@@ -47,19 +47,100 @@
       "placeholder": "Vraag FINN, zoek een asset of voeg een indicator toe..."
     },
     "pages": {
-      "analysis": { "label": "Analyse", "eyebrow": "Analysewerkruimte", "description": "Onderzoek één asset met markt-, macro- en technisch bewijs." },
-      "automation": { "label": "Automatisering", "eyebrow": "Automatiseringswerkruimte", "description": "Beheer uitvoering en bewaak iedere bot binnen je risicokaders." },
-      "plan": { "label": "Mijn Plan", "eyebrow": "Planwerkruimte", "description": "Bouw en beheer je handelsplannen voor de geselecteerde asset." },
-      "reflection": { "label": "Reflectie", "eyebrow": "Reflectiewerkruimte", "description": "Beoordeel resultaten, gedrag en verbeterpunten uit je handelsproces." },
-      "portfolio": { "label": "Portfolio", "eyebrow": "Portfoliowerkruimte", "description": "Bekijk posities, blootstelling en acties die aandacht vragen." }
+      "analysis": {
+        "label": "Analyse",
+        "eyebrow": "Analysewerkruimte",
+        "description": "Onderzoek één asset met markt-, macro- en technisch bewijs."
+      },
+      "automation": {
+        "label": "Automatisering",
+        "eyebrow": "Automatiseringswerkruimte",
+        "description": "Beheer uitvoering en bewaak iedere bot binnen je risicokaders."
+      },
+      "plan": {
+        "label": "Mijn Plan",
+        "eyebrow": "Planwerkruimte",
+        "description": "Bouw en beheer je handelsplannen voor de geselecteerde asset."
+      },
+      "reflection": {
+        "label": "Reflectie",
+        "eyebrow": "Reflectiewerkruimte",
+        "description": "Beoordeel resultaten, gedrag en verbeterpunten uit je handelsproces."
+      },
+      "portfolio": {
+        "label": "Portfolio",
+        "eyebrow": "Portfoliowerkruimte",
+        "description": "Bekijk posities, blootstelling en acties die aandacht vragen."
+      }
     },
     "steps": {
-      "analysis": [{ "label": "Asset", "description": "Wat analyseer ik?" }, { "label": "Bewijs", "description": "Wat zeggen Markt, Macro en Technisch?" }, { "label": "Conclusie", "description": "Wat betekent dit voor mijn plan?" }],
-      "portfolio": [{ "label": "Posities", "description": "Wat bezit ik?" }, { "label": "Risico", "description": "Waar zit mijn blootstelling?" }, { "label": "Actie", "description": "Wat vraagt mijn aandacht?" }],
-      "automation": [{ "label": "Plan", "description": "Welke regels gelden?" }, { "label": "Uitvoering", "description": "Wat voert Automatisering uit?" }, { "label": "Bewaking", "description": "Blijft alles binnen mijn risico?" }],
-      "reflection": [{ "label": "Resultaat", "description": "Wat gebeurde er?" }, { "label": "Evaluatie", "description": "Volgde ik mijn plan?" }, { "label": "Verbetering", "description": "Wat pas ik de volgende keer aan?" }]
+      "analysis": [
+        {
+          "label": "Asset",
+          "description": "Wat analyseer ik?"
+        },
+        {
+          "label": "Bewijs",
+          "description": "Wat zeggen Markt, Macro en Technisch?"
+        },
+        {
+          "label": "Conclusie",
+          "description": "Wat betekent dit voor mijn plan?"
+        }
+      ],
+      "portfolio": [
+        {
+          "label": "Posities",
+          "description": "Wat bezit ik?"
+        },
+        {
+          "label": "Risico",
+          "description": "Waar zit mijn blootstelling?"
+        },
+        {
+          "label": "Actie",
+          "description": "Wat vraagt mijn aandacht?"
+        }
+      ],
+      "automation": [
+        {
+          "label": "Plan",
+          "description": "Welke regels gelden?"
+        },
+        {
+          "label": "Uitvoering",
+          "description": "Wat voert Automatisering uit?"
+        },
+        {
+          "label": "Bewaking",
+          "description": "Blijft alles binnen mijn risico?"
+        }
+      ],
+      "reflection": [
+        {
+          "label": "Resultaat",
+          "description": "Wat gebeurde er?"
+        },
+        {
+          "label": "Evaluatie",
+          "description": "Volgde ik mijn plan?"
+        },
+        {
+          "label": "Verbetering",
+          "description": "Wat pas ik de volgende keer aan?"
+        }
+      ]
     },
-    "legacyPages": { "/asset": "Overzicht", "/bot": "Bots", "/market": "Markt", "/macro": "Macro", "/technical": "Technisch", "/setup": "Setups", "/strategy": "Strategieën", "/report": "Rapporten" }
+    "legacyPages": {
+      "/asset": "Overzicht",
+      "/bot": "Bots",
+      "/market": "Markt",
+      "/macro": "Macro",
+      "/technical": "Technisch",
+      "/setup": "Setups",
+      "/strategy": "Strategieën",
+      "/report": "Rapporten"
+    }
   },
   "nav": {
     "portfolio": "Portfolio",
@@ -441,7 +522,7 @@
       "setup": "Setup",
       "topContributors": "Topbijdragen",
       "explain": "Leg uit",
-      "askFinn": "Leg uit waarom {title} nu op {score} staat",
+      "askFinn": "Vraag Finn over {title}",
       "emptyState": {
         "macro": "Nog geen macrodata beschikbaar. Voeg macro-indicatoren toe op de macro-pagina.",
         "technical": "Nog geen technische analyse beschikbaar. Voeg indicatoren toe op de technische pagina.",
@@ -464,7 +545,6 @@
       },
       "tune": "Engine afstemmen",
       "cancelTune": "Afstemmen sluiten",
-      "askFinn": "Vraag Finn over {title}",
       "weight": "Weging",
       "configurationStatus": "Configuratiestatus",
       "balanced": "Gebalanceerde mix gedetecteerd. Klaar om te optimaliseren.",
@@ -1036,7 +1116,11 @@
         "completedEyebrow": "Stap afgerond",
         "completedTitle": "Je marktcontext voor {symbol} staat nu live.",
         "completedBody": "Ga meteen door naar macro zodat Finn het bredere regime rond {symbol} kan meewegen, of blijf hier als je eerst nog extra marktindicatoren wilt verfijnen.",
-        "examples": ["BTC prijs", "24u-verandering", "Volume"],
+        "examples": [
+          "BTC prijs",
+          "24u-verandering",
+          "Volume"
+        ],
         "steps": [
           "Kies hieronder één marktindicator in het configuratieblok voor {symbol}.",
           "Koppel hem aan je marktoverzicht zodat hij onderdeel wordt van je live context voor {symbol}.",
@@ -1135,7 +1219,11 @@
         "completedEyebrow": "Stap afgerond",
         "completedTitle": "Je macrocontext voor {symbol} is gekoppeld.",
         "completedBody": "Ga nu door naar technische signalen zodat Finn ook trend en timing op hetzelfde asset kan uitleggen, of blijf hier als je eerst nog meer macro-indicatoren wilt toevoegen.",
-        "examples": ["Voeg DXY toe", "Voeg US10Y toe", "Voeg inflatie toe"],
+        "examples": [
+          "Voeg DXY toe",
+          "Voeg US10Y toe",
+          "Voeg inflatie toe"
+        ],
         "steps": [
           "Kies hieronder één macro-indicator uit de selector, bijvoorbeeld DXY.",
           "Klik op synchroniseren en wacht tot hij actief verschijnt in je macro-overzicht voor {symbol}.",
@@ -1233,7 +1321,11 @@
         "completedEyebrow": "Stap afgerond",
         "completedTitle": "Je technische context voor {symbol} staat klaar.",
         "completedBody": "Je kunt nu doorgaan naar setup maken zodat Finn deze context aan concrete regels koppelt, of hier blijven als je eerst nog meer technische signalen wilt toevoegen.",
-        "examples": ["RSI", "MA 200", "VIX"],
+        "examples": [
+          "RSI",
+          "MA 200",
+          "VIX"
+        ],
         "steps": [
           "Kies hieronder één technische indicator in het configuratieblok voor {symbol}.",
           "Synchroniseer hem met de terminal zodat hij onderdeel wordt van je technische context voor {symbol}.",
@@ -1466,7 +1558,11 @@
       "completedEyebrow": "Stap afgerond",
       "completedTitle": "Je eerste setup staat opgeslagen.",
       "completedBody": "Ga nu door naar strategie zodat Finn van je setup een echt uitvoeringsplan kan maken, of blijf hier als je deze setup eerst nog wilt verfijnen.",
-      "examples": ["Maak een BTC swing setup met 4H entry", "Maak een ETH DCA setup", "Maak een SOL breakout setup"],
+      "examples": [
+        "Maak een BTC swing setup met 4H entry",
+        "Maak een ETH DCA setup",
+        "Maak een SOL breakout setup"
+      ],
       "steps": [
         "Scroll naar het blok voor een nieuwe setup hieronder.",
         "Kies één asset, een setup-type en een timeframe of laat Finn je die drie dingen stap voor stap uitvragen.",
@@ -1505,7 +1601,11 @@
       "completedEyebrow": "Stap afgerond",
       "completedTitle": "Je eerste strategie staat klaar.",
       "completedBody": "Ga nu door naar bot zodat Finn je setup en strategie aan een echte uitvoeringslane kan koppelen, of blijf hier als je je strategie eerst nog wilt aanscherpen.",
-      "examples": ["Maak een strategie voor mijn BTC setup", "Maak hier een DCA-strategie van", "Geef entry, invalidatie en risk management"],
+      "examples": [
+        "Maak een strategie voor mijn BTC setup",
+        "Maak hier een DCA-strategie van",
+        "Geef entry, invalidatie en risk management"
+      ],
       "steps": [
         "Scroll naar het blok voor een nieuwe strategie hieronder.",
         "Kies eerst bij welke setup hij hoort.",
@@ -1563,7 +1663,11 @@
       "title": "Koppel één bot aan je strategie",
       "body": "Dit is de laatste onboardingstap. Maak één eenvoudige bot voor de strategie die je net hebt gemaakt, zodat Finn setup, strategie, cadence en uitvoeringsmodus in één reviewbare lijn kan verbinden.",
       "guidedIntro": "Je komt hier vanuit onboarding. Rond nu alleen deze ene actie af: maak één bot voor de strategie die je net hebt opgeslagen.",
-      "examples": ["Maak een BTC paper-bot voor mijn swingstrategie", "Begin eerst met wekelijkse cadence", "Start in paper-modus voordat je live gaat"],
+      "examples": [
+        "Maak een BTC paper-bot voor mijn swingstrategie",
+        "Begin eerst met wekelijkse cadence",
+        "Start in paper-modus voordat je live gaat"
+      ],
       "steps": [
         "Klik op bot aanmaken.",
         "Kies de strategie die je net voor dezelfde asset hebt gemaakt.",
@@ -1870,7 +1974,31 @@
         "low": "LAAG",
         "medium": "MIDDEL",
         "high": "HOOG"
-      }
+      },
+      "primaryStateLabel": "Direct zichtbaar",
+      "summaryReasonLabel": "Waarom",
+      "diagnosticsToolsLabel": "Diagnostiektools",
+      "diagnosticsToolsBody": "Gebruik backtests en scenario's alleen wanneer je dieper wilt controleren waarom de bot wel of niet uitvoerbaar is.",
+      "blockerNoStrategyBody": "Deze bot kan nog niet handelen, omdat er nog geen strategie is gekoppeld aan het plan.",
+      "blockerNoStrategyStep": "Volgende stap: koppel eerst een strategie voordat Automation een beslissing kan nemen.",
+      "blockerPausedTitle": "Bot is gepauzeerd",
+      "blockerPausedBody": "De keten blijft zichtbaar, maar deze bot voert niets uit totdat je hem opnieuw activeert.",
+      "blockerPausedStep": "Volgende stap: hervat de bot als dit nog steeds je goedgekeurde plan is.",
+      "blockerWaitingTitle": "Wachten op geldige uitvoering",
+      "blockerWaitingBody": "De bot wacht op bevestiging vanuit setup, strategie en marktcontext.",
+      "blockerWaitingStep": "Volgende stap: controleer de gekoppelde keten en wacht op betere marktcondities.",
+      "blockerReadyTitle": "Bot is klaar voor uitvoering",
+      "blockerReadyBody": "De gekoppelde keten is compleet en de huidige beslissing kan worden uitgevoerd binnen de ingestelde limieten.",
+      "blockerReadyStep": "Volgende stap: beoordeel de trade of laat de bot zijn goedgekeurde plan volgen.",
+      "executionReasonFallback": "De bot heeft een beslissing, maar nog geen extra toelichting uit de engine ontvangen.",
+      "executionSummaryLabel": "Uitvoeringssamenvatting",
+      "diagnosticsReady": "Diagnostiek",
+      "amountLabel": "Bedrag",
+      "setupLabel": "Setup",
+      "setupScoreLabel": "Setup score",
+      "stopLossLabel": "Stop loss",
+      "targetCountLabel": "Targets",
+      "notAvailable": "n.v.t."
     },
     "orderPreview": {
       "finnLoadError": "Finn kon deze preflight-review nu niet laden.",
@@ -2869,8 +2997,7 @@
       "paperExecutionPendingVerification": "Paper execution is nog niet verifieerbaar.",
       "botDecisionPaperExecuted": "Bot-decision als paper/manual execution verwerkt.",
       "botDecisionSkippedVerified": "Bot-decision overgeslagen en geverifieerd.",
-      "defaultBotName": "SOL Bot"
-      ,
+      "defaultBotName": "SOL Bot",
       "configLabel": "Config",
       "confirmLabel": "Bevestig",
       "proposalLabel": "Voorstel",
@@ -3639,7 +3766,12 @@
     "indicatorConfigModal": {
       "eyebrow": "Indicator instellen",
       "categoryConfiguration": "{category} instellen",
-      "categories": { "technical": "Technisch", "macro": "Macro", "market": "Markt", "indicator": "Indicator" },
+      "categories": {
+        "technical": "Technisch",
+        "macro": "Macro",
+        "market": "Markt",
+        "indicator": "Indicator"
+      },
       "save": "Opslaan",
       "addIndicator": "{indicator} toevoegen",
       "loading": "Configuratie laden...",
@@ -3661,8 +3793,16 @@
       "and": "en",
       "noExtraMoments": "zonder extra marktmomenten",
       "summaryTemplate": "FINN gebruikt {indicator}: {interpretation}, {when}, met {weight} invloed.",
-      "weightOptions": { "low": "Laag", "normal": "Normaal", "high": "Hoog" },
-      "interpretationLabels": { "standard": "standaard", "contrarian": "contrair", "custom": "aangepast" },
+      "weightOptions": {
+        "low": "Laag",
+        "normal": "Normaal",
+        "high": "Hoog"
+      },
+      "interpretationLabels": {
+        "standard": "standaard",
+        "contrarian": "contrair",
+        "custom": "aangepast"
+      },
       "profileTypes": {
         "swing_trader": "jouw swingprofiel",
         "day_trader": "jouw daytradingprofiel",
@@ -3674,31 +3814,70 @@
         "generic": {
           "description": "Bepaal wanneer FINN naar {indicator} luistert, hoe het signaal wordt gelezen en hoe zwaar het meetelt.",
           "whenQuestion": "Wanneer moet FINN extra naar deze indicator luisteren?",
-          "always": { "label": "Altijd gebruiken", "help": "Deze indicator telt standaard mee in de routine." },
+          "always": {
+            "label": "Altijd gebruiken",
+            "help": "Deze indicator telt standaard mee in de routine."
+          },
           "interpretationQuestion": "Hoe moet FINN het signaal interpreteren?",
-          "standard": { "label": "Standaard", "help": "Hoge waarden tellen als sterker of positiever." },
-          "contrarian": { "label": "Contrair", "help": "Hoge en lage waarden worden omgekeerd wanneer dat logischer is." },
+          "standard": {
+            "label": "Standaard",
+            "help": "Hoge waarden tellen als sterker of positiever."
+          },
+          "contrarian": {
+            "label": "Contrair",
+            "help": "Hoge en lage waarden worden omgekeerd wanneer dat logischer is."
+          },
           "recommendation": "Aanbevolen als veilige start voor {profile}."
         },
         "rsi": {
           "description": "RSI helpt FINN inschatten wanneer momentum te ver is doorgeschoten of juist kracht houdt.",
           "whenQuestion": "Wanneer moet FINN extra naar RSI luisteren?",
-          "oversold": { "label": "Oververkocht", "help": "RSI onder 30 kan op een herstel- of koopkans wijzen." },
-          "overbought": { "label": "Overgekocht", "help": "RSI boven 70 kan aangeven dat de beweging uitgeput raakt." },
-          "always": { "label": "Altijd gebruiken", "help": "RSI telt ook buiten extreme zones mee als bevestiging." },
-          "standard": { "label": "Standaard", "help": "Hoge RSI telt positiever, lage RSI zwakker." },
-          "contrarian": { "label": "Contrair", "help": "Lage RSI telt positiever, hoge RSI juist voorzichtiger." },
+          "oversold": {
+            "label": "Oververkocht",
+            "help": "RSI onder 30 kan op een herstel- of koopkans wijzen."
+          },
+          "overbought": {
+            "label": "Overgekocht",
+            "help": "RSI boven 70 kan aangeven dat de beweging uitgeput raakt."
+          },
+          "always": {
+            "label": "Altijd gebruiken",
+            "help": "RSI telt ook buiten extreme zones mee als bevestiging."
+          },
+          "standard": {
+            "label": "Standaard",
+            "help": "Hoge RSI telt positiever, lage RSI zwakker."
+          },
+          "contrarian": {
+            "label": "Contrair",
+            "help": "Lage RSI telt positiever, hoge RSI juist voorzichtiger."
+          },
           "fastRecommendation": "Aanbevolen voor sneller momentumwerk binnen {profile}.",
           "swingRecommendation": "Aanbevolen voor jouw swingprofiel: gebruik RSI vooral bij oververkochte en overgekochte situaties."
         },
         "ma200": {
           "description": "MA 200 helpt FINN zien of de grotere trend meewerkt, tegenwerkt of als filter dient.",
           "whenQuestion": "Wanneer moet FINN extra naar MA 200 luisteren?",
-          "bull": { "label": "Stijgende markt", "help": "Gebruik MA 200 om een positieve bias en trendvoortzetting te bewaken." },
-          "bear": { "label": "Dalende markt", "help": "Gebruik MA 200 om defensief te blijven wanneer de grotere trend zwak is." },
-          "sideways": { "label": "Zijwaarts", "help": "Gebruik MA 200 als filter wanneer de markt geen duidelijke trend toont." },
-          "standard": { "label": "Standaard", "help": "Boven MA 200 is sterker, onder MA 200 is zwakker." },
-          "contrarian": { "label": "Contrair", "help": "Gebruik MA 200 tegendraads als mean-reversionfilter." },
+          "bull": {
+            "label": "Stijgende markt",
+            "help": "Gebruik MA 200 om een positieve bias en trendvoortzetting te bewaken."
+          },
+          "bear": {
+            "label": "Dalende markt",
+            "help": "Gebruik MA 200 om defensief te blijven wanneer de grotere trend zwak is."
+          },
+          "sideways": {
+            "label": "Zijwaarts",
+            "help": "Gebruik MA 200 als filter wanneer de markt geen duidelijke trend toont."
+          },
+          "standard": {
+            "label": "Standaard",
+            "help": "Boven MA 200 is sterker, onder MA 200 is zwakker."
+          },
+          "contrarian": {
+            "label": "Contrair",
+            "help": "Gebruik MA 200 tegendraads als mean-reversionfilter."
+          },
           "fastRecommendation": "Aanbevolen als richtingfilter zonder zijwaartse ruis te zwaar mee te nemen binnen {profile}.",
           "standardRecommendation": "Aanbevolen voor {profile}: gebruik MA 200 als trendfilter in stijgende, dalende en zijwaartse fases."
         }

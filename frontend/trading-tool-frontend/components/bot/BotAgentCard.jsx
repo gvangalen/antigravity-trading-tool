@@ -104,12 +104,12 @@ export default function BotAgentCard({
 
     if (directReason) return directReason;
     if (!hasLinkedStrategy) return copy.noStrategy;
-    if (!bot?.is_active) return copy.blockerPausedTitle || "Bot is gepauzeerd";
+    if (!bot?.is_active) return copy.blockerPausedTitle;
     if (normalizedAction === "hold" || normalizedAction === "observe") {
-      return copy.blockerWaitingBody || "De bot wacht op bevestiging vanuit setup, strategie en marktcontext.";
+      return copy.blockerWaitingBody;
     }
     if (normalizedAction) {
-      return copy.executionReasonFallback || "De bot heeft een beslissing, maar nog geen extra toelichting uit de engine ontvangen.";
+      return copy.executionReasonFallback;
     }
     return copy.dataUpdating;
   };
@@ -233,49 +233,31 @@ export default function BotAgentCard({
 
     const blocker = !hasLinkedStrategy
       ? {
-          tone: "amber",
-          title: copy.noStrategy,
-          body:
-            copy.blockerNoStrategyBody ||
-            "Deze bot kan nog niet handelen, omdat er nog geen strategie is gekoppeld aan het plan.",
-          nextStep:
-            copy.blockerNoStrategyStep ||
-            "Volgende stap: koppel eerst een strategie voordat Automation een beslissing kan nemen.",
+        tone: "amber",
+        title: copy.noStrategy,
+        body: copy.blockerNoStrategyBody,
+        nextStep: copy.blockerNoStrategyStep,
+      }
+    : !bot?.is_active
+      ? {
+          tone: "slate",
+          title: copy.blockerPausedTitle,
+          body: copy.blockerPausedBody,
+          nextStep: copy.blockerPausedStep,
         }
-      : !bot?.is_active
+      : !hasDecision || normalizedAction === "hold" || normalizedAction === "observe"
         ? {
-            tone: "slate",
-            title: copy.blockerPausedTitle || "Bot is gepauzeerd",
-            body:
-              copy.blockerPausedBody ||
-              "De keten blijft zichtbaar, maar deze bot voert niets uit totdat je hem opnieuw activeert.",
-            nextStep:
-              copy.blockerPausedStep ||
-              "Volgende stap: hervat de bot als dit nog steeds je goedgekeurde plan is.",
+            tone: "blue",
+            title: copy.blockerWaitingTitle,
+            body: decisionReason || copy.blockerWaitingBody,
+            nextStep: copy.blockerWaitingStep,
           }
-        : !hasDecision || normalizedAction === "hold" || normalizedAction === "observe"
-          ? {
-              tone: "blue",
-              title: copy.blockerWaitingTitle || "Wachten op geldige uitvoering",
-              body:
-                decisionReason ||
-                copy.blockerWaitingBody ||
-                "Er is nog geen directe tradebeslissing. De bot wacht op bevestiging vanuit setup, strategie en marktcontext.",
-              nextStep:
-                copy.blockerWaitingStep ||
-                "Volgende stap: controleer de gekoppelde keten en wacht op betere marktcondities.",
-            }
-          : {
-              tone: "emerald",
-              title: copy.blockerReadyTitle || "Bot is klaar voor uitvoering",
-              body:
-                decisionReason ||
-                copy.blockerReadyBody ||
-                "De gekoppelde keten is compleet en de huidige beslissing kan worden uitgevoerd binnen de ingestelde limieten.",
-              nextStep:
-                copy.blockerReadyStep ||
-                "Volgende stap: beoordeel de trade of laat de bot zijn goedgekeurde plan volgen.",
-            };
+        : {
+            tone: "emerald",
+            title: copy.blockerReadyTitle,
+            body: decisionReason || copy.blockerReadyBody,
+            nextStep: copy.blockerReadyStep,
+          };
 
     const blockerToneClasses = blocker.tone === "amber"
       ? "border-amber-200 bg-amber-50 text-amber-800"
@@ -471,7 +453,7 @@ export default function BotAgentCard({
       stopLossLabel:
         stopLoss != null
           ? formatCurrency(Number(stopLoss), locale, "EUR", { maximumFractionDigits: 0 })
-          : copy.notAvailable || "n.v.t.",
+          : copy.notAvailable,
       targetCount: targets.length,
       hasPlanLevels: stopLoss != null || targets.length > 0,
       reason: deriveDecisionReason(normalizedDecision),
@@ -620,7 +602,7 @@ export default function BotAgentCard({
 
         <div className={`rounded-[1.5rem] border px-5 py-4 ${blockerToneClasses}`}>
           <div className="text-[10px] font-black uppercase tracking-[0.22em] opacity-70">
-            {copy.primaryStateLabel || "Direct zichtbaar"}
+            {copy.primaryStateLabel}
           </div>
           <div className="mt-2 text-lg font-black tracking-tight">
             {blocker.title}
@@ -652,7 +634,7 @@ export default function BotAgentCard({
           </div>
 
           <div className="bg-card rounded-xl p-4 border border-slate-100 shadow-sm">
-             <div className="text-[9px] font-black text-secondary uppercase tracking-widest mb-1.5 opacity-60">{copy.summaryReasonLabel || "Waarom"}</div>
+             <div className="text-[9px] font-black text-secondary uppercase tracking-widest mb-1.5 opacity-60">{copy.summaryReasonLabel}</div>
              <div className="text-xs font-black text-foreground tracking-tight">{summaryReason}</div>
           </div>
 
@@ -676,10 +658,10 @@ export default function BotAgentCard({
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
                 <div className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">
-                  {copy.diagnosticsToolsLabel || "Diagnostiektools"}
+                  {copy.diagnosticsToolsLabel}
                 </div>
                 <p className="mt-1 text-sm font-semibold text-slate-600">
-                  {copy.diagnosticsToolsBody || "Gebruik backtests en scenario's alleen wanneer je dieper wilt controleren waarom de bot wel of niet uitvoerbaar is."}
+                  {copy.diagnosticsToolsBody}
                 </p>
               </div>
               <div className="flex flex-wrap items-center gap-2">
@@ -956,7 +938,7 @@ export default function BotAgentCard({
                 <div className="flex flex-wrap items-start justify-between gap-4">
                   <div>
                     <div className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">
-                      {copy.executionSummaryLabel || "Execution summary"}
+                      {copy.executionSummaryLabel}
                     </div>
                     <h3 className="mt-2 text-xl font-black text-slate-900">
                       {bot?.strategy?.name || copy.noStrategy}
@@ -966,7 +948,7 @@ export default function BotAgentCard({
                     </p>
                   </div>
                   <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-[10px] font-black uppercase tracking-[0.14em] text-slate-500">
-                    {loadingMarketIntelligence ? (copy.dataUpdating || "Data wordt bijgewerkt") : (copy.diagnosticsReady || "Diagnostiek")}
+                    {loadingMarketIntelligence ? copy.dataUpdating : copy.diagnosticsReady}
                   </div>
                 </div>
 
@@ -980,24 +962,24 @@ export default function BotAgentCard({
                     <div className="mt-2 text-sm font-black text-slate-900">{executionSummary.confidenceLabel}</div>
                   </div>
                   <div className="rounded-2xl border border-slate-100 bg-slate-50/80 p-4">
-                    <div className="text-[9px] font-black uppercase tracking-widest text-slate-400">{copy.amountLabel || "Bedrag"}</div>
+                    <div className="text-[9px] font-black uppercase tracking-widest text-slate-400">{copy.amountLabel}</div>
                     <div className="mt-2 text-sm font-black text-slate-900">{executionSummary.amountLabel}</div>
                   </div>
                   <div className="rounded-2xl border border-slate-100 bg-slate-50/80 p-4">
-                    <div className="text-[9px] font-black uppercase tracking-widest text-slate-400">{copy.setupLabel || "Setup"}</div>
+                    <div className="text-[9px] font-black uppercase tracking-widest text-slate-400">{copy.setupLabel}</div>
                     <div className="mt-2 text-sm font-black text-slate-900">{executionSummary.setupName}</div>
-                    <div className="mt-1 text-[11px] font-bold text-slate-500">{copy.setupScoreLabel || "Setup score"}: {executionSummary.setupScoreLabel}</div>
+                    <div className="mt-1 text-[11px] font-bold text-slate-500">{copy.setupScoreLabel}: {executionSummary.setupScoreLabel}</div>
                   </div>
                 </div>
 
                 {executionSummary.hasPlanLevels ? (
                   <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
                     <div className="rounded-2xl border border-slate-100 bg-white p-4">
-                      <div className="text-[9px] font-black uppercase tracking-widest text-slate-400">{copy.stopLossLabel || "Stop loss"}</div>
+                      <div className="text-[9px] font-black uppercase tracking-widest text-slate-400">{copy.stopLossLabel}</div>
                       <div className="mt-2 text-sm font-black text-slate-900">{executionSummary.stopLossLabel}</div>
                     </div>
                     <div className="rounded-2xl border border-slate-100 bg-white p-4">
-                      <div className="text-[9px] font-black uppercase tracking-widest text-slate-400">{copy.targetCountLabel || "Targets"}</div>
+                      <div className="text-[9px] font-black uppercase tracking-widest text-slate-400">{copy.targetCountLabel}</div>
                       <div className="mt-2 text-sm font-black text-slate-900">{executionSummary.targetCount}</div>
                     </div>
                   </div>

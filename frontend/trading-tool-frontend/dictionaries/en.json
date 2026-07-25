@@ -39,21 +39,107 @@
     "closeBackdrop": "Close FINN chat",
     "workspaceLabel": "Workspace",
     "workflowLabel": "Workflow",
-    "composer": { "asset": "Add asset", "indicator": "Add indicator", "menu": "Open add menu", "placeholder": "Ask FINN, search an asset or add an indicator..." },
+    "composer": {
+      "asset": "Add asset",
+      "indicator": "Add indicator",
+      "menu": "Open add menu",
+      "placeholder": "Ask FINN, search an asset or add an indicator..."
+    },
     "pages": {
-      "analysis": { "label": "Analysis", "eyebrow": "Analysis workspace", "description": "Research one asset with market, macro and technical evidence." },
-      "automation": { "label": "Automation", "eyebrow": "Automation workspace", "description": "Manage execution and monitor every bot within your risk limits." },
-      "plan": { "label": "My Plan", "eyebrow": "Plan workspace", "description": "Build and manage your trading plans for the selected asset." },
-      "reflection": { "label": "Reflection", "eyebrow": "Reflection workspace", "description": "Review results, behaviour and improvements in your trading process." },
-      "portfolio": { "label": "Portfolio", "eyebrow": "Portfolio workspace", "description": "Review positions, exposure and actions that need attention." }
+      "analysis": {
+        "label": "Analysis",
+        "eyebrow": "Analysis workspace",
+        "description": "Research one asset with market, macro and technical evidence."
+      },
+      "automation": {
+        "label": "Automation",
+        "eyebrow": "Automation workspace",
+        "description": "Manage execution and monitor every bot within your risk limits."
+      },
+      "plan": {
+        "label": "My Plan",
+        "eyebrow": "Plan workspace",
+        "description": "Build and manage your trading plans for the selected asset."
+      },
+      "reflection": {
+        "label": "Reflection",
+        "eyebrow": "Reflection workspace",
+        "description": "Review results, behaviour and improvements in your trading process."
+      },
+      "portfolio": {
+        "label": "Portfolio",
+        "eyebrow": "Portfolio workspace",
+        "description": "Review positions, exposure and actions that need attention."
+      }
     },
     "steps": {
-      "analysis": [{ "label": "Asset", "description": "What am I analysing?" }, { "label": "Evidence", "description": "What do Market, Macro and Technical show?" }, { "label": "Conclusion", "description": "What does this mean for my plan?" }],
-      "portfolio": [{ "label": "Positions", "description": "What do I own?" }, { "label": "Risk", "description": "Where is my exposure?" }, { "label": "Action", "description": "What needs my attention?" }],
-      "automation": [{ "label": "Plan", "description": "Which rules apply?" }, { "label": "Execution", "description": "What does Automation execute?" }, { "label": "Monitoring", "description": "Does everything remain within my risk?" }],
-      "reflection": [{ "label": "Result", "description": "What happened?" }, { "label": "Evaluation", "description": "Did I follow my plan?" }, { "label": "Improvement", "description": "What will I change next time?" }]
+      "analysis": [
+        {
+          "label": "Asset",
+          "description": "What am I analysing?"
+        },
+        {
+          "label": "Evidence",
+          "description": "What do Market, Macro and Technical show?"
+        },
+        {
+          "label": "Conclusion",
+          "description": "What does this mean for my plan?"
+        }
+      ],
+      "portfolio": [
+        {
+          "label": "Positions",
+          "description": "What do I own?"
+        },
+        {
+          "label": "Risk",
+          "description": "Where is my exposure?"
+        },
+        {
+          "label": "Action",
+          "description": "What needs my attention?"
+        }
+      ],
+      "automation": [
+        {
+          "label": "Plan",
+          "description": "Which rules apply?"
+        },
+        {
+          "label": "Execution",
+          "description": "What does Automation execute?"
+        },
+        {
+          "label": "Monitoring",
+          "description": "Does everything remain within my risk?"
+        }
+      ],
+      "reflection": [
+        {
+          "label": "Result",
+          "description": "What happened?"
+        },
+        {
+          "label": "Evaluation",
+          "description": "Did I follow my plan?"
+        },
+        {
+          "label": "Improvement",
+          "description": "What will I change next time?"
+        }
+      ]
     },
-    "legacyPages": { "/asset": "Overview", "/bot": "Bots", "/market": "Market", "/macro": "Macro", "/technical": "Technical", "/setup": "Setups", "/strategy": "Strategies", "/report": "Reports" }
+    "legacyPages": {
+      "/asset": "Overview",
+      "/bot": "Bots",
+      "/market": "Market",
+      "/macro": "Macro",
+      "/technical": "Technical",
+      "/setup": "Setups",
+      "/strategy": "Strategies",
+      "/report": "Reports"
+    }
   },
   "nav": {
     "portfolio": "Portfolio",
@@ -435,7 +521,7 @@
       "setup": "Setup",
       "topContributors": "Top contributors",
       "explain": "Explain",
-      "askFinn": "Explain why {title} is at {score} right now",
+      "askFinn": "Ask Finn about {title}",
       "emptyState": {
         "macro": "No macro data is available yet. Add macro indicators on the macro page.",
         "technical": "No technical analysis is available yet. Add indicators on the technical page.",
@@ -458,7 +544,6 @@
       },
       "tune": "Tune engine",
       "cancelTune": "Cancel tuning",
-      "askFinn": "Ask Finn about {title}",
       "weight": "Weight",
       "configurationStatus": "Configuration status",
       "balanced": "Balanced mix detected. Ready to optimize.",
@@ -1030,7 +1115,11 @@
         "completedEyebrow": "Step completed",
         "completedTitle": "Your market context for {symbol} is now live.",
         "completedBody": "Move straight into macro so Finn can weigh the bigger regime around {symbol}, or stay here if you want to refine a few more market indicators first.",
-        "examples": ["BTC price", "24h change", "Volume"],
+        "examples": [
+          "BTC price",
+          "24h change",
+          "Volume"
+        ],
         "steps": [
           "Choose one market indicator in the configuration block below for {symbol}.",
           "Attach it to your market overview so it becomes part of your live context for {symbol}.",
@@ -1129,7 +1218,11 @@
         "completedEyebrow": "Step completed",
         "completedTitle": "Your macro context for {symbol} is connected.",
         "completedBody": "Continue to technical signals so Finn can also explain trend and timing for the same asset, or stay here if you want to add more macro indicators first.",
-        "examples": ["Add DXY", "Add US10Y", "Add inflation"],
+        "examples": [
+          "Add DXY",
+          "Add US10Y",
+          "Add inflation"
+        ],
         "steps": [
           "Pick one macro indicator from the selector below, for example DXY.",
           "Click sync and wait until it appears as active in your macro overview for {symbol}.",
@@ -1227,7 +1320,11 @@
         "completedEyebrow": "Step completed",
         "completedTitle": "Your technical context for {symbol} is ready.",
         "completedBody": "You can move on to setup creation so Finn can tie this context to concrete rules, or stay here if you want to add more technical signals first.",
-        "examples": ["RSI", "MA 200", "VIX"],
+        "examples": [
+          "RSI",
+          "MA 200",
+          "VIX"
+        ],
         "steps": [
           "Choose one technical indicator in the configuration block below for {symbol}.",
           "Sync it to the terminal so it becomes part of your technical context for {symbol}.",
@@ -1460,7 +1557,11 @@
       "completedEyebrow": "Step completed",
       "completedTitle": "Your first setup has been saved.",
       "completedBody": "Continue to strategy so Finn can turn your setup into a real execution plan, or stay here if you want to refine this setup first.",
-      "examples": ["Create a BTC swing setup with 4H entry", "Create an ETH DCA setup", "Create a SOL breakout setup"],
+      "examples": [
+        "Create a BTC swing setup with 4H entry",
+        "Create an ETH DCA setup",
+        "Create a SOL breakout setup"
+      ],
       "steps": [
         "Scroll to the new setup block below.",
         "Choose one asset, one setup type, and one timeframe, or let Finn ask for those step by step.",
@@ -1499,7 +1600,11 @@
       "completedEyebrow": "Step completed",
       "completedTitle": "Your first strategy is ready.",
       "completedBody": "Continue to bot so Finn can connect your setup and strategy to a real execution lane, or stay here if you want to sharpen the strategy first.",
-      "examples": ["Create a strategy for my BTC setup", "Turn this into a DCA strategy", "Add entry, invalidation, and risk management"],
+      "examples": [
+        "Create a strategy for my BTC setup",
+        "Turn this into a DCA strategy",
+        "Add entry, invalidation, and risk management"
+      ],
       "steps": [
         "Scroll to the new strategy block below.",
         "Choose which setup it belongs to first.",
@@ -1557,7 +1662,11 @@
       "title": "Link one bot to your strategy",
       "body": "This is the final onboarding step. Create one simple bot for the strategy you just made so Finn can connect setup, strategy, cadence, and execution mode into one reviewable lane.",
       "guidedIntro": "You arrived here from onboarding. Only finish this one action now: create one bot for the strategy you just saved.",
-      "examples": ["Create a BTC paper bot for my swing strategy", "Use weekly cadence first", "Start in paper mode before going live"],
+      "examples": [
+        "Create a BTC paper bot for my swing strategy",
+        "Use weekly cadence first",
+        "Start in paper mode before going live"
+      ],
       "steps": [
         "Click create bot.",
         "Choose the strategy you just created for this same asset.",
@@ -1864,7 +1973,31 @@
         "low": "LOW",
         "medium": "MEDIUM",
         "high": "HIGH"
-      }
+      },
+      "primaryStateLabel": "Directly visible",
+      "summaryReasonLabel": "Why",
+      "diagnosticsToolsLabel": "Diagnostics tools",
+      "diagnosticsToolsBody": "Use backtests and scenarios only when you want to dig deeper into why the bot is or is not executable.",
+      "blockerNoStrategyBody": "This bot cannot trade yet because no strategy is linked to the plan.",
+      "blockerNoStrategyStep": "Next step: link a strategy before Automation can evaluate this bot.",
+      "blockerPausedTitle": "Bot is paused",
+      "blockerPausedBody": "The chain stays visible, but this bot will not execute anything until you resume it.",
+      "blockerPausedStep": "Next step: resume the bot if this is still your approved plan.",
+      "blockerWaitingTitle": "Waiting for valid execution",
+      "blockerWaitingBody": "The bot is waiting for confirmation from setup, strategy and market context.",
+      "blockerWaitingStep": "Next step: review the linked chain and wait for better market conditions.",
+      "blockerReadyTitle": "Bot is ready for execution",
+      "blockerReadyBody": "The linked chain is complete and the current decision can be executed within the configured limits.",
+      "blockerReadyStep": "Next step: review the trade or let the bot follow its approved plan.",
+      "executionReasonFallback": "The bot has a decision, but the engine has not returned extra explanation yet.",
+      "executionSummaryLabel": "Execution summary",
+      "diagnosticsReady": "Diagnostics",
+      "amountLabel": "Amount",
+      "setupLabel": "Setup",
+      "setupScoreLabel": "Setup score",
+      "stopLossLabel": "Stop loss",
+      "targetCountLabel": "Targets",
+      "notAvailable": "n/a"
     },
     "orderPreview": {
       "finnLoadError": "Finn could not load this preflight review right now.",
@@ -3550,7 +3683,12 @@
     "indicatorConfigModal": {
       "eyebrow": "Indicator settings",
       "categoryConfiguration": "Configure {category}",
-      "categories": { "technical": "Technical", "macro": "Macro", "market": "Market", "indicator": "Indicator" },
+      "categories": {
+        "technical": "Technical",
+        "macro": "Macro",
+        "market": "Market",
+        "indicator": "Indicator"
+      },
       "save": "Save",
       "addIndicator": "Add {indicator}",
       "loading": "Loading configuration...",
@@ -3572,8 +3710,16 @@
       "and": "and",
       "noExtraMoments": "without additional market conditions",
       "summaryTemplate": "FINN uses {indicator}: {interpretation}, {when}, with {weight} influence.",
-      "weightOptions": { "low": "Low", "normal": "Normal", "high": "High" },
-      "interpretationLabels": { "standard": "standard", "contrarian": "contrarian", "custom": "custom" },
+      "weightOptions": {
+        "low": "Low",
+        "normal": "Normal",
+        "high": "High"
+      },
+      "interpretationLabels": {
+        "standard": "standard",
+        "contrarian": "contrarian",
+        "custom": "custom"
+      },
       "profileTypes": {
         "swing_trader": "your swing profile",
         "day_trader": "your day-trading profile",
@@ -3585,31 +3731,70 @@
         "generic": {
           "description": "Choose when FINN listens to {indicator}, how the signal is read and how much it counts.",
           "whenQuestion": "When should FINN pay extra attention to this indicator?",
-          "always": { "label": "Always use", "help": "This indicator is included in the routine by default." },
+          "always": {
+            "label": "Always use",
+            "help": "This indicator is included in the routine by default."
+          },
           "interpretationQuestion": "How should FINN interpret the signal?",
-          "standard": { "label": "Standard", "help": "Higher values count as stronger or more positive." },
-          "contrarian": { "label": "Contrarian", "help": "High and low values are reversed when that is more appropriate." },
+          "standard": {
+            "label": "Standard",
+            "help": "Higher values count as stronger or more positive."
+          },
+          "contrarian": {
+            "label": "Contrarian",
+            "help": "High and low values are reversed when that is more appropriate."
+          },
           "recommendation": "Recommended as a safe starting point for {profile}."
         },
         "rsi": {
           "description": "RSI helps FINN assess when momentum is stretched or continues to show strength.",
           "whenQuestion": "When should FINN pay extra attention to RSI?",
-          "oversold": { "label": "Oversold", "help": "RSI below 30 can signal a recovery or buying opportunity." },
-          "overbought": { "label": "Overbought", "help": "RSI above 70 can indicate that the move is becoming exhausted." },
-          "always": { "label": "Always use", "help": "RSI also counts as confirmation outside extreme zones." },
-          "standard": { "label": "Standard", "help": "High RSI counts more positively and low RSI more weakly." },
-          "contrarian": { "label": "Contrarian", "help": "Low RSI counts more positively and high RSI more cautiously." },
+          "oversold": {
+            "label": "Oversold",
+            "help": "RSI below 30 can signal a recovery or buying opportunity."
+          },
+          "overbought": {
+            "label": "Overbought",
+            "help": "RSI above 70 can indicate that the move is becoming exhausted."
+          },
+          "always": {
+            "label": "Always use",
+            "help": "RSI also counts as confirmation outside extreme zones."
+          },
+          "standard": {
+            "label": "Standard",
+            "help": "High RSI counts more positively and low RSI more weakly."
+          },
+          "contrarian": {
+            "label": "Contrarian",
+            "help": "Low RSI counts more positively and high RSI more cautiously."
+          },
           "fastRecommendation": "Recommended for faster momentum analysis within {profile}.",
           "swingRecommendation": "Recommended for your swing profile: use RSI mainly in oversold and overbought conditions."
         },
         "ma200": {
           "description": "MA 200 helps FINN determine whether the broader trend supports, opposes or filters a setup.",
           "whenQuestion": "When should FINN pay extra attention to MA 200?",
-          "bull": { "label": "Bull market", "help": "Use MA 200 to monitor bullish bias and trend continuation." },
-          "bear": { "label": "Bear market", "help": "Use MA 200 to stay defensive when the broader trend is weak." },
-          "sideways": { "label": "Sideways", "help": "Use MA 200 as a filter when the market lacks a clear trend." },
-          "standard": { "label": "Standard", "help": "Above MA 200 is stronger; below MA 200 is weaker." },
-          "contrarian": { "label": "Contrarian", "help": "Use MA 200 as a contrarian mean-reversion filter." },
+          "bull": {
+            "label": "Bull market",
+            "help": "Use MA 200 to monitor bullish bias and trend continuation."
+          },
+          "bear": {
+            "label": "Bear market",
+            "help": "Use MA 200 to stay defensive when the broader trend is weak."
+          },
+          "sideways": {
+            "label": "Sideways",
+            "help": "Use MA 200 as a filter when the market lacks a clear trend."
+          },
+          "standard": {
+            "label": "Standard",
+            "help": "Above MA 200 is stronger; below MA 200 is weaker."
+          },
+          "contrarian": {
+            "label": "Contrarian",
+            "help": "Use MA 200 as a contrarian mean-reversion filter."
+          },
           "fastRecommendation": "Recommended as a direction filter without overweighting sideways noise within {profile}.",
           "standardRecommendation": "Recommended for {profile}: use MA 200 as a trend filter in bullish, bearish and sideways phases."
         }

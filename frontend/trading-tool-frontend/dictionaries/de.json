@@ -40,21 +40,107 @@
     "closeBackdrop": "FINN-Chat schließen",
     "workspaceLabel": "Arbeitsbereich",
     "workflowLabel": "Workflow",
-    "composer": { "asset": "Asset hinzufügen", "indicator": "Indikator hinzufügen", "menu": "Hinzufügen-Menü öffnen", "placeholder": "FINN fragen, ein Asset suchen oder einen Indikator hinzufügen..." },
+    "composer": {
+      "asset": "Asset hinzufügen",
+      "indicator": "Indikator hinzufügen",
+      "menu": "Hinzufügen-Menü öffnen",
+      "placeholder": "FINN fragen, ein Asset suchen oder einen Indikator hinzufügen..."
+    },
     "pages": {
-      "analysis": { "label": "Analyse", "eyebrow": "Analyse-Arbeitsbereich", "description": "Untersuche ein Asset anhand von Markt-, Makro- und technischen Daten." },
-      "automation": { "label": "Automatisierung", "eyebrow": "Automatisierungsbereich", "description": "Verwalte die Ausführung und überwache jeden Bot innerhalb deiner Risikogrenzen." },
-      "plan": { "label": "Mein Plan", "eyebrow": "Plan-Arbeitsbereich", "description": "Erstelle und verwalte deine Handelspläne für das ausgewählte Asset." },
-      "reflection": { "label": "Reflexion", "eyebrow": "Reflexionsbereich", "description": "Bewerte Ergebnisse, Verhalten und Verbesserungen in deinem Handelsprozess." },
-      "portfolio": { "label": "Portfolio", "eyebrow": "Portfolio-Arbeitsbereich", "description": "Prüfe Positionen, Exposition und Aktionen, die Aufmerksamkeit erfordern." }
+      "analysis": {
+        "label": "Analyse",
+        "eyebrow": "Analyse-Arbeitsbereich",
+        "description": "Untersuche ein Asset anhand von Markt-, Makro- und technischen Daten."
+      },
+      "automation": {
+        "label": "Automatisierung",
+        "eyebrow": "Automatisierungsbereich",
+        "description": "Verwalte die Ausführung und überwache jeden Bot innerhalb deiner Risikogrenzen."
+      },
+      "plan": {
+        "label": "Mein Plan",
+        "eyebrow": "Plan-Arbeitsbereich",
+        "description": "Erstelle und verwalte deine Handelspläne für das ausgewählte Asset."
+      },
+      "reflection": {
+        "label": "Reflexion",
+        "eyebrow": "Reflexionsbereich",
+        "description": "Bewerte Ergebnisse, Verhalten und Verbesserungen in deinem Handelsprozess."
+      },
+      "portfolio": {
+        "label": "Portfolio",
+        "eyebrow": "Portfolio-Arbeitsbereich",
+        "description": "Prüfe Positionen, Exposition und Aktionen, die Aufmerksamkeit erfordern."
+      }
     },
     "steps": {
-      "analysis": [{ "label": "Asset", "description": "Was analysiere ich?" }, { "label": "Evidenz", "description": "Was zeigen Markt, Makro und Technik?" }, { "label": "Fazit", "description": "Was bedeutet das für meinen Plan?" }],
-      "portfolio": [{ "label": "Positionen", "description": "Was besitze ich?" }, { "label": "Risiko", "description": "Wo liegt meine Exposition?" }, { "label": "Aktion", "description": "Was braucht meine Aufmerksamkeit?" }],
-      "automation": [{ "label": "Plan", "description": "Welche Regeln gelten?" }, { "label": "Ausführung", "description": "Was führt die Automatisierung aus?" }, { "label": "Überwachung", "description": "Bleibt alles innerhalb meines Risikos?" }],
-      "reflection": [{ "label": "Ergebnis", "description": "Was ist passiert?" }, { "label": "Auswertung", "description": "Habe ich meinen Plan befolgt?" }, { "label": "Verbesserung", "description": "Was ändere ich beim nächsten Mal?" }]
+      "analysis": [
+        {
+          "label": "Asset",
+          "description": "Was analysiere ich?"
+        },
+        {
+          "label": "Evidenz",
+          "description": "Was zeigen Markt, Makro und Technik?"
+        },
+        {
+          "label": "Fazit",
+          "description": "Was bedeutet das für meinen Plan?"
+        }
+      ],
+      "portfolio": [
+        {
+          "label": "Positionen",
+          "description": "Was besitze ich?"
+        },
+        {
+          "label": "Risiko",
+          "description": "Wo liegt meine Exposition?"
+        },
+        {
+          "label": "Aktion",
+          "description": "Was braucht meine Aufmerksamkeit?"
+        }
+      ],
+      "automation": [
+        {
+          "label": "Plan",
+          "description": "Welche Regeln gelten?"
+        },
+        {
+          "label": "Ausführung",
+          "description": "Was führt die Automatisierung aus?"
+        },
+        {
+          "label": "Überwachung",
+          "description": "Bleibt alles innerhalb meines Risikos?"
+        }
+      ],
+      "reflection": [
+        {
+          "label": "Ergebnis",
+          "description": "Was ist passiert?"
+        },
+        {
+          "label": "Auswertung",
+          "description": "Habe ich meinen Plan befolgt?"
+        },
+        {
+          "label": "Verbesserung",
+          "description": "Was ändere ich beim nächsten Mal?"
+        }
+      ]
     },
-    "legacyPages": { "/asset": "Übersicht", "/bot": "Bots", "/market": "Markt", "/macro": "Makro", "/technical": "Technik", "/setup": "Setups", "/strategy": "Strategien", "/report": "Berichte" }
+    "legacyPages": {
+      "/asset": "Übersicht",
+      "/bot": "Bots",
+      "/market": "Markt",
+      "/macro": "Makro",
+      "/technical": "Technik",
+      "/setup": "Setups",
+      "/strategy": "Strategien",
+      "/report": "Berichte"
+    }
   },
   "nav": {
     "portfolio": "Portfolio",
@@ -436,7 +522,7 @@
       "setup": "Setup",
       "topContributors": "Top contributors",
       "explain": "Explain",
-      "askFinn": "Explain why {title} is at {score} right now",
+      "askFinn": "Ask Finn about {title}",
       "emptyState": {
         "macro": "No macro data is available yet. Add macro indicators on the macro page.",
         "technical": "No technical analysis is available yet. Add indicators on the technical page.",
@@ -459,7 +545,6 @@
       },
       "tune": "Tune engine",
       "cancelTune": "Cancel tuning",
-      "askFinn": "Ask Finn about {title}",
       "weight": "Weight",
       "configurationStatus": "Configuration status",
       "balanced": "Balanced mix detected. Ready to optimize.",
@@ -1031,7 +1116,11 @@
         "completedEyebrow": "Schritt abgeschlossen",
         "completedTitle": "Dein Marktkontext fuer {symbol} ist jetzt live.",
         "completedBody": "Gehe direkt weiter zu Macro, damit Finn das groessere Regime rund um {symbol} mitbewerten kann, oder bleibe hier, wenn du zuerst noch weitere Marktindikatoren verfeinern willst.",
-        "examples": ["BTC price", "24h change", "Volume"],
+        "examples": [
+          "BTC price",
+          "24h change",
+          "Volume"
+        ],
         "steps": [
           "Choose one market indicator in the configuration block below for {symbol}.",
           "Attach it to your market overview so it becomes part of your live context for {symbol}.",
@@ -1130,7 +1219,11 @@
         "completedEyebrow": "Schritt abgeschlossen",
         "completedTitle": "Dein Makrokontext fuer {symbol} ist verbunden.",
         "completedBody": "Gehe jetzt weiter zu Technical, damit Finn auch Trend und Timing fuer dasselbe Asset erklaeren kann, oder bleibe hier, wenn du zuerst noch weitere Makroindikatoren hinzufuegen willst.",
-        "examples": ["DXY", "US10Y", "Inflation"],
+        "examples": [
+          "DXY",
+          "US10Y",
+          "Inflation"
+        ],
         "steps": [
           "Choose one macro indicator from the selector below.",
           "Click sync so it becomes part of your macro overview for {symbol}.",
@@ -1228,7 +1321,11 @@
         "completedEyebrow": "Schritt abgeschlossen",
         "completedTitle": "Dein technischer Kontext fuer {symbol} ist bereit.",
         "completedBody": "Du kannst jetzt zu Setup weitergehen, damit Finn diesen Kontext an konkrete Regeln bindet, oder hier bleiben, wenn du zuerst noch weitere technische Signale hinzufuegen willst.",
-        "examples": ["RSI", "MA 200", "VIX"],
+        "examples": [
+          "RSI",
+          "MA 200",
+          "VIX"
+        ],
         "steps": [
           "Choose one technical indicator in the configuration block below for {symbol}.",
           "Sync it to the terminal so it becomes part of your technical context for {symbol}.",
@@ -1461,7 +1558,11 @@
       "completedEyebrow": "Schritt abgeschlossen",
       "completedTitle": "Dein erstes Setup wurde gespeichert.",
       "completedBody": "Gehe jetzt weiter zu Strategy, damit Finn aus deinem Setup einen echten Ausfuehrungsplan machen kann, oder bleibe hier, wenn du dieses Setup zuerst noch verfeinern willst.",
-      "examples": ["BTC swing setup", "ETH DCA setup", "SOL breakout setup"],
+      "examples": [
+        "BTC swing setup",
+        "ETH DCA setup",
+        "SOL breakout setup"
+      ],
       "steps": [
         "Scroll to the new setup block below.",
         "Fill in one simple setup with asset, timeframe, and core conditions.",
@@ -1500,7 +1601,11 @@
       "completedEyebrow": "Schritt abgeschlossen",
       "completedTitle": "Deine erste Strategy ist bereit.",
       "completedBody": "Gehe jetzt weiter zu Bot, damit Finn dein Setup und deine Strategy an eine echte Ausfuehrungslane koppeln kann, oder bleibe hier, wenn du die Strategy zuerst noch schaerfen willst.",
-      "examples": ["BTC swing execution", "ETH DCA execution", "SOL breakout execution"],
+      "examples": [
+        "BTC swing execution",
+        "ETH DCA execution",
+        "SOL breakout execution"
+      ],
       "steps": [
         "Scroll to the new strategy block below.",
         "Choose the setup it belongs to and fill in the key execution fields.",
@@ -1558,7 +1663,11 @@
       "title": "Link one bot to your strategy",
       "body": "This is the final onboarding step. Create one simple bot for the strategy you just made so Finn can connect setup, strategy, cadence, and execution mode into one reviewable lane.",
       "guidedIntro": "You arrived here from onboarding. Only finish this one action now: create one bot for the strategy you just saved.",
-      "examples": ["Create a BTC paper bot for my swing strategy", "Use weekly cadence first", "Start in paper mode before going live"],
+      "examples": [
+        "Create a BTC paper bot for my swing strategy",
+        "Use weekly cadence first",
+        "Start in paper mode before going live"
+      ],
       "steps": [
         "Click create bot.",
         "Choose the strategy you just created for this same asset.",
@@ -1865,7 +1974,31 @@
         "low": "NIEDRIG",
         "medium": "MITTEL",
         "high": "HOCH"
-      }
+      },
+      "primaryStateLabel": "Direkt sichtbar",
+      "summaryReasonLabel": "Warum",
+      "diagnosticsToolsLabel": "Diagnosetools",
+      "diagnosticsToolsBody": "Nutze Backtests und Szenarien nur, wenn du tiefer prüfen willst, warum der Bot ausführbar ist oder nicht.",
+      "blockerNoStrategyBody": "Dieser Bot kann noch nicht handeln, weil noch keine Strategie mit dem Plan verknüpft ist.",
+      "blockerNoStrategyStep": "Nächster Schritt: Verknüpfe zuerst eine Strategie, bevor Automation diesen Bot bewerten kann.",
+      "blockerPausedTitle": "Bot ist pausiert",
+      "blockerPausedBody": "Die Kette bleibt sichtbar, aber dieser Bot führt nichts aus, bis du ihn wieder aktivierst.",
+      "blockerPausedStep": "Nächster Schritt: Aktiviere den Bot wieder, wenn dies weiterhin dein freigegebener Plan ist.",
+      "blockerWaitingTitle": "Warten auf gültige Ausführung",
+      "blockerWaitingBody": "Der Bot wartet auf Bestätigung aus Setup, Strategie und Marktumfeld.",
+      "blockerWaitingStep": "Nächster Schritt: Prüfe die verknüpfte Kette und warte auf bessere Marktbedingungen.",
+      "blockerReadyTitle": "Bot ist bereit zur Ausführung",
+      "blockerReadyBody": "Die verknüpfte Kette ist komplett und die aktuelle Entscheidung kann innerhalb der gesetzten Limits ausgeführt werden.",
+      "blockerReadyStep": "Nächster Schritt: Prüfe den Trade oder lasse den Bot deinem freigegebenen Plan folgen.",
+      "executionReasonFallback": "Der Bot hat eine Entscheidung, aber die Engine hat noch keine zusätzliche Erklärung zurückgegeben.",
+      "executionSummaryLabel": "Ausführungsübersicht",
+      "diagnosticsReady": "Diagnostik",
+      "amountLabel": "Betrag",
+      "setupLabel": "Setup",
+      "setupScoreLabel": "Setup-Score",
+      "stopLossLabel": "Stop-Loss",
+      "targetCountLabel": "Ziele",
+      "notAvailable": "n. v."
     },
     "orderPreview": {
       "finnLoadError": "Finn konnte diese Preflight-Prüfung gerade nicht laden.",
@@ -3633,7 +3766,12 @@
     "indicatorConfigModal": {
       "eyebrow": "Indikator einstellen",
       "categoryConfiguration": "{category} konfigurieren",
-      "categories": { "technical": "Technik", "macro": "Makro", "market": "Markt", "indicator": "Indikator" },
+      "categories": {
+        "technical": "Technik",
+        "macro": "Makro",
+        "market": "Markt",
+        "indicator": "Indikator"
+      },
       "save": "Speichern",
       "addIndicator": "{indicator} hinzufügen",
       "loading": "Konfiguration wird geladen...",
@@ -3655,8 +3793,16 @@
       "and": "und",
       "noExtraMoments": "ohne zusätzliche Marktbedingungen",
       "summaryTemplate": "FINN nutzt {indicator}: {interpretation}, {when}, mit {weight} Einfluss.",
-      "weightOptions": { "low": "Niedrig", "normal": "Normal", "high": "Hoch" },
-      "interpretationLabels": { "standard": "standardmäßig", "contrarian": "konträr", "custom": "benutzerdefiniert" },
+      "weightOptions": {
+        "low": "Niedrig",
+        "normal": "Normal",
+        "high": "Hoch"
+      },
+      "interpretationLabels": {
+        "standard": "standardmäßig",
+        "contrarian": "konträr",
+        "custom": "benutzerdefiniert"
+      },
       "profileTypes": {
         "swing_trader": "dein Swing-Profil",
         "day_trader": "dein Daytrading-Profil",
@@ -3668,31 +3814,70 @@
         "generic": {
           "description": "Lege fest, wann FINN auf {indicator} achtet, wie das Signal gelesen wird und wie stark es zählt.",
           "whenQuestion": "Wann soll FINN diesen Indikator besonders berücksichtigen?",
-          "always": { "label": "Immer verwenden", "help": "Dieser Indikator wird standardmäßig in die Routine einbezogen." },
+          "always": {
+            "label": "Immer verwenden",
+            "help": "Dieser Indikator wird standardmäßig in die Routine einbezogen."
+          },
           "interpretationQuestion": "Wie soll FINN das Signal interpretieren?",
-          "standard": { "label": "Standard", "help": "Höhere Werte zählen als stärker oder positiver." },
-          "contrarian": { "label": "Konträr", "help": "Hohe und niedrige Werte werden umgekehrt, wenn das sinnvoller ist." },
+          "standard": {
+            "label": "Standard",
+            "help": "Höhere Werte zählen als stärker oder positiver."
+          },
+          "contrarian": {
+            "label": "Konträr",
+            "help": "Hohe und niedrige Werte werden umgekehrt, wenn das sinnvoller ist."
+          },
           "recommendation": "Als sicherer Ausgangspunkt für {profile} empfohlen."
         },
         "rsi": {
           "description": "Der RSI hilft FINN zu erkennen, wann das Momentum überdehnt ist oder Stärke behält.",
           "whenQuestion": "Wann soll FINN den RSI besonders berücksichtigen?",
-          "oversold": { "label": "Überverkauft", "help": "Ein RSI unter 30 kann auf eine Erholung oder Kaufchance hindeuten." },
-          "overbought": { "label": "Überkauft", "help": "Ein RSI über 70 kann auf eine nachlassende Bewegung hindeuten." },
-          "always": { "label": "Immer verwenden", "help": "Der RSI zählt auch außerhalb extremer Zonen als Bestätigung." },
-          "standard": { "label": "Standard", "help": "Ein hoher RSI zählt positiver, ein niedriger RSI schwächer." },
-          "contrarian": { "label": "Konträr", "help": "Ein niedriger RSI zählt positiver, ein hoher RSI vorsichtiger." },
+          "oversold": {
+            "label": "Überverkauft",
+            "help": "Ein RSI unter 30 kann auf eine Erholung oder Kaufchance hindeuten."
+          },
+          "overbought": {
+            "label": "Überkauft",
+            "help": "Ein RSI über 70 kann auf eine nachlassende Bewegung hindeuten."
+          },
+          "always": {
+            "label": "Immer verwenden",
+            "help": "Der RSI zählt auch außerhalb extremer Zonen als Bestätigung."
+          },
+          "standard": {
+            "label": "Standard",
+            "help": "Ein hoher RSI zählt positiver, ein niedriger RSI schwächer."
+          },
+          "contrarian": {
+            "label": "Konträr",
+            "help": "Ein niedriger RSI zählt positiver, ein hoher RSI vorsichtiger."
+          },
           "fastRecommendation": "Für schnellere Momentum-Analysen innerhalb von {profile} empfohlen.",
           "swingRecommendation": "Für dein Swing-Profil empfohlen: Nutze den RSI vor allem bei überverkauften und überkauften Bedingungen."
         },
         "ma200": {
           "description": "Der MA 200 zeigt FINN, ob der übergeordnete Trend unterstützt, entgegenwirkt oder als Filter dient.",
           "whenQuestion": "Wann soll FINN den MA 200 besonders berücksichtigen?",
-          "bull": { "label": "Bullenmarkt", "help": "Nutze den MA 200 zur Kontrolle von positiver Tendenz und Trendfortsetzung." },
-          "bear": { "label": "Bärenmarkt", "help": "Nutze den MA 200 defensiv, wenn der übergeordnete Trend schwach ist." },
-          "sideways": { "label": "Seitwärts", "help": "Nutze den MA 200 als Filter, wenn der Markt keinen klaren Trend zeigt." },
-          "standard": { "label": "Standard", "help": "Über dem MA 200 ist stärker, darunter schwächer." },
-          "contrarian": { "label": "Konträr", "help": "Nutze den MA 200 konträr als Mean-Reversion-Filter." },
+          "bull": {
+            "label": "Bullenmarkt",
+            "help": "Nutze den MA 200 zur Kontrolle von positiver Tendenz und Trendfortsetzung."
+          },
+          "bear": {
+            "label": "Bärenmarkt",
+            "help": "Nutze den MA 200 defensiv, wenn der übergeordnete Trend schwach ist."
+          },
+          "sideways": {
+            "label": "Seitwärts",
+            "help": "Nutze den MA 200 als Filter, wenn der Markt keinen klaren Trend zeigt."
+          },
+          "standard": {
+            "label": "Standard",
+            "help": "Über dem MA 200 ist stärker, darunter schwächer."
+          },
+          "contrarian": {
+            "label": "Konträr",
+            "help": "Nutze den MA 200 konträr als Mean-Reversion-Filter."
+          },
           "fastRecommendation": "Als Richtungsfilter empfohlen, ohne seitliches Rauschen in {profile} zu stark zu gewichten.",
           "standardRecommendation": "Für {profile} empfohlen: Nutze den MA 200 als Trendfilter in steigenden, fallenden und seitlichen Phasen."
         }
