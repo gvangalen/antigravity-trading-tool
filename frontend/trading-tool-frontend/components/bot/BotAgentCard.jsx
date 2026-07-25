@@ -121,168 +121,180 @@ export default function BotAgentCard({
         })
       : null;
 
-  /* ================= NORMALIZE DECISION ================= */
-  const normalizedDecision = useMemo(() => {
-  const scores = safeDecision?.scores_json || {};
-  const guardrails =
-    safeDecision?.guardrails_result ||
-    safeDecision?.guardrails ||
-    {};
-  const tradePlan = safeDecision?.trade_plan || {};
+  /* ================= NORMALIZE DECISION + SUMMARY ================= */
+  const decisionView = useMemo(() => {
+    const scores = safeDecision?.scores_json || {};
+    const guardrails =
+      safeDecision?.guardrails_result ||
+      safeDecision?.guardrails ||
+      {};
+    const tradePlan = safeDecision?.trade_plan || {};
 
-  const rawPositionSize =
-    safeDecision?.position_size ??
-    scores?.position_size ??
-    null;
+    const rawPositionSize =
+      safeDecision?.position_size ??
+      scores?.position_size ??
+      null;
 
-  const parsedPositionSize = Number(rawPositionSize);
+    const parsedPositionSize = Number(rawPositionSize);
 
-  const normalizedPositionSize = rawPositionSize !== null && Number.isFinite(parsedPositionSize)
-    ? Math.max(0, Math.min(parsedPositionSize, 1))
-    : null;
+    const normalizedPositionSize = rawPositionSize !== null && Number.isFinite(parsedPositionSize)
+      ? Math.max(0, Math.min(parsedPositionSize, 1))
+      : null;
 
-  const normalized = {
-    ...safeDecision,
+    const normalizedDecision = {
+      ...safeDecision,
 
-    scores_json: scores,
-    metrics: safeDecision?.metrics || {},
+      scores_json: scores,
+      metrics: safeDecision?.metrics || {},
 
-    guardrails_result: guardrails,
-    guardrails: guardrails,
+      guardrails_result: guardrails,
+      guardrails: guardrails,
 
-    trade_plan: tradePlan,
+      trade_plan: tradePlan,
 
-    transition_risk:
-      scores?.transition_risk ??
-      safeDecision?.transition_risk ??
-      null,
+      transition_risk:
+        scores?.transition_risk ??
+        safeDecision?.transition_risk ??
+        null,
 
-    market_pressure:
-      scores?.market_pressure ??
-      safeDecision?.market_pressure ??
-      null,
+      market_pressure:
+        scores?.market_pressure ??
+        safeDecision?.market_pressure ??
+        null,
 
-    warnings:
-      scores?.warnings ??
-      safeDecision?.warnings ??
-      [],
+      warnings:
+        scores?.warnings ??
+        safeDecision?.warnings ??
+        [],
 
-    requested_amount_eur:
-      safeDecision?.requested_amount_eur ??
-      scores?.requested_amount_eur ??
-      0,
+      requested_amount_eur:
+        safeDecision?.requested_amount_eur ??
+        scores?.requested_amount_eur ??
+        0,
 
-    amount_eur:
-      safeDecision?.amount_eur ??
-      scores?.amount_eur ??
-      0,
+      amount_eur:
+        safeDecision?.amount_eur ??
+        scores?.amount_eur ??
+        0,
 
-    base_amount:
-      safeDecision?.base_amount ??
-      scores?.base_amount ??
-      safeDecision?.requested_amount_eur ??
-      0,
+      base_amount:
+        safeDecision?.base_amount ??
+        scores?.base_amount ??
+        safeDecision?.requested_amount_eur ??
+        0,
 
-    execution_mode:
-      safeDecision?.execution_mode ??
-      scores?.execution_mode ??
-      "fixed",
+      execution_mode:
+        safeDecision?.execution_mode ??
+        scores?.execution_mode ??
+        "fixed",
 
-    decision_curve_name:
-      safeDecision?.decision_curve_name ??
-      scores?.decision_curve_name ??
-      null,
+      decision_curve_name:
+        safeDecision?.decision_curve_name ??
+        scores?.decision_curve_name ??
+        null,
 
-    setup_match:
-      safeDecision?.setup_match ??
-      scores?.setup_match ??
-      null,
+      setup_match:
+        safeDecision?.setup_match ??
+        scores?.setup_match ??
+        null,
 
-    // ✅ MARKET SUGGESTION / POSITION SIZE
-    position_size: normalizedPositionSize,
+      position_size: normalizedPositionSize,
 
-    // ✅ STRATEGY EXPOSURE BLIJFT APART
-    exposure_multiplier:
-      safeDecision?.exposure_multiplier ??
-      scores?.exposure_multiplier ??
-      1,
-  };
+      exposure_multiplier:
+        safeDecision?.exposure_multiplier ??
+        scores?.exposure_multiplier ??
+        1,
+    };
 
-  return normalized;
-}, [safeDecision]);
+    const hasDecision = Boolean(
+      normalizedActionLabel ||
+      normalizedDecision?.action ||
+      normalizedDecision?.decision_id ||
+      normalizedDecision?.id
+    );
 
-  const hasDecision = Boolean(
-    normalizedActionLabel ||
-    normalizedDecision?.action ||
-    normalizedDecision?.decision_id ||
-    normalizedDecision?.id
-  );
+    const decisionReason =
+      safeDecision?.reason ||
+      normalizedDecision?.reason ||
+      normalizedDecision?.guardrail_reason ||
+      normalizedDecision?.reasons?.[0] ||
+      normalizedDecision?.trade_plan?.summary ||
+      "";
 
-  const decisionReason =
-    safeDecision?.reason ||
-    normalizedDecision?.reason ||
-    normalizedDecision?.guardrail_reason ||
-    normalizedDecision?.reasons?.[0] ||
-    normalizedDecision?.trade_plan?.summary ||
-    "";
+    const summaryReason = !hasLinkedStrategy
+      ? copy.noStrategy
+      : decisionReason || copy.dataUpdating;
 
-  const summaryReason = !hasLinkedStrategy
-    ? copy.noStrategy
-    : decisionReason || copy.dataUpdating;
-
-  const blocker = !hasLinkedStrategy
-    ? {
-        tone: "amber",
-        title: copy.noStrategy,
-        body:
-          copy.blockerNoStrategyBody ||
-          "Deze bot kan nog niet handelen, omdat er nog geen strategie is gekoppeld aan het plan.",
-        nextStep:
-          copy.blockerNoStrategyStep ||
-          "Volgende stap: koppel eerst een strategie voordat Automation een beslissing kan nemen.",
-      }
-    : !bot?.is_active
+    const blocker = !hasLinkedStrategy
       ? {
-          tone: "slate",
-          title: copy.blockerPausedTitle || "Bot is gepauzeerd",
+          tone: "amber",
+          title: copy.noStrategy,
           body:
-            copy.blockerPausedBody ||
-            "De keten blijft zichtbaar, maar deze bot voert niets uit totdat je hem opnieuw activeert.",
+            copy.blockerNoStrategyBody ||
+            "Deze bot kan nog niet handelen, omdat er nog geen strategie is gekoppeld aan het plan.",
           nextStep:
-            copy.blockerPausedStep ||
-            "Volgende stap: hervat de bot als dit nog steeds je goedgekeurde plan is.",
+            copy.blockerNoStrategyStep ||
+            "Volgende stap: koppel eerst een strategie voordat Automation een beslissing kan nemen.",
         }
-      : !hasDecision || normalizedAction === "hold" || normalizedAction === "observe"
+      : !bot?.is_active
         ? {
-            tone: "blue",
-            title: copy.blockerWaitingTitle || "Wachten op geldige uitvoering",
+            tone: "slate",
+            title: copy.blockerPausedTitle || "Bot is gepauzeerd",
             body:
-              decisionReason ||
-              copy.blockerWaitingBody ||
-              "Er is nog geen directe tradebeslissing. De bot wacht op bevestiging vanuit setup, strategie en marktcontext.",
+              copy.blockerPausedBody ||
+              "De keten blijft zichtbaar, maar deze bot voert niets uit totdat je hem opnieuw activeert.",
             nextStep:
-              copy.blockerWaitingStep ||
-              "Volgende stap: controleer de gekoppelde keten en wacht op betere marktcondities.",
+              copy.blockerPausedStep ||
+              "Volgende stap: hervat de bot als dit nog steeds je goedgekeurde plan is.",
           }
-        : {
-            tone: "emerald",
-            title: copy.blockerReadyTitle || "Bot is klaar voor uitvoering",
-            body:
-              decisionReason ||
-              copy.blockerReadyBody ||
-              "De gekoppelde keten is compleet en de huidige beslissing kan worden uitgevoerd binnen de ingestelde limieten.",
-            nextStep:
-              copy.blockerReadyStep ||
-              "Volgende stap: beoordeel de trade of laat de bot zijn goedgekeurde plan volgen.",
-          };
+        : !hasDecision || normalizedAction === "hold" || normalizedAction === "observe"
+          ? {
+              tone: "blue",
+              title: copy.blockerWaitingTitle || "Wachten op geldige uitvoering",
+              body:
+                decisionReason ||
+                copy.blockerWaitingBody ||
+                "Er is nog geen directe tradebeslissing. De bot wacht op bevestiging vanuit setup, strategie en marktcontext.",
+              nextStep:
+                copy.blockerWaitingStep ||
+                "Volgende stap: controleer de gekoppelde keten en wacht op betere marktcondities.",
+            }
+          : {
+              tone: "emerald",
+              title: copy.blockerReadyTitle || "Bot is klaar voor uitvoering",
+              body:
+                decisionReason ||
+                copy.blockerReadyBody ||
+                "De gekoppelde keten is compleet en de huidige beslissing kan worden uitgevoerd binnen de ingestelde limieten.",
+              nextStep:
+                copy.blockerReadyStep ||
+                "Volgende stap: beoordeel de trade of laat de bot zijn goedgekeurde plan volgen.",
+            };
 
-  const blockerToneClasses = blocker.tone === "amber"
-    ? "border-amber-200 bg-amber-50 text-amber-800"
-    : blocker.tone === "emerald"
-      ? "border-emerald-200 bg-emerald-50 text-emerald-800"
-      : blocker.tone === "slate"
-        ? "border-slate-200 bg-slate-50 text-slate-700"
-        : "border-blue-200 bg-blue-50 text-blue-800";
+    const blockerToneClasses = blocker.tone === "amber"
+      ? "border-amber-200 bg-amber-50 text-amber-800"
+      : blocker.tone === "emerald"
+        ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+        : blocker.tone === "slate"
+          ? "border-slate-200 bg-slate-50 text-slate-700"
+          : "border-blue-200 bg-blue-50 text-blue-800";
+
+    return {
+      normalizedDecision,
+      hasDecision,
+      decisionReason,
+      summaryReason,
+      blocker,
+      blockerToneClasses,
+    };
+  }, [bot?.is_active, copy, hasLinkedStrategy, normalizedAction, normalizedActionLabel, safeDecision]);
+
+  const {
+    normalizedDecision,
+    summaryReason,
+    blocker,
+    blockerToneClasses,
+  } = decisionView;
 
   /* ================= HISTORY ================= */
   const combinedHistory = useMemo(() => {
