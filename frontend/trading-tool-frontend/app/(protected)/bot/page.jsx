@@ -10,7 +10,6 @@ import { useModal } from "@/components/modal/ModalProvider";
 
 import { useMarketIntelligence } from "@/hooks/useMarketIntelligence";
 import BotAgentCard from "@/components/bot/BotAgentCard";
-import BotScores from "@/components/bot/BotScores";
 import BotForm from "@/components/bot/AddBotForm";
 import BotBudgetForm from "@/components/bot/BotBudgetForm";
 import GlobalTradePanel from "@/components/bot/GlobalTradePanel";
@@ -28,7 +27,6 @@ import { useOnboarding } from "@/hooks/useOnboarding";
 import OnboardingBanner from "@/components/onboarding/OnboardingBanner";
 import OnboardingStepGuide from "@/components/onboarding/OnboardingStepGuide";
 import { openFinnContext } from "@/lib/finnCommandSearch";
-import { fetchActiveSetup } from "@/lib/api/setups";
 
 function persistBotSelection(botId) {
   if (typeof window === "undefined" || !botId) return;
@@ -58,7 +56,6 @@ function BotPageInner() {
   const [assetFilter, setAssetFilter] = useState("all");
   const [currentTime, setCurrentTime] = useState(null);
   const [generatingBotId, setGeneratingBotId] = useState(null);
-  const [recommendedSetup, setRecommendedSetup] = useState(null);
   const copy = t?.botPage || {};
   const botGuideCopy = copy.onboardingGuide || {};
 
@@ -207,8 +204,6 @@ function BotPageInner() {
     return () => window.removeEventListener("execution-guardrail-handoff", handleExecutionHandoff);
   }, [bots, setActiveBot]);
 
-  const dailyScores = today?.daily_scores ?? today?.scores ?? {};
-
   const availableAssets = useMemo(() => {
     const assets = new Set(
       bots
@@ -286,38 +281,6 @@ function BotPageInner() {
       persistBotSelection(nextBot.id);
     }
   }, [activeBot, filteredBots, setActiveBot]);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    async function loadRecommendedSetup() {
-      const symbol = String(
-        activeBot?.symbol || activeBot?.strategy?.setup?.symbol || activeBot?.strategy?.symbol || "BTC"
-      ).toUpperCase();
-
-      try {
-        const active = await fetchActiveSetup(symbol);
-        if (!cancelled) {
-          setRecommendedSetup(
-            active && String(active.symbol || symbol).toUpperCase() === symbol ? active : null
-          );
-        }
-      } catch (error) {
-        console.error("Failed to load recommended setup", error);
-        if (!cancelled) setRecommendedSetup(null);
-      }
-    }
-
-    if (!activeBot) {
-      setRecommendedSetup(null);
-      return;
-    }
-
-    loadRecommendedSetup();
-    return () => {
-      cancelled = true;
-    };
-  }, [activeBot]);
 
   const getBotPresentation = (bot) => {
     const portfolio = portfolios.find((item) => item.bot_id === bot.id);
@@ -573,22 +536,8 @@ function BotPageInner() {
             </div>
           )}
 
-          {/* ... existing content ... */}
-          <div className="space-y-6">
-            <BotScores
-              scores={dailyScores}
-              bot={activeBot}
-              presentation={activeBot ? getBotPresentation(activeBot) : null}
-              strategies={strategies}
-              setups={setups}
-              bots={bots}
-              recommendedSetup={recommendedSetup}
-              loading={loading?.today}
-            />
-          </div>
-
           {/* BOT DEPLOYMENT SECTION */}
-          <div className="space-y-6 pt-5 border-t border-slate-100 dark:border-slate-800">
+          <div className="space-y-6">
             <div className="space-y-4">
               <div>
                 <h2 className="text-3xl font-black text-slate-900 dark:text-slate-100 tracking-tighter">{copy.myBotsTitle}</h2>
