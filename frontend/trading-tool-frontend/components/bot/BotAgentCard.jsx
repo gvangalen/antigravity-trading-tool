@@ -100,6 +100,7 @@ export default function BotAgentCard({
     safeDecision?.confidence ||
     ""
   ).toLowerCase();
+  const hasLinkedStrategy = Boolean(bot?.strategy?.id || bot?.strategy_id || bot?.strategy);
 
   /* ================= BOT STATE ================= */
   const normalizedAction = String(safeDecision?.action || "").toLowerCase();
@@ -209,6 +210,79 @@ export default function BotAgentCard({
 
   return normalized;
 }, [safeDecision]);
+
+  const hasDecision = Boolean(
+    normalizedActionLabel ||
+    normalizedDecision?.action ||
+    normalizedDecision?.decision_id ||
+    normalizedDecision?.id
+  );
+
+  const decisionReason =
+    safeDecision?.reason ||
+    normalizedDecision?.reason ||
+    normalizedDecision?.guardrail_reason ||
+    normalizedDecision?.reasons?.[0] ||
+    normalizedDecision?.trade_plan?.summary ||
+    "";
+
+  const summaryReason = !hasLinkedStrategy
+    ? copy.noStrategy
+    : decisionReason || copy.dataUpdating;
+
+  const blocker = !hasLinkedStrategy
+    ? {
+        tone: "amber",
+        title: copy.noStrategy,
+        body:
+          copy.blockerNoStrategyBody ||
+          "Deze bot kan nog niet handelen, omdat er nog geen strategie is gekoppeld aan het plan.",
+        nextStep:
+          copy.blockerNoStrategyStep ||
+          "Volgende stap: koppel eerst een strategie voordat Automation een beslissing kan nemen.",
+      }
+    : !bot?.is_active
+      ? {
+          tone: "slate",
+          title: copy.blockerPausedTitle || "Bot is gepauzeerd",
+          body:
+            copy.blockerPausedBody ||
+            "De keten blijft zichtbaar, maar deze bot voert niets uit totdat je hem opnieuw activeert.",
+          nextStep:
+            copy.blockerPausedStep ||
+            "Volgende stap: hervat de bot als dit nog steeds je goedgekeurde plan is.",
+        }
+      : !hasDecision || normalizedAction === "hold" || normalizedAction === "observe"
+        ? {
+            tone: "blue",
+            title: copy.blockerWaitingTitle || "Wachten op geldige uitvoering",
+            body:
+              decisionReason ||
+              copy.blockerWaitingBody ||
+              "Er is nog geen directe tradebeslissing. De bot wacht op bevestiging vanuit setup, strategie en marktcontext.",
+            nextStep:
+              copy.blockerWaitingStep ||
+              "Volgende stap: controleer de gekoppelde keten en wacht op betere marktcondities.",
+          }
+        : {
+            tone: "emerald",
+            title: copy.blockerReadyTitle || "Bot is klaar voor uitvoering",
+            body:
+              decisionReason ||
+              copy.blockerReadyBody ||
+              "De gekoppelde keten is compleet en de huidige beslissing kan worden uitgevoerd binnen de ingestelde limieten.",
+            nextStep:
+              copy.blockerReadyStep ||
+              "Volgende stap: beoordeel de trade of laat de bot zijn goedgekeurde plan volgen.",
+          };
+
+  const blockerToneClasses = blocker.tone === "amber"
+    ? "border-amber-200 bg-amber-50 text-amber-800"
+    : blocker.tone === "emerald"
+      ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+      : blocker.tone === "slate"
+        ? "border-slate-200 bg-slate-50 text-slate-700"
+        : "border-blue-200 bg-blue-50 text-blue-800";
 
   /* ================= HISTORY ================= */
   const combinedHistory = useMemo(() => {
@@ -449,32 +523,6 @@ export default function BotAgentCard({
                    {bot?.is_live ? <Zap size={10} /> : <Clock size={10} />}
                    {bot?.is_live ? copy.liveMode : copy.paperMode}
                 </div>
-
-                <button
-                  onClick={() => handleBacktest()}
-                  disabled={backtestLoading || scenariosLoading}
-                  className="h-8 px-3 rounded-xl border border-slate-200 bg-card text-muted hover:text-[var(--primary)] hover:border-[var(--primary)] transition-all shadow-sm active:scale-95 flex items-center gap-1.5 text-[9px] font-black uppercase tracking-wider disabled:opacity-50"
-                >
-                  {backtestLoading ? (
-                    <div className="w-2.5 h-2.5 border-2 border-slate-300 border-t-[var(--primary)] animate-spin rounded-full" />
-                  ) : (
-                    <RotateCcw size={11} className="opacity-70" />
-                  )}
-                   {backtestLoading ? copy.analyzing : copy.startBacktest}
-                </button>
-
-                <button
-                  onClick={handleRunScenarios}
-                  disabled={backtestLoading || scenariosLoading}
-                  className="h-8 px-3 rounded-xl border border-indigo-200 bg-indigo-50 text-indigo-600 hover:bg-indigo-100 transition-all shadow-sm active:scale-95 flex items-center gap-1.5 text-[9px] font-black uppercase tracking-wider disabled:opacity-50"
-                >
-                  {scenariosLoading ? (
-                    <div className="w-2.5 h-2.5 border-2 border-indigo-300 border-t-indigo-600 animate-spin rounded-full" />
-                  ) : (
-                    <Activity size={11} className="opacity-70" />
-                  )}
-                  {copy.scenarios}
-                </button>
               </div>
             </div>
           </div>
@@ -538,13 +586,28 @@ export default function BotAgentCard({
           </div>
         </div>
 
-        {/* 📊 SYSTEM STATUS BAR (UPGRADED PADDING) */}
-        <div className={`grid grid-cols-2 lg:grid-cols-4 ${compact ? "gap-2 p-1.5 rounded-2xl" : "gap-4 p-2 rounded-[1.5rem]"} bg-[var(--color-border-subtle)] border border-slate-100`}>
+        <div className={`rounded-[1.5rem] border px-5 py-4 ${blockerToneClasses}`}>
+          <div className="text-[10px] font-black uppercase tracking-[0.22em] opacity-70">
+            {copy.primaryStateLabel || "Direct zichtbaar"}
+          </div>
+          <div className="mt-2 text-lg font-black tracking-tight">
+            {blocker.title}
+          </div>
+          <p className="mt-2 text-sm font-semibold leading-relaxed">
+            {blocker.body}
+          </p>
+          <p className="mt-2 text-xs font-bold opacity-80">
+            {blocker.nextStep}
+          </p>
+        </div>
+
+        {/* 📊 SYSTEM STATUS BAR */}
+        <div className={`grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 ${compact ? "gap-2 p-1.5 rounded-2xl" : "gap-4 p-2 rounded-[1.5rem]"} bg-[var(--color-border-subtle)] border border-slate-100`}>
           <div className="bg-card rounded-xl p-4 border border-slate-100 shadow-sm">
              <div className="text-[9px] font-black text-secondary uppercase tracking-widest mb-1.5 opacity-60">{copy.statusReaction}</div>
              <div className={`text-xs font-black uppercase tracking-tight flex items-center gap-2 ${bot?.is_live ? 'text-emerald-600' : 'text-blue-600'}`}>
-                <div className={`w-2 h-2 rounded-full ${botState === 'live' ? (bot?.is_live ? 'bg-emerald-500' : 'bg-green-500') : 'bg-slate-400'}`} />
-                {bot?.is_live ? copy.liveMode : copy.paperMode} {stateLabels[botState] || botState}
+                <div className={`w-2 h-2 rounded-full ${botState === 'live' ? (bot?.is_live ? 'bg-emerald-500' : 'bg-green-500') : botState === 'waiting' ? 'bg-amber-400' : 'bg-slate-400'}`} />
+                {stateLabels[botState] || botState}
              </div>
           </div>
 
@@ -557,18 +620,15 @@ export default function BotAgentCard({
           </div>
 
           <div className="bg-card rounded-xl p-4 border border-slate-100 shadow-sm">
-             <div className="text-[9px] font-black text-secondary uppercase tracking-widest mb-1.5 opacity-60">{copy.logicalConfidence}</div>
-             <div className="text-xs font-black text-foreground uppercase tracking-tight flex items-center gap-2">
-                <Layers size={12} strokeWidth={3} />
-                {confidenceLabels[normalizedConfidence] || normalizedConfidence.toUpperCase() || copy.insufficientData}
-             </div>
+             <div className="text-[9px] font-black text-secondary uppercase tracking-widest mb-1.5 opacity-60">{copy.summaryReasonLabel || "Waarom"}</div>
+             <div className="text-xs font-black text-foreground tracking-tight">{summaryReason}</div>
           </div>
 
           <div className="bg-card rounded-xl p-4 border border-slate-100 shadow-sm">
              <div className="text-[9px] font-black text-secondary uppercase tracking-widest mb-1.5 opacity-60">{copy.lastChecked}</div>
              <div className="text-xs font-black text-muted tracking-tight">{lastRun || copy.dataUpdating}</div>
           </div>
-        </div>
+         </div>
 
         {/* 🔽 EXPAND TOGGLE 🔽 */}
         <button
@@ -579,9 +639,51 @@ export default function BotAgentCard({
           {isExpanded ? copy.collapseDiagnostics : copy.viewFullDiagnostics}
         </button>
 
+        {isExpanded && (
+          <div className="rounded-[1.5rem] border border-slate-200 bg-slate-50/70 p-4">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <div className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">
+                  {copy.diagnosticsToolsLabel || "Diagnostiektools"}
+                </div>
+                <p className="mt-1 text-sm font-semibold text-slate-600">
+                  {copy.diagnosticsToolsBody || "Gebruik backtests en scenario's alleen wanneer je dieper wilt controleren waarom de bot wel of niet uitvoerbaar is."}
+                </p>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  onClick={() => handleBacktest()}
+                  disabled={backtestLoading || scenariosLoading}
+                  className="h-9 px-3 rounded-xl border border-slate-200 bg-card text-muted hover:text-[var(--primary)] hover:border-[var(--primary)] transition-all shadow-sm active:scale-95 flex items-center gap-1.5 text-[9px] font-black uppercase tracking-wider disabled:opacity-50"
+                >
+                  {backtestLoading ? (
+                    <div className="w-2.5 h-2.5 border-2 border-slate-300 border-t-[var(--primary)] animate-spin rounded-full" />
+                  ) : (
+                    <RotateCcw size={11} className="opacity-70" />
+                  )}
+                  {backtestLoading ? copy.analyzing : copy.startBacktest}
+                </button>
+
+                <button
+                  onClick={handleRunScenarios}
+                  disabled={backtestLoading || scenariosLoading}
+                  className="h-9 px-3 rounded-xl border border-indigo-200 bg-indigo-50 text-indigo-600 hover:bg-indigo-100 transition-all shadow-sm active:scale-95 flex items-center gap-1.5 text-[9px] font-black uppercase tracking-wider disabled:opacity-50"
+                >
+                  {scenariosLoading ? (
+                    <div className="w-2.5 h-2.5 border-2 border-indigo-300 border-t-indigo-600 animate-spin rounded-full" />
+                  ) : (
+                    <Activity size={11} className="opacity-70" />
+                  )}
+                  {copy.scenarios}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* 📊 BACKTEST RESULTS SECTION */}
         {/* ⏳ LOADING STATE */}
-        {(backtestLoading || scenariosLoading) && (
+        {isExpanded && (backtestLoading || scenariosLoading) && (
           <div className="mt-4 p-6 bg-[var(--color-border-subtle)] border border-slate-100 rounded-2xl flex items-center justify-center gap-4 animate-pulse">
             <div className="w-5 h-5 border-2 border-slate-300 border-t-[var(--primary)] animate-spin rounded-full" />
             <div className="text-xs font-black text-secondary uppercase tracking-[0.2em]">
@@ -591,7 +693,7 @@ export default function BotAgentCard({
         )}
 
         {/* 📊 BACKTEST RESULTS SECTION (LIGHT MODE) */}
-        {backtestResult && !backtestLoading && (
+        {isExpanded && backtestResult && !backtestLoading && (
           <div className="mt-4 space-y-4 animate-fade-in">
             <div className="bg-card rounded-[2rem] border border-slate-200 shadow-xl overflow-hidden relative group">
               <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-50/50 blur-3xl rounded-full translate-x-1/2 -translate-y-1/2 opacity-50" />
@@ -738,7 +840,7 @@ export default function BotAgentCard({
         )}
 
         {/* 🚀 SCENARIO COMPARISON TABLE (LIGHT MODE) */}
-        {Object.keys(scenarios).length > 0 && !scenariosLoading && (
+        {isExpanded && Object.keys(scenarios).length > 0 && !scenariosLoading && (
           <div className="mt-4 p-6 bg-[var(--color-border-subtle)] rounded-3xl border border-slate-200 shadow-sm animate-fade-in relative overflow-hidden">
              <div className="flex items-center justify-between mb-6">
                 <div className="flex items-center gap-3">
@@ -815,47 +917,63 @@ export default function BotAgentCard({
             </div>
 
             {/* Module 2: Market Intelligence (THE BRAIN) */}
-            <div className="bg-card rounded-[2rem] border border-slate-200 p-6 lg:p-8 shadow-sm">
-              {loadingMarketIntelligence ? (
-                <div className="flex items-center gap-3 text-xs font-black text-secondary uppercase tracking-widest p-10 justify-center">
-                  <div className="w-4 h-4 rounded-full border-2 border-slate-200 border-t-[var(--primary)] animate-spin" />
-                  {copy.syncingBrain}
+            {hasLinkedStrategy ? (
+              <div className="bg-card rounded-[2rem] border border-slate-200 p-6 lg:p-8 shadow-sm">
+                {loadingMarketIntelligence ? (
+                  <div className="flex items-center gap-3 text-xs font-black text-secondary uppercase tracking-widest p-10 justify-center">
+                    <div className="w-4 h-4 rounded-full border-2 border-slate-200 border-t-[var(--primary)] animate-spin" />
+                    {copy.syncingBrain}
+                  </div>
+                ) : (
+                  <MarketDecisionCard data={marketIntelligence} />
+                )}
+              </div>
+            ) : (
+              <div className="bg-card rounded-[2rem] border border-dashed border-slate-300 p-6 lg:p-8 shadow-sm">
+                <div className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">
+                  {copy.diagnosticsPendingLabel || "Diagnostiek wacht"}
                 </div>
-              ) : (
-                <MarketDecisionCard data={marketIntelligence} />
-              )}
-            </div>
+                <p className="mt-2 text-lg font-black text-slate-900">
+                  {copy.noStrategy}
+                </p>
+                <p className="mt-2 text-sm font-semibold text-slate-600 leading-relaxed">
+                  {copy.diagnosticsPendingBody || "Diepere markt- en uitvoeringsdiagnostiek wordt pas echt zinvol zodra deze bot een gekoppelde strategie heeft."}
+                </p>
+              </div>
+            )}
 
             {/* Module 3: Execution Engine & Price Ladder */}
-            <div className="bg-card rounded-[2rem] border border-slate-200 overflow-hidden shadow-md">
-              <div className="flex flex-col">
-                <div className="flex-1 p-6 lg:p-8">
-                  <BotDecisionCard
-                    bot={bot}
-                    portfolio={portfolio}
-                    decision={normalizedDecision}
-                    order={safeOrder}
-                    loading={loadingDecision}
-                    isAuto={isAuto}
-                    onGenerate={onGenerate}
-                    onExecute={!isAuto ? onExecute : undefined}
-                    onSkip={!isAuto ? onSkip : undefined}
-                  />
-                </div>
+            {hasLinkedStrategy ? (
+              <div className="bg-card rounded-[2rem] border border-slate-200 overflow-hidden shadow-md">
+                <div className="flex flex-col">
+                  <div className="flex-1 p-6 lg:p-8">
+                    <BotDecisionCard
+                      bot={bot}
+                      portfolio={portfolio}
+                      decision={normalizedDecision}
+                      order={safeOrder}
+                      loading={loadingDecision}
+                      isAuto={isAuto}
+                      onGenerate={onGenerate}
+                      onExecute={!isAuto ? onExecute : undefined}
+                      onSkip={!isAuto ? onSkip : undefined}
+                    />
+                  </div>
 
-                <div className="p-6 lg:p-8 bg-slate-50/30 border-t border-slate-100">
-                  <TradePlanCard
-                    decision={normalizedDecision}
-                    tradePlan={planSource}
-                    loading={loadingDecision}
-                    allowManual={!isAuto}
-                    onSave={canSavePlan ? handleSaveTradePlan : undefined}
-                    saving={savingPlan}
-                    error={saveError}
-                  />
+                  <div className="p-6 lg:p-8 bg-slate-50/30 border-t border-slate-100">
+                    <TradePlanCard
+                      decision={normalizedDecision}
+                      tradePlan={planSource}
+                      loading={loadingDecision}
+                      allowManual={!isAuto}
+                      onSave={canSavePlan ? handleSaveTradePlan : undefined}
+                      saving={savingPlan}
+                      error={saveError}
+                    />
+                  </div>
                 </div>
               </div>
-            </div>
+            ) : null}
           </div>
 
           {/* 📜 TERMINAL LOGS / HISTORY (BOTTOM BAR) */}
