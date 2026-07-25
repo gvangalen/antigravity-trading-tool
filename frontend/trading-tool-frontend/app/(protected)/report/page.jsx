@@ -41,7 +41,6 @@ import { trackAssistantEvent } from '@/lib/api/assistantAnalytics';
 import { useTranslation } from '@/app/providers/I18nProvider';
 import { useAsset } from '@/app/providers/AssetProvider';
 import { formatDateTime, getIntlLocale, getLocaleValue, normalizeLocale } from '@/lib/i18n';
-import FinnSpecialistContext from '@/components/finn/FinnSpecialistContext';
 import {
   FALLBACK_FINN_REPORT_OPTIONS,
   resolveActiveFinnReportOption,
@@ -1869,14 +1868,6 @@ RENDER
       <DashboardErrorBoundary onRetry={handleBoundaryRetry}>
         <ReportTerminalHUD report={report} type={reportType} loading={loading} />
       </DashboardErrorBoundary>
-
-      <div className="mt-6">
-        <FinnSpecialistContext
-          subjectType="reflection"
-          symbol={selectedAsset || "BTC"}
-          period={{ daily: "day", weekly: "week", monthly: "month", quarterly: "quarter" }[reportType]}
-        />
-      </div>
 
       <DashboardErrorBoundary onRetry={handleBoundaryRetry}>
         <FinnReportsPanel />
