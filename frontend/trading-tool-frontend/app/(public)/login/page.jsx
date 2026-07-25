@@ -7,11 +7,19 @@ import { Mail, Lock, LogIn, ShieldCheck, Eye, EyeOff } from "lucide-react";
 import { useModal } from "@/components/modal/ModalProvider";
 import { useTranslation } from "@/app/providers/I18nProvider";
 import Link from "next/link";
-import { getOnboardingStatus } from "@/lib/api/onboarding";
+import { getCachedOnboardingStatus, getOnboardingStatus } from "@/lib/api/onboarding";
 
-async function resolvePostLoginDestination(nextPath) {
+async function resolvePostLoginDestination(nextPath, options = {}) {
+  const { preferCache = false } = options;
+
+  if (nextPath && !nextPath.startsWith("/login") && !nextPath.startsWith("/register")) {
+    return nextPath;
+  }
+
   try {
-    const status = await getOnboardingStatus();
+    const status =
+      (preferCache ? getCachedOnboardingStatus() : null) ||
+      await getOnboardingStatus({ preferCache });
     const isComplete = status?.onboarding_complete ?? (
       status?.has_profile &&
       status?.has_setup &&
@@ -54,7 +62,7 @@ function LoginPageContent() {
   useEffect(() => {
     if (!sessionChecked || !isAuthenticated || redirected.current) return;
     redirected.current = true;
-    void resolvePostLoginDestination(nextPath).then((destination) => {
+    void resolvePostLoginDestination(nextPath, { preferCache: true }).then((destination) => {
       router.push(destination);
     });
   }, [isAuthenticated, sessionChecked, nextPath, router]);
@@ -78,7 +86,7 @@ function LoginPageContent() {
     }
 
     showSnackbar(t?.auth?.welcomeBack, "success");
-    const destination = await resolvePostLoginDestination(nextPath);
+    const destination = await resolvePostLoginDestination(nextPath, { preferCache: true });
     router.push(destination);
   };
 

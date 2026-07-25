@@ -13,6 +13,35 @@ import {
   deleteMacroIndicator,
 } from "@/lib/api/macro";
 
+const MACRO_INDICATOR_NAMES_CACHE_TTL_MS = 5 * 60 * 1000;
+let macroIndicatorNamesCache = [];
+let macroIndicatorNamesCacheUpdatedAt = 0;
+let macroIndicatorNamesInFlightPromise = null;
+
+function hasFreshMacroIndicatorNamesCache() {
+  return Date.now() - macroIndicatorNamesCacheUpdatedAt < MACRO_INDICATOR_NAMES_CACHE_TTL_MS;
+}
+
+async function loadMacroIndicatorNamesShared(forceFresh = false) {
+  if (!forceFresh && hasFreshMacroIndicatorNamesCache()) {
+    return macroIndicatorNamesCache;
+  }
+
+  if (!macroIndicatorNamesInFlightPromise) {
+    macroIndicatorNamesInFlightPromise = getMacroIndicatorNames()
+      .then((list) => {
+        macroIndicatorNamesCache = Array.isArray(list) ? list : [];
+        macroIndicatorNamesCacheUpdatedAt = Date.now();
+        return macroIndicatorNamesCache;
+      })
+      .finally(() => {
+        macroIndicatorNamesInFlightPromise = null;
+      });
+  }
+
+  return macroIndicatorNamesInFlightPromise;
+}
+
 /* ============================================================
    ⭐ OFFICIËLE MACRO HOOK — ACTION-DRIVEN (FIXED)
    - Volledig in lijn met Technical & Market
@@ -26,7 +55,9 @@ export function useMacroData(activeTab = "Dag") {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
-  const [indicatorNames, setIndicatorNames] = useState([]);
+  const [indicatorNames, setIndicatorNames] = useState(() => (
+    hasFreshMacroIndicatorNamesCache() ? macroIndicatorNamesCache : []
+  ));
   const [scoreRules, setScoreRules] = useState([]);
 
   /* ------------------------------------------------------------
@@ -40,7 +71,7 @@ export function useMacroData(activeTab = "Dag") {
   useEffect(() => {
     async function loadIndicators() {
       try {
-        const list = await getMacroIndicatorNames();
+        const list = await loadMacroIndicatorNamesShared();
         setIndicatorNames(Array.isArray(list) ? list : []);
       } catch (err) {
         console.error("❌ Fout bij ophalen macro indicatornamen:", err);

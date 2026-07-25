@@ -16,6 +16,35 @@ import {
 
 import { getDailyScores } from "@/lib/api/scores";
 
+const TECHNICAL_INDICATOR_NAMES_CACHE_TTL_MS = 5 * 60 * 1000;
+let technicalIndicatorNamesCache = [];
+let technicalIndicatorNamesCacheUpdatedAt = 0;
+let technicalIndicatorNamesInFlightPromise = null;
+
+function hasFreshTechnicalIndicatorNamesCache() {
+  return Date.now() - technicalIndicatorNamesCacheUpdatedAt < TECHNICAL_INDICATOR_NAMES_CACHE_TTL_MS;
+}
+
+async function loadTechnicalIndicatorNamesShared(forceFresh = false) {
+  if (!forceFresh && hasFreshTechnicalIndicatorNamesCache()) {
+    return technicalIndicatorNamesCache;
+  }
+
+  if (!technicalIndicatorNamesInFlightPromise) {
+    technicalIndicatorNamesInFlightPromise = getIndicatorNames()
+      .then((list) => {
+        technicalIndicatorNamesCache = Array.isArray(list) ? list : [];
+        technicalIndicatorNamesCacheUpdatedAt = Date.now();
+        return technicalIndicatorNamesCache;
+      })
+      .finally(() => {
+        technicalIndicatorNamesInFlightPromise = null;
+      });
+  }
+
+  return technicalIndicatorNamesInFlightPromise;
+}
+
 /* --------------------------------------------------------
    Advies logica
 -------------------------------------------------------- */
@@ -39,7 +68,9 @@ export function useTechnicalData(activeTab = "day", symbol = "BTC", options = {}
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
-  const [indicatorNames, setIndicatorNames] = useState([]);
+  const [indicatorNames, setIndicatorNames] = useState(() => (
+    hasFreshTechnicalIndicatorNamesCache() ? technicalIndicatorNamesCache : []
+  ));
   const [scoreRules, setScoreRules] = useState([]);
 
   /* --------------------------------------------------------
@@ -54,8 +85,11 @@ export function useTechnicalData(activeTab = "day", symbol = "BTC", options = {}
   -------------------------------------------------------- */
   useEffect(() => {
     loadData();
-    loadIndicatorNames();
   }, [activeTab, symbol]);
+
+  useEffect(() => {
+    loadIndicatorNames();
+  }, []);
 
   /* ======================================================
      LADEN VAN TECHNICAL DATA
@@ -124,7 +158,7 @@ export function useTechnicalData(activeTab = "day", symbol = "BTC", options = {}
   ====================================================== */
   async function loadIndicatorNames() {
     try {
-      const list = await getIndicatorNames();
+      const list = await loadTechnicalIndicatorNamesShared();
       setIndicatorNames(Array.isArray(list) ? list : []);
     } catch (err) {
       console.error("❌ Fout bij indicator-namen:", err);

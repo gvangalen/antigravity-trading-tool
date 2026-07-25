@@ -5,9 +5,11 @@ import { usePathname } from "next/navigation";
 
 import {
   getOnboardingStatus,
+  getCachedOnboardingStatus,
   completeOnboardingStep,
   finishOnboarding,
   resetOnboarding,
+  cacheOnboardingStatus,
 } from "@/lib/api/onboarding";
 import { trackAssistantEvent } from "@/lib/api/assistantAnalytics";
 
@@ -22,8 +24,16 @@ export function useOnboarding() {
   // 1️⃣ Status ophalen
   // =====================================================
   const fetchStatus = useCallback(async () => {
+    const cached = getCachedOnboardingStatus(30_000);
+    if (cached) {
+      setStatus(cached);
+      setLoading(false);
+    }
+
     try {
-      setLoading(true);
+      if (!cached) {
+        setLoading(true);
+      }
       setError(null);
 
       const data = await getOnboardingStatus();
@@ -49,6 +59,10 @@ export function useOnboarding() {
       setError(null);
 
       await completeOnboardingStep(step);
+      cacheOnboardingStatus({
+        ...(status || {}),
+        [`has_${step}`]: true,
+      });
       trackAssistantEvent({
         event_name: "onboarding_step_completed",
         page: pathname || "/onboarding",
@@ -75,6 +89,10 @@ export function useOnboarding() {
       setError(null);
 
       await finishOnboarding();
+      cacheOnboardingStatus({
+        ...(status || {}),
+        onboarding_complete: true,
+      });
       trackAssistantEvent({
         event_name: "onboarding_completed",
         page: pathname || "/onboarding",

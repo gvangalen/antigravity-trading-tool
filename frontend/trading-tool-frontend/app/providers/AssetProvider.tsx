@@ -6,6 +6,9 @@ import { API_BASE_URL } from "@/lib/config";
 import { buildAuthHeaders } from "@/lib/api/auth";
 import { normalizeOnboardingAsset, readOnboardingAssetPreference } from "@/lib/onboardingAsset";
 
+let preferredAssetCache: string | null = null;
+let preferredAssetPromise: Promise<string | null> | null = null;
+
 type AssetContextType = {
   selectedAsset: string;
   setSelectedAsset: (asset: string) => void;
@@ -19,6 +22,7 @@ export function AssetProvider({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const [selectedAsset, setSelectedAssetState] = useState<string>("BTC");
   const [availableAssets, setAvailableAssets] = useState<string[]>(["BTC", "ETH", "SOL", "ADA", "DOT"]);
+  const [preferencesHydrated, setPreferencesHydrated] = useState(false);
 
   // Load from localStorage on mount
   useEffect(() => {
@@ -37,24 +41,42 @@ export function AssetProvider({ children }: { children: React.ReactNode }) {
       path.startsWith("/forgot-password") ||
       path.startsWith("/reset-password");
 
-    if (isPublicAuthRoute) return;
+    if (isPublicAuthRoute || preferencesHydrated) return;
 
     let cancelled = false;
 
-    async function hydrateSelectedAssetFromPreferences() {
-      try {
-        const response = await fetch(`${API_BASE_URL}/api/assistant/preferences`, {
+    async function fetchPreferredAsset() {
+      if (preferredAssetCache) {
+        return preferredAssetCache;
+      }
+
+      if (!preferredAssetPromise) {
+        preferredAssetPromise = fetch(`${API_BASE_URL}/api/assistant/preferences`, {
           method: "GET",
           credentials: "include",
           headers: Object.fromEntries(buildAuthHeaders(undefined, "GET").entries()),
-        });
-        if (!response.ok || cancelled) return;
+        })
+          .then(async (response) => {
+            if (!response.ok) return null;
+            const payload = await response.json().catch(() => null);
+            const asset = readOnboardingAssetPreference(payload?.preferences || {});
+            preferredAssetCache = asset || null;
+            return preferredAssetCache;
+          })
+          .catch(() => null)
+          .finally(() => {
+            preferredAssetPromise = null;
+          });
+      }
 
-        const payload = await response.json().catch(() => null);
-        if (cancelled || !payload) return;
+      return preferredAssetPromise;
+    }
 
-        const preferredAsset = readOnboardingAssetPreference(payload.preferences || {});
+    async function hydrateSelectedAssetFromPreferences() {
+      try {
+        const preferredAsset = await fetchPreferredAsset();
         if (!preferredAsset) return;
+        if (cancelled) return;
 
         setSelectedAssetState(preferredAsset);
         localStorage.setItem("selectedAsset", preferredAsset);
@@ -63,6 +85,10 @@ export function AssetProvider({ children }: { children: React.ReactNode }) {
         );
       } catch (error) {
         // Silent by design: public routes and expired sessions should not spam logs here.
+      } finally {
+        if (!cancelled) {
+          setPreferencesHydrated(true);
+        }
       }
     }
 
@@ -71,7 +97,7 @@ export function AssetProvider({ children }: { children: React.ReactNode }) {
     return () => {
       cancelled = true;
     };
-  }, [pathname]);
+  }, [pathname, preferencesHydrated]);
 
   const setSelectedAsset = (asset: string) => {
     const normalized = normalizeOnboardingAsset(asset);

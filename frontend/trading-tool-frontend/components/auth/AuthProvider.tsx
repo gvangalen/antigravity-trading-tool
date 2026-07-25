@@ -190,10 +190,19 @@ export function AuthProvider({ children }) {
         access_token: data?.access_token,
         refresh_token: data?.refresh_token,
       });
+      const loginUser = data?.user ?? null;
 
-      // 🔥 BELANGRIJK:
-      // laad server session opnieuw zodat cookies & context sync zijn
-      await loadSession();
+      if (loginUser) {
+        setUser(loginUser);
+        saveUserLocal(loginUser);
+      }
+      setSessionChecked(true);
+      setLoading(false);
+
+      // Synchroniseer serverstatus op de achtergrond zonder login te blokkeren.
+      setTimeout(() => {
+        void loadSession();
+      }, 0);
 
       // 📳 Haptic Success
       import("@/lib/haptics").then(({ hapticFeedback }) => {

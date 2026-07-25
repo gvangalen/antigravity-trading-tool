@@ -1669,7 +1669,7 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
     reloadWorkspace,
     reloadWatchlist,
   } = useAssetWorkspaceData(activeSymbol, periods, watchlistSymbols);
-  const { strategies = [] } = useStrategyData();
+  const { strategies = [] } = useStrategyData({ includeSetups: false });
   const [marketBestSetup, setMarketBestSetup] = useState(null);
 
   const categoryData = workspace?.categories || {};
@@ -1806,7 +1806,7 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
   };
   const saveWeights = async (weights) => {
     const result = await updateIntelligenceWeights(weights);
-    await Promise.all([reloadWorkspace(), reloadWatchlist()]);
+    await reloadWorkspace();
     return result;
   };
 

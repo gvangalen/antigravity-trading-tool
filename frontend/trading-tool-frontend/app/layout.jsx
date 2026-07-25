@@ -9,7 +9,7 @@ import { getLocaleBootScript, resolveServerFallbackLocale } from "@/lib/i18n";
 const STALE_APP_RECOVERY_VERSION =
   process.env.NEXT_PUBLIC_DEPLOY_VERSION ||
   process.env.VERCEL_GIT_COMMIT_SHA ||
-  `local-build-${new Date().toISOString()}`;
+  `local-build-v2-${new Date().toISOString()}`;
 
 export const metadata = {
   title: `${BRANDING.APP_NAME} — ${BRANDING.APP_SLOGAN} Trading Discipline Engine`,
@@ -43,7 +43,7 @@ function StaleAppRecoveryScript() {
 
   function shouldRecover(reason) {
     var text = String(reason || "");
-    return /copy|ChunkLoadError|Loading chunk|Cannot find module|page-6ba98bbaffeb4e74|Minified React error/i.test(text);
+    return /copy|ChunkLoadError|Loading chunk|Cannot find module|page-6ba98bbaffeb4e74|Minified React error|undefined is not an object|Cannot read properties of undefined|Widget Crash Detected/i.test(text);
   }
 
   function recoveryKind(reason) {

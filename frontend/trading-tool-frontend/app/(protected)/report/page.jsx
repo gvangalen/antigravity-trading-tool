@@ -42,6 +42,11 @@ import { useTranslation } from '@/app/providers/I18nProvider';
 import { useAsset } from '@/app/providers/AssetProvider';
 import { formatDateTime, getIntlLocale, getLocaleValue, normalizeLocale } from '@/lib/i18n';
 import FinnSpecialistContext from '@/components/finn/FinnSpecialistContext';
+import {
+  FALLBACK_FINN_REPORT_OPTIONS,
+  resolveActiveFinnReportOption,
+  resolveFinnReportOptions,
+} from '@/lib/report/finnReportOptions.mjs';
 
 import {
   Download,
@@ -69,14 +74,9 @@ CONFIG
 ===================================================== */
 
 const REPORT_TYPE_KEYS = ['daily', 'weekly', 'monthly', 'quarterly'];
-
 const AUTO_GENERATE_IF_EMPTY = true;
 const POLL_INTERVAL_MS = 4000;
 const POLL_MAX_ATTEMPTS = 60;
-
-const getFinnReportOptions = (finnOptions = {}) => REPORT_TYPE_KEYS
-  .map((key) => ({ key, ...(finnOptions?.[key] || {}) }))
-  .filter((option) => option.label && option.prompt);
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -1031,21 +1031,36 @@ function FinnGovernanceSurface({ analysis }) {
 function FinnReportsPanel() {
   const { t, locale } = useTranslation();
   const reportT = t.pages.report;
-  const finnT = reportT.finn;
+  const finnT = reportT.finn || {};
   const panelRef = useRef(null);
   const [activeFinnReport, setActiveFinnReport] = useState('today');
   const [finnReportCache, setFinnReportCache] = useState({});
   const [finnReport, setFinnReport] = useState(null);
-  const [finnLoading, setFinnLoading] = useState(true);
+  const [finnLoading, setFinnLoading] = useState(false);
   const [finnError, setFinnError] = useState('');
   const [expanded, setExpanded] = useState(false);
   const [shouldLoadFinn, setShouldLoadFinn] = useState(false);
 
-  const finnReportOptions = useMemo(() => getFinnReportOptions(finnT.options), [finnT.options]);
+  const finnReportOptions = useMemo(() => resolveFinnReportOptions(finnT?.options), [finnT?.options]);
+  const safeFinnReportOptions = useMemo(() => {
+    const options = Array.isArray(finnReportOptions) ? finnReportOptions : [];
+    const sanitized = options.filter((option) => option && typeof option.key === 'string' && option.key);
+    return sanitized.length ? sanitized : FALLBACK_FINN_REPORT_OPTIONS;
+  }, [finnReportOptions]);
 
-  const activeOption = finnReportOptions.find((option) => option.key === activeFinnReport) || finnReportOptions[0];
+  const activeOption = useMemo(
+    () => resolveActiveFinnReportOption(safeFinnReportOptions, activeFinnReport),
+    [activeFinnReport, safeFinnReportOptions]
+  );
 
   const loadFinnReport = async (option = activeOption, force = false) => {
+    if (!option?.key || !option?.prompt) {
+      setFinnReport(null);
+      setFinnError(finnT?.loadError || 'Finn report could not be loaded.');
+      setFinnLoading(false);
+      return;
+    }
+
     if (!force && finnReportCache[option.key]) {
       setFinnReport(finnReportCache[option.key]);
       setFinnError('');
@@ -1086,7 +1101,7 @@ function FinnReportsPanel() {
       setExpanded(false);
     } catch (err) {
       console.error('Finn report load failed:', err);
-      setFinnError(finnT.loadError);
+      setFinnError(finnT?.loadError || 'Finn report could not be loaded.');
     } finally {
       setFinnLoading(false);
     }
@@ -1102,40 +1117,17 @@ function FinnReportsPanel() {
   }, []);
 
   useEffect(() => {
-    if (shouldLoadFinn) return;
-
-    const fallback = window.setTimeout(() => {
-      setShouldLoadFinn(true);
-    }, 1800);
-
-    if (typeof IntersectionObserver !== 'undefined' && panelRef.current) {
-      const observer = new IntersectionObserver(
-        (entries) => {
-          if (entries.some((entry) => entry.isIntersecting)) {
-            setShouldLoadFinn(true);
-            observer.disconnect();
-          }
-        },
-        { rootMargin: '320px 0px' }
-      );
-      observer.observe(panelRef.current);
-
-      return () => {
-        window.clearTimeout(fallback);
-        observer.disconnect();
-      };
-    }
-
-    return () => window.clearTimeout(fallback);
-  }, [shouldLoadFinn]);
-
-  useEffect(() => {
     if (!shouldLoadFinn) {
       setFinnLoading(false);
       return;
     }
+    if (!activeOption?.key) {
+      setFinnLoading(false);
+      setFinnError(finnT?.loadError || 'Finn report could not be loaded.');
+      return;
+    }
     loadFinnReport(activeOption);
-  }, [activeFinnReport, shouldLoadFinn]);
+  }, [activeFinnReport, shouldLoadFinn, activeOption, finnT?.loadError]);
 
   const analysis = finnReport?.state?.analysis || finnReport?.analysis || {};
   const behavioralAnalysis = mergeBehavioralAnalysis(
@@ -1153,18 +1145,19 @@ function FinnReportsPanel() {
   const isFinnReport = finnReport?.intent === 'finn_report' && finnReport?.flow === 'finn_report';
   const isBehavioralMemory = finnReport?.intent === 'behavioral_memory' && finnReport?.flow === 'behavioral_memory';
   const isWeeklyReflection = finnReport?.intent === 'weekly_reflection' && finnReport?.flow === 'weekly_reflection';
-  const showBehavioralTabLegend = activeOption.key === 'week' || activeOption.key === 'behavior';
+  const activeOptionKey = activeOption?.key || 'today';
+  const showBehavioralTabLegend = activeOptionKey === 'week' || activeOptionKey === 'behavior';
   const isContractValid = (
     isFinnReport ||
-    (activeOption.key === 'behavior' && isBehavioralMemory) ||
-    (activeOption.key === 'week' && isWeeklyReflection)
+    (activeOptionKey === 'behavior' && isBehavioralMemory) ||
+    (activeOptionKey === 'week' && isWeeklyReflection)
   );
 
   const metricItems = [
-    [finnT.metrics.actions, metrics.actions_today ?? metrics.actions_7d ?? metrics.actions_30d],
-    [finnT.metrics.slowed, metrics.plan_deviation_events_today ?? metrics.plan_deviation_events_7d ?? metrics.plan_deviation_events_30d],
-    [finnT.metrics.skips, metrics.skipped_today ?? metrics.skipped_7d ?? metrics.skipped_30d],
-  ].filter(([, value]) => value !== undefined && value !== null);
+    [finnT?.metrics?.actions, metrics.actions_today ?? metrics.actions_7d ?? metrics.actions_30d],
+    [finnT?.metrics?.slowed, metrics.plan_deviation_events_today ?? metrics.plan_deviation_events_7d ?? metrics.plan_deviation_events_30d],
+    [finnT?.metrics?.skips, metrics.skipped_today ?? metrics.skipped_7d ?? metrics.skipped_30d],
+  ].filter(([label, value]) => label && value !== undefined && value !== null);
 
   return (
     <section ref={panelRef} className="my-8 md:my-10">
@@ -1188,7 +1181,7 @@ function FinnReportsPanel() {
             </div>
 
             <div className="flex flex-wrap gap-2">
-              {[finnT.badges.readOnly, finnT.badges.auditTrail, finnT.badges.separate].map((label) => (
+              {[finnT?.badges?.readOnly, finnT?.badges?.auditTrail, finnT?.badges?.separate].filter(Boolean).map((label) => (
                 <span
                   key={label}
                   className="px-3 py-1.5 rounded-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-[10px] font-black uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400"
@@ -1203,11 +1196,12 @@ function FinnReportsPanel() {
         <div className="p-6 md:p-7">
           <div className="mb-5 overflow-x-auto">
             <div className="inline-flex min-w-full sm:min-w-0 rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/50 p-1">
-              {finnReportOptions.map((option) => {
+              {safeFinnReportOptions.map((option, index) => {
+                if (!option?.key) return null;
                 const active = option.key === activeFinnReport;
                 return (
                   <button
-                    key={option.key}
+                    key={`${option.key}-${index}`}
                     onClick={() => setActiveFinnReport(option.key)}
                     className={`flex-1 sm:flex-none px-4 py-3 rounded-xl text-[10px] font-black uppercase tracking-[0.16em] whitespace-nowrap transition-all ${
                       active
@@ -1262,7 +1256,7 @@ function FinnReportsPanel() {
                     </span>
                     <span className="inline-flex items-center gap-1.5 text-[10px] font-black uppercase tracking-[0.18em] text-blue-600 dark:text-blue-400">
                       <ClipboardList size={13} />
-                      {activeOption.eyebrow}
+                      {activeOption?.eyebrow || finnT.latest}
                     </span>
                     <span className="px-2.5 py-1 rounded-full bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-[9px] font-black uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">
                       {finnT.activity}
@@ -1275,7 +1269,7 @@ function FinnReportsPanel() {
                   <div className="grid grid-cols-1 gap-3 md:grid-cols-[minmax(0,1fr)_220px] md:items-start">
                     <div className="min-w-0">
                       <p className="text-sm md:text-[15px] leading-relaxed text-slate-700 dark:text-slate-300 max-w-3xl">
-                        {summary || activeOption.empty}
+                        {summary || activeOption?.empty || finnT.summaryFallback}
                       </p>
 
                       <div className="mt-5 grid grid-cols-1 sm:grid-cols-3 gap-3 max-w-2xl">
@@ -1343,11 +1337,11 @@ function FinnReportsPanel() {
                       </div>
                       <div className="mt-3 flex flex-wrap gap-2">
                         {[
-                          finnT.behavioralPills.profile,
-                          finnT.behavioralPills.trend,
-                          finnT.behavioralPills.brake,
-                          finnT.behavioralPills.style,
-                        ].map((label) => (
+                          finnT?.behavioralPills?.profile,
+                          finnT?.behavioralPills?.trend,
+                          finnT?.behavioralPills?.brake,
+                          finnT?.behavioralPills?.style,
+                        ].filter(Boolean).map((label) => (
                           <span
                             key={label}
                             className="inline-flex items-center rounded-full border border-white/70 dark:border-slate-900/50 bg-white/80 dark:bg-slate-950/35 px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.14em] text-violet-900 dark:text-violet-100"
@@ -1382,7 +1376,14 @@ function FinnReportsPanel() {
                     </p>
                   </div>
                   <div className="mt-5 grid grid-cols-1 sm:grid-cols-3 gap-3 max-w-2xl">
-                    {(metricItems.length ? metricItems : [[finnT.detailMetrics.source, source], [finnT.detailMetrics.type, reportType], [finnT.detailMetrics.separation, separateFrom]]).map(([label, value]) => (
+                    {(metricItems.length
+                      ? metricItems
+                      : [
+                          [finnT?.detailMetrics?.source, source],
+                          [finnT?.detailMetrics?.type, reportType],
+                          [finnT?.detailMetrics?.separation, separateFrom],
+                        ].filter(([label]) => label)
+                    ).map(([label, value]) => (
                       <div
                         key={label}
                         className="rounded-xl bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 p-3"
@@ -1401,7 +1402,7 @@ function FinnReportsPanel() {
                   <FinnPortfolioRisk portfolioRisk={portfolioRisk} />
                   <FinnBehavioralIntelligenceBlocks
                     analysis={behavioralAnalysis}
-                    forceVisible={activeOption.key === 'week' || activeOption.key === 'behavior'}
+                    forceVisible={activeOptionKey === 'week' || activeOptionKey === 'behavior'}
                   />
                   <FinnGovernanceSurface analysis={analysis} />
                   {analysis?.agent_accountability?.performance_light?.summary && (
@@ -1449,6 +1450,16 @@ export default function ReportPage() {
 
   const pollTokenRef = useRef(0);
   const lastSignatureRef = useRef('');
+
+  const handleBoundaryRetry = () => {
+    if (typeof window !== 'undefined' && typeof window.__TRADAMIND_CLEAR_STALE_APP__ === 'function') {
+      window.__TRADAMIND_CLEAR_STALE_APP__('Widget Crash Detected');
+      return;
+    }
+    if (typeof window !== 'undefined') {
+      window.location.reload();
+    }
+  };
 
   const fallbackLabel = reportT.types[reportType] || reportT.hudDefaultTitle;
 
@@ -1642,7 +1653,7 @@ RENDER
       </header>
 
       {/* 📊 OVERVIEW HUD */}
-      <DashboardErrorBoundary>
+      <DashboardErrorBoundary onRetry={handleBoundaryRetry}>
         <ReportTerminalHUD report={report} type={reportType} loading={loading} />
       </DashboardErrorBoundary>
 
@@ -1654,7 +1665,7 @@ RENDER
         />
       </div>
 
-      <DashboardErrorBoundary>
+      <DashboardErrorBoundary onRetry={handleBoundaryRetry}>
         <FinnReportsPanel />
       </DashboardErrorBoundary>
 
@@ -1719,7 +1730,7 @@ RENDER
       ) : (
         report && (
           <div className="animate-fade-slide pb-24">
-            <DashboardErrorBoundary>
+            <DashboardErrorBoundary onRetry={handleBoundaryRetry}>
               <ReportContainer>
                 <ReportLayout report={report} />
               </ReportContainer>

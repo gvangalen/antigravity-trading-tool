@@ -24,6 +24,35 @@ import {
 
 import { getDailyScores } from "@/lib/api/scores";
 
+const MARKET_INDICATOR_NAMES_CACHE_TTL_MS = 5 * 60 * 1000;
+let marketIndicatorNamesCache = [];
+let marketIndicatorNamesCacheUpdatedAt = 0;
+let marketIndicatorNamesInFlightPromise = null;
+
+function hasFreshMarketIndicatorNamesCache() {
+  return Date.now() - marketIndicatorNamesCacheUpdatedAt < MARKET_INDICATOR_NAMES_CACHE_TTL_MS;
+}
+
+async function loadMarketIndicatorNamesShared(forceFresh = false) {
+  if (!forceFresh && hasFreshMarketIndicatorNamesCache()) {
+    return marketIndicatorNamesCache;
+  }
+
+  if (!marketIndicatorNamesInFlightPromise) {
+    marketIndicatorNamesInFlightPromise = getMarketIndicatorNames()
+      .then((list) => {
+        marketIndicatorNamesCache = Array.isArray(list) ? list : [];
+        marketIndicatorNamesCacheUpdatedAt = Date.now();
+        return marketIndicatorNamesCache;
+      })
+      .finally(() => {
+        marketIndicatorNamesInFlightPromise = null;
+      });
+  }
+
+  return marketIndicatorNamesInFlightPromise;
+}
+
 /* --------------------------------------------------------
    Advies logica
 -------------------------------------------------------- */
@@ -136,7 +165,7 @@ export function useMarketData(symbol = "BTC", options = {}) {
         shouldLoadDailyScores ? getDailyScores(symbol) : Promise.resolve(null),
         shouldLoadMarketDayData ? marketPeriodRequest(symbol) : Promise.resolve(null),
         shouldLoadIndicators ? getUserMarketIndicators(symbol) : Promise.resolve(null),
-        shouldLoadIndicators ? getMarketIndicatorNames() : Promise.resolve(null),
+        shouldLoadIndicators ? loadMarketIndicatorNamesShared() : Promise.resolve(null),
       ]);
 
       const [

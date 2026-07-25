@@ -2,9 +2,13 @@
 
 import { useEffect } from "react";
 
-export default function CacheKiller() {
-  const CURRENT_BUILD = "2026-07-08-copy-chunk-recovery";
+const CURRENT_BUILD =
+  (typeof window !== "undefined" && window.__NEXT_DATA__?.buildId) ||
+  process.env.NEXT_PUBLIC_DEPLOY_VERSION ||
+  process.env.NEXT_PUBLIC_VERCEL_GIT_COMMIT_SHA ||
+  "2026-07-25-runtime-recovery-v2";
 
+export default function CacheKiller() {
   useEffect(() => {
     if (typeof window === "undefined") return;
 
