@@ -1983,6 +1983,8 @@
       "blockerPausedTitle": "Bot is paused",
       "blockerPausedBody": "The chain stays visible, but this bot will not execute anything until you resume it.",
       "blockerPausedStep": "Next step: resume the bot if this is still your approved plan.",
+      "blockerPausedCompleteBody": "Execution is paused, but the linked chain and the last known bot data stay visible below.",
+      "blockerPausedCompleteStep": "Next step: review the last known setup, strategy and decision, then resume the bot when this is still your approved plan.",
       "blockerWaitingTitle": "Waiting for valid execution",
       "blockerWaitingBody": "The bot is waiting for confirmation from setup, strategy and market context.",
       "blockerWaitingStep": "Next step: review the linked chain and wait for better market conditions.",

@@ -261,8 +261,8 @@ export default function BotAgentCard({
       ? {
           tone: "slate",
           title: copy.blockerPausedTitle,
-          body: copy.blockerPausedBody,
-          nextStep: copy.blockerPausedStep,
+          body: copy.blockerPausedCompleteBody || copy.blockerPausedBody,
+          nextStep: copy.blockerPausedCompleteStep || copy.blockerPausedStep,
         }
       : !hasDecision || normalizedAction === "hold" || normalizedAction === "observe"
         ? {

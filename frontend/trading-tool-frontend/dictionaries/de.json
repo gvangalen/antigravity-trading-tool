@@ -1984,6 +1984,8 @@
       "blockerPausedTitle": "Bot ist pausiert",
       "blockerPausedBody": "Die Kette bleibt sichtbar, aber dieser Bot führt nichts aus, bis du ihn wieder aktivierst.",
       "blockerPausedStep": "Nächster Schritt: Aktiviere den Bot wieder, wenn dies weiterhin dein freigegebener Plan ist.",
+      "blockerPausedCompleteBody": "Die Ausführung ist pausiert, aber die verknüpfte Kette und die zuletzt bekannten Botdaten bleiben unten sichtbar.",
+      "blockerPausedCompleteStep": "Nächster Schritt: Prüfe die zuletzt bekannte Setup-, Strategie- und Entscheidungsdaten und aktiviere den Bot wieder, wenn dies weiterhin dein freigegebener Plan ist.",
       "blockerWaitingTitle": "Warten auf gültige Ausführung",
       "blockerWaitingBody": "Der Bot wartet auf Bestätigung aus Setup, Strategie und Marktumfeld.",
       "blockerWaitingStep": "Nächster Schritt: Prüfe die verknüpfte Kette und warte auf bessere Marktbedingungen.",

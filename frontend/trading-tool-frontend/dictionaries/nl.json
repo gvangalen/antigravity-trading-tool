@@ -1984,6 +1984,8 @@
       "blockerPausedTitle": "Bot is gepauzeerd",
       "blockerPausedBody": "De keten blijft zichtbaar, maar deze bot voert niets uit totdat je hem opnieuw activeert.",
       "blockerPausedStep": "Volgende stap: hervat de bot als dit nog steeds je goedgekeurde plan is.",
+      "blockerPausedCompleteBody": "De uitvoering staat gepauzeerd, maar de gekoppelde keten en de laatst bekende botdata blijven hieronder zichtbaar.",
+      "blockerPausedCompleteStep": "Volgende stap: controleer de laatst bekende setup, strategie en beslissing en hervat daarna de bot als dit nog steeds je goedgekeurde plan is.",
       "blockerWaitingTitle": "Wachten op geldige uitvoering",
       "blockerWaitingBody": "De bot wacht op bevestiging vanuit setup, strategie en marktcontext.",
       "blockerWaitingStep": "Volgende stap: controleer de gekoppelde keten en wacht op betere marktcondities.",
