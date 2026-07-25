@@ -35,6 +35,65 @@ function persistBotSelection(botId) {
   window.history.replaceState(window.history.state, "", `${url.pathname}${url.search}${url.hash}`);
 }
 
+function getBotChainState(bot, strategies = []) {
+  const linkedStrategy =
+    bot?.strategy ||
+    strategies.find((strategy) => strategy.id === (bot?.strategy_id || bot?.strategy?.id)) ||
+    null;
+
+  const hasStrategy = Boolean(linkedStrategy?.id || bot?.strategy_id || bot?.strategy);
+  const hasSetup = Boolean(
+    linkedStrategy?.setup?.id ||
+    linkedStrategy?.setup_id ||
+    bot?.strategy?.setup?.id ||
+    bot?.strategy?.setup_id
+  );
+
+  return {
+    linkedStrategy,
+    hasStrategy,
+    hasSetup,
+    isComplete: hasStrategy && hasSetup,
+  };
+}
+
+function getBotMarketFitScore(decision) {
+  const setupMatchScore = Number(
+    decision?.setup_match?.score ??
+    decision?.scores_json?.setup_match?.score ??
+    decision?.scores_json?.setup_score ??
+    decision?.setup_score ??
+    NaN
+  );
+
+  return Number.isFinite(setupMatchScore) ? setupMatchScore : -1;
+}
+
+function compareBotsForAutomation(a, b, strategies = [], decisionsByBot = {}) {
+  const aChain = getBotChainState(a, strategies);
+  const bChain = getBotChainState(b, strategies);
+
+  if (aChain.isComplete !== bChain.isComplete) {
+    return aChain.isComplete ? -1 : 1;
+  }
+
+  const aScore = getBotMarketFitScore(decisionsByBot?.[a.id] || {});
+  const bScore = getBotMarketFitScore(decisionsByBot?.[b.id] || {});
+  if (aScore !== bScore) {
+    return bScore - aScore;
+  }
+
+  if (a.is_active !== b.is_active) {
+    return a.is_active ? -1 : 1;
+  }
+
+  if (aChain.hasStrategy !== bChain.hasStrategy) {
+    return aChain.hasStrategy ? -1 : 1;
+  }
+
+  return String(a?.name || "").localeCompare(String(b?.name || ""));
+}
+
 function BotPageInner() {
   const router = useRouter();
   const { t, locale } = useTranslation();
@@ -105,6 +164,12 @@ function BotPageInner() {
     loadStrategies();
   }, [loadSetups, loadStrategies]);
 
+  const rankedBots = useMemo(() => {
+    return [...bots].sort((left, right) => (
+      compareBotsForAutomation(left, right, strategies, decisionsByBot)
+    ));
+  }, [bots, strategies, decisionsByBot]);
+
   useEffect(() => {
     trackAssistantEvent({
       event_name: "screen_view",
@@ -115,15 +180,15 @@ function BotPageInner() {
   }, []);
 
   useEffect(() => {
-    if (bots.length === 0) {
+    if (rankedBots.length === 0) {
       setActiveBot(null);
       setExpandedBotId(null);
       setTradePanelBotId(null);
       hasInitializedExpansionRef.current = false;
       return;
     }
-    if (!activeBot || !bots.find((b) => b.id === activeBot.id)) {
-      const defaultBot = bots[0];
+    if (!activeBot || !rankedBots.find((b) => b.id === activeBot.id)) {
+      const defaultBot = rankedBots[0];
       setActiveBot(defaultBot);
       setExpandedBotId(defaultBot.id);
       hasInitializedExpansionRef.current = true;
@@ -135,9 +200,9 @@ function BotPageInner() {
       return;
     }
     setExpandedBotId((currentId) => (
-      currentId && !bots.some((bot) => bot.id === currentId) ? null : currentId
+      currentId && !rankedBots.some((bot) => bot.id === currentId) ? null : currentId
     ));
-  }, [bots, activeBot, setActiveBot]);
+  }, [rankedBots, activeBot, setActiveBot]);
 
   useEffect(() => {
     if (bots.length > 0 && status && status.has_bot === false) {
@@ -217,7 +282,7 @@ function BotPageInner() {
   }, [bots, portfolios]);
 
   const filteredBots = useMemo(() => {
-    return bots.filter((bot) => {
+    return rankedBots.filter((bot) => {
       if (statusFilter === "active" && !bot.is_active) return false;
       if (statusFilter === "paused" && bot.is_active) return false;
       
@@ -228,7 +293,7 @@ function BotPageInner() {
       
       return true;
     });
-  }, [bots, statusFilter, assetFilter, portfolios]);
+  }, [rankedBots, statusFilter, assetFilter, portfolios]);
 
   useEffect(() => {
     if (!tradePanelBotId) {
