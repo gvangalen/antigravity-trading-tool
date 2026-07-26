@@ -5531,157 +5531,148 @@ function AIAssistantContent({
           </div>
         )}
         {!isSimpleFinnModal && shouldCondenseMissionControl ? (
-          <div className="p-5 border-b border-slate-100 dark:border-slate-800 bg-[linear-gradient(180deg,rgba(248,250,252,0.96)_0%,rgba(255,255,255,1)_100%)] dark:bg-[#0f172a] space-y-4 animate-fade-in">
+          <div className="p-4 border-b border-slate-100 dark:border-slate-800 bg-[linear-gradient(180deg,rgba(248,250,252,0.92)_0%,rgba(255,255,255,1)_100%)] dark:bg-[#0f172a] space-y-3 animate-fade-in">
             {missionControlLoading && !missionControl ? (
-              <div className="rounded-[26px] border border-slate-200 dark:border-slate-800 bg-white/90 dark:bg-slate-950/35 px-4 py-4 space-y-3 animate-pulse">
+              <div className="rounded-[22px] border border-slate-200 dark:border-slate-800 bg-white/90 dark:bg-slate-950/35 px-4 py-4 space-y-3 animate-pulse">
                 <div className="flex items-center gap-2 text-[9px] font-black uppercase tracking-widest text-slate-400">
                   <Sparkles size={11} className="text-blue-500" />
                   {uiText.loadingWorkspace}
                 </div>
                 <div className="h-4 w-8/12 rounded-full bg-slate-200 dark:bg-slate-800" />
                 <div className="h-3 w-5/12 rounded-full bg-slate-200 dark:bg-slate-800" />
-                <div className="grid gap-2 md:grid-cols-3">
-                  <div className="h-16 rounded-2xl bg-slate-100 dark:bg-slate-900" />
-                  <div className="h-16 rounded-2xl bg-slate-100 dark:bg-slate-900" />
-                  <div className="h-16 rounded-2xl bg-slate-100 dark:bg-slate-900" />
+                <div className="grid gap-2 md:grid-cols-4">
+                  <div className="h-14 rounded-xl bg-slate-100 dark:bg-slate-900" />
+                  <div className="h-14 rounded-xl bg-slate-100 dark:bg-slate-900" />
+                  <div className="h-14 rounded-xl bg-slate-100 dark:bg-slate-900" />
+                  <div className="h-14 rounded-xl bg-slate-100 dark:bg-slate-900" />
                 </div>
               </div>
             ) : (
               <>
-                <div className="grid gap-4 xl:grid-cols-[minmax(0,1.55fr)_minmax(300px,0.95fr)]">
-                  <div className="rounded-[28px] border border-slate-200 dark:border-slate-800 bg-white/96 dark:bg-slate-950/30 p-5 shadow-[0_18px_45px_-35px_rgba(37,99,235,0.35)]">
-                    <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="rounded-[22px] border border-slate-200 dark:border-slate-800 bg-white/96 dark:bg-slate-950/30 px-4 py-4 shadow-[0_16px_36px_-34px_rgba(37,99,235,0.35)]">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.24em] text-blue-600 dark:text-blue-300">
                         <Shield size={12} />
                         {uiText.workspaceSummary}
                       </div>
-                      <span className="rounded-full border border-emerald-200/80 bg-emerald-50 px-3 py-1 text-[9px] font-black uppercase tracking-[0.18em] text-emerald-700 dark:border-emerald-900/50 dark:bg-emerald-950/20 dark:text-emerald-300">
-                        {humanizeSurfaceStatus(
-                          missionControl?.summary?.posture ||
-                          missionControl?.behavioral_insight?.coaching?.current_posture ||
-                          insight?.market_insight?.posture ||
-                          "defensive",
-                        )}
-                      </span>
-                    </div>
+                      {workspaceGreeting ? (
+                        <p className="mt-3 text-[13px] font-semibold text-slate-500 dark:text-slate-400">
+                          {workspaceGreeting}
+                        </p>
+                      ) : null}
 
-                    {workspaceGreeting ? (
-                      <p className="mt-4 text-sm font-semibold text-slate-500 dark:text-slate-400">
-                        {workspaceGreeting}
-                      </p>
-                    ) : null}
+                      <h3 className="mt-1.5 max-w-4xl text-[22px] font-black leading-[1.18] tracking-tight text-slate-950 dark:text-slate-50 lg:text-[24px]">
+                        {workspaceHeadline}
+                      </h3>
 
-                    <h3 className="mt-2 max-w-4xl text-[28px] font-black leading-[1.15] tracking-tight text-slate-950 dark:text-slate-50">
-                      {workspaceHeadline}
-                    </h3>
+                      {(workspaceSupport || workspaceActionHint) ? (
+                        <p className="mt-2.5 max-w-3xl text-[14px] font-medium leading-6 text-slate-600 dark:text-slate-300">
+                          {workspaceSupport || workspaceActionHint}
+                        </p>
+                      ) : null}
 
-                    {workspaceSupport ? (
-                      <p className="mt-3 max-w-3xl text-sm font-medium leading-6 text-slate-600 dark:text-slate-300">
-                        {workspaceSupport}
-                      </p>
-                    ) : null}
-
-                    <div className="mt-5 flex flex-wrap gap-2.5">
-                      <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-2 text-[10px] font-black uppercase tracking-[0.18em] text-slate-700 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200">
-                        <span className="text-slate-400 dark:text-slate-500">{uiText.workspaceStatusMarket}</span>
-                        <span className="text-slate-950 dark:text-slate-50">
+                      <div className="mt-4 flex flex-wrap items-center gap-2">
+                        <span className="rounded-full border border-emerald-200/80 bg-emerald-50 px-2.5 py-1 text-[9px] font-black uppercase tracking-[0.16em] text-emerald-700 dark:border-emerald-900/50 dark:bg-emerald-950/20 dark:text-emerald-300">
                           {humanizeSurfaceStatus(
                             missionControl?.summary?.posture ||
+                            missionControl?.behavioral_insight?.coaching?.current_posture ||
                             insight?.market_insight?.posture ||
                             "defensive",
                           )}
                         </span>
-                      </div>
-                      <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-2 text-[10px] font-black uppercase tracking-[0.18em] text-slate-700 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200">
-                        <span className="text-slate-400 dark:text-slate-500">{uiText.workspaceStatusReviews}</span>
-                        <span className="text-slate-950 dark:text-slate-50">{overlayMissionSections.reviewItems.length}</span>
-                      </div>
-                      <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-2 text-[10px] font-black uppercase tracking-[0.18em] text-slate-700 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200">
-                        <span className="text-slate-400 dark:text-slate-500">{uiText.workspaceStatusRisks}</span>
-                        <span className="text-slate-950 dark:text-slate-50">{overlayMissionSections.riskItems.length}</span>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="rounded-[28px] border border-slate-200 dark:border-slate-800 bg-slate-50/85 dark:bg-slate-900/45 p-5">
-                    <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.24em] text-slate-500 dark:text-slate-400">
-                      <Activity size={12} className="text-blue-600 dark:text-blue-300" />
-                      {uiText.workspacePrimaryAction}
-                    </div>
-
-                    <div className="mt-4">
-                      <p className="text-xl font-black leading-tight text-slate-950 dark:text-slate-50">
-                        {primaryCoachingItem
-                          ? humanizeMissionTitle(primaryCoachingItem)
-                          : missionControl?.coaching_loop?.headline || uiText.noActions}
-                      </p>
-                      <p className="mt-3 text-sm font-medium leading-6 text-slate-600 dark:text-slate-300">
-                        {workspaceActionHint || compactMissionReason || uiText.noActions}
-                      </p>
-                    </div>
-
-                    {primaryProfileHabitAlignment && compactBehavioralReason ? (
-                      <div className="mt-4 rounded-2xl border border-amber-200/80 bg-amber-50/70 px-3 py-3 dark:border-amber-900/40 dark:bg-amber-950/20">
-                        <div className="text-[8px] font-black uppercase tracking-[0.2em] text-amber-700 dark:text-amber-300">
-                          {at("cards.finnSlowsDownOn")} {primaryBehaviorLabel}
+                        <div className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.14em] text-slate-700 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200">
+                          <span className="text-slate-400 dark:text-slate-500">{uiText.workspaceStatusMarket}</span>
+                          <span className="text-slate-950 dark:text-slate-50">
+                            {humanizeSurfaceStatus(
+                              missionControl?.summary?.posture ||
+                              insight?.market_insight?.posture ||
+                              "defensive",
+                            )}
+                          </span>
                         </div>
-                        <p className="mt-1.5 text-[11px] font-semibold leading-snug text-slate-700 dark:text-slate-200">
-                          {compactBehavioralReason}
-                        </p>
+                        <div className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.14em] text-slate-700 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200">
+                          <span className="text-slate-400 dark:text-slate-500">{uiText.workspaceStatusReviews}</span>
+                          <span className="text-slate-950 dark:text-slate-50">{overlayMissionSections.reviewItems.length}</span>
+                        </div>
+                        <div className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.14em] text-slate-700 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200">
+                          <span className="text-slate-400 dark:text-slate-500">{uiText.workspaceStatusRisks}</span>
+                          <span className="text-slate-950 dark:text-slate-50">{overlayMissionSections.riskItems.length}</span>
+                        </div>
                       </div>
-                    ) : null}
 
-                    {primaryMissionAction ? (
-                      <button
-                        type="button"
-                        onClick={() => handleFollowUpAction(primaryMissionAction, primaryCoachingItem)}
-                        disabled={executingAction}
-                        className="mt-5 inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-2xl bg-blue-600 px-4 py-3 text-[11px] font-black uppercase tracking-[0.18em] text-white shadow-lg shadow-blue-600/15 transition-colors hover:bg-blue-700 disabled:opacity-60"
-                      >
-                        {followUpIcon(primaryMissionAction.handoff || primaryMissionAction.type)}
-                        <span className="leading-tight">{humanizeActionLabel(primaryMissionAction, primaryCoachingItem)}</span>
-                      </button>
-                    ) : null}
+                      <div className="mt-4 flex flex-wrap items-center gap-3">
+                        {primaryMissionAction ? (
+                          <button
+                            type="button"
+                            onClick={() => handleFollowUpAction(primaryMissionAction, primaryCoachingItem)}
+                            disabled={executingAction}
+                            className="inline-flex min-h-10 items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-[10px] font-black uppercase tracking-[0.16em] text-white shadow-md shadow-blue-600/15 transition-colors hover:bg-blue-700 disabled:opacity-60"
+                          >
+                            {followUpIcon(primaryMissionAction.handoff || primaryMissionAction.type)}
+                            <span className="leading-tight">{humanizeActionLabel(primaryMissionAction, primaryCoachingItem)}</span>
+                          </button>
+                        ) : null}
+
+                        <div className="min-w-0 text-[13px] font-semibold text-slate-600 dark:text-slate-300">
+                          <span className="text-slate-400 dark:text-slate-500">{uiText.workspacePrimaryAction}: </span>
+                          {primaryCoachingItem
+                            ? humanizeMissionTitle(primaryCoachingItem)
+                            : missionControl?.coaching_loop?.headline || uiText.noActions}
+                        </div>
+                      </div>
+
+                      {primaryProfileHabitAlignment && compactBehavioralReason ? (
+                        <div className="mt-4 rounded-xl border border-amber-200/80 bg-amber-50/70 px-3 py-2.5 dark:border-amber-900/40 dark:bg-amber-950/20">
+                          <div className="text-[8px] font-black uppercase tracking-[0.18em] text-amber-700 dark:text-amber-300">
+                            {at("cards.finnSlowsDownOn")} {primaryBehaviorLabel}
+                          </div>
+                          <p className="mt-1 text-[11px] font-semibold leading-snug text-slate-700 dark:text-slate-200">
+                            {compactBehavioralReason}
+                          </p>
+                        </div>
+                      ) : null}
+                    </div>
                   </div>
                 </div>
 
-                <div className="rounded-[28px] border border-slate-200 dark:border-slate-800 bg-white/96 dark:bg-slate-950/30 p-4 shadow-[0_18px_45px_-40px_rgba(15,23,42,0.32)]">
+                <div className="rounded-[22px] border border-slate-200 dark:border-slate-800 bg-white/96 dark:bg-slate-950/30 p-3 shadow-[0_14px_32px_-34px_rgba(15,23,42,0.32)]">
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <div>
                       <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.24em] text-blue-600 dark:text-blue-300">
                         <ListChecks size={12} />
                         {uiText.workspaceQueue}
                       </div>
-                      <p className="mt-1 text-sm font-medium text-slate-500 dark:text-slate-400">
+                      <p className="mt-0.5 text-[13px] font-medium text-slate-500 dark:text-slate-400">
                         {uiText.workspaceDetails}
                       </p>
                     </div>
-                    <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-[9px] font-black uppercase tracking-[0.18em] text-slate-600 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300">
+                    <span className="rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[9px] font-black uppercase tracking-[0.14em] text-slate-600 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300">
                       {compactOpenLabel}
                     </span>
                   </div>
 
-                  <div className="mt-4 grid gap-3 lg:grid-cols-3">
+                  <div className="mt-3 grid gap-2 xl:grid-cols-4">
                     {previewQueueSections.map((section) => (
                       <button
                         key={section.key}
                         type="button"
                         onClick={() => setMissionDetailSection((current) => current === section.key ? "" : section.key)}
-                        className={`rounded-[24px] border p-4 text-left transition-all ${
+                        className={`rounded-[18px] border px-3 py-3 text-left transition-all ${
                           missionDetailSection === section.key
                             ? "border-blue-300 bg-blue-50/70 shadow-[0_16px_40px_-35px_rgba(37,99,235,0.55)] dark:border-blue-900/60 dark:bg-blue-950/20"
                             : "border-slate-200 bg-slate-50/75 hover:border-slate-300 hover:bg-white dark:border-slate-800 dark:bg-slate-900/35 dark:hover:border-slate-700 dark:hover:bg-slate-900/60"
                         }`}
                       >
                         <div className="flex items-center justify-between gap-3">
-                          <span className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">
+                          <span className="text-[9px] font-black uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">
                             {section.label}
                           </span>
-                          <span className="rounded-full bg-white/90 px-2.5 py-1 text-xs font-black text-slate-900 shadow-sm dark:bg-slate-950/80 dark:text-slate-100">
+                          <span className="rounded-full bg-white/90 px-2 py-0.5 text-[11px] font-black text-slate-900 shadow-sm dark:bg-slate-950/80 dark:text-slate-100">
                             {section.count}
                           </span>
                         </div>
-                        <p className="mt-3 text-sm font-semibold leading-6 text-slate-700 dark:text-slate-200">
+                        <p className="mt-2 text-[13px] font-semibold leading-5 text-slate-700 dark:text-slate-200">
                           {section.summary}
                         </p>
                       </button>
@@ -5691,21 +5682,21 @@ function AIAssistantContent({
                       <button
                         type="button"
                         onClick={() => setMissionDetailSection((current) => current === previewSecondarySectionKey ? "" : previewSecondarySectionKey)}
-                        className={`rounded-[24px] border p-4 text-left transition-all ${
+                        className={`rounded-[18px] border px-3 py-3 text-left transition-all ${
                           missionDetailSection === previewSecondarySectionKey
                             ? "border-blue-300 bg-blue-50/70 shadow-[0_16px_40px_-35px_rgba(37,99,235,0.55)] dark:border-blue-900/60 dark:bg-blue-950/20"
                             : "border-slate-200 bg-slate-50/75 hover:border-slate-300 hover:bg-white dark:border-slate-800 dark:bg-slate-900/35 dark:hover:border-slate-700 dark:hover:bg-slate-900/60"
                         }`}
                       >
                         <div className="flex items-center justify-between gap-3">
-                          <span className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">
+                          <span className="text-[9px] font-black uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">
                             {uiText.workspaceSectionMore}
                           </span>
-                          <span className="rounded-full bg-white/90 px-2.5 py-1 text-xs font-black text-slate-900 shadow-sm dark:bg-slate-950/80 dark:text-slate-100">
+                          <span className="rounded-full bg-white/90 px-2 py-0.5 text-[11px] font-black text-slate-900 shadow-sm dark:bg-slate-950/80 dark:text-slate-100">
                             {overlayMissionSections.performanceCards.length + overlayMissionSections.historyItems.length}
                           </span>
                         </div>
-                        <p className="mt-3 text-sm font-semibold leading-6 text-slate-700 dark:text-slate-200">
+                        <p className="mt-2 text-[13px] font-semibold leading-5 text-slate-700 dark:text-slate-200">
                           {overlayMissionSections.performanceCards.length > 0
                             ? uiText.workspaceSummaryPerformance
                             : uiText.workspaceSummaryHistory}
