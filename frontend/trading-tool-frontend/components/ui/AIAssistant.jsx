@@ -111,6 +111,8 @@ function buildAssistantUiText(at) {
     workspaceStatusReviews: at("uiText.workspaceStatusReviews"),
     workspaceStatusRisks: at("uiText.workspaceStatusRisks"),
     workspaceStatusOpen: at("uiText.workspaceStatusOpen"),
+    workspaceActionNeeded: at("uiText.workspaceActionNeeded"),
+    workspaceOnTrack: at("uiText.workspaceOnTrack"),
     workspacePrimaryAction: at("uiText.workspacePrimaryAction"),
     workspaceQueue: at("uiText.workspaceQueue"),
     workspaceDetails: at("uiText.workspaceDetails"),
@@ -833,6 +835,7 @@ function AIAssistantContent({
     const pageMap = {
       "/dashboard": t?.nav?.dashboard || "Dashboard",
       "/": t?.nav?.dashboard || "Dashboard",
+      "/asset": t?.nav?.analysis || "Analysis",
       "/market": t?.nav?.market || "Market",
       "/macro": t?.nav?.macro || "Macro",
       "/technical": t?.nav?.technical || "Technical",
@@ -5223,16 +5226,14 @@ function AIAssistantContent({
 
   const progress = activeState ? getFlowProgress(activeState) : null;
   const activeStep = progress ? Math.min(progress.filled + 1, progress.total) : 1;
-  const finnContextLabel = [context.page_type || "Finn", context.symbol || "BTC", context.timeframe || "1D"]
+  const workspaceContextLabel = getFinnWorkspaceLabel(pathname, locale) || humanizeFinnContextValue(context.page_type, "Workspace");
+  const finnContextLabel = [workspaceContextLabel, context.symbol || "BTC"]
     .filter(Boolean)
     .join(" · ");
   const compactFinnHeader = [
     "FINN",
-    String(context.page_type || "").toLowerCase() !== "unknown"
-      ? humanizeFinnContextValue(context.page_type, getFinnWorkspaceLabel(pathname, locale))
-      : getFinnWorkspaceLabel(pathname, locale),
+    workspaceContextLabel,
     String(context.symbol || globalSymbol || "BTC").toUpperCase(),
-    compactFinnTimeframe(context.timeframe),
   ].filter(Boolean);
   const finnModeLabel =
     activeState?.current_flow && activeState.current_flow !== "none"
@@ -5333,6 +5334,25 @@ function AIAssistantContent({
     },
   ];
   const openSummaryCount = overlayMissionSections.todayItems.length || missionControl?.summary?.open_action_count || 0;
+  const workspaceNeedsAttention =
+    openSummaryCount > 0 ||
+    overlayMissionSections.reviewItems.length > 0 ||
+    overlayMissionSections.riskItems.length > 0 ||
+    Number(missionControl?.summary?.blocked_count || 0) > 0;
+  const marketStatusValue = (() => {
+    const summaryPosture = String(missionControl?.summary?.posture || "").toLowerCase();
+    const marketPosture = String(insight?.market_insight?.posture || "").toLowerCase();
+    const marketCycle = String(
+      insight?.market_insight?.structural_cycle ||
+      insight?.market_insight?.cycle ||
+      ""
+    ).toLowerCase();
+    return humanizeSurfaceStatus(
+      summaryPosture.includes("action_required")
+        ? marketPosture || marketCycle || "defensive"
+        : summaryPosture || marketPosture || marketCycle || "defensive"
+    );
+  })();
   const openItemsAreReviews =
     overlayMissionSections.todayItems.length > 0 &&
     overlayMissionSections.todayItems.every((item) => isReviewCandidate(item));
@@ -5485,7 +5505,9 @@ function AIAssistantContent({
               <>
                 <div className="flex items-center gap-2">
                   <h2 className="text-sm font-black text-foreground dark:text-slate-100 tracking-tight">FINN</h2>
-                  <span className="text-[9px] font-black uppercase tracking-widest bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 px-1.5 py-0.5 rounded">{finnModeLabel}</span>
+                      {!previewSectionsOnly ? (
+                        <span className="text-[9px] font-black uppercase tracking-widest bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 px-1.5 py-0.5 rounded">{finnModeLabel}</span>
+                      ) : null}
                 </div>
                 <div className="flex items-center gap-1.5 mt-0.5">
                   <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
@@ -5574,21 +5596,12 @@ function AIAssistantContent({
 
                       <div className="mt-4 flex flex-wrap items-center gap-2">
                         <span className="rounded-full border border-emerald-200/80 bg-emerald-50 px-2.5 py-1 text-[9px] font-black uppercase tracking-[0.16em] text-emerald-700 dark:border-emerald-900/50 dark:bg-emerald-950/20 dark:text-emerald-300">
-                          {humanizeSurfaceStatus(
-                            missionControl?.summary?.posture ||
-                            missionControl?.behavioral_insight?.coaching?.current_posture ||
-                            insight?.market_insight?.posture ||
-                            "defensive",
-                          )}
+                          {workspaceNeedsAttention ? uiText.workspaceActionNeeded : uiText.workspaceOnTrack}
                         </span>
                         <div className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.14em] text-slate-700 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200">
                           <span className="text-slate-400 dark:text-slate-500">{uiText.workspaceStatusMarket}</span>
                           <span className="text-slate-950 dark:text-slate-50">
-                            {humanizeSurfaceStatus(
-                              missionControl?.summary?.posture ||
-                              insight?.market_insight?.posture ||
-                              "defensive",
-                            )}
+                            {marketStatusValue}
                           </span>
                         </div>
                         <div className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.14em] text-slate-700 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200">
@@ -5614,12 +5627,6 @@ function AIAssistantContent({
                           </button>
                         ) : null}
 
-                        <div className="min-w-0 text-[13px] font-semibold text-slate-600 dark:text-slate-300">
-                          <span className="text-slate-400 dark:text-slate-500">{uiText.workspacePrimaryAction}: </span>
-                          {primaryCoachingItem
-                            ? humanizeMissionTitle(primaryCoachingItem)
-                            : missionControl?.coaching_loop?.headline || uiText.noActions}
-                        </div>
                       </div>
 
                       {primaryProfileHabitAlignment && compactBehavioralReason ? (
@@ -5690,16 +5697,17 @@ function AIAssistantContent({
                       >
                         <div className="flex items-center justify-between gap-3">
                           <span className="text-[9px] font-black uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">
-                            {uiText.workspaceSectionMore}
+                          {(missionDetailSections.find((section) => section.key === previewSecondarySectionKey)?.label) || uiText.workspaceSectionMore}
                           </span>
                           <span className="rounded-full bg-white/90 px-2 py-0.5 text-[11px] font-black text-slate-900 shadow-sm dark:bg-slate-950/80 dark:text-slate-100">
                             {overlayMissionSections.performanceCards.length + overlayMissionSections.historyItems.length}
                           </span>
                         </div>
                         <p className="mt-2 text-[13px] font-semibold leading-5 text-slate-700 dark:text-slate-200">
-                          {overlayMissionSections.performanceCards.length > 0
-                            ? uiText.workspaceSummaryPerformance
-                            : uiText.workspaceSummaryHistory}
+                          {(missionDetailSections.find((section) => section.key === previewSecondarySectionKey)?.summary) ||
+                            (overlayMissionSections.performanceCards.length > 0
+                              ? uiText.workspaceSummaryPerformance
+                              : uiText.workspaceSummaryHistory)}
                         </p>
                       </button>
                     ) : null}
