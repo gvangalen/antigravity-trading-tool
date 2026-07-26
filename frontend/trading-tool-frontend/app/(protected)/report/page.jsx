@@ -215,140 +215,189 @@ function formatFinnReportTimestamp(report, fallbackText) {
   });
 }
 
-function getFinnDigestCopy(locale = 'nl') {
-  const normalized = String(locale || 'nl').toLowerCase();
-  if (normalized.startsWith('en')) {
-    return {
-      reportTitle: 'Daily reflection with Finn',
-      headlineDefault: 'Finn found no clear plan violations in this period.',
-      headlineOpen: (count) => `Finn saw no clear plan violations, but ${count} open decision${count === 1 ? '' : 's'} still need follow-up.`,
-      headlineBlocked: (count) => `Finn flagged ${count} moment${count === 1 ? '' : 's'} that need review before you continue.`,
-      reviewed: 'Reviewed',
-      blocked: 'Blocked',
-      open: 'Open',
-      good: 'What went well',
-      attention: 'What needs attention',
-      next: 'Next step',
-      details: 'Activity and evidence',
-      detailsHint: 'Open the underlying activity only when you want the evidence behind this reflection.',
-      detailButton: 'View activity and evidence',
-      detailButtonClose: 'Hide activity and evidence',
-      primaryActionDefault: 'View reflection details',
-      primaryActionOpen: (count) => `View ${count} open decision${count === 1 ? '' : 's'}`,
-      primaryActionBlocked: (count) => `Review ${count} blocked moment${count === 1 ? '' : 's'}`,
-      nextOpen: 'Review the open queue and close the highest-priority decision first.',
-      nextBlocked: 'Review the blocked moments first before starting any new decision.',
-      rawReportLabel: 'Original report text',
-      rawReportHint: 'Only open this if you need the unedited source text.',
-      rawReportOpen: 'Show source text',
-      rawReportClose: 'Hide source text',
-      activityTitle: 'What happened today?',
-      activitySummary: (reviewed, open) => reviewed > 0
-        ? `${reviewed} decision${reviewed === 1 ? '' : 's'} were reviewed. ${open} remain open.`
-        : `${open} decision${open === 1 ? '' : 's'} are still open and waiting for follow-up.`,
-      blockedTitle: 'What did Finn stop?',
-      blockedSummary: (count) => count > 0
-        ? `Finn stopped ${count} moment${count === 1 ? '' : 's'} before you continued.`
-        : 'Finn did not have to stop you today.',
-      deviationTitle: 'Where did I drift?',
-      deviationSummary: (blocked) => blocked > 0
-        ? 'Review the blocked moments first to see where your process drifted.'
-        : 'No clear plan deviations were found in this period.',
-      goodDefault: 'No clear plan deviations or impulsive execution signals were found.',
-      attentionDefault: 'There is not enough strong evidence yet to make a heavier coaching claim.',
-      nextDefault: 'Review open items first before starting a new decision flow.',
-      openAttention: (count) => `${count} open item${count === 1 ? '' : 's'} still need to be rounded off first.`,
-      blockedAttention: (count) => `${count} guarded moment${count === 1 ? '' : 's'} need follow-up before you continue.`,
-      metricsHint: 'Today',
-    };
-  }
-  if (normalized.startsWith('de')) {
-    return {
-      reportTitle: 'Tagesreflexion mit Finn',
-      headlineDefault: 'Finn sieht in dieser Periode keine klaren Planabweichungen.',
-      headlineOpen: (count) => `Finn sieht keine klaren Planabweichungen, aber ${count} offene Entscheidung${count === 1 ? '' : 'en'} brauchen noch Nacharbeit.`,
-      headlineBlocked: (count) => `Finn markiert ${count} Moment${count === 1 ? '' : 'e'}, die du vor dem Weitergehen prüfen solltest.`,
-      reviewed: 'Geprüft',
-      blocked: 'Gebremst',
-      open: 'Offen',
-      good: 'Was lief gut',
-      attention: 'Worauf achten',
-      next: 'Nächster Schritt',
-      details: 'Aktivität und Belege',
-      detailsHint: 'Öffne die zugrunde liegende Aktivität nur, wenn du die Belege hinter dieser Reflexion sehen willst.',
-      detailButton: 'Aktivität und Belege ansehen',
-      detailButtonClose: 'Aktivität und Belege ausblenden',
-      primaryActionDefault: 'Reflexionsdetails ansehen',
-      primaryActionOpen: (count) => `${count} offene Entscheidung${count === 1 ? '' : 'en'} ansehen`,
-      primaryActionBlocked: (count) => `${count} gebremste Moment${count === 1 ? '' : 'e'} prüfen`,
-      nextOpen: 'Prüfe die offene Liste und schließe zuerst die wichtigste Entscheidung ab.',
-      nextBlocked: 'Prüfe die gebremsten Momente zuerst, bevor du neue Entscheidungen startest.',
-      rawReportLabel: 'Originaler Berichtstext',
-      rawReportHint: 'Nur öffnen, wenn du den unbearbeiteten Quelltext brauchst.',
-      rawReportOpen: 'Quelltext anzeigen',
-      rawReportClose: 'Quelltext ausblenden',
-      activityTitle: 'Was ist heute passiert?',
-      activitySummary: (reviewed, open) => reviewed > 0
-        ? `${reviewed} Entscheidung${reviewed === 1 ? '' : 'en'} wurden geprüft. ${open} bleiben offen.`
-        : `${open} Entscheidung${open === 1 ? '' : 'en'} sind noch offen und brauchen Nacharbeit.`,
-      blockedTitle: 'Was hat Finn gestoppt?',
-      blockedSummary: (count) => count > 0
-        ? `Finn hat ${count} Moment${count === 1 ? '' : 'e'} gestoppt, bevor du weitergemacht hast.`
-        : 'Finn musste dich heute nicht stoppen.',
-      deviationTitle: 'Wo bin ich abgewichen?',
-      deviationSummary: (blocked) => blocked > 0
-        ? 'Prüfe zuerst die gestoppten Momente, um die Abweichung zu sehen.'
-        : 'In dieser Periode wurden keine klaren Planabweichungen gefunden.',
-      goodDefault: 'Es wurden keine klaren Planabweichungen oder impulsiven Ausführungssignale gefunden.',
-      attentionDefault: 'Es gibt noch nicht genug belastbare Belege für eine schwerere Coaching-Aussage.',
-      nextDefault: 'Arbeite offene Punkte zuerst ab, bevor du einen neuen Entscheidungsfluss startest.',
-      openAttention: (count) => `${count} offene Punkte sollten zuerst sauber abgeschlossen werden.`,
-      blockedAttention: (count) => `${count} gebremste Momente brauchen Nacharbeit, bevor du weitermachst.`,
-      metricsHint: 'Heute',
-    };
-  }
-  return {
-    reportTitle: 'Dagreflectie met Finn',
-    headlineDefault: 'Finn ziet in deze periode geen duidelijke planafwijkingen.',
-    headlineOpen: (count) => `Finn ziet geen duidelijke planafwijkingen, maar ${count} open beslissing${count === 1 ? '' : 'en'} vragen nog afronding.`,
-    headlineBlocked: (count) => `Finn markeert ${count} moment${count === 1 ? '' : 'en'} die je eerst moet nalopen voordat je verdergaat.`,
-    reviewed: 'Beoordeeld',
-    blocked: 'Geblokkeerd',
+function pluralSuffix(count, singular = '', plural = 's') {
+  return Number(count) === 1 ? singular : plural;
+}
+
+function buildFinnDigestCopy(digestT = {}) {
+  const fallback = {
+    reportTitle: 'Daily reflection with Finn',
+    headlineDefault: 'Finn found no clear plan violations in this period.',
+    headlineCautious: 'Finn saw only a limited amount of evidence in this period.',
+    headlineLimited: 'There is not enough real activity yet for a firm reflection.',
+    headlineOpen: 'Finn saw no clear plan violations, but {count} open decision{s} still need follow-up.',
+    headlineBlocked: 'Finn flagged {count} moment{s} that need review before you continue.',
+    headlineDeviation: 'Finn saw signs that your process drifted away from your plan.',
+    reviewed: 'Reviewed',
+    blocked: 'Blocked',
     open: 'Open',
-    good: 'Wat ging goed',
-    attention: 'Waar moet je op letten',
-    next: 'Volgende stap',
-    details: 'Activiteit en onderbouwing',
-    detailsHint: 'Open de onderliggende activiteit alleen als je de onderbouwing achter deze reflectie wilt zien.',
-    detailButton: 'Bekijk activiteit en onderbouwing',
-    detailButtonClose: 'Verberg activiteit en onderbouwing',
-    primaryActionDefault: 'Bekijk reflectiedetails',
-    primaryActionOpen: (count) => `Bekijk ${count} open beslissing${count === 1 ? '' : 'en'}`,
-    primaryActionBlocked: (count) => `Bekijk ${count} geblokkeerd moment${count === 1 ? '' : 'en'}`,
-    nextOpen: 'Bekijk de open lijst en rond eerst de belangrijkste beslissing af.',
-    nextBlocked: 'Bekijk eerst de geblokkeerde momenten voordat je nieuwe beslissingen start.',
-    rawReportLabel: 'Originele rapporttekst',
-    rawReportHint: 'Open dit alleen als je de onbewerkte brontekst nodig hebt.',
-    rawReportOpen: 'Toon brontekst',
-    rawReportClose: 'Verberg brontekst',
-    activityTitle: 'Wat gebeurde er vandaag?',
-    activitySummary: (reviewed, open) => reviewed > 0
-      ? `${reviewed} beslissing${reviewed === 1 ? '' : 'en'} zijn beoordeeld. ${open} staan nog open.`
-      : `${open} beslissing${open === 1 ? '' : 'en'} staan nog open en vragen opvolging.`,
-    blockedTitle: 'Wat hield Finn tegen?',
-    blockedSummary: (count) => count > 0
-      ? `Finn hield ${count} moment${count === 1 ? '' : 'en'} tegen voordat je verderging.`
-      : 'Finn hoefde je vandaag niet af te remmen.',
-    deviationTitle: 'Waar week ik af?',
-    deviationSummary: (blocked) => blocked > 0
-      ? 'Bekijk eerst de geblokkeerde momenten om te zien waar je proces afweek.'
-      : 'Er zijn in deze periode geen duidelijke planafwijkingen gevonden.',
-    goodDefault: 'Er zijn geen duidelijke planafwijkingen of impulsieve uitvoersignalen gevonden.',
-    attentionDefault: 'Er is nog te weinig hard bewijs om hier een zwaardere coachingconclusie aan te hangen.',
-    nextDefault: 'Rond eerst open items af voordat je een nieuwe beslisflow start.',
-    openAttention: (count) => `${count} open item${count === 1 ? '' : 's'} moeten eerst netjes worden afgerond.`,
-    blockedAttention: (count) => `${count} afgeremde moment${count === 1 ? '' : 'en'} vragen eerst opvolging voordat je verdergaat.`,
-    metricsHint: 'Vandaag',
+    good: 'What went well',
+    attention: 'What needs attention',
+    next: 'Next step',
+    detailsHint: 'Open the underlying activity only when you want the evidence behind this reflection.',
+    detailButton: 'View activity and evidence',
+    detailButtonClose: 'Hide activity and evidence',
+    primaryActionDefault: 'View reflection details',
+    primaryActionOpen: 'View {count} open decision{s}',
+    primaryActionBlocked: 'Review {count} blocked moment{s}',
+    nextOpen: 'Review the open queue and close the highest-priority decision first.',
+    nextBlocked: 'Review the blocked moments first before starting any new decision.',
+    activityTitle: 'What happened today?',
+    activitySummaryReviewed: '{reviewed} decision{s} were reviewed. {open} remain open.',
+    activitySummaryOpen: '{open} decision{s} are still open and waiting for follow-up.',
+    blockedSummaryActive: 'Finn stopped {count} moment{s} before you continued.',
+    blockedSummaryQuiet: 'Finn did not have to stop you today.',
+    deviationSummaryActive: 'Review the blocked moments first to see where your process drifted.',
+    deviationSummaryQuiet: 'No clear plan deviations were found in this period.',
+    goodDefault: 'No clear plan deviations or impulsive execution signals were found.',
+    goodReviewed: 'You slowed down enough to review decisions before moving on.',
+    goodKeepCloser: 'No hard break was needed, but your process still stayed reasonably controlled.',
+    goodLimited: 'The available evidence is still too limited for a stronger positive conclusion.',
+    attentionDefault: 'There is not enough strong evidence yet to make a heavier coaching claim.',
+    attentionLimited: 'Keep logging decisions clearly so Finn can judge patterns with more confidence.',
+    attentionDeviation: 'A few signals suggest your process may have drifted away from plan-first execution.',
+    nextDefault: 'Review open items first before starting a new decision flow.',
+    nextLimited: 'Keep decisions explicit and let the next few actions build a clearer reflection.',
+    nextDeviation: 'Review the moments where your process drifted and tighten the next decision flow.',
+    openAttention: '{count} open item{s} still need to be rounded off first.',
+    blockedAttention: '{count} guarded moment{s} need follow-up before you continue.',
+    metricsHint: 'Today',
+  };
+  const text = (key) => digestT?.[key] || fallback[key];
+
+  return {
+    reportTitle: text('reportTitle'),
+    headlineDefault: text('headlineDefault'),
+    headlineCautious: text('headlineCautious'),
+    headlineLimited: text('headlineLimited'),
+    headlineOpen: (count) => replaceVars(text('headlineOpen'), { count, s: pluralSuffix(count), en: pluralSuffix(count, '', 'en'), e: pluralSuffix(count, '', 'e') }),
+    headlineBlocked: (count) => replaceVars(text('headlineBlocked'), { count, s: pluralSuffix(count), en: pluralSuffix(count, '', 'en'), e: pluralSuffix(count, '', 'e') }),
+    headlineDeviation: text('headlineDeviation'),
+    reviewed: text('reviewed'),
+    blocked: text('blocked'),
+    open: text('open'),
+    good: text('good'),
+    attention: text('attention'),
+    next: text('next'),
+    detailsHint: text('detailsHint'),
+    detailButton: text('detailButton'),
+    detailButtonClose: text('detailButtonClose'),
+    primaryActionDefault: text('primaryActionDefault'),
+    primaryActionOpen: (count) => replaceVars(text('primaryActionOpen'), { count, s: pluralSuffix(count), en: pluralSuffix(count, '', 'en'), e: pluralSuffix(count, '', 'e') }),
+    primaryActionBlocked: (count) => replaceVars(text('primaryActionBlocked'), { count, s: pluralSuffix(count), en: pluralSuffix(count, '', 'en'), e: pluralSuffix(count, '', 'e') }),
+    nextOpen: text('nextOpen'),
+    nextBlocked: text('nextBlocked'),
+    activityTitle: text('activityTitle'),
+    activitySummary: (reviewed, open) => (
+      reviewed > 0
+        ? replaceVars(text('activitySummaryReviewed'), { reviewed, open, s: pluralSuffix(reviewed), en: pluralSuffix(reviewed, '', 'en'), e: pluralSuffix(reviewed, '', 'e') })
+        : replaceVars(text('activitySummaryOpen'), { open, s: pluralSuffix(open), en: pluralSuffix(open, '', 'en'), e: pluralSuffix(open, '', 'e') })
+    ),
+    blockedSummary: (count) => (
+      count > 0
+        ? replaceVars(text('blockedSummaryActive'), { count, s: pluralSuffix(count), en: pluralSuffix(count, '', 'en'), e: pluralSuffix(count, '', 'e') })
+        : text('blockedSummaryQuiet')
+    ),
+    deviationSummary: (count) => (count > 0 ? text('deviationSummaryActive') : text('deviationSummaryQuiet')),
+    goodDefault: text('goodDefault'),
+    goodReviewed: text('goodReviewed'),
+    goodKeepCloser: text('goodKeepCloser'),
+    goodLimited: text('goodLimited'),
+    attentionDefault: text('attentionDefault'),
+    attentionLimited: text('attentionLimited'),
+    attentionDeviation: text('attentionDeviation'),
+    nextDefault: text('nextDefault'),
+    nextLimited: text('nextLimited'),
+    nextDeviation: text('nextDeviation'),
+    openAttention: (count) => replaceVars(text('openAttention'), { count, s: pluralSuffix(count), en: pluralSuffix(count, '', 'en'), e: pluralSuffix(count, '', 'e') }),
+    blockedAttention: (count) => replaceVars(text('blockedAttention'), { count, s: pluralSuffix(count), en: pluralSuffix(count, '', 'en'), e: pluralSuffix(count, '', 'e') }),
+    metricsHint: text('metricsHint'),
+  };
+}
+
+function buildFinnReflectionSummary({
+  digest,
+  activityEntries = [],
+  blockedEntries = [],
+  deviationEntries = [],
+  reviewedCount = 0,
+  blockedCount = 0,
+  openActionCount = 0,
+}) {
+  const concreteReviewed = activityEntries.length;
+  const concreteBlocked = blockedEntries.length;
+  const concreteDeviation = deviationEntries.length;
+  const concreteOpen = activityEntries.filter((entry) => {
+    const haystack = [entry?.status, entry?.resolve_state, entry?.label, entry?.type]
+      .filter(Boolean)
+      .join(' ')
+      .toLowerCase();
+    return ['pending', 'open', 'later', 'snooz', 'skip'].some((pattern) => haystack.includes(pattern));
+  }).length;
+
+  const evidenceCount = concreteReviewed + concreteBlocked + concreteDeviation;
+  const hasThinEvidence = evidenceCount <= 1;
+  const hasStrongBlockedEvidence = concreteBlocked > 0 || blockedCount >= 2;
+  const hasStrongOpenEvidence = concreteOpen > 0 || openActionCount >= 2;
+  const hasClearDeviationEvidence = concreteDeviation > 0;
+
+  if (evidenceCount === 0 && openActionCount === 0 && blockedCount === 0) {
+    return {
+      headline: digest.headlineLimited,
+      good: digest.goodLimited,
+      attention: digest.attentionLimited,
+      next: digest.nextLimited,
+      primaryAction: digest.primaryActionDefault,
+    };
+  }
+
+  if (hasStrongBlockedEvidence) {
+    const blockedTotal = Math.max(blockedCount, concreteBlocked);
+    return {
+      headline: digest.headlineBlocked(blockedTotal),
+      good: reviewedCount > 0 ? digest.goodReviewed : digest.goodLimited,
+      attention: digest.blockedAttention(blockedTotal),
+      next: digest.nextBlocked,
+      primaryAction: digest.primaryActionBlocked(blockedTotal),
+    };
+  }
+
+  if (hasStrongOpenEvidence) {
+    return {
+      headline: digest.headlineOpen(openActionCount),
+      good: hasClearDeviationEvidence ? digest.goodKeepCloser : digest.goodDefault,
+      attention: digest.openAttention(openActionCount),
+      next: digest.nextOpen,
+      primaryAction: digest.primaryActionOpen(openActionCount),
+    };
+  }
+
+  if (hasClearDeviationEvidence) {
+    return {
+      headline: digest.headlineDeviation,
+      good: reviewedCount > 0 ? digest.goodReviewed : digest.goodKeepCloser,
+      attention: digest.attentionDeviation,
+      next: digest.nextDeviation,
+      primaryAction: digest.primaryActionDefault,
+    };
+  }
+
+  if (hasThinEvidence) {
+    return {
+      headline: digest.headlineCautious,
+      good: reviewedCount > 0 ? digest.goodReviewed : digest.goodLimited,
+      attention: digest.attentionLimited,
+      next: digest.nextLimited,
+      primaryAction: digest.primaryActionDefault,
+    };
+  }
+
+  return {
+    headline: digest.headlineDefault,
+    good: reviewedCount > 0 ? digest.goodReviewed : digest.goodDefault,
+    attention: digest.attentionDefault,
+    next: digest.nextDefault,
+    primaryAction: digest.primaryActionDefault,
   };
 }
 
@@ -457,6 +506,131 @@ function dedupeFinnEntries(entries = []) {
     seen.add(key);
     return true;
   });
+}
+
+function isGenericFinnEntry(entry = {}) {
+  const haystack = [
+    entry?.label,
+    entry?.type,
+    entry?.message,
+    entry?.outcome,
+    entry?.status,
+    entry?.resolve_state,
+  ]
+    .filter(Boolean)
+    .join(' ')
+    .toLowerCase();
+
+  return [
+    'mission control item',
+    'ai_pending_actions',
+    'contract ok',
+    'pending resolved',
+    'status updated',
+    'status gewijzigd',
+    'agent handoff',
+    'handoff',
+    'timestamp',
+    'refreshed',
+    'refresh',
+    'sync',
+    'gesynchroniseerd',
+    'item bijgewerkt',
+    'item updated',
+  ].some((pattern) => haystack.includes(pattern));
+}
+
+function cleanFinnEntries(entries = []) {
+  return dedupeFinnEntries(entries).filter((entry) => !isGenericFinnEntry(entry));
+}
+
+function getFinnEntryHaystack(entry = {}) {
+  return [
+    entry?.status,
+    entry?.resolve_state,
+    entry?.label,
+    entry?.type,
+    entry?.message,
+    entry?.outcome,
+    entry?.severity,
+  ]
+    .filter(Boolean)
+    .join(' ')
+    .toLowerCase();
+}
+
+function isMeaningfulReviewedEntry(entry = {}) {
+  const haystack = getFinnEntryHaystack(entry);
+  const hasReviewSignal = ['review', 'reviewed', 'resolved', 'completed', 'confirmed', 'approved', 'closed'].some((pattern) => haystack.includes(pattern));
+  const hasOpenSignal = ['pending', 'open', 'later', 'snooz', 'skip', 'waiting'].some((pattern) => haystack.includes(pattern));
+  return hasReviewSignal && !hasOpenSignal;
+}
+
+function isMeaningfulOpenEntry(entry = {}) {
+  const haystack = getFinnEntryHaystack(entry);
+  const hasOpenSignal = ['pending', 'open', 'later', 'snooz', 'waiting', 'needs review', 'needs input', 'confirm'].some((pattern) => haystack.includes(pattern));
+  const isResolved = ['resolved', 'completed', 'closed', 'approved', 'confirmed'].some((pattern) => haystack.includes(pattern));
+  return hasOpenSignal && !isResolved;
+}
+
+function isMeaningfulBlockedEntry(entry = {}) {
+  const haystack = getFinnEntryHaystack(entry);
+  return ['blocked', 'guardrail', 'intervened', 'stopped', 'denied', 'prevented', 'risk'].some((pattern) => haystack.includes(pattern));
+}
+
+function isMeaningfulDeviationEntry(entry = {}) {
+  const haystack = getFinnEntryHaystack(entry);
+  return ['deviation', 'override', 'breach', 'violat', 'adherence'].some((pattern) => haystack.includes(pattern));
+}
+
+function getMeaningfulFinnMetrics({
+  activityEntries = [],
+  blockedEntries = [],
+  deviationEntries = [],
+}) {
+  const reviewedEntries = activityEntries.filter(isMeaningfulReviewedEntry);
+  const openEntries = activityEntries.filter(isMeaningfulOpenEntry);
+  const blockedMeaningfulEntries = blockedEntries.filter(isMeaningfulBlockedEntry);
+  const deviationMeaningfulEntries = deviationEntries.filter(isMeaningfulDeviationEntry);
+
+  return {
+    reviewedCount: reviewedEntries.length,
+    openActionCount: openEntries.length,
+    blockedCount: blockedMeaningfulEntries.length,
+    deviationCount: deviationMeaningfulEntries.length,
+    reviewedEntries,
+    openEntries,
+    blockedMeaningfulEntries,
+    deviationMeaningfulEntries,
+  };
+}
+
+function humanizeEvidenceDetail(entry = {}, kind, reflectionT) {
+  const status = String(entry?.status || entry?.resolve_state || '').toLowerCase();
+  const combined = [
+    entry?.status,
+    entry?.resolve_state,
+    entry?.label,
+    entry?.type,
+  ]
+    .filter(Boolean)
+    .join(' ')
+    .toLowerCase();
+
+  if (kind === 'blocked') return reflectionT.evidenceBlocked;
+  if (kind === 'deviation') return reflectionT.evidenceDeviation;
+  if (status.includes('resolve') || combined.includes('resolve')) return reflectionT.evidenceResolved;
+  if (status.includes('skip') || combined.includes('skip') || combined.includes('later') || combined.includes('snooz')) return reflectionT.evidenceSkipped;
+  if (status.includes('review') || combined.includes('review')) return reflectionT.evidenceReviewed;
+  if (status.includes('pending') || combined.includes('pending') || combined.includes('open')) return reflectionT.evidencePending;
+  return reflectionT.noExtraDetails;
+}
+
+function humanizeEvidenceTitle(entry = {}, kind, reflectionT) {
+  if (entry?.asset) return String(entry.asset).toUpperCase();
+  if (kind === 'blocked') return reflectionT.genericBlockedItem;
+  if (kind === 'deviation') return reflectionT.genericDeviationItem;
+  return reflectionT.genericOpenItem;
 }
 
 function finnAgentVerdictTone(verdict = {}) {
@@ -738,25 +912,25 @@ function FinnReflectionBlocks({
   const whatIDid = dayClose?.what_i_did_today || sections?.activity_journal || null;
   const whatFinnBlocked = dayClose?.what_finn_blocked || sections?.blocked_summary || null;
   const whereIDeviated = dayClose?.where_i_deviated || sections?.plan_adherence || null;
-  const activityEntries = dedupeFinnEntries(whatIDid?.entries || []);
-  const blockedEntries = dedupeFinnEntries(whatFinnBlocked?.entries || []);
-  const deviationEntries = dedupeFinnEntries(whereIDeviated?.entries || []);
-  const todayMode = variant === 'today' && copy;
+  const activityEntries = cleanFinnEntries(whatIDid?.entries || []).filter((entry) => (
+    isMeaningfulReviewedEntry(entry) || isMeaningfulOpenEntry(entry)
+  ));
+  const blockedEntries = cleanFinnEntries(whatFinnBlocked?.entries || []).filter(isMeaningfulBlockedEntry);
+  const deviationEntries = cleanFinnEntries(whereIDeviated?.entries || []).filter(isMeaningfulDeviationEntry);
+  const digest = copy || buildFinnDigestCopy();
   const cards = [
     {
       key: 'activity',
       icon: ClipboardList,
-      title: todayMode ? copy.activityTitle : (whatIDid?.title || reflectionT.todayTitle),
-      summary: todayMode
-        ? copy.activitySummary(reviewedCount, openActionCount)
-        : whatIDid?.summary,
-      entries: todayMode ? [] : (showActivityEntries ? activityEntries : []),
+      title: digest.activityTitle || reflectionT.todayTitle,
+      summary: digest.activitySummary(reviewedCount, openActionCount),
+      entries: showActivityEntries ? activityEntries : [],
       accent: 'slate',
       renderEntry: (entry) => (
         <>
           <div className="flex items-center justify-between gap-3">
             <span className="text-[10px] font-black uppercase tracking-[0.14em]">
-              {entry.label || entry.type || reflectionT.actionFallback}
+              {humanizeEvidenceTitle(entry, 'activity', reflectionT)}
             </span>
             {entry.asset && (
               <span className="text-[8px] font-black uppercase tracking-widest opacity-70">
@@ -764,34 +938,31 @@ function FinnReflectionBlocks({
               </span>
             )}
           </div>
-          <div className="mt-2 flex flex-wrap gap-2 text-[9px] font-black uppercase tracking-[0.12em] opacity-75">
-            {entry.status && <span>{entry.status}</span>}
-            {entry.resolve_state && <span>{entry.resolve_state}</span>}
-          </div>
+          <p className="mt-2 text-xs font-semibold leading-relaxed">
+            {humanizeEvidenceDetail(entry, 'activity', reflectionT)}
+          </p>
         </>
       ),
     },
     {
       key: 'blocked',
       icon: ShieldAlert,
-      title: todayMode ? copy.blockedTitle : (whatFinnBlocked?.title || reflectionT.blockedTitle),
-      summary: todayMode
-        ? copy.blockedSummary(blockedCount)
-        : whatFinnBlocked?.summary,
-      entries: todayMode ? [] : blockedEntries,
+      title: reflectionT.blockedTitle,
+      summary: digest.blockedSummary(blockedCount),
+      entries: blockedEntries,
       accent: 'rose',
       renderEntry: (entry) => (
         <>
           <div className="flex items-center justify-between gap-3">
             <span className="text-[10px] font-black uppercase tracking-[0.14em]">
-              {entry.label || entry.type || reflectionT.guardrailFallback}
+              {humanizeEvidenceTitle(entry, 'blocked', reflectionT)}
             </span>
             <span className="text-[8px] font-black uppercase tracking-widest opacity-70">
-              {entry.asset || entry.severity || 'review'}
+              {entry.asset || reflectionT.guardrailFallback}
             </span>
           </div>
           <p className="mt-2 text-xs font-semibold leading-relaxed">
-            {entry.outcome || reflectionT.noExtraDetails}
+            {humanizeEvidenceDetail(entry, 'blocked', reflectionT)}
           </p>
         </>
       ),
@@ -799,33 +970,29 @@ function FinnReflectionBlocks({
     {
       key: 'deviation',
       icon: Activity,
-      title: todayMode ? copy.deviationTitle : (whereIDeviated?.title || reflectionT.deviationTitle),
-      summary: todayMode
-        ? copy.deviationSummary(blockedCount)
-        : whereIDeviated?.summary,
-      entries: todayMode ? [] : deviationEntries,
-      accent: todayMode
-        ? 'emerald'
-        : whereIDeviated?.status === 'steady' ? 'emerald' : whereIDeviated?.status === 'disciplined' ? 'amber' : 'amber',
+      title: reflectionT.deviationTitle,
+      summary: digest.deviationSummary(blockedCount),
+      entries: deviationEntries,
+      accent: 'emerald',
       renderEntry: (entry) => (
         <>
           <div className="flex items-center justify-between gap-3">
             <span className="text-[10px] font-black uppercase tracking-[0.14em]">
-              {entry.label || entry.type || reflectionT.deviationFallback}
+              {humanizeEvidenceTitle(entry, 'deviation', reflectionT)}
             </span>
             <span className="text-[8px] font-black uppercase tracking-widest opacity-70">
-              {entry.asset || entry.severity || 'review'}
+              {entry.asset || reflectionT.deviationFallback}
             </span>
           </div>
           <p className="mt-2 text-xs font-semibold leading-relaxed">
-            {entry.message || reflectionT.noExtraDetails}
+            {humanizeEvidenceDetail(entry, 'deviation', reflectionT)}
           </p>
         </>
       ),
     },
   ].filter((card) => card && (card.summary || (Array.isArray(card.entries) && card.entries.length > 0)));
 
-  if (cards.length === 0 && !(dayClose?.tomorrow_focus?.length > 0)) return null;
+  if (cards.length === 0) return null;
 
   return (
     <div className="mt-5 grid grid-cols-1 xl:grid-cols-3 gap-4">
@@ -841,26 +1008,6 @@ function FinnReflectionBlocks({
         />
       ))}
 
-      {dayClose?.tomorrow_focus?.length > 0 && (
-        <div className={`rounded-2xl border border-emerald-200 dark:border-emerald-900/50 bg-emerald-50/70 dark:bg-emerald-950/20 p-4 text-emerald-700 dark:text-emerald-300 ${cards.length > 1 ? 'xl:col-span-3' : ''}`}>
-          <div className="flex items-center gap-2">
-            <CheckCircle2 size={14} />
-            <span className="text-[10px] font-black uppercase tracking-[0.16em]">
-              {reflectionT.tomorrowFocus}
-            </span>
-          </div>
-          <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-2">
-            {dayClose.tomorrow_focus.slice(0, 4).map((item) => (
-              <div
-                key={item}
-                className="rounded-xl border border-white/60 dark:border-slate-900/50 bg-white/70 dark:bg-slate-950/35 p-3 text-xs font-semibold leading-relaxed"
-              >
-                {item}
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
     </div>
   );
 }
@@ -1309,7 +1456,7 @@ function FinnReportsPanel() {
   const { t, locale } = useTranslation();
   const reportT = t.pages.report;
   const finnT = reportT.finn || {};
-  const digestCopy = useMemo(() => getFinnDigestCopy(locale), [locale]);
+  const digestCopy = useMemo(() => buildFinnDigestCopy(finnT?.digest), [finnT?.digest]);
   const panelRef = useRef(null);
   const detailsRef = useRef(null);
   const [activeFinnReport, setActiveFinnReport] = useState('today');
@@ -1318,7 +1465,6 @@ function FinnReportsPanel() {
   const [finnLoading, setFinnLoading] = useState(false);
   const [finnError, setFinnError] = useState('');
   const [expanded, setExpanded] = useState(false);
-  const [showRawReport, setShowRawReport] = useState(false);
   const [shouldLoadFinn, setShouldLoadFinn] = useState(false);
 
   const finnReportOptions = useMemo(() => resolveFinnReportOptions(finnT?.options), [finnT?.options]);
@@ -1379,7 +1525,6 @@ function FinnReportsPanel() {
       setFinnReportCache((cache) => ({ ...cache, [option.key]: data || null }));
       setFinnReport(data || null);
       setExpanded(false);
-      setShowRawReport(false);
     } catch (err) {
       console.error('Finn report load failed:', err);
       setFinnError(finnT?.loadError || 'Finn report could not be loaded.');
@@ -1411,81 +1556,41 @@ function FinnReportsPanel() {
   }, [activeFinnReport, shouldLoadFinn, activeOption, finnT?.loadError]);
 
   const analysis = finnReport?.state?.analysis || finnReport?.analysis || {};
-  const behavioralAnalysis = mergeBehavioralAnalysis(
-    finnReport?.state?.behavioral_insight,
-    analysis?.behavioral_insight,
-    analysis
-  );
-  const portfolioRisk = analysis?.portfolio_risk || finnReport?.state?.portfolio_risk || null;
   const metrics = analysis?.metrics || {};
-  const source = formatFinnReportSource(finnReport, finnT.auditSourceFallback);
-  const latestUpdateLabel = formatFinnReportTimestamp(finnReport, finnT.timestampUnavailable);
-  const reportType = finnReport?.state?.report_type || analysis?.report_type || 'finn_reflection_report';
-  const separateFrom = finnReport?.state?.separate_from || analysis?.separate_from || 'daily_trading_report';
-  const isFinnReport = finnReport?.intent === 'finn_report' && finnReport?.flow === 'finn_report';
-  const isBehavioralMemory = finnReport?.intent === 'behavioral_memory' && finnReport?.flow === 'behavioral_memory';
-  const isWeeklyReflection = finnReport?.intent === 'weekly_reflection' && finnReport?.flow === 'weekly_reflection';
   const activeOptionKey = activeOption?.key || 'today';
-  const showBehavioralTabLegend = activeOptionKey === 'week' || activeOptionKey === 'behavior';
-  const isContractValid = (
-    isFinnReport ||
-    (activeOptionKey === 'behavior' && isBehavioralMemory) ||
-    (activeOptionKey === 'week' && isWeeklyReflection)
-  );
-
-  const metricItems = [
-    [finnT?.metrics?.actions, metrics.actions_today ?? metrics.actions_7d ?? metrics.actions_30d],
-    [finnT?.metrics?.slowed, metrics.plan_deviation_events_today ?? metrics.plan_deviation_events_7d ?? metrics.plan_deviation_events_30d],
-    [finnT?.metrics?.skips, metrics.skipped_today ?? metrics.skipped_7d ?? metrics.skipped_30d],
-  ].filter(([label, value]) => label && value !== undefined && value !== null);
   const sections = analysis?.sections || {};
   const dayClose = analysis?.day_close || {};
   const whatIDid = dayClose?.what_i_did_today || sections?.activity_journal || null;
   const whatFinnBlocked = dayClose?.what_finn_blocked || sections?.blocked_summary || null;
   const whereIDeviated = dayClose?.where_i_deviated || sections?.plan_adherence || null;
-  const reviewedCount = Number(
-    analysis?.governance_events_summary?.decision_review_count ??
-    analysis?.agent_accountability?.decision_review_count ??
-    (Array.isArray(whatIDid?.entries) ? whatIDid.entries.length : 0)
-  ) || 0;
-  const blockedCount = Math.max(
-    Number(metrics.plan_deviation_events_today ?? metrics.plan_deviation_events_7d ?? metrics.plan_deviation_events_30d ?? 0) || 0,
-    Array.isArray(whatFinnBlocked?.entries) ? whatFinnBlocked.entries.length : 0
-  );
-  const openActionCount = Math.max(
-    countMatchingEntries(whatIDid?.entries, ['pending', 'open', 'later', 'snooz']),
-    countMatchingEntries(analysis?.pending_actions, ['pending', 'open', 'later', 'snooz'])
-  );
-  const topHeadline = blockedCount > 0
-    ? digestCopy.headlineBlocked(blockedCount)
-    : openActionCount > 0
-      ? digestCopy.headlineOpen(openActionCount)
-      : digestCopy.headlineDefault;
-  const goodSummary = getFirstNonEmptyText(
-    blockedCount === 0 ? digestCopy.goodDefault : '',
-    digestCopy.goodDefault
-  );
-  const attentionSummary = blockedCount > 0
-    ? digestCopy.blockedAttention(blockedCount)
-    : openActionCount > 0
-      ? digestCopy.openAttention(openActionCount)
-      : digestCopy.attentionDefault;
-  const nextStepSummary = blockedCount > 0
-    ? digestCopy.nextBlocked
-    : openActionCount > 0
-      ? digestCopy.nextOpen
-      : digestCopy.nextDefault;
+  const cleanedActivityEntries = cleanFinnEntries(whatIDid?.entries || []);
+  const cleanedBlockedEntries = cleanFinnEntries(whatFinnBlocked?.entries || []);
+  const cleanedDeviationEntries = cleanFinnEntries(whereIDeviated?.entries || []);
+  const meaningfulMetrics = getMeaningfulFinnMetrics({
+    activityEntries: cleanedActivityEntries,
+    blockedEntries: cleanedBlockedEntries,
+    deviationEntries: cleanedDeviationEntries,
+  });
+  const reviewedCount = meaningfulMetrics.reviewedCount;
+  const blockedCount = meaningfulMetrics.blockedCount;
+  const openActionCount = meaningfulMetrics.openActionCount;
+  const deviationCount = meaningfulMetrics.deviationCount;
+  const reflectionSummary = buildFinnReflectionSummary({
+    digest: digestCopy,
+    activityEntries: meaningfulMetrics.reviewedEntries.concat(meaningfulMetrics.openEntries),
+    blockedEntries: meaningfulMetrics.blockedMeaningfulEntries,
+    deviationEntries: meaningfulMetrics.deviationMeaningfulEntries,
+    reviewedCount,
+    blockedCount,
+    openActionCount,
+  });
   const compactMetricItems = [
     [digestCopy.reviewed, reviewedCount],
     [digestCopy.blocked, blockedCount],
     [digestCopy.open, openActionCount],
   ];
   const isTodayView = activeOptionKey === 'today';
-  const primaryActionLabel = blockedCount > 0
-    ? digestCopy.primaryActionBlocked(blockedCount)
-    : openActionCount > 0
-      ? digestCopy.primaryActionOpen(openActionCount)
-      : digestCopy.primaryActionDefault;
+  const primaryActionLabel = reflectionSummary.primaryAction;
   const openReflectionDetails = () => {
     setExpanded(true);
     if (typeof window !== 'undefined') {
@@ -1566,92 +1671,69 @@ function FinnReportsPanel() {
             </div>
           ) : (
             <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-900/40 p-5 md:p-6">
-              <div className="flex flex-col xl:flex-row xl:items-start xl:justify-between gap-5">
-                <div className="min-w-0 flex-1">
-                  {!isTodayView && (
-                    <div className="flex flex-wrap items-center gap-2 mb-3">
-                      <span className="inline-flex items-center gap-1.5 text-[10px] font-black uppercase tracking-[0.18em] text-slate-400 dark:text-slate-500">
-                        {finnT.latest}
-                      </span>
-                      <span className="inline-flex items-center gap-1.5 text-[10px] font-black uppercase tracking-[0.18em] text-blue-600 dark:text-blue-400">
-                        <ClipboardList size={13} />
-                        {activeOption?.eyebrow || finnT.latest}
-                      </span>
-                      <span className="px-2.5 py-1 rounded-full bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-[9px] font-black uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">
-                        {finnT.activity}
-                      </span>
-                      <span className="px-2.5 py-1 rounded-full bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-900/40 text-[9px] font-black uppercase tracking-[0.14em] text-emerald-700 dark:text-emerald-300">
-                        {finnT.auditData}
-                      </span>
-                    </div>
-                  )}
+              <div className="min-w-0">
+                <div className="rounded-2xl border border-blue-100 dark:border-blue-900/40 bg-blue-50/70 dark:bg-blue-950/20 p-5">
+                  <div className="text-[10px] font-black uppercase tracking-[0.18em] text-blue-600 dark:text-blue-300">
+                    {activeOption?.label || digestCopy.metricsHint}
+                  </div>
+                  <p className="mt-3 text-lg md:text-2xl font-black tracking-tight text-slate-950 dark:text-slate-100 max-w-3xl">
+                    {reflectionSummary.headline}
+                  </p>
+                </div>
 
-                  <div className="min-w-0">
-                    <div className="rounded-2xl border border-blue-100 dark:border-blue-900/40 bg-blue-50/70 dark:bg-blue-950/20 p-5">
-                      <div className="text-[10px] font-black uppercase tracking-[0.18em] text-blue-600 dark:text-blue-300">
-                        {digestCopy.metricsHint}
+                <div className="mt-4 grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  {compactMetricItems.map(([label, value]) => (
+                    <div
+                      key={label}
+                      className="rounded-xl bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 p-3"
+                    >
+                      <div className="text-[9px] font-black uppercase tracking-[0.16em] text-slate-400 dark:text-slate-500">
+                        {label}
                       </div>
-                      <p className="mt-3 text-lg md:text-2xl font-black tracking-tight text-slate-950 dark:text-slate-100 max-w-3xl">
-                        {topHeadline}
+                      <div className="mt-1 text-2xl font-black text-slate-900 dark:text-slate-100">
+                        {value}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="mt-4 grid grid-cols-1 lg:grid-cols-3 gap-3">
+                  {[
+                    [digestCopy.good, reflectionSummary.good, 'border-emerald-200 dark:border-emerald-900/50 bg-emerald-50/70 dark:bg-emerald-950/20 text-emerald-800 dark:text-emerald-200'],
+                    [digestCopy.attention, reflectionSummary.attention, 'border-amber-200 dark:border-amber-900/50 bg-amber-50/70 dark:bg-amber-950/20 text-amber-800 dark:text-amber-200'],
+                    [digestCopy.next, reflectionSummary.next, 'border-blue-200 dark:border-blue-900/50 bg-blue-50/70 dark:bg-blue-950/20 text-blue-800 dark:text-blue-200'],
+                  ].map(([label, value, tone]) => (
+                    <div key={label} className={`rounded-2xl border p-4 ${tone}`}>
+                      <div className="text-[10px] font-black uppercase tracking-[0.16em]">
+                        {label}
+                      </div>
+                      <p className="mt-3 text-sm font-semibold leading-relaxed">
+                        {value}
                       </p>
                     </div>
+                  ))}
+                </div>
 
-                    <div className="mt-4 grid grid-cols-1 sm:grid-cols-3 gap-3">
-                      {compactMetricItems.map(([label, value]) => (
-                        <div
-                          key={label}
-                          className="rounded-xl bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 p-3"
-                        >
-                          <div className="text-[9px] font-black uppercase tracking-[0.16em] text-slate-400 dark:text-slate-500">
-                            {label}
-                          </div>
-                          <div className="mt-1 text-2xl font-black text-slate-900 dark:text-slate-100">
-                            {value}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
+                <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center">
+                  <button
+                    onClick={openReflectionDetails}
+                    className={actionButtonStyles({
+                      variant: 'primary',
+                      className: 'justify-center gap-2 rounded-xl px-5 py-3 text-[11px] tracking-widest active:scale-[0.98]',
+                    })}
+                  >
+                    {primaryActionLabel}
+                  </button>
+                  <button
+                    onClick={() => setExpanded((value) => !value)}
+                    className="text-sm font-semibold text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100 transition-colors"
+                  >
+                    {expanded ? digestCopy.detailButtonClose : digestCopy.detailButton}
+                  </button>
+                </div>
 
-                    <div className="mt-4 grid grid-cols-1 lg:grid-cols-3 gap-3">
-                      {[
-                        [digestCopy.good, goodSummary, 'border-emerald-200 dark:border-emerald-900/50 bg-emerald-50/70 dark:bg-emerald-950/20 text-emerald-800 dark:text-emerald-200'],
-                        [digestCopy.attention, attentionSummary, 'border-amber-200 dark:border-amber-900/50 bg-amber-50/70 dark:bg-amber-950/20 text-amber-800 dark:text-amber-200'],
-                        [digestCopy.next, nextStepSummary, 'border-blue-200 dark:border-blue-900/50 bg-blue-50/70 dark:bg-blue-950/20 text-blue-800 dark:text-blue-200'],
-                      ].map(([label, value, tone]) => (
-                        <div key={label} className={`rounded-2xl border p-4 ${tone}`}>
-                          <div className="text-[10px] font-black uppercase tracking-[0.16em]">
-                            {label}
-                          </div>
-                          <p className="mt-3 text-sm font-semibold leading-relaxed">
-                            {value}
-                          </p>
-                        </div>
-                      ))}
-                    </div>
-
-                    <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center">
-                      <button
-                        onClick={openReflectionDetails}
-                        className={actionButtonStyles({
-                          variant: 'primary',
-                          className: 'justify-center gap-2 rounded-xl px-5 py-3 text-[11px] tracking-widest active:scale-[0.98]',
-                        })}
-                      >
-                        {primaryActionLabel}
-                      </button>
-                      <button
-                        onClick={() => setExpanded((value) => !value)}
-                        className="text-sm font-semibold text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100 transition-colors"
-                      >
-                        {expanded ? digestCopy.detailButtonClose : digestCopy.detailButton}
-                      </button>
-                    </div>
-                    {!isTodayView && (
-                      <div className="mt-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 p-3 text-xs leading-relaxed text-slate-500 dark:text-slate-400">
-                        {digestCopy.detailsHint}
-                      </div>
-                    )}
-                  </div>
+                <div className="mt-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 p-3 text-xs leading-relaxed text-slate-500 dark:text-slate-400">
+                  {digestCopy.detailsHint}
                 </div>
               </div>
 
@@ -1659,98 +1741,13 @@ function FinnReportsPanel() {
                 <div ref={detailsRef} className="mt-6 border-t border-slate-200 dark:border-slate-800 pt-5">
                   <FinnReflectionBlocks
                     analysis={analysis}
-                    showActivityEntries={false}
+                    showActivityEntries={!isTodayView}
                     variant={isTodayView ? 'today' : 'default'}
                     copy={digestCopy}
                     reviewedCount={reviewedCount}
                     blockedCount={blockedCount}
                     openActionCount={openActionCount}
                   />
-
-                  {(activeOptionKey === 'week' || activeOptionKey === 'behavior') && (
-                    <>
-                      <div className="flex flex-wrap items-center gap-2 mb-4">
-                        <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[10px] font-black uppercase tracking-[0.14em] border ${
-                          isContractValid
-                            ? 'bg-emerald-50 dark:bg-emerald-950/30 border-emerald-200 dark:border-emerald-900/40 text-emerald-700 dark:text-emerald-300'
-                            : 'bg-amber-50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-900/40 text-amber-700 dark:text-amber-300'
-                        }`}>
-                          <ShieldCheck size={12} />
-                          {isContractValid ? finnT.contractOk : finnT.contractCheck}
-                        </span>
-                        <span className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-400 dark:text-slate-500">
-                          {finnT.sourcePrefix}: {source}
-                        </span>
-                      </div>
-                      <div className="mt-5 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950/50 p-4">
-                        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                          <div>
-                            <div className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-500 dark:text-slate-400">
-                              {digestCopy.rawReportLabel}
-                            </div>
-                            <p className="mt-2 text-sm leading-relaxed text-slate-500 dark:text-slate-400 max-w-3xl">
-                              {digestCopy.rawReportHint}
-                            </p>
-                          </div>
-                          <button
-                            onClick={() => setShowRawReport((value) => !value)}
-                            className="text-sm font-semibold text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-slate-100 transition-colors"
-                          >
-                            {showRawReport ? digestCopy.rawReportClose : digestCopy.rawReportOpen}
-                          </button>
-                        </div>
-                        {showRawReport && (
-                          <div className="mt-4 rounded-xl border border-slate-200 dark:border-slate-800 p-4">
-                            <p className="whitespace-pre-wrap text-sm leading-7 text-slate-700 dark:text-slate-300">
-                              {finnReport?.response || finnT.noReportText}
-                            </p>
-                          </div>
-                        )}
-                      </div>
-                      <div className="mt-5 grid grid-cols-1 sm:grid-cols-3 gap-3 max-w-2xl">
-                        {(metricItems.length
-                          ? metricItems
-                          : [
-                              [finnT?.detailMetrics?.source, source],
-                              [finnT?.detailMetrics?.type, reportType],
-                              [finnT?.detailMetrics?.separation, separateFrom],
-                            ].filter(([label]) => label)
-                        ).map(([label, value]) => (
-                          <div
-                            key={label}
-                            className="rounded-xl bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 p-3"
-                          >
-                            <div className="text-[9px] font-black uppercase tracking-[0.16em] text-slate-400 dark:text-slate-500">
-                              {label}
-                            </div>
-                            <div className="mt-1 text-sm font-black text-slate-900 dark:text-slate-100 truncate">
-                              {String(value)}
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                      <FinnAgentController controller={analysis?.agent_controller} />
-                      <FinnPortfolioRisk portfolioRisk={portfolioRisk} />
-                      <FinnBehavioralIntelligenceBlocks
-                        analysis={behavioralAnalysis}
-                        forceVisible={activeOptionKey === 'week' || activeOptionKey === 'behavior'}
-                      />
-                      <FinnGovernanceSurface analysis={analysis} />
-                    </>
-                  )}
-                  {!isTodayView && analysis?.agent_accountability?.performance_light?.summary && (
-                    <div className="mt-5 rounded-2xl border border-blue-200 dark:border-blue-900/50 bg-blue-50 dark:bg-blue-950/20 p-4 text-blue-700 dark:text-blue-300">
-                      <div className="text-[10px] font-black uppercase tracking-[0.16em] mb-2">
-                        {finnT.improvementPoint}
-                      </div>
-                      <p className="text-sm font-semibold leading-relaxed">
-                        {analysis.agent_accountability.performance_light.summary}
-                      </p>
-                    </div>
-                  )}
-                  {(activeOptionKey === 'week' || activeOptionKey === 'behavior') && (
-                    <FinnAgentVerdicts verdicts={analysis?.agent_verdicts || []} />
-                  )}
                 </div>
               )}
             </div>
