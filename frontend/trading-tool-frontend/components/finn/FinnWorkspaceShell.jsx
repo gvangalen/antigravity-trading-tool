@@ -43,6 +43,7 @@ export default function FinnWorkspaceShell({ children }) {
   const [commandRequest, setCommandRequest] = useState(null);
   const commandNonceRef = useRef(0);
   const isAnalysisV3 = searchParams.get("variant") !== "legacy";
+  const isAdminRoute = pathname?.startsWith("/admin");
 
   const workspaceCopy = t?.finnWorkspace || {};
   const activeWorkflow = useMemo(
@@ -102,6 +103,24 @@ export default function FinnWorkspaceShell({ children }) {
     event.preventDefault();
     openAssistant();
   };
+
+  if (isAdminRoute) {
+    return (
+      <>
+        <NavBar />
+
+        <div className="min-h-screen bg-[linear-gradient(180deg,#f8fbff_0%,#ffffff_42%,#f7f9fc_100%)] transition-all duration-200 lg:pl-64 dark:bg-[#020617]">
+          <div className="pt-16 lg:pt-0">
+            <WorkspaceCanvas>
+              <div className="mx-auto flex w-full max-w-[1500px] flex-col gap-6 pb-10 pt-6 lg:gap-8 lg:pb-12 lg:pt-8">
+                {children}
+              </div>
+            </WorkspaceCanvas>
+          </div>
+        </div>
+      </>
+    );
+  }
 
   return (
     <>
