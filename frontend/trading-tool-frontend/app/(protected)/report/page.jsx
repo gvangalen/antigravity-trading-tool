@@ -2032,9 +2032,6 @@ RENDER
                         <span className="h-1 w-1 rounded-full bg-slate-300" />
                         <span>{tradingPanelCopy.statusReady}</span>
                       </div>
-                      <p className="mt-4 max-w-3xl text-sm leading-relaxed text-slate-600">
-                        {tradingReportSummary}
-                      </p>
                   </div>
                 </div>
 
