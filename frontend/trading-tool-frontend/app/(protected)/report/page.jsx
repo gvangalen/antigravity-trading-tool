@@ -2020,8 +2020,7 @@ RENDER
             <DashboardErrorBoundary onRetry={handleBoundaryRetry}>
               <section className="mt-10 rounded-[28px] border border-slate-200/80 bg-white shadow-[0_18px_40px_-36px_rgba(15,23,42,0.26)]">
                 <div className="border-b border-slate-100 px-6 py-6 md:px-8">
-                  <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
-                    <div className="max-w-3xl">
+                  <div className="max-w-3xl">
                       <div className="text-[10px] font-black uppercase tracking-[0.24em] text-blue-600">
                         {tradingPanelCopy.eyebrow}
                       </div>
@@ -2036,18 +2035,6 @@ RENDER
                       <p className="mt-4 max-w-3xl text-sm leading-relaxed text-slate-600">
                         {tradingReportSummary}
                       </p>
-                    </div>
-
-                    <button
-                      onClick={() => setTradingReportExpanded((value) => !value)}
-                      className="inline-flex items-center gap-2 self-start rounded-xl border border-slate-200 bg-white px-4 py-3 text-[11px] font-black uppercase tracking-[0.16em] text-slate-700 transition hover:border-blue-200 hover:text-blue-600"
-                    >
-                      {tradingReportExpanded ? tradingPanelCopy.expandedCta : tradingPanelCopy.collapsedCta}
-                      <ChevronDown
-                        size={14}
-                        className={`transition-transform ${tradingReportExpanded ? 'rotate-180' : ''}`}
-                      />
-                    </button>
                   </div>
                 </div>
 
@@ -2092,18 +2079,34 @@ RENDER
                     </div>
                   </div>
 
-                  {tradingReportExpanded && (
-                    <div className="mt-8">
-                      <DashboardErrorBoundary onRetry={handleBoundaryRetry}>
-                        <ReportTerminalHUD report={report} type={reportType} loading={loading} />
-                      </DashboardErrorBoundary>
-                      <DashboardErrorBoundary onRetry={handleBoundaryRetry}>
-                        <ReportContainer>
-                          <ReportLayout report={report} />
-                        </ReportContainer>
-                      </DashboardErrorBoundary>
+                  <div className="mt-8">
+                    <DashboardErrorBoundary onRetry={handleBoundaryRetry}>
+                      <ReportTerminalHUD report={report} type={reportType} loading={loading} />
+                    </DashboardErrorBoundary>
+
+                    <div className="mt-5 flex justify-end">
+                      <button
+                        onClick={() => setTradingReportExpanded((value) => !value)}
+                        className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-3 text-[11px] font-black uppercase tracking-[0.16em] text-slate-700 transition hover:border-blue-200 hover:text-blue-600"
+                      >
+                        {tradingReportExpanded ? tradingPanelCopy.expandedCta : tradingPanelCopy.collapsedCta}
+                        <ChevronDown
+                          size={14}
+                          className={`transition-transform ${tradingReportExpanded ? 'rotate-180' : ''}`}
+                        />
+                      </button>
                     </div>
-                  )}
+
+                    {tradingReportExpanded && (
+                      <DashboardErrorBoundary onRetry={handleBoundaryRetry}>
+                        <div className="mt-8">
+                          <ReportContainer>
+                            <ReportLayout report={report} />
+                          </ReportContainer>
+                        </div>
+                      </DashboardErrorBoundary>
+                    )}
+                  </div>
                 </div>
               </section>
             </DashboardErrorBoundary>
