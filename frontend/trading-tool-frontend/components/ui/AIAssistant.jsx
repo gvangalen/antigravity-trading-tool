@@ -106,6 +106,28 @@ function buildAssistantUiText(at) {
     noReviews: at("uiText.noReviews"),
     noPerformance: at("uiText.noPerformance"),
     noHistory: at("uiText.noHistory"),
+    workspaceSummary: at("uiText.workspaceSummary"),
+    workspaceStatusMarket: at("uiText.workspaceStatusMarket"),
+    workspaceStatusReviews: at("uiText.workspaceStatusReviews"),
+    workspaceStatusRisks: at("uiText.workspaceStatusRisks"),
+    workspaceStatusOpen: at("uiText.workspaceStatusOpen"),
+    workspacePrimaryAction: at("uiText.workspacePrimaryAction"),
+    workspaceQueue: at("uiText.workspaceQueue"),
+    workspaceDetails: at("uiText.workspaceDetails"),
+    workspaceSectionToday: at("uiText.workspaceSectionToday"),
+    workspaceSectionReviews: at("uiText.workspaceSectionReviews"),
+    workspaceSectionRisks: at("uiText.workspaceSectionRisks"),
+    workspaceSectionPerformance: at("uiText.workspaceSectionPerformance"),
+    workspaceSectionHistory: at("uiText.workspaceSectionHistory"),
+    workspaceSectionMore: at("uiText.workspaceSectionMore"),
+    workspaceSummaryToday: at("uiText.workspaceSummaryToday"),
+    workspaceSummaryReviews: at("uiText.workspaceSummaryReviews"),
+    workspaceSummaryRisks: at("uiText.workspaceSummaryRisks"),
+    workspaceSummaryPerformance: at("uiText.workspaceSummaryPerformance"),
+    workspaceSummaryHistory: at("uiText.workspaceSummaryHistory"),
+    readOnlyMode: at("uiText.readOnlyMode"),
+    paperMode: at("uiText.paperMode"),
+    conceptMode: at("uiText.conceptMode"),
     retry: at("uiText.retry"),
     inputPlaceholder: at("uiText.inputPlaceholder"),
     composerAsset: at("uiText.composerAsset"),
@@ -5214,10 +5236,10 @@ function AIAssistantContent({
   ].filter(Boolean);
   const finnModeLabel =
     activeState?.current_flow && activeState.current_flow !== "none"
-      ? "Concept"
+      ? uiText.conceptMode
       : pathname?.includes("/portfolio")
-      ? "Paper"
-      : "Alleen lezen";
+      ? uiText.paperMode
+      : uiText.readOnlyMode;
 
   const shouldCondenseMissionControl = (previewSectionsOnly || pathname === "/dashboard") && !isOnboarding;
   const showFullMissionControl = !shouldCondenseMissionControl;
@@ -5256,40 +5278,58 @@ function AIAssistantContent({
     primaryBehaviorCost ||
     primaryBehaviorRule ||
     "";
+  const workspaceBriefingLines = String(stableBriefingText || buildBriefingText(insight) || "")
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean);
+  const workspaceGreeting = workspaceBriefingLines[0] || "";
+  const workspaceHeadline =
+    workspaceBriefingLines[1] ||
+    compactMissionReason ||
+    missionControl?.summary?.headline ||
+    at("briefing.market.default", "", {
+      symbol: String(context?.symbol || globalSymbol || "BTC").trim().toUpperCase(),
+    });
+  const workspaceSupport =
+    workspaceBriefingLines[2] ||
+    compactMissionReason ||
+    primaryBehaviorRule ||
+    "";
+  const workspaceActionHint = workspaceBriefingLines[3] || "";
   const missionDetailSections = [
     {
       key: "today",
-      label: "Vandaag",
+      label: uiText.workspaceSectionToday,
       count: overlayMissionSections.todayItems.length,
-      summary: "Wat Finn nu het eerst van je vraagt. Rond dit af of stel het bewust uit.",
+      summary: uiText.workspaceSummaryToday,
     },
     {
       key: "reviews",
-      label: "Reviews",
+      label: uiText.workspaceSectionReviews,
       count: overlayMissionSections.reviewItems.length,
-      summary: "Open reviews die nog niet al bovenaan in Vandaag staan.",
+      summary: uiText.workspaceSummaryReviews,
     },
     ...(overlayMissionSections.riskItems.length > 0
       ? [{
           key: "risk",
-          label: "Risico's",
+          label: uiText.workspaceSectionRisks,
           count: overlayMissionSections.riskItems.length,
-          summary: "Wat je nu remt en waarom.",
+          summary: uiText.workspaceSummaryRisks,
         }]
       : []),
     ...(overlayMissionSections.performanceCards.length > 0
       ? [{
           key: "performance",
-          label: "Performance",
+          label: uiText.workspaceSectionPerformance,
           count: overlayMissionSections.performanceCards.length,
-          summary: "Zo liep je ritme vandaag.",
+          summary: uiText.workspaceSummaryPerformance,
         }]
       : []),
     {
       key: "history",
-      label: "Historie",
+      label: uiText.workspaceSectionHistory,
       count: overlayMissionSections.historyItems.length,
-      summary: "Terugblik op recente Finn-activiteit.",
+      summary: uiText.workspaceSummaryHistory,
     },
   ];
   const openSummaryCount = overlayMissionSections.todayItems.length || missionControl?.summary?.open_action_count || 0;
@@ -5297,8 +5337,14 @@ function AIAssistantContent({
     overlayMissionSections.todayItems.length > 0 &&
     overlayMissionSections.todayItems.every((item) => isReviewCandidate(item));
   const compactOpenLabel = openItemsAreReviews
-      ? (openSummaryCount === 1 ? "1 review open" : `${openSummaryCount} reviews open`)
-      : (openSummaryCount === 1 ? "1 aandachtspunt open" : `${openSummaryCount} aandachtspunten open`);
+      ? (openSummaryCount === 1 ? uiText.openReviewsOne : at("uiText.openReviewsMany", "", { count: openSummaryCount }))
+      : (openSummaryCount === 1 ? uiText.openAttentionOne : at("uiText.openAttentionMany", "", { count: openSummaryCount }));
+  const previewQueueSections = missionDetailSections.filter((section) =>
+    ["today", "reviews", "risk"].includes(section.key) && (section.count > 0 || section.key === "today")
+  );
+  const previewHasExtraDetail =
+    overlayMissionSections.performanceCards.length > 0 || overlayMissionSections.historyItems.length > 0;
+  const previewSecondarySectionKey = overlayMissionSections.performanceCards.length > 0 ? "performance" : "history";
   const showMissionSection = (key) => (showFullMissionControl || shouldCondenseMissionControl) && missionDetailSection === key;
 
   useEffect(() => {
@@ -5484,8 +5530,311 @@ function AIAssistantContent({
             </p>
           </div>
         )}
+        {!isSimpleFinnModal && shouldCondenseMissionControl ? (
+          <div className="p-5 border-b border-slate-100 dark:border-slate-800 bg-[linear-gradient(180deg,rgba(248,250,252,0.96)_0%,rgba(255,255,255,1)_100%)] dark:bg-[#0f172a] space-y-4 animate-fade-in">
+            {missionControlLoading && !missionControl ? (
+              <div className="rounded-[26px] border border-slate-200 dark:border-slate-800 bg-white/90 dark:bg-slate-950/35 px-4 py-4 space-y-3 animate-pulse">
+                <div className="flex items-center gap-2 text-[9px] font-black uppercase tracking-widest text-slate-400">
+                  <Sparkles size={11} className="text-blue-500" />
+                  {uiText.loadingWorkspace}
+                </div>
+                <div className="h-4 w-8/12 rounded-full bg-slate-200 dark:bg-slate-800" />
+                <div className="h-3 w-5/12 rounded-full bg-slate-200 dark:bg-slate-800" />
+                <div className="grid gap-2 md:grid-cols-3">
+                  <div className="h-16 rounded-2xl bg-slate-100 dark:bg-slate-900" />
+                  <div className="h-16 rounded-2xl bg-slate-100 dark:bg-slate-900" />
+                  <div className="h-16 rounded-2xl bg-slate-100 dark:bg-slate-900" />
+                </div>
+              </div>
+            ) : (
+              <>
+                <div className="grid gap-4 xl:grid-cols-[minmax(0,1.55fr)_minmax(300px,0.95fr)]">
+                  <div className="rounded-[28px] border border-slate-200 dark:border-slate-800 bg-white/96 dark:bg-slate-950/30 p-5 shadow-[0_18px_45px_-35px_rgba(37,99,235,0.35)]">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.24em] text-blue-600 dark:text-blue-300">
+                        <Shield size={12} />
+                        {uiText.workspaceSummary}
+                      </div>
+                      <span className="rounded-full border border-emerald-200/80 bg-emerald-50 px-3 py-1 text-[9px] font-black uppercase tracking-[0.18em] text-emerald-700 dark:border-emerald-900/50 dark:bg-emerald-950/20 dark:text-emerald-300">
+                        {humanizeSurfaceStatus(
+                          missionControl?.summary?.posture ||
+                          missionControl?.behavioral_insight?.coaching?.current_posture ||
+                          insight?.market_insight?.posture ||
+                          "defensive",
+                        )}
+                      </span>
+                    </div>
+
+                    {workspaceGreeting ? (
+                      <p className="mt-4 text-sm font-semibold text-slate-500 dark:text-slate-400">
+                        {workspaceGreeting}
+                      </p>
+                    ) : null}
+
+                    <h3 className="mt-2 max-w-4xl text-[28px] font-black leading-[1.15] tracking-tight text-slate-950 dark:text-slate-50">
+                      {workspaceHeadline}
+                    </h3>
+
+                    {workspaceSupport ? (
+                      <p className="mt-3 max-w-3xl text-sm font-medium leading-6 text-slate-600 dark:text-slate-300">
+                        {workspaceSupport}
+                      </p>
+                    ) : null}
+
+                    <div className="mt-5 flex flex-wrap gap-2.5">
+                      <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-2 text-[10px] font-black uppercase tracking-[0.18em] text-slate-700 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200">
+                        <span className="text-slate-400 dark:text-slate-500">{uiText.workspaceStatusMarket}</span>
+                        <span className="text-slate-950 dark:text-slate-50">
+                          {humanizeSurfaceStatus(
+                            missionControl?.summary?.posture ||
+                            insight?.market_insight?.posture ||
+                            "defensive",
+                          )}
+                        </span>
+                      </div>
+                      <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-2 text-[10px] font-black uppercase tracking-[0.18em] text-slate-700 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200">
+                        <span className="text-slate-400 dark:text-slate-500">{uiText.workspaceStatusReviews}</span>
+                        <span className="text-slate-950 dark:text-slate-50">{overlayMissionSections.reviewItems.length}</span>
+                      </div>
+                      <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-2 text-[10px] font-black uppercase tracking-[0.18em] text-slate-700 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200">
+                        <span className="text-slate-400 dark:text-slate-500">{uiText.workspaceStatusRisks}</span>
+                        <span className="text-slate-950 dark:text-slate-50">{overlayMissionSections.riskItems.length}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="rounded-[28px] border border-slate-200 dark:border-slate-800 bg-slate-50/85 dark:bg-slate-900/45 p-5">
+                    <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.24em] text-slate-500 dark:text-slate-400">
+                      <Activity size={12} className="text-blue-600 dark:text-blue-300" />
+                      {uiText.workspacePrimaryAction}
+                    </div>
+
+                    <div className="mt-4">
+                      <p className="text-xl font-black leading-tight text-slate-950 dark:text-slate-50">
+                        {primaryCoachingItem
+                          ? humanizeMissionTitle(primaryCoachingItem)
+                          : missionControl?.coaching_loop?.headline || uiText.noActions}
+                      </p>
+                      <p className="mt-3 text-sm font-medium leading-6 text-slate-600 dark:text-slate-300">
+                        {workspaceActionHint || compactMissionReason || uiText.noActions}
+                      </p>
+                    </div>
+
+                    {primaryProfileHabitAlignment && compactBehavioralReason ? (
+                      <div className="mt-4 rounded-2xl border border-amber-200/80 bg-amber-50/70 px-3 py-3 dark:border-amber-900/40 dark:bg-amber-950/20">
+                        <div className="text-[8px] font-black uppercase tracking-[0.2em] text-amber-700 dark:text-amber-300">
+                          {at("cards.finnSlowsDownOn")} {primaryBehaviorLabel}
+                        </div>
+                        <p className="mt-1.5 text-[11px] font-semibold leading-snug text-slate-700 dark:text-slate-200">
+                          {compactBehavioralReason}
+                        </p>
+                      </div>
+                    ) : null}
+
+                    {primaryMissionAction ? (
+                      <button
+                        type="button"
+                        onClick={() => handleFollowUpAction(primaryMissionAction, primaryCoachingItem)}
+                        disabled={executingAction}
+                        className="mt-5 inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-2xl bg-blue-600 px-4 py-3 text-[11px] font-black uppercase tracking-[0.18em] text-white shadow-lg shadow-blue-600/15 transition-colors hover:bg-blue-700 disabled:opacity-60"
+                      >
+                        {followUpIcon(primaryMissionAction.handoff || primaryMissionAction.type)}
+                        <span className="leading-tight">{humanizeActionLabel(primaryMissionAction, primaryCoachingItem)}</span>
+                      </button>
+                    ) : null}
+                  </div>
+                </div>
+
+                <div className="rounded-[28px] border border-slate-200 dark:border-slate-800 bg-white/96 dark:bg-slate-950/30 p-4 shadow-[0_18px_45px_-40px_rgba(15,23,42,0.32)]">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                      <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.24em] text-blue-600 dark:text-blue-300">
+                        <ListChecks size={12} />
+                        {uiText.workspaceQueue}
+                      </div>
+                      <p className="mt-1 text-sm font-medium text-slate-500 dark:text-slate-400">
+                        {uiText.workspaceDetails}
+                      </p>
+                    </div>
+                    <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-[9px] font-black uppercase tracking-[0.18em] text-slate-600 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300">
+                      {compactOpenLabel}
+                    </span>
+                  </div>
+
+                  <div className="mt-4 grid gap-3 lg:grid-cols-3">
+                    {previewQueueSections.map((section) => (
+                      <button
+                        key={section.key}
+                        type="button"
+                        onClick={() => setMissionDetailSection((current) => current === section.key ? "" : section.key)}
+                        className={`rounded-[24px] border p-4 text-left transition-all ${
+                          missionDetailSection === section.key
+                            ? "border-blue-300 bg-blue-50/70 shadow-[0_16px_40px_-35px_rgba(37,99,235,0.55)] dark:border-blue-900/60 dark:bg-blue-950/20"
+                            : "border-slate-200 bg-slate-50/75 hover:border-slate-300 hover:bg-white dark:border-slate-800 dark:bg-slate-900/35 dark:hover:border-slate-700 dark:hover:bg-slate-900/60"
+                        }`}
+                      >
+                        <div className="flex items-center justify-between gap-3">
+                          <span className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">
+                            {section.label}
+                          </span>
+                          <span className="rounded-full bg-white/90 px-2.5 py-1 text-xs font-black text-slate-900 shadow-sm dark:bg-slate-950/80 dark:text-slate-100">
+                            {section.count}
+                          </span>
+                        </div>
+                        <p className="mt-3 text-sm font-semibold leading-6 text-slate-700 dark:text-slate-200">
+                          {section.summary}
+                        </p>
+                      </button>
+                    ))}
+
+                    {previewHasExtraDetail ? (
+                      <button
+                        type="button"
+                        onClick={() => setMissionDetailSection((current) => current === previewSecondarySectionKey ? "" : previewSecondarySectionKey)}
+                        className={`rounded-[24px] border p-4 text-left transition-all ${
+                          missionDetailSection === previewSecondarySectionKey
+                            ? "border-blue-300 bg-blue-50/70 shadow-[0_16px_40px_-35px_rgba(37,99,235,0.55)] dark:border-blue-900/60 dark:bg-blue-950/20"
+                            : "border-slate-200 bg-slate-50/75 hover:border-slate-300 hover:bg-white dark:border-slate-800 dark:bg-slate-900/35 dark:hover:border-slate-700 dark:hover:bg-slate-900/60"
+                        }`}
+                      >
+                        <div className="flex items-center justify-between gap-3">
+                          <span className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-500 dark:text-slate-400">
+                            {uiText.workspaceSectionMore}
+                          </span>
+                          <span className="rounded-full bg-white/90 px-2.5 py-1 text-xs font-black text-slate-900 shadow-sm dark:bg-slate-950/80 dark:text-slate-100">
+                            {overlayMissionSections.performanceCards.length + overlayMissionSections.historyItems.length}
+                          </span>
+                        </div>
+                        <p className="mt-3 text-sm font-semibold leading-6 text-slate-700 dark:text-slate-200">
+                          {overlayMissionSections.performanceCards.length > 0
+                            ? uiText.workspaceSummaryPerformance
+                            : uiText.workspaceSummaryHistory}
+                        </p>
+                      </button>
+                    ) : null}
+                  </div>
+                </div>
+
+                {missionDetailSections.map((section) => {
+                  if (missionDetailSection !== section.key) return null;
+
+                  if (section.key === "today") {
+                    return (
+                      <div key={section.key} className="rounded-[24px] border border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-900/50 p-4 space-y-3">
+                        <p className="text-[11px] font-semibold leading-snug text-slate-500 dark:text-slate-400">
+                          {section.summary}
+                        </p>
+                        {overlayMissionSections.todayItems.length > 0 ? (
+                          overlayMissionSections.todayItems.map((item) => renderMissionSectionCard(item, "today"))
+                        ) : (
+                          <div className="rounded-xl border border-slate-100 dark:border-slate-800 bg-white/80 dark:bg-slate-950/35 px-3 py-3 text-[10px] font-semibold leading-snug text-slate-500 dark:text-slate-400">
+                            {uiText.noActions}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  }
+
+                  if (section.key === "reviews") {
+                    return (
+                      <div key={section.key} className="rounded-[24px] border border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-900/50 p-4 space-y-3">
+                        <p className="text-[11px] font-semibold leading-snug text-slate-500 dark:text-slate-400">
+                          {section.summary}
+                        </p>
+                        {overlayMissionSections.reviewItems.length > 0 ? (
+                          overlayMissionSections.reviewItems.map((item) => renderMissionSectionCard(item, "reviews"))
+                        ) : (
+                          <div className="rounded-xl border border-slate-100 dark:border-slate-800 bg-white/80 dark:bg-slate-950/35 px-3 py-3 text-[10px] font-semibold leading-snug text-slate-500 dark:text-slate-400">
+                            {uiText.noReviews}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  }
+
+                  if (section.key === "risk") {
+                    return (
+                      <div key={section.key} className="rounded-[24px] border border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-900/50 p-4 space-y-3">
+                        <p className="text-[11px] font-semibold leading-snug text-slate-500 dark:text-slate-400">
+                          {section.summary}
+                        </p>
+                        {overlayMissionSections.riskItems.length > 0 ? (
+                          overlayMissionSections.riskItems.map((item) => renderMissionSectionCard(item, "risk"))
+                        ) : (
+                          <div className="rounded-xl border border-slate-100 dark:border-slate-800 bg-white/80 dark:bg-slate-950/35 px-3 py-3 text-[10px] font-semibold leading-snug text-slate-500 dark:text-slate-400">
+                            {at("cards.noExtraBlockers")}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  }
+
+                  if (section.key === "performance") {
+                    return (
+                      <div key={section.key} className="rounded-[24px] border border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-900/50 p-4 space-y-3">
+                        <p className="text-[11px] font-semibold leading-snug text-slate-500 dark:text-slate-400">
+                          {section.summary}
+                        </p>
+                        {overlayMissionSections.performanceCards.length > 0 ? (
+                          <div className="space-y-2">
+                            {overlayMissionSections.performanceCards.map((card) => (
+                              <div
+                                key={card.key}
+                                className={`rounded-xl border px-3 py-3 ${
+                                  card.tone === "positive"
+                                    ? "border-emerald-100 dark:border-emerald-900/40 bg-emerald-50/30 dark:bg-emerald-950/10"
+                                    : card.tone === "attention"
+                                      ? "border-amber-100 dark:border-amber-900/40 bg-amber-50/45 dark:bg-amber-950/15"
+                                      : "border-slate-100 dark:border-slate-800 bg-white/90 dark:bg-slate-950/25"
+                                }`}
+                              >
+                                <div className="flex items-center justify-between gap-3">
+                                  <p className="text-[11px] font-black leading-snug text-slate-900 dark:text-slate-100">
+                                    {card.title}
+                                  </p>
+                                  {card.status ? (
+                                    <span className="rounded-full bg-slate-100 dark:bg-slate-900 px-2 py-0.5 text-[7px] font-black uppercase tracking-widest text-slate-500 dark:text-slate-400">
+                                      {card.status}
+                                    </span>
+                                  ) : null}
+                                </div>
+                                <p className="mt-1 text-[10px] font-semibold leading-snug text-slate-600 dark:text-slate-300">
+                                  {card.summary}
+                                </p>
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <div className="rounded-xl border border-slate-100 dark:border-slate-800 bg-white/80 dark:bg-slate-950/35 px-3 py-3 text-[10px] font-semibold leading-snug text-slate-500 dark:text-slate-400">
+                            {uiText.noPerformance}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  }
+
+                  return (
+                    <div key={section.key} className="rounded-[24px] border border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-900/50 p-4 space-y-3">
+                      <p className="text-[11px] font-semibold leading-snug text-slate-500 dark:text-slate-400">
+                        {section.summary}
+                      </p>
+                      {overlayMissionSections.historyItems.length > 0 ? (
+                        overlayMissionSections.historyItems.map(renderMissionHistoryEntry)
+                      ) : (
+                        <div className="rounded-xl border border-slate-100 dark:border-slate-800 bg-white/80 dark:bg-slate-950/35 px-3 py-3 text-[10px] font-semibold leading-snug text-slate-500 dark:text-slate-400">
+                          {uiText.noHistory}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </>
+            )}
+          </div>
+        ) : null}
+
         {/* SECTION 1 — FINN POSTURE & BRIEFING */}
-        {!isSimpleFinnModal && (
+        {!isSimpleFinnModal && !shouldCondenseMissionControl && (
         <div className="p-5 border-b border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/20 space-y-2.5 animate-fade-in">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-1.5">
@@ -5550,7 +5899,7 @@ function AIAssistantContent({
         )}
 
         {/* SECTION 1B — FINN Mission Control */}
-        {!isSimpleFinnModal && (shouldCondenseMissionControl || missionControlLoading || missionControl?.summary || missionControl?.coaching_loop || missionControl?.behavioral_insight) && (
+        {!isSimpleFinnModal && !shouldCondenseMissionControl && (missionControlLoading || missionControl?.summary || missionControl?.coaching_loop || missionControl?.behavioral_insight) && (
           <div className="p-5 border-b border-slate-100 dark:border-slate-800 bg-white dark:bg-[#0f172a] space-y-3">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-1.5">
