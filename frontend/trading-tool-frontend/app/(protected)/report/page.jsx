@@ -375,6 +375,67 @@ function getFirstNonEmptyText(...values) {
   return values.find((value) => typeof value === 'string' && value.trim()) || '';
 }
 
+function normalizeReportNarrative(value) {
+  if (value === null || value === undefined) return '';
+  if (typeof value === 'string') return value.trim();
+  if (Array.isArray(value)) {
+    return value.map((item) => normalizeReportNarrative(item)).filter(Boolean).join(' ');
+  }
+  if (typeof value === 'object') {
+    return normalizeReportNarrative(
+      value.text ?? value.summary ?? value.description ?? value.content ?? ''
+    );
+  }
+  return String(value).trim();
+}
+
+function getTradingReportSummary(report, fallbackText) {
+  const text = getFirstNonEmptyText(
+    normalizeReportNarrative(report?.executive_summary),
+    normalizeReportNarrative(report?.market_overview),
+    normalizeReportNarrative(report?.outlook),
+    fallbackText
+  );
+
+  const cleaned = String(text || '')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  return cleaned.length > 190 ? `${cleaned.slice(0, 190).trim()}...` : cleaned;
+}
+
+function getTradingReportPanelCopy(locale = 'nl') {
+  const normalized = String(locale || 'nl').toLowerCase();
+  if (normalized.startsWith('en')) {
+    return {
+      eyebrow: 'Trading report',
+      sectionTitle: 'Trading Report',
+      collapsedCta: 'View full trading report',
+      expandedCta: 'Hide full trading report',
+      summaryFallback: 'Open the full trading report for the latest market context and setup guidance.',
+      statusReady: 'Ready',
+    };
+  }
+  if (normalized.startsWith('de')) {
+    return {
+      eyebrow: 'Trading-Bericht',
+      sectionTitle: 'Trading-Bericht',
+      collapsedCta: 'Vollständigen Trading-Bericht ansehen',
+      expandedCta: 'Vollständigen Trading-Bericht ausblenden',
+      summaryFallback: 'Öffne den vollständigen Trading-Bericht für den aktuellen Marktkontext und Setup-Hinweise.',
+      statusReady: 'Bereit',
+    };
+  }
+  return {
+    eyebrow: 'Tradingrapport',
+    sectionTitle: 'Tradingrapport',
+    collapsedCta: 'Bekijk volledig tradingrapport',
+    expandedCta: 'Verberg volledig tradingrapport',
+    summaryFallback: 'Open het volledige tradingrapport voor de laatste marktcontext en setup-richting.',
+    statusReady: 'Klaar',
+  };
+}
+
 function normalizeFinnEntryKey(entry = {}) {
   return [
     entry?.label,
@@ -1706,14 +1767,16 @@ PAGE
 
 export default function ReportPage() {
   const { showSnackbar } = useModal();
-  const { t } = useTranslation();
+  const { t, locale } = useTranslation();
   const { selectedAsset } = useAsset();
   const reportT = t.pages.report;
+  const tradingPanelCopy = useMemo(() => getTradingReportPanelCopy(locale), [locale]);
 
   const [reportType, setReportType] = useState('daily');
   const [report, setReport] = useState(null);
   const [dates, setDates] = useState([]);
   const [selectedDate, setSelectedDate] = useState('latest');
+  const [tradingReportExpanded, setTradingReportExpanded] = useState(false);
 
   const [loading, setLoading] = useState(true);
   const [pdfLoading, setPdfLoading] = useState(false);
@@ -1735,6 +1798,10 @@ export default function ReportPage() {
   };
 
   const fallbackLabel = reportT.types[reportType] || reportT.hudDefaultTitle;
+  const tradingReportSummary = useMemo(
+    () => getTradingReportSummary(report, tradingPanelCopy.summaryFallback),
+    [report, tradingPanelCopy.summaryFallback]
+  );
 
   const reportFns = useMemo(
     () => ({
@@ -1809,6 +1876,10 @@ LOAD
   useEffect(() => {
     loadData('latest');
   }, [reportType]);
+
+  useEffect(() => {
+    setTradingReportExpanded(false);
+  }, [reportType, selectedDate]);
 
   /* =====================================================
 GENERATE
@@ -1925,47 +1996,6 @@ RENDER
         </div>
       </header>
 
-      {/* 🕹️ CONTROLS */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 py-8">
-          <ReportTabs selected={reportType} onChange={setReportType} />
-
-          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-1 rounded-xl shadow-sm flex items-center gap-2 transition-colors">
-              <div className="flex items-center gap-2 px-3 py-1 border-r border-slate-100 dark:border-slate-800">
-                  <Calendar size={13} className="text-slate-400 dark:text-slate-500" />
-                  <select
-                      value={selectedDate}
-                      onChange={(e) => loadData(e.target.value)}
-                      className="bg-transparent text-[11px] font-bold text-slate-600 dark:text-slate-400 focus:outline-none appearance-none"
-                  >
-                      <option value="latest">{reportT.recent}</option>
-                      {dates.map((d) => (
-                          <option key={d} value={d}>{d}</option>
-                      ))}
-                  </select>
-              </div>
-
-              <div className="flex items-center gap-2 pr-1">
-                  <button
-                      onClick={handleDownload}
-                      disabled={pdfLoading || !report}
-                      className="flex items-center gap-2 px-3 py-1.5 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white rounded-lg transition-all disabled:opacity-30"
-                  >
-                      {pdfLoading ? <Loader2 size={13} className="animate-spin" /> : <Download size={13} />}
-                      <span className="text-[11px] font-black uppercase tracking-widest">{reportT.pdf}</span>
-                  </button>
-
-                  <button
-                      onClick={() => handleGenerate(false, selectedDate)}
-                      disabled={generating}
-                      className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-all shadow-lg shadow-blue-600/10 active:scale-95 disabled:bg-slate-300"
-                  >
-                      <RefreshCw size={13} className={generating ? "animate-spin" : ""} />
-                      <span className="text-[11px] font-black uppercase tracking-widest">{reportT.new}</span>
-                  </button>
-              </div>
-          </div>
-      </div>
-
       {/* ⚠️ ERROR MESSAGE */}
       {error && (
         <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-900/30 p-6 rounded-2xl flex items-center gap-4 text-red-700 dark:text-red-300 shadow-sm transition-colors">
@@ -1987,16 +2017,98 @@ RENDER
         report && (
           <div className="animate-fade-slide pb-24">
             <DashboardErrorBoundary onRetry={handleBoundaryRetry}>
-              <ReportTerminalHUD report={report} type={reportType} loading={loading} />
-            </DashboardErrorBoundary>
-            <DashboardErrorBoundary onRetry={handleBoundaryRetry}>
-              <ReportContainer>
-                <ReportLayout report={report} />
-              </ReportContainer>
+              <FinnReportsPanel />
             </DashboardErrorBoundary>
 
             <DashboardErrorBoundary onRetry={handleBoundaryRetry}>
-              <FinnReportsPanel />
+              <section className="mt-10 rounded-[28px] border border-slate-200/80 bg-white shadow-[0_18px_40px_-36px_rgba(15,23,42,0.26)]">
+                <div className="border-b border-slate-100 px-6 py-6 md:px-8">
+                  <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
+                    <div className="max-w-3xl">
+                      <div className="text-[10px] font-black uppercase tracking-[0.24em] text-blue-600">
+                        {tradingPanelCopy.eyebrow}
+                      </div>
+                      <h2 className="mt-2 text-3xl font-black tracking-tight text-slate-950">
+                        {tradingPanelCopy.sectionTitle}
+                      </h2>
+                      <div className="mt-4 flex flex-wrap items-center gap-2 text-[11px] font-black uppercase tracking-[0.16em] text-slate-400">
+                        <span>{reportT.hudPeriod}: {report?.report_date || '—'}</span>
+                        <span className="h-1 w-1 rounded-full bg-slate-300" />
+                        <span>{tradingPanelCopy.statusReady}</span>
+                      </div>
+                      <p className="mt-4 max-w-3xl text-sm leading-relaxed text-slate-600">
+                        {tradingReportSummary}
+                      </p>
+                    </div>
+
+                    <button
+                      onClick={() => setTradingReportExpanded((value) => !value)}
+                      className="inline-flex items-center gap-2 self-start rounded-xl border border-slate-200 bg-white px-4 py-3 text-[11px] font-black uppercase tracking-[0.16em] text-slate-700 transition hover:border-blue-200 hover:text-blue-600"
+                    >
+                      {tradingReportExpanded ? tradingPanelCopy.expandedCta : tradingPanelCopy.collapsedCta}
+                      <ChevronDown
+                        size={14}
+                        className={`transition-transform ${tradingReportExpanded ? 'rotate-180' : ''}`}
+                      />
+                    </button>
+                  </div>
+                </div>
+
+                <div className="px-6 py-6 md:px-8">
+                  <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+                    <ReportTabs selected={reportType} onChange={setReportType} />
+
+                    <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 p-1 rounded-xl shadow-sm flex items-center gap-2 transition-colors">
+                      <div className="flex items-center gap-2 px-3 py-1 border-r border-slate-100 dark:border-slate-800">
+                        <Calendar size={13} className="text-slate-400 dark:text-slate-500" />
+                        <select
+                          value={selectedDate}
+                          onChange={(e) => loadData(e.target.value)}
+                          className="bg-transparent text-[11px] font-bold text-slate-600 dark:text-slate-400 focus:outline-none appearance-none"
+                        >
+                          <option value="latest">{reportT.recent}</option>
+                          {dates.map((d) => (
+                            <option key={d} value={d}>{d}</option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div className="flex items-center gap-2 pr-1">
+                        <button
+                          onClick={handleDownload}
+                          disabled={pdfLoading || !report}
+                          className="flex items-center gap-2 px-3 py-1.5 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white rounded-lg transition-all disabled:opacity-30"
+                        >
+                          {pdfLoading ? <Loader2 size={13} className="animate-spin" /> : <Download size={13} />}
+                          <span className="text-[11px] font-black uppercase tracking-widest">{reportT.pdf}</span>
+                        </button>
+
+                        <button
+                          onClick={() => handleGenerate(false, selectedDate)}
+                          disabled={generating}
+                          className="flex items-center gap-2 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-all shadow-lg shadow-blue-600/10 active:scale-95 disabled:bg-slate-300"
+                        >
+                          <RefreshCw size={13} className={generating ? "animate-spin" : ""} />
+                          <span className="text-[11px] font-black uppercase tracking-widest">{reportT.new}</span>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+
+                  {tradingReportExpanded && (
+                    <div className="mt-8">
+                      <DashboardErrorBoundary onRetry={handleBoundaryRetry}>
+                        <ReportTerminalHUD report={report} type={reportType} loading={loading} />
+                      </DashboardErrorBoundary>
+                      <DashboardErrorBoundary onRetry={handleBoundaryRetry}>
+                        <ReportContainer>
+                          <ReportLayout report={report} />
+                        </ReportContainer>
+                      </DashboardErrorBoundary>
+                    </div>
+                  )}
+                </div>
+              </section>
             </DashboardErrorBoundary>
           </div>
         )
