@@ -154,19 +154,7 @@ export default function FinnWorkspaceShell({ children }) {
                   </button>
                 </div>
 
-                <div className="hidden lg:flex lg:items-center lg:gap-4">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      commandNonceRef.current += 1;
-                      setCommandRequest({ mode: "all", category: null, nonce: commandNonceRef.current });
-                      setAssistantOpen(true);
-                    }}
-                    className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-[10px] font-black uppercase tracking-[0.18em] text-slate-500 transition hover:border-blue-200 hover:text-blue-600 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-400"
-                  >
-                    FINN
-                    <span className="rounded-md border border-slate-200 px-1.5 py-0.5 text-[9px] dark:border-slate-700">⌘K</span>
-                  </button>
+                <div className="hidden lg:flex lg:items-center">
                   <div className="rounded-full border-2 border-slate-100 p-0.5 shadow-sm dark:border-slate-800">
                     <AvatarMenu />
                   </div>
