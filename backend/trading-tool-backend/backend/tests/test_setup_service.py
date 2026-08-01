@@ -1,6 +1,7 @@
 import pytest
 from fastapi import HTTPException
 
+from backend.schemas.trading_schema import SetupCreateSchema
 from backend.services.setup_service import SetupService
 from backend.services.strategy_service import normalize_weekday
 
@@ -79,6 +80,54 @@ def test_trade_setup_clears_dca_fields():
     assert payload["dca_frequency"] is None
     assert payload["dca_day"] is None
     assert payload["dca_month_day"] is None
+
+
+def test_save_setup_applies_default_timeframe_for_trade_payload():
+    service = SetupService(None)
+    payload = SetupCreateSchema(name="BTC trade", symbol="BTC", setup_type="trade")
+    raw_payload = {
+        "name": "BTC trade",
+        "symbol": "BTC",
+        "setup_type": "trade",
+    }
+
+    class Repo:
+        async def check_name_exists(self, name, user_id):
+            return False
+
+        async def create_setup(self, payload_data, user_id, tags):
+            assert payload_data["timeframe"] == "4H"
+            return 123
+
+        async def get_setup_by_id(self, setup_id, user_id):
+            return {
+                "id": setup_id,
+                "name": "BTC trade",
+                "symbol": "BTC",
+                "timeframe": "4H",
+                "setup_type": "trade",
+                "tags": [],
+                "favorite": False,
+                "created_at": None,
+                "user_id": user_id,
+            }
+
+    class Session:
+        async def commit(self):
+            return None
+
+    async def no_op_onboarding(_user_id):
+        return None
+
+    service.repository = Repo()
+    service.session = Session()
+    service._mark_setup_step_completed_best_effort = no_op_onboarding
+
+    import asyncio
+    result = asyncio.run(service.save_setup(payload, raw_payload, 7))
+
+    assert result["status"] == "success"
+    assert result["setup"]["timeframe"] == "4H"
 
 
 @pytest.mark.parametrize("raw_day", ["monday", "maandag", "1", 1])

@@ -36,6 +36,14 @@ def test_notifications_unsubscribe_is_user_scoped():
     assert "MobilePushToken.user_id == user_id" in source
 
 
+def test_notifications_subscribe_refuses_cross_user_reassignment():
+    source = _source()
+
+    assert "Subscription endpoint belongs to another user." in source
+    assert "Push token belongs to another user." in source
+    assert "_is_owned_by_other_user(existing.user_id, user_id)" in source
+
+
 def test_mobile_push_routes_degrade_cleanly_when_table_is_missing():
     source = _source()
 

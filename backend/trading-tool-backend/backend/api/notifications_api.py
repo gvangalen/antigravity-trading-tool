@@ -25,6 +25,10 @@ class SubscribeRequest(BaseModel):
     subscription: SubscriptionInfo
     user_id: Optional[int] = None
 
+
+def _is_owned_by_other_user(record_user_id: Optional[int], current_user_id: int) -> bool:
+    return record_user_id is not None and int(record_user_id) != int(current_user_id)
+
 @router.post("/subscribe")
 async def subscribe(
     request: SubscribeRequest,
@@ -37,6 +41,9 @@ async def subscribe(
             select(PushSubscription).where(PushSubscription.endpoint == request.subscription.endpoint)
         )
         existing = result.scalars().first()
+
+        if existing and _is_owned_by_other_user(existing.user_id, user_id):
+            raise HTTPException(status_code=409, detail="Subscription endpoint belongs to another user.")
 
         if existing:
             existing.user_id = user_id
@@ -106,6 +113,9 @@ async def mobile_subscribe(
             select(MobilePushToken).where(MobilePushToken.push_token == request.push_token)
         )
         existing = result.scalars().first()
+
+        if existing and _is_owned_by_other_user(existing.user_id, user_id):
+            raise HTTPException(status_code=409, detail="Push token belongs to another user.")
 
         if existing:
             existing.user_id = user_id

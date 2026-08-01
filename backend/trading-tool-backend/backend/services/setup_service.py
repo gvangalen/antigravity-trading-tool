@@ -46,6 +46,10 @@ class SetupService:
         self.session = db_session
         self.repository = SetupRepository(db_session)
 
+    def _default_timeframe_for_setup_type(self, setup_type: Any) -> str:
+        normalized_type = str(setup_type or "").strip().lower()
+        return "1W" if normalized_type == "dca" else "4H"
+
     def _normalize_dca_day(self, value: Any) -> str:
         if value is None or value == "":
             raise ValueError()
@@ -256,6 +260,9 @@ class SetupService:
                 raise HTTPException(400, "min_investment mag niet negatief zijn.")
 
     async def save_setup(self, payload: SetupCreateSchema, raw_payload: dict, user_id: int) -> dict:
+        if not raw_payload.get("timeframe"):
+            raw_payload["timeframe"] = self._default_timeframe_for_setup_type(raw_payload.get("setup_type"))
+
         # Validate utilizing our robust payload validator
         self.validate_setup_payload(raw_payload, is_update=False)
 
