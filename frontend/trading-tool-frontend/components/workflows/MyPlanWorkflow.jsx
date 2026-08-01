@@ -359,6 +359,22 @@ export default function MyPlanWorkflow({ symbol = "BTC" }) {
   const setupFormRef = useRef(null);
   const strategyFormRef = useRef(null);
 
+  const refreshMarketBestSetup = async () => {
+    try {
+      const result = await fetchActiveSetup(activeSymbol);
+      setMarketBestSetup(
+        result && String(result.symbol || activeSymbol).toUpperCase() === activeSymbol
+          ? result
+          : null
+      );
+      return result ?? null;
+    } catch (error) {
+      console.error("Failed to refresh best market setup for plan workflow", error);
+      setMarketBestSetup(null);
+      return null;
+    }
+  };
+
   useEffect(() => {
     let cancelled = false;
 
@@ -470,7 +486,8 @@ export default function MyPlanWorkflow({ symbol = "BTC" }) {
   };
 
   const handleSetupSaved = async (savedSetup) => {
-    const refreshedSetups = await loadSetups();
+    const refreshedSetups = await loadSetups(true);
+    await refreshMarketBestSetup();
     if (drawer?.type === "new-setup") {
       const setup = savedSetup?.id
         ? savedSetup
@@ -489,7 +506,7 @@ export default function MyPlanWorkflow({ symbol = "BTC" }) {
     } else {
       await addStrategy(payload);
     }
-    await Promise.all([loadSetups(), loadStrategies()]);
+    await Promise.all([loadSetups(true), loadStrategies(true), refreshMarketBestSetup()]);
     setBots(await fetchBotConfigs().catch(() => []));
     closeDrawer();
   };
@@ -510,7 +527,7 @@ export default function MyPlanWorkflow({ symbol = "BTC" }) {
       onConfirm: async () => {
         if (plan.strategy?.id) await removeStrategy(plan.strategy.id);
         if (removesSetup && plan.setup?.id) await deleteSetup(plan.setup.id);
-        await Promise.all([loadSetups(), loadStrategies()]);
+        await Promise.all([loadSetups(true), loadStrategies(true), refreshMarketBestSetup()]);
         setBots(await fetchBotConfigs().catch(() => []));
         showSnackbar(copy.deletePlan, "success");
       },

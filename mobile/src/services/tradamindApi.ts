@@ -294,15 +294,23 @@ export const intelligenceApi = {
   },
 
   marketLatest(symbol: string) {
-    return apiClient.get<MarketLatestResponse>(`/api/market_data/${encodeURIComponent(symbol)}/latest`);
+    return apiClient.request<MarketLatestResponse>(`/api/market_data/${encodeURIComponent(symbol)}/latest`, {
+      timeoutMs: 15000,
+    });
   },
 
   marketChart7d(symbol: string) {
-    return apiClient.get<MarketChartPoint[]>('/api/market_data/7d', { symbol });
+    return apiClient.request<MarketChartPoint[]>('/api/market_data/7d', {
+      query: { symbol },
+      timeoutMs: 20000,
+    });
   },
 
   forwardReturnsMonth(symbol: string) {
-    return apiClient.get<ForwardReturnChartResponse[]>('/api/market_data/forward/maand', { symbol });
+    return apiClient.request<ForwardReturnChartResponse[]>('/api/market_data/forward/maand', {
+      query: { symbol },
+      timeoutMs: 15000,
+    });
   },
 
   workspaceAsset(
@@ -345,7 +353,9 @@ export const intelligenceApi = {
   },
 
   topSetups() {
-    return apiClient.get<SetupResponse>('/api/setups/top');
+    return apiClient.request<SetupResponse>('/api/setups/top', {
+      timeoutMs: 15000,
+    });
   },
 
   activeStrategyToday() {

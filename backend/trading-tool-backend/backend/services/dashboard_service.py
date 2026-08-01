@@ -169,18 +169,23 @@ class DashboardService:
     async def get_mobile_overview(
         self,
         user_id: int,
+        symbol: str | None = None,
         bypass_cache: bool = False,
         locale: str = "nl",
     ) -> MobileOverviewResponse:
         logger.info(f"🔄 [MobileOverview] Executing hardened composition for user_id={user_id}.")
 
         # 2. Setup symbols and default fallback structs
-        # Fetch real watchlist for user from database
-        query = text("SELECT symbol FROM watchlists WHERE user_id = :user_id")
-        result = await self.session.execute(query, {"user_id": user_id})
-        symbols = [row.symbol.upper() for row in result.fetchall()]
-        if not symbols:
-            symbols = ["BTC", "ETH", "SOL"]
+        normalized_symbol = str(symbol or "").strip().upper()
+        if normalized_symbol:
+            symbols = [normalized_symbol]
+        else:
+            # Fetch real watchlist for user from database
+            query = text("SELECT symbol FROM watchlists WHERE user_id = :user_id")
+            result = await self.session.execute(query, {"user_id": user_id})
+            symbols = [row.symbol.upper() for row in result.fetchall()]
+            if not symbols:
+                symbols = ["BTC", "ETH", "SOL"]
             
         # We declare safe defaults for all sub-components so they are populated even under failure
         prices_data = {s: {"price": None, "change_24h": None} for s in symbols}
