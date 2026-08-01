@@ -7,8 +7,8 @@ import pytest
 
 def test_response_trace_lookup_is_user_scoped_and_uses_memory_fallback(monkeypatch):
     monkeypatch.setattr(
-        "backend.services.finn_product_analytics_service.get_db_connection",
-        lambda: None,
+        "backend.services.finn_product_analytics_service.fetch_finn_response_trace",
+        lambda **kwargs: None,
     )
     service = FinnProductAnalyticsService(max_events=10)
     service.record_event(

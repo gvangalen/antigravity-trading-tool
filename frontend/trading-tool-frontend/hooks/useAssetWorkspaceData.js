@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { trackAssistantEvent } from "@/lib/api/assistantAnalytics";
 import { useVisibilityPolling } from "@/hooks/useVisibilityPolling";
 import { fetchAssetWorkspace, fetchWorkspaceWatchlist } from "@/lib/api/workspace";
 import { fetchLatestPrice } from "@/lib/api/market";
@@ -79,6 +80,24 @@ export function useAssetWorkspaceData(symbol, periods, watchlistSymbols) {
   const [error, setError] = useState(null);
   const [isFallbackWorkspace, setIsFallbackWorkspace] = useState(false);
   const watchlistKey = (watchlistSymbols || []).join(",");
+  const fallbackStartedAtRef = useRef(null);
+  const assetSymbol = String(symbol || "BTC").toUpperCase();
+
+  function trackWorkspaceTelemetry(eventName, metadata = {}) {
+    void trackAssistantEvent({
+      event_name: eventName,
+      page: "/asset",
+      surface: "web",
+      asset: assetSymbol,
+      flow_type: "asset_workspace",
+      metadata: {
+        market_period: periods?.market,
+        macro_period: periods?.macro,
+        technical_period: periods?.technical,
+        ...metadata,
+      },
+    });
+  }
 
   async function reloadWorkspace() {
     setLoading(true);
@@ -89,6 +108,13 @@ export function useAssetWorkspaceData(symbol, periods, watchlistSymbols) {
         signal: controller.signal,
         forceFresh: true,
       });
+      if (fallbackStartedAtRef.current) {
+        trackWorkspaceTelemetry("asset_workspace_recovered", {
+          fallback_duration_ms: Date.now() - fallbackStartedAtRef.current,
+          recovery_source: "workspace_live",
+        });
+        fallbackStartedAtRef.current = null;
+      }
       setWorkspace(payload);
       setError(null);
       setIsFallbackWorkspace(false);
@@ -104,6 +130,15 @@ export function useAssetWorkspaceData(symbol, periods, watchlistSymbols) {
         quoteResult.status === "fulfilled" ? quoteResult.value : null,
         dailyScoresResult.status === "fulfilled" ? dailyScoresResult.value : null,
       );
+      if (!fallbackStartedAtRef.current) {
+        fallbackStartedAtRef.current = Date.now();
+        trackWorkspaceTelemetry("asset_workspace_fallback_served", {
+          error_name: nextError?.name || "unknown_error",
+          reason: nextError?.name === "AbortError" ? "workspace_timeout" : "workspace_request_failed",
+          quote_available: quoteResult.status === "fulfilled",
+          daily_scores_available: dailyScoresResult.status === "fulfilled",
+        });
+      }
       setWorkspace(fallback);
       setError(nextError);
       setIsFallbackWorkspace(true);

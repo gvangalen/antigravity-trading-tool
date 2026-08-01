@@ -7,9 +7,14 @@ from contextlib import contextmanager
 from contextvars import ContextVar
 from typing import Any, Dict, Iterator, Optional
 
-from backend.utils.ai_cost_calculator import calculate_cost
-from backend.utils.db import get_db_connection
+from backend.infrastructure.repositories.ai_usage_log_sync_repository import (
+    fetch_average_estimated_cost,
+    fetch_supported_ai_usage_log_columns,
+    fetch_user_email_snapshot,
+    insert_ai_usage_log_row,
+)
 from backend.services.ai_usage_log_compat import AI_USAGE_LOG_COLUMN_ORDER, filter_ai_usage_log_values
+from backend.utils.ai_cost_calculator import calculate_cost
 
 
 logger = logging.getLogger(__name__)
@@ -98,29 +103,13 @@ def estimate_blocked_cost(
     purpose: Optional[str],
     entry_point: Optional[str],
 ) -> float:
-    conn = get_db_connection()
-    if conn is not None:
-        try:
-            with conn.cursor() as cur:
-                cur.execute(
-                    """
-                    SELECT COALESCE(AVG(NULLIF(estimated_cost_if_full, 0)), AVG(NULLIF(cost, 0)), 0)
-                    FROM ai_usage_logs
-                    WHERE model = %s
-                      AND purpose = %s
-                      AND COALESCE(entry_point, '') = COALESCE(%s, '')
-                      AND status IN ('full_ai', 'cache_exact', 'cache_semantic', 'fallback')
-                      AND timestamp >= NOW() - interval '90 days'
-                    """,
-                    (model, purpose, entry_point),
-                )
-                row = cur.fetchone()
-                if row and row[0]:
-                    return round(float(row[0]), 6)
-        except Exception as exc:
-            logger.warning("⚠️ Kon blocked cost estimate niet afleiden uit historie: %s", exc)
-        finally:
-            conn.close()
+    historical = fetch_average_estimated_cost(
+        model=model,
+        purpose=purpose,
+        entry_point=entry_point,
+    )
+    if historical is not None:
+        return historical
 
     prompt_tokens, completion_tokens = DEFAULT_COST_TOKEN_BUDGETS.get(
         str(purpose or "").strip().lower(),
@@ -171,68 +160,41 @@ def log_ai_usage_sync(
     entry_point: Optional[str] = None,
     user_email_snapshot: Optional[str] = None,
 ) -> None:
-    conn = get_db_connection()
-    if conn is None:
-        return
-
-    try:
-        global _supported_ai_usage_log_columns_sync
-        with conn:
-            with conn.cursor() as cur:
-                if _supported_ai_usage_log_columns_sync is None:
-                    cur.execute(
-                        """
-                        SELECT column_name
-                        FROM information_schema.columns
-                        WHERE table_schema = current_schema()
-                          AND table_name = 'ai_usage_logs'
-                        """
-                    )
-                    rows = cur.fetchall()
-                    columns = {str(row[0]) for row in rows if row and row[0]}
-                    _supported_ai_usage_log_columns_sync = columns or set(AI_USAGE_LOG_COLUMN_ORDER)
-
-                values = {
-                    "user_id": user_id,
-                    "model": model,
-                    "prompt_tokens": prompt_tokens,
-                    "completion_tokens": completion_tokens,
-                    "cost": cost,
-                    "purpose": purpose,
-                    "status": status,
-                    "response_time_ms": response_time_ms,
-                    "estimated_cost_if_full": estimated_cost_if_full if estimated_cost_if_full is not None else cost,
-                    "similarity_score": similarity_score,
-                    "cache_age_seconds": cache_age_seconds,
-                    "rejected_reason": rejected_reason,
-                    "symbol": symbol,
-                    "trace_id": trace_id,
-                    "completion_status": completion_status,
-                    "parser_recovery_triggered": parser_recovery_triggered,
-                    "confidence_score": confidence_score,
-                    "safety_guardrail_triggered": safety_guardrail_triggered,
-                    "request_source": request_source or "unclassified",
-                    "app_env": app_env or get_app_env(),
-                    "run_kind": run_kind,
-                    "entry_point": entry_point,
-                    "user_email_snapshot": user_email_snapshot,
-                }
-                columns, params = filter_ai_usage_log_values(
-                    values,
-                    supported_columns=_supported_ai_usage_log_columns_sync,
-                )
-                cur.execute(
-                    "INSERT INTO ai_usage_logs ("
-                    + ", ".join(columns)
-                    + ") VALUES ("
-                    + ", ".join(["%s"] * len(columns))
-                    + ")",
-                    tuple(params[column] for column in columns),
-                )
-    except Exception as exc:
-        logger.warning("⚠️ Kon AI usage log niet opslaan: %s", exc)
-    finally:
-        conn.close()
+    global _supported_ai_usage_log_columns_sync
+    if _supported_ai_usage_log_columns_sync is None:
+        _supported_ai_usage_log_columns_sync = (
+            fetch_supported_ai_usage_log_columns() or set(AI_USAGE_LOG_COLUMN_ORDER)
+        )
+    values = {
+        "user_id": user_id,
+        "model": model,
+        "prompt_tokens": prompt_tokens,
+        "completion_tokens": completion_tokens,
+        "cost": cost,
+        "purpose": purpose,
+        "status": status,
+        "response_time_ms": response_time_ms,
+        "estimated_cost_if_full": estimated_cost_if_full if estimated_cost_if_full is not None else cost,
+        "similarity_score": similarity_score,
+        "cache_age_seconds": cache_age_seconds,
+        "rejected_reason": rejected_reason,
+        "symbol": symbol,
+        "trace_id": trace_id,
+        "completion_status": completion_status,
+        "parser_recovery_triggered": parser_recovery_triggered,
+        "confidence_score": confidence_score,
+        "safety_guardrail_triggered": safety_guardrail_triggered,
+        "request_source": request_source or "unclassified",
+        "app_env": app_env or get_app_env(),
+        "run_kind": run_kind,
+        "entry_point": entry_point,
+        "user_email_snapshot": user_email_snapshot,
+    }
+    columns, params = filter_ai_usage_log_values(
+        values,
+        supported_columns=_supported_ai_usage_log_columns_sync,
+    )
+    insert_ai_usage_log_row(columns=columns, values=params)
 
 
 def log_background_ai_skip(
@@ -269,21 +231,7 @@ def log_background_ai_skip(
 
 
 def get_user_email_snapshot(user_id: Optional[int]) -> Optional[str]:
-    if not user_id:
-        return None
-    conn = get_db_connection()
-    if conn is None:
-        return None
-    try:
-        with conn.cursor() as cur:
-            cur.execute("SELECT email FROM users WHERE id = %s LIMIT 1", (user_id,))
-            row = cur.fetchone()
-            return str(row[0]) if row and row[0] else None
-    except Exception as exc:
-        logger.warning("⚠️ Kon user email snapshot niet ophalen: %s", exc)
-        return None
-    finally:
-        conn.close()
+    return fetch_user_email_snapshot(user_id)
 
 
 def log_openai_usage_from_context(

@@ -1,4 +1,5 @@
 import hashlib
+import inspect
 import json
 import os
 import re
@@ -137,6 +138,49 @@ def _cache_set(cache: Dict[Any, Dict[str, Any]], key: Any, value: Any, ttl_secon
         "expires_at": time.time() + max(1, ttl_seconds),
         "value": deepcopy(value),
     }
+
+
+def _call_with_optional_context(handler: Any, analysis: Dict[str, Any], context: Dict[str, Any]) -> Any:
+    try:
+        signature = inspect.signature(handler)
+    except (TypeError, ValueError):
+        return handler(analysis, context)
+
+    parameters = list(signature.parameters.values())
+    accepts_varargs = any(param.kind == inspect.Parameter.VAR_POSITIONAL for param in parameters)
+    if accepts_varargs or len(parameters) >= 2:
+        return handler(analysis, context)
+    return handler(analysis)
+
+
+def _call_priority_engine_payload_compat(
+    handler: Any,
+    mission: Dict[str, Any],
+    analysis: Dict[str, Any],
+    signals: Dict[str, Any],
+    *,
+    profile_habit_alignment: Dict[str, Any],
+) -> Any:
+    try:
+        signature = inspect.signature(handler)
+    except (TypeError, ValueError):
+        return handler(
+            mission,
+            analysis,
+            signals,
+            profile_habit_alignment=profile_habit_alignment,
+        )
+
+    parameters = signature.parameters.values()
+    accepts_kwargs = any(param.kind == inspect.Parameter.VAR_KEYWORD for param in parameters)
+    if accepts_kwargs or "profile_habit_alignment" in signature.parameters:
+        return handler(
+            mission,
+            analysis,
+            signals,
+            profile_habit_alignment=profile_habit_alignment,
+        )
+    return handler(mission, analysis, signals)
 
 GENERAL_CAPABILITY_FOLLOW_UP_PHRASES = (
     "leg dat in een simpele zin uit",
@@ -4458,7 +4502,7 @@ class FinnPlanService:
         context: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         context = context or {}
-        allow_cached_response = bool(context.get("allow_cached_mission_control"))
+        allow_cached_response = bool(context.get("allow_cached_mission_control", True))
         explain_cache_key = (
             f"{int(user_id)}:{self._normalized_query(query)}:"
             f"{str(context.get('page') or context.get('scope') or 'mission_control')}"
@@ -4509,7 +4553,8 @@ class FinnPlanService:
                 trade_journal_intelligence=self._build_trade_journal_intelligence_summary(activity_feed, governance_events),
                 behavioral_memory=behavioral_memory,
             )
-        priority_engine = self._priority_engine_payload(
+        priority_engine = _call_priority_engine_payload_compat(
+            self._priority_engine_payload,
             mission,
             analysis,
             self._priority_engine_governance_signals(governance_events),
@@ -7998,7 +8043,7 @@ class FinnPlanService:
                     MISSION_CONTROL_PREVIEW_CACHE_TTL_SECONDS,
                 )
         analysis["question_focus"] = self._portfolio_question_focus(query)
-        response = self._portfolio_daily_coach_message(analysis, context)
+        response = _call_with_optional_context(self._portfolio_daily_coach_message, analysis, context)
 
         return {
             "response": response,
@@ -12413,7 +12458,8 @@ class FinnPlanService:
             profile_habit_alignment=profile_habit_alignment,
         )
         mission["coaching_loop"] = coaching_loop
-        priority_engine = self._priority_engine_payload(
+        priority_engine = _call_priority_engine_payload_compat(
+            self._priority_engine_payload,
             mission,
             analysis,
             self._priority_engine_governance_signals(governance_events),

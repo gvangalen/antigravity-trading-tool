@@ -7,7 +7,11 @@ from copy import deepcopy
 from datetime import datetime, timedelta, timezone
 from typing import Any, Deque, Dict, Optional
 
-from backend.utils.db import get_db_connection, jsonb_param
+from backend.infrastructure.repositories.finn_product_event_sync_repository import (
+    fetch_finn_product_analytics_snapshot,
+    fetch_finn_response_trace,
+    persist_finn_product_event,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -36,6 +40,12 @@ class FinnProductAnalyticsService:
         }
 
     def _persist_event(self, event: Dict[str, Any]) -> None:
+        try:
+            persist_finn_product_event(event, table_name=PERSISTED_EVENTS_TABLE)
+        except Exception as exc:
+            logger.warning("⚠️ Kon FINN product event niet persisteren: %s", exc)
+        return
+
         conn = get_db_connection()
         if conn is None:
             return
@@ -254,6 +264,8 @@ class FinnProductAnalyticsService:
         }
 
     def _persistent_snapshot(self) -> Optional[Dict[str, Any]]:
+        return fetch_finn_product_analytics_snapshot(table_name=PERSISTED_EVENTS_TABLE)
+
         conn = get_db_connection()
         if conn is None:
             return None
@@ -640,33 +652,13 @@ class FinnProductAnalyticsService:
 
     def get_response_trace(self, *, user_id: int, trace_id: str) -> Optional[Dict[str, Any]]:
         """Return only the caller's privacy-safe persisted FINN response trace."""
-        conn = get_db_connection()
-        if conn is not None:
-            try:
-                with conn.cursor() as cur:
-                    cur.execute(
-                        f"""
-                        SELECT metadata, created_at
-                        FROM {PERSISTED_EVENTS_TABLE}
-                        WHERE user_id = %s
-                          AND trace_id = %s
-                          AND event_name = 'finn_response_trace'
-                        ORDER BY created_at DESC, id DESC
-                        LIMIT 1
-                        """,
-                        (int(user_id), str(trace_id)),
-                    )
-                    row = cur.fetchone()
-                    if row:
-                        metadata, created_at = row
-                        trace = deepcopy(metadata or {})
-                        if isinstance(trace, dict) and not trace.get("recorded_at") and created_at:
-                            trace["recorded_at"] = created_at.isoformat() + "Z"
-                        return trace if isinstance(trace, dict) else None
-            except Exception as exc:
-                logger.warning("Kon FINN response trace niet ophalen: %s", exc)
-            finally:
-                conn.close()
+        persisted = fetch_finn_response_trace(
+            user_id=user_id,
+            trace_id=trace_id,
+            table_name=PERSISTED_EVENTS_TABLE,
+        )
+        if persisted is not None:
+            return persisted
 
         with self._lock:
             for event in reversed(self._events):

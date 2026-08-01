@@ -71,7 +71,10 @@ class ReportService:
             raise ValueError("Invalid date")
 
     async def _get_user_locale(self, user_id: int) -> str:
-        user = await UserRepository(self.repository.db).get_by_id(user_id)
+        repository_db = getattr(self.repository, "db", None)
+        if repository_db is None:
+            return resolve_locale({})
+        user = await UserRepository(repository_db).get_by_id(user_id)
         preferences = getattr(user, "ai_preferences", {}) or {} if user else {}
         return resolve_locale(preferences)
 
