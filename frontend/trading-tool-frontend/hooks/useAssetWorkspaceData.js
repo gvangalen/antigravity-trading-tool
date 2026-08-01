@@ -73,6 +73,7 @@ export function useAssetWorkspaceData(symbol, periods, watchlistSymbols) {
   const [loading, setLoading] = useState(true);
   const [watchlistLoading, setWatchlistLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [isFallbackWorkspace, setIsFallbackWorkspace] = useState(false);
   const watchlistKey = (watchlistSymbols || []).join(",");
 
   async function reloadWorkspace() {
@@ -86,6 +87,7 @@ export function useAssetWorkspaceData(symbol, periods, watchlistSymbols) {
       });
       setWorkspace(payload);
       setError(null);
+      setIsFallbackWorkspace(false);
       return payload;
     } catch (nextError) {
       const [quoteResult, dailyScoresResult] = await Promise.allSettled([
@@ -100,6 +102,7 @@ export function useAssetWorkspaceData(symbol, periods, watchlistSymbols) {
       );
       setWorkspace(fallback);
       setError(nextError);
+      setIsFallbackWorkspace(true);
       return fallback;
     } finally {
       window.clearTimeout(timeoutId);
@@ -155,6 +158,7 @@ export function useAssetWorkspaceData(symbol, periods, watchlistSymbols) {
     loading,
     watchlistLoading,
     error,
+    isFallbackWorkspace,
     reloadWorkspace,
     reloadWatchlist,
   };

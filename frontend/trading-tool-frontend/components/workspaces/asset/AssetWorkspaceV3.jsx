@@ -167,7 +167,9 @@ function getUiCopy(locale = "nl") {
       periodLabel: "Period",
       freshness: "Freshness",
       currentData: "Current",
+      fallbackData: "Fallback",
       staleData: "Stale",
+      fallbackReady: "Fallback data is available. Detailed context will return automatically once the full workspace feed responds again.",
       scoreContribution: "Score contribution",
       sampleSize: "Samples",
       askFinnContext: "Ask FINN for context",
@@ -276,7 +278,9 @@ function getUiCopy(locale = "nl") {
       periodLabel: "Zeitraum",
       freshness: "Aktualität",
       currentData: "Aktuell",
+      fallbackData: "Fallback",
       staleData: "Veraltet",
+      fallbackReady: "Fallback-Daten sind verfügbar. Die Detailkontexte erscheinen automatisch wieder, sobald der vollständige Workspace-Feed erneut antwortet.",
       scoreContribution: "Score-Beitrag",
       sampleSize: "Stichproben",
       askFinnContext: "FINN nach Kontext fragen",
@@ -384,7 +388,9 @@ function getUiCopy(locale = "nl") {
     periodLabel: "Periode",
     freshness: "Actualiteit",
     currentData: "Actueel",
+    fallbackData: "Fallback",
     staleData: "Verouderd",
+    fallbackReady: "Fallback-data is beschikbaar. De detailcontext komt automatisch terug zodra de volledige workspace-feed weer antwoord geeft.",
     scoreContribution: "Scorebijdrage",
     sampleSize: "Meetpunten",
     askFinnContext: "Vraag FINN om context",
@@ -523,9 +529,9 @@ function formatPercent(value, digits = 2) {
 }
 
 function formatTimestamp(value, locale) {
-  if (!value) return "Offline";
+  if (!value) return "—";
   const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "Offline";
+  if (Number.isNaN(date.getTime())) return "—";
   return new Intl.DateTimeFormat(locale || "en-US", {
     month: "short",
     day: "numeric",
@@ -1060,6 +1066,7 @@ function ActiveAssetCard({
   price,
   change24h,
   updatedAt,
+  statusLabel,
   combinedSummary,
   onSelectAsset,
   ui,
@@ -1101,6 +1108,11 @@ function ActiveAssetCard({
         </div>
         <div className="shrink-0 text-right text-[11px] font-semibold text-slate-400">
           {ui.updated} <span className="text-slate-600">{updatedAt}</span>
+          {statusLabel ? (
+            <div className="mt-0.5 text-[10px] font-black uppercase tracking-[0.14em] text-amber-600">
+              {statusLabel}
+            </div>
+          ) : null}
         </div>
       </div>
 
@@ -1666,6 +1678,7 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
     watchlist: watchlistData,
     loading: workspaceLoading,
     watchlistLoading,
+    isFallbackWorkspace,
     reloadWorkspace,
     reloadWatchlist,
   } = useAssetWorkspaceData(activeSymbol, periods, watchlistSymbols);
@@ -1685,10 +1698,11 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
   };
   const btcLive = workspace?.quote || null;
   const hasScoreData = [market.score, macro.score, technical.score].some((score) => score !== null);
-  const marketLoading = workspaceLoading;
-  const macroLoading = workspaceLoading;
-  const technicalLoading = workspaceLoading;
-  const scoresLoading = workspaceLoading;
+  const hasResolvedWorkspace = Boolean(workspace);
+  const marketLoading = workspaceLoading && !hasResolvedWorkspace;
+  const macroLoading = workspaceLoading && !hasResolvedWorkspace;
+  const technicalLoading = workspaceLoading && !hasResolvedWorkspace;
+  const scoresLoading = workspaceLoading && !hasResolvedWorkspace;
 
   useEffect(() => {
     let cancelled = false;
@@ -1920,6 +1934,12 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
     const technicalRows = buildRows(technicalData, locale, ui);
     const supportedScore = (score, rows) =>
       hasScoreData && rows.some((row) => row.score !== null) ? score : null;
+    const fallbackEmptyState = (score, rows, loadingState, defaultEmptyState) =>
+      loadingState
+        ? defaultEmptyState
+        : supportedScore(score, rows) !== null || isFallbackWorkspace
+          ? ui.fallbackReady
+          : defaultEmptyState;
 
     return [
       {
@@ -1930,7 +1950,7 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
         score: supportedScore(market?.score, marketRows),
         insight: buildSectionInsight("market", supportedScore(market?.score, marketRows), ui),
         rows: marketRows,
-        emptyState: marketLoading ? ui.loadingMarket : ui.marketEmpty,
+        emptyState: fallbackEmptyState(market?.score, marketRows, marketLoading, ui.marketEmpty),
       },
       {
         id: "macro",
@@ -1940,7 +1960,7 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
         score: supportedScore(macro?.score, macroRows),
         insight: buildSectionInsight("macro", supportedScore(macro?.score, macroRows), ui),
         rows: macroRows,
-        emptyState: macroLoading ? ui.loadingMacro : ui.macroEmpty,
+        emptyState: fallbackEmptyState(macro?.score, macroRows, macroLoading, ui.macroEmpty),
       },
       {
         id: "technical",
@@ -1950,10 +1970,10 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
         score: supportedScore(technical?.score, technicalRows),
         insight: buildSectionInsight("technical", supportedScore(technical?.score, technicalRows), ui),
         rows: technicalRows,
-        emptyState: technicalLoading ? ui.loadingTechnical : ui.technicalEmpty,
+        emptyState: fallbackEmptyState(technical?.score, technicalRows, technicalLoading, ui.technicalEmpty),
       },
     ];
-  }, [hasScoreData, locale, macro, macroData, macroLoading, market, marketDayData, marketLoading, technical, technicalData, technicalLoading, ui]);
+  }, [hasScoreData, isFallbackWorkspace, locale, macro, macroData, macroLoading, market, marketDayData, marketLoading, technical, technicalData, technicalLoading, ui]);
 
   const handleAssetSelect = (symbol) => {
     const nextSymbol = String(symbol || activeSymbol).toUpperCase();
@@ -1975,7 +1995,8 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
         assetName={ASSET_NAMES[activeSymbol]}
         price={formatPrice(btcLive?.price, locale)}
         change24h={btcLive?.change_24h}
-        updatedAt={formatTimestamp(btcLive?.as_of, locale)}
+        updatedAt={formatTimestamp(btcLive?.as_of || workspace?.generated_at, locale)}
+        statusLabel={isFallbackWorkspace ? ui.fallbackData : btcLive?.stale ? ui.staleData : null}
         combinedSummary={combinedSummary}
         onSelectAsset={() => openSearch()}
         ui={ui}
