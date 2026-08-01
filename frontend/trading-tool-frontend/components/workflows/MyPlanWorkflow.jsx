@@ -486,18 +486,11 @@ export default function MyPlanWorkflow({ symbol = "BTC" }) {
   };
 
   const handleSetupSaved = async (savedSetup) => {
-    const refreshedSetups = await loadSetups(true);
-    await refreshMarketBestSetup();
-    if (drawer?.type === "new-setup") {
-      const setup = savedSetup?.id
-        ? savedSetup
-        : refreshedSetups.find((item) => item.symbol === activeSymbol) || refreshedSetups.at(-1);
-      if (setup) {
-        openStrategyDrawer(setup, null, "new-strategy");
-        return;
-      }
-    }
     closeDrawer();
+    await Promise.all([
+      loadSetups(true),
+      refreshMarketBestSetup(),
+    ]);
   };
 
   const handleStrategySubmit = async (payload) => {

@@ -6,6 +6,7 @@ from datetime import datetime
 import asyncio
 
 from backend.infrastructure.repositories.setup_repository import SetupRepository
+from backend.infrastructure.repositories.onboarding_repository import OnboardingRepository
 from backend.schemas.trading_schema import SetupCreateSchema
 
 WEEKDAY_TO_NUMBER = {
@@ -138,6 +139,18 @@ class SetupService:
             "user_id": item.get("user_id"),
         }
 
+    async def _mark_setup_step_completed_best_effort(self, user_id: int) -> None:
+        """
+        Setup saves should never wait on the full onboarding status recomputation.
+        We only mark the setup step as completed and swallow any non-critical issue.
+        """
+        try:
+            repo = OnboardingRepository(self.session)
+            await repo.mark_step_completed(user_id, "default", "setup")
+        except Exception:
+            # Best-effort only: the user-facing save response must not fail on onboarding bookkeeping.
+            return
+
     def validate_setup_payload(self, raw_payload: dict, is_update: bool = False):
         """
         Validates a setup payload meticulously for logical consistency, correct ranges,
@@ -266,12 +279,10 @@ class SetupService:
         # Use the raw dict directly because of the hybrid strategy
         setup_id = await self.repository.create_setup(raw_payload, user_id, tags)
         await self.session.commit()
-        
-        # Async run of onboarding logic
-        from backend.services.onboarding_service import mark_step_completed
-        await mark_step_completed(user_id, "setup", self.session)
+        await self._mark_setup_step_completed_best_effort(user_id)
 
-        return {"status": "success", "setup_id": setup_id}
+        created = await self.repository.get_setup_by_id(setup_id, user_id)
+        return {"status": "success", "setup_id": setup_id, "setup": self._format_setup(created)}
 
     async def get_last_setup(self, user_id: int, setup_id: Optional[int] = None) -> dict:
         if setup_id:
@@ -361,9 +372,9 @@ class SetupService:
             raise HTTPException(404, "Kon setup niet updaten")
             
         await self.session.commit()
-        from backend.services.onboarding_service import mark_step_completed
-        await mark_step_completed(user_id, "setup", self.session)
-        return {"message": "Setup bijgewerkt"}
+        await self._mark_setup_step_completed_best_effort(user_id)
+        updated = await self.repository.get_setup_by_id(setup_id, user_id)
+        return {"message": "Setup bijgewerkt", "setup": self._format_setup(updated)}
 
     async def delete_setup(self, setup_id: int, user_id: int) -> dict:
         dependents = await self.session.execute(
@@ -381,8 +392,7 @@ class SetupService:
         if deleted == 0:
             raise HTTPException(404, "Niet gevonden of geen toegang")
         await self.session.commit()
-        from backend.services.onboarding_service import mark_step_completed
-        await mark_step_completed(user_id, "setup", self.session)
+        await self._mark_setup_step_completed_best_effort(user_id)
         return {"message": "Setup verwijderd"}
 
     async def check_name(self, name: str, user_id: int) -> dict:
