@@ -7,10 +7,11 @@ import { Bot, ChevronDown, Plus, Sparkles, Wallet } from "lucide-react";
 import useBotData from "@/hooks/useBotData";
 import { useStrategyData } from "@/hooks/useStrategyData";
 import { useModal } from "@/components/modal/ModalProvider";
+import Drawer from "@/components/ui/Drawer";
 
 import { useMarketIntelligence } from "@/hooks/useMarketIntelligence";
 import BotAgentCard from "@/components/bot/BotAgentCard";
-import BotForm from "@/components/bot/AddBotForm";
+import AddBotForm from "@/components/bot/AddBotForm";
 import BotBudgetForm from "@/components/bot/BotBudgetForm";
 import GlobalTradePanel from "@/components/bot/GlobalTradePanel";
 
@@ -122,8 +123,8 @@ function BotPageInner() {
   const { status, completeStep } = useOnboarding();
   const { openConfirm, showSnackbar } = useModal();
   const searchParams = useSearchParams();
-  const formRef = useRef({});
-  const budgetRef = useRef({});
+  const botFormRef = useRef(null);
+  const budgetFormRef = useRef(null);
   const hasInitializedExpansionRef = useRef(false);
   const botListColumnRef = useRef(null);
   const botRowRefs = useRef(new Map());
@@ -133,6 +134,8 @@ function BotPageInner() {
   const [expandedBotId, setExpandedBotId] = useState(null);
   const [tradePanelBotId, setTradePanelBotId] = useState(null);
   const [tradePanelOffset, setTradePanelOffset] = useState(0);
+  const [drawer, setDrawer] = useState(null);
+  const [pendingFocusedBotId, setPendingFocusedBotId] = useState(null);
   const [statusFilter, setStatusFilter] = useState("all");
   const [assetFilter, setAssetFilter] = useState("all");
   const [currentTime, setCurrentTime] = useState(null);
@@ -266,6 +269,17 @@ function BotPageInner() {
       });
     }
   }, [resolvedBots, activeBot?.id, searchParams, setActiveBot]);
+
+  useEffect(() => {
+    if (!pendingFocusedBotId) return;
+    const nextBot = resolvedBots.find((bot) => bot.id === pendingFocusedBotId);
+    if (!nextBot) return;
+
+    setActiveBot(nextBot);
+    setExpandedBotId(nextBot.id);
+    persistBotSelection(nextBot.id);
+    setPendingFocusedBotId(null);
+  }, [pendingFocusedBotId, resolvedBots, setActiveBot]);
 
   useEffect(() => {
     const handleExecutionHandoff = (event) => {
@@ -453,37 +467,42 @@ function BotPageInner() {
     return { "1D": single, "1W": single, "1M": single, "1Y": single, ALL: single };
   }, [today, totalPortfolioValueEur, currentTime]);
 
-  const handleGenerateDecision = async (bot) => {
-    try { 
-      setGeneratingBotId(bot.id); 
-      await generateDecisionForBot({ bot_id: bot.id }); 
-      showSnackbar(`${copy.proposalCreatedPrefix} ${bot.name}`, "success");
+  const closeBotDrawer = () => {
+    if (botFormRef.current?.isSubmitting?.() || budgetFormRef.current?.isSubmitting?.()) {
+      return;
     }
-    catch { 
-      showSnackbar(copy.proposalCreateFailed, "danger");
+    setDrawer(null);
+  };
+
+  const hasConfiguredBudget = (budget) =>
+    Number(budget?.total_eur ?? 0) > 0 ||
+    Number(budget?.daily_limit_eur ?? 0) > 0 ||
+    Number(budget?.max_order_eur ?? 0) > 0;
+
+  const focusSavedBot = (savedBot, fallbackBot = null) => {
+    const candidate = savedBot?.bot ?? savedBot ?? fallbackBot;
+    const botId = Number(candidate?.id ?? fallbackBot?.id ?? 0);
+
+    if (botId > 0) {
+      setPendingFocusedBotId(botId);
+      setExpandedBotId(botId);
+      persistBotSelection(botId);
     }
-    finally { 
-      setGeneratingBotId(null); 
+
+    if (candidate) {
+      const resolvedCandidate = resolveBotChain(candidate, strategies, setups);
+      setActiveBot(resolvedCandidate);
     }
+
+    setDrawer(null);
   };
 
   const handleAddBot = (initialValues = {}) => {
     const isPlanActivation = Boolean(initialValues?.strategy_id);
-    formRef.current = initialValues;
-    openConfirm({
-      title: isPlanActivation ? copy.createFromPlanTitle : copy.createTitle,
-      statusLabel: isPlanActivation ? copy.createFromPlanStatus : copy.createStatus,
-      description: <BotForm strategies={strategies} initialValues={initialValues} onChange={(v) => (formRef.current = v)} />,
-      context: <p>{initialValues.symbol || formRef.current?.symbol || copy.newBotLabel} · {(initialValues.is_live || formRef.current?.is_live) ? copy.modeLive : copy.modeSimulation}</p>,
-      impact: <p>{isPlanActivation ? copy.createFromPlanImpact : copy.createImpact}</p>,
-      safety: <p>{isPlanActivation ? copy.createFromPlanSafety : copy.createSafety}</p>,
-      consequence: <p>{isPlanActivation ? copy.createFromPlanConsequence : copy.createConsequence}</p>,
-      confirmText: isPlanActivation ? copy.createFromPlanConfirm : copy.createConfirm,
-      busyText: isPlanActivation ? copy.createFromPlanBusy : copy.createBusy,
-      onConfirm: async () => {
-        if (!formRef.current?.name || !formRef.current?.strategy_id) { showSnackbar(copy.createValidation, "danger"); return; }
-        await createBot(formRef.current); showSnackbar(isPlanActivation ? copy.createFromPlanSuccess : copy.createSuccess, "success");
-      },
+    setDrawer({
+      type: "create-bot",
+      initialValues,
+      fromPlan: isPlanActivation,
     });
   };
 
@@ -528,44 +547,22 @@ function BotPageInner() {
   const handleOpenBotSettings = async (type, bot) => {
     if (!bot) return;
     if (type === "general") {
-      formRef.current = bot;
-      openConfirm({
-        title: `${copy.updateTitlePrefix} – ${bot.name}`,
-        statusLabel: copy.updateStatus,
-        description: <BotForm strategies={strategies} initialValues={bot} onChange={(v) => (formRef.current = v)} />,
-        context: <p>{bot.symbol || copy.botLabel} · {bot.is_live ? copy.modeLive : copy.modePaper}</p>,
-        impact: <p>{copy.updateImpact}</p>,
-        safety: <p>{copy.updateSafety}</p>,
-        consequence: <p>{copy.updateConsequence}</p>,
-        confirmText: copy.updateConfirm,
-        busyText: copy.updateBusy,
-        onConfirm: async () => { await updateBot(bot.id, formRef.current); showSnackbar(copy.updateSuccess, "success"); },
+      setDrawer({
+        type: "edit-bot",
+        bot,
       });
       return;
     }
     if (type === "portfolio") {
       const portfolio = portfolios.find((p) => p.bot_id === bot.id);
-      budgetRef.current = { total_eur: portfolio?.budget?.total_eur ?? 0, daily_limit_eur: portfolio?.budget?.daily_limit_eur ?? 0, max_order_eur: portfolio?.budget?.max_order_eur ?? 0, max_asset_exposure_pct: portfolio?.budget?.max_asset_exposure_pct ?? 100 };
-      openConfirm({
-        title: `${copy.budgetTitlePrefix} – ${bot.name}`,
-        statusLabel: copy.budgetStatus,
-        description: <BotBudgetForm initialBudget={budgetRef.current} onChange={(v) => (budgetRef.current = v)} />,
-        context: <p>{bot.symbol || copy.botLabel} · {bot.is_live ? copy.modeLive : copy.modePaper}</p>,
-        impact: <p>{copy.budgetImpact}</p>,
-        safety: <p>{copy.budgetSafety}</p>,
-        consequence: <p>{copy.budgetConsequence}</p>,
-        confirmText: copy.budgetConfirm,
-        busyText: copy.budgetBusy,
-        onConfirm: async () => {
-          await updateBot(bot.id, {
-            budget_total_eur: budgetRef.current.total_eur,
-            budget_daily_limit_eur: budgetRef.current.daily_limit_eur,
-            budget_max_order_eur: budgetRef.current.max_order_eur,
-            max_asset_exposure_pct: budgetRef.current.max_asset_exposure_pct,
-          });
-          showSnackbar(copy.budgetSuccess, "success");
-          // 🔥 Refresh decision to apply new budget to guardrails
-          await handleGenerateDecision(bot);
+      setDrawer({
+        type: "budget-bot",
+        bot,
+        initialBudget: {
+          total_eur: portfolio?.budget?.total_eur ?? 0,
+          daily_limit_eur: portfolio?.budget?.daily_limit_eur ?? 0,
+          max_order_eur: portfolio?.budget?.max_order_eur ?? 0,
+          max_asset_exposure_pct: portfolio?.budget?.max_asset_exposure_pct ?? 100,
         },
       });
       return;
@@ -585,6 +582,22 @@ function BotPageInner() {
         busyText: copy.deleteBusy,
         onConfirm: async () => { await deleteBot(bot.id); showSnackbar(copy.deleteSuccess, "danger"); }
       });
+    }
+  };
+
+  const handleGenerateDecision = async (bot, { silent = false } = {}) => {
+    try {
+      setGeneratingBotId(bot.id);
+      await generateDecisionForBot({ bot_id: bot.id });
+      if (!silent) {
+        showSnackbar(`${copy.proposalCreatedPrefix} ${bot.name}`, "success");
+      }
+    } catch {
+      if (!silent) {
+        showSnackbar(copy.proposalCreateFailed, "danger");
+      }
+    } finally {
+      setGeneratingBotId(null);
     }
   };
 
@@ -836,6 +849,107 @@ function BotPageInner() {
         )}
 
       </div>
+
+      <Drawer
+        isOpen={drawer?.type === "create-bot" || drawer?.type === "edit-bot"}
+        onClose={closeBotDrawer}
+        isCloseBlocked={() =>
+          Boolean(botFormRef.current?.isSubmitting?.() || budgetFormRef.current?.isSubmitting?.())
+        }
+        title={
+          drawer?.type === "edit-bot"
+            ? (copy.editTitle || copy.updateTitlePrefix)
+            : drawer?.fromPlan
+              ? copy.createFromPlanTitle
+              : copy.createTitle
+        }
+        subtitle={
+          drawer?.type === "edit-bot"
+            ? copy.updateStatus
+            : drawer?.fromPlan
+              ? copy.createFromPlanStatus
+              : copy.createStatus
+        }
+        width="max-w-2xl"
+      >
+        <AddBotForm
+          ref={botFormRef}
+          strategies={strategies}
+          initialData={drawer?.type === "edit-bot" ? drawer?.bot : null}
+          initialValues={drawer?.type === "create-bot" ? drawer?.initialValues : null}
+          hideActions={false}
+          submitLabel={
+            drawer?.type === "edit-bot"
+              ? copy.updateConfirm
+              : drawer?.fromPlan
+                ? copy.createFromPlanConfirm
+                : copy.createConfirm
+          }
+          submitBusyLabel={
+            drawer?.type === "edit-bot"
+              ? copy.updateBusy
+              : drawer?.fromPlan
+                ? copy.createFromPlanBusy
+                : copy.createBusy
+          }
+          cancelLabel={t?.common?.cancel || "Annuleren"}
+          successMessage={
+            drawer?.type === "edit-bot"
+              ? copy.updateSuccess
+              : drawer?.fromPlan
+                ? copy.createFromPlanSuccess
+                : copy.createSuccess
+          }
+          saveFailedMessage={copy.form?.saveFailed || copy.createValidation}
+          onCancel={closeBotDrawer}
+          onSubmit={async (payload) => {
+            if (drawer?.type === "edit-bot" && drawer?.bot?.id) {
+              return await updateBot(drawer.bot.id, payload);
+            }
+            return await createBot(payload);
+          }}
+          onSaved={(savedBot) => focusSavedBot(savedBot, drawer?.bot || null)}
+        />
+      </Drawer>
+
+      <Drawer
+        isOpen={drawer?.type === "budget-bot"}
+        onClose={closeBotDrawer}
+        isCloseBlocked={() =>
+          Boolean(botFormRef.current?.isSubmitting?.() || budgetFormRef.current?.isSubmitting?.())
+        }
+        title={
+          hasConfiguredBudget(drawer?.initialBudget)
+            ? (copy.budgetEditTitle || copy.budgetTitlePrefix)
+            : (copy.budgetSetTitle || copy.budgetTitlePrefix)
+        }
+        subtitle={copy.budgetStatus}
+        width="max-w-xl"
+      >
+        <BotBudgetForm
+          ref={budgetFormRef}
+          initialBudget={drawer?.initialBudget || null}
+          hideActions={false}
+          submitLabel={copy.budgetConfirm}
+          submitBusyLabel={copy.budgetBusy}
+          cancelLabel={t?.common?.cancel || "Annuleren"}
+          successMessage={copy.budgetSuccess}
+          saveFailedMessage={copy.budgetForm?.saveFailed || copy.partialError}
+          onCancel={closeBotDrawer}
+          onSubmit={async (budget) => {
+            if (!drawer?.bot?.id) return null;
+            const result = await updateBot(drawer.bot.id, {
+              budget_total_eur: budget.total_eur,
+              budget_daily_limit_eur: budget.daily_limit_eur,
+              budget_max_order_eur: budget.max_order_eur,
+              max_asset_exposure_pct: budget.max_asset_exposure_pct,
+            });
+            await handleGenerateDecision(drawer.bot, { silent: true });
+            return result;
+          }}
+          onSaved={(savedBot) => focusSavedBot(savedBot, drawer?.bot || null)}
+        />
+      </Drawer>
     </div>
   );
 }

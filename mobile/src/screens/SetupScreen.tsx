@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Feather } from '@expo/vector-icons';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import type { NavigationProp, RouteProp } from '@react-navigation/native';
-import { Pressable, StyleSheet, Text, View, TouchableOpacity } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, View, TouchableOpacity } from 'react-native';
 
 import { BotDecisionCard } from '../components/cards/BotDecisionCard';
 import { AppButton } from '../components/buttons/AppButton';
@@ -9,17 +10,17 @@ import { CardShell } from '../components/cards/CardShell';
 import { InsightCard } from '../components/cards/InsightCard';
 import { RiskWarningCard } from '../components/cards/RiskWarningCard';
 import { StrategyStatusCard } from '../components/cards/StrategyStatusCard';
-import { AssetContextHeader } from '../components/layout/AssetContextHeader';
-import { SegmentedControl } from '../components/layout/SegmentedControl';
 import { LoadingSkeletonCard } from '../components/layout/LoadingSkeletonCard';
 import { ScreenContainer } from '../components/layout/ScreenContainer';
-import { SectionHeader } from '../components/layout/SectionHeader';
 import { StatusChip } from '../components/layout/StatusChip';
 import { BottomSheet } from '../components/sheets/BottomSheet';
 import { StrategyCard } from '../components/StrategyCard';
+import { TodayWithFinnCard } from '../components/workspace/TodayWithFinnCard';
+import { WorkspaceHeroSection } from '../components/workspace/WorkspaceHeroSection';
 import { StatusTone, statusTones, theme } from '../constants/theme';
 
 import { useApiResource } from '../hooks/useApiResource';
+import { localizedBackendText, translate, translateFinnTag } from '../i18n';
 import { preferenceColors, useAppPreferences } from '../preferences/AppPreferencesProvider';
 import type { MainTabParamList } from '../navigation/MainTabNavigator';
 import { mapBotDecision, mapStrategy, nowLabel } from '../services/dataMappers';
@@ -40,6 +41,7 @@ type UnknownRecord = Record<string, unknown>;
 type SheetKey = 'setup' | 'strategy' | 'risk' | 'confirm' | null;
 
 type SetupSummary = {
+  id?: number;
   name: string;
   symbol: string;
   timeframe: string;
@@ -62,47 +64,41 @@ type BotActionMeta = {
   canMarkExecuted: boolean;
 };
 
+type PlanStrategySummary = {
+  id?: number;
+  name: string;
+  exists: boolean;
+};
+
 export function SetupScreen() {
   const route = useRoute<RouteProp<MainTabParamList, 'Setup'>>();
   const navigation = useNavigation<any>();
+  const { context, updateContext } = useIntelligenceContext();
+  const activeAsset = route.params?.symbol ?? context.asset;
   const { openFinn } = useFinnOverlay();
   const [sheet, setSheet] = useState<SheetKey>(null);
   const [handledNotification, setHandledNotification] = useState<string | null>(null);
   const [actionStatus, setActionStatus] = useState<string>('');
   const [actionLoading, setActionLoading] = useState(false);
-  const [activeTab, setActiveTab] = useState<'briefing' | 'actief' | 'setups' | 'strategies'>('briefing');
 
   useEffect(() => {
     trackAssistantEvent({
       event_name: 'screen_view',
-      page: 'setup',
-      flow_type: activeTab,
+      page: 'my_plan',
+      flow_type: 'my_plan',
     });
-  }, [activeTab]);
+  }, []);
 
-  const fetchStrategies = useCallback(() => intelligenceApi.queryStrategies({}), []);
-  const strategiesResource = useApiResource<any | undefined>({
-    fallbackData: undefined,
-    fetcher: fetchStrategies,
-    enabled: activeTab === 'strategies',
-  });
-
-  const [setupsFilter, setSetupsFilter] = useState<'alle' | 'actief' | 'inactief'>('actief');
-  const [strategiesFilter, setStrategiesFilter] = useState<'alle' | 'actief' | 'inactief'>('actief');
-
-  const fetchOverview = useCallback(() => mobileApi.overview(), []);
+  const fetchOverview = useCallback(() => mobileApi.overview(activeAsset), [activeAsset]);
   const overviewResource = useApiResource<MobileOverviewResponse | undefined>({
     fallbackData: undefined,
     fetcher: fetchOverview,
   });
 
   const notificationType = route.params?.notificationType;
-  const { context, updateContext } = useIntelligenceContext();
-  const activeAsset = route.params?.symbol ?? context.asset;
-
   useEffect(() => {
     if (route.params?.symbol && route.params.symbol !== context.asset) {
-      updateContext({ asset: route.params.symbol, screen: 'Setup' });
+      updateContext({ asset: route.params.symbol, screen: 'My Plan' });
     }
   }, [route.params?.symbol]);
 
@@ -119,9 +115,16 @@ export function SetupScreen() {
     fallbackData: undefined,
     fetcher: fetchTopSetups,
   });
+  const topSetupRecords = useMemo(() => asArray(topSetupsResource.data).slice(0, 12), [topSetupsResource.data]);
+  const topSetupIds = useMemo(
+    () => topSetupRecords
+      .map((item) => readOptionalNumber(item, ['id', 'setup_id']))
+      .filter((value): value is number => typeof value === 'number'),
+    [topSetupRecords],
+  );
 
   const activeSetup = useMemo(() => extractActiveSetup(activeSetupResource.data), [activeSetupResource.data]);
-  const setupId = (activeSetup as any)?.id;
+  const setupId = useMemo(() => readOptionalNumber(activeSetup, ['id', 'setup_id']), [activeSetup]);
 
   const fetchStrategy = useCallback(() => {
     if (setupId) {
@@ -133,7 +136,7 @@ export function SetupScreen() {
   const strategyResource = useApiResource<StrategyResponse | undefined>({
     fallbackData: undefined,
     fetcher: fetchStrategy,
-    enabled: !!setupId,
+    enabled: true,
   });
 
   const fetchBotToday = useCallback(() => intelligenceApi.botToday(activeAsset), [activeAsset]);
@@ -147,10 +150,37 @@ export function SetupScreen() {
     [activeOverviewAsset, activeSetupResource.data],
   );
   const strategySource = useMemo(() => extractStrategy(strategyResource.data), [strategyResource.data]);
+  const activeStrategyName = useMemo(
+    () =>
+      readString(strategySource, ['name', 'strategy_name', 'setup_name'], '') ||
+      (strategySource ? 'Active strategy' : 'Add strategy'),
+    [strategySource],
+  );
   const strategy = useMemo(
     () => mapStrategy(strategySource, activeSetupResource.data),
     [activeSetupResource.data, strategySource],
   );
+  const fetchPlanStrategies = useCallback(async () => {
+    if (topSetupIds.length === 0) return {} as Record<string, PlanStrategySummary | null>;
+
+    const entries = await Promise.all(
+      topSetupIds.map(async (currentSetupId) => {
+        try {
+          const source = await intelligenceApi.getStrategyBySetup(currentSetupId);
+          return [String(currentSetupId), mapPlanStrategySummary(source)] as const;
+        } catch {
+          return [String(currentSetupId), null] as const;
+        }
+      }),
+    );
+
+    return Object.fromEntries(entries);
+  }, [topSetupIds]);
+  const planStrategiesResource = useApiResource<Record<string, PlanStrategySummary | null>>({
+    fallbackData: {},
+    fetcher: fetchPlanStrategies,
+    enabled: topSetupIds.length > 0,
+  });
   const botDecisionSource = useMemo(() => extractBotDecision(botResource.data), [botResource.data]);
   const botDecision = useMemo(() => mapBotDecision(botDecisionSource), [botDecisionSource]);
   const botMeta = useMemo(() => mapBotActionMeta(botResource.data, botDecisionSource), [botDecisionSource, botResource.data]);
@@ -159,19 +189,20 @@ export function SetupScreen() {
     () => mapDecisionState(activeOverviewAsset, setup, botDecision.action),
     [activeOverviewAsset, botDecision.action, setup],
   );
-
   const loading =
     overviewResource.loading ||
     activeSetupResource.loading ||
     strategyResource.loading ||
     botResource.loading ||
-    topSetupsResource.loading;
+    topSetupsResource.loading ||
+    planStrategiesResource.loading;
   const isStale =
     overviewResource.isStale ||
     activeSetupResource.isStale ||
     strategyResource.isStale ||
     botResource.isStale ||
-    topSetupsResource.isStale;
+    topSetupsResource.isStale ||
+    planStrategiesResource.isStale;
 
   useEffect(() => {
     if (!notificationType) return;
@@ -234,13 +265,15 @@ export function SetupScreen() {
 
   return (
     <ScreenContainer
+      contentInsetBottom={272}
       edgeToEdge={true}
       refreshing={
         overviewResource.refreshing ||
         activeSetupResource.refreshing ||
         topSetupsResource.refreshing ||
         strategyResource.refreshing ||
-        botResource.refreshing
+        botResource.refreshing ||
+        planStrategiesResource.refreshing
       }
       onRefresh={async () => {
         await Promise.all([
@@ -249,25 +282,10 @@ export function SetupScreen() {
           topSetupsResource.refresh(),
           strategyResource.refresh(),
           botResource.refresh(),
+          planStrategiesResource.refresh(),
         ]);
       }}
     >
-      <AssetContextHeader
-        asset={activeAsset}
-        context="FINN setup guidance"
-        updatedAt={latestLabel([
-          overviewResource.updatedAt,
-          activeSetupResource.updatedAt,
-          strategyResource.updatedAt,
-          botResource.updatedAt,
-        ])}
-      />
-      <SectionHeader
-        label="Setup"
-        title="FINN setup matcher"
-        description="De beste setup eerst. Details pas wanneer ze je beslissing helpen."
-      />
-
       {notificationType ? (
         <NotificationContextCard
           activeAsset={activeAsset}
@@ -286,142 +304,38 @@ export function SetupScreen() {
         <LoadingSkeletonCard />
       ) : (
         <>
-          <SetupTabBar activeTab={activeTab} onSelect={setActiveTab} />
-          
-          {activeTab === 'briefing' && (
-            <FinnSetupBriefingCard
-              decisionState={decisionState}
-              isStale={isStale}
-              onAskFinn={() =>
-                openFinn({
-                  prefill: `Leg uit waarom ${setup.name} nu de beste setup is voor ${activeAsset}. Benoem confidence, risico en de veilige volgende stap.`,
-                  source: 'setup-briefing',
-                  symbol: activeAsset,
-                })
-              }
-              setup={setup}
-            />
-          )}
-          
-          {activeTab === 'actief' && (
-            <>
-              {/* 1. Actieve Setup */}
-              <BestMatchingSetupCard onPress={() => setSheet('setup')} setup={setup} />
-              
-              {/* 2. Actieve Strategie */}
-              {strategy && strategy.symbol && strategy.entryZone !== 'n/a' ? (
-                <View style={{ paddingHorizontal: theme.spacing.lg, marginTop: theme.spacing.md }}>
-                  <SectionHeader
-                    label="Strategy"
-                    title="Actieve strategie"
-                    description="Het execution plan dat nu actief is voor dit asset."
-                  />
-                  <StrategyCard strategy={{
-                    symbol: strategy.symbol,
-                    bias: strategy.bias,
-                    entryZone: strategy.entryZone,
-                    targets: strategy.targets,
-                    stopLoss: strategy.invalidation,
-                    confidenceScore: strategy.confidence,
-                    aiExplanation: strategy.explanation
-                  }} />
-                </View>
-              ) : (
-                <View style={{ paddingHorizontal: theme.spacing.lg, marginTop: theme.spacing.md }}>
-                  <InsightCard
-                    label="Strategy"
-                    title="Geen actieve strategie"
-                    body="Er is nog geen actieve strategie gekoppeld aan deze setup voor dit asset."
-                    tone="neutral"
-                  />
-                </View>
-              )}
-            </>
-          )}
-          
-          {activeTab === 'setups' && (
-            <View style={{ paddingHorizontal: theme.spacing.lg }}>
-              <SectionHeader
-                label="Andere setups"
-                title="Andere setups"
-                description="Blader door alle setups of filter op status."
-              />
-              
-              <View style={{ marginBottom: theme.spacing.md }}>
-                <SegmentedControl
-                  items={[
-                    { key: 'alle', label: 'ALLE' },
-                    { key: 'actief', label: 'ACTIEF' },
-                    { key: 'inactief', label: 'INACTIEF' },
-                  ]}
-                  selected={setupsFilter}
-                  onChange={(value) => setSetupsFilter(value as 'alle' | 'actief' | 'inactief')}
-                />
-              </View>
-
-              <NextBestMatchesCard setups={topSetups.filter((item) => {
-                const matchesTab = item.name !== setup.name;
-                if (setupsFilter === 'alle') return matchesTab;
-                if (setupsFilter === 'actief') return matchesTab && item.status === 'active';
-                if (setupsFilter === 'inactief') return matchesTab && item.status !== 'active';
-                return matchesTab;
-              })} />
-            </View>
-          )}
-          
-          {activeTab === 'strategies' && (
-            <View style={{ paddingHorizontal: theme.spacing.lg }}>
-              <SectionHeader
-                label="Strategieën"
-                title="Beheer strategieën"
-                description="Lijst van al jouw opgeslagen strategieën."
-              />
-              
-              <View style={{ marginBottom: theme.spacing.md }}>
-                <SegmentedControl
-                  items={[
-                    { key: 'alle', label: 'ALLE' },
-                    { key: 'actief', label: 'ACTIEF' },
-                    { key: 'inactief', label: 'INACTIEF' },
-                  ]}
-                  selected={strategiesFilter}
-                  onChange={(value) => setStrategiesFilter(value as 'alle' | 'actief' | 'inactief')}
-                />
-              </View>
-
-              <AppButton
-                label="+ Nieuwe strategie"
-                style={{ marginBottom: theme.spacing.md }}
-                onPress={() => {
-                  openFinn({
-                    prefill: `Vraag letterlijk: "Wil je een strategie maken voor ${activeAsset}?"`,
-                    source: 'strategy-create',
-                    symbol: activeAsset,
-                  });
-                }}
-              />
-
-              {strategiesResource.loading ? (
-                <Text style={{ color: theme.colors.textSoft }}>Laden...</Text>
-              ) : strategiesResource.data && strategiesResource.data.length > 0 ? (
-                strategiesResource.data.filter((strat: any) => {
-                  if (strategiesFilter === 'alle') return true;
-                  if (strategiesFilter === 'actief') return strat.status === 'active';
-                  if (strategiesFilter === 'inactief') return strat.status !== 'active';
-                  return true;
-                }).map((strat: any) => (
-                  <StrategyListCard key={strat.id} strat={strat} />
-                ))
-              ) : (
-                <InsightCard
-                  label="Strategieën"
-                  title="Geen strategieën gevonden"
-                  body="Je hebt nog geen strategieën aangemaakt."
-                  tone="neutral"
-                />
-              )}
-            </View>
-          )}
+          <FinnSetupBriefingCard
+            briefing={overviewResource.data?.finn_briefing}
+            decisionState={decisionState}
+            topSetups={topSetups}
+            isStale={isStale}
+            onAskFinn={() =>
+              openFinn({
+                prefill: `Explain my current plan for ${activeAsset}. Tell me why ${setup.name} is leading, what confirms it and what should wait.`,
+                source: 'my-plan-workspace',
+                symbol: activeAsset,
+              })
+            }
+            setup={setup}
+            strategy={strategy}
+          />
+          <MyPlanWorkflowIntro setup={setup} />
+          <ActivePlanWorkspaceCard
+            botDecision={botDecision}
+            decisionState={decisionState}
+            onOpenSetup={() => setSheet('setup')}
+            onOpenStrategy={() => setSheet('strategy')}
+            onReviewBot={() => setSheet('confirm')}
+            setup={setup}
+            strategy={strategy}
+          />
+          <AllPlansListCard
+            activeSetup={setup}
+            activeStrategyName={activeStrategyName}
+            planStrategies={planStrategiesResource.data}
+            strategy={strategy}
+            setups={topSetups}
+          />
         </>
       )}
 
@@ -434,6 +348,7 @@ export function SetupScreen() {
             activeSetupResource.error?.message ||
             strategyResource.error?.message ||
             botResource.error?.message ||
+            (planStrategiesResource.error instanceof Error ? planStrategiesResource.error.message : '') ||
             'Controleer backend/API status.'
           }
           tone="warning"
@@ -464,63 +379,412 @@ export function SetupScreen() {
   );
 }
 
-function SetupTabBar({ activeTab, onSelect }: { activeTab: string; onSelect: (tab: 'briefing' | 'actief' | 'setups' | 'strategies') => void }) {
-  return (
-    <SegmentedControl
-      items={[
-        { key: 'briefing', label: 'Briefing' },
-        { key: 'actief', label: 'Actief' },
-        { key: 'setups', label: 'Setups' },
-        { key: 'strategies', label: 'Strategieën' },
-      ]}
-      selected={activeTab}
-      onChange={(value) => onSelect(value as 'briefing' | 'actief' | 'setups' | 'strategies')}
-    />
-  );
-}
-
 function FinnSetupBriefingCard({
+  briefing,
   decisionState,
   isStale,
   onAskFinn,
   setup,
+  strategy,
+  topSetups,
 }: {
+  briefing?: MobileOverviewResponse['finn_briefing'];
   decisionState: ReturnType<typeof mapDecisionState>;
   isStale: boolean;
   onAskFinn: () => void;
   setup: SetupSummary;
+  strategy: ReturnType<typeof mapStrategy>;
+  topSetups: SetupSummary[];
+}) {
+  const { language } = useAppPreferences();
+  const reviewCount = topSetups.filter((item) => item.score < 70).length + (setup.score < 70 ? 1 : 0);
+  const queueItems = [
+    {
+      key: 'tasks',
+      label: translate(language, 'queue.label.tasks'),
+      value: topSetups.length + 1,
+      body: translate(language, 'queue.body.plansInCurrentWorkspace'),
+    },
+    {
+      key: 'reviews',
+      label: translate(language, 'queue.label.reviews'),
+      value: reviewCount,
+      body: translate(language, 'queue.body.plansNeedReview'),
+    },
+    {
+      key: 'risks',
+      label: translate(language, 'queue.label.risks'),
+      value: topSetups.filter((item) => item.score < 50).length + (setup.score < 50 ? 1 : 0),
+      body: translate(language, 'queue.body.weakPlansSlowing'),
+    },
+    {
+      key: 'performance',
+      label: translate(language, 'queue.label.performance'),
+      value: strategy && strategy.symbol && strategy.entryZone !== 'n/a' ? 1 : 0,
+      body: translate(language, 'queue.body.plansAlreadyReady'),
+    },
+  ];
+  const finnHeadline = localizedBackendText(
+    language,
+    briefing?.summary?.trim(),
+    translate(language, 'finn.noBriefingReady'),
+  );
+  const tags = [
+    {
+      label: translateFinnTag(
+        language,
+        decisionState.score >= 70 ? 'Constructive' : decisionState.score >= 50 ? 'Selective' : 'Defensive',
+      ),
+      tone: scoreBadgeTone(decisionState.score),
+    },
+    { label: translateFinnTag(language, setup.action || 'Review'), tone: setup.tone },
+    { label: translate(language, 'common.confidence', { count: setup.score }), tone: 'accent' as StatusTone },
+    {
+      label: translateFinnTag(language, isStale ? 'Stale sync' : strategy?.status || 'Plan review'),
+      tone: isStale ? ('warning' as StatusTone) : ('neutral' as StatusTone),
+    },
+  ];
+
+  return (
+    <WorkspaceHeroSection>
+      <TodayWithFinnCard
+        headline={finnHeadline}
+        support={translate(language, reviewCount === 1 ? 'finn.reviewNeedsAttention' : 'finn.reviewsNeedAttention', {
+          count: reviewCount,
+        })}
+        tags={tags}
+        primaryActionLabel={translate(language, 'finn.refreshDailyScores')}
+        onPrimaryAction={onAskFinn}
+        queueItems={queueItems}
+        queueStatusLabel={translate(language, 'common.itemsOpen', { count: Number(queueItems[0]?.value ?? 0) })}
+      />
+    </WorkspaceHeroSection>
+  );
+}
+
+function MyPlanWorkflowIntro({ setup }: { setup: SetupSummary }) {
+  const { appearance, language } = useAppPreferences();
+  const colors = preferenceColors(appearance);
+  const steps = [
+    {
+      icon: 'layers',
+      title: '1 Setup',
+      text: translate(language, 'myPlan.workflowStepSetup'),
+    },
+    {
+      icon: 'activity',
+      title: '2 Strategy',
+      text: translate(language, 'myPlan.workflowStepStrategy'),
+    },
+    {
+      icon: 'shield',
+      title: '3 Plan',
+      text: translate(language, 'myPlan.workflowStepPlan'),
+    },
+  ] as const;
+
+  return (
+    <View
+      style={[
+        styles.workspacePanel,
+        { backgroundColor: colors.surface, borderColor: colors.borderSubtle },
+      ]}
+    >
+      <Text style={[styles.workspaceEyebrow, { color: colors.textDim }]}>
+        {translate(language, 'myPlan.workflowEyebrow')}
+      </Text>
+      <Text style={[styles.workspaceSectionTitle, { color: colors.text }]}>
+        {translate(language, 'myPlan.workflowTitle')}
+      </Text>
+      <Text style={[styles.workflowHeroSubtitle, { color: colors.textMuted }]}>
+        {translate(language, 'myPlan.workflowSubtitle')}
+      </Text>
+
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        style={styles.workflowRail}
+        contentContainerStyle={styles.workflowRailContent}
+      >
+        {steps.map((step, index) => (
+          <View
+            key={step.title}
+            style={[
+              styles.workflowStepCard,
+              {
+                backgroundColor: colors.surface,
+                borderColor: colors.borderSubtle,
+                marginRight: index === steps.length - 1 ? 0 : 10,
+              },
+            ]}
+          >
+            <View style={[styles.workflowStepIcon, { backgroundColor: colors.surfaceMuted }]}>
+              <Feather name={step.icon} size={16} color={colors.accent} />
+            </View>
+            <View style={styles.workflowStepCopy}>
+              <Text style={[styles.workflowStepTitle, { color: colors.text }]}>{step.title}</Text>
+              <Text style={[styles.workflowStepText, { color: colors.textMuted }]} numberOfLines={2}>
+                {step.text}
+              </Text>
+            </View>
+          </View>
+        ))}
+      </ScrollView>
+
+      <View style={styles.planCheckStrip}>
+        <View style={styles.planCheckIcon}>
+          <Feather name="zap" size={15} color="#fff" />
+        </View>
+        <View style={styles.flexText}>
+          <Text style={styles.planCheckEyebrow}>{translate(language, 'myPlan.planCheckEyebrow')}</Text>
+          <Text style={styles.planCheckText}>
+            {translate(language, 'myPlan.planCheckReady', { name: setup.name })}
+          </Text>
+        </View>
+      </View>
+    </View>
+  );
+}
+
+function ActivePlanWorkspaceCard({
+  botDecision,
+  decisionState,
+  onOpenSetup,
+  onOpenStrategy,
+  onReviewBot,
+  setup,
+  strategy,
+}: {
+  botDecision: ReturnType<typeof mapBotDecision>;
+  decisionState: ReturnType<typeof mapDecisionState>;
+  onOpenSetup: () => void;
+  onOpenStrategy: () => void;
+  onReviewBot: () => void;
+  setup: SetupSummary;
+  strategy: ReturnType<typeof mapStrategy>;
+}) {
+  const { appearance } = useAppPreferences();
+  const colors = preferenceColors(appearance);
+  const planReady = strategy && strategy.symbol && strategy.entryZone !== 'n/a';
+
+  return (
+    <View style={[styles.workspacePanel, { backgroundColor: colors.surfaceMuted, borderColor: colors.borderSubtle }]}>
+      <View style={styles.sectionTop}>
+        <View style={styles.flexText}>
+          <Text style={[styles.workspaceEyebrow, { color: colors.textDim }]}>Active plan</Text>
+          <Text style={[styles.workspaceSectionTitle, { color: colors.text }]}>{setup.name}</Text>
+          <Text style={[styles.workspaceMicrocopy, { color: colors.textMuted }]}>
+            {setup.symbol} · {setup.timeframe} · {setup.type}
+          </Text>
+        </View>
+        <FilledStatusBadge label={planReady ? 'Active' : 'In review'} tone={planReady ? 'success' : 'warning'} />
+      </View>
+
+      <View style={[styles.workspaceDivider, { backgroundColor: colors.borderSubtle }]} />
+
+      <View style={[styles.planPartGroup, { backgroundColor: colors.surfaceMuted, borderColor: colors.borderSubtle }]}>
+        <PlanPartRow
+          actionLabel="Open setup"
+          description={`${setup.trend} conditions · ${setup.action}`}
+          icon="layers"
+          onPress={onOpenSetup}
+          summary={`${setup.score}% match`}
+          title="Setup"
+          value={setup.name}
+        />
+        <View style={[styles.planPartDivider, { backgroundColor: colors.borderSubtle }]} />
+        <PlanPartRow
+          actionLabel="Open strategy"
+          description={planReady ? `${strategy.bias} · ${strategy.entryZone}` : 'Nog geen uitvoerbare strategy gekoppeld'}
+          icon="activity"
+          onPress={onOpenStrategy}
+          summary={planReady ? `${strategy.confidence}% confidence` : 'Missing'}
+          title="Strategy"
+          value={planReady ? strategy.bias : 'No active strategy'}
+        />
+        <View style={[styles.planPartDivider, { backgroundColor: colors.borderSubtle }]} />
+        <PlanPartRow
+          actionLabel="Review bot"
+          description={botDecision.reason}
+          icon="shield"
+          onPress={onReviewBot}
+          summary={botDecision.action}
+          title="Plan"
+          value={decisionState.title}
+        />
+      </View>
+    </View>
+  );
+}
+
+function AllPlansListCard({
+  activeSetup,
+  activeStrategyName,
+  planStrategies,
+  setups,
+  strategy,
+}: {
+  activeSetup: SetupSummary;
+  activeStrategyName: string;
+  planStrategies: Record<string, PlanStrategySummary | null>;
+  setups: SetupSummary[];
+  strategy: ReturnType<typeof mapStrategy>;
+}) {
+  const { appearance } = useAppPreferences();
+  const colors = preferenceColors(appearance);
+  const plans = useMemo(() => {
+    const merged = [activeSetup, ...setups];
+    const seen = new Set<string>();
+    return merged.filter((item) => {
+      const key = `${item.name}-${item.symbol}-${item.timeframe}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  }, [activeSetup, setups]);
+
+  return (
+    <View style={[styles.workspacePanel, { backgroundColor: colors.surface, borderColor: colors.borderSubtle }]}>
+      <View style={styles.sectionTop}>
+        <View style={styles.flexText}>
+          <View style={styles.planListHeadingRow}>
+            <Text style={[styles.workspaceSectionTitle, { color: colors.text }]}>My plans</Text>
+            <StatusChip label={`${plans.length} plans`} tone="neutral" />
+          </View>
+          <Text style={[styles.workspaceSectionSubtitle, { color: colors.textMuted }]}>
+            Setup and strategy remain visible as two parts of the same plan.
+          </Text>
+        </View>
+      </View>
+
+      <View style={[styles.workspaceDivider, { backgroundColor: colors.borderSubtle }]} />
+
+      <View style={styles.planList}>
+        {plans.map((plan, index) => {
+          const isActive = plan.name === activeSetup.name;
+          const planStrategy = plan.id ? planStrategies[String(plan.id)] : null;
+          const hasStrategy = isActive
+            ? Boolean(strategy && strategy.symbol && strategy.entryZone !== 'n/a')
+            : Boolean(planStrategy?.exists);
+          const planStatus = isActive && hasStrategy ? 'Active' : 'Draft';
+          const planTone: StatusTone = planStatus === 'Active' ? 'success' : 'warning';
+          const botState = isActive && hasStrategy ? 'Bot active' : 'No linked bot';
+          const strategyTitle = isActive
+            ? activeStrategyName
+            : planStrategy?.name || 'Add strategy';
+
+          return (
+            <View
+              key={`${plan.name}-${plan.symbol}-${plan.timeframe}-${index}`}
+              style={[
+                styles.planListRow,
+                index < plans.length - 1 && { borderBottomWidth: 1, borderBottomColor: colors.borderSubtle },
+              ]}
+            >
+              <View style={styles.planListHeader}>
+                <View style={styles.flexText}>
+                  <View style={styles.planListTitleRow}>
+                    <Text style={[styles.planListTitle, { color: colors.text }]}>{plan.name}</Text>
+                    <FilledStatusBadge label={planStatus} tone={planTone} />
+                  </View>
+                  <Text style={[styles.planListMeta, { color: colors.textDim }]}>
+                    {plan.symbol} · {plan.timeframe}
+                  </Text>
+                  <Text style={[styles.planListBotState, { color: colors.textSoft }]}>
+                    {botState}
+                  </Text>
+                </View>
+              </View>
+
+              <View style={styles.planListTiles}>
+                <View style={[styles.planListTile, { backgroundColor: colors.surfaceMuted, borderColor: colors.borderSubtle }]}>
+                  <View style={styles.planListTileHeader}>
+                    <View style={[styles.planListTileIcon, { backgroundColor: colors.surface }]}>
+                      <Feather name="layers" size={15} color={colors.accent} />
+                    </View>
+                    <Text style={[styles.planListTileLabel, { color: colors.textDim }]}>Setup</Text>
+                  </View>
+                  <View style={styles.planListTileBody}>
+                    <Text style={[styles.planListTileTitle, { color: colors.text }]} numberOfLines={1}>
+                      {plan.name}
+                    </Text>
+                    <Feather name="check" size={17} color={theme.colors.success} />
+                  </View>
+                </View>
+
+                <View
+                  style={[
+                    styles.planListTile,
+                    hasStrategy
+                      ? { backgroundColor: colors.surfaceMuted, borderColor: colors.borderSubtle }
+                      : styles.planListTileDraft,
+                  ]}
+                >
+                  <View style={styles.planListTileHeader}>
+                    <View style={[styles.planListTileIcon, { backgroundColor: hasStrategy ? colors.surface : '#FFF5D7' }]}>
+                      <Feather name="target" size={15} color={hasStrategy ? colors.accent : theme.colors.warning} />
+                    </View>
+                    <Text style={[styles.planListTileLabel, { color: colors.textDim }]}>Strategy</Text>
+                  </View>
+                  <View style={styles.planListTileBody}>
+                    <Text style={[styles.planListTileTitle, { color: colors.text }]} numberOfLines={1}>
+                      {strategyTitle}
+                    </Text>
+                    <Feather
+                      name={hasStrategy ? 'check' : 'plus'}
+                      size={17}
+                      color={hasStrategy ? theme.colors.success : theme.colors.warning}
+                    />
+                  </View>
+                </View>
+              </View>
+            </View>
+          );
+        })}
+      </View>
+    </View>
+  );
+}
+
+function PlanPartRow({
+  actionLabel,
+  description,
+  icon,
+  onPress,
+  summary,
+  title,
+  value,
+}: {
+  actionLabel: string;
+  description: string;
+  icon: keyof typeof Feather.glyphMap;
+  onPress: () => void;
+  summary: string;
+  title: string;
+  value: string;
 }) {
   const { appearance } = useAppPreferences();
   const colors = preferenceColors(appearance);
 
   return (
-    <View style={[styles.heroCard, { borderColor: colors.border }]}>
-      <View style={styles.sectionTop}>
-        <Text style={styles.heroKicker}>FINN SETUP BRIEFING</Text>
-        <View style={styles.heroPill}>
-          <View style={styles.heroPillDot} />
-          <Text style={styles.heroPillText}>{riskLabelForScore(decisionState.score).toUpperCase()}</Text>
+    <Pressable onPress={onPress} style={({ pressed }) => [styles.planPartRow, pressed && styles.pressed]}>
+      <View style={[styles.planPartIcon, { backgroundColor: colors.surface }]}>
+        <Feather name={icon} size={15} color={colors.accent} />
+      </View>
+      <View style={styles.planPartContent}>
+        <View style={styles.planPartTop}>
+          <Text style={[styles.planPartTitle, { color: colors.textDim }]}>{title}</Text>
+          <Text style={[styles.planPartSummary, { color: colors.accent }]}>{summary}</Text>
+        </View>
+        <View style={styles.planPartBody}>
+          <View style={styles.flexText}>
+            <Text style={[styles.planPartValue, { color: colors.text }]} numberOfLines={1}>{value}</Text>
+            <Text style={[styles.planPartDescription, { color: colors.textMuted }]} numberOfLines={2}>{description}</Text>
+          </View>
+          <Text style={[styles.planPartAction, { color: colors.textSoft }]}>{actionLabel}</Text>
         </View>
       </View>
-
-      <Text style={[styles.heroTitle, { color: colors.text }]}>{decisionState.title}</Text>
-
-      <Text style={[styles.briefingCopy, { color: colors.textMuted }]}>
-        <Text style={{ color: colors.text }}>Beste huidige match: {setup.name}. Confidence {setup.score}%.</Text> FINN ziet {setup.trend.toLowerCase()} condities en adviseert: {setup.action.toLowerCase()}.
-      </Text>
-
-      <View style={styles.briefingMetaRow}>
-        <View style={{ flex: 1, gap: 2 }}>
-          <Text style={{ fontSize: 11, color: colors.textDim, fontWeight: '700', letterSpacing: 0.5 }}>CONFIDENCE</Text>
-          <Text style={{ fontSize: 14, color: colors.success, fontWeight: '700' }}>{setup.score}%</Text>
-        </View>
-        <View style={{ flex: 1, gap: 2 }}>
-          <Text style={{ fontSize: 11, color: colors.textDim, fontWeight: '700', letterSpacing: 0.5 }}>RISK POSTURE</Text>
-          <Text style={{ fontSize: 14, color: colors.text, fontWeight: '700' }}>{riskLabelForScore(decisionState.score)}</Text>
-        </View>
-      </View>
-
-    </View>
+    </Pressable>
   );
 }
 
@@ -1047,6 +1311,50 @@ function NotificationContextCard({
   );
 }
 
+function PlanDecisionMatrix({
+  decisionState,
+}: {
+  decisionState: ReturnType<typeof mapDecisionState>;
+}) {
+  const { appearance } = useAppPreferences();
+  const colors = preferenceColors(appearance);
+
+  return (
+    <View style={[styles.workspacePanel, { backgroundColor: colors.surface, borderColor: colors.borderSubtle }]}>
+      <View style={styles.sectionTop}>
+        <View style={styles.flexText}>
+          <Text style={[styles.workspaceEyebrow, { color: colors.textDim }]}>Decision matrix</Text>
+          <Text style={[styles.workspaceSectionTitle, { color: colors.text }]}>{decisionState.title}</Text>
+        </View>
+        <FilledStatusBadge label={`${decisionState.score}/100`} tone={decisionState.tone} />
+      </View>
+      <View style={styles.matrixGrid}>
+        {decisionState.scores.map((item) => (
+          <View key={item.label} style={[styles.matrixCell, { borderColor: colors.borderSubtle, backgroundColor: colors.surfaceMuted }]}>
+            <Text style={[styles.matrixLabel, { color: colors.textDim }]}>{item.label}</Text>
+            <Text style={[styles.matrixValue, { color: colors.text }]}>{item.value}</Text>
+          </View>
+        ))}
+      </View>
+      <Text style={[styles.workspaceBody, { color: colors.textMuted }]}>{decisionState.reason}</Text>
+      <Text style={[styles.matrixNextStep, { color: colors.textSoft }]}>{decisionState.nextStep}</Text>
+    </View>
+  );
+}
+
+function FilledStatusBadge({ label, tone }: { label: string; tone: StatusTone }) {
+  const { appearance } = useAppPreferences();
+  const colors = preferenceColors(appearance);
+  const palette = statusPalette(tone, colors);
+
+  return (
+    <View style={[styles.filledBadge, { backgroundColor: palette.background, borderColor: palette.border }]}>
+      <View style={[styles.filledBadgeDot, { backgroundColor: palette.color }]} />
+      <Text style={[styles.filledBadgeText, { color: palette.color }]}>{label}</Text>
+    </View>
+  );
+}
+
 function notificationCopy(type: string, symbol: string): {
   body: string;
   chip: string;
@@ -1093,6 +1401,7 @@ function mapSetupSummary(source?: SetupResponse, overviewAsset?: MobileOverviewR
       (active
         ? 'De backend heeft deze setup geselecteerd op basis van overlap met de huidige macro-, technical- en market-scores.'
         : 'Er is nog geen actieve setup beschikbaar voor deze asset. Gebruik dit scherm als read-only context.'),
+    id: readOptionalNumber(active, ['id', 'setup_id']),
     name,
     score,
     symbol,
@@ -1105,11 +1414,12 @@ function mapSetupSummary(source?: SetupResponse, overviewAsset?: MobileOverviewR
 }
 
 function mapTopSetups(source?: SetupResponse): SetupSummary[] {
-  return asArray(source).slice(0, 4).map((item) => {
+  return asArray(source).slice(0, 12).map((item) => {
     const score = clampScore(readNumber(item, ['score', 'match_score', 'setup_score'], 50));
     return {
       action: readString(item, ['action'], 'Review'),
       explanation: readString(item, ['explanation', 'setup_explanation'], 'Setup uit backend-ranking.'),
+      id: readOptionalNumber(item, ['id', 'setup_id']),
       name: readString(item, ['name', 'setup_name'], 'Setup'),
       score,
       symbol: readString(item, ['symbol'], 'BTC'),
@@ -1180,7 +1490,19 @@ function mapBotActionMeta(source?: BotResponse, decision?: UnknownRecord): BotAc
 function extractActiveSetup(source?: SetupResponse) {
   const record = firstObject(source);
   const active = record?.active;
-  return isRecord(active) ? active : record;
+  if (isRecord(active)) {
+    return {
+      ...active,
+      id: readOptionalNumber(active, ['id', 'setup_id']) ?? active.id,
+    };
+  }
+  if (isRecord(record)) {
+    return {
+      ...record,
+      id: readOptionalNumber(record, ['id', 'setup_id']) ?? record.id,
+    };
+  }
+  return record;
 }
 
 function extractStrategy(source?: StrategyResponse) {
@@ -1195,6 +1517,19 @@ function extractBotDecision(source?: BotResponse) {
   const decisions = record?.decisions;
   if (Array.isArray(decisions)) return decisions.find(isRecord);
   return record;
+}
+
+function mapPlanStrategySummary(source?: StrategyResponse): PlanStrategySummary | null {
+  const strategy = extractStrategy(source);
+  if (!strategy) return null;
+
+  return {
+    exists: true,
+    id: readOptionalNumber(strategy, ['id', 'strategy_id']),
+    name:
+      readString(strategy, ['name', 'strategy_name', 'setup_name'], '') ||
+      readString(strategy, ['decision_curve_name'], 'Strategy'),
+  };
 }
 
 function riskSeverity(score: number, action: string) {
@@ -1304,6 +1639,24 @@ function toneForScore(score: number): StatusTone {
   if (score >= 55) return 'accent';
   if (score >= 40) return 'warning';
   return 'danger';
+}
+
+function scoreBadgeTone(score: number): StatusTone {
+  if (score >= 70) return 'success';
+  if (score >= 50) return 'accent';
+  if (score >= 35) return 'warning';
+  return 'danger';
+}
+
+function statusPalette(tone: StatusTone, colors: ReturnType<typeof preferenceColors>) {
+  const softMap: Record<StatusTone, { background: string; border: string; color: string }> = {
+    accent: { background: '#E8F0FF', border: '#C7D7FE', color: colors.accent },
+    success: { background: '#EAF9F3', border: '#C8EFD9', color: colors.success },
+    warning: { background: '#FEF5E7', border: '#F9D9A7', color: colors.warning },
+    danger: { background: '#FDECEF', border: '#F8C7D1', color: colors.danger },
+    neutral: { background: colors.surfaceMuted, border: colors.borderSubtle, color: colors.textDim },
+  };
+  return softMap[tone];
 }
 
 function colorForScore(score: number) {
@@ -1465,6 +1818,427 @@ function formatStrategyPrice(value: unknown) {
 }
 
 const styles = StyleSheet.create({
+  filledBadge: {
+    alignItems: 'center',
+    borderRadius: theme.radius.pill,
+    borderWidth: 1,
+    flexDirection: 'row',
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+  },
+  filledBadgeDot: {
+    borderRadius: 999,
+    height: 7,
+    width: 7,
+  },
+  filledBadgeRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: theme.spacing.xs,
+    marginTop: theme.spacing.sm,
+  },
+  filledBadgeText: {
+    fontSize: 11,
+    fontWeight: '900',
+    letterSpacing: 0.8,
+    textTransform: 'uppercase',
+  },
+  heroMetaGrid: {
+    flexDirection: 'row',
+    gap: theme.spacing.sm,
+    marginTop: theme.spacing.md,
+  },
+  heroMetaLabel: {
+    fontSize: 10,
+    fontWeight: '900',
+    letterSpacing: 1.2,
+    textTransform: 'uppercase',
+  },
+  heroMetaTile: {
+    borderRadius: 18,
+    borderWidth: 1,
+    flex: 1,
+    gap: 4,
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: 14,
+  },
+  heroMetaValue: {
+    fontSize: 16,
+    fontWeight: '900',
+    lineHeight: 20,
+  },
+  todayFinnBadgeContent: {
+    paddingRight: 8,
+  },
+  todayFinnBadgeRail: {
+    marginTop: 12,
+  },
+  todayFinnDot: {
+    borderRadius: 999,
+    height: 8,
+    width: 8,
+  },
+  todayFinnHeader: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 8,
+  },
+  planPartAction: {
+    fontSize: 11,
+    fontWeight: '900',
+    letterSpacing: 0.5,
+    marginTop: 2,
+    textTransform: 'uppercase',
+  },
+  planPartBody: {
+    flexDirection: 'row',
+    gap: 12,
+    justifyContent: 'space-between',
+    marginTop: 3,
+  },
+  planPartContent: {
+    flex: 1,
+    gap: 4,
+  },
+  planPartDescription: {
+    fontSize: 12,
+    fontWeight: '600',
+    lineHeight: 17,
+  },
+  planPartDivider: {
+    height: 1,
+    marginLeft: 52,
+  },
+  planPartGroup: {
+    borderRadius: 20,
+    borderWidth: 1,
+    marginTop: theme.spacing.md,
+    overflow: 'hidden',
+  },
+  planPartIcon: {
+    alignItems: 'center',
+    borderRadius: 14,
+    height: 38,
+    justifyContent: 'center',
+    width: 38,
+  },
+  planPartRow: {
+    alignItems: 'flex-start',
+    flexDirection: 'row',
+    gap: 12,
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: 14,
+  },
+  planPartSummary: {
+    fontSize: 10,
+    fontWeight: '900',
+    letterSpacing: 0.8,
+    textTransform: 'uppercase',
+  },
+  planPartTitle: {
+    fontSize: 10,
+    fontWeight: '900',
+    letterSpacing: 1.4,
+    textTransform: 'uppercase',
+  },
+  planPartTop: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  planPartValue: {
+    fontSize: 16,
+    fontWeight: '900',
+    lineHeight: 20,
+    marginTop: 1,
+  },
+  primaryActionButton: {
+    alignItems: 'center',
+    backgroundColor: theme.colors.accent,
+    borderRadius: theme.radius.pill,
+    justifyContent: 'center',
+    marginTop: theme.spacing.md,
+    minHeight: 52,
+    paddingHorizontal: theme.spacing.lg,
+  },
+  primaryActionButtonText: {
+    color: '#ffffff',
+    fontSize: 13,
+    fontWeight: '900',
+    letterSpacing: 1.1,
+    textTransform: 'uppercase',
+  },
+  planList: {
+    gap: 0,
+  },
+  planListBotState: {
+    fontSize: 11,
+    fontWeight: '900',
+    letterSpacing: 1.1,
+    marginTop: 4,
+    textTransform: 'uppercase',
+  },
+  planListHeadingRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  planListHeader: {
+    gap: 6,
+  },
+  planListMeta: {
+    fontSize: 12,
+    fontWeight: '700',
+    marginTop: 4,
+    textTransform: 'uppercase',
+  },
+  planListRow: {
+    gap: 12,
+    paddingVertical: 14,
+  },
+  planListTile: {
+    borderRadius: 18,
+    borderWidth: 1,
+    flex: 1,
+    gap: 8,
+    minHeight: 84,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+  },
+  planListTileBody: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 8,
+    justifyContent: 'space-between',
+  },
+  planListTileDraft: {
+    backgroundColor: '#FFFBEF',
+    borderColor: '#F7D77A',
+    borderStyle: 'dashed',
+  },
+  planListTileHeader: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 8,
+  },
+  planListTileIcon: {
+    alignItems: 'center',
+    borderRadius: 14,
+    height: 34,
+    justifyContent: 'center',
+    width: 34,
+  },
+  planListTileLabel: {
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  planListTileTitle: {
+    fontSize: 14,
+    fontWeight: '800',
+    lineHeight: 18,
+    marginTop: 0,
+    minWidth: 0,
+    flex: 1,
+  },
+  planListTiles: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  planListTitle: {
+    fontSize: 15,
+    fontWeight: '900',
+    lineHeight: 20,
+  },
+  planListTitleRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  queueBody: {
+    fontSize: 12,
+    fontWeight: '600',
+    lineHeight: 17,
+  },
+  queueCard: {
+    borderRadius: 18,
+    borderWidth: 1,
+    gap: 6,
+    minHeight: 100,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    width: '47.2%',
+  },
+  queueGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    justifyContent: 'space-between',
+    marginTop: 12,
+  },
+  queueLabel: {
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  queueValue: {
+    fontSize: 22,
+    fontWeight: '900',
+  },
+  planCheckEyebrow: {
+    color: '#DBEAFE',
+    fontSize: 10,
+    fontWeight: '900',
+    letterSpacing: 1.2,
+    textTransform: 'uppercase',
+  },
+  planCheckIcon: {
+    alignItems: 'center',
+    backgroundColor: theme.colors.accent,
+    borderRadius: 18,
+    height: 42,
+    justifyContent: 'center',
+    width: 42,
+  },
+  planCheckStrip: {
+    alignItems: 'center',
+    backgroundColor: theme.colors.accent,
+    borderRadius: 20,
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 14,
+  },
+  planCheckText: {
+    color: '#ffffff',
+    fontSize: 14,
+    fontWeight: '800',
+    lineHeight: 19,
+  },
+  workflowHeroSubtitle: {
+    fontSize: 13,
+    fontWeight: '600',
+    lineHeight: 18,
+    marginTop: 2,
+  },
+  workflowStepCopy: {
+    flex: 1,
+    gap: 4,
+    justifyContent: 'center',
+  },
+  workflowRail: {
+    marginTop: 12,
+  },
+  workflowRailContent: {
+    paddingRight: 42,
+  },
+  workflowStepIcon: {
+    alignItems: 'center',
+    borderRadius: 16,
+    height: 40,
+    justifyContent: 'center',
+    width: 40,
+  },
+  workflowStepCard: {
+    borderRadius: 18,
+    borderWidth: 1,
+    flexDirection: 'row',
+    gap: 10,
+    minHeight: 84,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    width: 228,
+  },
+  workflowStepText: {
+    fontSize: 12,
+    fontWeight: '600',
+    lineHeight: 17,
+  },
+  workflowStepTitle: {
+    fontSize: 14,
+    fontWeight: '900',
+    lineHeight: 18,
+  },
+  workspaceBody: {
+    fontSize: 15,
+    fontWeight: '600',
+    lineHeight: 24,
+  },
+  workspaceEyebrow: {
+    fontSize: 11,
+    fontWeight: '900',
+    letterSpacing: 2.2,
+    textTransform: 'uppercase',
+  },
+  workspaceHeadline: {
+    fontSize: 28,
+    fontWeight: '900',
+    letterSpacing: -0.8,
+    lineHeight: 34,
+  },
+  workspaceHeadlineCompact: {
+    fontSize: 19,
+    lineHeight: 28,
+    marginTop: 4,
+  },
+  workspaceLead: {
+    fontSize: 15,
+    fontWeight: '700',
+    marginTop: 6,
+  },
+  workspaceMicrocopy: {
+    fontSize: 12,
+    fontWeight: '700',
+    lineHeight: 17,
+    marginTop: 3,
+    textTransform: 'uppercase',
+  },
+  workspaceMutedPanel: {
+    marginTop: 0,
+  },
+  workspacePanel: {
+    backgroundColor: 'transparent',
+    borderColor: 'transparent',
+    borderRadius: 28,
+    borderWidth: 1,
+    gap: theme.spacing.sm,
+    marginHorizontal: theme.spacing.lg,
+    marginTop: 0,
+    paddingHorizontal: 20,
+    paddingVertical: 20,
+  },
+  workspaceSectionCopy: {
+    flex: 1,
+    gap: 6,
+  },
+  workspaceSectionHeader: {
+    alignItems: 'flex-start',
+    flexDirection: 'row',
+    gap: 12,
+    justifyContent: 'space-between',
+  },
+  workspaceSectionSubtitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    lineHeight: 24,
+  },
+  workspaceSectionTitle: {
+    fontSize: 18,
+    fontWeight: '900',
+    lineHeight: 24,
+  },
+  workspaceSubsectionHeader: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 2,
+  },
+  workspaceDivider: {
+    height: 1,
+    marginTop: 4,
+  },
   botTop: {
     alignItems: 'center',
     flexDirection: 'row',
@@ -2087,6 +2861,37 @@ const styles = StyleSheet.create({
     gap: theme.spacing.md,
     justifyContent: 'space-between',
     padding: theme.spacing.md,
+  },
+  matrixCell: {
+    borderRadius: theme.radius.md,
+    borderWidth: 0.5,
+    flexBasis: '48%',
+    gap: 4,
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.sm,
+  },
+  matrixGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: theme.spacing.sm,
+    marginTop: theme.spacing.md,
+  },
+  matrixLabel: {
+    color: theme.colors.textDim,
+    fontSize: theme.typography.label,
+    fontWeight: '900',
+    letterSpacing: 1,
+    textTransform: 'uppercase',
+  },
+  matrixNextStep: {
+    fontSize: 13,
+    fontWeight: '700',
+    lineHeight: 19,
+    marginTop: theme.spacing.sm,
+  },
+  matrixValue: {
+    fontSize: 18,
+    fontWeight: '900',
   },
   setupScore: {
     fontSize: 18,

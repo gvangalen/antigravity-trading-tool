@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Feather } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import type { NavigationProp } from '@react-navigation/native';
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
@@ -6,15 +7,16 @@ import Svg, { Path } from 'react-native-svg';
 
 import { CardShell } from '../components/cards/CardShell';
 import { InsightCard } from '../components/cards/InsightCard';
-import { AssetContextHeader } from '../components/layout/AssetContextHeader';
 import { LoadingSkeletonCard } from '../components/layout/LoadingSkeletonCard';
 import { ScreenContainer } from '../components/layout/ScreenContainer';
-import { SectionHeader } from '../components/layout/SectionHeader';
 import { StatusChip } from '../components/layout/StatusChip';
 import { SegmentedControl } from '../components/layout/SegmentedControl';
 import { BottomSheet } from '../components/sheets/BottomSheet';
+import { TodayWithFinnCard } from '../components/workspace/TodayWithFinnCard';
+import { WorkspaceHeroSection } from '../components/workspace/WorkspaceHeroSection';
 import { StatusTone, theme } from '../constants/theme';
 import { useApiResource } from '../hooks/useApiResource';
+import { localizedBackendText, translate, translateFinnTag } from '../i18n';
 import { preferenceColors, useAppPreferences } from '../preferences/AppPreferencesProvider';
 import type { MainTabParamList } from '../navigation/MainTabNavigator';
 import {
@@ -81,6 +83,8 @@ const metrics: Array<{ key: MetricKey; label: string }> = [
 
 export function PortfolioScreen() {
   const navigation = useNavigation<NavigationProp<MainTabParamList>>();
+  const { context } = useIntelligenceContext();
+  const activeAsset = context.asset;
   const { openFinn } = useFinnOverlay();
   const [envFilter, setEnvFilter] = useState<EnvFilter>('all');
   const [range, setRange] = useState<RangeKey>('1W');
@@ -106,7 +110,7 @@ export function PortfolioScreen() {
   const rangeConfig = ranges.find((item) => item.key === range) ?? ranges[1];
   const isLiveFilter = envFilter === 'all' ? undefined : envFilter === 'live';
 
-  const fetchOverview = useCallback(() => mobileApi.overview(), []);
+  const fetchOverview = useCallback(() => mobileApi.overview(activeAsset), [activeAsset]);
   const overviewResource = useApiResource<MobileOverviewResponse | undefined>({
     fallbackData: undefined,
     fetcher: fetchOverview,
@@ -124,7 +128,13 @@ export function PortfolioScreen() {
     fetcher: fetchConfigs,
   });
 
-  const fetchExchangeBalances = useCallback(async () => asArray(await intelligenceApi.exchangeBalances()), []);
+  const fetchExchangeBalances = useCallback(async () => {
+    try {
+      return asArray(await intelligenceApi.exchangeBalances());
+    } catch {
+      return [];
+    }
+  }, []);
   const exchangeResource = useApiResource<UnknownRecord[]>({
     fallbackData: [],
     fetcher: fetchExchangeBalances,
@@ -146,23 +156,26 @@ export function PortfolioScreen() {
     fetcher: fetchHistory,
   });
 
+  const overviewBots = useMemo(
+    () => mapOverviewBots(overviewResource.data),
+    [overviewResource.data],
+  );
   const bots = useMemo(
-    () => mapBots(portfoliosResource.data, configsResource.data),
-    [configsResource.data, portfoliosResource.data],
+    () => mergePortfolioBots(mapBots(portfoliosResource.data, configsResource.data), overviewBots),
+    [configsResource.data, overviewBots, portfoliosResource.data],
   );
   const filteredBots = useMemo(
     () => bots.filter((bot) => envFilter === 'all' || bot.isLive === (envFilter === 'live')),
     [bots, envFilter],
   );
-  const aggregate = useMemo(() => aggregateBots(filteredBots), [filteredBots]);
-  const exchangeSummary = useMemo(() => summarizeExchange(exchangeResource.data), [exchangeResource.data]);
-  const history = useMemo(
-    () => normalizeHistory(historyResource.data, aggregate, rangeConfig.limit),
-    [aggregate, historyResource.data, rangeConfig.limit],
+  const aggregate = useMemo(
+    () => aggregateBots(filteredBots, overviewResource.data?.portfolio),
+    [filteredBots, overviewResource.data?.portfolio],
   );
+  const exchangeSummary = useMemo(() => summarizeExchange(exchangeResource.data), [exchangeResource.data]);
+  const history = useMemo(() => normalizeHistory(historyResource.data), [historyResource.data]);
   const performance = useMemo(() => getPerformance(history, metric, aggregate), [aggregate, history, metric]);
-  const { context, updateContext } = useIntelligenceContext();
-  const activeAsset = context.asset;
+  const { updateContext } = useIntelligenceContext();
   const activeOverviewAsset = overviewResource.data?.watchlist.find((asset) => asset.symbol === activeAsset);
   const primaryBot = filteredBots.find((bot) => bot.symbol === activeAsset && bot.isActive) ?? filteredBots.find((bot) => bot.isActive) ?? filteredBots[0];
   const loading =
@@ -177,7 +190,6 @@ export function PortfolioScreen() {
     configsResource.isStale ||
     exchangeResource.isStale ||
     historyResource.isStale;
-
   async function changeEnv(next: EnvFilter) {
     await triggerHaptic('selection');
     setEnvFilter(next);
@@ -288,23 +300,20 @@ export function PortfolioScreen() {
           historyResource.refresh();
         }}
       >
-        <AssetContextHeader asset={activeAsset} context="Portfolio command center" updatedAt={portfolioUpdatedAt([
-          overviewResource.updatedAt,
-          portfoliosResource.updatedAt,
-          historyResource.updatedAt,
-        ])} />
-        <SectionHeader
-          label="System control"
-          title="Portfolio"
-          description="Geaggregeerd overzicht van budget, posities en botstatus vanuit de backend."
-        />
-
         {loading && bots.length === 0 ? (
           <LoadingSkeletonCard />
         ) : (
           <>
-            <EnvironmentAnalytics overview={overviewResource.data} stale={isStale} />
-
+            <PortfolioWorkspaceHero
+              activeAsset={activeAsset}
+              briefing={overviewResource.data?.finn_briefing}
+              filteredBots={filteredBots.length}
+              isStale={isStale}
+              metric={metric}
+              onAskFinn={askFinnTradeCheck}
+              performance={performance.last}
+            />
+            <PortfolioWorkspaceIntro />
             <PortfolioPerformanceCard
               delta={performance.delta}
               metric={metric}
@@ -314,15 +323,13 @@ export function PortfolioScreen() {
               range={range}
               total={performance.last}
             />
-
-            <BotPortfolioOverviewCard
+            <PortfolioCapitalAllocationCard
               aggregate={aggregate}
               bots={filteredBots}
               envFilter={envFilter}
               exchangeSummary={exchangeSummary}
               onEnvFilterChange={changeEnv}
             />
-
             <MyBotsSection bots={filteredBots} totalBots={bots.length} onOpenTrade={openTradeSheet} />
           </>
         )}
@@ -374,37 +381,143 @@ export function PortfolioScreen() {
   );
 }
 
-function EnvironmentAnalytics({ overview, stale }: { overview?: MobileOverviewResponse; stale: boolean }) {
+function PortfolioWorkspaceIntro() {
   const { appearance } = useAppPreferences();
   const colors = preferenceColors(appearance);
-  const asset = overview?.watchlist[0];
-  const scores = [
-    { label: 'Macro index', value: asset?.macro_score },
-    { label: 'Technical index', value: asset?.technical_score },
-    { label: 'Market index', value: asset?.market_score },
-    { label: 'Setup index', value: asset?.setup_score },
-  ];
+  const steps = [
+    { icon: 'pie-chart', title: '1 Balance', text: 'How much capital, cash and exposure is active?' },
+    { icon: 'trending-up', title: '2 Performance', text: 'How is equity evolving across the selected range?' },
+    { icon: 'briefcase', title: '3 Bots', text: 'Which live or paper bots currently drive portfolio risk?' },
+  ] as const;
 
   return (
-    <View style={{ paddingVertical: theme.spacing.md, paddingHorizontal: theme.spacing.lg }}>
+    <View style={[styles.workspaceIntroPanel, { borderColor: colors.borderSubtle }]}>
       <View style={styles.sectionTop}>
-        <View>
-          <Text style={styles.kicker}>Environment analytics</Text>
-          <Text style={[styles.cardTitle, { color: colors.text }]}>System health & market scopes</Text>
+        <View style={styles.flexText}>
+          <Text style={[styles.workspaceEyebrow, { color: colors.textDim }]}>Portfolio workspace</Text>
+          <Text style={[styles.workspaceIntroTitle, { color: colors.text }]}>Portfolio</Text>
+          <Text style={[styles.workspaceIntroSubtitle, { color: colors.textMuted }]}>
+            Review positions, exposure and actions that need attention.
+          </Text>
         </View>
-        <StatusChip label={stale ? 'Stale' : 'Live'} tone={stale ? 'warning' : 'success'} />
+        <StatusChip label="Active" tone="success" />
       </View>
-      <View style={{ gap: 8, marginTop: theme.spacing.md }}>
-        {scores.map((score) => {
-          const value = clampScore(score.value);
-          return (
-            <View key={score.label} style={{ flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 2 }}>
-              <Text style={{ fontSize: 13, color: colors.textDim }}>{score.label}</Text>
-              <Text style={{ fontSize: 13, color: colorForScore(value), fontWeight: '600' }}>{value}</Text>
+
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.workflowRail}>
+        {steps.map((step) => (
+          <View
+            key={step.title}
+            style={[styles.workflowCard, { backgroundColor: colors.surfaceMuted, borderColor: colors.borderSubtle }]}
+          >
+            <View style={[styles.workflowIcon, { backgroundColor: colors.surface }]}>
+              <Feather name={step.icon} size={16} color={colors.accent} />
             </View>
-          );
-        })}
-      </View>
+            <View style={styles.workflowCopy}>
+              <Text style={[styles.workflowTitle, { color: colors.accent }]}>{step.title}</Text>
+              <Text style={[styles.workflowText, { color: colors.textMuted }]}>{step.text}</Text>
+            </View>
+          </View>
+        ))}
+      </ScrollView>
+    </View>
+  );
+}
+
+function PortfolioWorkspaceHero({
+  activeAsset,
+  briefing,
+  filteredBots,
+  isStale,
+  metric,
+  onAskFinn,
+  performance,
+}: {
+  activeAsset: string;
+  briefing?: MobileOverviewResponse['finn_briefing'];
+  filteredBots: number;
+  isStale: boolean;
+  metric: MetricKey;
+  onAskFinn: () => void;
+  performance: number;
+}) {
+  const { language } = useAppPreferences();
+  const tags = [
+    {
+      label: translate(language, 'portfolio.activeSources', { count: filteredBots }),
+      tone: 'accent' as StatusTone,
+    },
+    {
+      label: metric.replace('_', ' '),
+      tone: 'neutral' as StatusTone,
+    },
+    { label: isStale ? 'Stale sync' : 'Live', tone: isStale ? ('warning' as StatusTone) : ('success' as StatusTone) },
+  ];
+  const queueItems = [
+    {
+      key: 'tasks',
+      label: translate(language, 'queue.label.tasks'),
+      value: filteredBots,
+      body: translate(language, 'queue.body.botsInCurrentPortfolioLens'),
+    },
+    {
+      key: 'reviews',
+      label: translate(language, 'queue.label.reviews'),
+      value: filteredBots > 0 ? 1 : 0,
+      body: translate(language, 'queue.body.executionFlowNeedsReview'),
+    },
+    {
+      key: 'risks',
+      label: translate(language, 'queue.label.risks'),
+      value: isStale ? 1 : 0,
+      body: translate(language, 'queue.body.staleSyncMissingBackendContext'),
+    },
+    {
+      key: 'performance',
+      label: translate(language, 'queue.label.performance'),
+      value: performance >= 0 ? 1 : 0,
+      body: translate(language, 'queue.body.visiblePerformanceMatchesMetric'),
+    },
+  ];
+  const headline = localizedBackendText(
+    language,
+    briefing?.summary?.trim(),
+    translate(language, 'finn.noBriefingReady'),
+  );
+  const support = isStale
+    ? translate(language, 'portfolio.staleSupport')
+    : translate(language, 'portfolio.metricSupport', { metric: metric.replace('_', ' ') });
+
+  return (
+    <WorkspaceHeroSection>
+      <TodayWithFinnCard
+        headline={headline}
+        support={support}
+        tags={tags.map((tag) => ({ ...tag, label: translateFinnTag(language, tag.label) }))}
+        primaryActionLabel={translate(language, 'finn.askAboutExposure')}
+        onPrimaryAction={onAskFinn}
+        queueItems={queueItems}
+        queueStatusLabel={translate(language, 'common.itemsOpen', { count: filteredBots })}
+      />
+    </WorkspaceHeroSection>
+  );
+}
+
+function FilledBadge({ label, tone }: { label: string; tone: StatusTone }) {
+  const { appearance } = useAppPreferences();
+  const colors = preferenceColors(appearance);
+  const palettes: Record<StatusTone, { background: string; border: string; color: string }> = {
+    accent: { background: '#E8F0FF', border: '#C7D7FE', color: colors.accent },
+    success: { background: '#EAF9F3', border: '#C8EFD9', color: colors.success },
+    warning: { background: '#FEF5E7', border: '#F9D9A7', color: colors.warning },
+    danger: { background: '#FDECEF', border: '#F8C7D1', color: colors.danger },
+    neutral: { background: colors.surface, border: colors.borderSubtle, color: colors.textDim },
+  };
+  const palette = palettes[tone];
+
+  return (
+    <View style={[styles.filledBadge, { backgroundColor: palette.background, borderColor: palette.border }]}>
+      <View style={[styles.filledBadgeDot, { backgroundColor: palette.color }]} />
+      <Text style={[styles.filledBadgeText, { color: palette.color }]}>{label}</Text>
     </View>
   );
 }
@@ -430,46 +543,50 @@ function PortfolioPerformanceCard({
   const colors = preferenceColors(appearance);
   const isDown = delta.absolute < 0;
   const accentColor = metric === 'unrealized_pnl' ? (isDown ? theme.colors.danger : theme.colors.success) : theme.colors.accent;
+  const deltaLabel =
+    delta.percent === null
+      ? formatMetric(delta.absolute, metric)
+      : `${formatMetric(delta.absolute, metric)} · ${formatPercent(delta.percent)}`;
 
   return (
-    <CardShell emphasis="primary" edgeToEdge={true}>
+    <View style={[styles.portfolioHeroCard, { backgroundColor: colors.surfaceMuted, borderColor: colors.borderSubtle }]}>
       <View style={styles.performanceHeader}>
-        <View>
-          <Text style={styles.kicker}>Portfolio overview</Text>
-          <Text style={[styles.performanceTitle, { color: colors.text }]}>Global equity performance</Text>
-          <Text style={[styles.performanceValue, { color: colors.text }]}>{formatMetric(total, metric)}</Text>
+        <View style={styles.performanceCopy}>
+          <Text style={[styles.heroKicker, { color: colors.textDim }]}>Portfolio overview</Text>
+          <Text style={[styles.heroValue, { color: colors.text }]}>{formatMetric(total, metric)}</Text>
           <View style={styles.deltaRow}>
-            <View style={[styles.deltaBadge, { borderColor: isDown ? theme.colors.danger : theme.colors.success }]}>
-              <Text style={[styles.deltaText, { color: isDown ? theme.colors.danger : theme.colors.success }]}>
-                {isDown ? 'Down' : 'Up'} {delta.percent === null ? 'n/a' : formatPercent(delta.percent)}
+            <View style={[styles.deltaSoftBadge, { backgroundColor: isDown ? '#FDECEF' : '#EAF9F3' }]}>
+              <Text style={[styles.deltaSoftText, { color: isDown ? theme.colors.danger : theme.colors.success }]}>
+                {deltaLabel}
               </Text>
             </View>
-            <Text style={[styles.deltaAbsolute, { color: colors.textDim }]}>{formatMetric(delta.absolute, metric)}</Text>
           </View>
         </View>
-        <StatusChip label={range} tone="accent" />
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.rangeRail}>
+          <SegmentedControl
+            compact
+            items={ranges.map((item) => ({ key: item.key, label: item.key }))}
+            selected={range}
+            onChange={(value) => onRangeChange(value as RangeKey)}
+          />
+        </ScrollView>
       </View>
 
-      <SegmentedControl
-        items={ranges.map((item) => ({ key: item.key, label: item.key }))}
-        selected={range}
-        onChange={(value) => onRangeChange(value as RangeKey)}
-      />
-      <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.metricRail}>
         <SegmentedControl
           compact
-          items={metrics.map((item) => ({ key: item.key, label: item.label }))}
+          items={metrics.map((item) => ({ key: item.key, label: item.label.toUpperCase() }))}
           selected={metric}
           onChange={(value) => onMetricChange(value as MetricKey)}
         />
       </ScrollView>
 
       <SparkChart accentColor={accentColor} metric={metric} points={points} />
-    </CardShell>
+    </View>
   );
 }
 
-function BotPortfolioOverviewCard({
+function PortfolioCapitalAllocationCard({
   aggregate,
   bots,
   envFilter,
@@ -484,20 +601,32 @@ function BotPortfolioOverviewCard({
 }) {
   const { appearance } = useAppPreferences();
   const colors = preferenceColors(appearance);
+  const budgetItems = [
+    { label: 'Today spent', value: formatEUR(aggregate.todaySpent), tone: 'warning' as const },
+    { label: 'Daily limit', value: formatEUR(aggregate.dailyLimit), tone: 'neutral' as const },
+    { label: 'Sum max/trade', value: formatEUR(aggregate.maxOrder), tone: 'accent' as const },
+  ];
+  const portfolioMetrics = [
+    { label: 'Positions', value: String(aggregate.assetRows.length), tone: 'accent' as StatusTone },
+    { label: 'Total value', value: formatEUR(aggregate.positionValue), tone: 'neutral' as StatusTone },
+    { label: 'Invested', value: formatEUR(aggregate.invested), tone: 'neutral' as StatusTone },
+    {
+      label: 'PnL total',
+      value: `${formatEUR(aggregate.pnl)} ${formatPercent(aggregate.pnlPct)}`,
+      tone: aggregate.pnl >= 0 ? ('success' as StatusTone) : ('danger' as StatusTone),
+    },
+  ];
+  const available = Math.max(aggregate.totalBudget - aggregate.invested, 0);
   const usedPct = aggregate.totalBudget > 0 ? Math.min(100, (aggregate.invested / aggregate.totalBudget) * 100) : 0;
 
   return (
-    <View style={{ paddingVertical: theme.spacing.md, paddingHorizontal: theme.spacing.lg }}>
-      {/* Hero */}
-      <View style={styles.portfolioHero}>
-        <View style={styles.leftRail} />
-        <View style={styles.heroContent}>
-          <Text style={styles.kicker}>Systeem overzicht</Text>
-          <Text style={[styles.heroTitle, { color: colors.text }]}>
-            Portfolio <Text style={styles.heroDash}>-</Text> {envFilter === 'all' ? 'Alle bots' : envFilter === 'live' ? 'Live' : 'Paper'}
-          </Text>
-          <Text style={[styles.heroBody, { color: colors.textMuted }]}>Budget en posities over de geselecteerde omgeving.</Text>
+    <View style={styles.portfolioSection}>
+      <View style={styles.sectionTop}>
+        <View>
+          <Text style={styles.kicker}>Portfolio data</Text>
+          <Text style={[styles.cardTitle, { color: colors.text }]}>Capital allocation</Text>
         </View>
+        <StatusChip label={`${bots.filter((bot) => bot.isActive).length} active`} tone="accent" />
       </View>
 
       <SegmentedControl
@@ -506,120 +635,82 @@ function BotPortfolioOverviewCard({
         onChange={(value) => onEnvFilterChange(value as EnvFilter)}
       />
 
-      {/* Actieve bots */}
-      <View style={{ flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 8, marginTop: theme.spacing.md }}>
-        <Text style={{ fontSize: 13, color: colors.textDim }}>Actieve bots</Text>
-        <Text style={{ fontSize: 13, color: colors.text, fontWeight: '600' }}>{bots.filter((bot) => bot.isActive).length}</Text>
-      </View>
-
-      {/* Exchange balances */}
-      {exchangeSummary.count > 0 && envFilter !== 'paper' ? (
-        <View style={{ marginTop: theme.spacing.md }}>
-          <Text style={styles.kicker}>Exchange balances</Text>
-          <Text style={[styles.exchangeSubtitle, { color: colors.textDim }]}>Live wallet context vanuit de backend</Text>
-          <View style={{ gap: 8, marginTop: theme.spacing.md }}>
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-              <Text style={{ fontSize: 13, color: colors.textDim }}>Exchanges</Text>
-              <Text style={{ fontSize: 13, color: colors.text, fontWeight: '600' }}>{String(exchangeSummary.count)}</Text>
-            </View>
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-              <Text style={{ fontSize: 13, color: colors.textDim }}>Totaal waarde</Text>
-              <Text style={{ fontSize: 13, color: colors.text, fontWeight: '600' }}>{formatEUR(exchangeSummary.totalEur)}</Text>
-            </View>
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-              <Text style={{ fontSize: 13, color: colors.textDim }}>Vrij EUR</Text>
-              <Text style={{ fontSize: 13, color: colors.text, fontWeight: '600' }}>{formatEUR(exchangeSummary.freeEur)}</Text>
-            </View>
-          </View>
-          {exchangeSummary.names.length > 0 ? (
-            <Text style={{ fontSize: 11, color: colors.textSoft, marginTop: 8, letterSpacing: 0.5 }}>{exchangeSummary.names.join('  -  ').toUpperCase()}</Text>
-          ) : null}
-        </View>
-      ) : null}
-
-      {/* Budget */}
-      <View style={{ marginTop: theme.spacing.md }}>
-        <Text style={styles.kicker}>Gebruik van totaal budget</Text>
-        <Text style={[styles.budgetSub, { color: colors.textDim }]}>Single source of truth: backend</Text>
-        
-        <View style={{ gap: 8, marginTop: theme.spacing.md }}>
-          <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-            <Text style={{ fontSize: 13, color: colors.text }}>Alle bots gecombineerd</Text>
-            <Text style={{ fontSize: 13, color: colors.text, fontWeight: '600' }}>
-              {formatEUR(aggregate.invested)} / {formatEUR(aggregate.totalBudget)}
-            </Text>
-          </View>
-          
-          <View style={[styles.progressTrack, { backgroundColor: colors.border }]}>
-            <View style={[styles.progressFill, { width: `${usedPct}%`, backgroundColor: colors.accent }]} />
-          </View>
-          
-          <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-            <Text style={{ fontSize: 13, color: colors.text }}>Beschikbaar</Text>
-            <Text style={{ fontSize: 13, color: colors.text, fontWeight: '600' }}>{formatEUR(Math.max(aggregate.totalBudget - aggregate.invested, 0))}</Text>
-          </View>
-        </View>
-        
-        <View style={{ gap: 8, marginTop: theme.spacing.md }}>
-          <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-            <Text style={{ fontSize: 13, color: colors.textDim }}>Vandaag besteed</Text>
-            <Text style={{ fontSize: 13, color: colors.text, fontWeight: '600' }}>{formatEUR(aggregate.todaySpent)}</Text>
-          </View>
-          <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-            <Text style={{ fontSize: 13, color: colors.textDim }}>Daglimiet</Text>
-            <Text style={{ fontSize: 13, color: colors.text, fontWeight: '600' }}>{formatEUR(aggregate.dailyLimit)}</Text>
-          </View>
-          <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-            <Text style={{ fontSize: 13, color: colors.textDim }}>Som max/trade</Text>
-            <Text style={{ fontSize: 13, color: colors.text, fontWeight: '600' }}>{formatEUR(aggregate.maxOrder)}</Text>
-          </View>
-        </View>
-      </View>
-
-      {/* Big Stats */}
-      <View style={{ gap: 8, marginTop: theme.spacing.md }}>
-        <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-          <Text style={{ fontSize: 13, color: colors.textDim }}>Posities</Text>
-          <Text style={{ fontSize: 13, color: colors.text, fontWeight: '600' }}>{String(aggregate.assetRows.length)}</Text>
-        </View>
-        <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-          <Text style={{ fontSize: 13, color: colors.textDim }}>Totale waarde</Text>
-          <Text style={{ fontSize: 13, color: colors.text, fontWeight: '600' }}>{formatEUR(aggregate.positionValue)}</Text>
-        </View>
-        <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-          <Text style={{ fontSize: 13, color: colors.textDim }}>Invested exec</Text>
-          <Text style={{ fontSize: 13, color: colors.text, fontWeight: '600' }}>{formatEUR(aggregate.invested)}</Text>
-        </View>
-        <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-          <Text style={{ fontSize: 13, color: colors.textDim }}>PNL totaal</Text>
-          <Text style={{ fontSize: 13, color: aggregate.pnl >= 0 ? theme.colors.success : theme.colors.danger, fontWeight: '600' }}>
-            {formatEUR(aggregate.pnl)} {formatPercent(aggregate.pnlPct)}
+      <View style={[styles.allocationCard, { backgroundColor: colors.surfaceMuted, borderColor: colors.borderSubtle }]}>
+        <Text style={[styles.allocationLabel, { color: colors.text }]}>Combined allocation</Text>
+        <View style={styles.allocationRow}>
+          <Text style={[styles.allocationValue, { color: colors.textMuted }]}>
+            {formatEUR(aggregate.invested)} / {formatEUR(aggregate.totalBudget)}
           </Text>
         </View>
+        <View style={[styles.progressTrack, { backgroundColor: colors.borderSubtle }]}>
+          <View style={[styles.progressFill, { width: `${usedPct}%`, backgroundColor: theme.colors.success }]} />
+        </View>
+        <View style={[styles.availableRow, { borderBottomColor: colors.borderSubtle }]}>
+          <Text style={[styles.availableLabel, { color: colors.textMuted }]}>Available</Text>
+          <Text style={[styles.availableValue, { color: colors.text }]}>{formatEUR(available)}</Text>
+        </View>
+        <View style={styles.allocationMetrics}>
+          {budgetItems.map((item) => (
+            <View key={item.label} style={styles.allocationMetric}>
+              <Text style={[styles.allocationMetricLabel, { color: colors.textDim }]}>{item.label}</Text>
+              <Text style={[styles.allocationMetricValue, { color: toneColor(item.tone) }]}>{item.value}</Text>
+            </View>
+          ))}
+        </View>
       </View>
 
-      {/* Asset Breakdown */}
-      {aggregate.assetRows.length > 0 ? (
-        <View style={{ marginTop: theme.spacing.md }}>
-          <Text style={styles.kicker}>Breakdown per asset</Text>
-          <View style={{ marginTop: theme.spacing.sm }}>
-            {aggregate.assetRows.map((row) => (
-              <View key={row.symbol} style={{ flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 8, borderBottomWidth: 0.5, borderBottomColor: colors.border }}>
+      <View style={styles.portfolioMetricGrid}>
+        {portfolioMetrics.map((item) => (
+          <View
+            key={item.label}
+            style={[styles.portfolioMetricCard, { backgroundColor: colors.surfaceMuted, borderColor: colors.borderSubtle }]}
+          >
+            <Text style={[styles.portfolioMetricLabel, { color: colors.textDim }]}>{item.label}</Text>
+            <Text style={[styles.portfolioMetricValue, { color: toneColor(item.tone) }]}>{item.value}</Text>
+          </View>
+        ))}
+      </View>
+
+      <View style={styles.breakdownSection}>
+        <View style={styles.sectionTop}>
+          <View>
+            <Text style={styles.kicker}>Breakdown by asset</Text>
+            <Text style={[styles.exchangeSubtitle, { color: colors.textMuted }]}>
+              {exchangeSummary.count > 0 && envFilter !== 'paper'
+                ? `${exchangeSummary.count} active source${exchangeSummary.count === 1 ? '' : 's'}`
+                : 'Current visible asset exposure.'}
+            </Text>
+          </View>
+        </View>
+        <View style={styles.breakdownList}>
+          {aggregate.assetRows.map((row, index) => (
+            <View
+              key={row.symbol}
+              style={[
+                styles.breakdownRow,
+                { borderBottomColor: colors.borderSubtle },
+                index === aggregate.assetRows.length - 1 && styles.breakdownRowLast,
+              ]}
+            >
+              <View style={styles.breakdownIdentity}>
+                <View style={[styles.breakdownDot, { backgroundColor: index === 0 ? theme.colors.accent : colors.textSoft }]} />
                 <View>
-                  <Text style={{ fontSize: 14, color: colors.text, fontWeight: '600' }}>{row.symbol}</Text>
-                  <Text style={{ fontSize: 12, color: colors.textDim }}>{row.netQty.toFixed(6)} {row.symbol}</Text>
-                </View>
-                <View style={{ alignItems: 'flex-end' }}>
-                  <Text style={{ fontSize: 14, color: colors.text, fontWeight: '600' }}>{formatEUR(row.positionValue)}</Text>
-                  <Text style={{ fontSize: 12, color: row.pnl >= 0 ? theme.colors.success : theme.colors.danger }}>
-                    {formatEUR(row.pnl)} {formatPercent(row.pnlPct)}
+                  <Text style={[styles.breakdownSymbol, { color: colors.text }]}>{row.symbol}</Text>
+                  <Text style={[styles.breakdownQty, { color: colors.textDim }]}>
+                    {row.netQty.toFixed(6)} {row.symbol}
                   </Text>
                 </View>
               </View>
-            ))}
-          </View>
+              <View style={styles.breakdownValues}>
+                <Text style={[styles.breakdownPrice, { color: colors.text }]}>{formatEUR(row.positionValue)}</Text>
+                <Text style={[styles.breakdownPnl, { color: row.pnl >= 0 ? theme.colors.success : theme.colors.danger }]}>
+                  {formatEUR(row.pnl)} {formatPercent(row.pnlPct)}
+                </Text>
+              </View>
+            </View>
+          ))}
         </View>
-      ) : null}
+      </View>
     </View>
   );
 }
@@ -631,8 +722,8 @@ function MyBotsSection({ bots, totalBots, onOpenTrade }: { bots: PortfolioBot[];
   return (
     <View style={styles.myBots}>
       <View style={{ paddingHorizontal: theme.spacing.lg }}>
-        <Text style={[styles.myBotsTitle, { color: colors.text }]}>My Bots</Text>
-        <Text style={[styles.myBotsSubtitle, { color: colors.textMuted }]}>Overzicht van actieve handelsstrategieen.</Text>
+        <Text style={[styles.myBotsTitle, { color: colors.text }]}>Active sources</Text>
+        <Text style={[styles.myBotsSubtitle, { color: colors.textMuted }]}>Same live and paper bot state as desktop, compact for mobile review.</Text>
       </View>
       <View style={[styles.filterPills, { paddingHorizontal: theme.spacing.lg }]}>
         <StatusChip label={`All ${totalBots}`} tone="accent" />
@@ -686,14 +777,14 @@ function BotCard({ bot }: { bot: PortfolioBot }) {
       </View>
       <View style={styles.botChips}>
         <Tag label={bot.riskProfile || 'Strategy'} tone={bot.riskProfile.toLowerCase().includes('aggressive') ? 'danger' : 'warning'} />
-        <Tag label={bot.isLive ? 'Live' : 'Paper'} tone={bot.isLive ? 'success' : 'accent'} />
+        <Tag label={bot.isLive ? 'Live' : 'Paper'} tone={bot.isLive ? 'danger' : 'accent'} />
         <Tag label={bot.mode || 'Manual-link'} tone="neutral" />
       </View>
       <View style={styles.botMetricGrid}>
-        <BotMetric label="Status response" value={bot.isActive ? 'Paper waiting' : 'Paused'} tone={bot.isActive ? 'accent' : 'neutral'} />
-        <BotMetric label="Market action" value={bot.positionValue > 0 ? 'Monitor' : 'Hold'} tone="accent" />
-        <BotMetric label="Logic confidence" value={pnlPct >= 0 ? 'Stable' : 'Review'} tone={pnlPct >= 0 ? 'success' : 'warning'} />
-        <BotMetric label="Telemetry sync" value="Backend" tone="neutral" />
+        <BotMetric label="Execution state" value={bot.isActive ? (bot.isLive ? 'Live ready' : 'Paper ready') : 'Paused'} tone={bot.isActive ? (bot.isLive ? 'danger' : 'accent') : 'neutral'} />
+        <BotMetric label="Market action" value={bot.positionValue > 0 ? 'Manage' : 'Hold'} tone="accent" />
+        <BotMetric label="PnL status" value={pnlPct >= 0 ? 'Constructive' : 'Review'} tone={pnlPct >= 0 ? 'success' : 'warning'} />
+        <BotMetric label="Budget" value={formatEUR(bot.budgetTotal)} tone="neutral" />
       </View>
       <View style={styles.botFooter}>
         <Text style={[styles.botFooterText, { color: colors.textDim }]}>Invested {formatEUR(bot.invested)}</Text>
@@ -701,6 +792,18 @@ function BotCard({ bot }: { bot: PortfolioBot }) {
           PnL {formatEUR(pnl)} {formatPercent(pnlPct)}
         </Text>
       </View>
+    </View>
+  );
+}
+
+function WorkspaceStatRow({ label, value }: { label: string; value: string }) {
+  const { appearance } = useAppPreferences();
+  const colors = preferenceColors(appearance);
+
+  return (
+    <View style={styles.workspaceRow}>
+      <Text style={[styles.workspaceRowLabel, { color: colors.textDim }]}>{label}</Text>
+      <Text style={[styles.workspaceRowValue, { color: colors.text }]}>{value}</Text>
     </View>
   );
 }
@@ -764,27 +867,14 @@ function SparkChart({
   const p75Date = formatDataDate(visiblePoints[Math.floor(len * 0.75)]?.ts as string);
 
   return (
-    <View style={[styles.chartBox, { paddingBottom: 30, paddingLeft: 55, paddingTop: 10 }]}>
-      
-      {/* Y-Axis Labels (5 labels) */}
-      <View style={{ position: 'absolute', left: 5, top: 10, bottom: 40, justifyContent: 'space-between', alignItems: 'flex-end', width: 45 }}>
-        <Text style={{ fontSize: 9, color: theme.colors.textDim, fontWeight: '700' }}>{formatEUR(max)}</Text>
-        <Text style={{ fontSize: 9, color: theme.colors.textDim, fontWeight: '700' }}>{formatEUR(min + span * 0.75)}</Text>
-        <Text style={{ fontSize: 9, color: theme.colors.textDim, fontWeight: '700' }}>{formatEUR(min + span * 0.5)}</Text>
-        <Text style={{ fontSize: 9, color: theme.colors.textDim, fontWeight: '700' }}>{formatEUR(min + span * 0.25)}</Text>
-        <Text style={{ fontSize: 9, color: theme.colors.textDim, fontWeight: '700' }}>{formatEUR(min)}</Text>
-      </View>
-
-      {/* Chart Area */}
-      <View style={{ flex: 1, paddingRight: theme.spacing.sm }}>
+    <View style={styles.chartBox}>
+      <View style={styles.chartCanvas}>
         <Svg width="100%" height="100%" viewBox="0 0 100 100">
-          {/* Area Fill */}
           <Path
             d={areaPath}
             fill={accentColor}
             opacity={0.15}
           />
-          {/* Smooth Line */}
           <Path
             d={linePath}
             stroke={accentColor}
@@ -794,13 +884,12 @@ function SparkChart({
         </Svg>
       </View>
 
-      {/* X-Axis Labels (5 labels) */}
-      <View style={{ position: 'absolute', bottom: 10, left: 55, right: 10, flexDirection: 'row', justifyContent: 'space-between' }}>
-        <Text style={{ fontSize: 9, color: theme.colors.textDim, fontWeight: '700' }}>{firstDate}</Text>
-        <Text style={{ fontSize: 9, color: theme.colors.textDim, fontWeight: '700' }}>{p25Date}</Text>
-        <Text style={{ fontSize: 9, color: theme.colors.textDim, fontWeight: '700' }}>{p50Date}</Text>
-        <Text style={{ fontSize: 9, color: theme.colors.textDim, fontWeight: '700' }}>{p75Date}</Text>
-        <Text style={{ fontSize: 9, color: theme.colors.textDim, fontWeight: '700' }}>{lastDate}</Text>
+      <View style={styles.chartAxisLabels}>
+        <Text style={styles.chartAxisText}>{firstDate}</Text>
+        <Text style={styles.chartAxisText}>{p25Date}</Text>
+        <Text style={styles.chartAxisText}>{p50Date}</Text>
+        <Text style={styles.chartAxisText}>{p75Date}</Text>
+        <Text style={styles.chartAxisText}>{lastDate}</Text>
       </View>
     </View>
   );
@@ -923,17 +1012,22 @@ function TradeActionSheet({
 
   return (
     <View style={styles.tradeSheet}>
-      <View style={styles.tradeHero}>
-        <View style={styles.tradeIcon}>
-          <Text style={styles.tradeIconText}>AI</Text>
-        </View>
+      <View style={styles.tradeHeroCompact}>
         <View style={styles.tradeHeroCopy}>
-          <Text style={styles.kicker}>Handelen met</Text>
+          <Text style={styles.kicker}>Execution workspace</Text>
           <Text style={[styles.tradeHeroTitle, { color: colors.text }]}>{bot?.name || `${activeAsset} trade flow`}</Text>
           <Text style={[styles.tradeHeroMeta, { color: colors.textDim }]}>
-            {activeAsset}  -  {bot?.isLive ? 'Live context' : 'Paper-safe'}  -  FINN check voor execution
+            {activeAsset} · {bot?.isLive ? 'Live' : 'Paper'} · FINN review before execution
           </Text>
         </View>
+        <StatusChip label={riskLabel} tone={riskTone} />
+      </View>
+
+      <View style={styles.tradeOverviewGrid}>
+        <TradeContextStat label="Setup" value={setupScore > 0 ? `${setupScore}` : 'n/a'} tone={setupScore >= 60 ? 'success' : 'warning'} />
+        <TradeContextStat label="Conviction" value={`${conviction}`} tone={conviction >= 70 ? 'success' : conviction >= 50 ? 'warning' : 'danger'} />
+        <TradeContextStat label="Exposure" value={`${Math.round(exposurePct)}%`} tone={exposurePct > 75 ? 'warning' : 'accent'} />
+        <TradeContextStat label="Max order" value={formatEUR(bot?.budgetMaxOrder ?? 0)} tone="neutral" />
       </View>
 
       <View style={styles.tradeStep}>
@@ -970,10 +1064,10 @@ function TradeActionSheet({
           <StatusChip label={riskLabel} tone={riskTone} />
         </View>
         <View style={styles.tradeContextGrid}>
-          <TradeContextStat label="Exposure" value={`${Math.round(exposurePct)}%`} tone={exposurePct > 75 ? 'warning' : 'accent'} />
           <TradeContextStat label="Risk" value={riskLabel} tone={riskTone} />
-          <TradeContextStat label="Setup active" value={setupScore > 0 ? `${setupScore}` : 'n/a'} tone={setupScore >= 60 ? 'success' : 'warning'} />
-          <TradeContextStat label="Conviction" value={`${conviction}`} tone={conviction >= 70 ? 'success' : conviction >= 50 ? 'warning' : 'danger'} />
+          <TradeContextStat label="Available EUR" value={formatEUR(exchangeSummary.freeEur)} tone="neutral" />
+          <TradeContextStat label="Environment" value={bot?.isLive ? 'Live' : 'Paper'} tone={bot?.isLive ? 'danger' : 'accent'} />
+          <TradeContextStat label="Asset" value={activeAsset} tone="accent" />
         </View>
         <View style={[styles.tradeWarning, { borderColor: colors.border }, stale && styles.tradeWarningStrong]}>
           <Text style={[styles.tradeWarningTitle, { color: colors.text }]}>{stale ? 'Ververs voordat je bevestigt.' : 'Geen one-tap execution.'}</Text>
@@ -1270,15 +1364,69 @@ function mapBots(portfolios: UnknownRecord[], configs: UnknownRecord[]): Portfol
     .filter((bot) => bot.id > 0 || bot.name !== 'Bot');
 }
 
-function aggregateBots(bots: PortfolioBot[]) {
+function mapOverviewBots(overview?: MobileOverviewResponse): PortfolioBot[] {
+  if (!overview) return [];
+
+  return overview.active_bots.map((bot) => ({
+    available: 0,
+    budgetDailyLimit: 0,
+    budgetMaxOrder: 0,
+    budgetTotal: 0,
+    id: bot.bot_id,
+    invested: bot.invested_eur ?? 0,
+    isActive: bot.is_active,
+    isLive: bot.is_live,
+    mode: bot.is_live ? 'live' : 'paper',
+    name: bot.name,
+    netQty: 0,
+    positionValue: bot.position_value_eur ?? bot.invested_eur ?? 0,
+    riskProfile: 'standard',
+    strategy: 'strategy',
+    symbol: bot.symbol,
+    timeframe: '1D',
+    todaySpent: 0,
+  }));
+}
+
+function mergePortfolioBots(primary: PortfolioBot[], fallback: PortfolioBot[]) {
+  if (primary.length === 0) return fallback;
+
+  const fallbackById = new Map<number, PortfolioBot>();
+  fallback.forEach((bot) => fallbackById.set(bot.id, bot));
+
+  return primary.map((bot) => {
+    const overviewBot = fallbackById.get(bot.id);
+    if (!overviewBot) return bot;
+
+    return {
+      ...overviewBot,
+      ...bot,
+      invested: bot.invested || overviewBot.invested,
+      isActive: bot.isActive || overviewBot.isActive,
+      isLive: bot.isLive || overviewBot.isLive,
+      name: bot.name || overviewBot.name,
+      positionValue: bot.positionValue || overviewBot.positionValue,
+      symbol: bot.symbol || overviewBot.symbol,
+    };
+  });
+}
+
+function aggregateBots(
+  bots: PortfolioBot[],
+  overviewPortfolio?: MobileOverviewResponse['portfolio'],
+) {
   const totalBudget = sum(bots, (bot) => bot.budgetTotal);
   const dailyLimit = sum(bots, (bot) => bot.budgetDailyLimit);
   const maxOrder = sum(bots, (bot) => bot.budgetMaxOrder);
-  const invested = sum(bots, (bot) => bot.invested);
-  const positionValue = sum(bots, (bot) => bot.positionValue);
+  const invested =
+    overviewPortfolio?.total_invested_eur ??
+    sum(bots, (bot) => bot.invested);
+  const positionValue =
+    overviewPortfolio?.total_balance_eur ??
+    sum(bots, (bot) => bot.positionValue);
   const todaySpent = sum(bots, (bot) => bot.todaySpent);
   const pnl = positionValue - invested;
-  const pnlPct = invested > 0 ? (pnl / invested) * 100 : 0;
+  const pnlPct = overviewPortfolio?.total_profit_pct ?? (invested > 0 ? (pnl / invested) * 100 : 0);
 
   const rowsBySymbol = bots.reduce<Record<string, { invested: number; netQty: number; positionValue: number; symbol: string }>>(
     (acc, bot) => {
@@ -1335,18 +1483,8 @@ function summarizeExchange(balances: UnknownRecord[]): ExchangeSummary {
   );
 }
 
-function normalizeHistory(history: UnknownRecord[], aggregate: ReturnType<typeof aggregateBots>, targetLength: number) {
-  if (history.length > 0) return history;
-  const count = Math.min(Math.max(targetLength, 8), 24);
-  return Array.from({ length: count }, (_, index) => ({
-    btc_qty: aggregate.assetRows[0]?.netQty ?? 0,
-    btc_value: aggregate.positionValue,
-    cash: Math.max(aggregate.totalBudget - aggregate.invested, 0),
-    equity: aggregate.positionValue,
-    invested: aggregate.invested,
-    ts: new Date(Date.now() - (count - index) * 60 * 60 * 1000).toISOString(),
-    unrealized_pnl: aggregate.pnl,
-  }));
+function normalizeHistory(history: UnknownRecord[]) {
+  return history;
 }
 
 function getPerformance(history: UnknownRecord[], metric: MetricKey, aggregate: ReturnType<typeof aggregateBots>) {
@@ -1452,6 +1590,215 @@ function portfolioUpdatedAt(values: string[]) {
 }
 
 const styles = StyleSheet.create({
+  filledBadge: {
+    alignItems: 'center',
+    borderRadius: theme.radius.pill,
+    borderWidth: 1,
+    flexDirection: 'row',
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+  },
+  filledBadgeDot: {
+    borderRadius: 999,
+    height: 7,
+    width: 7,
+  },
+  filledBadgeRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: theme.spacing.xs,
+    marginTop: theme.spacing.sm,
+  },
+  filledBadgeText: {
+    fontSize: 11,
+    fontWeight: '900',
+    letterSpacing: 0.8,
+    textTransform: 'uppercase',
+  },
+  flexText: {
+    flex: 1,
+  },
+  analysisMetaCard: {
+    borderRadius: 18,
+    borderWidth: 1,
+    flex: 1,
+    gap: 4,
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.md,
+  },
+  analysisMetaLabel: {
+    color: theme.colors.textDim,
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 0.6,
+    textTransform: 'uppercase',
+  },
+  analysisMetaRow: {
+    flexDirection: 'row',
+    gap: theme.spacing.sm,
+    marginTop: theme.spacing.md,
+  },
+  analysisMetaValue: {
+    fontSize: 14,
+    fontWeight: '800',
+    lineHeight: 19,
+  },
+  bodyText: {
+    fontSize: 14,
+    fontWeight: '600',
+    lineHeight: 21,
+    marginTop: theme.spacing.sm,
+  },
+  cardTitle: {
+    fontSize: theme.typography.cardTitle,
+    fontWeight: '900',
+    marginTop: 4,
+  },
+  portfolioSection: {
+    paddingHorizontal: theme.spacing.lg,
+    paddingVertical: theme.spacing.md,
+  },
+  allocationCard: {
+    borderRadius: 24,
+    borderWidth: 1,
+    marginTop: theme.spacing.md,
+    padding: theme.spacing.lg,
+  },
+  allocationLabel: {
+    fontSize: 14,
+    fontWeight: '700',
+    lineHeight: 20,
+  },
+  allocationRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: theme.spacing.xs,
+  },
+  allocationValue: {
+    fontSize: 15,
+    fontWeight: '700',
+    lineHeight: 20,
+  },
+  availableRow: {
+    alignItems: 'center',
+    borderBottomWidth: 1,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: theme.spacing.sm,
+    paddingBottom: theme.spacing.md,
+  },
+  availableLabel: {
+    fontSize: 13,
+    fontWeight: '700',
+    lineHeight: 18,
+  },
+  availableValue: {
+    fontSize: 16,
+    fontWeight: '800',
+    lineHeight: 20,
+  },
+  allocationMetrics: {
+    flexDirection: 'row',
+    gap: theme.spacing.md,
+    marginTop: theme.spacing.lg,
+  },
+  allocationMetric: {
+    flex: 1,
+    minWidth: 90,
+  },
+  allocationMetricLabel: {
+    fontSize: 10,
+    fontWeight: '900',
+    letterSpacing: 1.1,
+    textTransform: 'uppercase',
+  },
+  allocationMetricValue: {
+    fontSize: 15,
+    fontWeight: '800',
+    lineHeight: 20,
+    marginTop: 4,
+  },
+  portfolioMetricGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: theme.spacing.sm,
+    marginTop: theme.spacing.lg,
+  },
+  portfolioMetricCard: {
+    borderRadius: 22,
+    borderWidth: 1,
+    minHeight: 108,
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.md,
+    width: '48.5%',
+  },
+  portfolioMetricLabel: {
+    fontSize: 10,
+    fontWeight: '900',
+    letterSpacing: 1.1,
+    textTransform: 'uppercase',
+  },
+  portfolioMetricValue: {
+    fontSize: 22,
+    fontWeight: '900',
+    letterSpacing: -0.8,
+    lineHeight: 28,
+    marginTop: theme.spacing.sm,
+  },
+  breakdownSection: {
+    marginTop: theme.spacing.lg,
+  },
+  breakdownList: {
+    marginTop: theme.spacing.sm,
+  },
+  breakdownIdentity: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: theme.spacing.sm,
+  },
+  breakdownDot: {
+    borderRadius: theme.radius.pill,
+    height: 14,
+    width: 14,
+  },
+  breakdownRow: {
+    alignItems: 'center',
+    borderBottomWidth: 1,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingVertical: theme.spacing.md,
+  },
+  breakdownRowLast: {
+    borderBottomWidth: 0,
+    paddingBottom: theme.spacing.xs,
+  },
+  breakdownSymbol: {
+    fontSize: 16,
+    fontWeight: '900',
+    lineHeight: 21,
+  },
+  breakdownQty: {
+    fontSize: 13,
+    fontWeight: '600',
+    lineHeight: 18,
+    marginTop: 4,
+  },
+  breakdownValues: {
+    alignItems: 'flex-end',
+  },
+  breakdownPrice: {
+    fontSize: 18,
+    fontWeight: '900',
+    lineHeight: 22,
+  },
+  breakdownPnl: {
+    fontSize: 13,
+    fontWeight: '700',
+    lineHeight: 18,
+    marginTop: 4,
+  },
   inlineTradeButton: {
     alignItems: 'center',
     borderRadius: theme.radius.pill,
@@ -1495,6 +1842,18 @@ const styles = StyleSheet.create({
   tradePrimaryButtonDisabled: {
     opacity: 0.72,
   },
+  tradeHeroCompact: {
+    alignItems: 'flex-start',
+    flexDirection: 'row',
+    gap: theme.spacing.md,
+    justifyContent: 'space-between',
+  },
+  tradeOverviewGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: theme.spacing.sm,
+    marginTop: theme.spacing.md,
+  },
   tradePrimaryText: {
     color: theme.colors.white,
     fontSize: theme.typography.small,
@@ -1535,6 +1894,109 @@ const styles = StyleSheet.create({
     marginTop: theme.spacing.md,
     minWidth: 126,
     padding: theme.spacing.md,
+  },
+  workspaceCell: {
+    borderRadius: theme.radius.md,
+    borderWidth: 0.5,
+    gap: 4,
+    minHeight: 82,
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.md,
+    width: '48.5%',
+  },
+  workspaceGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: theme.spacing.sm,
+  },
+  workspaceGridWrap: {
+    paddingHorizontal: theme.spacing.lg,
+    paddingVertical: theme.spacing.md,
+  },
+  workspacePanel: {
+    borderRadius: theme.radius.lg,
+    borderWidth: 0.5,
+    marginTop: theme.spacing.md,
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.md,
+  },
+  workspaceLabel: {
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 0.5,
+    textTransform: 'uppercase',
+  },
+  contextPanel: {
+    borderRadius: 22,
+    borderWidth: 1,
+    gap: theme.spacing.sm,
+    marginTop: theme.spacing.md,
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.md,
+  },
+  contextTitle: {
+    fontSize: 17,
+    fontWeight: '900',
+    lineHeight: 22,
+    marginTop: 2,
+  },
+  workspaceRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: theme.spacing.md,
+    justifyContent: 'space-between',
+  },
+  workspaceRowLabel: {
+    flex: 1,
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  workspaceRowValue: {
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  workspaceValue: {
+    fontSize: 15,
+    fontWeight: '800',
+    lineHeight: 20,
+  },
+  compactStatCard: {
+    borderRadius: theme.radius.md,
+    borderWidth: 0.5,
+    gap: 4,
+    minHeight: 74,
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.md,
+    width: '48.5%',
+  },
+  compactStatLabel: {
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 0.5,
+    textTransform: 'uppercase',
+  },
+  compactStatsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: theme.spacing.sm,
+    marginTop: theme.spacing.md,
+  },
+  compactStatValue: {
+    fontSize: 14,
+    fontWeight: '800',
+    lineHeight: 19,
+  },
+  panelRows: {
+    gap: theme.spacing.sm,
+    marginTop: theme.spacing.md,
+  },
+  portfolioHeroWrap: {
+    borderRadius: 28,
+    borderWidth: 1,
+    gap: theme.spacing.sm,
+    marginHorizontal: theme.spacing.lg,
+    paddingHorizontal: 20,
+    paddingVertical: 20,
   },
   assetBreakdown: {
     borderTopColor: theme.colors.border,
@@ -1709,12 +2171,6 @@ const styles = StyleSheet.create({
     fontSize: theme.typography.small,
     fontWeight: '900',
   },
-  cardTitle: {
-    color: theme.colors.text,
-    fontSize: theme.typography.cardTitle,
-    fontWeight: '900',
-    marginTop: 5,
-  },
   chartBar: {
     minHeight: 4,
     width: '100%',
@@ -1727,14 +2183,25 @@ const styles = StyleSheet.create({
   },
   chartBox: {
     backgroundColor: 'transparent',
-    borderColor: theme.colors.border,
-    borderRadius: theme.radius.md,
-    borderWidth: 1,
     height: 220,
     justifyContent: 'center',
     marginTop: theme.spacing.lg,
     overflow: 'hidden',
-    paddingVertical: theme.spacing.md,
+  },
+  chartCanvas: {
+    flex: 1,
+    width: '100%',
+  },
+  chartAxisLabels: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: theme.spacing.sm,
+    paddingHorizontal: 4,
+  },
+  chartAxisText: {
+    color: theme.colors.textDim,
+    fontSize: 9,
+    fontWeight: '700',
   },
   chartColumn: {
     alignItems: 'center',
@@ -1768,6 +2235,16 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: theme.spacing.sm,
     marginTop: theme.spacing.sm,
+  },
+  deltaSoftBadge: {
+    borderRadius: theme.radius.pill,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  deltaSoftText: {
+    fontSize: 12,
+    fontWeight: '800',
+    letterSpacing: 0.2,
   },
   deltaText: {
     fontSize: theme.typography.small,
@@ -1851,6 +2328,22 @@ const styles = StyleSheet.create({
     letterSpacing: 2.7,
     textTransform: 'uppercase',
   },
+  primaryButton: {
+    alignItems: 'center',
+    backgroundColor: theme.colors.accent,
+    borderRadius: theme.radius.pill,
+    justifyContent: 'center',
+    marginTop: theme.spacing.md,
+    minHeight: 52,
+    paddingHorizontal: theme.spacing.lg,
+  },
+  primaryButtonText: {
+    color: '#ffffff',
+    fontSize: 13,
+    fontWeight: '900',
+    letterSpacing: 1.1,
+    textTransform: 'uppercase',
+  },
   leftRail: {
     backgroundColor: theme.colors.accent,
     borderRadius: theme.radius.pill,
@@ -1883,6 +2376,37 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
   },
+  performanceCopy: {
+    flex: 1,
+    paddingRight: theme.spacing.md,
+  },
+  heroKicker: {
+    fontSize: 11,
+    fontWeight: '900',
+    letterSpacing: 2.2,
+    textTransform: 'uppercase',
+  },
+  heroValue: {
+    fontSize: 34,
+    fontWeight: '900',
+    letterSpacing: -1.2,
+    lineHeight: 40,
+    marginTop: theme.spacing.sm,
+  },
+  rangeRail: {
+    paddingLeft: theme.spacing.sm,
+  },
+  metricRail: {
+    marginTop: theme.spacing.md,
+    paddingRight: theme.spacing.sm,
+  },
+  portfolioHeroCard: {
+    borderRadius: 28,
+    borderWidth: 1,
+    marginHorizontal: theme.spacing.lg,
+    marginTop: theme.spacing.md,
+    padding: theme.spacing.lg,
+  },
   performanceTitle: {
     color: theme.colors.textDim,
     fontSize: theme.typography.label,
@@ -1901,6 +2425,96 @@ const styles = StyleSheet.create({
   portfolioHero: {
     flexDirection: 'row',
     gap: theme.spacing.md,
+  },
+  workflowCard: {
+    borderRadius: 20,
+    borderWidth: 1,
+    flexDirection: 'row',
+    gap: 12,
+    minHeight: 88,
+    padding: theme.spacing.md,
+    width: 256,
+  },
+  workflowCopy: {
+    flex: 1,
+    gap: 4,
+    justifyContent: 'center',
+  },
+  workflowIcon: {
+    alignItems: 'center',
+    borderRadius: 16,
+    height: 52,
+    justifyContent: 'center',
+    width: 52,
+  },
+  workflowRail: {
+    gap: theme.spacing.sm,
+    paddingRight: theme.spacing.lg,
+  },
+  workflowText: {
+    fontSize: 14,
+    fontWeight: '600',
+    lineHeight: 19,
+  },
+  workflowTitle: {
+    fontSize: 16,
+    fontWeight: '900',
+    lineHeight: 20,
+  },
+  workspaceBody: {
+    fontSize: 15,
+    fontWeight: '600',
+    lineHeight: 24,
+  },
+  workspaceEyebrow: {
+    fontSize: 11,
+    fontWeight: '900',
+    letterSpacing: 2.2,
+    textTransform: 'uppercase',
+  },
+  workspaceHeadline: {
+    fontSize: 19,
+    fontWeight: '900',
+    letterSpacing: -0.6,
+    lineHeight: 28,
+    marginTop: 4,
+  },
+  workspaceHeadlineCompact: {
+    fontSize: 18,
+    lineHeight: 26,
+    marginTop: 2,
+  },
+  workspaceIntroPanel: {
+    borderColor: theme.colors.border,
+    borderRadius: 28,
+    borderWidth: 1,
+    gap: theme.spacing.sm,
+    marginHorizontal: theme.spacing.lg,
+    paddingHorizontal: 20,
+    paddingVertical: 20,
+  },
+  workspaceIntroSubtitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    lineHeight: 24,
+  },
+  workspaceIntroTitle: {
+    fontSize: 18,
+    fontWeight: '900',
+    lineHeight: 24,
+  },
+  workspaceLead: {
+    fontSize: 15,
+    fontWeight: '700',
+    marginTop: 6,
+  },
+  workspaceMutedPanel: {
+    borderRadius: 28,
+    borderWidth: 1,
+    gap: theme.spacing.sm,
+    marginHorizontal: theme.spacing.lg,
+    paddingHorizontal: 20,
+    paddingVertical: 20,
   },
   pressed: {
     opacity: 0.86,
@@ -2014,6 +2628,21 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
     flexDirection: 'row',
     justifyContent: 'space-between',
+  },
+  summaryAction: {
+    alignItems: 'center',
+    backgroundColor: theme.colors.accent,
+    borderRadius: theme.radius.button,
+    justifyContent: 'center',
+    minHeight: 48,
+    marginTop: theme.spacing.md,
+  },
+  summaryActionText: {
+    color: '#ffffff',
+    fontSize: 11,
+    fontWeight: '900',
+    letterSpacing: 0.9,
+    textTransform: 'uppercase',
   },
   segment: {
     alignItems: 'center',

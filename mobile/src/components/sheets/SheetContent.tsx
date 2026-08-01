@@ -1,4 +1,4 @@
-import { StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 
 import { theme } from '../../constants/theme';
 import { triggerHaptic } from '../../utils/haptics';
@@ -49,7 +49,17 @@ export function ConfirmActionSheetContent({ onDone }: { onDone: () => void }) {
   );
 }
 
-export function DraftReviewSheetContent({ draft, onConfirm }: { draft: any; onConfirm: () => void }) {
+export function DraftReviewSheetContent({
+  draft,
+  error,
+  onConfirm,
+  saving = false,
+}: {
+  draft: any;
+  error?: string | null;
+  onConfirm: () => Promise<void> | void;
+  saving?: boolean;
+}) {
   if (!draft) {
     return (
       <View style={styles.block}>
@@ -80,13 +90,18 @@ export function DraftReviewSheetContent({ draft, onConfirm }: { draft: any; onCo
         })}
       </View>
 
+      {error ? <Text style={styles.errorText}>{error}</Text> : null}
+
       <AppButton
         label={isUpdate ? "Sla wijziging op" : "Sla concept op"}
+        disabled={saving}
         onPress={async () => {
+          if (saving) return;
           await triggerHaptic('success');
-          onConfirm();
+          await onConfirm();
         }}
       />
+      {saving ? <ActivityIndicator color={theme.colors.accent} /> : null}
     </View>
   );
 }
@@ -100,6 +115,12 @@ const styles = StyleSheet.create({
     fontSize: theme.typography.body,
     fontWeight: '600',
     lineHeight: 22,
+  },
+  errorText: {
+    color: theme.colors.danger,
+    fontSize: 13,
+    fontWeight: '700',
+    lineHeight: 18,
   },
   title: {
     color: theme.colors.text,

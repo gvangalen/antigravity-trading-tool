@@ -11,18 +11,31 @@ type BottomSheetProps = {
   title: string;
   children: ReactNode;
   onClose: () => void;
+  allowClose?: boolean;
+  closeOnBackdropPress?: boolean;
 };
 
-export function BottomSheet({ visible, title, children, onClose }: BottomSheetProps) {
+export function BottomSheet({
+  visible,
+  title,
+  children,
+  onClose,
+  allowClose = true,
+  closeOnBackdropPress = true,
+}: BottomSheetProps) {
   const insets = useSafeAreaInsets();
   const { appearance, language } = useAppPreferences();
   const colors = preferenceColors(appearance);
   const labels = preferenceLabels(language);
+  const handleClose = () => {
+    if (!allowClose) return;
+    onClose();
+  };
 
   return (
-    <Modal animationType="slide" transparent visible={visible} onRequestClose={onClose}>
+    <Modal animationType="slide" transparent visible={visible} onRequestClose={handleClose}>
       <View style={styles.overlay}>
-        <Pressable style={styles.backdrop} onPress={onClose} />
+        <Pressable style={styles.backdrop} disabled={!allowClose || !closeOnBackdropPress} onPress={handleClose} />
         <View
           style={[
             styles.sheet,
@@ -37,11 +50,13 @@ export function BottomSheet({ visible, title, children, onClose }: BottomSheetPr
           <View style={styles.header}>
             <Text style={[styles.title, { color: colors.text }]}>{title}</Text>
             <Pressable
+              disabled={!allowClose}
               onPress={async () => {
+                if (!allowClose) return;
                 await triggerHaptic('selection');
                 onClose();
               }}
-              style={({ pressed }) => [styles.close, pressed && styles.pressed]}
+              style={({ pressed }) => [styles.close, !allowClose && styles.disabled, pressed && styles.pressed]}
             >
               <Text style={[styles.closeText, { color: colors.textSoft }]}>{labels.close}</Text>
             </Pressable>
@@ -78,6 +93,9 @@ const styles = StyleSheet.create({
   },
   content: {
     gap: theme.spacing.md,
+  },
+  disabled: {
+    opacity: 0.45,
   },
   handle: {
     alignSelf: 'center',

@@ -14,24 +14,37 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../auth/AuthProvider';
 import { CardShell } from '../components/cards/CardShell';
 import { StatusChip } from '../components/layout/StatusChip';
+import { theme } from '../constants/theme';
+import { translate } from '../i18n';
+import { useAppPreferences } from '../preferences/AppPreferencesProvider';
 import { authApi } from '../services/authApi';
 import { API_BASE_URL } from '../services/apiClient';
-import { theme } from '../constants/theme';
 import { triggerHaptic } from '../utils/haptics';
 
 type HealthState = 'checking' | 'online' | 'offline';
+const IS_LOCAL_DEV_API = /127\.0\.0\.1|localhost|192\.168\./.test(API_BASE_URL);
+const DEV_PREFILL_EMAIL =
+  process.env.EXPO_PUBLIC_SIMULATOR_AUTO_LOGIN_EMAIL?.trim() ||
+  (IS_LOCAL_DEV_API ? 'gerrit@example.com' : '');
+const DEV_PREFILL_PASSWORD =
+  process.env.EXPO_PUBLIC_SIMULATOR_AUTO_LOGIN_PASSWORD?.trim() ||
+  (IS_LOCAL_DEV_API ? 'test123' : '');
 
 export function LoginScreen() {
   const { error, loading, login } = useAuth();
+  const { language } = useAppPreferences();
   const [healthState, setHealthState] = useState<HealthState>('checking');
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
+  const [email, setEmail] = useState(DEV_PREFILL_EMAIL);
+  const [password, setPassword] = useState(DEV_PREFILL_PASSWORD);
   const [passwordVisible, setPasswordVisible] = useState(false);
 
   const canSubmit = email.trim().length > 3 && password.length > 0 && !loading;
 
   useEffect(() => {
     let mounted = true;
+    const fallback = setTimeout(() => {
+      if (mounted) setHealthState('offline');
+    }, 4500);
 
     authApi
       .health()
@@ -44,6 +57,7 @@ export function LoginScreen() {
 
     return () => {
       mounted = false;
+      clearTimeout(fallback);
     };
   }, []);
 
@@ -62,21 +76,27 @@ export function LoginScreen() {
         <View style={styles.container}>
           <View>
             <View style={styles.topRow}>
-              <StatusChip label="Tradamind Mobile" tone="accent" />
+              <StatusChip label={translate(language, 'login.mobile')} tone="accent" />
               <StatusChip
                 compact
-                label={healthState === 'checking' ? 'Syncing' : healthState === 'online' ? 'API live' : 'API offline'}
+                label={
+                  healthState === 'checking'
+                    ? translate(language, 'login.syncing')
+                    : healthState === 'online'
+                      ? translate(language, 'login.apiLive')
+                      : translate(language, 'login.apiOffline')
+                }
                 tone={healthState === 'online' ? 'success' : healthState === 'offline' ? 'danger' : 'warning'}
               />
             </View>
-            <Text style={styles.title}>Welkom terug bij FINN.</Text>
+            <Text style={styles.title}>{translate(language, 'login.title')}</Text>
             <Text style={styles.subtitle}>
-              Log in om je assistant, watchlist, setups, portfolio en reports met echte backenddata te laden.
+              {translate(language, 'login.subtitle')}
             </Text>
           </View>
 
           <CardShell emphasis="primary">
-            <Text style={styles.formLabel}>Email</Text>
+            <Text style={styles.formLabel}>{translate(language, 'login.email')}</Text>
             <TextInput
               autoCapitalize="none"
               autoComplete="email"
@@ -91,13 +111,13 @@ export function LoginScreen() {
               value={email}
             />
 
-            <Text style={styles.formLabel}>Password</Text>
+            <Text style={styles.formLabel}>{translate(language, 'login.password')}</Text>
             <View style={styles.passwordRow}>
               <TextInput
                 autoCapitalize="none"
                 onChangeText={setPassword}
                 onSubmitEditing={handleLogin}
-                placeholder="Password"
+                placeholder={translate(language, 'login.passwordPlaceholder')}
                 placeholderTextColor={theme.colors.textDim}
                 returnKeyType="done"
                 secureTextEntry={!passwordVisible}
@@ -106,14 +126,22 @@ export function LoginScreen() {
                 value={password}
               />
               <Pressable
-                accessibilityLabel={passwordVisible ? 'Hide password' : 'Show password'}
+                accessibilityLabel={
+                  passwordVisible
+                    ? translate(language, 'login.hidePassword')
+                    : translate(language, 'login.showPassword')
+                }
                 onPress={async () => {
                   await triggerHaptic('selection');
                   setPasswordVisible((visible) => !visible);
                 }}
                 style={({ pressed }) => [styles.passwordToggle, pressed && styles.pressed]}
               >
-                <Text style={styles.toggleText}>{passwordVisible ? 'Hide' : 'Show'}</Text>
+                <Text style={styles.toggleText}>
+                  {passwordVisible
+                    ? translate(language, 'login.hidePassword')
+                    : translate(language, 'login.showPassword')}
+                </Text>
               </Pressable>
             </View>
 
@@ -131,16 +159,20 @@ export function LoginScreen() {
               {loading ? (
                 <ActivityIndicator color={theme.colors.white} />
               ) : (
-                <Text style={styles.buttonText}>{healthState === 'offline' ? 'Retry login' : 'Log in'}</Text>
+                <Text style={styles.buttonText}>
+                  {healthState === 'offline'
+                    ? translate(language, 'login.retryLogin')
+                    : translate(language, 'login.logIn')}
+                </Text>
               )}
             </Pressable>
 
             <View style={styles.securityRow}>
-              <Text style={styles.securityText}>Bearer auth</Text>
+              <Text style={styles.securityText}>{translate(language, 'login.bearerAuth')}</Text>
               <Text style={styles.securityDivider}>·</Text>
-              <Text style={styles.securityText}>Secure token storage</Text>
+              <Text style={styles.securityText}>{translate(language, 'login.secureTokenStorage')}</Text>
               <Text style={styles.securityDivider}>·</Text>
-              <Text style={styles.securityText}>Auto refresh</Text>
+              <Text style={styles.securityText}>{translate(language, 'login.autoRefresh')}</Text>
             </View>
           </CardShell>
 

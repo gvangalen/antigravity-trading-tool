@@ -1,28 +1,35 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Feather } from '@expo/vector-icons';
+import { useNavigation } from '@react-navigation/native';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { CardShell } from '../components/cards/CardShell';
 import { InsightCard } from '../components/cards/InsightCard';
-import { AssetContextHeader } from '../components/layout/AssetContextHeader';
 import { LoadingSkeletonCard } from '../components/layout/LoadingSkeletonCard';
 import { ScreenContainer } from '../components/layout/ScreenContainer';
-import { SectionHeader } from '../components/layout/SectionHeader';
 import { StatusChip } from '../components/layout/StatusChip';
 import { SegmentedControl } from '../components/layout/SegmentedControl';
+import { TodayWithFinnCard } from '../components/workspace/TodayWithFinnCard';
+import { WorkspaceHeroSection } from '../components/workspace/WorkspaceHeroSection';
 import { StatusTone, theme } from '../constants/theme';
 import { useApiResource } from '../hooks/useApiResource';
+import { localizedBackendText, translate, translateFinnTag } from '../i18n';
+import type { MainTabParamList } from '../navigation/MainTabNavigator';
 import { preferenceColors, useAppPreferences } from '../preferences/AppPreferencesProvider';
 import {
+  ForwardReturnChartResponse,
   MarketChartPoint,
   MarketLatestResponse,
   MobileOverviewAsset,
   MobileOverviewResponse,
+  WorkspaceAssetResponse,
   assistantApi,
   intelligenceApi,
   mobileApi,
 } from '../services/tradamindApi';
 import { triggerHaptic } from '../utils/haptics';
 import { useIntelligenceContext } from '../contexts/ActiveIntelligenceContext';
+import { useFinnOverlay } from '../contexts/FinnOverlayContext';
 import { trackAssistantEvent } from '../services/assistantAnalytics';
 
 type Timeframe = '15m' | '1h' | '4h' | '1d';
@@ -30,20 +37,23 @@ type Timeframe = '15m' | '1h' | '4h' | '1d';
 const timeframes: Timeframe[] = ['15m', '1h', '4h', '1d'];
 
 export function WatchlistScreen() {
+  const navigation = useNavigation<any>();
   const { context, updateContext } = useIntelligenceContext();
+  const { openFinn } = useFinnOverlay();
+  const { language } = useAppPreferences();
   const selectedSymbol = context.asset;
   const [timeframe, setTimeframe] = useState<Timeframe>('1h');
 
   useEffect(() => {
     trackAssistantEvent({
       event_name: 'screen_view',
-      page: 'watchlist',
-      flow_type: 'watchlist',
+      page: 'analysis',
+      flow_type: 'analysis',
       asset: selectedSymbol,
     });
   }, [selectedSymbol]);
 
-  const fetchOverview = useCallback(() => mobileApi.overview(), []);
+  const fetchOverview = useCallback(() => mobileApi.overview(selectedSymbol), [selectedSymbol]);
   const overviewResource = useApiResource<MobileOverviewResponse | undefined>({
     fallbackData: undefined,
     fetcher: fetchOverview,
@@ -60,6 +70,32 @@ export function WatchlistScreen() {
     fallbackData: [],
     fetcher: fetchChart,
   });
+  const fetchWorkspaceAsset = useCallback(
+    () =>
+      intelligenceApi.workspaceAsset(selectedSymbol, {
+        market_period: 'day',
+        macro_period: 'day',
+        technical_period: 'day',
+      }),
+    [selectedSymbol],
+  );
+  const workspaceAssetResource = useApiResource<WorkspaceAssetResponse | undefined>({
+    fallbackData: undefined,
+    fetcher: fetchWorkspaceAsset,
+  });
+  const fetchTopSetups = useCallback(() => intelligenceApi.topSetups(), []);
+  const topSetupsResource = useApiResource({
+    fallbackData: undefined,
+    fetcher: fetchTopSetups,
+  });
+  const fetchForwardReturnsMonth = useCallback(
+    () => intelligenceApi.forwardReturnsMonth(selectedSymbol),
+    [selectedSymbol],
+  );
+  const forwardReturnsMonthResource = useApiResource<ForwardReturnChartResponse[]>({
+    fallbackData: [],
+    fetcher: fetchForwardReturnsMonth,
+  });
 
   const fetchInsight = useCallback(
     () =>
@@ -75,75 +111,146 @@ export function WatchlistScreen() {
     fetcher: fetchInsight,
   });
 
-  const assets = useMemo(() => {
-    const watchlist = overviewResource.data?.watchlist?.filter(Boolean) ?? [];
-    return watchlist.length > 0 ? watchlist : fallbackAssets();
-  }, [overviewResource.data]);
+  const assets = useMemo(
+    () => {
+      const liveAssets = (overviewResource.data?.watchlist?.filter(Boolean) ?? []).filter((asset) => asset?.symbol);
+      if (liveAssets.length > 0) {
+        return liveAssets;
+      }
+
+      const fallbackAsset = buildFallbackOverviewAsset(
+        selectedSymbol,
+        latestResource.data,
+        workspaceAssetResource.data,
+      );
+      return fallbackAsset ? [fallbackAsset] : [];
+    },
+    [latestResource.data, overviewResource.data, selectedSymbol, workspaceAssetResource.data],
+  );
   const selectedAsset = assets.find((asset) => asset.symbol === selectedSymbol) ?? assets[0];
-  const intelligence = buildAssetIntelligence(selectedAsset, latestResource.data, insightResource.data);
-  const chartPoints = buildChartPoints(chartResource.data, selectedAsset, timeframe);
-  const chartOverlays = buildChartOverlays(selectedAsset, intelligence);
+  const intelligence = selectedAsset
+    ? buildAssetIntelligence(selectedAsset, latestResource.data, insightResource.data)
+    : null;
+  const chartPoints = selectedAsset ? buildChartPoints(chartResource.data, selectedAsset, timeframe) : [];
+  const chartOverlays = selectedAsset && intelligence ? buildChartOverlays(selectedAsset, intelligence) : [];
+  const suggestedPlan = useMemo(() => deriveSuggestedPlan(topSetupsResource.data, selectedAsset), [selectedAsset, topSetupsResource.data]);
+  const overview = overviewResource.data;
+  const analysisBootstrapLoading =
+    assets.length === 0 &&
+    (overviewResource.loading || latestResource.loading || workspaceAssetResource.loading);
 
   async function selectAsset(symbol: string) {
     await triggerHaptic('selection');
-    updateContext({ asset: symbol, screen: 'Watchlist' });
+    updateContext({ asset: symbol, screen: 'Analysis' });
   }
 
   return (
     <ScreenContainer
       edgeToEdge={true}
+      contentInsetBottom={392}
       refreshing={overviewResource.refreshing || latestResource.refreshing || chartResource.refreshing}
       onRefresh={() => {
         overviewResource.refresh();
         latestResource.refresh();
         chartResource.refresh();
+        workspaceAssetResource.refresh();
         insightResource.refresh();
+        topSetupsResource.refresh();
+        forwardReturnsMonthResource.refresh();
       }}
     >
-      <AssetContextHeader asset={selectedSymbol} context="Watchlist context" updatedAt={overviewResource.updatedAt} />
-      <SectionHeader
-        label="Watchlist"
-        title="Marktcontext"
-        description="Prijscontext, trend en Finn-signalen per asset in een rustige leeslaag."
-      />
-
-      <WatchlistIntelligenceTerminal
-        assets={assets}
-        selectedSymbol={selectedSymbol}
-        stale={overviewResource.isStale}
-        onSelect={selectAsset}
-      />
-
-      {overviewResource.loading ? (
+      {analysisBootstrapLoading ? (
         <LoadingSkeletonCard />
-      ) : (
-        <SelectedAssetIntelligence intelligence={intelligence} />
-      )}
-
-      <CompactLiveChart
-        overlays={chartOverlays}
-        points={chartPoints}
-        symbol={selectedSymbol}
-        timeframe={timeframe}
-        onTimeframeChange={setTimeframe}
-        loading={chartResource.loading}
-      />
-
-      {overviewResource.error ? (
+      ) : !selectedAsset ? (
         <InsightCard
-          label="Watchlist fout"
-          title="Watchlistcontext kon niet live laden."
-          body={overviewResource.error.message}
-          cta="Probeer opnieuw"
-          tone="danger"
-          onPress={overviewResource.refresh}
+          label={
+            language === 'nl'
+              ? 'Analyse-data'
+              : language === 'de'
+                ? 'Analysedaten'
+                : 'Analysis data'
+          }
+          title={
+            language === 'nl'
+              ? 'De backend gaf nog geen analyse-assets terug.'
+              : language === 'de'
+                ? 'Das Backend hat noch keine Analyse-Assets geliefert.'
+                : 'The backend has not returned analysis assets yet.'
+          }
+          body={
+            overviewResource.error?.message ||
+            (language === 'nl'
+              ? 'Zodra watchlist- en overview-data weer live terugkomen, verschijnt hier direct de echte analyse-workspace.'
+              : language === 'de'
+                ? 'Sobald Watchlist- und Overview-Daten wieder live ankommen, erscheint hier sofort der echte Analyse-Workspace.'
+                : 'As soon as watchlist and overview data come back live, the real analysis workspace will appear here immediately.')
+          }
+          cta={language === 'nl' ? 'Ververs' : language === 'de' ? 'Aktualisieren' : 'Refresh'}
+          tone="warning"
+          onPress={() => {
+            overviewResource.refresh();
+            latestResource.refresh();
+            chartResource.refresh();
+            workspaceAssetResource.refresh();
+            insightResource.refresh();
+            topSetupsResource.refresh();
+            forwardReturnsMonthResource.refresh();
+          }}
         />
-      ) : null}
+      ) : (
+        <>
+          <AnalysisWorkspaceMissionControl
+            activeSymbol={selectedSymbol}
+            assets={assets}
+            briefing={overview?.finn_briefing}
+            intelligence={intelligence!}
+            onRefreshScores={() => {
+              latestResource.refresh();
+              chartResource.refresh();
+              workspaceAssetResource.refresh();
+              insightResource.refresh();
+              topSetupsResource.refresh();
+            }}
+          />
+          <AnalysisWorkspaceIntro
+            asset={selectedAsset}
+            assets={assets}
+            intelligence={intelligence!}
+            onAskFinn={() =>
+              openFinn({
+                prefill: `Help me work through the ${selectedSymbol} analysis workspace step by step: asset, evidence and conclusion.`,
+                source: 'analysis-workspace-intro',
+                symbol: selectedSymbol,
+              })
+            }
+            onSelect={selectAsset}
+            selectedSymbol={selectedSymbol}
+            stale={overviewResource.isStale}
+          />
+          <CompactLiveChart
+            overlays={chartOverlays}
+            points={chartPoints}
+            symbol={selectedSymbol}
+            timeframe={timeframe}
+            onTimeframeChange={setTimeframe}
+            loading={chartResource.loading}
+          />
+          <AnalysisContextScores asset={selectedAsset} intelligence={intelligence!} workspaceAsset={workspaceAssetResource.data} />
+          <AnalysisEvidenceSections asset={selectedAsset} workspaceAsset={workspaceAssetResource.data} />
+          <AnalysisPlanBridge
+            candidate={suggestedPlan}
+            onOpenPlan={() =>
+              navigation.navigate('Setup' satisfies keyof MainTabParamList, { symbol: selectedSymbol })
+            }
+          />
+          <HistoricalForwardReturnsCard asset={selectedAsset} rows={forwardReturnsMonthResource.data} />
+        </>
+      )}
 
       {chartResource.error ? (
         <InsightCard
-          label="Chart fallback"
-          title="Chartdata gebruikt tijdelijk een veilige fallback."
+          label="Chart error"
+          title="Chartdata kon niet live laden."
           body={chartResource.error.message}
           cta="Laad chart opnieuw"
           tone="warning"
@@ -151,6 +258,450 @@ export function WatchlistScreen() {
         />
       ) : null}
     </ScreenContainer>
+  );
+}
+
+function AnalysisContextScores({
+  asset,
+  intelligence,
+  workspaceAsset,
+}: {
+  asset: MobileOverviewAsset;
+  intelligence: AssetIntelligence;
+  workspaceAsset?: WorkspaceAssetResponse;
+}) {
+  const { appearance } = useAppPreferences();
+  const colors = preferenceColors(appearance);
+  const marketScore = readWorkspaceScore(workspaceAsset?.categories?.market?.score?.score) ?? Math.round(asset.market_score);
+  const macroScore = readWorkspaceScore(workspaceAsset?.categories?.macro?.score?.score) ?? Math.round(asset.macro_score);
+  const technicalScore = readWorkspaceScore(workspaceAsset?.categories?.technical?.score?.score) ?? Math.round(asset.technical_score);
+  const combinedScore = readWorkspaceScore(workspaceAsset?.combined?.score) ?? compositeScore(asset);
+  const items = [
+    { label: 'Market', value: marketScore, tone: toneForScore(marketScore) },
+    { label: 'Macro', value: macroScore, tone: toneForScore(macroScore) },
+    { label: 'Technical', value: technicalScore, tone: toneForScore(technicalScore) },
+    { label: 'Combined', value: combinedScore, tone: intelligence.marketPostureTone },
+  ];
+
+  return (
+    <CardShell emphasis="standard" flat style={styles.workspaceBlendSurface}>
+      <View
+        style={[
+          styles.contextScoresCard,
+          { backgroundColor: colors.surfaceMuted, borderColor: colors.borderSubtle },
+        ]}
+      >
+        <View style={styles.sectionTop}>
+          <View style={styles.sectionLead}>
+            <Text style={styles.kicker}>Context scores</Text>
+            <Text style={[styles.cardTitle, { color: colors.text }]}>Desktop analysis engine</Text>
+          </View>
+          <View
+            style={[
+              styles.contextScoresBadge,
+              { backgroundColor: `${colorForTone(intelligence.marketPostureTone)}12` },
+            ]}
+          >
+            <Text style={[styles.contextScoresBadgeText, { color: colorForTone(intelligence.marketPostureTone) }]}>
+              {intelligence.marketPosture}
+            </Text>
+          </View>
+        </View>
+        <View style={styles.scoreOverviewGrid}>
+          {items.map((item) => (
+            <View key={item.label} style={[styles.scoreOverviewCard, { borderColor: colors.borderSubtle }]}>
+              <Text style={styles.scoreOverviewLabel}>{item.label}</Text>
+              <Text style={[styles.scoreOverviewValue, { color: colorForTone(item.tone) }]}>{item.value}/100</Text>
+            </View>
+          ))}
+        </View>
+      </View>
+    </CardShell>
+  );
+}
+
+function AnalysisWorkspaceMissionControl({
+  activeSymbol,
+  assets,
+  briefing,
+  intelligence,
+  onRefreshScores,
+}: {
+  activeSymbol: string;
+  assets: MobileOverviewAsset[];
+  briefing?: MobileOverviewResponse['finn_briefing'];
+  intelligence: AssetIntelligence;
+  onRefreshScores: () => void;
+}) {
+  const { language } = useAppPreferences();
+  const reviewCount = assets.filter((asset) => asset.setup_score < 55).length;
+  const riskCount = assets.filter((asset) => asset.setup_score < 40 || asset.technical_score < 40).length;
+  const performanceCount = assets.filter((asset) => (asset.change_24h ?? 0) >= 0).length;
+  const taskCount = assets.length;
+  const summary = localizedBackendText(
+    language,
+    briefing?.summary?.trim(),
+    translate(language, 'analysis.summaryUnavailable', { symbol: activeSymbol }),
+  );
+  const chips = [
+    {
+      label: reviewCount > 0 ? translate(language, 'tag.actionNeeded') : translate(language, 'tag.monitoring'),
+      tone: reviewCount > 0 ? ('warning' as StatusTone) : ('success' as StatusTone),
+    },
+    { label: translateFinnTag(language, intelligence.marketPosture), tone: intelligence.marketPostureTone },
+    {
+      label: `${translate(language, 'queue.label.reviews')} ${reviewCount}`,
+      tone: reviewCount > 0 ? ('accent' as StatusTone) : ('neutral' as StatusTone),
+    },
+    {
+      label: `${translate(language, 'queue.label.risks')} ${riskCount}`,
+      tone: riskCount > 0 ? ('danger' as StatusTone) : ('neutral' as StatusTone),
+    },
+  ];
+  const queueItems = [
+    { key: 'tasks', label: translate(language, 'queue.label.tasks'), value: taskCount, body: translate(language, 'queue.body.handleFirst') },
+    { key: 'reviews', label: translate(language, 'queue.label.reviews'), value: reviewCount, body: translate(language, 'queue.body.needDecision') },
+    { key: 'risks', label: translate(language, 'queue.label.risks'), value: riskCount, body: translate(language, 'queue.body.slowingYouDown') },
+    { key: 'performance', label: translate(language, 'queue.label.performance'), value: performanceCount, body: translate(language, 'queue.body.howTodayBehaves') },
+  ];
+
+  return (
+    <WorkspaceHeroSection>
+      <TodayWithFinnCard
+        headline={summary}
+        support={translate(language, reviewCount === 1 ? 'finn.reviewNeedsAttention' : 'finn.reviewsNeedAttention', {
+          count: reviewCount,
+        })}
+        tags={chips}
+        primaryActionLabel={translate(language, 'finn.refreshDailyScores')}
+        onPrimaryAction={onRefreshScores}
+        queueItems={queueItems}
+        queueStatusLabel={translate(language, 'common.itemsOpen', { count: taskCount })}
+      />
+    </WorkspaceHeroSection>
+  );
+}
+
+function WorkspaceTonePill({ label, tone }: { label: string; tone: StatusTone }) {
+  const { appearance } = useAppPreferences();
+  const colors = preferenceColors(appearance);
+  const baseColor = tone === 'neutral' ? colors.textDim : (colors[tone] || colors.accent);
+
+  return (
+    <View style={[styles.workspaceTonePill, { backgroundColor: appearance === 'light' ? `${baseColor}12` : `${baseColor}20` }]}>
+      <View style={[styles.workspaceTonePillDot, { backgroundColor: baseColor }]} />
+      <Text style={[styles.workspaceTonePillText, { color: baseColor }]} numberOfLines={1}>
+        {label}
+      </Text>
+    </View>
+  );
+}
+
+function AnalysisWorkspaceIntro({
+  asset,
+  assets,
+  intelligence,
+  onAskFinn,
+  onSelect,
+  selectedSymbol,
+  stale,
+}: {
+  asset: MobileOverviewAsset;
+  assets: MobileOverviewAsset[];
+  intelligence: AssetIntelligence;
+  onAskFinn: () => void;
+  onSelect: (symbol: string) => void;
+  selectedSymbol: string;
+  stale: boolean;
+}) {
+  const { appearance } = useAppPreferences();
+  const colors = preferenceColors(appearance);
+  const combined = compositeScore(asset);
+  const steps = [
+    { id: '1', title: 'Asset', body: 'What am I analysing?', icon: 'search' as const },
+    { id: '2', title: 'Evidence', body: 'What do Market, Macro and Technical show?', icon: 'bar-chart-2' as const },
+    { id: '3', title: 'Conclusion', body: 'What does this mean for my plan?', icon: 'sun' as const },
+  ];
+  const summaryItems = [
+    { label: 'Bias', value: intelligence.marketPosture },
+    { label: 'Combined', value: `${combined}/100` },
+    { label: 'Confidence', value: `${Math.max(35, Math.min(95, combined + 8))}%` },
+  ];
+  const assetLine = `${asset.symbol} · ${assetNameForSymbol(asset.symbol)}`;
+
+  return (
+    <CardShell emphasis="standard" flat style={styles.workspaceBlendSurface}>
+      <View style={styles.sectionTop}>
+        <View style={styles.sectionLead}>
+          <Text style={styles.kicker}>Analysis workspace</Text>
+          <Text style={[styles.workspaceTitle, { color: colors.text }]}>Analysis</Text>
+          <Text style={[styles.workspaceSubtitle, { color: colors.textMuted }]}>
+            Research one asset with market, macro and technical evidence.
+          </Text>
+        </View>
+        <View style={[styles.sectionMetaPill, { backgroundColor: `${theme.colors.success}14` }]}>
+          <Text style={[styles.inlineMetaLabel, styles.sectionMetaBadgeText, { color: theme.colors.success }]}>
+            Active
+          </Text>
+        </View>
+      </View>
+
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.workflowSteps}
+        style={styles.workflowRail}
+      >
+        {steps.map((step, index) => (
+          <View
+            key={step.id}
+            style={[
+              styles.workflowStepCard,
+              {
+                backgroundColor: colors.surface,
+                borderColor: colors.borderSubtle,
+                marginRight: index === steps.length - 1 ? 0 : 12,
+              },
+            ]}
+          >
+            <View style={[styles.workflowIconTile, { backgroundColor: `${colors.accent}10` }]}>
+              <Feather color={theme.colors.accent} name={step.icon} size={18} />
+            </View>
+            <View style={styles.workflowStepCopy}>
+              <Text style={styles.workflowStepTitle}>{step.id} {step.title}</Text>
+              <Text style={[styles.workflowStepBody, { color: colors.textMuted }]} numberOfLines={2}>
+                {step.body}
+              </Text>
+            </View>
+          </View>
+        ))}
+      </ScrollView>
+
+      <View style={[styles.workspacePanelDivider, { backgroundColor: colors.borderSubtle }]} />
+
+      <View
+        style={[
+          styles.activeAnalysisShell,
+          { backgroundColor: colors.surfaceMuted, borderColor: colors.borderSubtle },
+        ]}
+      >
+        <View style={styles.activeAnalysisTop}>
+          <Text style={styles.kicker}>Active analysis</Text>
+          <Text style={[styles.updatedMeta, { color: colors.textDim }]}>Updated offline</Text>
+        </View>
+
+        <Text style={[styles.activeAnalysisAssetLine, { color: colors.textDim }]}>{assetLine}</Text>
+
+        <View style={styles.activeAnalysisRow}>
+          <View style={styles.activeAnalysisLeft}>
+            <Pressable style={[styles.assetPill, { borderColor: colors.borderSubtle, backgroundColor: colors.surface }]}>
+              <Text style={[styles.assetPillText, { color: colors.text }]}>{asset.symbol}</Text>
+            </Pressable>
+            <Text style={[styles.activeAnalysisPrice, { color: colors.text }]}>{intelligence.price}</Text>
+            <Text style={[styles.activeAnalysisChange, { color: colorForTone(intelligence.changeTone) }]}>{intelligence.change}</Text>
+            <Text style={[styles.activeAnalysisTf, { color: colors.textDim }]}>1D</Text>
+          </View>
+
+          <View
+            style={[
+              styles.activeAnalysisSummary,
+              { backgroundColor: colors.surface, borderColor: colors.borderSubtle },
+            ]}
+          >
+            {summaryItems.map((item) => (
+              <View key={item.label} style={styles.activeAnalysisSummaryItem}>
+                <Text style={styles.activeAnalysisSummaryLabel} numberOfLines={1}>{item.label}</Text>
+                <Text style={[styles.activeAnalysisSummaryValue, { color: colors.text }]} numberOfLines={2}>{item.value}</Text>
+              </View>
+            ))}
+          </View>
+        </View>
+      </View>
+
+      <View style={[styles.workspacePanelDivider, { backgroundColor: colors.borderSubtle }]} />
+
+      <View style={styles.watchlistTop}>
+        <View style={styles.watchlistTopLeft}>
+          <Text style={styles.kicker}>Watchlist</Text>
+          <View style={styles.watchlistGroupRow}>
+            <View
+              style={[
+                styles.watchlistGroupChip,
+                styles.watchlistGroupChipActive,
+                { backgroundColor: `${colors.accent}10`, borderColor: `${colors.accent}24` },
+              ]}
+            >
+              <Text style={styles.watchlistGroupChipActiveText}>Crypto</Text>
+            </View>
+            <View style={[styles.watchlistGroupChip, { backgroundColor: colors.surfaceMuted }]}>
+              <Text style={[styles.watchlistGroupChipText, { color: colors.textDim }]}>Stocks</Text>
+            </View>
+            <View style={[styles.watchlistGroupChip, { backgroundColor: colors.surfaceMuted }]}>
+              <Text style={[styles.watchlistGroupChipText, { color: colors.textDim }]}>ETF</Text>
+            </View>
+          </View>
+        </View>
+        <StatusChip label={stale ? 'Stale' : 'Live'} tone={stale ? 'warning' : 'success'} />
+      </View>
+
+      <View style={[styles.watchlistTable, { borderColor: colors.borderSubtle }]}>
+        {assets.map((asset) => {
+          const active = asset.symbol === selectedSymbol;
+          const score = compositeScore(asset);
+          const change = asset.change_24h ?? 0;
+          return (
+            <Pressable
+              key={asset.symbol}
+              onPress={() => onSelect(asset.symbol)}
+              style={({ pressed }) => [
+                styles.watchlistRow,
+                {
+                  borderBottomColor: colors.borderSubtle,
+                  backgroundColor: active ? `${colors.accent}08` : 'transparent',
+                },
+                pressed && styles.pressed,
+              ]}
+            >
+              <View style={styles.watchlistRowTop}>
+                <View style={styles.watchlistAssetBlock}>
+                  <View style={[styles.watchlistDot, { backgroundColor: active ? theme.colors.accent : colors.borderStrong }]} />
+                  <View style={styles.watchlistAssetText}>
+                    <Text style={[styles.watchlistSymbol, { color: colors.text }]}>{asset.symbol}</Text>
+                    <Text style={[styles.watchlistName, { color: colors.textDim }]}>{assetNameForSymbol(asset.symbol)}</Text>
+                  </View>
+                </View>
+                <View style={styles.watchlistPriceBlock}>
+                  <Text style={[styles.watchlistPrice, { color: colors.text }]}>
+                    {typeof asset.price === 'number' ? formatShortPrice(asset.price) : 'n/a'}
+                  </Text>
+                  <Text
+                    style={[
+                      styles.watchlistChange,
+                      { color: change >= 0 ? theme.colors.success : theme.colors.danger },
+                    ]}
+                  >
+                    {formatSignedPercent(change)}
+                  </Text>
+                </View>
+              </View>
+
+              <View style={styles.watchlistRowBottom}>
+                <View style={styles.watchlistMetaLeft}>
+                  <Text style={[styles.watchlistScore, { color: colors.textMuted }]}>Score: {score}</Text>
+                  <StatusChip compact label={stateForAsset(asset)} tone={toneForScore(score)} />
+                </View>
+                {active ? <View style={[styles.watchlistActiveMarker, { backgroundColor: theme.colors.accent }]} /> : null}
+              </View>
+            </Pressable>
+          );
+        })}
+      </View>
+    </CardShell>
+  );
+}
+
+function AnalysisPlanBridge({
+  candidate,
+  onOpenPlan,
+}: {
+  candidate: { action: string; name: string; score: number; summary: string } | null;
+  onOpenPlan: () => void;
+}) {
+  const { appearance } = useAppPreferences();
+  const colors = preferenceColors(appearance);
+
+  if (!candidate) return null;
+
+  return (
+    <Pressable
+      onPress={async () => {
+        await triggerHaptic('selection');
+        onOpenPlan();
+      }}
+      style={({ pressed }) => [styles.planBridge, { borderColor: colors.borderSubtle }, pressed && styles.pressed]}
+    >
+      <View style={styles.planBridgeContent}>
+        <View style={styles.planBridgeCopy}>
+          <Text style={styles.kicker}>Next step</Text>
+          <Text style={[styles.cardTitle, { color: colors.text }]}>Open My Plan</Text>
+          <Text style={[styles.bodyText, { color: colors.textMuted }]}>
+            {candidate.name} is the best matching plan for current conditions. {candidate.summary}
+          </Text>
+        </View>
+        <View style={styles.planBridgeSide}>
+          <Text style={styles.planBridgeScore}>{candidate.score}/100</Text>
+          <Pressable onPress={onOpenPlan} style={styles.planBridgeButton}>
+            <Text style={styles.planBridgeButtonText}>{candidate.action}</Text>
+          </Pressable>
+        </View>
+      </View>
+    </Pressable>
+  );
+}
+
+function AnalysisRegimeCard({
+  change,
+  finnSummary,
+  posture,
+  postureTone,
+  riskState,
+  riskTone,
+  symbol,
+}: {
+  change: string;
+  finnSummary: string;
+  posture: string;
+  postureTone: StatusTone;
+  riskState: string;
+  riskTone: StatusTone;
+  symbol: string;
+}) {
+  const { appearance } = useAppPreferences();
+  const colors = preferenceColors(appearance);
+
+  return (
+    <CardShell emphasis="standard" flat style={styles.workspaceBlendSurface}>
+      <View style={styles.sectionTop}>
+        <View>
+          <Text style={styles.kicker}>Market regime</Text>
+          <Text style={[styles.cardTitle, { color: colors.text }]}>{symbol} control plane</Text>
+        </View>
+        <StatusChip label={change} tone={change.startsWith('+') ? 'success' : 'danger'} />
+      </View>
+      <View style={styles.analysisMetaRow}>
+        <View style={[styles.analysisMetaCard, { borderColor: colors.border, backgroundColor: colors.backgroundSoft }]}>
+          <Text style={styles.analysisMetaLabel}>Posture</Text>
+          <Text style={[styles.analysisMetaValue, { color: colorForTone(postureTone) }]}>{posture}</Text>
+        </View>
+        <View style={[styles.analysisMetaCard, { borderColor: colors.border, backgroundColor: colors.backgroundSoft }]}>
+          <Text style={styles.analysisMetaLabel}>Risk</Text>
+          <Text style={[styles.analysisMetaValue, { color: colorForTone(riskTone) }]}>{riskState}</Text>
+        </View>
+      </View>
+      <Text style={[styles.bodyText, { color: colors.textMuted }]}>{finnSummary}</Text>
+    </CardShell>
+  );
+}
+
+function AnalysisFinnActions({
+  onAskContext,
+  onAskSetup,
+}: {
+  onAskContext: () => void;
+  onAskSetup: () => void;
+}) {
+  const { appearance } = useAppPreferences();
+  const colors = preferenceColors(appearance);
+
+  return (
+    <View style={styles.analysisActionWrap}>
+      <Pressable onPress={onAskContext} style={[styles.analysisActionPrimary, { backgroundColor: theme.colors.accent }]}>
+        <Text style={styles.analysisActionPrimaryText}>Ask FINN for context</Text>
+      </Pressable>
+      <Pressable onPress={onAskSetup} style={[styles.analysisActionSecondary, { borderColor: colors.borderStrong, backgroundColor: colors.surface }]}>
+        <Text style={[styles.analysisActionSecondaryText, { color: colors.text }]}>Review setup evidence</Text>
+      </Pressable>
+    </View>
   );
 }
 
@@ -176,12 +727,12 @@ function SelectedAssetIntelligence({ intelligence }: { intelligence: AssetIntell
   const colors = preferenceColors(appearance);
 
   return (
-    <CardShell emphasis="primary" edgeToEdge={true}>
+    <CardShell emphasis="primary">
       <View style={styles.intelTop}>
         <View style={styles.assetIdentity}>
           <AssetIcon symbol={intelligence.symbol} />
           <View>
-            <Text style={styles.intelLabel}>Actieve asset</Text>
+            <Text style={styles.intelLabel}>Analysis briefing</Text>
             <Text style={[styles.intelSymbol, { color: colors.text }]}>{intelligence.symbol}</Text>
           </View>
         </View>
@@ -207,6 +758,279 @@ function SelectedAssetIntelligence({ intelligence }: { intelligence: AssetIntell
   );
 }
 
+function AnalysisEvidenceGrid({ asset }: { asset: MobileOverviewAsset }) {
+  const { appearance } = useAppPreferences();
+  const colors = preferenceColors(appearance);
+  const sections = [
+    {
+      key: 'macro',
+      label: 'Macro',
+      score: Math.round(asset.macro_score),
+      summary: asset.macro_label || 'Macro context from the active workspace.',
+      tone: toneForScore(asset.macro_score),
+    },
+    {
+      key: 'market',
+      label: 'Market',
+      score: Math.round(asset.market_score),
+      summary: asset.market_label || 'Market evidence and flow confirmation.',
+      tone: toneForScore(asset.market_score),
+    },
+    {
+      key: 'technical',
+      label: 'Technical',
+      score: Math.round(asset.technical_score),
+      summary: asset.technical_label || 'Trend and momentum confirmation.',
+      tone: toneForScore(asset.technical_score),
+    },
+    {
+      key: 'setup',
+      label: 'Setup',
+      score: Math.round(asset.setup_score),
+      summary: stateForAsset(asset),
+      tone: toneForScore(asset.setup_score),
+    },
+  ];
+
+  return (
+    <View style={styles.evidenceGrid}>
+      {sections.map((section) => (
+        <View
+          key={section.key}
+          style={[
+            styles.evidenceCard,
+            { backgroundColor: colors.backgroundSoft, borderColor: colors.border },
+          ]}
+        >
+          <View style={styles.evidenceTop}>
+            <Text style={styles.evidenceLabel}>{section.label}</Text>
+            <StatusChip compact label={String(section.score)} tone={section.tone} />
+          </View>
+          <Text style={[styles.evidenceText, { color: colors.textMuted }]}>{section.summary}</Text>
+        </View>
+      ))}
+    </View>
+  );
+}
+
+function AnalysisEvidenceSections({
+  asset,
+  workspaceAsset,
+}: {
+  asset: MobileOverviewAsset;
+  workspaceAsset?: WorkspaceAssetResponse;
+}) {
+  const { language } = useAppPreferences();
+  const sections = buildEvidenceSections(workspaceAsset);
+
+  if (sections.length === 0) {
+    return (
+      <InsightCard
+        label="Analysis"
+        title={translate(language, 'analysis.evidenceUnavailableHeadline')}
+        body={translate(language, 'analysis.evidenceUnavailableBody')}
+        tone="warning"
+      />
+    );
+  }
+
+  return (
+    <View style={styles.analysisSection}>
+      {sections.map((section, index) => (
+        <AnalysisEvidenceSectionCard
+          key={section.key}
+          section={section}
+          isLastSection={index === sections.length - 1}
+        />
+      ))}
+    </View>
+  );
+}
+
+function AnalysisEvidenceSectionCard({
+  isLastSection,
+  section,
+}: {
+  isLastSection: boolean;
+  section: {
+    key: string;
+    title: string;
+    score: number;
+    summary: string;
+    rows: Array<{ label: string; value: string; development: string; assessment: string; tone: StatusTone }>;
+  };
+}) {
+  const { appearance } = useAppPreferences();
+  const colors = preferenceColors(appearance);
+
+  return (
+    <CardShell emphasis="standard" flat style={styles.workspaceBlendSurface}>
+      <View style={styles.sectionTop}>
+        <View>
+          <Text style={styles.kicker}>{section.title} evidence</Text>
+          <View style={styles.evidenceSectionTitleRow}>
+            <Text style={[styles.workspaceTitle, { color: colors.text }]}>{section.title}</Text>
+            <View
+              style={[
+                styles.evidenceScorePill,
+                {
+                  backgroundColor: `${colorForTone(toneForScore(section.score))}12`,
+                },
+              ]}
+            >
+              <Text style={[styles.evidenceScorePillText, { color: colorForTone(toneForScore(section.score)) }]}>
+                {section.score}/100
+              </Text>
+            </View>
+          </View>
+          <Text style={[styles.workspaceSubtitle, { color: colors.textMuted }]}>{section.summary}</Text>
+        </View>
+      </View>
+
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.evidenceTimeframeRow}
+        style={styles.evidenceTimeframeRail}
+      >
+          {['Day', 'Week', 'Month', 'Quarter'].map((item, index) => (
+            <View
+              key={item}
+              style={[
+                styles.evidenceTimeframeChip,
+                index === 0
+                  ? [
+                      styles.evidenceTimeframeChipActive,
+                      { backgroundColor: `${colors.accent}10`, borderColor: `${colors.accent}24` },
+                    ]
+                  : { borderColor: colors.borderSubtle, backgroundColor: 'transparent' },
+              ]}
+            >
+              <Text style={index === 0 ? styles.evidenceTimeframeChipActiveText : [styles.evidenceTimeframeChipText, { color: colors.textDim }]}>{item}</Text>
+            </View>
+          ))}
+      </ScrollView>
+
+      <View style={[styles.evidenceTable, { borderColor: colors.borderSubtle }]}>
+        {section.rows.map((row, index) => (
+          <View
+            key={`${section.key}-${row.label}`}
+            style={[
+              styles.evidenceMobileRow,
+              index < section.rows.length - 1 && { borderBottomColor: colors.borderSubtle, borderBottomWidth: 1 },
+              index === section.rows.length - 1 && isLastSection && styles.evidenceLastRow,
+            ]}
+          >
+            <View style={styles.evidenceMobileTop}>
+              <Text style={[styles.evidenceMobileLabel, { color: colors.text }]}>{row.label}</Text>
+              <Text style={[styles.evidenceMobileValue, { color: colors.text }]}>{row.value}</Text>
+            </View>
+            <Text style={[styles.evidenceMobileAssessment, { color: colors.textMuted }]}>{row.assessment}</Text>
+            <View style={styles.evidenceMobileBottom}>
+              <StatusChip compact label={row.development} tone={row.tone} />
+            </View>
+          </View>
+        ))}
+      </View>
+    </CardShell>
+  );
+}
+
+function HistoricalForwardReturnsCard({
+  asset,
+  rows,
+}: {
+  asset: MobileOverviewAsset;
+  rows: ForwardReturnChartResponse[];
+}) {
+  const { appearance } = useAppPreferences();
+  const { language } = useAppPreferences();
+  const colors = preferenceColors(appearance);
+  const matrix = buildForwardReturnMatrix(rows);
+
+  if (!matrix) {
+    return (
+      <InsightCard
+        label={`${asset.symbol} · Market`}
+        title={translate(language, 'analysis.forwardReturnsUnavailableHeadline')}
+        body={translate(language, 'analysis.forwardReturnsUnavailableBody')}
+        tone="warning"
+      />
+    );
+  }
+
+  return (
+    <CardShell emphasis="standard" flat style={styles.workspaceBlendSurface}>
+      <View>
+        <Text style={styles.kicker}>{asset.symbol} · Market</Text>
+        <Text style={[styles.workspaceTitle, { color: colors.text }]}>Historical forward returns</Text>
+        <Text style={[styles.workspaceSubtitle, { color: colors.textMuted }]}>
+          Compare recurring returns by week, month, quarter and year.
+        </Text>
+      </View>
+
+      <View style={styles.forwardTabs}>
+        {['Week', 'Month', 'Quarter', 'Year'].map((tab, index) => (
+          <View
+            key={tab}
+            style={[
+              styles.forwardTab,
+              index === 1 ? styles.forwardTabActive : { borderColor: colors.border, backgroundColor: colors.surface },
+            ]}
+          >
+            <Text style={index === 1 ? styles.forwardTabActiveText : [styles.forwardTabText, { color: colors.textDim }]}>{tab}</Text>
+          </View>
+        ))}
+      </View>
+
+      <View style={[styles.forwardMatrix, { borderColor: colors.borderSubtle }]}>
+        <View style={[styles.forwardMatrixHeader, { borderBottomColor: colors.borderSubtle }]}>
+          <Text style={[styles.forwardMatrixHeadCell, styles.forwardYearCell]}>Year</Text>
+          {matrix.months.map((month) => (
+            <Text key={month} style={styles.forwardMatrixHeadCell}>{month}</Text>
+          ))}
+          <Text style={styles.forwardMatrixHeadCell}>Avg.</Text>
+        </View>
+        {matrix.rows.map((row, rowIndex) => (
+          <View key={row.label} style={[styles.forwardMatrixRow, rowIndex < matrix.rows.length - 1 && { borderBottomColor: colors.borderSubtle, borderBottomWidth: 1 }]}>
+            <Text style={[styles.forwardMatrixYear, { color: colors.text }]}>{row.label}</Text>
+            {row.values.map((value, index) => (
+              <View
+                key={`${row.label}-${index}`}
+                style={[
+                  styles.forwardMatrixValueCell,
+                  value === null
+                    ? { backgroundColor: colors.surfaceMuted }
+                    : value >= 0
+                      ? styles.forwardPositiveCell
+                      : styles.forwardNegativeCell,
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.forwardMatrixValueText,
+                    {
+                      color:
+                        value === null
+                          ? colors.textDim
+                          : value >= 0
+                            ? '#166534'
+                            : '#991B1B',
+                    },
+                  ]}
+                >
+                  {value === null ? '—' : formatSignedPercent(value)}
+                </Text>
+              </View>
+            ))}
+            <Text style={[styles.forwardMatrixAvg, { color: colors.text }]}>{formatSignedPercent(row.average)}</Text>
+          </View>
+        ))}
+      </View>
+    </CardShell>
+  );
+}
+
 function CompactLiveChart({
   loading,
   onTimeframeChange,
@@ -223,26 +1047,51 @@ function CompactLiveChart({
   timeframe: Timeframe;
 }) {
   const { appearance } = useAppPreferences();
+  const { language } = useAppPreferences();
   const colors = preferenceColors(appearance);
 
   return (
-    <View style={{ borderBottomWidth: 0.5, borderColor: colors.border, paddingVertical: theme.spacing.md }}>
+    <CardShell emphasis="standard" flat style={styles.workspaceBlendSurface}>
       <View style={styles.chartHeader}>
         <View>
-          <Text style={styles.chartLabel}>Compacte live chart</Text>
+          <Text style={styles.kicker}>Tradingview chart</Text>
           <Text style={[styles.chartTitle, { color: colors.text }]}>{symbol}USD</Text>
         </View>
-        <StatusChip label="RSI · MA200 · VOL" tone="accent" />
+        <Text style={[styles.inlineMetaLabel, { color: colors.textDim }]}>{timeframe.toUpperCase()}</Text>
       </View>
 
       <SegmentedControl
+        compact
         items={timeframes.map((item) => ({ key: item, label: item }))}
         selected={timeframe}
         onChange={(value) => onTimeframeChange(value as Timeframe)}
       />
 
-      {loading ? <LoadingSkeletonCard /> : <NativeCandleChart overlays={overlays} points={points} />}
-    </View>
+      {loading ? (
+        <LoadingSkeletonCard />
+      ) : points.length > 1 ? (
+        <NativeCandleChart overlays={overlays} points={points} />
+      ) : (
+        <InsightCard
+          label="Chart"
+          title={
+            language === 'nl'
+              ? 'Er zijn nog geen live chartpunten beschikbaar.'
+              : language === 'de'
+                ? 'Es sind noch keine Live-Chartpunkte verfügbar.'
+                : 'No live chart points are available yet.'
+          }
+          body={
+            language === 'nl'
+              ? 'De backend gaf nog niet genoeg markthistorie terug om de analysis chart te tekenen.'
+              : language === 'de'
+                ? 'Das Backend hat noch nicht genug Markthistorie zurückgegeben, um den Analyse-Chart zu zeichnen.'
+                : 'The backend has not returned enough market history yet to draw the analysis chart.'
+          }
+          tone="warning"
+        />
+      )}
+    </CardShell>
   );
 }
 
@@ -549,10 +1398,10 @@ function buildAssetIntelligence(
   const latestChange = readNumber(latest, ['change_24h'], asset.change_24h ?? 0);
   const setupScore = Math.round(asset.setup_score);
   const technicalScore = Math.round(asset.technical_score);
-  const posture = postureForAsset(asset, latestChange);
+  const posture = String(asset.posture ?? '').trim() || postureForAsset(asset, latestChange);
   const setupState = setupStateForAsset(asset);
-  const riskState = riskStateForAsset(asset, latestChange);
-  const headline = headlineForAsset(asset, latestChange);
+  const riskState = String(asset.risk_state ?? '').trim() || riskStateForAsset(asset, latestChange);
+  const headline = String(asset.structure ?? '').trim() || headlineForAsset(asset, latestChange);
   const aiCopy = conciseInsight(insightText(insight?.market_insight));
   const finnText =
     aiCopy ||
@@ -576,6 +1425,42 @@ function buildAssetIntelligence(
   };
 }
 
+function buildFallbackOverviewAsset(
+  symbol: string,
+  latest?: MarketLatestResponse,
+  workspaceAsset?: WorkspaceAssetResponse,
+): MobileOverviewAsset | null {
+  if (!latest && !workspaceAsset) {
+    return null;
+  }
+
+  const quote = workspaceAsset?.quote;
+  const marketScore = readWorkspaceScore(workspaceAsset?.categories?.market?.score?.score) ?? 50;
+  const macroScore = readWorkspaceScore(workspaceAsset?.categories?.macro?.score?.score) ?? 50;
+  const technicalScore = readWorkspaceScore(workspaceAsset?.categories?.technical?.score?.score) ?? 50;
+  const combinedScore = readWorkspaceScore(workspaceAsset?.combined?.score) ?? Math.round((marketScore + macroScore + technicalScore) / 3);
+  const latestRecord = latest && typeof latest === 'object' ? latest : undefined;
+  const resolvedSymbol = String(workspaceAsset?.symbol || latestRecord?.symbol || symbol || 'BTC').toUpperCase();
+
+  return {
+    symbol: resolvedSymbol,
+    price: readNumber(latestRecord, ['price'], typeof quote?.price === 'number' ? quote.price : 0) || null,
+    change_24h:
+      readNumber(latestRecord, ['change_24h'], typeof quote?.change_24h === 'number' ? quote.change_24h : 0) || 0,
+    macro_score: macroScore,
+    technical_score: technicalScore,
+    market_score: marketScore,
+    setup_score: combinedScore,
+    macro_label: workspaceAsset?.categories?.macro?.score?.status ?? null,
+    technical_label: workspaceAsset?.categories?.technical?.score?.status ?? null,
+    market_label: workspaceAsset?.categories?.market?.score?.status ?? null,
+    posture: workspaceAsset?.combined?.status ?? null,
+    structure: null,
+    conviction: combinedScore,
+    risk_state: null,
+  };
+}
+
 function buildChartOverlays(asset: MobileOverviewAsset, intelligence: AssetIntelligence): ChartOverlay[] {
   if (!asset.price) return [];
   const price = asset.price;
@@ -591,6 +1476,30 @@ function buildChartOverlays(asset: MobileOverviewAsset, intelligence: AssetIntel
   ];
 }
 
+function deriveSuggestedPlan(source: unknown, asset: MobileOverviewAsset) {
+  const setups = Array.isArray((source as { active_setups?: unknown[] } | undefined)?.active_setups)
+    ? ((source as { active_setups?: unknown[] }).active_setups ?? [])
+    : Array.isArray((source as { data?: unknown[] } | undefined)?.data)
+      ? ((source as { data?: unknown[] }).data ?? [])
+      : [];
+
+  const match = setups.find((item) => {
+    if (!item || typeof item !== 'object') return false;
+    const symbol = String((item as Record<string, unknown>).symbol ?? '').toUpperCase();
+    return !symbol || symbol === asset.symbol;
+  }) as Record<string, unknown> | undefined;
+
+  if (!match) return null;
+
+  const score = Math.round(Number(match.score ?? match.setup_score ?? asset.setup_score ?? 0));
+  return {
+    action: String(match.action ?? 'Review'),
+    name: String(match.setup_name ?? match.name ?? 'Best matching plan'),
+    score,
+    summary: `Setup score ${score}. Review setup, strategy and bot readiness before execution.`,
+  };
+}
+
 function buildChartPoints(source: MarketChartPoint[], asset: MobileOverviewAsset, timeframe: Timeframe): ChartPoint[] {
   const realPoints = source
     .filter((point) => point.close || point.open)
@@ -602,84 +1511,7 @@ function buildChartPoints(source: MarketChartPoint[], asset: MobileOverviewAsset
       rsi: 38 + ((index * 9) % 38),
       volume: Number(point.volume ?? 1000 + index * 140),
     }));
-
-  const base = realPoints.length > 3 ? realPoints : syntheticPoints(asset);
-  const multiplier = timeframe === '15m' ? 4 : timeframe === '1h' ? 3 : timeframe === '4h' ? 2 : 1;
-
-  if (base.length >= 24) return base;
-
-  return Array.from({ length: 28 }, (_, index) => {
-    const anchor = base[index % base.length];
-    const wave = Math.sin(index / multiplier) * (anchor.close * 0.006);
-    const close = anchor.close + wave;
-    const open = index === 0 ? anchor.open : close - wave * 0.7;
-    return {
-      close,
-      high: Math.max(open, close) + Math.abs(wave) + close * 0.004,
-      low: Math.min(open, close) - Math.abs(wave) - close * 0.004,
-      open,
-      rsi: Math.max(22, Math.min(78, anchor.rsi + Math.sin(index / 2) * 12)),
-      volume: anchor.volume * (0.7 + Math.abs(Math.sin(index / 3))),
-    };
-  });
-}
-
-function fallbackAssets(): MobileOverviewAsset[] {
-  return [
-    {
-      symbol: 'BTC',
-      price: 81040,
-      change_24h: 2.35,
-      macro_score: 64,
-      market_score: 72,
-      technical_score: 58,
-      setup_score: 38,
-      macro_label: 'Neutral',
-      market_label: 'Risk-on',
-      technical_label: 'Compression',
-    },
-    {
-      symbol: 'ETH',
-      price: 2278.2,
-      change_24h: -2.62,
-      macro_score: 58,
-      market_score: 61,
-      technical_score: 42,
-      setup_score: 35,
-      macro_label: 'Neutral',
-      market_label: 'Mixed',
-      technical_label: 'Weak Structure',
-    },
-    {
-      symbol: 'SOL',
-      price: 94.51,
-      change_24h: -3.01,
-      macro_score: 55,
-      market_score: 59,
-      technical_score: 44,
-      setup_score: 39,
-      macro_label: 'Neutral',
-      market_label: 'Mixed',
-      technical_label: 'Weak Structure',
-    },
-  ];
-}
-
-function syntheticPoints(asset: MobileOverviewAsset): ChartPoint[] {
-  const base = asset.price ?? (asset.symbol === 'BTC' ? 80500 : asset.symbol === 'ETH' ? 2275 : 94);
-  return Array.from({ length: 12 }, (_, index) => {
-    const wave = Math.sin(index / 1.6) * base * 0.018;
-    const close = base + wave + index * base * 0.001;
-    const open = close - Math.cos(index) * base * 0.012;
-    return {
-      close,
-      high: Math.max(open, close) + base * 0.014,
-      low: Math.min(open, close) - base * 0.014,
-      open,
-      rsi: 42 + Math.sin(index / 1.4) * 18,
-      volume: 1000 + Math.abs(Math.sin(index)) * 2200,
-    };
-  });
+  return realPoints;
 }
 
 function stateForAsset(asset: MobileOverviewAsset) {
@@ -774,6 +1606,191 @@ function compositeScore(asset: MobileOverviewAsset) {
   return Math.round((asset.macro_score + asset.market_score + asset.technical_score + asset.setup_score) / 4);
 }
 
+function buildEvidenceSections(workspaceAsset?: WorkspaceAssetResponse) {
+  return buildWorkspaceEvidenceSections(workspaceAsset);
+}
+
+function buildWorkspaceEvidenceSections(workspaceAsset?: WorkspaceAssetResponse) {
+  if (!workspaceAsset?.categories) return [];
+
+  const categoryMap = [
+    {
+      key: 'market',
+      title: 'Market',
+      summaryFallback: 'The market picture remains mixed and needs confirmation.',
+    },
+    {
+      key: 'macro',
+      title: 'Macro',
+      summaryFallback: 'Macro context remains mixed and needs confirmation.',
+    },
+    {
+      key: 'technical',
+      title: 'Technical',
+      summaryFallback: 'Technical picture is workable but not fully confirmed yet.',
+    },
+  ] as const;
+
+  return categoryMap.map((category) => {
+    const payload = workspaceAsset.categories[category.key];
+
+    return {
+      key: category.key,
+      title: category.title,
+      score: readWorkspaceScore(payload?.score?.score) ?? 0,
+      summary: deriveWorkspaceSummary(payload, category.summaryFallback),
+      rows: (payload?.rows ?? []).map((row) => ({
+        label: humanizeIndicatorName(row.name),
+        value: formatWorkspaceValue(row.value),
+        development: deriveWorkspaceDevelopment(row),
+        assessment: deriveWorkspaceAssessment(row),
+        tone: deriveWorkspaceTone(row),
+      })),
+    };
+  });
+}
+
+function readWorkspaceScore(value: unknown) {
+  return typeof value === 'number' && Number.isFinite(value) ? Math.round(value) : null;
+}
+
+function deriveWorkspaceSummary(payload: WorkspaceAssetResponse['categories']['market'] | undefined, fallback: string) {
+  const firstMeaningfulInterpretation = payload?.rows?.find(
+    (row) => typeof row.interpretation === 'string' && row.interpretation.trim(),
+  )?.interpretation;
+  return firstMeaningfulInterpretation?.trim() || fallback;
+}
+
+function deriveWorkspaceDevelopment(row: WorkspaceAssetResponse['categories']['market']['rows'][number]) {
+  const trend = typeof row.trend === 'string' ? row.trend.trim() : '';
+  if (trend) return humanizeTrend(trend);
+
+  const score = typeof row.score === 'number' ? row.score : null;
+  if (score === null) return 'Monitoring';
+  if (score >= 70) return 'Improving';
+  if (score >= 45) return 'Stable';
+  return 'Weakening';
+}
+
+function deriveWorkspaceAssessment(row: WorkspaceAssetResponse['categories']['market']['rows'][number]) {
+  const interpretation = typeof row.interpretation === 'string' ? row.interpretation.trim() : '';
+  const action = typeof row.action === 'string' ? row.action.trim() : '';
+  return interpretation || action || 'No assessment available yet.';
+}
+
+function deriveWorkspaceTone(row: WorkspaceAssetResponse['categories']['market']['rows'][number]): StatusTone {
+  const score = typeof row.score === 'number' ? row.score : null;
+  if (score === null) return 'neutral';
+  return toneForScore(score);
+}
+
+function formatWorkspaceValue(value: unknown) {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    if (Math.abs(value) <= 100 && !Number.isInteger(value)) {
+      return formatSignedPercent(value);
+    }
+    if (Math.abs(value) >= 1000) {
+      return formatCompact(value);
+    }
+    return Number.isInteger(value) ? `${value}` : value.toFixed(2);
+  }
+
+  if (typeof value === 'string' && value.trim()) {
+    return value.trim();
+  }
+
+  return 'n/a';
+}
+
+function humanizeTrend(trend: string) {
+  const normalized = trend.toLowerCase();
+  if (normalized.includes('verbeter') || normalized.includes('improv')) return 'Improving';
+  if (normalized.includes('stab')) return 'Stable';
+  if (normalized.includes('zwak') || normalized.includes('weak')) return 'Weakening';
+  if (normalized.includes('neut')) return 'Neutral';
+  if (normalized.includes('laag')) return 'Low';
+
+  return trend
+    .split(/[_\s-]+/)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ');
+}
+
+function humanizeIndicatorName(name: string) {
+  const dictionary: Record<string, string> = {
+    btc_dominance: 'Bitcoin dominance',
+    change_24h: '24-hour price change',
+    fear_greed_index: 'Fear & greed',
+    ma_200: '200-day moving average',
+    rsi: 'RSI',
+  };
+  if (dictionary[name]) return dictionary[name];
+
+  return name
+    .split(/[_\s-]+/)
+    .filter(Boolean)
+    .map((part) => {
+      if (part.toUpperCase() === 'RSI') return 'RSI';
+      return part.charAt(0).toUpperCase() + part.slice(1);
+    })
+    .join(' ');
+}
+
+function buildForwardReturnMatrix(rows: ForwardReturnChartResponse[]) {
+  if (!rows.length) return null;
+
+  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  const normalizedRows = rows
+    .filter((row) => Array.isArray(row.values) && row.values.some((value: number | null) => typeof value === 'number'))
+    .map((row) => {
+      const values = months.map((_, index) => {
+        const value = row.values[index];
+        return typeof value === 'number' && Number.isFinite(value) ? Number(value.toFixed(1)) : null;
+      });
+      return {
+        average: average(values),
+        label: `${row.year}`,
+        values,
+      };
+    });
+
+  if (!normalizedRows.length) return null;
+
+  const averageRow = months.map((_, index) =>
+    average(normalizedRows.map((row) => row.values[index])),
+  );
+
+  return {
+    months,
+    rows: [
+      ...normalizedRows,
+      {
+        average: average(averageRow),
+        label: 'AVG.',
+        values: averageRow,
+      },
+    ],
+  };
+}
+
+function average(values: Array<number | null>) {
+  const valid = values.filter((value): value is number => typeof value === 'number' && Number.isFinite(value));
+  if (!valid.length) return 0;
+  return Number((valid.reduce((sum, value) => sum + value, 0) / valid.length).toFixed(1));
+}
+
+function assetNameForSymbol(symbol: string) {
+  if (symbol === 'BTC') return 'Bitcoin';
+  if (symbol === 'ETH') return 'Ethereum';
+  if (symbol === 'SOL') return 'Solana';
+  return 'Asset context';
+}
+
+function formatSignedPercent(value: number) {
+  return `${value >= 0 ? '+' : ''}${value.toFixed(1)}%`;
+}
+
 function toneForScore(score: number): StatusTone {
   if (score >= 70) return 'success';
   if (score >= 55) return 'accent';
@@ -828,6 +1845,62 @@ function formatCompact(value: number) {
 }
 
 const styles = StyleSheet.create({
+  analysisActionPrimary: {
+    alignItems: 'center',
+    borderRadius: theme.radius.button,
+    justifyContent: 'center',
+    minHeight: 52,
+    paddingHorizontal: theme.spacing.lg,
+  },
+  analysisActionPrimaryText: {
+    color: theme.colors.white,
+    fontSize: 12,
+    fontWeight: '900',
+    letterSpacing: 1.2,
+    textTransform: 'uppercase',
+  },
+  analysisActionSecondary: {
+    alignItems: 'center',
+    borderRadius: theme.radius.button,
+    borderWidth: 1,
+    justifyContent: 'center',
+    minHeight: 48,
+    paddingHorizontal: theme.spacing.lg,
+  },
+  analysisActionSecondaryText: {
+    fontSize: 12,
+    fontWeight: '800',
+    letterSpacing: 0.4,
+  },
+  analysisActionWrap: {
+    gap: theme.spacing.sm,
+    paddingHorizontal: theme.spacing.lg,
+  },
+  analysisMetaCard: {
+    borderRadius: theme.radius.md,
+    borderWidth: 0.5,
+    flex: 1,
+    gap: 4,
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.md,
+  },
+  analysisMetaLabel: {
+    color: theme.colors.textDim,
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 0.6,
+    textTransform: 'uppercase',
+  },
+  analysisMetaRow: {
+    flexDirection: 'row',
+    gap: theme.spacing.sm,
+    marginTop: theme.spacing.md,
+  },
+  analysisMetaValue: {
+    fontSize: 14,
+    fontWeight: '800',
+    lineHeight: 19,
+  },
   assetIdentity: {
     alignItems: 'center',
     flexDirection: 'row',
@@ -887,20 +1960,90 @@ const styles = StyleSheet.create({
     textAlign: 'right',
   },
   chartCanvas: {
-    backgroundColor: theme.colors.backgroundSoft,
-    borderColor: theme.colors.border,
-    borderRadius: theme.radius.md,
-    borderWidth: 1,
-    height: 258,
-    marginTop: theme.spacing.md,
+    backgroundColor: theme.colors.white,
+    borderTopColor: theme.colors.borderSubtle,
+    borderTopWidth: 1,
+    height: 204,
+    marginTop: 10,
     overflow: 'hidden',
-    paddingLeft: theme.spacing.sm,
-    paddingTop: theme.spacing.sm,
+    paddingLeft: 6,
+    paddingTop: 10,
   },
   chartHeader: {
-    alignItems: 'flex-start',
+    alignItems: 'center',
     flexDirection: 'row',
     gap: theme.spacing.md,
+    justifyContent: 'space-between',
+    marginBottom: 8,
+  },
+  bodyText: {
+    fontSize: 14,
+    fontWeight: '600',
+    lineHeight: 21,
+    marginTop: theme.spacing.md,
+  },
+  compactIntro: {
+    fontSize: 12,
+    fontWeight: '600',
+    lineHeight: 17,
+    marginTop: 3,
+  },
+  cardTitle: {
+    fontSize: theme.typography.cardTitle,
+    fontWeight: '900',
+    marginTop: 4,
+  },
+  contextScoresBadge: {
+    alignItems: 'center',
+    borderRadius: theme.radius.pill,
+    flexShrink: 0,
+    justifyContent: 'center',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+  },
+  contextScoresBadgeText: {
+    fontSize: 10,
+    fontWeight: '900',
+    letterSpacing: 0.8,
+    textTransform: 'uppercase',
+  },
+  contextScoresCard: {
+    borderRadius: 22,
+    borderWidth: 1,
+    paddingHorizontal: 16,
+    paddingVertical: 16,
+  },
+  evidenceCard: {
+    borderRadius: theme.radius.md,
+    borderWidth: 0.5,
+    flexBasis: '48%',
+    gap: theme.spacing.sm,
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.md,
+  },
+  evidenceGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: theme.spacing.sm,
+    marginTop: theme.spacing.md,
+    paddingHorizontal: theme.spacing.lg,
+  },
+  evidenceLabel: {
+    color: theme.colors.textDim,
+    fontSize: theme.typography.label,
+    fontWeight: '900',
+    letterSpacing: 1.2,
+    textTransform: 'uppercase',
+  },
+  evidenceText: {
+    fontSize: 12,
+    fontWeight: '600',
+    lineHeight: 18,
+  },
+  evidenceTop: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: theme.spacing.sm,
     justifyContent: 'space-between',
   },
   chartLabel: {
@@ -912,9 +2055,9 @@ const styles = StyleSheet.create({
   },
   chartTitle: {
     color: theme.colors.text,
-    fontSize: theme.typography.cardTitle,
+    fontSize: 15,
     fontWeight: '900',
-    marginTop: 4,
+    marginTop: 2,
   },
   finnSummary: {
     color: theme.colors.textMuted,
@@ -973,6 +2116,19 @@ const styles = StyleSheet.create({
     alignItems: 'flex-start',
     flexDirection: 'row',
     justifyContent: 'space-between',
+  },
+  inlineMetaLabel: {
+    fontSize: 10,
+    fontWeight: '900',
+    letterSpacing: 0.9,
+    textTransform: 'uppercase',
+  },
+  kicker: {
+    color: theme.colors.textDim,
+    fontSize: 9,
+    fontWeight: '900',
+    letterSpacing: 1.8,
+    textTransform: 'uppercase',
   },
   maDot: {
     backgroundColor: '#60A5FA',
@@ -1037,6 +2193,12 @@ const styles = StyleSheet.create({
     fontWeight: '900',
     letterSpacing: 0,
     marginTop: theme.spacing.lg,
+  },
+  sectionTop: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 10,
+    justifyContent: 'space-between',
   },
   priceGrid: {
     bottom: 76,
@@ -1168,10 +2330,77 @@ const styles = StyleSheet.create({
     fontWeight: '900',
     marginTop: 4,
   },
+  scoreOverviewCard: {
+    borderRadius: 16,
+    borderWidth: 1,
+    flex: 1,
+    gap: 4,
+    minWidth: '47%',
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+  },
+  scoreOverviewGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    columnGap: 10,
+    marginTop: 12,
+    rowGap: 10,
+  },
+  scoreOverviewLabel: {
+    color: theme.colors.textDim,
+    fontSize: 10,
+    fontWeight: '900',
+    letterSpacing: 1,
+    textTransform: 'uppercase',
+  },
+  scoreOverviewValue: {
+    fontSize: 15,
+    fontWeight: '900',
+  },
   scoreStrip: {
     flexDirection: 'row',
     gap: theme.spacing.sm,
     marginTop: theme.spacing.lg,
+  },
+  planBridge: {
+    borderTopWidth: 1,
+  },
+  planBridgeButton: {
+    alignItems: 'center',
+    backgroundColor: theme.colors.accent,
+    borderRadius: theme.radius.button,
+    justifyContent: 'center',
+    minHeight: 40,
+    minWidth: 104,
+    paddingHorizontal: 14,
+  },
+  planBridgeButtonText: {
+    color: theme.colors.white,
+    fontSize: 10,
+    fontWeight: '900',
+    letterSpacing: 0.9,
+    textTransform: 'uppercase',
+  },
+  planBridgeContent: {
+    flexDirection: 'row',
+    gap: 12,
+    paddingHorizontal: 0,
+    paddingVertical: 16,
+  },
+  planBridgeCopy: {
+    flex: 1,
+    gap: 4,
+  },
+  planBridgeScore: {
+    color: theme.colors.text,
+    fontSize: 18,
+    fontWeight: '900',
+  },
+  planBridgeSide: {
+    alignItems: 'flex-end',
+    gap: 4,
+    justifyContent: 'center',
+    minWidth: 74,
   },
   setupPill: {
     alignItems: 'center',
@@ -1347,11 +2576,606 @@ const styles = StyleSheet.create({
     gap: theme.spacing.sm,
     paddingTop: theme.spacing.md,
   },
+  panelDivider: {
+    height: 1,
+    marginBottom: 14,
+    marginTop: 16,
+  },
   volumeBar: {
     borderRadius: 3,
     bottom: 2,
     position: 'absolute',
     width: 8,
+  },
+  activeAnalysisChange: {
+    fontSize: 16,
+    fontWeight: '900',
+  },
+  activeAnalysisAssetLine: {
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 0.3,
+    marginTop: 8,
+    textTransform: 'uppercase',
+  },
+  activeAnalysisLeft: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    flexShrink: 1,
+    flexWrap: 'wrap',
+    gap: 6,
+  },
+  activeAnalysisPrice: {
+    fontSize: 22,
+    fontWeight: '900',
+    letterSpacing: -0.4,
+  },
+  activeAnalysisShell: {
+    borderRadius: 24,
+    borderWidth: 1,
+    marginTop: 2,
+    paddingHorizontal: 14,
+    paddingVertical: 14,
+  },
+  activeAnalysisRow: {
+    gap: 10,
+    marginTop: 10,
+  },
+  activeAnalysisSummary: {
+    flexDirection: 'row',
+    gap: 8,
+    overflow: 'hidden',
+    borderRadius: 18,
+    borderWidth: 1,
+    paddingHorizontal: 10,
+    paddingVertical: 10,
+  },
+  activeAnalysisSummaryItem: {
+    flex: 1,
+    gap: 2,
+    minHeight: 50,
+    minWidth: 0,
+    paddingHorizontal: 6,
+    paddingVertical: 4,
+  },
+  activeAnalysisSummaryLabel: {
+    color: theme.colors.textDim,
+    fontSize: 7.5,
+    fontWeight: '900',
+    letterSpacing: 0.45,
+    textTransform: 'uppercase',
+  },
+  activeAnalysisSummaryValue: {
+    fontSize: 10.5,
+    fontWeight: '900',
+  },
+  activeAnalysisTf: {
+    fontSize: 12,
+    fontWeight: '900',
+    letterSpacing: 1,
+    textTransform: 'uppercase',
+  },
+  activeAnalysisTop: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  analysisSection: {
+    gap: 8,
+  },
+  assetPill: {
+    alignItems: 'center',
+    borderRadius: theme.radius.pill,
+    borderWidth: 1,
+    flexDirection: 'row',
+    gap: theme.spacing.xs,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+  },
+  assetPillText: {
+    fontSize: 12,
+    fontWeight: '900',
+  },
+  evidenceMobileAssessment: {
+    fontSize: 11.5,
+    fontWeight: '500',
+    lineHeight: 17,
+    marginTop: 2,
+  },
+  evidenceMobileBottom: {
+    alignItems: 'flex-end',
+    marginTop: 4,
+  },
+  evidenceMobileLabel: {
+    flex: 1,
+    fontSize: 13.5,
+    fontWeight: '800',
+    lineHeight: 18,
+    paddingRight: 8,
+  },
+  evidenceMobileRow: {
+    paddingHorizontal: 2,
+    paddingVertical: 9,
+  },
+  evidenceLastRow: {
+    paddingBottom: 176,
+  },
+  evidenceMobileTop: {
+    alignItems: 'flex-start',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  evidenceMobileValue: {
+    fontSize: 13.5,
+    fontWeight: '800',
+    marginLeft: 8,
+    textAlign: 'right',
+  },
+  evidenceScorePill: {
+    alignItems: 'center',
+    borderRadius: theme.radius.pill,
+    justifyContent: 'center',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+  },
+  evidenceScorePillText: {
+    fontSize: 10,
+    fontWeight: '900',
+    letterSpacing: 0.6,
+  },
+  evidenceSectionTitleRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+    marginTop: 4,
+  },
+  evidenceTable: {
+    borderTopWidth: 1,
+    marginTop: 8,
+    overflow: 'hidden',
+  },
+  evidenceTimeframeRail: {
+    marginTop: 6,
+  },
+  evidenceTimeframeChip: {
+    borderRadius: theme.radius.pill,
+    borderWidth: 1,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+  },
+  evidenceTimeframeChipActive: {
+    backgroundColor: theme.colors.accentSoft,
+    borderColor: '#1D4ED880',
+  },
+  evidenceTimeframeChipActiveText: {
+    color: theme.colors.accent,
+    fontSize: 10,
+    fontWeight: '900',
+    letterSpacing: 0.8,
+    textTransform: 'uppercase',
+  },
+  evidenceTimeframeChipText: {
+    fontSize: 10,
+    fontWeight: '900',
+    letterSpacing: 0.8,
+    textTransform: 'uppercase',
+  },
+  evidenceTimeframeRow: {
+    flexDirection: 'row',
+    gap: 6,
+    paddingRight: 36,
+  },
+  forwardMatrix: {
+    borderTopWidth: 1,
+    marginTop: 12,
+    overflow: 'hidden',
+  },
+  forwardMatrixAvg: {
+    flex: 0.8,
+    fontSize: 11,
+    fontWeight: '900',
+    textAlign: 'right',
+  },
+  forwardMatrixHeadCell: {
+    color: theme.colors.textDim,
+    flex: 1,
+    fontSize: 9,
+    fontWeight: '900',
+    letterSpacing: 0.8,
+    textAlign: 'center',
+    textTransform: 'uppercase',
+  },
+  forwardMatrixHeader: {
+    flexDirection: 'row',
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 9,
+  },
+  forwardMatrixRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 9,
+  },
+  forwardMatrixValueCell: {
+    alignItems: 'center',
+    borderRadius: theme.radius.sm,
+    flex: 1,
+    justifyContent: 'center',
+    minHeight: 30,
+  },
+  forwardMatrixValueText: {
+    fontSize: 10,
+    fontWeight: '900',
+  },
+  forwardMatrixYear: {
+    flex: 1.1,
+    fontSize: 11,
+    fontWeight: '900',
+  },
+  forwardNegativeCell: {
+    backgroundColor: '#FEE2E2',
+  },
+  forwardPositiveCell: {
+    backgroundColor: '#DCFCE7',
+  },
+  forwardTab: {
+    borderRadius: theme.radius.pill,
+    borderWidth: 1,
+    minWidth: 76,
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: 10,
+  },
+  forwardTabActive: {
+    backgroundColor: '#F8FAFC',
+    borderColor: theme.colors.borderStrong,
+  },
+  forwardTabActiveText: {
+    color: theme.colors.text,
+    fontSize: 11,
+    fontWeight: '900',
+    letterSpacing: 1,
+    textAlign: 'center',
+    textTransform: 'uppercase',
+  },
+  forwardTabText: {
+    fontSize: 11,
+    fontWeight: '900',
+    letterSpacing: 1,
+    textAlign: 'center',
+    textTransform: 'uppercase',
+  },
+  forwardTabs: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+    marginTop: 12,
+  },
+  forwardYearCell: {
+    flex: 1.1,
+    textAlign: 'left',
+  },
+  missionCard: {
+    borderRadius: 22,
+    borderWidth: 1,
+    paddingHorizontal: 16,
+    paddingVertical: 15,
+  },
+  queueCard: {
+    borderRadius: 18,
+    borderWidth: 1,
+    gap: 6,
+    minHeight: 102,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    width: '48.3%',
+  },
+  queueCardBody: {
+    fontSize: 12,
+    fontWeight: '600',
+    lineHeight: 17,
+  },
+  queueCardLabel: {
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  queueCardTop: {
+    alignItems: 'flex-start',
+    gap: 4,
+  },
+  queueCardValue: {
+    fontSize: 22,
+    fontWeight: '900',
+  },
+  sectionLead: {
+    flex: 1,
+    minWidth: 0,
+    paddingRight: 8,
+  },
+  sectionMetaBadge: {
+    flexShrink: 0,
+    marginTop: 0,
+  },
+  sectionMetaBadgeText: {
+    marginTop: 0,
+  },
+  sectionMetaPill: {
+    alignItems: 'center',
+    borderRadius: theme.radius.pill,
+    justifyContent: 'center',
+    minHeight: 26,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+  },
+  queueGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+    justifyContent: 'space-between',
+    marginTop: 10,
+  },
+  queueSurface: {
+    marginTop: 10,
+  },
+  updatedMeta: {
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  watchlistAssetBlock: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    flexShrink: 1,
+    gap: 10,
+  },
+  watchlistActiveMarker: {
+    borderRadius: theme.radius.pill,
+    height: 10,
+    width: 10,
+  },
+  watchlistAssetText: {
+    gap: 2,
+  },
+  watchlistChange: {
+    fontSize: 12,
+    fontWeight: '800',
+    textAlign: 'right',
+  },
+  watchlistDot: {
+    borderRadius: theme.radius.pill,
+    height: 12,
+    width: 12,
+  },
+  watchlistGroupChip: {
+    borderRadius: theme.radius.pill,
+    paddingHorizontal: theme.spacing.sm,
+    paddingVertical: 6,
+  },
+  watchlistGroupChipActive: {
+    backgroundColor: theme.colors.accentSoft,
+    borderColor: '#1D4ED880',
+  },
+  watchlistGroupChipActiveText: {
+    color: theme.colors.accent,
+    fontSize: 10,
+    fontWeight: '900',
+    letterSpacing: 0.8,
+    textTransform: 'uppercase',
+  },
+  watchlistGroupChipText: {
+    fontSize: 10,
+    fontWeight: '900',
+    letterSpacing: 0.8,
+    textTransform: 'uppercase',
+  },
+  watchlistGroupRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+  },
+  watchlistMetaLeft: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  watchlistMetaRight: {
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  watchlistName: {
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  watchlistPrice: {
+    fontSize: 16,
+    fontWeight: '900',
+    textAlign: 'right',
+  },
+  watchlistPriceBlock: {
+    alignItems: 'flex-end',
+    gap: 4,
+    marginLeft: 12,
+  },
+  watchlistRow: {
+    gap: 10,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+  },
+  watchlistRowBottom: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingLeft: 16,
+  },
+  watchlistRowTop: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  watchlistScore: {
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  watchlistSymbol: {
+    fontSize: 17,
+    fontWeight: '900',
+  },
+  watchlistTable: {
+    borderTopWidth: 1,
+    marginHorizontal: 0,
+    marginTop: 12,
+    overflow: 'hidden',
+  },
+  watchlistTop: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  watchlistTopLeft: {
+    gap: 6,
+  },
+  workflowRail: {
+    marginTop: 10,
+  },
+  workflowStepBody: {
+    fontSize: 10.5,
+    fontWeight: '600',
+    lineHeight: 15,
+  },
+  workflowIconTile: {
+    alignItems: 'center',
+    borderRadius: 12,
+    height: 34,
+    justifyContent: 'center',
+    width: 34,
+  },
+  workflowSteps: {
+    paddingRight: 34,
+  },
+  workflowStepCard: {
+    borderRadius: 18,
+    borderWidth: 1,
+    flexDirection: 'row',
+    gap: 10,
+    minHeight: 74,
+    paddingHorizontal: 11,
+    paddingVertical: 11,
+    width: 224,
+  },
+  workflowStepCopy: {
+    flex: 1,
+    gap: 3,
+    justifyContent: 'center',
+  },
+  workflowStepTitle: {
+    color: theme.colors.accent,
+    fontSize: 12,
+    fontWeight: '900',
+  },
+  workspaceChipRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginTop: 12,
+  },
+  workspaceGreeting: {
+    fontSize: 14,
+    fontWeight: '600',
+    marginTop: 8,
+  },
+  workspaceHeadline: {
+    fontSize: 15,
+    fontWeight: '900',
+    lineHeight: 22,
+    marginTop: 6,
+  },
+  workspacePrimaryAction: {
+    alignItems: 'center',
+    backgroundColor: theme.colors.accent,
+    borderRadius: theme.radius.button,
+    marginTop: 12,
+    paddingHorizontal: 15,
+    paddingVertical: 12,
+  },
+  workspacePrimaryActionWide: {
+    alignSelf: 'stretch',
+  },
+  workspacePrimaryActionText: {
+    color: theme.colors.white,
+    fontSize: 11,
+    fontWeight: '900',
+    letterSpacing: 0.9,
+    textTransform: 'uppercase',
+  },
+  workspacePanelDivider: {
+    height: 1,
+    marginBottom: 14,
+    marginTop: 14,
+  },
+  workspaceBlendSurface: {
+    marginHorizontal: 0,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+  },
+  workspaceSurface: {
+    borderRadius: 26,
+    marginHorizontal: 0,
+    paddingHorizontal: 8,
+    paddingVertical: 14,
+  },
+  workspaceSecondaryAction: {
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    borderRadius: theme.radius.button,
+    borderWidth: 1,
+    marginTop: 12,
+    paddingHorizontal: theme.spacing.lg,
+    paddingVertical: 11,
+  },
+  workspaceSecondaryActionText: {
+    fontSize: 12,
+    fontWeight: '900',
+    letterSpacing: 0.8,
+    textTransform: 'uppercase',
+  },
+  workspaceSubtitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    lineHeight: 19,
+    marginTop: 6,
+  },
+  workspaceSupport: {
+    fontSize: 13,
+    fontWeight: '600',
+    marginTop: 10,
+  },
+  workspaceTonePill: {
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    borderRadius: theme.radius.pill,
+    flexDirection: 'row',
+    gap: 6,
+    maxWidth: '100%',
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+  },
+  workspaceTonePillDot: {
+    borderRadius: theme.radius.pill,
+    height: 5,
+    width: 5,
+  },
+  workspaceTonePillText: {
+    fontSize: 8.5,
+    fontWeight: '900',
+    letterSpacing: 0.8,
+    textTransform: 'uppercase',
+  },
+  workspaceTitle: {
+    fontSize: 15,
+    fontWeight: '900',
+    marginTop: 3,
   },
   wick: {
     borderRadius: 2,

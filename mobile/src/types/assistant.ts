@@ -49,12 +49,20 @@ export type AssistantAction =
       symbol?: string;
       params?: Record<string, unknown>;
       description?: string;
+      action_id?: string;
+      id?: string;
+      label?: string;
+      requires_confirmation?: boolean;
     }
   | {
       type: 'bundle';
       actions: AssistantAction[];
       symbol?: string;
       params?: Record<string, unknown>;
+      action_id?: string;
+      id?: string;
+      label?: string;
+      requires_confirmation?: boolean;
     };
 
 export type AssistantDraft = {
@@ -75,6 +83,7 @@ export type AssistantEnvelope = {
   intent?: string;
   flow?: string;
   action?: AssistantAction | null;
+  actions?: AssistantAction[] | null;
   draft?: AssistantDraft | null;
   state?: AssistantConversationState | null;
   reasoning?: AssistantReasoning | null;
@@ -83,6 +92,7 @@ export type AssistantEnvelope = {
   risk_summary?: string | null;
   next_best_action?: string | null;
   review_reason?: string | null;
+  can_confirm?: boolean;
 };
 
 export type AssistantFeedItem =

@@ -5,19 +5,21 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { CardShell } from '../components/cards/CardShell';
 import { InsightCard } from '../components/cards/InsightCard';
-import { AssetContextHeader } from '../components/layout/AssetContextHeader';
 import { LoadingSkeletonCard } from '../components/layout/LoadingSkeletonCard';
 import { ScreenContainer } from '../components/layout/ScreenContainer';
-import { SectionHeader } from '../components/layout/SectionHeader';
 import { StatusChip } from '../components/layout/StatusChip';
+import { TodayWithFinnCard } from '../components/workspace/TodayWithFinnCard';
 import { SegmentedControl } from '../components/layout/SegmentedControl';
+import { WorkspaceHeroSection } from '../components/workspace/WorkspaceHeroSection';
 import { StatusTone, theme } from '../constants/theme';
+import { localizedBackendText, translate, translateFinnTag } from '../i18n';
 import { triggerHaptic } from '../utils/haptics';
 import { useFinnOverlay } from '../contexts/FinnOverlayContext';
 import { useApiResource } from '../hooks/useApiResource';
 import type { MainTabParamList } from '../navigation/MainTabNavigator';
 import { preferenceColors, useAppPreferences } from '../preferences/AppPreferencesProvider';
-import { MobileReportHighlight, MobileReportResponse, ReportResponse, intelligenceApi } from '../services/tradamindApi';
+import type { AppLanguage } from '../preferences/appLocale';
+import { MobileOverviewResponse, MobileReportHighlight, MobileReportResponse, ReportResponse, intelligenceApi, mobileApi } from '../services/tradamindApi';
 import { trackAssistantEvent } from '../services/assistantAnalytics';
 
 type ReportPeriod = 'daily' | 'weekly' | 'monthly' | 'quarterly';
@@ -69,13 +71,6 @@ type ReportCompanion =
       type: 'bot';
     };
 
-const periods: Array<{ id: ReportPeriod; label: string; short: string }> = [
-  { id: 'daily', label: 'Dagrapport', short: 'D' },
-  { id: 'weekly', label: 'Weekrapport', short: 'W' },
-  { id: 'monthly', label: 'Maandrapport', short: 'M' },
-  { id: 'quarterly', label: 'Kwartaalrapport', short: 'Q' },
-];
-
 export function ReportScreen() {
   const navigation = useNavigation<NavigationProp<MainTabParamList>>();
   const route = useRoute<RouteProp<MainTabParamList, 'Report'>>();
@@ -83,8 +78,14 @@ export function ReportScreen() {
   const [period, setPeriod] = useState<ReportPeriod>('daily');
   const activeSymbol = route.params?.symbol ?? 'BTC';
   const notificationType = route.params?.notificationType;
-  const { appearance } = useAppPreferences();
+  const { appearance, language } = useAppPreferences();
   const colors = preferenceColors(appearance);
+  const periods: Array<{ id: ReportPeriod; label: string; short: string }> = [
+    { id: 'daily', label: translate(language, 'report.period.daily'), short: 'D' },
+    { id: 'weekly', label: translate(language, 'report.period.weekly'), short: 'W' },
+    { id: 'monthly', label: translate(language, 'report.period.monthly'), short: 'M' },
+    { id: 'quarterly', label: translate(language, 'report.period.quarterly'), short: 'Q' },
+  ];
 
   useEffect(() => {
     trackAssistantEvent({
@@ -130,12 +131,16 @@ export function ReportScreen() {
     fallbackData: {},
     fetcher: fetchReport,
   });
+  const fetchOverview = useCallback(() => mobileApi.overview(activeSymbol), [activeSymbol]);
+  const overviewResource = useApiResource<MobileOverviewResponse | undefined>({
+    fallbackData: undefined,
+    fetcher: fetchOverview,
+  });
 
   const report = useMemo(
-    () => mapMobileReport(reportResource.data.mobile, period, reportResource.data.full),
-    [period, reportResource.data],
+    () => mapMobileReport(reportResource.data.mobile, period, language, reportResource.data.full),
+    [language, period, reportResource.data],
   );
-
   async function changePeriod(nextPeriod: ReportPeriod) {
     await triggerHaptic('selection');
     setPeriod(nextPeriod);
@@ -144,14 +149,22 @@ export function ReportScreen() {
   return (
     <ScreenContainer
       edgeToEdge={true}
-      refreshing={reportResource.refreshing}
-      onRefresh={reportResource.refresh}
+      refreshing={reportResource.refreshing || overviewResource.refreshing}
+      onRefresh={async () => {
+        await Promise.all([reportResource.refresh(), overviewResource.refresh()]);
+      }}
     >
-      <AssetContextHeader asset={activeSymbol} context="Reports intelligence" updatedAt={report.updatedAt} />
-      <SectionHeader
-        label="Report"
-        title="Tradamind intelligence"
-        description="Compacte conclusie bovenin, volledige report reader eronder voor de desktop-inhoud op mobiel."
+      <ReflectionTodayHero
+        activeSymbol={activeSymbol}
+        onAskFinn={() =>
+          openFinn({
+            prefill: `Translate the current ${period} report for ${activeSymbol} into conclusion, main risk and next safe step.`,
+            source: 'reflection-today',
+            symbol: activeSymbol,
+          })
+        }
+        briefing={overviewResource.data?.finn_briefing}
+        report={report}
       />
 
       {notificationType ? (
@@ -176,17 +189,25 @@ export function ReportScreen() {
         />
       ) : null}
 
+      {reportResource.loading ? (
+        <LoadingSkeletonCard />
+      ) : (
+        <ReflectionSummaryGrid report={report} />
+      )}
+
       <SegmentedControl
         items={periods.map((item) => ({ key: item.id, label: item.label }))}
         selected={period}
         onChange={(value) => changePeriod(value as ReportPeriod)}
       />
 
-      {reportResource.loading ? (
-        <LoadingSkeletonCard />
-      ) : (
-        <ReportHero report={report} />
-      )}
+      {!reportResource.loading && report.highlights.length > 0 ? (
+        <View style={styles.highlights}>
+          {report.highlights.slice(0, 3).map((highlight, index) => (
+            <HighlightCard key={`${highlight.category}-${highlight.name}-${index}`} highlight={highlight} />
+          ))}
+        </View>
+      ) : null}
 
       <View style={styles.readerHeader}>
         <View>
@@ -197,8 +218,8 @@ export function ReportScreen() {
       </View>
 
       <View style={styles.reader}>
-        {report.fullSections.map((section) => (
-          <ReportSectionCard key={section.title} section={section} />
+        {report.fullSections.map((section, index) => (
+          <ReportSectionCard key={`${section.title}-${index}`} section={section} />
         ))}
       </View>
 
@@ -213,15 +234,130 @@ export function ReportScreen() {
         />
       ) : null}
 
-      {report.isFallback ? (
+      {report.isUnavailable ? (
         <InsightCard
-          label="Fallback"
-          title="Report gebruikt tijdelijk voorbeeldcontext."
-          body="De mobiele report API gaf geen bruikbaar rapport terug. De layout blijft testbaar met fallbackdata."
+          label="Report"
+          title={translate(language, 'report.unavailableHeadline')}
+          body={translate(language, 'report.unavailableBody')}
           tone="warning"
         />
       ) : null}
     </ScreenContainer>
+  );
+}
+
+function ReflectionTodayHero({
+  activeSymbol,
+  briefing,
+  onAskFinn,
+  report,
+}: {
+  activeSymbol: string;
+  briefing?: MobileOverviewResponse['finn_briefing'];
+  onAskFinn: () => void;
+  report: MappedReport;
+}) {
+  const { language } = useAppPreferences();
+  const warningCount = report.highlights.filter((item) => item.tone === 'danger' || item.tone === 'warning').length;
+  const confidenceLabel =
+    report.scores.find((item) => item.label.toLowerCase().includes('combined')) ||
+    report.scores[0];
+  const tags = [
+    { label: translateFinnTag(language, report.conclusionTitle), tone: report.overallTone },
+    { label: report.periodLabel, tone: 'accent' as StatusTone },
+    confidenceLabel ? { label: translate(language, 'common.confidence', { count: confidenceLabel.value }), tone: confidenceLabel.tone } : null,
+    { label: translate(language, 'common.sections', { count: report.fullSections.length }), tone: 'neutral' as StatusTone },
+  ].filter(Boolean) as Array<{ label: string; tone: StatusTone }>;
+  const queueItems = [
+    {
+      key: 'sections',
+      label: translate(language, 'queue.label.sections'),
+      value: report.fullSections.length,
+      body: translate(language, 'queue.body.fullReportBlocks'),
+    },
+    {
+      key: 'highlights',
+      label: translate(language, 'queue.label.highlights'),
+      value: report.highlights.length,
+      body: translate(language, 'queue.body.topItemsSurfaced'),
+    },
+    {
+      key: 'risks',
+      label: translate(language, 'queue.label.risks'),
+      value: warningCount,
+      body: translate(language, 'queue.body.warningsAndFlags'),
+    },
+    {
+      key: 'reading',
+      label: translate(language, 'queue.label.reading'),
+      value: `${report.readingMinutes}m`,
+      body: translate(language, 'queue.body.estimatedTimeToFinish'),
+    },
+  ];
+
+  const support = report.isUnavailable
+    ? translate(language, 'report.unavailableBody')
+    : translate(language, 'report.risksNeedAttention', { count: warningCount });
+
+  return (
+    <WorkspaceHeroSection>
+      <TodayWithFinnCard
+        headline={localizedBackendText(
+          language,
+          briefing?.summary?.trim(),
+          report.isUnavailable ? translate(language, 'report.unavailableHeadline') : translate(language, 'finn.noBriefingReady'),
+        )}
+        support={support}
+        tags={tags}
+        primaryActionLabel={translate(language, 'finn.askAboutThisReport')}
+        onPrimaryAction={onAskFinn}
+        queueItems={queueItems}
+        queueStatusLabel={translate(language, 'common.itemsOpen', { count: Number(queueItems[0]?.value ?? 0) })}
+      />
+    </WorkspaceHeroSection>
+  );
+}
+
+function ReflectionWorkspaceHero({
+  activeSymbol,
+  onAskFinn,
+  report,
+}: {
+  activeSymbol: string;
+  onAskFinn: () => void;
+  report: MappedReport;
+}) {
+  const { appearance } = useAppPreferences();
+  const colors = preferenceColors(appearance);
+
+  return (
+    <View style={styles.summaryGridWrap}>
+      <View style={styles.summaryTop}>
+        <View style={styles.summaryCopy}>
+          <Text style={styles.heroLabel}>Reflection briefing</Text>
+          <Text style={[styles.heroTitle, { color: colors.text }]}>{activeSymbol} {report.periodLabel}</Text>
+          <Text style={[styles.notificationBody, { color: colors.textMuted }]}>{report.headline}</Text>
+        </View>
+        <StatusChip label={report.periodLabel} tone={report.overallTone} />
+      </View>
+      <View style={styles.summaryGrid}>
+        <View style={[styles.summaryCard, { borderColor: colors.border, backgroundColor: colors.surface }]}>
+          <Text style={[styles.summaryLabel, { color: colors.textDim }]}>Reading</Text>
+          <Text style={[styles.summaryValue, { color: colors.text }]}>{report.readingMinutes} min</Text>
+        </View>
+        <View style={[styles.summaryCard, { borderColor: colors.border, backgroundColor: colors.surface }]}>
+          <Text style={[styles.summaryLabel, { color: colors.textDim }]}>Sections</Text>
+          <Text style={[styles.summaryValue, { color: colors.text }]}>{report.fullSections.length}</Text>
+        </View>
+      </View>
+      <View style={styles.heroFooter}>
+        <Text style={[styles.integrity, { color: colors.textDim }]}>Integrity check voltooid</Text>
+        <Text style={[styles.generated, { color: colors.textDim }]}>Update: {report.generatedLabel}</Text>
+      </View>
+      <Pressable onPress={onAskFinn} style={styles.reportAction}>
+        <Text style={styles.reportActionText}>Ask FINN to translate this report</Text>
+      </Pressable>
+    </View>
   );
 }
 
@@ -233,7 +369,7 @@ type MappedReport = {
     title: string;
     tone: StatusTone;
   }>;
-  isFallback: boolean;
+  isUnavailable: boolean;
   periodLabel: string;
   readingMinutes: number;
   dateLabel: string;
@@ -255,26 +391,35 @@ type MappedReport = {
   }>;
 };
 
-function ReportHero({ report }: { report: MappedReport }) {
+function ReflectionSummaryGrid({ report }: { report: MappedReport }) {
   const { appearance } = useAppPreferences();
   const colors = preferenceColors(appearance);
+  const items = [
+    { label: 'Conclusion', value: report.conclusionTitle, tone: report.overallTone },
+    { label: 'Market', value: report.marketAnalysis, tone: 'accent' as const },
+    { label: 'Outlook', value: report.outlook, tone: 'warning' as const },
+    { label: 'Read time', value: `${report.readingMinutes} min`, tone: 'neutral' as const },
+    ...report.scores.slice(0, 4).map((score) => ({
+      label: score.label,
+      value: String(score.value),
+      tone: score.tone,
+    })),
+  ];
 
   return (
-    <View style={{ paddingVertical: theme.spacing.md, paddingHorizontal: theme.spacing.lg }}>
-      <View style={styles.heroTop}>
-        <View>
-          <Text style={styles.heroLabel}>System rapportage</Text>
-          <Text style={[styles.heroTitle, { color: colors.text }]}>{report.periodLabel}</Text>
-        </View>
-        <StatusChip label={report.overallTone === 'danger' ? 'Review' : 'Ready'} tone={report.overallTone} />
-      </View>
-
-      <Text style={[styles.heroHeadline, { color: colors.text }]}>{report.headline}</Text>
-      <Text style={[styles.heroDate, { color: colors.textMuted }]}>Periode: {report.dateLabel}</Text>
-
-      <View style={[styles.heroFooter, { borderTopColor: colors.border }]}>
-        <Text style={[styles.integrity, { color: colors.textDim }]}>Integrity check voltooid</Text>
-        <Text style={[styles.generated, { color: colors.textDim }]}>Update: {report.generatedLabel}</Text>
+    <View style={styles.summaryGridWrap}>
+      <View style={styles.summaryGrid}>
+        {items.map((item, index) => (
+          <View
+            key={`${item.label}-${index}`}
+            style={[styles.summaryCard, { borderColor: colors.border, backgroundColor: colors.surface }]}
+          >
+            <Text style={[styles.summaryLabel, { color: colors.textDim }]}>{item.label}</Text>
+            <Text style={[styles.summaryValue, { color: colorForTone(item.tone) }]} numberOfLines={4}>
+              {item.value}
+            </Text>
+          </View>
+        ))}
       </View>
     </View>
   );
@@ -349,6 +494,7 @@ function ReportSectionCard({
 
   return (
     <View style={{ paddingVertical: theme.spacing.md, paddingHorizontal: theme.spacing.lg }}>
+      <View style={[styles.readerCard, { borderColor: colors.border, backgroundColor: colors.surface }]}>
       <View style={styles.reportSectionHeader}>
         <View>
           <Text style={[styles.reportSectionLabel, { color: colors.textDim }]}>{section.label}</Text>
@@ -372,6 +518,7 @@ function ReportSectionCard({
           ))}
         </View>
       ) : null}
+      </View>
     </View>
   );
 }
@@ -390,11 +537,10 @@ function MarketCompanionCard({ companion }: { companion: Extract<ReportCompanion
 
   return (
     <View style={{ 
-      paddingVertical: theme.spacing.md, 
-      borderBottomWidth: 0.5,
+      paddingVertical: theme.spacing.md,
+      borderTopWidth: 0.5,
       borderColor: colors.border,
       marginTop: theme.spacing.md,
-      marginHorizontal: theme.spacing.lg,
     }}>
       <Text style={[styles.companionTitle, { color: colors.text }]}>Marktanalyse</Text>
 
@@ -414,8 +560,8 @@ function MarketCompanionCard({ companion }: { companion: Extract<ReportCompanion
       </View>
 
       <View style={[styles.companionScoreGrid, { borderTopColor: colors.border }]}>
-        {companion.scores.map((score) => (
-          <View key={score.label} style={{ flex: 1, minWidth: '45%', gap: 2 }}>
+        {companion.scores.map((score, index) => (
+          <View key={`${score.label}-${index}`} style={{ flex: 1, minWidth: '45%', gap: 2 }}>
             <Text style={{ fontSize: 10, color: colors.textDim, fontWeight: '700', letterSpacing: 0.5 }}>{score.label.toUpperCase()}</Text>
             <Text style={{ fontSize: 14, color: colorForTone(score.tone), fontWeight: '700' }}>{score.value}</Text>
           </View>
@@ -431,11 +577,10 @@ function IndicatorCompanionCard({ companion }: { companion: Extract<ReportCompan
 
   return (
     <View style={{ 
-      paddingVertical: theme.spacing.md, 
-      borderBottomWidth: 0.5,
+      paddingVertical: theme.spacing.md,
+      borderTopWidth: 0.5,
       borderColor: colors.border,
       marginTop: theme.spacing.md,
-      marginHorizontal: theme.spacing.lg,
     }}>
       <Text style={[styles.companionTitle, { color: colors.text }]}>{companion.title}</Text>
       <View style={styles.indicatorList}>
@@ -459,11 +604,10 @@ function SetupCompanionCard({ companion }: { companion: Extract<ReportCompanion,
 
   return (
     <View style={{ 
-      paddingVertical: theme.spacing.md, 
-      borderBottomWidth: 0.5,
+      paddingVertical: theme.spacing.md,
+      borderTopWidth: 0.5,
       borderColor: colors.border,
       marginTop: theme.spacing.md,
-      marginHorizontal: theme.spacing.lg,
     }}>
       <Text style={[styles.companionTitle, { color: colors.text }]}>Optimale Setup</Text>
       
@@ -500,11 +644,10 @@ function StrategyCompanionCard({ companion }: { companion: Extract<ReportCompani
 
   return (
     <View style={{ 
-      paddingVertical: theme.spacing.md, 
-      borderBottomWidth: 0.5,
+      paddingVertical: theme.spacing.md,
+      borderTopWidth: 0.5,
       borderColor: colors.border,
       marginTop: theme.spacing.md,
-      marginHorizontal: theme.spacing.lg,
     }}>
       <Text style={[styles.companionTitle, { color: colors.text }]}>Actieve Strategie</Text>
       <Text style={[styles.companionPrimary, { color: colors.text }]}>{companion.name}</Text>
@@ -546,11 +689,10 @@ function BotCompanionCard({ companion }: { companion: Extract<ReportCompanion, {
 
   return (
     <View style={{ 
-      paddingVertical: theme.spacing.md, 
-      borderBottomWidth: 0.5,
+      paddingVertical: theme.spacing.md,
+      borderTopWidth: 0.5,
       borderColor: colors.border,
       marginTop: theme.spacing.md,
-      marginHorizontal: theme.spacing.lg,
     }}>
       <Text style={[styles.companionTitle, { color: colors.text }]}>Handelsactie</Text>
       <Text style={[styles.companionPrimary, { color: colors.text }]}>{companion.botName}</Text>
@@ -585,119 +727,160 @@ function BotCompanionCard({ companion }: { companion: Extract<ReportCompanion, {
 function mapMobileReport(
   report: MobileReportResponse | undefined,
   period: ReportPeriod,
+  language: AppLanguage,
   fullReport?: ReportResponse,
 ): MappedReport {
-  if (!report || report._status === 'pending') return fallbackReport(period);
+  let hydratedReport: MobileReportResponse | undefined;
+  if (report && report._status !== 'pending') {
+    hydratedReport = report;
+  } else if (fullReport && hasUsableFullReport(fullReport)) {
+    hydratedReport = buildMobileReportFromFullReport(fullReport);
+  }
 
-  const summary = compactText(String(report.executive_summary_compact || ''), 420);
-  const marketAnalysis = compactText(String(report.market_analysis_compact || ''), 380);
-  const outlook = compactText(String(report.outlook_compact || ''), 320);
-  const scores = scoresFromKpis(report.kpi_metrics);
+  if (!hydratedReport) return unavailableReport(period, language);
+
+  const summary = compactText(String(hydratedReport.executive_summary_compact || ''), 420);
+  const marketAnalysis = compactText(String(hydratedReport.market_analysis_compact || ''), 380);
+  const outlook = compactText(String(hydratedReport.outlook_compact || ''), 320);
+  const scores = scoresFromKpis(hydratedReport.kpi_metrics);
   const avgScore = scores.reduce((total, item) => total + item.value, 0) / Math.max(1, scores.length);
   const headline = headlineFromReport(summary, avgScore);
-  const highlights = normalizeHighlights(report.highlights);
-  const fullSections = fullReportSections(fullReport, report);
+  const highlights = normalizeHighlights(hydratedReport.highlights);
+  const fullSections = fullReportSections(fullReport, hydratedReport);
 
   return {
     conclusionTitle: conclusionTitle(avgScore),
-    dateLabel: report.report_date || dateRange(report.period_start, report.period_end) || 'Recent',
+    dateLabel: hydratedReport.report_date || dateRange(hydratedReport.period_start, hydratedReport.period_end) || 'Recent',
     fullSections,
-    generatedLabel: timeLabel(report.generated_at),
+    generatedLabel: timeLabel(hydratedReport.generated_at),
     headline,
     highlights,
-    isFallback: false,
+    isUnavailable: false,
     marketAnalysis,
     overallTone: toneForScore(avgScore),
     outlook,
-    periodLabel: periodLabel(period),
+    periodLabel: periodLabel(period, language),
     readingMinutes: readingMinutes(fullSections),
     scores,
-    summary: summary || 'FINN heeft het rapport geladen, maar er is geen compacte samenvatting beschikbaar.',
-    updatedAt: timeLabel(report.generated_at),
+    summary: summary || '',
+    updatedAt: timeLabel(hydratedReport.generated_at),
   };
 }
 
-function fallbackReport(period: ReportPeriod): MappedReport {
-  const highlights = [{ category: 'System', name: 'Geen data', score: null, interpretation: 'Geen report data beschikbaar', tone: 'neutral' as const }];
+function hasUsableFullReport(fullReport: ReportResponse | undefined) {
+  if (!fullReport) return false;
+  return Boolean(
+    readReportText(fullReport, [
+      'executive_summary',
+      'summary',
+      'market_analysis',
+      'market_overview',
+      'outlook',
+      'strategic_lessons',
+      'macro_context',
+      'macro_trends',
+      'technical_analysis',
+      'technical_structure',
+    ]) || readReportNumber(fullReport, ['macro_score', 'technical_score', 'market_score', 'setup_score']),
+  );
+}
+
+function buildMobileReportFromFullReport(fullReport: ReportResponse): MobileReportResponse {
+  const highlights = [
+    ...reportHighlightsFromField(fullReport, 'market_indicator_highlights', 'market'),
+    ...reportHighlightsFromField(fullReport, 'macro_indicator_highlights', 'macro'),
+    ...reportHighlightsFromField(fullReport, 'technical_indicator_highlights', 'technical'),
+  ];
 
   return {
-    conclusionTitle: 'Geduld blijft de hoofdactie',
-    dateLabel: 'Recent',
-    fullSections: [
-      {
-        companions: [
-          {
-            change: 0.4,
-            price: 81187,
-            scores: [
-              { label: 'Macro', value: 68, tone: 'accent' },
-              { label: 'Technical', value: 71, tone: 'success' },
-              { label: 'Market', value: 74, tone: 'success' },
-              { label: 'Setup', value: 63, tone: 'warning' },
-            ],
-            type: 'market',
-            volume: 31897671988,
-          },
-        ],
-        label: 'Overview',
-        paragraphs: splitReportParagraphs(
-          'The morning read favors patience: market structure is supportive, setup confirmation is incomplete, and portfolio exposure is already meaningful.',
-        ),
-        title: 'Dagoverzicht',
-        tone: 'accent',
-      },
-      {
-        companions: [
-          {
-            matchLabel: 'Beste match',
-            name: 'SOL Setup',
-            score: 63,
-            symbol: 'SOL',
-            timeframe: '1w',
-            topSetups: [],
-            type: 'setup',
-          },
-        ],
-        label: 'Setup',
-        paragraphs: splitReportParagraphs('Fallback setup-context zodat de report companion card zichtbaar blijft tijdens offline testen.'),
-        title: 'Setup validatie',
-        tone: 'warning',
-      },
-      {
-        label: 'Outlook',
-        paragraphs: splitReportParagraphs('Vraag FINN om dit rapport te vertalen naar setup- en risicocontext.'),
-        title: 'Vooruitblik',
-        tone: 'warning',
-      },
-    ],
-    generatedLabel: new Date().toLocaleTimeString(),
-    headline: 'Constructive, not urgent',
+    active_strategy: fullReport.active_strategy,
+    best_setup: fullReport.best_setup,
+    bot_snapshot: fullReport.bot_snapshot,
+    executive_summary_compact: compactText(
+      readReportText(fullReport, ['executive_summary', 'summary']),
+      420,
+    ),
+    generated_at:
+      readStringField(fullReport, ['generated_at', 'created_at']) || null,
     highlights,
-    isFallback: true,
-    marketAnalysis: 'Market structure is supportive, but setup confirmation remains incomplete.',
+    kpi_metrics: {
+      change_24h: readReportNumber(fullReport, ['change_24h', 'price_change_24h']) ?? 0,
+      macro_score: readReportNumber(fullReport, ['macro_score']) ?? 0,
+      market_score: readReportNumber(fullReport, ['market_score']) ?? 0,
+      price: readReportNumber(fullReport, ['price', 'bitcoin_price']) ?? 0,
+      setup_score: readReportNumber(fullReport, ['setup_score']) ?? 0,
+      technical_score: readReportNumber(fullReport, ['technical_score']) ?? 0,
+      volume: readReportNumber(fullReport, ['volume', 'total_volume']) ?? 0,
+    },
+    market_analysis_compact: compactText(
+      readReportText(fullReport, ['market_analysis', 'market_overview']),
+      380,
+    ),
+    outlook_compact: compactText(
+      readReportText(fullReport, ['outlook', 'strategic_lessons']),
+      320,
+    ),
+    period_end: readStringField(fullReport, ['period_end']) || null,
+    period_start: readStringField(fullReport, ['period_start']) || null,
+    report_date: readStringField(fullReport, ['report_date']) || null,
+    top_setups: readArray(fullReport.top_setups),
+    watchlist: readArray(fullReport.watchlist),
+  };
+}
+
+function reportHighlightsFromField(
+  fullReport: ReportResponse,
+  field: string,
+  fallbackCategory: string,
+): MobileReportHighlight[] {
+  return readArray(fullReport[field])
+    .flatMap((item) => {
+      const record = readRecord(item);
+      if (!record) return [];
+      const rawValue = readField(record, ['value', 'reading', 'current']);
+      const value =
+        typeof rawValue === 'string' || typeof rawValue === 'number' || rawValue === null
+          ? rawValue
+          : undefined;
+      return {
+        category: readStringField(record, ['category']) || fallbackCategory,
+        interpretation:
+          readStringField(record, ['interpretation', 'explanation', 'uitleg', 'advies']) || null,
+        name: readStringField(record, ['name', 'indicator']) || null,
+        score: readNumericField(record, ['score']),
+        value,
+      } satisfies MobileReportHighlight;
+    })
+}
+
+function unavailableReport(period: ReportPeriod, language: AppLanguage): MappedReport {
+  return {
+    conclusionTitle: 'Unavailable',
+    dateLabel: '-',
+    fullSections: [],
+    generatedLabel: '-',
+    headline: '',
+    highlights: [],
+    isUnavailable: true,
+    marketAnalysis: '',
     overallTone: 'warning',
-    outlook: 'Vraag FINN om dit rapport te vertalen naar setup- en risicocontext.',
-    periodLabel: periodLabel(period),
-    readingMinutes: 1,
-    scores: [
-      { label: 'Macro', value: 68, tone: 'accent' },
-      { label: 'Technical', value: 71, tone: 'success' },
-      { label: 'Market', value: 74, tone: 'success' },
-      { label: 'Setup', value: 63, tone: 'warning' },
-    ],
-    summary:
-      'The morning read favors patience: market structure is supportive, setup confirmation is incomplete, and portfolio exposure is already meaningful.',
-    updatedAt: new Date().toLocaleTimeString(),
+    outlook: '',
+    periodLabel: periodLabel(period, language),
+    readingMinutes: 0,
+    scores: [],
+    summary: '',
+    updatedAt: '-',
   };
 }
 
 function scoresFromKpis(kpis?: Record<string, unknown> | null) {
+  if (!kpis) return [];
   const items = [
     ['Macro', readNumber(kpis, 'macro_score')],
     ['Technical', readNumber(kpis, 'technical_score')],
     ['Market', readNumber(kpis, 'market_score')],
     ['Setup', readNumber(kpis, 'setup_score')],
-  ] as const;
+  ].filter((item): item is [string, number] => typeof item[1] === 'number' && Number.isFinite(item[1]));
 
   return items.map(([label, value]) => ({
     label,
@@ -721,9 +904,7 @@ function normalizeHighlights(highlights?: MobileReportHighlight[]) {
       };
     });
 
-  if (normalized.length > 0) return normalized;
-
-  return [{ category: 'System', name: 'Geen data', score: null, interpretation: 'Geen data', tone: 'neutral' as const }];
+  return normalized;
 }
 
 function fullReportSections(fullReport: ReportResponse | undefined, mobileReport: MobileReportResponse) {
@@ -732,35 +913,37 @@ function fullReportSections(fullReport: ReportResponse | undefined, mobileReport
     {
       companions: [marketCompanion(fullReport, mobileReport, scores)].filter(Boolean) as ReportCompanion[],
       label: 'Overview',
-      source: readReportText(fullReport, ['executive_summary']) || String(mobileReport.executive_summary_compact || ''),
+      source: readReportText(fullReport, ['executive_summary', 'summary']) || String(mobileReport.executive_summary_compact || ''),
       title: 'Dagoverzicht',
       tone: 'accent' as StatusTone,
     },
     {
       companions: [indicatorCompanion(fullReport, mobileReport, 'market_indicator_highlights', 'Market Indicator Highlights', 'market')].filter(Boolean) as ReportCompanion[],
       label: 'Market analyse',
-      source: readReportText(fullReport, ['market_analysis']) || String(mobileReport.market_analysis_compact || ''),
+      source:
+        readReportText(fullReport, ['market_analysis', 'market_overview']) ||
+        String(mobileReport.market_analysis_compact || ''),
       title: 'Marktbeeld',
       tone: 'warning' as StatusTone,
     },
     {
       companions: [indicatorCompanion(fullReport, mobileReport, 'technical_indicator_highlights', 'Technical Indicator Highlights', 'technical')].filter(Boolean) as ReportCompanion[],
       label: 'Technical',
-      source: readReportText(fullReport, ['technical_analysis']),
+      source: readReportText(fullReport, ['technical_analysis', 'technical_structure']),
       title: 'Technische analyse',
       tone: 'danger' as StatusTone,
     },
     {
       companions: [indicatorCompanion(fullReport, mobileReport, 'macro_indicator_highlights', 'Macro Indicator Highlights', 'macro')].filter(Boolean) as ReportCompanion[],
       label: 'Macro',
-      source: readReportText(fullReport, ['macro_context']),
+      source: readReportText(fullReport, ['macro_context', 'macro_trends']),
       title: 'Macro context',
       tone: 'neutral' as StatusTone,
     },
     {
       companions: [setupCompanion(fullReport, mobileReport)].filter(Boolean) as ReportCompanion[],
       label: 'Setup',
-      source: readReportText(fullReport, ['setup_validation']),
+      source: readReportText(fullReport, ['setup_validation', 'setup_performance']),
       title: 'Setup validatie',
       tone: 'success' as StatusTone,
     },
@@ -774,13 +957,15 @@ function fullReportSections(fullReport: ReportResponse | undefined, mobileReport
     {
       companions: [botCompanion(fullReport, mobileReport)].filter(Boolean) as ReportCompanion[],
       label: 'Bot',
-      source: readReportText(fullReport, ['bot_strategy']),
+      source: readReportText(fullReport, ['bot_strategy', 'bot_performance']),
       title: 'Bot strategie',
       tone: 'neutral' as StatusTone,
     },
     {
       label: 'Outlook',
-      source: readReportText(fullReport, ['outlook']) || String(mobileReport.outlook_compact || ''),
+      source:
+        readReportText(fullReport, ['outlook', 'strategic_lessons']) ||
+        String(mobileReport.outlook_compact || ''),
       title: 'Vooruitblik',
       tone: 'warning' as StatusTone,
     },
@@ -910,7 +1095,8 @@ function readingMinutes(sections: MappedReport['fullSections']) {
     .split(/\s+/)
     .filter(Boolean).length;
 
-  return Math.max(1, Math.ceil(words / 180));
+  if (words === 0) return 0;
+  return Math.ceil(words / 180);
 }
 
 function readRecord(value: unknown): Record<string, unknown> | undefined {
@@ -1035,11 +1221,11 @@ function conclusionTitle(avgScore: number) {
   return 'Wachten blijft verdedigbaar';
 }
 
-function periodLabel(period: ReportPeriod) {
-  if (period === 'weekly') return 'Weekrapport';
-  if (period === 'monthly') return 'Maandrapport';
-  if (period === 'quarterly') return 'Kwartaalrapport';
-  return 'Dagrapport';
+function periodLabel(period: ReportPeriod, language: AppLanguage) {
+  if (period === 'weekly') return translate(language, 'report.period.weekly');
+  if (period === 'monthly') return translate(language, 'report.period.monthly');
+  if (period === 'quarterly') return translate(language, 'report.period.quarterly');
+  return translate(language, 'report.period.daily');
 }
 
 function dateRange(start?: string | null, end?: string | null) {
@@ -1120,6 +1306,66 @@ function timeLabel(value?: string | null) {
 }
 
 const styles = StyleSheet.create({
+  summaryCard: {
+    borderRadius: theme.radius.md,
+    borderWidth: 0.5,
+    flexBasis: '47.5%',
+    flexGrow: 0,
+    flexShrink: 0,
+    gap: 4,
+    maxWidth: '47.5%',
+    minHeight: 86,
+    minWidth: 0,
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.md,
+  },
+  summaryGrid: {
+    columnGap: theme.spacing.sm,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    rowGap: theme.spacing.sm,
+  },
+  summaryGridWrap: {
+    paddingHorizontal: 8,
+    paddingBottom: theme.spacing.sm,
+  },
+  summaryCopy: {
+    flex: 1,
+  },
+  summaryLabel: {
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 0.5,
+    textTransform: 'uppercase',
+  },
+  summaryTop: {
+    alignItems: 'flex-start',
+    flexDirection: 'row',
+    gap: theme.spacing.md,
+    justifyContent: 'space-between',
+    marginBottom: theme.spacing.md,
+  },
+  summaryValue: {
+    flexShrink: 1,
+    fontSize: 14,
+    fontWeight: '700',
+    lineHeight: 19,
+  },
+  reportAction: {
+    alignItems: 'center',
+    backgroundColor: theme.colors.accent,
+    borderRadius: theme.radius.button,
+    justifyContent: 'center',
+    minHeight: 48,
+    marginTop: theme.spacing.md,
+  },
+  reportActionText: {
+    color: '#ffffff',
+    fontSize: 11,
+    fontWeight: '900',
+    letterSpacing: 0.9,
+    textTransform: 'uppercase',
+  },
   actionPanel: {
     alignItems: 'center',
     borderRadius: theme.radius.lg,
@@ -1511,6 +1757,13 @@ const styles = StyleSheet.create({
   },
   reader: {
     gap: theme.spacing.md,
+  },
+  readerCard: {
+    borderRadius: theme.radius.lg,
+    borderWidth: 0.5,
+    overflow: 'hidden',
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.md,
   },
   readerHeader: {
     alignItems: 'center',

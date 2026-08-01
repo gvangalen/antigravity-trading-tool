@@ -15,8 +15,10 @@ export type MobileUser = {
 export type LoginResponse = {
   success: boolean;
   user: MobileUser;
-  access_token: string;
-  refresh_token: string;
+  access_token?: string;
+  refresh_token?: string;
+  auth_mode?: string | null;
+  token_transport?: string | null;
 };
 
 export type RefreshResponse = {
@@ -29,6 +31,7 @@ export const authApi = {
     return apiClient.request<{ message: string; status: string }>('/api/health', {
       skipAuth: true,
       skipRefresh: true,
+      timeoutMs: 4000,
     });
   },
 
@@ -38,6 +41,7 @@ export const authApi = {
       method: 'POST',
       skipAuth: true,
       skipRefresh: true,
+      timeoutMs: 30000,
     });
   },
 

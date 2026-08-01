@@ -3,7 +3,14 @@
 import "rc-slider/assets/index.css";
 import Slider from "rc-slider";
 
-import React, { useState, useEffect } from "react";
+import React, {
+  forwardRef,
+  useCallback,
+  useEffect,
+  useImperativeHandle,
+  useRef,
+  useState,
+} from "react";
 import { Settings, BarChart3, Save, Info, Rocket, Target } from "lucide-react";
 
 import { saveNewSetup, updateSetup } from "@/lib/api/setups";
@@ -11,12 +18,13 @@ import { useModal } from "@/components/modal/ModalProvider";
 import { useTranslation } from "@/app/providers/I18nProvider";
 import { useAsset } from "@/app/providers/AssetProvider";
 
-export default function SetupForm({ onSaved, mode = "new", initialData = null }) {
+const SetupForm = forwardRef(function SetupForm({ onSaved, mode = "new", initialData = null }, ref) {
   const isEdit = mode === "edit";
   const { t } = useTranslation();
   const copy = t?.setups?.form || {};
   const { showSnackbar } = useModal();
   const { selectedAsset } = useAsset();
+  const formRef = useRef(null);
 
   // ----------------------------------------------------
   // SCORE MEANING
@@ -51,6 +59,7 @@ export default function SetupForm({ onSaved, mode = "new", initialData = null })
   const [technicalScore, setTechnicalScore] = useState([40, 80]);
   const [marketScore, setMarketScore] = useState([20, 60]);
   const [loading, setLoading] = useState(false);
+  const [submitError, setSubmitError] = useState("");
 
   useEffect(() => {
     if (isEdit) return;
@@ -69,7 +78,7 @@ export default function SetupForm({ onSaved, mode = "new", initialData = null })
   // LOAD FOR EDIT
   // ----------------------------------------------------
   useEffect(() => {
-    if (!isEdit || !initialData) return;
+    if (!initialData) return;
 
     setFormData({
       name: initialData.name ?? "",
@@ -96,7 +105,7 @@ export default function SetupForm({ onSaved, mode = "new", initialData = null })
       initialData.min_market_score ?? 20,
       initialData.max_market_score ?? 60,
     ]);
-  }, [isEdit, initialData]);
+  }, [initialData]);
 
   // ----------------------------------------------------
   // HANDLERS
@@ -115,8 +124,16 @@ export default function SetupForm({ onSaved, mode = "new", initialData = null })
   // ----------------------------------------------------
   // SUBMIT
   // ----------------------------------------------------
-  const handleSubmit = async (e) => {
-    e.preventDefault();
+  const submitForm = useCallback(async () => {
+    if (loading) {
+      return { ok: false, reason: "busy" };
+    }
+
+    if (formRef.current && !formRef.current.reportValidity()) {
+      return { ok: false, reason: "validation" };
+    }
+
+    setSubmitError("");
     setLoading(true);
 
     const payload = {
@@ -166,12 +183,40 @@ export default function SetupForm({ onSaved, mode = "new", initialData = null })
       }
 
       onSaved?.(savedSetup?.setup ?? savedSetup ?? null);
+      return { ok: true, data: savedSetup?.setup ?? savedSetup ?? null };
     } catch (err) {
       console.error(err);
+      setSubmitError(copy.saveFailed);
       showSnackbar(copy.saveFailed, "danger");
+      return { ok: false, reason: "api", error: err };
     } finally {
       setLoading(false);
     }
+  }, [
+    copy.saveFailed,
+    copy.savedSuccess,
+    copy.updatedSuccess,
+    formData,
+    isDca,
+    isEdit,
+    isTrade,
+    loading,
+    macroScore,
+    marketScore,
+    onSaved,
+    selectedAsset,
+    showSnackbar,
+    technicalScore,
+  ]);
+
+  useImperativeHandle(ref, () => ({
+    submit: submitForm,
+    isSubmitting: () => loading,
+  }), [loading, submitForm]);
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    await submitForm();
   };
 
   // ----------------------------------------------------
@@ -241,7 +286,7 @@ export default function SetupForm({ onSaved, mode = "new", initialData = null })
   // RENDER
   // ----------------------------------------------------
   return (
-    <form onSubmit={handleSubmit} className="space-y-8">
+    <form ref={formRef} onSubmit={handleSubmit} className="space-y-8">
       {/* BASIS */}
       <div className={sectionClass}>
         {sectionTitle(<Settings size={18} />, copy.basicsTitle)}
@@ -405,15 +450,22 @@ export default function SetupForm({ onSaved, mode = "new", initialData = null })
       </div>
 
       {/* SAVE */}
+      {submitError ? (
+        <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">
+          {submitError}
+        </div>
+      ) : null}
+
       <button
-        id="setup-edit-submit"
         type="submit"
         disabled={loading}
-        className="w-full flex items-center justify-center gap-3 bg-blue-600 hover:bg-blue-700 text-white px-8 py-5 rounded-2xl text-[12px] font-black uppercase tracking-widest transition-all active:scale-95 border-b-4 border-blue-800 active:border-b-0"
+        className="w-full flex items-center justify-center gap-3 bg-blue-600 hover:bg-blue-700 text-white px-8 py-5 rounded-2xl text-[12px] font-black uppercase tracking-widest transition-all active:scale-95 border-b-4 border-blue-800 active:border-b-0 disabled:cursor-not-allowed disabled:opacity-70"
       >
         <Save size={20} />
         {loading ? copy.savingButton : copy.saveButton}
       </button>
     </form>
   );
-}
+});
+
+export default SetupForm;

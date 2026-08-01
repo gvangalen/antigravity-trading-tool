@@ -1,5 +1,5 @@
 import { ReactNode } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { StyleProp, StyleSheet, View, ViewStyle } from 'react-native';
 
 import { theme } from '../../constants/theme';
 import { preferenceColors, useAppPreferences } from '../../preferences/AppPreferencesProvider';
@@ -9,9 +9,16 @@ type CardShellProps = {
   emphasis?: 'primary' | 'standard' | 'muted';
   flat?: boolean;
   edgeToEdge?: boolean;
+  style?: StyleProp<ViewStyle>;
 };
 
-export function CardShell({ children, emphasis = 'standard', flat = false, edgeToEdge = false }: CardShellProps) {
+export function CardShell({
+  children,
+  emphasis = 'standard',
+  flat = false,
+  edgeToEdge = false,
+  style,
+}: CardShellProps) {
   const { appearance } = useAppPreferences();
   const colors = preferenceColors(appearance);
 
@@ -19,13 +26,22 @@ export function CardShell({ children, emphasis = 'standard', flat = false, edgeT
     <View
       style={[
         styles.card,
-        { borderColor: colors.border },
+        {
+          backgroundColor: colors.surface,
+          borderColor: colors.border,
+          shadowColor: appearance === 'light' ? '#0F172A' : '#000000',
+          shadowOpacity: appearance === 'light' ? 0.035 : 0,
+          shadowRadius: appearance === 'light' ? 14 : 0,
+          shadowOffset: { width: 0, height: 6 },
+          elevation: appearance === 'light' ? 1 : 0,
+        },
         emphasis === 'primary' && styles.primary,
         emphasis === 'primary' && { borderColor: colors.borderStrong },
         emphasis === 'muted' && styles.muted,
         emphasis === 'muted' && { borderColor: colors.borderSubtle },
         flat && styles.flat,
         edgeToEdge && styles.edgeToEdge,
+        style,
       ]}
     >
       {children}
@@ -35,20 +51,18 @@ export function CardShell({ children, emphasis = 'standard', flat = false, edgeT
 
 const styles = StyleSheet.create({
   card: {
-    backgroundColor: 'transparent',
     borderColor: theme.colors.border,
-    borderRadius: theme.radius.card,
-    borderWidth: 0.5,
-    padding: theme.spacing.md,
-    marginBottom: theme.spacing.md,
+    borderRadius: 22,
+    borderWidth: 1,
+    marginBottom: 12,
+    padding: 16,
   },
   muted: {
     backgroundColor: 'transparent',
   },
   primary: {
-    backgroundColor: 'transparent',
     borderColor: theme.colors.border,
-    borderWidth: 0.5,
+    borderWidth: 1,
   },
   flat: {
     borderWidth: 0,

@@ -18,9 +18,9 @@ const ActiveIntelligenceContext = createContext<IntelligenceContextValue | null>
 const DEFAULT_CONTEXT: IntelligenceContextState = {
   asset: 'BTC',
   timeframe: '1D',
-  screen: 'Watchlist',
-  page: 'Watchlist',
-  page_type: 'Watchlist',
+  screen: 'Analysis',
+  page: 'Analysis',
+  page_type: 'Analysis',
 };
 
 export function ActiveIntelligenceProvider({ children }: { children: ReactNode }) {

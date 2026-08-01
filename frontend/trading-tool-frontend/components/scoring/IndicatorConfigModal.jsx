@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { createPortal } from "react-dom";
 import {
   CheckCircle2,
   ChevronDown,
@@ -9,11 +8,11 @@ import {
   Check,
   SlidersHorizontal,
   Sparkles,
-  X,
 } from "lucide-react";
 
 import IndicatorScoreEditor from "@/components/scoring/IndicatorScoreEditor";
 import { useModal } from "@/components/modal/ModalProvider";
+import Drawer from "@/components/ui/Drawer";
 import { useTranslation } from "@/app/providers/I18nProvider";
 import {
   getIndicatorConfig,
@@ -278,7 +277,6 @@ export default function IndicatorConfigModal({
   const [draft, setDraft] = useState(null);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [mounted, setMounted] = useState(false);
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [profileContext, setProfileContext] = useState(() => buildProfileContext({}, copy));
   const [selectedConditions, setSelectedConditions] = useState([]);
@@ -367,22 +365,6 @@ export default function IndicatorConfigModal({
       return [...current, conditionId];
     });
   }, []);
-
-  useEffect(() => {
-    setMounted(true);
-    return () => setMounted(false);
-  }, []);
-
-  useEffect(() => {
-    if (!isOpen) return;
-
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-
-    return () => {
-      document.body.style.overflow = previousOverflow;
-    };
-  }, [isOpen]);
 
   useEffect(() => {
     if (!isOpen || !category || !normalizedIndicator) return;
@@ -492,42 +474,31 @@ export default function IndicatorConfigModal({
     showSnackbar,
   ]);
 
-  if (!isOpen || !indicator || !category || !mounted) return null;
+  if (!isOpen || !indicator || !category) return null;
 
-  return createPortal(
-    <div className="fixed inset-0 z-[400] overflow-y-auto bg-slate-950/55 px-4 py-6 backdrop-blur-sm sm:px-6 sm:py-8">
-      <div className="flex min-h-full items-center justify-center">
-        <div className="relative flex max-h-[calc(100vh-3rem)] w-full max-w-5xl flex-col overflow-hidden rounded-[32px] border border-slate-200 bg-white shadow-[0_35px_120px_-35px_rgba(15,23,42,0.55)]">
-          <button
-            type="button"
-            onClick={onClose}
-            className="absolute right-5 top-5 z-10 rounded-2xl p-2 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
-          >
-            <X size={20} />
-          </button>
+  const handleClose = () => {
+    if (saving) return;
+    onClose?.();
+  };
 
-          <div className="border-b border-slate-100 px-6 py-6 sm:px-8">
-            <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-              <div className="max-w-2xl">
-                <div className="text-[10px] font-black uppercase tracking-[0.28em] text-blue-600">
-                  {copy.eyebrow}
-                </div>
-                <h2 className="mt-2 text-3xl font-black tracking-tight text-slate-950">
-                  {indicatorLabel}
-                </h2>
-                <p className="mt-3 text-sm font-medium leading-6 text-slate-500">
-                  {roleModel.description}
-                </p>
-              </div>
-
-              <div className="inline-flex items-center gap-2 self-start rounded-full border border-blue-100 bg-blue-50 px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.22em] text-blue-600">
-                <SlidersHorizontal size={12} />
-                {copy.categoryConfiguration.replace("{category}", categoryLabel)}
-              </div>
-            </div>
+  return (
+    <Drawer
+      isOpen={isOpen}
+      onClose={handleClose}
+      isCloseBlocked={saving}
+      title={indicatorLabel}
+      subtitle={copy.eyebrow}
+      description={roleModel.description}
+      width="max-w-4xl"
+    >
+      <div className="flex h-full flex-col">
+        <div className="flex-1 overflow-y-auto">
+          <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-blue-100 bg-blue-50 px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.22em] text-blue-600">
+            <SlidersHorizontal size={12} />
+            {copy.categoryConfiguration.replace("{category}", categoryLabel)}
           </div>
 
-          <div className="flex-1 overflow-y-auto px-6 py-6 sm:px-8 sm:py-8">
+          <div className="space-y-6">
             {loading || !draft ? (
               <div className="rounded-[28px] border border-slate-200 bg-slate-50 px-6 py-12 text-sm font-semibold text-slate-500">
                 {copy.loading}
@@ -708,36 +679,34 @@ export default function IndicatorConfigModal({
               </div>
             )}
           </div>
+        </div>
+        <div className="mt-6 border-t border-slate-100 pt-5">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="text-sm font-semibold text-slate-500">
+              {summaryText}
+            </div>
 
-          <div className="border-t border-slate-100 px-6 py-5 sm:px-8">
-            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-              <div className="text-sm font-semibold text-slate-500">
-                {summaryText}
-              </div>
-
-              <div className="flex items-center justify-end gap-4">
-                <button
-                  type="button"
-                  onClick={onClose}
-                  disabled={saving}
-                  className="rounded-2xl border border-slate-200 px-5 py-3 text-[11px] font-black uppercase tracking-[0.2em] text-slate-500 transition hover:border-slate-300 hover:text-slate-700 disabled:opacity-50"
-                >
-                  {copy.cancel}
-                </button>
-                <button
-                  type="button"
-                  onClick={handleConfirm}
-                  disabled={saving || !isValidDraft || loading}
-                  className="inline-flex min-w-[220px] items-center justify-center gap-2 rounded-2xl bg-blue-600 px-5 py-3 text-[11px] font-black uppercase tracking-[0.22em] text-white shadow-lg shadow-blue-600/20 transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
-                >
-                  {saving ? copy.saving : actionLabel}
-                </button>
-              </div>
+            <div className="flex items-center justify-end gap-4">
+              <button
+                type="button"
+                onClick={handleClose}
+                disabled={saving}
+                className="rounded-2xl border border-slate-200 px-5 py-3 text-[11px] font-black uppercase tracking-[0.2em] text-slate-500 transition hover:border-slate-300 hover:text-slate-700 disabled:opacity-50"
+              >
+                {copy.cancel}
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirm}
+                disabled={saving || !isValidDraft || loading}
+                className="inline-flex min-w-[220px] items-center justify-center gap-2 rounded-2xl bg-blue-600 px-5 py-3 text-[11px] font-black uppercase tracking-[0.22em] text-white shadow-lg shadow-blue-600/20 transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {saving ? copy.saving : actionLabel}
+              </button>
             </div>
           </div>
         </div>
       </div>
-    </div>,
-    document.body
+    </Drawer>
   );
 }

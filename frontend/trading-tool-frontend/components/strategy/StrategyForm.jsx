@@ -1,6 +1,14 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import {
+  forwardRef,
+  useCallback,
+  useEffect,
+  useImperativeHandle,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { useModal } from "@/components/modal/ModalProvider";
 import { fetchAuth } from "@/lib/api/auth";
 
@@ -8,19 +16,21 @@ import { Wallet, TrendingUp } from "lucide-react";
 import CurveEditor from "@/components/decision/CurveEditor";
 import { useTranslation } from "@/app/providers/I18nProvider";
 
-export default function StrategyForm({
+const StrategyForm = forwardRef(function StrategyForm({
   onSubmit,
   setups = [],
   strategy = null, // The strategy object being edited
   isEdit = false,
   hideSubmit = false,
-}) {
+}, ref) {
   const { t } = useTranslation();
   const copy = t?.strategies?.form || {};
   const { showSnackbar } = useModal();
+  const formRef = useRef(null);
 
   const [error, setError] = useState("");
   const [curves, setCurves] = useState([]);
+  const [saving, setSaving] = useState(false);
 
   /* ================= LOAD CURVES ================= */
 
@@ -230,70 +240,85 @@ export default function StrategyForm({
   }, [isValid, form, isEdit, setupType, isTrade]);
   /* ================= SUBMIT ================= */
 
+  const submitForm = useCallback(async () => {
+    if (saving) {
+      return { ok: false, reason: "busy" };
+    }
+
+    if (formRef.current && !formRef.current.reportValidity()) {
+      return { ok: false, reason: "validation" };
+    }
+
+    if (!isValid) {
+      setError(copy.validationError);
+      return { ok: false, reason: "validation" };
+    }
+
+    setError("");
+    setSaving(true);
+
+    const targets = form.targetsText
+      .split(",")
+      .map((t) => parseFloat(t.trim()))
+      .filter((n) => !Number.isNaN(n));
+
+    const payload = {
+      name: form.name.trim(),
+      setup_id: Number(form.setup_id),
+      base_amount: Number(form.base_amount),
+      execution_mode: form.execution_mode,
+      setup_type: setupType,
+      decision_curve:
+        form.execution_mode === "fixed"
+          ? null
+          : {
+              ...form.decision_curve,
+              name: form.curve_name.trim(),
+            },
+      decision_curve_name:
+        form.execution_mode === "fixed"
+          ? null
+          : form.curve_name.trim(),
+      decision_curve_id:
+        form.selected_curve_id !== "new" && form.selected_curve_id !== "existing"
+          ? Number(form.selected_curve_id)
+          : null,
+      is_active: form.is_active,
+    };
+
+    if (isTrade) {
+      payload.entry = form.entry !== "" ? Number(form.entry) : null;
+      payload.targets = targets;
+      payload.stop_loss = form.stop_loss !== "" ? Number(form.stop_loss) : null;
+    }
+
+    try {
+      await onSubmit(payload);
+      showSnackbar(copy.savedSuccess, "success");
+      return { ok: true, data: payload };
+    } catch (err) {
+      console.error(err);
+      setError(copy.saveFailed);
+      return { ok: false, reason: "api", error: err };
+    } finally {
+      setSaving(false);
+    }
+  }, [copy.saveFailed, copy.savedSuccess, copy.validationError, form, isTrade, isValid, onSubmit, saving, setupType, showSnackbar]);
+
+  useImperativeHandle(ref, () => ({
+    submit: submitForm,
+    isSubmitting: () => saving,
+  }), [saving, submitForm]);
+
   const handleSubmit = async (e) => {
-  e.preventDefault();
-
-  if (!isValid) {
-    setError(copy.validationError);
-    return;
-  }
-
-  const targets = form.targetsText
-    .split(",")
-    .map((t) => parseFloat(t.trim()))
-    .filter((n) => !Number.isNaN(n));
-
-  const payload = {
-    name: form.name.trim(),
-    setup_id: Number(form.setup_id),
-
-    base_amount: Number(form.base_amount),
-    execution_mode: form.execution_mode,
-
-    // 🔥 belangrijk voor backend consistency
-    setup_type: setupType,
-
-    decision_curve:
-      form.execution_mode === "fixed"
-        ? null
-        : {
-            ...form.decision_curve,
-            name: form.curve_name.trim(),
-          },
-
-    decision_curve_name:
-      form.execution_mode === "fixed"
-        ? null
-        : form.curve_name.trim(),
-
-    decision_curve_id:
-      form.selected_curve_id !== "new" && form.selected_curve_id !== "existing"
-        ? Number(form.selected_curve_id)
-        : null,
-
-    is_active: form.is_active,
+    e.preventDefault();
+    await submitForm();
   };
-
-  // 🔥 TRADE velden (fix: geen NaN)
-  if (isTrade) {
-    payload.entry = form.entry !== "" ? Number(form.entry) : null;
-    payload.targets = targets;
-    payload.stop_loss = form.stop_loss !== "" ? Number(form.stop_loss) : null;
-  }
-
-  try {
-    await onSubmit(payload);
-    showSnackbar(copy.savedSuccess, "success");
-  } catch (err) {
-    console.error(err);
-    setError(copy.saveFailed);
-  }
-};
 
   /* ================= UI ================= */
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-6">
+    <form ref={formRef} onSubmit={handleSubmit} className="space-y-6">
       {!isEdit && (
         <h2 className="text-xl font-bold flex items-center gap-2">
           {isDca ? (
@@ -450,10 +475,12 @@ export default function StrategyForm({
       {error && <p className="text-red-500">{error}</p>}
 
       {!hideSubmit && (
-        <button id="strategy-edit-submit" disabled={!isValid} className="btn-primary w-full py-3 text-sm font-black uppercase tracking-widest">
-          {isEdit ? copy.updateButton : copy.saveButton}
+        <button disabled={!isValid || saving} className="btn-primary w-full py-3 text-sm font-black uppercase tracking-widest disabled:cursor-not-allowed disabled:opacity-60">
+          {saving ? copy.saveButton : isEdit ? copy.updateButton : copy.saveButton}
         </button>
       )}
     </form>
   );
-}
+});
+
+export default StrategyForm;

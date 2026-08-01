@@ -35,33 +35,46 @@ export function BotDecisionCard({
 
   return (
     <View style={{ paddingVertical: theme.spacing.md, paddingHorizontal: theme.spacing.lg }}>
-      <View style={styles.header}>
-        <View style={styles.heading}>
-          <Text style={styles.label}>Bot decision</Text>
-          <Text style={[styles.botName, { color: colors.text }]}>{botName}</Text>
+      <CardShell emphasis="standard">
+        <View style={styles.header}>
+          <View style={styles.heading}>
+            <Text style={styles.label}>Automation review</Text>
+            <Text style={[styles.botName, { color: colors.text }]}>{botName}</Text>
+          </View>
+          <StatusChip label={action} tone={tone} />
         </View>
-        <StatusChip label={action} tone={tone} />
-      </View>
-      <View style={styles.summaryRow}>
-        <Metric label="Confidence" value={`${confidence}`} color={palette.color} colors={colors} />
-        <Metric label="Amount" value={amount} color={palette.color} colors={colors} />
-      </View>
-      <View style={{ marginTop: theme.spacing.md, gap: 4 }}>
-        <Text style={{ fontSize: 11, color: colors.warning, fontWeight: '700', letterSpacing: 0.5 }}>GUARDRAIL</Text>
-        <Text style={{ fontSize: 13, color: colors.textSoft, fontWeight: '600' }}>{guardrail}</Text>
-      </View>
-      <Text style={[styles.reason, { color: colors.textMuted }]}>{reason}</Text>
-      <View style={styles.actions}>
-        <Pressable
-          onPress={async () => {
-            await triggerHaptic('impact');
-            onConfirm?.();
-          }}
-          style={({ pressed }) => [styles.primaryButton, { backgroundColor: colors.surfaceMuted, borderColor: colors.borderStrong }, pressed && styles.pressed]}
-        >
-          <Text style={styles.primaryText}>Review action</Text>
-        </Pressable>
-      </View>
+        <View style={styles.summaryRow}>
+          <Metric label="Confidence" value={`${confidence}`} color={palette.color} colors={colors} />
+          <Metric label="Amount" value={amount} color={palette.color} colors={colors} />
+        </View>
+        <View style={[styles.guardrailPanel, { borderColor: colors.border, backgroundColor: colors.surfaceMuted }]}>
+          <Text style={[styles.guardrailKicker, { color: palette.color }]}>Guardrail</Text>
+          <Text style={[styles.guardrailValue, { color: colors.text }]}>{guardrail}</Text>
+          <Text style={[styles.reason, { color: colors.textMuted }]}>{reason}</Text>
+        </View>
+        <View style={styles.actions}>
+          <Pressable
+            onPress={async () => {
+              await triggerHaptic('impact');
+              onConfirm?.();
+            }}
+            style={({ pressed }) => [styles.primaryButton, { backgroundColor: colors.surfaceMuted, borderColor: colors.borderStrong }, pressed && styles.pressed]}
+          >
+            <Text style={styles.primaryText}>Review action</Text>
+          </Pressable>
+          {onAskWhy ? (
+            <Pressable
+              onPress={async () => {
+                await triggerHaptic('selection');
+                onAskWhy();
+              }}
+              style={({ pressed }) => [styles.secondaryButton, { borderColor: colors.borderStrong }, pressed && styles.pressed]}
+            >
+              <Text style={[styles.secondaryText, { color: colors.textSoft }]}>Ask why</Text>
+            </Pressable>
+          ) : null}
+        </View>
+      </CardShell>
     </View>
   );
 }
@@ -106,6 +119,24 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     lineHeight: 20,
     marginTop: 4,
+  },
+  guardrailKicker: {
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 0.6,
+    textTransform: 'uppercase',
+  },
+  guardrailPanel: {
+    borderRadius: theme.radius.md,
+    borderWidth: 0.5,
+    gap: theme.spacing.xs,
+    marginTop: theme.spacing.md,
+    padding: theme.spacing.md,
+  },
+  guardrailValue: {
+    fontSize: 15,
+    fontWeight: '800',
+    lineHeight: 20,
   },
   header: {
     alignItems: 'flex-start',

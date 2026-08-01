@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { forwardRef, useCallback, useImperativeHandle, useState } from "react";
 import { Shield, Zap, Info, CheckCircle2, AlertCircle } from "lucide-react";
 import { useTranslation } from "@/app/providers/I18nProvider";
 
@@ -9,7 +9,7 @@ const EXCHANGES = [
   { id: "bitvavo", name: "Bitvavo", logo: "🏦", descriptionKey: "bitvavoDescription" },
 ];
 
-export default function ExchangeSettingsForm({ onSave, onCancel }) {
+const ExchangeSettingsForm = forwardRef(function ExchangeSettingsForm({ onSave, onCancel, onSaved }, ref) {
   const { t } = useTranslation();
   const copy = t?.botPage?.exchangeSettings || {};
   const [step, setStep] = useState(1);
@@ -22,30 +22,56 @@ export default function ExchangeSettingsForm({ onSave, onCancel }) {
   const [testing, setTesting] = useState(false);
   const [status, setStatus] = useState(null);
 
-  const handleConnect = async () => {
+  const handleConnect = useCallback(async () => {
+    if (testing) {
+      return { ok: false, reason: "busy" };
+    }
+
+    if (!selectedExchange) {
+      const message = copy.selectExchangeValidation || copy.statusError;
+      setStatus({ type: "error", message });
+      return { ok: false, reason: "validation" };
+    }
+
+    if (!String(form.api_key || "").trim() || !String(form.api_secret || "").trim()) {
+      const message = copy.credentialsValidation || copy.statusError;
+      setStatus({ type: "error", message });
+      return { ok: false, reason: "validation" };
+    }
+
     setTesting(true);
     setStatus(null);
     try {
       await onSave({
         exchange_name: selectedExchange.id,
-        ...form
+        ...form,
       });
-      setStatus({
+      const nextStatus = {
         type: "success",
         message: copy.statusSuccess.replace(
           "{exchange}",
           selectedExchange.name
         ),
-      });
+      };
+      setStatus(nextStatus);
+      onSaved?.(nextStatus);
+      return { ok: true };
     } catch (err) {
-      setStatus({
+      const nextStatus = {
         type: "error",
         message: err?.message || copy.statusError,
-      });
+      };
+      setStatus(nextStatus);
+      return { ok: false, reason: "api", error: err };
     } finally {
       setTesting(false);
     }
-  };
+  }, [copy, form, onSave, onSaved, selectedExchange, testing]);
+
+  useImperativeHandle(ref, () => ({
+    submit: handleConnect,
+    isSubmitting: () => testing,
+  }), [handleConnect, testing]);
 
   if (step === 1) {
     return (
@@ -154,7 +180,9 @@ export default function ExchangeSettingsForm({ onSave, onCancel }) {
            {copy.cancel}
          </button>
          <button 
-           onClick={handleConnect}
+           onClick={() => {
+             void handleConnect();
+           }}
            disabled={testing || !form.api_key || !form.api_secret}
            className="flex-[2] bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white py-4 rounded-2xl text-[10px] font-black uppercase tracking-[0.2em] shadow-lg shadow-blue-600/20 transition-all active:scale-95 flex items-center justify-center gap-2"
          >
@@ -168,4 +196,6 @@ export default function ExchangeSettingsForm({ onSave, onCancel }) {
       </div>
     </div>
   );
-}
+});
+
+export default ExchangeSettingsForm;

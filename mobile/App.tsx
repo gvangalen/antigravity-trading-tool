@@ -1,7 +1,7 @@
 import { NavigationContainer, useNavigationContainerRef } from '@react-navigation/native';
 import * as Notifications from 'expo-notifications';
 import { StatusBar } from 'expo-status-bar';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
@@ -9,7 +9,9 @@ import { AuthProvider, useAuth } from './src/auth/AuthProvider';
 import { theme } from './src/constants/theme';
 import { MainTabNavigator, MainTabParamList } from './src/navigation/MainTabNavigator';
 import { AppPreferencesProvider, preferenceColors, useAppPreferences } from './src/preferences/AppPreferencesProvider';
+import { extractBackendAppLanguage } from './src/preferences/appLocale';
 import { LoginScreen } from './src/screens/LoginScreen';
+import { assistantApi } from './src/services/tradamindApi';
 import { normalizeNotificationData, routeForNotification } from './src/services/pushNotifications';
 import { ActiveIntelligenceProvider } from './src/contexts/ActiveIntelligenceContext';
 import { FinnOverlayProvider } from './src/contexts/FinnOverlayContext';
@@ -34,10 +36,39 @@ import { useFinnOverlay } from './src/contexts/FinnOverlayContext';
 
 function AppShell() {
   const navigationRef = useNavigationContainerRef<MainTabParamList>();
-  const { appearance } = useAppPreferences();
+  const { appearance, language, loadingPreferences, setLanguage } = useAppPreferences();
   const { user } = useAuth();
   const { openFinn } = useFinnOverlay();
   const colors = preferenceColors(appearance);
+  const [localeSyncing, setLocaleSyncing] = useState(false);
+
+  useEffect(() => {
+    if (!user) {
+      setLocaleSyncing(false);
+      return;
+    }
+
+    let mounted = true;
+    setLocaleSyncing(true);
+
+    assistantApi
+      .preferences()
+      .then(async (preferences) => {
+        const backendLocale = extractBackendAppLanguage(preferences, language);
+        if (!mounted || backendLocale === language) return;
+        await setLanguage(backendLocale);
+      })
+      .catch(() => undefined)
+      .finally(() => {
+        if (mounted) {
+          setLocaleSyncing(false);
+        }
+      });
+
+    return () => {
+      mounted = false;
+    };
+  }, [language, setLanguage, user]);
 
   useEffect(() => {
     if (!user) return;
@@ -49,6 +80,8 @@ function AppShell() {
       const route = routeForNotification(normalizeNotificationData(rawData));
       if (route.screen === 'FINN') {
         openFinn(route.params);
+      } else if (route.screen === 'Automation') {
+        navigationRef.navigate('Automation', route.params);
       } else if (route.screen === 'Setup') {
         navigationRef.navigate('Setup', route.params);
       } else if (route.screen === 'Report') {
@@ -65,6 +98,14 @@ function AppShell() {
       subscription.remove();
     };
   }, [navigationRef, user]);
+
+  if (loadingPreferences || localeSyncing) {
+    return (
+      <View style={[styles.loading, { backgroundColor: colors.background }]}>
+        <ActivityIndicator color={theme.colors.accent} />
+      </View>
+    );
+  }
 
   return (
     <NavigationContainer

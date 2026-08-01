@@ -1,17 +1,20 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { Zap, Link as LinkIcon, RefreshCcw, ShieldCheck, XCircle } from "lucide-react";
-import { useModal } from "@/components/modal/ModalProvider";
+import { useEffect, useRef, useState } from "react";
+import { Link as LinkIcon, RefreshCcw } from "lucide-react";
 import ExchangeSettingsForm from "@/components/bot/ExchangeSettingsForm";
+import { useModal } from "@/components/modal/ModalProvider";
+import Drawer from "@/components/ui/Drawer";
 import { useTranslation } from "@/app/providers/I18nProvider";
 import { formatCurrency } from "@/lib/i18n";
 
 export default function SystemConnectivity() {
-  const { openConfirm, close: closeModal } = useModal();
+  const { showSnackbar } = useModal();
   const { t, locale } = useTranslation();
   const [exchanges, setExchanges] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+  const exchangeFormRef = useRef(null);
   const copy = t?.dashboard?.systemConnectivity || {};
 
   const fetchExchanges = async () => {
@@ -43,23 +46,15 @@ export default function SystemConnectivity() {
       throw new Error(err.detail || copy.saveError);
     }
     await fetchExchanges();
-    closeModal();
+  };
+
+  const closeDrawer = () => {
+    if (exchangeFormRef.current?.isSubmitting?.()) return;
+    setIsDrawerOpen(false);
   };
 
   const handleOpenSettings = () => {
-    openConfirm({
-      title: copy.manageTitle,
-      statusLabel: exchanges.length > 0 ? copy.statusConnected : copy.statusDisconnected,
-      context: exchanges.length > 0
-        ? copy.contextConnected
-        : copy.contextDisconnected,
-      impact: copy.impact,
-      safety: copy.safety,
-      consequence: copy.consequence,
-      description: <ExchangeSettingsForm onSave={handleSave} onCancel={closeModal} />,
-      icon: <Zap size={20} />,
-      tone: "info"
-    });
+    setIsDrawerOpen(true);
   };
 
   const isConnected = exchanges.length > 0;
@@ -98,6 +93,26 @@ export default function SystemConnectivity() {
           </button>
         )}
       </div>
+
+      <Drawer
+        isOpen={isDrawerOpen}
+        onClose={closeDrawer}
+        isCloseBlocked={() => Boolean(exchangeFormRef.current?.isSubmitting?.())}
+        title={copy.manageTitle}
+        subtitle={exchanges.length > 0 ? copy.statusConnected : copy.statusDisconnected}
+        description={exchanges.length > 0 ? copy.contextConnected : copy.contextDisconnected}
+        width="max-w-2xl"
+      >
+        <ExchangeSettingsForm
+          ref={exchangeFormRef}
+          onSave={handleSave}
+          onCancel={closeDrawer}
+          onSaved={(status) => {
+            showSnackbar(status?.message || copy.statusConnected, "success");
+            setIsDrawerOpen(false);
+          }}
+        />
+      </Drawer>
     </div>
   );
 }

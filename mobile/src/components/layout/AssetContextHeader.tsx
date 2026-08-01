@@ -1,11 +1,7 @@
-import { useNavigation } from '@react-navigation/native';
-import type { NavigationProp } from '@react-navigation/native';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
-import { useAuth } from '../../auth/AuthProvider';
 import { preferenceColors, useAppPreferences } from '../../preferences/AppPreferencesProvider';
 import { theme } from '../../constants/theme';
-import type { MainTabParamList } from '../../navigation/MainTabNavigator';
 import { triggerHaptic } from '../../utils/haptics';
 import { DataFreshnessIndicator } from './DataFreshnessIndicator';
 
@@ -16,64 +12,50 @@ type AssetContextHeaderProps = {
 };
 
 export function AssetContextHeader({ asset, context, updatedAt }: AssetContextHeaderProps) {
-  const navigation = useNavigation<NavigationProp<MainTabParamList>>();
-  const { user } = useAuth();
   const { appearance } = useAppPreferences();
   const colors = preferenceColors(appearance);
-  const initials = userInitials(user?.first_name, user?.last_name, user?.email);
 
   return (
-    <View style={[styles.container, { borderColor: colors.border }]}>
-      <View style={styles.titleBlock}>
-        <Text style={styles.label}>Active context</Text>
-        <Text style={[styles.title, { color: colors.text }]}>{context}</Text>
+    <View
+      style={[
+        styles.container,
+        {
+          backgroundColor: colors.surface,
+          borderColor: colors.border,
+          shadowColor: appearance === 'light' ? '#0F172A' : '#000000',
+          shadowOpacity: appearance === 'light' ? 0.04 : 0,
+          shadowRadius: appearance === 'light' ? 16 : 0,
+          shadowOffset: { width: 0, height: 8 },
+          elevation: appearance === 'light' ? 1 : 0,
+        },
+      ]}
+    >
+      <View style={styles.contextBlock}>
+        <Text style={styles.label}>Live context</Text>
+        <Text style={[styles.contextText, { color: colors.textDim }]} numberOfLines={1}>
+          {context}
+        </Text>
       </View>
-      <View style={styles.actions}>
+      <View style={styles.metaRow}>
         <Pressable
           onPress={() => triggerHaptic('selection')}
           style={({ pressed }) => [
             styles.assetButton,
             { backgroundColor: colors.backgroundSoft, borderColor: colors.border },
-            pressed && styles.pressed
+            pressed && styles.pressed,
           ]}
         >
           <Text style={[styles.asset, { color: colors.text }]}>{asset}</Text>
         </Pressable>
-        <Pressable
-          accessibilityLabel="Open profile settings"
-          onPress={async () => {
-            await triggerHaptic('selection');
-            navigation.navigate('Settings');
-          }}
-          style={({ pressed }) => [
-            styles.avatarButton,
-            { backgroundColor: colors.surfaceMuted, borderColor: colors.borderStrong },
-            pressed && styles.pressed,
-          ]}
-        >
-          <Text style={[styles.avatarText, { color: colors.text }]}>{initials}</Text>
-        </Pressable>
-      </View>
-      <View style={styles.freshness}>
-        <DataFreshnessIndicator updatedAt={updatedAt} />
+        <View style={styles.freshness}>
+          <DataFreshnessIndicator updatedAt={updatedAt} />
+        </View>
       </View>
     </View>
   );
 }
 
-function userInitials(firstName?: string | null, lastName?: string | null, email?: string | null) {
-  const first = firstName?.trim().charAt(0);
-  const last = lastName?.trim().charAt(0);
-  if (first || last) return `${first ?? ''}${last ?? ''}`.toUpperCase();
-  return (email?.trim().charAt(0) || 'U').toUpperCase();
-}
-
 const styles = StyleSheet.create({
-  actions: {
-    alignItems: 'center',
-    flexDirection: 'row',
-    gap: theme.spacing.sm,
-  },
   asset: {
     color: theme.colors.text,
     fontSize: 12,
@@ -87,53 +69,43 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 4,
   },
-  avatarButton: {
-    alignItems: 'center',
-    backgroundColor: theme.colors.surfaceMuted,
-    borderColor: theme.colors.borderStrong,
-    borderRadius: theme.radius.pill,
-    borderWidth: 1,
-    height: 32,
-    justifyContent: 'center',
-    width: 32,
-  },
-  avatarText: {
-    color: theme.colors.textSoft,
-    fontSize: 11,
-    fontWeight: '900',
-  },
   container: {
-    alignItems: 'flex-start',
-    borderColor: theme.colors.border,
-    borderBottomWidth: 0.5,
+    alignItems: 'center',
+    borderRadius: 24,
+    borderWidth: 1,
     flexDirection: 'row',
-    flexWrap: 'wrap',
     gap: theme.spacing.md,
     justifyContent: 'space-between',
-    padding: theme.spacing.md,
+    marginBottom: theme.spacing.md,
+    paddingHorizontal: 18,
+    paddingVertical: 14,
+  },
+  contextBlock: {
+    flex: 1,
+    gap: 2,
+    minWidth: 120,
+  },
+  contextText: {
+    fontSize: 12,
+    fontWeight: '700',
   },
   freshness: {
-    flexBasis: '100%',
+    flexShrink: 1,
   },
   label: {
     color: theme.colors.textDim,
-    fontSize: theme.typography.label,
+    fontSize: 10,
     fontWeight: '900',
-    letterSpacing: 1.6,
+    letterSpacing: 1.2,
     textTransform: 'uppercase',
+  },
+  metaRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: theme.spacing.sm,
   },
   pressed: {
     opacity: 0.82,
     transform: [{ scale: 0.98 }],
-  },
-  title: {
-    color: theme.colors.text,
-    fontSize: theme.typography.cardTitle,
-    fontWeight: '900',
-    marginTop: 3,
-  },
-  titleBlock: {
-    flex: 1,
-    minWidth: 150,
   },
 });

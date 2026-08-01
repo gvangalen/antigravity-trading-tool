@@ -1,7 +1,17 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import {
+  forwardRef,
+  useCallback,
+  useEffect,
+  useImperativeHandle,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { useTranslation } from "@/app/providers/I18nProvider";
+import { useModal } from "@/components/modal/ModalProvider";
+import { actionButtonStyles } from "@/components/ui/actionButtonStyles";
 
 const RISK_PROFILE_ICONS = {
   conservative: "🛡️",
@@ -12,14 +22,45 @@ const RISK_PROFILE_ICONS = {
 /**
  * AddBotForm — Tradamind 2.5 (FINAL)
  */
-export default function AddBotForm({
+const extractErrorMessage = (error, fallback) => {
+  if (error?.body) {
+    try {
+      const parsed = JSON.parse(error.body);
+      if (typeof parsed?.detail === "string" && parsed.detail.trim()) {
+        return parsed.detail.trim();
+      }
+    } catch {
+      // Ignore parse failure and use fallback.
+    }
+  }
+
+  if (typeof error?.message === "string" && error.message.trim()) {
+    return error.message.trim();
+  }
+
+  return fallback;
+};
+
+const AddBotForm = forwardRef(function AddBotForm({
   initialData = null,
   initialValues = null,
   strategies = [],
   onChange,
-}) {
+  onSubmit,
+  onSaved,
+  onCancel,
+  hideActions = true,
+  submitLabel = "",
+  submitBusyLabel = "",
+  cancelLabel = "",
+  successMessage = "",
+  saveFailedMessage = "",
+}, ref) {
   const { t } = useTranslation();
   const copy = t?.botPage?.form || {};
+  const pageCopy = t?.botPage || {};
+  const { showSnackbar } = useModal();
+  const formRef = useRef(null);
 
   const sourceData = initialData ?? initialValues;
   const isEdit = Boolean(sourceData?.id ?? sourceData?.bot_id);
@@ -39,6 +80,8 @@ export default function AddBotForm({
     budget_max_order_eur: 0,
     max_asset_exposure_pct: 100,
   });
+  const [loading, setLoading] = useState(false);
+  const [submitError, setSubmitError] = useState("");
 
   /* =====================================================
      INIT / PREFILL
@@ -112,17 +155,132 @@ export default function AddBotForm({
   const getStrategyType = (s) =>
     (s?.strategy_type || s?.type || "manual").toUpperCase();
 
+  const validateForm = useCallback(() => {
+    if (formRef.current && !formRef.current.reportValidity()) {
+      return {
+        ok: false,
+        message: pageCopy.createValidation || "Vul naam en strategie in voordat je opslaat.",
+      };
+    }
+
+    if (!String(form.name || "").trim() || !form.strategy_id) {
+      return {
+        ok: false,
+        message: pageCopy.createValidation || "Vul naam en strategie in voordat je opslaat.",
+      };
+    }
+
+    const numericFields = [
+      "budget_total_eur",
+      "budget_daily_limit_eur",
+      "budget_min_order_eur",
+      "budget_max_order_eur",
+      "max_asset_exposure_pct",
+    ];
+
+    for (const field of numericFields) {
+      const value = Number(form[field]);
+      if (!Number.isFinite(value) || value < 0) {
+        return {
+          ok: false,
+          message: copy.numericValidation || "Gebruik alleen geldige positieve waarden.",
+        };
+      }
+    }
+
+    if (Number(form.max_asset_exposure_pct) > 100) {
+      return {
+        ok: false,
+        message: copy.assetExposureValidation || "Assetblootstelling mag maximaal 100% zijn.",
+      };
+    }
+
+    return { ok: true };
+  }, [copy.assetExposureValidation, copy.numericValidation, form, pageCopy.createValidation]);
+
+  const submitForm = useCallback(async () => {
+    if (loading) {
+      return { ok: false, reason: "busy" };
+    }
+
+    const validation = validateForm();
+    if (!validation.ok) {
+      setSubmitError(validation.message);
+      return { ok: false, reason: "validation" };
+    }
+
+    if (typeof onSubmit !== "function") {
+      return { ok: false, reason: "missing_submit" };
+    }
+
+    const payload = {
+      ...form,
+      name: String(form.name || "").trim(),
+      strategy_id: Number(form.strategy_id),
+      budget_total_eur: Number(form.budget_total_eur || 0),
+      budget_daily_limit_eur: Number(form.budget_daily_limit_eur || 0),
+      budget_min_order_eur: Number(form.budget_min_order_eur || 0),
+      budget_max_order_eur: Number(form.budget_max_order_eur || 0),
+      max_asset_exposure_pct: Number(form.max_asset_exposure_pct || 0),
+    };
+
+    setSubmitError("");
+    setLoading(true);
+
+    try {
+      const savedBot = await onSubmit(payload);
+      if (successMessage) {
+        showSnackbar(successMessage, "success");
+      }
+      onSaved?.(savedBot ?? payload);
+      return { ok: true, data: savedBot ?? payload };
+    } catch (error) {
+      console.error(error);
+      const message = extractErrorMessage(
+        error,
+        saveFailedMessage || copy.saveFailed || "Opslaan van de bot mislukt."
+      );
+      setSubmitError(message);
+      showSnackbar(message, "danger");
+      return { ok: false, reason: "api", error };
+    } finally {
+      setLoading(false);
+    }
+  }, [
+    copy.saveFailed,
+    form,
+    loading,
+    onSaved,
+    onSubmit,
+    saveFailedMessage,
+    showSnackbar,
+    successMessage,
+    validateForm,
+  ]);
+
+  useImperativeHandle(ref, () => ({
+    submit: submitForm,
+    isSubmitting: () => loading,
+  }), [loading, submitForm]);
+
+  const handleSubmit = async (event) => {
+    event.preventDefault();
+    await submitForm();
+  };
+
   return (
-    <div className="space-y-6">
+    <form ref={formRef} onSubmit={handleSubmit} className="space-y-6">
       {/* ================= BOT NAME ================= */}
       <div className="space-y-1.5">
           <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">
           {copy.nameLabel}
         </label>
         <input
+          name="name"
           className="w-full bg-card border-2 border-slate-100 dark:border-slate-800 rounded-2xl px-5 py-4 text-sm font-bold text-foreground focus:border-blue-600 transition-all outline-none placeholder:text-slate-300"
           placeholder={copy.namePlaceholder}
           value={form.name}
+          required
           onChange={(e) =>
             setForm((s) => ({ ...s, name: e.target.value }))
           }
@@ -143,8 +301,10 @@ export default function AddBotForm({
         ) : (
           <div className="relative">
             <select
+              name="strategy_id"
               className="w-full bg-card border-2 border-slate-100 dark:border-slate-800 rounded-2xl px-5 py-4 text-sm font-bold text-foreground appearance-none focus:border-blue-600 outline-none cursor-pointer"
               value={form.strategy_id ?? ""}
+              required
               onChange={(e) =>
                 setForm((s) => ({
                   ...s,
@@ -311,6 +471,7 @@ export default function AddBotForm({
                 type="number"
                 min="0"
                 step="0.01"
+                name={key}
                 className="w-full bg-card border-2 border-slate-100 dark:border-slate-800 rounded-2xl px-4 py-3 text-sm font-bold text-foreground focus:border-blue-600 transition-all outline-none"
                 value={form[key]}
                 onChange={(e) => setForm((s) => ({ ...s, [key]: Number(e.target.value) }))}
@@ -329,6 +490,41 @@ export default function AddBotForm({
             {selectedRisk.description}
          </div>
       </div>
-    </div>
+
+      {submitError ? (
+        <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">
+          {submitError}
+        </div>
+      ) : null}
+
+      {!hideActions ? (
+        <div className="flex flex-col-reverse gap-3 border-t border-slate-100 pt-6 sm:flex-row sm:justify-end">
+          <button
+            type="button"
+            onClick={onCancel}
+            disabled={loading}
+            className={actionButtonStyles({ variant: "secondary" })}
+          >
+            {cancelLabel || "Annuleren"}
+          </button>
+          <button
+            type="submit"
+            disabled={loading}
+            className={actionButtonStyles({ variant: "primary" })}
+          >
+            {loading ? (
+              <>
+                <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" />
+                {submitBusyLabel || submitLabel || "Opslaan..."}
+              </>
+            ) : (
+              submitLabel || "Opslaan"
+            )}
+          </button>
+        </div>
+      ) : null}
+    </form>
   );
-}
+});
+
+export default AddBotForm;

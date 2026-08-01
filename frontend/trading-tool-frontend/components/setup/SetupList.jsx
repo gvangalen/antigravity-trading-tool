@@ -1,11 +1,12 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useModal } from "@/components/modal/ModalProvider";
 import { assistantChat } from "@/lib/api/ai";
 
 import { generateExplanation } from "@/lib/api/setups";
 import AILoader from "@/components/ui/AILoader";
+import Drawer from "@/components/ui/Drawer";
 import SetupForm from "@/components/setup/SetupForm";
 
 import {
@@ -62,6 +63,8 @@ export default function SetupList({
   const [justUpdated, setJustUpdated] = useState({});
   const [finnPanels, setFinnPanels] = useState({});
   const [finnLoading, setFinnLoading] = useState({});
+  const [editingSetup, setEditingSetup] = useState(null);
+  const setupFormRef = useRef(null);
   
   const { macro, technical, market, loading: scoresLoading } = useScoresData();
   const [strategies, setStrategies] = useState([]);
@@ -186,33 +189,13 @@ export default function SetupList({
      EDIT
   --------------------------------------------------------- */
   function openEditModal(setup) {
-    openConfirm({
-      title: `${copy.editTitle} – ${setup.name}`,
-      statusLabel: copy.editStatus,
-      tone: "primary",
-      confirmText: copy.editConfirm,
-      cancelText: copy.cancelAction,
-      description: <SetupFormWrapper setup={setup} />,
-      consequence: <p>{copy.editConsequence}</p>,
-      onConfirm: () =>
-        document.querySelector("#setup-edit-submit")?.click(),
-    });
+    setEditingSetup(setup);
   }
 
-  function SetupFormWrapper({ setup }) {
-    return (
-      <div className="space-y-6 pt-4">
-        <SetupForm
-          mode="edit"
-          initialData={setup}
-          onSaved={() => {
-            reload && reload();
-            showSnackbar(copy.editSuccess, "success");
-          }}
-        />
-      </div>
-    );
-  }
+  const closeEditDrawer = () => {
+    if (setupFormRef.current?.isSubmitting?.()) return;
+    setEditingSetup(null);
+  };
 
   /* ---------------------------------------------------------
      LINEAGE & STATUS HELPERS
@@ -525,6 +508,30 @@ export default function SetupList({
           </div>
         )}
       </div>
+
+      <Drawer
+        isOpen={Boolean(editingSetup)}
+        onClose={closeEditDrawer}
+        isCloseBlocked={() => Boolean(setupFormRef.current?.isSubmitting?.())}
+        title={editingSetup ? `${copy.editTitle} – ${editingSetup.name}` : copy.editTitle}
+        subtitle={copy.editStatus}
+        width="max-w-3xl"
+      >
+        {editingSetup ? (
+          <div className="space-y-6 pt-4">
+            <SetupForm
+              ref={setupFormRef}
+              mode="edit"
+              initialData={editingSetup}
+              onSaved={() => {
+                reload && reload();
+                showSnackbar(copy.editSuccess, "success");
+                setEditingSetup(null);
+              }}
+            />
+          </div>
+        ) : null}
+      </Drawer>
     </div>
   );
 }

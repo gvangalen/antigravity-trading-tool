@@ -166,6 +166,7 @@ export function SettingsScreen() {
           options={[
             { label: labels.nederlands, value: 'nl' },
             { label: labels.english, value: 'en' },
+            { label: labels.german, value: 'de' },
           ]}
           onSelect={async (nextValue) => {
             await setLanguage(nextValue);
@@ -191,7 +192,12 @@ export function SettingsScreen() {
         />
       </BottomSheet>
 
-      <BottomSheet visible={sheet === 'push'} title={labels.pushTitle} onClose={() => setSheet(null)}>
+      <BottomSheet
+        visible={sheet === 'push'}
+        title={labels.pushTitle}
+        onClose={() => setSheet(null)}
+        allowClose={!pushLoading}
+      >
         <Text style={[styles.sheetCopy, { color: colors.textMuted }]}>{labels.pushCopy}</Text>
         {pushStatus ? <Text style={[styles.pushStatus, { color: colors.textSoft }]}>{pushStatus}</Text> : null}
         <Pressable
@@ -229,7 +235,12 @@ export function SettingsScreen() {
         </Pressable>
       </BottomSheet>
 
-      <BottomSheet visible={sheet === 'session'} title={labels.session} onClose={() => setSheet(null)}>
+      <BottomSheet
+        visible={sheet === 'session'}
+        title={labels.session}
+        onClose={() => setSheet(null)}
+        allowClose={!loading}
+      >
         <Text style={[styles.sheetCopy, { color: colors.textMuted }]}>{labels.sessionCopy}</Text>
         <Pressable
           disabled={loading}
@@ -366,7 +377,9 @@ function OptionList<TValue extends string>({
 }
 
 function languageLabel(language: AppLanguage) {
-  return language === 'nl' ? 'Nederlands' : 'English';
+  if (language === 'nl') return 'Nederlands';
+  if (language === 'de') return 'Deutsch';
+  return 'English';
 }
 
 function appearanceLabel(appearance: AppAppearance, labels: PreferenceLabels) {

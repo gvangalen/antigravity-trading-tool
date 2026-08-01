@@ -1,6 +1,7 @@
 import { createContext, ReactNode, useCallback, useContext, useMemo, useState } from 'react';
+import { Modal } from 'react-native';
 
-import { FinnScreen } from '../screens/FinnScreen';
+import { FinnOverlaySheet } from '../components/assistant/FinnOverlaySheet';
 
 type FinnOverlayParams = {
   contextMetric?: string;
@@ -40,16 +41,22 @@ export function FinnOverlayProvider({ children }: { children: ReactNode }) {
   return (
     <FinnOverlayContext.Provider value={value}>
       {children}
-      {isOpen ? (
-        <FinnScreen
-          isOverlay={true}
+      <Modal
+        animationType="fade"
+        onRequestClose={closeFinn}
+        presentationStyle="overFullScreen"
+        statusBarTranslucent={true}
+        transparent={true}
+        visible={isOpen}
+      >
+        <FinnOverlaySheet
           prefill={params?.prefill}
           source={params?.source}
           contextMetric={params?.contextMetric}
           symbol={params?.symbol}
           onClose={closeFinn}
         />
-      ) : null}
+      </Modal>
     </FinnOverlayContext.Provider>
   );
 }

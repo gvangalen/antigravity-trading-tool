@@ -14,16 +14,10 @@ import {
 import { AssistantFeedRenderer } from '../components/assistant/AssistantFeedRenderer';
 import { SuggestedPromptChips } from '../components/assistant/SuggestedPromptChips';
 import { MobileFINNFeed } from '../components/assistant/MobileFINNFeed';
-import { ActionCard } from '../components/cards/ActionCard';
-import { AssistantBriefingCard } from '../components/cards/AssistantBriefingCard';
 import { BotDecisionCard } from '../components/cards/BotDecisionCard';
 import { InsightCard } from '../components/cards/InsightCard';
-import { MarketSnapshotCard } from '../components/cards/MarketSnapshotCard';
-import { MasterDecisionCard } from '../components/cards/MasterDecisionCard';
-import { AssetContextHeader } from '../components/layout/AssetContextHeader';
 import { LoadingSkeletonCard } from '../components/layout/LoadingSkeletonCard';
 import { ScreenContainer } from '../components/layout/ScreenContainer';
-import { SectionHeader } from '../components/layout/SectionHeader';
 import { BottomSheet } from '../components/sheets/BottomSheet';
 import {
   ConfirmActionSheetContent,
@@ -45,7 +39,7 @@ import {
 import { preferenceColors, useAppPreferences } from '../preferences/AppPreferencesProvider';
 import { AssistantInsightResponse, MobileOverviewAsset, MobileOverviewResponse, MobileIntelligenceEvent, assistantApi, mobileApi, intelligenceApi } from '../services/tradamindApi';
 import { apiClient } from '../services/apiClient';
-import { AssistantFeedItem, AssistantDraft } from '../types/assistant';
+import { AssistantAction, AssistantFeedItem, AssistantDraft, AssistantEnvelope } from '../types/assistant';
 import { triggerHaptic } from '../utils/haptics';
 import { useIntelligenceContext } from '../contexts/ActiveIntelligenceContext';
 import { useAuth } from '../auth/AuthProvider';
@@ -53,6 +47,32 @@ import type { MainTabParamList } from '../navigation/MainTabNavigator';
 import { trackAssistantEvent } from '../services/assistantAnalytics';
 
 type SheetType = 'risk' | 'confirm' | 'draft' | null;
+type PendingAction = AssistantAction & {
+  action_id?: string;
+  id?: string;
+  label?: string;
+  requires_confirmation?: boolean;
+};
+
+function getPendingActionFromEnvelope(envelope: AssistantEnvelope): PendingAction | null {
+  const candidates = [
+    envelope.action,
+    ...(Array.isArray(envelope.actions) ? envelope.actions : []),
+  ];
+
+  for (const candidate of candidates) {
+    if (
+      candidate &&
+      typeof candidate === 'object' &&
+      (typeof (candidate as PendingAction).action_id === 'string' ||
+        typeof (candidate as PendingAction).id === 'string')
+    ) {
+      return candidate as PendingAction;
+    }
+  }
+
+  return null;
+}
 
 function formatFinnContextLabel(pageType?: string, symbol?: string, timeframe?: string) {
   const laneMap: Record<string, string> = {
@@ -103,7 +123,10 @@ export function FinnScreen({
   const [localEvents, setLocalEvents] = useState<MobileIntelligenceEvent[]>([]);
   const [feedItems, setFeedItems] = useState<AssistantFeedItem[]>([]);
   const [currentDraft, setCurrentDraft] = useState<AssistantDraft | null>(null);
+  const [currentDraftAction, setCurrentDraftAction] = useState<PendingAction | null>(null);
   const [activeState, setActiveState] = useState<any>(null);
+  const [draftError, setDraftError] = useState<string | null>(null);
+  const [draftSaving, setDraftSaving] = useState(false);
   const isActionFlow = source?.startsWith('strategy-') || source?.startsWith('setup-') || source?.startsWith('bot-');
 
   const { context, updateContext } = useIntelligenceContext();
@@ -228,6 +251,7 @@ export function FinnScreen({
       setFeedItems((current) => [...current, ...mapAssistantEnvelopeToFeedItems(envelope)]);
       if (envelope.draft) {
         setCurrentDraft(envelope.draft);
+        setCurrentDraftAction(getPendingActionFromEnvelope(envelope));
       }
       if (envelope.state && envelope.state.status === "collecting" && envelope.state.current_flow !== "none") {
         setActiveState(envelope.state);
@@ -250,6 +274,89 @@ export function FinnScreen({
     }
   }
 
+  async function handleDraftConfirm() {
+    if (!currentDraft || draftSaving) return;
+
+    setDraftSaving(true);
+    setDraftError(null);
+
+    try {
+      let successMessage = 'Concept opgeslagen.';
+
+      const actionId =
+        typeof currentDraftAction?.action_id === 'string'
+          ? currentDraftAction.action_id
+          : typeof currentDraftAction?.id === 'string'
+            ? currentDraftAction.id
+            : null;
+
+      if (actionId) {
+        const result = await assistantApi.executePendingAction(actionId);
+        successMessage = result.message || successMessage;
+      } else if (currentDraft.type === 'strategy') {
+        const payload = currentDraft.payload;
+        if (payload.strategy_id) {
+          await intelligenceApi.updateStrategy(Number(payload.strategy_id), payload);
+          successMessage = 'Strategie bijgewerkt.';
+        } else {
+          await intelligenceApi.createStrategy(payload);
+          successMessage = 'Strategie aangemaakt.';
+        }
+      } else if (currentDraft.type === 'setup') {
+        const payload = currentDraft.payload;
+        if (payload.setup_id) {
+          await intelligenceApi.updateSetup(Number(payload.setup_id), payload);
+          successMessage = 'Setup bijgewerkt.';
+        } else {
+          await intelligenceApi.createSetup(payload);
+          successMessage = 'Setup aangemaakt.';
+        }
+      } else if (currentDraft.type === 'bot') {
+        const payload = currentDraft.payload;
+        if (payload.bot_id) {
+          await intelligenceApi.updateBotConfig(Number(payload.bot_id), payload);
+          successMessage = 'Bot bijgewerkt.';
+        } else if (payload.strategy_id) {
+          await intelligenceApi.createBotConfig(payload);
+          successMessage = 'Bot aangemaakt.';
+        } else {
+          throw new Error('Deze botdraft mist een strategy_id en kan daarom nog niet worden opgeslagen.');
+        }
+      } else {
+        throw new Error('Dit drafttype wordt nog niet ondersteund.');
+      }
+
+      await Promise.allSettled([
+        overviewResource.refresh(),
+        insightResource.refresh(),
+      ]);
+      await triggerHaptic('success');
+      setCurrentDraftAction(null);
+      setCurrentDraft(null);
+      setDraftError(null);
+      setFeedItems((current) => [
+        ...current,
+        {
+          id: `draft-save-${Date.now()}`,
+          type: 'message',
+          role: 'assistant',
+          text: successMessage,
+        },
+      ]);
+      setSheet(null);
+    } catch (error) {
+      setDraftError(error instanceof Error ? error.message : 'Opslaan mislukt. Probeer opnieuw.');
+      console.error('Failed to save draft:', error);
+    } finally {
+      setDraftSaving(false);
+    }
+  }
+
+  function openDraftSheet() {
+    setDraftError(null);
+    setSheet('draft');
+  }
+
   const handleArchiveEvent = useCallback((eventId: number) => {
     setLocalEvents((prev) => prev.filter((e) => e.id !== eventId));
     apiClient.post(`/api/assistant/events/${eventId}/archive`).catch((err) => {
@@ -266,6 +373,14 @@ export function FinnScreen({
   const activeBotDecision = mapMobileOverviewBotDecision(overviewResource.data);
   const activeAssetOverview = overviewResource.data?.watchlist.find((asset) => asset.symbol === context.asset);
   const activeBriefingText = buildActiveBriefingText(context.asset, activeInsight, activeAssetOverview);
+  const starterPrompts = useMemo(
+    () => [
+      `Vat ${context.asset} vandaag samen`,
+      `Wat is nu het grootste risico voor ${context.asset}?`,
+      `Welke workspace moet ik nu openen voor ${context.asset}?`,
+    ],
+    [context.asset],
+  );
   
   // Mapping helpers for sheets
   const activeSetup = { macro: 80, market: 75, tech: 60, setup: 70 };
@@ -294,6 +409,7 @@ export function FinnScreen({
       setFeedItems((current) => [...current, ...mapAssistantEnvelopeToFeedItems(envelope)]);
       if (envelope.draft) {
         setCurrentDraft(envelope.draft);
+        setCurrentDraftAction(getPendingActionFromEnvelope(envelope));
       }
       if (envelope.state && envelope.state.status === "collecting" && envelope.state.current_flow !== "none") {
         setActiveState(envelope.state);
@@ -378,29 +494,47 @@ export function FinnScreen({
             insightResource.refresh();
           }}
         >
-          <View style={styles.compactHeader}>
-            <View style={styles.headerTitleRow}>
-              <View style={styles.botIconBox}>
-                <Text style={styles.botIconText}>🤖</Text>
+          <View style={[styles.workspaceHero, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+            <View style={styles.compactHeader}>
+              <View style={styles.headerTitleRow}>
+                <View style={styles.botIconBox}>
+                  <Text style={styles.botIconLetter}>F</Text>
+                </View>
+                <View style={styles.headerCopy}>
+                  <View style={styles.headerTitleLine}>
+                    <Text style={[styles.headerEyebrow, { color: colors.textDim }]}>FINN Workspace</Text>
+                    <View style={styles.headerBadge}>
+                      <Text style={styles.headerBadgeText}>{finnModeLabel.toUpperCase()}</Text>
+                    </View>
+                  </View>
+                  <Text style={[styles.headerTitle, { color: colors.text }]}>Ask FINN</Text>
+                </View>
               </View>
-              <Text style={[styles.headerTitle, { color: colors.text }]}>FINN</Text>
-              <View style={styles.headerBadge}>
-                <Text style={styles.headerBadgeText}>{finnModeLabel.toUpperCase()}</Text>
+              <View style={styles.headerSubRow}>
+                <View style={styles.greenDot} />
+                <Text style={[styles.headerContextText, { color: colors.textDim }]}>{finnContextLabel}</Text>
               </View>
-            </View>
-            <View style={styles.headerSubRow}>
-              <View style={styles.greenDot} />
-              <Text style={[styles.headerContextText, { color: colors.textDim }]}>
-                {finnContextLabel}
-              </Text>
+              <View style={styles.heroMetaRow}>
+                <View style={[styles.heroMetaCard, { backgroundColor: colors.backgroundSoft, borderColor: colors.border }]}>
+                  <Text style={styles.heroMetaLabel}>Context</Text>
+                  <Text style={[styles.heroMetaValue, { color: colors.text }]}>{context.asset}</Text>
+                </View>
+                <View style={[styles.heroMetaCard, { backgroundColor: colors.backgroundSoft, borderColor: colors.border }]}>
+                  <Text style={styles.heroMetaLabel}>Workflow</Text>
+                  <Text style={[styles.heroMetaValue, { color: colors.text }]}>{context.screen || 'FINN'}</Text>
+                </View>
+                <View style={[styles.heroMetaCard, { backgroundColor: colors.backgroundSoft, borderColor: colors.border }]}>
+                  <Text style={styles.heroMetaLabel}>Mode</Text>
+                  <Text style={[styles.heroMetaValue, { color: colors.text }]}>{finnModeLabel}</Text>
+                </View>
+              </View>
             </View>
           </View>
 
           {!isActionFlow && (
-            <View style={styles.postureBox}>
+            <View style={[styles.postureBox, { backgroundColor: colors.surface, borderColor: colors.border }]}>
               <View style={styles.hudSectionHeader}>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                  <Text style={styles.hudSectionIcon}>🛡️</Text>
                   <Text style={[styles.hudSectionTitle, { color: colors.text }]}>ACTIEVE BRIEFING</Text>
                 </View>
                 <View style={styles.posturePill}>
@@ -424,9 +558,16 @@ export function FinnScreen({
           <AssistantFeedRenderer
             items={isActionFlow ? feedItems.filter(item => item.type !== 'reasoning') : feedItems}
             onActionPress={() => setSheet('confirm')}
-            onDraftPress={() => setSheet('draft')}
+            onDraftPress={openDraftSheet}
             onRiskPress={() => setSheet('risk')}
           />
+
+          {!sending && feedItems.length === 0 ? (
+            <View style={styles.promptSection}>
+              <Text style={[styles.promptTitle, { color: colors.text }]}>Start from the live workspace context</Text>
+              <SuggestedPromptChips prompts={starterPrompts} onSelect={setQuery} />
+            </View>
+          ) : null}
 
           {activeState && activeState.current_flow && activeState.current_flow !== "none" && (() => {
             const progress = getFlowProgress(activeState);
@@ -493,24 +634,21 @@ export function FinnScreen({
       <BottomSheet visible={sheet === 'confirm'} title="Review voorgestelde actie" onClose={() => setSheet(null)}>
         <ConfirmActionSheetContent onDone={() => setSheet(null)} />
       </BottomSheet>
-      <BottomSheet visible={sheet === 'draft'} title="Review concept" onClose={() => setSheet(null)}>
+      <BottomSheet
+        visible={sheet === 'draft'}
+        title="Review concept"
+        onClose={() => {
+          if (draftSaving) return;
+          setDraftError(null);
+          setSheet(null);
+        }}
+        allowClose={!draftSaving}
+      >
         <DraftReviewSheetContent
           draft={currentDraft}
-          onConfirm={async () => {
-            setSheet(null);
-            if (currentDraft && currentDraft.type === 'strategy') {
-              try {
-                const payload = currentDraft.payload;
-                if (payload.strategy_id) {
-                  await intelligenceApi.updateStrategy(Number(payload.strategy_id), payload);
-                } else {
-                  await intelligenceApi.createStrategy(payload);
-                }
-              } catch (error) {
-                console.error('Failed to save strategy:', error);
-              }
-            }
-          }}
+          error={draftError}
+          onConfirm={handleDraftConfirm}
+          saving={draftSaving}
         />
       </BottomSheet>
     </View>
@@ -656,8 +794,17 @@ const styles = StyleSheet.create({
     fontWeight: '800',
   },
   compactHeader: {
-    paddingVertical: theme.spacing.md,
-    paddingHorizontal: theme.spacing.sm,
+    gap: theme.spacing.md,
+  },
+  headerCopy: {
+    flex: 1,
+    gap: 2,
+  },
+  headerEyebrow: {
+    fontSize: 10,
+    fontWeight: '900',
+    letterSpacing: 1.2,
+    textTransform: 'uppercase',
   },
   headerTitleRow: {
     flexDirection: 'row',
@@ -666,19 +813,26 @@ const styles = StyleSheet.create({
   },
   botIconBox: {
     backgroundColor: theme.colors.accent,
-    borderRadius: 8,
-    width: 28,
-    height: 28,
+    borderRadius: 14,
+    width: 40,
+    height: 40,
     justifyContent: 'center',
     alignItems: 'center',
   },
-  botIconText: {
-    fontSize: 16,
+  botIconLetter: {
+    color: '#ffffff',
+    fontSize: 19,
+    fontWeight: '900',
   },
   headerTitle: {
-    fontSize: 20,
+    fontSize: 24,
     fontWeight: '900',
     letterSpacing: -0.5,
+  },
+  headerTitleLine: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: theme.spacing.sm,
   },
   headerBadge: {
     backgroundColor: '#EFF6FF',
@@ -697,7 +851,29 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 6,
     marginTop: 6,
-    paddingLeft: 36, // align with text
+  },
+  heroMetaCard: {
+    borderRadius: theme.radius.lg,
+    borderWidth: 1,
+    flex: 1,
+    gap: 4,
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.sm,
+  },
+  heroMetaLabel: {
+    color: theme.colors.textDim,
+    fontSize: 10,
+    fontWeight: '900',
+    letterSpacing: 0.9,
+    textTransform: 'uppercase',
+  },
+  heroMetaRow: {
+    flexDirection: 'row',
+    gap: theme.spacing.sm,
+  },
+  heroMetaValue: {
+    fontSize: 13,
+    fontWeight: '800',
   },
   greenDot: {
     width: 6,
@@ -711,9 +887,12 @@ const styles = StyleSheet.create({
     letterSpacing: 1,
   },
   postureBox: {
-    paddingHorizontal: theme.spacing.sm,
-    paddingVertical: theme.spacing.xs,
+    borderRadius: theme.radius.xl,
+    borderWidth: 1,
+    marginHorizontal: theme.spacing.xs,
     marginBottom: theme.spacing.md,
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.md,
   },
   posturePill: {
     backgroundColor: '#ECFDF5', // theme.colors.successSoft
@@ -727,6 +906,14 @@ const styles = StyleSheet.create({
     color: '#059669', // theme.colors.success
     fontSize: 9,
     fontWeight: '900',
+  },
+  promptSection: {
+    gap: theme.spacing.sm,
+    marginBottom: theme.spacing.md,
+  },
+  promptTitle: {
+    fontSize: 13,
+    fontWeight: '800',
   },
   recentSection: {
     paddingHorizontal: theme.spacing.xs,
@@ -758,6 +945,13 @@ const styles = StyleSheet.create({
   recentArrow: {
     fontSize: 14,
     fontWeight: '900',
+  },
+  workspaceHero: {
+    borderRadius: theme.radius.xl,
+    borderWidth: 1,
+    marginBottom: theme.spacing.md,
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.md,
   },
   composer: {
     alignItems: 'flex-end',

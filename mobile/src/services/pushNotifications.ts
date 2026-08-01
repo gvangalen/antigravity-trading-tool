@@ -1,9 +1,9 @@
 import * as Notifications from 'expo-notifications';
-import * as SecureStore from 'expo-secure-store';
 import { Platform } from 'react-native';
 
 import type { MainTabParamList } from '../navigation/MainTabNavigator';
 import { apiClient } from './apiClient';
+import { deleteItemAsync, getItemAsync, setItemAsync } from './secureStore';
 
 const PUSH_TOKEN_KEY = 'tradamind_mobile_push_token';
 
@@ -25,6 +25,7 @@ export type MobileNotificationData = {
 export type NotificationRoute =
   | { screen: 'FINN'; params?: { prefill?: string; source?: string; contextMetric?: string; symbol?: string } }
   | { screen: 'Setup'; params?: MainTabParamList['Setup'] }
+  | { screen: 'Automation'; params?: MainTabParamList['Automation'] }
   | { screen: 'Report'; params?: MainTabParamList['Report'] }
   | { screen: 'Watchlist'; params?: MainTabParamList['Watchlist'] };
 
@@ -58,13 +59,13 @@ export async function registerMobilePushToken(userId: number): Promise<PushRegis
     push_token: token,
     user_id: userId,
   });
-  await SecureStore.setItemAsync(PUSH_TOKEN_KEY, token);
+  await setItemAsync(PUSH_TOKEN_KEY, token);
 
   return { status: 'registered', token };
 }
 
 export async function unregisterMobilePushToken() {
-  const token = await SecureStore.getItemAsync(PUSH_TOKEN_KEY);
+  const token = await getItemAsync(PUSH_TOKEN_KEY);
   if (!token) return;
 
   try {
@@ -72,12 +73,12 @@ export async function unregisterMobilePushToken() {
       push_token: token,
     });
   } finally {
-    await SecureStore.deleteItemAsync(PUSH_TOKEN_KEY);
+    await deleteItemAsync(PUSH_TOKEN_KEY);
   }
 }
 
 export async function getStoredPushToken() {
-  return SecureStore.getItemAsync(PUSH_TOKEN_KEY);
+  return getItemAsync(PUSH_TOKEN_KEY);
 }
 
 export function normalizeNotificationData(data: Record<string, unknown> | undefined): MobileNotificationData {
@@ -103,7 +104,7 @@ export function routeForNotification(data: MobileNotificationData): Notification
 
   if (type === 'bot_action_ready') {
     return {
-      screen: 'Setup',
+      screen: 'Automation',
       params: { notificationType: type, symbol },
     };
   }

@@ -17,8 +17,8 @@ export function StatusChip({ label, tone = 'neutral', compact = false }: StatusC
   const baseColor = tone === 'neutral' ? colors.textDim : (colors[tone] || colors.accent);
   
   // Create light backgrounds and borders dynamically
-  const background = `${baseColor}15`; // ~8% opacity
-  const border = `${baseColor}30`; // ~19% opacity
+  const background = appearance === 'light' ? `${baseColor}08` : `${baseColor}15`;
+  const border = appearance === 'light' ? `${baseColor}20` : `${baseColor}30`;
 
   return (
     <View
@@ -43,24 +43,24 @@ const styles = StyleSheet.create({
     borderRadius: theme.radius.pill,
     borderWidth: 1,
     flexDirection: 'row',
-    gap: theme.spacing.xs,
+    gap: 5,
     maxWidth: '100%',
-    paddingHorizontal: theme.spacing.sm,
-    paddingVertical: 7,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
   },
   compact: {
-    paddingHorizontal: 8,
-    paddingVertical: 5,
+    paddingHorizontal: 7,
+    paddingVertical: 3,
   },
   dot: {
     borderRadius: theme.radius.pill,
-    height: 6,
-    width: 6,
+    height: 4,
+    width: 4,
   },
   label: {
-    fontSize: theme.typography.label,
+    fontSize: 8.5,
     fontWeight: '900',
-    letterSpacing: 1,
+    letterSpacing: 0.8,
     textTransform: 'uppercase',
   },
 });

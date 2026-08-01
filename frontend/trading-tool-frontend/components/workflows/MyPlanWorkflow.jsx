@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import {
@@ -356,6 +356,8 @@ export default function MyPlanWorkflow({ symbol = "BTC" }) {
     removeStrategy,
   } = useStrategyData();
   const [drawer, setDrawer] = useState(null);
+  const setupFormRef = useRef(null);
+  const strategyFormRef = useRef(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -710,11 +712,13 @@ export default function MyPlanWorkflow({ symbol = "BTC" }) {
       <Drawer
         isOpen={drawer?.type === "new-setup" || drawer?.type === "edit-setup"}
         onClose={closeDrawer}
+        isCloseBlocked={() => Boolean(setupFormRef.current?.isSubmitting?.())}
         title={drawer?.type === "edit-setup" ? copy.editSetupTitle : copy.createSetupTitle}
         subtitle={copy.createSetupSubtitle}
         width="max-w-3xl"
       >
         <SetupForm
+          ref={setupFormRef}
           mode={drawer?.type === "edit-setup" ? "edit" : "new"}
           initialData={drawer?.setup || null}
           onSaved={handleSetupSaved}
@@ -724,11 +728,13 @@ export default function MyPlanWorkflow({ symbol = "BTC" }) {
       <Drawer
         isOpen={drawer?.type === "new-strategy" || drawer?.type === "edit-strategy"}
         onClose={closeDrawer}
+        isCloseBlocked={() => Boolean(strategyFormRef.current?.isSubmitting?.())}
         title={drawer?.type === "edit-strategy" ? copy.editStrategyTitle : copy.createStrategyTitle}
         subtitle={copy.createStrategySubtitle}
         width="max-w-2xl"
       >
         <StrategyForm
+          ref={strategyFormRef}
           key={`${drawer?.type || "closed"}-${drawer?.strategy?.id || drawer?.setup?.id || "new"}`}
           setups={setups}
           strategy={strategySeed}

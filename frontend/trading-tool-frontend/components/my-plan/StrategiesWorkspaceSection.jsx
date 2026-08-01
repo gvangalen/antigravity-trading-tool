@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useModal } from "@/components/modal/ModalProvider";
 import {
@@ -38,6 +38,7 @@ export default function StrategiesWorkspaceSection() {
   const [search, setSearch] = useState("");
   const [refreshKey, setRefreshKey] = useState(0);
   const [editingStrategy, setEditingStrategy] = useState(null);
+  const strategyFormRef = useRef(null);
 
   const {
     strategies,
@@ -223,11 +224,13 @@ export default function StrategiesWorkspaceSection() {
       <Drawer
         isOpen={!!editingStrategy}
         onClose={() => setEditingStrategy(null)}
+        isCloseBlocked={() => Boolean(strategyFormRef.current?.isSubmitting?.())}
         title={editingStrategy?.name || copy.editTitle}
         subtitle={copy.editSubtitle}
       >
         {editingStrategy ? (
           <StrategyForm
+            ref={strategyFormRef}
             strategy={editingStrategy}
             setups={safeSetups}
             onSubmit={(data) => handleUpdateStrategy(editingStrategy.id, data)}

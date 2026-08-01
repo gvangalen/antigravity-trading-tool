@@ -1,7 +1,8 @@
 "use client";
 
-import React, { useEffect } from "react";
+import React, { useId } from "react";
 import { X } from "lucide-react";
+import OverlayShell from "@/components/ui/OverlayShell";
 
 /**
  * Drawer component for professional "Pro" slide-overs.
@@ -12,63 +13,66 @@ export default function Drawer({
   title, 
   subtitle,
   children,
-  width = "max-w-xl" 
+  width = "max-w-xl",
+  description,
+  closeOnBackdrop = true,
+  closeOnEscape = true,
+  isCloseBlocked = false,
 }) {
-  // Prevent scroll when drawer is open
-  useEffect(() => {
-    if (isOpen) {
-      document.body.style.overflow = "hidden";
-    } else {
-      document.body.style.overflow = "unset";
-    }
-    return () => {
-      document.body.style.overflow = "unset";
-    };
-  }, [isOpen]);
-
-  if (!isOpen) return null;
+  const titleId = useId();
+  const descriptionId = useId();
 
   return (
-    <div className="fixed inset-0 z-[100] overflow-hidden">
-      {/* Backdrop */}
-      <div 
-        className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm transition-opacity" 
-        onClick={onClose}
-      />
-
-      <div className="pointer-events-none fixed inset-y-0 right-0 flex max-w-full pl-10">
-        <div className={`pointer-events-auto w-screen ${width} animate-drawer-slide`}>
-          <div className="flex h-full flex-col overflow-y-scroll bg-card shadow-2xl">
-            {/* Header */}
-            <div className="bg-[var(--color-border-subtle)] px-6 py-8 border-b border-slate-100">
-              <div className="flex items-start justify-between">
-                <div>
-                   {subtitle && (
-                     <div className="text-[10px] font-black text-[var(--primary)] uppercase tracking-[0.3em] mb-1">
-                       {subtitle}
-                     </div>
-                   )}
-                   <h2 className="text-2xl font-black text-foreground tracking-tight">
-                     {title}
-                   </h2>
-                </div>
-                <button
-                  type="button"
-                  className="rounded-xl p-2 text-secondary hover:text-slate-500 hover:bg-white hover:shadow-sm transition-all"
-                  onClick={onClose}
+    <OverlayShell
+      isOpen={isOpen}
+      onClose={onClose}
+      variant="drawer"
+      labelledBy={titleId}
+      describedBy={description || subtitle ? descriptionId : undefined}
+      closeOnBackdrop={closeOnBackdrop}
+      closeOnEscape={closeOnEscape}
+      isCloseBlocked={isCloseBlocked}
+      rootClassName="z-[100]"
+      backdropClassName="bg-slate-900/40 backdrop-blur-sm transition-opacity"
+      positionClassName="pointer-events-none fixed inset-y-0 right-0 flex max-w-full pl-10"
+      panelClassName={`pointer-events-auto w-screen ${width} animate-drawer-slide`}
+    >
+      <div className="flex h-full flex-col overflow-y-auto bg-card shadow-2xl">
+        <div className="border-b border-slate-100 bg-[var(--color-border-subtle)] px-6 py-8">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              {subtitle ? (
+                <div
+                  id={descriptionId}
+                  className="mb-1 text-[10px] font-black uppercase tracking-[0.3em] text-[var(--primary)]"
                 >
-                  <X size={20} />
-                </button>
-              </div>
+                  {subtitle}
+                </div>
+              ) : null}
+              <h2 id={titleId} className="text-2xl font-black tracking-tight text-foreground">
+                {title}
+              </h2>
+              {description ? (
+                <p className="mt-2 max-w-2xl text-sm font-medium leading-relaxed text-slate-500">
+                  {description}
+                </p>
+              ) : null}
             </div>
-
-            {/* Content */}
-            <div className="relative flex-1 px-6 py-8">
-              {children}
-            </div>
+            <button
+              type="button"
+              aria-label="Sluiten"
+              data-overlay-close="true"
+              className="rounded-xl p-2 text-secondary transition-all hover:bg-white hover:text-slate-500 hover:shadow-sm"
+              onClick={() => onClose?.("button")}
+            >
+              <X size={20} aria-hidden="true" />
+            </button>
           </div>
         </div>
+        <div className="relative flex-1 px-6 py-8">
+          {children}
+        </div>
       </div>
-    </div>
+    </OverlayShell>
   );
 }

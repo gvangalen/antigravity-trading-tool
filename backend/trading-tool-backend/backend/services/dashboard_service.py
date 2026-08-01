@@ -8,7 +8,9 @@ from sqlalchemy import text
 from fastapi import HTTPException
 
 from backend.infrastructure.repositories.dashboard_repository import DashboardRepository
+from backend.infrastructure.repositories.user_repository import UserRepository
 from backend.services.platform_metrics import record_latency_sample
+from backend.services.locale_service import localize_finn_payload
 from backend.schemas.dashboard_schema import (
     DashboardResponse, MobileOverviewResponse, MobilePortfolioOverviewSchema,
     MobileAssetWatchlistSchema, MobileActiveBotSchema, MobileFinnBriefingSchema,
@@ -164,7 +166,12 @@ class DashboardService:
             raise HTTPException(status_code=500, detail="HEALTH01: DB-connectie faalt.")
         return {"status": "ok"}
 
-    async def get_mobile_overview(self, user_id: int, bypass_cache: bool = False) -> MobileOverviewResponse:
+    async def get_mobile_overview(
+        self,
+        user_id: int,
+        bypass_cache: bool = False,
+        locale: str = "nl",
+    ) -> MobileOverviewResponse:
         logger.info(f"🔄 [MobileOverview] Executing hardened composition for user_id={user_id}.")
 
         # 2. Setup symbols and default fallback structs
@@ -352,10 +359,19 @@ class DashboardService:
             if isinstance(ai_suggested, list) and len(ai_suggested) > 0:
                 suggested_actions = ai_suggested
 
+        localized_briefing = await localize_finn_payload(
+            {
+                "greeting": greeting,
+                "summary": summary,
+                "suggested_actions": suggested_actions,
+            },
+            locale,
+        )
+
         finn_briefing = MobileFinnBriefingSchema(
-            greeting=greeting,
-            summary=summary,
-            suggested_actions=suggested_actions
+            greeting=localized_briefing.get("greeting", greeting),
+            summary=localized_briefing.get("summary", summary),
+            suggested_actions=localized_briefing.get("suggested_actions", suggested_actions),
         )
 
         portfolio_overview = MobilePortfolioOverviewSchema(

@@ -2,6 +2,8 @@ import { ReactNode, createContext, useCallback, useContext, useEffect, useMemo, 
 
 import { authApi, MobileUser } from '../services/authApi';
 import { clearTokens, getAccessToken, saveTokens } from '../services/tokenStorage';
+import { assistantApi } from '../services/tradamindApi';
+import { extractBackendAppLanguage, setStoredAppLanguage } from '../preferences/appLocale';
 
 type AuthContextValue = {
   user: MobileUser | null;
@@ -14,33 +16,21 @@ type AuthContextValue = {
 };
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
+const DEFAULT_SIMULATOR_EMAIL = 'gerrit@example.com';
+const DEFAULT_SIMULATOR_PASSWORD = 'test123';
+const DEV_AUTO_LOGIN_EMAIL =
+  process.env.EXPO_PUBLIC_SIMULATOR_AUTO_LOGIN_EMAIL?.trim() ||
+  (__DEV__ ? DEFAULT_SIMULATOR_EMAIL : undefined);
+const DEV_AUTO_LOGIN_PASSWORD =
+  process.env.EXPO_PUBLIC_SIMULATOR_AUTO_LOGIN_PASSWORD?.trim() ||
+  (__DEV__ ? DEFAULT_SIMULATOR_PASSWORD : undefined);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<MobileUser | null>(null);
   const [initializing, setInitializing] = useState(true);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  const refreshUser = useCallback(async () => {
-    const token = await getAccessToken();
-    if (!token) {
-      setUser(null);
-      return;
-    }
-
-    try {
-      const nextUser = await authApi.me();
-      setUser(nextUser);
-      setError(null);
-    } catch {
-      await clearTokens();
-      setUser(null);
-    }
-  }, []);
-
-  useEffect(() => {
-    refreshUser().finally(() => setInitializing(false));
-  }, [refreshUser]);
+  const [devAutoLoginTried, setDevAutoLoginTried] = useState(false);
 
   const login = useCallback(async (email: string, password: string) => {
     setLoading(true);
@@ -48,11 +38,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     try {
       const response = await authApi.login(email.trim(), password);
-      if (!response.success || !response.access_token || !response.refresh_token) {
-        throw new Error('Login response is incomplete');
+      if (!response.success || !response.user) {
+        throw new Error('Login failed');
       }
-      await saveTokens(response.access_token, response.refresh_token);
-      setUser(response.user);
+
+      if (response.access_token && response.refresh_token) {
+        await saveTokens(response.access_token, response.refresh_token);
+        setUser(response.user);
+      } else {
+        // Local/mobile dev can authenticate through a secure cookie session.
+        await clearTokens();
+        const nextUser = await authApi.me();
+        setUser(nextUser);
+      }
+
+      try {
+        const preferences = await assistantApi.preferences();
+        await setStoredAppLanguage(extractBackendAppLanguage(preferences));
+      } catch {
+        // Keep the current app language when backend preferences are unavailable.
+      }
+
       return true;
     } catch (nextError) {
       setError(nextError instanceof Error ? nextError.message : 'Login failed');
@@ -63,6 +69,75 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setLoading(false);
     }
   }, []);
+
+  const refreshUser = useCallback(async () => {
+    try {
+      const nextUser = await authApi.me();
+      const token = await getAccessToken();
+
+      if (!token) {
+        if (DEV_AUTO_LOGIN_EMAIL && DEV_AUTO_LOGIN_PASSWORD) {
+          const relogged = await login(DEV_AUTO_LOGIN_EMAIL, DEV_AUTO_LOGIN_PASSWORD);
+          if (relogged) {
+            return;
+          }
+        }
+
+        setUser(null);
+        setError('Authentication required');
+        return;
+      }
+
+      setUser(nextUser);
+      setError(null);
+
+      try {
+        const preferences = await assistantApi.preferences();
+        await setStoredAppLanguage(extractBackendAppLanguage(preferences));
+      } catch {
+        // Keep the current app language when backend preferences are unavailable.
+      }
+    } catch {
+      const token = await getAccessToken();
+      if (token) {
+        await clearTokens();
+      }
+      setUser(null);
+    }
+  }, [login]);
+
+  useEffect(() => {
+    refreshUser().finally(() => setInitializing(false));
+  }, [refreshUser]);
+
+  useEffect(() => {
+    if (initializing || loading || devAutoLoginTried) {
+      return;
+    }
+    if (!DEV_AUTO_LOGIN_EMAIL || !DEV_AUTO_LOGIN_PASSWORD) {
+      return;
+    }
+
+    let cancelled = false;
+
+    async function ensureDevSessionHasToken() {
+      const token = await getAccessToken();
+      if (cancelled || token) {
+        return;
+      }
+
+      setDevAutoLoginTried(true);
+      await login(DEV_AUTO_LOGIN_EMAIL, DEV_AUTO_LOGIN_PASSWORD).catch(() => {
+        // Surface login errors through the existing auth state.
+      });
+    }
+
+    ensureDevSessionHasToken();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [devAutoLoginTried, initializing, loading, login, user]);
 
   const logout = useCallback(async () => {
     setLoading(true);

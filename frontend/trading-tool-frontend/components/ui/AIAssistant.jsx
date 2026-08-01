@@ -22,6 +22,7 @@ import SetupForm from "@/components/setup/SetupForm";
 import StrategyForm from "@/components/strategy/StrategyForm";
 import AddBotForm from "@/components/bot/AddBotForm";
 import { actionButtonStyles } from "@/components/ui/actionButtonStyles";
+import Drawer from "@/components/ui/Drawer";
 import { getAssistantSessionId, trackAssistantEvent } from "@/lib/api/assistantAnalytics";
 import { normalizeTraderProfilePreferences } from "@/lib/traderProfileOptions";
 import { useTranslation } from "@/app/providers/I18nProvider";
@@ -406,7 +407,7 @@ function AIAssistantContent({
   const { selectedAsset: globalSymbol } = useAsset();
   const router = useRouter();
   const watchlist = useWatchlist();
-  const { openConfirm, showSnackbar } = useModal();
+  const { showSnackbar } = useModal();
   const { t, locale } = useTranslation();
   const governanceCopy = t?.pages?.report?.finn?.governance || {};
   const { events, loading: eventsLoading, archiveEvent } = useIntelligenceEvents({
@@ -431,11 +432,13 @@ function AIAssistantContent({
   const [missionDetailSection, setMissionDetailSection] = useState("");
   const [recentConversations, setRecentConversations] = useState([]);
   const [showComposerMenu, setShowComposerMenu] = useState(false);
+  const [draftDrawer, setDraftDrawer] = useState(null);
   
   const messagesEndRef = useRef(null);
   const scrollRef = useRef(null);
   const composerInputRef = useRef(null);
   const commandCenterRef = useRef(null);
+  const draftFormRef = useRef(null);
   const handledContextRequestRef = useRef(null);
   const loadedFinnStateRef = useRef(false);
   const missionControlCacheKeyRef = useRef("");
@@ -4317,32 +4320,24 @@ function AIAssistantContent({
     });
   };
 
+  const closeDraftDrawer = () => {
+    if (draftFormRef.current?.isSubmitting?.()) return;
+    if (draftDrawer?.trackingType) {
+      trackFinnConfirmEvent("finn_confirm_canceled", draftDrawer.trackingType);
+    }
+    setDraftDrawer(null);
+  };
+
   const handleEditDraft = async (draft, onSuccess) => {
     if (draft.type === "setup") {
       try {
         trackFinnConfirmEvent("finn_confirm_opened", "setup_draft");
-        openConfirm({
+        setDraftDrawer({
+          type: "setup",
           title: at("modals.editSetupTitle"),
-          tone: "primary",
-          confirmText: at("modals.saveCreate"),
-          cancelText: "Annuleren",
-          description: (
-            <div className="space-y-6 pt-4 max-h-[60vh] overflow-y-auto no-scrollbar">
-              <SetupForm 
-                mode="new"
-                initialData={draft.payload}
-                onSaved={() => {
-                  showSnackbar(at("modals.setupCreatedSuccess"), "success");
-                  onSuccess();
-                }}
-              />
-            </div>
-          ),
-          onConfirm: () => {
-            trackFinnConfirmEvent("finn_confirm_confirmed", "setup_draft");
-            document.querySelector("#setup-edit-submit")?.click();
-          },
-          onCancel: () => trackFinnConfirmEvent("finn_confirm_canceled", "setup_draft"),
+          payload: draft.payload,
+          onSuccess,
+          trackingType: "setup_draft",
         });
       } catch (err) {
         console.error("Failed to load SetupForm", err);
@@ -4351,40 +4346,13 @@ function AIAssistantContent({
       try {
         const setupsList = await fetchSetups();
         trackFinnConfirmEvent("finn_confirm_opened", "strategy_draft");
-        openConfirm({
+        setDraftDrawer({
+          type: "strategy",
           title: at("modals.editStrategyTitle"),
-          tone: "primary",
-          confirmText: at("modals.saveCreate"),
-          cancelText: "Annuleren",
-          description: (
-            <div className="space-y-6 pt-4 max-h-[60vh] overflow-y-auto no-scrollbar">
-              <StrategyForm 
-                setups={setupsList}
-                isEdit={false}
-                strategy={{
-                  name: draft.payload.name,
-                  symbol: draft.payload.symbol,
-                  setup_type: draft.payload.setup_type,
-                  setup_id: setupsList[0]?.id,
-                  base_amount: draft.payload.base_amount,
-                  entry: draft.payload.entry,
-                  targets: draft.payload.targets,
-                  stop_loss: draft.payload.stop_loss,
-                  execution_mode: draft.payload.execution_mode || "fixed"
-                }}
-                onSubmit={async (payload) => {
-                  await createStrategy(payload);
-                  showSnackbar(at("modals.strategyCreatedSuccess"), "success");
-                  onSuccess();
-                }}
-              />
-            </div>
-          ),
-          onConfirm: () => {
-            trackFinnConfirmEvent("finn_confirm_confirmed", "strategy_draft");
-            document.querySelector("#strategy-edit-submit")?.click();
-          },
-          onCancel: () => trackFinnConfirmEvent("finn_confirm_canceled", "strategy_draft"),
+          payload: draft.payload,
+          setups: setupsList,
+          onSuccess,
+          trackingType: "strategy_draft",
         });
       } catch (err) {
         console.error("Failed to load StrategyForm", err);
@@ -4392,52 +4360,14 @@ function AIAssistantContent({
     } else if (draft.type === "bot") {
       try {
         const stratList = await fetchStrategies();
-        let currentFormVal = {};
         trackFinnConfirmEvent("finn_confirm_opened", "bot_draft");
-        openConfirm({
+        setDraftDrawer({
+          type: "bot",
           title: at("modals.editBotTitle"),
-          tone: "primary",
-          confirmText: at("modals.saveCreate"),
-          cancelText: "Annuleren",
-          description: (
-            <div className="space-y-6 pt-4 max-h-[60vh] overflow-y-auto no-scrollbar">
-              <AddBotForm 
-                strategies={stratList}
-                initialData={{
-                  name: draft.payload.name,
-                  strategy_id: draft.payload.strategy_id || stratList[0]?.id,
-                  mode: draft.payload.mode || "manual",
-                  is_live: draft.payload.is_live || false,
-                  risk_profile: draft.payload.risk_profile || "balanced",
-                  base_currency: draft.payload.base_currency || "EUR"
-                }}
-                onChange={(val) => {
-                  currentFormVal = val;
-                }}
-              />
-            </div>
-          ),
-          onConfirm: async () => {
-            trackFinnConfirmEvent("finn_confirm_confirmed", "bot_draft");
-            const payload = {
-              name: currentFormVal.name || draft.payload.name,
-              strategy_id: currentFormVal.strategy_id || draft.payload.strategy_id || stratList[0]?.id,
-              mode: currentFormVal.mode || draft.payload.mode || "manual",
-              is_live: currentFormVal.is_live ?? draft.payload.is_live ?? false,
-              risk_profile: currentFormVal.risk_profile || draft.payload.risk_profile || "balanced",
-              base_currency: currentFormVal.base_currency || draft.payload.base_currency || "EUR",
-              budget_total_eur: draft.payload.budget_total_eur || 500.0,
-              budget_daily_limit_eur: draft.payload.budget_daily_limit_eur || 50.0,
-              budget_min_order_eur: draft.payload.budget_min_order_eur || 10.0,
-              budget_max_order_eur: draft.payload.budget_max_order_eur || 100.0,
-              max_asset_exposure_pct: draft.payload.max_asset_exposure_pct || 100.0,
-              cadence: draft.payload.cadence || "daily"
-            };
-            await createBotConfig(payload);
-            showSnackbar("Bot succesvol aangemaakt!", "success");
-            onSuccess();
-          },
-          onCancel: () => trackFinnConfirmEvent("finn_confirm_canceled", "bot_draft"),
+          payload: draft.payload,
+          strategies: stratList,
+          onSuccess,
+          trackingType: "bot_draft",
         });
       } catch (err) {
         console.error("Failed to load AddBotForm", err);
@@ -6290,6 +6220,94 @@ function AIAssistantContent({
         </>
         )}
       </div>
+
+      <Drawer
+        isOpen={Boolean(draftDrawer)}
+        onClose={closeDraftDrawer}
+        isCloseBlocked={() => Boolean(draftFormRef.current?.isSubmitting?.())}
+        title={draftDrawer?.title || at("uiText.draftLabel")}
+        subtitle={at("uiText.draftLabel")}
+        width={draftDrawer?.type === "setup" ? "max-w-3xl" : "max-w-2xl"}
+      >
+        {draftDrawer?.type === "setup" ? (
+          <SetupForm
+            ref={draftFormRef}
+            mode="new"
+            initialData={draftDrawer.payload}
+            onSaved={() => {
+              trackFinnConfirmEvent("finn_confirm_confirmed", draftDrawer.trackingType);
+              showSnackbar(at("modals.setupCreatedSuccess"), "success");
+              draftDrawer.onSuccess?.();
+              setDraftDrawer(null);
+            }}
+          />
+        ) : null}
+
+        {draftDrawer?.type === "strategy" ? (
+          <StrategyForm
+            ref={draftFormRef}
+            setups={draftDrawer.setups || []}
+            isEdit={false}
+            strategy={{
+              name: draftDrawer.payload?.name,
+              symbol: draftDrawer.payload?.symbol,
+              setup_type: draftDrawer.payload?.setup_type,
+              setup_id: draftDrawer.payload?.setup_id || draftDrawer.setups?.[0]?.id,
+              base_amount: draftDrawer.payload?.base_amount,
+              entry: draftDrawer.payload?.entry,
+              targets: draftDrawer.payload?.targets,
+              stop_loss: draftDrawer.payload?.stop_loss,
+              execution_mode: draftDrawer.payload?.execution_mode || "fixed",
+            }}
+            onSubmit={async (payload) => {
+              await createStrategy(payload);
+              trackFinnConfirmEvent("finn_confirm_confirmed", draftDrawer.trackingType);
+              showSnackbar(at("modals.strategyCreatedSuccess"), "success");
+              draftDrawer.onSuccess?.();
+              setDraftDrawer(null);
+            }}
+          />
+        ) : null}
+
+        {draftDrawer?.type === "bot" ? (
+          <AddBotForm
+            ref={draftFormRef}
+            strategies={draftDrawer.strategies || []}
+            initialData={{
+              name: draftDrawer.payload?.name,
+              strategy_id: draftDrawer.payload?.strategy_id || draftDrawer.strategies?.[0]?.id,
+              mode: draftDrawer.payload?.mode || "manual",
+              is_live: draftDrawer.payload?.is_live || false,
+              risk_profile: draftDrawer.payload?.risk_profile || "balanced",
+              base_currency: draftDrawer.payload?.base_currency || "EUR",
+              budget_total_eur: draftDrawer.payload?.budget_total_eur || 500.0,
+              budget_daily_limit_eur: draftDrawer.payload?.budget_daily_limit_eur || 50.0,
+              budget_min_order_eur: draftDrawer.payload?.budget_min_order_eur || 10.0,
+              budget_max_order_eur: draftDrawer.payload?.budget_max_order_eur || 100.0,
+              max_asset_exposure_pct: draftDrawer.payload?.max_asset_exposure_pct || 100.0,
+            }}
+            hideActions={false}
+            submitLabel={at("modals.saveCreate")}
+            submitBusyLabel={at("uiText.loadingShort")}
+            cancelLabel={uiText.cancel}
+            successMessage=""
+            saveFailedMessage={at("universalAction.executionFailed")}
+            onCancel={closeDraftDrawer}
+            onSubmit={async (payload) => {
+              return await createBotConfig({
+                ...payload,
+                cadence: draftDrawer.payload?.cadence || "daily",
+              });
+            }}
+            onSaved={() => {
+              trackFinnConfirmEvent("finn_confirm_confirmed", draftDrawer.trackingType);
+              showSnackbar("Bot succesvol aangemaakt!", "success");
+              draftDrawer.onSuccess?.();
+              setDraftDrawer(null);
+            }}
+          />
+        ) : null}
+      </Drawer>
 
       {/* INPUT AREA */}
       {!previewSectionsOnly && (

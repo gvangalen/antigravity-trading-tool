@@ -3,14 +3,15 @@
 import {
   createContext,
   useContext,
-  useEffect,
   useCallback,
   useState,
+  useId,
   ReactNode,
 } from "react";
 import { toast } from "react-hot-toast";
-import { X, CheckCircle2, Info, AlertTriangle } from "lucide-react";
+import { X } from "lucide-react";
 import { actionButtonStyles } from "@/components/ui/actionButtonStyles";
+import OverlayShell from "@/components/ui/OverlayShell";
 
 /* ===========================================================
    TYPES
@@ -32,7 +33,8 @@ export type ModalConfig = {
   confirmText?: string;
   cancelText?: string;
   busyText?: string;
-  onConfirm?: () => void | Promise<void>;
+  closeOnBackdrop?: boolean;
+  onConfirm?: () => void | boolean | Promise<void | boolean>;
   onCancel?: () => void;
 };
 
@@ -92,22 +94,6 @@ export function ModalProvider({ children }: { children: ReactNode }) {
     []
   );
 
-  /* --- SCROLL LOCK + ESCAPE --- */
-  useEffect(() => {
-    if (!modal) return;
-
-    const prevOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-
-    const esc = (e: KeyboardEvent) => e.key === "Escape" && close();
-    window.addEventListener("keydown", esc);
-
-    return () => {
-      document.body.style.overflow = prevOverflow;
-      window.removeEventListener("keydown", esc);
-    };
-  }, [modal, close]);
-
   return (
     <ModalContext.Provider value={{ openConfirm, close, showSnackbar }}>
       {children}
@@ -149,6 +135,8 @@ function ModalRoot({
     busyText,
     onConfirm,
   } = modal;
+  const titleId = useId();
+  const descriptionId = useId();
 
   const toneClasses: {
     iconBg: string;
@@ -187,8 +175,10 @@ function ModalRoot({
 
     try {
       setBusy(true);
-      await onConfirm();
-      onClose();
+      const shouldClose = await onConfirm();
+      if (shouldClose !== false) {
+        onClose();
+      }
     } catch (err) {
       console.error("❌ Modal onConfirm error:", err);
     } finally {
@@ -197,65 +187,83 @@ function ModalRoot({
   };
 
   return (
-    <div className="fixed inset-0 z-[210] bg-black/60 backdrop-blur-sm flex items-center justify-center px-4 animate-fade-in">
-      <div className="w-full max-w-md bg-card dark:bg-[#0f172a] border border-slate-200 dark:border-slate-800 rounded-2xl shadow-xl animate-fade-slide flex flex-col max-h-[85vh] relative overflow-hidden transition-colors">
+    <OverlayShell
+      isOpen={Boolean(modal)}
+      onClose={onClose}
+      variant="dialog"
+      labelledBy={titleId}
+      describedBy={description || context || impact || safety || consequence ? descriptionId : undefined}
+      closeOnBackdrop={modal.closeOnBackdrop ?? true}
+      closeOnEscape
+      isCloseBlocked={busy}
+      rootClassName="z-[210]"
+      backdropClassName="bg-black/60 backdrop-blur-sm"
+      positionClassName="fixed inset-0 flex items-center justify-center px-4"
+      panelClassName="relative flex max-h-[85vh] w-full max-w-md flex-col overflow-hidden rounded-2xl border border-slate-200 bg-card shadow-xl transition-colors animate-fade-slide dark:border-slate-800 dark:bg-[#0f172a]"
+    >
+      <button
+        onClick={() => onClose()}
+        disabled={busy}
+        aria-label="Sluiten"
+        data-overlay-close="true"
+        className="absolute right-4 top-4 z-10 rounded-xl p-2 text-secondary transition-all hover:bg-slate-100 hover:text-slate-900 dark:hover:bg-slate-800 dark:hover:text-white"
+      >
+        <X className="h-5 w-5" aria-hidden="true" />
+      </button>
 
-        <button
-          onClick={onClose}
-          className="absolute top-4 right-4 p-2 rounded-xl text-secondary hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition-all z-10"
-        >
-          <X className="w-5 h-5" />
-        </button>
-
-        <div className="px-8 pt-8 pb-6 flex items-start gap-4">
-          {icon && (
-            <div className={`rounded-2xl p-3 ${toneClasses.iconBg}`}>
-              <div className={toneClasses.iconText}>{icon}</div>
-            </div>
-          )}
-          <div className="space-y-2">
-            {statusLabel ? (
-              <span className="inline-flex rounded-full border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.22em] text-slate-500 dark:text-slate-300">
-                {statusLabel}
-              </span>
-            ) : null}
-            <h2 className="text-2xl font-black text-foreground dark:text-white tracking-tight">{title}</h2>
+      <div className="flex items-start gap-4 px-8 pb-6 pt-8">
+        {icon ? (
+          <div className={`rounded-2xl p-3 ${toneClasses.iconBg}`} aria-hidden="true">
+            <div className={toneClasses.iconText}>{icon}</div>
           </div>
-        </div>
-
-        {(description || context || impact || safety || consequence) && (
-          <div className="flex-1 overflow-y-auto px-8 py-2 space-y-4 text-[15px] font-medium text-muted dark:text-slate-400 leading-relaxed">
-            {description ? <div>{description}</div> : null}
-            {context ? <ModalSection label="Context">{context}</ModalSection> : null}
-            {impact ? <ModalSection label="Impact">{impact}</ModalSection> : null}
-            {safety ? <ModalSection label="Veiligheid">{safety}</ModalSection> : null}
-            {consequence ? <ModalSection label="Daarna">{consequence}</ModalSection> : null}
-          </div>
-        )}
-
-        <div className="px-8 py-8 flex justify-end gap-4 mt-4">
-          <button
-            onClick={onClose}
-            disabled={busy}
-            className={actionButtonStyles({ variant: "secondary" })}
-          >
-            {cancelText}
-          </button>
-
-          <button
-            onClick={handleConfirm}
-            disabled={busy}
-            className={actionButtonStyles({
-              variant: toneClasses.confirmVariant,
-              className: "shadow-sm",
-            })}
-          >
-            {busy && <div className="w-4 h-4 border-2 border-white/30 border-t-white animate-spin rounded-full" />}
-            {busy ? busyText || "Bezig..." : confirmText}
-          </button>
+        ) : null}
+        <div className="space-y-2">
+          {statusLabel ? (
+            <span className="inline-flex rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.22em] text-slate-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300">
+              {statusLabel}
+            </span>
+          ) : null}
+          <h2 id={titleId} className="text-2xl font-black tracking-tight text-foreground dark:text-white">
+            {title}
+          </h2>
         </div>
       </div>
-    </div>
+
+      {(description || context || impact || safety || consequence) && (
+        <div
+          id={descriptionId}
+          className="flex-1 space-y-4 overflow-y-auto px-8 py-2 text-[15px] font-medium leading-relaxed text-muted dark:text-slate-400"
+        >
+          {description ? <div>{description}</div> : null}
+          {context ? <ModalSection label="Context">{context}</ModalSection> : null}
+          {impact ? <ModalSection label="Impact">{impact}</ModalSection> : null}
+          {safety ? <ModalSection label="Veiligheid">{safety}</ModalSection> : null}
+          {consequence ? <ModalSection label="Daarna">{consequence}</ModalSection> : null}
+        </div>
+      )}
+
+      <div className="mt-4 flex justify-end gap-4 px-8 py-8">
+        <button
+          onClick={() => onClose()}
+          disabled={busy}
+          className={actionButtonStyles({ variant: "secondary" })}
+        >
+          {cancelText}
+        </button>
+
+        <button
+          onClick={handleConfirm}
+          disabled={busy}
+          className={actionButtonStyles({
+            variant: toneClasses.confirmVariant,
+            className: "shadow-sm",
+          })}
+        >
+          {busy && <div className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" />}
+          {busy ? busyText || "Bezig..." : confirmText}
+        </button>
+      </div>
+    </OverlayShell>
   );
 }
 

@@ -91,10 +91,78 @@ export type MarketChartPoint = {
   volume?: number | null;
   created_at: string;
 };
+export type ForwardReturnChartResponse = {
+  year: number;
+  values: Array<number | null>;
+};
 export type SetupResponse = Record<string, unknown> | Record<string, unknown>[];
 export type StrategyResponse = Record<string, unknown> | Record<string, unknown>[];
 export type BotResponse = Record<string, unknown> | Record<string, unknown>[];
 export type PortfolioResponse = Record<string, unknown> | Record<string, unknown>[];
+export type WorkspaceIndicatorRow = {
+  name: string;
+  indicator_key?: string;
+  value?: number | string | null;
+  score?: number | null;
+  trend?: string | null;
+  interpretation?: string | null;
+  action?: string | null;
+  freshness?: {
+    stale?: boolean;
+    age_seconds?: number | null;
+    as_of?: string | null;
+    source?: string | null;
+    status?: string | null;
+  } | null;
+};
+export type WorkspaceCategoryScore = {
+  score?: number | null;
+  period?: string | null;
+  sample_size?: number | null;
+  status?: string | null;
+};
+export type WorkspaceCategoryPayload = {
+  rows: WorkspaceIndicatorRow[];
+  score: WorkspaceCategoryScore;
+  freshness?: {
+    stale?: boolean;
+    age_seconds?: number | null;
+    as_of?: string | null;
+    source?: string | null;
+    status?: string | null;
+  } | null;
+};
+export type WorkspaceAssetResponse = {
+  symbol: string;
+  periods: {
+    market: string;
+    macro: string;
+    technical: string;
+  };
+  quote?: {
+    price?: number | null;
+    change_24h?: number | null;
+    volume?: number | null;
+    stale?: boolean;
+    age_seconds?: number | null;
+    as_of?: string | null;
+    source?: string | null;
+    status?: string | null;
+  } | null;
+  categories: {
+    market: WorkspaceCategoryPayload;
+    macro: WorkspaceCategoryPayload;
+    technical: WorkspaceCategoryPayload;
+  };
+  combined?: {
+    score?: number | null;
+    status?: string | null;
+  } | null;
+  daily?: Record<string, unknown> | null;
+  master?: Record<string, unknown> | null;
+  regime?: Record<string, unknown> | null;
+  generated_at?: string | null;
+};
 export type OrderPreviewRequest = {
   bot_id: number;
   symbol: string;
@@ -162,9 +230,25 @@ export type AssistantAnalyticsPayload = {
   metadata?: Record<string, unknown>;
 };
 
+export type AssistantActionExecutionResponse = {
+  ok: boolean;
+  message?: string | null;
+  setup_id?: number | null;
+  strategy_id?: number | null;
+  bot_id?: number | null;
+  action_id?: string | null;
+  operation?: string | null;
+  verified?: Record<string, unknown> | null;
+  draft?: Record<string, unknown> | null;
+};
+
 export const assistantApi = {
   insight(context: AssistantRuntimeContext) {
-    return apiClient.post<AssistantInsightResponse>('/api/assistant/insight', context);
+    return apiClient.request<AssistantInsightResponse>('/api/assistant/insight', {
+      body: context,
+      method: 'POST',
+      timeoutMs: 20000,
+    });
   },
 
   preferences() {
@@ -176,6 +260,12 @@ export const assistantApi = {
       context,
       history,
       query,
+    });
+  },
+
+  executePendingAction(actionId: string) {
+    return apiClient.post<AssistantActionExecutionResponse>('/api/assistant/actions/execute', {
+      action_id: actionId,
     });
   },
 };
@@ -190,8 +280,11 @@ export const analyticsApi = {
 };
 
 export const mobileApi = {
-  overview() {
-    return apiClient.get<MobileOverviewResponse>('/api/dashboard/mobile-overview');
+  overview(symbol?: string) {
+    return apiClient.request<MobileOverviewResponse>('/api/dashboard/mobile-overview', {
+      query: symbol ? { symbol } : undefined,
+      timeoutMs: 20000,
+    });
   },
 };
 
@@ -208,6 +301,29 @@ export const intelligenceApi = {
     return apiClient.get<MarketChartPoint[]>('/api/market_data/7d', { symbol });
   },
 
+  forwardReturnsMonth(symbol: string) {
+    return apiClient.get<ForwardReturnChartResponse[]>('/api/market_data/forward/maand', { symbol });
+  },
+
+  workspaceAsset(
+    symbol: string,
+    options?: {
+      market_period?: 'day' | 'week' | 'month' | 'quarter';
+      macro_period?: 'day' | 'week' | 'month' | 'quarter';
+      technical_period?: 'day' | 'week' | 'month' | 'quarter';
+    },
+  ) {
+    return apiClient.request<WorkspaceAssetResponse>('/api/workspace/asset', {
+      query: {
+        symbol,
+        market_period: options?.market_period ?? 'day',
+        macro_period: options?.macro_period ?? 'day',
+        technical_period: options?.technical_period ?? 'day',
+      },
+      timeoutMs: 20000,
+    });
+  },
+
   dailyScores(symbol: string) {
     return apiClient.get<DailyScoresResponse>('/api/scores/daily', { symbol });
   },
@@ -218,6 +334,14 @@ export const intelligenceApi = {
 
   activeSetups(symbol?: string) {
     return apiClient.get<SetupResponse>('/api/setups/active', { symbol });
+  },
+
+  createSetup(data: Record<string, unknown>) {
+    return apiClient.post<Record<string, unknown>>('/api/setups', data);
+  },
+
+  updateSetup(setupId: number, data: Record<string, unknown>) {
+    return apiClient.patch<Record<string, unknown>>(`/api/setups/${setupId}`, data);
   },
 
   topSetups() {
@@ -266,6 +390,14 @@ export const intelligenceApi = {
 
   botConfigs() {
     return apiClient.get<BotResponse>('/api/bot/configs');
+  },
+
+  createBotConfig(data: Record<string, unknown>) {
+    return apiClient.post<Record<string, unknown>>('/api/bot/configs', data);
+  },
+
+  updateBotConfig(botId: number, data: Record<string, unknown>) {
+    return apiClient.put<Record<string, unknown>>(`/api/bot/configs/${botId}`, data);
   },
 
   botPortfolios() {

@@ -108,6 +108,6 @@ async def get_mobile_overview(
     in één snelle request voor mobiele startschermen met ingebouwde in-memory caching.
     """
     user_id = current_user["id"]
-    payload = await service.get_mobile_overview(user_id, bypass_cache=bypass_cache)
     locale = resolve_request_locale(x_locale, current_user.get("ai_preferences") or {})
+    payload = await service.get_mobile_overview(user_id, bypass_cache=bypass_cache, locale=locale)
     return await localize_generic_payload(_payload_to_dict(payload), locale)

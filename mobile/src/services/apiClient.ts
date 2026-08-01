@@ -1,13 +1,63 @@
+import { NativeModules, Platform } from 'react-native';
+
+import { getStoredAppLanguage } from '../preferences/appLocale';
 import { clearTokens, getAccessToken, getRefreshToken, saveAccessToken } from './tokenStorage';
 
-const DEFAULT_API_BASE_URL = 'https://tradamind.com';
+declare const __DEV__: boolean;
+
+function resolveDevApiBaseUrl() {
+  try {
+    const bundleUrl = NativeModules?.SourceCode?.scriptURL as string | undefined;
+    if (bundleUrl) {
+      const host = new URL(bundleUrl).hostname;
+      if (host) {
+        return `http://${host}:8000`;
+      }
+    }
+  } catch {
+    // Fall back to localhost when Metro host detection is unavailable.
+  }
+
+  return 'http://127.0.0.1:8000';
+}
+
+const DEFAULT_API_BASE_URL = __DEV__ ? resolveDevApiBaseUrl() : 'https://tradamind.com';
+const USE_COOKIE_CREDENTIALS = Platform.OS === 'web';
 
 declare const process: {
   env?: Record<string, string | undefined>;
 };
 
-export const API_BASE_URL =
-  process.env?.EXPO_PUBLIC_API_BASE_URL?.replace(/\/$/, '') || DEFAULT_API_BASE_URL;
+const configuredApiBaseUrl = process.env?.EXPO_PUBLIC_API_BASE_URL?.replace(/\/$/, '');
+const forceRemoteDevApi = process.env?.EXPO_PUBLIC_DEV_REMOTE_API === '1';
+
+function isRemoteTradamindUrl(value: string | undefined) {
+  if (!value) return false;
+
+  try {
+    return /(^|\.)tradamind\.com$/i.test(new URL(value).hostname);
+  } catch {
+    return false;
+  }
+}
+
+function resolveApiBaseUrl() {
+  if (!__DEV__) {
+    return configuredApiBaseUrl || DEFAULT_API_BASE_URL;
+  }
+
+  if (forceRemoteDevApi && configuredApiBaseUrl) {
+    return configuredApiBaseUrl;
+  }
+
+  if (configuredApiBaseUrl && !isRemoteTradamindUrl(configuredApiBaseUrl)) {
+    return configuredApiBaseUrl;
+  }
+
+  return DEFAULT_API_BASE_URL;
+}
+
+export const API_BASE_URL = resolveApiBaseUrl();
 
 export type ApiRequestOptions = {
   method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
@@ -45,14 +95,17 @@ class APIClient {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), options.timeoutMs ?? 12000);
     const accessToken = options.skipAuth ? null : await getAccessToken();
+    const refreshToken = options.skipAuth ? null : await getRefreshToken();
+    const locale = await getStoredAppLanguage();
 
     try {
       const response = await fetch(this.buildUrl(path, options.query), {
         body: options.body === undefined ? undefined : JSON.stringify(options.body),
-        credentials: 'include',
+        credentials: USE_COOKIE_CREDENTIALS ? 'include' : 'omit',
         headers: {
           Accept: 'application/json',
           'Content-Type': 'application/json',
+          'X-Locale': locale,
           'X-Tradamind-Client': 'mobile-expo',
           ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
         },
@@ -63,7 +116,7 @@ class APIClient {
       const payload = await this.parseResponse(response);
 
       if (!response.ok) {
-        if (response.status === 401 && !didRetry && !options.skipRefresh) {
+        if (response.status === 401 && !didRetry && !options.skipRefresh && refreshToken) {
           const refreshed = await this.refreshAccessToken();
           if (refreshed) {
             return this.requestInternal<T>(path, options, true);
@@ -99,6 +152,10 @@ class APIClient {
 
   put<T>(path: string, body?: unknown, query?: ApiRequestOptions['query']) {
     return this.request<T>(path, { body, method: 'PUT', query });
+  }
+
+  patch<T>(path: string, body?: unknown, query?: ApiRequestOptions['query']) {
+    return this.request<T>(path, { body, method: 'PATCH', query });
   }
 
   delete<T>(path: string, query?: ApiRequestOptions['query']) {
@@ -143,12 +200,14 @@ class APIClient {
     if (!refreshToken) return false;
 
     try {
+      const locale = await getStoredAppLanguage();
       const response = await fetch(this.buildUrl('/api/auth/refresh'), {
         body: JSON.stringify({ refresh_token: refreshToken }),
-        credentials: 'include',
+        credentials: USE_COOKIE_CREDENTIALS ? 'include' : 'omit',
         headers: {
           Accept: 'application/json',
           'Content-Type': 'application/json',
+          'X-Locale': locale,
           'X-Tradamind-Client': 'mobile-expo',
         },
         method: 'POST',

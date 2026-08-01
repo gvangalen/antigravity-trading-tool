@@ -1,7 +1,20 @@
-import * as SecureStore from 'expo-secure-store';
 import { ReactNode, createContext, useContext, useEffect, useMemo, useState } from 'react';
 
-export type AppLanguage = 'nl' | 'en';
+import { getItemAsync, setItemAsync } from '../services/secureStore';
+import { getAccessToken } from '../services/tokenStorage';
+import { assistantApi } from '../services/tradamindApi';
+import {
+  AppLanguage,
+  DEFAULT_APP_LANGUAGE,
+  LANGUAGE_KEY,
+  extractBackendAppLanguage,
+  normalizeAppLanguage,
+  setStoredAppLanguage,
+  subscribeAppLanguage,
+} from './appLocale';
+
+export type { AppLanguage } from './appLocale';
+
 export type AppAppearance = 'system' | 'dark' | 'light';
 
 type AppPreferencesContextValue = {
@@ -12,13 +25,12 @@ type AppPreferencesContextValue = {
   setLanguage: (value: AppLanguage) => Promise<void>;
 };
 
-const LANGUAGE_KEY = 'tradamind_mobile_language';
 const APPEARANCE_KEY = 'tradamind_mobile_appearance';
 
 const AppPreferencesContext = createContext<AppPreferencesContextValue | undefined>(undefined);
 
 export function AppPreferencesProvider({ children }: { children: ReactNode }) {
-  const [language, setLanguageState] = useState<AppLanguage>('nl');
+  const [language, setLanguageState] = useState<AppLanguage>(DEFAULT_APP_LANGUAGE);
   const [appearance, setAppearanceState] = useState<AppAppearance>('system');
   const [loadingPreferences, setLoadingPreferences] = useState(true);
 
@@ -27,17 +39,30 @@ export function AppPreferencesProvider({ children }: { children: ReactNode }) {
 
     async function load() {
       const [storedLanguage, storedAppearance] = await Promise.all([
-        SecureStore.getItemAsync(LANGUAGE_KEY),
-        SecureStore.getItemAsync(APPEARANCE_KEY),
+        getItemAsync(LANGUAGE_KEY),
+        getItemAsync(APPEARANCE_KEY),
       ]);
 
       if (!mounted) return;
-      if (storedLanguage === 'nl' || storedLanguage === 'en') {
-        setLanguageState(storedLanguage);
-      }
+      const nextLanguage = normalizeAppLanguage(storedLanguage);
+      setLanguageState(nextLanguage);
       if (storedAppearance === 'system' || storedAppearance === 'dark' || storedAppearance === 'light') {
         setAppearanceState(storedAppearance);
       }
+
+      const token = await getAccessToken();
+      if (token) {
+        try {
+          const preferences = await assistantApi.preferences();
+          const backendLocale = extractBackendAppLanguage(preferences, nextLanguage);
+          if (!mounted) return;
+          setLanguageState(backendLocale);
+          await setStoredAppLanguage(backendLocale);
+        } catch {
+          // Keep local preference when backend locale lookup is unavailable.
+        }
+      }
+
       setLoadingPreferences(false);
     }
 
@@ -47,14 +72,20 @@ export function AppPreferencesProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
+  useEffect(() => {
+    return subscribeAppLanguage((nextLanguage) => {
+      setLanguageState(nextLanguage);
+    });
+  }, []);
+
   const setLanguage = async (value: AppLanguage) => {
     setLanguageState(value);
-    await SecureStore.setItemAsync(LANGUAGE_KEY, value);
+    await setStoredAppLanguage(value);
   };
 
   const setAppearance = async (value: AppAppearance) => {
     setAppearanceState(value);
-    await SecureStore.setItemAsync(APPEARANCE_KEY, value);
+    await setItemAsync(APPEARANCE_KEY, value);
   };
 
   const value = useMemo(
@@ -94,6 +125,7 @@ export function preferenceLabels(language: AppLanguage) {
     deviceSettings: language === 'nl' ? 'Open device instellingen' : 'Open device settings',
     emailFallback: language === 'nl' ? 'Geen e-mail geladen' : 'No email loaded',
     english: 'English',
+    german: 'Deutsch',
     languageTitle: language === 'nl' ? 'Taal' : 'Language',
     light: language === 'nl' ? 'Licht' : 'Light',
     logout: language === 'nl' ? 'Uitloggen' : 'Log out',
@@ -147,17 +179,17 @@ export function preferenceColors(appearance: AppAppearance) {
   }
 
   return {
-    background: '#F8FAFC',
-    backgroundSoft: '#EFF6FF',
-    border: '#CBD5E1',
-    borderStrong: '#93A4B8',
-    borderSubtle: '#E2E8F0',
+    background: '#FFFFFF',
+    backgroundSoft: '#FFFFFF',
+    border: '#D7E0EA',
+    borderStrong: '#A5B4C7',
+    borderSubtle: '#E9EEF5',
     surface: '#FFFFFF',
     surfaceElevated: '#FFFFFF',
-    surfaceMuted: '#EAF2FF',
+    surfaceMuted: '#F7FAFC',
     text: '#0F172A',
     textDim: '#64748B',
-    textMuted: '#475569',
+    textMuted: '#526276',
     textSoft: '#1E293B',
     accent: '#2563EB',
     success: '#10B981',

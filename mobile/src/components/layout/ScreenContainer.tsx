@@ -44,17 +44,32 @@ export function ScreenContainer({
 
   if (!scroll) {
     return (
-    <SafeAreaView edges={['top']} style={[styles.safeArea, { backgroundColor: colors.background }]}>
-        <View style={[styles.staticContent, { backgroundColor: colors.background }, edgeToEdge && { paddingHorizontal: 0 }]}>{children}</View>
+    <SafeAreaView edges={[]} style={[styles.safeArea, { backgroundColor: colors.background }]}>
+        <View
+          style={[
+            styles.staticContent,
+            { backgroundColor: colors.background },
+            edgeToEdge && { paddingHorizontal: 0 },
+          ]}
+        >
+          {children}
+        </View>
       </SafeAreaView>
     );
   }
 
   return (
-    <SafeAreaView edges={['top']} style={[styles.safeArea, { backgroundColor: colors.background }]}>
+    <SafeAreaView edges={[]} style={[styles.safeArea, { backgroundColor: colors.background }]}>
       <ScrollView
-        contentContainerStyle={[styles.content, { paddingBottom: contentInsetBottom }, edgeToEdge && { paddingHorizontal: 0 }]}
+        automaticallyAdjustContentInsets={false}
+        contentInsetAdjustmentBehavior="never"
+        contentContainerStyle={[
+          styles.content,
+          { paddingBottom: contentInsetBottom },
+          edgeToEdge && { paddingHorizontal: 0 },
+        ]}
         keyboardShouldPersistTaps="handled"
+        style={styles.scroll}
         refreshControl={
           <RefreshControl
             refreshing={isRefreshing}
@@ -72,18 +87,27 @@ export function ScreenContainer({
 
 const styles = StyleSheet.create({
   content: {
-    gap: theme.spacing.lg,
-    paddingHorizontal: theme.spacing.lg,
-    paddingTop: theme.spacing.md,
+    alignItems: 'stretch',
+    gap: 8,
+    minWidth: '100%',
+    width: '100%',
+    paddingHorizontal: 0,
+    paddingTop: 0,
+  },
+  scroll: {
+    marginTop: 0,
   },
   safeArea: {
     backgroundColor: theme.colors.background,
     flex: 1,
   },
   staticContent: {
+    alignItems: 'stretch',
     backgroundColor: theme.colors.background,
     flex: 1,
-    paddingHorizontal: theme.spacing.lg,
-    paddingTop: theme.spacing.md,
+    minWidth: '100%',
+    width: '100%',
+    paddingHorizontal: 0,
+    paddingTop: 0,
   },
 });
