@@ -9,10 +9,10 @@ PHASE6_DOC = REPO_ROOT / "docs" / "operations" / "platform-hardening-phase6-qa.m
 def test_platform_status_reflects_latest_deployed_hardening_baseline():
     source = STATUS_DOC.read_text()
 
-    assert "`2f56033` - `Upgrade frontend security stack to Next 15`" in source
+    assert "patched `next@15.5.21+` line" in source
     assert (
         "`Platform hardening baseline, Phase 2.1 observability bridge, "
-        "and the frontend security stack upgrade to Next 15 are live on Oracle`"
+        "and the patched frontend security stack are live on Oracle once repo_head, production_head, and LAST_GOOD_COMMIT agree`"
         in source
     )
     assert (
@@ -39,6 +39,7 @@ def test_platform_status_reflects_latest_deployed_hardening_baseline():
     assert "authenticated frontend flows clear stale local user/token state" in source
     assert "market-data read routes no longer perform forward-return sync writes" in source
     assert 'externally: `401 {"detail":"Missing access token"}`' in source
+    assert "git rev-parse --short HEAD" in source
     assert "repo_head" in source
     assert "production_head" in source
     assert "LAST_GOOD_COMMIT" in source

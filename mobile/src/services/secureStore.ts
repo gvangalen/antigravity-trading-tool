@@ -1,6 +1,10 @@
 import * as ExpoSecureStore from 'expo-secure-store';
 import { Platform } from 'react-native';
 
+declare const __DEV__: boolean;
+
+const nativeDevFallback = new Map<string, string>();
+
 function getBrowserStorage() {
   try {
     return typeof window !== 'undefined' ? window.localStorage : null;
@@ -21,13 +25,31 @@ function hasNativeSecureStore() {
   );
 }
 
+function assertNativeSecureStoreAvailable() {
+  if (Platform.OS === 'web' || hasNativeSecureStore()) {
+    return;
+  }
+
+  if (__DEV__) {
+    console.warn('[secureStore] Native SecureStore unavailable; using in-memory dev fallback.');
+    return;
+  }
+
+  throw new Error('Native SecureStore is required for release builds.');
+}
+
 export async function getItemAsync(key: string) {
   if (hasNativeSecureStore()) {
     return ExpoSecureStore.getItemAsync(key);
   }
 
-  const storage = getBrowserStorage();
-  return storage ? storage.getItem(key) : null;
+  if (Platform.OS === 'web') {
+    const storage = getBrowserStorage();
+    return storage ? storage.getItem(key) : null;
+  }
+
+  assertNativeSecureStoreAvailable();
+  return nativeDevFallback.get(key) ?? null;
 }
 
 export async function setItemAsync(key: string, value: string) {
@@ -36,8 +58,14 @@ export async function setItemAsync(key: string, value: string) {
     return;
   }
 
-  const storage = getBrowserStorage();
-  storage?.setItem(key, value);
+  if (Platform.OS === 'web') {
+    const storage = getBrowserStorage();
+    storage?.setItem(key, value);
+    return;
+  }
+
+  assertNativeSecureStoreAvailable();
+  nativeDevFallback.set(key, value);
 }
 
 export async function deleteItemAsync(key: string) {
@@ -46,6 +74,12 @@ export async function deleteItemAsync(key: string) {
     return;
   }
 
-  const storage = getBrowserStorage();
-  storage?.removeItem(key);
+  if (Platform.OS === 'web') {
+    const storage = getBrowserStorage();
+    storage?.removeItem(key);
+    return;
+  }
+
+  assertNativeSecureStoreAvailable();
+  nativeDevFallback.delete(key);
 }

@@ -1,11 +1,11 @@
 # Platform Security & Architecture Retest Checklist
 
-Last updated: 2026-06-06
+Last updated: 2026-08-01
 
 This checklist is the fastest clean rerun path for the security agent and the system architect agent after the latest live baseline:
 
-- `production_head = 2f56033`
-- `LAST_GOOD_COMMIT = 2f56033`
+- `production_head` must be read from the live host during the rerun
+- `LAST_GOOD_COMMIT` must match the current deploy marker on the live host
 
 Use this document to keep both reruns anchored to the same runtime truth, smoke state, and test scope.
 
@@ -14,8 +14,8 @@ Use this document to keep both reruns anchored to the same runtime truth, smoke 
 Confirm these first:
 
 1. live commit markers
-   - host `HEAD = 2f56033`
-   - `ops/deploy/production/LAST_GOOD_COMMIT = 2f56033`
+   - host `HEAD` must be captured from the live host before scoring
+   - `ops/deploy/production/LAST_GOOD_COMMIT` must be captured from the same host and recorded next to `HEAD`
 
 2. health and reachability
    - external `/api/health` -> `200`
@@ -24,9 +24,9 @@ Confirm these first:
    - internal `/api/system/health` may be `degraded` if broker/Celery inspection is noisy, but it must not be `down` or `error`
 
 3. runtime expectations
-   - frontend security stack is on `next@15.5.19`
-   - `npm audit` on the frontend is `0 vulnerabilities`
-   - web auth is cookie + CSRF protected
+   - frontend security stack is on a patched `next@15.5.21+` line
+   - `npm audit` on the frontend has `0 critical` and `0 high`
+   - web auth is cookie + CSRF protected with no browser-token auth path on web
    - Finn action execution is `action_id` only
 
 If any of those are false, stop and re-check the deployment state before scoring the platform.
@@ -84,7 +84,7 @@ npm run build
 
 Expected:
 
-- `npm audit`: `0 vulnerabilities`
+- `npm audit`: `0 critical`, `0 high`
 - build: pass
 
 ### Recommended Regression Slice
@@ -198,4 +198,3 @@ If the reruns are clean, the expected reading should roughly be:
   - throughput validation
   - queue backlog reduction
   - multi-instance rollout discipline
-

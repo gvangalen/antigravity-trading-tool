@@ -1,6 +1,6 @@
 # Platform Hardening Status
 
-Last updated: 2026-06-06
+Last updated: 2026-08-01
 
 This document tracks the reliability/platform hardening track after the first six phases. It separates what is now production-ready for V1 from what remains legacy, scale-tuning, or enterprise-level work.
 
@@ -49,15 +49,16 @@ The main remaining risk is operational scale, not core request correctness:
 
 ## Current Live Baseline
 
-Latest deployed hardening commit:
+Latest deployed hardening baseline:
 
-- `2f56033` - `Upgrade frontend security stack to Next 15`
+- deployment markers must be read from the live host before final scoring
+- the security stack now expects a patched `next@15.5.21+` line and a clean `npm audit` for `critical`/`high`
 
 Current code and runtime truth:
 
-- `repo_head`: `2f56033` on `main` as of June 6, 2026
-- `production_head`: `2f56033` on Oracle as of June 6, 2026
-- `LAST_GOOD_COMMIT`: `2f56033`
+- `repo_head`: capture locally with `git rev-parse --short HEAD` before the rerun
+- `production_head`: capture from the live Oracle host before the rerun
+- `LAST_GOOD_COMMIT`: read from the live deploy marker on the same host
 
 Deploy/status convention for the next phase:
 
@@ -70,7 +71,7 @@ Use source under `frontend/trading-tool-frontend/lib/` and `frontend/trading-too
 
 Current rollout candidate:
 
-- `Platform hardening baseline, Phase 2.1 observability bridge, and the frontend security stack upgrade to Next 15 are live on Oracle`
+- `Platform hardening baseline, Phase 2.1 observability bridge, and the patched frontend security stack are live on Oracle once repo_head, production_head, and LAST_GOOD_COMMIT agree`
 
 Latest smoke results from deploy:
 
@@ -85,7 +86,7 @@ Latest smoke results from deploy:
   - `celery-worker-scoring-execution`: `concurrency=2`
   - `celery-worker-ai-reporting`: `concurrency=1`
   - `celery-beat`: unchanged
-- Oracle markers: `HEAD=8096336`, `LAST_GOOD_COMMIT=8096336`
+- Oracle markers: record the current `HEAD` and `LAST_GOOD_COMMIT` together for every rerun report
 
 Latest local regression:
 
