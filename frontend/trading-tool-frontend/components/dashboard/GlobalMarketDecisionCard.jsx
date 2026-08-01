@@ -9,6 +9,7 @@ export default function GlobalMarketDecisionCard({
   symbol = "BTC",
   snapshot = null,
   compact = false,
+  fallbackMessage = null,
 }) {
   const { t } = useTranslation();
   const fallbackSnapshot = useMarketIntelligence(symbol, { enabled: !snapshot });
@@ -23,10 +24,14 @@ export default function GlobalMarketDecisionCard({
     );
   }
 
-  if (data?.available === false || data?.data_status === "insufficient_data") {
+  if (
+    data?.available === false
+    || data?.data_status === "insufficient_data"
+    || data?.data_status === "fallback"
+  ) {
     return (
       <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-5 text-sm font-semibold text-slate-500">
-        {t?.common?.insufficientData || "Onvoldoende data"}
+        {fallbackMessage || t?.common?.insufficientData || "Onvoldoende data"}
       </div>
     );
   }

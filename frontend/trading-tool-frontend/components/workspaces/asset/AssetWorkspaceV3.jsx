@@ -1536,6 +1536,8 @@ const EMPTY_FORWARD_RETURNS = {
   year: [],
 };
 
+const FORWARD_RETURNS_REQUEST_TIMEOUT_MS = 12000;
+
 function ForwardReturnsSection({ symbol, ui }) {
   const [data, setData] = useState(EMPTY_FORWARD_RETURNS);
   const [loading, setLoading] = useState(true);
@@ -1549,12 +1551,19 @@ function ForwardReturnsSection({ symbol, ui }) {
     const loadForwardReturns = async () => {
       setLoading(true);
       setFailed(false);
+      const withTimeout = (promise) =>
+        Promise.race([
+          promise,
+          new Promise((_, reject) =>
+            window.setTimeout(() => reject(new Error("forward_returns_timeout")), FORWARD_RETURNS_REQUEST_TIMEOUT_MS)
+          ),
+        ]);
 
       const results = await Promise.allSettled([
-        fetchForwardReturnsWeek(symbol),
-        fetchForwardReturnsMonth(symbol),
-        fetchForwardReturnsQuarter(symbol),
-        fetchForwardReturnsYear(symbol),
+        withTimeout(fetchForwardReturnsWeek(symbol)),
+        withTimeout(fetchForwardReturnsMonth(symbol)),
+        withTimeout(fetchForwardReturnsQuarter(symbol)),
+        withTimeout(fetchForwardReturnsYear(symbol)),
       ]);
 
       if (cancelled) return;
@@ -1570,7 +1579,10 @@ function ForwardReturnsSection({ symbol, ui }) {
         quarter: value(2),
         year: value(3),
       });
-      setFailed(results.every((result) => result.status === "rejected"));
+      setFailed(
+        results.every((result) => result.status === "rejected")
+        || results.every((result, index) => value(index).length === 0)
+      );
       setLoading(false);
     };
 
@@ -2027,8 +2039,9 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
           symbol={activeSymbol}
           snapshot={{
             data: workspace?.regime ?? null,
-            loading: workspaceLoading && !workspace?.regime,
+            loading: workspaceLoading && !workspace,
           }}
+          fallbackMessage={isFallbackWorkspace ? ui.fallbackReady : null}
           compact
         />
       </section>
@@ -2037,7 +2050,11 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
         market={hasScoreData ? market : null}
         macro={hasScoreData ? macro : null}
         technical={hasScoreData ? technical : null}
-        combined={combinedSummary}
+        combined={
+          isFallbackWorkspace && combinedSummary.score === null
+            ? { ...combinedSummary, bias: ui.fallbackData, tone: scoreTone(50, ui) }
+            : combinedSummary
+        }
         weights={master?.weights}
         loading={scoresLoading}
         onSaveWeights={saveWeights}
