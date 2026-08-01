@@ -69,7 +69,7 @@ if TYPE_CHECKING:
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
-MISSION_CONTROL_CACHE_TTL_SECONDS = int(os.getenv("MISSION_CONTROL_CACHE_TTL_SECONDS", "90"))
+MISSION_CONTROL_CACHE_TTL_SECONDS = int(os.getenv("MISSION_CONTROL_CACHE_TTL_SECONDS", "20"))
 _mission_control_cache: Dict[int, Dict[str, Any]] = {}
 
 
@@ -3055,14 +3055,17 @@ async def get_finn_mission_control(
             "allow_cached_mission_control": True,
         },
     )
-    await _issue_finn_response_actions_safely(
-        finn,
-        db,
-        current_user["id"],
-        response,
-        trace_id=trace_id,
-        route_source="assistant_mission_control",
-    )
+    try:
+        await finn.issue_response_actions(current_user["id"], response)
+    except (DBAPIError, SQLAlchemyError) as exc:
+        logger.warning(
+            "Skipping FINN response action issuance after database failure on %s for user %s (trace_id=%s): %s",
+            "assistant_mission_control",
+            current_user["id"],
+            trace_id,
+            exc,
+        )
+        await db.rollback()
     response = await _enrich_with_trader_profile(db, current_user["id"], response)
     _store_cached_mission_control(current_user["id"], response)
     return response

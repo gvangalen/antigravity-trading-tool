@@ -35,4 +35,4 @@ def test_market_intelligence_cache_ttl_and_mission_control_ttl_are_hardened():
     assistant_source = _read(BACKEND_ROOT / "api" / "ai_assistant_api.py")
 
     assert 'MARKET_INTELLIGENCE_CACHE_TTL_SECONDS' in intelligence_source
-    assert 'MISSION_CONTROL_CACHE_TTL_SECONDS = int(os.getenv("MISSION_CONTROL_CACHE_TTL_SECONDS", "90"))' in assistant_source
+    assert 'MISSION_CONTROL_CACHE_TTL_SECONDS = int(os.getenv("MISSION_CONTROL_CACHE_TTL_SECONDS", "20"))' in assistant_source

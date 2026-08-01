@@ -63,6 +63,10 @@ function buildLoginRedirectUrl(reason?: string) {
 
 function redirectToLogin(reason?: string) {
   if (typeof window !== "undefined") {
+    if (!reason) {
+      window.location.href = "/login";
+      return;
+    }
     window.location.href = buildLoginRedirectUrl(reason);
   }
 }

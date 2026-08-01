@@ -147,7 +147,7 @@ class AuthService:
         refresh_token, _ = await self._issue_refresh_session(user)
 
         await self.repository.update_last_login(user.id, self._db_utc_now())
-        requested_locale = resolve_supported_locale(data.locale)
+        requested_locale = resolve_supported_locale(getattr(data, "locale", None))
         current_locale = resolve_supported_locale((user.ai_preferences or {}).get("locale"))
         if requested_locale != current_locale:
             user = await self.repository.update_ai_preferences(user.id, {"locale": requested_locale}) or user
