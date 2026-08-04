@@ -67,7 +67,6 @@ import {
   Bot,
   Terminal,
   BarChart3,
-  Filter,
 } from 'lucide-react';
 
 /* =====================================================
@@ -1484,10 +1483,6 @@ function FinnReportsPanel({ report }) {
     () => safeFinnReportOptions.filter((option) => ['today', 'week', 'behavior'].includes(option?.key)),
     [safeFinnReportOptions]
   );
-  const blockedOption = useMemo(
-    () => safeFinnReportOptions.find((option) => option?.key === 'blocked') || null,
-    [safeFinnReportOptions]
-  );
 
   const loadFinnReport = async (option = activeOption, force = false) => {
     if (!option?.key || !option?.prompt) {
@@ -1692,7 +1687,7 @@ function FinnReportsPanel({ report }) {
             </div>
           ) : (
             <div className="space-y-5">
-              <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+              <div className="flex flex-col gap-4">
                 <div className="overflow-x-auto">
                   <div className="inline-flex rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 overflow-hidden min-w-max">
                     {primaryReflectionTabs.map((option, index) => {
@@ -1714,19 +1709,6 @@ function FinnReportsPanel({ report }) {
                     })}
                   </div>
                 </div>
-                {blockedOption ? (
-                  <button
-                    onClick={() => setActiveFinnReport(blockedOption.key)}
-                    className={`inline-flex items-center gap-2 self-start rounded-2xl border px-5 py-3 text-sm font-semibold transition-colors ${
-                      activeFinnReport === blockedOption.key
-                        ? 'border-slate-900 bg-slate-900 text-white dark:border-white dark:bg-white dark:text-slate-950'
-                        : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-200'
-                    }`}
-                  >
-                    <Filter size={16} />
-                    Blocked
-                  </button>
-                ) : null}
               </div>
 
               <div className="rounded-[28px] border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 p-5 md:p-6">
