@@ -1452,7 +1452,7 @@ function FinnGovernanceSurface({ analysis }) {
   );
 }
 
-function FinnReportsPanel() {
+function FinnReportsPanel({ report }) {
   const { t, locale } = useTranslation();
   const reportT = t.pages.report;
   const finnT = reportT.finn || {};
@@ -2120,7 +2120,7 @@ RENDER
         report && (
           <div className="animate-fade-slide pb-24">
             <DashboardErrorBoundary onRetry={handleBoundaryRetry}>
-              <FinnReportsPanel />
+              <FinnReportsPanel report={report} />
             </DashboardErrorBoundary>
 
             <DashboardErrorBoundary onRetry={handleBoundaryRetry}>
