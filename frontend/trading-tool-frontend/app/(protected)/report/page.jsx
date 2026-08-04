@@ -66,6 +66,9 @@ import {
   Bot,
   Terminal,
   BarChart3,
+  ChevronRight,
+  Filter,
+  Globe2,
 } from 'lucide-react';
 
 /* =====================================================
@@ -451,6 +454,23 @@ function getTradingReportSummary(report, fallbackText) {
     .trim();
 
   return cleaned.length > 190 ? `${cleaned.slice(0, 190).trim()}...` : cleaned;
+}
+
+function compactSentence(value, maxLength = 72, fallback = 'Waiting for data') {
+  const text = String(value || '').replace(/\s+/g, ' ').trim();
+  if (!text) return fallback;
+  return text.length > maxLength ? `${text.slice(0, maxLength).trim()}...` : text;
+}
+
+function formatReflectionDateLabel(rawDate, locale = 'en') {
+  if (!rawDate) return '—';
+  const parsed = new Date(rawDate);
+  if (Number.isNaN(parsed.getTime())) return String(rawDate);
+  return formatDateTime(parsed, locale, {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+  });
 }
 
 function getTradingReportPanelCopy(locale = 'nl') {
@@ -1452,7 +1472,7 @@ function FinnGovernanceSurface({ analysis }) {
   );
 }
 
-function FinnReportsPanel() {
+function FinnReportsPanel({ report }) {
   const { t, locale } = useTranslation();
   const reportT = t.pages.report;
   const finnT = reportT.finn || {};
@@ -1477,6 +1497,14 @@ function FinnReportsPanel() {
   const activeOption = useMemo(
     () => resolveActiveFinnReportOption(safeFinnReportOptions, activeFinnReport),
     [activeFinnReport, safeFinnReportOptions]
+  );
+  const primaryReflectionTabs = useMemo(
+    () => safeFinnReportOptions.filter((option) => ['today', 'week', 'behavior'].includes(option?.key)),
+    [safeFinnReportOptions]
+  );
+  const blockedOption = useMemo(
+    () => safeFinnReportOptions.find((option) => option?.key === 'blocked') || null,
+    [safeFinnReportOptions]
   );
 
   const loadFinnReport = async (option = activeOption, force = false) => {
@@ -1590,7 +1618,46 @@ function FinnReportsPanel() {
     [digestCopy.open, openActionCount],
   ];
   const isTodayView = activeOptionKey === 'today';
+  const evidenceCount = reviewedCount + blockedCount + openActionCount;
+  const evidenceTarget = 3;
+  const evidenceProgress = Math.max(0, Math.min(100, (evidenceCount / evidenceTarget) * 100));
+  const totalEvents = cleanedActivityEntries.length + cleanedBlockedEntries.length + cleanedDeviationEntries.length;
+  const hasLimitedEvidence = evidenceCount < evidenceTarget;
+  const reflectionDateLabel = formatReflectionDateLabel(report?.report_date, locale);
+  const headerRangeLabel = activeOptionKey === 'today' ? 'Today' : activeOption?.label || digestCopy.metricsHint;
+  const reflectionSupport = hasLimitedEvidence
+    ? 'FINN needs a few explicit decisions before it can identify a meaningful pattern.'
+    : 'FINN reviews how closely you followed your plan and what to improve next.';
+  const reflectionAside = hasLimitedEvidence
+    ? 'FINN will show patterns here once enough existing activity and reviews have been recorded.'
+    : 'FINN is now seeing enough evidence to surface repeatable patterns and coaching signals.';
   const primaryActionLabel = reflectionSummary.primaryAction;
+  const tradingSummaryCards = [
+    {
+      key: 'market',
+      icon: Globe2,
+      label: 'Market',
+      value: compactSentence(report?.market_overview),
+    },
+    {
+      key: 'macro',
+      icon: BarChart3,
+      label: 'Macro',
+      value: compactSentence(report?.macro_context || report?.macro_trends),
+    },
+    {
+      key: 'technical',
+      icon: Activity,
+      label: 'Technical',
+      value: compactSentence(report?.technical_analysis || report?.technical_structure),
+    },
+    {
+      key: 'setup',
+      icon: Target,
+      label: 'Setups & strategy',
+      value: compactSentence(report?.strategy_implication || report?.setup_validation || report?.setup_performance),
+    },
+  ];
   const openReflectionDetails = () => {
     setExpanded(true);
     if (typeof window !== 'undefined') {
@@ -1611,9 +1678,28 @@ function FinnReportsPanel() {
 
       <div className="rounded-3xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 shadow-lg shadow-slate-900/5 overflow-hidden">
         <div className="p-6 md:p-7 border-b border-slate-100 dark:border-slate-800/80">
-          <h2 className="text-xl md:text-2xl font-black tracking-tight text-slate-950 dark:text-slate-100">
-            {digestCopy.reportTitle}
-          </h2>
+          <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
+            <div>
+              <h2 className="text-3xl md:text-4xl font-black tracking-tight text-slate-950 dark:text-slate-100">
+                Reflection
+              </h2>
+              <p className="mt-2 text-base font-medium text-slate-500 dark:text-slate-400 max-w-2xl">
+                FINN reviews how closely you followed your plan and what to improve next.
+              </p>
+            </div>
+            <div className="flex flex-wrap items-center gap-3">
+              <span className="text-base font-medium text-slate-600 dark:text-slate-300">
+                {headerRangeLabel} · {reflectionDateLabel}
+              </span>
+              <span className={`inline-flex items-center rounded-2xl border px-4 py-2 text-sm font-semibold ${
+                hasLimitedEvidence
+                  ? 'border-blue-200 bg-blue-50 text-blue-600 dark:border-blue-900/40 dark:bg-blue-950/20 dark:text-blue-300'
+                  : 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/40 dark:bg-emerald-950/20 dark:text-emerald-300'
+              }`}>
+                {hasLimitedEvidence ? 'Limited evidence' : 'Reflection active'}
+              </span>
+            </div>
+          </div>
         </div>
 
         <div className="p-6 md:p-7">
@@ -1670,34 +1756,138 @@ function FinnReportsPanel() {
               </button>
             </div>
           ) : (
-            <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-900/40 p-5 md:p-6">
-              <div className="min-w-0">
-                <div className="rounded-2xl border border-blue-100 dark:border-blue-900/40 bg-blue-50/70 dark:bg-blue-950/20 p-5">
-                  <div className="text-[10px] font-black uppercase tracking-[0.18em] text-blue-600 dark:text-blue-300">
-                    {activeOption?.label || digestCopy.metricsHint}
+            <div className="space-y-5">
+              <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                <div className="overflow-x-auto">
+                  <div className="inline-flex rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 overflow-hidden min-w-max">
+                    {primaryReflectionTabs.map((option, index) => {
+                      const active = option.key === activeFinnReport;
+                      const label = option.key === 'behavior' ? '30 days' : option.label;
+                      return (
+                        <button
+                          key={`${option.key}-${index}`}
+                          onClick={() => setActiveFinnReport(option.key)}
+                          className={`px-6 py-3 text-sm font-semibold transition-colors ${
+                            active
+                              ? 'bg-blue-50 text-blue-600 dark:bg-blue-950/30 dark:text-blue-300'
+                              : 'text-slate-600 hover:text-slate-950 dark:text-slate-400 dark:hover:text-slate-100'
+                          } ${index !== primaryReflectionTabs.length - 1 ? 'border-r border-slate-200 dark:border-slate-800' : ''}`}
+                        >
+                          {label}
+                        </button>
+                      );
+                    })}
                   </div>
-                  <p className="mt-3 text-lg md:text-2xl font-black tracking-tight text-slate-950 dark:text-slate-100 max-w-3xl">
-                    {reflectionSummary.headline}
-                  </p>
                 </div>
+                {blockedOption ? (
+                  <button
+                    onClick={() => setActiveFinnReport(blockedOption.key)}
+                    className={`inline-flex items-center gap-2 self-start rounded-2xl border px-5 py-3 text-sm font-semibold transition-colors ${
+                      activeFinnReport === blockedOption.key
+                        ? 'border-slate-900 bg-slate-900 text-white dark:border-white dark:bg-white dark:text-slate-950'
+                        : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-200'
+                    }`}
+                  >
+                    <Filter size={16} />
+                    Blocked
+                  </button>
+                ) : null}
+              </div>
 
-                <div className="mt-4 grid grid-cols-1 sm:grid-cols-3 gap-3">
-                  {compactMetricItems.map(([label, value]) => (
-                    <div
-                      key={label}
-                      className="rounded-xl bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 p-3"
-                    >
-                      <div className="text-[9px] font-black uppercase tracking-[0.16em] text-slate-400 dark:text-slate-500">
-                        {label}
+              <div className="rounded-[28px] border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 p-5 md:p-6">
+                <div className="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1.8fr)_minmax(280px,0.95fr)]">
+                  <div>
+                    <div className="text-[11px] font-black uppercase tracking-[0.22em] text-blue-600 dark:text-blue-300">
+                      FINN&apos;S REFLECTION
+                    </div>
+                    <p className="mt-4 text-3xl font-black tracking-tight text-slate-950 dark:text-slate-100">
+                      {reflectionSummary.headline}
+                    </p>
+                    <p className="mt-3 text-base font-medium text-slate-500 dark:text-slate-400 max-w-3xl">
+                      {reflectionSupport}
+                    </p>
+
+                    <div className="mt-8 grid grid-cols-1 gap-4 sm:grid-cols-3">
+                      {[
+                        [ClipboardList, digestCopy.reviewed, reviewedCount],
+                        [ShieldAlert, digestCopy.blocked, blockedCount],
+                        [Activity, digestCopy.open, openActionCount],
+                      ].map(([Icon, label, value]) => (
+                        <div key={label} className="flex items-center gap-4">
+                          <div className="flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 text-slate-500 dark:border-slate-800 dark:text-slate-400">
+                            <Icon size={18} />
+                          </div>
+                          <div>
+                            <div className="text-sm font-medium text-slate-500 dark:text-slate-400">{label}</div>
+                            <div className="text-2xl font-black text-slate-950 dark:text-slate-100">{value}</div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+
+                    <div className="mt-8 border-t border-slate-200 dark:border-slate-800 pt-6">
+                      <div className="flex items-center justify-between gap-4">
+                        <span className="text-sm font-medium text-slate-500 dark:text-slate-400">Evidence collected</span>
+                        <span className="text-sm font-medium text-slate-600 dark:text-slate-300">
+                          {Math.min(evidenceCount, evidenceTarget)} of {evidenceTarget} decisions
+                        </span>
                       </div>
-                      <div className="mt-1 text-2xl font-black text-slate-900 dark:text-slate-100">
-                        {value}
+                      <div className="mt-4 relative">
+                        <div className="h-1.5 rounded-full bg-slate-200 dark:bg-slate-800" />
+                        <div
+                          className="absolute left-0 top-0 h-1.5 rounded-full bg-slate-400 dark:bg-slate-500"
+                          style={{ width: `${evidenceProgress}%` }}
+                        />
+                        <div className="absolute left-0 top-1/2 h-5 w-5 -translate-y-1/2 rounded-full border border-slate-300 bg-white dark:border-slate-700 dark:bg-slate-950" />
+                        <div
+                          className="absolute top-1/2 h-5 w-5 -translate-x-1/2 -translate-y-1/2 rounded-full border border-slate-300 bg-white dark:border-slate-700 dark:bg-slate-950"
+                          style={{ left: '50%' }}
+                        />
+                        <div
+                          className="absolute top-1/2 h-5 w-5 -translate-y-1/2 rounded-full border border-slate-300 bg-white dark:border-slate-700 dark:bg-slate-950"
+                          style={{ right: 0 }}
+                        />
                       </div>
                     </div>
-                  ))}
+                  </div>
+
+                  <div className="rounded-3xl border border-blue-100 bg-blue-50/60 p-6 text-slate-700 dark:border-blue-900/40 dark:bg-blue-950/20 dark:text-slate-200">
+                    <div className="text-[11px] font-black uppercase tracking-[0.22em] text-blue-600 dark:text-blue-300">
+                      {hasLimitedEvidence ? 'WHEN REFLECTION APPEARS' : 'PATTERN SIGNAL'}
+                    </div>
+                    <p className="mt-6 text-[28px] leading-none text-blue-600 dark:text-blue-300">
+                      {hasLimitedEvidence ? null : null}
+                    </p>
+                    <p className="mt-5 text-xl font-medium leading-relaxed">
+                      {reflectionAside}
+                    </p>
+                  </div>
                 </div>
 
-                <div className="mt-4 grid grid-cols-1 lg:grid-cols-3 gap-3">
+                <button
+                  onClick={openReflectionDetails}
+                  className="mt-5 flex w-full items-center justify-between rounded-2xl border border-slate-200 bg-white px-5 py-5 text-left transition hover:border-slate-300 dark:border-slate-800 dark:bg-slate-950"
+                >
+                  <div className="flex min-w-0 items-center gap-4">
+                    <div className="flex h-11 w-11 items-center justify-center rounded-2xl border border-slate-200 text-slate-500 dark:border-slate-800 dark:text-slate-400">
+                      <FileText size={18} />
+                    </div>
+                    <div className="min-w-0">
+                      <div className="text-2xl font-black tracking-tight text-slate-950 dark:text-slate-100">
+                        Activity &amp; evidence
+                      </div>
+                      <div className="mt-1 text-sm font-medium text-slate-500 dark:text-slate-400">
+                        See the decisions and events behind this reflection
+                      </div>
+                    </div>
+                  </div>
+                  <div className="ml-4 flex items-center gap-4 text-slate-500 dark:text-slate-400">
+                    <span className="text-sm font-medium">{totalEvents} events</span>
+                    <ChevronRight size={18} />
+                  </div>
+                </button>
+
+                <div className="mt-5 grid grid-cols-1 lg:grid-cols-3 gap-3">
                   {[
                     [digestCopy.good, reflectionSummary.good, 'border-emerald-200 dark:border-emerald-900/50 bg-emerald-50/70 dark:bg-emerald-950/20 text-emerald-800 dark:text-emerald-200'],
                     [digestCopy.attention, reflectionSummary.attention, 'border-amber-200 dark:border-amber-900/50 bg-amber-50/70 dark:bg-amber-950/20 text-amber-800 dark:text-amber-200'],
@@ -1713,32 +1903,26 @@ function FinnReportsPanel() {
                     </div>
                   ))}
                 </div>
-
-                <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center">
-                  <button
-                    onClick={openReflectionDetails}
-                    className={actionButtonStyles({
-                      variant: 'primary',
-                      className: 'justify-center gap-2 rounded-xl px-5 py-3 text-[11px] tracking-widest active:scale-[0.98]',
-                    })}
-                  >
-                    {primaryActionLabel}
-                  </button>
-                  <button
-                    onClick={() => setExpanded((value) => !value)}
-                    className="text-sm font-semibold text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100 transition-colors"
-                  >
-                    {expanded ? digestCopy.detailButtonClose : digestCopy.detailButton}
-                  </button>
-                </div>
-
-                <div className="mt-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 p-3 text-xs leading-relaxed text-slate-500 dark:text-slate-400">
-                  {digestCopy.detailsHint}
-                </div>
               </div>
 
               {expanded && (
-                <div ref={detailsRef} className="mt-6 border-t border-slate-200 dark:border-slate-800 pt-5">
+                <div ref={detailsRef} className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-900/40 p-5 md:p-6">
+                  <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                      <div className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-400 dark:text-slate-500">
+                        Reflection details
+                      </div>
+                      <div className="mt-1 text-lg font-black text-slate-950 dark:text-slate-100">
+                        {primaryActionLabel}
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => setExpanded(false)}
+                      className="text-sm font-semibold text-slate-500 transition-colors hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100"
+                    >
+                      {digestCopy.detailButtonClose}
+                    </button>
+                  </div>
                   <FinnReflectionBlocks
                     analysis={analysis}
                     showActivityEntries={!isTodayView}
@@ -2014,24 +2198,31 @@ RENDER
         report && (
           <div className="animate-fade-slide pb-24">
             <DashboardErrorBoundary onRetry={handleBoundaryRetry}>
-              <FinnReportsPanel />
+              <FinnReportsPanel report={report} />
             </DashboardErrorBoundary>
 
             <DashboardErrorBoundary onRetry={handleBoundaryRetry}>
               <section className="mt-10 rounded-[28px] border border-slate-200/80 bg-white shadow-[0_18px_40px_-36px_rgba(15,23,42,0.26)]">
                 <div className="border-b border-slate-100 px-6 py-6 md:px-8">
-                  <div className="max-w-3xl">
-                      <div className="text-[10px] font-black uppercase tracking-[0.24em] text-blue-600">
-                        {tradingPanelCopy.eyebrow}
-                      </div>
-                      <h2 className="mt-2 text-3xl font-black tracking-tight text-slate-950">
-                        {tradingPanelCopy.sectionTitle}
-                      </h2>
-                      <div className="mt-4 flex flex-wrap items-center gap-2 text-[11px] font-black uppercase tracking-[0.16em] text-slate-400">
-                        <span>{reportT.hudPeriod}: {report?.report_date || '—'}</span>
-                        <span className="h-1 w-1 rounded-full bg-slate-300" />
-                        <span>{tradingPanelCopy.statusReady}</span>
-                      </div>
+                  <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
+                    <div className="max-w-3xl">
+                        <div className="text-[10px] font-black uppercase tracking-[0.24em] text-blue-600">
+                          {tradingPanelCopy.eyebrow}
+                        </div>
+                        <h2 className="mt-2 text-3xl font-black tracking-tight text-slate-950">
+                          {tradingPanelCopy.sectionTitle}
+                        </h2>
+                        <p className="mt-2 text-base font-medium text-slate-500">
+                          The market context and trading data behind FINN&apos;s reflection.
+                        </p>
+                    </div>
+                    <button
+                      onClick={() => setTradingReportExpanded(true)}
+                      className="inline-flex items-center gap-2 self-start text-lg font-semibold text-blue-600 transition hover:text-blue-700"
+                    >
+                      View full report
+                      <ChevronRight size={18} />
+                    </button>
                   </div>
                 </div>
 
@@ -2081,17 +2272,32 @@ RENDER
                       <ReportTerminalHUD report={report} type={reportType} loading={loading} />
                     </DashboardErrorBoundary>
 
-                    <div className="mt-5 flex justify-end">
-                      <button
-                        onClick={() => setTradingReportExpanded((value) => !value)}
-                        className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-3 text-[11px] font-black uppercase tracking-[0.16em] text-slate-700 transition hover:border-blue-200 hover:text-blue-600"
-                      >
-                        {tradingReportExpanded ? tradingPanelCopy.expandedCta : tradingPanelCopy.collapsedCta}
-                        <ChevronDown
-                          size={14}
-                          className={`transition-transform ${tradingReportExpanded ? 'rotate-180' : ''}`}
-                        />
-                      </button>
+                    <div className="mt-6 rounded-2xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-950 overflow-hidden">
+                      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4">
+                        {[
+                          { key: 'market', icon: Globe2, label: 'Market', value: compactSentence(report?.market_overview) },
+                          { key: 'macro', icon: BarChart3, label: 'Macro', value: compactSentence(report?.macro_context || report?.macro_trends) },
+                          { key: 'technical', icon: Activity, label: 'Technical', value: compactSentence(report?.technical_analysis || report?.technical_structure) },
+                          { key: 'strategy', icon: Target, label: 'Setups & strategy', value: compactSentence(report?.strategy_implication || report?.setup_validation || report?.setup_performance) },
+                        ].map((item, index, array) => (
+                          <div
+                            key={item.key}
+                            className={`flex items-start gap-4 px-5 py-5 ${index !== array.length - 1 ? 'border-b md:border-b-0 xl:border-r border-slate-200 dark:border-slate-800' : ''}`}
+                          >
+                            <div className="mt-0.5 flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 text-slate-500 dark:border-slate-800 dark:text-slate-400">
+                              <item.icon size={18} />
+                            </div>
+                            <div className="min-w-0">
+                              <div className="text-lg font-semibold text-slate-700 dark:text-slate-200">
+                                {item.label}
+                              </div>
+                              <div className="mt-1 text-sm font-medium leading-relaxed text-slate-500 dark:text-slate-400">
+                                {item.value}
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
                     </div>
 
                     {tradingReportExpanded && (
