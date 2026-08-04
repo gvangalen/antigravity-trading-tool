@@ -77,7 +77,7 @@ const styles = StyleSheet.create({
   },
   title: {
     color: theme.colors.text,
-    fontSize: 34,
+    fontSize: 26,
     fontWeight: '900',
     letterSpacing: 0,
   },

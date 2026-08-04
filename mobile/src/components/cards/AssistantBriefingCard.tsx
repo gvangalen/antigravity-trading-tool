@@ -21,7 +21,7 @@ export function AssistantBriefingCard({
   return (
     <CardShell emphasis="primary">
       <View style={styles.header}>
-        <StatusChip label="AI briefing" tone="accent" />
+        <StatusChip compact label="AI briefing" tone="accent" />
         <Text style={styles.kicker}>Operating layer</Text>
       </View>
       <Text style={styles.status}>{status}</Text>
@@ -47,8 +47,8 @@ const styles = StyleSheet.create({
     borderColor: theme.colors.borderStrong,
     borderWidth: 1,
     borderRadius: theme.radius.button,
-    marginTop: theme.spacing.lg,
-    paddingVertical: 12,
+    marginTop: theme.spacing.md,
+    paddingVertical: 10,
   },
   buttonText: {
     color: theme.colors.accent,
@@ -92,22 +92,22 @@ const styles = StyleSheet.create({
     color: theme.colors.textSoft,
     fontSize: theme.typography.body,
     fontWeight: '700',
-    lineHeight: 22,
+    lineHeight: 20,
     marginTop: 5,
   },
   status: {
     color: theme.colors.text,
-    fontSize: 25,
+    fontSize: 20,
     fontWeight: '900',
     letterSpacing: 0,
-    lineHeight: 30,
-    marginTop: theme.spacing.lg,
+    lineHeight: 24,
+    marginTop: theme.spacing.md,
   },
   summary: {
     color: theme.colors.textMuted,
     fontSize: theme.typography.body,
     fontWeight: '600',
-    lineHeight: 23,
+    lineHeight: 20,
     marginTop: theme.spacing.sm,
   },
 });

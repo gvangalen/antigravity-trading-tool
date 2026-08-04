@@ -5,10 +5,17 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { InsightCard } from '../components/cards/InsightCard';
 import { LoadingSkeletonCard } from '../components/layout/LoadingSkeletonCard';
 import { ScreenContainer } from '../components/layout/ScreenContainer';
+import { SwipeActionRow } from '../components/rows/SwipeActionRow';
+import { SegmentedControl } from '../components/layout/SegmentedControl';
 import { StatusChip } from '../components/layout/StatusChip';
-import { TodayWithFinnCard, type TodayWithFinnQueueItem, type TodayWithFinnTag } from '../components/workspace/TodayWithFinnCard';
+import { BottomSheet } from '../components/sheets/BottomSheet';
+import { ConfirmDestructiveSheetContent, RowActionSheetContent } from '../components/sheets/RowActionSheetContent';
+import { TodayWithFinnCard, type TodayWithFinnQueueItem } from '../components/workspace/TodayWithFinnCard';
+import { WorkflowStepsRail } from '../components/workspace/WorkflowStepsRail';
 import { WorkspaceHeroSection } from '../components/workspace/WorkspaceHeroSection';
+import { listRowStandards } from '../constants/listRows';
 import { StatusTone, theme } from '../constants/theme';
+import { typography } from '../constants/typography';
 import { useIntelligenceContext } from '../contexts/ActiveIntelligenceContext';
 import { useFinnOverlay } from '../contexts/FinnOverlayContext';
 import { useApiResource } from '../hooks/useApiResource';
@@ -35,18 +42,15 @@ type AutomationBot = {
   timeframe: string;
 };
 
-const automationFilters: Array<{ key: AutomationFilter; label: string }> = [
-  { key: 'all', label: 'All' },
-  { key: 'active', label: 'Active' },
-  { key: 'paused', label: 'Paused' },
-];
-
 export function AutomationScreen() {
   const { context } = useIntelligenceContext();
   const { openFinn } = useFinnOverlay();
-  const { appearance } = useAppPreferences();
+  const { appearance, language } = useAppPreferences();
   const colors = preferenceColors(appearance);
   const [filter, setFilter] = useState<AutomationFilter>('all');
+  const [botActionItem, setBotActionItem] = useState<AutomationBot | null>(null);
+  const [botRemoveItem, setBotRemoveItem] = useState<AutomationBot | null>(null);
+  const [botDetailItem, setBotDetailItem] = useState<AutomationBot | null>(null);
   const activeAsset = context.asset;
 
   useEffect(() => {
@@ -80,41 +84,89 @@ export function AutomationScreen() {
     [overviewResource.data],
   );
   const bots = useMemo(
-    () => mergeAutomationBots(
-      mapAutomationBots(configsResource.data, portfoliosResource.data),
-      overviewBots,
-    ),
-    [configsResource.data, overviewBots, portfoliosResource.data],
+    () =>
+      sortAutomationBots(
+        mergeAutomationBots(
+          mapAutomationBots(configsResource.data, portfoliosResource.data),
+          overviewBots,
+        ),
+        activeAsset,
+      ),
+    [activeAsset, configsResource.data, overviewBots, portfoliosResource.data],
   );
   const filteredBots = useMemo(() => filterAutomationBots(bots, filter), [bots, filter]);
   const activeBots = useMemo(() => bots.filter((bot) => bot.isActive), [bots]);
   const pausedBots = useMemo(() => bots.filter((bot) => !bot.isActive), [bots]);
   const liveBots = useMemo(() => bots.filter((bot) => bot.isLive), [bots]);
   const topBot =
+    filteredBots.find((bot) => needsAutomationReview(bot) && bot.symbol === activeAsset) ??
+    bots.find((bot) => needsAutomationReview(bot) && bot.symbol === activeAsset) ??
+    filteredBots.find((bot) => needsAutomationReview(bot)) ??
+    bots.find((bot) => needsAutomationReview(bot)) ??
     filteredBots.find((bot) => bot.symbol === activeAsset && bot.isActive) ??
     bots.find((bot) => bot.symbol === activeAsset && bot.isActive) ??
     filteredBots.find((bot) => bot.symbol === activeAsset) ??
     bots.find((bot) => bot.symbol === activeAsset) ??
-    filteredBots.find((bot) => bot.isActive) ??
-    bots.find((bot) => bot.isActive) ??
     filteredBots[0] ??
     bots[0] ??
     null;
-  const decision = useMemo(() => mapBotDecision(extractRecord(decisionResource.data)), [decisionResource.data]);
-  const remainingBots = useMemo(
-    () => filteredBots.filter((bot) => !topBot || bot.id !== topBot.id),
-    [filteredBots, topBot],
-  );
-  const loading = (configsResource.loading || portfoliosResource.loading) && bots.length === 0;
   const staleMessage =
     configsResource.error?.message ||
     portfoliosResource.error?.message ||
     decisionResource.error?.message ||
     overviewResource.error?.message;
+  const hasRenderableAutomationCore =
+    bots.length > 0 ||
+    activeBots.length > 0 ||
+    pausedBots.length > 0 ||
+    liveBots.length > 0 ||
+    Boolean(overviewResource.data?.active_bots?.length) ||
+    Boolean(decisionResource.data);
+  const visibleTopBot = topBot;
+  const visibleBots = filteredBots.length > 0 ? sortAutomationBots(filteredBots, activeAsset) : [];
+  const decision = useMemo(() => mapBotDecision(extractRecord(decisionResource.data)), [decisionResource.data]);
+  const loading = (configsResource.loading || portfoliosResource.loading) && bots.length === 0;
+
+  async function openBot(bot: AutomationBot) {
+    await triggerHaptic('selection');
+    setBotDetailItem(bot);
+  }
+
+  async function openBotActions(bot: AutomationBot) {
+    await triggerHaptic('selection');
+    setBotActionItem(bot);
+  }
+
+  async function editBot(bot: AutomationBot) {
+    setBotActionItem(null);
+    await triggerHaptic('selection');
+    openFinn({
+      prefill: `Help me edit bot ${bot.name} for ${bot.symbol}. Review execution mode, risk settings and budget, then suggest the smallest safe config change.`,
+      source: 'automation-bot-edit',
+      symbol: bot.symbol,
+    });
+  }
+
+  function promptDeleteBot(bot: AutomationBot) {
+    setBotActionItem(null);
+    setBotRemoveItem(bot);
+  }
+
+  async function confirmDeleteBot() {
+    if (!botRemoveItem) return;
+
+    await intelligenceApi.deleteBotConfig(botRemoveItem.id);
+    setBotRemoveItem(null);
+    overviewResource.refresh();
+    configsResource.refresh();
+    portfoliosResource.refresh();
+    decisionResource.refresh();
+  }
 
   return (
     <ScreenContainer
       edgeToEdge={true}
+      contentInsetBottom={320}
       refreshing={
         overviewResource.refreshing ||
         configsResource.refreshing ||
@@ -128,96 +180,430 @@ export function AutomationScreen() {
         decisionResource.refresh();
       }}
     >
-      {topBot ? (
-        <AutomationTodayHero
+      {visibleTopBot ? (
+      <AutomationTodayHero
           activeAsset={activeAsset}
           activeCount={activeBots.length}
-          bot={topBot}
+          bot={visibleTopBot}
           briefing={overviewResource.data?.finn_briefing}
           decision={decision}
           liveCount={liveBots.length}
-          pausedCount={pausedBots.length}
           onOpen={() =>
             openFinn({
-              prefill: `Open the automation workspace for ${topBot.name} on ${topBot.symbol}. Summarize today's execution state, key blockers and the first review step.`,
+              prefill: `Open the automation workspace for ${visibleTopBot.name} on ${visibleTopBot.symbol}. Summarize today's execution state, key blockers and the first review step.`,
               source: 'automation-today',
-              symbol: topBot.symbol,
+              symbol: visibleTopBot.symbol,
             })
           }
+          pausedCount={pausedBots.length}
+          reviewCount={Math.max(1, pausedBots.length)}
         />
       ) : null}
-
-      <AutomationWorkspaceIntro />
+      <WorkflowStepsRail
+        steps={[
+          {
+            body: translate(language, 'automation.stepPlanBody'),
+            icon: 'layers',
+            step: 1,
+            title: translate(language, 'automation.stepPlanTitle'),
+          },
+          {
+            body: translate(language, 'automation.stepExecutionBody'),
+            icon: 'cpu',
+            step: 2,
+            title: translate(language, 'automation.stepExecutionTitle'),
+          },
+          {
+            body: translate(language, 'automation.stepMonitoringBody'),
+            icon: 'shield',
+            step: 3,
+            title: translate(language, 'automation.stepMonitoringTitle'),
+          },
+        ]}
+      />
 
       {loading ? <LoadingSkeletonCard /> : null}
 
-      {topBot ? (
-        <PrimaryAutomationBotCard
-          bot={topBot}
-          checkedAt={decisionResource.updatedAt ?? overviewResource.updatedAt}
-          colors={colors}
-          decision={decision}
-          onAskFinn={() =>
-            openFinn({
-              prefill: `Explain the automation diagnostics for ${topBot.name} on ${topBot.symbol}. Focus on budget, risk state, and what should happen next.`,
-              source: 'automation-primary-bot',
-              symbol: topBot.symbol,
-            })
-          }
-          onReviewTrade={() =>
-            openFinn({
-              prefill: `Review whether ${topBot.name} on ${topBot.symbol} is safe to execute today. Translate the diagnostics into a concrete next action.`,
-              source: 'automation-trade-review',
-              symbol: topBot.symbol,
-            })
-          }
-          onViewDiagnostics={() =>
-            openFinn({
-              prefill: `Show the full diagnostics for ${topBot.name} on ${topBot.symbol}. I want the complete explanation behind status, action, confidence and blockers.`,
-              source: 'automation-full-diagnostics',
-              symbol: topBot.symbol,
-            })
-          }
-        />
-      ) : (
-        <InsightCard
-          body="Desktop parity here starts when at least one reviewed bot configuration is available from the backend."
-          label="Automation"
-          title="No bot configuration found."
-          tone="warning"
-        />
-      )}
+      {visibleTopBot ? (
+        <>
+          <AutomationBotsSection
+            bots={visibleBots}
+            colors={colors}
+            filter={filter}
+            liveCount={liveBots.length}
+            onAskFinn={openBot}
+            onChangeFilter={setFilter}
+            onDeleteBot={promptDeleteBot}
+            onEditBot={editBot}
+            onOpenActions={openBotActions}
+          />
+        </>
+      ) : null}
 
-      <AutomationBotList
-        bots={remainingBots}
-        colors={colors}
-        filter={filter}
-        onAskFinn={(bot) =>
-          openFinn({
-            prefill: `Open the automation context for ${bot.name} on ${bot.symbol}. Explain status, risk and next review step.`,
-            source: 'automation-bot-row',
-            symbol: bot.symbol,
-          })
-        }
-        onChangeFilter={setFilter}
-      />
-
-      {staleMessage ? (
+      {staleMessage && !hasRenderableAutomationCore ? (
         <InsightCard
           body={staleMessage}
-          cta="Refresh"
-          label="Automation sync"
+          cta={translate(language, 'automation.syncRefresh')}
+          label={translate(language, 'automation.syncLabel')}
           onPress={() => {
             configsResource.refresh();
             portfoliosResource.refresh();
             decisionResource.refresh();
             overviewResource.refresh();
           }}
-          title="Part of the automation state is stale."
+          title={translate(language, 'automation.syncTitle')}
           tone="warning"
         />
       ) : null}
+
+      <BottomSheet
+        visible={Boolean(botDetailItem)}
+        title={botDetailItem?.name ?? 'Bot details'}
+        onClose={() => setBotDetailItem(null)}
+      >
+        {botDetailItem ? (
+          <AutomationBotDetailSheet
+            bot={botDetailItem}
+            onAskFinn={() =>
+              openFinn({
+                prefill: `Open the automation context for ${botDetailItem.name} on ${botDetailItem.symbol}. Explain status, risk and next review step.`,
+                source: 'automation-bot-detail',
+                symbol: botDetailItem.symbol,
+              })
+            }
+            onEdit={async () => {
+              setBotDetailItem(null);
+              await editBot(botDetailItem);
+            }}
+          />
+        ) : null}
+      </BottomSheet>
+
+      <BottomSheet
+        visible={Boolean(botActionItem)}
+        title={translate(language, 'common.actions')}
+        onClose={() => setBotActionItem(null)}
+      >
+        <RowActionSheetContent
+          actions={
+            botActionItem
+              ? [
+                  {
+                    key: 'edit',
+                    label: translate(language, 'common.edit'),
+                    description: `${botActionItem.name} · ${botActionItem.symbol} · ${botActionItem.isLive ? 'Live' : 'Paper'}`,
+                    icon: 'edit-3',
+                    onPress: () => editBot(botActionItem),
+                  },
+                  {
+                    key: 'delete',
+                    label: translate(language, 'common.delete'),
+                    description: botActionItem.isActive || botActionItem.isLive
+                      ? 'Actieve of live bot: extra controle aanbevolen.'
+                      : 'Verwijder deze botconfiguratie.',
+                    icon: 'trash-2',
+                    tone: 'danger',
+                    onPress: () => promptDeleteBot(botActionItem),
+                  },
+                ]
+              : []
+          }
+        />
+      </BottomSheet>
+
+      <BottomSheet
+        visible={Boolean(botRemoveItem)}
+        title="Bot verwijderen?"
+        onClose={() => setBotRemoveItem(null)}
+      >
+        {botRemoveItem ? (
+          <ConfirmDestructiveSheetContent
+            body={
+              botRemoveItem.isActive || botRemoveItem.isLive
+                ? `${botRemoveItem.name} is ${botRemoveItem.isLive ? 'live' : 'actief'}. Verwijderen stopt deze configuratie en kan lopende monitoring onderbreken. Controleer eerst budget, exchange en open exposure.`
+                : `Verwijder ${botRemoveItem.name} voor ${botRemoveItem.symbol}. Deze botconfiguratie wordt permanent verwijderd.`
+            }
+            confirmLabel={translate(language, 'common.delete')}
+            onConfirm={confirmDeleteBot}
+            title={botRemoveItem.isActive || botRemoveItem.isLive ? 'Actieve bot verwijderen?' : 'Bot verwijderen?'}
+          />
+        ) : null}
+      </BottomSheet>
     </ScreenContainer>
+  );
+}
+
+function AutomationBotDetailSheet({
+  bot,
+  onAskFinn,
+  onEdit,
+}: {
+  bot: AutomationBot;
+  onAskFinn: () => void;
+  onEdit: () => void | Promise<void>;
+}) {
+  const { appearance, language } = useAppPreferences();
+  const colors = preferenceColors(appearance);
+  const state = deriveAutomationBotState(bot);
+
+  return (
+    <View style={{ gap: theme.spacing.md }}>
+      <View
+        style={{
+          backgroundColor: colors.surfaceMuted,
+          borderColor: colors.borderSubtle,
+          borderRadius: theme.radius.card,
+          borderWidth: 1,
+          padding: theme.spacing.md,
+        }}
+      >
+        <View style={{ alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between', gap: theme.spacing.sm }}>
+          <View style={{ flex: 1 }}>
+            <Text style={[typography.eyebrow, { color: colors.textDim }]}>Bot detail</Text>
+            <Text style={[typography.sectionTitle, { color: colors.text }]}>{bot.name}</Text>
+            <Text style={[typography.body, { color: colors.textMuted }]}>
+              {bot.symbol} · {bot.timeframe || '—'} · {translateFinnTag(language, bot.isLive ? 'Live' : 'Paper')}
+            </Text>
+          </View>
+          <StatusChip compact label={bot.isActive ? translate(language, 'automation.active') : translate(language, 'automation.paused')} tone={bot.isActive ? 'success' : 'warning'} />
+        </View>
+      </View>
+
+      <View style={{ gap: theme.spacing.sm }}>
+        <View style={{ flexDirection: 'row', gap: theme.spacing.sm }}>
+          <View style={{ flex: 1 }}>
+            <AutomationDetailMetric label="Status" value={state.label} />
+          </View>
+          <View style={{ flex: 1 }}>
+            <AutomationDetailMetric label="Actie" value={state.action} />
+          </View>
+        </View>
+        <View style={{ flexDirection: 'row', gap: theme.spacing.sm }}>
+          <View style={{ flex: 1 }}>
+            <AutomationDetailMetric label="Mode" value={bot.mode || '—'} />
+          </View>
+          <View style={{ flex: 1 }}>
+            <AutomationDetailMetric label="Kapitaal" value={bot.isLive ? 'Live' : 'Paper'} />
+          </View>
+        </View>
+        <View style={{ flexDirection: 'row', gap: theme.spacing.sm }}>
+          <View style={{ flex: 1 }}>
+            <AutomationDetailMetric label="Budget" value={formatEUR(bot.budgetTotal)} />
+          </View>
+          <View style={{ flex: 1 }}>
+            <AutomationDetailMetric label="Exposure" value={formatEUR(bot.exposure)} />
+          </View>
+        </View>
+      </View>
+
+      <View
+        style={{
+          borderColor: colors.borderSubtle,
+          borderRadius: theme.radius.card,
+          borderWidth: 1,
+          padding: theme.spacing.md,
+        }}
+      >
+        <Text style={[typography.sectionTitle, { color: colors.text }]}>Wat je nu ziet</Text>
+        <Text style={[typography.body, { color: colors.textMuted, marginTop: theme.spacing.xs }]}>
+          {bot.isActive
+            ? `${bot.name} draait momenteel ${bot.isLive ? 'met live kapitaal' : 'in paper mode'} en heeft zichtbare exposure van ${formatEUR(bot.exposure)}.`
+            : `${bot.name} staat nu niet actief. Controleer of budget, setupkwaliteit en execution mode nog kloppen voordat je hem opnieuw activeert.`}
+        </Text>
+        <Text style={[typography.body, { color: colors.textMuted, marginTop: theme.spacing.xs }]}>
+          {bot.budgetTotal > 0
+            ? `Het ingestelde budget is ${formatEUR(bot.budgetTotal)}.`
+            : 'Er staat nog geen bruikbaar budget op deze botconfiguratie.'}
+        </Text>
+      </View>
+
+      <View style={{ gap: theme.spacing.sm }}>
+        <Pressable
+          onPress={async () => {
+            await triggerHaptic('selection');
+            await onEdit();
+          }}
+          style={{
+            alignItems: 'center',
+            backgroundColor: colors.surfaceMuted,
+            borderColor: colors.borderSubtle,
+            borderRadius: theme.radius.button,
+            borderWidth: 1,
+            paddingHorizontal: theme.spacing.md,
+            paddingVertical: theme.spacing.sm,
+          }}
+        >
+          <Text style={[typography.actionStrong, { color: colors.text }]}>Bot bewerken</Text>
+        </Pressable>
+        <Pressable
+          onPress={async () => {
+            await triggerHaptic('selection');
+            onAskFinn();
+          }}
+          style={{
+            alignItems: 'center',
+            backgroundColor: colors.accent,
+            borderRadius: theme.radius.button,
+            paddingHorizontal: theme.spacing.md,
+            paddingVertical: theme.spacing.sm,
+          }}
+        >
+          <Text style={{ color: theme.colors.white, fontSize: 13, fontWeight: '800', letterSpacing: 0.3 }}>
+            Vraag FINN om extra botuitleg
+          </Text>
+        </Pressable>
+      </View>
+    </View>
+  );
+}
+
+function AutomationDetailMetric({
+  label,
+  value,
+}: {
+  label: string;
+  value: string;
+}) {
+  const { appearance } = useAppPreferences();
+  const colors = preferenceColors(appearance);
+
+  return (
+    <View
+      style={{
+        backgroundColor: colors.surfaceMuted,
+        borderColor: colors.borderSubtle,
+        borderRadius: theme.radius.card,
+        borderWidth: 1,
+        gap: 4,
+        padding: theme.spacing.sm,
+      }}
+    >
+      <Text style={[typography.metricLabel, { color: colors.textDim }]}>{label}</Text>
+      <Text style={[typography.bodyStrong, { color: colors.text }]}>{value}</Text>
+    </View>
+  );
+}
+
+function AutomationBotsSection({
+  bots,
+  colors,
+  filter,
+  liveCount,
+  onAskFinn,
+  onChangeFilter,
+  onDeleteBot,
+  onEditBot,
+  onOpenActions,
+}: {
+  bots: AutomationBot[];
+  colors: ReturnType<typeof preferenceColors>;
+  filter: AutomationFilter;
+  liveCount: number;
+  onAskFinn: (bot: AutomationBot) => void;
+  onChangeFilter: (value: AutomationFilter) => void;
+  onDeleteBot: (bot: AutomationBot) => void;
+  onEditBot: (bot: AutomationBot) => void | Promise<void>;
+  onOpenActions: (bot: AutomationBot) => void | Promise<void>;
+}) {
+  const { language } = useAppPreferences();
+  const pausedCount = bots.filter((bot) => deriveAutomationBotState(bot).kind === 'paused').length;
+  const reviewCount = Math.max(1, bots.filter((bot) => deriveAutomationBotState(bot).action === 'Review').length);
+
+  return (
+    <View style={styles.automationSection}>
+      <View style={styles.automationBotsHeader}>
+        <Text style={[styles.automationBotsTitle, { color: colors.text }]}>
+          {translate(language, 'automation.sectionBotsTitle')}
+        </Text>
+        <Pressable accessibilityRole="button">
+          <Text style={styles.automationNewBotLink}>{translate(language, 'automation.newBot')}</Text>
+        </Pressable>
+      </View>
+
+      <SegmentedControl
+        compact
+        items={[
+          { key: 'all', label: translate(language, 'automation.filter.all') },
+          { key: 'active', label: translate(language, 'automation.filter.active') },
+          { key: 'paused', label: translate(language, 'automation.filter.paused') },
+        ]}
+        selected={filter}
+        onChange={(value) => onChangeFilter(value as AutomationFilter)}
+      />
+
+      <View style={styles.automationBotList}>
+        {bots.map((bot) => (
+          <SwipeActionRow
+            key={`${bot.id}-${bot.name}`}
+            actions={[
+              {
+                key: 'edit',
+                label: translate(language, 'common.edit'),
+                icon: 'edit-3',
+                onPress: () => onEditBot(bot),
+              },
+              {
+                key: 'delete',
+                label: translate(language, 'common.delete'),
+                icon: 'trash-2',
+                tone: 'danger',
+                onPress: () => onDeleteBot(bot),
+              },
+            ]}
+          >
+            <Pressable
+              onPress={() => onAskFinn(bot)}
+              style={({ pressed }) => [
+                styles.automationBotRow,
+                { borderBottomColor: colors.borderSubtle },
+                pressed && styles.pressed,
+              ]}
+            >
+              <View style={styles.automationBotLeft}>
+                <View style={[styles.automationBotIcon, { backgroundColor: colors.surfaceMuted }]}>
+                  <Feather color={colors.accent} name="cpu" size={listRowStandards.iconGlyphSize} />
+                </View>
+                <View style={styles.automationBotCopy}>
+                  <Text numberOfLines={2} style={[styles.automationBotTitle, { color: colors.text }]}>
+                    {bot.name}
+                  </Text>
+                  {([bot.symbol, bot.timeframe, translateFinnTag(language, bot.isLive ? 'Live' : 'Paper')].filter(Boolean).join(' · ')) ? (
+                    <Text style={[styles.automationBotMeta, { color: colors.textMuted }]}>
+                      {[bot.symbol, bot.timeframe, translateFinnTag(language, bot.isLive ? 'Live' : 'Paper')].filter(Boolean).join(' · ')}
+                    </Text>
+                  ) : null}
+                </View>
+              </View>
+              <View style={styles.automationBotRight}>
+                {(() => {
+                  const state = deriveAutomationBotState(bot);
+                  return (
+                    <>
+                      <Text style={[styles.automationBotStatus, { color: state.color(colors) }]}>
+                        {state.label}
+                      </Text>
+                      <Text style={[styles.automationBotAction, { color: colors.accent }]}>
+                        {state.action}
+                      </Text>
+                    </>
+                  );
+                })()}
+                <Pressable
+                  hitSlop={10}
+                  onPress={(event) => {
+                    event.stopPropagation();
+                    onOpenActions(bot);
+                  }}
+                  style={[styles.automationBotOverflowButton, { borderColor: colors.borderSubtle, backgroundColor: colors.surfaceMuted }]}
+                >
+                  <Feather color={colors.textDim} name="more-horizontal" size={15} />
+                </Pressable>
+              </View>
+            </Pressable>
+          </SwipeActionRow>
+        ))}
+      </View>
+    </View>
   );
 }
 
@@ -229,6 +615,7 @@ function AutomationTodayHero({
   decision,
   liveCount,
   pausedCount,
+  reviewCount,
   onOpen,
 }: {
   activeAsset: string;
@@ -238,6 +625,7 @@ function AutomationTodayHero({
   decision: ReturnType<typeof mapBotDecision>;
   liveCount: number;
   pausedCount: number;
+  reviewCount: number;
   onOpen: () => void;
 }) {
   const { language } = useAppPreferences();
@@ -251,17 +639,20 @@ function AutomationTodayHero({
       ? translate(language, 'automation.noBudgetSupport')
       : translate(language, 'automation.pausedLiveSupport', { liveCount, pausedCount });
 
-  const tags: TodayWithFinnTag[] = [
-    {
-      label: translateFinnTag(language, bot.isActive ? 'Active bot' : 'Paused bot'),
-      tone: bot.isActive ? 'success' : 'warning',
-    },
-    { label: translateFinnTag(language, decision.action), tone: decision.tone },
-    { label: translate(language, 'common.confidence', { count: decision.confidence }), tone: 'accent' },
-    { label: translateFinnTag(language, bot.isLive ? 'Live' : 'Paper'), tone: bot.isLive ? 'danger' : 'neutral' },
+  const metaItems = [
+    translateFinnTag(language, bot.isActive ? 'Active bot' : 'Paused bot'),
+    translate(language, 'common.confidence', { count: decision.confidence }),
+    translateFinnTag(language, bot.isLive ? 'Live' : 'Paper'),
   ];
 
   const queueItems: TodayWithFinnQueueItem[] = [
+    {
+      body: translate(language, 'queue.body.botsWaitingReview'),
+      key: 'tasks',
+      label: translate(language, 'queue.label.tasks'),
+      value: reviewCount,
+      detail: translate(language, 'queue.body.botsPausedOrBlocked'),
+    },
     {
       body: translate(language, 'queue.body.botsCurrentlyEnabled'),
       key: 'bots',
@@ -272,7 +663,7 @@ function AutomationTodayHero({
       body: translate(language, 'queue.body.botsWaitingReview'),
       key: 'reviews',
       label: translate(language, 'queue.label.reviews'),
-      value: Math.max(1, pausedCount),
+      value: reviewCount,
     },
     {
       body: translate(language, 'queue.body.botsUsingLiveCapital'),
@@ -292,80 +683,12 @@ function AutomationTodayHero({
     <WorkspaceHeroSection>
       <TodayWithFinnCard
         headline={headline}
-        onPrimaryAction={onOpen}
-        primaryActionLabel={translate(language, 'finn.openAutomationReview')}
+        metaItems={metaItems}
         queueItems={queueItems}
-        queueStatusLabel={translate(language, 'common.itemsOpen', { count: Number(queueItems[0]?.value ?? 0) })}
+        queueStatusLabel={translate(language, 'common.itemsOpen', { count: reviewCount })}
         support={support}
-        tags={tags}
       />
     </WorkspaceHeroSection>
-  );
-}
-
-function AutomationWorkspaceIntro() {
-  const { appearance, language } = useAppPreferences();
-  const colors = preferenceColors(appearance);
-  const automationSteps = [
-    {
-      body: translate(language, 'automation.stepPlanBody'),
-      icon: 'clipboard',
-      index: '1',
-      title: translate(language, 'automation.stepPlanTitle'),
-    },
-    {
-      body: translate(language, 'automation.stepExecutionBody'),
-      icon: 'cpu',
-      index: '2',
-      title: translate(language, 'automation.stepExecutionTitle'),
-    },
-    {
-      body: translate(language, 'automation.stepMonitoringBody'),
-      icon: 'shield',
-      index: '3',
-      title: translate(language, 'automation.stepMonitoringTitle'),
-    },
-  ] as const;
-
-  return (
-    <View style={[styles.introPanel, { backgroundColor: colors.surface, borderColor: colors.borderSubtle }]}>
-      <View style={styles.introHeader}>
-        <View style={styles.introCopy}>
-          <Text style={[styles.sectionEyebrow, { color: colors.textDim }]}>
-            {translate(language, 'automation.workspaceEyebrow')}
-          </Text>
-          <Text style={[styles.sectionTitle, { color: colors.text }]}>
-            {translate(language, 'automation.workspaceTitle')}
-          </Text>
-          <Text style={[styles.sectionBody, { color: colors.textMuted }]}>
-            {translate(language, 'automation.workspaceSubtitle')}
-          </Text>
-        </View>
-        <StatusChip label={translate(language, 'automation.active')} tone="success" />
-      </View>
-
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        style={styles.stepRail}
-        contentContainerStyle={styles.stepRailContent}
-      >
-        {automationSteps.map((step) => (
-          <View
-            key={step.index}
-            style={[styles.stepCard, { backgroundColor: colors.surface, borderColor: colors.borderSubtle }]}
-          >
-            <View style={[styles.stepIconWrap, { backgroundColor: colors.surfaceMuted }]}>
-              <Feather color={colors.accent} name={step.icon} size={18} />
-            </View>
-            <View style={styles.stepCopy}>
-              <Text style={[styles.stepTitle, { color: colors.text }]}>{`${step.index} ${step.title}`}</Text>
-              <Text style={[styles.stepBody, { color: colors.textMuted }]}>{step.body}</Text>
-            </View>
-          </View>
-        ))}
-      </ScrollView>
-    </View>
   );
 }
 
@@ -430,14 +753,16 @@ function PrimaryAutomationBotCard({
           </View>
         </View>
         <StatusChip
+          compact
           label={translate(language, bot.isActive ? 'automation.active' : 'automation.paused')}
           tone={bot.isActive ? 'success' : 'warning'}
         />
       </View>
 
       <View style={styles.primaryBotBadgeRow}>
-        <StatusChip label={bot.mode} tone="neutral" />
+        <StatusChip compact label={bot.mode} tone="neutral" />
         <StatusChip
+          compact
           label={translate(language, bot.isLive ? 'automation.liveCapital' : 'automation.paperTracking')}
           tone={bot.isLive ? 'danger' : 'accent'}
         />
@@ -500,7 +825,7 @@ function PrimaryAutomationBotCard({
           }}
           style={styles.primaryAction}
         >
-          <Text style={styles.primaryActionText}>Ask FINN</Text>
+          <Text style={styles.primaryActionText}>{translate(language, 'automation.askFinn')}</Text>
         </Pressable>
       </View>
     </View>
@@ -521,6 +846,11 @@ function AutomationBotList({
   onChangeFilter: (value: AutomationFilter) => void;
 }) {
   const { language } = useAppPreferences();
+  const automationFilters: Array<{ key: AutomationFilter; label: string }> = [
+    { key: 'all', label: translate(language, 'automation.filter.all') },
+    { key: 'active', label: translate(language, 'automation.filter.active') },
+    { key: 'paused', label: translate(language, 'automation.filter.paused') },
+  ];
   return (
     <View style={styles.listSection}>
       <View style={styles.listSectionHeader}>
@@ -532,40 +862,12 @@ function AutomationBotList({
         </View>
       </View>
 
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        style={styles.filterRail}
-        contentContainerStyle={styles.filterRailContent}
-      >
-        {automationFilters.map((item) => {
-          const active = filter === item.key;
-          return (
-            <Pressable
-              key={item.key}
-              onPress={async () => {
-                await triggerHaptic('selection');
-                onChangeFilter(item.key);
-              }}
-              style={[
-                styles.filterPill,
-                active
-                  ? styles.filterPillActive
-                  : { backgroundColor: colors.surfaceMuted, borderColor: colors.surfaceMuted },
-              ]}
-            >
-              <Text
-                style={[
-                  styles.filterPillText,
-                  { color: active ? '#FFFFFF' : colors.textDim },
-                ]}
-              >
-                {item.label}
-              </Text>
-            </Pressable>
-          );
-        })}
-      </ScrollView>
+      <SegmentedControl
+        compact
+        items={automationFilters.map((item) => ({ key: item.key, label: item.label }))}
+        selected={filter}
+        onChange={(value: AutomationFilter) => onChangeFilter(value)}
+      />
 
       <View style={styles.botList}>
         {bots.map((bot) => (
@@ -579,10 +881,12 @@ function AutomationBotList({
           >
             <View style={styles.botRowLeft}>
               <View style={[styles.botRowIcon, { backgroundColor: colors.surfaceMuted }]}>
-                <Feather color={colors.accent} name="cpu" size={18} />
+                <Feather color={colors.accent} name="cpu" size={16} />
               </View>
               <View style={styles.botRowCopy}>
-                <Text style={[styles.botRowTitle, { color: colors.text }]}>{bot.name}</Text>
+                <Text numberOfLines={2} style={[styles.botRowTitle, { color: colors.text }]}>
+                  {bot.name}
+                </Text>
                 <Text style={[styles.botRowMeta, { color: colors.textMuted }]}>
                   {bot.symbol} · {bot.timeframe} · {translateFinnTag(language, bot.isLive ? 'Live' : 'Paper').toUpperCase()}
                 </Text>
@@ -590,14 +894,18 @@ function AutomationBotList({
             </View>
 
             <View style={styles.botRowRight}>
-              <StatusChip
-                label={translate(language, bot.isActive ? 'automation.active' : 'automation.paused')}
-                tone={bot.isActive ? 'success' : 'warning'}
-              />
+              <Text
+                style={[
+                  styles.botRowStatus,
+                  { color: bot.isActive ? theme.colors.success : colors.textDim },
+                ]}
+              >
+                {translate(language, bot.isActive ? 'automation.active' : 'automation.paused')}
+              </Text>
               <Text style={[styles.botRowAction, { color: colors.accent }]}>
                 {translate(language, bot.isActive ? 'automation.hold' : 'automation.review')}
               </Text>
-              <Feather color={colors.textDim} name="chevron-down" size={18} />
+              <Feather color={colors.textDim} name="chevron-right" size={16} />
             </View>
           </Pressable>
         ))}
@@ -638,10 +946,10 @@ function mapAutomationBots(configs: UnknownRecord[], portfolios: UnknownRecord[]
       id,
       isActive: readBool(config, ['is_active', 'active'], false),
       isLive: readBool(config, ['is_live', 'live'], false),
-      mode: readString(config, ['mode', 'execution_mode'], 'read-only'),
+      mode: readString(config, ['mode', 'execution_mode'], ''),
       name: readString(config, ['name', 'bot_name'], 'Bot'),
-      symbol: readString(config, ['symbol', 'asset'], 'BTC'),
-      timeframe: readString(setup, ['timeframe'], readString(config, ['timeframe', 'frequency'], '1D')).toUpperCase(),
+      symbol: readString(config, ['symbol', 'asset'], ''),
+      timeframe: readString(setup, ['timeframe'], readString(config, ['timeframe', 'frequency'], '')).toUpperCase(),
     };
   });
 }
@@ -655,20 +963,19 @@ function mapOverviewAutomationBots(overview?: MobileOverviewResponse): Automatio
     id: bot.bot_id,
     isActive: bot.is_active,
     isLive: bot.is_live,
-    mode: bot.is_live ? 'live' : 'paper',
+    mode: '',
     name: bot.name,
     symbol: bot.symbol,
-    timeframe: '1D',
+    timeframe: '',
   }));
 }
 
 function mergeAutomationBots(primary: AutomationBot[], fallback: AutomationBot[]) {
-  if (primary.length === 0) return fallback;
+  if (primary.length === 0) return [];
 
   const fallbackById = new Map<number, AutomationBot>();
   fallback.forEach((bot) => fallbackById.set(bot.id, bot));
-
-  return primary.map((bot) => {
+  const merged = primary.map((bot) => {
     const overviewBot = fallbackById.get(bot.id);
     if (!overviewBot) return bot;
 
@@ -682,12 +989,65 @@ function mergeAutomationBots(primary: AutomationBot[], fallback: AutomationBot[]
       symbol: bot.symbol || overviewBot.symbol,
     };
   });
+
+  const seen = new Set<number>();
+  return merged.filter((bot) => {
+    if (seen.has(bot.id)) return false;
+    seen.add(bot.id);
+    return true;
+  });
 }
 
 function filterAutomationBots(bots: AutomationBot[], filter: AutomationFilter) {
   if (filter === 'active') return bots.filter((bot) => bot.isActive);
   if (filter === 'paused') return bots.filter((bot) => !bot.isActive);
   return bots;
+}
+
+function needsAutomationReview(bot: AutomationBot) {
+  return !bot.isActive && bot.exposure <= 0;
+}
+
+function sortAutomationBots(bots: AutomationBot[], activeAsset: string) {
+  return [...bots].sort((left, right) => {
+    const leftRank = automationBotRank(left, activeAsset);
+    const rightRank = automationBotRank(right, activeAsset);
+    if (leftRank !== rightRank) return leftRank - rightRank;
+    return left.name.localeCompare(right.name);
+  });
+}
+
+function automationBotRank(bot: AutomationBot, activeAsset: string) {
+  const assetBonus = bot.symbol === activeAsset ? -0.5 : 0;
+  const state = deriveAutomationBotState(bot).kind;
+  if (state === 'paused') return 0 + assetBonus;
+  if (state === 'active') return 1 + assetBonus;
+  return 2 + assetBonus;
+}
+
+function deriveAutomationBotState(bot: AutomationBot) {
+  if (bot.isActive) {
+    return {
+      action: 'Vasthouden',
+      color: (colors: ReturnType<typeof preferenceColors>) => colors.success,
+      kind: 'active' as const,
+      label: 'Actief',
+    };
+  }
+  if (bot.exposure > 0 || bot.budgetTotal > 0) {
+    return {
+      action: 'Bekijken',
+      color: (colors: ReturnType<typeof preferenceColors>) => colors.textDim,
+      kind: 'off' as const,
+      label: 'Uit',
+    };
+  }
+  return {
+    action: 'Review',
+    color: (colors: ReturnType<typeof preferenceColors>) => colors.danger,
+    kind: 'paused' as const,
+    label: 'Gepauzeerd',
+  };
 }
 
 function readString(source: UnknownRecord, keys: string[], fallback = '') {
@@ -737,6 +1097,24 @@ function formatCheckedAt(value?: string | null) {
   });
 }
 
+function formatAutomationCheckedAt(value?: string | null) {
+  if (!value) return 'Wacht op sync';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  const diffMs = Date.now() - date.getTime();
+  const diffMin = Math.max(1, Math.round(diffMs / 60000));
+  if (diffMin < 60) return `${diffMin} min geleden`;
+  return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+}
+
+function formatEUR(value: number) {
+  return new Intl.NumberFormat('nl-NL', {
+    currency: 'EUR',
+    maximumFractionDigits: Math.abs(value) >= 100 ? 0 : 2,
+    style: 'currency',
+  }).format(Number.isFinite(value) ? value : 0);
+}
+
 function toneColor(tone: StatusTone, colors: ReturnType<typeof preferenceColors>) {
   if (tone === 'success') return colors.success;
   if (tone === 'warning') return colors.warning;
@@ -746,6 +1124,146 @@ function toneColor(tone: StatusTone, colors: ReturnType<typeof preferenceColors>
 }
 
 const styles = StyleSheet.create({
+  automationBotAction: {
+    ...typography.listRowAction,
+    letterSpacing: 0.2,
+  },
+  automationBotCopy: {
+    flex: 1,
+    minWidth: 0,
+  },
+  automationBotIcon: {
+    alignItems: 'center',
+    borderColor: listRowStandards.iconBorderColor,
+    borderRadius: listRowStandards.iconRadius,
+    borderWidth: 1,
+    height: listRowStandards.iconSize,
+    justifyContent: 'center',
+    width: listRowStandards.iconSize,
+  },
+  automationBotLeft: {
+    alignItems: 'center',
+    flex: 1,
+    flexDirection: 'row',
+    gap: listRowStandards.rowGap,
+    minWidth: 0,
+  },
+  automationBotList: {
+    marginTop: theme.spacing.md,
+  },
+  automationBotMeta: {
+    ...typography.listRowMeta,
+    marginTop: 1,
+  },
+  automationBotRight: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 8,
+    marginLeft: 10,
+  },
+  automationBotOverflowButton: {
+    alignItems: 'center',
+    borderRadius: 14,
+    borderWidth: 1,
+    height: 30,
+    justifyContent: 'center',
+    width: 30,
+  },
+  automationBotRow: {
+    alignItems: 'center',
+    borderBottomWidth: 1,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingVertical: listRowStandards.rowPaddingY,
+  },
+  pressed: {
+    opacity: 0.72,
+  },
+  automationBotStatus: {
+    ...typography.listRowStatus,
+    minWidth: listRowStandards.statusMinWidth,
+    textAlign: 'right',
+  },
+  automationBotTitle: {
+    ...typography.listRowTitle,
+  },
+  automationBotsHeader: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: theme.spacing.md,
+  },
+  automationBotsTitle: {
+    ...typography.sectionTitle,
+  },
+  automationNewBotLink: {
+    color: theme.colors.accent,
+    fontSize: 15,
+    fontWeight: '600',
+    lineHeight: 20,
+  },
+  automationSafetyLabel: {
+    fontSize: 15,
+    fontWeight: '500',
+    lineHeight: 20,
+  },
+  automationSafetyLeft: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 12,
+  },
+  automationSafetyList: {
+    marginTop: theme.spacing.md,
+  },
+  automationSafetyNote: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: theme.spacing.md,
+  },
+  automationSafetyNoteText: {
+    flex: 1,
+    ...typography.body,
+  },
+  automationSafetyRight: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 8,
+    marginLeft: theme.spacing.md,
+  },
+  automationSafetyRow: {
+    alignItems: 'center',
+    borderBottomWidth: 1,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingVertical: 14,
+  },
+  automationSafetyRowLast: {
+    borderBottomWidth: 0,
+    paddingBottom: 0,
+  },
+  automationSafetyTitle: {
+    ...typography.metricValue,
+  },
+  automationSafetyValue: {
+    ...typography.bodyStrong,
+    lineHeight: 20,
+  },
+  automationSection: {
+    paddingHorizontal: theme.spacing.lg,
+    paddingVertical: theme.spacing.md,
+  },
+  automationSummaryPill: {
+    alignItems: 'center',
+    borderRadius: 12,
+    borderWidth: 1,
+    marginTop: theme.spacing.md,
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: 12,
+  },
+  automationSummaryPillText: {
+    ...typography.body,
+  },
   botList: {
     gap: theme.spacing.sm,
     marginTop: theme.spacing.md,
@@ -755,47 +1273,48 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     borderBottomWidth: 1,
     flexDirection: 'row',
-    gap: theme.spacing.sm,
+    gap: 8,
     justifyContent: 'space-between',
-    paddingVertical: theme.spacing.md,
+    paddingVertical: listRowStandards.rowPaddingY,
   },
   botRowAction: {
-    fontSize: 13,
-    fontWeight: '800',
-    letterSpacing: 0.3,
-    textTransform: 'uppercase',
+    ...typography.listRowAction,
   },
   botRowCopy: {
     flex: 1,
-    gap: 4,
+    gap: 2,
+    minWidth: 0,
   },
   botRowIcon: {
     alignItems: 'center',
-    borderRadius: 20,
-    height: 40,
+    borderColor: listRowStandards.iconBorderColor,
+    borderRadius: listRowStandards.iconRadius,
+    borderWidth: 1,
+    height: listRowStandards.iconSize,
     justifyContent: 'center',
-    width: 40,
+    width: listRowStandards.iconSize,
   },
   botRowLeft: {
     alignItems: 'center',
     flex: 1,
     flexDirection: 'row',
-    gap: theme.spacing.sm,
+    gap: 10,
+    minWidth: 0,
   },
   botRowMeta: {
-    fontSize: 12,
-    fontWeight: '700',
-    letterSpacing: 0.6,
+    ...typography.listRowMeta,
   },
   botRowRight: {
     alignItems: 'center',
     flexDirection: 'row',
-    gap: theme.spacing.xs,
+    gap: 6,
+    marginLeft: 10,
+  },
+  botRowStatus: {
+    ...typography.listRowStatus,
   },
   botRowTitle: {
-    fontSize: 15,
-    fontWeight: '800',
-    lineHeight: 20,
+    ...typography.listRowTitle,
   },
   diagnosticsLink: {
     alignItems: 'center',
@@ -808,39 +1327,11 @@ const styles = StyleSheet.create({
     paddingVertical: theme.spacing.md,
   },
   diagnosticsLinkText: {
-    fontSize: 11,
-    fontWeight: '900',
+    ...typography.chipLabel,
     letterSpacing: 1.1,
-    textTransform: 'uppercase',
-  },
-  filterPill: {
-    alignItems: 'center',
-    borderRadius: theme.radius.pill,
-    borderWidth: 1,
-    justifyContent: 'center',
-    marginRight: 8,
-    minHeight: 38,
-    paddingHorizontal: 18,
-  },
-  filterPillActive: {
-    backgroundColor: theme.colors.accent,
-    borderColor: theme.colors.accent,
-  },
-  filterPillText: {
-    fontSize: 12,
-    fontWeight: '800',
-    letterSpacing: 0.8,
-    textTransform: 'uppercase',
-  },
-  filterRail: {
-    marginTop: theme.spacing.md,
-  },
-  filterRailContent: {
-    paddingRight: theme.spacing.lg,
   },
   introBody: {
-    fontSize: 15,
-    fontWeight: '600',
+    ...typography.action,
     lineHeight: 22,
   },
   introCopy: {
@@ -853,11 +1344,11 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   introPanel: {
-    borderRadius: 28,
+    borderRadius: 20,
     borderWidth: 1,
     marginHorizontal: theme.spacing.lg,
     marginTop: theme.spacing.md,
-    padding: theme.spacing.lg,
+    padding: theme.spacing.md,
   },
   listSection: {
     marginHorizontal: theme.spacing.lg,
@@ -869,10 +1360,8 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   listSubtitle: {
-    fontSize: 14,
-    fontWeight: '600',
-    lineHeight: 20,
-    marginTop: 6,
+    ...typography.subcopy,
+    marginTop: 4,
   },
   metricCard: {
     borderRadius: 22,
@@ -890,15 +1379,11 @@ const styles = StyleSheet.create({
     marginTop: theme.spacing.lg,
   },
   metricLabel: {
-    fontSize: 10,
-    fontWeight: '900',
+    ...typography.metricLabelStrong,
     letterSpacing: 1.3,
-    textTransform: 'uppercase',
   },
   metricValue: {
-    fontSize: 16,
-    fontWeight: '800',
-    lineHeight: 22,
+    ...typography.metricValue,
     marginTop: theme.spacing.sm,
   },
   primaryAction: {
@@ -925,8 +1410,8 @@ const styles = StyleSheet.create({
   primaryBotBadgeRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: theme.spacing.xs,
-    marginTop: theme.spacing.md,
+    gap: 6,
+    marginTop: theme.spacing.sm,
   },
   primaryBotHeader: {
     alignItems: 'flex-start',
@@ -936,10 +1421,10 @@ const styles = StyleSheet.create({
   },
   primaryBotIcon: {
     alignItems: 'center',
-    borderRadius: 24,
-    height: 48,
+    borderRadius: 18,
+    height: 40,
     justifyContent: 'center',
-    width: 48,
+    width: 40,
   },
   primaryBotIdentity: {
     flex: 1,
@@ -947,23 +1432,23 @@ const styles = StyleSheet.create({
     gap: theme.spacing.sm,
   },
   primaryBotMeta: {
-    fontSize: 13,
+    ...typography.subcopy,
     fontWeight: '700',
-    lineHeight: 18,
+    lineHeight: 16,
     marginTop: 4,
   },
   primaryBotPanel: {
-    borderRadius: 28,
+    borderRadius: 20,
     borderWidth: 1,
     marginHorizontal: theme.spacing.lg,
     marginTop: theme.spacing.lg,
-    padding: theme.spacing.lg,
+    padding: theme.spacing.md,
   },
   primaryBotTitle: {
-    fontSize: 22,
+    ...typography.sectionTitle,
     fontWeight: '900',
-    letterSpacing: -0.6,
-    marginTop: 4,
+    lineHeight: 22,
+    marginTop: 2,
   },
   primaryBotTitleWrap: {
     flex: 1,
@@ -984,80 +1469,71 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
   },
   sectionBody: {
-    fontSize: 15,
-    fontWeight: '600',
-    lineHeight: 22,
-    marginTop: theme.spacing.sm,
+    ...typography.bodyStrong,
+    marginTop: theme.spacing.xs,
   },
   sectionEyebrow: {
-    fontSize: theme.typography.label,
-    fontWeight: '900',
-    letterSpacing: 3.2,
-    textTransform: 'uppercase',
+    ...typography.eyebrow,
   },
   sectionTitle: {
-    fontSize: 34,
-    fontWeight: '900',
-    letterSpacing: -1.1,
-    lineHeight: 38,
-    marginTop: 6,
+    ...typography.cardTitle,
+    marginTop: 4,
   },
   stepBody: {
-    fontSize: 13,
-    fontWeight: '700',
-    lineHeight: 18,
-    marginTop: 2,
+    ...typography.chipLabelCompact,
+    fontWeight: '600',
+    lineHeight: 13,
+    textTransform: 'none',
+    marginTop: 1,
   },
   stepCard: {
     alignItems: 'center',
-    borderRadius: 24,
+    borderRadius: 14,
     borderWidth: 1,
     flexDirection: 'row',
-    marginRight: theme.spacing.sm,
-    minHeight: 104,
-    paddingHorizontal: theme.spacing.md,
-    paddingVertical: theme.spacing.md,
-    width: 268,
+    marginRight: 6,
+    minHeight: 48,
+    paddingHorizontal: theme.spacing.sm,
+    paddingVertical: 8,
+    width: 138,
   },
   stepCopy: {
     flex: 1,
   },
   stepIconWrap: {
     alignItems: 'center',
-    borderRadius: 18,
-    height: 48,
+    borderRadius: 12,
+    height: 32,
     justifyContent: 'center',
-    marginRight: theme.spacing.md,
-    width: 48,
+    marginRight: theme.spacing.sm,
+    width: 32,
   },
   stepRail: {
-    marginTop: theme.spacing.lg,
+    marginTop: theme.spacing.sm,
   },
   stepRailContent: {
-    paddingRight: theme.spacing.xl,
+    paddingRight: theme.spacing.md,
   },
   stepTitle: {
-    fontSize: 16,
+    ...typography.subcopy,
     fontWeight: '800',
-    lineHeight: 20,
+    lineHeight: 14,
   },
   warningBody: {
     color: '#8A4B00',
-    fontSize: 14,
+    ...typography.bodyLarge,
     fontWeight: '700',
     lineHeight: 20,
     marginTop: theme.spacing.sm,
   },
   warningEyebrow: {
     color: '#C06A00',
-    fontSize: 10,
-    fontWeight: '900',
+    ...typography.metricLabelStrong,
     letterSpacing: 2,
-    textTransform: 'uppercase',
   },
   warningNextStep: {
     color: '#B45309',
-    fontSize: 12,
+    ...typography.subcopy,
     fontWeight: '700',
     lineHeight: 18,
     marginTop: theme.spacing.xs,
@@ -1072,7 +1548,7 @@ const styles = StyleSheet.create({
   },
   warningTitle: {
     color: '#9A4A00',
-    fontSize: 16,
+    ...typography.cardTitle,
     fontWeight: '900',
     lineHeight: 20,
     marginTop: theme.spacing.xs,

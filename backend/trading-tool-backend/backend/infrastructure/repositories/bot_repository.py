@@ -19,6 +19,20 @@ class BotRepository:
         result = await self.session.execute(query, {"table_name": table_name})
         return result.fetchone() is not None
 
+    async def check_column_exists(self, table_name: str, column_name: str) -> bool:
+        query = text("""
+            SELECT 1
+            FROM information_schema.columns
+            WHERE table_schema='public'
+              AND table_name=:table_name
+              AND column_name=:column_name
+        """)
+        result = await self.session.execute(
+            query,
+            {"table_name": table_name, "column_name": column_name},
+        )
+        return result.fetchone() is not None
+
     async def get_daily_scores_row(self, user_id: int, report_date: date) -> Optional[dict]:
         if not await self.check_table_exists("daily_scores"):
             return None
@@ -40,11 +54,13 @@ class BotRepository:
         }
 
     async def get_bot_configs(self, user_id: int) -> List[dict]:
+        has_base_currency = await self.check_column_exists("bot_configs", "base_currency")
+        base_currency_select = "b.base_currency" if has_base_currency else "'EUR' AS base_currency"
         query = text("""
             SELECT
               b.id, b.name, b.is_active, b.is_live, b.mode, b.cadence, b.risk_profile,
               b.budget_total_eur, b.budget_daily_limit_eur, b.budget_min_order_eur,
-              b.budget_max_order_eur, b.max_asset_exposure_pct, b.base_currency, b.last_run,
+              b.budget_max_order_eur, b.max_asset_exposure_pct, """ + base_currency_select + """, b.last_run,
               COALESCE(st.symbol, 'BTC') AS symbol, b.created_at, b.updated_at,
               s.id AS strategy_id, s.name AS strategy_name, s.setup_type AS setup_type,
               st.id AS setup_id, st.name AS setup_name, st.symbol AS setup_symbol, st.timeframe AS timeframe
@@ -58,11 +74,13 @@ class BotRepository:
         return [dict(r._mapping) for r in result.fetchall()]
 
     async def get_bot_config(self, user_id: int, bot_id: int) -> Optional[dict]:
+        has_base_currency = await self.check_column_exists("bot_configs", "base_currency")
+        base_currency_select = "b.base_currency" if has_base_currency else "'EUR' AS base_currency"
         query = text("""
             SELECT
               b.id, b.name, b.is_active, b.is_live, b.mode, b.cadence, b.risk_profile,
               b.budget_total_eur, b.budget_daily_limit_eur, b.budget_min_order_eur,
-              b.budget_max_order_eur, b.max_asset_exposure_pct, b.base_currency, b.last_run,
+              b.budget_max_order_eur, b.max_asset_exposure_pct, """ + base_currency_select + """, b.last_run,
               COALESCE(st.symbol, 'BTC') AS symbol, b.created_at, b.updated_at,
               s.id AS strategy_id, s.name AS strategy_name, s.setup_type AS setup_type,
               st.id AS setup_id, st.name AS setup_name, st.symbol AS setup_symbol, st.timeframe AS timeframe
@@ -355,12 +373,18 @@ class BotRepository:
     # BOT PORTFOLIOS
     # ==========================
     async def get_bot_portfolios_base(self, user_id: int) -> List[dict]:
+        has_base_currency = await self.check_column_exists("bot_configs", "base_currency")
+        base_currency_select = (
+            "COALESCE(base_currency, 'EUR') as base_currency"
+            if has_base_currency
+            else "'EUR' as base_currency"
+        )
         query = text("""
             SELECT
               id, name, is_active, is_live, mode, COALESCE(risk_profile,'balanced') as risk_profile,
               COALESCE(budget_total_eur,0) as budget_total_eur, COALESCE(budget_daily_limit_eur,0) as budget_daily_limit_eur,
               COALESCE(budget_min_order_eur,0) as budget_min_order_eur, COALESCE(budget_max_order_eur,0) as budget_max_order_eur,
-              COALESCE(base_currency, 'EUR') as base_currency
+              """ + base_currency_select + """
             FROM bot_configs
             WHERE user_id=:user_id
             ORDER BY id ASC

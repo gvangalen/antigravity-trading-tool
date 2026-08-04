@@ -98,7 +98,7 @@ export function normalizeNotificationData(data: Record<string, unknown> | undefi
 
 export function routeForNotification(data: MobileNotificationData): NotificationRoute {
   const type = data.type ?? '';
-  const symbol = data.symbol ?? 'BTC';
+  const symbol = data.symbol ?? '';
   const title = data.title ?? notificationTitle(type, symbol);
   const description = data.description ?? 'Open de context en vraag FINN om uitleg voordat je actie neemt.';
 

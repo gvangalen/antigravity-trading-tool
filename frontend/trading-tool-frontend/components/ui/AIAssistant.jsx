@@ -2,7 +2,7 @@
 
 import React, { Suspense, useState, useEffect, useLayoutEffect, useRef } from "react";
 import { usePathname, useSearchParams, useRouter } from "next/navigation";
-import { assistantChat, executeAssistantAction, fetchAssistantInsight, getAssistantPreferences, assistantChatStream, executePendingAction, fetchFinnState, fetchFinnMissionControl } from "@/lib/api/ai";
+import { assistantChat, executeAssistantAction, fetchAssistantInsight, getAssistantPreferences, getAssistantSessionDetail, getAssistantSessions, updateAssistantPreferences, assistantChatStream, executePendingAction, fetchFinnState, fetchFinnMissionControl } from "@/lib/api/ai";
 import { Send, Zap, Brain, Shield, BarChart3, Loader2, X, MessageSquare, Target, Activity, FileText, Bot, ChevronDown, ListChecks, Terminal, Sparkles, CheckCircle2, Plus, Search, SlidersHorizontal } from "lucide-react";
 import useIntelligenceEvents from "@/hooks/useIntelligenceEvents";
 import { useOnboarding } from "@/hooks/useOnboarding";
@@ -32,6 +32,23 @@ const INDICATOR_MODAL_OPEN_EVENT = "finn-indicator-config:open";
 const INDICATOR_MODAL_COMPLETED_EVENT = "finn-indicator-config:completed";
 const FINN_RECENT_CONVERSATIONS_STORAGE_KEY = "finn-recent-conversations:v1";
 const MAX_RECENT_FINN_CONVERSATIONS = 3;
+const ACTIVE_FINN_SESSION_ID_KEY = "active_finn_session_id";
+
+function normalizeFinnSessionId(value) {
+  if (typeof value !== "string") return null;
+  const normalized = value.trim();
+  return normalized || null;
+}
+
+function mapBackendSessionMessages(messages = []) {
+  return (Array.isArray(messages) ? messages : [])
+    .filter((message) => typeof message?.content === "string" && message.content.trim())
+    .map((message) => ({
+      role: message.role === "user" ? "user" : "assistant",
+      text: message.content,
+      isComplete: true,
+    }));
+}
 
 function sanitizeMessageForPersistence(message) {
   if (!message || typeof message.text !== "string") return null;
@@ -433,6 +450,8 @@ function AIAssistantContent({
   const [recentConversations, setRecentConversations] = useState([]);
   const [showComposerMenu, setShowComposerMenu] = useState(false);
   const [draftDrawer, setDraftDrawer] = useState(null);
+  const [activeFinnSessionId, setActiveFinnSessionId] = useState(null);
+  const [availableFinnSessions, setAvailableFinnSessions] = useState([]);
   
   const messagesEndRef = useRef(null);
   const scrollRef = useRef(null);
@@ -447,6 +466,7 @@ function AIAssistantContent({
   const missionControlRequestRef = useRef(null);
   const insightRequestRef = useRef(null);
   const finnStateRequestRef = useRef(null);
+  const sharedSessionRestoreRef = useRef(false);
   const [showReasoning, setShowReasoning] = useState(false);
   const at = createAssistantTranslator(t);
   const activeQuery = queryValue !== undefined ? queryValue : query;
@@ -3827,6 +3847,73 @@ function AIAssistantContent({
     }
   }, [isOpen, pathname, searchParams, globalSymbol]);
 
+  useEffect(() => {
+    if (!isOpen || previewSectionsOnly || sharedSessionRestoreRef.current) return;
+    sharedSessionRestoreRef.current = true;
+
+    (async () => {
+      try {
+        const prefResponse = await getAssistantPreferences();
+        const nextPreferences = prefResponse?.preferences || {};
+        setPreferences((current) => (Object.keys(current || {}).length ? current : nextPreferences));
+
+        const preferredSessionId = normalizeFinnSessionId(nextPreferences?.[ACTIVE_FINN_SESSION_ID_KEY]);
+        const sessions = await getAssistantSessions();
+        setAvailableFinnSessions(Array.isArray(sessions) ? sessions : []);
+        const latestSessionId = normalizeFinnSessionId(sessions?.[0]?.id);
+        const resolvedSessionId = preferredSessionId || latestSessionId;
+        if (!resolvedSessionId) return;
+
+        const detail = await getAssistantSessionDetail(resolvedSessionId);
+        setActiveFinnSessionId(resolvedSessionId);
+        setMessages((current) => (current.length > 0 ? current : mapBackendSessionMessages(detail?.messages)));
+      } catch (error) {
+        console.warn("Kon gedeelde FINN-sessie niet laden:", error);
+      }
+    })();
+  }, [isOpen, previewSectionsOnly]);
+
+  const persistActiveFinnSessionId = async (sessionId) => {
+    const normalized = normalizeFinnSessionId(sessionId);
+    if (!normalized) return;
+    setActiveFinnSessionId(normalized);
+    try {
+      await updateAssistantPreferences({
+        [ACTIVE_FINN_SESSION_ID_KEY]: normalized,
+      });
+    } catch (error) {
+      console.warn("Kon actieve FINN-sessie niet bewaren:", error);
+    }
+  };
+
+  const startNewFinnConversation = async () => {
+    setActiveFinnSessionId(null);
+    setFinnDraft(null);
+    setActiveState(null);
+    setMessages([]);
+    try {
+      await updateAssistantPreferences({
+        [ACTIVE_FINN_SESSION_ID_KEY]: null,
+      });
+    } catch (error) {
+      console.warn("Kon actieve FINN-sessie niet resetten:", error);
+    }
+  };
+
+  const restoreFinnSession = async (sessionId) => {
+    const normalized = normalizeFinnSessionId(sessionId);
+    if (!normalized) return;
+    try {
+      const detail = await getAssistantSessionDetail(normalized);
+      await persistActiveFinnSessionId(normalized);
+      setFinnDraft(null);
+      setActiveState(null);
+      setMessages(mapBackendSessionMessages(detail?.messages));
+    } catch (error) {
+      console.warn("Kon FINN-sessie niet herstellen:", error);
+    }
+  };
+
   async function loadFinnState() {
     if (loadedFinnStateRef.current) return;
     if (finnStateRequestRef.current) return finnStateRequestRef.current;
@@ -4111,7 +4198,8 @@ function AIAssistantContent({
         ...baseRequestContext,
         ...(commandRequest?.context || {}),
       };
-      const sessionId = getAssistantSessionId();
+      const analyticsSessionId = getAssistantSessionId();
+      const chatSessionId = activeFinnSessionId || "new";
 
       await assistantChatStream(
         nextQuery,
@@ -4132,9 +4220,10 @@ function AIAssistantContent({
             return copy;
           });
         },
-        (envelope) => {
+        async (envelope) => {
           // onEnvelope
           if (activeStreamIdRef.current !== streamId) return;
+          await persistActiveFinnSessionId(envelope?.session_id || chatSessionId);
           const originalResponse = envelope?.response || "";
           const sanitizedResponse = stripSuggestedActionsSection(originalResponse);
           const indicatorModalRequest = buildIndicatorModalRequest(envelope, requestContext?.symbol || globalSymbol || "BTC");
@@ -4194,7 +4283,7 @@ function AIAssistantContent({
           if (envelope?.flow === "decision_review" || envelope?.intent === "decision_review") {
             trackAssistantEvent({
               event_name: "decision_review_used",
-              session_id: sessionId,
+              session_id: analyticsSessionId,
               page: pathname || "/assistant",
               surface: "finn_overlay",
               asset: requestContext?.symbol || globalSymbol || null,
@@ -4204,7 +4293,7 @@ function AIAssistantContent({
           if (envelope?.flow === "priority_engine" || envelope?.intent === "priority_engine") {
             trackAssistantEvent({
               event_name: "priority_engine_used",
-              session_id: sessionId,
+              session_id: analyticsSessionId,
               page: pathname || "/assistant",
               surface: "finn_overlay",
               asset: requestContext?.symbol || globalSymbol || null,
@@ -4265,7 +4354,7 @@ function AIAssistantContent({
           activeStreamIdRef.current = null;
         },
         2,
-        sessionId,
+        chatSessionId,
       );
     } catch (err) {
       if (activeStreamIdRef.current !== streamId) return;
@@ -5196,7 +5285,6 @@ function AIAssistantContent({
   const briefingFollowUpActions = shouldCondenseMissionControl
     ? []
     : getBriefingFollowUpActions();
-  const primaryMissionAction = coachingLoopAction(primaryCoachingItem) || compactMissionActions[0] || null;
   const compactMissionReason =
     (primaryCoachingItem ? humanizeMissionReason(primaryCoachingItem) : null) ||
     primaryCoachingItem?.why_now ||
@@ -5362,6 +5450,8 @@ function AIAssistantContent({
   const recentConversationItems = recentConversations
     .filter((conversation) => conversation?.storageKey === currentConversationStorageKey)
     .slice(0, MAX_RECENT_FINN_CONVERSATIONS);
+
+  const recentFinnSessionItems = availableFinnSessions.slice(0, MAX_RECENT_FINN_CONVERSATIONS);
 
   const handleRestoreConversation = (conversation) => {
     if (!conversation || !Array.isArray(conversation.messages) || conversation.messages.length === 0) return;
@@ -5542,21 +5632,6 @@ function AIAssistantContent({
                           <span className="text-slate-400 dark:text-slate-500">{uiText.workspaceStatusRisks}</span>
                           <span className="text-slate-950 dark:text-slate-50">{overlayMissionSections.riskItems.length}</span>
                         </div>
-                      </div>
-
-                      <div className="mt-4 flex flex-wrap items-center gap-3">
-                        {primaryMissionAction ? (
-                          <button
-                            type="button"
-                            onClick={() => handleFollowUpAction(primaryMissionAction, primaryCoachingItem)}
-                            disabled={executingAction}
-                            className="inline-flex min-h-10 items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-[10px] font-black uppercase tracking-[0.16em] text-white shadow-md shadow-blue-600/15 transition-colors hover:bg-blue-700 disabled:opacity-60"
-                          >
-                            {followUpIcon(primaryMissionAction.handoff || primaryMissionAction.type)}
-                            <span className="leading-tight">{humanizeActionLabel(primaryMissionAction, primaryCoachingItem)}</span>
-                          </button>
-                        ) : null}
-
                       </div>
 
                       {primaryProfileHabitAlignment && compactBehavioralReason ? (
@@ -5882,17 +5957,6 @@ function AIAssistantContent({
                       </div>
                     )}
                   </div>
-                  {primaryMissionAction && (
-                    <button
-                      type="button"
-                      onClick={() => handleFollowUpAction(primaryMissionAction, primaryCoachingItem)}
-                      disabled={executingAction}
-                      className="flex w-full items-center justify-center gap-2 rounded-xl bg-blue-600 px-3 py-3 text-[11px] font-black text-white shadow-lg shadow-blue-600/15 transition-colors hover:bg-blue-700 disabled:opacity-60"
-                    >
-                      {followUpIcon(primaryMissionAction.handoff || primaryMissionAction.type)}
-                      <span className="leading-tight">{humanizeActionLabel(primaryMissionAction, primaryCoachingItem)}</span>
-                    </button>
-                  )}
                 </div>
 
                 <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-900/50 overflow-hidden">
@@ -6065,6 +6129,44 @@ function AIAssistantContent({
                   </button>
                 ))}
               </div>
+            </div>
+          )}
+          {isSimpleFinnModal && (
+            <div className="space-y-2">
+              <div className="flex items-center justify-between gap-3">
+                <div className="px-1 text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-400 dark:text-slate-500">
+                  Backend sessies
+                </div>
+                <button
+                  type="button"
+                  onClick={() => void startNewFinnConversation()}
+                  className="rounded-full border border-slate-200 bg-white px-3 py-1 text-[10px] font-black uppercase tracking-[0.16em] text-slate-600 transition hover:border-blue-200 hover:text-blue-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300"
+                >
+                  Nieuw gesprek
+                </button>
+              </div>
+              {recentFinnSessionItems.map((session) => {
+                const isActiveSession = session?.id === activeFinnSessionId;
+                return (
+                  <button
+                    key={session.id}
+                    type="button"
+                    onClick={() => void restoreFinnSession(session.id)}
+                    className={`flex w-full items-center justify-between gap-3 rounded-2xl border px-3 py-3 text-left transition ${
+                      isActiveSession
+                        ? "border-blue-200 bg-blue-50 dark:border-blue-900/60 dark:bg-blue-950/20"
+                        : "border-slate-200 bg-white hover:border-blue-200 hover:bg-blue-50/40 dark:border-slate-800 dark:bg-slate-900/40 dark:hover:border-blue-900/40 dark:hover:bg-blue-950/10"
+                    }`}
+                  >
+                    <span className="min-w-0 flex-1 truncate text-sm font-semibold text-slate-700 dark:text-slate-200">
+                      {session.title || "FINN gesprek"}
+                    </span>
+                    <span className="shrink-0 text-[10px] font-semibold text-slate-400 dark:text-slate-500">
+                      {formatRecentConversationTime(session.updated_at)}
+                    </span>
+                  </button>
+                );
+              })}
             </div>
           )}
 

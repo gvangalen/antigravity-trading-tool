@@ -8,7 +8,7 @@ import { StatusChip } from '../layout/StatusChip';
 export function ScoreDetailSheetContent() {
   return (
     <View style={styles.block}>
-      <StatusChip label="Score detail" tone="accent" />
+      <StatusChip compact label="Score detail" tone="accent" />
       <Text style={styles.title}>Setup score is waiting for cleaner entry.</Text>
       <Text style={styles.body}>
         Market and technical context are constructive. The setup score lags because entry quality is
@@ -21,7 +21,7 @@ export function ScoreDetailSheetContent() {
 export function RiskExplanationSheetContent() {
   return (
     <View style={styles.block}>
-      <StatusChip label="Risicocheck" tone="warning" />
+      <StatusChip compact label="Risicocheck" tone="warning" />
       <Text style={styles.title}>De grootste fout is nu te vroeg achter prijs aan te lopen.</Text>
       <Text style={styles.body}>
         De veiligere route is wachten op bevestiging of de geplande grootte verlagen totdat de setupkwaliteit verbetert.
@@ -33,7 +33,7 @@ export function RiskExplanationSheetContent() {
 export function ConfirmActionSheetContent({ onDone }: { onDone: () => void }) {
   return (
     <View style={styles.block}>
-      <StatusChip label="Read-only review" tone="warning" />
+      <StatusChip compact label="Read-only review" tone="warning" />
       <Text style={styles.title}>Controleer eerst context, impact en risico.</Text>
       <Text style={styles.body}>
         Finn gebruikt deze sheet om gevoelige acties eerst expliciet te laten reviewen. De daadwerkelijke bevestiging blijft gekoppeld aan de concrete flow waarin je werkt.
@@ -63,7 +63,7 @@ export function DraftReviewSheetContent({
   if (!draft) {
     return (
       <View style={styles.block}>
-        <StatusChip label="Concept review" tone="accent" />
+        <StatusChip compact label="Concept review" tone="accent" />
         <Text style={styles.title}>Geen concept geladen</Text>
         <Text style={styles.body}>Er is geen concept gevonden om te beoordelen.</Text>
       </View>
@@ -75,7 +75,7 @@ export function DraftReviewSheetContent({
 
   return (
     <View style={styles.block}>
-      <StatusChip label={isUpdate ? "Update review" : "Concept review"} tone="warning" />
+      <StatusChip compact label={isUpdate ? "Update review" : "Concept review"} tone="warning" />
       <Text style={styles.title}>{payload.name || `${draft.type} Concept`}</Text>
       
       <View style={{ gap: 8, marginTop: theme.spacing.sm }}>

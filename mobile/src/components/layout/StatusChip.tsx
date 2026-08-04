@@ -1,6 +1,7 @@
 import { StyleSheet, Text, View } from 'react-native';
 
 import { StatusTone, theme } from '../../constants/theme';
+import { typography } from '../../constants/typography';
 import { preferenceColors, useAppPreferences } from '../../preferences/AppPreferencesProvider';
 
 type StatusChipProps = {
@@ -43,24 +44,23 @@ const styles = StyleSheet.create({
     borderRadius: theme.radius.pill,
     borderWidth: 1,
     flexDirection: 'row',
-    gap: 5,
+    gap: 3,
     maxWidth: '100%',
-    paddingHorizontal: 10,
-    paddingVertical: 6,
+    minHeight: 26,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
   },
   compact: {
-    paddingHorizontal: 7,
-    paddingVertical: 3,
+    minHeight: 22,
+    paddingHorizontal: 6,
+    paddingVertical: 1,
   },
   dot: {
     borderRadius: theme.radius.pill,
-    height: 4,
-    width: 4,
+    height: 3,
+    width: 3,
   },
   label: {
-    fontSize: 8.5,
-    fontWeight: '900',
-    letterSpacing: 0.8,
-    textTransform: 'uppercase',
+    ...typography.chipLabelCompact,
   },
 });

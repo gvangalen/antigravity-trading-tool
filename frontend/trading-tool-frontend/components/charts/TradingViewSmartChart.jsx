@@ -19,6 +19,7 @@ export default function TradingViewSmartChart({
   focusedBotId = null,
   setFocusedBotId = () => {},
   height = 500,
+  onIntervalChange = () => {},
 }) {
   const containerRef = useRef(null);
   const chartRef = useRef(null);
@@ -36,6 +37,7 @@ export default function TradingViewSmartChart({
         interval={interval}
         indicators={indicators}
         height={height}
+        onIntervalChange={onIntervalChange}
       />
     );
   }

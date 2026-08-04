@@ -42,7 +42,7 @@ export function StrategyCard({ strategy }: StrategyCardProps) {
 const styles = StyleSheet.create({
   bias: {
     color: theme.colors.textMuted,
-    fontSize: 15,
+    fontSize: 14,
     marginTop: 4,
   },
   card: {
@@ -69,7 +69,7 @@ const styles = StyleSheet.create({
   },
   confidenceValue: {
     color: theme.colors.text,
-    fontSize: 26,
+    fontSize: 22,
     fontWeight: '900',
   },
   divider: {
@@ -79,8 +79,8 @@ const styles = StyleSheet.create({
   },
   explanation: {
     color: theme.colors.textSoft,
-    fontSize: 15,
-    lineHeight: 23,
+    fontSize: 14,
+    lineHeight: 20,
     marginTop: theme.spacing.xs,
   },
   explanationBox: {
@@ -91,7 +91,7 @@ const styles = StyleSheet.create({
   },
   explanationTitle: {
     color: theme.colors.text,
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: '900',
   },
   header: {
@@ -109,13 +109,13 @@ const styles = StyleSheet.create({
   },
   metaValue: {
     color: theme.colors.text,
-    fontSize: 17,
+    fontSize: 15,
     fontWeight: '800',
     marginTop: 4,
   },
   symbol: {
     color: theme.colors.text,
-    fontSize: 28,
+    fontSize: 22,
     fontWeight: '900',
   },
 });

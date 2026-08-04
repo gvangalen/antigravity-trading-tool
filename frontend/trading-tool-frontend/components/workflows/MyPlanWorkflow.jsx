@@ -26,7 +26,7 @@ import { useModal } from "@/components/modal/ModalProvider";
 import SetupForm from "@/components/setup/SetupForm";
 import StrategyForm from "@/components/strategy/StrategyForm";
 import Drawer from "@/components/ui/Drawer";
-import { useStrategyData } from "@/hooks/useStrategyData";
+import { invalidateStrategyDataCaches, useStrategyData } from "@/hooks/useStrategyData";
 import { fetchBotConfigs } from "@/lib/api/botApi";
 import { deleteSetup, fetchActiveSetup } from "@/lib/api/setups";
 import { openFinnContext } from "@/lib/finnCommandSearch";
@@ -375,6 +375,16 @@ export default function MyPlanWorkflow({ symbol = "BTC" }) {
     }
   };
 
+  const refreshPlanWorkspace = async () => {
+    invalidateStrategyDataCaches();
+    await Promise.all([
+      loadSetups(true),
+      loadStrategies(true),
+      refreshMarketBestSetup(),
+    ]);
+    setBots(await fetchBotConfigs().catch(() => []));
+  };
+
   useEffect(() => {
     let cancelled = false;
 
@@ -418,6 +428,23 @@ export default function MyPlanWorkflow({ symbol = "BTC" }) {
       cancelled = true;
     };
   }, [activeSymbol]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const refreshIfVisible = () => {
+      if (document.visibilityState !== "visible") return;
+      void refreshPlanWorkspace();
+    };
+
+    window.addEventListener("focus", refreshIfVisible);
+    document.addEventListener("visibilitychange", refreshIfVisible);
+
+    return () => {
+      window.removeEventListener("focus", refreshIfVisible);
+      document.removeEventListener("visibilitychange", refreshIfVisible);
+    };
+  }, [activeSymbol, loadSetups, loadStrategies]);
 
   const askFinnForPlan = (plan, subjectType = "plan") => {
     const setup = plan?.setup || null;
@@ -487,10 +514,7 @@ export default function MyPlanWorkflow({ symbol = "BTC" }) {
 
   const handleSetupSaved = async (savedSetup) => {
     closeDrawer();
-    await Promise.all([
-      loadSetups(true),
-      refreshMarketBestSetup(),
-    ]);
+    await refreshPlanWorkspace();
   };
 
   const handleStrategySubmit = async (payload) => {
@@ -499,8 +523,7 @@ export default function MyPlanWorkflow({ symbol = "BTC" }) {
     } else {
       await addStrategy(payload);
     }
-    await Promise.all([loadSetups(true), loadStrategies(true), refreshMarketBestSetup()]);
-    setBots(await fetchBotConfigs().catch(() => []));
+    await refreshPlanWorkspace();
     closeDrawer();
   };
 
@@ -520,8 +543,8 @@ export default function MyPlanWorkflow({ symbol = "BTC" }) {
       onConfirm: async () => {
         if (plan.strategy?.id) await removeStrategy(plan.strategy.id);
         if (removesSetup && plan.setup?.id) await deleteSetup(plan.setup.id);
-        await Promise.all([loadSetups(true), loadStrategies(true), refreshMarketBestSetup()]);
-        setBots(await fetchBotConfigs().catch(() => []));
+        invalidateStrategyDataCaches();
+        await refreshPlanWorkspace();
         showSnackbar(copy.deletePlan, "success");
       },
     });

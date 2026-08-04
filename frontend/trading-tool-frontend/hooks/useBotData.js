@@ -578,6 +578,18 @@ const createManualOrder = useCallback(
   [loadPortfolios, loadToday, loadTradesForBot, loadConfigs]
 );
 
+  const reloadAll = useCallback(
+    async ({ includeHistory = false, forceFresh = true } = {}) => {
+      await Promise.all([
+        loadConfigs(forceFresh),
+        loadToday(forceFresh),
+        loadPortfolios(forceFresh),
+        includeHistory ? loadHistory(30) : Promise.resolve(),
+      ]);
+    },
+    [loadConfigs, loadHistory, loadPortfolios, loadToday]
+  );
+
   /* =====================================================
      🔁 INIT LOAD
   ===================================================== */
@@ -625,5 +637,10 @@ const createManualOrder = useCallback(
   
     createManualOrder,
     runBacktest,
+    reloadAll,
+    loadConfigs,
+    loadToday,
+    loadHistory,
+    loadPortfolios,
   };
 }

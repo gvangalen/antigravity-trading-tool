@@ -24,6 +24,15 @@ let setupsCache = [];
 let setupsCacheUpdatedAt = 0;
 let setupsInFlightPromise = null;
 
+export function invalidateStrategyDataCaches() {
+  strategiesCache = [];
+  strategiesCacheUpdatedAt = 0;
+  strategiesInFlightPromise = null;
+  setupsCache = [];
+  setupsCacheUpdatedAt = 0;
+  setupsInFlightPromise = null;
+}
+
 function hasFreshStrategiesCache() {
   return Date.now() - strategiesCacheUpdatedAt < STRATEGIES_CACHE_TTL_MS;
 }
@@ -166,6 +175,7 @@ export function useStrategyData(options = {}) {
   async function addStrategy(strategyData) {
     try {
       const created = await createStrategy(strategyData);
+      invalidateStrategyDataCaches();
       setSuccessMessage('Strategie toegevoegd.');
       await loadStrategies(true);
       return created;
@@ -179,6 +189,7 @@ export function useStrategyData(options = {}) {
   async function saveStrategy(id, updatedData) {
     try {
       const saved = await updateStrategy(id, updatedData);
+      invalidateStrategyDataCaches();
       setSuccessMessage('Strategie opgeslagen.');
       await loadStrategies(true);
       return saved;
@@ -192,6 +203,7 @@ export function useStrategyData(options = {}) {
   async function removeStrategy(id) {
     try {
       await deleteStrategy(id);
+      invalidateStrategyDataCaches();
       setSuccessMessage('Strategie verwijderd.');
       await loadStrategies(true);
       return true;
@@ -216,6 +228,7 @@ export function useStrategyData(options = {}) {
 
     try {
       await analyzeStrategy(strategyId);
+      invalidateStrategyDataCaches();
       await loadStrategies(true);
       setSuccessMessage('🧠 AI-uitleg bijgewerkt');
     } catch (err) {
@@ -230,6 +243,7 @@ export function useStrategyData(options = {}) {
   async function generateAll() {
     try {
       await generateAllStrategies();
+      invalidateStrategyDataCaches();
       await loadStrategies(true);
       setSuccessMessage('Alle strategieën gegenereerd.');
     } catch (err) {

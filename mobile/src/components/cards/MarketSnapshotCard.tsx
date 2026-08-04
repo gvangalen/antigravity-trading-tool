@@ -30,7 +30,7 @@ export function MarketSnapshotCard({
           <Text style={styles.label}>Market snapshot</Text>
           <Text style={styles.symbol}>{symbol}</Text>
         </View>
-        <StatusChip label={change24h} tone={tone} />
+        <StatusChip compact label={change24h} tone={tone} />
       </View>
       <Text style={[styles.price, { color: palette.color }]}>{price}</Text>
       <View style={styles.row}>
@@ -75,7 +75,7 @@ const styles = StyleSheet.create({
     fontWeight: '900',
   },
   price: {
-    fontSize: 34,
+    fontSize: 22,
     fontWeight: '900',
     letterSpacing: 0,
     marginTop: theme.spacing.md,

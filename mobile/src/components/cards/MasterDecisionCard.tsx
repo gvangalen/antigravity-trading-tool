@@ -25,8 +25,8 @@ export function MasterDecisionCard({ score, state, reason }: MasterDecisionCardP
       </View>
       <Text style={styles.reason}>{reason}</Text>
       <View style={styles.footer}>
-        <StatusChip label="Selective" tone="accent" />
-        <StatusChip label="No rush" tone="warning" />
+        <StatusChip compact label="Selective" tone="accent" />
+        <StatusChip compact label="No rush" tone="warning" />
       </View>
     </CardShell>
   );
@@ -61,7 +61,7 @@ const styles = StyleSheet.create({
   },
   score: {
     color: theme.colors.text,
-    fontSize: 28,
+    fontSize: 22,
     fontWeight: '900',
   },
   scoreBox: {
@@ -70,7 +70,7 @@ const styles = StyleSheet.create({
     borderColor: '#1D4ED880',
     borderRadius: theme.radius.md,
     borderWidth: 1,
-    minWidth: 76,
+    minWidth: 68,
     padding: theme.spacing.sm,
   },
   scoreLabel: {
@@ -81,9 +81,9 @@ const styles = StyleSheet.create({
   },
   state: {
     color: theme.colors.text,
-    fontSize: 25,
+    fontSize: 20,
     fontWeight: '900',
-    lineHeight: 30,
+    lineHeight: 24,
     marginTop: 5,
     maxWidth: 210,
   },

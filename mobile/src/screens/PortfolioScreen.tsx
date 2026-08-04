@@ -11,10 +11,15 @@ import { LoadingSkeletonCard } from '../components/layout/LoadingSkeletonCard';
 import { ScreenContainer } from '../components/layout/ScreenContainer';
 import { StatusChip } from '../components/layout/StatusChip';
 import { SegmentedControl } from '../components/layout/SegmentedControl';
+import { SwipeActionRow } from '../components/rows/SwipeActionRow';
 import { BottomSheet } from '../components/sheets/BottomSheet';
-import { TodayWithFinnCard } from '../components/workspace/TodayWithFinnCard';
+import { ConfirmDestructiveSheetContent, RowActionSheetContent } from '../components/sheets/RowActionSheetContent';
+import { TodayWithFinnCard, type TodayWithFinnQueueItem } from '../components/workspace/TodayWithFinnCard';
+import { WorkflowStepsRail } from '../components/workspace/WorkflowStepsRail';
 import { WorkspaceHeroSection } from '../components/workspace/WorkspaceHeroSection';
+import { listRowStandards } from '../constants/listRows';
 import { StatusTone, theme } from '../constants/theme';
+import { typography } from '../constants/typography';
 import { useApiResource } from '../hooks/useApiResource';
 import { localizedBackendText, translate, translateFinnTag } from '../i18n';
 import { preferenceColors, useAppPreferences } from '../preferences/AppPreferencesProvider';
@@ -64,6 +69,8 @@ type ExchangeSummary = {
   totalEur: number;
 };
 
+type PortfolioAssetRow = ReturnType<typeof aggregateBots>['assetRows'][number];
+
 const envFilters: EnvFilter[] = ['all', 'paper', 'live'];
 const ranges: Array<{ key: RangeKey; bucket: string; limit: number }> = [
   { key: '1D', bucket: '1h', limit: 24 },
@@ -84,6 +91,7 @@ const metrics: Array<{ key: MetricKey; label: string }> = [
 export function PortfolioScreen() {
   const navigation = useNavigation<NavigationProp<MainTabParamList>>();
   const { context } = useIntelligenceContext();
+  const { language } = useAppPreferences();
   const activeAsset = context.asset;
   const { openFinn } = useFinnOverlay();
   const [envFilter, setEnvFilter] = useState<EnvFilter>('all');
@@ -106,6 +114,8 @@ export function PortfolioScreen() {
   const [tradePreview, setTradePreview] = useState<OrderPreviewResponse | null>(null);
   const [tradePreviewError, setTradePreviewError] = useState('');
   const [tradePreviewLoading, setTradePreviewLoading] = useState(false);
+  const [assetActionRow, setAssetActionRow] = useState<PortfolioAssetRow | null>(null);
+  const [assetRemoveRow, setAssetRemoveRow] = useState<PortfolioAssetRow | null>(null);
 
   const rangeConfig = ranges.find((item) => item.key === range) ?? ranges[1];
   const isLiveFilter = envFilter === 'all' ? undefined : envFilter === 'live';
@@ -175,8 +185,26 @@ export function PortfolioScreen() {
   const exchangeSummary = useMemo(() => summarizeExchange(exchangeResource.data), [exchangeResource.data]);
   const history = useMemo(() => normalizeHistory(historyResource.data), [historyResource.data]);
   const performance = useMemo(() => getPerformance(history, metric, aggregate), [aggregate, history, metric]);
+  const portfolioSyncMessage =
+    portfoliosResource.error?.message ||
+    configsResource.error?.message ||
+    exchangeResource.error?.message ||
+    historyResource.error?.message ||
+    '';
+  const hasRenderablePortfolioCore =
+    filteredBots.length > 0 ||
+    aggregate.assetRows.length > 0 ||
+    aggregate.positionValue > 0 ||
+    aggregate.invested > 0 ||
+    exchangeSummary.totalEur > 0 ||
+    history.length > 0 ||
+    Boolean(overviewResource.data?.portfolio);
   const { updateContext } = useIntelligenceContext();
   const activeOverviewAsset = overviewResource.data?.watchlist.find((asset) => asset.symbol === activeAsset);
+  const watchlistSymbols = useMemo(
+    () => new Set((overviewResource.data?.watchlist ?? []).map((asset) => asset.symbol.toUpperCase())),
+    [overviewResource.data?.watchlist],
+  );
   const primaryBot = filteredBots.find((bot) => bot.symbol === activeAsset && bot.isActive) ?? filteredBots.find((bot) => bot.isActive) ?? filteredBots[0];
   const loading =
     overviewResource.loading ||
@@ -210,6 +238,39 @@ export function PortfolioScreen() {
     setTradeSheetOpen(true);
   }
 
+  async function openPortfolioAsset(row: PortfolioAssetRow) {
+    await triggerHaptic('selection');
+    updateContext({ asset: row.symbol, screen: 'Analysis' });
+    navigation.navigate('Watchlist');
+  }
+
+  async function openPortfolioAssetActions(row: PortfolioAssetRow) {
+    await triggerHaptic('selection');
+    setAssetActionRow(row);
+  }
+
+  function promptPortfolioAssetRemove(row: PortfolioAssetRow) {
+    setAssetActionRow(null);
+    setAssetRemoveRow(row);
+  }
+
+  async function confirmPortfolioAssetRemove() {
+    if (!assetRemoveRow) return;
+
+    const symbol = assetRemoveRow.symbol;
+    await intelligenceApi.removeFromWatchlist(symbol);
+    setAssetRemoveRow(null);
+
+    if (symbol === activeAsset) {
+      const nextSymbol = overviewResource.data?.watchlist.find((asset) => asset.symbol !== symbol)?.symbol;
+      if (nextSymbol) {
+        updateContext({ asset: nextSymbol, screen: 'Portfolio' });
+      }
+    }
+
+    overviewResource.refresh();
+  }
+
   async function askFinnTradeCheck() {
     await triggerHaptic('selection');
     setTradeSheetOpen(false);
@@ -233,7 +294,7 @@ export function PortfolioScreen() {
     setTradePreview(null);
 
     if (!primaryBot) {
-      setTradePreviewError('Geen actieve bot gevonden voor deze trade preview.');
+      setTradePreviewError(translate(language, 'portfolio.noActiveBotPreview'));
       return;
     }
 
@@ -247,7 +308,7 @@ export function PortfolioScreen() {
     });
 
     if (!payload) {
-      setTradePreviewError('Vul eerst een geldig bedrag in voor de preview.');
+      setTradePreviewError(translate(language, 'portfolio.invalidPreviewAmount'));
       return;
     }
 
@@ -256,7 +317,7 @@ export function PortfolioScreen() {
       const preview = await intelligenceApi.previewOrder(payload);
       setTradePreview(preview);
     } catch (error) {
-      setTradePreviewError(error instanceof Error ? error.message : 'Order preview is mislukt.');
+      setTradePreviewError(error instanceof Error ? error.message : translate(language, 'portfolio.previewFailed'));
     } finally {
       setTradePreviewLoading(false);
     }
@@ -284,7 +345,7 @@ export function PortfolioScreen() {
     <View style={styles.screenWrap}>
       <ScreenContainer
         edgeToEdge={true}
-        contentInsetBottom={170}
+        contentInsetBottom={320}
         refreshing={
           overviewResource.refreshing ||
           portfoliosResource.refreshing ||
@@ -311,10 +372,39 @@ export function PortfolioScreen() {
               isStale={isStale}
               metric={metric}
               onAskFinn={askFinnTradeCheck}
-              performance={performance.last}
+              performance={performance.delta.absolute}
             />
-            <PortfolioWorkspaceIntro />
-            <PortfolioPerformanceCard
+            <WorkflowStepsRail
+              steps={[
+                {
+                  body: translate(language, 'portfolio.workflowStepValueBody'),
+                  icon: 'bar-chart-2',
+                  step: 1,
+                  title: translate(language, 'portfolio.workflowStepValueTitle'),
+                },
+                {
+                  body: translate(language, 'portfolio.workflowStepExposureBody'),
+                  icon: 'pie-chart',
+                  step: 2,
+                  title: translate(language, 'portfolio.workflowStepExposureTitle'),
+                },
+                {
+                  body: translate(language, 'portfolio.workflowStepPositionsBody'),
+                  icon: 'briefcase',
+                  step: 3,
+                  title: translate(language, 'portfolio.workflowStepPositionsTitle'),
+                },
+              ]}
+            />
+            <PortfolioCapitalOverviewSection
+              aggregate={aggregate}
+              bots={filteredBots}
+              dailyDelta={performance.delta.absolute}
+              envFilter={envFilter}
+              exchangeSummary={exchangeSummary}
+              onEnvFilterChange={changeEnv}
+            />
+            <PortfolioPerformanceSection
               delta={performance.delta}
               metric={metric}
               onMetricChange={changeMetric}
@@ -323,37 +413,38 @@ export function PortfolioScreen() {
               range={range}
               total={performance.last}
             />
-            <PortfolioCapitalAllocationCard
-              aggregate={aggregate}
-              bots={filteredBots}
-              envFilter={envFilter}
-              exchangeSummary={exchangeSummary}
-              onEnvFilterChange={changeEnv}
+            <PortfolioAssetExposureSection
+              rows={aggregate.assetRows}
+              totalValue={aggregate.positionValue}
+              watchlistSymbols={watchlistSymbols}
+              onOpenActions={openPortfolioAssetActions}
+              onOpenAsset={openPortfolioAsset}
+              onRemoveAsset={promptPortfolioAssetRemove}
+              onViewAll={() => {
+                openFinn({
+                  prefill: buildPortfolioExposurePrefill(activeAsset, aggregate.assetRows, aggregate.positionValue),
+                  source: 'portfolio-positions',
+                  symbol: activeAsset,
+                });
+              }}
             />
-            <MyBotsSection bots={filteredBots} totalBots={bots.length} onOpenTrade={openTradeSheet} />
           </>
         )}
 
-        {portfoliosResource.error || configsResource.error || exchangeResource.error || historyResource.error ? (
+        {portfolioSyncMessage && !hasRenderablePortfolioCore ? (
           <InsightCard
-            label="Portfolio sync"
-            title="Een deel van de portfolio-data is stale."
-            body={
-              portfoliosResource.error?.message ||
-              configsResource.error?.message ||
-              exchangeResource.error?.message ||
-              historyResource.error?.message ||
-              'Controleer backend/API status.'
-            }
+            label={translate(language, 'portfolio.syncLabel')}
+            title={translate(language, 'portfolio.syncTitle')}
+            body={portfolioSyncMessage}
             tone="warning"
-            cta="Pull to refresh"
+            cta={translate(language, 'portfolio.syncRefresh')}
           />
         ) : null}
       </ScreenContainer>
 
 
 
-      <BottomSheet visible={tradeSheetOpen} title="AI trade flow" onClose={() => setTradeSheetOpen(false)}>
+      <BottomSheet visible={tradeSheetOpen} title={translate(language, 'portfolio.tradeSheetTitle')} onClose={() => setTradeSheetOpen(false)}>
         <TradeActionSheet
           activeAsset={activeAsset}
           amountPreset={amountPreset}
@@ -377,50 +468,595 @@ export function PortfolioScreen() {
           onPreview={requestTradePreview}
         />
       </BottomSheet>
+
+      <BottomSheet
+        visible={Boolean(assetActionRow)}
+        title={translate(language, 'common.actions')}
+        onClose={() => setAssetActionRow(null)}
+      >
+        <RowActionSheetContent
+          actions={
+            assetActionRow
+              ? [
+                  {
+                    key: 'open',
+                    label: translate(language, 'analysis.assetOpen'),
+                    description: `${assetActionRow.symbol} · ${formatEUR(assetActionRow.positionValue)}`,
+                    icon: 'arrow-up-right',
+                    onPress: () => openPortfolioAsset(assetActionRow),
+                  },
+                  ...(watchlistSymbols.has(assetActionRow.symbol.toUpperCase())
+                    ? [
+                        {
+                          key: 'remove',
+                          label: translate(language, 'analysis.assetRemove'),
+                          description: translate(language, 'analysis.assetRemoveDetail', { symbol: assetActionRow.symbol }),
+                          icon: 'trash-2' as const,
+                          tone: 'danger' as const,
+                          onPress: () => promptPortfolioAssetRemove(assetActionRow),
+                        },
+                      ]
+                    : []),
+                ]
+              : []
+          }
+        />
+      </BottomSheet>
+
+      <BottomSheet
+        visible={Boolean(assetRemoveRow)}
+        title={translate(language, 'analysis.assetRemoveConfirmTitle')}
+        onClose={() => setAssetRemoveRow(null)}
+      >
+        {assetRemoveRow ? (
+          <ConfirmDestructiveSheetContent
+            body={translate(language, 'analysis.assetRemoveConfirmBody', { symbol: assetRemoveRow.symbol })}
+            confirmLabel={translate(language, 'common.delete')}
+            onConfirm={confirmPortfolioAssetRemove}
+            title={translate(language, 'analysis.assetRemoveConfirmTitle')}
+          />
+        ) : null}
+      </BottomSheet>
     </View>
   );
 }
 
-function PortfolioWorkspaceIntro() {
-  const { appearance } = useAppPreferences();
+function PortfolioCapitalOverviewSection({
+  aggregate,
+  bots,
+  dailyDelta,
+  envFilter,
+  exchangeSummary,
+  onEnvFilterChange,
+}: {
+  aggregate: ReturnType<typeof aggregateBots>;
+  bots: PortfolioBot[];
+  dailyDelta: number;
+  envFilter: EnvFilter;
+  exchangeSummary: ReturnType<typeof summarizeExchange>;
+  onEnvFilterChange: (value: EnvFilter) => void;
+}) {
+  const { appearance, language } = useAppPreferences();
   const colors = preferenceColors(appearance);
-  const steps = [
-    { icon: 'pie-chart', title: '1 Balance', text: 'How much capital, cash and exposure is active?' },
-    { icon: 'trending-up', title: '2 Performance', text: 'How is equity evolving across the selected range?' },
-    { icon: 'briefcase', title: '3 Bots', text: 'Which live or paper bots currently drive portfolio risk?' },
-  ] as const;
+  const deltaTone = dailyDelta >= 0 ? theme.colors.success : theme.colors.danger;
+  const totalValue = aggregate.positionValue;
+  const available = Math.max(exchangeSummary.freeEur, 0);
+  const invested = Math.max(aggregate.invested, 0);
+  const trackTotal = Math.max(totalValue, available + invested, 1);
+  const availablePct = Math.max(0, Math.min(100, (available / trackTotal) * 100));
+  const investedPct = Math.max(0, Math.min(100, (invested / trackTotal) * 100));
+  const activeCount = bots.filter((bot) => bot.isActive).length;
+  const riskRows = [
+    { label: translate(language, 'portfolio.todaySpent'), value: formatEUR(aggregate.todaySpent) },
+    { label: translate(language, 'portfolio.dailyLimit'), value: formatEUR(aggregate.dailyLimit) },
+    { label: translate(language, 'portfolio.maxPerTrade'), value: formatEUR(aggregate.maxOrder) },
+  ];
 
   return (
-    <View style={[styles.workspaceIntroPanel, { borderColor: colors.borderSubtle }]}>
-      <View style={styles.sectionTop}>
-        <View style={styles.flexText}>
-          <Text style={[styles.workspaceEyebrow, { color: colors.textDim }]}>Portfolio workspace</Text>
-          <Text style={[styles.workspaceIntroTitle, { color: colors.text }]}>Portfolio</Text>
-          <Text style={[styles.workspaceIntroSubtitle, { color: colors.textMuted }]}>
-            Review positions, exposure and actions that need attention.
+    <View style={styles.portfolioOverviewSection}>
+      <View style={styles.portfolioSectionHeader}>
+        <View>
+          <Text style={[styles.portfolioOverviewEyebrow, { color: colors.textDim }]}>PORTFOLIO</Text>
+          <Text style={[styles.portfolioCapitalTitle, { color: colors.text }]}>
+            {translate(language, 'portfolio.capitalOverview')}
           </Text>
         </View>
-        <StatusChip label="Active" tone="success" />
+        <StatusChip compact label={translate(language, 'portfolio.activeCount', { count: activeCount || 0 })} tone="success" />
       </View>
 
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.workflowRail}>
-        {steps.map((step) => (
+      <SegmentedControl
+        compact
+        items={[
+          { key: 'all', label: translate(language, 'portfolio.filter.all') },
+          { key: 'paper', label: translate(language, 'portfolio.filter.paper') },
+          { key: 'live', label: translate(language, 'portfolio.filter.live') },
+        ]}
+        selected={envFilter}
+        onChange={(value) => onEnvFilterChange(value as EnvFilter)}
+      />
+
+      <View style={styles.portfolioOverviewHeader}>
+        <View style={[styles.portfolioOverviewMetric, styles.portfolioOverviewMetricPrimary]}>
+          <Text style={[styles.portfolioOverviewMetricLabel, { color: colors.textDim }]}>
+            {translate(language, 'portfolio.totalValue')}
+          </Text>
+          <Text style={[styles.portfolioOverviewValue, { color: colors.text }]}>{formatEUR(totalValue)}</Text>
+        </View>
+        <View style={styles.portfolioOverviewMetric}>
+          <Text style={[styles.portfolioOverviewMetricLabel, { color: colors.textDim }]}>
+            {translate(language, 'portfolio.today')}
+          </Text>
+          <Text style={[styles.portfolioOverviewDelta, { color: deltaTone }]}>
+            {dailyDelta >= 0 ? '+' : ''}
+            {formatEUR(dailyDelta)} {aggregate.positionValue > 0 ? formatPercent(aggregate.pnlPct) : '+0,0%'}
+          </Text>
+        </View>
+      </View>
+
+      <View style={styles.portfolioOverviewHeader}>
+        <View style={styles.portfolioOverviewMetric}>
+          <Text style={[styles.portfolioOverviewMetricLabel, { color: colors.textDim }]}>
+            {translate(language, 'portfolio.available')}
+          </Text>
+          <Text style={[styles.portfolioOverviewSubValue, { color: colors.text }]}>{formatEUR(available)}</Text>
+        </View>
+        <View style={styles.portfolioOverviewMetric}>
+          <Text style={[styles.portfolioOverviewMetricLabel, { color: colors.textDim }]}>
+            {translate(language, 'portfolio.invested')}
+          </Text>
+          <Text style={[styles.portfolioOverviewSubValue, { color: colors.text }]}>{formatEUR(invested)}</Text>
+        </View>
+      </View>
+
+      <View style={[styles.portfolioExposureTrack, { backgroundColor: colors.borderSubtle }]}>
+        <View style={[styles.portfolioExposureFill, { backgroundColor: theme.colors.accent, width: `${availablePct}%` }]} />
+        <View style={[styles.portfolioExposureFill, { backgroundColor: colors.textSoft, width: `${investedPct}%` }]} />
+      </View>
+
+      <View style={styles.portfolioExposureLegend}>
+        <View style={styles.portfolioExposureLegendItem}>
+          <View style={[styles.portfolioExposureLegendDot, { backgroundColor: theme.colors.accent }]} />
+          <View>
+            <Text style={[styles.portfolioExposureLegendLabel, { color: colors.textDim }]}>
+              {translate(language, 'portfolio.available')}
+            </Text>
+            <Text style={[styles.portfolioExposureLegendValue, { color: colors.text }]}>{formatEUR(available)}</Text>
+          </View>
+        </View>
+        <View style={styles.portfolioExposureLegendItem}>
+          <View style={[styles.portfolioExposureLegendDot, { backgroundColor: colors.textSoft }]} />
+          <View>
+            <Text style={[styles.portfolioExposureLegendLabel, { color: colors.textDim }]}>
+              {translate(language, 'portfolio.inBots')}
+            </Text>
+            <Text style={[styles.portfolioExposureLegendValue, { color: colors.text }]}>{formatEUR(invested)}</Text>
+          </View>
+        </View>
+      </View>
+
+      <View style={styles.portfolioRiskSection}>
+        <Text style={[styles.portfolioRiskTitle, { color: colors.text }]}>
+          {translate(language, 'portfolio.riskLimits')}
+        </Text>
+        {riskRows.map((row, index) => (
           <View
-            key={step.title}
-            style={[styles.workflowCard, { backgroundColor: colors.surfaceMuted, borderColor: colors.borderSubtle }]}
+            key={row.label}
+            style={[
+              styles.portfolioRiskRow,
+              { borderBottomColor: colors.borderSubtle },
+              index === riskRows.length - 1 && styles.portfolioRiskRowLast,
+            ]}
           >
-            <View style={[styles.workflowIcon, { backgroundColor: colors.surface }]}>
-              <Feather name={step.icon} size={16} color={colors.accent} />
-            </View>
-            <View style={styles.workflowCopy}>
-              <Text style={[styles.workflowTitle, { color: colors.accent }]}>{step.title}</Text>
-              <Text style={[styles.workflowText, { color: colors.textMuted }]}>{step.text}</Text>
-            </View>
+            <Text style={[styles.portfolioRiskLabel, { color: colors.textMuted }]}>{row.label}</Text>
+            <Text style={[styles.portfolioRiskValue, { color: colors.text }]}>{row.value}</Text>
           </View>
         ))}
-      </ScrollView>
+      </View>
+
+      <View style={[styles.portfolioSectionDivider, { backgroundColor: colors.borderSubtle }]} />
     </View>
   );
+}
+
+function PortfolioPerformanceSection({
+  delta,
+  metric,
+  onMetricChange,
+  onRangeChange,
+  points,
+  range,
+  total,
+}: {
+  delta: { absolute: number; percent: number | null };
+  metric: MetricKey;
+  onMetricChange: (value: MetricKey) => void;
+  onRangeChange: (value: RangeKey) => void;
+  points: UnknownRecord[];
+  range: RangeKey;
+  total: number;
+}) {
+  const { appearance, language } = useAppPreferences();
+  const colors = preferenceColors(appearance);
+  const isDown = delta.absolute < 0;
+  const accentColor =
+    metric === 'unrealized_pnl' ? (isDown ? theme.colors.danger : theme.colors.success) : theme.colors.accent;
+  const deltaLabel =
+    delta.percent === null
+      ? formatMetric(delta.absolute, metric)
+      : `${formatMetric(delta.absolute, metric)}${isSanePercent(delta.percent) ? ` · ${formatPercent(delta.percent)}` : ''}`;
+
+  return (
+    <View style={styles.portfolioSection}>
+      <View style={styles.portfolioChartHeader}>
+        <View style={styles.portfolioChartCopy}>
+          <Text style={[styles.portfolioOverviewEyebrow, { color: colors.textDim }]}>PORTFOLIO OVERVIEW</Text>
+          <Text style={[styles.portfolioChartValue, { color: colors.text }]}>{formatMetric(total, metric)}</Text>
+          <Text
+            style={[
+              styles.portfolioChartDelta,
+              { color: isDown ? theme.colors.danger : theme.colors.success },
+            ]}
+          >
+            {deltaLabel}
+          </Text>
+        </View>
+      </View>
+
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.portfolioChartRail}>
+        <SegmentedControl
+          compact
+          items={ranges.map((item) => ({ key: item.key, label: item.key }))}
+          selected={range}
+          onChange={(value) => onRangeChange(value as RangeKey)}
+        />
+      </ScrollView>
+
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.portfolioMetricRail}>
+        <SegmentedControl
+          compact
+          items={metrics.map((item) => ({ key: item.key, label: item.label.toUpperCase() }))}
+          selected={metric}
+          onChange={(value) => onMetricChange(value as MetricKey)}
+        />
+      </ScrollView>
+
+      <View style={[styles.portfolioChartCard, { backgroundColor: colors.surface, borderColor: colors.borderSubtle }]}>
+        <SparkChart accentColor={accentColor} metric={metric} points={points} />
+      </View>
+
+      <View style={[styles.portfolioSectionDivider, { backgroundColor: colors.borderSubtle }]} />
+    </View>
+  );
+}
+
+function PortfolioAssetExposureSection({
+  rows,
+  totalValue,
+  watchlistSymbols,
+  onOpenActions,
+  onOpenAsset,
+  onRemoveAsset,
+  onViewAll,
+}: {
+  rows: PortfolioAssetRow[];
+  totalValue: number;
+  watchlistSymbols: Set<string>;
+  onOpenActions: (row: PortfolioAssetRow) => void | Promise<void>;
+  onOpenAsset: (row: PortfolioAssetRow) => void | Promise<void>;
+  onRemoveAsset: (row: PortfolioAssetRow) => void | Promise<void>;
+  onViewAll: () => void;
+}) {
+  const { appearance, language } = useAppPreferences();
+  const colors = preferenceColors(appearance);
+
+  if (rows.length === 0) {
+    return (
+      <View style={styles.portfolioSection}>
+        <View style={styles.portfolioSectionHeader}>
+          <View>
+            <Text style={[styles.portfolioAssetTitle, { color: colors.text }]}>
+              {translate(language, 'portfolio.exposurePerAsset')}
+            </Text>
+            <Text style={[styles.portfolioAssetSubtitle, { color: colors.textMuted }]}>
+              {translate(language, 'portfolio.visibleAllocation')}
+            </Text>
+          </View>
+          <Pressable accessibilityRole="button" onPress={onViewAll}>
+            <Text style={styles.portfolioSectionLink}>{translate(language, 'portfolio.viewAll')}</Text>
+          </Pressable>
+        </View>
+        <View style={[styles.portfolioAssetEmpty, { borderColor: colors.borderSubtle, backgroundColor: colors.surface }]}>
+          <Text style={[styles.portfolioAssetEmptyText, { color: colors.textMuted }]}>
+            {translate(language, 'portfolio.allocationEmpty')}
+          </Text>
+        </View>
+      </View>
+    );
+  }
+
+  return (
+    <View style={styles.portfolioSection}>
+      <View style={styles.portfolioSectionHeader}>
+        <View>
+          <Text style={[styles.portfolioAssetTitle, { color: colors.text }]}>
+            {translate(language, 'portfolio.exposurePerAsset')}
+          </Text>
+          <Text style={[styles.portfolioAssetSubtitle, { color: colors.textMuted }]}>
+            {translate(language, 'portfolio.visibleAllocation')}
+          </Text>
+        </View>
+        <Pressable accessibilityRole="button" onPress={onViewAll}>
+          <Text style={styles.portfolioSectionLink}>{translate(language, 'portfolio.viewAll')}</Text>
+        </Pressable>
+      </View>
+
+      <View style={styles.portfolioAssetTableHeader}>
+        <Text numberOfLines={1} style={[styles.portfolioAssetHeaderLabel, { color: colors.textDim }]}>{translate(language, 'portfolio.asset')}</Text>
+        <Text numberOfLines={1} style={[styles.portfolioAssetHeaderValue, { color: colors.textDim }]}>{translate(language, 'portfolio.value')}</Text>
+        <Text numberOfLines={1} style={[styles.portfolioAssetHeaderAllocation, { color: colors.textDim }]}>{translate(language, 'portfolio.allocation')}</Text>
+      </View>
+
+      {rows.map((row, index) => {
+        const share = totalValue > 0 ? (row.positionValue / totalValue) * 100 : 0;
+        const isTracked = watchlistSymbols.has(row.symbol.toUpperCase());
+        return (
+          <SwipeActionRow
+            key={`${row.symbol}-${index}`}
+            actions={[
+              {
+                key: 'open',
+                label: translate(language, 'common.open'),
+                icon: 'arrow-up-right',
+                onPress: () => onOpenAsset(row),
+              },
+              ...(isTracked
+                ? [
+                    {
+                      key: 'remove',
+                      label: translate(language, 'common.delete'),
+                      icon: 'trash-2' as const,
+                      tone: 'danger' as const,
+                      onPress: () => onRemoveAsset(row),
+                    },
+                  ]
+                : []),
+            ]}
+          >
+            <Pressable
+              onPress={() => onOpenAsset(row)}
+              style={({ pressed }) => [
+                styles.portfolioAssetRow,
+                { borderBottomColor: colors.borderSubtle },
+                index === rows.length - 1 && styles.portfolioAssetRowLast,
+                pressed && styles.pressed,
+              ]}
+            >
+              <View style={styles.portfolioAssetIdentity}>
+                <View style={[styles.portfolioPositionIcon, { backgroundColor: assetColor(row.symbol) }]}>
+                  <Text style={styles.portfolioPositionIconText}>{assetGlyph(row.symbol)}</Text>
+                </View>
+                <View style={styles.flexText}>
+                  <Text style={[styles.portfolioPositionName, { color: colors.text }]}>{assetName(row.symbol)}</Text>
+                  <Text style={[styles.portfolioPositionSymbol, { color: colors.textDim }]}>
+                    {assetSubLabel(row.symbol)}
+                    {isTracked ? ' · Watchlist' : ''}
+                  </Text>
+                </View>
+              </View>
+              <Text numberOfLines={1} style={[styles.portfolioAssetValue, { color: colors.text }]}>
+                {formatEUR(row.positionValue)}
+              </Text>
+              <Text numberOfLines={1} style={[styles.portfolioAssetAllocation, { color: colors.text }]}>
+                {Math.round(share)}%
+              </Text>
+              <Pressable
+                hitSlop={10}
+                onPress={(event) => {
+                  event.stopPropagation();
+                  onOpenActions(row);
+                }}
+                style={[
+                  styles.portfolioAssetOverflowButton,
+                  { borderColor: colors.borderSubtle, backgroundColor: colors.surfaceMuted },
+                ]}
+              >
+                <Feather color={colors.textDim} name="more-horizontal" size={listRowStandards.iconGlyphSize - 1} />
+              </Pressable>
+            </Pressable>
+          </SwipeActionRow>
+        );
+      })}
+    </View>
+  );
+}
+
+function PortfolioPositionsSection({
+  rows,
+  onViewAll,
+}: {
+  rows: ReturnType<typeof aggregateBots>['assetRows'];
+  onViewAll: () => void;
+}) {
+  const { appearance, language } = useAppPreferences();
+  const colors = preferenceColors(appearance);
+  const visibleRows = rows.slice(0, 4);
+
+  return (
+    <View style={styles.portfolioSection}>
+      <View style={styles.portfolioSectionHeader}>
+        <Text style={[styles.portfolioSectionTitle, { color: colors.text }]}>{translate(language, 'portfolio.positions')}</Text>
+        <Pressable accessibilityRole="button" onPress={onViewAll}>
+          <Text style={styles.portfolioSectionLink}>{translate(language, 'portfolio.viewAll')}</Text>
+        </Pressable>
+      </View>
+
+      {visibleRows.length === 0 ? (
+        <Text style={[styles.portfolioEmptyText, { color: colors.textMuted }]}>
+          {translate(language, 'portfolio.noVisiblePositions')}
+        </Text>
+      ) : (
+        visibleRows.map((row, index) => (
+          <View
+            key={row.symbol}
+            style={[
+              styles.portfolioPositionRow,
+              { borderBottomColor: colors.borderSubtle },
+              index === visibleRows.length - 1 && styles.portfolioPositionRowLast,
+            ]}
+          >
+            <View style={styles.portfolioPositionIdentity}>
+              <View style={[styles.portfolioPositionIcon, { backgroundColor: assetColor(row.symbol) }]}>
+                <Text style={styles.portfolioPositionIconText}>{assetGlyph(row.symbol)}</Text>
+              </View>
+              <View>
+                <Text style={[styles.portfolioPositionName, { color: colors.text }]}>{assetName(row.symbol)}</Text>
+                <Text style={[styles.portfolioPositionSymbol, { color: colors.textDim }]}>{row.symbol}</Text>
+              </View>
+            </View>
+            <View style={styles.portfolioPositionValues}>
+              <Text style={[styles.portfolioPositionValue, { color: colors.text }]}>{formatEUR(row.positionValue)}</Text>
+              <Text
+                style={[
+                  styles.portfolioPositionChange,
+                  { color: row.pnlPct >= 0 ? theme.colors.success : colors.textSoft },
+                ]}
+              >
+                {formatPercent(row.pnlPct)}
+              </Text>
+            </View>
+          </View>
+        ))
+      )}
+
+      <View style={[styles.portfolioSectionDivider, { backgroundColor: colors.borderSubtle }]} />
+    </View>
+  );
+}
+
+function PortfolioAllocationSection({
+  rows,
+  totalValue,
+}: {
+  rows: ReturnType<typeof aggregateBots>['assetRows'];
+  totalValue: number;
+}) {
+  const { appearance, language } = useAppPreferences();
+  const colors = preferenceColors(appearance);
+  const visibleRows = rows.filter((row) => row.positionValue > 0).slice(0, 4);
+
+  return (
+    <View style={styles.portfolioSection}>
+      <Text style={[styles.portfolioSectionTitle, { color: colors.text }]}>
+        {translate(language, 'portfolio.allocationTitle')}
+      </Text>
+      {visibleRows.length === 0 || totalValue <= 0 ? (
+        <Text style={[styles.portfolioEmptyText, { color: colors.textMuted }]}>
+          {translate(language, 'portfolio.allocationEmpty')}
+        </Text>
+      ) : (
+        <>
+          <View style={[styles.portfolioAllocationTrack, { backgroundColor: colors.borderSubtle }]}>
+            {visibleRows.map((row, index) => {
+              const share = Math.max((row.positionValue / totalValue) * 100, 6);
+              return (
+                <View
+                  key={row.symbol}
+                  style={[
+                    styles.portfolioAllocationFill,
+                    {
+                      backgroundColor: assetColor(row.symbol),
+                      width: `${share}%`,
+                    },
+                    index === 0 && styles.portfolioAllocationFillFirst,
+                    index === visibleRows.length - 1 && styles.portfolioAllocationFillLast,
+                  ]}
+                />
+              );
+            })}
+          </View>
+          <View style={styles.portfolioAllocationLegend}>
+            {visibleRows.map((row) => {
+              const share = totalValue > 0 ? (row.positionValue / totalValue) * 100 : 0;
+              return (
+                <View key={row.symbol} style={styles.portfolioAllocationLegendRow}>
+                  <Text style={[styles.portfolioAllocationLegendLabel, { color: colors.text }]}>{row.symbol}</Text>
+                  <Text style={[styles.portfolioAllocationLegendValue, { color: assetColor(row.symbol) }]}>
+                    {Math.round(share)}%
+                  </Text>
+                </View>
+              );
+            })}
+          </View>
+        </>
+      )}
+    </View>
+  );
+}
+
+function assetName(symbol: string) {
+  const upper = symbol.toUpperCase();
+  if (upper === 'BTC') return 'Bitcoin';
+  if (upper === 'SOL') return 'Solana';
+  if (upper === 'ETH') return 'Ethereum';
+  if (upper === 'EUR') return 'Euro';
+  return upper;
+}
+
+function assetSubLabel(symbol: string) {
+  const upper = symbol.toUpperCase();
+  if (upper === 'BTC') return 'Bitcoin';
+  if (upper === 'SOL') return 'Solana';
+  if (upper === 'ETH') return 'Ethereum';
+  if (upper === 'EUR') return 'Euro';
+  return upper;
+}
+
+function assetGlyph(symbol: string) {
+  const upper = symbol.toUpperCase();
+  if (upper === 'BTC') return 'B';
+  if (upper === 'SOL') return 'S';
+  if (upper === 'ETH') return 'E';
+  if (upper === 'EUR') return '€';
+  return upper.slice(0, 1);
+}
+
+function assetColor(symbol: string) {
+  const upper = symbol.toUpperCase();
+  if (upper === 'BTC') return '#F7931A';
+  if (upper === 'SOL') return '#7C3AED';
+  if (upper === 'ETH') return '#627EEA';
+  if (upper === 'EUR') return '#2563EB';
+  return theme.colors.accent;
+}
+
+function createEmptyAssetRow(symbol: string) {
+  return {
+    symbol,
+    invested: 0,
+    netQty: 0,
+    pnl: 0,
+    pnlPct: 0,
+    positionValue: 0,
+  };
+}
+
+function buildPortfolioExposurePrefill(
+  activeAsset: string,
+  rows: ReturnType<typeof aggregateBots>['assetRows'],
+  totalValue: number,
+) {
+  const lines = rows.slice(0, 5).map((row) => {
+    const share = totalValue > 0 ? Math.round((row.positionValue / totalValue) * 100) : 0;
+    return `- ${row.symbol}: ${formatEUR(row.positionValue)} (${share}%)`;
+  });
+
+  return [
+    `Geef een korte exposure review voor mijn ${activeAsset} portfolio.`,
+    `Totale zichtbare waarde: ${formatEUR(totalValue)}.`,
+    'Huidige verdeling:',
+    ...lines,
+    'Noem kort concentratierisico, sync-risico en de veiligste volgende stap.',
+  ].join('\n');
 }
 
 function PortfolioWorkspaceHero({
@@ -441,23 +1077,20 @@ function PortfolioWorkspaceHero({
   performance: number;
 }) {
   const { language } = useAppPreferences();
-  const tags = [
-    {
-      label: translate(language, 'portfolio.activeSources', { count: filteredBots }),
-      tone: 'accent' as StatusTone,
-    },
-    {
-      label: metric.replace('_', ' '),
-      tone: 'neutral' as StatusTone,
-    },
-    { label: isStale ? 'Stale sync' : 'Live', tone: isStale ? ('warning' as StatusTone) : ('success' as StatusTone) },
+  const metaItems = [
+    translate(language, 'portfolio.activeSources', { count: filteredBots }),
+    metric.replace('_', ' '),
+    translate(language, isStale ? 'tag.staleSync' : 'tag.live'),
   ];
-  const queueItems = [
+  const queueItems: TodayWithFinnQueueItem[] = [
     {
       key: 'tasks',
       label: translate(language, 'queue.label.tasks'),
-      value: filteredBots,
-      body: translate(language, 'queue.body.botsInCurrentPortfolioLens'),
+      value: filteredBots > 0 || isStale ? 1 : 0,
+      body: translate(language, isStale ? 'portfolio.queueRefreshSync' : 'portfolio.queueReviewExposure'),
+      detail: isStale
+        ? translate(language, 'portfolio.staleSupport')
+        : translate(language, 'portfolio.queueReviewExposureDetail'),
     },
     {
       key: 'reviews',
@@ -478,6 +1111,10 @@ function PortfolioWorkspaceHero({
       body: translate(language, 'queue.body.visiblePerformanceMatchesMetric'),
     },
   ];
+  const openCount = queueItems.reduce((total, item) => {
+    const value = typeof item.value === 'number' ? item.value : Number(item.value);
+    return total + (Number.isFinite(value) && value > 0 ? 1 : 0);
+  }, 0);
   const headline = localizedBackendText(
     language,
     briefing?.summary?.trim(),
@@ -491,19 +1128,17 @@ function PortfolioWorkspaceHero({
     <WorkspaceHeroSection>
       <TodayWithFinnCard
         headline={headline}
+        metaItems={metaItems}
         support={support}
-        tags={tags.map((tag) => ({ ...tag, label: translateFinnTag(language, tag.label) }))}
-        primaryActionLabel={translate(language, 'finn.askAboutExposure')}
-        onPrimaryAction={onAskFinn}
         queueItems={queueItems}
-        queueStatusLabel={translate(language, 'common.itemsOpen', { count: filteredBots })}
+        queueStatusLabel={translate(language, 'common.itemsOpen', { count: openCount })}
       />
     </WorkspaceHeroSection>
   );
 }
 
 function FilledBadge({ label, tone }: { label: string; tone: StatusTone }) {
-  const { appearance } = useAppPreferences();
+  const { appearance, language } = useAppPreferences();
   const colors = preferenceColors(appearance);
   const palettes: Record<StatusTone, { background: string; border: string; color: string }> = {
     accent: { background: '#E8F0FF', border: '#C7D7FE', color: colors.accent },
@@ -539,7 +1174,7 @@ function PortfolioPerformanceCard({
   range: RangeKey;
   total: number;
 }) {
-  const { appearance } = useAppPreferences();
+  const { appearance, language } = useAppPreferences();
   const colors = preferenceColors(appearance);
   const isDown = delta.absolute < 0;
   const accentColor = metric === 'unrealized_pnl' ? (isDown ? theme.colors.danger : theme.colors.success) : theme.colors.accent;
@@ -599,7 +1234,7 @@ function PortfolioCapitalAllocationCard({
   exchangeSummary: ReturnType<typeof summarizeExchange>;
   onEnvFilterChange: (value: EnvFilter) => void;
 }) {
-  const { appearance } = useAppPreferences();
+  const { appearance, language } = useAppPreferences();
   const colors = preferenceColors(appearance);
   const budgetItems = [
     { label: 'Today spent', value: formatEUR(aggregate.todaySpent), tone: 'warning' as const },
@@ -626,33 +1261,44 @@ function PortfolioCapitalAllocationCard({
           <Text style={styles.kicker}>Portfolio data</Text>
           <Text style={[styles.cardTitle, { color: colors.text }]}>Capital allocation</Text>
         </View>
-        <StatusChip label={`${bots.filter((bot) => bot.isActive).length} active`} tone="accent" />
+        <StatusChip compact label={`${bots.filter((bot) => bot.isActive).length} active`} tone="accent" />
       </View>
 
       <SegmentedControl
+        compact
         items={envFilters.map((item) => ({ key: item, label: item.toUpperCase() }))}
         selected={envFilter}
         onChange={(value) => onEnvFilterChange(value as EnvFilter)}
       />
 
       <View style={[styles.allocationCard, { backgroundColor: colors.surfaceMuted, borderColor: colors.borderSubtle }]}>
-        <Text style={[styles.allocationLabel, { color: colors.text }]}>Combined allocation</Text>
-        <View style={styles.allocationRow}>
-          <Text style={[styles.allocationValue, { color: colors.textMuted }]}>
-            {formatEUR(aggregate.invested)} / {formatEUR(aggregate.totalBudget)}
-          </Text>
+        <View style={styles.allocationSummaryGrid}>
+          <View style={[styles.allocationSummaryCell, { backgroundColor: colors.surface, borderColor: colors.borderSubtle }]}>
+            <Text style={[styles.allocationLabel, { color: colors.textDim }]}>Combined allocation</Text>
+            <Text numberOfLines={1} style={[styles.allocationValue, { color: colors.text }]}>
+              {formatEUR(aggregate.invested)} / {formatEUR(aggregate.totalBudget)}
+            </Text>
+          </View>
+          <View style={[styles.allocationSummaryCell, { backgroundColor: colors.surface, borderColor: colors.borderSubtle }]}>
+            <Text style={[styles.availableLabel, { color: colors.textDim }]}>Available</Text>
+            <Text numberOfLines={1} style={[styles.availableValue, { color: colors.text }]}>
+              {formatEUR(available)}
+            </Text>
+          </View>
         </View>
+
         <View style={[styles.progressTrack, { backgroundColor: colors.borderSubtle }]}>
           <View style={[styles.progressFill, { width: `${usedPct}%`, backgroundColor: theme.colors.success }]} />
         </View>
-        <View style={[styles.availableRow, { borderBottomColor: colors.borderSubtle }]}>
-          <Text style={[styles.availableLabel, { color: colors.textMuted }]}>Available</Text>
-          <Text style={[styles.availableValue, { color: colors.text }]}>{formatEUR(available)}</Text>
-        </View>
         <View style={styles.allocationMetrics}>
           {budgetItems.map((item) => (
-            <View key={item.label} style={styles.allocationMetric}>
-              <Text style={[styles.allocationMetricLabel, { color: colors.textDim }]}>{item.label}</Text>
+            <View
+              key={item.label}
+              style={[styles.allocationMetric, { backgroundColor: colors.surface, borderColor: colors.borderSubtle }]}
+            >
+              <Text numberOfLines={2} style={[styles.allocationMetricLabel, { color: colors.textDim }]}>
+                {item.label}
+              </Text>
               <Text style={[styles.allocationMetricValue, { color: toneColor(item.tone) }]}>{item.value}</Text>
             </View>
           ))}
@@ -665,8 +1311,12 @@ function PortfolioCapitalAllocationCard({
             key={item.label}
             style={[styles.portfolioMetricCard, { backgroundColor: colors.surfaceMuted, borderColor: colors.borderSubtle }]}
           >
-            <Text style={[styles.portfolioMetricLabel, { color: colors.textDim }]}>{item.label}</Text>
-            <Text style={[styles.portfolioMetricValue, { color: toneColor(item.tone) }]}>{item.value}</Text>
+            <Text numberOfLines={1} style={[styles.portfolioMetricLabel, { color: colors.textDim }]}>
+              {item.label}
+            </Text>
+            <Text numberOfLines={2} style={[styles.portfolioMetricValue, { color: toneColor(item.tone) }]}>
+              {item.value}
+            </Text>
           </View>
         ))}
       </View>
@@ -678,7 +1328,7 @@ function PortfolioCapitalAllocationCard({
             <Text style={[styles.exchangeSubtitle, { color: colors.textMuted }]}>
               {exchangeSummary.count > 0 && envFilter !== 'paper'
                 ? `${exchangeSummary.count} active source${exchangeSummary.count === 1 ? '' : 's'}`
-                : 'Current visible asset exposure.'}
+                : translate(language, 'portfolio.visibleAllocation')}
             </Text>
           </View>
         </View>
@@ -726,8 +1376,8 @@ function MyBotsSection({ bots, totalBots, onOpenTrade }: { bots: PortfolioBot[];
         <Text style={[styles.myBotsSubtitle, { color: colors.textMuted }]}>Same live and paper bot state as desktop, compact for mobile review.</Text>
       </View>
       <View style={[styles.filterPills, { paddingHorizontal: theme.spacing.lg }]}>
-        <StatusChip label={`All ${totalBots}`} tone="accent" />
-        <StatusChip label={`Active ${bots.filter((bot) => bot.isActive).length}`} tone="success" />
+        <StatusChip compact label={`All ${totalBots}`} tone="accent" />
+        <StatusChip compact label={`Active ${bots.filter((bot) => bot.isActive).length}`} tone="success" />
       </View>
       <Pressable
         onPress={onOpenTrade}
@@ -754,10 +1404,11 @@ function MyBotsSection({ bots, totalBots, onOpenTrade }: { bots: PortfolioBot[];
 }
 
 function BotCard({ bot }: { bot: PortfolioBot }) {
-  const { appearance } = useAppPreferences();
+  const { appearance, language } = useAppPreferences();
   const colors = preferenceColors(appearance);
   const pnl = bot.positionValue - bot.invested;
   const pnlPct = bot.invested > 0 ? (pnl / bot.invested) * 100 : 0;
+  const metaParts = [bot.symbol, bot.timeframe, bot.strategy].filter(Boolean);
 
   return (
     <View style={[styles.botRow, { borderBottomColor: colors.borderSubtle }]}>
@@ -770,20 +1421,36 @@ function BotCard({ bot }: { bot: PortfolioBot }) {
             <Text style={[styles.botName, { color: colors.text }]}>{bot.name}</Text>
             <View style={[styles.statusDot, { backgroundColor: bot.isActive ? theme.colors.warning : theme.colors.neutral }]} />
           </View>
-          <Text style={[styles.botMeta, { color: colors.textDim }]}>
-            {bot.symbol}  -  {bot.timeframe}  -  {bot.strategy}
-          </Text>
+          {metaParts.length > 0 ? (
+            <Text style={[styles.botMeta, { color: colors.textDim }]}>
+              {metaParts.join('  -  ')}
+            </Text>
+          ) : null}
         </View>
       </View>
       <View style={styles.botChips}>
-        <Tag label={bot.riskProfile || 'Strategy'} tone={bot.riskProfile.toLowerCase().includes('aggressive') ? 'danger' : 'warning'} />
-        <Tag label={bot.isLive ? 'Live' : 'Paper'} tone={bot.isLive ? 'danger' : 'accent'} />
-        <Tag label={bot.mode || 'Manual-link'} tone="neutral" />
+        {bot.riskProfile ? (
+          <Tag label={bot.riskProfile} tone={bot.riskProfile.toLowerCase().includes('aggressive') ? 'danger' : 'warning'} />
+        ) : null}
+        <Tag label={translateFinnTag(language, bot.isLive ? 'Live' : 'Paper')} tone={bot.isLive ? 'danger' : 'accent'} />
+        {bot.mode ? <Tag label={bot.mode} tone="neutral" /> : null}
       </View>
       <View style={styles.botMetricGrid}>
-        <BotMetric label="Execution state" value={bot.isActive ? (bot.isLive ? 'Live ready' : 'Paper ready') : 'Paused'} tone={bot.isActive ? (bot.isLive ? 'danger' : 'accent') : 'neutral'} />
+        <BotMetric
+          label="Execution state"
+          value={
+            bot.isActive
+              ? translateFinnTag(language, bot.isLive ? 'Live' : 'Paper')
+              : translate(language, 'automation.paused')
+          }
+          tone={bot.isActive ? (bot.isLive ? 'danger' : 'accent') : 'neutral'}
+        />
         <BotMetric label="Market action" value={bot.positionValue > 0 ? 'Manage' : 'Hold'} tone="accent" />
-        <BotMetric label="PnL status" value={pnlPct >= 0 ? 'Constructive' : 'Review'} tone={pnlPct >= 0 ? 'success' : 'warning'} />
+        <BotMetric
+          label="PnL status"
+          value={pnlPct >= 0 ? translate(language, 'tag.constructive') : translate(language, 'automation.review')}
+          tone={pnlPct >= 0 ? 'success' : 'warning'}
+        />
         <BotMetric label="Budget" value={formatEUR(bot.budgetTotal)} tone="neutral" />
       </View>
       <View style={styles.botFooter}>
@@ -920,11 +1587,7 @@ function BigStat({ label, tone, value }: { label: string; tone?: StatusTone; val
 }
 
 function Tag({ label, tone }: { label: string; tone: StatusTone }) {
-  return (
-    <View style={[styles.tag, { borderColor: toneColor(tone) }]}>
-      <Text style={[styles.tagText, { color: toneColor(tone) }]}>{label}</Text>
-    </View>
-  );
+  return <StatusChip compact label={label} tone={tone} />;
 }
 
 function BotMetric({ label, tone, value }: { label: string; tone: StatusTone; value: string }) {
@@ -982,14 +1645,14 @@ function TradeActionSheet({
   onModeChange: (value: TradeMode) => void;
   onPreview: () => void;
 }) {
-  const { appearance } = useAppPreferences();
+  const { appearance, language } = useAppPreferences();
   const colors = preferenceColors(appearance);
 
   const actionItems: Array<{ key: TradeMode; label: string; body: string }> = [
-    { key: 'buy', label: 'Buy', body: 'Maak een gecontroleerde koopdraft.' },
-    { key: 'sell', label: 'Sell', body: 'Controleer exit, positie en risico.' },
-    { key: 'dca', label: 'DCA', body: 'Past bij botbudget en cadence.' },
-    { key: 'bot', label: 'Bot Action', body: 'Laat FINN de botactie wegen.' },
+    { key: 'buy', label: translate(language, 'portfolio.tradeAction.buy'), body: translate(language, 'portfolio.tradeAction.buyBody') },
+    { key: 'sell', label: translate(language, 'portfolio.tradeAction.sell'), body: translate(language, 'portfolio.tradeAction.sellBody') },
+    { key: 'dca', label: translate(language, 'portfolio.tradeAction.dca'), body: translate(language, 'portfolio.tradeAction.dcaBody') },
+    { key: 'bot', label: translate(language, 'portfolio.tradeAction.bot'), body: translate(language, 'portfolio.tradeAction.botBody') },
   ];
   const setupScore = clampScore(overview?.setup_score);
   const conviction = Math.round(
@@ -1001,7 +1664,13 @@ function TradeActionSheet({
   );
   const exposurePct = bot?.budgetTotal ? Math.min(100, (bot.positionValue / bot.budgetTotal) * 100) : 0;
   const riskTone: StatusTone = stale || exposurePct > 75 ? 'warning' : setupScore >= 55 && conviction >= 55 ? 'success' : 'neutral';
-  const riskLabel = stale ? 'Data stale' : exposurePct > 75 ? 'Exposure hoog' : setupScore >= 55 ? 'Guardrails ok' : 'Setup zwak';
+  const riskLabel = stale
+    ? translate(language, 'portfolio.dataStale')
+    : exposurePct > 75
+      ? translate(language, 'portfolio.exposureHigh')
+      : setupScore >= 55
+        ? translate(language, 'portfolio.guardrailsOk')
+        : translate(language, 'portfolio.setupWeak');
   const livePrice = Number.isFinite(overview?.price ?? NaN) ? Number(overview?.price) : 0;
   const estimatedBtc =
     amountUnit === 'BTC'
@@ -1015,24 +1684,26 @@ function TradeActionSheet({
       <View style={styles.tradeHeroCompact}>
         <View style={styles.tradeHeroCopy}>
           <Text style={styles.kicker}>Execution workspace</Text>
-          <Text style={[styles.tradeHeroTitle, { color: colors.text }]}>{bot?.name || `${activeAsset} trade flow`}</Text>
+          <Text style={[styles.tradeHeroTitle, { color: colors.text }]}>
+            {bot?.name || translate(language, 'portfolio.tradeFlow', { asset: activeAsset })}
+          </Text>
           <Text style={[styles.tradeHeroMeta, { color: colors.textDim }]}>
-            {activeAsset} · {bot?.isLive ? 'Live' : 'Paper'} · FINN review before execution
+            {activeAsset} · {translateFinnTag(language, bot?.isLive ? 'Live' : 'Paper')} · {translate(language, 'portfolio.finnReviewBeforeExecution')}
           </Text>
         </View>
-        <StatusChip label={riskLabel} tone={riskTone} />
+        <StatusChip compact label={riskLabel} tone={riskTone} />
       </View>
 
       <View style={styles.tradeOverviewGrid}>
-        <TradeContextStat label="Setup" value={setupScore > 0 ? `${setupScore}` : 'n/a'} tone={setupScore >= 60 ? 'success' : 'warning'} />
+        <TradeContextStat label="Setup" value={setupScore > 0 ? `${setupScore}` : '—'} tone={setupScore >= 60 ? 'success' : 'warning'} />
         <TradeContextStat label="Conviction" value={`${conviction}`} tone={conviction >= 70 ? 'success' : conviction >= 50 ? 'warning' : 'danger'} />
         <TradeContextStat label="Exposure" value={`${Math.round(exposurePct)}%`} tone={exposurePct > 75 ? 'warning' : 'accent'} />
-        <TradeContextStat label="Max order" value={formatEUR(bot?.budgetMaxOrder ?? 0)} tone="neutral" />
+        <TradeContextStat label={translate(language, 'portfolio.maxOrder')} value={formatEUR(bot?.budgetMaxOrder ?? 0)} tone="neutral" />
       </View>
 
       <View style={styles.tradeStep}>
-        <Text style={styles.tradeStepLabel}>Stap 1</Text>
-        <Text style={[styles.tradeStepTitle, { color: colors.text }]}>Kies de actie</Text>
+        <Text style={styles.tradeStepLabel}>{translate(language, 'portfolio.step1')}</Text>
+        <Text style={[styles.tradeStepTitle, { color: colors.text }]}>{translate(language, 'portfolio.chooseAction')}</Text>
         <View style={styles.tradeModeGrid}>
           {actionItems.map((item) => {
             const active = mode === item.key;
@@ -1058,21 +1729,23 @@ function TradeActionSheet({
       <View style={styles.tradeStep}>
         <View style={styles.tradeStepHeader}>
           <View>
-            <Text style={styles.tradeStepLabel}>Stap 2</Text>
-            <Text style={[styles.tradeStepTitle, { color: colors.text }]}>FINN context</Text>
+            <Text style={styles.tradeStepLabel}>{translate(language, 'portfolio.step2')}</Text>
+            <Text style={[styles.tradeStepTitle, { color: colors.text }]}>{translate(language, 'portfolio.finnContext')}</Text>
           </View>
-          <StatusChip label={riskLabel} tone={riskTone} />
+          <StatusChip compact label={riskLabel} tone={riskTone} />
         </View>
         <View style={styles.tradeContextGrid}>
-          <TradeContextStat label="Risk" value={riskLabel} tone={riskTone} />
-          <TradeContextStat label="Available EUR" value={formatEUR(exchangeSummary.freeEur)} tone="neutral" />
-          <TradeContextStat label="Environment" value={bot?.isLive ? 'Live' : 'Paper'} tone={bot?.isLive ? 'danger' : 'accent'} />
-          <TradeContextStat label="Asset" value={activeAsset} tone="accent" />
+          <TradeContextStat label={translate(language, 'portfolio.risk')} value={riskLabel} tone={riskTone} />
+          <TradeContextStat label={translate(language, 'portfolio.availableEur')} value={formatEUR(exchangeSummary.freeEur)} tone="neutral" />
+          <TradeContextStat label={translate(language, 'portfolio.environment')} value={translateFinnTag(language, bot?.isLive ? 'Live' : 'Paper')} tone={bot?.isLive ? 'danger' : 'accent'} />
+          <TradeContextStat label={translate(language, 'portfolio.asset')} value={activeAsset} tone="accent" />
         </View>
         <View style={[styles.tradeWarning, { borderColor: colors.border }, stale && styles.tradeWarningStrong]}>
-          <Text style={[styles.tradeWarningTitle, { color: colors.text }]}>{stale ? 'Ververs voordat je bevestigt.' : 'Geen one-tap execution.'}</Text>
+          <Text style={[styles.tradeWarningTitle, { color: colors.text }]}>
+            {stale ? translate(language, 'portfolio.refreshBeforeConfirm') : translate(language, 'portfolio.noOneTapExecution')}
+          </Text>
           <Text style={[styles.tradeWarningBody, { color: colors.textMuted }]}>
-            Deze sheet maakt alleen een gecontroleerde trade-draft. FINN checkt exposure, setup en botcontext voordat je iets uitvoert.
+            {translate(language, 'portfolio.tradeSheetWarning')}
           </Text>
         </View>
       </View>
@@ -1087,8 +1760,10 @@ function TradeActionSheet({
           style={styles.executionToggle}
         >
           <View>
-            <Text style={styles.tradeStepLabel}>Stap 3</Text>
-            <Text style={[styles.tradeStepTitle, { color: colors.text }]}>{executionExpanded ? 'Execution draft' : 'Execution uitklappen'}</Text>
+            <Text style={styles.tradeStepLabel}>{translate(language, 'portfolio.step3')}</Text>
+            <Text style={[styles.tradeStepTitle, { color: colors.text }]}>
+              {translate(language, executionExpanded ? 'portfolio.executionDraft' : 'portfolio.expandExecution')}
+            </Text>
           </View>
           <Text style={[styles.executionToggleIcon, { color: colors.text }]}>{executionExpanded ? '-' : '+'}</Text>
         </Pressable>
@@ -1108,7 +1783,7 @@ function TradeActionSheet({
                     style={[styles.sideButton, active && (side === 'buy' ? styles.sideButtonBuy : styles.sideButtonSell)]}
                   >
                     <Text style={[styles.sideButtonText, { color: colors.textDim }, active && styles.sideButtonTextActive]}>
-                      {side === 'buy' ? 'Kopen' : 'Verkopen'}
+                        {side === 'buy' ? translate(language, 'portfolio.buySide') : translate(language, 'portfolio.sellSide')}
                     </Text>
                   </Pressable>
                 );
@@ -1117,8 +1792,12 @@ function TradeActionSheet({
 
             <View style={styles.executionField}>
               <View style={styles.executionFieldHeader}>
-                <Text style={[styles.metricLabel, { color: colors.textDim }]}>Order prijs</Text>
-                <Text style={[styles.executionLive, { color: colors.textDim }]}>{livePrice > 0 ? `Live: ${formatEUR(livePrice)}` : 'Live: n/a'}</Text>
+                <Text style={[styles.metricLabel, { color: colors.textDim }]}>{translate(language, 'portfolio.orderPrice')}</Text>
+                <Text style={[styles.executionLive, { color: colors.textDim }]}>
+                  {livePrice > 0
+                    ? translate(language, 'portfolio.livePrice', { value: formatEUR(livePrice) })
+                    : translate(language, 'portfolio.livePriceUnavailable')}
+                </Text>
               </View>
               <View style={[styles.readOnlyInput, { backgroundColor: colors.backgroundSoft, borderColor: colors.border }]}>
                 <Text style={[styles.readOnlyInputText, { color: colors.text }]}>{livePrice > 0 ? livePrice.toFixed(2).replace('.', ',') : '-'}</Text>
@@ -1127,7 +1806,7 @@ function TradeActionSheet({
 
             <View style={styles.executionField}>
               <View style={styles.executionFieldHeader}>
-                <Text style={[styles.metricLabel, { color: colors.textDim }]}>Aantal</Text>
+                <Text style={[styles.metricLabel, { color: colors.textDim }]}>{translate(language, 'portfolio.quantity')}</Text>
                 <View style={styles.unitSwitch}>
                   {(['EUR', 'BTC'] as const).map((unit) => (
                     <Pressable
@@ -1146,7 +1825,7 @@ function TradeActionSheet({
               <TextInput
                 keyboardType="decimal-pad"
                 onChangeText={onAmountValueChange}
-                placeholder={amountUnit === 'EUR' ? 'Bedrag in EUR' : 'Aantal BTC'}
+                placeholder={amountUnit === 'EUR' ? translate(language, 'portfolio.amountInEur') : translate(language, 'portfolio.amountInBtc')}
                 placeholderTextColor={colors.textDim}
                 style={[styles.amountInput, { backgroundColor: colors.surface, borderColor: colors.border, color: colors.text }]}
                 value={amountValue}
@@ -1169,15 +1848,17 @@ function TradeActionSheet({
             </View>
 
             <View style={[styles.expectationBox, { borderColor: colors.border }]}>
-              <SmallStat label="Verwacht" value={`${estimatedBtc.toFixed(6)} BTC`} />
-              <SmallStat label="Beschikbaar" value={formatEUR(exchangeSummary.freeEur)} />
-              <SmallStat label="Max order" value={formatEUR(bot?.budgetMaxOrder ?? 0)} />
+              <SmallStat label={translate(language, 'portfolio.expected')} value={`${estimatedBtc.toFixed(6)} BTC`} />
+              <SmallStat label={translate(language, 'portfolio.available')} value={formatEUR(exchangeSummary.freeEur)} />
+              <SmallStat label={translate(language, 'portfolio.maxOrder')} value={formatEUR(bot?.budgetMaxOrder ?? 0)} />
             </View>
 
             {preview ? <OrderPreviewCard preview={preview} /> : null}
             {previewError ? (
               <View style={[styles.tradeWarning, styles.tradeWarningStrong]}>
-                <Text style={[styles.tradeWarningTitle, { color: colors.text }]}>Preview niet beschikbaar</Text>
+                <Text style={[styles.tradeWarningTitle, { color: colors.text }]}>
+                  {translate(language, 'portfolio.previewUnavailable')}
+                </Text>
                 <Text style={[styles.tradeWarningBody, { color: colors.textMuted }]}>{previewError}</Text>
               </View>
             ) : null}
@@ -1192,15 +1873,17 @@ function TradeActionSheet({
       >
         <Text style={styles.tradePrimaryText}>
           {previewLoading
-            ? 'Preview laden...'
+            ? translate(language, 'portfolio.previewLoading')
             : executionExpanded
-              ? 'Maak veilige backend preview'
-              : 'Vraag FINN om trade check'}
+              ? translate(language, 'portfolio.safeBackendPreview')
+              : translate(language, 'portfolio.askFinnTradeCheck')}
         </Text>
       </Pressable>
       {preview ? (
         <Pressable accessibilityRole="button" onPress={onAskFinn} style={[styles.tradeSecondaryButton, { borderColor: colors.borderStrong }]}>
-          <Text style={[styles.tradeSecondaryText, { color: colors.textSoft }]}>Vraag FINN om uitleg</Text>
+          <Text style={[styles.tradeSecondaryText, { color: colors.textSoft }]}>
+            {translate(language, 'portfolio.askFinnExplain')}
+          </Text>
         </Pressable>
       ) : null}
     </View>
@@ -1208,7 +1891,7 @@ function TradeActionSheet({
 }
 
 function OrderPreviewCard({ preview }: { preview: OrderPreviewResponse }) {
-  const { appearance } = useAppPreferences();
+  const { appearance, language } = useAppPreferences();
   const colors = preferenceColors(appearance);
   const guardrails = isRecord(preview.guardrails) ? preview.guardrails : undefined;
   const allowed = readBool(guardrails, ['allowed'], false);
@@ -1222,7 +1905,7 @@ function OrderPreviewCard({ preview }: { preview: OrderPreviewResponse }) {
           <Text style={[styles.tradeStepLabel, { color: colors.textDim }]}>Backend preview</Text>
           <Text style={[styles.previewTitle, { color: colors.text }]}>{allowed ? 'Conceptorder is mogelijk' : 'Niet uitvoeren'}</Text>
         </View>
-        <StatusChip label={preview.is_live ? 'Live' : 'Paper'} tone={preview.is_live ? 'warning' : 'accent'} />
+        <StatusChip compact label={translateFinnTag(language, preview.is_live ? 'Live' : 'Paper')} tone={preview.is_live ? 'warning' : 'accent'} />
       </View>
       <View style={styles.previewGrid}>
         <SmallStat label="Side" value={preview.side.toUpperCase()} />
@@ -1334,7 +2017,7 @@ function mapBots(portfolios: UnknownRecord[], configs: UnknownRecord[]): Portfol
       const config = configById.get(id) ?? portfolio;
       const stats = record(portfolio.stats);
       const budget = record(portfolio.budget);
-      const symbol = readString(portfolio, ['symbol'], readString(config, ['symbol', 'asset'], 'BTC'));
+      const symbol = readString(portfolio, ['symbol'], readString(config, ['symbol', 'asset'], ''));
       const invested = Math.abs(
         readNumber(stats, ['net_executed_cash_delta_eur', 'invested_eur', 'invested'], readNumber(portfolio, ['invested_eur'], 0)),
       );
@@ -1350,14 +2033,14 @@ function mapBots(portfolios: UnknownRecord[], configs: UnknownRecord[]): Portfol
         invested,
         isActive: readBool(portfolio, ['is_active'], readBool(config, ['is_active'], false)),
         isLive: readBool(portfolio, ['is_live'], readBool(config, ['is_live'], false)),
-        mode: readString(portfolio, ['mode'], readString(config, ['mode'], 'manual-link')),
+        mode: readString(portfolio, ['mode'], readString(config, ['mode'], '')),
         name: readString(portfolio, ['name'], readString(config, ['name', 'bot_name'], `Bot ${id || ''}`.trim())),
         netQty: readNumber(stats, ['net_qty', 'qty'], readNumber(portfolio, ['qty', 'btc_qty'], 0)),
         positionValue,
-        riskProfile: readString(portfolio, ['risk_profile'], readString(config, ['risk_profile'], 'standard')),
-        strategy: readString(config, ['strategy_name', 'strategy', 'description'], readString(portfolio, ['strategy_name'], 'strategie')),
+        riskProfile: readString(portfolio, ['risk_profile'], readString(config, ['risk_profile'], '')),
+        strategy: readString(config, ['strategy_name', 'strategy', 'description'], readString(portfolio, ['strategy_name'], '')),
         symbol,
-        timeframe: readString(config, ['timeframe', 'frequency'], readString(portfolio, ['timeframe'], '1W')).toUpperCase(),
+        timeframe: readString(config, ['timeframe', 'frequency'], readString(portfolio, ['timeframe'], '')).toUpperCase(),
         todaySpent: readNumber(stats, ['today_spent_eur', 'today_executed_eur'], 0),
       };
     })
@@ -1376,20 +2059,20 @@ function mapOverviewBots(overview?: MobileOverviewResponse): PortfolioBot[] {
     invested: bot.invested_eur ?? 0,
     isActive: bot.is_active,
     isLive: bot.is_live,
-    mode: bot.is_live ? 'live' : 'paper',
+    mode: '',
     name: bot.name,
     netQty: 0,
     positionValue: bot.position_value_eur ?? bot.invested_eur ?? 0,
-    riskProfile: 'standard',
-    strategy: 'strategy',
+    riskProfile: '',
+    strategy: '',
     symbol: bot.symbol,
-    timeframe: '1D',
+    timeframe: '',
     todaySpent: 0,
   }));
 }
 
 function mergePortfolioBots(primary: PortfolioBot[], fallback: PortfolioBot[]) {
-  if (primary.length === 0) return fallback;
+  if (primary.length === 0) return [];
 
   const fallbackById = new Map<number, PortfolioBot>();
   fallback.forEach((bot) => fallbackById.set(bot.id, bot));
@@ -1418,23 +2101,26 @@ function aggregateBots(
   const totalBudget = sum(bots, (bot) => bot.budgetTotal);
   const dailyLimit = sum(bots, (bot) => bot.budgetDailyLimit);
   const maxOrder = sum(bots, (bot) => bot.budgetMaxOrder);
-  const invested =
-    overviewPortfolio?.total_invested_eur ??
-    sum(bots, (bot) => bot.invested);
-  const positionValue =
-    overviewPortfolio?.total_balance_eur ??
-    sum(bots, (bot) => bot.positionValue);
+  const investedFromBots = sum(bots, (bot) => bot.invested);
+  const positionValueFromBots = sum(bots, (bot) => bot.positionValue);
+  const invested = bots.length > 0
+    ? investedFromBots
+    : (overviewPortfolio?.total_invested_eur ?? investedFromBots);
+  const positionValue = bots.length > 0
+    ? positionValueFromBots
+    : (overviewPortfolio?.total_balance_eur ?? positionValueFromBots);
   const todaySpent = sum(bots, (bot) => bot.todaySpent);
   const pnl = positionValue - invested;
-  const pnlPct = overviewPortfolio?.total_profit_pct ?? (invested > 0 ? (pnl / invested) * 100 : 0);
+  const pnlPct = invested > 0 ? (pnl / invested) * 100 : (overviewPortfolio?.total_profit_pct ?? 0);
 
   const rowsBySymbol = bots.reduce<Record<string, { invested: number; netQty: number; positionValue: number; symbol: string }>>(
     (acc, bot) => {
-      const symbol = bot.symbol || 'BTC';
-      acc[symbol] = acc[symbol] ?? { invested: 0, netQty: 0, positionValue: 0, symbol };
-      acc[symbol].invested += bot.invested;
-      acc[symbol].netQty += bot.netQty;
-      acc[symbol].positionValue += bot.positionValue;
+      const symbolKey = bot.symbol.trim() || `unknown-${bot.id}`;
+      const symbolLabel = bot.symbol.trim() || '—';
+      acc[symbolKey] = acc[symbolKey] ?? { invested: 0, netQty: 0, positionValue: 0, symbol: symbolLabel };
+      acc[symbolKey].invested += bot.invested;
+      acc[symbolKey].netQty += bot.netQty;
+      acc[symbolKey].positionValue += bot.positionValue;
       return acc;
     },
     {},
@@ -1484,7 +2170,41 @@ function summarizeExchange(balances: UnknownRecord[]): ExchangeSummary {
 }
 
 function normalizeHistory(history: UnknownRecord[]) {
-  return history;
+  return history
+    .map((entry) => {
+      const ts = readString(entry, ['ts', 'timestamp', 'created_at', 'date', 'as_of']);
+      const cash = readNumber(entry, ['cash', 'cash_eur', 'free_eur', 'available_eur', 'balance_cash_eur'], 0);
+      const btcValue = readNumber(entry, ['btc_value', 'btc_value_eur', 'position_value_eur', 'positions_value_eur'], 0);
+      const invested = readNumber(entry, ['invested', 'invested_eur', 'total_invested_eur'], 0);
+      const unrealizedPnl = readNumber(entry, ['unrealized_pnl', 'unrealized_pnl_eur', 'pnl', 'pnl_eur', 'profit_eur'], 0);
+      const explicitEquity = readNumber(
+        entry,
+        ['equity', 'equity_eur', 'total_balance_eur', 'portfolio_value', 'total_value', 'value_eur'],
+        Number.NaN,
+      );
+      const explicitBtcQty = readNumber(entry, ['btc_qty', 'btc_quantity', 'net_qty', 'quantity_btc'], Number.NaN);
+      const equity = Number.isFinite(explicitEquity)
+        ? explicitEquity
+        : cash + Math.max(btcValue, invested + unrealizedPnl, 0);
+      const btcQty = Number.isFinite(explicitBtcQty) ? explicitBtcQty : 0;
+
+      return {
+        ...entry,
+        btc_qty: btcQty,
+        btc_value: btcValue,
+        cash,
+        equity,
+        invested,
+        ts,
+        unrealized_pnl: unrealizedPnl,
+      };
+    })
+    .sort((left, right) => {
+      const leftTs = typeof left.ts === 'string' ? Date.parse(left.ts) : Number.NaN;
+      const rightTs = typeof right.ts === 'string' ? Date.parse(right.ts) : Number.NaN;
+      if (!Number.isFinite(leftTs) || !Number.isFinite(rightTs)) return 0;
+      return leftTs - rightTs;
+    });
 }
 
 function getPerformance(history: UnknownRecord[], metric: MetricKey, aggregate: ReturnType<typeof aggregateBots>) {
@@ -1585,6 +2305,10 @@ function formatMetric(value: number, metric: MetricKey) {
   return formatEUR(value);
 }
 
+function isSanePercent(value: number | null) {
+  return value !== null && Number.isFinite(value) && Math.abs(value) <= 200;
+}
+
 function portfolioUpdatedAt(values: string[]) {
   return values.find(Boolean) ?? new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 }
@@ -1596,8 +2320,8 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     flexDirection: 'row',
     gap: 6,
-    paddingHorizontal: 12,
-    paddingVertical: 7,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
   },
   filledBadgeDot: {
     borderRadius: 999,
@@ -1611,10 +2335,7 @@ const styles = StyleSheet.create({
     marginTop: theme.spacing.sm,
   },
   filledBadgeText: {
-    fontSize: 11,
-    fontWeight: '900',
-    letterSpacing: 0.8,
-    textTransform: 'uppercase',
+    ...typography.chipLabelCompact,
   },
   flexText: {
     flex: 1,
@@ -1652,100 +2373,425 @@ const styles = StyleSheet.create({
   },
   cardTitle: {
     fontSize: theme.typography.cardTitle,
-    fontWeight: '900',
-    marginTop: 4,
+    fontWeight: '800',
+    marginTop: 2,
   },
   portfolioSection: {
     paddingHorizontal: theme.spacing.lg,
-    paddingVertical: theme.spacing.md,
+    paddingVertical: 10,
   },
-  allocationCard: {
-    borderRadius: 24,
+  portfolioOverviewSection: {
+    paddingHorizontal: theme.spacing.lg,
+    paddingTop: 12,
+    paddingBottom: 6,
+  },
+  portfolioOverviewHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: theme.spacing.md,
+    marginTop: 12,
+  },
+  portfolioOverviewCopy: {
+    flex: 1,
+    gap: 4,
+  },
+  portfolioOverviewEyebrow: {
+    ...typography.metricLabelStrong,
+  },
+  portfolioOverviewValue: {
+    ...typography.heroTitle,
+    fontSize: 15.5,
+    lineHeight: 19,
+  },
+  portfolioCapitalTitle: {
+    ...typography.sectionTitle,
+    marginTop: 2,
+  },
+  portfolioOverviewMetric: {
+    flex: 1,
+    minWidth: 0,
+  },
+  portfolioOverviewMetricPrimary: {
+    flex: 1.15,
+  },
+  portfolioOverviewMetricLabel: {
+    ...typography.metricLabel,
+  },
+  portfolioOverviewDelta: {
+    ...typography.cardTitle,
+    marginTop: 3,
+  },
+  portfolioOverviewSubValue: {
+    ...typography.cardTitle,
+    marginTop: 3,
+  },
+  portfolioAccountPill: {
+    alignItems: 'center',
+    borderRadius: theme.radius.pill,
+    borderWidth: 1,
+    flexDirection: 'row',
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  portfolioAccountPillText: {
+    ...typography.metaStrong,
+  },
+  portfolioSectionDivider: {
+    height: 1,
+    marginTop: theme.spacing.lg,
+    width: '100%',
+  },
+  portfolioChartHeader: {
+    gap: theme.spacing.xs,
+  },
+  portfolioChartCopy: {
+    gap: 4,
+  },
+  portfolioChartRail: {
+    paddingTop: theme.spacing.sm,
+  },
+  portfolioMetricRail: {
+    paddingTop: theme.spacing.sm,
+  },
+  portfolioChartValue: {
+    ...typography.sectionTitle,
+    marginTop: 2,
+  },
+  portfolioChartDelta: {
+    ...typography.body,
+    fontWeight: '700',
+    marginTop: 3,
+  },
+  portfolioChartCard: {
+    borderRadius: 20,
     borderWidth: 1,
     marginTop: theme.spacing.md,
-    padding: theme.spacing.lg,
+    overflow: 'hidden',
+    paddingHorizontal: theme.spacing.sm,
+    paddingTop: 2,
   },
-  allocationLabel: {
-    fontSize: 14,
-    fontWeight: '700',
-    lineHeight: 20,
-  },
-  allocationRow: {
+  portfolioSectionHeader: {
     alignItems: 'center',
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginTop: theme.spacing.xs,
+    marginBottom: theme.spacing.sm,
   },
-  allocationValue: {
-    fontSize: 15,
-    fontWeight: '700',
-    lineHeight: 20,
+  portfolioSectionTitle: {
+    ...typography.eyebrow,
   },
-  availableRow: {
+  portfolioSectionLink: {
+    color: theme.colors.accent,
+    ...typography.action,
+  },
+  portfolioEmptyText: {
+    ...typography.bodyLarge,
+    lineHeight: 22,
+    marginTop: theme.spacing.sm,
+  },
+  portfolioAssetTitle: {
+    ...typography.sectionTitle,
+  },
+  portfolioAssetSubtitle: {
+    ...typography.subcopy,
+    marginTop: 3,
+  },
+  portfolioAssetTableHeader: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    marginTop: theme.spacing.md,
+    paddingBottom: 6,
+  },
+  portfolioAssetHeaderLabel: {
+    flex: 1,
+    ...typography.chipLabelCompact,
+  },
+  portfolioAssetHeaderValue: {
+    ...typography.chipLabelCompact,
+    textAlign: 'right',
+    width: 88,
+  },
+  portfolioAssetHeaderAllocation: {
+    ...typography.chipLabelCompact,
+    textAlign: 'right',
+    width: 64,
+  },
+  portfolioAssetEmpty: {
+    borderRadius: theme.radius.lg,
+    borderWidth: 1,
+    marginTop: theme.spacing.md,
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.md,
+  },
+  portfolioAssetEmptyText: {
+    ...typography.subcopy,
+  },
+  portfolioAssetRow: {
+    alignItems: 'center',
+    borderBottomWidth: 1,
+    flexDirection: 'row',
+    paddingVertical: 11,
+  },
+  portfolioAssetRowLast: {
+    borderBottomWidth: 0,
+    paddingBottom: 0,
+  },
+  portfolioAssetOverflowButton: {
+    alignItems: 'center',
+    borderRadius: 14,
+    borderWidth: 1,
+    height: 30,
+    justifyContent: 'center',
+    marginLeft: theme.spacing.xs,
+    width: 30,
+  },
+  portfolioAssetIdentity: {
+    alignItems: 'center',
+    flex: 1,
+    flexDirection: 'row',
+    gap: 10,
+    minWidth: 0,
+  },
+  portfolioAssetValue: {
+    ...typography.bodyLarge,
+    lineHeight: 18,
+    textAlign: 'right',
+    width: 88,
+  },
+  portfolioAssetAllocation: {
+    ...typography.bodyLarge,
+    lineHeight: 18,
+    textAlign: 'right',
+    width: 64,
+  },
+  portfolioPositionRow: {
     alignItems: 'center',
     borderBottomWidth: 1,
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginTop: theme.spacing.sm,
-    paddingBottom: theme.spacing.md,
+    paddingVertical: 14,
   },
-  availableLabel: {
-    fontSize: 13,
+  portfolioPositionRowLast: {
+    borderBottomWidth: 0,
+    paddingBottom: 0,
+  },
+  portfolioPositionIdentity: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    flex: 1,
+    gap: 14,
+  },
+  portfolioPositionIcon: {
+    alignItems: 'center',
+    borderRadius: 999,
+    height: 42,
+    justifyContent: 'center',
+    width: 42,
+  },
+  portfolioPositionIconText: {
+    color: '#ffffff',
+    ...typography.metricValue,
+  },
+  portfolioPositionName: {
+    ...typography.bodyStrong,
+  },
+  portfolioPositionSymbol: {
+    fontSize: 12,
+    fontWeight: '500',
+    lineHeight: 16,
+    marginTop: 2,
+  },
+  portfolioPositionValues: {
+    alignItems: 'flex-end',
+    gap: 4,
+    marginLeft: theme.spacing.md,
+  },
+  portfolioPositionValue: {
+    fontSize: 16,
     fontWeight: '700',
+    lineHeight: 21,
+  },
+  portfolioPositionChange: {
+    fontSize: 13,
+    fontWeight: '600',
     lineHeight: 18,
   },
-  availableValue: {
-    fontSize: 16,
-    fontWeight: '800',
+  portfolioExposureTrack: {
+    borderRadius: 999,
+    flexDirection: 'row',
+    height: 10,
+    marginTop: theme.spacing.lg,
+    overflow: 'hidden',
+    width: '100%',
+  },
+  portfolioExposureFill: {
+    height: '100%',
+  },
+  portfolioExposureLegend: {
+    flexDirection: 'row',
+    gap: theme.spacing.xl,
+    marginTop: theme.spacing.md,
+  },
+  portfolioExposureLegendItem: {
+    alignItems: 'flex-start',
+    flexDirection: 'row',
+    flex: 1,
+    gap: 8,
+  },
+  portfolioExposureLegendDot: {
+    borderRadius: 999,
+    height: 10,
+    marginTop: 4,
+    width: 10,
+  },
+  portfolioExposureLegendLabel: {
+    ...typography.metaStrong,
+  },
+  portfolioExposureLegendValue: {
+    ...typography.cardTitle,
+    marginTop: 2,
+  },
+  portfolioRiskSection: {
+    marginTop: theme.spacing.xl,
+  },
+  portfolioRiskTitle: {
+    ...typography.sectionTitle,
+  },
+  portfolioRiskRow: {
+    alignItems: 'center',
+    borderBottomWidth: 1,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingVertical: 10,
+  },
+  portfolioRiskRowLast: {
+    borderBottomWidth: 0,
+    paddingBottom: 0,
+  },
+  portfolioRiskLabel: {
+    ...typography.body,
+  },
+  portfolioRiskValue: {
+    ...typography.bodyStrong,
+  },
+  portfolioAllocationTrack: {
+    borderRadius: 999,
+    flexDirection: 'row',
+    height: 18,
+    marginTop: theme.spacing.lg,
+    overflow: 'hidden',
+    width: '100%',
+  },
+  portfolioAllocationFill: {
+    height: '100%',
+  },
+  portfolioAllocationFillFirst: {
+    borderBottomLeftRadius: 999,
+    borderTopLeftRadius: 999,
+  },
+  portfolioAllocationFillLast: {
+    borderBottomRightRadius: 999,
+    borderTopRightRadius: 999,
+  },
+  portfolioAllocationLegend: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: theme.spacing.md,
+    justifyContent: 'space-between',
+    marginTop: theme.spacing.lg,
+  },
+  portfolioAllocationLegendRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 8,
+  },
+  portfolioAllocationLegendLabel: {
+    fontSize: 15,
+    fontWeight: '700',
     lineHeight: 20,
+  },
+  portfolioAllocationLegendValue: {
+    fontSize: 15,
+    fontWeight: '700',
+    lineHeight: 20,
+  },
+  allocationCard: {
+    borderRadius: 20,
+    borderWidth: 1,
+    marginTop: theme.spacing.md,
+    padding: theme.spacing.md,
+  },
+  allocationLabel: {
+    ...typography.chipLabelCompact,
+  },
+  allocationValue: {
+    ...typography.listRowTitle,
+    marginTop: 3,
+  },
+  availableLabel: {
+    ...typography.chipLabelCompact,
+  },
+  availableValue: {
+    ...typography.listRowTitle,
+    marginTop: 3,
   },
   allocationMetrics: {
     flexDirection: 'row',
-    gap: theme.spacing.md,
-    marginTop: theme.spacing.lg,
+    justifyContent: 'space-between',
+    marginTop: theme.spacing.sm,
   },
   allocationMetric: {
-    flex: 1,
-    minWidth: 90,
+    borderRadius: theme.radius.sm,
+    borderWidth: 1,
+    flexBasis: '31.5%',
+    maxWidth: '31.5%',
+    minHeight: 50,
+    paddingHorizontal: theme.spacing.xs,
+    paddingVertical: 7,
   },
   allocationMetricLabel: {
-    fontSize: 10,
-    fontWeight: '900',
-    letterSpacing: 1.1,
-    textTransform: 'uppercase',
+    ...typography.chipLabelCompact,
   },
   allocationMetricValue: {
-    fontSize: 15,
-    fontWeight: '800',
-    lineHeight: 20,
-    marginTop: 4,
+    ...typography.listRowTitle,
+    marginTop: 3,
+  },
+  allocationSummaryCell: {
+    borderRadius: theme.radius.sm,
+    borderWidth: 1,
+    flexBasis: '48.8%',
+    maxWidth: '48.8%',
+    minHeight: 50,
+    paddingHorizontal: theme.spacing.xs,
+    paddingVertical: 7,
+  },
+  allocationSummaryGrid: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
   },
   portfolioMetricGrid: {
+    columnGap: theme.spacing.xs,
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: theme.spacing.sm,
-    marginTop: theme.spacing.lg,
+    justifyContent: 'space-between',
+    marginTop: theme.spacing.md,
+    rowGap: theme.spacing.xs,
   },
   portfolioMetricCard: {
-    borderRadius: 22,
+    borderRadius: theme.radius.sm,
     borderWidth: 1,
-    minHeight: 108,
-    paddingHorizontal: theme.spacing.md,
-    paddingVertical: theme.spacing.md,
-    width: '48.5%',
+    flexBasis: '48.8%',
+    maxWidth: '48.8%',
+    minHeight: 54,
+    paddingHorizontal: theme.spacing.sm,
+    paddingVertical: 8,
   },
   portfolioMetricLabel: {
-    fontSize: 10,
-    fontWeight: '900',
-    letterSpacing: 1.1,
-    textTransform: 'uppercase',
+    ...typography.chipLabelCompact,
   },
   portfolioMetricValue: {
-    fontSize: 22,
-    fontWeight: '900',
-    letterSpacing: -0.8,
-    lineHeight: 28,
-    marginTop: theme.spacing.sm,
+    ...typography.listRowTitle,
+    marginTop: 2,
   },
   breakdownSection: {
     marginTop: theme.spacing.lg,
@@ -1775,26 +2821,26 @@ const styles = StyleSheet.create({
     paddingBottom: theme.spacing.xs,
   },
   breakdownSymbol: {
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: '900',
-    lineHeight: 21,
+    lineHeight: 18,
   },
   breakdownQty: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: '600',
-    lineHeight: 18,
-    marginTop: 4,
+    lineHeight: 15,
+    marginTop: 2,
   },
   breakdownValues: {
     alignItems: 'flex-end',
   },
   breakdownPrice: {
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: '900',
-    lineHeight: 22,
+    lineHeight: 20,
   },
   breakdownPnl: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: '700',
     lineHeight: 18,
     marginTop: 4,
@@ -1826,7 +2872,7 @@ const styles = StyleSheet.create({
     borderRadius: theme.radius.md,
     borderWidth: 1,
     color: theme.colors.text,
-    fontSize: 26,
+    fontSize: 22,
     fontWeight: '900',
     minHeight: 72,
     paddingHorizontal: theme.spacing.lg,
@@ -1881,7 +2927,7 @@ const styles = StyleSheet.create({
   },
   activeBotCount: {
     color: theme.colors.text,
-    fontSize: 28,
+    fontSize: 22,
     fontWeight: '900',
     marginTop: 4,
   },
@@ -2183,9 +3229,9 @@ const styles = StyleSheet.create({
   },
   chartBox: {
     backgroundColor: 'transparent',
-    height: 220,
+    height: 188,
     justifyContent: 'center',
-    marginTop: theme.spacing.lg,
+    marginTop: theme.spacing.md,
     overflow: 'hidden',
   },
   chartCanvas: {
@@ -2195,12 +3241,12 @@ const styles = StyleSheet.create({
   chartAxisLabels: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginTop: theme.spacing.sm,
+    marginTop: 6,
     paddingHorizontal: 4,
   },
   chartAxisText: {
     color: theme.colors.textDim,
-    fontSize: 9,
+    fontSize: 8,
     fontWeight: '700',
   },
   chartColumn: {
@@ -2305,10 +3351,10 @@ const styles = StyleSheet.create({
   },
   heroTitle: {
     color: theme.colors.text,
-    fontSize: 20,
+    fontSize: 18,
     fontWeight: '700',
     letterSpacing: 0,
-    lineHeight: 24,
+    lineHeight: 22,
     marginTop: 5,
     textTransform: 'uppercase',
   },
@@ -2367,9 +3413,9 @@ const styles = StyleSheet.create({
   },
   myBotsTitle: {
     color: theme.colors.text,
-    fontSize: 18,
+    fontSize: 17,
     fontWeight: '900',
-    lineHeight: 22,
+    lineHeight: 21,
   },
   performanceHeader: {
     alignItems: 'flex-start',
@@ -2387,11 +3433,11 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
   },
   heroValue: {
-    fontSize: 34,
+    fontSize: 20,
     fontWeight: '900',
-    letterSpacing: -1.2,
-    lineHeight: 40,
-    marginTop: theme.spacing.sm,
+    letterSpacing: -0.8,
+    lineHeight: 24,
+    marginTop: 6,
   },
   rangeRail: {
     paddingLeft: theme.spacing.sm,
@@ -2401,11 +3447,11 @@ const styles = StyleSheet.create({
     paddingRight: theme.spacing.sm,
   },
   portfolioHeroCard: {
-    borderRadius: 28,
+    borderRadius: 24,
     borderWidth: 1,
     marginHorizontal: theme.spacing.lg,
     marginTop: theme.spacing.md,
-    padding: theme.spacing.lg,
+    padding: 14,
   },
   performanceTitle: {
     color: theme.colors.textDim,
@@ -2417,23 +3463,23 @@ const styles = StyleSheet.create({
   },
   performanceValue: {
     color: theme.colors.text,
-    fontSize: 18,
+    fontSize: 14,
     fontWeight: '900',
     letterSpacing: 0,
-    marginTop: theme.spacing.xs,
+    marginTop: 2,
   },
   portfolioHero: {
     flexDirection: 'row',
     gap: theme.spacing.md,
   },
   workflowCard: {
-    borderRadius: 20,
+    borderRadius: 18,
     borderWidth: 1,
     flexDirection: 'row',
-    gap: 12,
-    minHeight: 88,
-    padding: theme.spacing.md,
-    width: 256,
+    gap: 10,
+    minHeight: 68,
+    padding: 10,
+    width: 232,
   },
   workflowCopy: {
     flex: 1,
@@ -2442,29 +3488,29 @@ const styles = StyleSheet.create({
   },
   workflowIcon: {
     alignItems: 'center',
-    borderRadius: 16,
-    height: 52,
+    borderRadius: 14,
+    height: 38,
     justifyContent: 'center',
-    width: 52,
+    width: 38,
   },
   workflowRail: {
     gap: theme.spacing.sm,
     paddingRight: theme.spacing.lg,
   },
   workflowText: {
-    fontSize: 14,
+    fontSize: 12,
     fontWeight: '600',
-    lineHeight: 19,
+    lineHeight: 15,
   },
   workflowTitle: {
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: '900',
-    lineHeight: 20,
+    lineHeight: 17,
   },
   workspaceBody: {
-    fontSize: 15,
+    fontSize: 12.5,
     fontWeight: '600',
-    lineHeight: 24,
+    lineHeight: 18,
   },
   workspaceEyebrow: {
     fontSize: 11,
@@ -2473,40 +3519,40 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
   },
   workspaceHeadline: {
-    fontSize: 19,
+    fontSize: 17,
     fontWeight: '900',
-    letterSpacing: -0.6,
-    lineHeight: 28,
-    marginTop: 4,
+    letterSpacing: -0.4,
+    lineHeight: 24,
+    marginTop: 2,
   },
   workspaceHeadlineCompact: {
-    fontSize: 18,
-    lineHeight: 26,
+    fontSize: 16,
+    lineHeight: 22,
     marginTop: 2,
   },
   workspaceIntroPanel: {
     borderColor: theme.colors.border,
-    borderRadius: 28,
+    borderRadius: 24,
     borderWidth: 1,
     gap: theme.spacing.sm,
     marginHorizontal: theme.spacing.lg,
-    paddingHorizontal: 20,
-    paddingVertical: 20,
+    paddingHorizontal: 16,
+    paddingVertical: 16,
   },
   workspaceIntroSubtitle: {
-    fontSize: 16,
+    fontSize: 12.5,
     fontWeight: '600',
-    lineHeight: 24,
+    lineHeight: 18,
   },
   workspaceIntroTitle: {
-    fontSize: 18,
+    fontSize: 15,
     fontWeight: '900',
-    lineHeight: 24,
+    lineHeight: 19,
   },
   workspaceLead: {
-    fontSize: 15,
+    fontSize: 12,
     fontWeight: '700',
-    marginTop: 6,
+    marginTop: 4,
   },
   workspaceMutedPanel: {
     borderRadius: 28,
@@ -2607,7 +3653,7 @@ const styles = StyleSheet.create({
     borderColor: theme.colors.border,
     borderRadius: theme.radius.md,
     borderWidth: 1,
-    minHeight: 86,
+    minHeight: 74,
     padding: theme.spacing.md,
     width: '48%',
   },
@@ -2616,9 +3662,9 @@ const styles = StyleSheet.create({
     borderColor: '#10B98144',
   },
   scoreValue: {
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: '900',
-    marginTop: theme.spacing.sm,
+    marginTop: theme.spacing.xs,
   },
   screenWrap: {
     backgroundColor: theme.colors.background,
@@ -2736,9 +3782,9 @@ const styles = StyleSheet.create({
   },
   executionToggleIcon: {
     color: theme.colors.textDim,
-    fontSize: 30,
+    fontSize: 22,
     fontWeight: '900',
-    lineHeight: 32,
+    lineHeight: 24,
   },
   readOnlyInput: {
     backgroundColor: theme.colors.surfaceMuted,
@@ -2746,12 +3792,12 @@ const styles = StyleSheet.create({
     borderRadius: theme.radius.md,
     borderWidth: 1,
     justifyContent: 'center',
-    minHeight: 72,
+    minHeight: 64,
     paddingHorizontal: theme.spacing.lg,
   },
   readOnlyInputText: {
     color: theme.colors.text,
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: '900',
   },
   sideButton: {

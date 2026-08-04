@@ -1,6 +1,8 @@
 import type { ReactNode } from 'react';
 import { StyleSheet, View } from 'react-native';
 
+import { theme } from '../../constants/theme';
+
 type WorkspaceHeroSectionProps = {
   children: ReactNode;
 };
@@ -12,8 +14,8 @@ export function WorkspaceHeroSection({ children }: WorkspaceHeroSectionProps) {
 const styles = StyleSheet.create({
   container: {
     marginTop: 0,
-    paddingHorizontal: 8,
-    paddingTop: 8,
+    paddingHorizontal: 0,
+    paddingTop: theme.spacing.xxs,
     width: '100%',
   },
 });

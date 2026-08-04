@@ -41,7 +41,7 @@ export function BotDecisionCard({
             <Text style={styles.label}>Automation review</Text>
             <Text style={[styles.botName, { color: colors.text }]}>{botName}</Text>
           </View>
-          <StatusChip label={action} tone={tone} />
+          <StatusChip compact label={action} tone={tone} />
         </View>
         <View style={styles.summaryRow}>
           <Metric label="Confidence" value={`${confidence}`} color={palette.color} colors={colors} />

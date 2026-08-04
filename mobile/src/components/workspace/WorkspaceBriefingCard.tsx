@@ -37,7 +37,7 @@ export function WorkspaceBriefingCard({
           <Text style={styles.kicker}>FINN WORKSPACE</Text>
           <Text style={[styles.lane, { color: colors.text }]}>{lane}</Text>
         </View>
-        <StatusChip label={statusLabel} tone={statusTone} />
+        <StatusChip compact label={statusLabel} tone={statusTone} />
       </View>
 
       <Text style={[styles.headline, { color: colors.text }]}>{headline}</Text>
@@ -82,10 +82,10 @@ const styles = StyleSheet.create({
     gap: 3,
   },
   headline: {
-    fontSize: 22,
+    fontSize: 18,
     fontWeight: '900',
     letterSpacing: -0.3,
-    lineHeight: 28,
+    lineHeight: 23,
     marginTop: theme.spacing.md,
   },
   kicker: {
@@ -96,7 +96,7 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
   },
   lane: {
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: '800',
   },
   metricCard: {

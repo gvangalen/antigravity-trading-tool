@@ -10,7 +10,29 @@ export type AssistantInsightResponse = {
 };
 
 export type AssistantPreferencesResponse = {
-  preferences: Record<string, string | number | boolean | null | undefined>;
+  preferences: Record<string, unknown>;
+};
+
+export type AssistantChatSession = {
+  id: string;
+  user_id: number;
+  title: string;
+  created_at: string;
+  updated_at: string;
+};
+
+export type AssistantChatSessionMessage = {
+  id: number;
+  role: 'assistant' | 'user';
+  content: string;
+  created_at: string;
+  intent?: string | null;
+  actions?: Record<string, unknown> | null;
+};
+
+export type AssistantChatSessionDetailResponse = {
+  session: AssistantChatSession;
+  messages: AssistantChatSessionMessage[];
 };
 
 export type MobileOverviewAsset = {
@@ -75,6 +97,10 @@ export type MobileIntelligenceEvent = {
 };
 
 export type WatchlistResponse = string[];
+export type WatchlistMutationResponse = {
+  message: string;
+  symbol?: string;
+};
 
 export type DailyScoresResponse = Record<string, unknown>;
 export type MasterScoreResponse = Record<string, unknown>;
@@ -242,6 +268,12 @@ export type AssistantActionExecutionResponse = {
   draft?: Record<string, unknown> | null;
 };
 
+export type IntelligenceWeightsPayload = {
+  market: number;
+  macro: number;
+  technical: number;
+};
+
 export const assistantApi = {
   insight(context: AssistantRuntimeContext) {
     return apiClient.request<AssistantInsightResponse>('/api/assistant/insight', {
@@ -255,12 +287,31 @@ export const assistantApi = {
     return apiClient.get<AssistantPreferencesResponse>('/api/assistant/preferences');
   },
 
-  chat(query: string, context: AssistantRuntimeContext, history?: AssistantHistoryMessage[]) {
+  updatePreferences(preferences: Record<string, unknown>) {
+    return apiClient.patch<AssistantPreferencesResponse>('/api/assistant/preferences', preferences);
+  },
+
+  updateIntelligenceWeights(weights: IntelligenceWeightsPayload) {
+    return apiClient.post<Record<string, unknown>>('/api/user/intelligence-weights', {
+      weights,
+    });
+  },
+
+  chat(query: string, context: AssistantRuntimeContext, history?: AssistantHistoryMessage[], sessionId?: string | null) {
     return apiClient.post<AssistantEnvelope>('/api/assistant/chat', {
       context,
       history,
       query,
+      session_id: sessionId,
     });
+  },
+
+  sessions() {
+    return apiClient.get<AssistantChatSession[]>('/api/assistant/sessions');
+  },
+
+  sessionDetail(sessionId: string) {
+    return apiClient.get<AssistantChatSessionDetailResponse>(`/api/assistant/sessions/${encodeURIComponent(sessionId)}`);
   },
 
   executePendingAction(actionId: string) {
@@ -293,23 +344,31 @@ export const intelligenceApi = {
     return apiClient.get<WatchlistResponse>('/api/watchlist');
   },
 
+  addToWatchlist(symbol: string) {
+    return apiClient.post<WatchlistMutationResponse>('/api/watchlist', { symbol });
+  },
+
+  removeFromWatchlist(symbol: string) {
+    return apiClient.delete<WatchlistMutationResponse>(`/api/watchlist/${encodeURIComponent(symbol)}`);
+  },
+
   marketLatest(symbol: string) {
     return apiClient.request<MarketLatestResponse>(`/api/market_data/${encodeURIComponent(symbol)}/latest`, {
-      timeoutMs: 15000,
+      timeoutMs: 30000,
     });
   },
 
   marketChart7d(symbol: string) {
     return apiClient.request<MarketChartPoint[]>('/api/market_data/7d', {
       query: { symbol },
-      timeoutMs: 20000,
+      timeoutMs: 30000,
     });
   },
 
   forwardReturnsMonth(symbol: string) {
     return apiClient.request<ForwardReturnChartResponse[]>('/api/market_data/forward/maand', {
       query: { symbol },
-      timeoutMs: 15000,
+      timeoutMs: 25000,
     });
   },
 
@@ -328,7 +387,7 @@ export const intelligenceApi = {
         macro_period: options?.macro_period ?? 'day',
         technical_period: options?.technical_period ?? 'day',
       },
-      timeoutMs: 20000,
+      timeoutMs: 30000,
     });
   },
 
@@ -352,9 +411,13 @@ export const intelligenceApi = {
     return apiClient.patch<Record<string, unknown>>(`/api/setups/${setupId}`, data);
   },
 
+  deleteSetup(setupId: number) {
+    return apiClient.delete<Record<string, unknown>>(`/api/setups/${setupId}`);
+  },
+
   topSetups() {
     return apiClient.request<SetupResponse>('/api/setups/top', {
-      timeoutMs: 15000,
+      timeoutMs: 25000,
     });
   },
 
@@ -408,6 +471,10 @@ export const intelligenceApi = {
 
   updateBotConfig(botId: number, data: Record<string, unknown>) {
     return apiClient.put<Record<string, unknown>>(`/api/bot/configs/${botId}`, data);
+  },
+
+  deleteBotConfig(botId: number) {
+    return apiClient.delete<Record<string, unknown>>(`/api/bot/configs/${botId}`);
   },
 
   botPortfolios() {

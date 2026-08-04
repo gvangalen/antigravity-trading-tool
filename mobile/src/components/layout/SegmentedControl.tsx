@@ -1,6 +1,7 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { theme } from '../../constants/theme';
+import { typography } from '../../constants/typography';
 import { preferenceColors, useAppPreferences } from '../../preferences/AppPreferencesProvider';
 
 type SegmentedItem<T extends string> = {
@@ -43,7 +44,7 @@ export function SegmentedControl<T extends string>({
               compact && styles.itemCompact,
               active && {
                 backgroundColor: colors.surface,
-                borderColor: colors.border,
+                borderColor: colors.accent,
               },
             ]}
           >
@@ -52,7 +53,7 @@ export function SegmentedControl<T extends string>({
               style={[
                 styles.label,
                 compact && styles.labelCompact,
-                { color: active ? colors.text : colors.textMuted },
+                { color: active ? colors.accent : colors.textMuted },
               ]}
             >
               {item.label}
@@ -68,38 +69,37 @@ const styles = StyleSheet.create({
   item: {
     alignItems: 'center',
     borderColor: 'transparent',
-    borderRadius: theme.radius.lg,
+    borderRadius: theme.radius.sm,
     borderWidth: 1,
     flex: 1,
-    minHeight: 40,
+    minHeight: 34,
     justifyContent: 'center',
-    paddingHorizontal: theme.spacing.sm,
-    paddingVertical: theme.spacing.xs,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
   },
   itemCompact: {
-    minHeight: 34,
-    paddingHorizontal: theme.spacing.sm,
-    paddingVertical: theme.spacing.xxs,
+    minHeight: 24,
+    paddingHorizontal: 10,
+    paddingVertical: 3,
   },
   label: {
-    fontSize: 11,
-    fontWeight: '900',
-    letterSpacing: 0,
+    ...typography.chipLabel,
     textAlign: 'center',
-    textTransform: 'uppercase',
   },
   labelCompact: {
-    fontSize: 10,
+    ...typography.chipLabelCompact,
   },
   shell: {
-    borderRadius: theme.radius.xl,
+    borderRadius: 18,
     borderWidth: 1,
     flexDirection: 'row',
-    gap: theme.spacing.xs,
+    gap: 6,
     marginTop: theme.spacing.sm,
-    padding: theme.spacing.xs,
+    padding: 6,
   },
   shellCompact: {
     alignSelf: 'flex-start',
+    gap: 4,
+    padding: 4,
   },
 });

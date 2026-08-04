@@ -80,6 +80,7 @@ export type AssistantConversationState = {
 
 export type AssistantEnvelope = {
   response: string;
+  session_id?: string | null;
   intent?: string;
   flow?: string;
   action?: AssistantAction | null;

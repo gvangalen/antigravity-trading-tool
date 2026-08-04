@@ -18,7 +18,7 @@ export function ActiveFlowStateCard({ state }: ActiveFlowStateCardProps) {
   return (
     <CardShell>
       <View style={styles.header}>
-        <StatusChip label="Active flow" tone="accent" />
+        <StatusChip compact label="Active flow" tone="accent" />
         <Text style={styles.progress}>{progress}%</Text>
       </View>
       <Text style={styles.title}>{formatFlow(state.current_flow)}</Text>

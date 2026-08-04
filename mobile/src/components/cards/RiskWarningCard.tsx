@@ -19,7 +19,7 @@ export function RiskWarningCard({ severity, title, body, nextStep, onExplain }: 
 
   return (
     <View style={{ paddingVertical: theme.spacing.md, paddingHorizontal: theme.spacing.lg }}>
-      <StatusChip label={severity} tone="warning" />
+      <StatusChip compact label={severity} tone="warning" />
       <Text style={[styles.title, { color: colors.text }]}>{title}</Text>
       <Text style={[styles.body, { color: colors.textMuted }]}>{body}</Text>
       

@@ -76,7 +76,7 @@ export function LoginScreen() {
         <View style={styles.container}>
           <View>
             <View style={styles.topRow}>
-              <StatusChip label={translate(language, 'login.mobile')} tone="accent" />
+              <StatusChip compact label={translate(language, 'login.mobile')} tone="accent" />
               <StatusChip
                 compact
                 label={
@@ -306,9 +306,9 @@ const styles = StyleSheet.create({
   },
   title: {
     color: theme.colors.text,
-    fontSize: 34,
+    fontSize: 28,
     fontWeight: '900',
-    lineHeight: 39,
+    lineHeight: 33,
     marginTop: theme.spacing.md,
   },
   topRow: {

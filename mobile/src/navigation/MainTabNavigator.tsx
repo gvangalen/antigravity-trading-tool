@@ -39,7 +39,7 @@ export function MainTabNavigator() {
           headerStyle: {
             height: 68,
           },
-          tabBarActiveTintColor: colors.text,
+          tabBarActiveTintColor: colors.accent,
           tabBarInactiveTintColor: colors.textDim,
           tabBarIcon: ({ color, size }) => {
             let iconName: "bar-chart-2" | "sliders" | "briefcase" | "file-text" | "cpu" = 'bar-chart-2';

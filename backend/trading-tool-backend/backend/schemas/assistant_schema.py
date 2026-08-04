@@ -86,6 +86,8 @@ class AssistantPreferenceUpdate(BaseModel):
     asset_focus: Optional[List[str]] = None
     investment_goals: Optional[str] = None
     investment_goals_list: Optional[List[str]] = None
+    analysis_hidden_indicators: Optional[List[str]] = None
+    active_finn_session_id: Optional[str] = None
 
 class AssistantPreferences(BaseModel):
     preferences: Dict[str, Any]

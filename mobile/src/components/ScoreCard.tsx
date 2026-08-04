@@ -42,7 +42,7 @@ const styles = StyleSheet.create({
   },
   label: {
     color: theme.colors.text,
-    fontSize: 17,
+    fontSize: 15,
     fontWeight: '900',
   },
   status: {
@@ -60,7 +60,7 @@ const styles = StyleSheet.create({
   },
   value: {
     color: theme.colors.accent,
-    fontSize: 28,
+    fontSize: 22,
     fontWeight: '900',
   },
 });

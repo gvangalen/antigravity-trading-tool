@@ -8,15 +8,22 @@ import { InsightCard } from '../components/cards/InsightCard';
 import { LoadingSkeletonCard } from '../components/layout/LoadingSkeletonCard';
 import { ScreenContainer } from '../components/layout/ScreenContainer';
 import { StatusChip } from '../components/layout/StatusChip';
-import { SegmentedControl } from '../components/layout/SegmentedControl';
+import { SwipeActionRow } from '../components/rows/SwipeActionRow';
+import { BottomSheet } from '../components/sheets/BottomSheet';
+import { ConfirmDestructiveSheetContent, RowActionSheetContent } from '../components/sheets/RowActionSheetContent';
+import { TradingViewWidget } from '../components/charts/TradingViewWidget';
 import { TodayWithFinnCard } from '../components/workspace/TodayWithFinnCard';
+import { WorkflowStepsRail } from '../components/workspace/WorkflowStepsRail';
 import { WorkspaceHeroSection } from '../components/workspace/WorkspaceHeroSection';
+import { listRowStandards } from '../constants/listRows';
 import { StatusTone, theme } from '../constants/theme';
+import { typography } from '../constants/typography';
 import { useApiResource } from '../hooks/useApiResource';
-import { localizedBackendText, translate, translateFinnTag } from '../i18n';
+import { localizedBackendText, translate } from '../i18n';
 import type { MainTabParamList } from '../navigation/MainTabNavigator';
 import { preferenceColors, useAppPreferences } from '../preferences/AppPreferencesProvider';
 import {
+  IntelligenceWeightsPayload,
   ForwardReturnChartResponse,
   MarketChartPoint,
   MarketLatestResponse,
@@ -31,10 +38,21 @@ import { triggerHaptic } from '../utils/haptics';
 import { useIntelligenceContext } from '../contexts/ActiveIntelligenceContext';
 import { useFinnOverlay } from '../contexts/FinnOverlayContext';
 import { trackAssistantEvent } from '../services/assistantAnalytics';
+import {
+  ANALYSIS_CHART_INTERVAL_KEY,
+  DEFAULT_TRADINGVIEW_INTERVAL,
+  normalizeTradingViewInterval,
+  type TradingViewInterval,
+} from '../lib/tradingView';
+const ANALYSIS_HIDDEN_INDICATORS_KEY = 'analysis_hidden_indicators';
 
-type Timeframe = '15m' | '1h' | '4h' | '1d';
+type IntelligenceWeightKey = 'market' | 'macro' | 'technical';
 
-const timeframes: Timeframe[] = ['15m', '1h', '4h', '1d'];
+const DEFAULT_INTELLIGENCE_WEIGHTS: IntelligenceWeightsPayload = {
+  market: 1 / 3,
+  macro: 1 / 3,
+  technical: 1 / 3,
+};
 
 export function WatchlistScreen() {
   const navigation = useNavigation<any>();
@@ -42,7 +60,26 @@ export function WatchlistScreen() {
   const { openFinn } = useFinnOverlay();
   const { language } = useAppPreferences();
   const selectedSymbol = context.asset;
-  const [timeframe, setTimeframe] = useState<Timeframe>('1h');
+  const [chartInterval, setChartInterval] = useState<TradingViewInterval>(DEFAULT_TRADINGVIEW_INTERVAL);
+  const [chartPreferenceLoaded, setChartPreferenceLoaded] = useState(false);
+  const [watchlistActionAsset, setWatchlistActionAsset] = useState<MobileOverviewAsset | null>(null);
+  const [watchlistRemoveAsset, setWatchlistRemoveAsset] = useState<MobileOverviewAsset | null>(null);
+  const [indicatorActionRow, setIndicatorActionRow] = useState<{
+    sectionKey: string;
+    sectionTitle: string;
+    row: { label: string; value: string; development: string; assessment: string; tone: StatusTone };
+  } | null>(null);
+  const [indicatorDetailRow, setIndicatorDetailRow] = useState<{
+    sectionKey: string;
+    sectionTitle: string;
+    row: { label: string; value: string; development: string; assessment: string; tone: StatusTone };
+  } | null>(null);
+  const [indicatorRemoveRow, setIndicatorRemoveRow] = useState<{
+    sectionKey: string;
+    sectionTitle: string;
+    row: { label: string; value: string; development: string; assessment: string; tone: StatusTone };
+  } | null>(null);
+  const [hiddenIndicatorKeys, setHiddenIndicatorKeys] = useState<string[]>([]);
 
   useEffect(() => {
     trackAssistantEvent({
@@ -52,6 +89,54 @@ export function WatchlistScreen() {
       asset: selectedSymbol,
     });
   }, [selectedSymbol]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadHiddenIndicators() {
+      try {
+        const response = await assistantApi.preferences();
+        if (cancelled) return;
+        setHiddenIndicatorKeys(normalizeHiddenIndicatorKeys(response?.preferences?.[ANALYSIS_HIDDEN_INDICATORS_KEY]));
+        setChartInterval(normalizeTradingViewInterval(response?.preferences?.[ANALYSIS_CHART_INTERVAL_KEY]));
+      } catch (error) {
+        if (!cancelled) {
+          console.warn('Failed to load analysis hidden indicators', error);
+        }
+      } finally {
+        if (!cancelled) {
+          setChartPreferenceLoaded(true);
+        }
+      }
+    }
+
+    loadHiddenIndicators();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!chartPreferenceLoaded) return;
+    let cancelled = false;
+
+    async function persistChartInterval() {
+      try {
+        await assistantApi.updatePreferences({
+          [ANALYSIS_CHART_INTERVAL_KEY]: chartInterval,
+        });
+      } catch (error) {
+        if (!cancelled) {
+          console.warn('Failed to persist analysis chart interval', error);
+        }
+      }
+    }
+
+    void persistChartInterval();
+    return () => {
+      cancelled = true;
+    };
+  }, [chartInterval, chartPreferenceLoaded]);
 
   const fetchOverview = useCallback(() => mobileApi.overview(selectedSymbol), [selectedSymbol]);
   const overviewResource = useApiResource<MobileOverviewResponse | undefined>({
@@ -63,12 +148,6 @@ export function WatchlistScreen() {
   const latestResource = useApiResource<MarketLatestResponse | undefined>({
     fallbackData: undefined,
     fetcher: fetchLatest,
-  });
-
-  const fetchChart = useCallback(() => intelligenceApi.marketChart7d(selectedSymbol), [selectedSymbol]);
-  const chartResource = useApiResource<MarketChartPoint[]>({
-    fallbackData: [],
-    fetcher: fetchChart,
   });
   const fetchWorkspaceAsset = useCallback(
     () =>
@@ -83,8 +162,35 @@ export function WatchlistScreen() {
     fallbackData: undefined,
     fetcher: fetchWorkspaceAsset,
   });
+
+  const assets = useMemo(
+    () => (overviewResource.data?.watchlist?.filter(Boolean) ?? []).filter((asset) => asset?.symbol),
+    [overviewResource.data],
+  );
+  const derivedAsset = useMemo(
+    () => buildFallbackAnalysisAsset(selectedSymbol, latestResource.data, workspaceAssetResource.data),
+    [latestResource.data, selectedSymbol, workspaceAssetResource.data],
+  );
+  const workspaceAssets = useMemo(
+    () => (assets.length > 0 ? assets : derivedAsset ? [derivedAsset] : []),
+    [assets, derivedAsset],
+  );
+  const selectedAsset = workspaceAssets.find((asset) => asset.symbol === selectedSymbol) ?? workspaceAssets[0];
+  const hasAnalysisBootstrap =
+    workspaceAssets.length > 0 ||
+    Boolean(overviewResource.data?.watchlist?.length) ||
+    Boolean(workspaceAssetResource.data) ||
+    Boolean(latestResource.data);
+
+  const fetchChart = useCallback(() => intelligenceApi.marketChart7d(selectedSymbol), [selectedSymbol]);
+  const chartResource = useApiResource<MarketChartPoint[]>({
+    enabled: hasAnalysisBootstrap,
+    fallbackData: [],
+    fetcher: fetchChart,
+  });
   const fetchTopSetups = useCallback(() => intelligenceApi.topSetups(), []);
   const topSetupsResource = useApiResource({
+    enabled: hasAnalysisBootstrap,
     fallbackData: undefined,
     fetcher: fetchTopSetups,
   });
@@ -93,6 +199,7 @@ export function WatchlistScreen() {
     [selectedSymbol],
   );
   const forwardReturnsMonthResource = useApiResource<ForwardReturnChartResponse[]>({
+    enabled: hasAnalysisBootstrap,
     fallbackData: [],
     fetcher: fetchForwardReturnsMonth,
   });
@@ -102,221 +209,629 @@ export function WatchlistScreen() {
       assistantApi.insight({
         page_type: 'WATCHLIST',
         symbol: selectedSymbol,
-        timeframe,
+        timeframe: chartInterval,
       }),
-    [selectedSymbol, timeframe],
+    [chartInterval, selectedSymbol],
   );
   const insightResource = useApiResource({
+    enabled: hasAnalysisBootstrap,
     fallbackData: undefined,
     fetcher: fetchInsight,
   });
 
-  const assets = useMemo(
-    () => {
-      const liveAssets = (overviewResource.data?.watchlist?.filter(Boolean) ?? []).filter((asset) => asset?.symbol);
-      if (liveAssets.length > 0) {
-        return liveAssets;
-      }
-
-      const fallbackAsset = buildFallbackOverviewAsset(
-        selectedSymbol,
-        latestResource.data,
-        workspaceAssetResource.data,
-      );
-      return fallbackAsset ? [fallbackAsset] : [];
-    },
-    [latestResource.data, overviewResource.data, selectedSymbol, workspaceAssetResource.data],
-  );
-  const selectedAsset = assets.find((asset) => asset.symbol === selectedSymbol) ?? assets[0];
   const intelligence = selectedAsset
     ? buildAssetIntelligence(selectedAsset, latestResource.data, insightResource.data)
     : null;
-  const chartPoints = selectedAsset ? buildChartPoints(chartResource.data, selectedAsset, timeframe) : [];
-  const chartOverlays = selectedAsset && intelligence ? buildChartOverlays(selectedAsset, intelligence) : [];
-  const suggestedPlan = useMemo(() => deriveSuggestedPlan(topSetupsResource.data, selectedAsset), [selectedAsset, topSetupsResource.data]);
   const overview = overviewResource.data;
+  const hasRenderableAnalysisCore =
+    hasAnalysisBootstrap ||
+    Boolean(insightResource.data);
   const analysisBootstrapLoading =
-    assets.length === 0 &&
+    !hasRenderableAnalysisCore &&
     (overviewResource.loading || latestResource.loading || workspaceAssetResource.loading);
+  const analysisFallbackError =
+    overviewResource.error?.message ||
+    latestResource.error?.message ||
+    workspaceAssetResource.error?.message ||
+    chartResource.error?.message;
 
   async function selectAsset(symbol: string) {
     await triggerHaptic('selection');
     updateContext({ asset: symbol, screen: 'Analysis' });
   }
 
-  return (
-    <ScreenContainer
-      edgeToEdge={true}
-      contentInsetBottom={392}
-      refreshing={overviewResource.refreshing || latestResource.refreshing || chartResource.refreshing}
-      onRefresh={() => {
-        overviewResource.refresh();
-        latestResource.refresh();
-        chartResource.refresh();
-        workspaceAssetResource.refresh();
-        insightResource.refresh();
-        topSetupsResource.refresh();
-        forwardReturnsMonthResource.refresh();
-      }}
-    >
-      {analysisBootstrapLoading ? (
-        <LoadingSkeletonCard />
-      ) : !selectedAsset ? (
-        <InsightCard
-          label={
-            language === 'nl'
-              ? 'Analyse-data'
-              : language === 'de'
-                ? 'Analysedaten'
-                : 'Analysis data'
-          }
-          title={
-            language === 'nl'
-              ? 'De backend gaf nog geen analyse-assets terug.'
-              : language === 'de'
-                ? 'Das Backend hat noch keine Analyse-Assets geliefert.'
-                : 'The backend has not returned analysis assets yet.'
-          }
-          body={
-            overviewResource.error?.message ||
-            (language === 'nl'
-              ? 'Zodra watchlist- en overview-data weer live terugkomen, verschijnt hier direct de echte analyse-workspace.'
-              : language === 'de'
-                ? 'Sobald Watchlist- und Overview-Daten wieder live ankommen, erscheint hier sofort der echte Analyse-Workspace.'
-                : 'As soon as watchlist and overview data come back live, the real analysis workspace will appear here immediately.')
-          }
-          cta={language === 'nl' ? 'Ververs' : language === 'de' ? 'Aktualisieren' : 'Refresh'}
-          tone="warning"
-          onPress={() => {
-            overviewResource.refresh();
-            latestResource.refresh();
-            chartResource.refresh();
-            workspaceAssetResource.refresh();
-            insightResource.refresh();
-            topSetupsResource.refresh();
-            forwardReturnsMonthResource.refresh();
-          }}
-        />
-      ) : (
-        <>
-          <AnalysisWorkspaceMissionControl
-            activeSymbol={selectedSymbol}
-            assets={assets}
-            briefing={overview?.finn_briefing}
-            intelligence={intelligence!}
-            onRefreshScores={() => {
-              latestResource.refresh();
-              chartResource.refresh();
-              workspaceAssetResource.refresh();
-              insightResource.refresh();
-              topSetupsResource.refresh();
-            }}
-          />
-          <AnalysisWorkspaceIntro
-            asset={selectedAsset}
-            assets={assets}
-            intelligence={intelligence!}
-            onAskFinn={() =>
-              openFinn({
-                prefill: `Help me work through the ${selectedSymbol} analysis workspace step by step: asset, evidence and conclusion.`,
-                source: 'analysis-workspace-intro',
-                symbol: selectedSymbol,
-              })
-            }
-            onSelect={selectAsset}
-            selectedSymbol={selectedSymbol}
-            stale={overviewResource.isStale}
-          />
-          <CompactLiveChart
-            overlays={chartOverlays}
-            points={chartPoints}
-            symbol={selectedSymbol}
-            timeframe={timeframe}
-            onTimeframeChange={setTimeframe}
-            loading={chartResource.loading}
-          />
-          <AnalysisContextScores asset={selectedAsset} intelligence={intelligence!} workspaceAsset={workspaceAssetResource.data} />
-          <AnalysisEvidenceSections asset={selectedAsset} workspaceAsset={workspaceAssetResource.data} />
-          <AnalysisPlanBridge
-            candidate={suggestedPlan}
-            onOpenPlan={() =>
-              navigation.navigate('Setup' satisfies keyof MainTabParamList, { symbol: selectedSymbol })
-            }
-          />
-          <HistoricalForwardReturnsCard asset={selectedAsset} rows={forwardReturnsMonthResource.data} />
-        </>
-      )}
+  async function openAssetActions(asset: MobileOverviewAsset) {
+    await triggerHaptic('selection');
+    setWatchlistActionAsset(asset);
+  }
 
-      {chartResource.error ? (
-        <InsightCard
-          label="Chart error"
-          title="Chartdata kon niet live laden."
-          body={chartResource.error.message}
-          cta="Laad chart opnieuw"
-          tone="warning"
-          onPress={chartResource.refresh}
+  async function openAnalysisAsset(asset: MobileOverviewAsset) {
+    setWatchlistActionAsset(null);
+    await selectAsset(asset.symbol);
+  }
+
+  async function promptRemoveAsset(asset: MobileOverviewAsset) {
+    setWatchlistActionAsset(null);
+    setWatchlistRemoveAsset(asset);
+  }
+
+  async function confirmRemoveAsset() {
+    if (!watchlistRemoveAsset) return;
+
+    const symbol = watchlistRemoveAsset.symbol;
+    const nextSymbol = workspaceAssets.find((asset) => asset.symbol !== symbol)?.symbol ?? selectedSymbol;
+
+    await intelligenceApi.removeFromWatchlist(symbol);
+    setWatchlistRemoveAsset(null);
+
+    if (symbol === selectedSymbol && nextSymbol && nextSymbol !== selectedSymbol) {
+      updateContext({ asset: nextSymbol, screen: 'Analysis' });
+    }
+
+    overviewResource.refresh();
+    latestResource.refresh();
+    chartResource.refresh();
+    workspaceAssetResource.refresh();
+    insightResource.refresh();
+    topSetupsResource.refresh();
+    forwardReturnsMonthResource.refresh();
+  }
+
+  async function openIndicatorDetail(item: {
+    sectionKey: string;
+    sectionTitle: string;
+    row: { label: string; value: string; development: string; assessment: string; tone: StatusTone };
+  }) {
+    setIndicatorActionRow(null);
+    await triggerHaptic('selection');
+    setIndicatorDetailRow(item);
+  }
+
+  async function openIndicatorActions(item: {
+    sectionKey: string;
+    sectionTitle: string;
+    row: { label: string; value: string; development: string; assessment: string; tone: StatusTone };
+  }) {
+    await triggerHaptic('selection');
+    setIndicatorActionRow(item);
+  }
+
+  async function askFinnAboutIndicator(item: {
+    sectionKey: string;
+    sectionTitle: string;
+    row: { label: string; value: string; development: string; assessment: string; tone: StatusTone };
+  }) {
+    setIndicatorActionRow(null);
+    setIndicatorDetailRow(null);
+    await triggerHaptic('selection');
+    openFinn({
+      prefill: `Explain the ${item.row.label} indicator for ${selectedSymbol} in the ${item.sectionTitle} section. Summarize what ${item.row.value} means, why the current state is ${item.row.development}, and what I should monitor next.`,
+      source: 'analysis-indicator-row',
+      symbol: selectedSymbol,
+    });
+  }
+
+  function promptHideIndicator(item: {
+    sectionKey: string;
+    sectionTitle: string;
+    row: { label: string; value: string; development: string; assessment: string; tone: StatusTone };
+  }) {
+    setIndicatorActionRow(null);
+    setIndicatorDetailRow(null);
+    setIndicatorRemoveRow(item);
+  }
+
+  async function confirmHideIndicator() {
+    if (!indicatorRemoveRow) return;
+
+    const nextKey = buildIndicatorKey(selectedSymbol, indicatorRemoveRow.sectionKey, indicatorRemoveRow.row.label);
+    const nextHiddenKeys = hiddenIndicatorKeys.includes(nextKey) ? hiddenIndicatorKeys : [...hiddenIndicatorKeys, nextKey];
+
+    setHiddenIndicatorKeys(nextHiddenKeys);
+    setIndicatorRemoveRow(null);
+    await triggerHaptic('warning');
+
+    try {
+      await assistantApi.updatePreferences({
+        [ANALYSIS_HIDDEN_INDICATORS_KEY]: nextHiddenKeys,
+      });
+    } catch (error) {
+      console.warn('Failed to persist hidden analysis indicators', error);
+    }
+  }
+
+  return (
+    <>
+      <ScreenContainer
+        edgeToEdge={true}
+        contentInsetBottom={392}
+        refreshing={overviewResource.refreshing || latestResource.refreshing || chartResource.refreshing}
+        onRefresh={() => {
+          overviewResource.refresh();
+          latestResource.refresh();
+          chartResource.refresh();
+          workspaceAssetResource.refresh();
+          insightResource.refresh();
+          topSetupsResource.refresh();
+          forwardReturnsMonthResource.refresh();
+        }}
+      >
+        {analysisBootstrapLoading ? (
+          <LoadingSkeletonCard />
+        ) : !selectedAsset ? (
+          <>
+            <AnalysisWorkspaceFallback
+              activeSymbol={selectedSymbol}
+              onRefreshScores={() => {
+                overviewResource.refresh();
+                latestResource.refresh();
+                chartResource.refresh();
+                workspaceAssetResource.refresh();
+                insightResource.refresh();
+                topSetupsResource.refresh();
+                forwardReturnsMonthResource.refresh();
+              }}
+            />
+            <WorkflowStepsRail
+              steps={[
+                {
+                  body: translate(language, 'analysis.workflowStepMarketBody'),
+                  icon: 'trending-up',
+                  step: 1,
+                  title: translate(language, 'analysis.workflowStepMarketTitle'),
+                },
+                {
+                  body: translate(language, 'analysis.workflowStepMacroBody'),
+                  icon: 'globe',
+                  step: 2,
+                  title: translate(language, 'analysis.workflowStepMacroTitle'),
+                },
+                {
+                  body: translate(language, 'analysis.workflowStepTechnicalBody'),
+                  icon: 'activity',
+                  step: 3,
+                  title: translate(language, 'analysis.workflowStepTechnicalTitle'),
+                },
+              ]}
+            />
+            <InsightCard
+              label={
+                language === 'nl'
+                  ? 'Analyse-data'
+                  : language === 'de'
+                    ? 'Analysedaten'
+                    : 'Analysis data'
+              }
+              title={
+                language === 'nl'
+                  ? 'De backend gaf nog geen analyse-assets terug.'
+                  : language === 'de'
+                    ? 'Das Backend hat noch keine Analyse-Assets geliefert.'
+                    : 'The backend has not returned analysis assets yet.'
+              }
+              body={
+                analysisFallbackError ||
+                (language === 'nl'
+                  ? 'Zodra watchlist- en overview-data weer live terugkomen, verschijnt hier direct de echte analyse-workspace.'
+                  : language === 'de'
+                    ? 'Sobald Watchlist- und Overview-Daten wieder live ankommen, erscheint hier sofort der echte Analyse-Workspace.'
+                    : 'As soon as watchlist and overview data come back live, the real analysis workspace will appear here immediately.')
+              }
+              cta={language === 'nl' ? 'Ververs' : language === 'de' ? 'Aktualisieren' : 'Refresh'}
+              tone="warning"
+              onPress={() => {
+                overviewResource.refresh();
+                latestResource.refresh();
+                chartResource.refresh();
+                workspaceAssetResource.refresh();
+                insightResource.refresh();
+                topSetupsResource.refresh();
+                forwardReturnsMonthResource.refresh();
+              }}
+            />
+          </>
+        ) : (
+          <>
+            <AnalysisWorkspaceMissionControl
+              activeSymbol={selectedSymbol}
+              assets={workspaceAssets}
+              briefing={overview?.finn_briefing}
+              intelligence={intelligence!}
+              onRefreshScores={() => {
+                overviewResource.refresh();
+                latestResource.refresh();
+                chartResource.refresh();
+                workspaceAssetResource.refresh();
+                insightResource.refresh();
+                topSetupsResource.refresh();
+              }}
+            />
+            <WorkflowStepsRail
+              steps={[
+                {
+                  body: translate(language, 'analysis.workflowStepMarketBody'),
+                  icon: 'trending-up',
+                  step: 1,
+                  title: translate(language, 'analysis.workflowStepMarketTitle'),
+                },
+                {
+                  body: translate(language, 'analysis.workflowStepMacroBody'),
+                  icon: 'globe',
+                  step: 2,
+                  title: translate(language, 'analysis.workflowStepMacroTitle'),
+                },
+                {
+                  body: translate(language, 'analysis.workflowStepTechnicalBody'),
+                  icon: 'activity',
+                  step: 3,
+                  title: translate(language, 'analysis.workflowStepTechnicalTitle'),
+                },
+              ]}
+            />
+            <AnalysisWatchlistCard
+              assets={workspaceAssets}
+              onOpenActions={openAssetActions}
+              onOpenAsset={openAnalysisAsset}
+              onRemoveAsset={promptRemoveAsset}
+              onSelect={selectAsset}
+              selectedSymbol={selectedSymbol}
+            />
+            <CompactLiveChart
+              errorMessage={chartResource.error?.message}
+              interval={chartInterval}
+              symbol={selectedSymbol}
+              loading={chartResource.loading}
+              onIntervalChange={setChartInterval}
+            />
+            <AnalysisContextScores
+              asset={selectedAsset}
+              hiddenIndicatorKeys={hiddenIndicatorKeys}
+              intelligence={intelligence!}
+              onRefreshScores={() => {
+                overviewResource.refresh();
+                workspaceAssetResource.refresh();
+              }}
+              workspaceAsset={workspaceAssetResource.data}
+            />
+            <AnalysisEvidenceSections
+              asset={selectedAsset}
+              hiddenIndicatorKeys={hiddenIndicatorKeys}
+              onHideIndicator={promptHideIndicator}
+              workspaceAsset={workspaceAssetResource.data}
+              onAskFinnIndicator={askFinnAboutIndicator}
+              onOpenIndicatorActions={openIndicatorActions}
+              onOpenIndicatorDetail={openIndicatorDetail}
+            />
+            <HistoricalForwardReturnsCard asset={selectedAsset} rows={forwardReturnsMonthResource.data} />
+          </>
+        )}
+      </ScreenContainer>
+
+      <BottomSheet
+        visible={Boolean(watchlistActionAsset)}
+        title={translate(language, 'common.actions')}
+        onClose={() => setWatchlistActionAsset(null)}
+      >
+        <RowActionSheetContent
+          actions={
+            watchlistActionAsset
+              ? [
+                  {
+                    key: 'open',
+                    label: translate(language, 'analysis.assetOpen'),
+                    description: translate(language, 'analysis.assetOpenDetail', { symbol: watchlistActionAsset.symbol }),
+                    icon: 'arrow-up-right',
+                    onPress: () => openAnalysisAsset(watchlistActionAsset),
+                  },
+                  {
+                    key: 'remove',
+                    label: translate(language, 'analysis.assetRemove'),
+                    description: translate(language, 'analysis.assetRemoveDetail', { symbol: watchlistActionAsset.symbol }),
+                    icon: 'trash-2',
+                    tone: 'danger',
+                    onPress: () => promptRemoveAsset(watchlistActionAsset),
+                  },
+                ]
+              : []
+          }
         />
-      ) : null}
-    </ScreenContainer>
+      </BottomSheet>
+
+      <BottomSheet
+        visible={Boolean(watchlistRemoveAsset)}
+        title={translate(language, 'analysis.assetRemoveConfirmTitle')}
+        onClose={() => setWatchlistRemoveAsset(null)}
+      >
+        {watchlistRemoveAsset ? (
+          <ConfirmDestructiveSheetContent
+            body={translate(language, 'analysis.assetRemoveConfirmBody', { symbol: watchlistRemoveAsset.symbol })}
+            confirmLabel={translate(language, 'common.delete')}
+            onConfirm={confirmRemoveAsset}
+            title={translate(language, 'analysis.assetRemoveConfirmTitle')}
+          />
+        ) : null}
+      </BottomSheet>
+
+      <BottomSheet
+        visible={Boolean(indicatorActionRow)}
+        title={translate(language, 'common.actions')}
+        onClose={() => setIndicatorActionRow(null)}
+      >
+        <RowActionSheetContent
+          actions={
+            indicatorActionRow
+              ? [
+                  {
+                    key: 'open',
+                    label: 'Meer info',
+                    description: `${indicatorActionRow.row.label} · ${indicatorActionRow.sectionTitle}`,
+                    icon: 'arrow-up-right',
+                    onPress: () => openIndicatorDetail(indicatorActionRow),
+                  },
+                  {
+                    key: 'finn',
+                    label: 'Vraag FINN',
+                    description: `Laat FINN ${indicatorActionRow.row.label} kort uitleggen.`,
+                    icon: 'message-circle',
+                    tone: 'accent',
+                    onPress: () => askFinnAboutIndicator(indicatorActionRow),
+                  },
+                  {
+                    key: 'hide',
+                    label: 'Verbergen',
+                    description: `Verberg ${indicatorActionRow.row.label} uit dit overzicht.`,
+                    icon: 'trash-2',
+                    tone: 'danger',
+                    onPress: () => promptHideIndicator(indicatorActionRow),
+                  },
+                ]
+              : []
+          }
+        />
+      </BottomSheet>
+
+      <BottomSheet
+        visible={Boolean(indicatorDetailRow)}
+        title={indicatorDetailRow?.row.label ?? 'Indicator'}
+        onClose={() => setIndicatorDetailRow(null)}
+      >
+        {indicatorDetailRow ? (
+          <IndicatorDetailSheet
+            item={indicatorDetailRow}
+            onHide={() => promptHideIndicator(indicatorDetailRow)}
+            onAskFinn={() => askFinnAboutIndicator(indicatorDetailRow)}
+          />
+        ) : null}
+      </BottomSheet>
+
+      <BottomSheet
+        visible={Boolean(indicatorRemoveRow)}
+        title="Indicator verbergen?"
+        onClose={() => setIndicatorRemoveRow(null)}
+      >
+        {indicatorRemoveRow ? (
+          <ConfirmDestructiveSheetContent
+            body={`Verberg ${indicatorRemoveRow.row.label} uit ${indicatorRemoveRow.sectionTitle}. De externe data blijft bestaan; je haalt hem alleen uit dit mobiele overzicht weg.`}
+            confirmLabel={translate(language, 'common.delete')}
+            onConfirm={confirmHideIndicator}
+            title="Indicator verbergen?"
+          />
+        ) : null}
+      </BottomSheet>
+    </>
   );
 }
 
 function AnalysisContextScores({
   asset,
+  hiddenIndicatorKeys,
   intelligence,
+  onRefreshScores,
   workspaceAsset,
 }: {
   asset: MobileOverviewAsset;
+  hiddenIndicatorKeys: string[];
   intelligence: AssetIntelligence;
+  onRefreshScores: () => void;
   workspaceAsset?: WorkspaceAssetResponse;
 }) {
-  const { appearance } = useAppPreferences();
+  const { appearance, language } = useAppPreferences();
   const colors = preferenceColors(appearance);
-  const marketScore = readWorkspaceScore(workspaceAsset?.categories?.market?.score?.score) ?? Math.round(asset.market_score);
-  const macroScore = readWorkspaceScore(workspaceAsset?.categories?.macro?.score?.score) ?? Math.round(asset.macro_score);
-  const technicalScore = readWorkspaceScore(workspaceAsset?.categories?.technical?.score?.score) ?? Math.round(asset.technical_score);
-  const combinedScore = readWorkspaceScore(workspaceAsset?.combined?.score) ?? compositeScore(asset);
+  const [tuningVisible, setTuningVisible] = useState(false);
+  const [savingWeights, setSavingWeights] = useState(false);
+  const visibleScores = buildVisibleWorkspaceScores(asset.symbol, workspaceAsset, hiddenIndicatorKeys);
+  const marketScore = visibleScores.market ?? Math.round(asset.market_score);
+  const macroScore = visibleScores.macro ?? Math.round(asset.macro_score);
+  const technicalScore = visibleScores.technical ?? Math.round(asset.technical_score);
+  const combinedScore = visibleScores.combined ?? compositeScore(asset);
+  const serverWeights = useMemo(
+    () => normalizeIntelligenceWeights(workspaceAsset?.master),
+    [workspaceAsset?.master],
+  );
+  const [localWeights, setLocalWeights] = useState<IntelligenceWeightsPayload>(serverWeights);
+
+  useEffect(() => {
+    if (!tuningVisible) {
+      setLocalWeights((current) => (
+        areIntelligenceWeightsEqual(current, serverWeights) ? current : serverWeights
+      ));
+    }
+  }, [serverWeights, tuningVisible]);
+
   const items = [
     { label: 'Market', value: marketScore, tone: toneForScore(marketScore) },
     { label: 'Macro', value: macroScore, tone: toneForScore(macroScore) },
     { label: 'Technical', value: technicalScore, tone: toneForScore(technicalScore) },
     { label: 'Combined', value: combinedScore, tone: intelligence.marketPostureTone },
   ];
+  const weightItems: Array<{ key: IntelligenceWeightKey; label: string; score: number }> = [
+    { key: 'market', label: 'Market', score: marketScore },
+    { key: 'macro', label: 'Macro', score: macroScore },
+    { key: 'technical', label: 'Technical', score: technicalScore },
+  ];
+  const totalWeight = Object.values(localWeights).reduce((sum, value) => sum + value, 0);
+  const isBalanced = Math.abs(totalWeight - 1) < 0.01;
+
+  const handleWeightChange = (key: IntelligenceWeightKey, nextValue: number) => {
+    setLocalWeights((current) => rebalanceIntelligenceWeights(current, key, nextValue));
+  };
+
+  const handleOpenTuning = async () => {
+    await triggerHaptic('selection');
+    setTuningVisible(true);
+  };
+
+  const handleSaveWeights = async () => {
+    if (savingWeights || !isBalanced) return;
+    setSavingWeights(true);
+    try {
+      await assistantApi.updateIntelligenceWeights(localWeights);
+      await onRefreshScores();
+      await triggerHaptic('success');
+      setTuningVisible(false);
+    } catch (error) {
+      console.warn('Failed to update intelligence weights', error);
+      await triggerHaptic('warning');
+    } finally {
+      setSavingWeights(false);
+    }
+  };
 
   return (
-    <CardShell emphasis="standard" flat style={styles.workspaceBlendSurface}>
-      <View
-        style={[
-          styles.contextScoresCard,
-          { backgroundColor: colors.surfaceMuted, borderColor: colors.borderSubtle },
-        ]}
-      >
-        <View style={styles.sectionTop}>
-          <View style={styles.sectionLead}>
-            <Text style={styles.kicker}>Context scores</Text>
-            <Text style={[styles.cardTitle, { color: colors.text }]}>Desktop analysis engine</Text>
+    <>
+      <CardShell emphasis="standard" flat style={styles.workspaceBlendSurface}>
+        <View style={styles.contextScoresHeader}>
+          <Text style={[styles.contextScoresTitle, { color: colors.text }]}>Context scores</Text>
+        </View>
+        <Pressable
+          onPress={handleOpenTuning}
+          style={({ pressed }) => [
+            styles.contextScoresCard,
+            { backgroundColor: colors.surface, borderColor: colors.borderSubtle },
+            pressed && styles.contextScoresCardPressed,
+          ]}
+        >
+          <View style={styles.scoreOverviewGrid}>
+            {items.map((item, index) => (
+              <View
+                key={item.label}
+                style={[
+                  styles.scoreOverviewCard,
+                  { borderColor: colors.borderSubtle },
+                  index === items.length - 1 && styles.scoreOverviewCardLast,
+                ]}
+              >
+                <Text style={styles.scoreOverviewLabel}>{item.label}</Text>
+                <Text style={[styles.scoreOverviewValue, { color: colorForTone(item.tone) }]}>{item.value}/100</Text>
+              </View>
+            ))}
           </View>
-          <View
-            style={[
-              styles.contextScoresBadge,
-              { backgroundColor: `${colorForTone(intelligence.marketPostureTone)}12` },
+        </Pressable>
+      </CardShell>
+
+      <BottomSheet
+        visible={tuningVisible}
+        title="Score tuning"
+        onClose={() => setTuningVisible(false)}
+      >
+        <View style={[styles.contextTuningPanel, { borderColor: colors.borderSubtle, backgroundColor: colors.surfaceMuted }]}>
+          <View style={styles.contextTuningSummaryGrid}>
+            {items.map((item) => (
+              <View
+                key={item.label}
+                style={[styles.contextTuningSummaryCard, { borderColor: colors.borderSubtle, backgroundColor: colors.surface }]}
+              >
+                <Text style={styles.contextTuningSummaryLabel}>{item.label}</Text>
+                <Text style={[styles.contextTuningSummaryValue, { color: colorForTone(item.tone) }]}>{item.value}</Text>
+              </View>
+            ))}
+          </View>
+
+          <View style={styles.contextTuningHeaderRow}>
+            <View style={styles.contextTuningCopy}>
+              <Text style={styles.contextTuningEyebrow}>Influence on combined score</Text>
+              <Text style={[styles.contextTuningHint, { color: isBalanced ? theme.colors.success : theme.colors.warning }]}>
+                {isBalanced ? 'De wegingen komen samen uit op 100%.' : 'De wegingen moeten samen op 100% uitkomen.'}
+              </Text>
+            </View>
+            <View style={[styles.contextTuningTotalBadge, { borderColor: colors.borderSubtle, backgroundColor: colors.surface }]}>
+              <Text style={[styles.contextTuningTotalBadgeText, { color: colors.text }]}>
+                {Math.round(totalWeight * 100)}%
+              </Text>
+            </View>
+          </View>
+
+          {weightItems.map((item) => {
+            const weight = localWeights[item.key];
+            return (
+              <View
+                key={item.key}
+                style={[styles.contextWeightCard, { borderColor: colors.borderSubtle, backgroundColor: colors.surface }]}
+              >
+                <View style={styles.contextWeightCardHeader}>
+                  <View>
+                    <Text style={styles.contextWeightLabel}>{item.label}</Text>
+                    <Text style={[styles.contextWeightMeta, { color: colors.textDim }]}>
+                      Weight · {item.score}/100
+                    </Text>
+                  </View>
+                  <Text style={[styles.contextWeightPercent, { color: colors.text }]}>
+                    {Math.round(weight * 100)}%
+                  </Text>
+                </View>
+
+                <View style={styles.contextWeightControls}>
+                  <Pressable
+                    onPress={() => handleWeightChange(item.key, weight - 0.05)}
+                    style={({ pressed }) => [
+                      styles.contextWeightStepButton,
+                      { borderColor: colors.borderSubtle, backgroundColor: colors.surfaceMuted },
+                      pressed && styles.contextWeightStepButtonPressed,
+                    ]}
+                  >
+                    <Text style={[styles.contextWeightStepButtonText, { color: colors.text }]}>-5%</Text>
+                  </Pressable>
+
+                  <View style={[styles.contextWeightTrack, { backgroundColor: colors.borderSubtle }]}>
+                    <View
+                      style={[
+                        styles.contextWeightTrackFill,
+                        { width: `${Math.max(0, Math.min(100, weight * 100))}%`, backgroundColor: theme.colors.accent },
+                      ]}
+                    />
+                  </View>
+
+                  <Pressable
+                    onPress={() => handleWeightChange(item.key, weight + 0.05)}
+                    style={({ pressed }) => [
+                      styles.contextWeightStepButton,
+                      { borderColor: colors.borderSubtle, backgroundColor: colors.surfaceMuted },
+                      pressed && styles.contextWeightStepButtonPressed,
+                    ]}
+                  >
+                    <Text style={[styles.contextWeightStepButtonText, { color: colors.text }]}>+5%</Text>
+                  </Pressable>
+                </View>
+              </View>
+            );
+          })}
+
+          <Pressable
+            disabled={savingWeights || !isBalanced}
+            onPress={handleSaveWeights}
+            style={({ pressed }) => [
+              styles.contextWeightsSaveButton,
+              (savingWeights || !isBalanced) && styles.contextWeightsSaveButtonDisabled,
+              pressed && !savingWeights && isBalanced && styles.contextWeightsSaveButtonPressed,
             ]}
           >
-            <Text style={[styles.contextScoresBadgeText, { color: colorForTone(intelligence.marketPostureTone) }]}>
-              {intelligence.marketPosture}
+            <Text style={styles.contextWeightsSaveButtonText}>
+              {savingWeights ? 'Opslaan...' : 'Wegingen toepassen'}
             </Text>
-          </View>
+          </Pressable>
         </View>
-        <View style={styles.scoreOverviewGrid}>
-          {items.map((item) => (
-            <View key={item.label} style={[styles.scoreOverviewCard, { borderColor: colors.borderSubtle }]}>
-              <Text style={styles.scoreOverviewLabel}>{item.label}</Text>
-              <Text style={[styles.scoreOverviewValue, { color: colorForTone(item.tone) }]}>{item.value}/100</Text>
-            </View>
-          ))}
-        </View>
-      </View>
-    </CardShell>
+      </BottomSheet>
+    </>
   );
 }
 
@@ -337,29 +852,24 @@ function AnalysisWorkspaceMissionControl({
   const reviewCount = assets.filter((asset) => asset.setup_score < 55).length;
   const riskCount = assets.filter((asset) => asset.setup_score < 40 || asset.technical_score < 40).length;
   const performanceCount = assets.filter((asset) => (asset.change_24h ?? 0) >= 0).length;
-  const taskCount = assets.length;
   const summary = localizedBackendText(
     language,
     briefing?.summary?.trim(),
     translate(language, 'analysis.summaryUnavailable', { symbol: activeSymbol }),
   );
-  const chips = [
-    {
-      label: reviewCount > 0 ? translate(language, 'tag.actionNeeded') : translate(language, 'tag.monitoring'),
-      tone: reviewCount > 0 ? ('warning' as StatusTone) : ('success' as StatusTone),
-    },
-    { label: translateFinnTag(language, intelligence.marketPosture), tone: intelligence.marketPostureTone },
-    {
-      label: `${translate(language, 'queue.label.reviews')} ${reviewCount}`,
-      tone: reviewCount > 0 ? ('accent' as StatusTone) : ('neutral' as StatusTone),
-    },
-    {
-      label: `${translate(language, 'queue.label.risks')} ${riskCount}`,
-      tone: riskCount > 0 ? ('danger' as StatusTone) : ('neutral' as StatusTone),
-    },
+  const metaItems = [
+    translate(language, 'analysis.available'),
+    `${translate(language, 'queue.label.reviews')} ${reviewCount}`,
+    `${translate(language, 'queue.label.risks')} ${riskCount}`,
   ];
   const queueItems = [
-    { key: 'tasks', label: translate(language, 'queue.label.tasks'), value: taskCount, body: translate(language, 'queue.body.handleFirst') },
+    {
+      key: 'tasks',
+      label: translate(language, 'queue.label.tasks'),
+      value: reviewCount,
+      body: translate(language, 'analysis.reviewBotDecision'),
+      detail: translate(language, 'analysis.reviewBotDecisionDetail', { symbol: activeSymbol }),
+    },
     { key: 'reviews', label: translate(language, 'queue.label.reviews'), value: reviewCount, body: translate(language, 'queue.body.needDecision') },
     { key: 'risks', label: translate(language, 'queue.label.risks'), value: riskCount, body: translate(language, 'queue.body.slowingYouDown') },
     { key: 'performance', label: translate(language, 'queue.label.performance'), value: performanceCount, body: translate(language, 'queue.body.howTodayBehaves') },
@@ -369,230 +879,121 @@ function AnalysisWorkspaceMissionControl({
     <WorkspaceHeroSection>
       <TodayWithFinnCard
         headline={summary}
+        metaItems={metaItems}
         support={translate(language, reviewCount === 1 ? 'finn.reviewNeedsAttention' : 'finn.reviewsNeedAttention', {
           count: reviewCount,
         })}
-        tags={chips}
-        primaryActionLabel={translate(language, 'finn.refreshDailyScores')}
-        onPrimaryAction={onRefreshScores}
         queueItems={queueItems}
-        queueStatusLabel={translate(language, 'common.itemsOpen', { count: taskCount })}
+        queueStatusLabel={translate(language, 'common.itemsOpen', { count: reviewCount })}
       />
     </WorkspaceHeroSection>
   );
 }
 
-function WorkspaceTonePill({ label, tone }: { label: string; tone: StatusTone }) {
-  const { appearance } = useAppPreferences();
-  const colors = preferenceColors(appearance);
-  const baseColor = tone === 'neutral' ? colors.textDim : (colors[tone] || colors.accent);
-
-  return (
-    <View style={[styles.workspaceTonePill, { backgroundColor: appearance === 'light' ? `${baseColor}12` : `${baseColor}20` }]}>
-      <View style={[styles.workspaceTonePillDot, { backgroundColor: baseColor }]} />
-      <Text style={[styles.workspaceTonePillText, { color: baseColor }]} numberOfLines={1}>
-        {label}
-      </Text>
-    </View>
-  );
-}
-
-function AnalysisWorkspaceIntro({
-  asset,
+function AnalysisWatchlistCard({
   assets,
-  intelligence,
-  onAskFinn,
+  onOpenActions,
+  onOpenAsset,
+  onRemoveAsset,
   onSelect,
   selectedSymbol,
-  stale,
 }: {
-  asset: MobileOverviewAsset;
   assets: MobileOverviewAsset[];
-  intelligence: AssetIntelligence;
-  onAskFinn: () => void;
+  onOpenActions: (asset: MobileOverviewAsset) => void | Promise<void>;
+  onOpenAsset: (asset: MobileOverviewAsset) => void | Promise<void>;
+  onRemoveAsset: (asset: MobileOverviewAsset) => void | Promise<void>;
   onSelect: (symbol: string) => void;
   selectedSymbol: string;
-  stale: boolean;
 }) {
-  const { appearance } = useAppPreferences();
+  const { appearance, language } = useAppPreferences();
   const colors = preferenceColors(appearance);
-  const combined = compositeScore(asset);
-  const steps = [
-    { id: '1', title: 'Asset', body: 'What am I analysing?', icon: 'search' as const },
-    { id: '2', title: 'Evidence', body: 'What do Market, Macro and Technical show?', icon: 'bar-chart-2' as const },
-    { id: '3', title: 'Conclusion', body: 'What does this mean for my plan?', icon: 'sun' as const },
-  ];
-  const summaryItems = [
-    { label: 'Bias', value: intelligence.marketPosture },
-    { label: 'Combined', value: `${combined}/100` },
-    { label: 'Confidence', value: `${Math.max(35, Math.min(95, combined + 8))}%` },
-  ];
-  const assetLine = `${asset.symbol} · ${assetNameForSymbol(asset.symbol)}`;
+  const visibleAssets = assets.slice(0, 1);
 
   return (
     <CardShell emphasis="standard" flat style={styles.workspaceBlendSurface}>
-      <View style={styles.sectionTop}>
-        <View style={styles.sectionLead}>
-          <Text style={styles.kicker}>Analysis workspace</Text>
-          <Text style={[styles.workspaceTitle, { color: colors.text }]}>Analysis</Text>
-          <Text style={[styles.workspaceSubtitle, { color: colors.textMuted }]}>
-            Research one asset with market, macro and technical evidence.
-          </Text>
-        </View>
-        <View style={[styles.sectionMetaPill, { backgroundColor: `${theme.colors.success}14` }]}>
-          <Text style={[styles.inlineMetaLabel, styles.sectionMetaBadgeText, { color: theme.colors.success }]}>
-            Active
-          </Text>
-        </View>
-      </View>
-
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.workflowSteps}
-        style={styles.workflowRail}
-      >
-        {steps.map((step, index) => (
-          <View
-            key={step.id}
-            style={[
-              styles.workflowStepCard,
-              {
-                backgroundColor: colors.surface,
-                borderColor: colors.borderSubtle,
-                marginRight: index === steps.length - 1 ? 0 : 12,
-              },
-            ]}
-          >
-            <View style={[styles.workflowIconTile, { backgroundColor: `${colors.accent}10` }]}>
-              <Feather color={theme.colors.accent} name={step.icon} size={18} />
-            </View>
-            <View style={styles.workflowStepCopy}>
-              <Text style={styles.workflowStepTitle}>{step.id} {step.title}</Text>
-              <Text style={[styles.workflowStepBody, { color: colors.textMuted }]} numberOfLines={2}>
-                {step.body}
-              </Text>
-            </View>
-          </View>
-        ))}
-      </ScrollView>
-
-      <View style={[styles.workspacePanelDivider, { backgroundColor: colors.borderSubtle }]} />
-
-      <View
-        style={[
-          styles.activeAnalysisShell,
-          { backgroundColor: colors.surfaceMuted, borderColor: colors.borderSubtle },
-        ]}
-      >
-        <View style={styles.activeAnalysisTop}>
-          <Text style={styles.kicker}>Active analysis</Text>
-          <Text style={[styles.updatedMeta, { color: colors.textDim }]}>Updated offline</Text>
-        </View>
-
-        <Text style={[styles.activeAnalysisAssetLine, { color: colors.textDim }]}>{assetLine}</Text>
-
-        <View style={styles.activeAnalysisRow}>
-          <View style={styles.activeAnalysisLeft}>
-            <Pressable style={[styles.assetPill, { borderColor: colors.borderSubtle, backgroundColor: colors.surface }]}>
-              <Text style={[styles.assetPillText, { color: colors.text }]}>{asset.symbol}</Text>
-            </Pressable>
-            <Text style={[styles.activeAnalysisPrice, { color: colors.text }]}>{intelligence.price}</Text>
-            <Text style={[styles.activeAnalysisChange, { color: colorForTone(intelligence.changeTone) }]}>{intelligence.change}</Text>
-            <Text style={[styles.activeAnalysisTf, { color: colors.textDim }]}>1D</Text>
-          </View>
-
-          <View
-            style={[
-              styles.activeAnalysisSummary,
-              { backgroundColor: colors.surface, borderColor: colors.borderSubtle },
-            ]}
-          >
-            {summaryItems.map((item) => (
-              <View key={item.label} style={styles.activeAnalysisSummaryItem}>
-                <Text style={styles.activeAnalysisSummaryLabel} numberOfLines={1}>{item.label}</Text>
-                <Text style={[styles.activeAnalysisSummaryValue, { color: colors.text }]} numberOfLines={2}>{item.value}</Text>
-              </View>
-            ))}
-          </View>
-        </View>
-      </View>
-
-      <View style={[styles.workspacePanelDivider, { backgroundColor: colors.borderSubtle }]} />
-
-      <View style={styles.watchlistTop}>
-        <View style={styles.watchlistTopLeft}>
-          <Text style={styles.kicker}>Watchlist</Text>
-          <View style={styles.watchlistGroupRow}>
-            <View
-              style={[
-                styles.watchlistGroupChip,
-                styles.watchlistGroupChipActive,
-                { backgroundColor: `${colors.accent}10`, borderColor: `${colors.accent}24` },
-              ]}
-            >
-              <Text style={styles.watchlistGroupChipActiveText}>Crypto</Text>
-            </View>
-            <View style={[styles.watchlistGroupChip, { backgroundColor: colors.surfaceMuted }]}>
-              <Text style={[styles.watchlistGroupChipText, { color: colors.textDim }]}>Stocks</Text>
-            </View>
-            <View style={[styles.watchlistGroupChip, { backgroundColor: colors.surfaceMuted }]}>
-              <Text style={[styles.watchlistGroupChipText, { color: colors.textDim }]}>ETF</Text>
-            </View>
-          </View>
-        </View>
-        <StatusChip label={stale ? 'Stale' : 'Live'} tone={stale ? 'warning' : 'success'} />
+      <Text style={[styles.watchlistSectionTitle, { color: colors.text }]}>{translate(language, 'analysis.watchlist')}</Text>
+      <View style={styles.watchlistTabs}>
+        <Text style={[styles.watchlistTabActive, { color: colors.accent }]}>{translate(language, 'analysis.tabCrypto')}</Text>
+        <Text style={[styles.watchlistTab, { color: colors.textDim }]}>{translate(language, 'analysis.tabStocks')}</Text>
+        <Text style={[styles.watchlistTab, { color: colors.textDim }]}>{translate(language, 'analysis.tabEtf')}</Text>
       </View>
 
       <View style={[styles.watchlistTable, { borderColor: colors.borderSubtle }]}>
-        {assets.map((asset) => {
-          const active = asset.symbol === selectedSymbol;
+        {visibleAssets.map((asset, index) => {
+          const selected = asset.symbol === selectedSymbol;
           const score = compositeScore(asset);
-          const change = asset.change_24h ?? 0;
+          const price = typeof asset.price === 'number' ? formatPrice(asset.price) : '—';
+          const change = typeof asset.change_24h === 'number' ? asset.change_24h : 0;
+          const chipTone = toneForScore(score);
+
           return (
-            <Pressable
+            <SwipeActionRow
               key={asset.symbol}
-              onPress={() => onSelect(asset.symbol)}
-              style={({ pressed }) => [
-                styles.watchlistRow,
+              actions={[
                 {
-                  borderBottomColor: colors.borderSubtle,
-                  backgroundColor: active ? `${colors.accent}08` : 'transparent',
+                  key: 'open',
+                  label: translate(language, 'common.open'),
+                  icon: 'arrow-up-right',
+                  onPress: () => onOpenAsset(asset),
                 },
-                pressed && styles.pressed,
+                {
+                  key: 'remove',
+                  label: translate(language, 'common.delete'),
+                  icon: 'trash-2',
+                  tone: 'danger',
+                  onPress: () => onRemoveAsset(asset),
+                },
               ]}
             >
-              <View style={styles.watchlistRowTop}>
+              <Pressable
+                onPress={() => onSelect(asset.symbol)}
+                style={({ pressed }) => [
+                  styles.watchlistRow,
+                  {
+                    borderBottomColor: colors.borderSubtle,
+                    backgroundColor: selected ? `${colors.accent}05` : colors.surface,
+                  },
+                  index === visibleAssets.length - 1 && styles.watchlistRowLast,
+                  pressed && styles.pressed,
+                ]}
+              >
                 <View style={styles.watchlistAssetBlock}>
-                  <View style={[styles.watchlistDot, { backgroundColor: active ? theme.colors.accent : colors.borderStrong }]} />
+                  <View style={[styles.watchlistSelectionDot, { backgroundColor: selected ? colors.accent : colors.borderSubtle }]} />
+                  <AssetIcon compact symbol={asset.symbol} />
                   <View style={styles.watchlistAssetText}>
                     <Text style={[styles.watchlistSymbol, { color: colors.text }]}>{asset.symbol}</Text>
                     <Text style={[styles.watchlistName, { color: colors.textDim }]}>{assetNameForSymbol(asset.symbol)}</Text>
                   </View>
                 </View>
-                <View style={styles.watchlistPriceBlock}>
-                  <Text style={[styles.watchlistPrice, { color: colors.text }]}>
-                    {typeof asset.price === 'number' ? formatShortPrice(asset.price) : 'n/a'}
-                  </Text>
-                  <Text
-                    style={[
-                      styles.watchlistChange,
-                      { color: change >= 0 ? theme.colors.success : theme.colors.danger },
-                    ]}
-                  >
+
+                <View style={styles.watchlistMetricBlock}>
+                  <Text style={[styles.watchlistPrice, { color: colors.text }]}>{price}</Text>
+                  <Text style={[styles.watchlistChange, { color: change >= 0 ? theme.colors.success : theme.colors.danger }]}>
                     {formatSignedPercent(change)}
                   </Text>
                 </View>
-              </View>
 
-              <View style={styles.watchlistRowBottom}>
-                <View style={styles.watchlistMetaLeft}>
-                  <Text style={[styles.watchlistScore, { color: colors.textMuted }]}>Score: {score}</Text>
-                  <StatusChip compact label={stateForAsset(asset)} tone={toneForScore(score)} />
+                <View style={styles.watchlistScoreBlock}>
+                  <Text style={styles.watchlistScoreLabel}>{translate(language, 'analysis.score')}</Text>
+                  <Text style={[styles.watchlistScoreValue, { color: colors.text }]}>{score}</Text>
                 </View>
-                {active ? <View style={[styles.watchlistActiveMarker, { backgroundColor: theme.colors.accent }]} /> : null}
-              </View>
-            </Pressable>
+
+                <View style={styles.watchlistStateBlock}>
+                  <StatusChip compact label={stateForAsset(asset)} tone={chipTone} />
+                </View>
+
+                <Pressable
+                  hitSlop={10}
+                  onPress={(event) => {
+                    event.stopPropagation();
+                    onOpenActions(asset);
+                  }}
+                  style={[styles.watchlistOverflowButton, { borderColor: colors.borderSubtle, backgroundColor: colors.surfaceMuted }]}
+                >
+                  <Feather color={colors.textDim} name="more-horizontal" size={15} />
+                </Pressable>
+              </Pressable>
+            </SwipeActionRow>
           );
         })}
       </View>
@@ -600,42 +1001,56 @@ function AnalysisWorkspaceIntro({
   );
 }
 
-function AnalysisPlanBridge({
-  candidate,
-  onOpenPlan,
+function AnalysisWorkspaceFallback({
+  activeSymbol,
+  onRefreshScores,
 }: {
-  candidate: { action: string; name: string; score: number; summary: string } | null;
-  onOpenPlan: () => void;
+  activeSymbol: string;
+  onRefreshScores: () => void;
 }) {
-  const { appearance } = useAppPreferences();
-  const colors = preferenceColors(appearance);
-
-  if (!candidate) return null;
+  const { language } = useAppPreferences();
+  const metaItems = [
+    translate(language, 'tag.monitoring'),
+    translate(language, 'tag.staleSync'),
+    `${translate(language, 'queue.label.reviews')} 0`,
+  ];
+  const queueItems = [
+    {
+      key: 'tasks',
+      label: translate(language, 'queue.label.tasks'),
+      value: 0,
+      body: translate(language, 'queue.body.staleSyncMissingBackendContext'),
+    },
+    {
+      key: 'reviews',
+      label: translate(language, 'queue.label.reviews'),
+      value: 0,
+      body: translate(language, 'queue.body.needDecision'),
+    },
+    {
+      key: 'risks',
+      label: translate(language, 'queue.label.risks'),
+      value: 0,
+      body: translate(language, 'queue.body.slowingYouDown'),
+    },
+    {
+      key: 'performance',
+      label: translate(language, 'queue.label.performance'),
+      value: '--',
+      body: translate(language, 'queue.body.howTodayBehaves'),
+    },
+  ];
 
   return (
-    <Pressable
-      onPress={async () => {
-        await triggerHaptic('selection');
-        onOpenPlan();
-      }}
-      style={({ pressed }) => [styles.planBridge, { borderColor: colors.borderSubtle }, pressed && styles.pressed]}
-    >
-      <View style={styles.planBridgeContent}>
-        <View style={styles.planBridgeCopy}>
-          <Text style={styles.kicker}>Next step</Text>
-          <Text style={[styles.cardTitle, { color: colors.text }]}>Open My Plan</Text>
-          <Text style={[styles.bodyText, { color: colors.textMuted }]}>
-            {candidate.name} is the best matching plan for current conditions. {candidate.summary}
-          </Text>
-        </View>
-        <View style={styles.planBridgeSide}>
-          <Text style={styles.planBridgeScore}>{candidate.score}/100</Text>
-          <Pressable onPress={onOpenPlan} style={styles.planBridgeButton}>
-            <Text style={styles.planBridgeButtonText}>{candidate.action}</Text>
-          </Pressable>
-        </View>
-      </View>
-    </Pressable>
+    <WorkspaceHeroSection>
+      <TodayWithFinnCard
+        headline={translate(language, 'analysis.summaryUnavailable', { symbol: activeSymbol })}
+        metaItems={metaItems}
+        support={translate(language, 'finn.noBriefingReady')}
+        queueItems={queueItems}
+        queueStatusLabel={translate(language, 'common.itemsOpen', { count: 0 })}
+      />
+    </WorkspaceHeroSection>
   );
 }
 
@@ -656,25 +1071,25 @@ function AnalysisRegimeCard({
   riskTone: StatusTone;
   symbol: string;
 }) {
-  const { appearance } = useAppPreferences();
+  const { appearance, language } = useAppPreferences();
   const colors = preferenceColors(appearance);
 
   return (
     <CardShell emphasis="standard" flat style={styles.workspaceBlendSurface}>
       <View style={styles.sectionTop}>
         <View>
-          <Text style={styles.kicker}>Market regime</Text>
-          <Text style={[styles.cardTitle, { color: colors.text }]}>{symbol} control plane</Text>
+          <Text style={styles.kicker}>{translate(language, 'analysis.marketRegime')}</Text>
+          <Text style={[styles.cardTitle, { color: colors.text }]}>{translate(language, 'analysis.controlPlane', { symbol })}</Text>
         </View>
-        <StatusChip label={change} tone={change.startsWith('+') ? 'success' : 'danger'} />
+        <StatusChip compact label={change} tone={change.startsWith('+') ? 'success' : 'danger'} />
       </View>
       <View style={styles.analysisMetaRow}>
         <View style={[styles.analysisMetaCard, { borderColor: colors.border, backgroundColor: colors.backgroundSoft }]}>
-          <Text style={styles.analysisMetaLabel}>Posture</Text>
+          <Text style={styles.analysisMetaLabel}>{translate(language, 'analysis.posture')}</Text>
           <Text style={[styles.analysisMetaValue, { color: colorForTone(postureTone) }]}>{posture}</Text>
         </View>
         <View style={[styles.analysisMetaCard, { borderColor: colors.border, backgroundColor: colors.backgroundSoft }]}>
-          <Text style={styles.analysisMetaLabel}>Risk</Text>
+          <Text style={styles.analysisMetaLabel}>{translate(language, 'analysis.risk')}</Text>
           <Text style={[styles.analysisMetaValue, { color: colorForTone(riskTone) }]}>{riskState}</Text>
         </View>
       </View>
@@ -690,16 +1105,16 @@ function AnalysisFinnActions({
   onAskContext: () => void;
   onAskSetup: () => void;
 }) {
-  const { appearance } = useAppPreferences();
+  const { appearance, language } = useAppPreferences();
   const colors = preferenceColors(appearance);
 
   return (
     <View style={styles.analysisActionWrap}>
       <Pressable onPress={onAskContext} style={[styles.analysisActionPrimary, { backgroundColor: theme.colors.accent }]}>
-        <Text style={styles.analysisActionPrimaryText}>Ask FINN for context</Text>
+        <Text style={styles.analysisActionPrimaryText}>{translate(language, 'analysis.askFinnContext')}</Text>
       </Pressable>
       <Pressable onPress={onAskSetup} style={[styles.analysisActionSecondary, { borderColor: colors.borderStrong, backgroundColor: colors.surface }]}>
-        <Text style={[styles.analysisActionSecondaryText, { color: colors.text }]}>Review setup evidence</Text>
+        <Text style={[styles.analysisActionSecondaryText, { color: colors.text }]}>{translate(language, 'analysis.reviewSetupEvidence')}</Text>
       </Pressable>
     </View>
   );
@@ -723,7 +1138,7 @@ type AssetIntelligence = {
 };
 
 function SelectedAssetIntelligence({ intelligence }: { intelligence: AssetIntelligence }) {
-  const { appearance } = useAppPreferences();
+  const { appearance, language } = useAppPreferences();
   const colors = preferenceColors(appearance);
 
   return (
@@ -732,11 +1147,11 @@ function SelectedAssetIntelligence({ intelligence }: { intelligence: AssetIntell
         <View style={styles.assetIdentity}>
           <AssetIcon symbol={intelligence.symbol} />
           <View>
-            <Text style={styles.intelLabel}>Analysis briefing</Text>
+            <Text style={styles.intelLabel}>{translate(language, 'analysis.analysisBriefing')}</Text>
             <Text style={[styles.intelSymbol, { color: colors.text }]}>{intelligence.symbol}</Text>
           </View>
         </View>
-        <StatusChip label={intelligence.change} tone={intelligence.changeTone} />
+        <StatusChip compact label={intelligence.change} tone={intelligence.changeTone} />
       </View>
 
       <Text style={[styles.price, { color: colors.text }]}>{intelligence.price}</Text>
@@ -744,9 +1159,9 @@ function SelectedAssetIntelligence({ intelligence }: { intelligence: AssetIntell
       <Text style={[styles.finnSummary, { color: colors.textMuted }]}>{intelligence.finnSummary}</Text>
 
       <View style={styles.intelChips}>
-        <StatusChip label={intelligence.marketPosture} tone={intelligence.marketPostureTone} />
-        <StatusChip label={intelligence.setupState} tone={intelligence.setupStateTone} />
-        <StatusChip label={intelligence.riskState} tone={intelligence.riskStateTone} />
+        <StatusChip compact label={intelligence.marketPosture} tone={intelligence.marketPostureTone} />
+        <StatusChip compact label={intelligence.setupState} tone={intelligence.setupStateTone} />
+        <StatusChip compact label={intelligence.riskState} tone={intelligence.riskStateTone} />
       </View>
 
       <View style={styles.scoreStrip}>
@@ -759,7 +1174,7 @@ function SelectedAssetIntelligence({ intelligence }: { intelligence: AssetIntell
 }
 
 function AnalysisEvidenceGrid({ asset }: { asset: MobileOverviewAsset }) {
-  const { appearance } = useAppPreferences();
+  const { appearance, language } = useAppPreferences();
   const colors = preferenceColors(appearance);
   const sections = [
     {
@@ -815,13 +1230,39 @@ function AnalysisEvidenceGrid({ asset }: { asset: MobileOverviewAsset }) {
 
 function AnalysisEvidenceSections({
   asset,
+  hiddenIndicatorKeys,
+  onHideIndicator,
   workspaceAsset,
+  onAskFinnIndicator,
+  onOpenIndicatorActions,
+  onOpenIndicatorDetail,
 }: {
   asset: MobileOverviewAsset;
+  hiddenIndicatorKeys: string[];
+  onHideIndicator: (item: {
+    sectionKey: string;
+    sectionTitle: string;
+    row: { label: string; value: string; development: string; assessment: string; tone: StatusTone };
+  }) => void;
   workspaceAsset?: WorkspaceAssetResponse;
+  onAskFinnIndicator: (item: {
+    sectionKey: string;
+    sectionTitle: string;
+    row: { label: string; value: string; development: string; assessment: string; tone: StatusTone };
+  }) => void | Promise<void>;
+  onOpenIndicatorActions: (item: {
+    sectionKey: string;
+    sectionTitle: string;
+    row: { label: string; value: string; development: string; assessment: string; tone: StatusTone };
+  }) => void | Promise<void>;
+  onOpenIndicatorDetail: (item: {
+    sectionKey: string;
+    sectionTitle: string;
+    row: { label: string; value: string; development: string; assessment: string; tone: StatusTone };
+  }) => void | Promise<void>;
 }) {
   const { language } = useAppPreferences();
-  const sections = buildEvidenceSections(workspaceAsset);
+  const sections = buildEvidenceSections(asset.symbol, workspaceAsset, hiddenIndicatorKeys);
 
   if (sections.length === 0) {
     return (
@@ -838,9 +1279,15 @@ function AnalysisEvidenceSections({
     <View style={styles.analysisSection}>
       {sections.map((section, index) => (
         <AnalysisEvidenceSectionCard
+          activeSymbol={asset.symbol}
+          hiddenIndicatorKeys={hiddenIndicatorKeys}
           key={section.key}
+          onHideIndicator={onHideIndicator}
           section={section}
           isLastSection={index === sections.length - 1}
+          onAskFinnIndicator={onAskFinnIndicator}
+          onOpenIndicatorActions={onOpenIndicatorActions}
+          onOpenIndicatorDetail={onOpenIndicatorDetail}
         />
       ))}
     </View>
@@ -848,10 +1295,38 @@ function AnalysisEvidenceSections({
 }
 
 function AnalysisEvidenceSectionCard({
+  activeSymbol,
+  hiddenIndicatorKeys,
   isLastSection,
+  onHideIndicator,
+  onAskFinnIndicator,
+  onOpenIndicatorActions,
+  onOpenIndicatorDetail,
   section,
 }: {
+  activeSymbol: string;
+  hiddenIndicatorKeys: string[];
   isLastSection: boolean;
+  onHideIndicator: (item: {
+    sectionKey: string;
+    sectionTitle: string;
+    row: { label: string; value: string; development: string; assessment: string; tone: StatusTone };
+  }) => void;
+  onAskFinnIndicator: (item: {
+    sectionKey: string;
+    sectionTitle: string;
+    row: { label: string; value: string; development: string; assessment: string; tone: StatusTone };
+  }) => void | Promise<void>;
+  onOpenIndicatorActions: (item: {
+    sectionKey: string;
+    sectionTitle: string;
+    row: { label: string; value: string; development: string; assessment: string; tone: StatusTone };
+  }) => void | Promise<void>;
+  onOpenIndicatorDetail: (item: {
+    sectionKey: string;
+    sectionTitle: string;
+    row: { label: string; value: string; development: string; assessment: string; tone: StatusTone };
+  }) => void | Promise<void>;
   section: {
     key: string;
     title: string;
@@ -860,39 +1335,32 @@ function AnalysisEvidenceSectionCard({
     rows: Array<{ label: string; value: string; development: string; assessment: string; tone: StatusTone }>;
   };
 }) {
-  const { appearance } = useAppPreferences();
+  const { appearance, language } = useAppPreferences();
   const colors = preferenceColors(appearance);
+  const visibleRows = section.rows.filter(
+    (row) => !hiddenIndicatorKeys.includes(buildIndicatorKey(activeSymbol, section.key, row.label)),
+  );
 
   return (
-    <CardShell emphasis="standard" flat style={styles.workspaceBlendSurface}>
-      <View style={styles.sectionTop}>
-        <View>
-          <Text style={styles.kicker}>{section.title} evidence</Text>
-          <View style={styles.evidenceSectionTitleRow}>
-            <Text style={[styles.workspaceTitle, { color: colors.text }]}>{section.title}</Text>
-            <View
-              style={[
-                styles.evidenceScorePill,
-                {
-                  backgroundColor: `${colorForTone(toneForScore(section.score))}12`,
-                },
-              ]}
-            >
-              <Text style={[styles.evidenceScorePillText, { color: colorForTone(toneForScore(section.score)) }]}>
-                {section.score}/100
-              </Text>
-            </View>
-          </View>
-          <Text style={[styles.workspaceSubtitle, { color: colors.textMuted }]}>{section.summary}</Text>
+    <CardShell
+      emphasis="standard"
+      flat
+      style={[
+        styles.workspaceBlendSurface,
+        styles.evidenceSectionBlock,
+        { borderBottomColor: colors.borderSubtle },
+        isLastSection && styles.analysisSectionBlockLast,
+      ]}
+    >
+      <View style={styles.evidenceSectionHeader}>
+        <View style={styles.evidenceSectionTitleWrap}>
+          <Text style={[styles.evidenceSectionTitle, { color: colors.text }]}>{section.title}</Text>
+          <Text style={styles.evidenceSectionScore}>{section.score}/100</Text>
         </View>
+        <Feather color={colors.textDim} name="chevron-down" size={16} />
       </View>
 
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.evidenceTimeframeRow}
-        style={styles.evidenceTimeframeRail}
-      >
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.evidenceTimeframeRow}>
           {['Day', 'Week', 'Month', 'Quarter'].map((item, index) => (
             <View
               key={item}
@@ -911,29 +1379,207 @@ function AnalysisEvidenceSectionCard({
           ))}
       </ScrollView>
 
+      <Text style={[styles.evidenceSectionSummary, { color: colors.textMuted }]}>{section.summary}</Text>
+
       <View style={[styles.evidenceTable, { borderColor: colors.borderSubtle }]}>
-        {section.rows.map((row, index) => (
-          <View
+        {visibleRows.length === 0 ? (
+          <Text style={[styles.evidenceEmptyText, { color: colors.textMuted }]}>
+            Geen indicatoren zichtbaar in deze sectie.
+          </Text>
+        ) : visibleRows.map((row, index) => (
+          <SwipeActionRow
             key={`${section.key}-${row.label}`}
-            style={[
-              styles.evidenceMobileRow,
-              index < section.rows.length - 1 && { borderBottomColor: colors.borderSubtle, borderBottomWidth: 1 },
-              index === section.rows.length - 1 && isLastSection && styles.evidenceLastRow,
+            actions={[
+              {
+                key: 'remove',
+                label: translate(language, 'common.delete'),
+                icon: 'trash-2',
+                tone: 'danger',
+                onPress: () => onHideIndicator({ sectionKey: section.key, sectionTitle: section.title, row }),
+              },
             ]}
           >
-            <View style={styles.evidenceMobileTop}>
-              <Text style={[styles.evidenceMobileLabel, { color: colors.text }]}>{row.label}</Text>
-              <Text style={[styles.evidenceMobileValue, { color: colors.text }]}>{row.value}</Text>
-            </View>
-            <Text style={[styles.evidenceMobileAssessment, { color: colors.textMuted }]}>{row.assessment}</Text>
-            <View style={styles.evidenceMobileBottom}>
-              <StatusChip compact label={row.development} tone={row.tone} />
-            </View>
-          </View>
+            <Pressable
+              onPress={() => onOpenIndicatorDetail({ sectionKey: section.key, sectionTitle: section.title, row })}
+              style={({ pressed }) => [
+                styles.evidenceMobileRow,
+                index < visibleRows.length - 1 && { borderBottomColor: colors.borderSubtle, borderBottomWidth: 1 },
+                index === visibleRows.length - 1 && isLastSection && styles.evidenceLastRow,
+                pressed && styles.pressed,
+              ]}
+            >
+              <View style={styles.evidenceMobileTop}>
+                <View style={styles.evidenceMobileLabelWrap}>
+                  <View style={[styles.evidenceMobileIcon, { backgroundColor: colors.surfaceMuted }]}>
+                    <Feather
+                      color={colors.accent}
+                      name={evidenceSectionIcon(section.key)}
+                      size={listRowStandards.iconGlyphSize - 2}
+                    />
+                  </View>
+                  <Text style={[styles.evidenceMobileLabel, { color: colors.text }]}>{row.label}</Text>
+                </View>
+                <View style={styles.evidenceMobileValueWrap}>
+                  <Text style={[styles.evidenceMobileValue, { color: colors.text }]}>{row.value}</Text>
+                  <Pressable
+                    hitSlop={10}
+                    onPress={(event) => {
+                      event.stopPropagation();
+                      onOpenIndicatorActions({ sectionKey: section.key, sectionTitle: section.title, row });
+                    }}
+                    style={[styles.evidenceOverflowButton, { borderColor: colors.borderSubtle, backgroundColor: colors.surfaceMuted }]}
+                  >
+                    <Feather color={colors.textDim} name="more-horizontal" size={15} />
+                  </Pressable>
+                </View>
+              </View>
+              <View style={styles.evidenceMobileBottom}>
+                <Text
+                  numberOfLines={1}
+                  style={[styles.evidenceMobileAssessment, { color: colors.textMuted }]}
+                >
+                  {row.assessment}
+                </Text>
+                <StatusChip compact label={row.development} tone={row.tone} />
+              </View>
+            </Pressable>
+          </SwipeActionRow>
         ))}
       </View>
     </CardShell>
   );
+}
+
+function IndicatorDetailSheet({
+  item,
+  onHide,
+  onAskFinn,
+}: {
+  item: {
+    sectionKey: string;
+    sectionTitle: string;
+    row: { label: string; value: string; development: string; assessment: string; tone: StatusTone };
+  };
+  onHide: () => void;
+  onAskFinn: () => void | Promise<void>;
+}) {
+  const { appearance } = useAppPreferences();
+  const colors = preferenceColors(appearance);
+  const nowMeaning = indicatorMeaningNow(item.row);
+  const monitorHint = indicatorMonitorHint(item.row);
+
+  return (
+    <View style={styles.indicatorDetailStack}>
+      <View style={[styles.indicatorDetailHero, { borderColor: colors.borderSubtle, backgroundColor: colors.surfaceMuted }]}>
+        <View style={styles.sectionTop}>
+          <View style={styles.flexText}>
+            <Text style={styles.kicker}>{item.sectionTitle} indicator</Text>
+            <Text style={[styles.indicatorDetailTitle, { color: colors.text }]}>{item.row.label}</Text>
+            <Text style={[styles.indicatorDetailMeta, { color: colors.textDim }]}>
+              {item.sectionTitle} · {item.row.development}
+            </Text>
+          </View>
+          <StatusChip compact label={item.row.development} tone={item.row.tone} />
+        </View>
+        <Text style={[styles.indicatorHeroSummary, { color: colors.textMuted }]}>
+          {nowMeaning}
+        </Text>
+      </View>
+
+      <View style={styles.indicatorMetricGrid}>
+        <View style={[styles.indicatorMetricCard, { borderColor: colors.borderSubtle, backgroundColor: colors.surfaceMuted }]}>
+          <Text style={[styles.indicatorMetricLabel, { color: colors.textDim }]}>Waarde</Text>
+          <Text style={[styles.indicatorMetricValue, { color: colors.text }]}>{item.row.value}</Text>
+        </View>
+        <View style={[styles.indicatorMetricCard, { borderColor: colors.borderSubtle, backgroundColor: colors.surfaceMuted }]}>
+          <Text style={[styles.indicatorMetricLabel, { color: colors.textDim }]}>Ontwikkeling</Text>
+          <Text style={[styles.indicatorMetricValue, { color: colorForTone(item.row.tone) }]}>{item.row.development}</Text>
+        </View>
+      </View>
+
+      <View style={[styles.indicatorAssessmentCard, { borderColor: colors.borderSubtle }]}>
+        <Text style={[styles.indicatorAssessmentTitle, { color: colors.text }]}>Interpretatie</Text>
+        <Text style={[styles.indicatorAssessmentBody, { color: colors.textMuted }]}>{item.row.assessment}</Text>
+      </View>
+
+      <View style={[styles.indicatorNowCard, { borderColor: colors.borderSubtle, backgroundColor: colors.surfaceMuted }]}>
+        <Text style={[styles.indicatorNowTitle, { color: colors.text }]}>Wat betekent dit nu?</Text>
+        <Text style={[styles.indicatorNowBody, { color: colors.textMuted }]}>{nowMeaning}</Text>
+        <Text style={[styles.indicatorMonitorLabel, { color: colors.textDim }]}>Let nu vooral op</Text>
+        <Text style={[styles.indicatorMonitorBody, { color: colors.text }]}>{monitorHint}</Text>
+      </View>
+
+      <Pressable
+        onPress={async () => {
+          await triggerHaptic('warning');
+          onHide();
+        }}
+        style={[styles.indicatorHideButton, { borderColor: colors.borderSubtle, backgroundColor: colors.surfaceMuted }]}
+      >
+        <Text style={[styles.indicatorHideButtonText, { color: colors.danger }]}>Verberg indicator</Text>
+      </Pressable>
+
+      <Pressable
+        onPress={async () => {
+          await triggerHaptic('selection');
+          await onAskFinn();
+        }}
+        style={[styles.indicatorFinnButton, { backgroundColor: colors.accent }]}
+      >
+        <Text style={styles.indicatorFinnButtonText}>Vraag FINN om extra uitleg</Text>
+      </Pressable>
+    </View>
+  );
+}
+
+function buildIndicatorKey(symbol: string, sectionKey: string, label: string) {
+  return `${symbol}:${sectionKey}:${label}`.toLowerCase();
+}
+
+function normalizeHiddenIndicatorKeys(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+
+  return value
+    .map((item) => (typeof item === 'string' ? item.trim().toLowerCase() : ''))
+    .filter(Boolean);
+}
+
+function indicatorMeaningNow(row: {
+  label: string;
+  value: string;
+  development: string;
+  assessment: string;
+  tone: StatusTone;
+}) {
+  if (row.tone === 'success') {
+    return `${row.label} ondersteunt het beeld nu redelijk goed. De huidige waarde (${row.value}) wijst op bevestiging, maar alleen zolang dit signaal stabiel blijft.`;
+  }
+  if (row.tone === 'danger') {
+    return `${row.label} zet nu duidelijke frictie op het beeld. De huidige waarde (${row.value}) vraagt om extra terughoudendheid tot de bevestiging verbetert.`;
+  }
+  if (row.tone === 'warning') {
+    return `${row.label} is nu gemengd. De waarde (${row.value}) geeft nog geen schoon signaal, dus dit is eerder monitoren dan vertrouwen.`;
+  }
+  return `${row.label} geeft nu vooral context. De waarde (${row.value}) helpt om het totaalbeeld te lezen, maar is op zichzelf nog niet beslissend.`;
+}
+
+function indicatorMonitorHint(row: {
+  label: string;
+  value: string;
+  development: string;
+  assessment: string;
+  tone: StatusTone;
+}) {
+  if (row.tone === 'success') {
+    return `Kijk of ${row.label} de huidige verbetering vasthoudt en of andere indicatoren in dezelfde sectie mee bevestigen.`;
+  }
+  if (row.tone === 'danger') {
+    return `Wacht op stabilisatie in ${row.label} of op sterkere bevestiging uit de rest van de sectie voordat je meer vertrouwen geeft.`;
+  }
+  if (row.tone === 'warning') {
+    return `Controleer of ${row.label} doorschuift naar verbetering of juist verder verzwakt bij de volgende update.`;
+  }
+  return `Gebruik ${row.label} samen met de andere indicatoren uit ${row.assessment ? 'deze sectie' : 'het totaalbeeld'} voor context.`;
 }
 
 function HistoricalForwardReturnsCard({
@@ -963,8 +1609,8 @@ function HistoricalForwardReturnsCard({
     <CardShell emphasis="standard" flat style={styles.workspaceBlendSurface}>
       <View>
         <Text style={styles.kicker}>{asset.symbol} · Market</Text>
-        <Text style={[styles.workspaceTitle, { color: colors.text }]}>Historical forward returns</Text>
-        <Text style={[styles.workspaceSubtitle, { color: colors.textMuted }]}>
+        <Text style={[styles.forwardTitle, { color: colors.text }]}>Historical forward returns</Text>
+        <Text style={[styles.forwardSubtitle, { color: colors.textMuted }]}>
           Compare recurring returns by week, month, quarter and year.
         </Text>
       </View>
@@ -1032,191 +1678,55 @@ function HistoricalForwardReturnsCard({
 }
 
 function CompactLiveChart({
+  errorMessage,
+  interval,
   loading,
-  onTimeframeChange,
-  overlays,
-  points,
+  onIntervalChange,
   symbol,
-  timeframe,
 }: {
+  errorMessage?: string;
+  interval: TradingViewInterval;
   loading: boolean;
-  onTimeframeChange: (timeframe: Timeframe) => void;
-  overlays: ChartOverlay[];
-  points: ChartPoint[];
+  onIntervalChange: (interval: TradingViewInterval) => void;
   symbol: string;
-  timeframe: Timeframe;
 }) {
-  const { appearance } = useAppPreferences();
   const { language } = useAppPreferences();
-  const colors = preferenceColors(appearance);
+  const chartFallbackBody =
+    errorMessage ??
+    (language === 'nl'
+      ? 'De TradingView-widget gaf nog geen bruikbare output terug. Controleer of de WebView extern scriptverkeer mag laden.'
+      : language === 'de'
+        ? 'Das TradingView-Widget hat noch keine brauchbare Ausgabe geliefert. Prüfe, ob die WebView externe Skripte laden darf.'
+        : 'The TradingView widget did not return usable output yet. Check whether the WebView may load external scripts.');
 
   return (
     <CardShell emphasis="standard" flat style={styles.workspaceBlendSurface}>
-      <View style={styles.chartHeader}>
-        <View>
-          <Text style={styles.kicker}>Tradingview chart</Text>
-          <Text style={[styles.chartTitle, { color: colors.text }]}>{symbol}USD</Text>
-        </View>
-        <Text style={[styles.inlineMetaLabel, { color: colors.textDim }]}>{timeframe.toUpperCase()}</Text>
-      </View>
-
-      <SegmentedControl
-        compact
-        items={timeframes.map((item) => ({ key: item, label: item }))}
-        selected={timeframe}
-        onChange={(value) => onTimeframeChange(value as Timeframe)}
-      />
+      <Text style={styles.kicker}>Tradingview chart</Text>
 
       {loading ? (
         <LoadingSkeletonCard />
-      ) : points.length > 1 ? (
-        <NativeCandleChart overlays={overlays} points={points} />
       ) : (
-        <InsightCard
-          label="Chart"
-          title={
-            language === 'nl'
-              ? 'Er zijn nog geen live chartpunten beschikbaar.'
-              : language === 'de'
-                ? 'Es sind noch keine Live-Chartpunkte verfügbar.'
-                : 'No live chart points are available yet.'
-          }
-          body={
-            language === 'nl'
-              ? 'De backend gaf nog niet genoeg markthistorie terug om de analysis chart te tekenen.'
-              : language === 'de'
-                ? 'Das Backend hat noch nicht genug Markthistorie zurückgegeben, um den Analyse-Chart zu zeichnen.'
-                : 'The backend has not returned enough market history yet to draw the analysis chart.'
-          }
-          tone="warning"
-        />
-      )}
-    </CardShell>
-  );
-}
-
-type ChartPoint = {
-  open: number;
-  high: number;
-  low: number;
-  close: number;
-  volume: number;
-  rsi: number;
-};
-
-type ChartOverlay = {
-  id: string;
-  label: string;
-  price: number;
-  tone: StatusTone;
-  type: 'setup_zone' | 'entry' | 'stop' | 'target' | 'ai_level' | 'bot_marker';
-};
-
-function NativeCandleChart({ overlays, points }: { overlays: ChartOverlay[]; points: ChartPoint[] }) {
-  const { appearance } = useAppPreferences();
-  const colors = preferenceColors(appearance);
-  const visible = points.slice(-28);
-  const min = Math.min(...visible.map((point) => point.low));
-  const max = Math.max(...visible.map((point) => point.high));
-  const maxVolume = Math.max(...visible.map((point) => point.volume));
-
-  return (
-    <View style={[styles.chartCanvas, { backgroundColor: colors.backgroundSoft, borderColor: colors.border }]}>
-      <View style={styles.priceGrid}>
-        <Text style={[styles.axisText, { color: colors.textDim }]}>{formatCompact(max)}</Text>
-        <Text style={[styles.axisText, { color: colors.textDim }]}>{formatCompact((max + min) / 2)}</Text>
-        <Text style={[styles.axisText, { color: colors.textDim }]}>{formatCompact(min)}</Text>
-      </View>
-      <View style={[styles.candleRow, { borderBottomColor: colors.border }]}>
-        <ChartOverlays overlays={overlays} min={min} max={max} />
-        {visible.map((point, index) => {
-          const bullish = point.close >= point.open;
-          const highTop = scaleToChart(point.high, min, max);
-          const lowTop = scaleToChart(point.low, min, max);
-          const bodyTop = scaleToChart(Math.max(point.open, point.close), min, max);
-          const bodyBottom = scaleToChart(Math.min(point.open, point.close), min, max);
-          const volumeHeight = Math.max(8, (point.volume / maxVolume) * 44);
-
-          return (
-            <View style={styles.candleSlot} key={`${point.close}-${index}`}>
-              <View
-                style={[
-                  styles.wick,
-                  {
-                    backgroundColor: bullish ? theme.colors.success : theme.colors.danger,
-                    height: Math.max(8, lowTop - highTop),
-                    top: highTop,
-                  },
-                ]}
-              />
-              <View
-                style={[
-                  styles.candle,
-                  {
-                    backgroundColor: bullish ? theme.colors.success : theme.colors.danger,
-                    height: Math.max(10, bodyBottom - bodyTop),
-                    top: bodyTop,
-                  },
-                ]}
-              />
-              <View
-                style={[
-                  styles.maDot,
-                  {
-                    top: scaleToChart((point.open + point.close + point.low) / 3, min, max),
-                  },
-                ]}
-              />
-              <View
-                style={[
-                  styles.volumeBar,
-                  {
-                    backgroundColor: bullish ? '#10B98166' : '#F43F5E66',
-                    height: volumeHeight,
-                  },
-                ]}
+        <>
+          <TradingViewWidget interval={interval} onIntervalChange={onIntervalChange} symbol={symbol} />
+          {errorMessage ? (
+            <View style={styles.chartNotice}>
+              <InsightCard
+                label="Chart"
+                title={
+                  language === 'nl'
+                    ? 'TradingView-chart geladen met fallback-configuratie.'
+                    : language === 'de'
+                      ? 'TradingView-Chart mit Fallback-Konfiguration geladen.'
+                      : 'TradingView chart loaded with fallback configuration.'
+                }
+                body={chartFallbackBody}
+                tone="warning"
               />
             </View>
-          );
-        })}
-      </View>
-      <View style={styles.rsiPanel}>
-        <Text style={styles.rsiLabel}>RSI 14</Text>
-        <View style={styles.rsiLine}>
-          {visible.map((point, index) => (
-            <View
-              key={`rsi-${index}`}
-              style={[
-                styles.rsiDot,
-                {
-                  left: `${(index / Math.max(1, visible.length - 1)) * 100}%`,
-                  top: `${100 - point.rsi}%`,
-                },
-              ]}
-            />
-          ))}
-        </View>
-      </View>
-    </View>
-  );
-}
-
-function ChartOverlays({ max, min, overlays }: { max: number; min: number; overlays: ChartOverlay[] }) {
-  const { appearance } = useAppPreferences();
-  const colors = preferenceColors(appearance);
-
-  return (
-    <View pointerEvents="none" style={styles.overlayLayer}>
-      {overlays.map((overlay) => {
-        const top = scaleToChart(overlay.price, min, max);
-        const color = colorForTone(overlay.tone);
-        return (
-          <View key={overlay.id} style={[styles.overlayLine, { borderColor: color, top }]}>
-            <Text style={[styles.overlayLabel, { backgroundColor: colors.backgroundSoft, color }]}>{overlay.label}</Text>
-          </View>
-        );
-      })}
-    </View>
+          ) : null}
+        </>
+      )}
+    </CardShell>
   );
 }
 
@@ -1244,7 +1754,7 @@ function ScannerRow({
           <Text style={[styles.rowSymbol, { color: colors.text }]}>{asset.symbol}</Text>
         </View>
       </View>
-      <Text style={[styles.rowPrice, { color: colors.text }]}>{typeof asset.price === 'number' ? formatShortPrice(asset.price) : 'n/a'}</Text>
+      <Text style={[styles.rowPrice, { color: colors.text }]}>{typeof asset.price === 'number' ? formatShortPrice(asset.price) : '—'}</Text>
       <Text style={[styles.rowChange, { color: tone === 'success' ? theme.colors.success : theme.colors.danger }]}>
         {change >= 0 ? '+' : ''}
         {change.toFixed(2)}%
@@ -1268,7 +1778,7 @@ function WatchlistIntelligenceTerminal({
   selectedSymbol: string;
   stale: boolean;
 }) {
-  const { appearance } = useAppPreferences();
+  const { appearance, language } = useAppPreferences();
   const colors = preferenceColors(appearance);
 
   return (
@@ -1277,11 +1787,17 @@ function WatchlistIntelligenceTerminal({
         <View style={styles.terminalTitleRow}>
           <Text style={styles.terminalStar}>★</Text>
           <View>
-            <Text style={styles.terminalLabel}>Marktcontext</Text>
-            <Text style={[styles.terminalSubtitle, { color: colors.textMuted }]}>Live watchlist</Text>
+            <Text style={styles.terminalLabel}>{translate(language, 'analysis.marketContext')}</Text>
+            <Text style={[styles.terminalSubtitle, { color: colors.textMuted }]}>
+              {translate(language, 'analysis.liveWatchlist')}
+            </Text>
           </View>
         </View>
-        <StatusChip label={stale ? 'Stale' : 'Live'} tone={stale ? 'warning' : 'success'} />
+        <StatusChip
+          compact
+          label={translate(language, stale ? 'common.stale' : 'tag.live')}
+          tone={stale ? 'warning' : 'success'}
+        />
       </View>
 
       <View style={[styles.terminalList, { backgroundColor: colors.backgroundSoft, borderColor: colors.border }]}>
@@ -1334,7 +1850,7 @@ function TerminalAssetCard({
           <Text style={[styles.terminalAssetSymbol, { color: colors.text }]}>{asset.symbol}</Text>
         </View>
         <View style={styles.terminalPriceBlock}>
-          <Text style={[styles.terminalPrice, { color: colors.text }]}>{typeof asset.price === 'number' ? formatShortPrice(asset.price) : 'n/a'}</Text>
+          <Text style={[styles.terminalPrice, { color: colors.text }]}>{typeof asset.price === 'number' ? formatShortPrice(asset.price) : '—'}</Text>
           <Text style={[styles.terminalChange, { color: colorForTone(intel.changeTone) }]}>
             {intel.change}
           </Text>
@@ -1389,6 +1905,60 @@ function colorForTone(tone: StatusTone) {
   return theme.colors.accent;
 }
 
+function normalizeIntelligenceWeights(source: unknown): IntelligenceWeightsPayload {
+  const raw = (source && typeof source === 'object' ? (source as Record<string, unknown>).weights : source) as
+    | Record<string, unknown>
+    | undefined;
+  const next = {
+    market: normalizeWeightValue(raw?.market, DEFAULT_INTELLIGENCE_WEIGHTS.market),
+    macro: normalizeWeightValue(raw?.macro, DEFAULT_INTELLIGENCE_WEIGHTS.macro),
+    technical: normalizeWeightValue(raw?.technical, DEFAULT_INTELLIGENCE_WEIGHTS.technical),
+  };
+  const total = Object.values(next).reduce((sum, value) => sum + value, 0);
+  if (!total) return { ...DEFAULT_INTELLIGENCE_WEIGHTS };
+
+  return {
+    market: next.market / total,
+    macro: next.macro / total,
+    technical: next.technical / total,
+  };
+}
+
+function normalizeWeightValue(value: unknown, fallback: number) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed < 0) return fallback;
+  return parsed > 1 ? parsed / 100 : parsed;
+}
+
+function rebalanceIntelligenceWeights(
+  current: IntelligenceWeightsPayload,
+  key: IntelligenceWeightKey,
+  nextValue: number,
+): IntelligenceWeightsPayload {
+  const value = Math.max(0, Math.min(1, Number(nextValue)));
+  const otherKeys = (Object.keys(current) as IntelligenceWeightKey[]).filter((itemKey) => itemKey !== key);
+  const otherTotal = otherKeys.reduce((sum, itemKey) => sum + current[itemKey], 0);
+  const remaining = 1 - value;
+  const next = { ...current, [key]: value };
+
+  otherKeys.forEach((itemKey) => {
+    next[itemKey] = otherTotal > 0 ? remaining * (current[itemKey] / otherTotal) : remaining / otherKeys.length;
+  });
+
+  return next;
+}
+
+function areIntelligenceWeightsEqual(
+  left: IntelligenceWeightsPayload,
+  right: IntelligenceWeightsPayload,
+) {
+  return (
+    Math.abs(left.market - right.market) < 0.0001 &&
+    Math.abs(left.macro - right.macro) < 0.0001 &&
+    Math.abs(left.technical - right.technical) < 0.0001
+  );
+}
+
 function buildAssetIntelligence(
   asset: MobileOverviewAsset,
   latest?: MarketLatestResponse,
@@ -1414,7 +1984,7 @@ function buildAssetIntelligence(
     headline,
     marketPosture: posture,
     marketPostureTone: latestChange >= 0 && technicalScore >= 60 ? 'success' : latestChange < -3 ? 'danger' : 'accent',
-    price: latestPrice > 0 ? formatPrice(latestPrice) : 'n/a',
+    price: latestPrice > 0 ? formatPrice(latestPrice) : '—',
     riskState,
     riskStateTone: riskState === 'High risk' || riskState === 'Weak risk/reward' ? 'danger' : riskState === 'Wait' ? 'warning' : 'success',
     setupScore,
@@ -1423,57 +1993,6 @@ function buildAssetIntelligence(
     symbol: asset.symbol,
     technicalScore,
   };
-}
-
-function buildFallbackOverviewAsset(
-  symbol: string,
-  latest?: MarketLatestResponse,
-  workspaceAsset?: WorkspaceAssetResponse,
-): MobileOverviewAsset | null {
-  if (!latest && !workspaceAsset) {
-    return null;
-  }
-
-  const quote = workspaceAsset?.quote;
-  const marketScore = readWorkspaceScore(workspaceAsset?.categories?.market?.score?.score) ?? 50;
-  const macroScore = readWorkspaceScore(workspaceAsset?.categories?.macro?.score?.score) ?? 50;
-  const technicalScore = readWorkspaceScore(workspaceAsset?.categories?.technical?.score?.score) ?? 50;
-  const combinedScore = readWorkspaceScore(workspaceAsset?.combined?.score) ?? Math.round((marketScore + macroScore + technicalScore) / 3);
-  const latestRecord = latest && typeof latest === 'object' ? latest : undefined;
-  const resolvedSymbol = String(workspaceAsset?.symbol || latestRecord?.symbol || symbol || 'BTC').toUpperCase();
-
-  return {
-    symbol: resolvedSymbol,
-    price: readNumber(latestRecord, ['price'], typeof quote?.price === 'number' ? quote.price : 0) || null,
-    change_24h:
-      readNumber(latestRecord, ['change_24h'], typeof quote?.change_24h === 'number' ? quote.change_24h : 0) || 0,
-    macro_score: macroScore,
-    technical_score: technicalScore,
-    market_score: marketScore,
-    setup_score: combinedScore,
-    macro_label: workspaceAsset?.categories?.macro?.score?.status ?? null,
-    technical_label: workspaceAsset?.categories?.technical?.score?.status ?? null,
-    market_label: workspaceAsset?.categories?.market?.score?.status ?? null,
-    posture: workspaceAsset?.combined?.status ?? null,
-    structure: null,
-    conviction: combinedScore,
-    risk_state: null,
-  };
-}
-
-function buildChartOverlays(asset: MobileOverviewAsset, intelligence: AssetIntelligence): ChartOverlay[] {
-  if (!asset.price) return [];
-  const price = asset.price;
-
-  return [
-    {
-      id: `${asset.symbol}-ai-level`,
-      label: intelligence.setupState,
-      price: price * (intelligence.setupScore >= 70 ? 1.012 : 0.988),
-      tone: intelligence.setupStateTone,
-      type: 'ai_level',
-    },
-  ];
 }
 
 function deriveSuggestedPlan(source: unknown, asset: MobileOverviewAsset) {
@@ -1498,20 +2017,6 @@ function deriveSuggestedPlan(source: unknown, asset: MobileOverviewAsset) {
     score,
     summary: `Setup score ${score}. Review setup, strategy and bot readiness before execution.`,
   };
-}
-
-function buildChartPoints(source: MarketChartPoint[], asset: MobileOverviewAsset, timeframe: Timeframe): ChartPoint[] {
-  const realPoints = source
-    .filter((point) => point.close || point.open)
-    .map((point, index) => ({
-      close: Number(point.close ?? point.open ?? asset.price ?? 1),
-      high: Number(point.high ?? point.close ?? point.open ?? asset.price ?? 1),
-      low: Number(point.low ?? point.close ?? point.open ?? asset.price ?? 1),
-      open: Number(point.open ?? point.close ?? asset.price ?? 1),
-      rsi: 38 + ((index * 9) % 38),
-      volume: Number(point.volume ?? 1000 + index * 140),
-    }));
-  return realPoints;
 }
 
 function stateForAsset(asset: MobileOverviewAsset) {
@@ -1606,11 +2111,71 @@ function compositeScore(asset: MobileOverviewAsset) {
   return Math.round((asset.macro_score + asset.market_score + asset.technical_score + asset.setup_score) / 4);
 }
 
-function buildEvidenceSections(workspaceAsset?: WorkspaceAssetResponse) {
-  return buildWorkspaceEvidenceSections(workspaceAsset);
+function buildFallbackAnalysisAsset(
+  symbol: string,
+  latest?: MarketLatestResponse,
+  workspaceAsset?: WorkspaceAssetResponse,
+): MobileOverviewAsset | null {
+  const marketScore = readWorkspaceScore(workspaceAsset?.categories?.market?.score?.score);
+  const macroScore = readWorkspaceScore(workspaceAsset?.categories?.macro?.score?.score);
+  const technicalScore = readWorkspaceScore(workspaceAsset?.categories?.technical?.score?.score);
+  const combinedScore = readWorkspaceScore(workspaceAsset?.combined?.score);
+  const latestPrice = readNumber(latest, ['price'], NaN);
+  const latestChange = readNumber(latest, ['change_24h'], NaN);
+
+  const hasAnyBackendSignal = [
+    marketScore,
+    macroScore,
+    technicalScore,
+    combinedScore,
+    Number.isFinite(latestPrice) ? latestPrice : null,
+    Number.isFinite(latestChange) ? latestChange : null,
+  ].some((value) => typeof value === 'number' && Number.isFinite(value));
+
+  if (!hasAnyBackendSignal) return null;
+
+  const safeMarket = marketScore ?? combinedScore ?? 50;
+  const safeMacro = macroScore ?? combinedScore ?? 50;
+  const safeTechnical = technicalScore ?? combinedScore ?? 50;
+  const safeSetup = combinedScore ?? Math.round((safeMarket + safeMacro + safeTechnical) / 3);
+
+  return {
+    symbol,
+    price: Number.isFinite(latestPrice) ? latestPrice : null,
+    change_24h: Number.isFinite(latestChange) ? latestChange : null,
+    macro_score: safeMacro,
+    technical_score: safeTechnical,
+    market_score: safeMarket,
+    setup_score: safeSetup,
+    macro_label: workspaceAsset?.categories?.macro?.score?.status ?? null,
+    technical_label: workspaceAsset?.categories?.technical?.score?.status ?? null,
+    market_label: workspaceAsset?.categories?.market?.score?.status ?? null,
+    posture: workspaceAsset?.combined?.status ?? null,
+    structure: deriveWorkspaceSummary(
+      workspaceAsset?.categories?.technical,
+      'Technical picture is workable but not fully confirmed yet.',
+    ),
+    conviction: combinedScore ?? null,
+    risk_state: deriveWorkspaceSummary(
+      workspaceAsset?.categories?.market,
+      'Monitoring',
+    ),
+  };
 }
 
-function buildWorkspaceEvidenceSections(workspaceAsset?: WorkspaceAssetResponse) {
+function buildEvidenceSections(
+  symbol: string,
+  workspaceAsset?: WorkspaceAssetResponse,
+  hiddenIndicatorKeys: string[] = [],
+) {
+  return buildWorkspaceEvidenceSections(symbol, workspaceAsset, hiddenIndicatorKeys);
+}
+
+function buildWorkspaceEvidenceSections(
+  symbol: string,
+  workspaceAsset?: WorkspaceAssetResponse,
+  hiddenIndicatorKeys: string[] = [],
+) {
   if (!workspaceAsset?.categories) return [];
 
   const categoryMap = [
@@ -1633,21 +2198,59 @@ function buildWorkspaceEvidenceSections(workspaceAsset?: WorkspaceAssetResponse)
 
   return categoryMap.map((category) => {
     const payload = workspaceAsset.categories[category.key];
+    const visibleRows = (payload?.rows ?? []).filter(
+      (row) => !hiddenIndicatorKeys.includes(buildIndicatorKey(symbol, category.key, humanizeIndicatorName(row.name))),
+    );
+    const visibleScore = averageVisibleIndicatorScore(visibleRows);
 
     return {
       key: category.key,
       title: category.title,
-      score: readWorkspaceScore(payload?.score?.score) ?? 0,
+      score: visibleScore ?? readWorkspaceScore(payload?.score?.score) ?? 0,
       summary: deriveWorkspaceSummary(payload, category.summaryFallback),
-      rows: (payload?.rows ?? []).map((row) => ({
+      rows: visibleRows.map((row) => ({
         label: humanizeIndicatorName(row.name),
         value: formatWorkspaceValue(row.value),
         development: deriveWorkspaceDevelopment(row),
         assessment: deriveWorkspaceAssessment(row),
+        rawScore: typeof row.score === 'number' && Number.isFinite(row.score) ? row.score : null,
         tone: deriveWorkspaceTone(row),
       })),
     };
   });
+}
+
+function buildVisibleWorkspaceScores(
+  symbol: string,
+  workspaceAsset?: WorkspaceAssetResponse,
+  hiddenIndicatorKeys: string[] = [],
+) {
+  const sections = buildWorkspaceEvidenceSections(symbol, workspaceAsset, hiddenIndicatorKeys);
+  const market = sections.find((section) => section.key === 'market')?.score ?? null;
+  const macro = sections.find((section) => section.key === 'macro')?.score ?? null;
+  const technical = sections.find((section) => section.key === 'technical')?.score ?? null;
+  const visibleSectionScores = [market, macro, technical].filter(
+    (value): value is number => typeof value === 'number' && Number.isFinite(value),
+  );
+
+  return {
+    market,
+    macro,
+    technical,
+    combined: visibleSectionScores.length
+      ? Math.round(visibleSectionScores.reduce((sum, value) => sum + value, 0) / visibleSectionScores.length)
+      : null,
+  };
+}
+
+function averageVisibleIndicatorScore(
+  rows: Array<{ score?: number | null }>,
+) {
+  const scores = rows
+    .map((row) => row.score)
+    .filter((value): value is number => typeof value === 'number' && Number.isFinite(value));
+  if (!scores.length) return null;
+  return Math.round(scores.reduce((sum, value) => sum + value, 0) / scores.length);
 }
 
 function readWorkspaceScore(value: unknown) {
@@ -1699,7 +2302,7 @@ function formatWorkspaceValue(value: unknown) {
     return value.trim();
   }
 
-  return 'n/a';
+  return '—';
 }
 
 function humanizeTrend(trend: string) {
@@ -1774,6 +2377,16 @@ function buildForwardReturnMatrix(rows: ForwardReturnChartResponse[]) {
   };
 }
 
+function evidenceSectionIcon(sectionKey: string): keyof typeof Feather.glyphMap {
+  if (sectionKey === 'macro') {
+    return 'globe';
+  }
+  if (sectionKey === 'technical') {
+    return 'activity';
+  }
+  return 'trending-up';
+}
+
 function average(values: Array<number | null>) {
   const valid = values.filter((value): value is number => typeof value === 'number' && Number.isFinite(value));
   if (!valid.length) return 0;
@@ -1796,11 +2409,6 @@ function toneForScore(score: number): StatusTone {
   if (score >= 55) return 'accent';
   if (score >= 40) return 'warning';
   return 'danger';
-}
-
-function scaleToChart(value: number, min: number, max: number) {
-  const range = Math.max(1, max - min);
-  return Math.max(4, Math.min(138, 138 - ((value - min) / range) * 132));
 }
 
 function readNumber(source: Record<string, unknown> | undefined, keys: string[], fallback: number) {
@@ -1964,7 +2572,7 @@ const styles = StyleSheet.create({
     borderTopColor: theme.colors.borderSubtle,
     borderTopWidth: 1,
     height: 204,
-    marginTop: 10,
+    marginTop: 8,
     overflow: 'hidden',
     paddingLeft: 6,
     paddingTop: 10,
@@ -1974,7 +2582,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: theme.spacing.md,
     justifyContent: 'space-between',
-    marginBottom: 8,
+    marginBottom: 2,
+  },
+  chartNotice: {
+    marginTop: 12,
   },
   bodyText: {
     fontSize: 14,
@@ -1990,8 +2601,8 @@ const styles = StyleSheet.create({
   },
   cardTitle: {
     fontSize: theme.typography.cardTitle,
-    fontWeight: '900',
-    marginTop: 4,
+    fontWeight: '800',
+    marginTop: 2,
   },
   contextScoresBadge: {
     alignItems: 'center',
@@ -2007,11 +2618,172 @@ const styles = StyleSheet.create({
     letterSpacing: 0.8,
     textTransform: 'uppercase',
   },
+  contextScoresHeader: {
+    marginBottom: 8,
+  },
   contextScoresCard: {
-    borderRadius: 22,
+    borderRadius: 16,
     borderWidth: 1,
-    paddingHorizontal: 16,
-    paddingVertical: 16,
+    paddingHorizontal: 0,
+    paddingVertical: 0,
+  },
+  contextScoresCardPressed: {
+    opacity: 0.92,
+    transform: [{ scale: 0.995 }],
+  },
+  contextScoresTitle: {
+    fontSize: 14,
+    fontWeight: '900',
+  },
+  contextTuningCopy: {
+    flex: 1,
+    gap: 3,
+  },
+  contextTuningEyebrow: {
+    color: theme.colors.textDim,
+    fontSize: 10,
+    fontWeight: '900',
+    letterSpacing: 1,
+    textTransform: 'uppercase',
+  },
+  contextTuningHeaderRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: theme.spacing.md,
+    justifyContent: 'space-between',
+  },
+  contextTuningHint: {
+    fontSize: 13,
+    fontWeight: '700',
+    lineHeight: 18,
+  },
+  contextTuningPanel: {
+    borderRadius: theme.radius.card,
+    borderWidth: 1,
+    gap: theme.spacing.md,
+    padding: theme.spacing.md,
+  },
+  contextTuningSummaryCard: {
+    borderRadius: theme.radius.md,
+    borderWidth: 1,
+    flexBasis: '48%',
+    gap: 2,
+    minWidth: '48%',
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.sm,
+  },
+  contextTuningSummaryGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: theme.spacing.sm,
+  },
+  contextTuningSummaryLabel: {
+    color: theme.colors.textDim,
+    fontSize: 9,
+    fontWeight: '900',
+    letterSpacing: 0.9,
+    textTransform: 'uppercase',
+  },
+  contextTuningSummaryValue: {
+    fontSize: 24,
+    fontWeight: '900',
+    lineHeight: 28,
+  },
+  contextTuningTotalBadge: {
+    borderRadius: theme.radius.pill,
+    borderWidth: 1,
+    minWidth: 72,
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.sm,
+  },
+  contextTuningTotalBadgeText: {
+    fontSize: 18,
+    fontWeight: '900',
+    textAlign: 'center',
+  },
+  contextWeightCard: {
+    borderRadius: theme.radius.card,
+    borderWidth: 1,
+    gap: theme.spacing.md,
+    padding: theme.spacing.md,
+  },
+  contextWeightCardHeader: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: theme.spacing.md,
+    justifyContent: 'space-between',
+  },
+  contextWeightControls: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: theme.spacing.sm,
+  },
+  contextWeightLabel: {
+    color: theme.colors.textDim,
+    fontSize: 10,
+    fontWeight: '900',
+    letterSpacing: 1,
+    textTransform: 'uppercase',
+  },
+  contextWeightMeta: {
+    fontSize: 12,
+    fontWeight: '700',
+    marginTop: 4,
+  },
+  contextWeightPercent: {
+    fontSize: 28,
+    fontWeight: '900',
+    lineHeight: 30,
+  },
+  contextWeightStepButton: {
+    alignItems: 'center',
+    borderRadius: theme.radius.button,
+    borderWidth: 1,
+    justifyContent: 'center',
+    minHeight: 42,
+    minWidth: 62,
+    paddingHorizontal: theme.spacing.md,
+  },
+  contextWeightStepButtonPressed: {
+    opacity: 0.85,
+  },
+  contextWeightStepButtonText: {
+    fontSize: 12,
+    fontWeight: '900',
+    letterSpacing: 0.4,
+  },
+  contextWeightTrack: {
+    borderRadius: theme.radius.pill,
+    flex: 1,
+    height: 10,
+    overflow: 'hidden',
+  },
+  contextWeightTrackFill: {
+    borderRadius: theme.radius.pill,
+    height: '100%',
+  },
+  contextWeightsSaveButton: {
+    alignItems: 'center',
+    alignSelf: 'flex-end',
+    backgroundColor: theme.colors.accent,
+    borderRadius: theme.radius.button,
+    justifyContent: 'center',
+    minHeight: 44,
+    minWidth: 168,
+    paddingHorizontal: theme.spacing.lg,
+  },
+  contextWeightsSaveButtonDisabled: {
+    opacity: 0.45,
+  },
+  contextWeightsSaveButtonPressed: {
+    opacity: 0.9,
+  },
+  contextWeightsSaveButtonText: {
+    color: theme.colors.white,
+    fontSize: 12,
+    fontWeight: '900',
+    letterSpacing: 0.7,
+    textTransform: 'uppercase',
   },
   evidenceCard: {
     borderRadius: theme.radius.md,
@@ -2039,6 +2811,99 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '600',
     lineHeight: 18,
+  },
+  indicatorAssessmentBody: {
+    ...typography.body,
+    marginTop: theme.spacing.xs,
+  },
+  indicatorAssessmentCard: {
+    borderRadius: theme.radius.card,
+    borderWidth: 1,
+    padding: theme.spacing.md,
+  },
+  indicatorAssessmentTitle: {
+    ...typography.sectionTitle,
+  },
+  indicatorDetailHero: {
+    borderRadius: theme.radius.card,
+    borderWidth: 1,
+    padding: theme.spacing.md,
+  },
+  indicatorDetailMeta: {
+    ...typography.body,
+  },
+  indicatorHeroSummary: {
+    ...typography.body,
+    marginTop: theme.spacing.sm,
+  },
+  indicatorMonitorBody: {
+    ...typography.bodyStrong,
+    marginTop: 4,
+  },
+  indicatorMonitorLabel: {
+    ...typography.metricLabel,
+    marginTop: theme.spacing.sm,
+  },
+  indicatorNowBody: {
+    ...typography.body,
+    marginTop: theme.spacing.xs,
+  },
+  indicatorNowCard: {
+    borderRadius: theme.radius.card,
+    borderWidth: 1,
+    padding: theme.spacing.md,
+  },
+  indicatorNowTitle: {
+    ...typography.sectionTitle,
+  },
+  indicatorDetailStack: {
+    gap: theme.spacing.md,
+  },
+  indicatorDetailTitle: {
+    fontSize: theme.typography.title,
+    fontWeight: '900',
+    lineHeight: 28,
+  },
+  indicatorHideButton: {
+    alignItems: 'center',
+    borderRadius: theme.radius.button,
+    borderWidth: 1,
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.sm,
+  },
+  indicatorHideButtonText: {
+    fontSize: 13,
+    fontWeight: '800',
+    letterSpacing: 0.3,
+  },
+  indicatorFinnButton: {
+    alignItems: 'center',
+    borderRadius: theme.radius.button,
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.sm,
+  },
+  indicatorFinnButtonText: {
+    color: theme.colors.white,
+    fontSize: 13,
+    fontWeight: '800',
+    letterSpacing: 0.3,
+  },
+  indicatorMetricCard: {
+    borderRadius: theme.radius.card,
+    borderWidth: 1,
+    flex: 1,
+    gap: 4,
+    padding: theme.spacing.sm,
+  },
+  indicatorMetricGrid: {
+    flexDirection: 'row',
+    gap: theme.spacing.sm,
+  },
+  indicatorMetricLabel: {
+    ...typography.metricLabel,
+  },
+  indicatorMetricValue: {
+    ...typography.bodyStrong,
   },
   evidenceTop: {
     alignItems: 'center',
@@ -2128,6 +2993,7 @@ const styles = StyleSheet.create({
     fontSize: 9,
     fontWeight: '900',
     letterSpacing: 1.8,
+    marginBottom: 10,
     textTransform: 'uppercase',
   },
   maDot: {
@@ -2197,7 +3063,7 @@ const styles = StyleSheet.create({
   sectionTop: {
     alignItems: 'center',
     flexDirection: 'row',
-    gap: 10,
+    gap: 8,
     justifyContent: 'space-between',
   },
   priceGrid: {
@@ -2326,35 +3192,35 @@ const styles = StyleSheet.create({
   },
   scannerTitle: {
     color: theme.colors.text,
-    fontSize: theme.typography.title,
+    fontSize: 15,
     fontWeight: '900',
-    marginTop: 4,
+    lineHeight: 18,
+    marginTop: 3,
   },
   scoreOverviewCard: {
-    borderRadius: 16,
-    borderWidth: 1,
+    borderRightWidth: 0.5,
     flex: 1,
-    gap: 4,
-    minWidth: '47%',
-    paddingHorizontal: 12,
-    paddingVertical: 12,
+    gap: 2,
+    minWidth: 0,
+    paddingHorizontal: 8,
+    paddingVertical: 8,
+  },
+  scoreOverviewCardLast: {
+    borderRightWidth: 0,
   },
   scoreOverviewGrid: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    columnGap: 10,
-    marginTop: 12,
-    rowGap: 10,
+    flexWrap: 'nowrap',
   },
   scoreOverviewLabel: {
     color: theme.colors.textDim,
-    fontSize: 10,
+    fontSize: 7.5,
     fontWeight: '900',
-    letterSpacing: 1,
+    letterSpacing: 0.6,
     textTransform: 'uppercase',
   },
   scoreOverviewValue: {
-    fontSize: 15,
+    fontSize: 9.75,
     fontWeight: '900',
   },
   scoreStrip: {
@@ -2588,7 +3454,7 @@ const styles = StyleSheet.create({
     width: 8,
   },
   activeAnalysisChange: {
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: '900',
   },
   activeAnalysisAssetLine: {
@@ -2606,37 +3472,37 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   activeAnalysisPrice: {
-    fontSize: 22,
+    fontSize: 18,
     fontWeight: '900',
-    letterSpacing: -0.4,
+    letterSpacing: -0.25,
   },
   activeAnalysisShell: {
-    borderRadius: 24,
+    borderRadius: 20,
     borderWidth: 1,
     marginTop: 2,
-    paddingHorizontal: 14,
-    paddingVertical: 14,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
   },
   activeAnalysisRow: {
-    gap: 10,
-    marginTop: 10,
+    gap: 8,
+    marginTop: 8,
   },
   activeAnalysisSummary: {
     flexDirection: 'row',
-    gap: 8,
+    gap: 6,
     overflow: 'hidden',
-    borderRadius: 18,
+    borderRadius: 16,
     borderWidth: 1,
-    paddingHorizontal: 10,
-    paddingVertical: 10,
+    paddingHorizontal: 8,
+    paddingVertical: 8,
   },
   activeAnalysisSummaryItem: {
     flex: 1,
     gap: 2,
-    minHeight: 50,
+    minHeight: 44,
     minWidth: 0,
-    paddingHorizontal: 6,
-    paddingVertical: 4,
+    paddingHorizontal: 4,
+    paddingVertical: 3,
   },
   activeAnalysisSummaryLabel: {
     color: theme.colors.textDim,
@@ -2650,9 +3516,9 @@ const styles = StyleSheet.create({
     fontWeight: '900',
   },
   activeAnalysisTf: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '900',
-    letterSpacing: 1,
+    letterSpacing: 0.85,
     textTransform: 'uppercase',
   },
   activeAnalysisTop: {
@@ -2661,7 +3527,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   analysisSection: {
-    gap: 8,
+    gap: 2,
   },
   assetPill: {
     alignItems: 'center',
@@ -2669,47 +3535,112 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     flexDirection: 'row',
     gap: theme.spacing.xs,
-    paddingHorizontal: 10,
-    paddingVertical: 7,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
   },
   assetPillText: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '900',
   },
   evidenceMobileAssessment: {
-    fontSize: 11.5,
-    fontWeight: '500',
-    lineHeight: 17,
-    marginTop: 2,
+    flex: 1,
+    ...typography.listRowMeta,
+    marginRight: 6,
   },
   evidenceMobileBottom: {
-    alignItems: 'flex-end',
-    marginTop: 4,
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 6,
+    justifyContent: 'space-between',
+    marginTop: 2,
+  },
+  evidenceMobileIcon: {
+    alignItems: 'center',
+    borderColor: listRowStandards.iconBorderColor,
+    borderRadius: 10,
+    borderWidth: 1,
+    height: 22,
+    justifyContent: 'center',
+    width: 22,
   },
   evidenceMobileLabel: {
+    ...typography.listRowTitle,
     flex: 1,
-    fontSize: 13.5,
-    fontWeight: '800',
-    lineHeight: 18,
-    paddingRight: 8,
+    paddingRight: 4,
+  },
+  evidenceMobileLabelWrap: {
+    alignItems: 'center',
+    flex: 1,
+    flexDirection: 'row',
+    gap: 8,
+    minWidth: 0,
+  },
+  evidenceMobileValueWrap: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 6,
+    marginLeft: theme.spacing.xs,
   },
   evidenceMobileRow: {
+    gap: 1,
     paddingHorizontal: 2,
-    paddingVertical: 9,
+    paddingVertical: 7,
   },
   evidenceLastRow: {
-    paddingBottom: 176,
+    paddingBottom: 12,
   },
   evidenceMobileTop: {
     alignItems: 'flex-start',
     flexDirection: 'row',
+    gap: 6,
     justifyContent: 'space-between',
   },
   evidenceMobileValue: {
-    fontSize: 13.5,
-    fontWeight: '800',
-    marginLeft: 8,
+    ...typography.listRowTitle,
+    marginLeft: 4,
     textAlign: 'right',
+  },
+  evidenceOverflowButton: {
+    alignItems: 'center',
+    borderRadius: 14,
+    borderWidth: 1,
+    height: 30,
+    justifyContent: 'center',
+    width: 30,
+  },
+  evidenceSectionBlock: {
+    borderBottomWidth: 0.5,
+    paddingBottom: 1,
+    paddingTop: 1,
+  },
+  evidenceSectionHeader: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  evidenceSectionScore: {
+    color: theme.colors.textDim,
+    ...typography.metaStrong,
+  },
+  evidenceEmptyText: {
+    ...typography.body,
+    paddingHorizontal: theme.spacing.sm,
+    paddingVertical: theme.spacing.md,
+  },
+  evidenceSectionSummary: {
+    ...typography.meta,
+    marginTop: 2,
+  },
+  evidenceSectionTitle: {
+    ...typography.cardTitle,
+  },
+  evidenceSectionTitleWrap: {
+    alignItems: 'baseline',
+    flexDirection: 'row',
+    gap: 10,
+  },
+  analysisSectionBlockLast: {
+    borderBottomWidth: 0,
   },
   evidenceScorePill: {
     alignItems: 'center',
@@ -2727,22 +3658,19 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 10,
-    marginTop: 4,
+    gap: 8,
+    marginTop: 2,
   },
   evidenceTable: {
     borderTopWidth: 1,
-    marginTop: 8,
+    marginTop: 3,
     overflow: 'hidden',
-  },
-  evidenceTimeframeRail: {
-    marginTop: 6,
   },
   evidenceTimeframeChip: {
     borderRadius: theme.radius.pill,
     borderWidth: 1,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
   },
   evidenceTimeframeChipActive: {
     backgroundColor: theme.colors.accentSoft,
@@ -2750,37 +3678,32 @@ const styles = StyleSheet.create({
   },
   evidenceTimeframeChipActiveText: {
     color: theme.colors.accent,
-    fontSize: 10,
-    fontWeight: '900',
-    letterSpacing: 0.8,
-    textTransform: 'uppercase',
+    ...typography.chipLabelCompact,
   },
   evidenceTimeframeChipText: {
-    fontSize: 10,
-    fontWeight: '900',
-    letterSpacing: 0.8,
-    textTransform: 'uppercase',
+    ...typography.chipLabelCompact,
   },
   evidenceTimeframeRow: {
     flexDirection: 'row',
     gap: 6,
-    paddingRight: 36,
+    paddingRight: 12,
+    marginTop: 8,
   },
   forwardMatrix: {
     borderTopWidth: 1,
-    marginTop: 12,
+    marginTop: 8,
     overflow: 'hidden',
   },
   forwardMatrixAvg: {
     flex: 0.8,
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: '900',
     textAlign: 'right',
   },
   forwardMatrixHeadCell: {
     color: theme.colors.textDim,
     flex: 1,
-    fontSize: 9,
+    fontSize: 8,
     fontWeight: '900',
     letterSpacing: 0.8,
     textAlign: 'center',
@@ -2789,30 +3712,30 @@ const styles = StyleSheet.create({
   forwardMatrixHeader: {
     flexDirection: 'row',
     gap: 4,
-    paddingHorizontal: 10,
-    paddingVertical: 9,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
   },
   forwardMatrixRow: {
     alignItems: 'center',
     flexDirection: 'row',
     gap: 4,
-    paddingHorizontal: 10,
-    paddingVertical: 9,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
   },
   forwardMatrixValueCell: {
     alignItems: 'center',
     borderRadius: theme.radius.sm,
     flex: 1,
     justifyContent: 'center',
-    minHeight: 30,
+    minHeight: 24,
   },
   forwardMatrixValueText: {
-    fontSize: 10,
+    fontSize: 9,
     fontWeight: '900',
   },
   forwardMatrixYear: {
     flex: 1.1,
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: '900',
   },
   forwardNegativeCell: {
@@ -2824,9 +3747,9 @@ const styles = StyleSheet.create({
   forwardTab: {
     borderRadius: theme.radius.pill,
     borderWidth: 1,
-    minWidth: 76,
-    paddingHorizontal: theme.spacing.md,
-    paddingVertical: 10,
+    minWidth: 58,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
   },
   forwardTabActive: {
     backgroundColor: '#F8FAFC',
@@ -2834,24 +3757,90 @@ const styles = StyleSheet.create({
   },
   forwardTabActiveText: {
     color: theme.colors.text,
-    fontSize: 11,
+    fontSize: 9,
     fontWeight: '900',
-    letterSpacing: 1,
+    letterSpacing: 0.8,
     textAlign: 'center',
     textTransform: 'uppercase',
   },
   forwardTabText: {
-    fontSize: 11,
+    fontSize: 9,
     fontWeight: '900',
-    letterSpacing: 1,
+    letterSpacing: 0.8,
     textAlign: 'center',
     textTransform: 'uppercase',
+  },
+  forwardSubtitle: {
+    fontSize: 11,
+    fontWeight: '500',
+    lineHeight: 16,
+    marginTop: 3,
   },
   forwardTabs: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 10,
-    marginTop: 12,
+    gap: 6,
+    marginTop: 8,
+  },
+  forwardTitle: {
+    fontSize: 15,
+    fontWeight: '900',
+    marginTop: 2,
+  },
+  flexText: {
+    flex: 1,
+    minWidth: 0,
+  },
+  conclusionActions: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 12,
+    justifyContent: 'space-between',
+    marginTop: 10,
+  },
+  conclusionBody: {
+    fontSize: 12.5,
+    fontWeight: '500',
+    lineHeight: 19,
+    marginTop: 6,
+  },
+  conclusionHeader: {
+    alignItems: 'flex-start',
+    flexDirection: 'row',
+    gap: 12,
+  },
+  conclusionLink: {
+    paddingVertical: 4,
+  },
+  conclusionLinkText: {
+    color: theme.colors.accent,
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  conclusionScore: {
+    fontSize: 13,
+    fontWeight: '900',
+    marginTop: 2,
+  },
+  conclusionSecondaryAction: {
+    alignItems: 'center',
+    borderRadius: theme.radius.pill,
+    borderWidth: 1,
+    minHeight: 32,
+    paddingHorizontal: 12,
+  },
+  conclusionSecondaryActionText: {
+    fontSize: 11,
+    fontWeight: '800',
+  },
+  conclusionTitle: {
+    fontSize: 15,
+    fontWeight: '900',
+    marginTop: 4,
+  },
+  conclusionSurface: {
+    paddingBottom: 10,
+    paddingTop: 6,
   },
   forwardYearCell: {
     flex: 1.1,
@@ -2886,7 +3875,7 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   queueCardValue: {
-    fontSize: 22,
+    fontSize: 18,
     fontWeight: '900',
   },
   sectionLead: {
@@ -2928,6 +3917,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexShrink: 1,
     gap: 10,
+    minWidth: 0,
   },
   watchlistActiveMarker: {
     borderRadius: theme.radius.pill,
@@ -2938,8 +3928,7 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   watchlistChange: {
-    fontSize: 12,
-    fontWeight: '800',
+    ...typography.metaStrong,
     textAlign: 'right',
   },
   watchlistDot: {
@@ -2981,16 +3970,25 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   watchlistMetaRight: {
-    fontSize: 11,
-    fontWeight: '700',
+    ...typography.metaStrong,
   },
   watchlistName: {
-    fontSize: 13,
-    fontWeight: '600',
+    ...typography.listRowMeta,
+  },
+  watchlistOverflowButton: {
+    alignItems: 'center',
+    borderRadius: theme.radius.pill,
+    borderWidth: 1,
+    height: 30,
+    justifyContent: 'center',
+    width: 30,
+  },
+  watchlistMetricBlock: {
+    alignItems: 'flex-end',
+    minWidth: 72,
   },
   watchlistPrice: {
-    fontSize: 16,
-    fontWeight: '900',
+    ...typography.cardTitle,
     textAlign: 'right',
   },
   watchlistPriceBlock: {
@@ -2999,9 +3997,15 @@ const styles = StyleSheet.create({
     marginLeft: 12,
   },
   watchlistRow: {
-    gap: 10,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
+    alignItems: 'center',
+    borderBottomWidth: 1,
+    flexDirection: 'row',
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+  },
+  watchlistRowLast: {
+    borderBottomWidth: 0,
   },
   watchlistRowBottom: {
     alignItems: 'center',
@@ -3018,15 +4022,56 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '700',
   },
+  watchlistScoreBlock: {
+    alignItems: 'flex-start',
+    gap: 1,
+    minWidth: 36,
+  },
+  watchlistScoreLabel: {
+    color: theme.colors.textDim,
+    ...typography.chipLabelCompact,
+  },
+  watchlistScoreValue: {
+    ...typography.cardTitle,
+  },
+  watchlistSectionTitle: {
+    ...typography.actionStrong,
+  },
+  watchlistSelectionDot: {
+    borderRadius: theme.radius.pill,
+    height: 8,
+    width: 8,
+  },
+  watchlistStateBlock: {
+    alignItems: 'flex-start',
+    flex: 1,
+    minWidth: 0,
+  },
   watchlistSymbol: {
-    fontSize: 17,
+    ...typography.listRowTitle,
+  },
+  watchlistTab: {
+    ...typography.metaStrong,
+  },
+  watchlistTabActive: {
+    borderBottomColor: theme.colors.accent,
+    borderBottomWidth: 2,
+    ...typography.metaStrong,
     fontWeight: '900',
+    paddingBottom: 7,
   },
   watchlistTable: {
+    borderBottomWidth: 1,
     borderTopWidth: 1,
     marginHorizontal: 0,
-    marginTop: 12,
+    marginTop: 8,
     overflow: 'hidden',
+  },
+  watchlistTabs: {
+    alignItems: 'flex-start',
+    flexDirection: 'row',
+    gap: 16,
+    marginTop: 8,
   },
   watchlistTop: {
     alignItems: 'center',
@@ -3037,32 +4082,27 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   workflowRail: {
-    marginTop: 10,
-  },
-  workflowStepBody: {
-    fontSize: 10.5,
-    fontWeight: '600',
-    lineHeight: 15,
+    marginTop: 8,
   },
   workflowIconTile: {
     alignItems: 'center',
-    borderRadius: 12,
-    height: 34,
+    borderRadius: 10,
+    height: 28,
     justifyContent: 'center',
-    width: 34,
+    width: 28,
   },
   workflowSteps: {
-    paddingRight: 34,
+    paddingRight: 16,
   },
   workflowStepCard: {
-    borderRadius: 18,
+    borderRadius: 14,
     borderWidth: 1,
     flexDirection: 'row',
-    gap: 10,
-    minHeight: 74,
-    paddingHorizontal: 11,
-    paddingVertical: 11,
-    width: 224,
+    gap: 8,
+    minHeight: 44,
+    paddingHorizontal: 9,
+    paddingVertical: 8,
+    width: 132,
   },
   workflowStepCopy: {
     flex: 1,
@@ -3071,7 +4111,7 @@ const styles = StyleSheet.create({
   },
   workflowStepTitle: {
     color: theme.colors.accent,
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '900',
   },
   workspaceChipRow: {
@@ -3116,8 +4156,8 @@ const styles = StyleSheet.create({
   },
   workspaceBlendSurface: {
     marginHorizontal: 0,
-    paddingHorizontal: 8,
-    paddingVertical: 6,
+    paddingHorizontal: 4,
+    paddingVertical: 4,
   },
   workspaceSurface: {
     borderRadius: 26,
@@ -3173,8 +4213,7 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
   },
   workspaceTitle: {
-    fontSize: 15,
-    fontWeight: '900',
+    ...typography.cardTitle,
     marginTop: 3,
   },
   wick: {

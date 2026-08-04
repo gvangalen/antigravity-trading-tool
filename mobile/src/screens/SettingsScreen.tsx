@@ -102,6 +102,7 @@ export function SettingsScreen() {
           <Text style={styles.backText}>{labels.back}</Text>
         </Pressable>
         <StatusChip
+          compact
           label={healthResource.isStale ? 'API stale' : 'API live'}
           tone={healthResource.isStale ? 'warning' : 'success'}
         />
@@ -439,9 +440,9 @@ const styles = StyleSheet.create({
   },
   chevron: {
     color: theme.colors.textDim,
-    fontSize: 28,
+    fontSize: 22,
     fontWeight: '700',
-    lineHeight: 28,
+    lineHeight: 22,
   },
   detailLabel: {
     color: theme.colors.textDim,

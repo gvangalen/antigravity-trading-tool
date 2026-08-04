@@ -1,0 +1,159 @@
+1:"$Sreact.fragment"
+9:I[57150,[],""]
+:HL["/_next/static/css/7244bb5879bb96ba.css","style"]
+:HL["/_next/static/css/19c9db1a3af975a5.css","style"]
+2:Tc7a,
+(function () {
+  var VERSION = "local-build-v2-2026-08-04T14:13:02.435Z";
+  var VERSION_KEY = "tradamind_app_cache_version";
+  var RECOVERY_PREFIX = "tradamind_app_cache_recovered_" + VERSION + "_";
+  var RECOVERY_COOLDOWN_MS = 30000;
+
+  function shouldRecover(reason) {
+    var text = String(reason || "");
+    return /copy|ChunkLoadError|Loading chunk|Cannot find module|page-6ba98bbaffeb4e74|Minified React error|undefined is not an object|Cannot read properties of undefined|Widget Crash Detected/i.test(text);
+  }
+
+  function recoveryKind(reason) {
+    var text = String(reason || "");
+    if (/ChunkLoadError|Loading chunk|Cannot find module/i.test(text)) return "chunk";
+    if (text === "build-version-change") return "version";
+    return "runtime";
+  }
+
+  async function clearStaleApp(reason) {
+    var kind = recoveryKind(reason);
+    var recoveryKey = RECOVERY_PREFIX + kind;
+    var now = Date.now();
+
+    try {
+      if (window.sessionStorage) {
+        var previousRecovery = Number(sessionStorage.getItem(recoveryKey) || 0);
+        if (previousRecovery && now - previousRecovery < RECOVERY_COOLDOWN_MS) return;
+        sessionStorage.setItem(recoveryKey, String(now));
+      }
+
+      if ("serviceWorker" in navigator && navigator.serviceWorker.getRegistrations) {
+        var registrations = await navigator.serviceWorker.getRegistrations();
+        await Promise.all(registrations.map(function (registration) {
+          return registration.unregister();
+        }));
+      }
+
+      if (window.caches && caches.keys) {
+        var cacheNames = await caches.keys();
+        await Promise.all(cacheNames.map(function (cacheName) {
+          return caches.delete(cacheName);
+        }));
+      }
+
+      if (window.localStorage) localStorage.setItem(VERSION_KEY, VERSION);
+    } catch (error) {
+      // Best effort only: recovery must never block the app from loading.
+    }
+
+    try {
+      var recoveryUrl = new URL(window.location.href);
+      recoveryUrl.searchParams.set("__tm_recover", VERSION + "-" + kind + "-" + now);
+      window.location.replace(recoveryUrl.toString());
+    } catch (error) {
+      window.location.reload();
+    }
+  }
+
+  try {
+    var previousVersion = window.localStorage && localStorage.getItem(VERSION_KEY);
+    if (previousVersion && previousVersion !== VERSION) {
+      clearStaleApp("build-version-change");
+    } else if (window.localStorage) {
+      localStorage.setItem(VERSION_KEY, VERSION);
+    }
+  } catch (error) {
+    // Ignore storage failures in private browsing or locked-down browsers.
+  }
+
+  window.__TRADAMIND_CLEAR_STALE_APP__ = clearStaleApp;
+
+  window.addEventListener("error", function (event) {
+    var reason = [
+      event && event.message,
+      event && event.filename,
+      event && event.error && event.error.message,
+      event && event.error && event.error.stack
+    ].filter(Boolean).join(" ");
+
+    if (shouldRecover(reason)) clearStaleApp(reason);
+  }, true);
+
+  window.addEventListener("unhandledrejection", function (event) {
+    var value = event && event.reason;
+    var reason = value ? (value.stack || value.message || String(value)) : "";
+    if (shouldRecover(reason)) clearStaleApp(reason);
+  });
+})();0:{"P":null,"b":"build-1785852768970","p":"","c":["","market"],"i":false,"f":[[["",{"children":["(protected)",{"children":["market",{"children":["__PAGE__",{}]}]}]},"$undefined","$undefined",true],["",["$","$1","c",{"children":[[["$","link","0",{"rel":"stylesheet","href":"/_next/static/css/7244bb5879bb96ba.css","precedence":"next","crossOrigin":"$undefined","nonce":"$undefined"}]],["$","html",null,{"lang":"nl","suppressHydrationWarning":true,"children":[["$","head",null,{"children":[["$","link",null,{"rel":"apple-touch-icon","href":"/icon-192x192.png"}],["$","script",null,{"dangerouslySetInnerHTML":{"__html":"$2"}}],"$L3"]}],"$L4"]}]]}],{"children":["(protected)","$L5",{"children":["market","$L6",{"children":["__PAGE__","$L7",{},null,false]},null,false]},null,false]},null,false],"$L8",false]],"m":"$undefined","G":["$9",[]],"s":false,"S":true}
+b:I[30416,["8327","static/chunks/8327-75c87b9395525913.js","5969","static/chunks/5969-d9a6a61d44ea74bf.js","8111","static/chunks/8111-153a033417fc5d6b.js","7816","static/chunks/7816-dd96bbd02c0e43b2.js","7177","static/chunks/app/layout-5a54d92b9e97482b.js"],"default"]
+c:I[69835,["8327","static/chunks/8327-75c87b9395525913.js","5969","static/chunks/5969-d9a6a61d44ea74bf.js","8111","static/chunks/8111-153a033417fc5d6b.js","7816","static/chunks/7816-dd96bbd02c0e43b2.js","7177","static/chunks/app/layout-5a54d92b9e97482b.js"],"default"]
+d:I[55038,["8327","static/chunks/8327-75c87b9395525913.js","5969","static/chunks/5969-d9a6a61d44ea74bf.js","8111","static/chunks/8111-153a033417fc5d6b.js","7816","static/chunks/7816-dd96bbd02c0e43b2.js","7177","static/chunks/app/layout-5a54d92b9e97482b.js"],"default"]
+e:I[9766,[],""]
+f:I[98924,[],""]
+10:I[33293,["2619","static/chunks/2619-04bc32f026a0d946.js","8111","static/chunks/8111-153a033417fc5d6b.js","4345","static/chunks/app/not-found-17cd3950fc4a8a24.js"],"default"]
+11:I[11803,["8327","static/chunks/8327-75c87b9395525913.js","5969","static/chunks/5969-d9a6a61d44ea74bf.js","8111","static/chunks/8111-153a033417fc5d6b.js","7816","static/chunks/7816-dd96bbd02c0e43b2.js","7177","static/chunks/app/layout-5a54d92b9e97482b.js"],"default"]
+12:I[17989,[],"ClientSegmentRoot"]
+13:I[33396,["8327","static/chunks/8327-75c87b9395525913.js","2619","static/chunks/2619-04bc32f026a0d946.js","979","static/chunks/979-a07ec218b132718e.js","5969","static/chunks/5969-d9a6a61d44ea74bf.js","580","static/chunks/580-54a70470a9fd7de5.js","8111","static/chunks/8111-153a033417fc5d6b.js","7816","static/chunks/7816-dd96bbd02c0e43b2.js","1035","static/chunks/1035-8ead257cf8099200.js","8076","static/chunks/8076-66e48442a9ebec3a.js","3504","static/chunks/3504-6353c9e830aa8e50.js","1510","static/chunks/1510-9316488cbe1ea6fc.js","2844","static/chunks/2844-e11a4b33acac3872.js","2079","static/chunks/2079-a1f723872c176658.js","4163","static/chunks/app/(protected)/layout-35f49dd3a183ba75.js"],"default"]
+15:I[81959,[],"ClientPageRoot"]
+16:I[22331,["8426","static/chunks/d0709137-fee43a14eb8a652b.js","8327","static/chunks/8327-75c87b9395525913.js","7198","static/chunks/7198-69583f1536e9b2ac.js","8111","static/chunks/8111-153a033417fc5d6b.js","7816","static/chunks/7816-dd96bbd02c0e43b2.js","1035","static/chunks/1035-8ead257cf8099200.js","8076","static/chunks/8076-66e48442a9ebec3a.js","3504","static/chunks/3504-6353c9e830aa8e50.js","3370","static/chunks/3370-5d9231671ff5a76d.js","1202","static/chunks/1202-904013ef2b0f629f.js","5553","static/chunks/app/(protected)/market/page-a8d1e0101c4bd2d0.js"],"default"]
+19:I[24431,[],"OutletBoundary"]
+1b:I[15278,[],"AsyncMetadataOutlet"]
+1d:I[24431,[],"ViewportBoundary"]
+1f:I[24431,[],"MetadataBoundary"]
+20:"$Sreact.suspense"
+a:T619,
+    (function () {
+      try {
+        var STORAGE_KEY = "antigravity_locale";
+        var COOKIE_KEY = "antigravity_locale";
+        var DEFAULT_LOCALE = "nl";
+        var SUPPORTED_LOCALES = ["nl","en","de"];
+
+        function normalizeLocale(value) {
+          if (!value) return null;
+          var lowered = String(value).trim().toLowerCase();
+          var directMatch = lowered.split(/[_-]/)[0];
+          if (SUPPORTED_LOCALES.indexOf(lowered) >= 0) return lowered;
+          if (SUPPORTED_LOCALES.indexOf(directMatch) >= 0) return directMatch;
+          return null;
+        }
+
+        function readCookieLocale() {
+          var match = document.cookie.match(new RegExp("(?:^|; )" + COOKIE_KEY + "=([^;]+)"));
+          return normalizeLocale(match && match[1] ? decodeURIComponent(match[1]) : null);
+        }
+
+        var stored = null;
+        try {
+          stored = normalizeLocale(window.localStorage.getItem(STORAGE_KEY));
+        } catch (error) {}
+
+        var browserLocales = Array.isArray(navigator.languages) ? navigator.languages : [];
+        var browserLocale = normalizeLocale(browserLocales[0]) || normalizeLocale(navigator.language);
+        var locale = stored || readCookieLocale() || browserLocale || DEFAULT_LOCALE;
+
+        window.__ANTIGRAVITY_LOCALE__ = locale;
+        document.documentElement.lang = locale;
+        document.documentElement.dataset.locale = locale;
+        document.cookie = COOKIE_KEY + "=" + encodeURIComponent(locale) + "; path=/; max-age=31536000; samesite=lax";
+      } catch (error) {}
+    })();
+  3:["$","script",null,{"dangerouslySetInnerHTML":{"__html":"$a"}}]
+4:["$","body",null,{"className":"bg-background text-foreground transition-colors duration-300 selection:bg-blue-600/30","children":[["$","$Lb",null,{}],["$","$Lc",null,{"children":[["$","$Ld",null,{"children":["$","$Le",null,{"parallelRouterKey":"children","error":"$undefined","errorStyles":"$undefined","errorScripts":"$undefined","template":["$","$Lf",null,{}],"templateStyles":"$undefined","templateScripts":"$undefined","notFound":[["$","$L10",null,{}],[]],"forbidden":"$undefined","unauthorized":"$undefined"}]}],["$","$L11",null,{}]]}]]}]
+5:["$","$1","c",{"children":[[["$","link","0",{"rel":"stylesheet","href":"/_next/static/css/19c9db1a3af975a5.css","precedence":"next","crossOrigin":"$undefined","nonce":"$undefined"}]],["$","$L12",null,{"Component":"$13","slots":{"children":["$","$Le",null,{"parallelRouterKey":"children","error":"$undefined","errorStyles":"$undefined","errorScripts":"$undefined","template":["$","$Lf",null,{}],"templateStyles":"$undefined","templateScripts":"$undefined","notFound":"$undefined","forbidden":"$undefined","unauthorized":"$undefined"}]},"params":{},"promise":"$@14"}]]}]
+6:["$","$1","c",{"children":[null,["$","$Le",null,{"parallelRouterKey":"children","error":"$undefined","errorStyles":"$undefined","errorScripts":"$undefined","template":["$","$Lf",null,{}],"templateStyles":"$undefined","templateScripts":"$undefined","notFound":"$undefined","forbidden":"$undefined","unauthorized":"$undefined"}]]}]
+7:["$","$1","c",{"children":[["$","$L15",null,{"Component":"$16","searchParams":{},"params":"$5:props:children:1:props:params","promises":["$@17","$@18"]}],null,["$","$L19",null,{"children":["$L1a",["$","$L1b",null,{"promise":"$@1c"}]]}]]}]
+8:["$","$1","h",{"children":[null,[["$","$L1d",null,{"children":"$L1e"}],null],["$","$L1f",null,{"children":["$","div",null,{"hidden":true,"children":["$","$20",null,{"fallback":null,"children":"$L21"}]}]}]]}]
+14:"$5:props:children:1:props:params"
+17:{}
+18:"$5:props:children:1:props:params"
+1e:[["$","meta","0",{"charSet":"utf-8"}],["$","meta","1",{"name":"viewport","content":"width=device-width, initial-scale=1, viewport-fit=cover"}],["$","meta","2",{"name":"theme-color","content":"#2F6BFF"}]]
+1a:null
+1c:{"metadata":[["$","title","0",{"children":"Tradamind — Professional Trading Discipline Engine"}],["$","meta","1",{"name":"description","content":"Premium Trading Dashboard for automated strategies and market intelligence."}],["$","link","2",{"rel":"manifest","href":"/manifest.json","crossOrigin":"$undefined"}],["$","link","3",{"rel":"canonical","href":"https://www.tradamind.com"}],["$","meta","4",{"name":"mobile-web-app-capable","content":"yes"}],["$","meta","5",{"name":"apple-mobile-web-app-title","content":"Tradamind"}],["$","meta","6",{"name":"apple-mobile-web-app-status-bar-style","content":"default"}]],"error":null,"digest":"$undefined"}
+21:"$1c:metadata"

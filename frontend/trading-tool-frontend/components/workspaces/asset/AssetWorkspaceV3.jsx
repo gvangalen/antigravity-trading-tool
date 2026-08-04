@@ -10,7 +10,6 @@ import {
   LineChart,
   Plus,
   Save,
-  Settings2,
   Sliders,
   Target,
   TrendingUp,
@@ -31,11 +30,18 @@ import {
   fetchForwardReturnsYear,
   marketIndicatorAdd,
 } from "@/lib/api/market";
-import { macroDataAdd, deleteMacroIndicator } from "@/lib/api/macro";
+import { macroDataAdd } from "@/lib/api/macro";
 import { fetchActiveSetup } from "@/lib/api/setups";
-import { technicalDataAdd, deleteTechnicalIndicator } from "@/lib/api/technical";
+import { technicalDataAdd } from "@/lib/api/technical";
 import { updateIntelligenceWeights } from "@/lib/api/scores";
+import { getAssistantPreferences, updateAssistantPreferences } from "@/lib/api/ai";
 import TradingViewSmartChart from "@/components/charts/TradingViewSmartChart";
+import {
+  ANALYSIS_CHART_INTERVAL_KEY,
+  DEFAULT_TRADINGVIEW_INTERVAL,
+  normalizeTradingViewInterval,
+  toTradingViewSymbol,
+} from "../../../../../shared/tradingViewConfig";
 import GlobalMarketDecisionCard from "@/components/dashboard/GlobalMarketDecisionCard";
 import { FINN_INDICATOR_MODAL_COMPLETED_EVENT } from "@/lib/finnCommandSearch";
 import { requestIndicatorContext } from "@/lib/api/workspace";
@@ -444,6 +450,7 @@ const DEFAULT_INTELLIGENCE_WEIGHTS = {
 };
 
 const ANALYSIS_TIMEFRAMES = ["day", "week", "month", "quarter"];
+const ANALYSIS_HIDDEN_INDICATORS_KEY = "analysis_hidden_indicators";
 
 function normalizeWeights(weights) {
   const next = Object.fromEntries(
@@ -462,6 +469,32 @@ function normalizeScore(value) {
   const parsed = Number(value);
   if (!Number.isFinite(parsed)) return null;
   return Math.max(0, Math.min(100, parsed));
+}
+
+function normalizeHiddenIndicatorKeys(value) {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((item) => (typeof item === "string" ? item.trim().toLowerCase() : ""))
+    .filter(Boolean);
+}
+
+function buildHiddenIndicatorKey(symbol, sectionId, label) {
+  return `${String(symbol || "").toUpperCase()}:${sectionId}:${label}`.toLowerCase();
+}
+
+function filterVisibleRows(rows, symbol, sectionId, hiddenIndicatorKeys) {
+  return (Array.isArray(rows) ? rows : []).filter(
+    (row) => !hiddenIndicatorKeys.includes(buildHiddenIndicatorKey(symbol, sectionId, row.label || row.name))
+  );
+}
+
+function averageVisibleSectionScore(rows) {
+  const scores = (Array.isArray(rows) ? rows : [])
+    .map((row) => normalizeScore(row?.score))
+    .filter((score) => score !== null);
+
+  if (!scores.length) return null;
+  return Math.round(scores.reduce((sum, score) => sum + score, 0) / scores.length);
 }
 
 function formatScore(value) {
@@ -960,8 +993,8 @@ function ScoreOverview({ market, macro, technical, combined, weights, loading, o
   );
 }
 
-function AnalysisChartSection({ symbol, isOpen, onToggle, ui }) {
-  const tvSymbol = `BINANCE:${symbol}USDT`;
+function AnalysisChartSection({ interval, onIntervalChange, symbol, isOpen, onToggle, ui }) {
+  const tvSymbol = toTradingViewSymbol(symbol);
 
   return (
     <section className="rounded-[24px] border border-slate-200/80 bg-white shadow-[0_18px_40px_-36px_rgba(15,23,42,0.26)]">
@@ -982,11 +1015,12 @@ function AnalysisChartSection({ symbol, isOpen, onToggle, ui }) {
         <div className="p-3">
           <TradingViewSmartChart
             symbol={tvSymbol}
-            interval="D"
+            interval={interval}
             indicators={[]}
             focusedBotId={null}
             setFocusedBotId={() => {}}
             height={400}
+            onIntervalChange={onIntervalChange}
           />
         </div>
       ) : null}
@@ -1651,6 +1685,8 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
   const [technicalConfigModal, setTechnicalConfigModal] = useState(null);
   const [watchlistRows, setWatchlistRows] = useState([]);
   const [showChart, setShowChart] = useState(true);
+  const [analysisChartInterval, setAnalysisChartInterval] = useState(DEFAULT_TRADINGVIEW_INTERVAL);
+  const [hiddenIndicatorKeys, setHiddenIndicatorKeys] = useState([]);
   const appliedIndicatorsRef = useRef(new Set());
 
   const indicatorFromUrl = searchParams.get("indicator");
@@ -1822,18 +1858,67 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
     await technicalDataAdd(name, activeSymbol);
     await reloadWorkspace();
   };
-  const removeMacroIndicator = async (name) => {
-    await deleteMacroIndicator(name);
-    await reloadWorkspace();
-  };
-  const removeTechnicalIndicator = async (name) => {
-    await deleteTechnicalIndicator(name, activeSymbol);
-    await reloadWorkspace();
-  };
   const saveWeights = async (weights) => {
     const result = await updateIntelligenceWeights(weights);
     await reloadWorkspace();
     return result;
+  };
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadHiddenIndicators() {
+      try {
+        const response = await getAssistantPreferences();
+        if (cancelled) return;
+        setHiddenIndicatorKeys(
+          normalizeHiddenIndicatorKeys(response?.preferences?.[ANALYSIS_HIDDEN_INDICATORS_KEY])
+        );
+        setAnalysisChartInterval(
+          normalizeTradingViewInterval(response?.preferences?.[ANALYSIS_CHART_INTERVAL_KEY])
+        );
+      } catch (error) {
+        if (!cancelled) {
+          console.error("Failed to load hidden analysis indicators:", error);
+        }
+      }
+    }
+
+    void loadHiddenIndicators();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const hideAnalysisIndicator = async (sectionId, row) => {
+    const nextKey = buildHiddenIndicatorKey(activeSymbol, sectionId, row?.label || row?.name);
+    const nextHiddenIndicatorKeys = hiddenIndicatorKeys.includes(nextKey)
+      ? hiddenIndicatorKeys
+      : [...hiddenIndicatorKeys, nextKey];
+
+    setHiddenIndicatorKeys(nextHiddenIndicatorKeys);
+    setExpandedRowKey(null);
+
+    try {
+      await updateAssistantPreferences({
+        [ANALYSIS_HIDDEN_INDICATORS_KEY]: nextHiddenIndicatorKeys,
+      });
+    } catch (error) {
+      console.error("Failed to persist hidden analysis indicators:", error);
+    }
+  };
+
+  const handleAnalysisChartIntervalChange = async (nextInterval) => {
+    const normalized = normalizeTradingViewInterval(nextInterval);
+    setAnalysisChartInterval((current) => (current === normalized ? current : normalized));
+
+    try {
+      await updateAssistantPreferences({
+        [ANALYSIS_CHART_INTERVAL_KEY]: normalized,
+      });
+    } catch (error) {
+      console.error("Failed to persist analysis chart interval:", error);
+    }
   };
 
   useEffect(() => {
@@ -1919,37 +2004,15 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
     };
   }, [locale, ui, watchlistData, watchlistLoading]);
 
-  const combinedSummary = useMemo(() => {
-    if (!hasScoreData) return summarizeContextScores([], ui);
-    const summary = summarizeWeightedScores(
-      {
-        market: market?.score,
-        macro: macro?.score,
-        technical: technical?.score,
-      },
-      master?.weights,
-      ui
-    );
-
-    const masterBias = String(master?.bias || "").trim();
-    const hasMasterBias = masterBias && !/^[-–—]+$/.test(masterBias);
-
-    return {
-      ...summary,
-      bias: hasMasterBias ? formatBiasLabel(masterBias, ui) : summary.bias,
-    };
-  }, [hasScoreData, macro, market, master, technical, ui]);
-
   const sections = useMemo(() => {
-    const marketRows = buildRows(marketDayData, locale, ui);
-    const macroRows = buildRows(macroData, locale, ui);
-    const technicalRows = buildRows(technicalData, locale, ui);
-    const supportedScore = (score, rows) =>
-      hasScoreData && rows.some((row) => row.score !== null) ? score : null;
+    const marketRows = filterVisibleRows(buildRows(marketDayData, locale, ui), activeSymbol, "market", hiddenIndicatorKeys);
+    const macroRows = filterVisibleRows(buildRows(macroData, locale, ui), activeSymbol, "macro", hiddenIndicatorKeys);
+    const technicalRows = filterVisibleRows(buildRows(technicalData, locale, ui), activeSymbol, "technical", hiddenIndicatorKeys);
+    const visibleScore = (rows) => averageVisibleSectionScore(rows);
     const fallbackEmptyState = (score, rows, loadingState, defaultEmptyState) =>
       loadingState
         ? defaultEmptyState
-        : supportedScore(score, rows) !== null || isFallbackWorkspace
+        : visibleScore(rows) !== null || isFallbackWorkspace
           ? ui.fallbackReady
           : defaultEmptyState;
 
@@ -1959,8 +2022,8 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
         title: locale?.startsWith("en") ? "Market" : locale?.startsWith("de") ? "Markt" : SECTION_META.market.label,
         eyebrow: locale?.startsWith("en") ? "Market evidence" : locale?.startsWith("de") ? "Marktbelege" : "Marktbewijs",
         icon: SECTION_META.market.icon,
-        score: supportedScore(market?.score, marketRows),
-        insight: buildSectionInsight("market", supportedScore(market?.score, marketRows), ui),
+        score: visibleScore(marketRows),
+        insight: buildSectionInsight("market", visibleScore(marketRows), ui),
         rows: marketRows,
         emptyState: fallbackEmptyState(market?.score, marketRows, marketLoading, ui.marketEmpty),
       },
@@ -1969,8 +2032,8 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
         title: locale?.startsWith("en") ? "Macro" : locale?.startsWith("de") ? "Makro" : SECTION_META.macro.label,
         eyebrow: locale?.startsWith("en") ? "Macro evidence" : locale?.startsWith("de") ? "Makrobelege" : "Macro-bewijs",
         icon: SECTION_META.macro.icon,
-        score: supportedScore(macro?.score, macroRows),
-        insight: buildSectionInsight("macro", supportedScore(macro?.score, macroRows), ui),
+        score: visibleScore(macroRows),
+        insight: buildSectionInsight("macro", visibleScore(macroRows), ui),
         rows: macroRows,
         emptyState: fallbackEmptyState(macro?.score, macroRows, macroLoading, ui.macroEmpty),
       },
@@ -1979,13 +2042,32 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
         title: locale?.startsWith("en") ? "Technical" : locale?.startsWith("de") ? "Technisch" : SECTION_META.technical.label,
         eyebrow: locale?.startsWith("en") ? "Technical evidence" : locale?.startsWith("de") ? "Technische belege" : "Technisch bewijs",
         icon: SECTION_META.technical.icon,
-        score: supportedScore(technical?.score, technicalRows),
-        insight: buildSectionInsight("technical", supportedScore(technical?.score, technicalRows), ui),
+        score: visibleScore(technicalRows),
+        insight: buildSectionInsight("technical", visibleScore(technicalRows), ui),
         rows: technicalRows,
         emptyState: fallbackEmptyState(technical?.score, technicalRows, technicalLoading, ui.technicalEmpty),
       },
     ];
-  }, [hasScoreData, isFallbackWorkspace, locale, macro, macroData, macroLoading, market, marketDayData, marketLoading, technical, technicalData, technicalLoading, ui]);
+  }, [activeSymbol, hiddenIndicatorKeys, isFallbackWorkspace, locale, macro, macroData, macroLoading, market, marketDayData, marketLoading, technical, technicalData, technicalLoading, ui]);
+
+  const combinedSummary = useMemo(() => {
+    const visibleScores = {
+      market: sections.find((section) => section.id === "market")?.score ?? null,
+      macro: sections.find((section) => section.id === "macro")?.score ?? null,
+      technical: sections.find((section) => section.id === "technical")?.score ?? null,
+    };
+    const summary = summarizeWeightedScores(visibleScores, master?.weights, ui);
+    const masterBias = String(master?.bias || "").trim();
+    const hasMasterBias = masterBias && !/^[-–—]+$/.test(masterBias);
+    const hasVisibleScores = Object.values(visibleScores).some((score) => score !== null);
+
+    if (!hasVisibleScores) return summarizeContextScores([], ui);
+
+    return {
+      ...summary,
+      bias: hasMasterBias ? formatBiasLabel(masterBias, ui) : summary.bias,
+    };
+  }, [master, sections, ui]);
 
   const handleAssetSelect = (symbol) => {
     const nextSymbol = String(symbol || activeSymbol).toUpperCase();
@@ -2023,8 +2105,10 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
       />
 
       <AnalysisChartSection
+        interval={analysisChartInterval}
         symbol={activeSymbol}
         isOpen={showChart}
+        onIntervalChange={handleAnalysisChartIntervalChange}
         onToggle={() => setShowChart((current) => !current)}
         ui={ui}
       />
@@ -2047,9 +2131,9 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
       </section>
 
       <ScoreOverview
-        market={hasScoreData ? market : null}
-        macro={hasScoreData ? macro : null}
-        technical={hasScoreData ? technical : null}
+        market={{ score: sections.find((section) => section.id === "market")?.score ?? null }}
+        macro={{ score: sections.find((section) => section.id === "macro")?.score ?? null }}
+        technical={{ score: sections.find((section) => section.id === "technical")?.score ?? null }}
         combined={
           isFallbackWorkspace && combinedSummary.score === null
             ? { ...combinedSummary, bias: ui.fallbackData, tone: scoreTone(50, ui) }
@@ -2143,50 +2227,19 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
               ) : null
             }
             renderExpandedActions={
-              section.id === "technical"
-                ? (row) => (
-                    <div className="flex flex-wrap justify-end gap-2">
-                      <button
-                        type="button"
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          setTechnicalConfigModal(row.name);
-                        }}
-                        className="inline-flex items-center gap-2 rounded-2xl border border-blue-200 bg-blue-50 px-3 py-2 text-[11px] font-black uppercase tracking-[0.18em] text-blue-700 transition hover:bg-blue-100"
-                      >
-                        <Settings2 size={12} />
-                        {ui.edit}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          removeTechnicalIndicator(row.name);
-                          setExpandedRowKey(null);
-                        }}
-                        className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-3 py-2 text-[11px] font-black uppercase tracking-[0.18em] text-slate-600 transition hover:border-red-200 hover:text-red-600"
-                      >
-                        <Target size={12} />
-                        {ui.remove}
-                      </button>
-                    </div>
-                  )
-                : section.id === "macro"
-                ? (row) => (
-                    <button
-                      type="button"
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        removeMacroIndicator(row.name);
-                        setExpandedRowKey(null);
-                      }}
-                      className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-3 py-2 text-[11px] font-black uppercase tracking-[0.18em] text-slate-600 transition hover:border-red-200 hover:text-red-600"
-                    >
-                      <Target size={12} />
-                      {ui.remove}
-                    </button>
-                  )
-                : null
+              (row) => (
+                <button
+                  type="button"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    void hideAnalysisIndicator(section.id, row);
+                  }}
+                  className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 bg-white px-3 py-2 text-[11px] font-black uppercase tracking-[0.18em] text-slate-600 transition hover:border-red-200 hover:text-red-600"
+                >
+                  <Target size={12} />
+                  {locale?.startsWith("en") ? "Hide" : locale?.startsWith("de") ? "Ausblenden" : "Verbergen"}
+                </button>
+              )
             }
           />
         ))}

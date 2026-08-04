@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Feather } from '@expo/vector-icons';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import type { NavigationProp, RouteProp } from '@react-navigation/native';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
@@ -8,10 +9,12 @@ import { InsightCard } from '../components/cards/InsightCard';
 import { LoadingSkeletonCard } from '../components/layout/LoadingSkeletonCard';
 import { ScreenContainer } from '../components/layout/ScreenContainer';
 import { StatusChip } from '../components/layout/StatusChip';
-import { TodayWithFinnCard } from '../components/workspace/TodayWithFinnCard';
+import { TodayWithFinnCard, type TodayWithFinnQueueItem } from '../components/workspace/TodayWithFinnCard';
+import { WorkflowStepsRail } from '../components/workspace/WorkflowStepsRail';
 import { SegmentedControl } from '../components/layout/SegmentedControl';
 import { WorkspaceHeroSection } from '../components/workspace/WorkspaceHeroSection';
 import { StatusTone, theme } from '../constants/theme';
+import { typography } from '../constants/typography';
 import { localizedBackendText, translate, translateFinnTag } from '../i18n';
 import { triggerHaptic } from '../utils/haptics';
 import { useFinnOverlay } from '../contexts/FinnOverlayContext';
@@ -19,11 +22,12 @@ import { useApiResource } from '../hooks/useApiResource';
 import type { MainTabParamList } from '../navigation/MainTabNavigator';
 import { preferenceColors, useAppPreferences } from '../preferences/AppPreferencesProvider';
 import type { AppLanguage } from '../preferences/appLocale';
-import { MobileOverviewResponse, MobileReportHighlight, MobileReportResponse, ReportResponse, intelligenceApi, mobileApi } from '../services/tradamindApi';
+import { MobileOverviewResponse, MobileReportHighlight, MobileReportResponse, ReportResponse, assistantApi, intelligenceApi, mobileApi } from '../services/tradamindApi';
 import { trackAssistantEvent } from '../services/assistantAnalytics';
 
 type ReportPeriod = 'daily' | 'weekly' | 'monthly' | 'quarterly';
 type ReportPayload = { full?: ReportResponse; mobile?: MobileReportResponse };
+type FinnReflectionKey = 'today' | 'week' | 'blocked' | 'behavior';
 type ReportCompanion =
   | {
       change: number;
@@ -71,20 +75,47 @@ type ReportCompanion =
       type: 'bot';
     };
 
+type FinnReflectionResponse = {
+  analysis?: Record<string, unknown> | null;
+  body: string;
+  headline: string;
+  next?: string | null;
+  risk?: string | null;
+  summary?: string | null;
+};
+
+const FINN_REFLECTION_OPTIONS: Array<{ key: FinnReflectionKey; label: string; prompt: string }> = [
+  { key: 'today', label: 'Today', prompt: 'Give me my Finn report for today' },
+  { key: 'week', label: 'Weekly reflection', prompt: 'Give me my Finn report for this week' },
+  { key: 'blocked', label: 'Blocked', prompt: 'Show me the blocked and guarded moments from my Finn report' },
+  { key: 'behavior', label: '30 day behavior', prompt: 'Give me my behavioral Finn report' },
+];
+
+async function resolveReportPair<TMobile, TFull>(
+  mobileFetcher: () => Promise<TMobile>,
+  fullFetcher: () => Promise<TFull>,
+): Promise<{ full?: TFull; mobile?: TMobile }> {
+  const [mobileResult, fullResult] = await Promise.allSettled([mobileFetcher(), fullFetcher()]);
+  return {
+    full: fullResult.status === 'fulfilled' ? fullResult.value : undefined,
+    mobile: mobileResult.status === 'fulfilled' ? mobileResult.value : undefined,
+  };
+}
+
 export function ReportScreen() {
   const navigation = useNavigation<NavigationProp<MainTabParamList>>();
   const route = useRoute<RouteProp<MainTabParamList, 'Report'>>();
   const { openFinn } = useFinnOverlay();
   const [period, setPeriod] = useState<ReportPeriod>('daily');
-  const activeSymbol = route.params?.symbol ?? 'BTC';
+  const activeSymbol = route.params?.symbol ?? '';
   const notificationType = route.params?.notificationType;
   const { appearance, language } = useAppPreferences();
   const colors = preferenceColors(appearance);
   const periods: Array<{ id: ReportPeriod; label: string; short: string }> = [
-    { id: 'daily', label: translate(language, 'report.period.daily'), short: 'D' },
-    { id: 'weekly', label: translate(language, 'report.period.weekly'), short: 'W' },
-    { id: 'monthly', label: translate(language, 'report.period.monthly'), short: 'M' },
-    { id: 'quarterly', label: translate(language, 'report.period.quarterly'), short: 'Q' },
+    { id: 'daily', label: translate(language, 'report.periodTab.daily'), short: 'D' },
+    { id: 'weekly', label: translate(language, 'report.periodTab.weekly'), short: 'W' },
+    { id: 'monthly', label: translate(language, 'report.periodTab.monthly'), short: 'M' },
+    { id: 'quarterly', label: translate(language, 'report.periodTab.quarterly'), short: 'Q' },
   ];
 
   useEffect(() => {
@@ -99,32 +130,28 @@ export function ReportScreen() {
 
   const fetchReport = useCallback(async (): Promise<ReportPayload> => {
     if (period === 'weekly') {
-      const [mobile, full] = await Promise.all([
-        intelligenceApi.latestWeeklyReport('mobile'),
-        intelligenceApi.latestWeeklyReportFull(),
-      ]);
-      return { full, mobile };
+      return resolveReportPair(
+        () => intelligenceApi.latestWeeklyReport('mobile'),
+        () => intelligenceApi.latestWeeklyReportFull(),
+      );
     }
     if (period === 'monthly') {
-      const [mobile, full] = await Promise.all([
-        intelligenceApi.latestMonthlyReport('mobile'),
-        intelligenceApi.latestMonthlyReportFull(),
-      ]);
-      return { full, mobile };
+      return resolveReportPair(
+        () => intelligenceApi.latestMonthlyReport('mobile'),
+        () => intelligenceApi.latestMonthlyReportFull(),
+      );
     }
     if (period === 'quarterly') {
-      const [mobile, full] = await Promise.all([
-        intelligenceApi.latestQuarterlyReport('mobile'),
-        intelligenceApi.latestQuarterlyReportFull(),
-      ]);
-      return { full, mobile };
+      return resolveReportPair(
+        () => intelligenceApi.latestQuarterlyReport('mobile'),
+        () => intelligenceApi.latestQuarterlyReportFull(),
+      );
     }
 
-    const [mobile, full] = await Promise.all([
-      intelligenceApi.latestDailyReport(activeSymbol, 'mobile'),
-      intelligenceApi.latestDailyReportFull(activeSymbol),
-    ]);
-    return { full, mobile };
+    return resolveReportPair(
+      () => intelligenceApi.latestDailyReport(activeSymbol, 'mobile'),
+      () => intelligenceApi.latestDailyReportFull(activeSymbol),
+    );
   }, [activeSymbol, period]);
 
   const reportResource = useApiResource<ReportPayload>({
@@ -149,13 +176,13 @@ export function ReportScreen() {
   return (
     <ScreenContainer
       edgeToEdge={true}
+      contentInsetBottom={320}
       refreshing={reportResource.refreshing || overviewResource.refreshing}
       onRefresh={async () => {
         await Promise.all([reportResource.refresh(), overviewResource.refresh()]);
       }}
     >
       <ReflectionTodayHero
-        activeSymbol={activeSymbol}
         onAskFinn={() =>
           openFinn({
             prefill: `Translate the current ${period} report for ${activeSymbol} into conclusion, main risk and next safe step.`,
@@ -166,156 +193,886 @@ export function ReportScreen() {
         briefing={overviewResource.data?.finn_briefing}
         report={report}
       />
+      <WorkflowStepsRail
+        steps={[
+          {
+            body: translate(language, 'report.workflowStepResultBody'),
+            icon: 'file-text',
+            step: 1,
+            title: translate(language, 'report.workflowStepResultTitle'),
+          },
+          {
+            body: translate(language, 'report.workflowStepReviewBody'),
+            icon: 'check-circle',
+            step: 2,
+            title: translate(language, 'report.workflowStepReviewTitle'),
+          },
+          {
+            body: translate(language, 'report.workflowStepReportBody'),
+            icon: 'book-open',
+            step: 3,
+            title: translate(language, 'report.workflowStepReportTitle'),
+          },
+        ]}
+      />
 
-      {notificationType ? (
-        <ReportNotificationCard
-          notificationType={notificationType}
-          symbol={activeSymbol}
-          onAskFinn={() => {
-            trackAssistantEvent({
-              event_name: 'report_finn_requested',
-              page: 'report',
-              flow_type: 'report_explain',
-              asset: activeSymbol,
-              report_type: period,
-            });
-            return (
-            openFinn({
-              prefill: `Leg uit wat belangrijk is in het ${period} rapport voor ${activeSymbol}. Geef conclusie, risico en veilige volgende stap.`,
-              source: `push-${notificationType}`,
-            })
-            );
-          }}
-        />
-      ) : null}
-
-      {reportResource.loading ? (
-        <LoadingSkeletonCard />
-      ) : (
-        <ReflectionSummaryGrid report={report} />
-      )}
+      {reportResource.loading ? <LoadingSkeletonCard /> : null}
 
       <SegmentedControl
+        compact
         items={periods.map((item) => ({ key: item.id, label: item.label }))}
         selected={period}
         onChange={(value) => changePeriod(value as ReportPeriod)}
       />
 
-      {!reportResource.loading && report.highlights.length > 0 ? (
-        <View style={styles.highlights}>
-          {report.highlights.slice(0, 3).map((highlight, index) => (
-            <HighlightCard key={`${highlight.category}-${highlight.name}-${index}`} highlight={highlight} />
-          ))}
-        </View>
+      {!reportResource.loading ? (
+        <>
+          <ReflectionFinnSection activeSymbol={activeSymbol} period={period} />
+          <ReflectionTradingReportSection report={report} />
+          {reportResource.error && report.isUnavailable ? (
+            <InsightCard
+              label={translate(language, `report.period.${period}`)}
+              title={translate(language, 'report.unavailableHeadline')}
+              body={reportResource.error.message}
+              tone="warning"
+              cta={translate(language, 'portfolio.syncRefresh')}
+            />
+          ) : null}
+        </>
       ) : null}
 
-      <View style={styles.readerHeader}>
-        <View>
-          <Text style={styles.sectionLabel}>Full report</Text>
-          <Text style={[styles.sectionTitle, { color: colors.text }]}>Leesmodus</Text>
-        </View>
-        <StatusChip label={`${report.fullSections.length} secties · ${report.readingMinutes} min`} tone="accent" />
-      </View>
-
-      <View style={styles.reader}>
-        {report.fullSections.map((section, index) => (
-          <ReportSectionCard key={`${section.title}-${index}`} section={section} />
-        ))}
-      </View>
-
-      {reportResource.error ? (
-        <InsightCard
-          label="Report error"
-          title="Rapport kon niet live laden."
-          body={reportResource.error.message}
-          cta="Retry"
-          tone="danger"
-          onPress={reportResource.refresh}
-        />
-      ) : null}
-
-      {report.isUnavailable ? (
-        <InsightCard
-          label="Report"
-          title={translate(language, 'report.unavailableHeadline')}
-          body={translate(language, 'report.unavailableBody')}
-          tone="warning"
-        />
-      ) : null}
     </ScreenContainer>
   );
 }
 
-function ReflectionTodayHero({
+function ReflectionFinnSection({
   activeSymbol,
+  period,
+}: {
+  activeSymbol: string;
+  period: ReportPeriod;
+}) {
+  const { appearance } = useAppPreferences();
+  const colors = preferenceColors(appearance);
+  const defaultKey: FinnReflectionKey = period === 'weekly' ? 'week' : 'today';
+  const [activeKey, setActiveKey] = useState<FinnReflectionKey>(defaultKey);
+  const [expanded, setExpanded] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [cache, setCache] = useState<Record<string, FinnReflectionResponse>>({});
+
+  useEffect(() => {
+    setActiveKey(defaultKey);
+  }, [defaultKey]);
+
+  const activeOption =
+    FINN_REFLECTION_OPTIONS.find((option) => option.key === activeKey) ?? FINN_REFLECTION_OPTIONS[0];
+  const cacheKey = `${activeKey}:${activeSymbol || 'global'}:${period}`;
+  const reflection = cache[cacheKey];
+  const reflectionParagraphs = reflection ? splitReportParagraphs(reflection.body) : [];
+  const presentation = reflection ? buildFinnReflectionPresentation(reflection) : null;
+
+  const loadReflection = useCallback(async (force = false) => {
+    if (!force && cache[cacheKey]) return;
+    setLoading(true);
+    setError(null);
+    try {
+      const envelope = await assistantApi.chat(
+        activeOption.prompt,
+        {
+          page_type: 'Reflection',
+          symbol: activeSymbol || undefined,
+          timeframe: period,
+        },
+        undefined,
+        'new',
+      );
+      setCache((current) => ({
+        ...current,
+        [cacheKey]: mapFinnReflectionEnvelope(envelope),
+      }));
+    } catch (nextError) {
+      setError(nextError instanceof Error ? nextError.message : 'Finn reflection kon niet worden geladen.');
+    } finally {
+      setLoading(false);
+    }
+  }, [activeOption.prompt, activeSymbol, cache, cacheKey, period]);
+
+  useEffect(() => {
+    void loadReflection();
+  }, [loadReflection]);
+
+  return (
+    <View style={styles.reflectionSection}>
+        <View style={[styles.reflectionCard, { borderColor: colors.borderSubtle, backgroundColor: colors.surface }]}>
+          <View style={styles.reflectionHeaderRow}>
+            <View>
+            <Text style={[styles.reflectionEyebrow, { color: theme.colors.accent }]}>FINN REPORTING</Text>
+            <Text style={[styles.reflectionTitle, { color: colors.text }]}>Daily reflection with Finn</Text>
+            </View>
+          </View>
+
+        <SegmentedControl
+          compact
+          items={FINN_REFLECTION_OPTIONS.map((item) => ({ key: item.key, label: item.label }))}
+          selected={activeKey}
+          onChange={(value) => {
+            setExpanded(false);
+            setActiveKey(value as FinnReflectionKey);
+          }}
+        />
+
+        {loading && !reflection ? (
+          <View style={[styles.reflectionConclusionBox, { borderColor: colors.borderSubtle, backgroundColor: colors.surfaceMuted }]}>
+            <Text style={[styles.reflectionConclusionBody, { color: colors.textMuted }]}>Finn reflection laden...</Text>
+          </View>
+        ) : null}
+
+        {error && !reflection ? (
+          <InsightCard label="FINN" title="Reflection unavailable" body={error} tone="warning" cta="Retry" />
+        ) : null}
+
+        {reflection ? (
+          <>
+            <View
+              style={[
+                styles.reflectionReportOverview,
+                { borderColor: colors.borderSubtle, backgroundColor: colors.surfaceMuted, marginTop: theme.spacing.md },
+              ]}
+            >
+              <View style={[styles.reflectionFinnHeadlineCard, { borderColor: colors.borderSubtle, backgroundColor: colors.surface }]}>
+                <Text style={[styles.reflectionReportOverviewLabel, { color: theme.colors.accent }]}>
+                  {activeOption.label.toUpperCase()}
+                </Text>
+                <Text style={[styles.reflectionFinnHeadlineText, { color: colors.text }]}>
+                  {reflection.headline}
+                </Text>
+              </View>
+
+              {presentation ? (
+                <>
+                  <View style={styles.reflectionFinnMetricGrid}>
+                    {presentation.metrics.map((item) => (
+                      <View
+                        key={item.label}
+                        style={[styles.reflectionFinnMetricCard, { borderColor: colors.borderSubtle, backgroundColor: colors.surface }]}
+                      >
+                        <Text style={[styles.reflectionFinnMetricLabel, { color: colors.textDim }]}>{item.label}</Text>
+                        <Text style={[styles.reflectionFinnMetricValue, { color: colors.text }]}>{item.value}</Text>
+                      </View>
+                    ))}
+                  </View>
+
+                  <View style={styles.reflectionFinnInsightGrid}>
+                    {presentation.insights.map((item) => (
+                      <View
+                        key={item.label}
+                        style={[
+                          styles.reflectionFinnInsightCard,
+                          {
+                            backgroundColor: item.background,
+                            borderColor: item.border,
+                          },
+                        ]}
+                      >
+                        <Text style={[styles.reflectionFinnInsightLabel, { color: item.color }]}>{item.label}</Text>
+                        <Text style={[styles.reflectionFinnInsightBody, { color: item.color }]}>{item.body}</Text>
+                      </View>
+                    ))}
+                  </View>
+                </>
+              ) : null}
+            </View>
+
+            <View style={styles.reflectionFinnActionRow}>
+              <Pressable
+                accessibilityRole="button"
+                onPress={() => setExpanded(true)}
+                style={[styles.reflectionFinnPrimaryAction, expanded && styles.reflectionFinnPrimaryActionDisabled]}
+              >
+                <Text style={styles.reflectionFinnPrimaryActionText}>View reflection details</Text>
+              </Pressable>
+              <Pressable accessibilityRole="button" onPress={() => setExpanded((current) => !current)}>
+                <Text style={[styles.reflectionFinnSecondaryActionText, { color: colors.textDim }]}>
+                  {expanded ? 'Hide activity and evidence' : 'View activity and evidence'}
+                </Text>
+              </Pressable>
+            </View>
+
+            <View style={[styles.reflectionFinnFootnote, { borderColor: colors.borderSubtle, backgroundColor: colors.surface }]}>
+              <Text style={[styles.reflectionConclusionBody, { color: colors.textDim }]}>
+                Open the underlying activity only when you want the evidence behind this reflection.
+              </Text>
+            </View>
+
+            {expanded ? (
+              <View style={styles.reflectionReportRows}>
+                {reflectionParagraphs.map((paragraph, index) => (
+                  <View
+                    key={`${activeKey}-detail-${index}`}
+                    style={[
+                      styles.reflectionReportRow,
+                      { borderBottomColor: colors.borderSubtle },
+                      index === reflectionParagraphs.length - 1 && styles.reflectionReportRowLast,
+                    ]}
+                  >
+                    <View style={styles.reflectionReportRowLead}>
+                      <Feather color={colors.text} name="cpu" size={15} />
+                      <View style={styles.reflectionReportRowCopy}>
+                        <Text style={[styles.reflectionReportRowMeta, { color: colors.textDim }]}>FINN</Text>
+                      </View>
+                    </View>
+                    <View style={styles.reflectionReportExpanded}>
+                      <Text style={[styles.reflectionReportExpandedText, { color: colors.textMuted }]}>{paragraph}</Text>
+                    </View>
+                  </View>
+                ))}
+              </View>
+            ) : null}
+
+            <ReflectionFinnAnalysisBlocks analysis={reflection.analysis} />
+          </>
+        ) : null}
+      </View>
+    </View>
+  );
+}
+
+function ReflectionFinnAnalysisBlocks({
+  analysis,
+}: {
+  analysis?: Record<string, unknown> | null;
+}) {
+  const { appearance } = useAppPreferences();
+  const colors = preferenceColors(appearance);
+  const behavioralProfile = readRecord(analysis?.behavioral_profile);
+  const trend = readRecord(analysis?.trend) ?? readRecord(analysis?.week_over_week) ?? readRecord(analysis?.month_over_month);
+  const priorityEngine = readRecord(analysis?.priority_engine);
+  const portfolioOS = readRecord(analysis?.portfolio_operating_system);
+  const memoryV2 = readRecord(analysis?.memory_v2);
+  const governanceSummary = readRecord(analysis?.governance_events_summary);
+  const riskFlags = readArray(analysis?.risk_flags)
+    .map((item) => readRecord(item))
+    .filter((item): item is Record<string, unknown> => Boolean(item))
+    .slice(0, 3);
+  const habitCards = readArray(analysis?.habit_cards)
+    .map((item) => readRecord(item))
+    .filter((item): item is Record<string, unknown> => Boolean(item))
+    .slice(0, 3);
+  const nextActions = normalizeTargets(readField(portfolioOS ?? {}, ['next_best_actions']));
+
+  if (!behavioralProfile && !trend && !priorityEngine && !portfolioOS && !memoryV2 && !governanceSummary) {
+    return null;
+  }
+
+  return (
+    <View style={styles.reflectionReportCompanions}>
+      {(behavioralProfile || trend || riskFlags.length > 0 || habitCards.length > 0) ? (
+        <View style={[styles.reflectionInlinePanel, { borderColor: colors.borderSubtle, backgroundColor: colors.surfaceMuted }]}>
+          <View style={styles.reflectionInlinePanelHeader}>
+            <Feather color={theme.colors.accent} name="activity" size={14} />
+            <Text style={[styles.reflectionInlinePanelTitle, { color: colors.text }]}>Behavioral intelligence</Text>
+          </View>
+          {behavioralProfile ? (
+            <>
+              <Text style={[styles.reflectionInlinePrimary, { color: colors.text }]}>
+                {readStringField(behavioralProfile, ['label']) || 'Behavioral profile'}
+              </Text>
+              <Text style={[styles.reflectionInlineVolume, { color: colors.textDim }]}>
+                {readStringField(behavioralProfile, ['summary', 'watch_for']) || 'Geen behavioural summary beschikbaar.'}
+              </Text>
+            </>
+          ) : null}
+          {trend ? (
+            <View style={styles.reflectionInlineScoreRow}>
+              <View style={styles.reflectionInlineScoreChip}>
+                <Text style={[styles.reflectionInlineScoreChipLabel, { color: colors.textDim }]}>Trend</Text>
+                <Text style={[styles.reflectionInlineScoreChipValue, { color: colors.text }]}>
+                  {readStringField(trend, ['status', 'momentum']) || 'Building'}
+                </Text>
+              </View>
+              {readNumericField(analysis ?? {}, ['behavioral_balance_score']) !== null ? (
+                <View style={styles.reflectionInlineScoreChip}>
+                  <Text style={[styles.reflectionInlineScoreChipLabel, { color: colors.textDim }]}>Balance</Text>
+                  <Text style={[styles.reflectionInlineScoreChipValue, { color: colors.text }]}>
+                    {Math.round(readNumericField(analysis ?? {}, ['behavioral_balance_score']) ?? 0)}/100
+                  </Text>
+                </View>
+              ) : null}
+            </View>
+          ) : null}
+          {riskFlags.length > 0 ? (
+            <View style={styles.reflectionReportRows}>
+              {riskFlags.map((item, index) => (
+                <View
+                  key={`risk-flag-${index}`}
+                  style={[
+                    styles.reflectionReportRow,
+                    { borderBottomColor: colors.borderSubtle },
+                    index === riskFlags.length - 1 && styles.reflectionReportRowLast,
+                  ]}
+                >
+                  <View style={styles.reflectionReportExpanded}>
+                    <Text style={[styles.reflectionReportRowMeta, { color: colors.textDim }]}>
+                      {readStringField(item, ['label', 'type']) || 'Brake'}
+                    </Text>
+                    <Text style={[styles.reflectionReportExpandedText, { color: colors.textMuted }]}>
+                      {readStringField(item, ['summary']) || 'Geen extra toelichting.'}
+                    </Text>
+                  </View>
+                </View>
+              ))}
+            </View>
+          ) : null}
+          {habitCards.length > 0 ? (
+            <View style={styles.reflectionInlineScoreRow}>
+              {habitCards.slice(0, 2).map((item, index) => (
+                <View key={`habit-${index}`} style={styles.reflectionInlineScoreChip}>
+                  <Text style={[styles.reflectionInlineScoreChipLabel, { color: colors.textDim }]}>
+                    {readStringField(item, ['label']) || 'Habit'}
+                  </Text>
+                  <Text style={[styles.reflectionInlineScoreChipValue, { color: colors.text }]}>
+                    {readStringField(item, ['status']) || 'Active'}
+                  </Text>
+                </View>
+              ))}
+            </View>
+          ) : null}
+        </View>
+      ) : null}
+
+      {(priorityEngine || portfolioOS || memoryV2 || governanceSummary) ? (
+        <View style={[styles.reflectionInlinePanel, { borderColor: colors.borderSubtle, backgroundColor: colors.surfaceMuted }]}>
+          <View style={styles.reflectionInlinePanelHeader}>
+            <Feather color={theme.colors.accent} name="shield" size={14} />
+            <Text style={[styles.reflectionInlinePanelTitle, { color: colors.text }]}>Governance layer</Text>
+          </View>
+          {portfolioOS ? (
+            <>
+              <Text style={[styles.reflectionInlinePrimary, { color: colors.text }]}>
+                {readStringField(portfolioOS, ['operating_posture']) || 'Portfolio operating system'}
+              </Text>
+              <Text style={[styles.reflectionInlineVolume, { color: colors.textDim }]}>
+                {readStringField(readRecord(readField(portfolioOS, ['control_plane'])), ['headline', 'why_now', 'habit_override']) || 'Geen governance summary beschikbaar.'}
+              </Text>
+            </>
+          ) : null}
+          {priorityEngine ? (
+            <View style={styles.reflectionInlineMetricRow}>
+              <View style={styles.reflectionInlineMetricBlock}>
+                <Text style={[styles.reflectionInlineMetricLabel, { color: colors.textDim }]}>Priority engine</Text>
+                <Text style={[styles.reflectionInlineMetricValue, { color: colors.text }]}>
+                  {readStringField(priorityEngine, ['headline', 'why_now']) || 'Active'}
+                </Text>
+              </View>
+            </View>
+          ) : null}
+          {memoryV2 ? (
+            <View style={styles.reflectionInlineMetricRow}>
+              <View style={styles.reflectionInlineMetricBlock}>
+                <Text style={[styles.reflectionInlineMetricLabel, { color: colors.textDim }]}>Memory</Text>
+                <Text style={[styles.reflectionInlineMetricValue, { color: colors.text }]}>
+                  {readStringField(memoryV2, ['memory_pattern', 'behavioral_cost', 'recommended_rule']) || 'Active'}
+                </Text>
+              </View>
+            </View>
+          ) : null}
+          {governanceSummary ? (
+            <View style={styles.reflectionInlineScoreRow}>
+              {[
+                ['Review', readNumericField(governanceSummary, ['decision_review_count'])],
+                ['Adherence', readNumericField(governanceSummary, ['plan_adherence_count'])],
+                ['Outcome', readNumericField(governanceSummary, ['outcome_tracking_count'])],
+              ]
+                .filter((item) => item[1] !== null)
+                .map(([label, value]) => (
+                  <View key={String(label)} style={styles.reflectionInlineScoreChip}>
+                    <Text style={[styles.reflectionInlineScoreChipLabel, { color: colors.textDim }]}>{label}</Text>
+                    <Text style={[styles.reflectionInlineScoreChipValue, { color: colors.text }]}>{Math.round(Number(value))}</Text>
+                  </View>
+                ))}
+            </View>
+          ) : null}
+          {nextActions.length > 0 ? (
+            <View style={styles.reflectionReportRows}>
+              {nextActions.slice(0, 3).map((item, index) => (
+                <View
+                  key={`next-action-${index}`}
+                  style={[
+                    styles.reflectionReportRow,
+                    { borderBottomColor: colors.borderSubtle },
+                    index === nextActions.slice(0, 3).length - 1 && styles.reflectionReportRowLast,
+                  ]}
+                >
+                  <View style={styles.reflectionReportExpanded}>
+                    <Text style={[styles.reflectionReportRowMeta, { color: colors.textDim }]}>Next action</Text>
+                    <Text style={[styles.reflectionReportExpandedText, { color: colors.textMuted }]}>{item}</Text>
+                  </View>
+                </View>
+              ))}
+            </View>
+          ) : null}
+        </View>
+      ) : null}
+    </View>
+  );
+}
+
+function ReflectionTodayHero({
   briefing,
   onAskFinn,
   report,
 }: {
-  activeSymbol: string;
   briefing?: MobileOverviewResponse['finn_briefing'];
   onAskFinn: () => void;
   report: MappedReport;
 }) {
   const { language } = useAppPreferences();
-  const warningCount = report.highlights.filter((item) => item.tone === 'danger' || item.tone === 'warning').length;
-  const confidenceLabel =
-    report.scores.find((item) => item.label.toLowerCase().includes('combined')) ||
-    report.scores[0];
-  const tags = [
-    { label: translateFinnTag(language, report.conclusionTitle), tone: report.overallTone },
-    { label: report.periodLabel, tone: 'accent' as StatusTone },
-    confidenceLabel ? { label: translate(language, 'common.confidence', { count: confidenceLabel.value }), tone: confidenceLabel.tone } : null,
-    { label: translate(language, 'common.sections', { count: report.fullSections.length }), tone: 'neutral' as StatusTone },
-  ].filter(Boolean) as Array<{ label: string; tone: StatusTone }>;
-  const queueItems = [
+  const support = report.summary || translate(language, 'report.unavailableBody');
+  const metaItems = [
+    report.periodLabel,
+    report.dateLabel,
+    report.updatedAt,
+  ].filter((item): item is string => Boolean(item && item !== '-'));
+  const riskCount = report.highlights.filter((item) => item.tone === 'warning' || item.tone === 'danger').length;
+  const openCount = report.isUnavailable ? 0 : 1;
+  const queueItems: TodayWithFinnQueueItem[] = [
     {
-      key: 'sections',
-      label: translate(language, 'queue.label.sections'),
-      value: report.fullSections.length,
-      body: translate(language, 'queue.body.fullReportBlocks'),
+      key: 'tasks',
+      label: translate(language, 'queue.label.tasks'),
+      value: openCount,
+      body: report.isUnavailable
+        ? translate(language, 'report.queueTaskUnavailable')
+        : translate(language, 'report.queueTaskReview'),
+      detail: report.isUnavailable
+        ? translate(language, 'report.queueTaskDetailUnavailable')
+        : translate(language, 'report.queueTaskDetailReady'),
     },
     {
-      key: 'highlights',
-      label: translate(language, 'queue.label.highlights'),
+      key: 'reviews',
+      label: translate(language, 'queue.label.reviews'),
       value: report.highlights.length,
-      body: translate(language, 'queue.body.topItemsSurfaced'),
+      body: report.highlights.length > 0
+        ? translate(language, 'report.queueReviewsCaptured')
+        : translate(language, 'report.queueReviewsEmpty'),
     },
     {
       key: 'risks',
       label: translate(language, 'queue.label.risks'),
-      value: warningCount,
-      body: translate(language, 'queue.body.warningsAndFlags'),
+      value: riskCount,
+      body: riskCount > 0
+        ? translate(language, 'report.queueRisksOpen')
+        : translate(language, 'report.queueRisksClear'),
     },
     {
-      key: 'reading',
-      label: translate(language, 'queue.label.reading'),
-      value: `${report.readingMinutes}m`,
-      body: translate(language, 'queue.body.estimatedTimeToFinish'),
+      key: 'performance',
+      label: translate(language, 'queue.label.performance'),
+      value: report.scores.filter((score) => score.value >= 50).length,
+      body: translate(language, 'report.queuePerformance'),
     },
   ];
-
-  const support = report.isUnavailable
-    ? translate(language, 'report.unavailableBody')
-    : translate(language, 'report.risksNeedAttention', { count: warningCount });
 
   return (
     <WorkspaceHeroSection>
       <TodayWithFinnCard
-        headline={localizedBackendText(
-          language,
-          briefing?.summary?.trim(),
-          report.isUnavailable ? translate(language, 'report.unavailableHeadline') : translate(language, 'finn.noBriefingReady'),
-        )}
+        headline={localizedBackendText(language, briefing?.summary?.trim(), report.headline)}
         support={support}
-        tags={tags}
-        primaryActionLabel={translate(language, 'finn.askAboutThisReport')}
-        onPrimaryAction={onAskFinn}
+        metaItems={metaItems}
         queueItems={queueItems}
-        queueStatusLabel={translate(language, 'common.itemsOpen', { count: Number(queueItems[0]?.value ?? 0) })}
+        queueStatusLabel={translate(language, 'common.itemsOpen', { count: openCount })}
       />
     </WorkspaceHeroSection>
   );
+}
+
+function ReflectionOverviewSection({ report }: { report: MappedReport }) {
+  const { appearance, language } = useAppPreferences();
+  const colors = preferenceColors(appearance);
+  const cards = buildReflectionOverviewCards(report);
+
+  if (cards.length === 0) {
+    return null;
+  }
+
+  return (
+    <View style={styles.reflectionSection}>
+      <View style={styles.reflectionHeaderRow}>
+        <View>
+          <Text style={[styles.reflectionEyebrow, { color: theme.colors.accent }]}>
+            {translate(language, 'report.yourReflection')}
+          </Text>
+          <Text style={[styles.reflectionTitle, { color: colors.text }]}>
+            {translate(language, 'report.todayTitle')}
+          </Text>
+        </View>
+        <Text style={[styles.reflectionDate, { color: colors.textDim }]}>{report.dateLabel}</Text>
+      </View>
+
+      <View style={[styles.reflectionCard, { borderColor: colors.borderSubtle, backgroundColor: colors.surface }]}>
+        {cards.map((card, index) => (
+          <View
+            key={card.label}
+            style={[
+              styles.reflectionInsightRow,
+              { borderBottomColor: colors.borderSubtle },
+              index === cards.length - 1 && styles.reflectionInsightRowLast,
+            ]}
+          >
+            <View style={[styles.reflectionInsightIcon, { backgroundColor: card.bg, borderColor: card.border }]}>
+              <Feather color={card.color} name={card.icon} size={16} />
+            </View>
+            <View style={styles.reflectionInsightCopy}>
+              <Text style={[styles.reflectionInsightLabel, { color: card.color }]}>{card.label}</Text>
+              <Text numberOfLines={1} style={[styles.reflectionInsightTitle, { color: colors.text }]}>
+                {card.title}
+              </Text>
+              <Text numberOfLines={1} style={[styles.reflectionInsightBody, { color: colors.textMuted }]}>
+                {card.body}
+              </Text>
+              <Text style={[styles.reflectionInsightFoot, { color: card.color }]}>{card.foot}</Text>
+            </View>
+            <Feather color={colors.textDim} name="chevron-right" size={18} />
+          </View>
+        ))}
+      </View>
+    </View>
+  );
+}
+
+function ReflectionTradingReportSection({ report }: { report: MappedReport }) {
+  const { appearance, language } = useAppPreferences();
+  const colors = preferenceColors(appearance);
+  const scoreItems = report.scores.slice(0, 4);
+  const sectionRows = report.fullSections.slice(0, 6);
+  const reportTitle = reflectionReportTitle(report.periodLabel);
+  const [reportExpanded, setReportExpanded] = useState(true);
+
+  return (
+    <View style={styles.reflectionSection}>
+      <View style={[styles.reflectionCard, { borderColor: colors.borderSubtle, backgroundColor: colors.surface }]}>
+        <Text style={[styles.reflectionReportLabel, { color: theme.colors.accent }]}>
+          {translate(language, 'report.tradingReport')}
+        </Text>
+        <Text style={[styles.reflectionReportSub, { color: colors.textMuted }]}>
+          {translate(language, 'report.tradingReportSubtitle')}
+        </Text>
+
+        <View
+          style={[
+            styles.reflectionReportOverview,
+            { borderColor: colors.borderSubtle, backgroundColor: colors.surfaceMuted },
+          ]}
+        >
+          <View style={styles.reflectionReportOverviewHeader}>
+            <View style={styles.reflectionReportOverviewLead}>
+              <View style={[styles.reflectionReportAccentBar, { backgroundColor: theme.colors.accent }]} />
+              <View style={styles.reflectionReportOverviewCopy}>
+                <Text style={[styles.reflectionReportOverviewLabel, { color: theme.colors.accent }]}>
+                  {translate(language, 'report.overviewLabel')}
+                </Text>
+                <Text style={[styles.reflectionReportOverviewTitle, { color: colors.text }]}>{reportTitle}</Text>
+                <View style={styles.reflectionReportOverviewMeta}>
+                  <Feather color={colors.textDim} name="calendar" size={13} />
+                  <Text style={[styles.reflectionReportOverviewMetaText, { color: colors.textDim }]}>
+                    {translate(language, 'report.periodMeta', { date: report.dateLabel })}
+                  </Text>
+                </View>
+              </View>
+            </View>
+
+            <View
+              style={[
+                styles.reflectionScoreCluster,
+                { borderColor: colors.borderSubtle, backgroundColor: colors.surface },
+              ]}
+            >
+              <View style={styles.reflectionScoreGrid}>
+                {scoreItems.map((score) => (
+                  <View key={score.label} style={[styles.reflectionScoreCell, { borderColor: colors.borderSubtle }]}>
+                    <View style={[styles.reflectionScoreIconWrap, { backgroundColor: softBackgroundForTone(score.tone) }]}>
+                      <Feather color={colorForTone(score.tone)} name={iconForScoreLabel(score.label)} size={13} />
+                    </View>
+                    <Text style={[styles.reflectionScoreLabel, { color: colors.textDim }]}>{score.label}</Text>
+                    <Text style={[styles.reflectionScoreValue, { color: colorForTone(score.tone) }]}>{score.value}</Text>
+                  </View>
+                ))}
+              </View>
+            </View>
+          </View>
+
+          <View style={[styles.reflectionReportOverviewFooter, { borderTopColor: colors.borderSubtle }]}>
+            <View style={styles.reflectionReportOverviewStatus}>
+              <Feather color={theme.colors.accent} name="info" size={13} />
+              <Text style={[styles.reflectionReportOverviewStatusText, { color: colors.textDim }]}>
+                {translate(language, 'report.validated')}
+              </Text>
+            </View>
+            <Text style={[styles.reflectionReportOverviewStatusMeta, { color: colors.textDim }]}>
+              {translate(language, 'report.updatedAt', { value: report.updatedAt })}
+            </Text>
+          </View>
+        </View>
+
+        <Pressable
+          accessibilityRole="button"
+          onPress={() => setReportExpanded((current) => !current)}
+          style={[styles.reflectionReportToggle, { borderColor: colors.borderSubtle, backgroundColor: colors.surface }]}
+        >
+          <Text style={[styles.reflectionReportToggleText, { color: colors.text }]}>
+            {translate(language, reportExpanded ? 'report.hideFull' : 'report.showFull')}
+          </Text>
+          <Feather
+            color={colors.textDim}
+            name={reportExpanded ? 'chevron-up' : 'chevron-down'}
+            size={16}
+          />
+        </Pressable>
+
+        {reportExpanded ? (
+          <>
+            <Text style={[styles.reflectionReportIntro, { color: colors.text }]}>
+              {translate(language, 'report.greeting')}
+            </Text>
+            <Text style={[styles.reflectionReportLead, { color: colors.textMuted }]}>
+              {translate(language, 'report.lead')}
+            </Text>
+            <Text style={[styles.reflectionReportSummary, { color: colors.textMuted }]}>
+              {report.summary || translate(language, 'report.unavailableBody')}
+            </Text>
+
+            {sectionRows.length > 0 ? (
+              <View style={styles.reflectionReportRows}>
+                {sectionRows.map((section, index) => (
+                  <View
+                    key={`${section.label}-${index}`}
+                    style={[
+                      styles.reflectionReportRow,
+                      { borderBottomColor: colors.borderSubtle },
+                      index === sectionRows.length - 1 && styles.reflectionReportRowLast,
+                    ]}
+                  >
+                    <View style={styles.reflectionReportRowLead}>
+                      <Feather
+                        color={colors.text}
+                        name={iconForReflectionSection(section.title)}
+                        size={15}
+                      />
+                      <View style={styles.reflectionReportRowCopy}>
+                        <Text style={[styles.reflectionReportRowMeta, { color: colors.textDim }]}>
+                          {section.label}
+                        </Text>
+                      </View>
+                    </View>
+                    <View style={styles.reflectionReportExpanded}>
+                      {section.paragraphs.map((paragraph, paragraphIndex) => (
+                        <Text
+                          key={`${section.title}-${paragraphIndex}`}
+                          style={[styles.reflectionReportExpandedText, { color: colors.textMuted }]}
+                        >
+                          {paragraph}
+                        </Text>
+                      ))}
+                      {section.companions?.length ? (
+                        <View style={styles.reflectionReportCompanions}>
+                          {section.companions.slice(0, 1).map((companion, companionIndex) => (
+                            <ReflectionEmbeddedCompanion
+                              companion={companion}
+                              key={`${section.title}-${companion.type}-${companionIndex}`}
+                            />
+                          ))}
+                        </View>
+                      ) : null}
+                    </View>
+                  </View>
+                ))}
+              </View>
+            ) : (
+              <View style={[styles.reflectionConclusionBox, { borderColor: colors.borderSubtle, backgroundColor: colors.surfaceMuted }]}>
+                <Text style={[styles.reflectionConclusionBody, { color: colors.textMuted }]}>
+                  {translate(language, 'report.unavailableBody')}
+                </Text>
+              </View>
+            )}
+
+            <View style={[styles.reflectionConclusionBox, { borderColor: colors.borderSubtle, backgroundColor: colors.surfaceMuted }]}>
+              <Text style={[styles.reflectionConclusionTitle, { color: colors.text }]}>
+                {translate(language, 'report.conclusion')}
+              </Text>
+              <Text style={[styles.reflectionConclusionBody, { color: colors.textMuted }]}>
+                {report.conclusionTitle || report.outlook || translate(language, 'report.unavailableHeadline')}
+              </Text>
+            </View>
+
+            <View style={styles.reflectionReportFooter}>
+              <Text style={[styles.reflectionFooterMeta, { color: colors.textDim }]}>
+                {translate(language, 'report.lastReflection', { value: report.updatedAt })}
+              </Text>
+              <Text style={[styles.reflectionFooterMeta, { color: colors.success }]}>
+                {translate(language, 'report.allReviewed')}
+              </Text>
+            </View>
+          </>
+        ) : null}
+      </View>
+    </View>
+  );
+}
+
+function ReflectionEmbeddedCompanion({ companion }: { companion: ReportCompanion }) {
+  const { appearance, language } = useAppPreferences();
+  const colors = preferenceColors(appearance);
+
+  if (companion.type === 'market') {
+    return (
+      <View style={[styles.reflectionInlinePanel, { borderColor: colors.borderSubtle, backgroundColor: colors.surfaceMuted }]}>
+        <View style={styles.reflectionInlinePanelHeader}>
+          <Feather color={theme.colors.accent} name="activity" size={14} />
+          <Text style={[styles.reflectionInlinePanelTitle, { color: colors.text }]}>
+            {translate(language, 'report.marketAnalysis')}
+          </Text>
+        </View>
+        <View style={styles.reflectionInlineMetricRow}>
+          <View style={styles.reflectionInlineMetricBlock}>
+            <Text style={[styles.reflectionInlineMetricLabel, { color: colors.textDim }]}>
+              {translate(language, 'report.bitcoinPrice')}
+            </Text>
+            <Text style={[styles.reflectionInlineMetricValue, { color: colors.text }]}>{formatCurrency(companion.price)}</Text>
+          </View>
+          <Text style={[styles.reflectionInlineChange, { color: companion.change >= 0 ? theme.colors.success : theme.colors.danger }]}>
+            {formatSignedPercent(companion.change)}
+          </Text>
+        </View>
+        <Text style={[styles.reflectionInlineVolume, { color: colors.textDim }]}>
+          {translate(language, 'report.volume')} {formatFullNumber(companion.volume)}
+        </Text>
+        <View style={styles.reflectionInlineScoreRow}>
+          {companion.scores.slice(0, 4).map((score) => (
+            <View key={score.label} style={styles.reflectionInlineScoreChip}>
+              <Text style={[styles.reflectionInlineScoreChipLabel, { color: colors.textDim }]}>{score.label}</Text>
+              <Text style={[styles.reflectionInlineScoreChipValue, { color: colorForTone(score.tone) }]}>{score.value}</Text>
+            </View>
+          ))}
+        </View>
+      </View>
+    );
+  }
+
+  if (companion.type === 'indicators') {
+    return (
+      <View style={[styles.reflectionInlinePanel, { borderColor: colors.borderSubtle, backgroundColor: colors.surfaceMuted }]}>
+        <View style={styles.reflectionInlinePanelHeader}>
+          <Feather color={theme.colors.accent} name="list" size={14} />
+          <Text style={[styles.reflectionInlinePanelTitle, { color: colors.text }]}>{companion.title}</Text>
+        </View>
+        {companion.items.slice(0, 3).map((item, index) => (
+          <View
+            key={`${item.name}-${index}`}
+            style={[
+              styles.reflectionInlineIndicatorRow,
+              index === companion.items.slice(0, 3).length - 1 && styles.reflectionInlineIndicatorRowLast,
+            ]}
+          >
+            <View style={styles.reflectionInlineIndicatorCopy}>
+              <Text style={[styles.reflectionInlineIndicatorTitle, { color: colors.text }]}>{formatDecisionMomentTitle(item.name)}</Text>
+              <Text numberOfLines={1} style={[styles.reflectionInlineIndicatorText, { color: colors.textDim }]}>
+                {compactText(item.interpretation, 56)}
+              </Text>
+            </View>
+            {item.score === null ? null : (
+              <Text style={[styles.reflectionInlineIndicatorScore, { color: colorForTone(item.tone) }]}>{item.score}</Text>
+            )}
+          </View>
+        ))}
+      </View>
+    );
+  }
+
+  if (companion.type === 'setup') {
+    return (
+      <View style={[styles.reflectionInlinePanel, { borderColor: colors.borderSubtle, backgroundColor: colors.surfaceMuted }]}>
+        <View style={styles.reflectionInlinePanelHeader}>
+          <Feather color={theme.colors.accent} name="target" size={14} />
+          <Text style={[styles.reflectionInlinePanelTitle, { color: colors.text }]}>
+            {translate(language, 'report.bestSetup')}
+          </Text>
+        </View>
+        <Text style={[styles.reflectionInlinePrimary, { color: colors.text }]}>{companion.name}</Text>
+        <Text style={[styles.reflectionInlineSub, { color: colors.textDim }]}>{companion.symbol} · {companion.timeframe}</Text>
+        <View style={styles.reflectionInlineMetricRow}>
+          <Text style={[styles.reflectionInlineMetricLabel, { color: colors.textDim }]}>
+            {translate(language, 'report.match')}
+          </Text>
+          <Text style={[styles.reflectionInlineMetricScore, { color: colorForTone(toneForScore(companion.score)) }]}>
+            {Math.round(companion.score)}%
+          </Text>
+        </View>
+      </View>
+    );
+  }
+
+  if (companion.type === 'strategy') {
+    return (
+      <View style={[styles.reflectionInlinePanel, { borderColor: colors.borderSubtle, backgroundColor: colors.surfaceMuted }]}>
+        <View style={styles.reflectionInlinePanelHeader}>
+          <Feather color={theme.colors.accent} name="crosshair" size={14} />
+          <Text style={[styles.reflectionInlinePanelTitle, { color: colors.text }]}>
+            {translate(language, 'report.activeStrategy')}
+          </Text>
+        </View>
+        <Text style={[styles.reflectionInlinePrimary, { color: colors.text }]}>{companion.name}</Text>
+        <Text style={[styles.reflectionInlineSub, { color: colors.textDim }]}>{companion.symbol} · {companion.timeframe}</Text>
+        <View style={styles.reflectionInlineScoreRow}>
+          <View style={styles.reflectionInlineScoreChip}>
+            <Text style={[styles.reflectionInlineScoreChipLabel, { color: colors.textDim }]}>
+              {translate(language, 'report.entry')}
+            </Text>
+            <Text style={[styles.reflectionInlineScoreChipValue, { color: colors.text }]}>{formatCurrency(companion.entry ?? 0)}</Text>
+          </View>
+          <View style={styles.reflectionInlineScoreChip}>
+            <Text style={[styles.reflectionInlineScoreChipLabel, { color: colors.textDim }]}>
+              {translate(language, 'report.stop')}
+            </Text>
+            <Text style={[styles.reflectionInlineScoreChipValue, { color: colors.text }]}>{formatCurrency(companion.stopLoss ?? 0)}</Text>
+          </View>
+          <View style={styles.reflectionInlineScoreChip}>
+            <Text style={[styles.reflectionInlineScoreChipLabel, { color: colors.textDim }]}>
+              {translate(language, 'report.confShort')}
+            </Text>
+            <Text style={[styles.reflectionInlineScoreChipValue, { color: colorForTone(toneForScore(companion.confidence ?? 0)) }]}>
+              {companion.confidence === null ? '-' : `${Math.round(companion.confidence)}%`}
+            </Text>
+          </View>
+        </View>
+      </View>
+    );
+  }
+
+  if (companion.type === 'bot') {
+    return (
+      <View style={[styles.reflectionInlinePanel, { borderColor: colors.borderSubtle, backgroundColor: colors.surfaceMuted }]}>
+        <View style={styles.reflectionInlinePanelHeader}>
+          <Feather color={theme.colors.accent} name="cpu" size={14} />
+          <Text style={[styles.reflectionInlinePanelTitle, { color: colors.text }]}>
+            {translate(language, 'report.botSnapshot')}
+          </Text>
+        </View>
+        <Text style={[styles.reflectionInlinePrimary, { color: colors.text }]}>{companion.botName}</Text>
+        <View style={styles.reflectionInlineMetricRow}>
+          <Text style={[styles.reflectionInlineMetricLabel, { color: colors.textDim }]}>
+            {translate(language, 'report.action')}
+          </Text>
+          <Text style={[styles.reflectionInlineMetricScore, { color: colorForTone(companion.action === 'buy' ? 'success' : companion.action === 'sell' ? 'danger' : 'neutral') }]}>
+            {companion.action.toUpperCase()}
+          </Text>
+        </View>
+        <Text numberOfLines={2} style={[styles.reflectionInlineVolume, { color: colors.textDim }]}>
+          {compactText(companion.reason, 92)}
+        </Text>
+      </View>
+    );
+  }
+
+  return null;
 }
 
 function ReflectionWorkspaceHero({
@@ -327,7 +1084,7 @@ function ReflectionWorkspaceHero({
   onAskFinn: () => void;
   report: MappedReport;
 }) {
-  const { appearance } = useAppPreferences();
+  const { appearance, language } = useAppPreferences();
   const colors = preferenceColors(appearance);
 
   return (
@@ -355,7 +1112,7 @@ function ReflectionWorkspaceHero({
         <Text style={[styles.generated, { color: colors.textDim }]}>Update: {report.generatedLabel}</Text>
       </View>
       <Pressable onPress={onAskFinn} style={styles.reportAction}>
-        <Text style={styles.reportActionText}>Ask FINN to translate this report</Text>
+        <Text style={styles.reportActionText}>{translate(language, 'report.askTranslate')}</Text>
       </Pressable>
     </View>
   );
@@ -392,7 +1149,7 @@ type MappedReport = {
 };
 
 function ReflectionSummaryGrid({ report }: { report: MappedReport }) {
-  const { appearance } = useAppPreferences();
+  const { appearance, language } = useAppPreferences();
   const colors = preferenceColors(appearance);
   const items = [
     { label: 'Conclusion', value: report.conclusionTitle, tone: report.overallTone },
@@ -434,20 +1191,24 @@ function ReportNotificationCard({
   onAskFinn: () => void;
   symbol: string;
 }) {
-  const { appearance } = useAppPreferences();
+  const { appearance, language } = useAppPreferences();
   const colors = preferenceColors(appearance);
 
   return (
     <View style={{ paddingVertical: theme.spacing.md, paddingHorizontal: theme.spacing.lg }}>
       <View style={styles.heroTop}>
         <View>
-          <Text style={styles.heroLabel}>Push context</Text>
-          <Text style={[styles.notificationTitle, { color: colors.text }]}>{notificationType === 'report_ready' ? 'Rapport staat klaar' : 'Rapport context'}</Text>
+          <Text style={styles.heroLabel}>{translate(language, 'report.pushContextLabel')}</Text>
+          <Text style={[styles.notificationTitle, { color: colors.text }]}>
+            {notificationType === 'report_ready'
+              ? translate(language, 'report.pushReadyTitle')
+              : translate(language, 'report.pushContextTitle')}
+          </Text>
         </View>
         <StatusChip label={symbol} tone="accent" />
       </View>
       <Text style={[styles.notificationBody, { color: colors.textMuted }]}>
-        Open dit rapport als context, niet als alarm. FINN kan de conclusie, risico's en volgende stap kort duiden.
+        {translate(language, 'report.pushBody')}
       </Text>
       <Pressable
         onPress={async () => {
@@ -456,7 +1217,7 @@ function ReportNotificationCard({
         }}
         style={({ pressed }) => [styles.notificationButton, pressed && styles.pressed]}
       >
-        <Text style={styles.notificationButtonText}>Vraag FINN om uitleg</Text>
+        <Text style={styles.notificationButtonText}>{translate(language, 'report.askExplain')}</Text>
       </Pressable>
     </View>
   );
@@ -467,7 +1228,7 @@ function HighlightCard({
 }: {
   highlight: MappedReport['highlights'][number];
 }) {
-  const { appearance } = useAppPreferences();
+  const { appearance, language } = useAppPreferences();
   const colors = preferenceColors(appearance);
 
   return (
@@ -489,7 +1250,7 @@ function ReportSectionCard({
 }: {
   section: MappedReport['fullSections'][number];
 }) {
-  const { appearance } = useAppPreferences();
+  const { appearance, language } = useAppPreferences();
   const colors = preferenceColors(appearance);
 
   return (
@@ -500,7 +1261,7 @@ function ReportSectionCard({
           <Text style={[styles.reportSectionLabel, { color: colors.textDim }]}>{section.label}</Text>
           <Text style={[styles.reportSectionTitle, { color: colors.text }]}>{section.title}</Text>
         </View>
-        <StatusChip label="Read" tone={section.tone} />
+        <StatusChip label={translate(language, 'common.read')} tone={section.tone} />
       </View>
 
       <View style={styles.paragraphs}>
@@ -547,7 +1308,7 @@ function MarketCompanionCard({ companion }: { companion: Extract<ReportCompanion
       <View style={styles.marketBlock}>
         <Text style={{ fontSize: 11, color: colors.textDim, fontWeight: '700', letterSpacing: 0.5 }}>BITCOIN PRIJS</Text>
         <View style={styles.marketPriceRow}>
-          <Text style={{ fontSize: 24, color: colors.text, fontWeight: '700' }}>{formatCurrency(companion.price)}</Text>
+          <Text style={{ fontSize: 20, color: colors.text, fontWeight: '700' }}>{formatCurrency(companion.price)}</Text>
           <Text style={[styles.marketChange, { color: companion.change >= 0 ? theme.colors.success : theme.colors.danger }]}>
             {formatSignedPercent(companion.change)}
           </Text>
@@ -614,7 +1375,7 @@ function SetupCompanionCard({ companion }: { companion: Extract<ReportCompanion,
       <View style={{ paddingVertical: 8, gap: 2 }}>
         <Text style={{ fontSize: 11, color: colors.textDim, fontWeight: '700', letterSpacing: 0.5 }}>BESTE MATCH</Text>
         <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-          <Text style={{ fontSize: 24, color: colors.text, fontWeight: '700' }}>{companion.name}</Text>
+          <Text style={{ fontSize: 20, color: colors.text, fontWeight: '700' }}>{companion.name}</Text>
           <StatusChip label={`${Math.round(companion.score)}%`} tone={toneForScore(companion.score)} />
         </View>
         <Text style={{ fontSize: 13, color: colors.textDim }}>{companion.symbol} · {companion.timeframe}</Text>
@@ -654,7 +1415,7 @@ function StrategyCompanionCard({ companion }: { companion: Extract<ReportCompani
       <Text style={[styles.companionSub, { color: colors.textDim }]}>{companion.symbol} · {companion.timeframe}</Text>
 
       <View style={{ paddingVertical: 8, gap: 2 }}>
-        <Text style={{ fontSize: 11, color: colors.textDim, fontWeight: '700', letterSpacing: 0.5 }}>{companion.entry === null ? 'REFERENTIEPRIJS' : 'INSTAPPRYS'}</Text>
+        <Text style={{ fontSize: 11, color: colors.textDim, fontWeight: '700', letterSpacing: 0.5 }}>{companion.entry === null ? 'REFERENTIEPRIJS' : 'INSTAPPRIJS'}</Text>
         <Text style={{ fontSize: 18, color: colors.text, fontWeight: '700' }}>{formatCurrency(companion.entry ?? 0)}</Text>
       </View>
 
@@ -739,9 +1500,9 @@ function mapMobileReport(
 
   if (!hydratedReport) return unavailableReport(period, language);
 
-  const summary = compactText(String(hydratedReport.executive_summary_compact || ''), 420);
-  const marketAnalysis = compactText(String(hydratedReport.market_analysis_compact || ''), 380);
-  const outlook = compactText(String(hydratedReport.outlook_compact || ''), 320);
+  const summary = normalizeReportText(String(hydratedReport.executive_summary_compact || ''));
+  const marketAnalysis = normalizeReportText(String(hydratedReport.market_analysis_compact || ''));
+  const outlook = normalizeReportText(String(hydratedReport.outlook_compact || ''));
   const scores = scoresFromKpis(hydratedReport.kpi_metrics);
   const avgScore = scores.reduce((total, item) => total + item.value, 0) / Math.max(1, scores.length);
   const headline = headlineFromReport(summary, avgScore);
@@ -796,9 +1557,8 @@ function buildMobileReportFromFullReport(fullReport: ReportResponse): MobileRepo
     active_strategy: fullReport.active_strategy,
     best_setup: fullReport.best_setup,
     bot_snapshot: fullReport.bot_snapshot,
-    executive_summary_compact: compactText(
+    executive_summary_compact: normalizeReportText(
       readReportText(fullReport, ['executive_summary', 'summary']),
-      420,
     ),
     generated_at:
       readStringField(fullReport, ['generated_at', 'created_at']) || null,
@@ -812,13 +1572,11 @@ function buildMobileReportFromFullReport(fullReport: ReportResponse): MobileRepo
       technical_score: readReportNumber(fullReport, ['technical_score']) ?? 0,
       volume: readReportNumber(fullReport, ['volume', 'total_volume']) ?? 0,
     },
-    market_analysis_compact: compactText(
+    market_analysis_compact: normalizeReportText(
       readReportText(fullReport, ['market_analysis', 'market_overview']),
-      380,
     ),
-    outlook_compact: compactText(
+    outlook_compact: normalizeReportText(
       readReportText(fullReport, ['outlook', 'strategic_lessons']),
-      320,
     ),
     period_end: readStringField(fullReport, ['period_end']) || null,
     period_start: readStringField(fullReport, ['period_start']) || null,
@@ -855,20 +1613,20 @@ function reportHighlightsFromField(
 
 function unavailableReport(period: ReportPeriod, language: AppLanguage): MappedReport {
   return {
-    conclusionTitle: 'Unavailable',
+    conclusionTitle: translate(language, 'report.unavailableHeadline'),
     dateLabel: '-',
     fullSections: [],
     generatedLabel: '-',
-    headline: '',
+    headline: translate(language, 'report.unavailableHeadline'),
     highlights: [],
     isUnavailable: true,
     marketAnalysis: '',
-    overallTone: 'warning',
+    overallTone: 'neutral',
     outlook: '',
     periodLabel: periodLabel(period, language),
     readingMinutes: 0,
     scores: [],
-    summary: '',
+    summary: translate(language, 'report.unavailableBody'),
     updatedAt: '-',
   };
 }
@@ -897,7 +1655,7 @@ function normalizeHighlights(highlights?: MobileReportHighlight[]) {
       const score = item.score === null || item.score === undefined ? null : Number(item.score);
       return {
         category: String(item.category || 'report'),
-        interpretation: compactText(String(item.interpretation || 'Geen interpretatie beschikbaar.'), 160),
+        interpretation: normalizeReportText(String(item.interpretation || 'Geen interpretatie beschikbaar.')),
         name: String(item.name || 'Indicator'),
         score: Number.isFinite(score) ? score : null,
         tone: score === null || !Number.isFinite(score) ? 'neutral' as StatusTone : toneForScore(score),
@@ -1017,7 +1775,7 @@ function indicatorCompanion(
         readStringField(record, ['interpretation', 'explanation', 'uitleg', 'advies']) ||
         'Geen interpretatie beschikbaar.';
       return {
-        interpretation: compactText(interpretation, 150),
+        interpretation: normalizeReportText(interpretation),
         name,
         score,
         tone: score === null ? 'neutral' as StatusTone : toneForScore(score),
@@ -1050,8 +1808,8 @@ function setupCompanion(fullReport: ReportResponse | undefined, mobileReport: Mo
     matchLabel: 'Beste match',
     name: readStringField(bestSetup, ['name', 'setup_name']) || 'Setup',
     score: readNumericField(bestSetup, ['score', 'match_score']) ?? 0,
-    symbol: readStringField(bestSetup, ['symbol', 'asset']) || 'BTC',
-    timeframe: readStringField(bestSetup, ['timeframe', 'frequency']) || '1w',
+    symbol: readStringField(bestSetup, ['symbol', 'asset']) || '',
+    timeframe: readStringField(bestSetup, ['timeframe', 'frequency']) || '',
     topSetups,
     type: 'setup',
   };
@@ -1066,9 +1824,9 @@ function strategyCompanion(fullReport: ReportResponse | undefined, mobileReport:
     entry: readNumericField(strategy, ['entry', 'entry_price']),
     name: readStringField(strategy, ['setup_name', 'name', 'strategy']) || 'Actieve strategie',
     stopLoss: readNumericField(strategy, ['stop_loss', 'stop']),
-    symbol: readStringField(strategy, ['symbol', 'asset']) || 'BTC',
+    symbol: readStringField(strategy, ['symbol', 'asset']) || '',
     targets: normalizeTargets(readField(strategy, ['targets', 'target_prices'])),
-    timeframe: readStringField(strategy, ['timeframe', 'frequency']) || '1w',
+    timeframe: readStringField(strategy, ['timeframe', 'frequency']) || '',
     type: 'strategy',
   };
 }
@@ -1099,6 +1857,111 @@ function readingMinutes(sections: MappedReport['fullSections']) {
   return Math.ceil(words / 180);
 }
 
+function mapFinnReflectionEnvelope(envelope: {
+  analysis?: Record<string, unknown> | null;
+  next_best_action?: string | null;
+  response?: string;
+  risk_summary?: string | null;
+  summary?: string | null;
+}) {
+  const body = normalizeReportText(String(envelope.response || envelope.summary || 'No Finn reflection available.'));
+  const headline = compactText(
+    firstSentence(body) || String(envelope.summary || envelope.risk_summary || envelope.next_best_action || 'Finn reflection'),
+    88,
+  );
+
+  return {
+    analysis:
+      readRecord((envelope as Record<string, unknown>)?.analysis) ??
+      readRecord(readField(readRecord((envelope as Record<string, unknown>)?.state), ['analysis'])) ??
+      readRecord((envelope as Record<string, unknown>)?.state),
+    body,
+    headline,
+    next: envelope.next_best_action || null,
+    risk: envelope.risk_summary || null,
+    summary: envelope.summary || null,
+  } satisfies FinnReflectionResponse;
+}
+
+function buildFinnReflectionPresentation(reflection: FinnReflectionResponse) {
+  const analysis = readRecord(reflection.analysis);
+  const sections = readRecord(readField(analysis, ['sections']));
+  const dayClose = readRecord(readField(analysis, ['day_close']));
+  const activityBlock =
+    readRecord(readField(dayClose, ['what_i_did_today'])) ?? readRecord(readField(sections, ['activity_journal']));
+  const blockedBlock =
+    readRecord(readField(dayClose, ['what_finn_blocked'])) ?? readRecord(readField(sections, ['blocked_summary']));
+  const deviationBlock =
+    readRecord(readField(dayClose, ['where_i_deviated'])) ?? readRecord(readField(sections, ['plan_adherence']));
+  const activityEntries = readArray(readField(activityBlock, ['entries']));
+  const blockedEntries = readArray(readField(blockedBlock, ['entries']));
+  const deviationEntries = readArray(readField(deviationBlock, ['entries']));
+  const reviewed = activityEntries.length;
+  const blocked = blockedEntries.length;
+  const open = activityEntries.filter((entry) => {
+    const record = readRecord(entry);
+    const haystack = [
+      readStringField(record, ['status', 'resolve_state', 'label', 'type']),
+      readStringField(record, ['message', 'outcome']),
+    ]
+      .filter(Boolean)
+      .join(' ')
+      .toLowerCase();
+    return ['pending', 'open', 'later', 'snooz', 'waiting', 'needs review', 'needs input'].some((pattern) =>
+      haystack.includes(pattern),
+    );
+  }).length;
+  const riskBody =
+    reflection.risk ||
+    readStringField(blockedBlock, ['summary', 'headline']) ||
+    readStringField(deviationBlock, ['summary', 'headline']) ||
+    'Keep logging decisions clearly so Finn can judge patterns with more confidence.';
+  const nextBody =
+    reflection.next ||
+    readStringField(dayClose, ['coach_message', 'next_best_action']) ||
+    'Keep decisions explicit and let the next few actions build a clearer reflection.';
+  const summaryBody =
+    reflection.summary ||
+    readStringField(activityBlock, ['summary', 'headline']) ||
+    'The available evidence is still too limited for a stronger positive conclusion.';
+  const headline =
+    reflection.headline ||
+    readStringField(dayClose, ['headline']) ||
+    'There is not enough real activity yet for a firm reflection.';
+
+  return {
+    headline,
+    insights: [
+      {
+        background: '#ECFDF5',
+        body: summaryBody,
+        border: '#A7F3D0',
+        color: '#166534',
+        label: 'WHAT WENT WELL',
+      },
+      {
+        background: '#FFFBEB',
+        body: riskBody,
+        border: '#FCD34D',
+        color: '#9A3412',
+        label: 'WHAT NEEDS ATTENTION',
+      },
+      {
+        background: '#EFF6FF',
+        body: nextBody,
+        border: '#BFDBFE',
+        color: '#1D4ED8',
+        label: 'NEXT STEP',
+      },
+    ],
+    metrics: [
+      { label: 'REVIEWED', value: String(reviewed) },
+      { label: 'BLOCKED', value: String(blocked) },
+      { label: 'OPEN', value: String(open) },
+    ],
+  };
+}
+
 function readRecord(value: unknown): Record<string, unknown> | undefined {
   if (!value) return undefined;
   if (Array.isArray(value)) return readRecord(value[0]);
@@ -1127,21 +1990,22 @@ function readArray(value: unknown): unknown[] {
   return [];
 }
 
-function readField(source: Record<string, unknown>, keys: string[]) {
+function readField(source: Record<string, unknown> | undefined, keys: string[]) {
   for (const key of keys) {
-    if (source[key] !== undefined && source[key] !== null) return source[key];
+    const value = source?.[key];
+    if (value !== undefined && value !== null) return value;
   }
   return undefined;
 }
 
-function readStringField(source: Record<string, unknown>, keys: string[]) {
+function readStringField(source: Record<string, unknown> | undefined, keys: string[]) {
   const value = readField(source, keys);
   if (typeof value === 'string' && value.trim()) return value.trim();
   if (typeof value === 'number' && Number.isFinite(value)) return String(value);
   return '';
 }
 
-function readNumericField(source: Record<string, unknown>, keys: string[]) {
+function readNumericField(source: Record<string, unknown> | undefined, keys: string[]) {
   const value = readField(source, keys);
   if (typeof value === 'number' && Number.isFinite(value)) return value;
   if (typeof value === 'string' && Number.isFinite(Number(value))) return Number(value);
@@ -1206,6 +2070,12 @@ function normalizeReportText(value: string) {
     .trim();
 }
 
+function firstSentence(value: string) {
+  const clean = normalizeReportText(value);
+  const sentence = clean.match(/[^.!?]+[.!?]+|[^.!?]+$/)?.[0]?.trim() || '';
+  return sentence;
+}
+
 function headlineFromReport(summary: string, avgScore: number) {
   if (avgScore >= 70) return 'Risk-on, selective';
   if (avgScore >= 55) return 'Constructive, wait confirmation';
@@ -1219,6 +2089,116 @@ function conclusionTitle(avgScore: number) {
   if (avgScore >= 55) return 'Context is bruikbaar, maar niet agressief';
   if (avgScore < 40) return 'Risico eerst beoordelen';
   return 'Wachten blijft verdedigbaar';
+}
+
+function buildReflectionOverviewCards(report: MappedReport) {
+  if (report.highlights.length === 0) return [];
+  const warningHighlight = report.highlights.find((item) => item.tone === 'danger' || item.tone === 'warning') ?? report.highlights[0];
+
+  return [
+    {
+      bg: '#EEF4FF',
+      body: compactText(report.summary || report.headline, 52),
+      border: '#D7E5FF',
+      color: theme.colors.accent,
+      foot: report.highlights.length > 0 ? `${report.highlights.length} beslissingen bekeken` : 'Dagbeeld',
+      icon: 'file-text' as const,
+      label: 'RESULTAAT',
+      title: compactText(report.conclusionTitle || 'Plan grotendeels gevolgd', 30),
+    },
+    {
+      bg: '#FFF7E8',
+      body: compactText(
+        warningHighlight?.interpretation || report.marketAnalysis || 'Een moment vroeg om extra bevestiging.',
+        52,
+      ),
+      border: '#F8D9A6',
+      color: theme.colors.warning,
+      foot: warningHighlight ? 'Aandacht' : 'Controle',
+      icon: 'check-circle' as const,
+      label: 'BEOORDELING',
+      title: compactText(formatDecisionMomentTitle(warningHighlight?.name || 'Bevestiging vroeg aangenomen'), 30),
+    },
+    {
+      bg: '#EAF8F1',
+      body: compactText(report.outlook || 'Leg vast wat je de volgende keer anders doet.', 52),
+      border: '#C9ECD8',
+      color: theme.colors.success,
+      foot: 'Volgende trade',
+      icon: 'arrow-up-right' as const,
+      label: 'VERBETERING',
+      title: report.outlook ? compactText(report.outlook, 30) : 'Wacht op candle close',
+    },
+  ];
+}
+
+function buildDecisionMoments(report: MappedReport) {
+  const source = report.highlights.length > 0 ? report.highlights.slice(0, 3) : report.fullSections.slice(0, 3).map((section) => ({
+    category: section.label,
+    interpretation: section.paragraphs[0] || '',
+    name: section.title,
+    score: null,
+    tone: section.tone,
+  }));
+
+  return source.map((item, index) => ({
+    color: colorForTone(item.tone),
+    note:
+      item.tone === 'danger'
+        ? 'review voltooid'
+        : item.tone === 'warning'
+          ? 'controle nodig'
+          : 'risicolimiet gevolgd',
+    tag:
+      item.tone === 'danger'
+        ? 'Afwijking'
+        : item.tone === 'warning'
+        ? 'Aandacht'
+        : 'Goed',
+    time: '—',
+    title: formatDecisionMomentTitle(item.name),
+  }));
+}
+
+function formatDecisionMomentTitle(value: string) {
+  const clean = value.replace(/_/g, ' ').trim();
+  const knownMap: Record<string, string> = {
+    'change 24h': 'BTC bevestiging te vroeg',
+    volume: 'Geen extra positie toegevoegd',
+    'fear greed index': 'Marktsentiment te zwak',
+  };
+  const mapped = knownMap[clean.toLowerCase()];
+  if (mapped) return mapped;
+  return compactText(clean.charAt(0).toUpperCase() + clean.slice(1), 30);
+}
+
+function reflectionReportTitle(periodLabel: string) {
+  const clean = periodLabel.toLowerCase();
+  if (clean.includes('week')) return 'Weekly Report';
+  if (clean.includes('maand') || clean.includes('month')) return 'Monthly Report';
+  if (clean.includes('kwart') || clean.includes('quarter')) return 'Quarterly Report';
+  return 'Daily Report';
+}
+
+function iconForScoreLabel(label: string): keyof typeof Feather.glyphMap {
+  const clean = label.toLowerCase();
+  if (clean.includes('macro')) return 'globe';
+  if (clean.includes('technical')) return 'activity';
+  if (clean.includes('market')) return 'bar-chart-2';
+  if (clean.includes('setup')) return 'target';
+  return 'circle';
+}
+
+function iconForReflectionSection(title: string): keyof typeof Feather.glyphMap {
+  const clean = title.toLowerCase();
+  if (clean.includes('market')) return 'globe';
+  if (clean.includes('macro')) return 'bar-chart-2';
+  if (clean.includes('techn')) return 'trending-up';
+  if (clean.includes('setup')) return 'crosshair';
+  if (clean.includes('trade')) return 'briefcase';
+  if (clean.includes('risico')) return 'shield';
+  if (clean.includes('conclus')) return 'flag';
+  return 'file-text';
 }
 
 function periodLabel(period: ReportPeriod, language: AppLanguage) {
@@ -1306,6 +2286,594 @@ function timeLabel(value?: string | null) {
 }
 
 const styles = StyleSheet.create({
+  reflectionSection: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  reflectionHeroCard: {
+    borderRadius: 16,
+    borderWidth: 1,
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.md,
+  },
+  reflectionHeroLabelRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 10,
+  },
+  reflectionHeroDot: {
+    backgroundColor: theme.colors.accent,
+    borderRadius: 999,
+    height: 10,
+    width: 10,
+  },
+  reflectionHeroLabel: {
+    fontSize: 14,
+    fontWeight: '700',
+    lineHeight: 18,
+  },
+  reflectionHeroHeadline: {
+    fontSize: 16,
+    fontWeight: '800',
+    lineHeight: 22,
+    marginTop: theme.spacing.md,
+  },
+  reflectionHeroSupport: {
+    fontSize: 14,
+    fontWeight: '500',
+    lineHeight: 21,
+    marginTop: theme.spacing.sm,
+  },
+  reflectionHeroAction: {
+    alignSelf: 'flex-start',
+    marginTop: theme.spacing.md,
+  },
+  reflectionHeroActionText: {
+    color: theme.colors.accent,
+    fontSize: 15,
+    fontWeight: '700',
+    lineHeight: 20,
+  },
+  reflectionHeaderRow: {
+    alignItems: 'flex-end',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: theme.spacing.sm,
+  },
+  reflectionEyebrow: {
+    ...typography.eyebrow,
+  },
+  reflectionTitle: {
+    ...typography.sectionTitle,
+    marginTop: 2,
+  },
+  reflectionDate: {
+    fontSize: 14,
+    fontWeight: '500',
+    lineHeight: 18,
+  },
+  reflectionCard: {
+    borderRadius: 16,
+    borderWidth: 1,
+    marginTop: 8,
+    overflow: 'hidden',
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+  },
+  reflectionInsightRow: {
+    alignItems: 'center',
+    borderBottomWidth: 1,
+    flexDirection: 'row',
+    gap: 12,
+    paddingVertical: 8,
+  },
+  reflectionInsightRowLast: {
+    borderBottomWidth: 0,
+    paddingBottom: 0,
+  },
+  reflectionInsightIcon: {
+    alignItems: 'center',
+    borderRadius: 12,
+    borderWidth: 1,
+    height: 46,
+    justifyContent: 'center',
+    width: 46,
+  },
+  reflectionInsightCopy: {
+    flex: 1,
+    minWidth: 0,
+  },
+  reflectionInsightLabel: {
+    fontSize: 9,
+    fontWeight: '900',
+    letterSpacing: 1.8,
+    textTransform: 'uppercase',
+  },
+  reflectionInsightTitle: {
+    fontSize: 13,
+    fontWeight: '800',
+    lineHeight: 16,
+    marginTop: 1,
+  },
+  reflectionInsightBody: {
+    fontSize: 11,
+    fontWeight: '500',
+    lineHeight: 14,
+    marginTop: 1,
+  },
+  reflectionInsightFoot: {
+    fontSize: 11,
+    fontWeight: '700',
+    lineHeight: 13,
+    marginTop: 2,
+  },
+  reflectionMomentsHeader: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  reflectionMomentsTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    lineHeight: 20,
+  },
+  reflectionMomentsCount: {
+    fontSize: 13,
+    fontWeight: '500',
+    lineHeight: 16,
+  },
+  reflectionMomentRow: {
+    alignItems: 'center',
+    borderBottomWidth: 1,
+    flexDirection: 'row',
+    gap: 8,
+    paddingVertical: 8,
+  },
+  reflectionMomentRowLast: {
+    borderBottomWidth: 0,
+    paddingBottom: 0,
+  },
+  reflectionMomentTime: {
+    fontSize: 12,
+    fontWeight: '500',
+    lineHeight: 14,
+    width: 40,
+  },
+  reflectionMomentCopy: {
+    flex: 1,
+    minWidth: 0,
+  },
+  reflectionMomentTitle: {
+    fontSize: 12,
+    fontWeight: '600',
+    lineHeight: 15,
+  },
+  reflectionMomentMeta: {
+    fontSize: 10,
+    fontWeight: '500',
+    lineHeight: 12,
+    marginTop: 1,
+  },
+  reflectionReportLabel: {
+    fontSize: 11,
+    fontWeight: '900',
+    letterSpacing: 2.2,
+    textTransform: 'uppercase',
+  },
+  reflectionReportSub: {
+    fontSize: 13,
+    fontWeight: '500',
+    lineHeight: 17,
+    marginTop: 4,
+  },
+  reflectionReportOverview: {
+    borderRadius: 18,
+    borderWidth: 1,
+    marginTop: 12,
+    overflow: 'hidden',
+  },
+  reflectionReportOverviewHeader: {
+    gap: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 14,
+  },
+  reflectionFinnHeadlineCard: {
+    borderBottomWidth: 1,
+    paddingHorizontal: 14,
+    paddingVertical: 14,
+  },
+  reflectionFinnHeadlineText: {
+    ...typography.heroTitle,
+    lineHeight: 24,
+    marginTop: 6,
+  },
+  reflectionFinnMetricGrid: {
+    flexDirection: 'row',
+    gap: 12,
+    paddingHorizontal: 14,
+    paddingTop: 14,
+  },
+  reflectionFinnMetricCard: {
+    borderRadius: 16,
+    borderWidth: 1,
+    flex: 1,
+    minWidth: 0,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+  },
+  reflectionFinnMetricLabel: {
+    ...typography.metricLabelStrong,
+    letterSpacing: 1.6,
+  },
+  reflectionFinnMetricValue: {
+    fontSize: 24,
+    fontWeight: '900',
+    lineHeight: 28,
+    marginTop: 8,
+  },
+  reflectionFinnInsightGrid: {
+    gap: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 14,
+  },
+  reflectionFinnInsightCard: {
+    borderRadius: 16,
+    borderWidth: 1,
+    minWidth: 0,
+    paddingHorizontal: 14,
+    paddingVertical: 14,
+  },
+  reflectionFinnInsightLabel: {
+    ...typography.metricLabelStrong,
+    letterSpacing: 1.8,
+  },
+  reflectionFinnInsightBody: {
+    fontSize: 15,
+    fontWeight: '700',
+    lineHeight: 24,
+    marginTop: 10,
+  },
+  reflectionFinnActionRow: {
+    alignItems: 'flex-start',
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+    marginTop: 14,
+  },
+  reflectionFinnPrimaryAction: {
+    alignItems: 'center',
+    backgroundColor: theme.colors.accent,
+    borderRadius: 16,
+    justifyContent: 'center',
+    minHeight: 48,
+    paddingHorizontal: 18,
+    paddingVertical: 12,
+  },
+  reflectionFinnPrimaryActionDisabled: {
+    opacity: 0.92,
+  },
+  reflectionFinnPrimaryActionText: {
+    color: theme.colors.white,
+    fontSize: 15,
+    fontWeight: '800',
+    lineHeight: 18,
+  },
+  reflectionFinnSecondaryActionText: {
+    fontSize: 15,
+    fontWeight: '600',
+    lineHeight: 20,
+    paddingVertical: 14,
+  },
+  reflectionFinnFootnote: {
+    borderRadius: 14,
+    borderWidth: 1,
+    marginTop: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  reflectionReportOverviewLead: {
+    alignItems: 'flex-start',
+    flexDirection: 'row',
+    gap: 10,
+  },
+  reflectionReportAccentBar: {
+    borderRadius: 999,
+    height: 56,
+    marginTop: 2,
+    width: 4,
+  },
+  reflectionReportOverviewCopy: {
+    flex: 1,
+    minWidth: 0,
+  },
+  reflectionReportOverviewLabel: {
+    ...typography.metricLabelStrong,
+    letterSpacing: 1.8,
+  },
+  reflectionReportOverviewTitle: {
+    ...typography.heroTitle,
+    lineHeight: 26,
+    marginTop: 6,
+  },
+  reflectionReportOverviewMeta: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 6,
+    marginTop: 10,
+  },
+  reflectionReportOverviewMetaText: {
+    ...typography.bodyStrong,
+    lineHeight: 16,
+  },
+  reflectionScoreCluster: {
+    borderRadius: 18,
+    borderWidth: 1,
+    padding: 10,
+  },
+  reflectionReportIntro: {
+    ...typography.bodyStrong,
+    lineHeight: 17,
+    marginTop: 14,
+  },
+  reflectionReportLead: {
+    ...typography.body,
+    fontStyle: 'italic',
+    marginTop: 4,
+  },
+  reflectionScoreGrid: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  reflectionScoreCell: {
+    alignItems: 'center',
+    borderRadius: 14,
+    borderWidth: 1,
+    flex: 1,
+    minWidth: 0,
+    paddingHorizontal: 6,
+    paddingVertical: 10,
+  },
+  reflectionScoreIconWrap: {
+    alignItems: 'center',
+    borderRadius: 999,
+    height: 28,
+    justifyContent: 'center',
+    marginBottom: 8,
+    width: 28,
+  },
+  reflectionScoreLabel: {
+    minHeight: 24,
+    ...typography.chipLabelCompact,
+    textAlign: 'center',
+  },
+  reflectionScoreValue: {
+    ...typography.metricValue,
+    marginTop: 2,
+  },
+  reflectionReportOverviewFooter: {
+    alignItems: 'center',
+    borderTopWidth: 1,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+  },
+  reflectionReportOverviewStatus: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 6,
+  },
+  reflectionReportOverviewStatusText: {
+    ...typography.subcopy,
+    fontWeight: '700',
+    lineHeight: 14,
+    textTransform: 'uppercase',
+  },
+  reflectionReportOverviewStatusMeta: {
+    ...typography.subcopy,
+    fontWeight: '600',
+    lineHeight: 14,
+  },
+  reflectionReportSummary: {
+    ...typography.body,
+    marginTop: 14,
+  },
+  reflectionReportToggle: {
+    alignItems: 'center',
+    alignSelf: 'flex-end',
+    borderRadius: 999,
+    borderWidth: 1,
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  reflectionReportToggleText: {
+    ...typography.chipLabel,
+    lineHeight: 13,
+  },
+  reflectionReportRows: {
+    marginTop: 8,
+  },
+  reflectionReportRow: {
+    borderBottomWidth: 1,
+    paddingVertical: 12,
+  },
+  reflectionReportRowLast: {
+    borderBottomWidth: 0,
+    paddingBottom: 0,
+  },
+  reflectionReportRowLead: {
+    alignItems: 'flex-start',
+    flexDirection: 'row',
+    gap: 8,
+  },
+  reflectionReportRowCopy: {
+    flex: 1,
+    minWidth: 0,
+  },
+  reflectionReportRowMeta: {
+    ...typography.chipLabel,
+    lineHeight: 14,
+  },
+  reflectionReportExpanded: {
+    gap: 10,
+    marginLeft: 23,
+    marginTop: 8,
+  },
+  reflectionReportExpandedText: {
+    ...typography.body,
+    lineHeight: 20,
+  },
+  reflectionReportCompanions: {
+    marginTop: 4,
+  },
+  reflectionInlinePanel: {
+    borderRadius: 14,
+    borderWidth: 1,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  reflectionInlinePanelHeader: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 8,
+  },
+  reflectionInlinePanelTitle: {
+    ...typography.subcopy,
+    fontWeight: '700',
+    lineHeight: 15,
+  },
+  reflectionInlineMetricRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 10,
+  },
+  reflectionInlineMetricBlock: {
+    flex: 1,
+    minWidth: 0,
+  },
+  reflectionInlineMetricLabel: {
+    ...typography.metricLabel,
+  },
+  reflectionInlineMetricValue: {
+    ...typography.metricValue,
+    marginTop: 3,
+  },
+  reflectionInlineChange: {
+    fontSize: 15,
+    fontWeight: '800',
+    lineHeight: 18,
+    marginLeft: 10,
+  },
+  reflectionInlineVolume: {
+    fontSize: 12,
+    fontWeight: '500',
+    lineHeight: 17,
+    marginTop: 8,
+  },
+  reflectionInlineScoreRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginTop: 10,
+  },
+  reflectionInlineScoreChip: {
+    minWidth: 56,
+  },
+  reflectionInlineScoreChipLabel: {
+    fontSize: 10,
+    fontWeight: '700',
+    lineHeight: 12,
+  },
+  reflectionInlineScoreChipValue: {
+    fontSize: 14,
+    fontWeight: '800',
+    lineHeight: 16,
+    marginTop: 2,
+  },
+  reflectionInlineIndicatorRow: {
+    alignItems: 'center',
+    borderBottomWidth: 1,
+    borderBottomColor: theme.colors.borderSubtle,
+    flexDirection: 'row',
+    gap: 8,
+    justifyContent: 'space-between',
+    paddingVertical: 8,
+  },
+  reflectionInlineIndicatorRowLast: {
+    borderBottomWidth: 0,
+    paddingBottom: 0,
+  },
+  reflectionInlineIndicatorCopy: {
+    flex: 1,
+    minWidth: 0,
+  },
+  reflectionInlineIndicatorTitle: {
+    fontSize: 12,
+    fontWeight: '700',
+    lineHeight: 15,
+  },
+  reflectionInlineIndicatorText: {
+    fontSize: 11,
+    fontWeight: '500',
+    lineHeight: 14,
+    marginTop: 2,
+  },
+  reflectionInlineIndicatorScore: {
+    fontSize: 14,
+    fontWeight: '800',
+    lineHeight: 16,
+    marginLeft: 8,
+  },
+  reflectionInlinePrimary: {
+    fontSize: 14,
+    fontWeight: '800',
+    lineHeight: 18,
+    marginTop: 8,
+  },
+  reflectionInlineSub: {
+    fontSize: 12,
+    fontWeight: '500',
+    lineHeight: 15,
+    marginTop: 2,
+  },
+  reflectionInlineMetricScore: {
+    fontSize: 14,
+    fontWeight: '800',
+    lineHeight: 16,
+  },
+  reflectionConclusionBox: {
+    borderRadius: 14,
+    borderWidth: 1,
+    marginTop: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+  },
+  reflectionConclusionTitle: {
+    fontSize: 14,
+    fontWeight: '700',
+    lineHeight: 18,
+  },
+  reflectionConclusionBody: {
+    fontSize: 13,
+    fontWeight: '500',
+    lineHeight: 17,
+    marginTop: 4,
+  },
+  reflectionReportFooter: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 10,
+  },
+  reflectionFooterMeta: {
+    fontSize: 12,
+    fontWeight: '500',
+    lineHeight: 15,
+  },
   summaryCard: {
     borderRadius: theme.radius.md,
     borderWidth: 0.5,
@@ -1314,10 +2882,10 @@ const styles = StyleSheet.create({
     flexShrink: 0,
     gap: 4,
     maxWidth: '47.5%',
-    minHeight: 86,
+    minHeight: 74,
     minWidth: 0,
-    paddingHorizontal: theme.spacing.md,
-    paddingVertical: theme.spacing.md,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
   },
   summaryGrid: {
     columnGap: theme.spacing.sm,
@@ -1343,7 +2911,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: theme.spacing.md,
     justifyContent: 'space-between',
-    marginBottom: theme.spacing.md,
+    marginBottom: 10,
   },
   summaryValue: {
     flexShrink: 1,
@@ -1441,10 +3009,10 @@ const styles = StyleSheet.create({
   },
   companionPrimary: {
     color: theme.colors.text,
-    fontSize: 24,
+    fontSize: 18,
     fontWeight: '900',
     letterSpacing: 0,
-    lineHeight: 29,
+    lineHeight: 22,
     marginTop: theme.spacing.md,
   },
   companionRow: {
@@ -1496,10 +3064,7 @@ const styles = StyleSheet.create({
   },
   generated: {
     color: theme.colors.textDim,
-    fontSize: 10,
-    fontWeight: '900',
-    letterSpacing: 1.2,
-    textTransform: 'uppercase',
+    ...typography.metricLabelStrong,
   },
   heroDate: {
     color: theme.colors.textMuted,
@@ -1517,23 +3082,16 @@ const styles = StyleSheet.create({
   },
   heroHeadline: {
     color: theme.colors.text,
-    fontSize: 18,
-    fontWeight: '900',
-    letterSpacing: 0,
-    lineHeight: 22,
+    ...typography.metricValue,
     marginTop: theme.spacing.lg,
   },
   heroLabel: {
     color: theme.colors.accent,
-    fontSize: theme.typography.label,
-    fontWeight: '900',
-    letterSpacing: 1.6,
-    textTransform: 'uppercase',
+    ...typography.eyebrow,
   },
   heroTitle: {
     color: theme.colors.text,
-    fontSize: theme.typography.title,
-    fontWeight: '900',
+    ...typography.heroTitle,
     marginTop: 4,
   },
   heroTop: {
@@ -1543,10 +3101,7 @@ const styles = StyleSheet.create({
   },
   highlightCategory: {
     color: theme.colors.textDim,
-    fontSize: theme.typography.label,
-    fontWeight: '900',
-    letterSpacing: 1.4,
-    textTransform: 'uppercase',
+    ...typography.eyebrow,
   },
   highlightHeader: {
     alignItems: 'center',
@@ -1561,8 +3116,7 @@ const styles = StyleSheet.create({
   },
   highlightText: {
     color: theme.colors.textMuted,
-    fontSize: theme.typography.body,
-    fontWeight: '600',
+    ...typography.bodyStrong,
     lineHeight: 22,
     marginTop: theme.spacing.md,
   },
@@ -1595,8 +3149,7 @@ const styles = StyleSheet.create({
   },
   indicatorText: {
     color: theme.colors.textMuted,
-    fontSize: theme.typography.body,
-    fontWeight: '600',
+    ...typography.bodyStrong,
     lineHeight: 22,
     marginTop: theme.spacing.sm,
   },
@@ -1611,10 +3164,7 @@ const styles = StyleSheet.create({
   },
   integrity: {
     color: theme.colors.textDim,
-    fontSize: 10,
-    fontWeight: '900',
-    letterSpacing: 1.2,
-    textTransform: 'uppercase',
+    ...typography.metricLabelStrong,
   },
   periodShortcut: {
     alignItems: 'center',
@@ -1655,8 +3205,7 @@ const styles = StyleSheet.create({
   },
   periodText: {
     color: theme.colors.textMuted,
-    fontSize: 11,
-    fontWeight: '900',
+    ...typography.metaStrong,
   },
   periodTextActive: {
     color: theme.colors.text,
@@ -1667,10 +3216,7 @@ const styles = StyleSheet.create({
   },
   metricLabel: {
     color: theme.colors.textDim,
-    fontSize: theme.typography.label,
-    fontWeight: '900',
-    letterSpacing: 1.1,
-    textTransform: 'uppercase',
+    ...typography.eyebrow,
   },
   metricPanel: {
     backgroundColor: theme.colors.surface,
@@ -1682,9 +3228,7 @@ const styles = StyleSheet.create({
   },
   metricValue: {
     color: theme.colors.text,
-    fontSize: 18,
-    fontWeight: '900',
-    letterSpacing: 0,
+    ...typography.metricValue,
     marginTop: theme.spacing.sm,
   },
   marketBlock: {
@@ -1696,9 +3240,7 @@ const styles = StyleSheet.create({
   },
   marketPrice: {
     color: theme.colors.text,
-    fontSize: 18,
-    fontWeight: '900',
-    letterSpacing: 0,
+    ...typography.metricValue,
   },
   marketPriceRow: {
     alignItems: 'baseline',
@@ -1709,8 +3251,7 @@ const styles = StyleSheet.create({
   },
   notificationBody: {
     color: theme.colors.textMuted,
-    fontSize: theme.typography.body,
-    fontWeight: '600',
+    ...typography.bodyStrong,
     lineHeight: 22,
     marginTop: theme.spacing.md,
   },
@@ -1727,16 +3268,14 @@ const styles = StyleSheet.create({
   },
   notificationButtonText: {
     color: theme.colors.accent,
-    fontSize: 12,
+    ...typography.subcopy,
     fontWeight: '700',
     letterSpacing: 0.5,
     textTransform: 'uppercase',
   },
   notificationTitle: {
     color: theme.colors.text,
-    fontSize: theme.typography.title,
-    fontWeight: '900',
-    lineHeight: 28,
+    ...typography.heroTitle,
     marginTop: 4,
   },
   progressFill: {

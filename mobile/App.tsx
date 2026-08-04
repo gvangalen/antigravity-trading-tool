@@ -3,6 +3,7 @@ import * as Notifications from 'expo-notifications';
 import { StatusBar } from 'expo-status-bar';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 import { AuthProvider, useAuth } from './src/auth/AuthProvider';
@@ -18,17 +19,19 @@ import { FinnOverlayProvider } from './src/contexts/FinnOverlayContext';
 
 export default function App() {
   return (
-    <SafeAreaProvider>
-      <AppPreferencesProvider>
-        <ActiveIntelligenceProvider>
-          <AuthProvider>
-            <FinnOverlayProvider>
-              <AppShell />
-            </FinnOverlayProvider>
-          </AuthProvider>
-        </ActiveIntelligenceProvider>
-      </AppPreferencesProvider>
-    </SafeAreaProvider>
+    <GestureHandlerRootView style={styles.gestureRoot}>
+      <SafeAreaProvider>
+        <AppPreferencesProvider>
+          <ActiveIntelligenceProvider>
+            <AuthProvider>
+              <FinnOverlayProvider>
+                <AppShell />
+              </FinnOverlayProvider>
+            </AuthProvider>
+          </ActiveIntelligenceProvider>
+        </AppPreferencesProvider>
+      </SafeAreaProvider>
+    </GestureHandlerRootView>
   );
 }
 
@@ -149,6 +152,9 @@ function AuthGate() {
 }
 
 const styles = StyleSheet.create({
+  gestureRoot: {
+    flex: 1,
+  },
   loading: {
     alignItems: 'center',
     backgroundColor: theme.colors.background,

@@ -13,11 +13,16 @@ import { StrategyStatusCard } from '../components/cards/StrategyStatusCard';
 import { LoadingSkeletonCard } from '../components/layout/LoadingSkeletonCard';
 import { ScreenContainer } from '../components/layout/ScreenContainer';
 import { StatusChip } from '../components/layout/StatusChip';
+import { SwipeActionRow } from '../components/rows/SwipeActionRow';
 import { BottomSheet } from '../components/sheets/BottomSheet';
+import { ConfirmDestructiveSheetContent, RowActionSheetContent } from '../components/sheets/RowActionSheetContent';
 import { StrategyCard } from '../components/StrategyCard';
 import { TodayWithFinnCard } from '../components/workspace/TodayWithFinnCard';
+import { WorkflowStepsRail } from '../components/workspace/WorkflowStepsRail';
 import { WorkspaceHeroSection } from '../components/workspace/WorkspaceHeroSection';
+import { listRowStandards } from '../constants/listRows';
 import { StatusTone, statusTones, theme } from '../constants/theme';
+import { typography } from '../constants/typography';
 
 import { useApiResource } from '../hooks/useApiResource';
 import { localizedBackendText, translate, translateFinnTag } from '../i18n';
@@ -38,7 +43,7 @@ import { useFinnOverlay } from '../contexts/FinnOverlayContext';
 import { trackAssistantEvent } from '../services/assistantAnalytics';
 
 type UnknownRecord = Record<string, unknown>;
-type SheetKey = 'setup' | 'strategy' | 'risk' | 'confirm' | null;
+type SheetKey = 'setup' | 'strategy' | 'risk' | 'confirm' | 'plan-detail' | null;
 
 type SetupSummary = {
   id?: number;
@@ -70,16 +75,33 @@ type PlanStrategySummary = {
   exists: boolean;
 };
 
+type PlanListItem = SetupSummary & {
+  hasStrategy: boolean;
+  isActive: boolean;
+  strategyId?: number;
+  strategyLine: string;
+};
+
+type PlanDetailState = {
+  plan: PlanListItem;
+  strategy?: StrategyResponse;
+};
+
 export function SetupScreen() {
   const route = useRoute<RouteProp<MainTabParamList, 'Setup'>>();
   const navigation = useNavigation<any>();
   const { context, updateContext } = useIntelligenceContext();
+  const { language } = useAppPreferences();
   const activeAsset = route.params?.symbol ?? context.asset;
   const { openFinn } = useFinnOverlay();
   const [sheet, setSheet] = useState<SheetKey>(null);
   const [handledNotification, setHandledNotification] = useState<string | null>(null);
   const [actionStatus, setActionStatus] = useState<string>('');
   const [actionLoading, setActionLoading] = useState(false);
+  const [planActionItem, setPlanActionItem] = useState<PlanListItem | null>(null);
+  const [planRemoveItem, setPlanRemoveItem] = useState<PlanListItem | null>(null);
+  const [planDetail, setPlanDetail] = useState<PlanDetailState | null>(null);
+  const [planDetailLoading, setPlanDetailLoading] = useState(false);
 
   useEffect(() => {
     trackAssistantEvent({
@@ -150,6 +172,18 @@ export function SetupScreen() {
     [activeOverviewAsset, activeSetupResource.data],
   );
   const strategySource = useMemo(() => extractStrategy(strategyResource.data), [strategyResource.data]);
+  const hasLinkedStrategy = useMemo(
+    () =>
+      Boolean(
+        strategySource &&
+          (
+            readString(strategySource, ['symbol', 'asset']) ||
+            readString(strategySource, ['name', 'strategy_name', 'setup_name']) ||
+            readString(strategySource, ['entry_zone', 'entry', 'entry_price'])
+          ),
+      ),
+    [strategySource],
+  );
   const activeStrategyName = useMemo(
     () =>
       readString(strategySource, ['name', 'strategy_name', 'setup_name'], '') ||
@@ -185,6 +219,42 @@ export function SetupScreen() {
   const botDecision = useMemo(() => mapBotDecision(botDecisionSource), [botDecisionSource]);
   const botMeta = useMemo(() => mapBotActionMeta(botResource.data, botDecisionSource), [botDecisionSource, botResource.data]);
   const topSetups = useMemo(() => mapTopSetups(topSetupsResource.data), [topSetupsResource.data]);
+  const planItems = useMemo(() => {
+    const merged = [setup, ...topSetups];
+    const seen = new Set<string>();
+    return merged
+      .filter((item) => {
+        const key = `${item.name}-${item.symbol}-${item.timeframe}`;
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      })
+      .map((item) => {
+        const isActivePlan = item.name === setup.name;
+        const planStrategy = item.id ? planStrategiesResource.data[String(item.id)] : null;
+        const hasStrategy = isActivePlan ? hasLinkedStrategy : Boolean(planStrategy?.exists);
+        return {
+          ...item,
+          hasStrategy,
+          isActive: isActivePlan,
+          strategyId: isActivePlan ? readOptionalNumber(strategySource, ['id', 'strategy_id']) : planStrategy?.id,
+          strategyLine: hasStrategy
+            ? translate(language, 'myPlan.strategyComplete')
+            : translate(language, 'myPlan.strategyMissing'),
+        };
+      });
+  }, [hasLinkedStrategy, language, planStrategiesResource.data, setup, strategySource, topSetups]);
+  const activePlanItem = useMemo(
+    () =>
+      planItems.find((item) => item.isActive) ?? {
+        ...setup,
+        hasStrategy: hasLinkedStrategy,
+        isActive: true,
+        strategyId: readOptionalNumber(strategySource, ['id', 'strategy_id']),
+        strategyLine: translate(language, hasLinkedStrategy ? 'myPlan.strategyComplete' : 'myPlan.strategyMissing'),
+      },
+    [hasLinkedStrategy, language, planItems, setup, strategySource],
+  );
   const decisionState = useMemo(
     () => mapDecisionState(activeOverviewAsset, setup, botDecision.action),
     [activeOverviewAsset, botDecision.action, setup],
@@ -263,9 +333,68 @@ export function SetupScreen() {
     }
   }
 
+  async function openPlanItem(plan: PlanListItem) {
+    await triggerHaptic('selection');
+    setPlanDetailLoading(true);
+    setSheet('plan-detail');
+    try {
+      let nextStrategy: StrategyResponse | undefined;
+      if (plan.isActive) {
+        nextStrategy = strategyResource.data;
+      } else if (plan.id) {
+        try {
+          nextStrategy = await intelligenceApi.getStrategyBySetup(plan.id);
+        } catch {
+          nextStrategy = undefined;
+        }
+      }
+      setPlanDetail({ plan, strategy: nextStrategy });
+    } finally {
+      setPlanDetailLoading(false);
+    }
+  }
+
+  async function openPlanActions(plan: PlanListItem) {
+    await triggerHaptic('selection');
+    setPlanActionItem(plan);
+  }
+
+  async function editPlanItem(plan: PlanListItem) {
+    setPlanActionItem(null);
+    await triggerHaptic('selection');
+    openFinn({
+      prefill: `Help me edit plan ${plan.name} for ${plan.symbol} on ${plan.timeframe}. Keep the existing intent, then suggest the smallest useful setup, strategy or risk change.`,
+      source: 'my-plan-edit',
+      symbol: plan.symbol || activeAsset,
+    });
+  }
+
+  function promptPlanRemove(plan: PlanListItem) {
+    setPlanActionItem(null);
+    setPlanRemoveItem(plan);
+  }
+
+  async function confirmPlanRemove() {
+    if (!planRemoveItem?.id) return;
+
+    if (planRemoveItem.strategyId) {
+      await intelligenceApi.deleteStrategy(planRemoveItem.strategyId);
+    }
+    await intelligenceApi.deleteSetup(planRemoveItem.id);
+    setPlanRemoveItem(null);
+
+    await Promise.all([
+      activeSetupResource.refresh(),
+      topSetupsResource.refresh(),
+      strategyResource.refresh(),
+      planStrategiesResource.refresh(),
+      overviewResource.refresh(),
+    ]);
+  }
+
   return (
     <ScreenContainer
-      contentInsetBottom={272}
+      contentInsetBottom={340}
       edgeToEdge={true}
       refreshing={
         overviewResource.refreshing ||
@@ -316,56 +445,70 @@ export function SetupScreen() {
                 symbol: activeAsset,
               })
             }
+            hasLinkedStrategy={hasLinkedStrategy}
             setup={setup}
             strategy={strategy}
           />
-          <MyPlanWorkflowIntro setup={setup} />
+          <WorkflowStepsRail
+            steps={[
+              {
+                body: translate(language, 'myPlan.workflowStepSetup'),
+                icon: 'layers',
+                step: 1,
+                title: translate(language, 'myPlan.setupLabel'),
+              },
+              {
+                body: translate(language, 'myPlan.workflowStepStrategy'),
+                icon: 'target',
+                step: 2,
+                title: translate(language, 'myPlan.strategyLabel'),
+              },
+              {
+                body: translate(language, 'myPlan.workflowStepPlan'),
+                icon: 'shield',
+                step: 3,
+                title: 'Plan',
+              },
+            ]}
+          />
           <ActivePlanWorkspaceCard
             botDecision={botDecision}
             decisionState={decisionState}
-            onOpenSetup={() => setSheet('setup')}
+            hasLinkedStrategy={hasLinkedStrategy}
+            isStale={isStale}
+            onOpenSetup={() => openPlanItem(activePlanItem)}
             onOpenStrategy={() => setSheet('strategy')}
             onReviewBot={() => setSheet('confirm')}
             setup={setup}
             strategy={strategy}
           />
           <AllPlansListCard
-            activeSetup={setup}
-            activeStrategyName={activeStrategyName}
-            planStrategies={planStrategiesResource.data}
-            strategy={strategy}
-            setups={topSetups}
+            onCreatePlan={() =>
+              openFinn({
+                prefill: `Help me create a new trading plan for ${activeAsset}. Start with setup, then strategy, then risk rules.`,
+                source: 'my-plan-create',
+                symbol: activeAsset,
+              })
+            }
+            onDeletePlan={promptPlanRemove}
+            onEditPlan={editPlanItem}
+            onOpenActions={openPlanActions}
+            onOpenPlan={openPlanItem}
+            plans={planItems}
           />
         </>
       )}
 
-      {overviewResource.error || activeSetupResource.error || strategyResource.error || botResource.error ? (
-        <InsightCard
-          label="Action sync"
-          title="Een deel van de decision-data is stale."
-          body={
-            overviewResource.error?.message ||
-            activeSetupResource.error?.message ||
-            strategyResource.error?.message ||
-            botResource.error?.message ||
-            (planStrategiesResource.error instanceof Error ? planStrategiesResource.error.message : '') ||
-            'Controleer backend/API status.'
-          }
-          tone="warning"
-          cta="Ververs"
-        />
-      ) : null}
-
-      <BottomSheet visible={sheet === 'setup'} title="Actieve setup" onClose={() => setSheet(null)}>
+      <BottomSheet visible={sheet === 'setup'} title={translate(language, 'myPlan.sheetSetupTitle')} onClose={() => setSheet(null)}>
         <SetupSheet setup={setup} />
       </BottomSheet>
-      <BottomSheet visible={sheet === 'strategy'} title="Strategiedetail" onClose={() => setSheet(null)}>
+      <BottomSheet visible={sheet === 'strategy'} title={translate(language, 'myPlan.sheetStrategyTitle')} onClose={() => setSheet(null)}>
         <StrategySheet strategy={strategySource} fallback={strategy} />
       </BottomSheet>
-      <BottomSheet visible={sheet === 'risk'} title="Laat Finn risico uitleggen" onClose={() => setSheet(null)}>
+      <BottomSheet visible={sheet === 'risk'} title={translate(language, 'myPlan.sheetRiskTitle')} onClose={() => setSheet(null)}>
         <RiskSheet decisionState={decisionState} setup={setup} botReasons={botMeta.reasons} />
       </BottomSheet>
-      <BottomSheet visible={sheet === 'confirm'} title="Bevestig botactie" onClose={() => setSheet(null)}>
+      <BottomSheet visible={sheet === 'confirm'} title={translate(language, 'myPlan.sheetConfirmTitle')} onClose={() => setSheet(null)}>
         <ConfirmBotSheet
           actionLoading={actionLoading}
           actionStatus={actionStatus}
@@ -375,6 +518,71 @@ export function SetupScreen() {
           onSkip={skipBotAction}
         />
       </BottomSheet>
+      <BottomSheet
+        visible={sheet === 'plan-detail'}
+        title={planDetail?.plan?.name ?? 'Plan details'}
+        onClose={() => {
+          setSheet(null);
+          setPlanDetail(null);
+        }}
+      >
+        <PlanDetailSheet
+          loading={planDetailLoading}
+          plan={planDetail?.plan}
+          strategy={planDetail?.strategy}
+          onAskFinn={() => {
+            if (!planDetail?.plan) return;
+            openFinn({
+              prefill: `Explain plan ${planDetail.plan.name} for ${planDetail.plan.symbol}. Summarize setup quality, linked strategy and the main risk check.`,
+              source: 'my-plan-detail',
+              symbol: planDetail.plan.symbol || activeAsset,
+            });
+          }}
+        />
+      </BottomSheet>
+      <BottomSheet
+        visible={Boolean(planActionItem)}
+        title={translate(language, 'common.actions')}
+        onClose={() => setPlanActionItem(null)}
+      >
+        <RowActionSheetContent
+          actions={
+            planActionItem
+              ? [
+                  {
+                    key: 'edit',
+                    label: translate(language, 'common.edit'),
+                    description: `${planActionItem.name} · ${planActionItem.symbol} · ${planActionItem.timeframe}`,
+                    icon: 'edit-3',
+                    onPress: () => editPlanItem(planActionItem),
+                  },
+                  {
+                    key: 'delete',
+                    label: translate(language, 'common.delete'),
+                    description: `Verwijder ${planActionItem.name} en gekoppelde strategie.`,
+                    icon: 'trash-2',
+                    tone: 'danger',
+                    onPress: () => promptPlanRemove(planActionItem),
+                  },
+                ]
+              : []
+          }
+        />
+      </BottomSheet>
+      <BottomSheet
+        visible={Boolean(planRemoveItem)}
+        title="Plan verwijderen?"
+        onClose={() => setPlanRemoveItem(null)}
+      >
+        {planRemoveItem ? (
+          <ConfirmDestructiveSheetContent
+            body={`Verwijder ${planRemoveItem.name} voor ${planRemoveItem.symbol}. ${planRemoveItem.hasStrategy ? 'De gekoppelde strategie wordt ook verwijderd.' : 'Er is nog geen strategie gekoppeld.'}`}
+            confirmLabel={translate(language, 'common.delete')}
+            onConfirm={confirmPlanRemove}
+            title="Plan verwijderen?"
+          />
+        ) : null}
+      </BottomSheet>
     </ScreenContainer>
   );
 }
@@ -382,6 +590,7 @@ export function SetupScreen() {
 function FinnSetupBriefingCard({
   briefing,
   decisionState,
+  hasLinkedStrategy,
   isStale,
   onAskFinn,
   setup,
@@ -390,6 +599,7 @@ function FinnSetupBriefingCard({
 }: {
   briefing?: MobileOverviewResponse['finn_briefing'];
   decisionState: ReturnType<typeof mapDecisionState>;
+  hasLinkedStrategy: boolean;
   isStale: boolean;
   onAskFinn: () => void;
   setup: SetupSummary;
@@ -420,7 +630,7 @@ function FinnSetupBriefingCard({
     {
       key: 'performance',
       label: translate(language, 'queue.label.performance'),
-      value: strategy && strategy.symbol && strategy.entryZone !== 'n/a' ? 1 : 0,
+      value: hasLinkedStrategy ? 1 : 0,
       body: translate(language, 'queue.body.plansAlreadyReady'),
     },
   ];
@@ -429,126 +639,40 @@ function FinnSetupBriefingCard({
     briefing?.summary?.trim(),
     translate(language, 'finn.noBriefingReady'),
   );
-  const tags = [
-    {
-      label: translateFinnTag(
-        language,
-        decisionState.score >= 70 ? 'Constructive' : decisionState.score >= 50 ? 'Selective' : 'Defensive',
-      ),
-      tone: scoreBadgeTone(decisionState.score),
-    },
-    { label: translateFinnTag(language, setup.action || 'Review'), tone: setup.tone },
-    { label: translate(language, 'common.confidence', { count: setup.score }), tone: 'accent' as StatusTone },
-    {
-      label: translateFinnTag(language, isStale ? 'Stale sync' : strategy?.status || 'Plan review'),
-      tone: isStale ? ('warning' as StatusTone) : ('neutral' as StatusTone),
-    },
+  const metaItems = [
+    decisionState.score >= 70
+      ? translate(language, 'myPlan.constructive')
+      : decisionState.score >= 50
+        ? translate(language, 'myPlan.selective')
+        : translate(language, 'myPlan.defensive'),
+    `${setup.score}% match`,
+    translate(language, 'myPlan.reviewPoints', { count: reviewCount }),
   ];
 
   return (
     <WorkspaceHeroSection>
       <TodayWithFinnCard
         headline={finnHeadline}
-        support={translate(language, reviewCount === 1 ? 'finn.reviewNeedsAttention' : 'finn.reviewsNeedAttention', {
-          count: reviewCount,
-        })}
-        tags={tags}
-        primaryActionLabel={translate(language, 'finn.refreshDailyScores')}
-        onPrimaryAction={onAskFinn}
+        metaItems={metaItems}
+        support={
+          hasLinkedStrategy
+            ? translate(language, 'myPlan.supportNeedsConfirmation', {
+                value: Math.max(0, 100 - strategy.confidence),
+              })
+            : translate(language, 'myPlan.supportInsufficientConfidence')
+        }
         queueItems={queueItems}
-        queueStatusLabel={translate(language, 'common.itemsOpen', { count: Number(queueItems[0]?.value ?? 0) })}
+        queueStatusLabel={translate(language, 'common.itemsOpen', { count: reviewCount })}
       />
     </WorkspaceHeroSection>
-  );
-}
-
-function MyPlanWorkflowIntro({ setup }: { setup: SetupSummary }) {
-  const { appearance, language } = useAppPreferences();
-  const colors = preferenceColors(appearance);
-  const steps = [
-    {
-      icon: 'layers',
-      title: '1 Setup',
-      text: translate(language, 'myPlan.workflowStepSetup'),
-    },
-    {
-      icon: 'activity',
-      title: '2 Strategy',
-      text: translate(language, 'myPlan.workflowStepStrategy'),
-    },
-    {
-      icon: 'shield',
-      title: '3 Plan',
-      text: translate(language, 'myPlan.workflowStepPlan'),
-    },
-  ] as const;
-
-  return (
-    <View
-      style={[
-        styles.workspacePanel,
-        { backgroundColor: colors.surface, borderColor: colors.borderSubtle },
-      ]}
-    >
-      <Text style={[styles.workspaceEyebrow, { color: colors.textDim }]}>
-        {translate(language, 'myPlan.workflowEyebrow')}
-      </Text>
-      <Text style={[styles.workspaceSectionTitle, { color: colors.text }]}>
-        {translate(language, 'myPlan.workflowTitle')}
-      </Text>
-      <Text style={[styles.workflowHeroSubtitle, { color: colors.textMuted }]}>
-        {translate(language, 'myPlan.workflowSubtitle')}
-      </Text>
-
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        style={styles.workflowRail}
-        contentContainerStyle={styles.workflowRailContent}
-      >
-        {steps.map((step, index) => (
-          <View
-            key={step.title}
-            style={[
-              styles.workflowStepCard,
-              {
-                backgroundColor: colors.surface,
-                borderColor: colors.borderSubtle,
-                marginRight: index === steps.length - 1 ? 0 : 10,
-              },
-            ]}
-          >
-            <View style={[styles.workflowStepIcon, { backgroundColor: colors.surfaceMuted }]}>
-              <Feather name={step.icon} size={16} color={colors.accent} />
-            </View>
-            <View style={styles.workflowStepCopy}>
-              <Text style={[styles.workflowStepTitle, { color: colors.text }]}>{step.title}</Text>
-              <Text style={[styles.workflowStepText, { color: colors.textMuted }]} numberOfLines={2}>
-                {step.text}
-              </Text>
-            </View>
-          </View>
-        ))}
-      </ScrollView>
-
-      <View style={styles.planCheckStrip}>
-        <View style={styles.planCheckIcon}>
-          <Feather name="zap" size={15} color="#fff" />
-        </View>
-        <View style={styles.flexText}>
-          <Text style={styles.planCheckEyebrow}>{translate(language, 'myPlan.planCheckEyebrow')}</Text>
-          <Text style={styles.planCheckText}>
-            {translate(language, 'myPlan.planCheckReady', { name: setup.name })}
-          </Text>
-        </View>
-      </View>
-    </View>
   );
 }
 
 function ActivePlanWorkspaceCard({
   botDecision,
   decisionState,
+  hasLinkedStrategy,
+  isStale,
   onOpenSetup,
   onOpenStrategy,
   onReviewBot,
@@ -557,6 +681,8 @@ function ActivePlanWorkspaceCard({
 }: {
   botDecision: ReturnType<typeof mapBotDecision>;
   decisionState: ReturnType<typeof mapDecisionState>;
+  hasLinkedStrategy: boolean;
+  isStale: boolean;
   onOpenSetup: () => void;
   onOpenStrategy: () => void;
   onReviewBot: () => void;
@@ -565,52 +691,56 @@ function ActivePlanWorkspaceCard({
 }) {
   const { appearance } = useAppPreferences();
   const colors = preferenceColors(appearance);
-  const planReady = strategy && strategy.symbol && strategy.entryZone !== 'n/a';
+  const { language } = useAppPreferences();
+  const planReady = hasLinkedStrategy;
 
   return (
-    <View style={[styles.workspacePanel, { backgroundColor: colors.surfaceMuted, borderColor: colors.borderSubtle }]}>
-      <View style={styles.sectionTop}>
-        <View style={styles.flexText}>
-          <Text style={[styles.workspaceEyebrow, { color: colors.textDim }]}>Active plan</Text>
-          <Text style={[styles.workspaceSectionTitle, { color: colors.text }]}>{setup.name}</Text>
-          <Text style={[styles.workspaceMicrocopy, { color: colors.textMuted }]}>
-            {setup.symbol} · {setup.timeframe} · {setup.type}
-          </Text>
-        </View>
-        <FilledStatusBadge label={planReady ? 'Active' : 'In review'} tone={planReady ? 'success' : 'warning'} />
+    <View style={[styles.myPlanSection, { borderColor: colors.borderSubtle }]}>
+      <View style={styles.myPlanSectionHeader}>
+        <Text style={[styles.myPlanSectionTitle, { color: colors.text }]}>{translate(language, 'myPlan.activePlan')}</Text>
+        <FilledStatusBadge label={translate(language, 'myPlan.active')} tone="success" />
       </View>
+      <Text style={[styles.activePlanName, { color: colors.text }]}>{setup.name}</Text>
+      <Text style={[styles.activePlanMeta, { color: colors.textDim }]}>
+        {setup.symbol} · {setup.timeframe} · {setup.type}
+      </Text>
 
-      <View style={[styles.workspaceDivider, { backgroundColor: colors.borderSubtle }]} />
-
-      <View style={[styles.planPartGroup, { backgroundColor: colors.surfaceMuted, borderColor: colors.borderSubtle }]}>
-        <PlanPartRow
-          actionLabel="Open setup"
-          description={`${setup.trend} conditions · ${setup.action}`}
+      <View style={[styles.activePlanRows, { borderColor: colors.borderSubtle }]}>
+        <PlanOverviewRow
           icon="layers"
-          onPress={onOpenSetup}
+          title={translate(language, 'myPlan.setupLabel')}
+          description={setup.name}
           summary={`${setup.score}% match`}
-          title="Setup"
-          value={setup.name}
+          statusLabel={setup.score >= 70 ? translate(language, 'myPlan.active') : translate(language, 'common.monitor')}
+          statusTone={setup.score >= 70 ? 'success' : 'warning'}
+          onPress={onOpenSetup}
         />
-        <View style={[styles.planPartDivider, { backgroundColor: colors.borderSubtle }]} />
-        <PlanPartRow
-          actionLabel="Open strategy"
-          description={planReady ? `${strategy.bias} · ${strategy.entryZone}` : 'Nog geen uitvoerbare strategy gekoppeld'}
-          icon="activity"
+        <PlanOverviewRow
+          icon="target"
+          title={translate(language, 'myPlan.strategyLabel')}
+          description={planReady ? strategy.bias : translate(language, 'myPlan.notLinked')}
+          summary={planReady ? `${strategy.confidence}% ${translate(language, 'myPlan.confidenceLabel').toLowerCase()}` : `0% ${translate(language, 'myPlan.confidenceLabel').toLowerCase()}`}
+          statusLabel={planReady ? translate(language, 'myPlan.active') : translate(language, 'myPlan.missing')}
+          statusTone={planReady ? (strategy.confidence >= 60 ? 'success' : 'warning') : 'neutral'}
           onPress={onOpenStrategy}
-          summary={planReady ? `${strategy.confidence}% confidence` : 'Missing'}
-          title="Strategy"
-          value={planReady ? strategy.bias : 'No active strategy'}
         />
-        <View style={[styles.planPartDivider, { backgroundColor: colors.borderSubtle }]} />
-        <PlanPartRow
-          actionLabel="Review bot"
-          description={botDecision.reason}
+        <PlanOverviewRow
           icon="shield"
+          title={translate(language, 'myPlan.riskExecutionLabel')}
+          description={
+            decisionState.score >= 70
+              ? translate(language, 'myPlan.constructivePosition')
+              : translate(language, 'myPlan.defensivePosition')
+          }
+          summary={
+            decisionState.score >= 70
+              ? translate(language, 'myPlan.readyForReview')
+              : translate(language, 'myPlan.waitForConfirmation')
+          }
+          statusLabel={isStale ? translate(language, 'common.stale') : translate(language, 'common.monitor')}
+          statusTone={isStale ? 'warning' : decisionState.tone}
           onPress={onReviewBot}
-          summary={botDecision.action}
-          title="Plan"
-          value={decisionState.title}
+          trailingChevron
         />
       </View>
     </View>
@@ -618,127 +748,100 @@ function ActivePlanWorkspaceCard({
 }
 
 function AllPlansListCard({
-  activeSetup,
-  activeStrategyName,
-  planStrategies,
-  setups,
-  strategy,
+  onCreatePlan,
+  onDeletePlan,
+  onEditPlan,
+  onOpenActions,
+  onOpenPlan,
+  plans,
 }: {
-  activeSetup: SetupSummary;
-  activeStrategyName: string;
-  planStrategies: Record<string, PlanStrategySummary | null>;
-  setups: SetupSummary[];
-  strategy: ReturnType<typeof mapStrategy>;
+  onCreatePlan: () => void;
+  onDeletePlan: (plan: PlanListItem) => void;
+  onEditPlan: (plan: PlanListItem) => void | Promise<void>;
+  onOpenActions: (plan: PlanListItem) => void | Promise<void>;
+  onOpenPlan: (plan: PlanListItem) => void | Promise<void>;
+  plans: PlanListItem[];
 }) {
-  const { appearance } = useAppPreferences();
+  const { appearance, language } = useAppPreferences();
   const colors = preferenceColors(appearance);
-  const plans = useMemo(() => {
-    const merged = [activeSetup, ...setups];
-    const seen = new Set<string>();
-    return merged.filter((item) => {
-      const key = `${item.name}-${item.symbol}-${item.timeframe}`;
-      if (seen.has(key)) return false;
-      seen.add(key);
-      return true;
-    });
-  }, [activeSetup, setups]);
 
   return (
-    <View style={[styles.workspacePanel, { backgroundColor: colors.surface, borderColor: colors.borderSubtle }]}>
-      <View style={styles.sectionTop}>
-        <View style={styles.flexText}>
-          <View style={styles.planListHeadingRow}>
-            <Text style={[styles.workspaceSectionTitle, { color: colors.text }]}>My plans</Text>
-            <StatusChip label={`${plans.length} plans`} tone="neutral" />
-          </View>
-          <Text style={[styles.workspaceSectionSubtitle, { color: colors.textMuted }]}>
-            Setup and strategy remain visible as two parts of the same plan.
-          </Text>
+    <View style={[styles.myPlanSection, { borderColor: colors.borderSubtle }]}>
+      <View style={styles.myPlanSectionHeader}>
+        <View style={styles.planListCompactHeader}>
+          <Text style={[styles.myPlanSectionTitle, { color: colors.text }]}>{translate(language, 'myPlan.yourPlans')}</Text>
+          <Text style={[styles.planCountText, { color: colors.textDim }]}>{translate(language, 'myPlan.plansCount', { count: plans.length })}</Text>
         </View>
+        <Pressable onPress={onCreatePlan} style={styles.newPlanLink}>
+          <Text style={styles.newPlanLinkText}>{translate(language, 'myPlan.newPlan')}</Text>
+        </Pressable>
       </View>
 
-      <View style={[styles.workspaceDivider, { backgroundColor: colors.borderSubtle }]} />
-
-      <View style={styles.planList}>
+      <View style={styles.planListCompact}>
         {plans.map((plan, index) => {
-          const isActive = plan.name === activeSetup.name;
-          const planStrategy = plan.id ? planStrategies[String(plan.id)] : null;
-          const hasStrategy = isActive
-            ? Boolean(strategy && strategy.symbol && strategy.entryZone !== 'n/a')
-            : Boolean(planStrategy?.exists);
-          const planStatus = isActive && hasStrategy ? 'Active' : 'Draft';
-          const planTone: StatusTone = planStatus === 'Active' ? 'success' : 'warning';
-          const botState = isActive && hasStrategy ? 'Bot active' : 'No linked bot';
-          const strategyTitle = isActive
-            ? activeStrategyName
-            : planStrategy?.name || 'Add strategy';
+          const planStatus = plan.isActive ? translate(language, 'myPlan.active') : translate(language, 'myPlan.concept');
+          const planTone: StatusTone = plan.isActive ? 'success' : 'warning';
 
           return (
-            <View
+            <SwipeActionRow
               key={`${plan.name}-${plan.symbol}-${plan.timeframe}-${index}`}
-              style={[
-                styles.planListRow,
-                index < plans.length - 1 && { borderBottomWidth: 1, borderBottomColor: colors.borderSubtle },
+              actions={[
+                {
+                  key: 'edit',
+                  label: translate(language, 'common.edit'),
+                  icon: 'edit-3',
+                  onPress: () => onEditPlan(plan),
+                },
+                {
+                  key: 'delete',
+                  label: translate(language, 'common.delete'),
+                  icon: 'trash-2',
+                  tone: 'danger',
+                  onPress: () => onDeletePlan(plan),
+                },
               ]}
             >
-              <View style={styles.planListHeader}>
-                <View style={styles.flexText}>
-                  <View style={styles.planListTitleRow}>
-                    <Text style={[styles.planListTitle, { color: colors.text }]}>{plan.name}</Text>
-                    <FilledStatusBadge label={planStatus} tone={planTone} />
-                  </View>
-                  <Text style={[styles.planListMeta, { color: colors.textDim }]}>
-                    {plan.symbol} · {plan.timeframe}
-                  </Text>
-                  <Text style={[styles.planListBotState, { color: colors.textSoft }]}>
-                    {botState}
-                  </Text>
-                </View>
-              </View>
-
-              <View style={styles.planListTiles}>
-                <View style={[styles.planListTile, { backgroundColor: colors.surfaceMuted, borderColor: colors.borderSubtle }]}>
-                  <View style={styles.planListTileHeader}>
-                    <View style={[styles.planListTileIcon, { backgroundColor: colors.surface }]}>
-                      <Feather name="layers" size={15} color={colors.accent} />
-                    </View>
-                    <Text style={[styles.planListTileLabel, { color: colors.textDim }]}>Setup</Text>
-                  </View>
-                  <View style={styles.planListTileBody}>
-                    <Text style={[styles.planListTileTitle, { color: colors.text }]} numberOfLines={1}>
-                      {plan.name}
-                    </Text>
-                    <Feather name="check" size={17} color={theme.colors.success} />
-                  </View>
-                </View>
-
-                <View
-                  style={[
-                    styles.planListTile,
-                    hasStrategy
-                      ? { backgroundColor: colors.surfaceMuted, borderColor: colors.borderSubtle }
-                      : styles.planListTileDraft,
-                  ]}
-                >
-                  <View style={styles.planListTileHeader}>
-                    <View style={[styles.planListTileIcon, { backgroundColor: hasStrategy ? colors.surface : '#FFF5D7' }]}>
-                      <Feather name="target" size={15} color={hasStrategy ? colors.accent : theme.colors.warning} />
-                    </View>
-                    <Text style={[styles.planListTileLabel, { color: colors.textDim }]}>Strategy</Text>
-                  </View>
-                  <View style={styles.planListTileBody}>
-                    <Text style={[styles.planListTileTitle, { color: colors.text }]} numberOfLines={1}>
-                      {strategyTitle}
-                    </Text>
+              <Pressable
+                onPress={() => onOpenPlan(plan)}
+                style={({ pressed }) => [
+                  styles.planListCompactRow,
+                  index < plans.length - 1 && { borderBottomWidth: 1, borderBottomColor: colors.borderSubtle },
+                  pressed && styles.pressed,
+                ]}
+              >
+                <View style={styles.planRowLeft}>
+                  <View style={[styles.planRowIcon, { backgroundColor: colors.surfaceMuted }]}>
                     <Feather
-                      name={hasStrategy ? 'check' : 'plus'}
-                      size={17}
-                      color={hasStrategy ? theme.colors.success : theme.colors.warning}
+                      color={colors.accent}
+                      name={plan.isActive ? 'shield' : 'layers'}
+                      size={listRowStandards.iconGlyphSize}
                     />
                   </View>
+                  <View style={styles.planRowCopy}>
+                    <Text style={[styles.planRowTitle, { color: colors.text }]}>{plan.name}</Text>
+                    <Text style={[styles.planRowMeta, { color: colors.textDim }]}>{plan.symbol} · {plan.timeframe}</Text>
+                  </View>
                 </View>
-              </View>
-            </View>
+                <View style={styles.planRowRight}>
+                  <View style={styles.planRowStatusWrap}>
+                    <StatusChip compact label={planStatus} tone={planTone} />
+                  </View>
+                  <Text style={[styles.planRowSubline, { color: colors.textMuted }]}>
+                    Setup compleet  ·  {plan.strategyLine}
+                  </Text>
+                </View>
+                <Pressable
+                  hitSlop={10}
+                  onPress={(event) => {
+                    event.stopPropagation();
+                    onOpenActions(plan);
+                  }}
+                  style={[styles.planOverflowButton, { borderColor: colors.borderSubtle, backgroundColor: colors.surfaceMuted }]}
+                >
+                  <Feather color={colors.textDim} name="more-horizontal" size={15} />
+                </Pressable>
+              </Pressable>
+            </SwipeActionRow>
           );
         })}
       </View>
@@ -784,6 +887,133 @@ function PlanPartRow({
           <Text style={[styles.planPartAction, { color: colors.textSoft }]}>{actionLabel}</Text>
         </View>
       </View>
+    </Pressable>
+  );
+}
+
+function PlanOverviewRow({
+  description,
+  icon,
+  onPress,
+  statusLabel,
+  statusTone,
+  summary,
+  title,
+  trailingChevron = false,
+}: {
+  description: string;
+  icon: keyof typeof Feather.glyphMap;
+  onPress: () => void;
+  statusLabel: string;
+  statusTone: StatusTone;
+  summary: string;
+  title: string;
+  trailingChevron?: boolean;
+}) {
+  const { appearance } = useAppPreferences();
+  const colors = preferenceColors(appearance);
+
+  return (
+    <Pressable
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.planOverviewRow,
+        { borderBottomColor: colors.borderSubtle },
+        pressed && styles.pressed,
+      ]}
+    >
+      <View style={styles.planOverviewLead}>
+        <View style={[styles.planOverviewIcon, { backgroundColor: `${colors.accent}08`, borderColor: `${colors.accent}20` }]}>
+          <Feather name={icon} size={18} color={colors.accent} />
+        </View>
+        <View style={styles.flexText}>
+          <Text style={[styles.planOverviewTitle, { color: colors.text }]}>{title}</Text>
+          <Text style={[styles.planOverviewDescription, { color: colors.textMuted }]} numberOfLines={1}>{description}</Text>
+        </View>
+      </View>
+      <View style={styles.planOverviewRight}>
+        <Text style={[styles.planOverviewSummary, { color: title === 'Risico & uitvoering' ? colors.accent : colors.text }]} numberOfLines={1}>
+          {summary}
+        </Text>
+        <View style={styles.planOverviewStatusWrap}>
+          <StatusChip compact label={statusLabel} tone={statusTone} />
+        </View>
+      </View>
+      {trailingChevron ? <Feather color={colors.textDim} name="chevron-right" size={17} /> : null}
+    </Pressable>
+  );
+}
+
+function PlanRulesCard({
+  decisionState,
+  hasLinkedStrategy,
+  strategy,
+}: {
+  decisionState: ReturnType<typeof mapDecisionState>;
+  hasLinkedStrategy: boolean;
+  strategy: ReturnType<typeof mapStrategy>;
+}) {
+  const { language } = useAppPreferences();
+  const entryValue = hasLinkedStrategy
+    ? strategy.entryZone
+    : translate(language, 'myPlan.entryOnlyAfterConfirmation');
+  const riskValue = decisionState.score >= 70 ? 'Max. 1.5%' : 'Max. 1%';
+  const exitValue = hasLinkedStrategy
+    ? translate(language, 'myPlan.exitFollowActiveStrategy')
+    : translate(language, 'myPlan.exitFollowConfirmedStrategy');
+
+  return (
+    <View style={styles.myPlanSection}>
+      <Text style={styles.myPlanSectionTitle}>{translate(language, 'myPlan.planRules')}</Text>
+      <View style={styles.planRulesList}>
+        <PlanRuleRow icon="log-in" label="Entry" value={entryValue} />
+        <PlanRuleRow icon="shield" label="Risico per trade" value={riskValue} />
+        <PlanRuleRow icon="log-out" label="Exit" value={exitValue} />
+      </View>
+    </View>
+  );
+}
+
+function PlanRuleRow({
+  icon,
+  label,
+  value,
+}: {
+  icon: keyof typeof Feather.glyphMap;
+  label: string;
+  value: string;
+}) {
+  const { appearance } = useAppPreferences();
+  const colors = preferenceColors(appearance);
+
+  return (
+    <View style={[styles.planRuleRow, { borderBottomColor: colors.borderSubtle }]}>
+      <View style={styles.planRuleLabelWrap}>
+        <Feather name={icon} size={18} color={colors.textDim} />
+        <Text style={[styles.planRuleLabel, { color: colors.text }]}>{label}</Text>
+      </View>
+      <View style={styles.planRuleValueWrap}>
+        <Text style={[styles.planRuleValue, { color: colors.textDim }]} numberOfLines={1}>{value}</Text>
+        <Feather name="chevron-right" size={16} color={colors.textDim} />
+      </View>
+    </View>
+  );
+}
+
+function PlanStaleBanner({ onRefresh }: { onRefresh: () => void }) {
+  const { appearance } = useAppPreferences();
+  const colors = preferenceColors(appearance);
+
+  return (
+    <Pressable
+      onPress={onRefresh}
+      style={[styles.planStaleBanner, { backgroundColor: '#FFF7ED', borderColor: '#FCD9BD' }]}
+    >
+      <View style={styles.planStaleLeft}>
+        <Feather name="clock" size={18} color={theme.colors.warning} />
+        <Text style={[styles.planStaleText, { color: colors.text }]}>Een deel van de beslisdata is verouderd.</Text>
+      </View>
+      <Text style={styles.planStaleAction}>Ververs →</Text>
     </Pressable>
   );
 }
@@ -966,7 +1196,7 @@ function DecisionStateCard({ state, stale }: { state: ReturnType<typeof mapDecis
           <Text style={styles.kicker}>System state</Text>
           <Text style={[styles.heroTitle, { color: colors.text }]}>{state.title}</Text>
         </View>
-        <StatusChip label={stale ? 'Stale' : state.status} tone={stale ? 'warning' : state.tone} />
+        <StatusChip compact label={stale ? 'Stale' : state.status} tone={stale ? 'warning' : state.tone} />
       </View>
       <View style={styles.scoreRow}>
         {state.scores.map((score) => (
@@ -1013,8 +1243,8 @@ function ActiveSetupCard({ setup, onPress }: { setup: SetupSummary; onPress: () 
           <View style={[styles.progressFill, { backgroundColor: palette.color, width: `${setup.score}%` }]} />
         </View>
         <View style={styles.compactGrid}>
-          <MiniMetric label="Trend" value={setup.trend || 'n/a'} />
-          <MiniMetric label="Action" value={setup.action || 'Review'} />
+          <MiniMetric label="Trend" value={setup.trend || '—'} />
+          <MiniMetric label="Action" value={setup.action || '—'} />
         </View>
         <Text style={[styles.bodyText, { color: colors.textMuted }]}>{setup.explanation}</Text>
       </CardShell>
@@ -1045,7 +1275,7 @@ function TopSetupsCard({ setups }: { setups: SetupSummary[] }) {
           <Text style={styles.kicker}>Setup ranking</Text>
           <Text style={[styles.cardTitle, { color: colors.text }]}>Best matching setups</Text>
         </View>
-        <StatusChip label={`${setups.length} loaded`} tone="accent" />
+        <StatusChip compact label={`${setups.length} loaded`} tone="accent" />
       </View>
       <View style={styles.setupList}>
         {setups.map((setup, index) => (
@@ -1091,40 +1321,150 @@ function StrategySheet({
 }) {
   const { appearance } = useAppPreferences();
   const colors = preferenceColors(appearance);
+  const hasBackendStrategy = Boolean(
+    strategy &&
+      (
+        readString(strategy, ['symbol', 'asset']) ||
+        readString(strategy, ['name', 'strategy_name', 'setup_name']) ||
+        readString(strategy, ['entry_zone', 'entry', 'entry_price'])
+      ),
+  );
   const baseAmount = readNumber(strategy, ['base_amount'], NaN);
-  const riskReward = readString(strategy, ['risk_reward'], 'n/a');
-  const mode = readString(strategy, ['execution_mode'], 'n/a');
+  const riskReward = readString(strategy, ['risk_reward'], '');
+  const mode = readString(strategy, ['execution_mode'], '');
 
   return (
     <View style={styles.sheetStack}>
-      <Text style={[styles.sheetTitle, { color: colors.text }]}>{readString(strategy, ['name'], fallback.bias)}</Text>
-      <Text style={[styles.bodyText, { color: colors.textMuted }]}>{fallback.explanation}</Text>
+      <Text style={[styles.sheetTitle, { color: colors.text }]}>
+        {hasBackendStrategy ? readString(strategy, ['name'], fallback.bias) : 'Nog geen strategie gekoppeld'}
+      </Text>
+      <Text style={[styles.bodyText, { color: colors.textMuted }]}>
+        {hasBackendStrategy
+          ? fallback.explanation
+          : 'De backend heeft voor deze setup nog geen gekoppelde strategie teruggegeven.'}
+      </Text>
       <View style={{ gap: 8, marginTop: theme.spacing.md }}>
         <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
           <Text style={{ fontSize: 13, color: colors.textDim }}>Entry</Text>
-          <Text style={{ fontSize: 13, color: colors.text, fontWeight: '600' }}>{fallback.entryZone}</Text>
+          <Text style={{ fontSize: 13, color: colors.text, fontWeight: '600' }}>{hasBackendStrategy ? fallback.entryZone : '—'}</Text>
         </View>
         <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
           <Text style={{ fontSize: 13, color: colors.textDim }}>Targets</Text>
-          <Text style={{ fontSize: 13, color: colors.text, fontWeight: '600' }}>{fallback.targets.join(' / ')}</Text>
+          <Text style={{ fontSize: 13, color: colors.text, fontWeight: '600' }}>
+            {hasBackendStrategy && fallback.targets.length > 0 ? fallback.targets.join(' / ') : '—'}
+          </Text>
         </View>
         <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
           <Text style={{ fontSize: 13, color: colors.textDim }}>Stop</Text>
-          <Text style={{ fontSize: 13, color: colors.text, fontWeight: '600' }}>{fallback.invalidation}</Text>
+          <Text style={{ fontSize: 13, color: colors.text, fontWeight: '600' }}>{hasBackendStrategy ? fallback.invalidation : '—'}</Text>
         </View>
         <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
           <Text style={{ fontSize: 13, color: colors.textDim }}>R:R</Text>
-          <Text style={{ fontSize: 13, color: colors.text, fontWeight: '600' }}>{riskReward}</Text>
+          <Text style={{ fontSize: 13, color: colors.text, fontWeight: '600' }}>{hasBackendStrategy && riskReward ? riskReward : '—'}</Text>
         </View>
         <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
           <Text style={{ fontSize: 13, color: colors.textDim }}>Mode</Text>
-          <Text style={{ fontSize: 13, color: colors.text, fontWeight: '600' }}>{mode}</Text>
+          <Text style={{ fontSize: 13, color: colors.text, fontWeight: '600' }}>{hasBackendStrategy && mode ? mode : '—'}</Text>
         </View>
         <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
           <Text style={{ fontSize: 13, color: colors.textDim }}>Base</Text>
-          <Text style={{ fontSize: 13, color: colors.text, fontWeight: '600' }}>{Number.isFinite(baseAmount) ? formatMoney(baseAmount, 'EUR') : 'n/a'}</Text>
+          <Text style={{ fontSize: 13, color: colors.text, fontWeight: '600' }}>
+            {hasBackendStrategy && Number.isFinite(baseAmount) ? formatMoney(baseAmount, 'EUR') : '—'}
+          </Text>
         </View>
       </View>
+    </View>
+  );
+}
+
+function PlanDetailSheet({
+  loading,
+  onAskFinn,
+  plan,
+  strategy,
+}: {
+  loading: boolean;
+  onAskFinn: () => void;
+  plan?: PlanListItem | null;
+  strategy?: StrategyResponse;
+}) {
+  const { appearance } = useAppPreferences();
+  const colors = preferenceColors(appearance);
+
+  if (loading) {
+    return <LoadingSkeletonCard />;
+  }
+
+  if (!plan) {
+    return (
+      <View style={styles.sheetStack}>
+        <Text style={[styles.bodyText, { color: colors.textMuted }]}>
+          Geen plandetails beschikbaar.
+        </Text>
+      </View>
+    );
+  }
+
+  const strategySource = extractStrategy(strategy);
+  const mappedStrategy = mapStrategy(strategySource);
+  const hasBackendStrategy = Boolean(
+    strategySource &&
+      (
+        readString(strategySource, ['symbol', 'asset']) ||
+        readString(strategySource, ['name', 'strategy_name', 'setup_name']) ||
+        readString(strategySource, ['entry_zone', 'entry', 'entry_price'])
+      ),
+  );
+
+  return (
+    <View style={styles.sheetStack}>
+      <View style={[styles.planDetailHero, { borderColor: colors.borderSubtle, backgroundColor: colors.surfaceMuted }]}>
+        <View style={styles.sectionTop}>
+          <View style={styles.flexText}>
+            <Text style={styles.kicker}>Plan detail</Text>
+            <Text style={[styles.sheetTitle, { color: colors.text }]}>{plan.name}</Text>
+            <Text style={[styles.bodyText, { color: colors.textDim }]}>
+              {plan.symbol} · {plan.timeframe} · {plan.type || 'Setup'}
+            </Text>
+          </View>
+          <StatusChip compact label={plan.isActive ? 'Actief' : 'Concept'} tone={plan.isActive ? 'success' : 'warning'} />
+        </View>
+        <View style={styles.compactGrid}>
+          <MiniMetric label="Match" value={`${plan.score}`} />
+          <MiniMetric label="Trend" value={plan.trend || '—'} />
+          <MiniMetric label="Actie" value={plan.action || '—'} />
+          <MiniMetric label="Status" value={plan.hasStrategy ? 'Strategy linked' : 'No strategy'} />
+        </View>
+      </View>
+
+      <SetupSheet setup={plan} />
+
+      <View style={[styles.planDetailSection, { borderColor: colors.borderSubtle }]}>
+        <Text style={[styles.planDetailSectionTitle, { color: colors.text }]}>Gekoppelde strategie</Text>
+        <StrategySheet fallback={mappedStrategy} strategy={strategySource} />
+      </View>
+
+      <View style={[styles.planDetailSection, { borderColor: colors.borderSubtle }]}>
+        <Text style={[styles.planDetailSectionTitle, { color: colors.text }]}>Review & risico</Text>
+        <Text style={[styles.bodyText, { color: colors.textMuted }]}>
+          {hasBackendStrategy
+            ? `Deze setup heeft een gekoppelde strategie met bias ${mappedStrategy.bias}, confidence ${mappedStrategy.confidence}% en entry ${mappedStrategy.entryZone}.`
+            : 'Deze setup heeft nog geen gekoppelde strategie. Eerst strategie en risk rules aanvullen voordat uitvoering logisch wordt.'}
+        </Text>
+        <Text style={[styles.bodyText, { color: colors.textMuted }]}>
+          {plan.explanation}
+        </Text>
+      </View>
+
+      <Pressable
+        onPress={async () => {
+          await triggerHaptic('selection');
+          onAskFinn();
+        }}
+        style={[styles.planDetailFinnButton, { backgroundColor: colors.accent }]}
+      >
+        <Text style={styles.planDetailFinnButtonText}>Vraag FINN om extra planuitleg</Text>
+      </Pressable>
     </View>
   );
 }
@@ -1293,7 +1633,7 @@ function NotificationContextCard({
           <Text style={styles.kicker}>Push context</Text>
           <Text style={[styles.cardTitle, { color: colors.text }]}>{copy.title}</Text>
         </View>
-        <StatusChip label={copy.chip} tone={copy.tone} />
+        <StatusChip compact label={copy.chip} tone={copy.tone} />
       </View>
       <Text style={[styles.bodyText, { color: colors.textMuted }]}>{copy.body}</Text>
       <View style={styles.notificationActions}>
@@ -1391,8 +1731,8 @@ function pushPrefill(type: string, symbol: string) {
 function mapSetupSummary(source?: SetupResponse, overviewAsset?: MobileOverviewResponse['watchlist'][number]): SetupSummary {
   const active = extractActiveSetup(source);
   const score = clampScore(readNumber(active, ['score', 'match_score'], overviewAsset?.setup_score ?? 0));
-  const symbol = readString(active, ['symbol'], overviewAsset?.symbol ?? 'BTC');
-  const name = readString(active, ['name', 'setup_name'], active ? `${symbol} setup` : 'Geen actieve setup');
+  const symbol = readString(active, ['symbol'], overviewAsset?.symbol ?? '');
+  const name = readString(active, ['name', 'setup_name'], active ? (symbol ? `${symbol} setup` : 'Actieve setup') : 'Geen actieve setup');
 
   return {
     action: readString(active, ['action'], score >= 65 ? 'Monitor' : 'Wait'),
@@ -1405,11 +1745,11 @@ function mapSetupSummary(source?: SetupResponse, overviewAsset?: MobileOverviewR
     name,
     score,
     symbol,
-    timeframe: readString(active, ['timeframe'], '1D'),
+    timeframe: readString(active, ['timeframe'], ''),
     tone: toneForScore(score),
-    trend: readString(active, ['trend'], 'neutral'),
-    type: readString(active, ['setup_type', 'type'], 'setup'),
-    status: readString(active, ['status', 'state'], 'active'),
+    trend: readString(active, ['trend'], ''),
+    type: readString(active, ['setup_type', 'type'], ''),
+    status: readString(active, ['status', 'state'], ''),
   };
 }
 
@@ -1422,12 +1762,12 @@ function mapTopSetups(source?: SetupResponse): SetupSummary[] {
       id: readOptionalNumber(item, ['id', 'setup_id']),
       name: readString(item, ['name', 'setup_name'], 'Setup'),
       score,
-      symbol: readString(item, ['symbol'], 'BTC'),
-      timeframe: readString(item, ['timeframe'], '1D'),
+      symbol: readString(item, ['symbol'], ''),
+      timeframe: readString(item, ['timeframe'], ''),
       tone: toneForScore(score),
-      trend: readString(item, ['trend'], 'neutral'),
-      type: readString(item, ['setup_type', 'type'], 'setup'),
-      status: readString(item, ['status', 'state'], 'active'),
+      trend: readString(item, ['trend'], ''),
+      type: readString(item, ['setup_type', 'type'], ''),
+      status: readString(item, ['status', 'state'], ''),
     };
   });
 }
@@ -1672,11 +2012,7 @@ function formatMoney(value: number, currency: 'EUR' | 'USD' = 'EUR') {
 }
 
 function Tag({ label, tone }: { label: string; tone: StatusTone }) {
-  return (
-    <View style={[styles.tag, { borderColor: statusTones[tone].color }]}>
-      <Text style={[styles.tagText, { color: statusTones[tone].color }]}>{label}</Text>
-    </View>
-  );
+  return <StatusChip compact label={label} tone={tone} />;
 }
 
 function BotMetric({ label, tone, value }: { label: string; tone: StatusTone; value: string }) {
@@ -1718,9 +2054,9 @@ function StrategyListCard({ strat }: { strat: any }) {
 
       <View style={styles.strategyCardMetaRow}>
         <Text style={[styles.strategyBreadcrumb, { color: colors.textDim }]} numberOfLines={1}>
-          {strat.symbol || 'BTC'}  /  {strat.setup_type || 'TRADE'}
+          {[strat.symbol, strat.setup_type].filter(Boolean).join('  /  ') || 'Onbekend'}
         </Text>
-        <StatusChip label={strat.status || 'stand-by'} tone={statusTone} />
+        <StatusChip compact label={strat.status?.trim() || '—'} tone={statusTone} />
       </View>
 
       <Text style={[styles.strategyCardTitle, { color: colors.text }]} numberOfLines={2}>
@@ -1728,8 +2064,8 @@ function StrategyListCard({ strat }: { strat: any }) {
       </Text>
 
       <View style={styles.strategyTypeRow}>
-        <Tag label={strat.setup_type?.toUpperCase() || 'TRADE'} tone="accent" />
-        <Tag label={strat.timeframe || '1W'} tone="neutral" />
+        {strat.setup_type ? <Tag label={strat.setup_type.toUpperCase()} tone="accent" /> : null}
+        {strat.timeframe ? <Tag label={strat.timeframe} tone="neutral" /> : null}
         <Text style={[styles.strategyBotState, { color: colors.textDim }]}>Geen bot</Text>
       </View>
 
@@ -1802,12 +2138,12 @@ function firstStrategyTarget(value: unknown) {
 
 function normalizeRiskReward(value: unknown) {
   const raw = String(value ?? '').trim();
-  if (!raw || raw.toLowerCase() === 'n/a') return 'n/a';
+  if (!raw || raw === '—' || raw.toLowerCase() === 'n/a') return '—';
   return raw.startsWith('1:') ? raw : `1:${raw}`;
 }
 
 function formatStrategyPrice(value: unknown) {
-  if (value === null || value === undefined || value === '') return 'n/a';
+  if (value === null || value === undefined || value === '') return '—';
   const numeric = Number(String(value).replace(/[^0-9.-]/g, ''));
   if (!Number.isFinite(numeric)) return String(value);
   return new Intl.NumberFormat('en-US', {
@@ -1818,14 +2154,28 @@ function formatStrategyPrice(value: unknown) {
 }
 
 const styles = StyleSheet.create({
+  activePlanMeta: {
+    ...typography.chipLabel,
+    lineHeight: 15,
+    marginTop: 3,
+  },
+  activePlanName: {
+    ...typography.cardTitle,
+    fontWeight: '800',
+    marginTop: 3,
+  },
+  activePlanRows: {
+    borderTopWidth: 0.5,
+    marginTop: 8,
+  },
   filledBadge: {
     alignItems: 'center',
     borderRadius: theme.radius.pill,
     borderWidth: 1,
     flexDirection: 'row',
-    gap: 6,
-    paddingHorizontal: 12,
-    paddingVertical: 7,
+    gap: 5,
+    paddingHorizontal: 9,
+    paddingVertical: 4,
   },
   filledBadgeDot: {
     borderRadius: 999,
@@ -1839,9 +2189,9 @@ const styles = StyleSheet.create({
     marginTop: theme.spacing.sm,
   },
   filledBadgeText: {
-    fontSize: 11,
+    fontSize: 9,
     fontWeight: '900',
-    letterSpacing: 0.8,
+    letterSpacing: 0.7,
     textTransform: 'uppercase',
   },
   heroMetaGrid: {
@@ -1885,30 +2235,30 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   planPartAction: {
-    fontSize: 11,
+    fontSize: 9.5,
     fontWeight: '900',
-    letterSpacing: 0.5,
-    marginTop: 2,
+    letterSpacing: 0.35,
+    marginTop: 1,
     textTransform: 'uppercase',
   },
   planPartBody: {
     flexDirection: 'row',
-    gap: 12,
+    gap: 10,
     justifyContent: 'space-between',
-    marginTop: 3,
+    marginTop: 2,
   },
   planPartContent: {
     flex: 1,
-    gap: 4,
+    gap: 3,
   },
   planPartDescription: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: '600',
-    lineHeight: 17,
+    lineHeight: 15,
   },
   planPartDivider: {
     height: 1,
-    marginLeft: 52,
+    marginLeft: 46,
   },
   planPartGroup: {
     borderRadius: 20,
@@ -1919,16 +2269,16 @@ const styles = StyleSheet.create({
   planPartIcon: {
     alignItems: 'center',
     borderRadius: 14,
-    height: 38,
+    height: 34,
     justifyContent: 'center',
-    width: 38,
+    width: 34,
   },
   planPartRow: {
     alignItems: 'flex-start',
     flexDirection: 'row',
-    gap: 12,
+    gap: 10,
     paddingHorizontal: theme.spacing.md,
-    paddingVertical: 14,
+    paddingVertical: 10,
   },
   planPartSummary: {
     fontSize: 10,
@@ -1948,10 +2298,9 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   planPartValue: {
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: '900',
-    lineHeight: 20,
-    marginTop: 1,
+    lineHeight: 17,
   },
   primaryActionButton: {
     alignItems: 'center',
@@ -1984,6 +2333,20 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 8,
+  },
+  planListCompact: {
+    marginTop: 8,
+  },
+  planListCompactHeader: {
+    alignItems: 'baseline',
+    flexDirection: 'row',
+    gap: 8,
+  },
+  planListCompactRow: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 12,
+    paddingVertical: 10,
   },
   planListHeader: {
     gap: 6,
@@ -2045,6 +2408,187 @@ const styles = StyleSheet.create({
   planListTiles: {
     flexDirection: 'row',
     gap: 10,
+  },
+  planCountText: {
+    ...typography.meta,
+  },
+  planConclusionBody: {
+    ...typography.body,
+    marginTop: 4,
+  },
+  planConclusionEyebrow: {
+    ...typography.metricLabel,
+    letterSpacing: 0.6,
+    marginTop: 2,
+  },
+  planConclusionLink: {
+    alignSelf: 'flex-start',
+    marginTop: 10,
+  },
+  planConclusionLinkText: {
+    color: theme.colors.accent,
+    ...typography.metaStrong,
+  },
+  planConclusionTitle: {
+    ...typography.cardTitle,
+    fontWeight: '800',
+    marginTop: 2,
+  },
+  planOverviewDescription: {
+    ...typography.meta,
+    marginTop: 1,
+  },
+  planOverviewIcon: {
+    alignItems: 'center',
+    borderRadius: 11,
+    borderWidth: 1,
+    height: 28,
+    justifyContent: 'center',
+    width: 28,
+  },
+  planOverviewLead: {
+    alignItems: 'center',
+    flex: 1.1,
+    flexDirection: 'row',
+    gap: 7,
+    minWidth: 0,
+  },
+  planOverviewRow: {
+    alignItems: 'center',
+    borderBottomWidth: 0.5,
+    flexDirection: 'row',
+    gap: 7,
+    paddingVertical: 7,
+  },
+  planOverviewRight: {
+    alignItems: 'flex-end',
+    gap: 4,
+    marginLeft: 8,
+    minWidth: 112,
+  },
+  planOverviewSummary: {
+    ...typography.listRowTitle,
+    fontSize: 10.5,
+    lineHeight: 13,
+    minWidth: 82,
+    textAlign: 'right',
+  },
+  planOverviewStatusWrap: {
+    alignSelf: 'flex-end',
+  },
+  planOverviewTitle: {
+    ...typography.listRowTitle,
+  },
+  planRowLeft: {
+    alignItems: 'center',
+    flex: 1,
+    flexDirection: 'row',
+    gap: listRowStandards.rowGap,
+    minWidth: 0,
+  },
+  planRowCopy: {
+    flex: 1,
+    minWidth: 0,
+  },
+  planRowIcon: {
+    alignItems: 'center',
+    borderColor: listRowStandards.iconBorderColor,
+    borderRadius: listRowStandards.iconRadius,
+    borderWidth: 1,
+    height: listRowStandards.iconSize,
+    justifyContent: 'center',
+    width: listRowStandards.iconSize,
+  },
+  planRowMeta: {
+    ...typography.listRowMeta,
+    marginTop: 1,
+  },
+  planRowRight: {
+    alignItems: 'flex-start',
+    flex: 1,
+    gap: 4,
+    minWidth: 0,
+  },
+  planOverflowButton: {
+    alignItems: 'center',
+    borderRadius: 14,
+    borderWidth: 1,
+    height: 30,
+    justifyContent: 'center',
+    marginLeft: theme.spacing.xs,
+    width: 30,
+  },
+  planRowStatusWrap: {
+    alignSelf: 'flex-start',
+  },
+  planRowSubline: {
+    ...typography.listRowMeta,
+  },
+  planRowTitle: {
+    ...typography.listRowTitle,
+  },
+  planRuleLabel: {
+    ...typography.bodyStrong,
+    fontWeight: '700',
+  },
+  planRuleLabelWrap: {
+    alignItems: 'center',
+    flex: 1,
+    flexDirection: 'row',
+    gap: 10,
+    minWidth: 0,
+  },
+  planRuleRow: {
+    alignItems: 'center',
+    borderBottomWidth: 0.5,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingVertical: 8,
+  },
+  planRulesList: {
+    marginTop: 8,
+  },
+  planRuleValue: {
+    ...typography.subcopy,
+    fontWeight: '600',
+    maxWidth: 132,
+    textAlign: 'right',
+  },
+  planRuleValueWrap: {
+    alignItems: 'center',
+    flex: 1,
+    flexDirection: 'row',
+    gap: 8,
+    justifyContent: 'flex-end',
+    minWidth: 0,
+  },
+  planStaleAction: {
+    color: theme.colors.warning,
+    fontSize: 11,
+    fontWeight: '800',
+  },
+  planStaleBanner: {
+    alignItems: 'center',
+    borderRadius: 16,
+    borderWidth: 1,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginHorizontal: theme.spacing.lg,
+    marginTop: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  planStaleLeft: {
+    alignItems: 'center',
+    flex: 1,
+    flexDirection: 'row',
+    gap: 10,
+    minWidth: 0,
+  },
+  planStaleText: {
+    fontSize: 13,
+    fontWeight: '600',
+    lineHeight: 17,
   },
   planListTitle: {
     fontSize: 15,
@@ -2129,42 +2673,37 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   workflowRail: {
-    marginTop: 12,
+    marginTop: 8,
   },
   workflowRailContent: {
-    paddingRight: 42,
+    paddingRight: 18,
   },
   workflowStepIcon: {
     alignItems: 'center',
-    borderRadius: 16,
-    height: 40,
+    borderRadius: 12,
+    height: 30,
     justifyContent: 'center',
-    width: 40,
+    width: 30,
   },
   workflowStepCard: {
-    borderRadius: 18,
+    borderRadius: 14,
     borderWidth: 1,
     flexDirection: 'row',
-    gap: 10,
-    minHeight: 84,
-    paddingHorizontal: 12,
-    paddingVertical: 12,
-    width: 228,
-  },
-  workflowStepText: {
-    fontSize: 12,
-    fontWeight: '600',
-    lineHeight: 17,
+    gap: 8,
+    minHeight: 46,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    width: 138,
   },
   workflowStepTitle: {
-    fontSize: 14,
+    fontSize: 12,
     fontWeight: '900',
-    lineHeight: 18,
+    lineHeight: 14,
   },
   workspaceBody: {
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: '600',
-    lineHeight: 24,
+    lineHeight: 21,
   },
   workspaceEyebrow: {
     fontSize: 11,
@@ -2173,10 +2712,10 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
   },
   workspaceHeadline: {
-    fontSize: 28,
+    fontSize: 22,
     fontWeight: '900',
     letterSpacing: -0.8,
-    lineHeight: 34,
+    lineHeight: 28,
   },
   workspaceHeadlineCompact: {
     fontSize: 19,
@@ -2184,7 +2723,7 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   workspaceLead: {
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: '700',
     marginTop: 6,
   },
@@ -2220,14 +2759,14 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   workspaceSectionSubtitle: {
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: '600',
-    lineHeight: 24,
+    lineHeight: 21,
   },
   workspaceSectionTitle: {
-    fontSize: 18,
+    fontSize: 17,
     fontWeight: '900',
-    lineHeight: 24,
+    lineHeight: 22,
   },
   workspaceSubsectionHeader: {
     alignItems: 'center',
@@ -2361,9 +2900,9 @@ const styles = StyleSheet.create({
   },
   strategyCardTitle: {
     color: theme.colors.text,
-    fontSize: 22,
+    fontSize: 18,
     fontWeight: '900',
-    lineHeight: 26,
+    lineHeight: 22,
   },
   strategyTypeRow: {
     alignItems: 'center',
@@ -2396,7 +2935,7 @@ const styles = StyleSheet.create({
   },
   strategyPlanValue: {
     color: theme.colors.text,
-    fontSize: 24,
+    fontSize: 18,
     fontWeight: '900',
     marginTop: theme.spacing.xs,
   },
@@ -2421,7 +2960,7 @@ const styles = StyleSheet.create({
   },
   strategyRiskValue: {
     color: theme.colors.white,
-    fontSize: 30,
+    fontSize: 20,
     fontWeight: '900',
     marginTop: 2,
   },
@@ -2553,14 +3092,14 @@ const styles = StyleSheet.create({
     color: theme.colors.text,
     fontSize: theme.typography.title,
     fontWeight: '900',
-    lineHeight: 27,
+    lineHeight: 24,
     marginTop: 5,
   },
   briefingCopy: {
     color: theme.colors.textMuted,
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: '800',
-    lineHeight: 27,
+    lineHeight: 23,
     marginTop: theme.spacing.lg,
   },
   briefingMetaRow: {
@@ -2572,13 +3111,13 @@ const styles = StyleSheet.create({
     borderRadius: theme.radius.md,
     borderWidth: 1,
     flex: 1,
-    minHeight: 82,
+    minHeight: 72,
     padding: theme.spacing.md,
   },
   briefingMetricValue: {
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: '900',
-    lineHeight: 24,
+    lineHeight: 21,
     marginTop: 6,
   },
   compactGrid: {
@@ -2648,23 +3187,16 @@ const styles = StyleSheet.create({
   },
   heroTitle: {
     color: theme.colors.text,
-    fontSize: 18,
-    fontWeight: '700',
-    lineHeight: 22,
+    ...typography.sectionTitle,
     marginTop: 5,
   },
   kicker: {
     color: theme.colors.accent,
-    fontSize: theme.typography.label,
-    fontWeight: '700',
-    letterSpacing: 1.7,
-    textTransform: 'uppercase',
+    ...typography.eyebrow,
   },
   metaLine: {
     color: theme.colors.textDim,
-    fontSize: theme.typography.small,
-    fontWeight: '800',
-    lineHeight: 18,
+    ...typography.meta,
     marginTop: 5,
   },
   matcherHeader: {
@@ -2675,10 +3207,32 @@ const styles = StyleSheet.create({
   },
   matcherTitle: {
     color: theme.colors.text,
-    fontSize: 18,
+    fontSize: 17,
     fontWeight: '900',
-    lineHeight: 22,
+    lineHeight: 21,
     marginTop: 5,
+  },
+  myPlanSection: {
+    marginHorizontal: theme.spacing.lg,
+    marginTop: 0,
+    paddingVertical: 8,
+  },
+  myPlanSectionHeader: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  myPlanSectionTitle: {
+    ...typography.sectionTitle,
+    fontWeight: '800',
+  },
+  newPlanLink: {
+    alignSelf: 'center',
+  },
+  newPlanLinkText: {
+    color: theme.colors.accent,
+    ...typography.subcopy,
+    fontWeight: '700',
   },
   metricValue: {
     color: theme.colors.text,
@@ -2900,6 +3454,32 @@ const styles = StyleSheet.create({
   sheetActions: {
     gap: theme.spacing.sm,
     marginTop: theme.spacing.md,
+  },
+  planDetailFinnButton: {
+    alignItems: 'center',
+    borderRadius: theme.radius.button,
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.sm,
+  },
+  planDetailFinnButtonText: {
+    color: theme.colors.white,
+    fontSize: 13,
+    fontWeight: '800',
+    letterSpacing: 0.3,
+  },
+  planDetailHero: {
+    borderRadius: theme.radius.card,
+    borderWidth: 1,
+    padding: theme.spacing.md,
+  },
+  planDetailSection: {
+    borderRadius: theme.radius.card,
+    borderWidth: 1,
+    padding: theme.spacing.md,
+  },
+  planDetailSectionTitle: {
+    ...typography.sectionTitle,
+    marginBottom: theme.spacing.sm,
   },
   sheetStack: {
     gap: theme.spacing.md,

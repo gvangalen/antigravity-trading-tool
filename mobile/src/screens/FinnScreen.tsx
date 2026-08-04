@@ -26,6 +26,7 @@ import {
 } from '../components/sheets/SheetContent';
 import { theme } from '../constants/theme';
 import { useApiResource } from '../hooks/useApiResource';
+import { translate } from '../i18n';
 import { mapAssistantEnvelopeToFeedItems } from '../services/assistantEnvelopeMapper';
 import {
   mapAssistantInsightCard,
@@ -53,6 +54,8 @@ type PendingAction = AssistantAction & {
   label?: string;
   requires_confirmation?: boolean;
 };
+
+const ACTIVE_FINN_SESSION_ID_KEY = 'active_finn_session_id';
 
 function getPendingActionFromEnvelope(envelope: AssistantEnvelope): PendingAction | null {
   const candidates = [
@@ -86,7 +89,8 @@ function formatFinnContextLabel(pageType?: string, symbol?: string, timeframe?: 
   };
 
   const lane = laneMap[pageType || ''] || pageType || 'Finn';
-  return `${lane} · ${symbol || 'BTC'} · ${(timeframe || '1D').toUpperCase()}`;
+  const meta = [lane, symbol || '', timeframe ? timeframe.toUpperCase() : ''].filter(Boolean);
+  return meta.join(' · ');
 }
 
 function deriveFinnModeLabel(source?: string, activeState?: any) {
@@ -114,7 +118,7 @@ export function FinnScreen({
   onClose?: () => void;
 } = {}) {
   const { logout, user } = useAuth();
-  const { appearance } = useAppPreferences();
+  const { appearance, language } = useAppPreferences();
   const colors = preferenceColors(appearance);
   const [query, setQuery] = useState('');
   const [sending, setSending] = useState(false);
@@ -127,6 +131,8 @@ export function FinnScreen({
   const [activeState, setActiveState] = useState<any>(null);
   const [draftError, setDraftError] = useState<string | null>(null);
   const [draftSaving, setDraftSaving] = useState(false);
+  const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
+  const [availableSessions, setAvailableSessions] = useState<Array<{ id: string; title: string; updated_at: string }>>([]);
   const isActionFlow = source?.startsWith('strategy-') || source?.startsWith('setup-') || source?.startsWith('bot-');
 
   const { context, updateContext } = useIntelligenceContext();
@@ -165,6 +171,95 @@ export function FinnScreen({
     }
   }, [overviewResource.data?.intelligence_events]);
 
+  const persistActiveSessionId = useCallback(async (sessionId: string | null) => {
+    if (!sessionId) return;
+    setActiveSessionId(sessionId);
+    try {
+      await assistantApi.updatePreferences({
+        [ACTIVE_FINN_SESSION_ID_KEY]: sessionId,
+      });
+    } catch (error) {
+      console.warn('Failed to persist FINN session id', error);
+    }
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadActiveSession() {
+      try {
+        const preferencesResponse = await assistantApi.preferences();
+        const preferredSessionId = normalizeAssistantSessionId(
+          preferencesResponse?.preferences?.[ACTIVE_FINN_SESSION_ID_KEY],
+        );
+        const sessions = await assistantApi.sessions();
+        if (!cancelled) {
+          setAvailableSessions(
+            Array.isArray(sessions)
+              ? sessions.map((session) => ({
+                  id: session.id,
+                  title: session.title || 'FINN gesprek',
+                  updated_at: session.updated_at,
+                }))
+              : [],
+          );
+        }
+        const fallbackSessionId =
+          preferredSessionId ||
+          normalizeAssistantSessionId(sessions?.[0]?.id);
+
+        if (!fallbackSessionId) return;
+
+        const detail = await assistantApi.sessionDetail(fallbackSessionId);
+        if (cancelled) return;
+
+        setActiveSessionId(fallbackSessionId);
+        setFeedItems(mapSessionMessagesToFeedItems(detail?.messages));
+      } catch (error) {
+        if (!cancelled) {
+          console.warn('Failed to load FINN session history', error);
+        }
+      }
+    }
+
+    loadActiveSession();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const switchToSession = useCallback(async (sessionId: string) => {
+    const normalized = normalizeAssistantSessionId(sessionId);
+    if (!normalized) return;
+
+    try {
+      const detail = await assistantApi.sessionDetail(normalized);
+      await persistActiveSessionId(normalized);
+      setCurrentDraft(null);
+      setCurrentDraftAction(null);
+      setActiveState(null);
+      setFeedItems(mapSessionMessagesToFeedItems(detail?.messages));
+    } catch (error) {
+      console.warn('Failed to switch FINN session', error);
+    }
+  }, [persistActiveSessionId]);
+
+  const startNewConversation = useCallback(async () => {
+    setActiveSessionId(null);
+    setCurrentDraft(null);
+    setCurrentDraftAction(null);
+    setActiveState(null);
+    setChatError(null);
+    setFeedItems([]);
+    try {
+      await assistantApi.updatePreferences({
+        [ACTIVE_FINN_SESSION_ID_KEY]: null,
+      });
+    } catch (error) {
+      console.warn('Failed to reset active FINN session id', error);
+    }
+  }, []);
+
   const getMetricTitle = (metric: string) => {
     const titles: Record<string, string> = {
       transition_risk: 'Transition Risk Analysis',
@@ -177,20 +272,22 @@ export function FinnScreen({
     return titles[metric] || 'Contextual Intelligence';
   };
 
-  const getMetricAnalysisText = (metric: string, symbol = 'BTC', tf = '1W') => {
+  const getMetricAnalysisText = (metric: string, symbol = '', tf = '') => {
+    const assetLabel = symbol || 'deze asset';
+    const timeframeLabel = tf || 'dit timeframe';
     switch (metric) {
       case 'transition_risk':
-        return `FINN detecteert toenemende regime-instabiliteit door afnemende trend strength en hogere volatiliteit voor ${symbol}. Nieuwe agressieve entries worden momenteel niet aanbevolen op het ${tf} timeframe.`;
+        return `FINN detecteert toenemende regime-instabiliteit door afnemende trend strength en hogere volatiliteit voor ${assetLabel}. Nieuwe agressieve entries worden momenteel niet aanbevolen op ${timeframeLabel}.`;
       case 'setup_quality':
-        return `De setup quality score weerspiegelt robuuste confluences en gunstige risk/reward verhoudingen voor ${symbol}. Voldoet momenteel aan alle institutionele instapeisen.`;
+        return `De setup quality score weerspiegelt robuuste confluences en gunstige risk/reward verhoudingen voor ${assetLabel}. Voldoet momenteel aan alle institutionele instapeisen.`;
       case 'market_pressure':
-        return `De verkoopdruk neemt toe in de orderboeken van ${symbol} met dalend volume op stijgingen. FINN adviseert strakkere stop-loss niveaus op ${tf}.`;
+        return `De verkoopdruk neemt toe in de orderboeken van ${assetLabel} met dalend volume op stijgingen. FINN adviseert strakkere stop-loss niveaus op ${timeframeLabel}.`;
       case 'structural_cycle':
-        return `De macro-structuur van ${symbol} bevindt zich in een vroege herstelfase (recovery). Accumulatie op belangrijke steunniveaus wordt ondersteund door stabiele kapitaalinstroom.`;
+        return `De macro-structuur van ${assetLabel} bevindt zich in een vroege herstelfase (recovery). Accumulatie op belangrijke steunniveaus wordt ondersteund door stabiele kapitaalinstroom.`;
       case 'position_size':
-        return `Huidige aanbevolen positiegrootte voor ${symbol} is defensief (50%). Verlaag actieve blootstelling bij verhoogde marktvolatiliteit om kapitaalbehoud te garanderen.`;
+        return `Huidige aanbevolen positiegrootte voor ${assetLabel} is defensief (50%). Verlaag actieve blootstelling bij verhoogde marktvolatiliteit om kapitaalbehoud te garanderen.`;
       case 'trend_strength':
-        return `De trend strength toont zwakke momentum-indicatoren op korte termijn voor ${symbol}. Verwacht verdere consolidatie voordat een duidelijke uitbraak wordt bevestigd.`;
+        return `De trend strength toont zwakke momentum-indicatoren op korte termijn voor ${assetLabel}. Verwacht verdere consolidatie voordat een duidelijke uitbraak wordt bevestigd.`;
       default:
         return `FINN analyseert momenteel de realtime datastromen voor ${symbol} (${tf}). Alle achtergrondmodellen en risico-parameters draaien binnen normale drempelwaarden.`;
     }
@@ -247,7 +344,8 @@ export function FinnScreen({
     setQuery('');
 
     try {
-      const envelope = await assistantApi.chat(textToSend, apiContext);
+      const envelope = await assistantApi.chat(textToSend, apiContext, undefined, activeSessionId || 'new');
+      await persistActiveSessionId(normalizeAssistantSessionId(envelope?.session_id));
       setFeedItems((current) => [...current, ...mapAssistantEnvelopeToFeedItems(envelope)]);
       if (envelope.draft) {
         setCurrentDraft(envelope.draft);
@@ -405,7 +503,8 @@ export function FinnScreen({
     setQuery('');
 
     try {
-      const envelope = await assistantApi.chat(trimmed, apiContext);
+      const envelope = await assistantApi.chat(trimmed, apiContext, undefined, activeSessionId || 'new');
+      await persistActiveSessionId(normalizeAssistantSessionId(envelope?.session_id));
       setFeedItems((current) => [...current, ...mapAssistantEnvelopeToFeedItems(envelope)]);
       if (envelope.draft) {
         setCurrentDraft(envelope.draft);
@@ -476,7 +575,7 @@ export function FinnScreen({
               </View>
             </View>
             <Pressable onPress={onClose} style={({ pressed }) => [styles.closeBtn, pressed && styles.pressed]}>
-              <Text style={styles.closeBtnText}>SLUITEN</Text>
+              <Text style={styles.closeBtnText}>{translate(language, 'finn.close').toUpperCase()}</Text>
             </Pressable>
           </View>
         </View>
@@ -502,12 +601,12 @@ export function FinnScreen({
                 </View>
                 <View style={styles.headerCopy}>
                   <View style={styles.headerTitleLine}>
-                    <Text style={[styles.headerEyebrow, { color: colors.textDim }]}>FINN Workspace</Text>
+                    <Text style={[styles.headerEyebrow, { color: colors.textDim }]}>FINN</Text>
                     <View style={styles.headerBadge}>
                       <Text style={styles.headerBadgeText}>{finnModeLabel.toUpperCase()}</Text>
                     </View>
                   </View>
-                  <Text style={[styles.headerTitle, { color: colors.text }]}>Ask FINN</Text>
+                  <Text style={[styles.headerTitle, { color: colors.text }]}>{translate(language, 'finn.askTitle')}</Text>
                 </View>
               </View>
               <View style={styles.headerSubRow}>
@@ -516,29 +615,62 @@ export function FinnScreen({
               </View>
               <View style={styles.heroMetaRow}>
                 <View style={[styles.heroMetaCard, { backgroundColor: colors.backgroundSoft, borderColor: colors.border }]}>
-                  <Text style={styles.heroMetaLabel}>Context</Text>
+                  <Text style={styles.heroMetaLabel}>{translate(language, 'finn.contextLabel')}</Text>
                   <Text style={[styles.heroMetaValue, { color: colors.text }]}>{context.asset}</Text>
                 </View>
                 <View style={[styles.heroMetaCard, { backgroundColor: colors.backgroundSoft, borderColor: colors.border }]}>
-                  <Text style={styles.heroMetaLabel}>Workflow</Text>
+                  <Text style={styles.heroMetaLabel}>{translate(language, 'finn.workflowLabel')}</Text>
                   <Text style={[styles.heroMetaValue, { color: colors.text }]}>{context.screen || 'FINN'}</Text>
                 </View>
                 <View style={[styles.heroMetaCard, { backgroundColor: colors.backgroundSoft, borderColor: colors.border }]}>
-                  <Text style={styles.heroMetaLabel}>Mode</Text>
+                  <Text style={styles.heroMetaLabel}>{translate(language, 'finn.modeLabel')}</Text>
                   <Text style={[styles.heroMetaValue, { color: colors.text }]}>{finnModeLabel}</Text>
                 </View>
               </View>
+              <View style={styles.sessionActionsRow}>
+                <Pressable
+                  onPress={startNewConversation}
+                  style={[styles.sessionActionButton, { borderColor: colors.border, backgroundColor: colors.backgroundSoft }]}
+                >
+                  <Text style={[styles.sessionActionText, { color: colors.text }]}>Nieuw gesprek</Text>
+                </Pressable>
+              </View>
             </View>
           </View>
+
+          {availableSessions.length > 0 ? (
+            <View style={styles.recentSection}>
+              <Text style={[styles.recentHeader, { color: colors.textDim }]}>Recente gesprekken</Text>
+              {availableSessions.slice(0, 3).map((session) => {
+                const active = session.id === activeSessionId;
+                return (
+                  <Pressable
+                    key={session.id}
+                    onPress={() => switchToSession(session.id)}
+                    style={[
+                      styles.recentRow,
+                      {
+                        borderColor: active ? colors.accent : colors.border,
+                        backgroundColor: active ? colors.backgroundSoft : colors.surface,
+                      },
+                    ]}
+                  >
+                    <Text numberOfLines={1} style={[styles.recentTitle, { color: colors.text }]}>{session.title}</Text>
+                    <Text style={[styles.recentArrow, { color: colors.textDim }]}>{formatSessionTimestamp(session.updated_at)}</Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          ) : null}
 
           {!isActionFlow && (
             <View style={[styles.postureBox, { backgroundColor: colors.surface, borderColor: colors.border }]}>
               <View style={styles.hudSectionHeader}>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                  <Text style={[styles.hudSectionTitle, { color: colors.text }]}>ACTIEVE BRIEFING</Text>
+                  <Text style={[styles.hudSectionTitle, { color: colors.text }]}>{translate(language, 'finn.activeBriefing')}</Text>
                 </View>
                 <View style={styles.posturePill}>
-                  <Text style={styles.posturePillText}>Defensieve Posture</Text>
+                  <Text style={styles.posturePillText}>{translate(language, 'finn.defensivePosture')}</Text>
                 </View>
               </View>
               <Text style={[styles.quoteText, { color: colors.text }]}>
@@ -564,7 +696,7 @@ export function FinnScreen({
 
           {!sending && feedItems.length === 0 ? (
             <View style={styles.promptSection}>
-              <Text style={[styles.promptTitle, { color: colors.text }]}>Start from the live workspace context</Text>
+              <Text style={[styles.promptTitle, { color: colors.text }]}>{translate(language, 'finn.startFromWorkspace')}</Text>
               <SuggestedPromptChips prompts={starterPrompts} onSelect={setQuery} />
             </View>
           ) : null}
@@ -582,7 +714,7 @@ export function FinnScreen({
                   <View style={{ height: 4, backgroundColor: '#2563EB', width: `${progress.percentage}%` }} />
                 </View>
                 <Text style={{ fontSize: 10, color: '#64748B', marginTop: 4 }}>
-                  {progress.filled} van de {progress.total} stappen voltooid
+                  {translate(language, 'finn.flowCompletedSteps', { filled: progress.filled, total: progress.total })}
                 </Text>
               </View>
             );
@@ -592,12 +724,12 @@ export function FinnScreen({
 
           {chatError ? (
             <InsightCard
-              label="Chat error"
-              title="FINN kon je vraag niet live beantwoorden."
+              label={translate(language, 'finn.chatErrorLabel')}
+              title={translate(language, 'finn.chatErrorTitle')}
               body={chatError}
-              cta="Probeer opnieuw"
+              cta={translate(language, 'finn.retry')}
               tone="danger"
-              onPress={() => setQuery(query || 'Vat mijn huidige context samen')}
+              onPress={() => setQuery(query || translate(language, 'finn.summarizeCurrentContext'))}
             />
           ) : null}
         </ScreenContainer>
@@ -608,7 +740,7 @@ export function FinnScreen({
               multiline
               maxLength={240}
               onChangeText={setQuery}
-              placeholder="Vraag Finn om context, risico of een volgende stap..."
+              placeholder={translate(language, 'finn.askPlaceholder')}
               placeholderTextColor={colors.textDim}
               style={[styles.input, { color: colors.text }]}
               value={query}
@@ -679,7 +811,7 @@ function buildActiveBriefingText(
   const change =
     typeof asset.change_24h === 'number'
       ? `${asset.change_24h >= 0 ? '+' : ''}${asset.change_24h.toFixed(2)}%`
-      : 'n/a';
+      : '—';
   const risk =
     asset.setup_score < 45 || asset.technical_score < 45
       ? 'De structuur is nog zwak, dus ik zou wachten op bevestiging.'
@@ -703,6 +835,30 @@ function conciseInsightText(value?: Record<string, string> | null) {
 
 function withoutSurroundingQuotes(value: string) {
   return value.trim().replace(/^["“]+|["”]+$/g, '');
+}
+
+function normalizeAssistantSessionId(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const normalized = value.trim();
+  return normalized ? normalized : null;
+}
+
+function mapSessionMessagesToFeedItems(messages: Array<{ id: number; role: 'assistant' | 'user'; content: string; created_at: string }> = []): AssistantFeedItem[] {
+  return messages
+    .filter((message) => typeof message?.content === 'string' && message.content.trim())
+    .map((message) => ({
+      id: `session-${message.id}`,
+      type: 'message',
+      role: message.role,
+      text: message.content,
+    }));
+}
+
+function formatSessionTimestamp(value?: string) {
+  if (!value) return '';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  return `${String(date.getDate()).padStart(2, '0')}-${String(date.getMonth() + 1).padStart(2, '0')} ${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
 }
 
 const styles = StyleSheet.create({
@@ -825,7 +981,7 @@ const styles = StyleSheet.create({
     fontWeight: '900',
   },
   headerTitle: {
-    fontSize: 24,
+    fontSize: 20,
     fontWeight: '900',
     letterSpacing: -0.5,
   },
@@ -870,6 +1026,20 @@ const styles = StyleSheet.create({
   heroMetaRow: {
     flexDirection: 'row',
     gap: theme.spacing.sm,
+  },
+  sessionActionsRow: {
+    flexDirection: 'row',
+    gap: theme.spacing.sm,
+  },
+  sessionActionButton: {
+    borderRadius: theme.radius.button,
+    borderWidth: 1,
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: 8,
+  },
+  sessionActionText: {
+    fontSize: 11,
+    fontWeight: '800',
   },
   heroMetaValue: {
     fontSize: 13,

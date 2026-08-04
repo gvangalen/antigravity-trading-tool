@@ -27,7 +27,7 @@ export function DraftReviewCard({
   return (
     <CardShell>
       <View style={styles.topRow}>
-        <StatusChip label={type} tone="accent" />
+        <StatusChip compact label={type} tone="accent" />
         <Text style={styles.asset}>{asset}</Text>
       </View>
       <Text style={styles.title}>{title}</Text>

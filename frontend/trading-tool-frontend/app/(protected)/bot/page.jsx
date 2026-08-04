@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Bot, ChevronDown, Plus, Sparkles, Wallet } from "lucide-react";
 
 import useBotData from "@/hooks/useBotData";
-import { useStrategyData } from "@/hooks/useStrategyData";
+import { invalidateStrategyDataCaches, useStrategyData } from "@/hooks/useStrategyData";
 import { useModal } from "@/components/modal/ModalProvider";
 import Drawer from "@/components/ui/Drawer";
 
@@ -156,6 +156,7 @@ function BotPageInner() {
     createBot,
     updateBot,
     deleteBot,
+    reloadAll,
 
     generateDecisionForBot,
     runBacktest,
@@ -188,6 +189,28 @@ function BotPageInner() {
     loadSetups();
     loadStrategies();
   }, [loadSetups, loadStrategies]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const refreshIfVisible = () => {
+      if (document.visibilityState !== "visible") return;
+      invalidateStrategyDataCaches();
+      void Promise.all([
+        loadSetups(true),
+        loadStrategies(true),
+        reloadAll({ includeHistory: false }),
+      ]);
+    };
+
+    window.addEventListener("focus", refreshIfVisible);
+    document.addEventListener("visibilitychange", refreshIfVisible);
+
+    return () => {
+      window.removeEventListener("focus", refreshIfVisible);
+      document.removeEventListener("visibilitychange", refreshIfVisible);
+    };
+  }, [loadSetups, loadStrategies, reloadAll]);
 
   const resolvedBots = useMemo(() => {
     return bots.map((bot) => resolveBotChain(bot, strategies, setups));

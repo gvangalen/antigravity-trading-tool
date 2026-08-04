@@ -1,4 +1,4 @@
-import { StyleSheet, Text, View } from 'react-native';
+import { Platform, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useAuth } from '../../auth/AuthProvider';
@@ -14,31 +14,25 @@ type WorkspaceHeaderProps = {
 
 const ROUTE_META: Record<
   keyof MainTabParamList,
-  { descriptionKey: TranslationKey; labelKey: TranslationKey }
+  { labelKey: TranslationKey }
 > = {
   Watchlist: {
     labelKey: 'workspace.analysis',
-    descriptionKey: 'workspace.analysisDescription',
   },
   Setup: {
     labelKey: 'workspace.myPlan',
-    descriptionKey: 'workspace.myPlanDescription',
   },
   Automation: {
     labelKey: 'workspace.automation',
-    descriptionKey: 'workspace.automationDescription',
   },
   Portfolio: {
     labelKey: 'workspace.portfolio',
-    descriptionKey: 'workspace.portfolioDescription',
   },
   Report: {
     labelKey: 'workspace.reflection',
-    descriptionKey: 'workspace.reflectionDescription',
   },
   Settings: {
     labelKey: 'workspace.settings',
-    descriptionKey: 'workspace.settingsDescription',
   },
 };
 
@@ -51,16 +45,19 @@ export function WorkspaceHeader({ routeName }: WorkspaceHeaderProps) {
   const routeMeta = ROUTE_META[routeName];
   const label = translate(language, routeMeta.labelKey);
   const initials = userInitials(user?.first_name, user?.last_name, user?.email);
-  const contextOwner = user?.first_name?.trim() || 'FINN';
+  const glassBackground = appearance === 'light' ? 'rgba(251, 252, 255, 0.64)' : 'rgba(9, 14, 26, 0.72)';
+  const glassBorder = appearance === 'light' ? 'rgba(20, 35, 65, 0.04)' : 'rgba(226, 232, 240, 0.05)';
+  const glassShadow = appearance === 'light' ? 'rgba(20, 35, 65, 0.02)' : 'rgba(2, 6, 23, 0.18)';
 
   return (
     <View
       style={[
         styles.container,
         {
-          backgroundColor: colors.surface,
-          borderBottomColor: colors.border,
-          paddingTop: Math.max(insets.top - 26, 2),
+          backgroundColor: glassBackground,
+          borderBottomColor: glassBorder,
+          paddingTop: Math.max(insets.top - 14, 4),
+          shadowColor: glassShadow,
         },
       ]}
     >
@@ -70,7 +67,7 @@ export function WorkspaceHeader({ routeName }: WorkspaceHeaderProps) {
             <Text style={styles.logoText}>F</Text>
           </View>
           <View style={styles.copyBlock}>
-            <Text style={[styles.brand, { color: colors.text }]}>FINN Workspace</Text>
+            <Text style={[styles.brand, { color: colors.text }]}>FINN</Text>
             <Text style={[styles.contextLine, { color: colors.textDim }]}>
               {label.toUpperCase()} · {context.asset}
             </Text>
@@ -78,7 +75,7 @@ export function WorkspaceHeader({ routeName }: WorkspaceHeaderProps) {
         </View>
 
         <View style={styles.actions}>
-          <View style={[styles.avatar, { backgroundColor: colors.surfaceMuted, borderColor: colors.borderStrong }]}>
+          <View style={[styles.avatar, { backgroundColor: 'transparent', borderColor: colors.border }]}>
             <Text style={[styles.avatarText, { color: colors.text }]}>{initials}</Text>
           </View>
         </View>
@@ -104,31 +101,34 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     borderRadius: theme.radius.pill,
     borderWidth: 1,
-    height: 40,
+    height: 34,
     justifyContent: 'center',
-    width: 40,
+    width: 34,
   },
   avatarText: {
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: '900',
   },
   brand: {
-    fontSize: 16,
+    fontSize: 13,
     fontWeight: '900',
-    letterSpacing: -0.6,
+    letterSpacing: -0.1,
   },
   container: {
     borderBottomWidth: 0.5,
     gap: 0,
-    paddingHorizontal: 14,
+    paddingHorizontal: theme.spacing.md,
     paddingBottom: 6,
     paddingTop: 0,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: Platform.OS === 'ios' ? 1 : 0,
+    shadowRadius: 10,
   },
   contextLine: {
-    fontSize: 11,
+    fontSize: 9,
     fontWeight: '800',
-    letterSpacing: 1.4,
-    marginTop: 1,
+    letterSpacing: 1.1,
+    marginTop: 0,
     textTransform: 'uppercase',
   },
   copyBlock: {
@@ -138,19 +138,19 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     flex: 1,
     flexDirection: 'row',
-    gap: 12,
+    gap: 8,
   },
   logo: {
     alignItems: 'center',
     backgroundColor: theme.colors.accent,
-    borderRadius: 14,
-    height: 44,
+    borderRadius: 9,
+    height: 30,
     justifyContent: 'center',
-    width: 44,
+    width: 30,
   },
   logoText: {
     color: '#ffffff',
-    fontSize: 23,
+    fontSize: 17,
     fontWeight: '900',
   },
   pressed: {
@@ -160,6 +160,6 @@ const styles = StyleSheet.create({
   topRow: {
     alignItems: 'center',
     flexDirection: 'row',
-    gap: 8,
+    gap: theme.spacing.xs,
   },
 });

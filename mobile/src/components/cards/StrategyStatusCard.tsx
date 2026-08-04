@@ -54,7 +54,7 @@ export function StrategyStatusCard({
         </View>
         
         <View style={styles.statusRow}>
-          <StatusChip label={status} tone="warning" />
+          <StatusChip compact label={status} tone="warning" />
         </View>
 
         <View style={{ gap: 4, marginTop: 8 }}>
@@ -102,7 +102,7 @@ const styles = StyleSheet.create({
   },
   confidenceValue: {
     color: theme.colors.text,
-    fontSize: 27,
+    fontSize: 22,
     fontWeight: '900',
   },
   explanation: {
@@ -157,7 +157,7 @@ const styles = StyleSheet.create({
   },
   symbol: {
     color: theme.colors.text,
-    fontSize: 20,
+    fontSize: 17,
     fontWeight: '700',
     marginTop: 5,
   },
