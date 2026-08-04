@@ -1478,6 +1478,14 @@ function FinnReportsPanel() {
     () => resolveActiveFinnReportOption(safeFinnReportOptions, activeFinnReport),
     [activeFinnReport, safeFinnReportOptions]
   );
+  const primaryReflectionTabs = useMemo(
+    () => safeFinnReportOptions.filter((option) => ['today', 'week', 'behavior'].includes(option?.key)),
+    [safeFinnReportOptions]
+  );
+  const blockedOption = useMemo(
+    () => safeFinnReportOptions.find((option) => option?.key === 'blocked') || null,
+    [safeFinnReportOptions]
+  );
 
   const loadFinnReport = async (option = activeOption, force = false) => {
     if (!option?.key || !option?.prompt) {
@@ -1590,6 +1598,20 @@ function FinnReportsPanel() {
     [digestCopy.open, openActionCount],
   ];
   const isTodayView = activeOptionKey === 'today';
+  const evidenceCount = reviewedCount + blockedCount + openActionCount;
+  const evidenceTarget = 3;
+  const evidenceProgress = Math.max(0, Math.min(100, (evidenceCount / evidenceTarget) * 100));
+  const totalEvents = cleanedActivityEntries.length + cleanedBlockedEntries.length + cleanedDeviationEntries.length;
+  const hasLimitedEvidence = evidenceCount < evidenceTarget;
+  const reflectionDateLabel = formatDateTime(new Date(report?.report_date || Date.now()), locale, {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+  });
+  const headerRangeLabel = activeOptionKey === 'today' ? 'Today' : activeOption?.label || digestCopy.metricsHint;
+  const emptyStateSupport = hasLimitedEvidence
+    ? 'FINN needs a few explicit decisions before it can identify a meaningful pattern.'
+    : 'FINN reviews how closely you followed your plan and what to improve next.';
   const primaryActionLabel = reflectionSummary.primaryAction;
   const openReflectionDetails = () => {
     setExpanded(true);
@@ -1611,34 +1633,31 @@ function FinnReportsPanel() {
 
       <div className="rounded-3xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 shadow-lg shadow-slate-900/5 overflow-hidden">
         <div className="p-6 md:p-7 border-b border-slate-100 dark:border-slate-800/80">
-          <h2 className="text-xl md:text-2xl font-black tracking-tight text-slate-950 dark:text-slate-100">
-            {digestCopy.reportTitle}
-          </h2>
+          <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
+            <div>
+              <h2 className="text-3xl md:text-4xl font-black tracking-tight text-slate-950 dark:text-slate-100">
+                Reflection
+              </h2>
+              <p className="mt-2 text-base font-medium text-slate-500 dark:text-slate-400 max-w-2xl">
+                FINN reviews how closely you followed your plan and what to improve next.
+              </p>
+            </div>
+            <div className="flex flex-wrap items-center gap-3">
+              <span className="text-base font-medium text-slate-600 dark:text-slate-300">
+                {headerRangeLabel} · {reflectionDateLabel}
+              </span>
+              <span className={`inline-flex items-center rounded-2xl border px-4 py-2 text-sm font-semibold ${
+                hasLimitedEvidence
+                  ? 'border-blue-200 bg-blue-50 text-blue-600 dark:border-blue-900/40 dark:bg-blue-950/20 dark:text-blue-300'
+                  : 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/40 dark:bg-emerald-950/20 dark:text-emerald-300'
+              }`}>
+                {hasLimitedEvidence ? 'Limited evidence' : 'Reflection active'}
+              </span>
+            </div>
+          </div>
         </div>
 
         <div className="p-6 md:p-7">
-          <div className="mb-5 overflow-x-auto">
-            <div className="inline-flex min-w-full sm:min-w-0 rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/50 p-1">
-              {safeFinnReportOptions.map((option, index) => {
-                if (!option?.key) return null;
-                const active = option.key === activeFinnReport;
-                return (
-                  <button
-                    key={`${option.key}-${index}`}
-                    onClick={() => setActiveFinnReport(option.key)}
-                    className={`flex-1 sm:flex-none px-4 py-3 rounded-xl text-[10px] font-black uppercase tracking-[0.16em] whitespace-nowrap transition-all ${
-                      active
-                        ? 'bg-white dark:bg-slate-950 text-blue-600 dark:text-blue-400 shadow-sm border border-slate-200 dark:border-slate-800'
-                        : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100'
-                    }`}
-                  >
-                    {option.label}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
           {!shouldLoadFinn ? (
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-900/40 p-4">
               <div className="text-sm font-semibold text-slate-600 dark:text-slate-300">
@@ -1670,75 +1689,162 @@ function FinnReportsPanel() {
               </button>
             </div>
           ) : (
-            <div className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-900/40 p-5 md:p-6">
-              <div className="min-w-0">
-                <div className="rounded-2xl border border-blue-100 dark:border-blue-900/40 bg-blue-50/70 dark:bg-blue-950/20 p-5">
-                  <div className="text-[10px] font-black uppercase tracking-[0.18em] text-blue-600 dark:text-blue-300">
-                    {activeOption?.label || digestCopy.metricsHint}
-                  </div>
-                  <p className="mt-3 text-lg md:text-2xl font-black tracking-tight text-slate-950 dark:text-slate-100 max-w-3xl">
-                    {reflectionSummary.headline}
-                  </p>
-                </div>
-
-                <div className="mt-4 grid grid-cols-1 sm:grid-cols-3 gap-3">
-                  {compactMetricItems.map(([label, value]) => (
-                    <div
-                      key={label}
-                      className="rounded-xl bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 p-3"
-                    >
-                      <div className="text-[9px] font-black uppercase tracking-[0.16em] text-slate-400 dark:text-slate-500">
-                        {label}
-                      </div>
-                      <div className="mt-1 text-2xl font-black text-slate-900 dark:text-slate-100">
-                        {value}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-
-                <div className="mt-4 grid grid-cols-1 lg:grid-cols-3 gap-3">
-                  {[
-                    [digestCopy.good, reflectionSummary.good, 'border-emerald-200 dark:border-emerald-900/50 bg-emerald-50/70 dark:bg-emerald-950/20 text-emerald-800 dark:text-emerald-200'],
-                    [digestCopy.attention, reflectionSummary.attention, 'border-amber-200 dark:border-amber-900/50 bg-amber-50/70 dark:bg-amber-950/20 text-amber-800 dark:text-amber-200'],
-                    [digestCopy.next, reflectionSummary.next, 'border-blue-200 dark:border-blue-900/50 bg-blue-50/70 dark:bg-blue-950/20 text-blue-800 dark:text-blue-200'],
-                  ].map(([label, value, tone]) => (
-                    <div key={label} className={`rounded-2xl border p-4 ${tone}`}>
-                      <div className="text-[10px] font-black uppercase tracking-[0.16em]">
-                        {label}
-                      </div>
-                      <p className="mt-3 text-sm font-semibold leading-relaxed">
-                        {value}
-                      </p>
-                    </div>
-                  ))}
-                </div>
-
-                <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center">
-                  <button
-                    onClick={openReflectionDetails}
-                    className={actionButtonStyles({
-                      variant: 'primary',
-                      className: 'justify-center gap-2 rounded-xl px-5 py-3 text-[11px] tracking-widest active:scale-[0.98]',
+            <div className="space-y-5">
+              <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                <div className="overflow-x-auto">
+                  <div className="inline-flex rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 overflow-hidden min-w-max">
+                    {primaryReflectionTabs.map((option, index) => {
+                      const active = option.key === activeFinnReport;
+                      const label = option.key === 'behavior' ? '30 days' : option.label;
+                      return (
+                        <button
+                          key={`${option.key}-${index}`}
+                          onClick={() => setActiveFinnReport(option.key)}
+                          className={`px-6 py-3 text-sm font-semibold transition-colors ${
+                            active
+                              ? 'bg-blue-50 text-blue-600 dark:bg-blue-950/30 dark:text-blue-300'
+                              : 'text-slate-600 hover:text-slate-950 dark:text-slate-400 dark:hover:text-slate-100'
+                          } ${index !== primaryReflectionTabs.length - 1 ? 'border-r border-slate-200 dark:border-slate-800' : ''}`}
+                        >
+                          {label}
+                        </button>
+                      );
                     })}
-                  >
-                    {primaryActionLabel}
-                  </button>
+                  </div>
+                </div>
+                {blockedOption ? (
                   <button
-                    onClick={() => setExpanded((value) => !value)}
-                    className="text-sm font-semibold text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100 transition-colors"
+                    onClick={() => setActiveFinnReport(blockedOption.key)}
+                    className={`inline-flex items-center gap-2 self-start rounded-2xl border px-5 py-3 text-sm font-semibold transition-colors ${
+                      activeFinnReport === blockedOption.key
+                        ? 'border-slate-900 bg-slate-900 text-white dark:border-white dark:bg-white dark:text-slate-950'
+                        : 'border-slate-200 bg-white text-slate-700 hover:border-slate-300 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-200'
+                    }`}
                   >
-                    {expanded ? digestCopy.detailButtonClose : digestCopy.detailButton}
+                    <Filter size={16} />
+                    Blocked
                   </button>
-                </div>
-
-                <div className="mt-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 p-3 text-xs leading-relaxed text-slate-500 dark:text-slate-400">
-                  {digestCopy.detailsHint}
-                </div>
+                ) : null}
               </div>
 
-              {expanded && (
-                <div ref={detailsRef} className="mt-6 border-t border-slate-200 dark:border-slate-800 pt-5">
+              <div className="rounded-[28px] border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 p-5 md:p-6">
+                <div className="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1.65fr)_minmax(240px,0.8fr)]">
+                  <div className="min-w-0">
+                    <div className="text-[11px] font-black uppercase tracking-[0.22em] text-blue-600 dark:text-blue-300">
+                      FINN&apos;S REFLECTION
+                    </div>
+                    <p className="mt-4 max-w-3xl text-2xl md:text-3xl font-black tracking-tight text-slate-950 dark:text-slate-100">
+                      {reflectionSummary.headline}
+                    </p>
+                    <p className="mt-3 text-base font-medium text-slate-500 dark:text-slate-400 max-w-2xl">
+                      {emptyStateSupport}
+                    </p>
+
+                    <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-3">
+                      {[
+                        [ClipboardList, digestCopy.reviewed, reviewedCount],
+                        [ShieldAlert, digestCopy.blocked, blockedCount],
+                        [Activity, digestCopy.open, openActionCount],
+                      ].map(([Icon, label, value]) => (
+                        <div key={label} className="flex items-center gap-4">
+                          <div className="flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 text-slate-500 dark:border-slate-800 dark:text-slate-400">
+                            <Icon size={18} />
+                          </div>
+                          <div>
+                            <div className="text-sm font-medium text-slate-500 dark:text-slate-400">{label}</div>
+                            <div className="text-2xl font-black text-slate-950 dark:text-slate-100">{value}</div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+
+                    <div className="mt-6 border-t border-slate-200 dark:border-slate-800 pt-5">
+                      <div className="flex items-center justify-between gap-4">
+                        <span className="text-sm font-medium text-slate-500 dark:text-slate-400">Evidence collected</span>
+                        <span className="text-sm font-medium text-slate-600 dark:text-slate-300">
+                          {Math.min(evidenceCount, evidenceTarget)} of {evidenceTarget} decisions
+                        </span>
+                      </div>
+                      <div className="mt-3 h-2 overflow-hidden rounded-full bg-slate-200 dark:bg-slate-800">
+                        <div
+                          className="h-full rounded-full bg-blue-500 dark:bg-blue-400 transition-all"
+                          style={{ width: `${evidenceProgress}%` }}
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="rounded-3xl border border-blue-100 bg-blue-50/50 p-5 text-slate-700 dark:border-blue-900/40 dark:bg-blue-950/20 dark:text-slate-200">
+                    <div className="text-[11px] font-black uppercase tracking-[0.22em] text-blue-600 dark:text-blue-300">
+                      WHEN REFLECTION APPEARS
+                    </div>
+                    <p className="mt-4 text-base font-medium leading-relaxed">
+                      FINN will show patterns here once enough existing activity and reviews have been recorded.
+                    </p>
+                  </div>
+                </div>
+
+                <button
+                  onClick={() => setExpanded((value) => !value)}
+                  className="mt-5 flex w-full items-center justify-between rounded-2xl border border-slate-200 bg-white px-5 py-5 text-left transition hover:border-slate-300 dark:border-slate-800 dark:bg-slate-950"
+                >
+                  <div className="flex min-w-0 items-center gap-4">
+                    <div className="flex h-11 w-11 items-center justify-center rounded-2xl border border-slate-200 text-slate-500 dark:border-slate-800 dark:text-slate-400">
+                      <FileText size={18} />
+                    </div>
+                    <div className="min-w-0">
+                      <div className="text-2xl font-black tracking-tight text-slate-950 dark:text-slate-100">
+                        Activity &amp; evidence
+                      </div>
+                      <div className="mt-1 text-sm font-medium text-slate-500 dark:text-slate-400">
+                        See the decisions and events behind this reflection
+                      </div>
+                    </div>
+                  </div>
+                  <div className="ml-4 flex items-center gap-4 text-slate-500 dark:text-slate-400">
+                    <span className="text-sm font-medium">{totalEvents} events</span>
+                    <ChevronRight size={18} className={`transition-transform ${expanded ? 'rotate-90' : ''}`} />
+                  </div>
+                </button>
+
+                {!hasLimitedEvidence ? (
+                  <div className="mt-5 grid grid-cols-1 lg:grid-cols-3 gap-3">
+                    {[
+                      [digestCopy.good, reflectionSummary.good, 'border-emerald-200 dark:border-emerald-900/50 bg-emerald-50/70 dark:bg-emerald-950/20 text-emerald-800 dark:text-emerald-200'],
+                      [digestCopy.attention, reflectionSummary.attention, 'border-amber-200 dark:border-amber-900/50 bg-amber-50/70 dark:bg-amber-950/20 text-amber-800 dark:text-amber-200'],
+                      [digestCopy.next, reflectionSummary.next, 'border-blue-200 dark:border-blue-900/50 bg-blue-50/70 dark:bg-blue-950/20 text-blue-800 dark:text-blue-200'],
+                    ].map(([label, value, tone]) => (
+                      <div key={label} className={`rounded-2xl border p-4 ${tone}`}>
+                        <div className="text-[10px] font-black uppercase tracking-[0.16em]">
+                          {label}
+                        </div>
+                        <p className="mt-3 text-sm font-semibold leading-relaxed">
+                          {value}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+
+              {expanded ? (
+                <div ref={detailsRef} className="rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-900/40 p-5 md:p-6">
+                  <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                      <div className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-400 dark:text-slate-500">
+                        Reflection details
+                      </div>
+                      <div className="mt-1 text-lg font-black text-slate-950 dark:text-slate-100">
+                        {primaryActionLabel}
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => setExpanded(false)}
+                      className="text-sm font-semibold text-slate-500 transition-colors hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100"
+                    >
+                      {digestCopy.detailButtonClose}
+                    </button>
+                  </div>
                   <FinnReflectionBlocks
                     analysis={analysis}
                     showActivityEntries={!isTodayView}
@@ -1749,7 +1855,7 @@ function FinnReportsPanel() {
                     openActionCount={openActionCount}
                   />
                 </div>
-              )}
+              ) : null}
             </div>
           )}
         </div>
