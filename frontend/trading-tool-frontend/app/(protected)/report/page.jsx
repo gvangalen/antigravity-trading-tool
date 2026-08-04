@@ -59,6 +59,7 @@ import {
   Shield,
   ClipboardList,
   ChevronDown,
+  ChevronRight,
   Activity,
   ShieldAlert,
   CheckCircle2,
@@ -66,6 +67,7 @@ import {
   Bot,
   Terminal,
   BarChart3,
+  Filter,
 } from 'lucide-react';
 
 /* =====================================================
