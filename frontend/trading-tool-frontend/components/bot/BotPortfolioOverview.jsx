@@ -8,6 +8,16 @@ import { formatCurrency, formatNumber } from "@/lib/i18n";
 import BotBudgetBar from "./BotBudgetBar";
 import BotPnLBadge from "./BotPnLBadge";
 
+function resolveAssetLogoUrl(symbol, explicitLogoUrl = null) {
+  if (explicitLogoUrl) return explicitLogoUrl;
+  const normalized = String(symbol || "").trim().toUpperCase();
+  if (!normalized) return null;
+  if (/^[A-Z]{2,10}$/.test(normalized)) {
+    return `https://assets.coincap.io/assets/icons/${normalized.toLowerCase()}@2x.png`;
+  }
+  return null;
+}
+
 /**
  * BotPortfolioOverview — READ ONLY
  * --------------------------------------------------
@@ -76,6 +86,7 @@ export default function BotPortfolioOverview({
     if (!acc[sym]) {
       acc[sym] = {
         symbol: sym,
+        logoUrl: resolveAssetLogoUrl(sym),
         netQty: 0,
         positionValue: 0,
         spentExecuted: 0,
@@ -241,12 +252,25 @@ export default function BotPortfolioOverview({
                   key={row.symbol}
                   className="flex items-center justify-between gap-4 rounded-2xl border-2 border-slate-50 bg-slate-50/30 px-5 py-4 transition-all hover:border-blue-600/10 hover:bg-white"
                 >
-                  <div className="min-w-0">
-                    <div className="text-[10px] font-black text-blue-600 uppercase tracking-widest mb-1 leading-none">
-                      {row.symbol}
-                    </div>
-                    <div className="text-sm font-black text-foreground tracking-tighter">
-                      {formatNumber(Number(row.netQty), locale, { minimumFractionDigits: 0, maximumFractionDigits: 6 })} <span className="opacity-40 text-[9px] uppercase tracking-normal">{row.symbol}</span>
+                  <div className="min-w-0 flex items-center gap-3">
+                    {row.logoUrl ? (
+                      <img
+                        src={row.logoUrl}
+                        alt={`${row.symbol} logo`}
+                        className="h-10 w-10 rounded-full object-cover shrink-0"
+                        loading="lazy"
+                        referrerPolicy="no-referrer"
+                      />
+                    ) : (
+                      <div className="h-10 w-10 shrink-0 rounded-full bg-slate-100 border border-slate-200" />
+                    )}
+                    <div className="min-w-0">
+                      <div className="text-[10px] font-black text-blue-600 uppercase tracking-widest mb-1 leading-none">
+                        {row.symbol}
+                      </div>
+                      <div className="text-sm font-black text-foreground tracking-tighter">
+                        {formatNumber(Number(row.netQty), locale, { minimumFractionDigits: 0, maximumFractionDigits: 6 })} <span className="opacity-40 text-[9px] uppercase tracking-normal">{row.symbol}</span>
+                      </div>
                     </div>
                   </div>
 

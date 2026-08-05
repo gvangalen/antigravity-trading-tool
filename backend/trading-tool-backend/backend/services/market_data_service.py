@@ -13,7 +13,10 @@ from backend.schemas.market_data_schema import (
     MarketDataResponse, MarketDataIndicatorResponse, MarketData7DResponse,
     MarketForwardReturnResponse, ForwardReturnChartResponse
 )
+from backend.schemas.market_provider_schema import AssetRecord
 from backend.infrastructure.models import MarketDataIndicator, MarketData7D
+from backend.services.asset_catalog_service import AssetCatalogService
+from backend.services.market_data_provider_registry import MarketDataProviderRegistry
 from backend.utils.scoring_utils import normalize_indicator_name
 from backend.utils.indicator_score_validation import require_indicator_score
 
@@ -44,38 +47,47 @@ class MarketDataService:
     def __init__(self, db_session: AsyncSession):
         self.session = db_session
         self.repository = MarketDataRepository(db_session)
+        self.provider_registry = MarketDataProviderRegistry()
 
     async def sync_live_price(self, symbol: str) -> dict:
-        """Fetches the live price from Binance and updates the market_data table."""
+        """Fetches the latest normalized market snapshot and updates market_data."""
         symbol = symbol.upper()
-        binance_symbol = f"{symbol}USDT"
-        
-        url = f"https://api.binance.com/api/v3/ticker/24hr?symbol={binance_symbol}"
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            res = await client.get(url)
-            if res.status_code != 200:
-                logger.error(f"❌ Kon live prijs voor {symbol} niet ophalen van Binance: {res.status_code}")
-                return {"error": "API fout"}
-                
-            data = res.json()
-            
-        price = float(data.get("lastPrice", 0))
-        change_24h = float(data.get("priceChangePercent", 0))
-        volume = float(data.get("quoteVolume", 0))
-        
+        asset_meta = await AssetCatalogService(self.session).get_asset(symbol)
+        asset = AssetRecord(**asset_meta)
+
+        try:
+            provider = self.provider_registry.resolve_for_asset(asset)
+            snapshot = await provider.fetch_latest_snapshot(asset)
+        except Exception as exc:
+            logger.error(
+                "❌ Kon live prijs voor %s niet ophalen via provider %s: %s",
+                symbol,
+                asset.primary_provider or asset.provider,
+                exc,
+            )
+            return {"error": "API fout"}
+
         from backend.infrastructure.models import MarketData
         from datetime import datetime
-        
+
         new_data = MarketData(
             symbol=symbol,
-            price=price,
-            change_24h=change_24h,
-            volume=volume,
-            timestamp=datetime.utcnow()
+            price=snapshot.price,
+            open=snapshot.open,
+            high=snapshot.high,
+            low=snapshot.low,
+            change_24h=snapshot.change_percent,
+            volume=snapshot.volume,
+            timestamp=snapshot.observed_at.replace(tzinfo=None) if snapshot.observed_at else datetime.utcnow()
         )
         self.session.add(new_data)
         await self.session.commit()
-        return {"status": "✅ Live price synced", "price": price}
+        return {
+            "status": "✅ Live price synced",
+            "price": snapshot.price,
+            "provider": snapshot.provider,
+            "provider_symbol": snapshot.provider_symbol,
+        }
 
     # =========================================================
     # CORE: List / Latest Datasets

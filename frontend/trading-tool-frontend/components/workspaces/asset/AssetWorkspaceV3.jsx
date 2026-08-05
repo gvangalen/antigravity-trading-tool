@@ -1107,6 +1107,7 @@ function formatBiasLabel(value, ui = getUiCopy("nl")) {
 function ActiveAssetCard({
   activeSymbol,
   assetName,
+  assetLogoUrl,
   price,
   change24h,
   updatedAt,
@@ -1167,10 +1168,19 @@ function ActiveAssetCard({
               onClick={onSelectAsset}
               className="inline-flex shrink-0 items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-[13px] font-black tracking-tight text-slate-950 transition hover:border-blue-200 hover:text-blue-600"
             >
+              {assetLogoUrl ? (
+                <img
+                  src={assetLogoUrl}
+                  alt={`${assetName || activeSymbol} logo`}
+                  className="h-5 w-5 rounded-full object-cover"
+                  loading="lazy"
+                  referrerPolicy="no-referrer"
+                />
+              ) : null}
               <span>{activeSymbol}</span>
               <span className="hidden text-slate-400 sm:inline">{assetName || "Asset"}</span>
             </button>
-            <span className="min-w-0 truncate text-[31px] font-black leading-none tracking-tight text-slate-950 sm:text-[34px] lg:text-[36px]">
+            <span className="min-w-0 truncate text-[26px] font-black leading-none tracking-tight text-slate-950 sm:text-[29px] lg:text-[31px]">
               {price}
             </span>
             <span className={`shrink-0 text-base font-black ${changeClass}`}>
@@ -2109,6 +2119,7 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
       <ActiveAssetCard
         activeSymbol={activeSymbol}
         assetName={ASSET_NAMES[activeSymbol]}
+        assetLogoUrl={resolveAssetLogoUrl(activeSymbol)}
         price={formatPrice(btcLive?.price, locale)}
         change24h={btcLive?.change_24h}
         updatedAt={formatTimestamp(btcLive?.as_of || workspace?.generated_at, locale)}
