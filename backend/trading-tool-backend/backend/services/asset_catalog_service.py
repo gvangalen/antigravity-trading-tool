@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
+
+logger = logging.getLogger(__name__)
 
 
 def _default_logo_url(symbol: str, asset_class: str) -> str | None:
@@ -105,43 +108,47 @@ class AssetCatalogService:
         if not normalized:
             return {}
 
-        result = await self.session.execute(
-            text(
-                """
-                SELECT
-                    symbol,
-                    display_name,
-                    asset_class,
-                    logo_url,
-                    tradingview_symbol,
-                    coingecko_id,
-                    coincap_id,
-                    yahoo_symbol,
-                    provider,
-                    is_active,
-                    metadata
-                FROM asset_catalog
-                WHERE symbol = ANY(:symbols)
-                """
-            ),
-            {"symbols": normalized},
-        )
-        db_rows = {
-            str(row.symbol).upper(): {
-                "symbol": str(row.symbol).upper(),
-                "display_name": row.display_name,
-                "asset_class": row.asset_class or "unknown",
-                "logo_url": row.logo_url,
-                "tradingview_symbol": row.tradingview_symbol,
-                "coingecko_id": row.coingecko_id,
-                "coincap_id": row.coincap_id,
-                "yahoo_symbol": row.yahoo_symbol,
-                "provider": row.provider or "database",
-                "is_active": bool(row.is_active) if row.is_active is not None else True,
-                "metadata": row.metadata or {},
+        try:
+            result = await self.session.execute(
+                text(
+                    """
+                    SELECT
+                        symbol,
+                        display_name,
+                        asset_class,
+                        logo_url,
+                        tradingview_symbol,
+                        coingecko_id,
+                        coincap_id,
+                        yahoo_symbol,
+                        provider,
+                        is_active,
+                        metadata
+                    FROM asset_catalog
+                    WHERE symbol = ANY(:symbols)
+                    """
+                ),
+                {"symbols": normalized},
+            )
+            db_rows = {
+                str(row.symbol).upper(): {
+                    "symbol": str(row.symbol).upper(),
+                    "display_name": row.display_name,
+                    "asset_class": row.asset_class or "unknown",
+                    "logo_url": row.logo_url,
+                    "tradingview_symbol": row.tradingview_symbol,
+                    "coingecko_id": row.coingecko_id,
+                    "coincap_id": row.coincap_id,
+                    "yahoo_symbol": row.yahoo_symbol,
+                    "provider": row.provider or "database",
+                    "is_active": bool(row.is_active) if row.is_active is not None else True,
+                    "metadata": row.metadata or {},
+                }
+                for row in result.fetchall()
             }
-            for row in result.fetchall()
-        }
+        except Exception as exc:
+            logger.warning("Asset catalog query failed; falling back to defaults: %s", exc)
+            db_rows = {}
 
         merged: dict[str, dict[str, Any]] = {}
         for symbol in normalized:
