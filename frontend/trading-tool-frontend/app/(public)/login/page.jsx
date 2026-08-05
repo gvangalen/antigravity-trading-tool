@@ -17,9 +17,12 @@ async function resolvePostLoginDestination(nextPath, options = {}) {
   }
 
   try {
-    const status =
-      (preferCache ? getCachedOnboardingStatus() : null) ||
-      await getOnboardingStatus({ preferCache });
+    const cachedStatus = preferCache ? getCachedOnboardingStatus() : null;
+    if (preferCache && !cachedStatus) {
+      return "/asset";
+    }
+
+    const status = cachedStatus || await getOnboardingStatus({ preferCache });
     const isComplete = status?.onboarding_complete ?? (
       status?.has_profile &&
       status?.has_setup &&

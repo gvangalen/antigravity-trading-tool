@@ -1,18 +1,21 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
+import { useAuth } from "@/components/auth/AuthProvider";
 import { apiGet, apiPost } from "@/lib/api/apiClient";
 import { useVisibilityPolling } from "@/hooks/useVisibilityPolling";
 
 export default function useIntelligenceEvents(options = {}) {
-  const { enabled = true } = options;
+  const { enabled = true, initialDelayMs = 1200 } = options;
+  const { user, sessionChecked } = useAuth();
   const [events, setEvents] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const isFetchingRef = useRef(false);
+  const canFetch = enabled && sessionChecked && !!user;
 
   const fetchEvents = async (silent = false) => {
-    if (!enabled) return;
+    if (!canFetch) return;
     if (isFetchingRef.current) return;
     isFetchingRef.current = true;
     if (!silent) setLoading(true);
@@ -45,11 +48,31 @@ export default function useIntelligenceEvents(options = {}) {
     }
   };
 
+  useEffect(() => {
+    if (canFetch) return;
+    setLoading(false);
+    setError(null);
+    if (!user) {
+      setEvents([]);
+    }
+  }, [canFetch, user]);
+
+  useEffect(() => {
+    if (!canFetch) return undefined;
+
+    const timeoutId = setTimeout(() => {
+      void fetchEvents(false);
+    }, initialDelayMs);
+
+    return () => clearTimeout(timeoutId);
+  }, [canFetch, initialDelayMs]);
+
   useVisibilityPolling(() => fetchEvents(true), {
-    enabled,
+    enabled: canFetch,
     intervalMs: 60000,
     backgroundIntervalMs: 180000,
-    runImmediately: true,
+    runImmediately: false,
+    deps: [user?.id, sessionChecked],
   });
 
   return {

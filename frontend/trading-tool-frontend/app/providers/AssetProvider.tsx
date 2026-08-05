@@ -2,12 +2,13 @@
 
 import React, { createContext, useContext, useState, useEffect } from "react";
 import { usePathname } from "next/navigation";
+import { useAuth } from "@/components/auth/AuthProvider";
 import { API_BASE_URL } from "@/lib/config";
 import { buildAuthHeaders } from "@/lib/api/auth";
 import { normalizeOnboardingAsset, readOnboardingAssetPreference } from "@/lib/onboardingAsset";
 
-let preferredAssetCache: string | null = null;
-let preferredAssetPromise: Promise<string | null> | null = null;
+const preferredAssetCache = new Map<string, string | null>();
+const preferredAssetPromise = new Map<string, Promise<string | null>>();
 
 type AssetContextType = {
   selectedAsset: string;
@@ -20,6 +21,7 @@ const AssetContext = createContext<AssetContextType | null>(null);
 
 export function AssetProvider({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  const { user, sessionChecked } = useAuth() as any;
   const [selectedAsset, setSelectedAssetState] = useState<string>("BTC");
   const [availableAssets, setAvailableAssets] = useState<string[]>(["BTC", "ETH", "SOL", "ADA", "DOT"]);
   const [preferencesHydrated, setPreferencesHydrated] = useState(false);
@@ -41,35 +43,51 @@ export function AssetProvider({ children }: { children: React.ReactNode }) {
       path.startsWith("/forgot-password") ||
       path.startsWith("/reset-password");
 
-    if (isPublicAuthRoute || preferencesHydrated) return;
+    if (isPublicAuthRoute || preferencesHydrated || !sessionChecked) return;
+
+    if (!user?.id) {
+      setPreferencesHydrated(true);
+      return;
+    }
 
     let cancelled = false;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const userKey = String(user.id);
 
     async function fetchPreferredAsset() {
-      if (preferredAssetCache) {
-        return preferredAssetCache;
+      const assetFromUser = readOnboardingAssetPreference(user?.ai_preferences || {});
+      if (assetFromUser) {
+        preferredAssetCache.set(userKey, assetFromUser);
+        return assetFromUser;
       }
 
-      if (!preferredAssetPromise) {
-        preferredAssetPromise = fetch(`${API_BASE_URL}/api/assistant/preferences`, {
-          method: "GET",
-          credentials: "include",
-          headers: Object.fromEntries(buildAuthHeaders(undefined, "GET").entries()),
-        })
-          .then(async (response) => {
-            if (!response.ok) return null;
-            const payload = await response.json().catch(() => null);
-            const asset = readOnboardingAssetPreference(payload?.preferences || {});
-            preferredAssetCache = asset || null;
-            return preferredAssetCache;
+      if (preferredAssetCache.has(userKey)) {
+        return preferredAssetCache.get(userKey) || null;
+      }
+
+      if (!preferredAssetPromise.has(userKey)) {
+        preferredAssetPromise.set(
+          userKey,
+          fetch(`${API_BASE_URL}/api/assistant/preferences`, {
+            method: "GET",
+            credentials: "include",
+            headers: Object.fromEntries(buildAuthHeaders(undefined, "GET").entries()),
           })
-          .catch(() => null)
-          .finally(() => {
-            preferredAssetPromise = null;
-          });
+            .then(async (response) => {
+              if (!response.ok) return null;
+              const payload = await response.json().catch(() => null);
+              const asset = readOnboardingAssetPreference(payload?.preferences || {});
+              preferredAssetCache.set(userKey, asset || null);
+              return asset || null;
+            })
+            .catch(() => null)
+            .finally(() => {
+              preferredAssetPromise.delete(userKey);
+            })
+        );
       }
 
-      return preferredAssetPromise;
+      return preferredAssetPromise.get(userKey) || null;
     }
 
     async function hydrateSelectedAssetFromPreferences() {
@@ -92,12 +110,19 @@ export function AssetProvider({ children }: { children: React.ReactNode }) {
       }
     }
 
-    hydrateSelectedAssetFromPreferences();
+    timer = setTimeout(() => {
+      void hydrateSelectedAssetFromPreferences();
+    }, 600);
 
     return () => {
       cancelled = true;
+      if (timer) clearTimeout(timer);
     };
-  }, [pathname, preferencesHydrated]);
+  }, [pathname, preferencesHydrated, sessionChecked, user?.id, user?.ai_preferences]);
+
+  useEffect(() => {
+    setPreferencesHydrated(false);
+  }, [user?.id]);
 
   const setSelectedAsset = (asset: string) => {
     const normalized = normalizeOnboardingAsset(asset);

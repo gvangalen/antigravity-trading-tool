@@ -199,11 +199,6 @@ export function AuthProvider({ children }) {
       setSessionChecked(true);
       setLoading(false);
 
-      // Synchroniseer serverstatus op de achtergrond zonder login te blokkeren.
-      setTimeout(() => {
-        void loadSession();
-      }, 0);
-
       // 📳 Haptic Success
       import("@/lib/haptics").then(({ hapticFeedback }) => {
         hapticFeedback.notification();
@@ -219,7 +214,7 @@ export function AuthProvider({ children }) {
           : "Kan de server niet bereiken. Probeer opnieuw.",
       };
     }
-  }, [loadSession]);
+  }, []);
 
   /* -------------------------------------------------------
      LOGOUT
