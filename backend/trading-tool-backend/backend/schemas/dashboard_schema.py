@@ -47,6 +47,9 @@ class DashboardResponse(BaseModel):
 
 class MobileAssetWatchlistSchema(BaseModel):
     symbol: str
+    display_name: Optional[str] = None
+    asset_class: Optional[str] = None
+    logo_url: Optional[str] = None
     price: Optional[float] = None
     change_24h: Optional[float] = None
     macro_score: float

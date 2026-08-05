@@ -218,17 +218,15 @@ export function ReportScreen() {
 
       {reportResource.loading ? <LoadingSkeletonCard /> : null}
 
-      <SegmentedControl
-        compact
-        items={periods.map((item) => ({ key: item.id, label: item.label }))}
-        selected={period}
-        onChange={(value) => changePeriod(value as ReportPeriod)}
-      />
-
       {!reportResource.loading ? (
         <>
           <ReflectionFinnSection activeSymbol={activeSymbol} period={period} />
-          <ReflectionTradingReportSection report={report} />
+          <ReflectionTradingReportSection
+            periodItems={periods.map((item) => ({ key: item.id, label: item.label }))}
+            period={period}
+            report={report}
+            onChangePeriod={(value) => changePeriod(value)}
+          />
           {reportResource.error && report.isUnavailable ? (
             <InsightCard
               label={translate(language, `report.period.${period}`)}
@@ -267,6 +265,10 @@ function ReflectionFinnSection({
 
   const activeOption =
     FINN_REFLECTION_OPTIONS.find((option) => option.key === activeKey) ?? FINN_REFLECTION_OPTIONS[0];
+  const primaryOptions = FINN_REFLECTION_OPTIONS.filter((option) => option.key !== 'blocked').map((option) => ({
+    key: option.key,
+    label: option.key === 'behavior' ? '30 days' : option.label,
+  }));
   const cacheKey = `${activeKey}:${activeSymbol || 'global'}:${period}`;
   const reflection = cache[cacheKey];
   const reflectionParagraphs = reflection ? splitReportParagraphs(reflection.body) : [];
@@ -304,17 +306,17 @@ function ReflectionFinnSection({
 
   return (
     <View style={styles.reflectionSection}>
-        <View style={[styles.reflectionCard, { borderColor: colors.borderSubtle, backgroundColor: colors.surface }]}>
-          <View style={styles.reflectionHeaderRow}>
-            <View>
+      <View style={[styles.reflectionCard, { borderColor: colors.borderSubtle, backgroundColor: colors.surface }]}>
+        <View style={styles.reflectionHeaderRow}>
+          <View>
             <Text style={[styles.reflectionEyebrow, { color: theme.colors.accent }]}>FINN REPORTING</Text>
             <Text style={[styles.reflectionTitle, { color: colors.text }]}>Daily reflection with Finn</Text>
-            </View>
           </View>
+        </View>
 
         <SegmentedControl
           compact
-          items={FINN_REFLECTION_OPTIONS.map((item) => ({ key: item.key, label: item.label }))}
+          items={primaryOptions}
           selected={activeKey}
           onChange={(value) => {
             setExpanded(false);
@@ -340,97 +342,153 @@ function ReflectionFinnSection({
                 { borderColor: colors.borderSubtle, backgroundColor: colors.surfaceMuted, marginTop: theme.spacing.md },
               ]}
             >
-              <View style={[styles.reflectionFinnHeadlineCard, { borderColor: colors.borderSubtle, backgroundColor: colors.surface }]}>
+              <View
+                style={[styles.reflectionFinnHeadlineCard, { borderColor: colors.borderSubtle, backgroundColor: colors.surface }]}
+              >
                 <Text style={[styles.reflectionReportOverviewLabel, { color: theme.colors.accent }]}>
                   {activeOption.label.toUpperCase()}
                 </Text>
-                <Text style={[styles.reflectionFinnHeadlineText, { color: colors.text }]}>
-                  {reflection.headline}
+                <Text style={[styles.reflectionFinnHeadlineText, { color: colors.text }]}>{presentation?.headline ?? reflection.headline}</Text>
+                <Text style={[styles.reflectionFinnSupportText, { color: colors.textMuted }]}>
+                  {presentation?.support ?? 'FINN needs a few explicit decisions before it can identify a meaningful pattern.'}
                 </Text>
               </View>
 
               {presentation ? (
                 <>
-                  <View style={styles.reflectionFinnMetricGrid}>
+                  <View style={styles.reflectionFinnMetricRow}>
                     {presentation.metrics.map((item) => (
-                      <View
-                        key={item.label}
-                        style={[styles.reflectionFinnMetricCard, { borderColor: colors.borderSubtle, backgroundColor: colors.surface }]}
-                      >
-                        <Text style={[styles.reflectionFinnMetricLabel, { color: colors.textDim }]}>{item.label}</Text>
-                        <Text style={[styles.reflectionFinnMetricValue, { color: colors.text }]}>{item.value}</Text>
+                      <View key={item.label} style={styles.reflectionFinnMetricInline}>
+                        <View
+                          style={[
+                            styles.reflectionFinnMetricIcon,
+                            { borderColor: colors.borderSubtle, backgroundColor: colors.surface },
+                          ]}
+                        >
+                          <Feather color={colors.textDim} name={item.icon} size={16} />
+                        </View>
+                        <View style={styles.reflectionFinnMetricCopy}>
+                          <Text style={[styles.reflectionFinnMetricInlineLabel, { color: colors.textDim }]}>{item.label}</Text>
+                          <Text style={[styles.reflectionFinnMetricInlineValue, { color: colors.text }]}>{item.value}</Text>
+                        </View>
                       </View>
                     ))}
                   </View>
 
-                  <View style={styles.reflectionFinnInsightGrid}>
-                    {presentation.insights.map((item) => (
+                  <View style={[styles.reflectionFinnProgressWrap, { borderTopColor: colors.borderSubtle }]}>
+                    <View style={styles.reflectionFinnProgressHeader}>
+                      <Text style={[styles.reflectionFinnProgressLabel, { color: colors.textDim }]}>Evidence collected</Text>
+                      <Text style={[styles.reflectionFinnProgressValue, { color: colors.textDim }]}>
+                        {presentation.evidenceCount} of {presentation.evidenceTarget} decisions
+                      </Text>
+                    </View>
+                    <View style={[styles.reflectionFinnProgressTrack, { backgroundColor: colors.borderSubtle }]}>
                       <View
-                        key={item.label}
                         style={[
-                          styles.reflectionFinnInsightCard,
-                          {
-                            backgroundColor: item.background,
-                            borderColor: item.border,
-                          },
+                          styles.reflectionFinnProgressFill,
+                          { backgroundColor: theme.colors.accent, width: `${presentation.evidenceProgress}%` },
                         ]}
-                      >
-                        <Text style={[styles.reflectionFinnInsightLabel, { color: item.color }]}>{item.label}</Text>
-                        <Text style={[styles.reflectionFinnInsightBody, { color: item.color }]}>{item.body}</Text>
-                      </View>
-                    ))}
+                      />
+                    </View>
+                  </View>
+
+                  <View
+                    style={[
+                      styles.reflectionFinnAsideCard,
+                      { borderColor: colors.borderSubtle, backgroundColor: colors.surface },
+                    ]}
+                  >
+                    <Text style={[styles.reflectionFinnAsideLabel, { color: theme.colors.accent }]}>WHEN REFLECTION APPEARS</Text>
+                    <Text style={[styles.reflectionFinnAsideBody, { color: colors.textMuted }]}>{presentation.aside}</Text>
                   </View>
                 </>
               ) : null}
             </View>
 
-            <View style={styles.reflectionFinnActionRow}>
-              <Pressable
-                accessibilityRole="button"
-                onPress={() => setExpanded(true)}
-                style={[styles.reflectionFinnPrimaryAction, expanded && styles.reflectionFinnPrimaryActionDisabled]}
-              >
-                <Text style={styles.reflectionFinnPrimaryActionText}>View reflection details</Text>
-              </Pressable>
-              <Pressable accessibilityRole="button" onPress={() => setExpanded((current) => !current)}>
-                <Text style={[styles.reflectionFinnSecondaryActionText, { color: colors.textDim }]}>
-                  {expanded ? 'Hide activity and evidence' : 'View activity and evidence'}
+            <Pressable
+              accessibilityRole="button"
+              onPress={() => setExpanded((current) => !current)}
+              style={[styles.reflectionFinnActivityRow, { borderColor: colors.borderSubtle, backgroundColor: colors.surface }]}
+            >
+              <View style={styles.reflectionFinnActivityLead}>
+                <View
+                  style={[
+                    styles.reflectionFinnActivityIcon,
+                    { borderColor: colors.borderSubtle, backgroundColor: colors.surfaceMuted },
+                  ]}
+                >
+                  <Feather color={colors.textDim} name="file-text" size={16} />
+                </View>
+                <View style={styles.reflectionFinnActivityCopy}>
+                  <Text style={[styles.reflectionFinnActivityTitle, { color: colors.text }]}>Activity & evidence</Text>
+                  <Text style={[styles.reflectionFinnActivityBody, { color: colors.textMuted }]}>
+                    See the decisions and events behind this reflection
+                  </Text>
+                </View>
+              </View>
+              <View style={styles.reflectionFinnActivityMeta}>
+                <Text style={[styles.reflectionFinnActivityCount, { color: colors.textDim }]}>
+                  {presentation?.eventsCount ?? 0} events
                 </Text>
-              </Pressable>
-            </View>
+                <Feather color={colors.textDim} name={expanded ? 'chevron-down' : 'chevron-right'} size={18} />
+              </View>
+            </Pressable>
 
-            <View style={[styles.reflectionFinnFootnote, { borderColor: colors.borderSubtle, backgroundColor: colors.surface }]}>
-              <Text style={[styles.reflectionConclusionBody, { color: colors.textDim }]}>
-                Open the underlying activity only when you want the evidence behind this reflection.
-              </Text>
-            </View>
-
-            {expanded ? (
-              <View style={styles.reflectionReportRows}>
-                {reflectionParagraphs.map((paragraph, index) => (
+            {presentation && !presentation.hasLimitedEvidence ? (
+              <View style={styles.reflectionFinnInsightGrid}>
+                {presentation.insights.map((item) => (
                   <View
-                    key={`${activeKey}-detail-${index}`}
+                    key={item.label}
                     style={[
-                      styles.reflectionReportRow,
-                      { borderBottomColor: colors.borderSubtle },
-                      index === reflectionParagraphs.length - 1 && styles.reflectionReportRowLast,
+                      styles.reflectionFinnInsightCard,
+                      {
+                        backgroundColor: item.background,
+                        borderColor: item.border,
+                      },
                     ]}
                   >
-                    <View style={styles.reflectionReportRowLead}>
-                      <Feather color={colors.text} name="cpu" size={15} />
-                      <View style={styles.reflectionReportRowCopy}>
-                        <Text style={[styles.reflectionReportRowMeta, { color: colors.textDim }]}>FINN</Text>
-                      </View>
-                    </View>
-                    <View style={styles.reflectionReportExpanded}>
-                      <Text style={[styles.reflectionReportExpandedText, { color: colors.textMuted }]}>{paragraph}</Text>
-                    </View>
+                    <Text style={[styles.reflectionFinnInsightLabel, { color: item.color }]}>{item.label}</Text>
+                    <Text style={[styles.reflectionFinnInsightBody, { color: item.color }]}>{item.body}</Text>
                   </View>
                 ))}
               </View>
             ) : null}
 
-            <ReflectionFinnAnalysisBlocks analysis={reflection.analysis} />
+            {expanded ? (
+              <View
+                style={[
+                  styles.reflectionFinnExpandedCard,
+                  { borderColor: colors.borderSubtle, backgroundColor: colors.surfaceMuted },
+                ]}
+              >
+                {reflectionParagraphs.length > 0 ? (
+                  <View style={styles.reflectionReportRows}>
+                    {reflectionParagraphs.map((paragraph, index) => (
+                      <View
+                        key={`${activeKey}-detail-${index}`}
+                        style={[
+                          styles.reflectionReportRow,
+                          { borderBottomColor: colors.borderSubtle },
+                          index === reflectionParagraphs.length - 1 && styles.reflectionReportRowLast,
+                        ]}
+                      >
+                        <View style={styles.reflectionReportRowLead}>
+                          <Feather color={colors.text} name="cpu" size={15} />
+                          <View style={styles.reflectionReportRowCopy}>
+                            <Text style={[styles.reflectionReportRowMeta, { color: colors.textDim }]}>FINN</Text>
+                          </View>
+                        </View>
+                        <View style={styles.reflectionReportExpanded}>
+                          <Text style={[styles.reflectionReportExpandedText, { color: colors.textMuted }]}>{paragraph}</Text>
+                        </View>
+                      </View>
+                    ))}
+                  </View>
+                ) : null}
+
+                <ReflectionFinnAnalysisBlocks analysis={reflection.analysis} />
+              </View>
+            ) : null}
           </>
         ) : null}
       </View>
@@ -629,11 +687,9 @@ function ReflectionTodayHero({
 }) {
   const { language } = useAppPreferences();
   const support = report.summary || translate(language, 'report.unavailableBody');
-  const metaItems = [
-    report.periodLabel,
-    report.dateLabel,
-    report.updatedAt,
-  ].filter((item): item is string => Boolean(item && item !== '-'));
+  const metaItems = [report.periodLabel, report.dateLabel, report.updatedAt].filter(
+    (item): item is string => Boolean(item && item !== '-'),
+  );
   const riskCount = report.highlights.filter((item) => item.tone === 'warning' || item.tone === 'danger').length;
   const openCount = report.isUnavailable ? 0 : 1;
   const queueItems: TodayWithFinnQueueItem[] = [
@@ -641,9 +697,7 @@ function ReflectionTodayHero({
       key: 'tasks',
       label: translate(language, 'queue.label.tasks'),
       value: openCount,
-      body: report.isUnavailable
-        ? translate(language, 'report.queueTaskUnavailable')
-        : translate(language, 'report.queueTaskReview'),
+      body: report.isUnavailable ? translate(language, 'report.queueTaskUnavailable') : translate(language, 'report.queueTaskReview'),
       detail: report.isUnavailable
         ? translate(language, 'report.queueTaskDetailUnavailable')
         : translate(language, 'report.queueTaskDetailReady'),
@@ -652,17 +706,13 @@ function ReflectionTodayHero({
       key: 'reviews',
       label: translate(language, 'queue.label.reviews'),
       value: report.highlights.length,
-      body: report.highlights.length > 0
-        ? translate(language, 'report.queueReviewsCaptured')
-        : translate(language, 'report.queueReviewsEmpty'),
+      body: report.highlights.length > 0 ? translate(language, 'report.queueReviewsCaptured') : translate(language, 'report.queueReviewsEmpty'),
     },
     {
       key: 'risks',
       label: translate(language, 'queue.label.risks'),
       value: riskCount,
-      body: riskCount > 0
-        ? translate(language, 'report.queueRisksOpen')
-        : translate(language, 'report.queueRisksClear'),
+      body: riskCount > 0 ? translate(language, 'report.queueRisksOpen') : translate(language, 'report.queueRisksClear'),
     },
     {
       key: 'performance',
@@ -739,7 +789,17 @@ function ReflectionOverviewSection({ report }: { report: MappedReport }) {
   );
 }
 
-function ReflectionTradingReportSection({ report }: { report: MappedReport }) {
+function ReflectionTradingReportSection({
+  onChangePeriod,
+  period,
+  periodItems,
+  report,
+}: {
+  onChangePeriod: (period: ReportPeriod) => void;
+  period: ReportPeriod;
+  periodItems: Array<{ key: ReportPeriod; label: string }>;
+  report: MappedReport;
+}) {
   const { appearance, language } = useAppPreferences();
   const colors = preferenceColors(appearance);
   const scoreItems = report.scores.slice(0, 4);
@@ -756,6 +816,13 @@ function ReflectionTradingReportSection({ report }: { report: MappedReport }) {
         <Text style={[styles.reflectionReportSub, { color: colors.textMuted }]}>
           {translate(language, 'report.tradingReportSubtitle')}
         </Text>
+
+        <SegmentedControl
+          compact
+          items={periodItems}
+          selected={period}
+          onChange={(value) => onChangePeriod(value as ReportPeriod)}
+        />
 
         <View
           style={[
@@ -1928,8 +1995,25 @@ function buildFinnReflectionPresentation(reflection: FinnReflectionResponse) {
     reflection.headline ||
     readStringField(dayClose, ['headline']) ||
     'There is not enough real activity yet for a firm reflection.';
+  const evidenceTarget = 3;
+  const evidenceCount = reviewed + blocked + open;
+  const evidenceProgress = Math.max(0, Math.min(100, (evidenceCount / evidenceTarget) * 100));
+  const hasLimitedEvidence = evidenceCount < evidenceTarget;
+  const eventsCount = activityEntries.length + blockedEntries.length + deviationEntries.length;
+  const support = hasLimitedEvidence
+    ? 'FINN needs a few explicit decisions before it can identify a meaningful pattern.'
+    : 'FINN reviews how closely you followed your plan and what to improve next.';
+  const aside = hasLimitedEvidence
+    ? 'FINN will show patterns here once enough existing activity and reviews have been recorded.'
+    : 'FINN is now seeing enough evidence to surface repeatable patterns and coaching signals.';
 
   return {
+    aside,
+    evidenceCount,
+    evidenceProgress,
+    evidenceTarget,
+    eventsCount,
+    hasLimitedEvidence,
     headline,
     insights: [
       {
@@ -1955,10 +2039,11 @@ function buildFinnReflectionPresentation(reflection: FinnReflectionResponse) {
       },
     ],
     metrics: [
-      { label: 'REVIEWED', value: String(reviewed) },
-      { label: 'BLOCKED', value: String(blocked) },
-      { label: 'OPEN', value: String(open) },
+      { icon: 'file-text' as const, label: 'Reviewed', value: String(reviewed) },
+      { icon: 'shield' as const, label: 'Blocked', value: String(blocked) },
+      { icon: 'activity' as const, label: 'Open', value: String(open) },
     ],
+    support,
   };
 }
 
@@ -2469,7 +2554,7 @@ const styles = StyleSheet.create({
   reflectionReportOverview: {
     borderRadius: 18,
     borderWidth: 1,
-    marginTop: 12,
+    marginTop: 10,
     overflow: 'hidden',
   },
   reflectionReportOverviewHeader: {
@@ -2480,41 +2565,56 @@ const styles = StyleSheet.create({
   reflectionFinnHeadlineCard: {
     borderBottomWidth: 1,
     paddingHorizontal: 14,
-    paddingVertical: 14,
+    paddingVertical: 12,
   },
   reflectionFinnHeadlineText: {
     ...typography.heroTitle,
     lineHeight: 24,
+    marginTop: 4,
+  },
+  reflectionFinnSupportText: {
+    ...typography.body,
     marginTop: 6,
   },
-  reflectionFinnMetricGrid: {
+  reflectionFinnMetricRow: {
     flexDirection: 'row',
     gap: 12,
     paddingHorizontal: 14,
-    paddingTop: 14,
+    paddingTop: 12,
   },
-  reflectionFinnMetricCard: {
-    borderRadius: 16,
+  reflectionFinnMetricInline: {
+    alignItems: 'flex-start',
+    flex: 1,
+    flexDirection: 'column',
+    gap: 8,
+    minWidth: 0,
+  },
+  reflectionFinnMetricIcon: {
+    alignItems: 'center',
+    borderRadius: 999,
     borderWidth: 1,
+    height: 40,
+    justifyContent: 'center',
+    width: 40,
+  },
+  reflectionFinnMetricCopy: {
     flex: 1,
     minWidth: 0,
-    paddingHorizontal: 12,
-    paddingVertical: 12,
+    width: '100%',
   },
-  reflectionFinnMetricLabel: {
-    ...typography.metricLabelStrong,
-    letterSpacing: 1.6,
+  reflectionFinnMetricInlineLabel: {
+    ...typography.body,
+    fontSize: 11,
+    lineHeight: 14,
   },
-  reflectionFinnMetricValue: {
+  reflectionFinnMetricInlineValue: {
     fontSize: 24,
     fontWeight: '900',
     lineHeight: 28,
-    marginTop: 8,
   },
   reflectionFinnInsightGrid: {
     gap: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 14,
+    marginTop: 12,
   },
   reflectionFinnInsightCard: {
     borderRadius: 16,
@@ -2533,43 +2633,104 @@ const styles = StyleSheet.create({
     lineHeight: 24,
     marginTop: 10,
   },
-  reflectionFinnActionRow: {
-    alignItems: 'flex-start',
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 12,
-    marginTop: 14,
+  reflectionFinnProgressWrap: {
+    borderTopWidth: 1,
+    marginTop: 12,
+    paddingHorizontal: 14,
+    paddingTop: 12,
   },
-  reflectionFinnPrimaryAction: {
+  reflectionFinnProgressHeader: {
     alignItems: 'center',
-    backgroundColor: theme.colors.accent,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  reflectionFinnProgressLabel: {
+    ...typography.body,
+    fontSize: 12,
+  },
+  reflectionFinnProgressValue: {
+    ...typography.bodyStrong,
+    fontSize: 12,
+  },
+  reflectionFinnProgressTrack: {
+    borderRadius: 999,
+    height: 8,
+    marginTop: 8,
+    overflow: 'hidden',
+  },
+  reflectionFinnProgressFill: {
+    borderRadius: 999,
+    height: '100%',
+  },
+  reflectionFinnAsideCard: {
     borderRadius: 16,
-    justifyContent: 'center',
-    minHeight: 48,
-    paddingHorizontal: 18,
+    borderWidth: 1,
+    marginTop: 10,
+    paddingHorizontal: 14,
     paddingVertical: 12,
   },
-  reflectionFinnPrimaryActionDisabled: {
-    opacity: 0.92,
+  reflectionFinnAsideLabel: {
+    ...typography.metricLabelStrong,
+    letterSpacing: 1.8,
   },
-  reflectionFinnPrimaryActionText: {
-    color: theme.colors.white,
-    fontSize: 15,
-    fontWeight: '800',
-    lineHeight: 18,
+  reflectionFinnAsideBody: {
+    ...typography.body,
+    marginTop: 6,
   },
-  reflectionFinnSecondaryActionText: {
-    fontSize: 15,
-    fontWeight: '600',
-    lineHeight: 20,
-    paddingVertical: 14,
-  },
-  reflectionFinnFootnote: {
-    borderRadius: 14,
+  reflectionFinnActivityRow: {
+    alignItems: 'center',
+    borderRadius: 16,
     borderWidth: 1,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
     marginTop: 12,
     paddingHorizontal: 14,
     paddingVertical: 12,
+  },
+  reflectionFinnActivityLead: {
+    alignItems: 'center',
+    flex: 1,
+    flexDirection: 'row',
+    gap: 12,
+    minWidth: 0,
+  },
+  reflectionFinnActivityIcon: {
+    alignItems: 'center',
+    borderRadius: 14,
+    borderWidth: 1,
+    height: 40,
+    justifyContent: 'center',
+    width: 40,
+  },
+  reflectionFinnActivityCopy: {
+    flex: 1,
+    minWidth: 0,
+  },
+  reflectionFinnActivityTitle: {
+    ...typography.sectionTitle,
+    fontSize: 16,
+    lineHeight: 20,
+  },
+  reflectionFinnActivityBody: {
+    ...typography.body,
+    marginTop: 2,
+  },
+  reflectionFinnActivityMeta: {
+    alignItems: 'center',
+    flexDirection: 'row',
+    gap: 8,
+    marginLeft: 12,
+  },
+  reflectionFinnActivityCount: {
+    ...typography.bodyStrong,
+    fontSize: 12,
+  },
+  reflectionFinnExpandedCard: {
+    borderRadius: 16,
+    borderWidth: 1,
+    marginTop: 12,
+    paddingHorizontal: 14,
+    paddingVertical: 14,
   },
   reflectionReportOverviewLead: {
     alignItems: 'flex-start',

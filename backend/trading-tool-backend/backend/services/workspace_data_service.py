@@ -12,6 +12,7 @@ from backend.infrastructure.repositories.market_data_repository import MarketDat
 from backend.infrastructure.repositories.score_repository import ScoreRepository
 from backend.infrastructure.repositories.technical_data_repository import TechnicalDataRepository
 from backend.infrastructure.repositories.user_repository import UserRepository
+from backend.services.asset_catalog_service import AssetCatalogService
 from backend.services.intelligence_service import IntelligenceService
 from backend.services.score_service import ScoreService
 
@@ -347,6 +348,7 @@ class WorkspaceDataService:
         normalized = list(dict.fromkeys(str(symbol).upper() for symbol in symbols if symbol))[:25]
         quotes = await self.market.get_latest_snapshots(normalized)
         scores = await self.scores.fetch_daily_scores_batch(user_id, normalized)
+        asset_catalog = await AssetCatalogService(self.session).get_assets(normalized)
         user = await self.users.get_by_id(user_id)
         preferences = getattr(user, "ai_preferences", None) or {}
         weights = preferences.get("intelligence_weights", {})
@@ -355,6 +357,7 @@ class WorkspaceDataService:
         for symbol in normalized:
             quote = quote_map.get(symbol)
             daily = scores.get(symbol)
+            asset_meta = asset_catalog.get(symbol, {})
             category_scores = [
                 _number(daily.get(key)) if daily else None
                 for key in ("market_score", "macro_score", "technical_score")
@@ -370,6 +373,10 @@ class WorkspaceDataService:
             )
             rows.append({
                 "symbol": symbol,
+                "display_name": asset_meta.get("display_name") or symbol,
+                "asset_class": asset_meta.get("asset_class") or "unknown",
+                "logo_url": asset_meta.get("logo_url"),
+                "tradingview_symbol": asset_meta.get("tradingview_symbol"),
                 "price": _number(getattr(quote, "price", None)),
                 "change_24h": _number(getattr(quote, "change_24h", None)),
                 "score": combined,

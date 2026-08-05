@@ -381,6 +381,25 @@ class Watchlist(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
 
+class AssetCatalog(Base):
+    __tablename__ = 'asset_catalog'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    symbol = Column(String, nullable=False, unique=True)
+    display_name = Column(String, nullable=False)
+    asset_class = Column(String, nullable=False, default='crypto')  # crypto, stock, etf, fx, commodity, index
+    logo_url = Column(String, nullable=True)
+    tradingview_symbol = Column(String, nullable=True)
+    coingecko_id = Column(String, nullable=True)
+    coincap_id = Column(String, nullable=True)
+    yahoo_symbol = Column(String, nullable=True)
+    provider = Column(String, nullable=True, default='manual')
+    is_active = Column(Boolean, default=True)
+    metadata_json = Column("metadata", JSON, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
 class ConversationState(Base):
     """
     🧠 Tijdelijk, compact, workflow-focused geheugen voor de AI assistent.

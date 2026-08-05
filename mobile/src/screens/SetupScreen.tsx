@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Feather } from '@expo/vector-icons';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import type { NavigationProp, RouteProp } from '@react-navigation/native';
-import { Pressable, ScrollView, StyleSheet, Text, View, TouchableOpacity } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, TextInput, View, TouchableOpacity } from 'react-native';
 
 import { BotDecisionCard } from '../components/cards/BotDecisionCard';
 import { AppButton } from '../components/buttons/AppButton';
@@ -12,6 +12,7 @@ import { RiskWarningCard } from '../components/cards/RiskWarningCard';
 import { StrategyStatusCard } from '../components/cards/StrategyStatusCard';
 import { LoadingSkeletonCard } from '../components/layout/LoadingSkeletonCard';
 import { ScreenContainer } from '../components/layout/ScreenContainer';
+import { SegmentedControl } from '../components/layout/SegmentedControl';
 import { StatusChip } from '../components/layout/StatusChip';
 import { SwipeActionRow } from '../components/rows/SwipeActionRow';
 import { BottomSheet } from '../components/sheets/BottomSheet';
@@ -102,6 +103,7 @@ export function SetupScreen() {
   const [planRemoveItem, setPlanRemoveItem] = useState<PlanListItem | null>(null);
   const [planDetail, setPlanDetail] = useState<PlanDetailState | null>(null);
   const [planDetailLoading, setPlanDetailLoading] = useState(false);
+  const [planEditItem, setPlanEditItem] = useState<PlanDetailState | null>(null);
 
   useEffect(() => {
     trackAssistantEvent({
@@ -362,11 +364,17 @@ export function SetupScreen() {
   async function editPlanItem(plan: PlanListItem) {
     setPlanActionItem(null);
     await triggerHaptic('selection');
-    openFinn({
-      prefill: `Help me edit plan ${plan.name} for ${plan.symbol} on ${plan.timeframe}. Keep the existing intent, then suggest the smallest useful setup, strategy or risk change.`,
-      source: 'my-plan-edit',
-      symbol: plan.symbol || activeAsset,
-    });
+    let nextStrategy: StrategyResponse | undefined;
+    if (plan.isActive) {
+      nextStrategy = strategyResource.data;
+    } else if (plan.id) {
+      try {
+        nextStrategy = await intelligenceApi.getStrategyBySetup(plan.id);
+      } catch {
+        nextStrategy = undefined;
+      }
+    }
+    setPlanEditItem({ plan, strategy: nextStrategy });
   }
 
   function promptPlanRemove(plan: PlanListItem) {
@@ -539,6 +547,36 @@ export function SetupScreen() {
             });
           }}
         />
+      </BottomSheet>
+      <BottomSheet
+        visible={Boolean(planEditItem)}
+        title={planEditItem?.plan?.name ?? 'Plan bewerken'}
+        onClose={() => setPlanEditItem(null)}
+      >
+        {planEditItem ? (
+          <PlanEditSheet
+            plan={planEditItem.plan}
+            strategy={planEditItem.strategy}
+            onAskFinn={() =>
+              openFinn({
+                prefill: `Help me edit plan ${planEditItem.plan.name} for ${planEditItem.plan.symbol} on ${planEditItem.plan.timeframe}. Keep the existing intent, then suggest the smallest useful setup, strategy or risk change.`,
+                source: 'my-plan-edit',
+                symbol: planEditItem.plan.symbol || activeAsset,
+              })
+            }
+            onClose={() => setPlanEditItem(null)}
+            onSaved={async () => {
+              setPlanEditItem(null);
+              await Promise.all([
+                activeSetupResource.refresh(),
+                topSetupsResource.refresh(),
+                strategyResource.refresh(),
+                planStrategiesResource.refresh(),
+                overviewResource.refresh(),
+              ]);
+            }}
+          />
+        ) : null}
       </BottomSheet>
       <BottomSheet
         visible={Boolean(planActionItem)}
@@ -773,7 +811,7 @@ function AllPlansListCard({
           <Text style={[styles.planCountText, { color: colors.textDim }]}>{translate(language, 'myPlan.plansCount', { count: plans.length })}</Text>
         </View>
         <Pressable onPress={onCreatePlan} style={styles.newPlanLink}>
-          <Text style={styles.newPlanLinkText}>{translate(language, 'myPlan.newPlan')}</Text>
+          <Text style={styles.newPlanLinkText}>{translate(language, 'myPlan.newPlan')} via FINN</Text>
         </Pressable>
       </View>
 
@@ -1469,6 +1507,284 @@ function PlanDetailSheet({
   );
 }
 
+function PlanEditSheet({
+  onAskFinn,
+  onClose,
+  onSaved,
+  plan,
+  strategy,
+}: {
+  onAskFinn: () => void;
+  onClose: () => void;
+  onSaved: () => Promise<void>;
+  plan: PlanListItem;
+  strategy?: StrategyResponse;
+}) {
+  const { appearance } = useAppPreferences();
+  const colors = preferenceColors(appearance);
+  const strategySource = extractStrategy(strategy);
+  const [name, setName] = useState(plan.name);
+  const [timeframe, setTimeframe] = useState(plan.timeframe || '1D');
+  const [setupType, setSetupType] = useState((plan.type || 'trade').toLowerCase() === 'dca' ? 'dca' : 'trade');
+  const [executionMode, setExecutionMode] = useState(readString(strategySource, ['execution_mode'], 'fixed').toLowerCase() === 'custom' ? 'custom' : 'fixed');
+  const [baseAmount, setBaseAmount] = useState(formatPlanNumber(readNumber(strategySource, ['base_amount'], 0)));
+  const [entry, setEntry] = useState(formatPlanNumber(readNumber(strategySource, ['entry', 'entry_price'], 0)));
+  const [stopLoss, setStopLoss] = useState(formatPlanNumber(readNumber(strategySource, ['stop_loss'], 0)));
+  const [targets, setTargets] = useState(formatTargetsInput(readArray(strategySource, ['targets'])));
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const hasStrategy = Boolean(strategySource && readOptionalNumber(strategySource, ['id', 'strategy_id']));
+  const existingDecisionCurve = strategySource && isRecord(strategySource) ? strategySource.decision_curve : undefined;
+
+  useEffect(() => {
+    setName(plan.name);
+    setTimeframe(plan.timeframe || '1D');
+    setSetupType((plan.type || 'trade').toLowerCase() === 'dca' ? 'dca' : 'trade');
+    setExecutionMode(readString(strategySource, ['execution_mode'], 'fixed').toLowerCase() === 'custom' ? 'custom' : 'fixed');
+    setBaseAmount(formatPlanNumber(readNumber(strategySource, ['base_amount'], 0)));
+    setEntry(formatPlanNumber(readNumber(strategySource, ['entry', 'entry_price'], 0)));
+    setStopLoss(formatPlanNumber(readNumber(strategySource, ['stop_loss'], 0)));
+    setTargets(formatTargetsInput(readArray(strategySource, ['targets'])));
+    setError(null);
+  }, [plan, strategySource]);
+
+  async function handleSave() {
+    const trimmedName = name.trim();
+    const parsedBaseAmount = parsePlanNumber(baseAmount);
+    const parsedEntry = parsePlanNumber(entry);
+    const parsedStopLoss = parsePlanNumber(stopLoss);
+    const parsedTargets = parseTargetsInput(targets);
+
+    if (!plan.id) {
+      setError('Deze setup heeft nog geen geldig id.');
+      return;
+    }
+    if (!trimmedName) {
+      setError('Plannaam mag niet leeg zijn.');
+      return;
+    }
+    if (hasStrategy && (parsedBaseAmount === null || parsedBaseAmount <= 0)) {
+      setError('Vul een geldig base amount in.');
+      return;
+    }
+    if (hasStrategy && executionMode === 'custom' && !existingDecisionCurve) {
+      setError('Custom execution kan hier alleen als er al een decision curve bestaat.');
+      return;
+    }
+    if (hasStrategy && setupType === 'trade') {
+      if (parsedEntry === null || parsedEntry <= 0) {
+        setError('Vul een geldige entry in.');
+        return;
+      }
+      if (parsedStopLoss === null || parsedStopLoss <= 0) {
+        setError('Vul een geldige stop loss in.');
+        return;
+      }
+      if (parsedStopLoss >= parsedEntry) {
+        setError('Voor long trades moet stop loss lager zijn dan entry.');
+        return;
+      }
+      if (parsedTargets.length === 0) {
+        setError('Voeg minimaal één target toe.');
+        return;
+      }
+      if (parsedTargets.some((target) => target <= parsedEntry)) {
+        setError('Alle targets moeten hoger liggen dan de entry.');
+        return;
+      }
+    }
+
+    setSaving(true);
+    setError(null);
+    try {
+      await intelligenceApi.updateSetup(plan.id, {
+        name: trimmedName,
+        symbol: plan.symbol,
+        timeframe,
+        setup_type: setupType,
+      });
+
+      const strategyId = readOptionalNumber(strategySource, ['id', 'strategy_id']);
+      if (strategyId && hasStrategy) {
+        const strategyPayload: Record<string, unknown> = {
+          execution_mode: executionMode,
+          base_amount: parsedBaseAmount,
+        };
+
+        if (executionMode === 'custom' && existingDecisionCurve) {
+          strategyPayload.decision_curve = existingDecisionCurve;
+        }
+
+        if (setupType === 'trade') {
+          strategyPayload.entry = parsedEntry;
+          strategyPayload.stop_loss = parsedStopLoss;
+          strategyPayload.targets = parsedTargets;
+        }
+
+        await intelligenceApi.updateStrategy(strategyId, strategyPayload);
+      }
+
+      await triggerHaptic('success');
+      await onSaved();
+    } catch (nextError) {
+      setError(nextError instanceof Error ? nextError.message : 'Plan opslaan mislukt.');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <View style={styles.sheetStack}>
+      <View style={[styles.planDetailSection, { borderColor: colors.borderSubtle, backgroundColor: colors.surfaceMuted }]}>
+        <Text style={styles.kicker}>Handmatig bewerken</Text>
+        <Text style={[styles.bodyText, { color: colors.textMuted }]}>
+          Pas hier direct setup- en strategyvelden aan. FINN blijft beschikbaar voor extra uitleg, maar is niet meer de enige edit-route.
+        </Text>
+      </View>
+
+      <View style={{ gap: theme.spacing.sm }}>
+        <View>
+          <Text style={[styles.metricLabel, { color: theme.colors.textDim, marginBottom: theme.spacing.xs }]}>Plannaam</Text>
+          <TextInput
+            autoCapitalize="words"
+            onChangeText={setName}
+            placeholder="Naam van het plan"
+            placeholderTextColor={colors.textDim}
+            style={[styles.planEditInput, { color: colors.text, borderColor: colors.borderSubtle, backgroundColor: colors.surfaceMuted }]}
+            value={name}
+          />
+        </View>
+
+        <View>
+          <Text style={[styles.metricLabel, { color: theme.colors.textDim, marginBottom: theme.spacing.xs }]}>Timeframe</Text>
+          <SegmentedControl
+            compact
+            items={[
+              { key: '1H', label: '1H' },
+              { key: '4H', label: '4H' },
+              { key: '1D', label: '1D' },
+              { key: '1W', label: '1W' },
+            ]}
+            selected={['1H', '4H', '1D', '1W'].includes(timeframe) ? timeframe : '1D'}
+            onChange={(value) => setTimeframe(value as string)}
+          />
+        </View>
+
+        <View>
+          <Text style={[styles.metricLabel, { color: theme.colors.textDim, marginBottom: theme.spacing.xs }]}>Setup type</Text>
+          <SegmentedControl
+            compact
+            items={[
+              { key: 'trade', label: 'Trade' },
+              { key: 'dca', label: 'DCA' },
+            ]}
+            selected={setupType}
+            onChange={(value) => setSetupType(value as string)}
+          />
+        </View>
+
+        {hasStrategy ? (
+          <>
+            <View>
+              <Text style={[styles.metricLabel, { color: theme.colors.textDim, marginBottom: theme.spacing.xs }]}>Execution mode</Text>
+              <SegmentedControl
+                compact
+                items={[
+                  { key: 'fixed', label: 'Fixed' },
+                  { key: 'custom', label: 'Custom' },
+                ]}
+                selected={executionMode}
+                onChange={(value) => setExecutionMode(value as string)}
+              />
+            </View>
+
+            <View>
+              <Text style={[styles.metricLabel, { color: theme.colors.textDim, marginBottom: theme.spacing.xs }]}>Base amount (EUR)</Text>
+              <TextInput
+                keyboardType="decimal-pad"
+                onChangeText={setBaseAmount}
+                placeholder="0"
+                placeholderTextColor={colors.textDim}
+                style={[styles.planEditInput, { color: colors.text, borderColor: colors.borderSubtle, backgroundColor: colors.surfaceMuted }]}
+                value={baseAmount}
+              />
+            </View>
+
+            {setupType === 'trade' ? (
+              <>
+                <View>
+                  <Text style={[styles.metricLabel, { color: theme.colors.textDim, marginBottom: theme.spacing.xs }]}>Entry</Text>
+                  <TextInput
+                    keyboardType="decimal-pad"
+                    onChangeText={setEntry}
+                    placeholder="0"
+                    placeholderTextColor={colors.textDim}
+                    style={[styles.planEditInput, { color: colors.text, borderColor: colors.borderSubtle, backgroundColor: colors.surfaceMuted }]}
+                    value={entry}
+                  />
+                </View>
+
+                <View>
+                  <Text style={[styles.metricLabel, { color: theme.colors.textDim, marginBottom: theme.spacing.xs }]}>Stop loss</Text>
+                  <TextInput
+                    keyboardType="decimal-pad"
+                    onChangeText={setStopLoss}
+                    placeholder="0"
+                    placeholderTextColor={colors.textDim}
+                    style={[styles.planEditInput, { color: colors.text, borderColor: colors.borderSubtle, backgroundColor: colors.surfaceMuted }]}
+                    value={stopLoss}
+                  />
+                </View>
+
+                <View>
+                  <Text style={[styles.metricLabel, { color: theme.colors.textDim, marginBottom: theme.spacing.xs }]}>Targets</Text>
+                  <TextInput
+                    onChangeText={setTargets}
+                    placeholder="Bijv. 72000, 76000, 80000"
+                    placeholderTextColor={colors.textDim}
+                    style={[styles.planEditInput, { color: colors.text, borderColor: colors.borderSubtle, backgroundColor: colors.surfaceMuted }]}
+                    value={targets}
+                  />
+                </View>
+              </>
+            ) : null}
+          </>
+        ) : null}
+      </View>
+
+      {error ? (
+        <View style={[styles.planDetailSection, { borderColor: colors.danger, backgroundColor: colors.surfaceMuted }]}>
+          <Text style={[styles.bodyText, { color: colors.danger }]}>{error}</Text>
+        </View>
+      ) : null}
+
+      <Pressable disabled={saving} onPress={handleSave} style={[styles.planDetailFinnButton, { backgroundColor: colors.accent, opacity: saving ? 0.7 : 1 }]}>
+        <Text style={styles.planDetailFinnButtonText}>{saving ? 'Opslaan...' : 'Plan opslaan'}</Text>
+      </Pressable>
+
+      <Pressable
+        onPress={async () => {
+          await triggerHaptic('selection');
+          onAskFinn();
+        }}
+        style={[styles.planDetailSecondaryButton, { borderColor: colors.borderSubtle, backgroundColor: colors.surfaceMuted }]}
+      >
+        <Text style={[styles.planDetailSecondaryButtonText, { color: colors.text }]}>Vraag FINN om extra planuitleg</Text>
+      </Pressable>
+
+      <Pressable
+        onPress={async () => {
+          await triggerHaptic('selection');
+          onClose();
+        }}
+        style={styles.planDetailCancelButton}
+      >
+        <Text style={[styles.bodyText, { color: colors.textDim }]}>Annuleren</Text>
+      </Pressable>
+    </View>
+  );
+}
+
 function RiskSheet({
   botReasons,
   decisionState,
@@ -2009,6 +2325,36 @@ function formatMoney(value: number, currency: 'EUR' | 'USD' = 'EUR') {
     maximumFractionDigits: value > 1000 ? 0 : 2,
     style: 'currency',
   }).format(value);
+}
+
+function parsePlanNumber(value: string) {
+  const normalized = value.replace(/\./g, '').replace(',', '.').replace(/[^\d.-]/g, '').trim();
+  if (!normalized) return 0;
+  const parsed = Number(normalized);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function formatPlanNumber(value: number) {
+  if (!Number.isFinite(value) || value === 0) return '';
+  return value.toLocaleString('nl-NL', {
+    maximumFractionDigits: value >= 100 ? 0 : 2,
+    minimumFractionDigits: 0,
+    useGrouping: false,
+  });
+}
+
+function parseTargetsInput(value: string) {
+  return value
+    .split(/[,\n]/)
+    .map((item) => parsePlanNumber(item.trim()))
+    .filter((item): item is number => typeof item === 'number' && Number.isFinite(item) && item > 0);
+}
+
+function formatTargetsInput(values: unknown[]) {
+  return values
+    .map((value) => (typeof value === 'number' ? formatPlanNumber(value) : typeof value === 'string' ? value.trim() : ''))
+    .filter(Boolean)
+    .join(', ');
 }
 
 function Tag({ label, tone }: { label: string; tone: StatusTone }) {
@@ -3461,11 +3807,36 @@ const styles = StyleSheet.create({
     paddingHorizontal: theme.spacing.md,
     paddingVertical: theme.spacing.sm,
   },
+  planDetailCancelButton: {
+    alignItems: 'center',
+    paddingVertical: theme.spacing.xs,
+  },
   planDetailFinnButtonText: {
     color: theme.colors.white,
     fontSize: 13,
     fontWeight: '800',
     letterSpacing: 0.3,
+  },
+  planDetailSecondaryButton: {
+    alignItems: 'center',
+    borderRadius: theme.radius.button,
+    borderWidth: 1,
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.sm,
+  },
+  planDetailSecondaryButtonText: {
+    fontSize: 12.5,
+    fontWeight: '800',
+    lineHeight: 15,
+  },
+  planEditInput: {
+    borderRadius: theme.radius.card,
+    borderWidth: 1,
+    fontSize: 14,
+    fontWeight: '600',
+    lineHeight: 18,
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.sm,
   },
   planDetailHero: {
     borderRadius: theme.radius.card,

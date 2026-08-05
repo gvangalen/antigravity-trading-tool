@@ -5,6 +5,7 @@ import type { NavigationProp } from '@react-navigation/native';
 import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
 
+import { AssetIcon } from '../components/assets/AssetIcon';
 import { CardShell } from '../components/cards/CardShell';
 import { InsightCard } from '../components/cards/InsightCard';
 import { LoadingSkeletonCard } from '../components/layout/LoadingSkeletonCard';
@@ -115,6 +116,7 @@ export function PortfolioScreen() {
   const [tradePreviewError, setTradePreviewError] = useState('');
   const [tradePreviewLoading, setTradePreviewLoading] = useState(false);
   const [assetActionRow, setAssetActionRow] = useState<PortfolioAssetRow | null>(null);
+  const [assetDetailRow, setAssetDetailRow] = useState<PortfolioAssetRow | null>(null);
   const [assetRemoveRow, setAssetRemoveRow] = useState<PortfolioAssetRow | null>(null);
 
   const rangeConfig = ranges.find((item) => item.key === range) ?? ranges[1];
@@ -240,6 +242,13 @@ export function PortfolioScreen() {
 
   async function openPortfolioAsset(row: PortfolioAssetRow) {
     await triggerHaptic('selection');
+    setAssetDetailRow(row);
+  }
+
+  async function openPortfolioAssetAnalysis(row: PortfolioAssetRow) {
+    await triggerHaptic('selection');
+    setAssetDetailRow(null);
+    setAssetActionRow(null);
     updateContext({ asset: row.symbol, screen: 'Analysis' });
     navigation.navigate('Watchlist');
   }
@@ -470,6 +479,27 @@ export function PortfolioScreen() {
       </BottomSheet>
 
       <BottomSheet
+        visible={Boolean(assetDetailRow)}
+        title={assetDetailRow ? `${assetName(assetDetailRow.symbol)}` : 'Asset overview'}
+        onClose={() => setAssetDetailRow(null)}
+      >
+        {assetDetailRow ? (
+          <PortfolioAssetDetailSheet
+            row={assetDetailRow}
+            totalValue={aggregate.positionValue}
+            onAskFinn={() =>
+              openFinn({
+                prefill: `Give me a portfolio overview for ${assetDetailRow.symbol}. Summarize exposure, current pnl, allocation and the main portfolio risk for this asset.`,
+                source: 'portfolio-asset-detail',
+                symbol: assetDetailRow.symbol,
+              })
+            }
+            onOpenAnalysis={() => openPortfolioAssetAnalysis(assetDetailRow)}
+          />
+        ) : null}
+      </BottomSheet>
+
+      <BottomSheet
         visible={Boolean(assetActionRow)}
         title={translate(language, 'common.actions')}
         onClose={() => setAssetActionRow(null)}
@@ -480,10 +510,10 @@ export function PortfolioScreen() {
               ? [
                   {
                     key: 'open',
-                    label: translate(language, 'analysis.assetOpen'),
+                    label: 'Open analyse',
                     description: `${assetActionRow.symbol} · ${formatEUR(assetActionRow.positionValue)}`,
                     icon: 'arrow-up-right',
-                    onPress: () => openPortfolioAsset(assetActionRow),
+                    onPress: () => openPortfolioAssetAnalysis(assetActionRow),
                   },
                   ...(watchlistSymbols.has(assetActionRow.symbol.toUpperCase())
                     ? [
@@ -832,9 +862,7 @@ function PortfolioAssetExposureSection({
               ]}
             >
               <View style={styles.portfolioAssetIdentity}>
-                <View style={[styles.portfolioPositionIcon, { backgroundColor: assetColor(row.symbol) }]}>
-                  <Text style={styles.portfolioPositionIconText}>{assetGlyph(row.symbol)}</Text>
-                </View>
+                <AssetIcon size={56} symbol={row.symbol} />
                 <View style={styles.flexText}>
                   <Text style={[styles.portfolioPositionName, { color: colors.text }]}>{assetName(row.symbol)}</Text>
                   <Text style={[styles.portfolioPositionSymbol, { color: colors.textDim }]}>
@@ -866,6 +894,144 @@ function PortfolioAssetExposureSection({
           </SwipeActionRow>
         );
       })}
+    </View>
+  );
+}
+
+function PortfolioAssetDetailSheet({
+  onAskFinn,
+  onOpenAnalysis,
+  row,
+  totalValue,
+}: {
+  onAskFinn: () => void;
+  onOpenAnalysis: () => void | Promise<void>;
+  row: PortfolioAssetRow;
+  totalValue: number;
+}) {
+  const { appearance } = useAppPreferences();
+  const colors = preferenceColors(appearance);
+  const share = totalValue > 0 ? (row.positionValue / totalValue) * 100 : 0;
+  const pnlTone = row.pnl >= 0 ? theme.colors.success : theme.colors.danger;
+
+  return (
+    <View style={{ gap: theme.spacing.md }}>
+      <View
+        style={{
+          backgroundColor: colors.surfaceMuted,
+          borderColor: colors.borderSubtle,
+          borderRadius: theme.radius.card,
+          borderWidth: 1,
+          padding: theme.spacing.md,
+        }}
+      >
+        <View style={{ alignItems: 'center', flexDirection: 'row', gap: theme.spacing.sm }}>
+          <AssetIcon size={56} symbol={row.symbol} />
+          <View style={{ flex: 1 }}>
+            <Text style={[typography.sectionTitle, { color: colors.text }]}>{assetName(row.symbol)}</Text>
+            <Text style={[typography.body, { color: colors.textMuted }]}>
+              {row.symbol} · {assetSubLabel(row.symbol)}
+            </Text>
+          </View>
+          <StatusChip compact label={`${Math.round(share)}% allocatie`} tone="accent" />
+        </View>
+      </View>
+
+      <View style={{ gap: theme.spacing.sm }}>
+        <View style={{ flexDirection: 'row', gap: theme.spacing.sm }}>
+          <View style={{ flex: 1 }}>
+            <PortfolioDetailMetric label="Waarde" value={formatEUR(row.positionValue)} />
+          </View>
+          <View style={{ flex: 1 }}>
+            <PortfolioDetailMetric label="Geinvesteerd" value={formatEUR(row.invested)} />
+          </View>
+        </View>
+        <View style={{ flexDirection: 'row', gap: theme.spacing.sm }}>
+          <View style={{ flex: 1 }}>
+            <PortfolioDetailMetric label="PnL" value={formatEUR(row.pnl)} valueColor={pnlTone} />
+          </View>
+          <View style={{ flex: 1 }}>
+            <PortfolioDetailMetric label="PnL %" value={formatPercent(row.pnlPct)} valueColor={pnlTone} />
+          </View>
+        </View>
+        <View style={{ flexDirection: 'row', gap: theme.spacing.sm }}>
+          <View style={{ flex: 1 }}>
+            <PortfolioDetailMetric label="Aantal" value={row.netQty > 0 ? formatQty(row.netQty) : '—'} />
+          </View>
+          <View style={{ flex: 1 }}>
+            <PortfolioDetailMetric label="Allocatie" value={`${Math.round(share)}%`} />
+          </View>
+        </View>
+      </View>
+
+      <View
+        style={{
+          borderColor: colors.borderSubtle,
+          borderRadius: theme.radius.card,
+          borderWidth: 1,
+          padding: theme.spacing.md,
+        }}
+      >
+        <Text style={[typography.sectionTitle, { color: colors.text }]}>Overzicht</Text>
+        <Text style={[typography.body, { color: colors.textMuted, marginTop: theme.spacing.xs }]}>
+          {assetName(row.symbol)} vertegenwoordigt momenteel {Math.round(share)}% van de zichtbare portfolio-allocatie met een positie van {formatEUR(row.positionValue)}.
+        </Text>
+        <Text style={[typography.body, { color: colors.textMuted, marginTop: theme.spacing.xs }]}>
+          {row.pnl >= 0
+            ? `Deze positie staat ${formatEUR(row.pnl)} in winst ten opzichte van ${formatEUR(row.invested)} geïnvesteerd kapitaal.`
+            : `Deze positie staat ${formatEUR(Math.abs(row.pnl))} onder water ten opzichte van ${formatEUR(row.invested)} geïnvesteerd kapitaal.`}
+        </Text>
+      </View>
+
+      <View style={{ gap: theme.spacing.sm }}>
+        <Pressable
+          onPress={async () => {
+            await triggerHaptic('selection');
+            await onOpenAnalysis();
+          }}
+          style={[styles.portfolioDetailSecondaryButton, { backgroundColor: colors.surfaceMuted, borderColor: colors.borderSubtle }]}
+        >
+          <Text style={[styles.portfolioDetailSecondaryButtonText, { color: colors.text }]}>Open analyse</Text>
+        </Pressable>
+        <Pressable
+          onPress={async () => {
+            await triggerHaptic('selection');
+            onAskFinn();
+          }}
+          style={styles.portfolioDetailPrimaryButton}
+        >
+          <Text style={styles.portfolioDetailPrimaryButtonText}>Vraag FINN om portfolio-uitleg</Text>
+        </Pressable>
+      </View>
+    </View>
+  );
+}
+
+function PortfolioDetailMetric({
+  label,
+  value,
+  valueColor,
+}: {
+  label: string;
+  value: string;
+  valueColor?: string;
+}) {
+  const { appearance } = useAppPreferences();
+  const colors = preferenceColors(appearance);
+
+  return (
+    <View
+      style={{
+        backgroundColor: colors.surfaceMuted,
+        borderColor: colors.borderSubtle,
+        borderRadius: theme.radius.card,
+        borderWidth: 1,
+        gap: 4,
+        padding: theme.spacing.sm,
+      }}
+    >
+      <Text style={[typography.metricLabel, { color: colors.textDim }]}>{label}</Text>
+      <Text style={[typography.bodyStrong, { color: valueColor ?? colors.text }]}>{value}</Text>
     </View>
   );
 }
@@ -905,9 +1071,7 @@ function PortfolioPositionsSection({
             ]}
           >
             <View style={styles.portfolioPositionIdentity}>
-              <View style={[styles.portfolioPositionIcon, { backgroundColor: assetColor(row.symbol) }]}>
-                <Text style={styles.portfolioPositionIconText}>{assetGlyph(row.symbol)}</Text>
-              </View>
+              <AssetIcon size={56} symbol={row.symbol} />
               <View>
                 <Text style={[styles.portfolioPositionName, { color: colors.text }]}>{assetName(row.symbol)}</Text>
                 <Text style={[styles.portfolioPositionSymbol, { color: colors.textDim }]}>{row.symbol}</Text>
@@ -2300,6 +2464,10 @@ function formatPercent(value: number) {
   return `${value >= 0 ? '+' : ''}${value.toFixed(1)}%`;
 }
 
+function formatQty(value: number) {
+  return `${(Number.isFinite(value) ? value : 0).toFixed(6)} BTC`;
+}
+
 function formatMetric(value: number, metric: MetricKey) {
   if (metric === 'btc_qty') return `${(Number.isFinite(value) ? value : 0).toFixed(6)} BTC`;
   return formatEUR(value);
@@ -2416,6 +2584,31 @@ const styles = StyleSheet.create({
   },
   portfolioOverviewMetricLabel: {
     ...typography.metricLabel,
+  },
+  portfolioDetailPrimaryButton: {
+    alignItems: 'center',
+    backgroundColor: theme.colors.accent,
+    borderRadius: theme.radius.button,
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.sm,
+  },
+  portfolioDetailPrimaryButtonText: {
+    color: theme.colors.white,
+    fontSize: 13,
+    fontWeight: '800',
+    letterSpacing: 0.3,
+  },
+  portfolioDetailSecondaryButton: {
+    alignItems: 'center',
+    borderRadius: theme.radius.button,
+    borderWidth: 1,
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.sm,
+  },
+  portfolioDetailSecondaryButtonText: {
+    fontSize: 12.5,
+    fontWeight: '800',
+    lineHeight: 15,
   },
   portfolioOverviewDelta: {
     ...typography.cardTitle,

@@ -3,6 +3,7 @@ import { Feather } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
+import { AssetIcon } from '../components/assets/AssetIcon';
 import { CardShell } from '../components/cards/CardShell';
 import { InsightCard } from '../components/cards/InsightCard';
 import { LoadingSkeletonCard } from '../components/layout/LoadingSkeletonCard';
@@ -959,10 +960,10 @@ function AnalysisWatchlistCard({
               >
                 <View style={styles.watchlistAssetBlock}>
                   <View style={[styles.watchlistSelectionDot, { backgroundColor: selected ? colors.accent : colors.borderSubtle }]} />
-                  <AssetIcon compact symbol={asset.symbol} />
+                  <AssetIcon compact logoUrl={asset.logo_url} symbol={asset.symbol} />
                   <View style={styles.watchlistAssetText}>
                     <Text style={[styles.watchlistSymbol, { color: colors.text }]}>{asset.symbol}</Text>
-                    <Text style={[styles.watchlistName, { color: colors.textDim }]}>{assetNameForSymbol(asset.symbol)}</Text>
+                    <Text style={[styles.watchlistName, { color: colors.textDim }]}>{asset.display_name || assetNameForSymbol(asset.symbol)}</Text>
                   </View>
                 </View>
 
@@ -1122,6 +1123,7 @@ function AnalysisFinnActions({
 
 type AssetIntelligence = {
   symbol: string;
+  logoUrl?: string | null;
   price: string;
   change: string;
   changeTone: StatusTone;
@@ -1145,7 +1147,7 @@ function SelectedAssetIntelligence({ intelligence }: { intelligence: AssetIntell
     <CardShell emphasis="primary">
       <View style={styles.intelTop}>
         <View style={styles.assetIdentity}>
-          <AssetIcon symbol={intelligence.symbol} />
+          <AssetIcon logoUrl={intelligence.logoUrl} symbol={intelligence.symbol} />
           <View>
             <Text style={styles.intelLabel}>{translate(language, 'analysis.analysisBriefing')}</Text>
             <Text style={[styles.intelSymbol, { color: colors.text }]}>{intelligence.symbol}</Text>
@@ -1865,18 +1867,6 @@ function TerminalAssetCard({
     </Pressable>
   );
 }
-
-
-
-function AssetIcon({ compact = false, symbol }: { compact?: boolean; symbol: string }) {
-  const background = symbol === 'BTC' ? '#F7931A' : symbol === 'ETH' ? '#627EEA' : symbol === 'SOL' ? '#111827' : theme.colors.accent;
-  return (
-    <View style={[styles.icon, compact && styles.iconCompact, { backgroundColor: background }]}>
-      <Text style={[styles.iconText, compact && styles.iconTextCompact]}>{symbol.slice(0, 1)}</Text>
-    </View>
-  );
-}
-
 function MiniMetric({ label, tone, value }: { label: string; tone: StatusTone; value: string }) {
   const { appearance } = useAppPreferences();
   const colors = preferenceColors(appearance);
@@ -1982,6 +1972,7 @@ function buildAssetIntelligence(
     changeTone: latestChange >= 0 ? 'success' : 'danger',
     finnSummary: finnText,
     headline,
+    logoUrl: asset.logo_url,
     marketPosture: posture,
     marketPostureTone: latestChange >= 0 && technicalScore >= 60 ? 'success' : latestChange < -3 ? 'danger' : 'accent',
     price: latestPrice > 0 ? formatPrice(latestPrice) : '—',

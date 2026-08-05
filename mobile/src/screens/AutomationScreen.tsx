@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Feather } from '@expo/vector-icons';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { InsightCard } from '../components/cards/InsightCard';
 import { LoadingSkeletonCard } from '../components/layout/LoadingSkeletonCard';
@@ -31,13 +31,16 @@ type UnknownRecord = Record<string, unknown>;
 type AutomationFilter = 'all' | 'active' | 'paused';
 
 type AutomationBot = {
+  budgetDailyLimit: number;
   id: number;
   isActive: boolean;
   isLive: boolean;
   budgetTotal: number;
   exposure: number;
+  maxAssetExposurePct: number;
   mode: string;
   name: string;
+  riskProfile: string;
   symbol: string;
   timeframe: string;
 };
@@ -51,6 +54,7 @@ export function AutomationScreen() {
   const [botActionItem, setBotActionItem] = useState<AutomationBot | null>(null);
   const [botRemoveItem, setBotRemoveItem] = useState<AutomationBot | null>(null);
   const [botDetailItem, setBotDetailItem] = useState<AutomationBot | null>(null);
+  const [botEditItem, setBotEditItem] = useState<AutomationBot | null>(null);
   const activeAsset = context.asset;
 
   useEffect(() => {
@@ -140,11 +144,7 @@ export function AutomationScreen() {
   async function editBot(bot: AutomationBot) {
     setBotActionItem(null);
     await triggerHaptic('selection');
-    openFinn({
-      prefill: `Help me edit bot ${bot.name} for ${bot.symbol}. Review execution mode, risk settings and budget, then suggest the smallest safe config change.`,
-      source: 'automation-bot-edit',
-      symbol: bot.symbol,
-    });
+    setBotEditItem(bot);
   }
 
   function promptDeleteBot(bot: AutomationBot) {
@@ -274,6 +274,35 @@ export function AutomationScreen() {
             onEdit={async () => {
               setBotDetailItem(null);
               await editBot(botDetailItem);
+            }}
+          />
+        ) : null}
+      </BottomSheet>
+
+      <BottomSheet
+        visible={Boolean(botEditItem)}
+        title={botEditItem ? `Bewerk ${botEditItem.name}` : 'Bot bewerken'}
+        onClose={() => setBotEditItem(null)}
+      >
+        {botEditItem ? (
+          <AutomationBotEditSheet
+            bot={botEditItem}
+            onAskFinn={() =>
+              openFinn({
+                prefill: `Help me edit bot ${botEditItem.name} for ${botEditItem.symbol}. Review execution mode, risk settings and budget, then suggest the smallest safe config change.`,
+                source: 'automation-bot-edit',
+                symbol: botEditItem.symbol,
+              })
+            }
+            onClose={() => setBotEditItem(null)}
+            onSaved={async () => {
+              setBotEditItem(null);
+              await Promise.allSettled([
+                overviewResource.refresh(),
+                configsResource.refresh(),
+                portfoliosResource.refresh(),
+                decisionResource.refresh(),
+              ]);
             }}
           />
         ) : null}
@@ -451,6 +480,302 @@ function AutomationBotDetailSheet({
           <Text style={{ color: theme.colors.white, fontSize: 13, fontWeight: '800', letterSpacing: 0.3 }}>
             Vraag FINN om extra botuitleg
           </Text>
+        </Pressable>
+      </View>
+    </View>
+  );
+}
+
+function AutomationBotEditSheet({
+  bot,
+  onAskFinn,
+  onClose,
+  onSaved,
+}: {
+  bot: AutomationBot;
+  onAskFinn: () => void;
+  onClose: () => void;
+  onSaved: () => Promise<void>;
+}) {
+  const { appearance } = useAppPreferences();
+  const colors = preferenceColors(appearance);
+  const [name, setName] = useState(bot.name);
+  const [mode, setMode] = useState(bot.mode || 'auto');
+  const [isActive, setIsActive] = useState(bot.isActive);
+  const [isLive, setIsLive] = useState(bot.isLive);
+  const [budgetTotal, setBudgetTotal] = useState(formatPlainNumber(bot.budgetTotal));
+  const [budgetDailyLimit, setBudgetDailyLimit] = useState(formatPlainNumber(bot.budgetDailyLimit));
+  const [riskProfile, setRiskProfile] = useState(bot.riskProfile || 'balanced');
+  const [maxExposure, setMaxExposure] = useState(formatPlainNumber(bot.maxAssetExposurePct));
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setName(bot.name);
+    setMode(bot.mode || 'auto');
+    setIsActive(bot.isActive);
+    setIsLive(bot.isLive);
+    setBudgetTotal(formatPlainNumber(bot.budgetTotal));
+    setBudgetDailyLimit(formatPlainNumber(bot.budgetDailyLimit));
+    setRiskProfile(bot.riskProfile || 'balanced');
+    setMaxExposure(formatPlainNumber(bot.maxAssetExposurePct));
+    setError(null);
+  }, [bot]);
+
+  async function handleSave() {
+    const trimmedName = name.trim();
+    const parsedBudget = parseEuroInput(budgetTotal);
+    const parsedDailyLimit = parseEuroInput(budgetDailyLimit);
+    const parsedMaxExposure = parseEuroInput(maxExposure);
+
+    if (!trimmedName) {
+      setError('Botnaam mag niet leeg zijn.');
+      return;
+    }
+
+    if (parsedBudget === null || parsedBudget < 0) {
+      setError('Vul een geldig budget in.');
+      return;
+    }
+
+    if (parsedDailyLimit === null || parsedDailyLimit < 0) {
+      setError('Vul een geldige daglimiet in.');
+      return;
+    }
+
+    if (parsedDailyLimit > parsedBudget) {
+      setError('Daglimiet mag niet groter zijn dan het totale budget.');
+      return;
+    }
+
+    if (parsedMaxExposure === null || parsedMaxExposure < 0 || parsedMaxExposure > 100) {
+      setError('Max exposure moet tussen 0 en 100% liggen.');
+      return;
+    }
+
+    setSaving(true);
+    setError(null);
+
+    try {
+      await intelligenceApi.updateBotConfig(bot.id, {
+        name: trimmedName,
+        mode,
+        is_active: isActive,
+        is_live: isLive,
+        budget_total_eur: parsedBudget,
+        budget_daily_limit_eur: parsedDailyLimit,
+        risk_profile: riskProfile,
+        max_asset_exposure_pct: parsedMaxExposure,
+      });
+      await triggerHaptic('success');
+      await onSaved();
+    } catch (nextError) {
+      setError(nextError instanceof Error ? nextError.message : 'Bot opslaan mislukt.');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <View style={{ gap: theme.spacing.md }}>
+      <View
+        style={{
+          backgroundColor: colors.surfaceMuted,
+          borderColor: colors.borderSubtle,
+          borderRadius: theme.radius.card,
+          borderWidth: 1,
+          padding: theme.spacing.md,
+        }}
+      >
+        <Text style={[typography.eyebrow, { color: colors.textDim }]}>Handmatig bewerken</Text>
+        <Text style={[typography.body, { color: colors.textMuted, marginTop: theme.spacing.xs }]}>
+          Pas hier direct de basisinstellingen van deze bot aan. FINN blijft beschikbaar voor extra uitleg, maar niet meer als verplichte edit-route.
+        </Text>
+      </View>
+
+      <View style={{ gap: theme.spacing.sm }}>
+        <View>
+          <Text style={[typography.metricLabel, { color: colors.textDim, marginBottom: theme.spacing.xs }]}>Botnaam</Text>
+          <TextInput
+            autoCapitalize="words"
+            onChangeText={setName}
+            placeholder="Naam van de bot"
+            placeholderTextColor={colors.textDim}
+            style={[
+              styles.automationEditInput,
+              {
+                backgroundColor: colors.surfaceMuted,
+                borderColor: colors.borderSubtle,
+                color: colors.text,
+              },
+            ]}
+            value={name}
+          />
+        </View>
+
+        <View>
+          <Text style={[typography.metricLabel, { color: colors.textDim, marginBottom: theme.spacing.xs }]}>Status</Text>
+          <SegmentedControl
+            compact
+            items={[
+              { key: 'active', label: 'Actief' },
+              { key: 'paused', label: 'Gepauzeerd' },
+            ]}
+            selected={isActive ? 'active' : 'paused'}
+            onChange={(value) => setIsActive(value === 'active')}
+          />
+        </View>
+
+        <View>
+          <Text style={[typography.metricLabel, { color: colors.textDim, marginBottom: theme.spacing.xs }]}>Mode</Text>
+          <SegmentedControl
+            compact
+            items={[
+              { key: 'auto', label: 'Auto' },
+              { key: 'manual', label: 'Manual' },
+            ]}
+            selected={mode === 'manual' ? 'manual' : 'auto'}
+            onChange={(value) => setMode(value as string)}
+          />
+        </View>
+
+        <View>
+          <Text style={[typography.metricLabel, { color: colors.textDim, marginBottom: theme.spacing.xs }]}>Kapitaal</Text>
+          <SegmentedControl
+            compact
+            items={[
+              { key: 'paper', label: 'Paper' },
+              { key: 'live', label: 'Live' },
+            ]}
+            selected={isLive ? 'live' : 'paper'}
+            onChange={(value) => setIsLive(value === 'live')}
+          />
+        </View>
+
+        <View>
+          <Text style={[typography.metricLabel, { color: colors.textDim, marginBottom: theme.spacing.xs }]}>Totaal budget (EUR)</Text>
+          <TextInput
+            keyboardType="decimal-pad"
+            onChangeText={setBudgetTotal}
+            placeholder="0"
+            placeholderTextColor={colors.textDim}
+            style={[
+              styles.automationEditInput,
+              {
+                backgroundColor: colors.surfaceMuted,
+                borderColor: colors.borderSubtle,
+                color: colors.text,
+              },
+            ]}
+            value={budgetTotal}
+          />
+        </View>
+
+        <View>
+          <Text style={[typography.metricLabel, { color: colors.textDim, marginBottom: theme.spacing.xs }]}>Daglimiet (EUR)</Text>
+          <TextInput
+            keyboardType="decimal-pad"
+            onChangeText={setBudgetDailyLimit}
+            placeholder="0"
+            placeholderTextColor={colors.textDim}
+            style={[
+              styles.automationEditInput,
+              {
+                backgroundColor: colors.surfaceMuted,
+                borderColor: colors.borderSubtle,
+                color: colors.text,
+              },
+            ]}
+            value={budgetDailyLimit}
+          />
+        </View>
+
+        <View>
+          <Text style={[typography.metricLabel, { color: colors.textDim, marginBottom: theme.spacing.xs }]}>Risk profile</Text>
+          <SegmentedControl
+            compact
+            items={[
+              { key: 'conservative', label: 'Conservatief' },
+              { key: 'balanced', label: 'Balanced' },
+              { key: 'aggressive', label: 'Agressief' },
+            ]}
+            selected={
+              riskProfile === 'conservative' || riskProfile === 'aggressive'
+                ? riskProfile
+                : 'balanced'
+            }
+            onChange={(value) => setRiskProfile(value as string)}
+          />
+        </View>
+
+        <View>
+          <Text style={[typography.metricLabel, { color: colors.textDim, marginBottom: theme.spacing.xs }]}>Max exposure (%)</Text>
+          <TextInput
+            keyboardType="decimal-pad"
+            onChangeText={setMaxExposure}
+            placeholder="100"
+            placeholderTextColor={colors.textDim}
+            style={[
+              styles.automationEditInput,
+              {
+                backgroundColor: colors.surfaceMuted,
+                borderColor: colors.borderSubtle,
+                color: colors.text,
+              },
+            ]}
+            value={maxExposure}
+          />
+        </View>
+      </View>
+
+      {error ? (
+        <View
+          style={{
+            backgroundColor: colors.surfaceMuted,
+            borderColor: colors.danger,
+            borderRadius: theme.radius.card,
+            borderWidth: 1,
+            padding: theme.spacing.sm,
+          }}
+        >
+          <Text style={[typography.body, { color: colors.danger }]}>{error}</Text>
+        </View>
+      ) : null}
+
+      <View style={{ gap: theme.spacing.sm }}>
+        <Pressable
+          disabled={saving}
+          onPress={handleSave}
+          style={[
+            styles.automationEditPrimaryButton,
+            { opacity: saving ? 0.7 : 1 },
+          ]}
+        >
+          <Text style={styles.automationEditPrimaryButtonText}>{saving ? 'Opslaan...' : 'Bot opslaan'}</Text>
+        </Pressable>
+        <Pressable
+          onPress={async () => {
+            await triggerHaptic('selection');
+            onAskFinn();
+          }}
+          style={[
+            styles.automationEditSecondaryButton,
+            {
+              backgroundColor: colors.surfaceMuted,
+              borderColor: colors.borderSubtle,
+            },
+          ]}
+        >
+          <Text style={[typography.actionStrong, { color: colors.text }]}>Vraag FINN om extra botuitleg</Text>
+        </Pressable>
+        <Pressable
+          onPress={async () => {
+            await triggerHaptic('selection');
+            onClose();
+          }}
+          style={styles.automationEditCancelWrap}
+        >
+          <Text style={[typography.bodyStrong, { color: colors.textDim }]}>Annuleren</Text>
         </Pressable>
       </View>
     </View>
@@ -937,6 +1262,7 @@ function mapAutomationBots(configs: UnknownRecord[], portfolios: UnknownRecord[]
     const setup = isRecord(strategy.setup) ? strategy.setup : {};
 
     return {
+      budgetDailyLimit: readNumber(budget, ['daily_limit_eur', 'budget_daily_limit_eur'], readNumber(config, ['budget_daily_limit_eur'], 0)),
       budgetTotal: readNumber(budget, ['total_eur', 'budget_total_eur'], readNumber(config, ['budget_total_eur', 'budget_total'], 0)),
       exposure: readNumber(
         stats,
@@ -946,8 +1272,10 @@ function mapAutomationBots(configs: UnknownRecord[], portfolios: UnknownRecord[]
       id,
       isActive: readBool(config, ['is_active', 'active'], false),
       isLive: readBool(config, ['is_live', 'live'], false),
+      maxAssetExposurePct: readNumber(config, ['max_asset_exposure_pct'], 100),
       mode: readString(config, ['mode', 'execution_mode'], ''),
       name: readString(config, ['name', 'bot_name'], 'Bot'),
+      riskProfile: readString(config, ['risk_profile'], 'balanced'),
       symbol: readString(config, ['symbol', 'asset'], ''),
       timeframe: readString(setup, ['timeframe'], readString(config, ['timeframe', 'frequency'], '')).toUpperCase(),
     };
@@ -958,13 +1286,16 @@ function mapOverviewAutomationBots(overview?: MobileOverviewResponse): Automatio
   if (!overview) return [];
 
   return overview.active_bots.map((bot) => ({
+    budgetDailyLimit: 0,
     budgetTotal: 0,
     exposure: bot.position_value_eur ?? bot.invested_eur ?? 0,
     id: bot.bot_id,
     isActive: bot.is_active,
     isLive: bot.is_live,
+    maxAssetExposurePct: 100,
     mode: '',
     name: bot.name,
+    riskProfile: 'balanced',
     symbol: bot.symbol,
     timeframe: '',
   }));
@@ -985,7 +1316,9 @@ function mergeAutomationBots(primary: AutomationBot[], fallback: AutomationBot[]
       exposure: bot.exposure || overviewBot.exposure,
       isActive: bot.isActive || overviewBot.isActive,
       isLive: bot.isLive || overviewBot.isLive,
+      maxAssetExposurePct: bot.maxAssetExposurePct || overviewBot.maxAssetExposurePct,
       name: bot.name || overviewBot.name,
+      riskProfile: bot.riskProfile || overviewBot.riskProfile,
       symbol: bot.symbol || overviewBot.symbol,
     };
   });
@@ -1107,6 +1440,22 @@ function formatAutomationCheckedAt(value?: string | null) {
   return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 }
 
+function parseEuroInput(value: string) {
+  const normalized = value.replace(/\./g, '').replace(',', '.').replace(/[^\d.-]/g, '').trim();
+  if (!normalized) return 0;
+  const parsed = Number(normalized);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function formatPlainNumber(value: number) {
+  if (!Number.isFinite(value) || value === 0) return '';
+  return value.toLocaleString('nl-NL', {
+    maximumFractionDigits: value >= 100 ? 0 : 2,
+    minimumFractionDigits: 0,
+    useGrouping: false,
+  });
+}
+
 function formatEUR(value: number) {
   return new Intl.NumberFormat('nl-NL', {
     currency: 'EUR',
@@ -1127,6 +1476,39 @@ const styles = StyleSheet.create({
   automationBotAction: {
     ...typography.listRowAction,
     letterSpacing: 0.2,
+  },
+  automationEditCancelWrap: {
+    alignItems: 'center',
+    paddingVertical: theme.spacing.xs,
+  },
+  automationEditInput: {
+    borderRadius: theme.radius.card,
+    borderWidth: 1,
+    fontSize: 14,
+    fontWeight: '600',
+    lineHeight: 18,
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.sm,
+  },
+  automationEditPrimaryButton: {
+    alignItems: 'center',
+    backgroundColor: theme.colors.accent,
+    borderRadius: theme.radius.button,
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.sm,
+  },
+  automationEditPrimaryButtonText: {
+    color: theme.colors.white,
+    fontSize: 13,
+    fontWeight: '800',
+    letterSpacing: 0.3,
+  },
+  automationEditSecondaryButton: {
+    alignItems: 'center',
+    borderRadius: theme.radius.button,
+    borderWidth: 1,
+    paddingHorizontal: theme.spacing.md,
+    paddingVertical: theme.spacing.sm,
   },
   automationBotCopy: {
     flex: 1,

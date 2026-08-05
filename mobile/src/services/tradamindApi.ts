@@ -37,6 +37,9 @@ export type AssistantChatSessionDetailResponse = {
 
 export type MobileOverviewAsset = {
   symbol: string;
+  display_name?: string | null;
+  asset_class?: string | null;
+  logo_url?: string | null;
   price?: number | null;
   change_24h?: number | null;
   macro_score: number;

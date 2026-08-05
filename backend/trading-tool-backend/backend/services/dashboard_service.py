@@ -9,6 +9,7 @@ from fastapi import HTTPException
 
 from backend.infrastructure.repositories.dashboard_repository import DashboardRepository
 from backend.infrastructure.repositories.user_repository import UserRepository
+from backend.services.asset_catalog_service import AssetCatalogService
 from backend.services.platform_metrics import record_latency_sample
 from backend.services.locale_service import localize_finn_payload
 from backend.schemas.dashboard_schema import (
@@ -25,6 +26,13 @@ def _safe_event_attr(event: Any, key: str, default: Any = None) -> Any:
         return event.get(key, default)
     data = getattr(event, "__dict__", {}) or {}
     return data.get(key, default)
+
+
+def _asset_logo_url(symbol: str) -> str | None:
+    normalized = str(symbol or "").strip().upper()
+    if not normalized:
+        return None
+    return f"https://assets.coincap.io/assets/icons/{normalized.lower()}@2x.png"
 
 # =========================================================
 # SYNCHRONOUS WRAPPER FOR SCORING ENGINE
@@ -192,6 +200,7 @@ class DashboardService:
         bot_portfolios = []
         ai_insight = {}
         raw_intel_events = []
+        asset_catalog_map = {}
 
         # 3. Run DB-backed components sequentially. A single AsyncSession must
         # not be shared across concurrent DB awaits.
@@ -199,6 +208,11 @@ class DashboardService:
             prices_data = await self.repository.get_latest_prices_and_changes(user_id, symbols) or prices_data
         except Exception as e:
             logger.error(f"❌ [MobileOverview] P1 Error: prices failed: {e}", exc_info=True)
+
+        try:
+            asset_catalog_map = await AssetCatalogService(self.session).get_assets(symbols)
+        except Exception as e:
+            logger.error(f"❌ [MobileOverview] P1b Error: asset catalog failed: {e}", exc_info=True)
 
         try:
             from backend.services.bot_service import BotService
@@ -259,9 +273,13 @@ class DashboardService:
             macro_sem = get_macro_semantics(macro_val)
             tech_sem = get_technical_semantics(tech_val)
             mkt_sem = get_market_semantics(mkt_val)
+            asset_meta = asset_catalog_map.get(sym, {})
 
             watchlist_items.append(MobileAssetWatchlistSchema(
                 symbol=sym,
+                display_name=asset_meta.get("display_name") or sym,
+                asset_class=asset_meta.get("asset_class"),
+                logo_url=asset_meta.get("logo_url") or _asset_logo_url(sym),
                 price=price_info.get("price"),
                 change_24h=price_info.get("change_24h"),
                 macro_score=macro_val,
