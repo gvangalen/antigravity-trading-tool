@@ -151,6 +151,7 @@ if ! ssh "${SSH_ARGS[@]}" "ubuntu@$SERVER_IP" "
   python3 backend/scripts/run_sql_migration.py backend/scripts/migrations/2026_06_28_auth_password_reset_tokens.py
   python3 backend/scripts/run_sql_migration.py backend/scripts/migrations/2026_07_20_asset_scoped_ai_insights.py
   python3 backend/scripts/run_sql_migration.py backend/scripts/migrations/2026_07_20_finn_response_trace_index.py
+  python3 backend/scripts/run_sql_migration.py backend/scripts/migrations/2026_08_05_asset_catalog.py
 
   cd ../../frontend/trading-tool-frontend
   rm -rf .next
