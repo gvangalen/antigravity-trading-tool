@@ -189,7 +189,8 @@ def test_frontend_workspace_reads_are_centralized_and_ai_is_explicit():
     assert "useOverviewSnapshot" not in workspace
     assert "btcLive?.as_of" in workspace
     assert "fetchAssetWorkspace" in hook
-    assert "fetchWorkspaceWatchlist" in hook
+    assert "watchlistSymbols" in hook
+    assert "fetchWorkspaceWatchlist" not in hook
     assert "assistantChat" not in hook
     assert "requestIndicatorContext" in workspace
     assert "onClick={requestFinnContext}" in workspace

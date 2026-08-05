@@ -3,16 +3,14 @@
 import { useEffect, useRef, useState } from "react";
 import { trackAssistantEvent } from "@/lib/api/assistantAnalytics";
 import { useVisibilityPolling } from "@/hooks/useVisibilityPolling";
-import { fetchAssetWorkspace, fetchWorkspaceWatchlist } from "@/lib/api/workspace";
+import { fetchAssetWorkspace } from "@/lib/api/workspace";
 import { fetchLatestPrice } from "@/lib/api/market";
 import { getDailyScores } from "@/lib/api/scores";
 
 const WORKSPACE_REQUEST_TIMEOUT_MS = 8000;
 const WORKSPACE_CACHE_TTL_MS = 60_000;
-const WATCHLIST_CACHE_TTL_MS = 60_000;
 
 const workspaceCache = new Map();
-const watchlistCache = new Map();
 
 function getFreshCache(cache, key, maxAgeMs) {
   const entry = cache.get(key);
@@ -92,20 +90,26 @@ function buildWorkspaceFallback(symbol, periods, quote, daily) {
 }
 
 export function useAssetWorkspaceData(symbol, periods, watchlistSymbols) {
+  const normalizedWatchlistSymbols = Array.from(
+    new Set((watchlistSymbols || []).map((item) => String(item || "").toUpperCase()).filter(Boolean))
+  );
+  const watchlistKey = normalizedWatchlistSymbols.join(",");
   const workspaceKey = JSON.stringify({
     symbol: String(symbol || "BTC").toUpperCase(),
     market: periods?.market || "day",
     macro: periods?.macro || "day",
     technical: periods?.technical || "day",
+    watchlist: watchlistKey,
   });
-  const watchlistKey = (watchlistSymbols || []).join(",");
   const cachedWorkspace = getFreshCache(workspaceCache, workspaceKey, WORKSPACE_CACHE_TTL_MS);
-  const cachedWatchlist = getFreshCache(watchlistCache, watchlistKey, WATCHLIST_CACHE_TTL_MS);
+  const cachedWatchlist = Array.isArray(cachedWorkspace?.watchlist?.rows)
+    ? cachedWorkspace.watchlist.rows
+    : [];
 
   const [workspace, setWorkspace] = useState(cachedWorkspace);
-  const [watchlist, setWatchlist] = useState(Array.isArray(cachedWatchlist) ? cachedWatchlist : []);
+  const [watchlist, setWatchlist] = useState(cachedWatchlist);
   const [loading, setLoading] = useState(!cachedWorkspace);
-  const [watchlistLoading, setWatchlistLoading] = useState(!cachedWatchlist);
+  const [watchlistLoading, setWatchlistLoading] = useState(!cachedWorkspace);
   const [error, setError] = useState(null);
   const [isFallbackWorkspace, setIsFallbackWorkspace] = useState(false);
   const fallbackStartedAtRef = useRef(null);
@@ -141,6 +145,7 @@ export function useAssetWorkspaceData(symbol, periods, watchlistSymbols) {
       const payload = await fetchAssetWorkspace(symbol, periods, {
         signal: controller.signal,
         forceFresh: true,
+        watchlistSymbols: normalizedWatchlistSymbols,
       });
       setFreshCache(workspaceCache, workspaceKey, payload);
       if (fallbackStartedAtRef.current) {
@@ -151,6 +156,7 @@ export function useAssetWorkspaceData(symbol, periods, watchlistSymbols) {
         fallbackStartedAtRef.current = null;
       }
       setWorkspace(payload);
+      setWatchlist(Array.isArray(payload?.watchlist?.rows) ? payload.watchlist.rows : []);
       setError(null);
       setIsFallbackWorkspace(false);
       return payload;
@@ -175,65 +181,32 @@ export function useAssetWorkspaceData(symbol, periods, watchlistSymbols) {
         });
       }
       setWorkspace(fallback);
+      if (!cachedWatchlist.length) {
+        setWatchlist([]);
+      }
       setError(nextError);
       setIsFallbackWorkspace(true);
       return fallback;
     } finally {
       window.clearTimeout(timeoutId);
       setLoading(false);
+      setWatchlistLoading(false);
     }
   }
 
   async function reloadWatchlist() {
-    const cached = getFreshCache(watchlistCache, watchlistKey, WATCHLIST_CACHE_TTL_MS);
-    if (cached) {
-      setWatchlist(Array.isArray(cached) ? cached : []);
-      setWatchlistLoading(false);
-    } else {
-      setWatchlistLoading(true);
-    }
-    const controller = new AbortController();
-    const timeoutId = window.setTimeout(() => controller.abort(), WORKSPACE_REQUEST_TIMEOUT_MS);
-    try {
-      const payload = await fetchWorkspaceWatchlist(watchlistSymbols || [], {
-        signal: controller.signal,
-        forceFresh: true,
-      });
-      const rows = Array.isArray(payload?.rows) ? payload.rows : [];
-      setFreshCache(watchlistCache, watchlistKey, rows);
-      setWatchlist(rows);
-      return payload;
-    } catch {
-      if (!cached) {
-        setWatchlist([]);
-      }
-      return null;
-    } finally {
-      window.clearTimeout(timeoutId);
-      setWatchlistLoading(false);
-    }
+    return reloadWorkspace();
   }
 
   useEffect(() => {
     void reloadWorkspace();
   }, [workspaceKey]);
 
-  useEffect(() => {
-    void reloadWatchlist();
-  }, [watchlistKey]);
-
   useVisibilityPolling(reloadWorkspace, {
     intervalMs: 60_000,
     backgroundIntervalMs: 300_000,
     runImmediately: false,
-    deps: [symbol, periods.market, periods.macro, periods.technical],
-  });
-
-  useVisibilityPolling(reloadWatchlist, {
-    intervalMs: 60_000,
-    backgroundIntervalMs: 300_000,
-    runImmediately: false,
-    deps: [watchlistKey],
+    deps: [symbol, periods.market, periods.macro, periods.technical, watchlistKey],
   });
 
   return {

@@ -102,6 +102,16 @@ const ASSET_NAMES = {
   DOT: "Polkadot",
 };
 
+function resolveAssetLogoUrl(symbol, explicitLogoUrl = null) {
+  if (explicitLogoUrl) return explicitLogoUrl;
+  const normalized = String(symbol || "").trim().toUpperCase();
+  if (!normalized) return null;
+  if (/^[A-Z]{2,10}$/.test(normalized)) {
+    return `https://assets.coincap.io/assets/icons/${normalized.toLowerCase()}@2x.png`;
+  }
+  return null;
+}
+
 const ASSET_GROUPS = [
   { id: "crypto", label: "Crypto", active: true },
   { id: "stocks", label: "Stocks", active: false },
@@ -1987,16 +1997,16 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
     let cancelled = false;
 
     async function loadWatchlistRows() {
-      const nextRows = (watchlistData || []).map((row) => {
-        const changeValue = Number(row?.change_24h);
-        const tone = scoreTone(row?.score, ui);
-        return {
-          symbol: row.symbol,
-          displayName: row?.display_name || row?.displayName || ASSET_NAMES[row.symbol] || row.symbol,
-          logoUrl: row?.logo_url || row?.logoUrl || null,
-          lastPrice: formatPrice(row?.price, locale),
-          change24h: formatPercent(changeValue, 2),
-          changeTone: Number.isFinite(changeValue)
+        const nextRows = (watchlistData || []).map((row) => {
+          const changeValue = Number(row?.change_24h);
+          const tone = scoreTone(row?.score, ui);
+          return {
+            symbol: row.symbol,
+            displayName: row?.display_name || row?.displayName || ASSET_NAMES[row.symbol] || row.symbol,
+            logoUrl: resolveAssetLogoUrl(row?.symbol, row?.logo_url || row?.logoUrl || null),
+            lastPrice: formatPrice(row?.price, locale),
+            change24h: formatPercent(changeValue, 2),
+            changeTone: Number.isFinite(changeValue)
             ? changeValue >= 0 ? "text-emerald-600" : "text-red-600"
             : "text-slate-400",
           score: formatScore(row?.score),

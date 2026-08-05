@@ -275,6 +275,7 @@ class WorkspaceDataService:
         market_period: str,
         macro_period: str,
         technical_period: str,
+        watchlist_symbols: list[str] | None = None,
     ) -> dict[str, Any]:
         symbol = str(symbol or "BTC").upper()
         periods = {
@@ -318,6 +319,11 @@ class WorkspaceDataService:
             {category: payload["score"]["score"] for category, payload in categories.items()},
             master_payload.get("weights"),
         )
+        watchlist_payload = await self._build_watchlist_payload(
+            user_id,
+            watchlist_symbols or [symbol],
+            master_payload.get("weights"),
+        )
 
         return {
             "symbol": symbol,
@@ -333,6 +339,7 @@ class WorkspaceDataService:
             },
             "daily": daily,
             "master": master_payload,
+            "watchlist": watchlist_payload,
             "regime": regime,
             "generated_at": datetime.now(timezone.utc).isoformat(),
             "ai_calls": 0,
@@ -346,14 +353,30 @@ class WorkspaceDataService:
         return payload.model_dump() if hasattr(payload, "model_dump") else payload.dict()
 
     async def get_watchlist(self, user_id: int, symbols: list[str]) -> dict[str, Any]:
+        user = await self.users.get_by_id(user_id)
+        preferences = getattr(user, "ai_preferences", None) or {}
+        weights = preferences.get("intelligence_weights", {})
+        return await self._build_watchlist_payload(user_id, symbols, weights)
+
+    async def _build_watchlist_payload(
+        self,
+        user_id: int,
+        symbols: list[str],
+        weights: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
         normalized = list(dict.fromkeys(str(symbol).upper() for symbol in symbols if symbol))[:25]
+        if not normalized:
+            return {
+                "period": "day",
+                "weights": _normalized_weights(weights),
+                "rows": [],
+                "ai_calls": 0,
+            }
+
         quotes = await self.market.get_latest_snapshots(normalized)
         scores = await self.scores.fetch_daily_scores_batch(user_id, normalized)
         session = getattr(self, "session", None)
         asset_catalog = await AssetCatalogService(session).get_assets(normalized) if session is not None else {}
-        user = await self.users.get_by_id(user_id)
-        preferences = getattr(user, "ai_preferences", None) or {}
-        weights = preferences.get("intelligence_weights", {})
         quote_map = {str(row.symbol).upper(): row for row in quotes}
         rows = []
         for symbol in normalized:

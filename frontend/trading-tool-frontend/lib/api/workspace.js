@@ -3,13 +3,20 @@
 import { fetchAuth } from "@/lib/api/auth";
 
 export function fetchAssetWorkspace(symbol, periods = {}, options = {}) {
+  const { watchlistSymbols = [], ...fetchOptions } = options;
   const params = new URLSearchParams({
     symbol: String(symbol || "BTC").toUpperCase(),
     market_period: periods.market || "day",
     macro_period: periods.macro || "day",
     technical_period: periods.technical || "day",
   });
-  return fetchAuth(`/api/workspace/asset?${params.toString()}`, { method: "GET", ...options });
+  const normalizedWatchlist = Array.from(
+    new Set(watchlistSymbols.map((item) => String(item || "").toUpperCase()).filter(Boolean))
+  );
+  if (normalizedWatchlist.length) {
+    params.set("watchlist_symbols", normalizedWatchlist.join(","));
+  }
+  return fetchAuth(`/api/workspace/asset?${params.toString()}`, { method: "GET", ...fetchOptions });
 }
 
 export function fetchWorkspaceWatchlist(symbols = [], options = {}) {
