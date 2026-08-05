@@ -259,6 +259,7 @@ class WorkspaceDataService:
     """Read-only projection for an asset workspace. It never refreshes data or invokes AI."""
 
     def __init__(self, session: AsyncSession):
+        self.session = session
         self.market = MarketDataRepository(session)
         self.macro = MacroDataRepository(session)
         self.technical = TechnicalDataRepository(session)
@@ -348,7 +349,8 @@ class WorkspaceDataService:
         normalized = list(dict.fromkeys(str(symbol).upper() for symbol in symbols if symbol))[:25]
         quotes = await self.market.get_latest_snapshots(normalized)
         scores = await self.scores.fetch_daily_scores_batch(user_id, normalized)
-        asset_catalog = await AssetCatalogService(self.session).get_assets(normalized)
+        session = getattr(self, "session", None)
+        asset_catalog = await AssetCatalogService(session).get_assets(normalized) if session is not None else {}
         user = await self.users.get_by_id(user_id)
         preferences = getattr(user, "ai_preferences", None) or {}
         weights = preferences.get("intelligence_weights", {})
