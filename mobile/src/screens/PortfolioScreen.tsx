@@ -862,13 +862,10 @@ function PortfolioAssetExposureSection({
               ]}
             >
               <View style={styles.portfolioAssetIdentity}>
-                <AssetIcon size={56} symbol={row.symbol} />
+                <AssetIcon size={24} symbol={row.symbol} />
                 <View style={styles.flexText}>
                   <Text style={[styles.portfolioPositionName, { color: colors.text }]}>{assetName(row.symbol)}</Text>
-                  <Text style={[styles.portfolioPositionSymbol, { color: colors.textDim }]}>
-                    {assetSubLabel(row.symbol)}
-                    {isTracked ? ' · Watchlist' : ''}
-                  </Text>
+                  <Text style={[styles.portfolioPositionSymbol, { color: colors.textDim }]}>{row.symbol.toUpperCase()}</Text>
                 </View>
               </View>
               <Text numberOfLines={1} style={[styles.portfolioAssetValue, { color: colors.text }]}>
@@ -926,7 +923,7 @@ function PortfolioAssetDetailSheet({
         }}
       >
         <View style={{ alignItems: 'center', flexDirection: 'row', gap: theme.spacing.sm }}>
-          <AssetIcon size={56} symbol={row.symbol} />
+          <AssetIcon size={24} symbol={row.symbol} />
           <View style={{ flex: 1 }}>
             <Text style={[typography.sectionTitle, { color: colors.text }]}>{assetName(row.symbol)}</Text>
             <Text style={[typography.body, { color: colors.textMuted }]}>
@@ -1071,7 +1068,7 @@ function PortfolioPositionsSection({
             ]}
           >
             <View style={styles.portfolioPositionIdentity}>
-              <AssetIcon size={56} symbol={row.symbol} />
+              <AssetIcon size={24} symbol={row.symbol} />
               <View>
                 <Text style={[styles.portfolioPositionName, { color: colors.text }]}>{assetName(row.symbol)}</Text>
                 <Text style={[styles.portfolioPositionSymbol, { color: colors.textDim }]}>{row.symbol}</Text>

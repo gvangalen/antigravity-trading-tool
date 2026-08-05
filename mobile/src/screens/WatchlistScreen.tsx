@@ -960,7 +960,7 @@ function AnalysisWatchlistCard({
               >
                 <View style={styles.watchlistAssetBlock}>
                   <View style={[styles.watchlistSelectionDot, { backgroundColor: selected ? colors.accent : colors.borderSubtle }]} />
-                  <AssetIcon compact logoUrl={asset.logo_url} symbol={asset.symbol} />
+                  <AssetIcon compact logoUrl={asset.logo_url} size={24} symbol={asset.symbol} />
                   <View style={styles.watchlistAssetText}>
                     <Text style={[styles.watchlistSymbol, { color: colors.text }]}>{asset.symbol}</Text>
                     <Text style={[styles.watchlistName, { color: colors.textDim }]}>{asset.display_name || assetNameForSymbol(asset.symbol)}</Text>
