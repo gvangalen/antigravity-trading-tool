@@ -236,10 +236,33 @@ PY
     return 1
   }
 
+  for_each_pm2_app() {
+    local csv=\"\${1:-}\"
+    local callback=\"\${2:-}\"
+    local app
+    IFS=',' read -ra pm2_apps <<< \"\$csv\"
+    for app in \"\${pm2_apps[@]}\"; do
+      app=\"\$(printf '%s' \"\$app\" | xargs)\"
+      if [ -n \"\$app\" ]; then
+        \"\$callback\" \"\$app\"
+      fi
+    done
+  }
+
+  pm2_delete_app() {
+    local app=\"\$1\"
+    pm2 delete \"\$app\" || true
+  }
+
+  pm2_start_app() {
+    local app=\"\$1\"
+    pm2 start $PM2_CONFIG --only \"\$app\" --update-env
+  }
+
   restart_backend_app() {
     echo \"⚠️ Restarting backend app ${BACKEND_APP} to recover startup/bind drift.\" >&2
-    pm2 delete \"$BACKEND_APP\" || true
-    pm2 start $PM2_CONFIG --only \"$BACKEND_APP\" --update-env
+    for_each_pm2_app \"$BACKEND_APP\" pm2_delete_app
+    for_each_pm2_app \"$BACKEND_APP\" pm2_start_app
   }
 
   stabilize_backend_app() {
@@ -254,17 +277,18 @@ PY
   rebuild_pm2_processes() {
     echo \"⚠️ Rebuilding PM2 process list with phased startup.\" >&2
     if [ \"$DEPLOY_COMPONENT_SET\" = \"backend_only\" ]; then
-      pm2 delete backend || true
+      for_each_pm2_app \"$BACKEND_APP\" pm2_delete_app
     else
-      pm2 delete all || true
+      for_each_pm2_app \"$CORE_PM2_APPS\" pm2_delete_app
+      for_each_pm2_app \"$AUX_PM2_APPS\" pm2_delete_app
     fi
-    pm2 start $PM2_CONFIG --only \"$CORE_PM2_APPS\" --update-env
+    for_each_pm2_app \"$CORE_PM2_APPS\" pm2_start_app
     if ! stabilize_backend_app; then
       echo \"❌ Backend did not become healthy during phased core startup.\" >&2
       exit 1
     fi
     if [ -n \"$AUX_PM2_APPS\" ]; then
-      pm2 start $PM2_CONFIG --only \"$AUX_PM2_APPS\" --update-env
+      for_each_pm2_app \"$AUX_PM2_APPS\" pm2_start_app
     fi
     check_pm2_apps_online
   }
