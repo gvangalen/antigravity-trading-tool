@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import os
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from typing import Any
 
 import httpx
@@ -21,7 +21,7 @@ def _parse_datetime(value: str | None) -> datetime | None:
         return None
     for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%d"):
         try:
-            return datetime.strptime(value, fmt).replace(tzinfo=UTC)
+            return datetime.strptime(value, fmt).replace(tzinfo=timezone.utc)
         except ValueError:
             continue
     return None
@@ -49,7 +49,7 @@ class TwelveDataMarketDataAdapter:
             quote_res.raise_for_status()
             payload = quote_res.json()
 
-        observed_at = _parse_datetime(payload.get("datetime")) or datetime.now(UTC)
+        observed_at = _parse_datetime(payload.get("datetime")) or datetime.now(timezone.utc)
         return PriceSnapshotDTO(
             symbol=asset.symbol,
             provider=self.provider_name,

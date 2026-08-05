@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from typing import Any
 
 import httpx
@@ -41,7 +41,7 @@ class BinanceMarketDataAdapter:
             volume=_float_or_none(payload.get("quoteVolume")),
             currency=asset.quote_currency,
             exchange=asset.exchange or "BINANCE",
-            observed_at=datetime.now(UTC),
+            observed_at=datetime.now(timezone.utc),
             is_delayed=False,
             raw_payload=payload,
         )
@@ -72,8 +72,8 @@ class BinanceMarketDataAdapter:
 
         candles: list[OHLCVCandleDTO] = []
         for item in payload:
-            period_start = datetime.fromtimestamp(int(item[0]) / 1000, UTC)
-            period_end = datetime.fromtimestamp(int(item[6]) / 1000, UTC)
+            period_start = datetime.fromtimestamp(int(item[0]) / 1000, timezone.utc)
+            period_end = datetime.fromtimestamp(int(item[6]) / 1000, timezone.utc)
             candles.append(
                 OHLCVCandleDTO(
                     symbol=asset.symbol,
