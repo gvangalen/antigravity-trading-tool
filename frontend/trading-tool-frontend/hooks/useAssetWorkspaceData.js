@@ -7,7 +7,26 @@ import { fetchAssetWorkspace, fetchWorkspaceWatchlist } from "@/lib/api/workspac
 import { fetchLatestPrice } from "@/lib/api/market";
 import { getDailyScores } from "@/lib/api/scores";
 
-const WORKSPACE_REQUEST_TIMEOUT_MS = 15000;
+const WORKSPACE_REQUEST_TIMEOUT_MS = 8000;
+const WORKSPACE_CACHE_TTL_MS = 60_000;
+const WATCHLIST_CACHE_TTL_MS = 60_000;
+
+const workspaceCache = new Map();
+const watchlistCache = new Map();
+
+function getFreshCache(cache, key, maxAgeMs) {
+  const entry = cache.get(key);
+  if (!entry) return null;
+  if (Date.now() - entry.savedAt > maxAgeMs) return null;
+  return entry.value;
+}
+
+function setFreshCache(cache, key, value) {
+  cache.set(key, {
+    value,
+    savedAt: Date.now(),
+  });
+}
 
 function buildWorkspaceFallback(symbol, periods, quote, daily) {
   const marketScore = daily?.market?.score ?? null;
@@ -73,13 +92,22 @@ function buildWorkspaceFallback(symbol, periods, quote, daily) {
 }
 
 export function useAssetWorkspaceData(symbol, periods, watchlistSymbols) {
-  const [workspace, setWorkspace] = useState(null);
-  const [watchlist, setWatchlist] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [watchlistLoading, setWatchlistLoading] = useState(true);
+  const workspaceKey = JSON.stringify({
+    symbol: String(symbol || "BTC").toUpperCase(),
+    market: periods?.market || "day",
+    macro: periods?.macro || "day",
+    technical: periods?.technical || "day",
+  });
+  const watchlistKey = (watchlistSymbols || []).join(",");
+  const cachedWorkspace = getFreshCache(workspaceCache, workspaceKey, WORKSPACE_CACHE_TTL_MS);
+  const cachedWatchlist = getFreshCache(watchlistCache, watchlistKey, WATCHLIST_CACHE_TTL_MS);
+
+  const [workspace, setWorkspace] = useState(cachedWorkspace);
+  const [watchlist, setWatchlist] = useState(Array.isArray(cachedWatchlist) ? cachedWatchlist : []);
+  const [loading, setLoading] = useState(!cachedWorkspace);
+  const [watchlistLoading, setWatchlistLoading] = useState(!cachedWatchlist);
   const [error, setError] = useState(null);
   const [isFallbackWorkspace, setIsFallbackWorkspace] = useState(false);
-  const watchlistKey = (watchlistSymbols || []).join(",");
   const fallbackStartedAtRef = useRef(null);
   const assetSymbol = String(symbol || "BTC").toUpperCase();
 
@@ -100,7 +128,13 @@ export function useAssetWorkspaceData(symbol, periods, watchlistSymbols) {
   }
 
   async function reloadWorkspace() {
-    setLoading(true);
+    const cached = getFreshCache(workspaceCache, workspaceKey, WORKSPACE_CACHE_TTL_MS);
+    if (cached) {
+      setWorkspace(cached);
+      setLoading(false);
+    } else {
+      setLoading(true);
+    }
     const controller = new AbortController();
     const timeoutId = window.setTimeout(() => controller.abort(), WORKSPACE_REQUEST_TIMEOUT_MS);
     try {
@@ -108,6 +142,7 @@ export function useAssetWorkspaceData(symbol, periods, watchlistSymbols) {
         signal: controller.signal,
         forceFresh: true,
       });
+      setFreshCache(workspaceCache, workspaceKey, payload);
       if (fallbackStartedAtRef.current) {
         trackWorkspaceTelemetry("asset_workspace_recovered", {
           fallback_duration_ms: Date.now() - fallbackStartedAtRef.current,
@@ -150,7 +185,13 @@ export function useAssetWorkspaceData(symbol, periods, watchlistSymbols) {
   }
 
   async function reloadWatchlist() {
-    setWatchlistLoading(true);
+    const cached = getFreshCache(watchlistCache, watchlistKey, WATCHLIST_CACHE_TTL_MS);
+    if (cached) {
+      setWatchlist(Array.isArray(cached) ? cached : []);
+      setWatchlistLoading(false);
+    } else {
+      setWatchlistLoading(true);
+    }
     const controller = new AbortController();
     const timeoutId = window.setTimeout(() => controller.abort(), WORKSPACE_REQUEST_TIMEOUT_MS);
     try {
@@ -158,10 +199,14 @@ export function useAssetWorkspaceData(symbol, periods, watchlistSymbols) {
         signal: controller.signal,
         forceFresh: true,
       });
-      setWatchlist(Array.isArray(payload?.rows) ? payload.rows : []);
+      const rows = Array.isArray(payload?.rows) ? payload.rows : [];
+      setFreshCache(watchlistCache, watchlistKey, rows);
+      setWatchlist(rows);
       return payload;
     } catch {
-      setWatchlist([]);
+      if (!cached) {
+        setWatchlist([]);
+      }
       return null;
     } finally {
       window.clearTimeout(timeoutId);
@@ -171,7 +216,7 @@ export function useAssetWorkspaceData(symbol, periods, watchlistSymbols) {
 
   useEffect(() => {
     void reloadWorkspace();
-  }, [symbol, periods.market, periods.macro, periods.technical]);
+  }, [workspaceKey]);
 
   useEffect(() => {
     void reloadWatchlist();

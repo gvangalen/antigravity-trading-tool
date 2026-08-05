@@ -1243,11 +1243,21 @@ function AssetList({ rows, activeSymbol, onSelect, onAddAsset, ui }) {
               >
                 <div className="min-w-0">
                   <div className="flex items-center gap-2">
-                    <span className={`h-2.5 w-2.5 rounded-full ${active ? "bg-blue-600" : "bg-slate-300"}`} />
+                    {row.logoUrl ? (
+                      <img
+                        src={row.logoUrl}
+                        alt={`${row.displayName || row.symbol} logo`}
+                        className="h-5 w-5 rounded-full object-cover"
+                        loading="lazy"
+                        referrerPolicy="no-referrer"
+                      />
+                    ) : (
+                      <span className={`h-2.5 w-2.5 rounded-full ${active ? "bg-blue-600" : "bg-slate-300"}`} />
+                    )}
                     <span className="text-[15px] font-black text-slate-950">{row.symbol}</span>
                   </div>
                   <div className="mt-0.5 truncate text-[13px] font-medium text-slate-500">
-                    {ASSET_NAMES[row.symbol] || "Asset context"}
+                    {row.displayName || ASSET_NAMES[row.symbol] || "Asset context"}
                   </div>
                 </div>
                 <div className="text-right text-[15px] font-black text-slate-950">{row.lastPrice}</div>
@@ -1982,6 +1992,8 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
         const tone = scoreTone(row?.score, ui);
         return {
           symbol: row.symbol,
+          displayName: row?.display_name || row?.displayName || ASSET_NAMES[row.symbol] || row.symbol,
+          logoUrl: row?.logo_url || row?.logoUrl || null,
           lastPrice: formatPrice(row?.price, locale),
           change24h: formatPercent(changeValue, 2),
           changeTone: Number.isFinite(changeValue)
