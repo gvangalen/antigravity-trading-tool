@@ -1,11 +1,16 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { trackAssistantEvent } from "@/lib/api/assistantAnalytics";
 import { useVisibilityPolling } from "@/hooks/useVisibilityPolling";
 import { fetchAssetWorkspace } from "@/lib/api/workspace";
 import { fetchLatestPrice } from "@/lib/api/market";
 import { getDailyScores } from "@/lib/api/scores";
+import {
+  bootstrapMacroPreferences,
+  getMacroPreferences,
+  syncMacroPreferences,
+} from "@/lib/api/macro";
 
 const WORKSPACE_REQUEST_TIMEOUT_MS = 8000;
 const WORKSPACE_CACHE_TTL_MS = 60_000;
@@ -113,6 +118,7 @@ export function useAssetWorkspaceData(symbol, periods, watchlistSymbols) {
   const [error, setError] = useState(null);
   const [isFallbackWorkspace, setIsFallbackWorkspace] = useState(false);
   const fallbackStartedAtRef = useRef(null);
+  const macroRecoveryRef = useRef(new Set());
   const assetSymbol = String(symbol || "BTC").toUpperCase();
 
   function trackWorkspaceTelemetry(eventName, metadata = {}) {
@@ -131,7 +137,7 @@ export function useAssetWorkspaceData(symbol, periods, watchlistSymbols) {
     });
   }
 
-  async function reloadWorkspace() {
+  const reloadWorkspace = useCallback(async () => {
     const cached = getFreshCache(workspaceCache, workspaceKey, WORKSPACE_CACHE_TTL_MS);
     if (cached) {
       setWorkspace(cached);
@@ -192,11 +198,53 @@ export function useAssetWorkspaceData(symbol, periods, watchlistSymbols) {
       setLoading(false);
       setWatchlistLoading(false);
     }
-  }
+  }, [cachedWatchlist.length, normalizedWatchlistSymbols, periods, symbol, workspaceKey]);
 
   async function reloadWatchlist() {
     return reloadWorkspace();
   }
+
+  useEffect(() => {
+    const macroRows = workspace?.categories?.macro?.rows;
+    const macroPreferencesKey = `${assetSymbol}:${workspace?.symbol || assetSymbol}`;
+    if (!workspace || isFallbackWorkspace || loading) return;
+    if (!Array.isArray(macroRows) || macroRows.length > 0) return;
+    if (macroRecoveryRef.current.has(macroPreferencesKey)) return;
+
+    let cancelled = false;
+    macroRecoveryRef.current.add(macroPreferencesKey);
+
+    async function recoverMacroWorkspace() {
+      try {
+        const preferences = await getMacroPreferences({ symbol: assetSymbol });
+        const configuredIndicators = Array.isArray(preferences?.indicators)
+          ? preferences.indicators.filter((item) => item?.indicator)
+          : [];
+
+        if (!configuredIndicators.length) {
+          await bootstrapMacroPreferences({
+            symbol: assetSymbol,
+            assetClass: preferences?.asset_class || null,
+            scope: "asset_class",
+            preset: "recommended",
+          });
+        }
+
+        await syncMacroPreferences(assetSymbol);
+        if (!cancelled) {
+          await reloadWorkspace();
+        }
+      } catch (nextError) {
+        console.error(`❌ Macro workspace recovery failed for ${assetSymbol}:`, nextError);
+      }
+    }
+
+    void recoverMacroWorkspace();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [assetSymbol, isFallbackWorkspace, loading, reloadWorkspace, workspace]);
 
   useEffect(() => {
     void reloadWorkspace();
