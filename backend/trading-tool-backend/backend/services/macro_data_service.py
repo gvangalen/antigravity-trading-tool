@@ -283,7 +283,6 @@ class MacroDataService:
                 raise HTTPException(500, f"Fout bij ophalen dynamische waarde.")
 
         # Score the value
-        from backend.utils.scoring_utils import normalize_indicator_name
         normalized = normalize_indicator_name(indicator_name)
 
         scored = await asyncio.to_thread(self._sync_score_indicator, "macro", normalized, value, user_id)
