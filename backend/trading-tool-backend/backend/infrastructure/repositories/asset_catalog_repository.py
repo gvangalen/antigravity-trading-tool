@@ -22,6 +22,7 @@ class AssetCatalogRepository:
         try:
             return await self._fetch_extended_rows(symbols)
         except Exception:
+            await self.session.rollback()
             return await self._fetch_legacy_rows(symbols)
 
     async def _fetch_extended_rows(self, symbols: list[str]) -> list[dict[str, Any]]:

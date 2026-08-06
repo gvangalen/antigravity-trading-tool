@@ -9,40 +9,180 @@ class TechnicalDataRepository:
     def __init__(self, session: AsyncSession):
         self.session = session
 
-    async def get_user_configs(self, user_id: int, category: str = 'technical') -> List[UserIndicatorConfig]:
-        stmt = select(UserIndicatorConfig).where(
+    @staticmethod
+    def _eq_or_null(column, value):
+        return column.is_(None) if value is None else column == value
+
+    async def get_user_configs(
+        self,
+        user_id: int,
+        category: str = 'technical',
+        symbol: Optional[str] = None,
+        asset_class: Optional[str] = None,
+    ) -> List[UserIndicatorConfig]:
+        normalized_symbol = str(symbol or "").strip().upper() or None
+        normalized_asset_class = str(asset_class or "").strip().lower() or None
+
+        if normalized_symbol:
+            symbol_stmt = select(UserIndicatorConfig).where(
+                and_(
+                    UserIndicatorConfig.user_id == user_id,
+                    UserIndicatorConfig.category == category,
+                    UserIndicatorConfig.enabled == True,
+                    UserIndicatorConfig.symbol == normalized_symbol,
+                )
+            ).order_by(UserIndicatorConfig.priority.asc(), UserIndicatorConfig.id.asc())
+            symbol_result = await self.session.execute(symbol_stmt)
+            symbol_rows = list(symbol_result.scalars().all())
+            if symbol_rows:
+                return symbol_rows
+
+        if normalized_asset_class:
+            class_stmt = select(UserIndicatorConfig).where(
+                and_(
+                    UserIndicatorConfig.user_id == user_id,
+                    UserIndicatorConfig.category == category,
+                    UserIndicatorConfig.enabled == True,
+                    UserIndicatorConfig.symbol.is_(None),
+                    UserIndicatorConfig.asset_class == normalized_asset_class,
+                )
+            ).order_by(UserIndicatorConfig.priority.asc(), UserIndicatorConfig.id.asc())
+            class_result = await self.session.execute(class_stmt)
+            class_rows = list(class_result.scalars().all())
+            if class_rows:
+                return class_rows
+
+        default_stmt = select(UserIndicatorConfig).where(
             and_(
                 UserIndicatorConfig.user_id == user_id,
-                UserIndicatorConfig.category == category
+                UserIndicatorConfig.category == category,
+                UserIndicatorConfig.enabled == True,
+                UserIndicatorConfig.symbol.is_(None),
+                UserIndicatorConfig.asset_class.is_(None),
             )
-        )
-        result = await self.session.execute(stmt)
-        return list(result.scalars().all())
+        ).order_by(UserIndicatorConfig.priority.asc(), UserIndicatorConfig.id.asc())
+        default_result = await self.session.execute(default_stmt)
+        return list(default_result.scalars().all())
 
-    async def ensure_user_config(self, user_id: int, indicator: str, category: str = 'technical'):
-        # Check if exists
+    async def ensure_user_config(
+        self,
+        user_id: int,
+        indicator: str,
+        category: str = 'technical',
+        symbol: Optional[str] = None,
+        asset_class: Optional[str] = None,
+        priority: int = 100,
+    ):
+        normalized_symbol = str(symbol or "").strip().upper() or None
+        normalized_asset_class = str(asset_class or "").strip().lower() or None
         stmt = select(UserIndicatorConfig).where(
             and_(
                 UserIndicatorConfig.user_id == user_id,
                 UserIndicatorConfig.indicator == indicator,
-                UserIndicatorConfig.category == category
+                UserIndicatorConfig.category == category,
+                self._eq_or_null(UserIndicatorConfig.symbol, normalized_symbol),
+                self._eq_or_null(UserIndicatorConfig.asset_class, normalized_asset_class),
             )
         )
         res = await self.session.execute(stmt)
-        if not res.scalars().first():
-            new_conf = UserIndicatorConfig(user_id=user_id, indicator=indicator, category=category)
-            self.session.add(new_conf)
+        existing = res.scalars().first()
+        if existing:
+            if existing.enabled is not True:
+                existing.enabled = True
+            existing.priority = priority
             await self.session.flush()
+            return existing
 
-    async def remove_user_config(self, user_id: int, indicator: str, category: str = 'technical'):
+        new_conf = UserIndicatorConfig(
+            user_id=user_id,
+            indicator=indicator,
+            category=category,
+            symbol=normalized_symbol,
+            asset_class=normalized_asset_class,
+            priority=priority,
+            enabled=True,
+        )
+        self.session.add(new_conf)
+        await self.session.flush()
+        return new_conf
+
+    async def remove_user_config(
+        self,
+        user_id: int,
+        indicator: str,
+        category: str = 'technical',
+        symbol: Optional[str] = None,
+        asset_class: Optional[str] = None,
+    ):
+        normalized_symbol = str(symbol or "").strip().upper() or None
+        normalized_asset_class = str(asset_class or "").strip().lower() or None
         stmt = delete(UserIndicatorConfig).where(
             and_(
                 UserIndicatorConfig.user_id == user_id,
                 UserIndicatorConfig.indicator == indicator,
-                UserIndicatorConfig.category == category
+                UserIndicatorConfig.category == category,
+                self._eq_or_null(UserIndicatorConfig.symbol, normalized_symbol),
+                self._eq_or_null(UserIndicatorConfig.asset_class, normalized_asset_class),
             )
         )
         await self.session.execute(stmt)
+
+    async def list_scope_configs(
+        self,
+        user_id: int,
+        *,
+        category: str = "technical",
+        symbol: Optional[str] = None,
+        asset_class: Optional[str] = None,
+    ) -> List[UserIndicatorConfig]:
+        normalized_symbol = str(symbol or "").strip().upper() or None
+        normalized_asset_class = str(asset_class or "").strip().lower() or None
+        stmt = select(UserIndicatorConfig).where(
+            and_(
+                UserIndicatorConfig.user_id == user_id,
+                UserIndicatorConfig.category == category,
+                self._eq_or_null(UserIndicatorConfig.symbol, normalized_symbol),
+                self._eq_or_null(UserIndicatorConfig.asset_class, normalized_asset_class),
+            )
+        ).order_by(UserIndicatorConfig.priority.asc(), UserIndicatorConfig.id.asc())
+        result = await self.session.execute(stmt)
+        return list(result.scalars().all())
+
+    async def replace_scope_configs(
+        self,
+        user_id: int,
+        indicators: List[tuple[str, int]],
+        *,
+        category: str = "technical",
+        symbol: Optional[str] = None,
+        asset_class: Optional[str] = None,
+    ) -> List[UserIndicatorConfig]:
+        normalized_symbol = str(symbol or "").strip().upper() or None
+        normalized_asset_class = str(asset_class or "").strip().lower() or None
+
+        delete_stmt = delete(UserIndicatorConfig).where(
+            and_(
+                UserIndicatorConfig.user_id == user_id,
+                UserIndicatorConfig.category == category,
+                self._eq_or_null(UserIndicatorConfig.symbol, normalized_symbol),
+                self._eq_or_null(UserIndicatorConfig.asset_class, normalized_asset_class),
+            )
+        )
+        await self.session.execute(delete_stmt)
+
+        created: List[UserIndicatorConfig] = []
+        for indicator, priority in indicators:
+            created.append(
+                await self.ensure_user_config(
+                    user_id,
+                    indicator,
+                    category=category,
+                    symbol=normalized_symbol,
+                    asset_class=normalized_asset_class,
+                    priority=priority,
+                )
+            )
+        return created
 
     async def get_latest_for_user(self, user_id: int, symbol: Optional[str] = None, limit: int = 50) -> List[TechnicalDataIndicator]:
         stmt = select(TechnicalDataIndicator).where(TechnicalDataIndicator.user_id == user_id)
@@ -55,13 +195,13 @@ class TechnicalDataRepository:
         )
         return list(result.scalars().all())
 
-    async def get_indicator_config(self, name: str) -> Optional[Indicator]:
+    async def get_indicator_config(self, name: str, category: str = 'technical') -> Optional[Indicator]:
         result = await self.session.execute(
             select(Indicator)
             .where(
                 and_(
                     func.lower(Indicator.name) == func.lower(name),
-                    Indicator.category == 'technical',
+                    Indicator.category == category,
                     Indicator.active == True
                 )
             )

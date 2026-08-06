@@ -10,6 +10,10 @@ from backend.schemas.market_data_schema import (
     MarketDataResponse, MarketDataIndicatorResponse, MarketData7DResponse,
     MarketForwardReturnResponse, ForwardReturnChartResponse
 )
+from backend.schemas.technical_data_schema import (
+    TechnicalIndicatorPreferenceItem,
+    TechnicalIndicatorPreferenceResponse,
+)
 from backend.utils.auth_utils import get_current_user
 
 router = APIRouter()
@@ -156,6 +160,79 @@ async def get_market_indicator_rules(
     except Exception as e:
         logger.error(f"❌ [indicator_rules] {e}")
         raise HTTPException(500, "Fout bij ophalen market-indicatorregels.")
+
+
+@router.get("/market/preferences", response_model=TechnicalIndicatorPreferenceResponse)
+async def get_market_preferences(
+    symbol: Optional[str] = Query(None),
+    asset_class: Optional[str] = Query(None),
+    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    user_id = current_user["id"]
+    service = MarketDataService(db)
+    resolved = await service.resolve_effective_preferences(user_id, symbol=symbol, asset_class=asset_class)
+    return TechnicalIndicatorPreferenceResponse(
+        scope=resolved["scope"],
+        symbol=resolved["symbol"],
+        asset_class=resolved["asset_class"],
+        indicators=[
+            TechnicalIndicatorPreferenceItem(
+                indicator=row.indicator,
+                priority=int(row.priority or 100),
+            )
+            for row in resolved["rows"]
+        ],
+    )
+
+
+@router.post("/market/preferences/bootstrap", response_model=TechnicalIndicatorPreferenceResponse)
+async def bootstrap_market_preferences(
+    symbol: Optional[str] = Query(None),
+    asset_class: Optional[str] = Query(None),
+    scope: str = Query("asset_class"),
+    preset: str = Query("recommended"),
+    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    user_id = current_user["id"]
+    service = MarketDataService(db)
+    try:
+        result = await service.bootstrap_preferences(
+            user_id,
+            symbol=symbol,
+            asset_class=asset_class,
+            scope=scope,
+            preset=preset,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    await db.commit()
+    return TechnicalIndicatorPreferenceResponse(
+        scope=result["scope"],
+        symbol=result["symbol"],
+        asset_class=result["asset_class"],
+        indicators=[
+            TechnicalIndicatorPreferenceItem(
+                indicator=row.indicator,
+                priority=int(row.priority or 100),
+            )
+            for row in result["rows"]
+        ],
+    )
+
+
+@router.post("/market/preferences/sync")
+async def sync_market_preferences_for_symbol(
+    symbol: str = Query(...),
+    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    user_id = current_user["id"]
+    service = MarketDataService(db)
+    result = await service.sync_effective_indicators(user_id, symbol)
+    await db.commit()
+    return result
 
 
 # =========================================================

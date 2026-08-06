@@ -103,6 +103,11 @@ export default function MacroPage() {
     activeMacroIndicatorNames,
     loading: loadingIndicators,
     error,
+    preferences,
+    preferencesLoading,
+    syncing,
+    assetClass,
+    applyRecommendedPreset,
   } = useMacroData(activeTab, selectedAsset);
   const macroStepComplete = Boolean(status?.has_macro || activeMacroIndicatorNames?.length > 0);
   const macroNeedsSetup = status?.has_macro === false && activeMacroIndicatorNames?.length === 0;
@@ -282,8 +287,14 @@ export default function MacroPage() {
               </div>
             ) : null}
             <MacroIndicatorScoreView
-               addMacroIndicator={addMacroIndicator}
-               activeMacroIndicatorNames={activeMacroIndicatorNames}
+              addMacroIndicator={addMacroIndicator}
+              activeMacroIndicatorNames={activeMacroIndicatorNames}
+              preferences={preferences}
+              preferencesLoading={preferencesLoading}
+              syncing={syncing}
+              assetClass={assetClass}
+              assetSymbol={selectedAsset}
+              applyRecommendedPreset={applyRecommendedPreset}
             />
          </div>
 

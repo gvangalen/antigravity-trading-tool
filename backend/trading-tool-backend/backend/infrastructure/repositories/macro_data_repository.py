@@ -16,13 +16,14 @@ class MacroDataRepository:
         result = await self.session.execute(stmt)
         return result.scalars().all()
 
-    async def check_indicator_exists(self, user_id: int, name: str) -> bool:
+    async def check_indicator_exists(self, user_id: int, name: str, symbol: Optional[str] = None) -> bool:
         stmt = (
             select(MacroData)
             .where(
                 and_(
                     func.lower(MacroData.name) == func.lower(name),
-                    MacroData.user_id == user_id
+                    MacroData.user_id == user_id,
+                    MacroData.symbol == symbol,
                 )
             )
             .limit(1)
@@ -41,23 +42,30 @@ class MacroDataRepository:
     # =========================================================
     # QUERIES: LATEST / DAY
     # =========================================================
-    async def get_user_macro_data(self, user_id: int, limit: int = 100) -> List[MacroData]:
-        # Macro is GLOBAL POOL voor de user. 
-        stmt = select(MacroData).where(MacroData.user_id == user_id)
+    async def get_user_macro_data(self, user_id: int, symbol: Optional[str] = None, limit: int = 100) -> List[MacroData]:
+        stmt = select(MacroData).where(
+            and_(
+                MacroData.user_id == user_id,
+                MacroData.symbol == symbol,
+            )
+        )
         result = await self.session.execute(
             stmt.order_by(MacroData.timestamp.desc()).limit(limit)
         )
         return list(result.scalars().all())
 
     async def get_active_day_macro_data(self, user_id: int, symbol: Optional[str] = None) -> List[MacroData]:
-        # We pakken de meest recente records per indicator_name voor deze gebruiker
-        # We negeren 'symbol' want macro is globaal
         subq = (
             select(
                 MacroData.name,
                 func.max(MacroData.timestamp).label("max_ts")
             )
-            .where(MacroData.user_id == user_id)
+            .where(
+                and_(
+                    MacroData.user_id == user_id,
+                    MacroData.symbol == symbol,
+                )
+            )
             .group_by(MacroData.name)
             .subquery()
         )
@@ -65,7 +73,12 @@ class MacroDataRepository:
         stmt = (
             select(MacroData)
             .join(subq, and_(MacroData.name == subq.c.name, MacroData.timestamp == subq.c.max_ts))
-            .where(MacroData.user_id == user_id)
+            .where(
+                and_(
+                    MacroData.user_id == user_id,
+                    MacroData.symbol == symbol,
+                )
+            )
         )
         
         result = await self.session.execute(stmt)
@@ -74,11 +87,15 @@ class MacroDataRepository:
     # =========================================================
     # AGGREGATIES (WEEK / MAAND / KWARTAAL)
     # =========================================================
-    async def _get_data_by_days(self, user_id: int, days: int) -> Sequence[MacroData]:
-        # Zoek de laatste X dagen waarvoor data bestaat (ongeacht symbool)
+    async def _get_data_by_days(self, user_id: int, days: int, symbol: Optional[str] = None) -> Sequence[MacroData]:
         day_q = (
             select(func.date(MacroData.timestamp).label("d"))
-            .where(MacroData.user_id == user_id)
+            .where(
+                and_(
+                    MacroData.user_id == user_id,
+                    MacroData.symbol == symbol,
+                )
+            )
             .group_by(func.date(MacroData.timestamp))
             .order_by(desc(func.date(MacroData.timestamp)))
             .limit(days)
@@ -94,6 +111,7 @@ class MacroDataRepository:
             .where(
                 and_(
                     MacroData.user_id == user_id,
+                    MacroData.symbol == symbol,
                     func.date(MacroData.timestamp).in_(dates)
                 )
             )
@@ -103,13 +121,13 @@ class MacroDataRepository:
         return result.scalars().all()
 
     async def get_macro_week_data(self, user_id: int, symbol: Optional[str] = None) -> Sequence[MacroData]:
-        return await self._get_data_by_days(user_id, 7)
+        return await self._get_data_by_days(user_id, 7, symbol=symbol)
 
     async def get_macro_month_data(self, user_id: int, symbol: Optional[str] = None) -> Sequence[MacroData]:
-        return await self._get_data_by_days(user_id, 30)
+        return await self._get_data_by_days(user_id, 30, symbol=symbol)
 
     async def get_macro_quarter_data(self, user_id: int, symbol: Optional[str] = None) -> Sequence[MacroData]:
-        return await self._get_data_by_days(user_id, 90)
+        return await self._get_data_by_days(user_id, 90, symbol=symbol)
 
     # =========================================================
     # CRUD: DELETE / RULES
@@ -120,7 +138,8 @@ class MacroDataRepository:
             .where(
                 and_(
                     func.lower(MacroData.name) == func.lower(name),
-                    MacroData.user_id == user_id
+                    MacroData.user_id == user_id,
+                    MacroData.symbol == symbol,
                 )
             )
         )

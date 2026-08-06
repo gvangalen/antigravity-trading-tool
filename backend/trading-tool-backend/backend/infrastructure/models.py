@@ -189,7 +189,9 @@ class MarketIndicatorRule(Base):
 class UserIndicatorConfig(Base):
     """
     🎯 SINGLE SOURCE OF TRUTH voor User Indicator Preferences.
-    Deze tabel onthoudt welke indicators een gebruiker wil volgen, ONAFHANKELIJK van het symbool.
+    Supports both:
+    - global defaults (symbol NULL)
+    - asset-specific overrides (symbol filled)
     """
     __tablename__ = 'user_indicator_configs'
 
@@ -197,6 +199,10 @@ class UserIndicatorConfig(Base):
     user_id = Column(Integer, ForeignKey('users.id', ondelete='CASCADE'), nullable=False)
     indicator = Column(String, nullable=False) # e.g. 'rsi', 'ma200'
     category = Column(String, default='technical') # 'technical', 'macro', 'market'
+    symbol = Column(String, nullable=True)
+    asset_class = Column(String, nullable=True)
+    priority = Column(Integer, default=100)
+    enabled = Column(Boolean, default=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
 class MacroData(Base):

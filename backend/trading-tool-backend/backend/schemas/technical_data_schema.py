@@ -1,5 +1,5 @@
 from pydantic import BaseModel
-from typing import Optional
+from typing import Optional, List
 from datetime import datetime
 
 class TechnicalDataResponse(BaseModel):
@@ -36,3 +36,21 @@ class TechnicalIndicatorHistoryResponse(BaseModel):
 
     class Config:
         orm_mode = True
+
+
+class TechnicalIndicatorPreferenceItem(BaseModel):
+    indicator: str
+    priority: int = 100
+
+
+class TechnicalIndicatorPreferenceResponse(BaseModel):
+    scope: str
+    symbol: Optional[str] = None
+    asset_class: Optional[str] = None
+    indicators: List[TechnicalIndicatorPreferenceItem]
+
+
+class TechnicalIndicatorPreferenceUpdate(BaseModel):
+    symbol: Optional[str] = None
+    asset_class: Optional[str] = None
+    indicators: List[TechnicalIndicatorPreferenceItem]

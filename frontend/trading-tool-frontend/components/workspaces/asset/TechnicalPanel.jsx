@@ -66,6 +66,11 @@ export default function TechnicalPage() {
     removeTechnicalIndicator,
     loading: loadingIndicators,
     error,
+    preferences,
+    preferencesLoading,
+    syncing,
+    assetClass,
+    applyRecommendedPreset,
   } = useTechnicalData(activeTab, selectedAsset, { includeScoreSummary: false });
 
   const { technical: technicalScore } = useScoresData(selectedAsset, {
@@ -227,6 +232,12 @@ export default function TechnicalPage() {
             <TechnicalIndicatorScoreView
                addTechnicalIndicator={addTechnicalIndicator}
                activeTechnicalIndicatorNames={technicalData.map(i => i.name)}
+               preferences={preferences}
+               preferencesLoading={preferencesLoading}
+               syncing={syncing}
+               assetClass={assetClass}
+               assetSymbol={selectedAsset}
+               applyRecommendedPreset={applyRecommendedPreset}
             />
          </div>
 

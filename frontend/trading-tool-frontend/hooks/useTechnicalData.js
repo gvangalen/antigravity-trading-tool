@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "@/app/providers/I18nProvider";
 
 import {
@@ -12,6 +12,9 @@ import {
   getScoreRulesForIndicator,
   technicalDataAdd,
   deleteTechnicalIndicator,
+  getTechnicalPreferences,
+  bootstrapTechnicalPreferences,
+  syncTechnicalPreferences,
 } from "@/lib/api/technical";
 
 import { getDailyScores } from "@/lib/api/scores";
@@ -62,11 +65,21 @@ export function useTechnicalData(activeTab = "day", symbol = "BTC", options = {}
   const { t } = useTranslation();
   const commonT = t?.common || {};
   const { includeScoreSummary = true } = options;
+  const normalizedSymbol = useMemo(() => String(symbol || "BTC").toUpperCase(), [symbol]);
   const [technicalData, setTechnicalData] = useState([]);
   const [avgScore, setAvgScore] = useState("N/A");
   const [advies, setAdvies] = useState(() => getAdvies(50, commonT));
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [preferences, setPreferences] = useState({
+    scope: "default",
+    symbol: normalizedSymbol,
+    assetClass: null,
+    indicators: [],
+  });
+  const [preferencesLoading, setPreferencesLoading] = useState(true);
+  const [syncing, setSyncing] = useState(false);
+  const autoSyncedRef = useRef(new Set());
 
   const [indicatorNames, setIndicatorNames] = useState(() => (
     hasFreshTechnicalIndicatorNamesCache() ? technicalIndicatorNamesCache : []
@@ -79,22 +92,40 @@ export function useTechnicalData(activeTab = "day", symbol = "BTC", options = {}
   const activeTechnicalIndicatorNames = Array.isArray(technicalData)
     ? technicalData.map((i) => i.name)
     : [];
+  const configuredTechnicalIndicatorNames = Array.isArray(preferences.indicators)
+    ? preferences.indicators.map((item) => item.indicator).filter(Boolean)
+    : [];
+  const assetClass = preferences.assetClass || null;
 
-  /* --------------------------------------------------------
-     INIT
-  -------------------------------------------------------- */
-  useEffect(() => {
-    loadData();
-  }, [activeTab, symbol]);
-
-  useEffect(() => {
-    loadIndicatorNames();
-  }, []);
+  const loadPreferences = useCallback(async () => {
+    setPreferencesLoading(true);
+    try {
+      const payload = await getTechnicalPreferences({ symbol: normalizedSymbol });
+      setPreferences({
+        scope: payload?.scope || "default",
+        symbol: payload?.symbol || normalizedSymbol,
+        assetClass: payload?.asset_class || null,
+        indicators: Array.isArray(payload?.indicators) ? payload.indicators : [],
+      });
+      return payload;
+    } catch (err) {
+      console.error(`❌ Fout bij technical preferences (${normalizedSymbol}):`, err);
+      setPreferences({
+        scope: "default",
+        symbol: normalizedSymbol,
+        assetClass: null,
+        indicators: [],
+      });
+      return null;
+    } finally {
+      setPreferencesLoading(false);
+    }
+  }, [normalizedSymbol]);
 
   /* ======================================================
      LADEN VAN TECHNICAL DATA
   ====================================================== */
-  async function loadData() {
+  const loadData = useCallback(async () => {
     setLoading(true);
     setError("");
 
@@ -103,10 +134,10 @@ export function useTechnicalData(activeTab = "day", symbol = "BTC", options = {}
 
       const tab = activeTab.toLowerCase();
 
-      if (tab === "dag" || tab === "day") raw = await technicalDataDay(symbol);
-      else if (tab === "week") raw = await technicalDataWeek(symbol);
-      else if (tab === "maand" || tab === "month") raw = await technicalDataMonth(symbol);
-      else if (tab === "kwartaal" || tab === "quarter") raw = await technicalDataQuarter(symbol);
+      if (tab === "dag" || tab === "day") raw = await technicalDataDay(normalizedSymbol);
+      else if (tab === "week") raw = await technicalDataWeek(normalizedSymbol);
+      else if (tab === "maand" || tab === "month") raw = await technicalDataMonth(normalizedSymbol);
+      else if (tab === "kwartaal" || tab === "quarter") raw = await technicalDataQuarter(normalizedSymbol);
 
       const dataList = Array.isArray(raw) ? raw : [];
 
@@ -129,7 +160,7 @@ export function useTechnicalData(activeTab = "day", symbol = "BTC", options = {}
          DAGELIJKSE TECHNICAL SCORE
       -------------------------------------------------- */
       if (includeScoreSummary) {
-        const scores = await getDailyScores(symbol);
+        const scores = await getDailyScores(normalizedSymbol);
         const backendScore = scores?.technical?.score ?? null;
 
         if (backendScore !== null) {
@@ -143,7 +174,7 @@ export function useTechnicalData(activeTab = "day", symbol = "BTC", options = {}
         updateScore(normalized);
       }
     } catch (err) {
-      console.error(`❌ Fout bij technical data (${symbol}):`, err);
+      console.error(`❌ Fout bij technical data (${normalizedSymbol}):`, err);
       setTechnicalData([]);
       setAvgScore("N/A");
       setAdvies(getAdvies(50, commonT));
@@ -151,7 +182,53 @@ export function useTechnicalData(activeTab = "day", symbol = "BTC", options = {}
     } finally {
       setLoading(false);
     }
-  }
+  }, [activeTab, commonT, includeScoreSummary, normalizedSymbol, t?.pages?.technical?.loadError]);
+
+  /* --------------------------------------------------------
+     INIT
+  -------------------------------------------------------- */
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
+
+  useEffect(() => {
+    loadIndicatorNames();
+  }, []);
+
+  useEffect(() => {
+    loadPreferences();
+  }, [loadPreferences]);
+
+  useEffect(() => {
+    const hasConfiguredIndicators = configuredTechnicalIndicatorNames.length > 0;
+    const hasLoadedSignals = activeTechnicalIndicatorNames.length > 0;
+    const syncKey = `${normalizedSymbol}:${preferences.scope}:${configuredTechnicalIndicatorNames.join(",")}`;
+
+    if (!hasConfiguredIndicators || hasLoadedSignals) return;
+    if (preferencesLoading || loading || syncing) return;
+    if (autoSyncedRef.current.has(syncKey)) return;
+
+    autoSyncedRef.current.add(syncKey);
+    setSyncing(true);
+
+    syncTechnicalPreferences(normalizedSymbol)
+      .then(() => loadData())
+      .catch((err) => {
+        console.error(`❌ Fout bij technical auto-sync (${normalizedSymbol}):`, err);
+      })
+      .finally(() => {
+        setSyncing(false);
+      });
+  }, [
+    activeTechnicalIndicatorNames.length,
+    configuredTechnicalIndicatorNames,
+    loadData,
+    loading,
+    normalizedSymbol,
+    preferences.scope,
+    preferencesLoading,
+    syncing,
+  ]);
 
   /* ======================================================
      INDICATOR NAMEN
@@ -190,7 +267,8 @@ export function useTechnicalData(activeTab = "day", symbol = "BTC", options = {}
       return;
     }
 
-    await technicalDataAdd(indicatorName, symbol);
+    await technicalDataAdd(indicatorName, normalizedSymbol);
+    await loadPreferences();
     await loadData();
   }
 
@@ -198,8 +276,27 @@ export function useTechnicalData(activeTab = "day", symbol = "BTC", options = {}
      ❌ INDICATOR VERWIJDEREN
   ====================================================== */
   async function removeTechnicalIndicator(indicatorName) {
-    await deleteTechnicalIndicator(indicatorName, symbol);
+    await deleteTechnicalIndicator(indicatorName, normalizedSymbol);
+    await loadPreferences();
     await loadData();
+  }
+
+  async function applyRecommendedPreset(scope = "asset_class") {
+    const effectiveScope = scope === "default" ? "default" : scope === "symbol" ? "symbol" : "asset_class";
+    setSyncing(true);
+
+    try {
+      await bootstrapTechnicalPreferences({
+        symbol: normalizedSymbol,
+        assetClass,
+        scope: effectiveScope,
+      });
+      await loadPreferences();
+      await syncTechnicalPreferences(normalizedSymbol);
+      await loadData();
+    } finally {
+      setSyncing(false);
+    }
   }
 
   /* ======================================================
@@ -233,6 +330,12 @@ export function useTechnicalData(activeTab = "day", symbol = "BTC", options = {}
 
     // 👇 ESSENTIEEL VOOR UI (zoals Market)
     activeTechnicalIndicatorNames,
+    configuredTechnicalIndicatorNames,
+    preferences,
+    preferencesLoading,
+    syncing,
+    assetClass,
+    applyRecommendedPreset,
     reload: loadData,
   };
 }

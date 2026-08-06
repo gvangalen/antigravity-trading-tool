@@ -15,6 +15,7 @@ from backend.schemas.score_schema import (
 
 from backend.infrastructure.repositories.user_repository import UserRepository
 from backend.infrastructure.repositories.technical_data_repository import TechnicalDataRepository
+from backend.services.asset_catalog_service import AssetCatalogService
 
 logger = logging.getLogger(__name__)
 
@@ -48,7 +49,12 @@ class ScoreService:
 
         if refresh_if_incomplete:
             tech_repo = TechnicalDataRepository(self.repository.db)
-            user_configs = await tech_repo.get_user_configs(user_id)
+            asset_scope = await AssetCatalogService(self.repository.db).get_asset(symbol)
+            user_configs = await tech_repo.get_user_configs(
+                user_id,
+                symbol=symbol,
+                asset_class=asset_scope.get("asset_class"),
+            )
 
             if not user_configs:
                 logger.info(f"🆕 Initializing global indicator config for user {user_id} from BTC data...")
@@ -56,7 +62,11 @@ class ScoreService:
                 for d in btc_data:
                     await tech_repo.ensure_user_config(user_id, d.indicator)
                 await self.repository.db.commit()
-                user_configs = await tech_repo.get_user_configs(user_id)
+                user_configs = await tech_repo.get_user_configs(
+                    user_id,
+                    symbol=symbol,
+                    asset_class=asset_scope.get("asset_class"),
+                )
 
             for conf in user_configs:
                 exists = await tech_repo.check_duplicate(conf.indicator, user_id, symbol)
@@ -71,7 +81,11 @@ class ScoreService:
                 from backend.utils.technical_interpreter import fetch_technical_value
                 
                 # 1. Technical: Fetch missing values and score them individually
-                user_configs = await tech_repo.get_user_configs(user_id)
+                user_configs = await tech_repo.get_user_configs(
+                    user_id,
+                    symbol=symbol,
+                    asset_class=asset_scope.get("asset_class"),
+                )
                 tech_values = {}
                 for conf in user_configs:
                     try:

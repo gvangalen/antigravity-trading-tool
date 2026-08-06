@@ -10,7 +10,10 @@ from backend.schemas.technical_data_schema import (
     TechnicalDataResponse,
     TechnicalIndicatorConfig,
     TechnicalIndicatorRuleResponse,
-    TechnicalIndicatorHistoryResponse
+    TechnicalIndicatorHistoryResponse,
+    TechnicalIndicatorPreferenceResponse,
+    TechnicalIndicatorPreferenceUpdate,
+    TechnicalIndicatorPreferenceItem,
 )
 from backend.services.technical_data_service import TechnicalDataService
 from backend.infrastructure.repositories.technical_data_repository import TechnicalDataRepository
@@ -266,3 +269,132 @@ async def get_indicator_history(
         )
         for r in rows
     ]
+
+
+@router.get("/technical/preferences", response_model=TechnicalIndicatorPreferenceResponse)
+async def get_technical_preferences(
+    symbol: Optional[str] = Query(None),
+    asset_class: Optional[str] = Query(None),
+    current_user: dict = Depends(get_current_user),
+    session: AsyncSession = Depends(get_db),
+):
+    user_id = current_user["id"]
+    service = TechnicalDataService(session)
+    resolved = await service.resolve_effective_preferences(
+        user_id,
+        symbol=symbol,
+        asset_class=asset_class,
+    )
+
+    return TechnicalIndicatorPreferenceResponse(
+        scope=resolved["scope"],
+        symbol=resolved["symbol"],
+        asset_class=resolved["asset_class"],
+        indicators=[
+            TechnicalIndicatorPreferenceItem(
+                indicator=row.indicator,
+                priority=int(row.priority or 100),
+            )
+            for row in resolved["rows"]
+        ],
+    )
+
+
+@router.put("/technical/preferences", response_model=TechnicalIndicatorPreferenceResponse)
+async def put_technical_preferences(
+    payload: TechnicalIndicatorPreferenceUpdate,
+    current_user: dict = Depends(get_current_user),
+    session: AsyncSession = Depends(get_db),
+):
+    user_id = current_user["id"]
+    repo = TechnicalDataRepository(session)
+
+    normalized_symbol = str(payload.symbol or "").strip().upper() or None
+    asset_class = str(payload.asset_class or "").strip().lower() or None
+    if normalized_symbol and not asset_class:
+        asset = await AssetCatalogService(session).get_asset(normalized_symbol)
+        asset_class = asset.get("asset_class")
+
+    normalized_items = []
+    for item in payload.indicators:
+        indicator = str(item.indicator or "").strip().lower()
+        if not indicator:
+            continue
+        normalized_items.append((indicator, int(item.priority or 100)))
+
+    await repo.replace_scope_configs(
+        user_id,
+        normalized_items,
+        symbol=normalized_symbol,
+        asset_class=asset_class,
+    )
+    await session.commit()
+
+    rows = await repo.list_scope_configs(
+        user_id,
+        symbol=normalized_symbol,
+        asset_class=asset_class,
+    )
+    return TechnicalIndicatorPreferenceResponse(
+        scope="symbol_override" if normalized_symbol else ("asset_class_override" if asset_class else "default"),
+        symbol=normalized_symbol,
+        asset_class=asset_class,
+        indicators=[
+            TechnicalIndicatorPreferenceItem(
+                indicator=row.indicator,
+                priority=int(row.priority or 100),
+            )
+            for row in rows
+        ],
+    )
+
+
+@router.post("/technical/preferences/sync")
+async def sync_technical_preferences_for_symbol(
+    symbol: str = Query(...),
+    current_user: dict = Depends(get_current_user),
+    session: AsyncSession = Depends(get_db),
+):
+    user_id = current_user["id"]
+    service = TechnicalDataService(session)
+    result = await service.sync_effective_indicators(user_id, symbol)
+    await session.commit()
+    return result
+
+
+@router.post("/technical/preferences/bootstrap", response_model=TechnicalIndicatorPreferenceResponse)
+async def bootstrap_technical_preferences(
+    symbol: Optional[str] = Query(None),
+    asset_class: Optional[str] = Query(None),
+    scope: str = Query("asset_class"),
+    preset: str = Query("recommended"),
+    current_user: dict = Depends(get_current_user),
+    session: AsyncSession = Depends(get_db),
+):
+    user_id = current_user["id"]
+    service = TechnicalDataService(session)
+
+    try:
+        result = await service.bootstrap_preferences(
+            user_id,
+            symbol=symbol,
+            asset_class=asset_class,
+            scope=scope,
+            preset=preset,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    await session.commit()
+    return TechnicalIndicatorPreferenceResponse(
+        scope=result["scope"],
+        symbol=result["symbol"],
+        asset_class=result["asset_class"],
+        indicators=[
+            TechnicalIndicatorPreferenceItem(
+                indicator=row.indicator,
+                priority=int(row.priority or 100),
+            )
+            for row in result["rows"]
+        ],
+    )

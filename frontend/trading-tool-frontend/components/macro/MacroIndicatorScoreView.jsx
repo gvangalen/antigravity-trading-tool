@@ -20,6 +20,12 @@ export default function MacroIndicatorScoreView({
   addMacroIndicator,
   activeMacroIndicatorNames = [],
   initialSelectedName = null,
+  preferences = null,
+  preferencesLoading = false,
+  syncing = false,
+  assetClass = null,
+  assetSymbol = "BTC",
+  applyRecommendedPreset = null,
 }) {
   const { t } = useTranslation();
   const [allIndicators, setAllIndicators] = useState([]);
@@ -102,6 +108,14 @@ export default function MacroIndicatorScoreView({
     selected?.display_name ||
     selected?.label ||
     selected?.name;
+  const effectiveScope = preferences?.scope || "default";
+  const configuredIndicators = Array.isArray(preferences?.indicators) ? preferences.indicators : [];
+  const scopeLabel =
+    effectiveScope === "symbol_override"
+      ? `Asset override · ${assetSymbol}`
+      : effectiveScope === "asset_class_override"
+      ? `Asset class default · ${assetClass || "unknown"}`
+      : "Global default";
 
   return (
     <div className="bg-card border border-slate-200 rounded-[2.5rem] shadow-sm overflow-hidden">
@@ -122,6 +136,56 @@ export default function MacroIndicatorScoreView({
       </div>
 
       <div className="p-8 space-y-8">
+        <div className="rounded-[2rem] border border-slate-200 bg-slate-50/80 p-5">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+            <div>
+              <div className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-500">
+                Active preference scope
+              </div>
+              <div className="mt-2 text-sm font-black uppercase tracking-[0.12em] text-slate-900">
+                {preferencesLoading ? "Loading..." : scopeLabel}
+              </div>
+              <div className="mt-2 text-sm text-slate-500">
+                {configuredIndicators.length > 0
+                  ? `${configuredIndicators.length} indicator${configuredIndicators.length === 1 ? "" : "s"} configured for this context.`
+                  : "No configured indicators yet for this context."}
+              </div>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {applyRecommendedPreset ? (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => applyRecommendedPreset("asset_class")}
+                    disabled={preferencesLoading || syncing}
+                    className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-[10px] font-black uppercase tracking-[0.18em] text-slate-700 transition hover:border-blue-300 hover:text-blue-600 disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    {syncing ? "Syncing..." : `Use ${assetClass || "asset"} defaults`}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => applyRecommendedPreset("symbol")}
+                    disabled={preferencesLoading || syncing}
+                    className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-[10px] font-black uppercase tracking-[0.18em] text-slate-700 transition hover:border-blue-300 hover:text-blue-600 disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    {syncing ? "Syncing..." : `Make ${assetSymbol} specific`}
+                  </button>
+                </>
+              ) : null}
+            </div>
+          </div>
+          <div className="mt-4 flex flex-wrap gap-2">
+            {configuredIndicators.map((item) => (
+              <span
+                key={`${item.indicator}-${item.priority ?? 100}`}
+                className="rounded-full border border-slate-200 bg-white px-3 py-1 text-[10px] font-black uppercase tracking-[0.16em] text-slate-600"
+              >
+                {item.indicator}
+              </span>
+            ))}
+          </div>
+        </div>
+
         {/* SEARCH BLOCK */}
         <div className="max-w-xl">
           <UniversalSearchDropdown

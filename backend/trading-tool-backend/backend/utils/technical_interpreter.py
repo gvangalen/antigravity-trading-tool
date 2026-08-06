@@ -123,6 +123,16 @@ def normalize_technical_value(indicator: str, value: float) -> float:
         if "rsi" in indicator:
             return max(0, min(100, value))
 
+        if indicator == "ema_20_gap_pct":
+            # Map a roughly useful band of -10% .. +10% around EMA20 into 0..100.
+            normalized = ((value + 10) / 20) * 100
+            return max(0, min(100, normalized))
+
+        if indicator == "macd_hist_pct":
+            # Histogram as % of price is typically small; map -3% .. +3% into 0..100.
+            normalized = ((value + 3) / 6) * 100
+            return max(0, min(100, normalized))
+
         if "ma200" in indicator or "ma_200" in indicator:
             deviation = abs(value - 1)
             cap = 0.2

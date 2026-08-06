@@ -19,8 +19,15 @@ class BinanceMarketDataAdapter:
     provider_name = "binance"
     base_url = "https://api.binance.com/api/v3"
 
+    def _provider_symbol(self, asset: AssetRecord) -> str:
+        provider_symbol = str(asset.provider_symbol or "").strip().upper()
+        if provider_symbol.endswith(("USDT", "USDC", "BUSD", "FDUSD", "EUR", "USD")):
+            return provider_symbol
+        quote_currency = str(asset.quote_currency or "USDT").strip().upper() or "USDT"
+        return f"{asset.symbol.upper()}{quote_currency}"
+
     async def fetch_latest_snapshot(self, asset: AssetRecord) -> PriceSnapshotDTO:
-        provider_symbol = asset.provider_symbol or f"{asset.symbol}USDT"
+        provider_symbol = self._provider_symbol(asset)
         url = f"{self.base_url}/ticker/24hr"
         async with httpx.AsyncClient(timeout=10.0) as client:
             response = await client.get(url, params={"symbol": provider_symbol})
@@ -54,7 +61,7 @@ class BinanceMarketDataAdapter:
         end_at: datetime | None = None,
         limit: int | None = None,
     ) -> list[OHLCVCandleDTO]:
-        provider_symbol = asset.provider_symbol or f"{asset.symbol}USDT"
+        provider_symbol = self._provider_symbol(asset)
         params: dict[str, Any] = {
             "symbol": provider_symbol,
             "interval": timeframe,

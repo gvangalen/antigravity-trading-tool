@@ -21,7 +21,7 @@ class MarketDataProviderRegistry:
 
     def resolve_for_asset(self, asset: AssetRecord) -> MarketDataProvider:
         primary = str(asset.primary_provider or asset.provider or "").strip().lower()
-        if primary:
+        if primary and primary not in {"seed", "default", "manual", "database", "fallback"}:
             return self.get_provider(primary)
 
         if asset.asset_class == "crypto":

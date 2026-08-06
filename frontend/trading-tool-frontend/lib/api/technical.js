@@ -98,3 +98,60 @@ export const fetchIndicatorHistory = async (indicatorName, limit = 20) => {
     method: "GET",
   });
 };
+
+//
+// =============================================================
+// ⚙️ 7. Technical preferences (effective/default/asset/symbol)
+// =============================================================
+function buildPreferenceQuery(params = {}) {
+  const query = new URLSearchParams();
+  if (params.symbol) query.set("symbol", String(params.symbol).toUpperCase());
+  if (params.assetClass) query.set("asset_class", String(params.assetClass).toLowerCase());
+  if (params.scope) query.set("scope", String(params.scope));
+  if (params.preset) query.set("preset", String(params.preset));
+  const suffix = query.toString();
+  return suffix ? `?${suffix}` : "";
+}
+
+export const getTechnicalPreferences = async ({ symbol, assetClass } = {}) =>
+  await fetchAuth(`/api/technical/preferences${buildPreferenceQuery({ symbol, assetClass })}`, {
+    method: "GET",
+    forceFresh: true,
+  });
+
+export const updateTechnicalPreferences = async ({
+  symbol = null,
+  assetClass = null,
+  indicators = [],
+} = {}) =>
+  await fetchAuth(`/api/technical/preferences`, {
+    method: "PUT",
+    body: JSON.stringify({
+      symbol,
+      asset_class: assetClass,
+      indicators,
+    }),
+  });
+
+export const bootstrapTechnicalPreferences = async ({
+  symbol = null,
+  assetClass = null,
+  scope = "asset_class",
+  preset = "recommended",
+} = {}) =>
+  await fetchAuth(
+    `/api/technical/preferences/bootstrap${buildPreferenceQuery({
+      symbol,
+      assetClass,
+      scope,
+      preset,
+    })}`,
+    {
+      method: "POST",
+    }
+  );
+
+export const syncTechnicalPreferences = async (symbol) =>
+  await fetchAuth(`/api/technical/preferences/sync?symbol=${encodeURIComponent(String(symbol || "BTC").toUpperCase())}`, {
+    method: "POST",
+  });

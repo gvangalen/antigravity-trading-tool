@@ -9,23 +9,27 @@ import { API_BASE_URL } from "@/lib/config";
 // =======================================================
 //
 
+function buildSymbolQuery(symbol = null) {
+  return symbol ? `?symbol=${encodeURIComponent(String(symbol).toUpperCase())}` : "";
+}
+
 // 📌 Alle macrodata (laatste snapshot per indicator)
-export const fetchMacroData = async () => {
-  return await fetchAuth(`/api/macro_data`, { method: "GET" });
+export const fetchMacroData = async (symbol = null) => {
+  return await fetchAuth(`/api/macro_data${buildSymbolQuery(symbol)}`, { method: "GET" });
 };
 
 // 📌 Per periode
-export const fetchMacroDataByDay = () =>
-  fetchAuth(`/api/macro_data/day`, { method: "GET" });
+export const fetchMacroDataByDay = (symbol = null) =>
+  fetchAuth(`/api/macro_data/day${buildSymbolQuery(symbol)}`, { method: "GET" });
 
-export const fetchMacroDataByWeek = () =>
-  fetchAuth(`/api/macro_data/week`, { method: "GET" });
+export const fetchMacroDataByWeek = (symbol = null) =>
+  fetchAuth(`/api/macro_data/week${buildSymbolQuery(symbol)}`, { method: "GET" });
 
-export const fetchMacroDataByMonth = () =>
-  fetchAuth(`/api/macro_data/month`, { method: "GET" });
+export const fetchMacroDataByMonth = (symbol = null) =>
+  fetchAuth(`/api/macro_data/month${buildSymbolQuery(symbol)}`, { method: "GET" });
 
-export const fetchMacroDataByQuarter = () =>
-  fetchAuth(`/api/macro_data/quarter`, { method: "GET" });
+export const fetchMacroDataByQuarter = (symbol = null) =>
+  fetchAuth(`/api/macro_data/quarter${buildSymbolQuery(symbol)}`, { method: "GET" });
 
 
 //
@@ -35,16 +39,16 @@ export const fetchMacroDataByQuarter = () =>
 //
 
 // ➕ Indicator toevoegen
-export const addMacroIndicator = async (name) => {
+export const addMacroIndicator = async (name, symbol = null) => {
   return await fetchAuth(`/api/macro_data`, {
     method: "POST",
-    body: JSON.stringify({ name }),
+    body: JSON.stringify({ name, symbol }),
   });
 };
 
 // 🗑 Indicator verwijderen
-export const deleteMacroIndicator = async (name) => {
-  return await fetchAuth(`/api/macro_data/${name}`, {
+export const deleteMacroIndicator = async (name, symbol = null) => {
+  return await fetchAuth(`/api/macro_data/${name}${buildSymbolQuery(symbol)}`, {
     method: "DELETE",
   });
 };
@@ -70,9 +74,41 @@ export const getScoreRulesForMacroIndicator = async (indicatorName) => {
 };
 
 // Alias voor consistentie
-export const macroDataAdd = async (indicator) => {
+export const macroDataAdd = async (indicator, symbol = null) => {
   return await fetchAuth(`/api/macro_data`, {
     method: "POST",
-    body: JSON.stringify({ name: indicator }),
+    body: JSON.stringify({ name: indicator, symbol }),
   });
 };
+
+function buildPreferenceQuery(params = {}) {
+  const query = new URLSearchParams();
+  if (params.symbol) query.set("symbol", String(params.symbol).toUpperCase());
+  if (params.assetClass) query.set("asset_class", String(params.assetClass).toLowerCase());
+  if (params.scope) query.set("scope", String(params.scope));
+  if (params.preset) query.set("preset", String(params.preset));
+  const suffix = query.toString();
+  return suffix ? `?${suffix}` : "";
+}
+
+export const getMacroPreferences = async ({ symbol, assetClass } = {}) =>
+  await fetchAuth(`/api/macro/preferences${buildPreferenceQuery({ symbol, assetClass })}`, {
+    method: "GET",
+    forceFresh: true,
+  });
+
+export const bootstrapMacroPreferences = async ({
+  symbol = null,
+  assetClass = null,
+  scope = "asset_class",
+  preset = "recommended",
+} = {}) =>
+  await fetchAuth(
+    `/api/macro/preferences/bootstrap${buildPreferenceQuery({ symbol, assetClass, scope, preset })}`,
+    { method: "POST" }
+  );
+
+export const syncMacroPreferences = async (symbol) =>
+  await fetchAuth(`/api/macro/preferences/sync?symbol=${encodeURIComponent(String(symbol || "BTC").toUpperCase())}`, {
+    method: "POST",
+  });

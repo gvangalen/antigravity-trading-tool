@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import {
   fetchMacroDataByDay,
@@ -11,6 +11,9 @@ import {
   getScoreRulesForMacroIndicator,
   macroDataAdd,
   deleteMacroIndicator,
+  getMacroPreferences,
+  bootstrapMacroPreferences,
+  syncMacroPreferences,
 } from "@/lib/api/macro";
 
 const MACRO_INDICATOR_NAMES_CACHE_TTL_MS = 5 * 60 * 1000;
@@ -47,7 +50,7 @@ async function loadMacroIndicatorNamesShared(forceFresh = false) {
    - Volledig in lijn met Technical & Market
    - action = advies (single source of truth)
 ============================================================ */
-export function useMacroData(activeTab = "Dag") {
+export function useMacroData(activeTab = "Dag", symbol = "BTC") {
   /* ------------------------------------------------------------
      STATE
   ------------------------------------------------------------ */
@@ -59,11 +62,50 @@ export function useMacroData(activeTab = "Dag") {
     hasFreshMacroIndicatorNamesCache() ? macroIndicatorNamesCache : []
   ));
   const [scoreRules, setScoreRules] = useState([]);
+  const normalizedSymbol = useMemo(() => String(symbol || "BTC").toUpperCase(), [symbol]);
+  const [preferences, setPreferences] = useState({
+    scope: "default",
+    symbol: normalizedSymbol,
+    assetClass: null,
+    indicators: [],
+  });
+  const [preferencesLoading, setPreferencesLoading] = useState(true);
+  const [syncing, setSyncing] = useState(false);
+  const autoSyncedRef = useRef(new Set());
 
   /* ------------------------------------------------------------
      🔑 Helpers
   ------------------------------------------------------------ */
   const activeMacroIndicatorNames = macroData.map((m) => m.name);
+  const configuredMacroIndicatorNames = Array.isArray(preferences.indicators)
+    ? preferences.indicators.map((item) => item.indicator).filter(Boolean)
+    : [];
+  const assetClass = preferences.assetClass || null;
+
+  const loadPreferences = useCallback(async () => {
+    setPreferencesLoading(true);
+    try {
+      const payload = await getMacroPreferences({ symbol: normalizedSymbol });
+      setPreferences({
+        scope: payload?.scope || "default",
+        symbol: payload?.symbol || normalizedSymbol,
+        assetClass: payload?.asset_class || null,
+        indicators: Array.isArray(payload?.indicators) ? payload.indicators : [],
+      });
+      return payload;
+    } catch (err) {
+      console.error(`❌ Fout bij macro preferences (${normalizedSymbol}):`, err);
+      setPreferences({
+        scope: "default",
+        symbol: normalizedSymbol,
+        assetClass: null,
+        indicators: [],
+      });
+      return null;
+    } finally {
+      setPreferencesLoading(false);
+    }
+  }, [normalizedSymbol]);
 
   /* ------------------------------------------------------------
      📌 1. Indicatornamen laden
@@ -84,9 +126,39 @@ export function useMacroData(activeTab = "Dag") {
      📌 2. Macrodata laden per tab
   ------------------------------------------------------------ */
   useEffect(() => {
+    loadPreferences();
+  }, [loadPreferences]);
+
+  useEffect(() => {
     loadData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeTab]);
+  }, [activeTab, normalizedSymbol]);
+
+  useEffect(() => {
+    const hasConfiguredIndicators = configuredMacroIndicatorNames.length > 0;
+    const hasLoadedSignals = activeMacroIndicatorNames.length > 0;
+    const syncKey = `${normalizedSymbol}:${preferences.scope}:${configuredMacroIndicatorNames.join(",")}`;
+    if (!hasConfiguredIndicators || hasLoadedSignals) return;
+    if (preferencesLoading || loading || syncing) return;
+    if (autoSyncedRef.current.has(syncKey)) return;
+
+    autoSyncedRef.current.add(syncKey);
+    setSyncing(true);
+    syncMacroPreferences(normalizedSymbol)
+      .then(() => loadData({ preserveExisting: true }))
+      .catch((err) => {
+        console.error(`❌ Fout bij macro auto-sync (${normalizedSymbol}):`, err);
+      })
+      .finally(() => setSyncing(false));
+  }, [
+    activeMacroIndicatorNames.length,
+    configuredMacroIndicatorNames,
+    loading,
+    normalizedSymbol,
+    preferences.scope,
+    preferencesLoading,
+    syncing,
+  ]);
 
   async function loadData(options = {}) {
     const { preserveExisting = false } = options;
@@ -100,21 +172,21 @@ export function useMacroData(activeTab = "Dag") {
       switch (normalizedTab) {
         case "dag":
         case "day":
-          raw = await fetchMacroDataByDay();
+          raw = await fetchMacroDataByDay(normalizedSymbol);
           break;
         case "week":
-          raw = await fetchMacroDataByWeek();
+          raw = await fetchMacroDataByWeek(normalizedSymbol);
           break;
         case "maand":
         case "month":
-          raw = await fetchMacroDataByMonth();
+          raw = await fetchMacroDataByMonth(normalizedSymbol);
           break;
         case "kwartaal":
         case "quarter":
-          raw = await fetchMacroDataByQuarter();
+          raw = await fetchMacroDataByQuarter(normalizedSymbol);
           break;
         default:
-          raw = await fetchMacroDataByDay();
+          raw = await fetchMacroDataByDay(normalizedSymbol);
       }
 
       if (!Array.isArray(raw)) {
@@ -176,7 +248,8 @@ export function useMacroData(activeTab = "Dag") {
     }
 
     try {
-      await macroDataAdd(name);
+      await macroDataAdd(name, normalizedSymbol);
+      await loadPreferences();
       const refreshed = await loadData({ preserveExisting: true });
 
       if (!refreshed) {
@@ -221,12 +294,30 @@ export function useMacroData(activeTab = "Dag") {
     }
 
     try {
-      await deleteMacroIndicator(name);
+      await deleteMacroIndicator(name, normalizedSymbol);
+      await loadPreferences();
       setMacroData((prev) => prev.filter((m) => m.name !== name));
       return { ok: true };
     } catch (err) {
       console.error("❌ Fout bij verwijderen macro-indicator:", err);
       return { ok: false, reason: "request_failed", error: err };
+    }
+  }
+
+  async function applyRecommendedPreset(scope = "asset_class") {
+    const effectiveScope = scope === "default" ? "default" : scope === "symbol" ? "symbol" : "asset_class";
+    setSyncing(true);
+    try {
+      await bootstrapMacroPreferences({
+        symbol: normalizedSymbol,
+        assetClass,
+        scope: effectiveScope,
+      });
+      await loadPreferences();
+      await syncMacroPreferences(normalizedSymbol);
+      await loadData({ preserveExisting: true });
+    } finally {
+      setSyncing(false);
     }
   }
 
@@ -246,6 +337,12 @@ export function useMacroData(activeTab = "Dag") {
     removeMacroIndicator,
 
     activeMacroIndicatorNames,
+    configuredMacroIndicatorNames,
+    preferences,
+    preferencesLoading,
+    syncing,
+    assetClass,
+    applyRecommendedPreset,
     reload: loadData,
   };
 }

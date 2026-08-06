@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useVisibilityPolling } from "@/hooks/useVisibilityPolling";
 import { useTranslation } from "@/app/providers/I18nProvider";
 
@@ -20,6 +20,9 @@ import {
   marketIndicatorAdd,
   marketIndicatorDelete,
   getUserMarketIndicators,
+  getMarketPreferences,
+  bootstrapMarketPreferences,
+  syncMarketPreferences,
 } from "@/lib/api/market";
 
 import { getDailyScores } from "@/lib/api/scores";
@@ -94,11 +97,25 @@ export function useMarketData(symbol = "BTC", options = {}) {
 
   const [marketDayData, setMarketDayData] = useState([]);
   const [activeMarketIndicators, setActiveMarketIndicators] = useState([]);
+  const normalizedSymbol = useMemo(() => String(symbol || "BTC").toUpperCase(), [symbol]);
+  const [preferences, setPreferences] = useState({
+    scope: "default",
+    symbol: normalizedSymbol,
+    assetClass: null,
+    indicators: [],
+  });
+  const [preferencesLoading, setPreferencesLoading] = useState(true);
+  const [syncing, setSyncing] = useState(false);
+  const autoSyncedRef = useRef(new Set());
 
   const activeMarketIndicatorNames = useMemo(
     () => (activeMarketIndicators || []).map((i) => i?.name).filter(Boolean),
     [activeMarketIndicators]
   );
+  const configuredMarketIndicatorNames = Array.isArray(preferences.indicators)
+    ? preferences.indicators.map((item) => item.indicator).filter(Boolean)
+    : [];
+  const assetClass = preferences.assetClass || null;
 
   const [availableIndicators, setAvailableIndicators] = useState([]);
   const [selectedIndicator, setSelectedIndicator] = useState(null);
@@ -118,24 +135,53 @@ export function useMarketData(symbol = "BTC", options = {}) {
   const unwrapSettled = (result, fallback) =>
     result?.status === "fulfilled" ? result.value : fallback;
 
+  const loadPreferences = useCallback(async () => {
+    setPreferencesLoading(true);
+    try {
+      const payload = await getMarketPreferences({ symbol: normalizedSymbol });
+      setPreferences({
+        scope: payload?.scope || "default",
+        symbol: payload?.symbol || normalizedSymbol,
+        assetClass: payload?.asset_class || null,
+        indicators: Array.isArray(payload?.indicators) ? payload.indicators : [],
+      });
+      return payload;
+    } catch (err) {
+      console.error(`❌ Fout bij market preferences (${normalizedSymbol}):`, err);
+      setPreferences({
+        scope: "default",
+        symbol: normalizedSymbol,
+        assetClass: null,
+        indicators: [],
+      });
+      return null;
+    } finally {
+      setPreferencesLoading(false);
+    }
+  }, [normalizedSymbol]);
+
   /* --------------------------------------------------------
      INIT
   -------------------------------------------------------- */
   useEffect(() => {
     loadAll();
-  }, [symbol, timeframe]);
+  }, [normalizedSymbol, timeframe]);
+
+  useEffect(() => {
+    loadPreferences();
+  }, [loadPreferences]);
 
   useVisibilityPolling(loadLivePrice, {
     intervalMs: 60000,
     backgroundIntervalMs: 300000,
     runImmediately: false,
-    deps: [symbol],
+    deps: [normalizedSymbol],
   });
 
   /* --------------------------------------------------------
      LOAD ALLES
   -------------------------------------------------------- */
-  async function loadAll() {
+  const loadAll = useCallback(async () => {
     setLoading(true);
     setError("");
 
@@ -157,14 +203,14 @@ export function useMarketData(symbol = "BTC", options = {}) {
       }[normalizedTimeframe] || fetchMarketDayData;
 
       const settledResults = await Promise.allSettled([
-        shouldLoadSevenDayData ? fetchMarketData7d(symbol) : Promise.resolve(null),
-        shouldLoadForwardData ? fetchForwardReturnsWeek(symbol) : Promise.resolve(null),
-        shouldLoadForwardData ? fetchForwardReturnsMonth(symbol) : Promise.resolve(null),
-        shouldLoadForwardData ? fetchForwardReturnsQuarter(symbol) : Promise.resolve(null),
-        shouldLoadForwardData ? fetchForwardReturnsYear(symbol) : Promise.resolve(null),
-        shouldLoadDailyScores ? getDailyScores(symbol) : Promise.resolve(null),
-        shouldLoadMarketDayData ? marketPeriodRequest(symbol) : Promise.resolve(null),
-        shouldLoadIndicators ? getUserMarketIndicators(symbol) : Promise.resolve(null),
+        shouldLoadSevenDayData ? fetchMarketData7d(normalizedSymbol) : Promise.resolve(null),
+        shouldLoadForwardData ? fetchForwardReturnsWeek(normalizedSymbol) : Promise.resolve(null),
+        shouldLoadForwardData ? fetchForwardReturnsMonth(normalizedSymbol) : Promise.resolve(null),
+        shouldLoadForwardData ? fetchForwardReturnsQuarter(normalizedSymbol) : Promise.resolve(null),
+        shouldLoadForwardData ? fetchForwardReturnsYear(normalizedSymbol) : Promise.resolve(null),
+        shouldLoadDailyScores ? getDailyScores(normalizedSymbol) : Promise.resolve(null),
+        shouldLoadMarketDayData ? marketPeriodRequest(normalizedSymbol) : Promise.resolve(null),
+        shouldLoadIndicators ? getUserMarketIndicators(normalizedSymbol) : Promise.resolve(null),
         shouldLoadIndicators ? loadMarketIndicatorNamesShared() : Promise.resolve(null),
       ]);
 
@@ -241,16 +287,55 @@ export function useMarketData(symbol = "BTC", options = {}) {
       });
 
       if (failedResults.length > 0) {
-        console.warn(`⚠️ loadAll partial failures (${symbol}):`, failedResults);
+        console.warn(`⚠️ loadAll partial failures (${normalizedSymbol}):`, failedResults);
         setError(t?.pages?.market?.partialLoadError);
       }
     } catch (err) {
-      console.error(`❌ loadAll error (${symbol}):`, err);
+      console.error(`❌ loadAll error (${normalizedSymbol}):`, err);
       setError(t?.pages?.market?.loadError);
     } finally {
       setLoading(false);
     }
-  }
+  }, [
+    commonT,
+    normalizedSymbol,
+    shouldLoadDailyScores,
+    shouldLoadExtended,
+    shouldLoadForwardData,
+    shouldLoadIndicators,
+    shouldLoadMarketDayData,
+    shouldLoadSevenDayData,
+    t?.pages?.market?.loadError,
+    t?.pages?.market?.partialLoadError,
+    timeframe,
+  ]);
+
+  useEffect(() => {
+    const hasConfiguredIndicators = configuredMarketIndicatorNames.length > 0;
+    const hasLoadedSignals = activeMarketIndicatorNames.length > 0;
+    const syncKey = `${normalizedSymbol}:${preferences.scope}:${configuredMarketIndicatorNames.join(",")}`;
+    if (!hasConfiguredIndicators || hasLoadedSignals) return;
+    if (preferencesLoading || loading || syncing) return;
+    if (autoSyncedRef.current.has(syncKey)) return;
+
+    autoSyncedRef.current.add(syncKey);
+    setSyncing(true);
+    syncMarketPreferences(normalizedSymbol)
+      .then(() => loadAll())
+      .catch((err) => {
+        console.error(`❌ Fout bij market auto-sync (${normalizedSymbol}):`, err);
+      })
+      .finally(() => setSyncing(false));
+  }, [
+    activeMarketIndicatorNames.length,
+    configuredMarketIndicatorNames,
+    loadAll,
+    loading,
+    normalizedSymbol,
+    preferences.scope,
+    preferencesLoading,
+    syncing,
+  ]);
 
   /* --------------------------------------------------------
      SYNC HISTORY
@@ -275,7 +360,7 @@ export function useMarketData(symbol = "BTC", options = {}) {
     if (livePriceFetchingRef.current) return;
     livePriceFetchingRef.current = true;
     try {
-      setBtcLive(await fetchLatestPrice(symbol, options));
+      setBtcLive(await fetchLatestPrice(normalizedSymbol, options));
     } catch {
       setBtcLive(null);
     } finally {
@@ -303,11 +388,11 @@ export function useMarketData(symbol = "BTC", options = {}) {
      REFRESH HELPERS
   -------------------------------------------------------- */
   async function refreshDay() {
-    setMarketDayData((await fetchMarketDayData(symbol)) || []);
+    setMarketDayData((await fetchMarketDayData(normalizedSymbol)) || []);
   }
 
   async function refreshActive() {
-    setActiveMarketIndicators((await getUserMarketIndicators(symbol)) || []);
+    setActiveMarketIndicators((await getUserMarketIndicators(normalizedSymbol)) || []);
   }
 
   /* --------------------------------------------------------
@@ -321,7 +406,8 @@ export function useMarketData(symbol = "BTC", options = {}) {
       return;
     }
 
-    await marketIndicatorAdd(indicatorName, symbol);
+    await marketIndicatorAdd(indicatorName, normalizedSymbol);
+    await loadPreferences();
 
     // refresh
     await refreshActive();
@@ -339,7 +425,8 @@ export function useMarketData(symbol = "BTC", options = {}) {
     const normalized = String(indicatorName).trim().toLowerCase();
 
     // 1) API delete
-    await marketIndicatorDelete(normalized, symbol);
+    await marketIndicatorDelete(normalized, normalizedSymbol);
+    await loadPreferences();
 
     // 2) Optimistic state update (direct uit UI halen)
     setMarketDayData((prev) =>
@@ -359,6 +446,23 @@ export function useMarketData(symbol = "BTC", options = {}) {
     await refreshDay();
   }
 
+  async function applyRecommendedPreset(scope = "asset_class") {
+    const effectiveScope = scope === "default" ? "default" : scope === "symbol" ? "symbol" : "asset_class";
+    setSyncing(true);
+    try {
+      await bootstrapMarketPreferences({
+        symbol: normalizedSymbol,
+        assetClass,
+        scope: effectiveScope,
+      });
+      await loadPreferences();
+      await syncMarketPreferences(normalizedSymbol);
+      await loadAll();
+    } finally {
+      setSyncing(false);
+    }
+  }
+
   return {
     loading,
     error,
@@ -374,9 +478,15 @@ export function useMarketData(symbol = "BTC", options = {}) {
 
     activeMarketIndicators,
     activeMarketIndicatorNames,
+    configuredMarketIndicatorNames,
+    preferences,
+    preferencesLoading,
+    syncing,
+    assetClass,
 
     addMarket,
     removeMarket,
+    applyRecommendedPreset,
     syncHistory,
     reload: loadAll,
 

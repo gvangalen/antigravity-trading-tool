@@ -127,3 +127,35 @@ export const initializeAsset = (symbol) =>
     method: "POST",
     body: JSON.stringify({ symbol }),
   });
+
+function buildPreferenceQuery(params = {}) {
+  const query = new URLSearchParams();
+  if (params.symbol) query.set("symbol", String(params.symbol).toUpperCase());
+  if (params.assetClass) query.set("asset_class", String(params.assetClass).toLowerCase());
+  if (params.scope) query.set("scope", String(params.scope));
+  if (params.preset) query.set("preset", String(params.preset));
+  const suffix = query.toString();
+  return suffix ? `?${suffix}` : "";
+}
+
+export const getMarketPreferences = async ({ symbol, assetClass } = {}) =>
+  await fetchAuth(`/api/market/preferences${buildPreferenceQuery({ symbol, assetClass })}`, {
+    method: "GET",
+    forceFresh: true,
+  });
+
+export const bootstrapMarketPreferences = async ({
+  symbol = null,
+  assetClass = null,
+  scope = "asset_class",
+  preset = "recommended",
+} = {}) =>
+  await fetchAuth(
+    `/api/market/preferences/bootstrap${buildPreferenceQuery({ symbol, assetClass, scope, preset })}`,
+    { method: "POST" }
+  );
+
+export const syncMarketPreferences = async (symbol) =>
+  await fetchAuth(`/api/market/preferences/sync?symbol=${encodeURIComponent(String(symbol || "BTC").toUpperCase())}`, {
+    method: "POST",
+  });

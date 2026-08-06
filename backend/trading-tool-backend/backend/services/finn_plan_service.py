@@ -10237,8 +10237,14 @@ class FinnPlanService:
             result = await self.session.execute(text("""
                 SELECT COUNT(*) AS count
                 FROM user_indicator_configs
-                WHERE user_id = :user_id AND category = 'technical' AND indicator = :indicator
-            """), {"user_id": user_id, "indicator": indicator})
+                WHERE user_id = :user_id
+                  AND category = 'technical'
+                  AND indicator = :indicator
+                  AND (
+                    (:symbol IS NOT NULL AND (symbol = :symbol OR symbol IS NULL))
+                    OR (:symbol IS NULL AND symbol IS NULL)
+                  )
+            """), {"user_id": user_id, "indicator": indicator, "symbol": symbol})
             return int(result.scalar() or 0) > 0
         return False
 
@@ -20503,8 +20509,14 @@ class FinnPlanService:
                 config_rows = await self.session.execute(text("""
                     SELECT COUNT(*) AS count
                     FROM user_indicator_configs
-                    WHERE user_id = :user_id AND category = 'technical' AND indicator = :indicator
-                """), {"user_id": user_id, "indicator": indicator})
+                    WHERE user_id = :user_id
+                      AND category = 'technical'
+                      AND indicator = :indicator
+                      AND (
+                        (:symbol IS NOT NULL AND (symbol = :symbol OR symbol IS NULL))
+                        OR (:symbol IS NULL AND symbol IS NULL)
+                      )
+                """), {"user_id": user_id, "indicator": indicator, "symbol": symbol})
                 config_count = int(config_rows.scalar() or 0)
                 removed_ok = normalize_indicator_name(indicator) not in active_after_action and config_count == 0
             elif category == "macro":
@@ -20546,8 +20558,14 @@ class FinnPlanService:
             config_rows = await self.session.execute(text("""
                 SELECT COUNT(*) AS count
                 FROM user_indicator_configs
-                WHERE user_id = :user_id AND category = 'technical' AND indicator = :indicator
-            """), {"user_id": user_id, "indicator": indicator})
+                WHERE user_id = :user_id
+                  AND category = 'technical'
+                  AND indicator = :indicator
+                  AND (
+                    (:symbol IS NOT NULL AND (symbol = :symbol OR symbol IS NULL))
+                    OR (:symbol IS NULL AND symbol IS NULL)
+                  )
+            """), {"user_id": user_id, "indicator": indicator, "symbol": symbol})
             node_ok = int(config_rows.scalar() or 0) > 0
         verified = {
             "indicator_config": rules_ok and override_ok,

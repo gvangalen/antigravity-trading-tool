@@ -65,7 +65,12 @@ export default function MarketPage() {
     selectedIndicator,
     selectIndicator,
     btcLive,
-    loading
+    loading,
+    preferences,
+    preferencesLoading,
+    syncing,
+    assetClass,
+    applyRecommendedPreset,
   } = useMarketData(activeSymbol, { includeDailyScores: false });
   const marketStepComplete = Boolean(status?.has_market || activeMarketIndicatorNames?.length > 0);
   const marketNeedsSetup = status?.has_market === false && activeMarketIndicatorNames?.length === 0;
@@ -198,7 +203,12 @@ export default function MarketPage() {
               selectIndicator={selectIndicator}
               addMarketIndicator={addMarket}
               activeIndicators={activeMarketIndicatorNames || []}
-              symbol={activeSymbol}
+              preferences={preferences}
+              preferencesLoading={preferencesLoading}
+              syncing={syncing}
+              assetClass={assetClass}
+              assetSymbol={activeSymbol}
+              applyRecommendedPreset={applyRecommendedPreset}
             />
           </div>
         </div>

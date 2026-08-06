@@ -4,6 +4,7 @@ from backend.infrastructure.database import SessionLocal
 from backend.infrastructure.repositories.technical_data_repository import TechnicalDataRepository
 from backend.infrastructure.repositories.score_repository import ScoreRepository
 from backend.services.score_service import ScoreService
+from backend.services.asset_catalog_service import AssetCatalogService
 
 from backend.utils.technical_interpreter import fetch_technical_value
 import asyncio
@@ -37,15 +38,24 @@ async def _async_initialize(user_id: int, symbol: str):
             tech_repo = TechnicalDataRepository(db)
             score_repo = ScoreRepository(db)
             score_service = ScoreService(score_repo)
+            asset_scope = await AssetCatalogService(db).get_asset(symbol)
             
-            user_configs = await tech_repo.get_user_configs(user_id)
+            user_configs = await tech_repo.get_user_configs(
+                user_id,
+                symbol=symbol,
+                asset_class=asset_scope.get("asset_class"),
+            )
             if not user_configs:
                 # Fallback: copy BTC indicators if user has no custom config
                 btc_data = await tech_repo.get_latest_data_fallback(user_id, symbol="BTC")
                 for d in btc_data:
                     await tech_repo.ensure_user_config(user_id, d.indicator)
                 await db.commit()
-                user_configs = await tech_repo.get_user_configs(user_id)
+                user_configs = await tech_repo.get_user_configs(
+                    user_id,
+                    symbol=symbol,
+                    asset_class=asset_scope.get("asset_class"),
+                )
 
             # 3. Trigger a fresh scan for this symbol via ScoreService logic
             # The get_daily_scores method has the "Runtime Engine" built-in
