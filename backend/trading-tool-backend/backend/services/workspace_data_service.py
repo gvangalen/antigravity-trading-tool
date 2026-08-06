@@ -375,9 +375,9 @@ class WorkspaceDataService:
 
         quotes = await self.market.get_latest_snapshots(normalized)
         scores = await self.scores.fetch_daily_scores_batch(user_id, normalized)
+        quote_map = {str(row.symbol).upper(): row for row in quotes}
         session = getattr(self, "session", None)
         asset_catalog = await AssetCatalogService(session).get_assets(normalized) if session is not None else {}
-        quote_map = {str(row.symbol).upper(): row for row in quotes}
         rows = []
         for symbol in normalized:
             quote = quote_map.get(symbol)

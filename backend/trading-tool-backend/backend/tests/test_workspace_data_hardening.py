@@ -4,8 +4,9 @@ from datetime import date, datetime, timezone
 from decimal import Decimal
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, patch
 
+from backend.services.asset_catalog_service import AssetCatalogService
 from backend.services.intelligence_service import IntelligenceService
 from backend.services.workspace_data_service import (
     WorkspaceDataService,
@@ -154,6 +155,64 @@ def test_watchlist_uses_one_batch_for_quotes_and_one_for_scores():
     assert result["rows"][1]["score"] is None
     assert result["rows"][1]["score_status"] == "insufficient_data"
     assert result["rows"][0]["score_freshness"]["source"] == "daily_scores"
+
+
+def test_watchlist_materializes_quotes_before_asset_catalog_fallback_rolls_back():
+    class ExpiringQuote:
+        def __init__(self, symbol: str, price: Decimal):
+            self._symbol = symbol
+            self.price = price
+            self.change_24h = Decimal("1.5")
+            self.timestamp = datetime.now(timezone.utc)
+            self.expired = False
+
+        @property
+        def symbol(self):
+            if self.expired:
+                raise RuntimeError("quote expired after rollback")
+            return self._symbol
+
+    quote = ExpiringQuote("BTC", Decimal("64000"))
+    service = object.__new__(WorkspaceDataService)
+    service.session = object()
+    service.market = SimpleNamespace(get_latest_snapshots=AsyncMock(return_value=[quote]))
+    service.scores = SimpleNamespace(
+        fetch_daily_scores_batch=AsyncMock(
+            return_value={
+                "BTC": {
+                    "market_score": Decimal("40"),
+                    "macro_score": Decimal("50"),
+                    "technical_score": Decimal("60"),
+                    "report_date": date(2026, 8, 6),
+                }
+            }
+        )
+    )
+
+    class FakeAssetCatalogService:
+        def __init__(self, _session):
+            pass
+
+        async def get_assets(self, _symbols):
+            quote.expired = True
+            return {}
+
+    with patch("backend.services.workspace_data_service.AssetCatalogService", FakeAssetCatalogService):
+        result = asyncio.run(service._build_watchlist_payload(7, ["BTC"]))
+
+    assert result["rows"][0]["symbol"] == "BTC"
+    assert result["rows"][0]["price"] == 64000.0
+
+
+def test_asset_catalog_read_failure_rolls_back_before_default_fallback():
+    service = AssetCatalogService(AsyncMock())
+    service.repository = SimpleNamespace(get_assets=AsyncMock(side_effect=RuntimeError("db read failed")))
+
+    result = asyncio.run(service.get_assets(["btc", "ETH"]))
+
+    service.session.rollback.assert_awaited_once()
+    assert result["BTC"]["display_name"] == "Bitcoin"
+    assert result["ETH"]["display_name"] == "Ethereum"
 
 
 def test_workspace_reads_do_not_parallelize_a_shared_async_session():

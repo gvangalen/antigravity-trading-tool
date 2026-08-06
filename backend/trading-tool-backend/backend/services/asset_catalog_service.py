@@ -469,6 +469,10 @@ class AssetCatalogService:
         try:
             db_rows = await self.repository.get_assets(normalized)
         except Exception as exc:
+            try:
+                await self.session.rollback()
+            except Exception:
+                logger.debug("Asset catalog rollback after read failure also failed", exc_info=True)
             logger.warning("Asset catalog query failed; falling back to defaults: %s", exc)
             db_rows = {}
 
