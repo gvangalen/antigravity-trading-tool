@@ -161,9 +161,9 @@ def test_watchlist_materializes_quotes_before_asset_catalog_fallback_rolls_back(
     class ExpiringQuote:
         def __init__(self, symbol: str, price: Decimal):
             self._symbol = symbol
-            self.price = price
-            self.change_24h = Decimal("1.5")
-            self.timestamp = datetime.now(timezone.utc)
+            self._price = price
+            self._change_24h = Decimal("1.5")
+            self._timestamp = datetime.now(timezone.utc)
             self.expired = False
 
         @property
@@ -171,6 +171,24 @@ def test_watchlist_materializes_quotes_before_asset_catalog_fallback_rolls_back(
             if self.expired:
                 raise RuntimeError("quote expired after rollback")
             return self._symbol
+
+        @property
+        def price(self):
+            if self.expired:
+                raise RuntimeError("quote price expired after rollback")
+            return self._price
+
+        @property
+        def change_24h(self):
+            if self.expired:
+                raise RuntimeError("quote change expired after rollback")
+            return self._change_24h
+
+        @property
+        def timestamp(self):
+            if self.expired:
+                raise RuntimeError("quote timestamp expired after rollback")
+            return self._timestamp
 
     quote = ExpiringQuote("BTC", Decimal("64000"))
     service = object.__new__(WorkspaceDataService)

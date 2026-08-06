@@ -375,7 +375,14 @@ class WorkspaceDataService:
 
         quotes = await self.market.get_latest_snapshots(normalized)
         scores = await self.scores.fetch_daily_scores_batch(user_id, normalized)
-        quote_map = {str(row.symbol).upper(): row for row in quotes}
+        quote_map = {
+            str(row.symbol).upper(): {
+                "price": _number(getattr(row, "price", None)),
+                "change_24h": _number(getattr(row, "change_24h", None)),
+                "timestamp": getattr(row, "timestamp", None),
+            }
+            for row in quotes
+        }
         session = getattr(self, "session", None)
         asset_catalog = await AssetCatalogService(session).get_assets(normalized) if session is not None else {}
         rows = []
@@ -402,12 +409,12 @@ class WorkspaceDataService:
                 "asset_class": asset_meta.get("asset_class") or "unknown",
                 "logo_url": asset_meta.get("logo_url"),
                 "tradingview_symbol": asset_meta.get("tradingview_symbol"),
-                "price": _number(getattr(quote, "price", None)),
-                "change_24h": _number(getattr(quote, "change_24h", None)),
+                "price": quote.get("price") if quote else None,
+                "change_24h": quote.get("change_24h") if quote else None,
                 "score": combined,
                 "score_period": "day",
                 "score_status": "available" if combined is not None else "insufficient_data",
-                "quote": _freshness(getattr(quote, "timestamp", None), STALE_AFTER_SECONDS["quote"], "market_data"),
+                "quote": _freshness(quote.get("timestamp") if quote else None, STALE_AFTER_SECONDS["quote"], "market_data"),
                 "score_freshness": score_freshness,
             })
         return {
