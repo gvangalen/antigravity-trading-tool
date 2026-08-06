@@ -1,17 +1,139 @@
+from types import SimpleNamespace
+
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, and_, func, delete, Date
+from sqlalchemy import select, and_, func, delete, Date, text
 from datetime import datetime, timedelta
-from typing import List, Optional
+from typing import Any, List, Optional
 
 from backend.infrastructure.models import TechnicalDataIndicator, TechnicalIndicatorRule, Indicator, UserIndicatorConfig
 
 class TechnicalDataRepository:
     def __init__(self, session: AsyncSession):
         self.session = session
+        self._user_config_columns_cache: Optional[set[str]] = None
 
     @staticmethod
     def _eq_or_null(column, value):
         return column.is_(None) if value is None else column == value
+
+    async def _get_user_config_columns(self) -> set[str]:
+        if self._user_config_columns_cache is not None:
+            return self._user_config_columns_cache
+
+        try:
+            result = await self.session.execute(
+                text(
+                    """
+                    SELECT column_name
+                    FROM information_schema.columns
+                    WHERE table_schema = 'public'
+                      AND table_name = 'user_indicator_configs'
+                    """
+                )
+            )
+            columns = {str(column_name) for column_name in result.scalars().all()}
+        except Exception:
+            columns = set()
+
+        if not columns:
+            columns = {
+                "id",
+                "user_id",
+                "indicator",
+                "category",
+                "priority",
+                "enabled",
+                "created_at",
+            }
+
+        self._user_config_columns_cache = columns
+        return columns
+
+    async def _supports_asset_scopes(self) -> bool:
+        columns = await self._get_user_config_columns()
+        return "symbol" in columns and "asset_class" in columns
+
+    @staticmethod
+    def _normalize_scope(symbol: Optional[str], asset_class: Optional[str]) -> tuple[Optional[str], Optional[str]]:
+        normalized_symbol = str(symbol or "").strip().upper() or None
+        normalized_asset_class = str(asset_class or "").strip().lower() or None
+        return normalized_symbol, normalized_asset_class
+
+    @staticmethod
+    def _row_to_user_config(row: Any, fallback_category: str) -> SimpleNamespace:
+        mapping = dict(row._mapping if hasattr(row, "_mapping") else row)
+        return SimpleNamespace(
+            id=mapping.get("id"),
+            user_id=mapping.get("user_id"),
+            indicator=mapping.get("indicator"),
+            category=mapping.get("category") or fallback_category,
+            symbol=mapping.get("symbol"),
+            asset_class=mapping.get("asset_class"),
+            priority=mapping.get("priority", 100),
+            enabled=mapping.get("enabled", True),
+            created_at=mapping.get("created_at"),
+        )
+
+    async def _fetch_scope_configs(
+        self,
+        user_id: int,
+        *,
+        category: str,
+        symbol: Optional[str],
+        asset_class: Optional[str],
+        enabled_only: bool,
+    ) -> List[SimpleNamespace]:
+        columns = await self._get_user_config_columns()
+        supports_asset_scopes = await self._supports_asset_scopes()
+
+        select_fields = [
+            "id",
+            "user_id",
+            "indicator",
+            "priority",
+            "enabled",
+            "created_at",
+        ]
+        if "category" in columns:
+            select_fields.append("category")
+        if "symbol" in columns:
+            select_fields.append("symbol")
+        if "asset_class" in columns:
+            select_fields.append("asset_class")
+
+        conditions = ["user_id = :user_id"]
+        params: dict[str, Any] = {"user_id": user_id}
+
+        if "category" in columns:
+            conditions.append("category = :category")
+            params["category"] = category
+
+        if enabled_only and "enabled" in columns:
+            conditions.append("enabled = TRUE")
+
+        if supports_asset_scopes:
+            if symbol is None:
+                conditions.append("symbol IS NULL")
+            else:
+                conditions.append("symbol = :symbol")
+                params["symbol"] = symbol
+
+            if asset_class is None:
+                conditions.append("asset_class IS NULL")
+            else:
+                conditions.append("asset_class = :asset_class")
+                params["asset_class"] = asset_class
+
+        query = text(
+            f"""
+            SELECT {", ".join(select_fields)}
+            FROM user_indicator_configs
+            WHERE {" AND ".join(conditions)}
+            ORDER BY priority ASC, id ASC
+            """
+        )
+        result = await self.session.execute(query, params)
+        return [self._row_to_user_config(row, category) for row in result.fetchall()]
 
     async def get_user_configs(
         self,
@@ -20,49 +142,46 @@ class TechnicalDataRepository:
         symbol: Optional[str] = None,
         asset_class: Optional[str] = None,
     ) -> List[UserIndicatorConfig]:
-        normalized_symbol = str(symbol or "").strip().upper() or None
-        normalized_asset_class = str(asset_class or "").strip().lower() or None
+        normalized_symbol, normalized_asset_class = self._normalize_scope(symbol, asset_class)
+
+        if not await self._supports_asset_scopes():
+            return await self._fetch_scope_configs(
+                user_id,
+                category=category,
+                symbol=None,
+                asset_class=None,
+                enabled_only=True,
+            )
 
         if normalized_symbol:
-            symbol_stmt = select(UserIndicatorConfig).where(
-                and_(
-                    UserIndicatorConfig.user_id == user_id,
-                    UserIndicatorConfig.category == category,
-                    UserIndicatorConfig.enabled == True,
-                    UserIndicatorConfig.symbol == normalized_symbol,
-                )
-            ).order_by(UserIndicatorConfig.priority.asc(), UserIndicatorConfig.id.asc())
-            symbol_result = await self.session.execute(symbol_stmt)
-            symbol_rows = list(symbol_result.scalars().all())
+            symbol_rows = await self._fetch_scope_configs(
+                user_id,
+                category=category,
+                symbol=normalized_symbol,
+                asset_class=normalized_asset_class,
+                enabled_only=True,
+            )
             if symbol_rows:
                 return symbol_rows
 
         if normalized_asset_class:
-            class_stmt = select(UserIndicatorConfig).where(
-                and_(
-                    UserIndicatorConfig.user_id == user_id,
-                    UserIndicatorConfig.category == category,
-                    UserIndicatorConfig.enabled == True,
-                    UserIndicatorConfig.symbol.is_(None),
-                    UserIndicatorConfig.asset_class == normalized_asset_class,
-                )
-            ).order_by(UserIndicatorConfig.priority.asc(), UserIndicatorConfig.id.asc())
-            class_result = await self.session.execute(class_stmt)
-            class_rows = list(class_result.scalars().all())
+            class_rows = await self._fetch_scope_configs(
+                user_id,
+                category=category,
+                symbol=None,
+                asset_class=normalized_asset_class,
+                enabled_only=True,
+            )
             if class_rows:
                 return class_rows
 
-        default_stmt = select(UserIndicatorConfig).where(
-            and_(
-                UserIndicatorConfig.user_id == user_id,
-                UserIndicatorConfig.category == category,
-                UserIndicatorConfig.enabled == True,
-                UserIndicatorConfig.symbol.is_(None),
-                UserIndicatorConfig.asset_class.is_(None),
-            )
-        ).order_by(UserIndicatorConfig.priority.asc(), UserIndicatorConfig.id.asc())
-        default_result = await self.session.execute(default_stmt)
-        return list(default_result.scalars().all())
+        return await self._fetch_scope_configs(
+            user_id,
+            category=category,
+            symbol=None,
+            asset_class=None,
+            enabled_only=True,
+        )
 
     async def ensure_user_config(
         self,
@@ -73,38 +192,122 @@ class TechnicalDataRepository:
         asset_class: Optional[str] = None,
         priority: int = 100,
     ):
-        normalized_symbol = str(symbol or "").strip().upper() or None
-        normalized_asset_class = str(asset_class or "").strip().lower() or None
-        stmt = select(UserIndicatorConfig).where(
-            and_(
-                UserIndicatorConfig.user_id == user_id,
-                UserIndicatorConfig.indicator == indicator,
-                UserIndicatorConfig.category == category,
-                self._eq_or_null(UserIndicatorConfig.symbol, normalized_symbol),
-                self._eq_or_null(UserIndicatorConfig.asset_class, normalized_asset_class),
-            )
-        )
-        res = await self.session.execute(stmt)
-        existing = res.scalars().first()
-        if existing:
-            if existing.enabled is not True:
-                existing.enabled = True
-            existing.priority = priority
-            await self.session.flush()
-            return existing
+        normalized_symbol, normalized_asset_class = self._normalize_scope(symbol, asset_class)
+        columns = await self._get_user_config_columns()
+        supports_asset_scopes = await self._supports_asset_scopes()
 
-        new_conf = UserIndicatorConfig(
+        conditions = [
+            "user_id = :user_id",
+            "indicator = :indicator",
+        ]
+        params: dict[str, Any] = {
+            "user_id": user_id,
+            "indicator": indicator,
+        }
+        if "category" in columns:
+            conditions.append("category = :category")
+            params["category"] = category
+        if supports_asset_scopes:
+            if normalized_symbol is None:
+                conditions.append("symbol IS NULL")
+            else:
+                conditions.append("symbol = :symbol")
+                params["symbol"] = normalized_symbol
+
+            if normalized_asset_class is None:
+                conditions.append("asset_class IS NULL")
+            else:
+                conditions.append("asset_class = :asset_class")
+                params["asset_class"] = normalized_asset_class
+
+        existing_query = text(
+            f"""
+            SELECT id, user_id, indicator, priority, enabled, created_at
+            {", category" if "category" in columns else ""}
+            {", symbol" if "symbol" in columns else ""}
+            {", asset_class" if "asset_class" in columns else ""}
+            FROM user_indicator_configs
+            WHERE {" AND ".join(conditions)}
+            ORDER BY id ASC
+            LIMIT 1
+            """
+        )
+        existing_result = await self.session.execute(existing_query, params)
+        existing = existing_result.first()
+        if existing:
+            update_sets = ["priority = :priority"]
+            update_params = dict(params)
+            update_params["priority"] = priority
+            if "enabled" in columns:
+                update_sets.append("enabled = TRUE")
+
+            await self.session.execute(
+                text(
+                    f"""
+                    UPDATE user_indicator_configs
+                    SET {", ".join(update_sets)}
+                    WHERE id = :config_id
+                    """
+                ),
+                {
+                    **update_params,
+                    "config_id": existing._mapping["id"],
+                },
+            )
+            await self.session.flush()
+            return SimpleNamespace(
+                **dict(existing._mapping),
+                category=(existing._mapping.get("category") or category),
+                symbol=existing._mapping.get("symbol", normalized_symbol if supports_asset_scopes else None),
+                asset_class=existing._mapping.get("asset_class", normalized_asset_class if supports_asset_scopes else None),
+                priority=priority,
+                enabled=True,
+            )
+
+        insert_columns = ["user_id", "indicator", "priority"]
+        insert_values = [":user_id", ":indicator", ":priority"]
+        insert_params: dict[str, Any] = {
+            "user_id": user_id,
+            "indicator": indicator,
+            "priority": priority,
+        }
+        if "category" in columns:
+            insert_columns.append("category")
+            insert_values.append(":category")
+            insert_params["category"] = category
+        if "enabled" in columns:
+            insert_columns.append("enabled")
+            insert_values.append("TRUE")
+        if "symbol" in columns:
+            insert_columns.append("symbol")
+            insert_values.append(":symbol")
+            insert_params["symbol"] = normalized_symbol
+        if "asset_class" in columns:
+            insert_columns.append("asset_class")
+            insert_values.append(":asset_class")
+            insert_params["asset_class"] = normalized_asset_class
+
+        await self.session.execute(
+            text(
+                f"""
+                INSERT INTO user_indicator_configs ({", ".join(insert_columns)})
+                VALUES ({", ".join(insert_values)})
+                """
+            ),
+            insert_params,
+        )
+        await self.session.flush()
+        return SimpleNamespace(
+            id=None,
             user_id=user_id,
             indicator=indicator,
             category=category,
-            symbol=normalized_symbol,
-            asset_class=normalized_asset_class,
+            symbol=normalized_symbol if supports_asset_scopes else None,
+            asset_class=normalized_asset_class if supports_asset_scopes else None,
             priority=priority,
             enabled=True,
+            created_at=None,
         )
-        self.session.add(new_conf)
-        await self.session.flush()
-        return new_conf
 
     async def remove_user_config(
         self,
@@ -114,18 +317,42 @@ class TechnicalDataRepository:
         symbol: Optional[str] = None,
         asset_class: Optional[str] = None,
     ):
-        normalized_symbol = str(symbol or "").strip().upper() or None
-        normalized_asset_class = str(asset_class or "").strip().lower() or None
-        stmt = delete(UserIndicatorConfig).where(
-            and_(
-                UserIndicatorConfig.user_id == user_id,
-                UserIndicatorConfig.indicator == indicator,
-                UserIndicatorConfig.category == category,
-                self._eq_or_null(UserIndicatorConfig.symbol, normalized_symbol),
-                self._eq_or_null(UserIndicatorConfig.asset_class, normalized_asset_class),
-            )
+        normalized_symbol, normalized_asset_class = self._normalize_scope(symbol, asset_class)
+        columns = await self._get_user_config_columns()
+        supports_asset_scopes = await self._supports_asset_scopes()
+
+        conditions = [
+            "user_id = :user_id",
+            "indicator = :indicator",
+        ]
+        params: dict[str, Any] = {
+            "user_id": user_id,
+            "indicator": indicator,
+        }
+        if "category" in columns:
+            conditions.append("category = :category")
+            params["category"] = category
+        if supports_asset_scopes:
+            if normalized_symbol is None:
+                conditions.append("symbol IS NULL")
+            else:
+                conditions.append("symbol = :symbol")
+                params["symbol"] = normalized_symbol
+            if normalized_asset_class is None:
+                conditions.append("asset_class IS NULL")
+            else:
+                conditions.append("asset_class = :asset_class")
+                params["asset_class"] = normalized_asset_class
+
+        await self.session.execute(
+            text(
+                f"""
+                DELETE FROM user_indicator_configs
+                WHERE {" AND ".join(conditions)}
+                """
+            ),
+            params,
         )
-        await self.session.execute(stmt)
 
     async def list_scope_configs(
         self,
@@ -135,18 +362,17 @@ class TechnicalDataRepository:
         symbol: Optional[str] = None,
         asset_class: Optional[str] = None,
     ) -> List[UserIndicatorConfig]:
-        normalized_symbol = str(symbol or "").strip().upper() or None
-        normalized_asset_class = str(asset_class or "").strip().lower() or None
-        stmt = select(UserIndicatorConfig).where(
-            and_(
-                UserIndicatorConfig.user_id == user_id,
-                UserIndicatorConfig.category == category,
-                self._eq_or_null(UserIndicatorConfig.symbol, normalized_symbol),
-                self._eq_or_null(UserIndicatorConfig.asset_class, normalized_asset_class),
-            )
-        ).order_by(UserIndicatorConfig.priority.asc(), UserIndicatorConfig.id.asc())
-        result = await self.session.execute(stmt)
-        return list(result.scalars().all())
+        normalized_symbol, normalized_asset_class = self._normalize_scope(symbol, asset_class)
+        if not await self._supports_asset_scopes():
+            normalized_symbol = None
+            normalized_asset_class = None
+        return await self._fetch_scope_configs(
+            user_id,
+            category=category,
+            symbol=normalized_symbol,
+            asset_class=normalized_asset_class,
+            enabled_only=False,
+        )
 
     async def replace_scope_configs(
         self,
@@ -157,18 +383,38 @@ class TechnicalDataRepository:
         symbol: Optional[str] = None,
         asset_class: Optional[str] = None,
     ) -> List[UserIndicatorConfig]:
-        normalized_symbol = str(symbol or "").strip().upper() or None
-        normalized_asset_class = str(asset_class or "").strip().lower() or None
+        normalized_symbol, normalized_asset_class = self._normalize_scope(symbol, asset_class)
+        if not await self._supports_asset_scopes():
+            normalized_symbol = None
+            normalized_asset_class = None
 
-        delete_stmt = delete(UserIndicatorConfig).where(
-            and_(
-                UserIndicatorConfig.user_id == user_id,
-                UserIndicatorConfig.category == category,
-                self._eq_or_null(UserIndicatorConfig.symbol, normalized_symbol),
-                self._eq_or_null(UserIndicatorConfig.asset_class, normalized_asset_class),
-            )
+        columns = await self._get_user_config_columns()
+        conditions = ["user_id = :user_id"]
+        params: dict[str, Any] = {"user_id": user_id}
+        if "category" in columns:
+            conditions.append("category = :category")
+            params["category"] = category
+        if await self._supports_asset_scopes():
+            if normalized_symbol is None:
+                conditions.append("symbol IS NULL")
+            else:
+                conditions.append("symbol = :symbol")
+                params["symbol"] = normalized_symbol
+            if normalized_asset_class is None:
+                conditions.append("asset_class IS NULL")
+            else:
+                conditions.append("asset_class = :asset_class")
+                params["asset_class"] = normalized_asset_class
+
+        await self.session.execute(
+            text(
+                f"""
+                DELETE FROM user_indicator_configs
+                WHERE {" AND ".join(conditions)}
+                """
+            ),
+            params,
         )
-        await self.session.execute(delete_stmt)
 
         created: List[UserIndicatorConfig] = []
         for indicator, priority in indicators:
