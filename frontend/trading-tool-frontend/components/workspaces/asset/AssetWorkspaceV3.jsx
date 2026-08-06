@@ -1521,6 +1521,7 @@ function EvidenceSection({
   toolbar,
   renderExpandedActions,
   emptyState,
+  emptyAction,
   symbol,
   period,
   locale,
@@ -1584,8 +1585,9 @@ function EvidenceSection({
             );
           })
         ) : (
-          <div className="px-5 py-12 text-center text-sm font-semibold text-slate-400">
-            {emptyState}
+          <div className="px-5 py-12 text-center">
+            <div className="text-sm font-semibold text-slate-400">{emptyState}</div>
+            {emptyAction ? <div className="mt-4">{emptyAction}</div> : null}
           </div>
         )}
       </div>
@@ -2047,6 +2049,18 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
         : visibleScore(rows) !== null || isFallbackWorkspace
           ? ui.fallbackReady
           : defaultEmptyState;
+    const showEmptyAction = (score, rows, loadingState) =>
+      !loadingState && !isFallbackWorkspace && visibleScore(rows) === null && rows.length === 0 && !Number.isFinite(Number(score));
+    const emptyActionButton = (category) => (
+      <button
+        type="button"
+        onClick={() => openSearch({ mode: "indicator", category })}
+        className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-[10px] font-black uppercase tracking-[0.16em] text-slate-700 transition hover:border-blue-200 hover:text-blue-600"
+      >
+        <Plus size={12} />
+        {ui.addIndicator}
+      </button>
+    );
 
     return [
       {
@@ -2058,6 +2072,7 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
         insight: buildSectionInsight("market", visibleScore(marketRows), ui),
         rows: marketRows,
         emptyState: fallbackEmptyState(market?.score, marketRows, marketLoading, ui.marketEmpty),
+        emptyAction: showEmptyAction(market?.score, marketRows, marketLoading) ? emptyActionButton("market") : null,
       },
       {
         id: "macro",
@@ -2068,6 +2083,7 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
         insight: buildSectionInsight("macro", visibleScore(macroRows), ui),
         rows: macroRows,
         emptyState: fallbackEmptyState(macro?.score, macroRows, macroLoading, ui.macroEmpty),
+        emptyAction: showEmptyAction(macro?.score, macroRows, macroLoading) ? emptyActionButton("macro") : null,
       },
       {
         id: "technical",
@@ -2078,6 +2094,7 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
         insight: buildSectionInsight("technical", visibleScore(technicalRows), ui),
         rows: technicalRows,
         emptyState: fallbackEmptyState(technical?.score, technicalRows, technicalLoading, ui.technicalEmpty),
+        emptyAction: showEmptyAction(technical?.score, technicalRows, technicalLoading) ? emptyActionButton("technical") : null,
       },
     ];
   }, [activeSymbol, hiddenIndicatorKeys, isFallbackWorkspace, locale, macro, macroData, macroLoading, market, marketDayData, marketLoading, technical, technicalData, technicalLoading, ui]);
@@ -2192,6 +2209,7 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
             expandedRowKey={expandedRowKey}
             onToggleRow={(key) => setExpandedRowKey((current) => (current === key ? null : key))}
             emptyState={section.emptyState}
+            emptyAction={section.emptyAction}
             symbol={activeSymbol}
             period={
               section.id === "market"
