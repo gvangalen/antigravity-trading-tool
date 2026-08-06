@@ -7,7 +7,7 @@ import { fetchAssetWorkspace } from "@/lib/api/workspace";
 import { fetchLatestPrice } from "@/lib/api/market";
 import { getDailyScores } from "@/lib/api/scores";
 
-const WORKSPACE_REQUEST_TIMEOUT_MS = 8000;
+const WORKSPACE_REQUEST_TIMEOUT_MS = 15000;
 const WORKSPACE_CACHE_TTL_MS = 60_000;
 
 const workspaceCache = new Map();
@@ -113,7 +113,12 @@ export function useAssetWorkspaceData(symbol, periods, watchlistSymbols) {
   const [error, setError] = useState(null);
   const [isFallbackWorkspace, setIsFallbackWorkspace] = useState(false);
   const fallbackStartedAtRef = useRef(null);
+  const latestWorkspaceRef = useRef(cachedWorkspace || null);
   const assetSymbol = String(symbol || "BTC").toUpperCase();
+
+  useEffect(() => {
+    latestWorkspaceRef.current = workspace || null;
+  }, [workspace]);
 
   function trackWorkspaceTelemetry(eventName, metadata = {}) {
     void trackAssistantEvent({
@@ -161,6 +166,22 @@ export function useAssetWorkspaceData(symbol, periods, watchlistSymbols) {
       setIsFallbackWorkspace(false);
       return payload;
     } catch (nextError) {
+      const liveWorkspace = latestWorkspaceRef.current;
+      if (liveWorkspace) {
+        if (!fallbackStartedAtRef.current) {
+          fallbackStartedAtRef.current = Date.now();
+          trackWorkspaceTelemetry("asset_workspace_stale_workspace_retained", {
+            error_name: nextError?.name || "unknown_error",
+            reason: nextError?.name === "AbortError" ? "workspace_timeout" : "workspace_request_failed",
+          });
+        }
+        setWorkspace(liveWorkspace);
+        setWatchlist(Array.isArray(liveWorkspace?.watchlist?.rows) ? liveWorkspace.watchlist.rows : []);
+        setError(nextError);
+        setIsFallbackWorkspace(true);
+        return liveWorkspace;
+      }
+
       const [quoteResult, dailyScoresResult] = await Promise.allSettled([
         fetchLatestPrice(symbol, { forceFresh: false }),
         getDailyScores(symbol),
