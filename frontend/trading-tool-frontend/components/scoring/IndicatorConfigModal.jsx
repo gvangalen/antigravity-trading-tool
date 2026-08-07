@@ -267,6 +267,7 @@ export default function IndicatorConfigModal({
   indicator,
   assetSymbol,
   mode = "add",
+  showSuccessSnackbar = true,
   onClose,
   onSubmitAction,
   onCompleted,
@@ -436,12 +437,14 @@ export default function IndicatorConfigModal({
         draft,
       });
 
-      showSnackbar(
-        mode === "edit"
-          ? copy.saved.replace("{indicator}", indicatorLabel).replace("{asset}", assetSymbol).replace("{category}", categoryLabel)
-          : copy.added.replace("{indicator}", indicatorLabel).replace("{asset}", assetSymbol).replace("{category}", categoryLabel),
-        "success"
-      );
+      if (showSuccessSnackbar) {
+        showSnackbar(
+          mode === "edit"
+            ? copy.saved.replace("{indicator}", indicatorLabel).replace("{asset}", assetSymbol).replace("{category}", categoryLabel)
+            : copy.added.replace("{indicator}", indicatorLabel).replace("{asset}", assetSymbol).replace("{category}", categoryLabel),
+          "success"
+        );
+      }
 
       onCompleted?.({
         indicator,
@@ -471,6 +474,7 @@ export default function IndicatorConfigModal({
     onCompleted,
     onSubmitAction,
     saving,
+    showSuccessSnackbar,
     showSnackbar,
   ]);
 

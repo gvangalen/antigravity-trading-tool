@@ -386,10 +386,11 @@ const FinnCommandCenter = forwardRef(function FinnCommandCenter(
         indicator={pendingIndicator?.indicatorName}
         assetSymbol={activeSymbol}
         mode="add"
+        showSuccessSnackbar={false}
         onClose={() => setPendingIndicator(null)}
         onSubmitAction={async ({ category, indicator, assetSymbol }) => {
           if (category === "technical") return technicalDataAdd(indicator, assetSymbol);
-          if (category === "macro") return macroDataAdd(indicator);
+          if (category === "macro") return macroDataAdd(indicator, assetSymbol);
           if (category === "market") return marketIndicatorAdd(indicator, assetSymbol);
         }}
         onCompleted={({ category, indicator, assetSymbol }) => {

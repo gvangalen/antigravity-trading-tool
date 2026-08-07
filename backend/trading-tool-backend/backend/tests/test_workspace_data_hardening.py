@@ -157,6 +157,43 @@ def test_watchlist_uses_one_batch_for_quotes_and_one_for_scores():
     assert result["rows"][0]["score_freshness"]["source"] == "daily_scores"
 
 
+def test_workspace_macro_rows_follow_active_asset_symbol():
+    service = object.__new__(WorkspaceDataService)
+    service.macro = SimpleNamespace(
+        get_active_day_macro_data=AsyncMock(
+            return_value=[
+                SimpleNamespace(
+                    name="fear_greed_index",
+                    value=Decimal("42"),
+                    score=Decimal("55"),
+                    trend="neutral",
+                    interpretation="ok",
+                    action="hold",
+                    timestamp=datetime(2026, 8, 7, tzinfo=timezone.utc),
+                )
+            ]
+        ),
+        _get_data_by_days=AsyncMock(return_value=[]),
+    )
+
+    rows = asyncio.run(service._macro_rows(7, "BTC", "day"))
+
+    service.macro.get_active_day_macro_data.assert_awaited_once_with(7, "BTC")
+    assert rows == [
+        {
+            "name": "fear_greed_index",
+            "value": 42.0,
+            "score": 55.0,
+            "trend": "neutral",
+            "interpretation": "ok",
+            "action": "hold",
+            "timestamp": "2026-08-07T00:00:00+00:00",
+            "sample_size": 1,
+            "period_aggregate": False,
+        }
+    ]
+
+
 def test_watchlist_materializes_quotes_before_asset_catalog_fallback_rolls_back():
     class ExpiringQuote:
         def __init__(self, symbol: str, price: Decimal):

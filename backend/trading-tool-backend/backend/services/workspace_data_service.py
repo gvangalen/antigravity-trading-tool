@@ -288,7 +288,7 @@ class WorkspaceDataService:
         # Repositories share this request's AsyncSession. SQLAlchemy sessions may
         # not provision or execute multiple connections concurrently.
         market_rows = await self._market_rows(user_id, symbol, periods["market"])
-        macro_rows = await self._macro_rows(user_id, periods["macro"])
+        macro_rows = await self._macro_rows(user_id, symbol, periods["macro"])
         technical_rows = await self._technical_rows(user_id, symbol, periods["technical"])
         quote = await self.market.get_latest_snapshot(symbol)
         regime = await self.intelligence.get_market_intelligence(user_id, symbol)
@@ -444,7 +444,7 @@ class WorkspaceDataService:
             rows = await self._market_rows(user_id, symbol, period)
             source = "market_data_indicators"
         elif category == "macro":
-            rows = await self._macro_rows(user_id, period)
+            rows = await self._macro_rows(user_id, symbol, period)
             source = "macro_data"
         else:
             rows = await self._technical_rows(user_id, symbol, period)
@@ -481,12 +481,12 @@ class WorkspaceDataService:
             rows = await self.market.get_period_indicators(user_id, symbol, PERIOD_DAYS[period])
             return _aggregate_by_name(rows, "name", _market_row)
 
-    async def _macro_rows(self, user_id: int, period: str) -> list[dict[str, Any]]:
+    async def _macro_rows(self, user_id: int, symbol: str, period: str) -> list[dict[str, Any]]:
         if period == "day":
-            rows = await self.macro.get_active_day_macro_data(user_id)
+            rows = await self.macro.get_active_day_macro_data(user_id, symbol)
             return [_macro_row(row) for row in _latest_by_name(rows, "name")]
         else:
-            rows = await self.macro._get_data_by_days(user_id, PERIOD_DAYS[period])
+            rows = await self.macro._get_data_by_days(user_id, PERIOD_DAYS[period], symbol=symbol)
             return _aggregate_by_name(rows, "name", _macro_row)
 
     async def _technical_rows(self, user_id: int, symbol: str, period: str) -> list[dict[str, Any]]:
