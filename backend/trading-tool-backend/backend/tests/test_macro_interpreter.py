@@ -1,4 +1,12 @@
-from backend.utils.macro_interpreter import fetch_macro_value
+import pytest
+
+from backend.utils.macro_interpreter import (
+    DXY_BASE_FACTOR,
+    DXY_COMPONENT_WEIGHTS,
+    _fetch_dxy_from_twelve_data,
+    _fred_csv_url,
+    fetch_macro_value,
+)
 
 
 class _Response:
@@ -12,79 +20,138 @@ class _Response:
         return self._payload
 
 
-def test_sp500_yahoo_falls_back_to_gspc_when_primary_response_has_no_value(monkeypatch):
-    responses = [
-        _Response({"chart": {"result": [{"meta": {"regularMarketPrice": None}, "indicators": {"quote": [{"close": [None]}]}}]}}),
-        _Response({"chart": {"result": [{"meta": {"regularMarketPrice": 7751.9}}]}}),
-    ]
+class _ResponseText:
+    def __init__(self, text):
+        self.text = text
 
-    def fake_get(url, timeout=10, headers=None):
-        return responses.pop(0)
-
-    monkeypatch.setattr("backend.utils.macro_interpreter._http_get", fake_get)
-
-    result = fetch_macro_value(
-        "sp500",
-        source="yahoo",
-        link="https://query1.finance.yahoo.com/v8/finance/chart/%5ESPX",
-    )
-
-    assert result == {"value": 7751.9}
+    def raise_for_status(self):
+        return None
 
 
-def test_sp500_yahoo_returns_primary_value_when_available(monkeypatch):
-    def fake_get(url, timeout=10, headers=None):
-        return _Response({"chart": {"result": [{"meta": {"regularMarketPrice": 7743.16}}]}})
+def test_sp500_fred_returns_last_csv_value(monkeypatch):
+    def fake_fetch_text(url, timeout=20):
+        assert url == _fred_csv_url("SP500")
+        return "observation_date,SP500\n2026-08-05,7721.70\n2026-08-06,7733.85\n"
 
-    monkeypatch.setattr("backend.utils.macro_interpreter._http_get", fake_get)
+    monkeypatch.setattr("backend.utils.macro_interpreter._fetch_text", fake_fetch_text)
 
     result = fetch_macro_value(
         "sp500",
-        source="yahoo",
-        link="https://query1.finance.yahoo.com/v8/finance/chart/%5ESPX",
+        source="fred",
+        link="fred:SP500",
     )
 
-    assert result == {"value": 7743.16}
+    assert result == {"value": 7733.85}
 
 
-def test_sp500_prefers_twelve_data_when_api_key_is_available(monkeypatch):
+def test_vix_fred_skips_blank_rows(monkeypatch):
+    def fake_fetch_text(url, timeout=20):
+        assert url == _fred_csv_url("VIXCLS")
+        return "observation_date,VIXCLS\n2026-08-05,15.81\n2026-08-06,.\n2026-08-07,15.15\n"
+
+    monkeypatch.setattr("backend.utils.macro_interpreter._fetch_text", fake_fetch_text)
+
+    result = fetch_macro_value(
+        "vix",
+        source="fred",
+        link="fred:VIXCLS",
+    )
+
+    assert result == {"value": 15.15}
+
+
+def test_inflation_rate_uses_cpi_year_over_year(monkeypatch):
+    def fake_fetch_text(url, timeout=20):
+        assert url == _fred_csv_url("CPIAUCSL")
+        return (
+            "observation_date,CPIAUCSL\n"
+            "2025-06-01,320.000\n"
+            "2025-07-01,321.000\n"
+            "2025-08-01,322.000\n"
+            "2025-09-01,323.000\n"
+            "2025-10-01,324.000\n"
+            "2025-11-01,325.000\n"
+            "2025-12-01,326.000\n"
+            "2026-01-01,327.000\n"
+            "2026-02-01,328.000\n"
+            "2026-03-01,329.000\n"
+            "2026-04-01,330.000\n"
+            "2026-05-01,331.000\n"
+            "2026-06-01,332.568\n"
+        )
+
+    monkeypatch.setattr("backend.utils.macro_interpreter._fetch_text", fake_fetch_text)
+
+    result = fetch_macro_value(
+        "inflation_rate",
+        source="fred",
+        link="fred:CPIAUCSL",
+    )
+
+    assert result == {"value": pytest.approx(((332.568 / 320.0) - 1.0) * 100.0)}
+
+
+def test_gold_prefers_twelve_data_when_configured(monkeypatch):
     class FakeProvider:
         def supports_indicator(self, indicator_name):
-            return indicator_name == "sp500"
+            return indicator_name == "gold_price"
 
         def fetch_latest_value(self, indicator_name):
-            assert indicator_name == "sp500"
-            return 7755.25
+            assert indicator_name == "gold_price"
+            return 4333.46
 
     monkeypatch.setattr("backend.utils.macro_interpreter.TwelveDataMacroProvider", lambda: FakeProvider())
 
     result = fetch_macro_value(
-        "sp500",
-        source="yahoo",
-        link="https://query1.finance.yahoo.com/v8/finance/chart/%5ESPX",
+        "gold_price",
+        source="twelve_data",
+        link="twelve_data:XAU/USD",
     )
 
-    assert result == {"value": 7755.25}
+    assert result == {"value": 4333.46}
 
 
-def test_sp500_falls_back_to_yahoo_when_twelve_data_has_no_value(monkeypatch):
+def test_dxy_derived_uses_twelve_data_before_other_routes(monkeypatch):
     class FakeProvider:
-        def supports_indicator(self, indicator_name):
-            return indicator_name == "sp500"
-
-        def fetch_latest_value(self, indicator_name):
-            return None
+        def fetch_derived_dxy(self):
+            return 99.86
 
     monkeypatch.setattr("backend.utils.macro_interpreter.TwelveDataMacroProvider", lambda: FakeProvider())
-    monkeypatch.setattr(
-        "backend.utils.macro_interpreter._http_get",
-        lambda url, timeout=10: _Response({"chart": {"result": [{"meta": {"regularMarketPrice": 7743.16}}]}}),
-    )
 
     result = fetch_macro_value(
-        "sp500",
-        source="yahoo",
-        link="https://query1.finance.yahoo.com/v8/finance/chart/%5ESPX",
+        "dxy",
+        source="derived",
+        link="derived:dxy",
     )
 
-    assert result == {"value": 7743.16}
+    assert result == {"value": 99.86}
+
+
+def test_dxy_formula_matches_exact_weighted_basket(monkeypatch):
+    class FakeProvider:
+        def fetch_derived_dxy(self):
+            rates = {
+                "EUR/USD": 1.16,
+                "USD/JPY": 157.0,
+                "GBP/USD": 1.34,
+                "USD/CAD": 1.35,
+                "USD/SEK": 10.4,
+                "USD/CHF": 0.82,
+            }
+            value = DXY_BASE_FACTOR
+            for provider_symbol, (weight_key, exponent) in DXY_COMPONENT_WEIGHTS.items():
+                assert weight_key
+                value *= rates[provider_symbol] ** exponent
+            return value
+
+    expected = (
+        DXY_BASE_FACTOR
+        * (1.16 ** DXY_COMPONENT_WEIGHTS["EUR/USD"][1])
+        * (157.0 ** DXY_COMPONENT_WEIGHTS["USD/JPY"][1])
+        * (1.34 ** DXY_COMPONENT_WEIGHTS["GBP/USD"][1])
+        * (1.35 ** DXY_COMPONENT_WEIGHTS["USD/CAD"][1])
+        * (10.4 ** DXY_COMPONENT_WEIGHTS["USD/SEK"][1])
+        * (0.82 ** DXY_COMPONENT_WEIGHTS["USD/CHF"][1])
+    )
+
+    assert _fetch_dxy_from_twelve_data(FakeProvider()) == pytest.approx(expected)

@@ -1,9 +1,14 @@
 import logging
-import math
-import os
 import requests
+import csv
+from datetime import date, timedelta
+from io import StringIO
 
-from backend.services.providers.twelve_data_macro_provider import TwelveDataMacroProvider
+from backend.services.providers.twelve_data_macro_provider import (
+    DXY_BASE_FACTOR,
+    DXY_COMPONENT_WEIGHTS,
+    TwelveDataMacroProvider,
+)
 from backend.utils.scoring_utils import (
     normalize_indicator_name,
     get_score_rule_from_db,
@@ -13,7 +18,14 @@ logger = logging.getLogger(__name__)
 
 YAHOO_DXY = "https://query1.finance.yahoo.com/v8/finance/chart/DX-Y.NYB"
 ALT_FNG = "https://api.alternative.me/fng/?limit=1"
+FRED_CSV_URL = "https://fred.stlouisfed.org/graph/fredgraph.csv?id={series_id}&cosd={start_date}"
 YAHOO_SP500_GSPC = "https://query1.finance.yahoo.com/v8/finance/chart/%5EGSPC"
+YAHOO_SP500 = "https://query1.finance.yahoo.com/v8/finance/chart/%5ESPX"
+YAHOO_VIX = "https://query1.finance.yahoo.com/v8/finance/chart/%5EVIX"
+YAHOO_GOLD = "https://query1.finance.yahoo.com/v8/finance/chart/GC=F"
+YAHOO_OIL = "https://query1.finance.yahoo.com/v8/finance/chart/CL=F"
+YAHOO_US10Y = "https://query1.finance.yahoo.com/v8/finance/chart/%5ETNX"
+YAHOO_US02Y = "https://query1.finance.yahoo.com/v8/finance/chart/%5EIRX"
 REQUEST_HEADERS = {
     "User-Agent": (
         "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
@@ -21,7 +33,6 @@ REQUEST_HEADERS = {
         "Chrome/137.0.0.0 Safari/537.36"
     )
 }
-
 
 def _coerce_first_numeric(*candidates):
     for candidate in candidates:
@@ -53,6 +64,17 @@ def _fetch_json(url: str, timeout: int = 10):
     return response.json()
 
 
+def _fetch_text(url: str, timeout: int = 10):
+    response = requests.get(url, timeout=timeout)
+    response.raise_for_status()
+    return response.text
+
+
+def _fred_csv_url(series_id: str) -> str:
+    start_date = (date.today() - timedelta(days=730)).isoformat()
+    return FRED_CSV_URL.format(series_id=series_id, start_date=start_date)
+
+
 def _extract_yahoo_chart_value(data):
     result = data.get("chart", {}).get("result") or []
     if not result:
@@ -69,36 +91,48 @@ def _extract_yahoo_chart_value(data):
     )
 
 
-def _fetch_dxy_from_frankfurter():
-    """
-    Bereken DXY via publieke FX-rates.
-    Dit is stabieler dan de Yahoo ^DXY endpoint die op productie vaak leeg of rate-limited terugkomt.
-    """
-    usd_cross = _fetch_json("https://api.frankfurter.app/latest?from=USD&to=JPY,CAD,SEK,CHF")
-    eur_usd = _fetch_json("https://api.frankfurter.app/latest?from=EUR&to=USD")
-    gbp_usd = _fetch_json("https://api.frankfurter.app/latest?from=GBP&to=USD")
+def _extract_last_csv_value(csv_text: str) -> float | None:
+    rows = _extract_csv_rows(csv_text)
+    if not rows:
+        return None
+    return _coerce_first_numeric(rows[-1][1])
 
-    usd_rates = usd_cross.get("rates", {})
-    eurusd = (eur_usd.get("rates") or {}).get("USD")
-    gbpusd = (gbp_usd.get("rates") or {}).get("USD")
-    usdjpy = usd_rates.get("JPY")
-    usdcad = usd_rates.get("CAD")
-    usdsek = usd_rates.get("SEK")
-    usdchf = usd_rates.get("CHF")
 
-    components = [eurusd, usdjpy, gbpusd, usdcad, usdsek, usdchf]
-    if any(value in ("", ".", None) for value in components):
+def _extract_csv_rows(csv_text: str) -> list[tuple[str, str]]:
+    reader = csv.reader(StringIO(csv_text))
+    next(reader, None)
+    rows: list[tuple[str, str]] = []
+    for row in reader:
+        if len(row) < 2:
+            continue
+        observation_date = (row[0] or "").strip()
+        value = (row[1] or "").strip()
+        if not observation_date or value in ("", ".", None):
+            continue
+        rows.append((observation_date, value))
+    return rows
+
+
+def _extract_inflation_yoy_from_csv(csv_text: str) -> float | None:
+    rows = _extract_csv_rows(csv_text)
+    if len(rows) < 13:
         return None
 
-    return (
-        50.14348112
-        * math.pow(float(eurusd), -0.576)
-        * math.pow(float(usdjpy), 0.136)
-        * math.pow(float(gbpusd), -0.119)
-        * math.pow(float(usdcad), 0.091)
-        * math.pow(float(usdsek), 0.042)
-        * math.pow(float(usdchf), 0.036)
-    )
+    latest_value = _coerce_first_numeric(rows[-1][1])
+    prior_value = _coerce_first_numeric(rows[-13][1])
+    if latest_value in (None, 0) or prior_value in (None, 0):
+        return None
+
+    return ((latest_value / prior_value) - 1.0) * 100.0
+
+
+def _fetch_dxy_from_twelve_data(provider: TwelveDataMacroProvider):
+    """
+    Exacte DXY-reconstructie met de officiële componenten en exponenten:
+    EURUSD^-0.576 * USDJPY^0.136 * GBPUSD^-0.119 *
+    USDCAD^0.091 * USDSEK^0.042 * USDCHF^0.036 * 50.14348112
+    """
+    return provider.fetch_derived_dxy()
 
 
 # ============================================================
@@ -114,8 +148,14 @@ def fetch_macro_value(name: str, source: str = None, link: str = None):
     normalized = normalize_indicator_name(name)
     logger.info(f"🌐 Fetch macro '{normalized}'")
 
+    source_lower = str(source or "").strip().lower()
+    link_lower = str(link or "").strip().lower()
+    use_twelve_data = source_lower == "twelve_data" or link_lower.startswith("twelve_data:")
+    effective_source = source
+    effective_link = link
+
     twelve_data_provider = TwelveDataMacroProvider()
-    if twelve_data_provider.supports_indicator(normalized):
+    if use_twelve_data and twelve_data_provider.supports_indicator(normalized):
         try:
             value = twelve_data_provider.fetch_latest_value(normalized)
             if value is not None:
@@ -123,14 +163,24 @@ def fetch_macro_value(name: str, source: str = None, link: str = None):
         except Exception:
             logger.warning("Twelve Data macro fallback mislukt voor %s", normalized, exc_info=True)
 
-    # 🟦 DXY
-    if normalized == "dxy":
+        legacy_fallbacks = {
+            "sp500": ("yahoo", YAHOO_SP500),
+            "vix": ("yahoo", YAHOO_VIX),
+            "gold_price": ("yahoo", YAHOO_GOLD),
+            "oil_price": ("yahoo", YAHOO_OIL),
+            "us10y": ("yahoo", YAHOO_US10Y),
+            "us02y": ("yahoo", YAHOO_US02Y),
+        }
+        effective_source, effective_link = legacy_fallbacks.get(normalized, (source, link))
+
+    # 🟦 Derived DXY basket
+    if normalized == "dxy" and source_lower == "derived":
         try:
-            value = _fetch_dxy_from_frankfurter()
+            value = _fetch_dxy_from_twelve_data(twelve_data_provider)
             if value is not None:
                 return {"value": value}
         except Exception:
-            logger.warning("Frankfurter DXY fallback mislukt", exc_info=True)
+            logger.warning("Twelve Data DXY fallback mislukt", exc_info=True)
 
         try:
             r = _http_get(YAHOO_DXY, timeout=10)
@@ -155,7 +205,7 @@ def fetch_macro_value(name: str, source: str = None, link: str = None):
             return {"value": None}
 
     # 🟩 Fear & Greed
-    if "alternative" in (source or "").lower():
+    if "alternative" in (effective_source or "").lower():
         try:
             r = _http_get(ALT_FNG, timeout=10)
             r.raise_for_status()
@@ -174,14 +224,26 @@ def fetch_macro_value(name: str, source: str = None, link: str = None):
         except Exception:
             return {"value": None}
 
-    # 🟨 Yahoo generic (Handles ^SPX, ^TNX, ^VIX, GC=F, CL=F, etc.)
-    if source and "yahoo" in source.lower() and link:
+    # 🟪 Official FRED CSV export
+    if effective_source and "fred" in effective_source.lower() and effective_link:
         try:
-            r = _http_get(link, timeout=10)
+            series_id = effective_link.split(":", 1)[1] if effective_link.lower().startswith("fred:") else None
+            csv_url = _fred_csv_url(series_id) if series_id else effective_link
+            csv_text = _fetch_text(csv_url, timeout=20)
+            if normalized == "inflation_rate":
+                return {"value": _extract_inflation_yoy_from_csv(csv_text)}
+            return {"value": _extract_last_csv_value(csv_text)}
+        except Exception:
+            return {"value": None}
+
+    # 🟨 Yahoo generic (legacy fallback only)
+    if effective_source and "yahoo" in effective_source.lower() and effective_link:
+        try:
+            r = _http_get(effective_link, timeout=10)
             r.raise_for_status()
             data = r.json()
             value = _extract_yahoo_chart_value(data)
-            if value is None and normalized == "sp500" and link != YAHOO_SP500_GSPC:
+            if value is None and normalized == "sp500" and effective_link != YAHOO_SP500_GSPC:
                 fallback_response = _http_get(YAHOO_SP500_GSPC, timeout=10)
                 fallback_response.raise_for_status()
                 value = _extract_yahoo_chart_value(fallback_response.json())
@@ -189,23 +251,10 @@ def fetch_macro_value(name: str, source: str = None, link: str = None):
         except Exception:
             return {"value": None}
 
-    # 🟪 FRED
-    if source and "fred" in source.lower() and link:
-        try:
-            r = _http_get(link, timeout=10)
-            r.raise_for_status()
-            fred = r.json()
-            obs = fred.get("observations", [])
-            if obs and obs[-1]["value"] not in ("", ".", None):
-                return {"value": float(obs[-1]["value"])}
-        except Exception:
-            pass
-        return {"value": None}
-
     # 🟫 Generic
-    if link:
+    if effective_link:
         try:
-            r = _http_get(link, timeout=10)
+            r = _http_get(effective_link, timeout=10)
             r.raise_for_status()
             data = r.json()
             for key in ("value", "price", "index"):

@@ -1,12 +1,22 @@
 from __future__ import annotations
 
 import os
+import math
 from typing import Any
 
 import requests
 
 
 TWELVE_DATA_QUOTE_URL = "https://api.twelvedata.com/quote"
+DXY_BASE_FACTOR = 50.14348112
+DXY_COMPONENT_WEIGHTS: dict[str, tuple[str, float]] = {
+    "EUR/USD": ("eurusd", -0.576),
+    "USD/JPY": ("usdjpy", 0.136),
+    "GBP/USD": ("gbpusd", -0.119),
+    "USD/CAD": ("usdcad", 0.091),
+    "USD/SEK": ("usdsek", 0.042),
+    "USD/CHF": ("usdchf", 0.036),
+}
 
 
 def _float_or_none(value: Any) -> float | None:
@@ -19,13 +29,9 @@ def _float_or_none(value: Any) -> float | None:
 class TwelveDataMacroProvider:
     provider_name = "twelve_data"
 
-    # Only map symbols we already validated internally or can support safely
-    # with our current asset catalog routing.
+    # Twelve Data is still useful for direct spot-style macro inputs such as gold.
     SYMBOL_MAP: dict[str, str] = {
-        "sp500": "SPX",
-        "vix": "VIX",
-        "dxy": "DXY",
-        "gold_price": "GLD",
+        "gold_price": "XAU/USD",
     }
 
     def __init__(self, api_key: str | None = None):
@@ -39,12 +45,17 @@ class TwelveDataMacroProvider:
             return None
 
         provider_symbol = self.SYMBOL_MAP[indicator_name]
+        return self.fetch_quote_value(provider_symbol)
+
+    def fetch_quote_value(self, provider_symbol: str) -> float | None:
+        if not self.api_key:
+            return None
+
         response = requests.get(
             TWELVE_DATA_QUOTE_URL,
             params={
                 "symbol": provider_symbol,
                 "apikey": self.api_key,
-                "interval": "1min",
             },
             timeout=10,
             headers={
@@ -60,4 +71,25 @@ class TwelveDataMacroProvider:
         if payload.get("status") == "error":
             raise ValueError(payload.get("message") or f"Twelve Data quote error for {provider_symbol}")
 
-        return _float_or_none(payload.get("close")) or _float_or_none(payload.get("price")) or _float_or_none(payload.get("previous_close"))
+        raw_value = (
+            _float_or_none(payload.get("close"))
+            or _float_or_none(payload.get("price"))
+            or _float_or_none(payload.get("previous_close"))
+        )
+        if raw_value is None:
+            return None
+
+        return raw_value
+
+    def fetch_derived_dxy(self) -> float | None:
+        if not self.api_key:
+            return None
+
+        weighted_product = DXY_BASE_FACTOR
+        for provider_symbol, (_, exponent) in DXY_COMPONENT_WEIGHTS.items():
+            quote_value = self.fetch_quote_value(provider_symbol)
+            if quote_value in (None, 0):
+                return None
+            weighted_product *= math.pow(float(quote_value), exponent)
+
+        return weighted_product

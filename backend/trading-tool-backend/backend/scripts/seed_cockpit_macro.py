@@ -10,65 +10,65 @@ logger = logging.getLogger(__name__)
 MACRO_INDICATORS = [
     {
         "name": "dxy",
-        "display_name": "US Dollar Index (DXY)",
-        "source": "yahoo",
-        "link": "https://query1.finance.yahoo.com/v8/finance/chart/DX-Y.NYB",
+        "display_name": "US Dollar Index (Derived Basket)",
+        "source": "derived",
+        "link": "derived:dxy",
         "category": "macro"
     },
     {
         "name": "sp500",
         "display_name": "S&P 500 Index",
-        "source": "yahoo",
-        "link": "https://query1.finance.yahoo.com/v8/finance/chart/%5ESPX",
+        "source": "fred",
+        "link": "fred:SP500",
         "category": "macro"
     },
     {
         "name": "vix",
-        "display_name": "Volatility Index (VIX)",
-        "source": "yahoo",
-        "link": "https://query1.finance.yahoo.com/v8/finance/chart/%5EVIX",
+        "display_name": "CBOE Volatility Index (VIX)",
+        "source": "fred",
+        "link": "fred:VIXCLS",
         "category": "macro"
     },
     {
         "name": "gold_price",
         "display_name": "Gold Price",
-        "source": "yahoo",
-        "link": "https://query1.finance.yahoo.com/v8/finance/chart/GC=F",
+        "source": "twelve_data",
+        "link": "twelve_data:XAU/USD",
         "category": "macro"
     },
     {
         "name": "oil_price",
         "display_name": "Crude Oil Price (WTI)",
-        "source": "yahoo",
-        "link": "https://query1.finance.yahoo.com/v8/finance/chart/CL=F",
+        "source": "fred",
+        "link": "fred:DCOILWTICO",
         "category": "macro"
     },
     {
         "name": "us10y",
         "display_name": "US 10-Year Yield",
-        "source": "yahoo",
-        "link": "https://query1.finance.yahoo.com/v8/finance/chart/%5ETNX",
+        "source": "fred",
+        "link": "fred:DGS10",
         "category": "macro"
     },
     {
         "name": "us02y",
         "display_name": "US 2-Year Yield",
-        "source": "yahoo",
-        "link": "https://query1.finance.yahoo.com/v8/finance/chart/%5EIRX",
+        "source": "fred",
+        "link": "fred:DGS2",
         "category": "macro"
     },
     {
         "name": "interest_rate",
         "display_name": "Fed Funds Rate",
         "source": "fred",
-        "link": "https://api.stlouisfed.org/fred/series/observations?series_id=FEDFUNDS&api_key=4377042838ee591d3319082ce739fa42&file_type=json",
+        "link": "fred:FEDFUNDS",
         "category": "macro"
     },
     {
         "name": "inflation_rate",
         "display_name": "US CPI (Inflation)",
         "source": "fred",
-        "link": "https://api.stlouisfed.org/fred/series/observations?series_id=CPIAUCSL&api_key=4377042838ee591d3319082ce739fa42&file_type=json",
+        "link": "fred:CPIAUCSL",
         "category": "macro"
     },
     {
