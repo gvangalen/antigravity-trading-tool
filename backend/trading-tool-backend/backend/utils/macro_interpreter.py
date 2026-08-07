@@ -3,6 +3,7 @@ import requests
 import csv
 from datetime import date, timedelta
 from io import StringIO
+from urllib.parse import parse_qs, urlparse
 
 from backend.services.providers.twelve_data_macro_provider import (
     DXY_BASE_FACTOR,
@@ -75,6 +76,17 @@ def _fred_csv_url(series_id: str) -> str:
     return FRED_CSV_URL.format(series_id=series_id, start_date=start_date)
 
 
+def _extract_fred_series_id(link: str) -> str | None:
+    try:
+        parsed = urlparse(link)
+        query = parse_qs(parsed.query)
+        series_id = (query.get("series_id") or [None])[0]
+        series_id = str(series_id or "").strip()
+        return series_id or None
+    except Exception:
+        return None
+
+
 def _extract_yahoo_chart_value(data):
     result = data.get("chart", {}).get("result") or []
     if not result:
@@ -115,6 +127,40 @@ def _extract_csv_rows(csv_text: str) -> list[tuple[str, str]]:
 
 def _extract_inflation_yoy_from_csv(csv_text: str) -> float | None:
     rows = _extract_csv_rows(csv_text)
+    if len(rows) < 13:
+        return None
+
+    latest_value = _coerce_first_numeric(rows[-1][1])
+    prior_value = _coerce_first_numeric(rows[-13][1])
+    if latest_value in (None, 0) or prior_value in (None, 0):
+        return None
+
+    return ((latest_value / prior_value) - 1.0) * 100.0
+
+
+def _extract_fred_json_observations(payload: dict) -> list[tuple[str, str]]:
+    observations = payload.get("observations") or []
+    rows: list[tuple[str, str]] = []
+    for observation in observations:
+        if not isinstance(observation, dict):
+            continue
+        observation_date = str(observation.get("date") or "").strip()
+        value = str(observation.get("value") or "").strip()
+        if not observation_date or value in ("", ".", "None"):
+            continue
+        rows.append((observation_date, value))
+    return rows
+
+
+def _extract_last_fred_json_value(payload: dict) -> float | None:
+    rows = _extract_fred_json_observations(payload)
+    if not rows:
+        return None
+    return _coerce_first_numeric(rows[-1][1])
+
+
+def _extract_inflation_yoy_from_fred_json(payload: dict) -> float | None:
+    rows = _extract_fred_json_observations(payload)
     if len(rows) < 13:
         return None
 
@@ -227,9 +273,33 @@ def fetch_macro_value(name: str, source: str = None, link: str = None):
     # 🟪 Official FRED CSV export
     if effective_source and "fred" in effective_source.lower() and effective_link:
         try:
-            series_id = effective_link.split(":", 1)[1] if effective_link.lower().startswith("fred:") else None
-            csv_url = _fred_csv_url(series_id) if series_id else effective_link
-            csv_text = _fetch_text(csv_url, timeout=20)
+            if effective_link.lower().startswith("fred:"):
+                series_id = effective_link.split(":", 1)[1]
+                csv_text = _fetch_text(_fred_csv_url(series_id), timeout=20)
+                if normalized == "inflation_rate":
+                    return {"value": _extract_inflation_yoy_from_csv(csv_text)}
+                return {"value": _extract_last_csv_value(csv_text)}
+
+            if "fredgraph.csv" in effective_link.lower():
+                csv_text = _fetch_text(effective_link, timeout=20)
+                if normalized == "inflation_rate":
+                    return {"value": _extract_inflation_yoy_from_csv(csv_text)}
+                return {"value": _extract_last_csv_value(csv_text)}
+
+            if "api.stlouisfed.org" in effective_link.lower() or "file_type=json" in effective_link.lower():
+                series_id = _extract_fred_series_id(effective_link)
+                if series_id:
+                    csv_text = _fetch_text(_fred_csv_url(series_id), timeout=20)
+                    if normalized == "inflation_rate":
+                        return {"value": _extract_inflation_yoy_from_csv(csv_text)}
+                    return {"value": _extract_last_csv_value(csv_text)}
+
+                payload = _fetch_json(effective_link, timeout=20)
+                if normalized == "inflation_rate":
+                    return {"value": _extract_inflation_yoy_from_fred_json(payload)}
+                return {"value": _extract_last_fred_json_value(payload)}
+
+            csv_text = _fetch_text(effective_link, timeout=20)
             if normalized == "inflation_rate":
                 return {"value": _extract_inflation_yoy_from_csv(csv_text)}
             return {"value": _extract_last_csv_value(csv_text)}

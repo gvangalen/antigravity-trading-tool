@@ -44,6 +44,22 @@ def test_sp500_fred_returns_last_csv_value(monkeypatch):
     assert result == {"value": 7733.85}
 
 
+def test_sp500_legacy_fred_json_url_returns_last_value(monkeypatch):
+    def fake_fetch_text(url, timeout=20):
+        assert url == _fred_csv_url("SP500")
+        return "observation_date,SP500\n2026-08-05,7723.55\n2026-08-06,7709.96\n"
+
+    monkeypatch.setattr("backend.utils.macro_interpreter._fetch_text", fake_fetch_text)
+
+    result = fetch_macro_value(
+        "sp500",
+        source="fred",
+        link="https://api.stlouisfed.org/fred/series/observations?series_id=SP500&api_key=old-key&file_type=json",
+    )
+
+    assert result == {"value": 7709.96}
+
+
 def test_vix_fred_skips_blank_rows(monkeypatch):
     def fake_fetch_text(url, timeout=20):
         assert url == _fred_csv_url("VIXCLS")
@@ -86,6 +102,37 @@ def test_inflation_rate_uses_cpi_year_over_year(monkeypatch):
         "inflation_rate",
         source="fred",
         link="fred:CPIAUCSL",
+    )
+
+    assert result == {"value": pytest.approx(((332.568 / 320.0) - 1.0) * 100.0)}
+
+
+def test_inflation_rate_legacy_fred_json_url_uses_year_over_year(monkeypatch):
+    def fake_fetch_text(url, timeout=20):
+        assert url == _fred_csv_url("CPIAUCSL")
+        return (
+            "observation_date,CPIAUCSL\n"
+            "2025-06-01,320.000\n"
+            "2025-07-01,321.000\n"
+            "2025-08-01,322.000\n"
+            "2025-09-01,323.000\n"
+            "2025-10-01,324.000\n"
+            "2025-11-01,325.000\n"
+            "2025-12-01,326.000\n"
+            "2026-01-01,327.000\n"
+            "2026-02-01,328.000\n"
+            "2026-03-01,329.000\n"
+            "2026-04-01,330.000\n"
+            "2026-05-01,331.000\n"
+            "2026-06-01,332.568\n"
+        )
+
+    monkeypatch.setattr("backend.utils.macro_interpreter._fetch_text", fake_fetch_text)
+
+    result = fetch_macro_value(
+        "inflation_rate",
+        source="fred",
+        link="https://api.stlouisfed.org/fred/series/observations?series_id=CPIAUCSL&api_key=old-key&file_type=json",
     )
 
     assert result == {"value": pytest.approx(((332.568 / 320.0) - 1.0) * 100.0)}
