@@ -74,6 +74,19 @@ class TechnicalDataRepository:
             created_at=mapping.get("created_at"),
         )
 
+    @staticmethod
+    def _ordered_existing_columns(columns: set[str], desired: list[str]) -> list[str]:
+        return [column for column in desired if column in columns]
+
+    @staticmethod
+    def _order_by_clause(columns: set[str]) -> str:
+        order_parts: list[str] = []
+        if "priority" in columns:
+            order_parts.append("priority ASC")
+        if "id" in columns:
+            order_parts.append("id ASC")
+        return f" ORDER BY {', '.join(order_parts)}" if order_parts else ""
+
     async def _fetch_scope_configs(
         self,
         user_id: int,
@@ -86,20 +99,17 @@ class TechnicalDataRepository:
         columns = await self._get_user_config_columns()
         supports_asset_scopes = await self._supports_asset_scopes()
 
-        select_fields = [
+        select_fields = self._ordered_existing_columns(columns, [
             "id",
             "user_id",
             "indicator",
             "priority",
             "enabled",
             "created_at",
-        ]
-        if "category" in columns:
-            select_fields.append("category")
-        if "symbol" in columns:
-            select_fields.append("symbol")
-        if "asset_class" in columns:
-            select_fields.append("asset_class")
+            "category",
+            "symbol",
+            "asset_class",
+        ])
 
         conditions = ["user_id = :user_id"]
         params: dict[str, Any] = {"user_id": user_id}
@@ -129,7 +139,7 @@ class TechnicalDataRepository:
             SELECT {", ".join(select_fields)}
             FROM user_indicator_configs
             WHERE {" AND ".join(conditions)}
-            ORDER BY priority ASC, id ASC
+            {self._order_by_clause(columns)}
             """
         )
         result = await self.session.execute(query, params)
@@ -220,57 +230,71 @@ class TechnicalDataRepository:
                 conditions.append("asset_class = :asset_class")
                 params["asset_class"] = normalized_asset_class
 
+        existing_select_fields = self._ordered_existing_columns(columns, [
+            "id",
+            "user_id",
+            "indicator",
+            "priority",
+            "enabled",
+            "created_at",
+            "category",
+            "symbol",
+            "asset_class",
+        ])
         existing_query = text(
             f"""
-            SELECT id, user_id, indicator, priority, enabled, created_at
-            {", category" if "category" in columns else ""}
-            {", symbol" if "symbol" in columns else ""}
-            {", asset_class" if "asset_class" in columns else ""}
+            SELECT {", ".join(existing_select_fields)}
             FROM user_indicator_configs
             WHERE {" AND ".join(conditions)}
-            ORDER BY id ASC
+            {self._order_by_clause(columns)}
             LIMIT 1
             """
         )
         existing_result = await self.session.execute(existing_query, params)
         existing = existing_result.first()
         if existing:
-            update_sets = ["priority = :priority"]
             update_params = dict(params)
-            update_params["priority"] = priority
+            update_sets: list[str] = []
+            if "priority" in columns:
+                update_sets.append("priority = :priority")
+                update_params["priority"] = priority
             if "enabled" in columns:
                 update_sets.append("enabled = TRUE")
 
-            await self.session.execute(
-                text(
-                    f"""
-                    UPDATE user_indicator_configs
-                    SET {", ".join(update_sets)}
-                    WHERE id = :config_id
-                    """
-                ),
-                {
-                    **update_params,
-                    "config_id": existing._mapping["id"],
-                },
-            )
+            if update_sets:
+                await self.session.execute(
+                    text(
+                        f"""
+                        UPDATE user_indicator_configs
+                        SET {", ".join(update_sets)}
+                        WHERE id = :config_id
+                        """
+                    ),
+                    {
+                        **update_params,
+                        "config_id": existing._mapping["id"],
+                    },
+                )
             await self.session.flush()
             return SimpleNamespace(
                 **dict(existing._mapping),
                 category=(existing._mapping.get("category") or category),
                 symbol=existing._mapping.get("symbol", normalized_symbol if supports_asset_scopes else None),
                 asset_class=existing._mapping.get("asset_class", normalized_asset_class if supports_asset_scopes else None),
-                priority=priority,
-                enabled=True,
+                priority=priority if "priority" in columns else existing._mapping.get("priority", 100),
+                enabled=True if "enabled" in columns else existing._mapping.get("enabled", True),
             )
 
-        insert_columns = ["user_id", "indicator", "priority"]
-        insert_values = [":user_id", ":indicator", ":priority"]
+        insert_columns = ["user_id", "indicator"]
+        insert_values = [":user_id", ":indicator"]
         insert_params: dict[str, Any] = {
             "user_id": user_id,
             "indicator": indicator,
-            "priority": priority,
         }
+        if "priority" in columns:
+            insert_columns.append("priority")
+            insert_values.append(":priority")
+            insert_params["priority"] = priority
         if "category" in columns:
             insert_columns.append("category")
             insert_values.append(":category")
@@ -304,7 +328,7 @@ class TechnicalDataRepository:
             category=category,
             symbol=normalized_symbol if supports_asset_scopes else None,
             asset_class=normalized_asset_class if supports_asset_scopes else None,
-            priority=priority,
+            priority=priority if "priority" in columns else 100,
             enabled=True,
             created_at=None,
         )

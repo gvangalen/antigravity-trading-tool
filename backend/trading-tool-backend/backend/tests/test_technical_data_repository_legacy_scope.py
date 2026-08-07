@@ -72,6 +72,49 @@ def test_ensure_user_config_legacy_schema_ignores_symbol_and_asset_class_columns
     }
 
 
+def test_ensure_user_config_very_legacy_schema_ignores_priority_too():
+    session = AsyncMock()
+    session.flush = AsyncMock()
+    session.execute = AsyncMock(
+        side_effect=[
+            _ExecuteResult(scalars=["id", "user_id", "indicator", "category"]),
+            _ExecuteResult(first_row=None),
+            _ExecuteResult(),
+        ]
+    )
+    repo = TechnicalDataRepository(session)
+
+    async def run():
+        return await repo.ensure_user_config(
+            2,
+            "fear_greed_index",
+            category="macro",
+            symbol="BTC",
+            asset_class="crypto",
+            priority=7,
+        )
+
+    created = asyncio.run(run())
+
+    assert created.priority == 100
+    assert created.symbol is None
+    assert created.asset_class is None
+
+    existing_query = str(session.execute.await_args_list[1].args[0])
+    insert_query = str(session.execute.await_args_list[2].args[0])
+    insert_params = session.execute.await_args_list[2].args[1]
+
+    assert "priority" not in existing_query.lower()
+    assert "enabled" not in existing_query.lower()
+    assert "created_at" not in existing_query.lower()
+    assert "priority" not in insert_query.lower()
+    assert insert_params == {
+        "user_id": 2,
+        "indicator": "fear_greed_index",
+        "category": "macro",
+    }
+
+
 def test_get_user_configs_legacy_schema_returns_global_rows_for_symbol_request():
     session = AsyncMock()
     session.execute = AsyncMock(
