@@ -11,6 +11,7 @@ logger = logging.getLogger(__name__)
 
 YAHOO_DXY = "https://query1.finance.yahoo.com/v8/finance/chart/DX-Y.NYB"
 ALT_FNG = "https://api.alternative.me/fng/?limit=1"
+YAHOO_SP500_GSPC = "https://query1.finance.yahoo.com/v8/finance/chart/%5EGSPC"
 REQUEST_HEADERS = {
     "User-Agent": (
         "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
@@ -48,6 +49,22 @@ def _fetch_json(url: str, timeout: int = 10):
     response = _http_get(url, timeout=timeout)
     response.raise_for_status()
     return response.json()
+
+
+def _extract_yahoo_chart_value(data):
+    result = data.get("chart", {}).get("result") or []
+    if not result:
+        return None
+
+    payload = result[0]
+    meta = payload.get("meta", {}) or {}
+    quote = (payload.get("indicators", {}).get("quote") or [{}])[0] or {}
+    return _coerce_first_numeric(
+        meta.get("regularMarketPrice"),
+        meta.get("previousClose"),
+        meta.get("chartPreviousClose"),
+        _extract_last_non_null(quote.get("close") or []),
+    )
 
 
 def _fetch_dxy_from_frankfurter():
@@ -152,19 +169,11 @@ def fetch_macro_value(name: str, source: str = None, link: str = None):
             r = _http_get(link, timeout=10)
             r.raise_for_status()
             data = r.json()
-            result = data.get("chart", {}).get("result") or []
-            if not result:
-                return {"value": None}
-
-            payload = result[0]
-            meta = payload.get("meta", {}) or {}
-            quote = (payload.get("indicators", {}).get("quote") or [{}])[0] or {}
-            value = _coerce_first_numeric(
-                meta.get("regularMarketPrice"),
-                meta.get("previousClose"),
-                meta.get("chartPreviousClose"),
-                _extract_last_non_null(quote.get("close") or []),
-            )
+            value = _extract_yahoo_chart_value(data)
+            if value is None and normalized == "sp500" and link != YAHOO_SP500_GSPC:
+                fallback_response = _http_get(YAHOO_SP500_GSPC, timeout=10)
+                fallback_response.raise_for_status()
+                value = _extract_yahoo_chart_value(fallback_response.json())
             return {"value": value}
         except Exception:
             return {"value": None}
