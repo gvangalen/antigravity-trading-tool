@@ -1,5 +1,6 @@
 import logging
 import math
+import os
 import requests
 
 from backend.utils.scoring_utils import (
@@ -12,6 +13,15 @@ logger = logging.getLogger(__name__)
 YAHOO_DXY = "https://query1.finance.yahoo.com/v8/finance/chart/DX-Y.NYB"
 ALT_FNG = "https://api.alternative.me/fng/?limit=1"
 YAHOO_SP500_GSPC = "https://query1.finance.yahoo.com/v8/finance/chart/%5EGSPC"
+TWELVE_DATA_QUOTE_URL = "https://api.twelvedata.com/quote"
+TWELVE_DATA_MACRO_SYMBOLS = {
+    "sp500": "SPX",
+    "vix": "VIX",
+    "dxy": "DXY",
+    # Use GLD as the current securities proxy for gold until we introduce a
+    # dedicated Twelve Data commodity mapping with validated symbol coverage.
+    "gold_price": "GLD",
+}
 REQUEST_HEADERS = {
     "User-Agent": (
         "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
@@ -67,6 +77,28 @@ def _extract_yahoo_chart_value(data):
     )
 
 
+def _fetch_twelve_data_quote_value(provider_symbol: str):
+    api_key = os.getenv("TWELVE_DATA_API_KEY") or ""
+    if not api_key:
+        return None
+
+    response = requests.get(
+        TWELVE_DATA_QUOTE_URL,
+        params={"symbol": provider_symbol, "apikey": api_key, "interval": "1min"},
+        timeout=10,
+        headers=REQUEST_HEADERS,
+    )
+    response.raise_for_status()
+    payload = response.json()
+    if payload.get("status") == "error":
+        raise ValueError(payload.get("message") or f"Twelve Data quote error for {provider_symbol}")
+    return _coerce_first_numeric(
+        payload.get("close"),
+        payload.get("price"),
+        payload.get("previous_close"),
+    )
+
+
 def _fetch_dxy_from_frankfurter():
     """
     Bereken DXY via publieke FX-rates.
@@ -111,6 +143,15 @@ def fetch_macro_value(name: str, source: str = None, link: str = None):
 
     normalized = normalize_indicator_name(name)
     logger.info(f"🌐 Fetch macro '{normalized}'")
+
+    provider_symbol = TWELVE_DATA_MACRO_SYMBOLS.get(normalized)
+    if provider_symbol:
+        try:
+            value = _fetch_twelve_data_quote_value(provider_symbol)
+            if value is not None:
+                return {"value": value}
+        except Exception:
+            logger.warning("Twelve Data macro fallback mislukt voor %s", normalized, exc_info=True)
 
     # 🟦 DXY
     if normalized == "dxy":
