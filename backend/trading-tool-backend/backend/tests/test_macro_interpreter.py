@@ -158,6 +158,71 @@ def test_gold_prefers_twelve_data_when_configured(monkeypatch):
     assert result == {"value": 4333.46}
 
 
+def test_google_trends_returns_latest_interest_value(monkeypatch):
+    class FakeResponse:
+        def __init__(self, text):
+            self.text = text
+
+        def raise_for_status(self):
+            return None
+
+    class FakeSession:
+        def __init__(self):
+            self.headers = {}
+
+        def get(self, url, params=None, timeout=20):
+            if "explore" in url:
+                return FakeResponse(
+                    """)]}'
+{"widgets":[{"id":"TIMESERIES","token":"abc123","request":{"time":"2026-05-07 2026-08-07"}}]}"""
+                )
+            return FakeResponse(
+                """)]}'
+{"default":{"timelineData":[{"value":[42]},{"value":[55]}]}}"""
+            )
+
+    monkeypatch.setattr("backend.utils.macro_interpreter.requests.Session", FakeSession)
+
+    result = fetch_macro_value(
+        "google_trends",
+        source="custom",
+        link="https://trends.google.com/trends/api/widgetdata/multiline",
+    )
+
+    assert result == {"value": 55.0}
+
+
+def test_etf_bitcoin_inflow_returns_latest_total_from_bitbo_table(monkeypatch):
+    def fake_fetch_text(url, timeout=20):
+        assert "bitbo.io/treasuries/etf-flows/" in url
+        return """
+        <table class="stats-table larger-table">
+          <tbody>
+            <tr>
+              <th><span>Date</span></th>
+              <th><span>IBIT</span></th>
+              <th><span>Totals</span></th>
+            </tr>
+            <tr>
+              <td class="cell right-align"><span>Aug 05, 2026</span></td>
+              <td class="cell right-align green"><span>196.2</span></td>
+              <td class="cell right-align green"><span>274.3</span></td>
+            </tr>
+          </tbody>
+        </table>
+        """
+
+    monkeypatch.setattr("backend.utils.macro_interpreter._fetch_text", fake_fetch_text)
+
+    result = fetch_macro_value(
+        "etf_bitcoin_inflow",
+        source="custom",
+        link="https://api.farside.co.uk/v1/etf/btc/latest",
+    )
+
+    assert result == {"value": 274.3}
+
+
 def test_dxy_derived_uses_twelve_data_before_other_routes(monkeypatch):
     class FakeProvider:
         def fetch_derived_dxy(self):

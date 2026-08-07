@@ -36,4 +36,12 @@ WHERE name = 'interest_rate';
 UPDATE indicators
 SET source = 'fred', link = 'fred:CPIAUCSL', active = TRUE
 WHERE name = 'inflation_rate';
+
+UPDATE indicators
+SET source = 'custom', link = 'https://trends.google.com/trends/api/widgetdata/multiline', active = FALSE
+WHERE name = 'google_trends';
+
+UPDATE indicators
+SET source = 'custom', link = 'https://bitbo.io/treasuries/etf-flows/', active = TRUE
+WHERE name = 'etf_bitcoin_inflow';
 """

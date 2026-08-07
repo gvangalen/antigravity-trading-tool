@@ -1,6 +1,8 @@
 import logging
 import requests
 import csv
+import json
+import re
 from datetime import date, timedelta
 from io import StringIO
 from urllib.parse import parse_qs, urlparse
@@ -27,6 +29,9 @@ YAHOO_GOLD = "https://query1.finance.yahoo.com/v8/finance/chart/GC=F"
 YAHOO_OIL = "https://query1.finance.yahoo.com/v8/finance/chart/CL=F"
 YAHOO_US10Y = "https://query1.finance.yahoo.com/v8/finance/chart/%5ETNX"
 YAHOO_US02Y = "https://query1.finance.yahoo.com/v8/finance/chart/%5EIRX"
+GOOGLE_TRENDS_EXPLORE_URL = "https://trends.google.com/trends/api/explore"
+GOOGLE_TRENDS_MULTILINE_URL = "https://trends.google.com/trends/api/widgetdata/multiline"
+BITBO_BTC_ETF_FLOWS_URL = "https://bitbo.io/treasuries/etf-flows/"
 REQUEST_HEADERS = {
     "User-Agent": (
         "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
@@ -69,6 +74,14 @@ def _fetch_text(url: str, timeout: int = 10):
     response = requests.get(url, timeout=timeout)
     response.raise_for_status()
     return response.text
+
+
+def _strip_google_json_prefix(text: str) -> str:
+    if text.startswith(")]}',"):
+        return text[5:]
+    if text.startswith(")]}'"):
+        return text[4:].lstrip("\n")
+    return text
 
 
 def _fred_csv_url(series_id: str) -> str:
@@ -181,6 +194,79 @@ def _fetch_dxy_from_twelve_data(provider: TwelveDataMacroProvider):
     return provider.fetch_derived_dxy()
 
 
+def _fetch_google_trends_value(keyword: str = "Bitcoin", timeframe: str = "today 3-m") -> float | None:
+    session = requests.Session()
+    session.headers.update(REQUEST_HEADERS)
+
+    req_payload = {
+        "comparisonItem": [{"keyword": keyword, "geo": "", "time": timeframe}],
+        "category": 0,
+        "property": "",
+    }
+    explore_response = session.get(
+        GOOGLE_TRENDS_EXPLORE_URL,
+        params={
+            "hl": "en-US",
+            "tz": "-120",
+            "req": json.dumps(req_payload, separators=(",", ":")),
+        },
+        timeout=20,
+    )
+    explore_response.raise_for_status()
+    explore_payload = json.loads(_strip_google_json_prefix(explore_response.text))
+    widget = next((w for w in explore_payload.get("widgets", []) if w.get("id") == "TIMESERIES"), None)
+    if not widget:
+        return None
+
+    multiline_response = session.get(
+        GOOGLE_TRENDS_MULTILINE_URL,
+        params={
+            "hl": "en-US",
+            "tz": "-120",
+            "req": json.dumps(widget.get("request") or {}, separators=(",", ":")),
+            "token": widget.get("token"),
+        },
+        timeout=20,
+    )
+    multiline_response.raise_for_status()
+    multiline_payload = json.loads(_strip_google_json_prefix(multiline_response.text))
+    timeline_rows = (((multiline_payload.get("default") or {}).get("timelineData")) or [])
+    for row in reversed(timeline_rows):
+        values = row.get("value") if isinstance(row, dict) else None
+        if isinstance(values, list) and values:
+            value = _coerce_first_numeric(values[0])
+            if value is not None:
+                return value
+    return None
+
+
+def _fetch_bitbo_btc_etf_inflow_value() -> float | None:
+    html = _fetch_text(BITBO_BTC_ETF_FLOWS_URL, timeout=20)
+    table_match = re.search(r'<table class="stats-table larger-table">(.*?)</table>', html, re.I | re.S)
+    if not table_match:
+        return None
+
+    rows = re.findall(r"<tr[^>]*>(.*?)</tr>", table_match.group(1), re.I | re.S)
+    if len(rows) < 2:
+        return None
+
+    latest_row = rows[1]
+    cells = re.findall(r"<t[dh][^>]*>(.*?)</t[dh]>", latest_row, re.I | re.S)
+    if not cells:
+        return None
+
+    cleaned_cells = []
+    for cell in cells:
+        text = re.sub(r"<[^>]+>", " ", cell)
+        text = " ".join(text.split())
+        cleaned_cells.append(text)
+
+    if len(cleaned_cells) < 2:
+        return None
+
+    return _coerce_first_numeric(cleaned_cells[-1])
+
+
 # ============================================================
 # 🌐 Macro waarde ophalen (RAW ONLY)
 # ============================================================
@@ -268,6 +354,24 @@ def fetch_macro_value(name: str, source: str = None, link: str = None):
             data = r.json()
             return {"value": float(data["data"]["market_cap_percentage"]["btc"])}
         except Exception:
+            return {"value": None}
+
+    # 🟫 Google Trends (Bitcoin interest, 0-100)
+    if normalized == "google_trends":
+        try:
+            value = _fetch_google_trends_value(keyword="Bitcoin")
+            return {"value": value}
+        except Exception:
+            logger.warning("Google Trends fetch mislukt", exc_info=True)
+            return {"value": None}
+
+    # 🟫 BTC ETF net inflow (latest daily total, USD millions)
+    if normalized == "etf_bitcoin_inflow":
+        try:
+            value = _fetch_bitbo_btc_etf_inflow_value()
+            return {"value": value}
+        except Exception:
+            logger.warning("Bitbo ETF inflow fetch mislukt", exc_info=True)
             return {"value": None}
 
     # 🟪 Official FRED CSV export
