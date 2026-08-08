@@ -10,7 +10,12 @@ class MacroDataRepository:
     async def get_global_indicators(self, category: str = 'macro') -> Sequence[Indicator]:
         stmt = (
             select(Indicator)
-            .where(Indicator.category == category)
+            .where(
+                and_(
+                    Indicator.category == category,
+                    Indicator.active == True,
+                )
+            )
             .order_by(Indicator.display_name.asc())
         )
         result = await self.session.execute(stmt)
@@ -35,7 +40,12 @@ class MacroDataRepository:
         self.session.add(record)
 
     async def get_indicator_info(self, name: str) -> Optional[Indicator]:
-        stmt = select(Indicator).where(func.lower(Indicator.name) == func.lower(name))
+        stmt = select(Indicator).where(
+            and_(
+                func.lower(Indicator.name) == func.lower(name),
+                Indicator.active == True,
+            )
+        )
         result = await self.session.execute(stmt)
         return result.scalars().first()
 

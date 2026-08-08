@@ -1,10 +1,15 @@
 import asyncio
 import logging
 from typing import List, Optional, Dict, Any
+from types import SimpleNamespace
 
 from fastapi import HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from backend.domain.macro_indicator_catalog import (
+    get_active_macro_indicator_definitions,
+    get_macro_indicator_definition,
+)
 from backend.infrastructure.models import MacroData
 from backend.infrastructure.repositories.technical_data_repository import TechnicalDataRepository
 from backend.infrastructure.repositories.macro_data_repository import MacroDataRepository
@@ -50,6 +55,12 @@ class MacroDataService:
         self.session = session
         self.repository = MacroDataRepository(session)
         self.preference_repository = TechnicalDataRepository(session)
+
+    def _resolve_indicator_info(self, indicator_name: str, db_info: Optional[Any]) -> Optional[Any]:
+        catalog_def = get_macro_indicator_definition(indicator_name)
+        if catalog_def and catalog_def.get("active"):
+            return SimpleNamespace(**catalog_def)
+        return db_info
 
     async def _resolve_asset_scope(
         self,
@@ -262,7 +273,10 @@ class MacroDataService:
             raise HTTPException(409, f"Indicator '{indicator_name}' is al toegevoegd voor deze gebruiker en asset.")
 
         # Get config
-        info = await self.repository.get_indicator_info(indicator_name)
+        info = self._resolve_indicator_info(
+            indicator_name,
+            await self.repository.get_indicator_info(indicator_name),
+        )
         if not info:
             raise HTTPException(404, f"Indicator '{indicator_name}' bestaat niet of is inactief.")
 
@@ -271,7 +285,12 @@ class MacroDataService:
         if value is None:
             # Dynamically fetch
             try:
-                result = await asyncio.to_thread(self._sync_fetch_macro_value, indicator_name, info.source, info.link)
+                result = await asyncio.to_thread(
+                    self._sync_fetch_macro_value,
+                    indicator_name,
+                    info.source,
+                    info.link,
+                )
                 if not result:
                     raise HTTPException(500, f"Geen waarde ontvangen voor '{indicator_name}'")
 
@@ -291,8 +310,9 @@ class MacroDataService:
         interpretation = scored.get("interpretation") or "Geen interpretatie beschikbaar"
         action = scored.get("action") or "Geen actie"
 
+        canonical_name = str(getattr(info, "name", None) or indicator_name)
         record = MacroData(
-            name=indicator_name,
+            name=canonical_name,
             value=value,
             trend=trend,
             interpretation=interpretation,
@@ -379,7 +399,23 @@ class MacroDataService:
     # =========================================================
     async def get_all_macro_indicators(self) -> List[MacroIndicatorNamesResponse]:
         records = await self.repository.get_global_indicators()
-        return [MacroIndicatorNamesResponse(name=r.name, display_name=r.display_name) for r in records]
+        merged: dict[str, MacroIndicatorNamesResponse] = {}
+
+        for definition in get_active_macro_indicator_definitions():
+            merged[definition["name"]] = MacroIndicatorNamesResponse(
+                name=str(definition["name"]),
+                display_name=str(definition["display_name"]),
+            )
+
+        for record in records:
+            if record.name in merged:
+                continue
+            merged[record.name] = MacroIndicatorNamesResponse(
+                name=record.name,
+                display_name=record.display_name,
+            )
+
+        return sorted(merged.values(), key=lambda row: row.display_name.lower())
 
     async def get_rules_for_macro_indicator(self, name: str, user_id: int) -> List[MacroIndicatorRuleResponse]:
         records = await self.repository.get_indicator_rules(name, user_id)
