@@ -113,10 +113,18 @@ function resolveAssetLogoUrl(symbol, explicitLogoUrl = null) {
 }
 
 const ASSET_GROUPS = [
-  { id: "crypto", label: "Crypto", active: true },
-  { id: "stocks", label: "Stocks", active: false },
-  { id: "etf", label: "ETF", active: false },
+  { id: "crypto", label: "Crypto" },
+  { id: "stocks", label: "Stocks" },
 ];
+
+function normalizeAssetGroup(assetClass) {
+  const normalized = String(assetClass || "").trim().toLowerCase();
+  if (normalized === "crypto") return "crypto";
+  if (normalized === "stock" || normalized === "stocks" || normalized === "etf" || normalized === "etfs") {
+    return "stocks";
+  }
+  return "crypto";
+}
 
 function getUiCopy(locale = "nl") {
   const normalized = String(locale || "nl").toLowerCase();
@@ -1238,7 +1246,7 @@ function ActiveAssetCard({
   );
 }
 
-function AssetList({ rows, activeSymbol, onSelect, onAddAsset, ui }) {
+function AssetList({ rows, activeSymbol, activeGroup, onSelect, onGroupChange, onAddAsset, ui }) {
   return (
     <section className="rounded-[24px] border border-slate-200/80 bg-white p-3.5 shadow-[0_18px_40px_-36px_rgba(15,23,42,0.26)]">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -1251,8 +1259,9 @@ function AssetList({ rows, activeSymbol, onSelect, onAddAsset, ui }) {
               <button
                 key={group.id}
                 type="button"
+                onClick={() => onGroupChange(group.id)}
                 className={`rounded-full border px-2.5 py-0.5 text-[10px] font-black uppercase tracking-[0.16em] ${
-                  group.active
+                  activeGroup === group.id
                     ? "border-slate-900 bg-slate-900 text-white"
                     : "border-slate-200 bg-white text-slate-500"
                 }`}
@@ -1282,7 +1291,7 @@ function AssetList({ rows, activeSymbol, onSelect, onAddAsset, ui }) {
           <div className="text-right">{ui.bias}</div>
         </div>
         <div>
-          {rows.map((row) => {
+          {rows.length ? rows.map((row) => {
             const active = row.symbol === activeSymbol;
             return (
               <button
@@ -1324,7 +1333,11 @@ function AssetList({ rows, activeSymbol, onSelect, onAddAsset, ui }) {
                 </div>
               </button>
             );
-          })}
+          }) : (
+            <div className="px-4 py-6 text-center text-xs font-bold text-slate-400">
+              {activeGroup === "stocks" ? "Nog geen stock-assets in je watchlist." : "Nog geen crypto-assets in je watchlist."}
+            </div>
+          )}
         </div>
       </div>
     </section>
@@ -1745,6 +1758,7 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
   const [marketTimeframe, setMarketTimeframe] = useState("day");
   const [macroTimeframe, setMacroTimeframe] = useState("day");
   const [technicalTimeframe, setTechnicalTimeframe] = useState("day");
+  const [activeAssetGroup, setActiveAssetGroup] = useState("crypto");
   const [expandedRowKey, setExpandedRowKey] = useState(null);
   const [technicalConfigModal, setTechnicalConfigModal] = useState(null);
   const [watchlistRows, setWatchlistRows] = useState([]);
@@ -1815,6 +1829,13 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
   const macroLoading = workspaceLoading && !hasResolvedWorkspace;
   const technicalLoading = workspaceLoading && !hasResolvedWorkspace;
   const scoresLoading = workspaceLoading && !hasResolvedWorkspace;
+
+  useEffect(() => {
+    const activeRow = watchlistRows.find((row) => row.symbol === activeSymbol);
+    if (!activeRow) return;
+    const nextGroup = normalizeAssetGroup(activeRow.assetClass);
+    setActiveAssetGroup((current) => (current === nextGroup ? current : nextGroup));
+  }, [activeSymbol, watchlistRows]);
 
   useEffect(() => {
     let cancelled = false;
@@ -2044,10 +2065,13 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
         const nextRows = (watchlistData || []).map((row) => {
           const changeValue = Number(row?.change_24h);
           const tone = scoreTone(row?.score, ui);
+          const assetClass = String(row?.asset_class || "").toLowerCase();
           return {
             symbol: row.symbol,
             displayName: row?.display_name || row?.displayName || ASSET_NAMES[row.symbol] || row.symbol,
             logoUrl: resolveAssetLogoUrl(row?.symbol, row?.logo_url || row?.logoUrl || null),
+            assetClass,
+            assetGroup: normalizeAssetGroup(assetClass),
             lastPrice: formatPrice(row?.price, locale),
             change24h: formatPercent(changeValue, 2),
             changeTone: Number.isFinite(changeValue)
@@ -2069,6 +2093,11 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
       cancelled = true;
     };
   }, [locale, ui, watchlistData, watchlistLoading]);
+
+  const visibleWatchlistRows = useMemo(
+    () => watchlistRows.filter((row) => row.assetGroup === activeAssetGroup),
+    [activeAssetGroup, watchlistRows]
+  );
 
   const sections = useMemo(() => {
     const marketRows = filterVisibleRows(buildRows(marketDayData, locale, ui), activeSymbol, "market", hiddenIndicatorKeys);
@@ -2179,9 +2208,11 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
       />
 
       <AssetList
-        rows={watchlistRows}
+        rows={visibleWatchlistRows}
         activeSymbol={activeSymbol}
         onSelect={handleAssetSelect}
+        activeGroup={activeAssetGroup}
+        onGroupChange={setActiveAssetGroup}
         onAddAsset={() => openSearch()}
         ui={ui}
       />
