@@ -20,6 +20,11 @@ class TwelveDataTechnicalIndicatorAdapter:
 
     async def fetch_indicator_value(self, asset: AssetRecord, indicator_name: str) -> float:
         normalized = str(indicator_name or "").strip().lower()
+        if asset.asset_class == "crypto":
+            fallback = await self._fetch_without_api_key(asset, normalized)
+            if fallback is not None:
+                return fallback
+
         if not self.api_key:
             fallback = await self._fetch_without_api_key(asset, normalized)
             if fallback is not None:
@@ -147,7 +152,11 @@ class TwelveDataTechnicalIndicatorAdapter:
     def _provider_symbol(self, asset: AssetRecord) -> str:
         provider_symbol = str(asset.provider_symbol or asset.symbol or "").strip().upper()
         if asset.asset_class == "crypto":
-            for quote in ("USDT", "USDC", "USD", "BUSD", "FDUSD", "EUR"):
+            for quote in ("USDT", "USDC", "BUSD", "FDUSD"):
+                if provider_symbol.endswith(quote) and len(provider_symbol) > len(quote):
+                    base = provider_symbol[: -len(quote)]
+                    return f"{base}/USD"
+            for quote in ("USD", "EUR"):
                 if provider_symbol.endswith(quote) and len(provider_symbol) > len(quote):
                     base = provider_symbol[: -len(quote)]
                     return f"{base}/{quote}"

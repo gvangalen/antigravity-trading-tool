@@ -139,20 +139,22 @@ export function useAssetWorkspaceData(symbol, periods, watchlistSymbols) {
     });
   }
 
-  const reloadWorkspace = useCallback(async () => {
+  const reloadWorkspace = useCallback(async ({ forceNetwork = false } = {}) => {
     const cached = getFreshCache(workspaceCache, workspaceKey, WORKSPACE_CACHE_TTL_MS);
-    if (cached) {
+    if (cached && !forceNetwork) {
       setWorkspace(cached);
+      setWatchlist(Array.isArray(cached?.watchlist?.rows) ? cached.watchlist.rows : []);
+      setWatchlistLoading(false);
       setLoading(false);
-    } else {
-      setLoading(true);
+      return cached;
     }
+    setLoading(true);
     const controller = new AbortController();
     const timeoutId = window.setTimeout(() => controller.abort(), WORKSPACE_REQUEST_TIMEOUT_MS);
     try {
       const payload = await fetchAssetWorkspace(symbol, periods, {
         signal: controller.signal,
-        forceFresh: true,
+        forceFresh: forceNetwork,
         watchlistSymbols: normalizedWatchlistSymbols,
       });
       setFreshCache(workspaceCache, workspaceKey, payload);
@@ -219,17 +221,17 @@ export function useAssetWorkspaceData(symbol, periods, watchlistSymbols) {
   }, [cachedWatchlist.length, normalizedWatchlistSymbols, periods, symbol, workspaceKey]);
 
   async function reloadWatchlist() {
-    return reloadWorkspace();
+    return reloadWorkspace({ forceNetwork: true });
   }
 
   useEffect(() => {
-    void reloadWorkspace();
+    void reloadWorkspace({ forceNetwork: false });
   }, [workspaceKey]);
 
   useEffect(() => {
     return subscribeWorkspaceRefresh((payload) => {
       if (String(payload?.symbol || "").toUpperCase() !== assetSymbol) return;
-      void reloadWorkspace();
+      void reloadWorkspace({ forceNetwork: true });
     });
   }, [assetSymbol, reloadWorkspace]);
 
@@ -240,7 +242,7 @@ export function useAssetWorkspaceData(symbol, periods, watchlistSymbols) {
       const now = Date.now();
       if (now - lastForegroundRefreshAtRef.current < FOREGROUND_REFRESH_COOLDOWN_MS) return;
       lastForegroundRefreshAtRef.current = now;
-      void reloadWorkspace();
+      void reloadWorkspace({ forceNetwork: true });
     };
 
     const handleFocus = () => refreshIfNeeded();
@@ -255,7 +257,7 @@ export function useAssetWorkspaceData(symbol, periods, watchlistSymbols) {
     };
   }, [reloadWorkspace]);
 
-  useVisibilityPolling(reloadWorkspace, {
+  useVisibilityPolling(() => reloadWorkspace({ forceNetwork: true }), {
     intervalMs: 60_000,
     backgroundIntervalMs: 300_000,
     runImmediately: false,

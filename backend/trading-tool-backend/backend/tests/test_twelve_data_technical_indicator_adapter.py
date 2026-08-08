@@ -18,7 +18,7 @@ def _asset(symbol: str = "BTC", provider_symbol: str = "BTCUSDT", asset_class: s
 def test_provider_symbol_normalizes_crypto_pairs_for_twelve_data():
     adapter = TwelveDataTechnicalIndicatorAdapter(api_key="test-key")
 
-    assert adapter._provider_symbol(_asset(provider_symbol="BTCUSDT")) == "BTC/USDT"
+    assert adapter._provider_symbol(_asset(provider_symbol="BTCUSDT")) == "BTC/USD"
     assert adapter._provider_symbol(_asset(provider_symbol="ETHUSD")) == "ETH/USD"
     assert adapter._provider_symbol(_asset(symbol="AAPL", provider_symbol="AAPL", asset_class="stock")) == "AAPL"
 
@@ -50,3 +50,10 @@ def test_crypto_indicator_falls_back_to_binance_without_twelve_data_key():
     import asyncio
 
     asyncio.run(run())
+
+
+def test_provider_symbol_maps_stablecoin_crypto_pairs_to_usd():
+    adapter = TwelveDataTechnicalIndicatorAdapter(api_key="test-key")
+
+    assert adapter._provider_symbol(_asset(provider_symbol="BTCUSDT")) == "BTC/USD"
+    assert adapter._provider_symbol(_asset(provider_symbol="ETHUSDC")) == "ETH/USD"
