@@ -1766,6 +1766,7 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
   const [analysisChartInterval, setAnalysisChartInterval] = useState(DEFAULT_TRADINGVIEW_INTERVAL);
   const [hiddenIndicatorKeys, setHiddenIndicatorKeys] = useState([]);
   const appliedIndicatorsRef = useRef(new Set());
+  const previousActiveSymbolRef = useRef(null);
 
   const indicatorFromUrl = searchParams.get("indicator");
   const marketIndicatorFromUrl = searchParams.get("marketIndicator");
@@ -1833,6 +1834,9 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
   useEffect(() => {
     const activeRow = watchlistRows.find((row) => row.symbol === activeSymbol);
     if (!activeRow) return;
+    const previousActiveSymbol = previousActiveSymbolRef.current;
+    previousActiveSymbolRef.current = activeSymbol;
+    if (previousActiveSymbol === activeSymbol) return;
     const nextGroup = normalizeAssetGroup(activeRow.assetClass);
     setActiveAssetGroup((current) => (current === nextGroup ? current : nextGroup));
   }, [activeSymbol, watchlistRows]);

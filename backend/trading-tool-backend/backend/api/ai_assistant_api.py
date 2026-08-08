@@ -61,6 +61,7 @@ from backend.infrastructure.repositories.conversation_state_repository import Co
 from backend.infrastructure.repositories.assistant_context_repository import AssistantContextRepository
 from backend.services.ai_action_engine import AiActionEngine
 from backend.services.ai_availability_service import get_ai_availability
+from backend.services.asset_catalog_service import DEFAULT_ASSET_CATALOG
 from backend.services.finn_response_trace_service import build_finn_response_trace
 
 if TYPE_CHECKING:
@@ -262,7 +263,6 @@ async def _ensure_pending_action_ids(
     return payload
 
 
-KNOWN_FINN_ASSETS = ("BTC", "ETH", "SOL")
 PROFILE_VALUE_LABELS = {
     "swing_trader": "swing trader",
     "day_trader": "day trader",
@@ -285,10 +285,59 @@ PROFILE_VALUE_LABELS = {
 }
 
 
+def _normalize_asset_alias(value: str) -> str:
+    normalized = re.sub(r"[^a-z0-9]+", " ", str(value or "").lower()).strip()
+    normalized = re.sub(
+        r"\b(incorporated|inc|corp|corporation|holdings|holding|group|trust|fund|etf|shares|global|class a|class b)\b",
+        " ",
+        normalized,
+    )
+    return re.sub(r"\s+", " ", normalized).strip()
+
+
+def _asset_query_candidates() -> list[tuple[str, str]]:
+    candidates: list[tuple[str, str]] = []
+    seen: set[tuple[str, str]] = set()
+
+    for symbol, meta in DEFAULT_ASSET_CATALOG.items():
+        normalized_symbol = str(symbol or "").strip().upper()
+        if not normalized_symbol:
+            continue
+
+        aliases = {
+            normalized_symbol.lower(),
+            _normalize_asset_alias(meta.get("display_name") or ""),
+            _normalize_asset_alias(str(meta.get("display_name") or "").replace(".", "")),
+        }
+
+        metadata = meta.get("metadata") if isinstance(meta.get("metadata"), dict) else {}
+        for extra in metadata.get("aliases", []) if isinstance(metadata.get("aliases"), list) else []:
+            aliases.add(_normalize_asset_alias(extra))
+
+        for alias in aliases:
+            if not alias:
+                continue
+            key = (alias, normalized_symbol)
+            if key in seen:
+                continue
+            seen.add(key)
+            candidates.append(key)
+
+    candidates.sort(key=lambda item: len(item[0]), reverse=True)
+    return candidates
+
+
+ASSET_QUERY_CANDIDATES = _asset_query_candidates()
+
+
 def _extract_asset_from_query(query: str) -> Optional[str]:
     upper = str(query or "").upper()
-    for symbol in KNOWN_FINN_ASSETS:
-        if re.search(rf"\b{re.escape(symbol)}\b", upper):
+    normalized_query = _normalize_asset_alias(query)
+
+    for alias, symbol in ASSET_QUERY_CANDIDATES:
+        if alias.isalnum() and len(alias) <= 5 and re.search(rf"\b{re.escape(alias.upper())}\b", upper):
+            return symbol
+        if alias and re.search(rf"\b{re.escape(alias)}\b", normalized_query):
             return symbol
     return None
 
