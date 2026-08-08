@@ -111,6 +111,16 @@ if ! ssh "${SSH_ARGS[@]}" "ubuntu@$SERVER_IP" "
   export BACKEND_PORT=$BACKEND_PORT
   export FRONTEND_PORT=$FRONTEND_PORT
   cd $REMOTE_DIR
+  ENV_FILE="\$HOME/.secrets/trading.env"
+  if [ -f "\$ENV_FILE" ]; then
+    set -o allexport
+    source "\$ENV_FILE"
+    set +o allexport
+  fi
+  if [ -z "\${TWELVE_DATA_API_KEY:-}" ]; then
+    echo \"❌ TWELVE_DATA_API_KEY ontbreekt in runtime env (\$ENV_FILE).\" >&2
+    exit 1
+  fi
   PREVIOUS_FRONTEND_STATIC=\"\$(mktemp -d)\"
   cleanup_previous_frontend_static() {
     rm -rf \"\$PREVIOUS_FRONTEND_STATIC\"

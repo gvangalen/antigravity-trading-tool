@@ -29,6 +29,41 @@ const WORKER_CONCURRENCY = {
   aiReporting: 1,
 };
 
+function pickRuntimeEnv(keys) {
+  return keys.reduce((acc, key) => {
+    if (typeof process.env[key] !== "undefined") {
+      acc[key] = process.env[key];
+    }
+    return acc;
+  }, {});
+}
+
+const SHARED_RUNTIME_ENV = pickRuntimeEnv([
+  "TWELVE_DATA_API_KEY",
+  "OPENAI_API_KEY",
+  "FRONTEND_URL",
+  "CORS_ORIGINS",
+  "CORS_ALLOW_ORIGIN_REGEX",
+  "DATABASE_URL",
+  "SECRET_KEY",
+  "JWT_SECRET_KEY",
+  "JWT_ALGORITHM",
+  "ACCESS_TOKEN_EXPIRE_MINUTES",
+  "REFRESH_TOKEN_EXPIRE_DAYS",
+  "FRED_API_KEY",
+  "ALPHA_VANTAGE_API_KEY",
+  "COINMARKETCAP_API_KEY",
+  "BINANCE_API_KEY",
+  "BINANCE_API_SECRET",
+  "BYBIT_API_KEY",
+  "BYBIT_API_SECRET",
+  "COINBASE_API_KEY",
+  "COINBASE_API_SECRET",
+  "REDIS_URL",
+  "CELERY_BROKER_URL",
+  "CELERY_RESULT_BACKEND",
+]);
+
 function createEcosystem(environmentName) {
   const environment = ENVIRONMENTS[environmentName];
   if (!environment) {
@@ -55,6 +90,7 @@ function createEcosystem(environmentName) {
         cwd: frontendDir,
         interpreter: NODE_INTERPRETER,
         env: {
+          ...SHARED_RUNTIME_ENV,
           NODE_ENV: "production",
           PORT: environment.frontendPort,
           APP_ENV: environment.appEnv,
@@ -67,6 +103,7 @@ function createEcosystem(environmentName) {
         args: `-m uvicorn backend.main:app --host 0.0.0.0 --port ${environment.backendPort}`,
         cwd: backendDir,
         env: {
+          ...SHARED_RUNTIME_ENV,
           APP_ENV: environment.appEnv,
         },
         max_memory_restart: "500M",
@@ -78,6 +115,7 @@ function createEcosystem(environmentName) {
         cwd: backendDir,
         interpreter: "none",
         env: {
+          ...SHARED_RUNTIME_ENV,
           APP_ENV: environment.appEnv,
         },
         max_memory_restart: "300M",
@@ -89,6 +127,7 @@ function createEcosystem(environmentName) {
         cwd: backendDir,
         interpreter: "none",
         env: {
+          ...SHARED_RUNTIME_ENV,
           APP_ENV: environment.appEnv,
         },
         max_memory_restart: "300M",
@@ -100,6 +139,7 @@ function createEcosystem(environmentName) {
         cwd: backendDir,
         interpreter: "none",
         env: {
+          ...SHARED_RUNTIME_ENV,
           APP_ENV: environment.appEnv,
         },
         max_memory_restart: "300M",
@@ -111,6 +151,7 @@ function createEcosystem(environmentName) {
         cwd: backendDir,
         interpreter: "none",
         env: {
+          ...SHARED_RUNTIME_ENV,
           APP_ENV: environment.appEnv,
         },
         max_memory_restart: "350M",
@@ -122,6 +163,7 @@ function createEcosystem(environmentName) {
         cwd: backendDir,
         interpreter: "none",
         env: {
+          ...SHARED_RUNTIME_ENV,
           APP_ENV: environment.appEnv,
         },
         max_memory_restart: "200M",
