@@ -95,6 +95,11 @@ celery_app.conf.beat_schedule = {
         crontab(hour=2, minute=20),
     ),
 
+    "sync_crypto_forward_returns": build_task_schedule_entry(
+        "backend.celery_task.market_task.sync_crypto_forward_returns",
+        crontab(hour="*/6", minute=35),
+    ),
+
     # =====================================================
     # 2️⃣ INDICATORS (SPREAD OUT)
     # =====================================================

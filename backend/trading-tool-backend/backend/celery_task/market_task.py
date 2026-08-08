@@ -1,6 +1,7 @@
 import logging
 import requests
 import json
+import asyncio
 from datetime import datetime
 from collections import defaultdict
 
@@ -10,6 +11,8 @@ from tenacity import retry, stop_after_attempt, wait_exponential
 from backend.utils.db import get_db_connection
 from backend.celery_task.btc_price_history_task import update_btc_history
 from backend.utils.scoring_utils import generate_scores_db
+from backend.infrastructure.database import async_session_factory
+from backend.services.market_data_service import MarketDataService
 
 # =====================================================
 # ⚙️ Config
@@ -298,6 +301,23 @@ def fetch_market_data_7d():
         conn.rollback()
     finally:
         conn.close()
+
+
+@shared_task(name="backend.celery_task.market_task.sync_crypto_forward_returns")
+def sync_crypto_forward_returns():
+    """Houd ondersteunde crypto forward returns warm, zodat de workspace snel blijft."""
+
+    async def _run():
+        async with async_session_factory() as session:
+            service = MarketDataService(session)
+            return await service.sync_supported_forward_returns(asset_class="crypto")
+
+    try:
+        logger.info("📚 Start crypto forward returns sync...")
+        result = asyncio.run(_run())
+        logger.info("✅ Crypto forward returns sync voltooid: %s", result)
+    except Exception:
+        logger.exception("❌ Crypto forward returns sync mislukt")
 
 # =====================================================
 # 📈 Forward returns (GLOBAAL)

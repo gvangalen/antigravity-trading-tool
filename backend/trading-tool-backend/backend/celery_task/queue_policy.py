@@ -30,6 +30,7 @@ TASK_QUEUE_ROUTES: Dict[str, str] = {
     "backend.celery_task.market_task.fetch_market_data_7d": "market_data",
     "backend.celery_task.market_task.save_market_data_daily": "market_data",
     "backend.celery_task.market_task.calculate_and_save_forward_returns": "market_data",
+    "backend.celery_task.market_task.sync_crypto_forward_returns": "market_data",
     "backend.celery_task.market_task.fetch_market_indicators": "market_data",
     "backend.celery_task.market_task.run_market_agent_daily": "ai_generation",
     "backend.celery_task.macro_task.fetch_macro_data": "market_data",

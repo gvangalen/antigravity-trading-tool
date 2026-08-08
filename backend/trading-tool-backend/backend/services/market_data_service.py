@@ -1,5 +1,5 @@
 from typing import Optional, List, Dict, Any
-from datetime import datetime, date
+from datetime import datetime, date, timezone, timedelta
 from collections import defaultdict
 import asyncio
 import httpx
@@ -22,6 +22,31 @@ from backend.utils.scoring_utils import normalize_indicator_name
 from backend.utils.indicator_score_validation import require_indicator_score
 
 logger = logging.getLogger(__name__)
+
+
+FORWARD_RETURN_SYMBOL_SUPPORT: dict[str, dict[str, Any]] = {
+    "BTC": {"source": "binance", "minimum_history_years": 5},
+    "ETH": {"source": "binance", "minimum_history_years": 4},
+    "SOL": {"source": "binance", "minimum_history_years": 3},
+    "XRP": {"source": "binance", "minimum_history_years": 5},
+    "LINK": {"source": "binance", "minimum_history_years": 4},
+    "MSTR": {"source": "twelve_data", "minimum_history_years": 5},
+    "COIN": {"source": "twelve_data", "minimum_history_years": 4},
+    "MARA": {"source": "twelve_data", "minimum_history_years": 5},
+    "RIOT": {"source": "twelve_data", "minimum_history_years": 5},
+    "CLSK": {"source": "twelve_data", "minimum_history_years": 5},
+    "HUT": {"source": "twelve_data", "minimum_history_years": 5},
+    "BTDR": {"source": "twelve_data", "minimum_history_years": 3},
+    "WULF": {"source": "twelve_data", "minimum_history_years": 4},
+    "CORZ": {"source": "twelve_data", "minimum_history_years": 2},
+    "SPY": {"source": "twelve_data", "minimum_history_years": 5},
+    "QQQ": {"source": "twelve_data", "minimum_history_years": 5},
+    "IBIT": {"source": "twelve_data", "minimum_history_years": 1},
+    "FBTC": {"source": "twelve_data", "minimum_history_years": 1},
+    "GLD": {"source": "twelve_data", "minimum_history_years": 5},
+    "AAPL": {"source": "twelve_data", "minimum_history_years": 5},
+    "MSFT": {"source": "twelve_data", "minimum_history_years": 5},
+}
 
 # =========================================================
 # SYNCHRONOUS WRAPPERS FOR LEGACY COMPONENTS
@@ -59,6 +84,148 @@ class MarketDataService:
         self.repository = MarketDataRepository(db_session)
         self.preference_repository = TechnicalDataRepository(db_session)
         self.provider_registry = MarketDataProviderRegistry()
+
+    async def get_forward_return_support(self, symbol: str) -> dict[str, Any]:
+        normalized_symbol = str(symbol or "").strip().upper()
+        asset_meta = await AssetCatalogService(self.session).get_asset(normalized_symbol)
+        config = FORWARD_RETURN_SYMBOL_SUPPORT.get(normalized_symbol)
+        if not config:
+            return {
+                "supported": False,
+                "symbol": normalized_symbol,
+                "asset_class": asset_meta.get("asset_class"),
+                "source": None,
+                "reason": "unsupported_symbol",
+            }
+        return {
+            "supported": True,
+            "symbol": normalized_symbol,
+            "asset_class": asset_meta.get("asset_class"),
+            "source": config["source"],
+            "minimum_history_years": int(config["minimum_history_years"]),
+            "provider_symbol": asset_meta.get("provider_symbol") or normalized_symbol,
+        }
+
+    @staticmethod
+    def _coverage_cutoff_date(minimum_history_years: int) -> date:
+        return (datetime.now(timezone.utc) - timedelta(days=365 * int(minimum_history_years))).date()
+
+    @staticmethod
+    def _as_date(value: Any) -> date | None:
+        if value is None:
+            return None
+        if isinstance(value, datetime):
+            return value.date()
+        if isinstance(value, date):
+            return value
+        return None
+
+    async def _forward_returns_need_refresh(self, symbol: str, support: dict[str, Any]) -> bool:
+        records = await self.repository.get_forward_returns(symbol)
+        if not records:
+            return True
+
+        oldest = min((self._as_date(record.start_date) for record in records if record.start_date), default=None)
+        newest = max((self._as_date(record.start_date) for record in records if record.start_date), default=None)
+        if oldest is None or newest is None:
+            return True
+
+        if oldest > self._coverage_cutoff_date(support["minimum_history_years"]):
+            return True
+
+        if newest < (datetime.now(timezone.utc) - timedelta(days=45)).date():
+            return True
+
+        return False
+
+    async def ensure_forward_returns_ready(self, symbol: str) -> dict[str, Any]:
+        normalized_symbol = str(symbol or "").strip().upper()
+        support = await self.get_forward_return_support(normalized_symbol)
+        if not support.get("supported"):
+            return support
+
+        if await self._forward_returns_need_refresh(normalized_symbol, support):
+            logger.info("🔁 Forward returns refresh nodig voor %s", normalized_symbol)
+            await self.sync_symbol_forward_returns(normalized_symbol)
+
+        return support
+
+    async def sync_supported_forward_returns(
+        self,
+        *,
+        symbols: list[str] | None = None,
+        asset_class: str | None = None,
+    ) -> dict[str, Any]:
+        requested = [str(symbol or "").strip().upper() for symbol in (symbols or []) if str(symbol or "").strip()]
+        if requested:
+            targets = [symbol for symbol in requested if symbol in FORWARD_RETURN_SYMBOL_SUPPORT]
+        else:
+            targets = list(FORWARD_RETURN_SYMBOL_SUPPORT.keys())
+            if asset_class:
+                normalized_class = str(asset_class or "").strip().lower()
+                catalog = await AssetCatalogService(self.session).get_assets(targets)
+                targets = [
+                    symbol for symbol in targets
+                    if str(catalog.get(symbol, {}).get("asset_class") or "").strip().lower() == normalized_class
+                ]
+
+        results: dict[str, Any] = {"requested": targets, "synced": [], "failed": []}
+        for symbol in targets:
+            try:
+                payload = await self.sync_symbol_forward_returns(symbol)
+                results["synced"].append({"symbol": symbol, "payload": payload})
+            except Exception as exc:
+                logger.error("❌ Forward returns sync mislukt voor %s: %s", symbol, exc, exc_info=True)
+                await self.session.rollback()
+                results["failed"].append({"symbol": symbol, "error": str(exc)})
+        return results
+
+    async def _load_binance_forward_prices(self, asset: AssetRecord) -> dict[date, float]:
+        all_prices: list[tuple[int, float]] = []
+        raw_provider_symbol = str(asset.provider_symbol or "").strip().upper()
+        if raw_provider_symbol.endswith(("USDT", "USDC", "BUSD", "FDUSD", "EUR", "USD")):
+            provider_symbol = raw_provider_symbol
+        else:
+            quote_currency = str(asset.quote_currency or "USDT").strip().upper() or "USDT"
+            provider_symbol = f"{asset.symbol.upper()}{quote_currency}"
+        end_time: int | None = None
+
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            for _ in range(4):
+                params: dict[str, Any] = {
+                    "symbol": provider_symbol,
+                    "interval": "1d",
+                    "limit": 1000,
+                }
+                if end_time is not None:
+                    params["endTime"] = end_time
+
+                response = await client.get("https://api.binance.com/api/v3/klines", params=params)
+                response.raise_for_status()
+                rows = response.json()
+                if not rows:
+                    break
+
+                chunk = [(int(row[0]), float(row[4])) for row in rows]
+                all_prices = chunk + all_prices
+                end_time = int(rows[0][0]) - 1
+
+                if len(rows) < 1000:
+                    break
+
+        return {
+            datetime.fromtimestamp(ts / 1000, timezone.utc).date(): price
+            for ts, price in all_prices
+        }
+
+    async def _load_twelve_data_forward_prices(self, asset: AssetRecord) -> dict[date, float]:
+        provider = self.provider_registry.get_provider("twelve_data")
+        candles = await provider.fetch_candles(asset, "1day", limit=5000)
+        return {
+            candle.period_start.date(): float(candle.close)
+            for candle in candles
+            if candle.period_start and candle.close is not None
+        }
 
     async def _resolve_asset_scope(
         self,
@@ -542,56 +709,38 @@ class MarketDataService:
 
     async def sync_symbol_forward_returns(self, symbol: str) -> dict:
         symbol = symbol.upper()
-        # Binance uses symbols like BTCUSDT, SOLUSDT
-        binance_symbol = f"{symbol}USDT"
+        support = await self.get_forward_return_support(symbol)
+        if not support.get("supported"):
+            return {
+                "status": "unsupported",
+                "symbol": symbol,
+                "reason": support.get("reason") or "unsupported_symbol",
+            }
 
-        logger.info(f"📥 Sync {symbol} forward returns gestart via Binance API")
-        
-        from datetime import datetime, timezone
-        from collections import defaultdict
-        
-        all_prices = []
-        end_time = int(datetime.now(timezone.utc).timestamp() * 1000)
-        
-        async with httpx.AsyncClient(timeout=15.0) as client:
-            # We want up to 11 years of data (4000 days). Binance gives max 1000 per request.
-            for _ in range(4):
-                url = f"https://api.binance.com/api/v3/klines?symbol={binance_symbol}&interval=1d&limit=1000&endTime={end_time}"
-                res = await client.get(url)
-                if res.status_code != 200:
-                    logger.error(f"❌ Binance API fout voor {symbol}: {res.status_code}")
-                    break
-                    
-                klines = res.json()
-                if not klines:
-                    break
-                    
-                chunk_prices = []
-                for k in klines:
-                    ts = k[0]
-                    close_price = float(k[4])
-                    chunk_prices.append((ts, close_price))
-                    
-                # Prepend because we are going backwards in time chunk by chunk
-                all_prices = chunk_prices + all_prices
-                
-                # Next end_time is the open time of the first kline in this chunk minus 1 ms
-                end_time = klines[0][0] - 1
-                
-                if len(klines) < 1000:
-                    break
-                    
-        if not all_prices:
-            return {"error": "Geen prijs data gevonden op Binance"}
+        asset_meta = await AssetCatalogService(self.session).get_asset(symbol)
+        asset = AssetRecord(**asset_meta)
 
-        daily_prices = {}
-        for ts, price in all_prices:
-            d = datetime.fromtimestamp(ts/1000, timezone.utc).date()
-            daily_prices[d] = price
-            
+        logger.info(
+            "📥 Sync %s forward returns gestart via %s",
+            symbol,
+            support["source"],
+        )
+
+        if support["source"] == "binance":
+            daily_prices = await self._load_binance_forward_prices(asset)
+        elif support["source"] == "twelve_data":
+            daily_prices = await self._load_twelve_data_forward_prices(asset)
+        else:
+            raise ValueError(f"Onbekende forward return source voor {symbol}: {support['source']}")
+
         sorted_dates = sorted(daily_prices.keys())
         if not sorted_dates:
-            return {"error": "Geen prijs data"}
+            return {
+                "status": "empty",
+                "symbol": symbol,
+                "source": support["source"],
+                "reason": "no_price_history",
+            }
 
         groups = {
             "7d": defaultdict(list),
@@ -643,7 +792,14 @@ class MarketDataService:
                 inserted += 1
 
         await self.session.commit()
-        return {"status": f"✅ Forward Returns gegenereerd", "inserted": inserted}
+        return {
+            "status": "✅ Forward Returns gegenereerd",
+            "symbol": symbol,
+            "source": support["source"],
+            "inserted": inserted,
+            "history_start": sorted_dates[0].isoformat(),
+            "history_end": sorted_dates[-1].isoformat(),
+        }
 
     async def fill_btc_7day_data(self, fallback_endpoints: dict = None, overwrite: bool = False) -> dict:
         """Legacy wrapper for BTC."""
@@ -659,16 +815,26 @@ class MarketDataService:
     # Forward Returns
     # =========================================================
     async def get_market_forward_returns(self, symbol: str = "BTC") -> List[MarketForwardReturnResponse]:
-        records = await self.repository.get_forward_returns(symbol.upper())
+        symbol = symbol.upper()
+        support = await self.ensure_forward_returns_ready(symbol)
+        if not support.get("supported"):
+            return []
+        records = await self.repository.get_forward_returns(symbol)
         return [MarketForwardReturnResponse.from_orm(r) for r in records]
 
     async def get_forward_returns_aggregated(self, period: str, symbol: str = "BTC") -> List[ForwardReturnChartResponse]:
-        records = await self.repository.get_forward_returns_by_period(symbol.upper(), period)
+        symbol = symbol.upper()
+        support = await self.ensure_forward_returns_ready(symbol)
+        if not support.get("supported"):
+            return []
+
+        records = await self.repository.get_forward_returns_by_period(symbol, period)
         
         if period == '7d':
              data = defaultdict(lambda: [None] * 53)
              for r in records:
-                 data[r.start_date.year][int(r.start_date.strftime("%U"))] = float(r.change or 0)
+                 week_index = max(min(r.start_date.isocalendar().week - 1, 52), 0)
+                 data[r.start_date.year][week_index] = float(r.change or 0)
              return [ForwardReturnChartResponse(year=y, values=v) for y, v in sorted(data.items())]
 
         elif period == '30d':
