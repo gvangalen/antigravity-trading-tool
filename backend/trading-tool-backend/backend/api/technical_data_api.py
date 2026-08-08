@@ -230,8 +230,8 @@ async def delete_technical_indicator(
 # ===============================================================
 @router.get("/technical/indicators", response_model=List[TechnicalIndicatorConfig])
 async def get_all_indicators(session: AsyncSession = Depends(get_db)):
-    repo = TechnicalDataRepository(session)
-    return await repo.get_all_indicators()
+    service = TechnicalDataService(session)
+    return await service.get_all_indicators()
 
 
 # ===============================================================

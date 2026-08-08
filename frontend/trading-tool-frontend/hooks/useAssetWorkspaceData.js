@@ -6,9 +6,11 @@ import { useVisibilityPolling } from "@/hooks/useVisibilityPolling";
 import { fetchAssetWorkspace } from "@/lib/api/workspace";
 import { fetchLatestPrice } from "@/lib/api/market";
 import { getDailyScores } from "@/lib/api/scores";
+import { subscribeWorkspaceRefresh } from "@/lib/workspaceSync";
 
 const WORKSPACE_REQUEST_TIMEOUT_MS = 15000;
 const WORKSPACE_CACHE_TTL_MS = 60_000;
+const FOREGROUND_REFRESH_COOLDOWN_MS = 5_000;
 
 const workspaceCache = new Map();
 
@@ -114,6 +116,7 @@ export function useAssetWorkspaceData(symbol, periods, watchlistSymbols) {
   const [isFallbackWorkspace, setIsFallbackWorkspace] = useState(false);
   const fallbackStartedAtRef = useRef(null);
   const latestWorkspaceRef = useRef(cachedWorkspace || null);
+  const lastForegroundRefreshAtRef = useRef(0);
   const assetSymbol = String(symbol || "BTC").toUpperCase();
 
   useEffect(() => {
@@ -222,6 +225,35 @@ export function useAssetWorkspaceData(symbol, periods, watchlistSymbols) {
   useEffect(() => {
     void reloadWorkspace();
   }, [workspaceKey]);
+
+  useEffect(() => {
+    return subscribeWorkspaceRefresh((payload) => {
+      if (String(payload?.symbol || "").toUpperCase() !== assetSymbol) return;
+      void reloadWorkspace();
+    });
+  }, [assetSymbol, reloadWorkspace]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return undefined;
+
+    const refreshIfNeeded = () => {
+      const now = Date.now();
+      if (now - lastForegroundRefreshAtRef.current < FOREGROUND_REFRESH_COOLDOWN_MS) return;
+      lastForegroundRefreshAtRef.current = now;
+      void reloadWorkspace();
+    };
+
+    const handleFocus = () => refreshIfNeeded();
+    const handlePageShow = () => refreshIfNeeded();
+
+    window.addEventListener("focus", handleFocus);
+    window.addEventListener("pageshow", handlePageShow);
+
+    return () => {
+      window.removeEventListener("focus", handleFocus);
+      window.removeEventListener("pageshow", handlePageShow);
+    };
+  }, [reloadWorkspace]);
 
   useVisibilityPolling(reloadWorkspace, {
     intervalMs: 60_000,

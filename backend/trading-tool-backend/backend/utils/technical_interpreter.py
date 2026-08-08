@@ -128,10 +128,26 @@ def normalize_technical_value(indicator: str, value: float) -> float:
             normalized = ((value + 10) / 20) * 100
             return max(0, min(100, normalized))
 
+        if indicator == "ema_50_gap_pct":
+            normalized = ((value + 15) / 30) * 100
+            return max(0, min(100, normalized))
+
         if indicator == "macd_hist_pct":
             # Histogram as % of price is typically small; map -3% .. +3% into 0..100.
             normalized = ((value + 3) / 6) * 100
             return max(0, min(100, normalized))
+
+        if indicator == "atr_pct":
+            normalized = (value / 10) * 100
+            return max(0, min(100, normalized))
+
+        if indicator == "adx":
+            return max(0, min(100, value))
+
+        if "ma50" in indicator or "ma_50" in indicator:
+            deviation = abs(value - 1)
+            cap = 0.15
+            return min(100, (deviation / cap) * 100)
 
         if "ma200" in indicator or "ma_200" in indicator:
             deviation = abs(value - 1)

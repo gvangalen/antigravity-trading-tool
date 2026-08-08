@@ -208,13 +208,21 @@ function getUiCopy(locale = "nl") {
       positiveMoveWeakScore: (value, score) => `Price is up ${value}, but the configured scoring thresholds still place this move in the weak zone (${score}/100).`,
       aboveMa200: "Above MA200",
       belowMa200: "Below MA200",
+      aboveMa50: "Above MA50",
+      belowMa50: "Below MA50",
       indicatorLabels: {
         change_24h: "24-hour price change",
         volume: "Volume",
         market_volume: "Volume",
         btc_dominance: "Bitcoin dominance",
         fear_greed_index: "Fear & Greed",
+        ma_50: "50-day moving average",
         ma_200: "200-day moving average",
+        ema_20_gap_pct: "EMA20 Gap %",
+        ema_50_gap_pct: "EMA50 Gap %",
+        macd_hist_pct: "MACD Histogram %",
+        atr_pct: "ATR %",
+        adx: "ADX",
         rsi: "RSI",
       },
       sectionInsights: {
@@ -319,13 +327,21 @@ function getUiCopy(locale = "nl") {
       positiveMoveWeakScore: (value, score) => `Der Kurs steigt um ${value}, aber die konfigurierten Score-Grenzen ordnen diese Bewegung noch der schwachen Zone zu (${score}/100).`,
       aboveMa200: "Über MA200",
       belowMa200: "Unter MA200",
+      aboveMa50: "Über MA50",
+      belowMa50: "Unter MA50",
       indicatorLabels: {
         change_24h: "24-Stunden-Preisänderung",
         volume: "Volumen",
         market_volume: "Volumen",
         btc_dominance: "Bitcoin-Dominanz",
         fear_greed_index: "Fear & Greed",
+        ma_50: "50-Tage-Durchschnitt",
         ma_200: "200-Tage-Durchschnitt",
+        ema_20_gap_pct: "EMA20 Abstand %",
+        ema_50_gap_pct: "EMA50 Abstand %",
+        macd_hist_pct: "MACD Histogramm %",
+        atr_pct: "ATR %",
+        adx: "ADX",
         rsi: "RSI",
       },
       sectionInsights: {
@@ -429,13 +445,21 @@ function getUiCopy(locale = "nl") {
     positiveMoveWeakScore: (value, score) => `De koers stijgt ${value}, maar de ingestelde scoregrenzen plaatsen deze beweging nog in de zwakke zone (${score}/100).`,
     aboveMa200: "Boven MA200",
     belowMa200: "Onder MA200",
+    aboveMa50: "Boven MA50",
+    belowMa50: "Onder MA50",
     indicatorLabels: {
       change_24h: "Prijsverandering 24 uur",
       volume: "Volume",
       market_volume: "Volume",
       btc_dominance: "Bitcoin-dominantie",
       fear_greed_index: "Fear & Greed",
+      ma_50: "50-daags gemiddelde",
       ma_200: "200-daags gemiddelde",
+      ema_20_gap_pct: "EMA20-afstand %",
+      ema_50_gap_pct: "EMA50-afstand %",
+      macd_hist_pct: "MACD-histogram %",
+      atr_pct: "ATR %",
+      adx: "ADX",
       rsi: "RSI",
     },
     sectionInsights: {
@@ -674,9 +698,17 @@ function formatIndicatorValue(name, value, locale, ui = getUiCopy(locale)) {
     return numericValue >= 1 ? ui.aboveMa200 : ui.belowMa200;
   }
 
+  if (label === "ma_50" && Number.isFinite(numericValue)) {
+    return numericValue >= 1 ? ui.aboveMa50 : ui.belowMa50;
+  }
+
   if ((label.includes("change") || label.includes("dominance")) && Number.isFinite(numericValue)) {
     const percentValue = normalizePotentialRatio(numericValue, { percent: true });
     return formatPercent(percentValue, 2);
+  }
+
+  if ((label.includes("gap_pct") || label.includes("atr_pct")) && Number.isFinite(numericValue)) {
+    return formatPercent(numericValue, 2);
   }
 
   if ((label === "us10y" || label === "us2y") && Number.isFinite(numericValue)) {

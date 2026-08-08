@@ -11,7 +11,7 @@ from backend.infrastructure.database import async_session_factory
 from backend.services.technical_data_service import TechnicalDataService
 
 
-DEFAULT_INDICATORS = ["rsi", "ema_20_gap_pct", "macd_hist_pct"]
+DEFAULT_INDICATORS = ["rsi", "ma_50", "ma_200", "ema_20_gap_pct", "ema_50_gap_pct", "macd_hist_pct", "atr_pct", "adx"]
 DEFAULT_SYMBOLS = ["SPY", "MSTR"]
 
 

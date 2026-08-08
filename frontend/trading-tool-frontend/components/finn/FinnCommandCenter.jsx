@@ -30,6 +30,7 @@ import {
   getDefaultIndicatorCategory,
   matchesCommandQuery,
 } from "@/lib/finnCommandSearch";
+import { publishWorkspaceRefresh } from "@/lib/workspaceSync";
 
 let indicatorCatalogCache = null;
 let indicatorCatalogPromise = null;
@@ -164,6 +165,9 @@ const FinnCommandCenter = forwardRef(function FinnCommandCenter(
 
   useEffect(() => {
     if (!request?.nonce) return;
+    if (!request?.query) {
+      onQueryChange("");
+    }
     setMode(
       request.mode === "indicator"
         ? { kind: "indicator", category: request.category || getDefaultIndicatorCategory(pathname) }
@@ -403,6 +407,11 @@ const FinnCommandCenter = forwardRef(function FinnCommandCenter(
           window.dispatchEvent(new CustomEvent(FINN_INDICATOR_MODAL_COMPLETED_EVENT, {
             detail: { category, indicator, assetSymbol, source: pendingIndicator?.source || "finn" },
           }));
+          publishWorkspaceRefresh({
+            symbol: assetSymbol,
+            category,
+            reason: "indicator_added",
+          });
           router.push(withVariant(`/asset?${params.toString()}`, activeVariant), { scroll: false });
           setPendingIndicator(null);
           onQueryChange("");

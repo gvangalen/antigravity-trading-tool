@@ -72,12 +72,13 @@ export default function FinnWorkspaceShell({ children }) {
   useEffect(() => {
     const openCommandCenter = (detail = {}) => {
       commandNonceRef.current += 1;
-      setComposerQuery(detail.query || "");
+      const nextQuery = typeof detail.query === "string" ? detail.query : "";
+      setComposerQuery(nextQuery);
       setCommandRequest({
         mode: detail.mode || "all",
         category: detail.category || null,
         context: detail.context || null,
-        query: detail.query || "",
+        query: nextQuery,
         autoSubmit: Boolean(detail.autoSubmit),
         nonce: commandNonceRef.current,
       });

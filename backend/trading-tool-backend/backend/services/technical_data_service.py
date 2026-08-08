@@ -1,8 +1,14 @@
 import asyncio
 import logging
 from typing import Dict, Any, List, Optional
+from types import SimpleNamespace
 
 from sqlalchemy.ext.asyncio import AsyncSession
+from fastapi import HTTPException
+from backend.domain.technical_indicator_catalog import (
+    get_active_technical_indicator_definitions,
+    get_technical_indicator_definition,
+)
 from backend.infrastructure.repositories.technical_data_repository import TechnicalDataRepository
 from backend.schemas.market_provider_schema import AssetRecord
 from backend.services.asset_catalog_service import AssetCatalogService
@@ -19,10 +25,10 @@ logger = logging.getLogger(__name__)
 
 class TechnicalDataService:
     RECOMMENDED_ASSET_CLASS_PRESETS: dict[str, list[str]] = {
-        "crypto": ["rsi", "ma_200"],
-        "stock": ["rsi", "ema_20_gap_pct", "macd_hist_pct"],
-        "etf": ["rsi", "ema_20_gap_pct", "macd_hist_pct"],
-        "index": ["rsi", "ema_20_gap_pct", "macd_hist_pct"],
+        "crypto": ["rsi", "ma_50", "ma_200", "ema_20_gap_pct", "macd_hist_pct"],
+        "stock": ["rsi", "ma_50", "ma_200", "ema_20_gap_pct", "macd_hist_pct"],
+        "etf": ["rsi", "ma_50", "ma_200", "ema_20_gap_pct", "macd_hist_pct"],
+        "index": ["rsi", "ma_50", "ma_200", "ema_20_gap_pct", "macd_hist_pct"],
         "forex": ["rsi"],
         "commodity": ["rsi"],
     }
@@ -31,6 +37,65 @@ class TechnicalDataService:
         self.session = session
         self.repository = TechnicalDataRepository(session)
         self.provider_registry = TechnicalIndicatorProviderRegistry()
+
+    def _resolve_indicator_config(self, indicator_name: str, db_config: Optional[Any]) -> Optional[Any]:
+        catalog_def = get_technical_indicator_definition(indicator_name)
+        if catalog_def and catalog_def.get("active"):
+            return SimpleNamespace(**catalog_def)
+        return db_config
+
+    def _score_indicator_with_fallback(self, *, name: str, value: float, user_id: int) -> Dict[str, Any]:
+        conn = get_db_connection()
+        if not conn:
+            raise RuntimeError("Geen database verbinding voor scoring engine.")
+        try:
+            normalized = normalize_indicator_name(name)
+            normalized_value = normalize_technical_value(normalized, value)
+            scored = score_indicator(
+                conn=conn,
+                category="technical",
+                indicator=normalized,
+                value=normalized_value,
+                user_id=user_id,
+            )
+        finally:
+            conn.close()
+
+        try:
+            score = require_indicator_score(scored, name)
+        except HTTPException as exc:
+            if exc.status_code != 422:
+                raise
+            score = max(0.0, min(100.0, float(normalized_value)))
+            if score >= 75:
+                trend = "sterk"
+                interpretation = "Indicator noteert in de sterke zone op basis van de genormaliseerde Twelve Data-waarde."
+                action = "Actie: trend en momentum krijgen extra bevestiging."
+            elif score >= 55:
+                trend = "constructief"
+                interpretation = "Indicator ondersteunt het huidige technische beeld, maar zonder extreme uitslag."
+                action = "Actie: bruikbaar als bevestiging naast structuur en context."
+            elif score <= 25:
+                trend = "zwak"
+                interpretation = "Indicator noteert in een zwakke zone op basis van de genormaliseerde Twelve Data-waarde."
+                action = "Actie: defensief blijven tot meer bevestiging terugkomt."
+            else:
+                trend = "neutraal"
+                interpretation = "Indicator zit in een gemengde zone en geeft nog geen duidelijke edge."
+                action = "Actie: wacht op extra bevestiging uit trend, momentum of prijsstructuur."
+            return {
+                "score": score,
+                "trend": trend,
+                "interpretation": interpretation,
+                "action": action,
+            }
+
+        return {
+            "score": score,
+            "trend": scored.get("trend") or "neutral",
+            "interpretation": scored.get("interpretation") or "Geen interpretatie beschikbaar",
+            "action": scored.get("action") or "Geen actie",
+        }
 
     async def _resolve_asset_scope(
         self,
@@ -164,7 +229,10 @@ class TechnicalDataService:
             if normalized_name in seen:
                 continue
 
-            cfg = await self.repository.get_indicator_config(normalized_name)
+            cfg = self._resolve_indicator_config(
+                normalized_name,
+                await self.repository.get_indicator_config(normalized_name),
+            )
             if not cfg:
                 logger.warning("⚠️ Indicator '%s' ontbreekt in indicators tabel en wordt overgeslagen.", normalized_name)
                 continue
@@ -274,7 +342,10 @@ class TechnicalDataService:
                 asset_class=asset_scope.get("asset_class"),
             )
 
-        cfg = await self.repository.get_indicator_config(name)
+        cfg = self._resolve_indicator_config(
+            name,
+            await self.repository.get_indicator_config(name),
+        )
         if not cfg:
             raise ValueError(f"Indicator '{name}' niet gevonden of niet actief.")
 
@@ -289,25 +360,13 @@ class TechnicalDataService:
 
         val = float(result["value"] if isinstance(result, dict) else result)
 
-        def _score_fallback() -> Dict[str, Any]:
-            conn = get_db_connection()
-            if not conn:
-                raise RuntimeError("Geen database verbinding voor scoring engine.")
-            try:
-                normalized = normalize_indicator_name(name)
-                normalized_value = normalize_technical_value(normalized, val)
-                return score_indicator(
-                    conn=conn,
-                    category="technical",
-                    indicator=normalized,
-                    value=normalized_value,
-                    user_id=user_id,
-                )
-            finally:
-                conn.close()
-
-        scored = await asyncio.to_thread(_score_fallback)
-        score = require_indicator_score(scored, name)
+        scored = await asyncio.to_thread(
+            self._score_indicator_with_fallback,
+            name=name,
+            value=val,
+            user_id=user_id,
+        )
+        score = float(scored["score"])
         advies = scored.get("trend") or "neutral"
         uitleg = scored.get("interpretation") or "Geen interpretatie beschikbaar"
 
@@ -351,3 +410,20 @@ class TechnicalDataService:
     async def get_indicator_rules(self, name_raw: str, user_id: int) -> List[Any]:
         name = normalize_indicator_name(name_raw)
         return await self.repository.get_rules_for_indicator(name, user_id)
+
+    async def get_all_indicators(self) -> List[dict[str, str]]:
+        rows = await self.repository.get_all_indicators()
+        merged: dict[str, dict[str, str]] = {}
+
+        for definition in get_active_technical_indicator_definitions():
+            merged[str(definition["name"])] = {
+                "name": str(definition["name"]),
+                "display_name": str(definition["display_name"]),
+            }
+
+        for row in rows:
+            if row["name"] in merged:
+                continue
+            merged[row["name"]] = row
+
+        return sorted(merged.values(), key=lambda row: row["display_name"].lower())

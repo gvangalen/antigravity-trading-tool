@@ -19,12 +19,17 @@ export const INDICATOR_MAP = {
   "bollinger_bands": "BB@tv-basicstudies",
   "volume": "Volume@tv-basicstudies",
   "atr": "ATR@tv-basicstudies",
+  "atr_pct": "ATR@tv-basicstudies",
+  "adx": "ADX@tv-basicstudies",
 
   // Averages & Trends (Mapping defaults)
   "ma_200": "MASimple@tv-basicstudies",
   "ma_50": "MASimple@tv-basicstudies",
   "ema_20": "MAExp@tv-basicstudies",
   "ema_50": "MAExp@tv-basicstudies",
+  "ema_20_gap_pct": "MAExp@tv-basicstudies",
+  "ema_50_gap_pct": "MAExp@tv-basicstudies",
+  "macd_hist_pct": "MACD@tv-basicstudies",
   "supertrend": "SuperTrend@tv-basicstudies",
   "vwap": "VWAP@tv-basicstudies",
 };
