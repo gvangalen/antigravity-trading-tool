@@ -101,6 +101,75 @@ def test_mission_control_explain_cache_reuses_response_and_invalidates(monkeypat
     assert calls == {"daily": 2, "governance": 2}
 
 
+def test_mission_control_explain_cache_isolated_per_service_instance(monkeypatch):
+    finn_module._mission_control_explain_cache.clear()
+    calls = {"service_one": 0, "service_two": 0}
+
+    def build_service(counter_key, headline):
+        service = FinnPlanService(None)
+
+        async def fake_daily(user_id, query, context):
+            calls[counter_key] += 1
+            return {
+                "state": {
+                    "analysis": {
+                        "portfolio_risk": {"status": "watch", "message": headline},
+                        "blocked_assets": [],
+                        "warning_assets": [],
+                        "reasons": [],
+                        "suggested_actions": [],
+                    }
+                }
+            }
+
+        async def fake_governance(user_id, *, event_types, limit=40):
+            return []
+
+        monkeypatch.setattr(service, "build_portfolio_daily_coach_response", fake_daily)
+        monkeypatch.setattr(service, "_build_mission_control_from_daily_analysis", lambda analysis: {"summary": {"open_action_count": 1}})
+        monkeypatch.setattr(service, "_fetch_recent_governance_events", fake_governance)
+        monkeypatch.setattr(service, "_priority_engine_payload", lambda mission, analysis, signals: {
+            "headline": headline,
+            "top_priorities": [{"title": headline, "type": "review", "priority": "high", "why_now": headline, "asset": "BTC"}],
+            "ignore_today": [],
+            "open_counts": {"workqueue_count": 1, "high_priority_count": 1},
+        })
+        monkeypatch.setattr(service, "_priority_engine_governance_signals", lambda events: {})
+        return service
+
+    service_one = build_service("service_one", "Service one headline")
+    service_two = build_service("service_two", "Service two headline")
+
+    first = asyncio.run(service_one.build_mission_control_explain_response(11, "Wat zegt Mission Control?", {"page": "dashboard"}))
+    second = asyncio.run(service_two.build_mission_control_explain_response(11, "Wat zegt Mission Control?", {"page": "dashboard"}))
+
+    assert first["analysis"]["mission_control_summary"]["headline"] == "Service one headline"
+    assert second["analysis"]["mission_control_summary"]["headline"] == "Service two headline"
+    assert calls == {"service_one": 1, "service_two": 1}
+
+
+def test_mission_control_explain_cache_invalidation_clears_all_matching_instance_keys():
+    finn_module._mission_control_explain_cache.clear()
+    finn_module._mission_control_explain_cache["service-a:17:wat zegt mission control?:dashboard"] = {
+        "expires_at": 9999999999,
+        "value": {"response": "cached-a"},
+    }
+    finn_module._mission_control_explain_cache["service-b:17:wat zegt mission control?:dashboard"] = {
+        "expires_at": 9999999999,
+        "value": {"response": "cached-b"},
+    }
+    finn_module._mission_control_explain_cache["service-c:18:wat zegt mission control?:dashboard"] = {
+        "expires_at": 9999999999,
+        "value": {"response": "cached-c"},
+    }
+
+    FinnPlanService.invalidate_runtime_caches_for_user(17)
+
+    assert "service-a:17:wat zegt mission control?:dashboard" not in finn_module._mission_control_explain_cache
+    assert "service-b:17:wat zegt mission control?:dashboard" not in finn_module._mission_control_explain_cache
+    assert "service-c:18:wat zegt mission control?:dashboard" in finn_module._mission_control_explain_cache
+
+
 def test_recent_governance_events_cache_reuses_same_window():
     finn_module._governance_event_cache.clear()
 

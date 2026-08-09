@@ -80,6 +80,7 @@ export default function MarketIndicatorScoreView({
     eyebrow: panelCopy.eyebrow,
     title: panelCopy.title,
     configBadge: panelCopy.configBadge || panelCopy.configId,
+    activeScopeLabel: panelCopy.activeScopeLabel,
     selectLabel: panelCopy.selectLabel,
     searchPlaceholder: panelCopy.searchPlaceholder,
     emptyHint: panelCopy.emptyHint,
@@ -130,7 +131,7 @@ export default function MarketIndicatorScoreView({
           <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
             <div>
               <div className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-500">
-                Active preference scope
+                {copy.activeScopeLabel || "Active preference scope"}
               </div>
               <div className="mt-2 text-sm font-black uppercase tracking-[0.12em] text-slate-900">
                 {preferencesLoading ? "Loading..." : scopeLabel}

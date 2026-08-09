@@ -1610,6 +1610,7 @@ function FinnReportsPanel({ report }) {
     ? 'FINN needs a few explicit decisions before it can identify a meaningful pattern.'
     : 'FINN reviews how closely you followed your plan and what to improve next.';
   const primaryActionLabel = reflectionSummary.primaryAction;
+  const reflectionPanel = finnT?.reflectionPanel || {};
   const openReflectionDetails = () => {
     setExpanded(true);
     if (typeof window !== 'undefined') {
@@ -1633,10 +1634,10 @@ function FinnReportsPanel({ report }) {
           <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
             <div>
               <h2 className="text-3xl md:text-4xl font-black tracking-tight text-slate-950 dark:text-slate-100">
-                Reflection
+                {reflectionPanel.title || 'Reflection'}
               </h2>
               <p className="mt-2 text-base font-medium text-slate-500 dark:text-slate-400 max-w-2xl">
-                FINN reviews how closely you followed your plan and what to improve next.
+                {reflectionPanel.description || 'FINN reviews how closely you followed your plan and what to improve next.'}
               </p>
             </div>
             <div className="flex flex-wrap items-center gap-3">
@@ -1715,7 +1716,7 @@ function FinnReportsPanel({ report }) {
                 <div className="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1.65fr)_minmax(240px,0.8fr)]">
                   <div className="min-w-0">
                     <div className="text-[11px] font-black uppercase tracking-[0.22em] text-blue-600 dark:text-blue-300">
-                      FINN&apos;S REFLECTION
+                      {reflectionPanel.eyebrow || "FINN'S REFLECTION"}
                     </div>
                     <p className="mt-4 max-w-3xl text-2xl md:text-3xl font-black tracking-tight text-slate-950 dark:text-slate-100">
                       {reflectionSummary.headline}
@@ -1744,7 +1745,9 @@ function FinnReportsPanel({ report }) {
 
                     <div className="mt-6 border-t border-slate-200 dark:border-slate-800 pt-5">
                       <div className="flex items-center justify-between gap-4">
-                        <span className="text-sm font-medium text-slate-500 dark:text-slate-400">Evidence collected</span>
+                        <span className="text-sm font-medium text-slate-500 dark:text-slate-400">
+                          {reflectionPanel.evidenceCollected || 'Evidence collected'}
+                        </span>
                         <span className="text-sm font-medium text-slate-600 dark:text-slate-300">
                           {Math.min(evidenceCount, evidenceTarget)} of {evidenceTarget} decisions
                         </span>
@@ -1760,10 +1763,10 @@ function FinnReportsPanel({ report }) {
 
                   <div className="rounded-3xl border border-blue-100 bg-blue-50/50 p-5 text-slate-700 dark:border-blue-900/40 dark:bg-blue-950/20 dark:text-slate-200">
                     <div className="text-[11px] font-black uppercase tracking-[0.22em] text-blue-600 dark:text-blue-300">
-                      WHEN REFLECTION APPEARS
+                      {reflectionPanel.whenVisibleTitle || 'WHEN REFLECTION APPEARS'}
                     </div>
                     <p className="mt-4 text-base font-medium leading-relaxed">
-                      FINN will show patterns here once enough existing activity and reviews have been recorded.
+                      {reflectionPanel.whenVisibleBody || 'FINN will show patterns here once enough existing activity and reviews have been recorded.'}
                     </p>
                   </div>
                 </div>
@@ -1778,10 +1781,10 @@ function FinnReportsPanel({ report }) {
                     </div>
                     <div className="min-w-0">
                       <div className="text-2xl font-black tracking-tight text-slate-950 dark:text-slate-100">
-                        Activity &amp; evidence
+                        {reflectionPanel.activityEvidenceTitle || 'Activity & evidence'}
                       </div>
                       <div className="mt-1 text-sm font-medium text-slate-500 dark:text-slate-400">
-                        See the decisions and events behind this reflection
+                        {reflectionPanel.activityEvidenceBody || 'See the decisions and events behind this reflection'}
                       </div>
                     </div>
                   </div>
@@ -1816,7 +1819,7 @@ function FinnReportsPanel({ report }) {
                   <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                     <div>
                       <div className="text-[10px] font-black uppercase tracking-[0.16em] text-slate-400 dark:text-slate-500">
-                        Reflection details
+                        {reflectionPanel.detailsTitle || 'Reflection details'}
                       </div>
                       <div className="mt-1 text-lg font-black text-slate-950 dark:text-slate-100">
                         {primaryActionLabel}

@@ -157,7 +157,9 @@ function buildAssistantUiText(at) {
     composerMenu: at("uiText.composerMenu"),
     composerInstruction: at("uiText.composerInstruction"),
     recentConversations: at("uiText.recentConversations"),
+    backendSessions: at("uiText.backendSessions"),
     continueConversation: at("uiText.continueConversation"),
+    newConversation: at("uiText.newConversation"),
     setupWizard: at("uiText.setupWizard"),
     startGuide: at("uiText.startGuide"),
     decisionReviewFallback: at("uiText.decisionReviewFallback"),
@@ -6220,14 +6222,14 @@ function AIAssistantContent({
             <div className="space-y-2">
               <div className="flex items-center justify-between gap-3">
                 <div className="px-1 text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-400 dark:text-slate-500">
-                  Backend sessies
+                  {uiText.backendSessions}
                 </div>
                 <button
                   type="button"
                   onClick={() => void startNewFinnConversation()}
                   className="rounded-full border border-slate-200 bg-white px-3 py-1 text-[10px] font-black uppercase tracking-[0.16em] text-slate-600 transition hover:border-blue-200 hover:text-blue-600 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300"
                 >
-                  Nieuw gesprek
+                  {uiText.newConversation}
                 </button>
               </div>
               {recentFinnSessionItems.map((session) => {

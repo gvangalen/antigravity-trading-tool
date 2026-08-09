@@ -604,9 +604,9 @@ class FinnPlanService:
     @classmethod
     def invalidate_runtime_caches_for_user(cls, user_id: int) -> None:
         _mission_control_preview_cache.pop(int(user_id), None)
-        explain_prefix = f"{int(user_id)}:"
         for key in list(_mission_control_explain_cache.keys()):
-            if str(key).startswith(explain_prefix):
+            key_str = str(key)
+            if key_str.startswith(f"{int(user_id)}:") or f":{int(user_id)}:" in key_str:
                 _mission_control_explain_cache.pop(key, None)
         prefix = f"{int(user_id)}:"
         for key in list(_governance_event_cache.keys()):
@@ -4504,7 +4504,7 @@ class FinnPlanService:
         context = context or {}
         allow_cached_response = bool(context.get("allow_cached_mission_control", True))
         explain_cache_key = (
-            f"{int(user_id)}:{self._normalized_query(query)}:"
+            f"{id(self)}:{int(user_id)}:{self._normalized_query(query)}:"
             f"{str(context.get('page') or context.get('scope') or 'mission_control')}"
         )
         if allow_cached_response:

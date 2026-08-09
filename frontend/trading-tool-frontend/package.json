@@ -9,9 +9,11 @@
     "dev": "next dev",
     "build": "NEXT_PRIVATE_BUILD_WORKER=1 next build",
     "export": "next build",
+    "typecheck": "rm -rf .next/types && tsc --noEmit",
     "lint:i18n": "node scripts/check-i18n-literals.mjs",
     "test:i18n": "node --test tests/i18n-hardening.test.mjs",
     "test:commands": "node --test tests/finn-command-search.test.mjs",
+    "audit:high": "npm audit --omit=dev --audit-level=high",
     "ios:sync": "npm run build && npx cap sync ios",
     "start": "next start"
   },
@@ -44,6 +46,7 @@
     "brace-expansion": "^5.0.9",
     "fast-uri": "^4.1.2",
     "js-yaml": "^5.2.3",
+    "nanoid": "^3.3.17",
     "postcss": "^8.5.25",
     "sharp": "^0.35.3",
     "tar": "^7.5.22"

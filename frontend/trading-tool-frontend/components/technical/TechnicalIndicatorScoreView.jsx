@@ -92,6 +92,7 @@ export default function TechnicalIndicatorScoreView({
       : effectiveScope === "asset_class_override"
       ? `Asset class default · ${assetClass || "unknown"}`
       : "Global default";
+  const activeScopeLabel = copy.activeScopeLabel || "Active preference scope";
 
   return (
     <div className="bg-card border border-slate-200 rounded-[2.5rem] p-8 shadow-sm">
@@ -116,7 +117,7 @@ export default function TechnicalIndicatorScoreView({
           <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
             <div>
               <div className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-500">
-                Active preference scope
+                {activeScopeLabel}
               </div>
               <div className="mt-2 text-sm font-black uppercase tracking-[0.12em] text-slate-900">
                 {preferencesLoading ? "Loading..." : scopeLabel}
