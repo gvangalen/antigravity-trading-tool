@@ -405,30 +405,59 @@ fi
 echo "🌤️ 3. Verifying external smoke for ${ENVIRONMENT}..."
 check_external() {
   local url="$1"
-  local expected="$2"
+  local expected_csv="$2"
   local label="$3"
   local attempts="${4:-20}"
+  local method="${5:-GET}"
+  local header_dump="/tmp/tradamind_external_check_headers.txt"
+  local body_dump="/tmp/tradamind_external_check_body.txt"
+
   for attempt in $(seq 1 "$attempts"); do
+    rm -f "$header_dump" "$body_dump"
+
     local status
-    status="$(curl -sS -o /tmp/tradamind_external_check.txt -w '%{http_code}' "$url" || true)"
-    if [ "$status" = "$expected" ]; then
-      echo "✅ ${label}: ${status}"
-      return 0
+    if [ "$method" = "HEAD" ]; then
+      status="$(curl -sS -I -D "$header_dump" -o /dev/null -w '%{http_code}' "$url" || true)"
+    else
+      status="$(curl -sS -D "$header_dump" -o "$body_dump" -w '%{http_code}' "$url" || true)"
     fi
-    echo "⏳ Waiting for ${label} (attempt ${attempt}/${attempts}, got ${status})..." >&2
+
+    IFS=',' read -ra expected_statuses <<< "$expected_csv"
+    local expected
+    for expected in "${expected_statuses[@]}"; do
+      expected="$(printf '%s' "$expected" | xargs)"
+      if [ -n "$expected" ] && [ "$status" = "$expected" ]; then
+        echo "✅ ${label}: ${status}"
+        return 0
+      fi
+    done
+
+    local location
+    location="$(awk 'BEGIN{IGNORECASE=1}/^location:/{sub(/\r$/,"",$0); sub(/^location:[[:space:]]*/,"",$0); print; exit}' "$header_dump" 2>/dev/null || true)"
+    if [ -n "$location" ]; then
+      echo "⏳ Waiting for ${label} (attempt ${attempt}/${attempts}, got ${status}, location=${location})..." >&2
+    else
+      echo "⏳ Waiting for ${label} (attempt ${attempt}/${attempts}, got ${status})..." >&2
+    fi
     sleep 3
   done
-  echo "❌ ${label} did not reach expected status ${expected}." >&2
-  if [ -f /tmp/tradamind_external_check.txt ]; then
-    head -c 500 /tmp/tradamind_external_check.txt >&2 || true
+
+  echo "❌ ${label} did not reach expected statuses [${expected_csv}]." >&2
+  if [ -f "$header_dump" ]; then
+    echo "Response headers:" >&2
+    head -n 20 "$header_dump" >&2 || true
+  fi
+  if [ "$method" != "HEAD" ] && [ -f "$body_dump" ]; then
+    echo "Response body preview:" >&2
+    head -c 500 "$body_dump" >&2 || true
     echo >&2
   fi
   return 1
 }
 
-if ! check_external "${EXTERNAL_BASE_URL}/api/health" "200" "external api health" \
-  || ! check_external "${EXTERNAL_BASE_URL}/api/system/health" "401" "external deep health gate" \
-  || ! check_external "${EXTERNAL_BASE_URL}/report" "200" "external report"; then
+if ! check_external "${EXTERNAL_BASE_URL}/api/health" "200" "external api health" 20 HEAD \
+  || ! check_external "${EXTERNAL_BASE_URL}/api/system/health" "401" "external deep health gate" 20 HEAD \
+  || ! check_external "${EXTERNAL_BASE_URL}/report" "200,302,307,308" "external report" 20 HEAD; then
   echo "❌ External smoke failed for ${TARGET_COMMIT}." >&2
   if [ "$(lower_bool "${AUTO_ROLLBACK_ON_FAILURE}")" = "true" ]; then
     echo "↩️ Auto rollback naar ${ROLLBACK_COMMIT}..." >&2

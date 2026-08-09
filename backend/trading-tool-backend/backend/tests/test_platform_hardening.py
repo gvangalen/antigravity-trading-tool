@@ -293,7 +293,8 @@ def test_deploy_script_has_no_user_specific_business_actions():
     assert "json.load" in source
     assert "STRICT_DEEP_HEALTH" in source
     assert "'down', 'error'" in source or '"down", "error"' in source
-    assert "pm2 delete all" in source or "pm2 delete backend" in source
+    assert "pm2_delete_app()" in source
+    assert 'for_each_pm2_app \\"$CORE_PM2_APPS\\" pm2_delete_app' in source or 'for_each_pm2_app \\"$BACKEND_APP\\" pm2_delete_app' in source
     assert "pm2 startOrReload $PM2_CONFIG --update-env" in source
 
 

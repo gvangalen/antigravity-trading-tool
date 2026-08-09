@@ -28,12 +28,13 @@ def test_deploy_script_gates_pm2_processes_and_has_fallback_rebuild():
     assert "jlist JSON payload not found" in source
     assert "PM2 gate failed" in source
     assert 'pm2 startOrReload $PM2_CONFIG --update-env && check_pm2_apps_online' in source
-    assert "pm2 delete all || true" in source
-    assert 'pm2 start $PM2_CONFIG --only \\"$CORE_PM2_APPS\\" --update-env' in source
+    assert 'for_each_pm2_app \\"$CORE_PM2_APPS\\" pm2_delete_app' in source
+    assert 'pm2_start_app()' in source
+    assert 'pm2 start $PM2_CONFIG --only \\"\\$app\\" --update-env' in source
     assert 'wait_for_backend_listen()' in source
     assert 'restart_backend_app()' in source
     assert 'stabilize_backend_app()' in source
-    assert 'pm2 delete \\"$BACKEND_APP\\" || true' in source
+    assert 'pm2 delete \\"\\$app\\" || true' in source
     assert "pm2 save --force" in source
     assert 'PM2_CONFIG="ecosystem.production.config.js"' in source
 
