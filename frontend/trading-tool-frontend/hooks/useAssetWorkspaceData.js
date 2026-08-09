@@ -13,6 +13,7 @@ const WORKSPACE_CACHE_TTL_MS = 60_000;
 const FOREGROUND_REFRESH_COOLDOWN_MS = 5_000;
 
 const workspaceCache = new Map();
+const workspaceInFlightRequests = new Map();
 
 function getFreshCache(cache, key, maxAgeMs) {
   const entry = cache.get(key);
@@ -26,6 +27,10 @@ function setFreshCache(cache, key, value) {
     value,
     savedAt: Date.now(),
   });
+}
+
+function getWorkspaceRequestKey(workspaceKey, forceNetwork) {
+  return `${workspaceKey}:${forceNetwork ? "fresh" : "cached"}`;
 }
 
 function buildWorkspaceFallback(symbol, periods, quote, daily) {
@@ -117,6 +122,7 @@ export function useAssetWorkspaceData(symbol, periods, watchlistSymbols) {
   const fallbackStartedAtRef = useRef(null);
   const latestWorkspaceRef = useRef(cachedWorkspace || null);
   const lastForegroundRefreshAtRef = useRef(0);
+  const requestSequenceRef = useRef(0);
   const assetSymbol = String(symbol || "BTC").toUpperCase();
 
   useEffect(() => {
@@ -159,15 +165,29 @@ export function useAssetWorkspaceData(symbol, periods, watchlistSymbols) {
       setLoading(false);
       return cached;
     }
+
+    const requestId = ++requestSequenceRef.current;
     setLoading(true);
-    const controller = new AbortController();
-    const timeoutId = window.setTimeout(() => controller.abort(), WORKSPACE_REQUEST_TIMEOUT_MS);
-    try {
-      const payload = await fetchAssetWorkspace(symbol, periods, {
+    const requestKey = getWorkspaceRequestKey(workspaceKey, forceNetwork);
+    let request = workspaceInFlightRequests.get(requestKey);
+
+    if (!request) {
+      const controller = new AbortController();
+      const timeoutId = window.setTimeout(() => controller.abort(), WORKSPACE_REQUEST_TIMEOUT_MS);
+      request = fetchAssetWorkspace(symbol, periods, {
         signal: controller.signal,
         forceFresh: forceNetwork,
         watchlistSymbols: normalizedWatchlistSymbols,
+      }).finally(() => {
+        window.clearTimeout(timeoutId);
+        workspaceInFlightRequests.delete(requestKey);
       });
+      workspaceInFlightRequests.set(requestKey, request);
+    }
+
+    try {
+      const payload = await request;
+      if (requestId !== requestSequenceRef.current) return payload;
       setFreshCache(workspaceCache, workspaceKey, payload);
       if (fallbackStartedAtRef.current) {
         trackWorkspaceTelemetry("asset_workspace_recovered", {
@@ -182,6 +202,9 @@ export function useAssetWorkspaceData(symbol, periods, watchlistSymbols) {
       setIsFallbackWorkspace(false);
       return payload;
     } catch (nextError) {
+      if (requestId !== requestSequenceRef.current) {
+        throw nextError;
+      }
       const liveWorkspace = latestWorkspaceRef.current;
       if (liveWorkspace) {
         if (!fallbackStartedAtRef.current) {
@@ -225,9 +248,10 @@ export function useAssetWorkspaceData(symbol, periods, watchlistSymbols) {
       setIsFallbackWorkspace(true);
       return fallback;
     } finally {
-      window.clearTimeout(timeoutId);
-      setLoading(false);
-      setWatchlistLoading(false);
+      if (requestId === requestSequenceRef.current) {
+        setLoading(false);
+        setWatchlistLoading(false);
+      }
     }
   }, [cachedWatchlist.length, normalizedWatchlistSymbols, periods, symbol, workspaceKey]);
 

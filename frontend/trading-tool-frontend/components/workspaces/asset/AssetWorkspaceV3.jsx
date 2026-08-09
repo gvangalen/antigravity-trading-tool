@@ -1649,10 +1649,22 @@ const EMPTY_FORWARD_RETURNS = {
 };
 
 const FORWARD_RETURNS_REQUEST_TIMEOUT_MS = 12000;
+const FORWARD_RETURNS_CACHE_TTL_MS = 5 * 60_000;
+const forwardReturnsCache = new Map();
+const forwardReturnsInflight = new Map();
+
+function getFreshForwardReturns(symbol) {
+  const normalized = String(symbol || "BTC").toUpperCase();
+  const cached = forwardReturnsCache.get(normalized);
+  if (!cached) return null;
+  if (Date.now() - cached.savedAt > FORWARD_RETURNS_CACHE_TTL_MS) return null;
+  return cached.data;
+}
 
 function ForwardReturnsSection({ symbol, ui }) {
-  const [data, setData] = useState(EMPTY_FORWARD_RETURNS);
-  const [loading, setLoading] = useState(true);
+  const cachedData = getFreshForwardReturns(symbol);
+  const [data, setData] = useState(cachedData || EMPTY_FORWARD_RETURNS);
+  const [loading, setLoading] = useState(!cachedData);
   const [failed, setFailed] = useState(false);
 
   useEffect(() => {
@@ -1661,6 +1673,15 @@ function ForwardReturnsSection({ symbol, ui }) {
     let timeoutId = null;
 
     const loadForwardReturns = async () => {
+      const normalizedSymbol = String(symbol || "BTC").toUpperCase();
+      const cached = getFreshForwardReturns(normalizedSymbol);
+      if (cached) {
+        setData(cached);
+        setLoading(false);
+        setFailed(false);
+        return;
+      }
+
       setLoading(true);
       setFailed(false);
       const withTimeout = (promise) =>
@@ -1671,12 +1692,20 @@ function ForwardReturnsSection({ symbol, ui }) {
           ),
         ]);
 
-      const results = await Promise.allSettled([
-        withTimeout(fetchForwardReturnsWeek(symbol)),
-        withTimeout(fetchForwardReturnsMonth(symbol)),
-        withTimeout(fetchForwardReturnsQuarter(symbol)),
-        withTimeout(fetchForwardReturnsYear(symbol)),
-      ]);
+      let request = forwardReturnsInflight.get(normalizedSymbol);
+      if (!request) {
+        request = Promise.allSettled([
+          withTimeout(fetchForwardReturnsWeek(normalizedSymbol)),
+          withTimeout(fetchForwardReturnsMonth(normalizedSymbol)),
+          withTimeout(fetchForwardReturnsQuarter(normalizedSymbol)),
+          withTimeout(fetchForwardReturnsYear(normalizedSymbol)),
+        ]).finally(() => {
+          forwardReturnsInflight.delete(normalizedSymbol);
+        });
+        forwardReturnsInflight.set(normalizedSymbol, request);
+      }
+
+      const results = await request;
 
       if (cancelled) return;
 
@@ -1685,12 +1714,17 @@ function ForwardReturnsSection({ symbol, ui }) {
           ? results[index].value
           : [];
 
-      setData({
+      const nextData = {
         week: value(0),
         month: value(1),
         quarter: value(2),
         year: value(3),
+      };
+      forwardReturnsCache.set(normalizedSymbol, {
+        data: nextData,
+        savedAt: Date.now(),
       });
+      setData(nextData);
       setFailed(
         results.every((result) => result.status === "rejected")
         || results.every((result, index) => value(index).length === 0)
