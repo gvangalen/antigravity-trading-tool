@@ -120,6 +120,17 @@ export function useAssetWorkspaceData(symbol, periods, watchlistSymbols) {
   const assetSymbol = String(symbol || "BTC").toUpperCase();
 
   useEffect(() => {
+    setWorkspace(cachedWorkspace || null);
+    setWatchlist(cachedWatchlist);
+    setLoading(!cachedWorkspace);
+    setWatchlistLoading(!cachedWorkspace);
+    setError(null);
+    setIsFallbackWorkspace(false);
+    fallbackStartedAtRef.current = null;
+    latestWorkspaceRef.current = cachedWorkspace || null;
+  }, [cachedWatchlist, cachedWorkspace, workspaceKey]);
+
+  useEffect(() => {
     latestWorkspaceRef.current = workspace || null;
   }, [workspace]);
 

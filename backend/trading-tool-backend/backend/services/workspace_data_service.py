@@ -294,6 +294,9 @@ class WorkspaceDataService:
         regime = await self.intelligence.get_market_intelligence(user_id, symbol)
         master = await self.score_service.get_master_score(user_id, symbol)
         daily = await self._daily_scores(user_id, symbol)
+        session = getattr(self, "session", None)
+        asset_catalog = await AssetCatalogService(session).get_assets([symbol]) if session is not None else {}
+        asset_meta = asset_catalog.get(symbol, {})
 
         quote_payload = {
             "price": _number(getattr(quote, "price", None)),
@@ -327,6 +330,13 @@ class WorkspaceDataService:
 
         return {
             "symbol": symbol,
+            "asset": {
+                "symbol": symbol,
+                "display_name": asset_meta.get("display_name") or symbol,
+                "asset_class": asset_meta.get("asset_class") or "unknown",
+                "logo_url": asset_meta.get("logo_url"),
+                "tradingview_symbol": asset_meta.get("tradingview_symbol"),
+            },
             "periods": periods,
             "quote": quote_payload,
             "categories": categories,

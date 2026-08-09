@@ -510,6 +510,10 @@ function AIAssistantContent({
     const symbol = String(asset?.symbol || "").toUpperCase();
     if (!symbol) return;
 
+    if (!watchlist.isInWatchlist(symbol)) {
+      await watchlist.add(symbol);
+    }
+
     setSelectedAsset(symbol);
     try {
       await initializeAsset(symbol);

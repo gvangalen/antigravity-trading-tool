@@ -102,11 +102,12 @@ const ASSET_NAMES = {
   DOT: "Polkadot",
 };
 
-function resolveAssetLogoUrl(symbol, explicitLogoUrl = null) {
+function resolveAssetLogoUrl(symbol, explicitLogoUrl = null, assetClass = null) {
   if (explicitLogoUrl) return explicitLogoUrl;
   const normalized = String(symbol || "").trim().toUpperCase();
+  const normalizedAssetClass = String(assetClass || "").trim().toLowerCase();
   if (!normalized) return null;
-  if (/^[A-Z]{2,10}$/.test(normalized)) {
+  if (normalizedAssetClass === "crypto" && /^[A-Z]{2,10}$/.test(normalized)) {
     return `https://assets.coincap.io/assets/icons/${normalized.toLowerCase()}@2x.png`;
   }
   return null;
@@ -1043,8 +1044,8 @@ function ScoreOverview({ market, macro, technical, combined, weights, loading, o
   );
 }
 
-function AnalysisChartSection({ interval, onIntervalChange, symbol, isOpen, onToggle, ui }) {
-  const tvSymbol = toTradingViewSymbol(symbol);
+function AnalysisChartSection({ interval, onIntervalChange, symbol, tradingViewSymbol, isOpen, onToggle, ui }) {
+  const tvSymbol = tradingViewSymbol || toTradingViewSymbol(symbol);
 
   return (
     <section className="rounded-[24px] border border-slate-200/80 bg-white shadow-[0_18px_40px_-36px_rgba(15,23,42,0.26)]">
@@ -1819,11 +1820,12 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
   const market = { score: categoryData.market?.score?.score ?? null };
   const macro = { score: categoryData.macro?.score?.score ?? null };
   const technical = { score: categoryData.technical?.score?.score ?? null };
+  const workspaceAsset = workspace?.asset || null;
   const master = {
     weights: workspace?.master?.weights || {},
     bias: workspace?.master?.master_bias || "–",
   };
-  const btcLive = workspace?.quote || null;
+  const assetLive = workspace?.quote || null;
   const hasScoreData = [market.score, macro.score, technical.score].some((score) => score !== null);
   const hasResolvedWorkspace = Boolean(workspace);
   const marketLoading = workspaceLoading && !hasResolvedWorkspace;
@@ -2073,7 +2075,8 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
           return {
             symbol: row.symbol,
             displayName: row?.display_name || row?.displayName || ASSET_NAMES[row.symbol] || row.symbol,
-            logoUrl: resolveAssetLogoUrl(row?.symbol, row?.logo_url || row?.logoUrl || null),
+            logoUrl: resolveAssetLogoUrl(row?.symbol, row?.logo_url || row?.logoUrl || null, assetClass),
+            tradingviewSymbol: row?.tradingview_symbol || row?.tradingviewSymbol || null,
             assetClass,
             assetGroup: normalizeAssetGroup(assetClass),
             lastPrice: formatPrice(row?.price, locale),
@@ -2102,6 +2105,24 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
     () => watchlistRows.filter((row) => row.assetGroup === activeAssetGroup),
     [activeAssetGroup, watchlistRows]
   );
+  const activeWatchlistRow = useMemo(
+    () => watchlistRows.find((row) => row.symbol === activeSymbol) || null,
+    [activeSymbol, watchlistRows]
+  );
+  const activeAssetName =
+    activeWatchlistRow?.displayName ||
+    workspaceAsset?.display_name ||
+    ASSET_NAMES[activeSymbol] ||
+    activeSymbol;
+  const activeAssetLogo = resolveAssetLogoUrl(
+    activeSymbol,
+    activeWatchlistRow?.logoUrl || workspaceAsset?.logo_url || null,
+    activeWatchlistRow?.assetClass || workspaceAsset?.asset_class || null,
+  );
+  const activeTradingViewSymbol =
+    activeWatchlistRow?.tradingviewSymbol ||
+    workspaceAsset?.tradingview_symbol ||
+    null;
 
   const sections = useMemo(() => {
     const marketRows = filterVisibleRows(buildRows(marketDayData, locale, ui), activeSymbol, "market", hiddenIndicatorKeys);
@@ -2200,12 +2221,12 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
     <section className="space-y-3">
       <ActiveAssetCard
         activeSymbol={activeSymbol}
-        assetName={ASSET_NAMES[activeSymbol]}
-        assetLogoUrl={resolveAssetLogoUrl(activeSymbol)}
-        price={formatPrice(btcLive?.price, locale)}
-        change24h={btcLive?.change_24h}
-        updatedAt={formatTimestamp(btcLive?.as_of || workspace?.generated_at, locale)}
-        statusLabel={isFallbackWorkspace ? ui.fallbackData : btcLive?.stale ? ui.staleData : null}
+        assetName={activeAssetName}
+        assetLogoUrl={activeAssetLogo}
+        price={formatPrice(assetLive?.price, locale)}
+        change24h={assetLive?.change_24h}
+        updatedAt={formatTimestamp(assetLive?.as_of || workspace?.generated_at, locale)}
+        statusLabel={isFallbackWorkspace ? ui.fallbackData : assetLive?.stale ? ui.staleData : null}
         combinedSummary={combinedSummary}
         onSelectAsset={() => openSearch()}
         ui={ui}
@@ -2224,6 +2245,7 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
       <AnalysisChartSection
         interval={analysisChartInterval}
         symbol={activeSymbol}
+        tradingViewSymbol={activeTradingViewSymbol}
         isOpen={showChart}
         onIntervalChange={handleAnalysisChartIntervalChange}
         onToggle={() => setShowChart((current) => !current)}
