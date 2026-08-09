@@ -15,6 +15,7 @@ import { createStrategy, fetchStrategies } from "@/lib/api/strategy";
 import { createBotConfig, fetchBotConfigs } from "@/lib/api/botApi";
 import { getIndicatorConfig } from "@/lib/api/indicatorConfig";
 import { fetchMacroData } from "@/lib/api/macro";
+import { initializeAsset } from "@/lib/api/market";
 import { technicalDataAll } from "@/lib/api/technical";
 import { useActiveSetup } from "@/app/providers/SetupProvider";
 import { useActiveBot } from "@/app/providers/ActiveBotProvider";
@@ -27,6 +28,7 @@ import { getAssistantSessionId, trackAssistantEvent } from "@/lib/api/assistantA
 import { normalizeTraderProfilePreferences } from "@/lib/traderProfileOptions";
 import { useTranslation } from "@/app/providers/I18nProvider";
 import FinnCommandCenter from "@/components/finn/FinnCommandCenter";
+import { FINN_ASSETS } from "@/lib/finnCommandSearch";
 
 const INDICATOR_MODAL_OPEN_EVENT = "finn-indicator-config:open";
 const INDICATOR_MODAL_COMPLETED_EVENT = "finn-indicator-config:completed";
@@ -421,7 +423,7 @@ function AIAssistantContent({
 }) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const { selectedAsset: globalSymbol } = useAsset();
+  const { selectedAsset: globalSymbol, setSelectedAsset } = useAsset();
   const router = useRouter();
   const watchlist = useWatchlist();
   const { showSnackbar } = useModal();
@@ -472,6 +474,7 @@ function AIAssistantContent({
   const activeQuery = queryValue !== undefined ? queryValue : query;
   const updateQuery = onQueryChange || setQuery;
   const isSimpleFinnModal = modal;
+  const activeVariant = searchParams.get("variant") === "legacy" ? "legacy" : "v3";
 
   const composerMenuCopy = {
     asset: at("uiText.composerAsset"),
@@ -495,6 +498,30 @@ function AIAssistantContent({
   };
 
   const uiText = buildAssistantUiText(at);
+
+  const buildAssetWorkspaceHref = (symbol) => {
+    const encodedSymbol = encodeURIComponent(String(symbol || "BTC").toUpperCase());
+    return activeVariant === "legacy"
+      ? `/asset?symbol=${encodedSymbol}&variant=legacy`
+      : `/asset?symbol=${encodedSymbol}`;
+  };
+
+  const handleSimpleFinnAssetSelect = async (asset) => {
+    const symbol = String(asset?.symbol || "").toUpperCase();
+    if (!symbol) return;
+
+    setSelectedAsset(symbol);
+    try {
+      await initializeAsset(symbol);
+    } catch (error) {
+      console.warn("Kon asset-init niet vooraf laden:", error);
+    }
+
+    router.push(buildAssetWorkspaceHref(symbol), { scroll: false });
+    setIsOpen(false);
+  };
+
+  const simpleFinnAssetSuggestions = FINN_ASSETS.slice(0, 16);
 
   useEffect(() => {
     const handleIndicatorModalCompleted = (event) => {
@@ -6128,6 +6155,60 @@ function AIAssistantContent({
                     </p>
                   </button>
                 ))}
+              </div>
+            </div>
+          )}
+          {isSimpleFinnModal && (
+            <div className="space-y-2">
+              <div className="px-1 text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-400 dark:text-slate-500">
+                Assets
+              </div>
+              <div className="space-y-2">
+                {simpleFinnAssetSuggestions.map((asset) => {
+                  const isInWatchlist = watchlist.isInWatchlist(asset.symbol);
+                  const isActiveAsset = String(globalSymbol || "BTC").toUpperCase() === asset.symbol;
+                  return (
+                    <button
+                      key={`asset-suggestion:${asset.symbol}`}
+                      type="button"
+                      onClick={() => void handleSimpleFinnAssetSelect(asset)}
+                      className={`flex w-full items-center justify-between gap-3 rounded-2xl border px-3 py-3 text-left transition ${
+                        isActiveAsset
+                          ? "border-blue-200 bg-blue-50 dark:border-blue-900/60 dark:bg-blue-950/20"
+                          : "border-slate-200 bg-white hover:border-blue-200 hover:bg-blue-50/40 dark:border-slate-800 dark:bg-slate-900/40 dark:hover:border-blue-900/40 dark:hover:bg-blue-950/10"
+                      }`}
+                    >
+                      <span className="flex min-w-0 items-center gap-3">
+                        <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-300">
+                          <span className="text-base font-black">{asset.icon}</span>
+                        </span>
+                        <span className="min-w-0">
+                          <span className="block truncate text-sm font-semibold text-slate-900 dark:text-slate-100">
+                            {asset.symbol}
+                          </span>
+                          <span className="block truncate text-[12px] text-slate-500 dark:text-slate-400">
+                            {asset.name}
+                          </span>
+                        </span>
+                      </span>
+                      <div className="flex shrink-0 items-center gap-2">
+                        <button
+                          type="button"
+                          aria-label={`${asset.symbol} watchlist`}
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            const action = isInWatchlist ? watchlist.remove(asset.symbol) : watchlist.add(asset.symbol);
+                            Promise.resolve(action).then(() => initializeAsset(asset.symbol).catch(() => null));
+                          }}
+                          className={`rounded-lg p-2 ${isInWatchlist ? "text-amber-400" : "text-slate-300 hover:text-amber-400"}`}
+                        >
+                          <Star size={15} fill={isInWatchlist ? "currentColor" : "none"} />
+                        </button>
+                        <ArrowRight size={14} className="text-slate-300" />
+                      </div>
+                    </button>
+                  );
+                })}
               </div>
             </div>
           )}

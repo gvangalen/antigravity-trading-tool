@@ -5,6 +5,7 @@ import re
 import time
 import uuid
 from copy import deepcopy
+from datetime import datetime
 from typing import TYPE_CHECKING, Any, Dict, Optional, Tuple
 from fastapi import APIRouter, Depends, HTTPException, Header, BackgroundTasks, Request
 from sqlalchemy.exc import DBAPIError, SQLAlchemyError
@@ -2421,6 +2422,30 @@ async def list_chat_sessions(
     except Exception as e:
         logger.exception("❌ Error opvragen chatsessies")
         raise HTTPException(status_code=500, detail="Fout bij ophalen chatsessies")
+
+
+@router.api_route("/assistant/sessions/new", methods=["GET", "POST"], response_model=ChatSessionResponse)
+async def create_compat_chat_session(
+    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    try:
+        user_id = current_user["id"]
+        now = datetime.utcnow()
+        session = ChatSession(
+            id=str(uuid.uuid4()),
+            user_id=user_id,
+            title="Nieuw FINN gesprek",
+            created_at=now,
+            updated_at=now,
+        )
+        db.add(session)
+        await db.commit()
+        await db.refresh(session)
+        return session
+    except Exception:
+        logger.exception("❌ Error aanmaken compat chatsessie")
+        raise HTTPException(status_code=500, detail="Fout bij aanmaken chatsessie")
 
 
 @router.get("/assistant/sessions/{session_id}", response_model=ChatSessionDetailResponse)
