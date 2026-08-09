@@ -20,7 +20,7 @@ jobs:
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           ref: ${{ github.event.workflow_run.head_sha }}
-          fetch-depth: 2
+          fetch-depth: 0
 
       - name: Prepare deploy key
         shell: bash
@@ -35,6 +35,11 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          if ! git rev-parse --verify HEAD^ >/dev/null 2>&1; then
+            echo "ℹ️ No parent commit available for deploy diff; skipping frontend export freshness check."
+            exit 0
+          fi
+
           changed_files="$(git diff --name-only HEAD^ HEAD)"
           frontend_source_changed="$(printf '%s\n' "$changed_files" | grep '^frontend/trading-tool-frontend/' | grep -v '^frontend/trading-tool-frontend/out/' || true)"
           frontend_export_changed="$(printf '%s\n' "$changed_files" | grep '^frontend/trading-tool-frontend/out/' || true)"
