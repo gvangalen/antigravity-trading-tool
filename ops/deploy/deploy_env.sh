@@ -15,6 +15,7 @@ SERVER_IP="${SERVER_IP:-}"
 REMOTE_DIR="${REMOTE_DIR:-/home/ubuntu/antigravity-trading-tool}"
 NODE_BIN="${NODE_BIN:-/home/ubuntu/.nvm/versions/node/v20.19.5/bin}"
 STRICT_DEEP_HEALTH="${STRICT_DEEP_HEALTH:-false}"
+STRICT_EXTERNAL_SMOKE="${STRICT_EXTERNAL_SMOKE:-false}"
 DEPLOY_COMPONENT_SET="${DEPLOY_COMPONENT_SET:-full}"
 AUTO_ROLLBACK_ON_FAILURE="${AUTO_ROLLBACK_ON_FAILURE:-true}"
 DEEP_HEALTH_ATTEMPTS="${DEEP_HEALTH_ATTEMPTS:-6}"
@@ -455,18 +456,26 @@ check_external() {
   return 1
 }
 
+external_smoke_failed=false
 if ! check_external "${EXTERNAL_BASE_URL}/api/health" "200" "external api health" 20 HEAD \
   || ! check_external "${EXTERNAL_BASE_URL}/api/system/health" "401" "external deep health gate" 20 HEAD \
   || ! check_external "${EXTERNAL_BASE_URL}/report" "200,302,307,308" "external report" 20 HEAD; then
-  echo "❌ External smoke failed for ${TARGET_COMMIT}." >&2
-  if [ "$(lower_bool "${AUTO_ROLLBACK_ON_FAILURE}")" = "true" ]; then
-    echo "↩️ Auto rollback naar ${ROLLBACK_COMMIT}..." >&2
-    ssh "${SSH_ARGS[@]}" "ubuntu@$SERVER_IP" \
-      "cd $REMOTE_DIR && ENVIRONMENT=$ENVIRONMENT bash ./ops/deploy/rollback_env.sh $ENVIRONMENT $ROLLBACK_COMMIT" || true
+  external_smoke_failed=true
+fi
+
+if [ "$external_smoke_failed" = "true" ]; then
+  if [ "$(lower_bool "${STRICT_EXTERNAL_SMOKE}")" = "true" ]; then
+    echo "❌ External smoke failed for ${TARGET_COMMIT}." >&2
+    if [ "$(lower_bool "${AUTO_ROLLBACK_ON_FAILURE}")" = "true" ]; then
+      echo "↩️ Auto rollback naar ${ROLLBACK_COMMIT}..." >&2
+      ssh "${SSH_ARGS[@]}" "ubuntu@$SERVER_IP" \
+        "cd $REMOTE_DIR && ENVIRONMENT=$ENVIRONMENT bash ./ops/deploy/rollback_env.sh $ENVIRONMENT $ROLLBACK_COMMIT" || true
+    fi
+    echo "Rollback command:" >&2
+    echo "  ${ROLLBACK_COMMAND}" >&2
+    exit 1
   fi
-  echo "Rollback command:" >&2
-  echo "  ${ROLLBACK_COMMAND}" >&2
-  exit 1
+  echo "⚠️ External smoke failed for ${TARGET_COMMIT}, but rollout continues because STRICT_EXTERNAL_SMOKE=false." >&2
 fi
 
 ssh "${SSH_ARGS[@]}" "ubuntu@$SERVER_IP" "

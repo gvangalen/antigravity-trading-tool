@@ -23,11 +23,15 @@ def test_deploy_env_supports_backend_only_auto_rollback_and_previous_markers():
     assert 'AUTO_ROLLBACK_ON_FAILURE="${AUTO_ROLLBACK_ON_FAILURE:-true}"' in source
     assert 'DEEP_HEALTH_ATTEMPTS="${DEEP_HEALTH_ATTEMPTS:-6}"' in source
     assert 'DEEP_HEALTH_RETRY_DELAY_SECONDS="${DEEP_HEALTH_RETRY_DELAY_SECONDS:-10}"' in source
+    assert 'STRICT_EXTERNAL_SMOKE="${STRICT_EXTERNAL_SMOKE:-false}"' in source
     assert "lower_bool()" in source
     assert 'if [ "$DEPLOY_COMPONENT_SET" = "backend_only" ]; then' in source
     assert 'if [ "$(lower_bool "${AUTO_ROLLBACK_ON_FAILURE}")" = "true" ]; then' in source
     assert "./ops/deploy/rollback_env.sh $ENVIRONMENT $ROLLBACK_COMMIT" in source
+    assert "external_smoke_failed=false" in source
+    assert 'if [ "$(lower_bool "${STRICT_EXTERNAL_SMOKE}")" = "true" ]; then' in source
     assert "External smoke failed" in source
+    assert "rollout continues because STRICT_EXTERNAL_SMOKE=false" in source
     assert "PREVIOUS_GOOD_COMMIT" in source
     assert "/var/www/tradamind/ops/deploy/PREVIOUS_GOOD_COMMIT" in source
     assert 'BACKEND_APP="${BACKEND_APP:-backend}"' in source
