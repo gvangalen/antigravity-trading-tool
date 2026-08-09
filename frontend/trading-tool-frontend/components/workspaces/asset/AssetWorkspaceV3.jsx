@@ -1976,7 +1976,7 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
     await reloadWorkspace();
   };
   const addMacroIndicator = async (name) => {
-    await macroDataAdd(name);
+    await macroDataAdd(name, activeSymbol);
     await reloadWorkspace();
   };
   const addTechnicalIndicator = async (name) => {
