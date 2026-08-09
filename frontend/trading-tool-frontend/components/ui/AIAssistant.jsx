@@ -513,7 +513,7 @@ function AIAssistantContent({
     if (!symbol) return;
 
     if (!watchlist.isInWatchlist(symbol)) {
-      await watchlist.add(symbol);
+      await watchlist.add(asset);
     }
 
     setSelectedAsset(symbol);
@@ -4162,7 +4162,7 @@ function AIAssistantContent({
     try {
       if (type === "add_to_watchlist") {
         if (symbol && watchlist?.add) {
-          await watchlist.add(symbol);
+          await watchlist.add({ symbol });
         }
       } else if (type === "remove_from_watchlist") {
         if (symbol && watchlist?.remove) {
@@ -6203,7 +6203,7 @@ function AIAssistantContent({
                           aria-label={`${asset.symbol} watchlist`}
                           onClick={(event) => {
                             event.stopPropagation();
-                            const action = isInWatchlist ? watchlist.remove(asset.symbol) : watchlist.add(asset.symbol);
+                            const action = isInWatchlist ? watchlist.remove(asset.symbol) : watchlist.add(asset);
                             Promise.resolve(action).then(() => initializeAsset(asset.symbol).catch(() => null));
                           }}
                           className={`rounded-lg p-2 ${isInWatchlist ? "text-amber-400" : "text-slate-300 hover:text-amber-400"}`}

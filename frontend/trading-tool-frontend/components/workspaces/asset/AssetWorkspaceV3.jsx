@@ -1787,7 +1787,7 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
   const { selectedAsset, setSelectedAsset, availableAssets = [] } = useAsset();
   const { locale } = useTranslation();
   const ui = useMemo(() => getUiCopy(locale), [locale]);
-  const { watchlist } = useWatchlist();
+  const { watchlist, symbols: watchlistSymbolsFromStore } = useWatchlist();
   const symbolFromUrl = searchParams.get("symbol")?.toUpperCase();
   const activeSymbol = symbolFromUrl || selectedAsset || "BTC";
   const [marketTimeframe, setMarketTimeframe] = useState("day");
@@ -1817,15 +1817,15 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
 
   const watchlistSymbols = useMemo(() => {
     const preferred =
-      Array.isArray(watchlist) && watchlist.length
-        ? watchlist
+      Array.isArray(watchlistSymbolsFromStore) && watchlistSymbolsFromStore.length
+        ? watchlistSymbolsFromStore
         : Array.isArray(availableAssets) && availableAssets.length
         ? availableAssets
         : ["BTC", "ETH", "SOL", "ADA", "DOT"];
     return Array.from(
       new Set(preferred.map((symbol) => String(symbol || "").toUpperCase()).filter(Boolean))
     ).slice(0, 6);
-  }, [availableAssets, watchlist]);
+  }, [availableAssets, watchlistSymbolsFromStore]);
 
   const periods = useMemo(
     () => ({

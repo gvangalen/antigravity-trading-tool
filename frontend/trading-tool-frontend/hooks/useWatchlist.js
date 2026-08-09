@@ -13,6 +13,28 @@ function hasFreshWatchlistCache() {
   return Date.now() - watchlistCacheUpdatedAt < WATCHLIST_CACHE_TTL_MS;
 }
 
+function normalizeWatchlistItem(item) {
+  if (typeof item === "string") {
+    const symbol = item.toUpperCase();
+    return {
+      symbol,
+      display_name: symbol,
+      asset_class: "crypto",
+      logo_url: null,
+      tradingview_symbol: null,
+    };
+  }
+
+  const symbol = String(item?.symbol || "").toUpperCase();
+  return {
+    symbol,
+    display_name: item?.display_name || item?.displayName || symbol,
+    asset_class: item?.asset_class || item?.assetClass || "crypto",
+    logo_url: item?.logo_url || item?.logoUrl || null,
+    tradingview_symbol: item?.tradingview_symbol || item?.tradingviewSymbol || null,
+  };
+}
+
 async function loadWatchlistShared(forceFresh = false) {
   if (!forceFresh && hasFreshWatchlistCache()) {
     return watchlistCache;
@@ -21,7 +43,7 @@ async function loadWatchlistShared(forceFresh = false) {
   if (!watchlistInFlightPromise) {
     watchlistInFlightPromise = fetchWatchlist()
       .then((data) => {
-        watchlistCache = Array.isArray(data) ? data : [];
+        watchlistCache = Array.isArray(data) ? data.map(normalizeWatchlistItem).filter((item) => item.symbol) : [];
         watchlistCacheUpdatedAt = Date.now();
         return watchlistCache;
       })
@@ -70,9 +92,9 @@ export function useWatchlist(options = {}) {
     window.dispatchEvent(new CustomEvent("watchlist-updated"));
   };
 
-  async function add(symbol) {
+  async function add(asset) {
     try {
-      await addToWatchlist(symbol);
+      await addToWatchlist(asset);
       await loadWatchlist(true);
       notify();
     } catch (err) {
@@ -91,11 +113,13 @@ export function useWatchlist(options = {}) {
   }
 
   const isInWatchlist = (symbol) => {
-    return (watchlist || []).includes(symbol?.toUpperCase());
+    const normalized = symbol?.toUpperCase();
+    return (watchlist || []).some((item) => item?.symbol === normalized);
   };
 
   return {
     watchlist,
+    symbols: (watchlist || []).map((item) => item.symbol).filter(Boolean),
     loading,
     add,
     remove,

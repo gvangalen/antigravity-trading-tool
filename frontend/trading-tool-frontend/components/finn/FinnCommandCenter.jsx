@@ -273,9 +273,13 @@ const FinnCommandCenter = forwardRef(function FinnCommandCenter(
       return;
     }
     if (result.type === "asset") {
-      const symbol = result.asset.symbol;
+      const asset = result.asset;
+      const symbol = asset.symbol;
       setActiveSetup(null);
       setFocusedBotId(null);
+      if (!watchlist.isInWatchlist(symbol)) {
+        await watchlist.add(asset);
+      }
       setSelectedAsset(symbol);
       initializeAsset(symbol).catch((error) => console.error("Asset initialization failed:", error));
       router.push(withVariant(`/asset?symbol=${encodeURIComponent(symbol)}`, activeVariant));
@@ -364,7 +368,7 @@ const FinnCommandCenter = forwardRef(function FinnCommandCenter(
                       <button type="button" aria-label={`${result.title} watchlist`} onClick={(event) => {
                         event.stopPropagation();
                         const symbol = result.asset.symbol;
-                        const action = watchlist.isInWatchlist(symbol) ? watchlist.remove(symbol) : watchlist.add(symbol);
+                        const action = watchlist.isInWatchlist(symbol) ? watchlist.remove(symbol) : watchlist.add(result.asset);
                         Promise.resolve(action).then(() => initializeAsset(symbol).catch(() => null));
                       }} className={`rounded-lg p-2 ${watchlist.isInWatchlist(result.asset.symbol) ? "text-amber-400" : "text-slate-300 hover:text-amber-400"}`}>
                         <Star size={15} fill={watchlist.isInWatchlist(result.asset.symbol) ? "currentColor" : "none"} />

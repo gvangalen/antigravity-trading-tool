@@ -5,7 +5,9 @@ from datetime import date, datetime, timezone
 from typing import Any, Iterable
 
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
 
+from backend.infrastructure.models import Watchlist
 from backend.infrastructure.repositories.intelligence_repository import IntelligenceRepository
 from backend.infrastructure.repositories.macro_data_repository import MacroDataRepository
 from backend.infrastructure.repositories.market_data_repository import MarketDataRepository
@@ -14,7 +16,9 @@ from backend.infrastructure.repositories.technical_data_repository import Techni
 from backend.infrastructure.repositories.user_repository import UserRepository
 from backend.services.asset_catalog_service import AssetCatalogService
 from backend.services.intelligence_service import IntelligenceService
+from backend.services.market_data_provider_registry import MarketDataProviderRegistry
 from backend.services.score_service import ScoreService
+from backend.schemas.market_provider_schema import AssetRecord
 
 
 PERIOD_DAYS = {"day": 1, "week": 7, "month": 30, "quarter": 90}
@@ -276,6 +280,7 @@ class WorkspaceDataService:
         self.users = UserRepository(session)
         self.score_service = ScoreService(self.scores, self.users)
         self.intelligence = IntelligenceService(IntelligenceRepository(session))
+        self.provider_registry = MarketDataProviderRegistry()
 
     async def get_asset_workspace(
         self,
@@ -299,8 +304,7 @@ class WorkspaceDataService:
         market_rows = await self._market_rows(user_id, symbol, periods["market"])
         macro_rows = await self._macro_rows(user_id, symbol, periods["macro"])
         technical_rows = await self._technical_rows(user_id, symbol, periods["technical"])
-        quote = await self.market.get_latest_snapshot(symbol)
-        quote_snapshot = _materialize_quote_snapshot(quote) if quote is not None else {}
+        quote_snapshot = await self._resolve_quote_snapshot(symbol)
         regime = await self.intelligence.get_market_intelligence(user_id, symbol)
         master = await self.score_service.get_master_score(user_id, symbol)
         daily = await self._daily_scores(user_id, symbol)
@@ -332,9 +336,14 @@ class WorkspaceDataService:
             {category: payload["score"]["score"] for category, payload in categories.items()},
             master_payload.get("weights"),
         )
+        effective_watchlist_symbols = (
+            watchlist_symbols
+            if watchlist_symbols
+            else await self._fetch_user_watchlist_symbols(user_id)
+        )
         watchlist_payload = await self._build_watchlist_payload(
             user_id,
-            watchlist_symbols or [symbol],
+            effective_watchlist_symbols or [symbol],
             master_payload.get("weights"),
         )
 
@@ -393,12 +402,8 @@ class WorkspaceDataService:
                 "ai_calls": 0,
             }
 
-        quotes = await self.market.get_latest_snapshots(normalized)
+        quote_map = await self._resolve_quote_map(normalized)
         scores = await self.scores.fetch_daily_scores_batch(user_id, normalized)
-        quote_map = {
-            str(getattr(row, "symbol", "")).upper(): _materialize_quote_snapshot(row)
-            for row in quotes
-        }
         session = getattr(self, "session", None)
         asset_catalog = await AssetCatalogService(session).get_assets(normalized) if session is not None else {}
         rows = []
@@ -439,6 +444,64 @@ class WorkspaceDataService:
             "rows": rows,
             "ai_calls": 0,
         }
+
+    async def _fetch_user_watchlist_symbols(self, user_id: int) -> list[str]:
+        stmt = select(Watchlist.symbol).where(Watchlist.user_id == user_id).order_by(Watchlist.created_at.asc(), Watchlist.id.asc())
+        result = await self.session.execute(stmt)
+        return [str(symbol or "").upper() for symbol in result.scalars().all() if symbol]
+
+    async def _resolve_quote_snapshot(self, symbol: str) -> dict[str, Any]:
+        quote_map = await self._resolve_quote_map([symbol])
+        return quote_map.get(str(symbol or "").upper(), {})
+
+    async def _resolve_quote_map(self, symbols: list[str]) -> dict[str, dict[str, Any]]:
+        normalized = list(dict.fromkeys(str(symbol).upper() for symbol in symbols if symbol))
+        if not normalized:
+            return {}
+
+        if hasattr(self.market, "get_latest_snapshots"):
+            quotes = await self.market.get_latest_snapshots(normalized)
+        else:
+            quotes = []
+            for symbol in normalized:
+                snapshot = await self.market.get_latest_snapshot(symbol)
+                if snapshot is not None:
+                    quotes.append(snapshot)
+        quote_map: dict[str, dict[str, Any]] = {}
+        for index, row in enumerate(quotes):
+            symbol = str(getattr(row, "symbol", "")).upper()
+            if not symbol and len(normalized) == 1:
+                symbol = normalized[0]
+            elif not symbol and index < len(normalized):
+                symbol = normalized[index]
+            if not symbol:
+                continue
+            quote_map[symbol] = _materialize_quote_snapshot(row)
+
+        missing = [symbol for symbol in normalized if not quote_map.get(symbol)]
+        if not missing or not hasattr(self, "session") or self.session is None:
+            return quote_map
+
+        asset_catalog = await AssetCatalogService(self.session).get_assets(missing)
+        for symbol in missing:
+            asset_meta = asset_catalog.get(symbol) or {}
+            if not asset_meta:
+                continue
+            try:
+                asset = AssetRecord(**asset_meta)
+                provider = self.provider_registry.resolve_for_asset(asset)
+                snapshot = await provider.fetch_latest_snapshot(asset)
+            except Exception:
+                continue
+
+            quote_map[symbol] = {
+                "price": _number(snapshot.price),
+                "change_24h": _number(snapshot.change_percent),
+                "volume": _number(snapshot.volume),
+                "timestamp": snapshot.observed_at,
+            }
+
+        return quote_map
 
     async def get_indicator_detail(
         self,
