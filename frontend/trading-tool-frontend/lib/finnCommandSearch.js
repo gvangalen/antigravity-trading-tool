@@ -17,11 +17,29 @@ export function openFinnContext({ query, context = {}, autoSubmit = true } = {})
 }
 
 export const FINN_ASSETS = [
-  { symbol: "BTC", name: "Bitcoin", icon: "₿" },
-  { symbol: "ETH", name: "Ethereum", icon: "Ξ" },
-  { symbol: "SOL", name: "Solana", icon: "S" },
-  { symbol: "ADA", name: "Cardano", icon: "A" },
-  { symbol: "DOT", name: "Polkadot", icon: "P" },
+  { symbol: "BTC", name: "Bitcoin", icon: "₿", assetClass: "crypto" },
+  { symbol: "ETH", name: "Ethereum", icon: "Ξ", assetClass: "crypto" },
+  { symbol: "SOL", name: "Solana", icon: "S", assetClass: "crypto" },
+  { symbol: "XRP", name: "XRP", icon: "X", assetClass: "crypto" },
+  { symbol: "LINK", name: "Chainlink", icon: "L", assetClass: "crypto" },
+  { symbol: "ADA", name: "Cardano", icon: "A", assetClass: "crypto" },
+  { symbol: "DOT", name: "Polkadot", icon: "P", assetClass: "crypto" },
+  { symbol: "MSTR", name: "Strategy Inc.", icon: "M", assetClass: "stock" },
+  { symbol: "COIN", name: "Coinbase Global, Inc.", icon: "C", assetClass: "stock" },
+  { symbol: "MARA", name: "MARA Holdings, Inc.", icon: "M", assetClass: "stock" },
+  { symbol: "RIOT", name: "Riot Platforms, Inc.", icon: "R", assetClass: "stock" },
+  { symbol: "CLSK", name: "CleanSpark, Inc.", icon: "C", assetClass: "stock" },
+  { symbol: "HUT", name: "Hut 8 Corp.", icon: "H", assetClass: "stock" },
+  { symbol: "BTDR", name: "Bitdeer Technologies Group", icon: "B", assetClass: "stock" },
+  { symbol: "WULF", name: "TeraWulf Inc.", icon: "W", assetClass: "stock" },
+  { symbol: "CORZ", name: "Core Scientific, Inc.", icon: "C", assetClass: "stock" },
+  { symbol: "AAPL", name: "Apple Inc.", icon: "A", assetClass: "stock" },
+  { symbol: "MSFT", name: "Microsoft Corporation", icon: "M", assetClass: "stock" },
+  { symbol: "SPY", name: "SPDR S&P 500 ETF Trust", icon: "S", assetClass: "etf" },
+  { symbol: "QQQ", name: "Invesco QQQ Trust", icon: "Q", assetClass: "etf" },
+  { symbol: "IBIT", name: "iShares Bitcoin Trust ETF", icon: "I", assetClass: "etf" },
+  { symbol: "FBTC", name: "Fidelity Wise Origin Bitcoin Fund", icon: "F", assetClass: "etf" },
+  { symbol: "GLD", name: "SPDR Gold Shares", icon: "G", assetClass: "etf" },
 ];
 
 const COMMAND_WORDS = new Set([
