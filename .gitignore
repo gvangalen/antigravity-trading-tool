@@ -13,3 +13,6 @@ dump.sql
 # Celery Beat runtime state
 celerybeat-schedule
 celerybeat-schedule.*
+
+# Local backend state artifact
+backend/trading-tool-backend/backend.db

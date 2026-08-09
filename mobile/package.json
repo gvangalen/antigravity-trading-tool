@@ -6,7 +6,12 @@
     "start": "expo start",
     "android": "expo start --android",
     "ios": "expo start --ios",
-    "web": "expo start --web"
+    "web": "expo start --web",
+    "typecheck": "tsc --noEmit",
+    "lint": "expo lint",
+    "smoke:web": "node -e \"require('fs').rmSync('dist', { recursive: true, force: true })\" && expo export --platform web --output-dir dist",
+    "smoke:ios": "node -e \"require('fs').rmSync('dist-ios', { recursive: true, force: true })\" && expo export --platform ios --output-dir dist-ios",
+    "smoke:android": "node -e \"require('fs').rmSync('dist-android', { recursive: true, force: true })\" && expo export --platform android --output-dir dist-android"
   },
   "dependencies": {
     "@expo/vector-icons": "^15.1.1",
@@ -28,6 +33,8 @@
   },
   "devDependencies": {
     "@types/react": "~19.1.0",
+    "eslint": "^9.0.0",
+    "eslint-config-expo": "~10.0.0",
     "typescript": "~5.9.2"
   },
   "private": true

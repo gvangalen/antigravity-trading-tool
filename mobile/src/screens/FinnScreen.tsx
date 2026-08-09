@@ -673,9 +673,7 @@ export function FinnScreen({
                   <Text style={styles.posturePillText}>{translate(language, 'finn.defensivePosture')}</Text>
                 </View>
               </View>
-              <Text style={[styles.quoteText, { color: colors.text }]}>
-                "{activeBriefingText}"
-              </Text>
+              <Text style={[styles.quoteText, { color: colors.text }]}>{`"${activeBriefingText}"`}</Text>
             </View>
           )}
 
