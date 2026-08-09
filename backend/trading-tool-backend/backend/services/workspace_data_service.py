@@ -101,6 +101,15 @@ def _weighted_score(scores: dict[str, Any], weights: dict[str, Any] | None) -> f
     return round(sum(score * weight for score, weight in available) / included_weight, 1)
 
 
+def _materialize_quote_snapshot(row: Any) -> dict[str, Any]:
+    return {
+        "price": _number(getattr(row, "price", None)),
+        "change_24h": _number(getattr(row, "change_24h", None)),
+        "volume": _number(getattr(row, "volume", None)),
+        "timestamp": getattr(row, "timestamp", None),
+    }
+
+
 def _latest_by_name(rows: Iterable[Any], name_attr: str) -> list[Any]:
     latest: dict[str, Any] = {}
     for row in rows:
@@ -291,6 +300,7 @@ class WorkspaceDataService:
         macro_rows = await self._macro_rows(user_id, symbol, periods["macro"])
         technical_rows = await self._technical_rows(user_id, symbol, periods["technical"])
         quote = await self.market.get_latest_snapshot(symbol)
+        quote_snapshot = _materialize_quote_snapshot(quote) if quote is not None else {}
         regime = await self.intelligence.get_market_intelligence(user_id, symbol)
         master = await self.score_service.get_master_score(user_id, symbol)
         daily = await self._daily_scores(user_id, symbol)
@@ -299,10 +309,10 @@ class WorkspaceDataService:
         asset_meta = asset_catalog.get(symbol, {})
 
         quote_payload = {
-            "price": _number(getattr(quote, "price", None)),
-            "change_24h": _number(getattr(quote, "change_24h", None)),
-            "volume": _number(getattr(quote, "volume", None)),
-            **_freshness(getattr(quote, "timestamp", None), STALE_AFTER_SECONDS["quote"], "market_data"),
+            "price": quote_snapshot.get("price"),
+            "change_24h": quote_snapshot.get("change_24h"),
+            "volume": quote_snapshot.get("volume"),
+            **_freshness(quote_snapshot.get("timestamp"), STALE_AFTER_SECONDS["quote"], "market_data"),
         }
         categories = {
             "market": self._category_payload(market_rows, periods["market"], STALE_AFTER_SECONDS[periods["market"]], "market_data_indicators"),
@@ -386,11 +396,7 @@ class WorkspaceDataService:
         quotes = await self.market.get_latest_snapshots(normalized)
         scores = await self.scores.fetch_daily_scores_batch(user_id, normalized)
         quote_map = {
-            str(row.symbol).upper(): {
-                "price": _number(getattr(row, "price", None)),
-                "change_24h": _number(getattr(row, "change_24h", None)),
-                "timestamp": getattr(row, "timestamp", None),
-            }
+            str(getattr(row, "symbol", "")).upper(): _materialize_quote_snapshot(row)
             for row in quotes
         }
         session = getattr(self, "session", None)

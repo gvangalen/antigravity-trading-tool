@@ -259,6 +259,73 @@ def test_watchlist_materializes_quotes_before_asset_catalog_fallback_rolls_back(
     assert result["rows"][0]["price"] == 64000.0
 
 
+def test_asset_workspace_materializes_quote_before_asset_catalog_lookup():
+    class ExpiringQuote:
+        def __init__(self):
+            self._price = Decimal("64000")
+            self._change_24h = Decimal("1.5")
+            self._volume = Decimal("1200")
+            self._timestamp = datetime.now(timezone.utc)
+            self.expired = False
+
+        @property
+        def price(self):
+            if self.expired:
+                raise RuntimeError("quote price expired after lookup")
+            return self._price
+
+        @property
+        def change_24h(self):
+            if self.expired:
+                raise RuntimeError("quote change expired after lookup")
+            return self._change_24h
+
+        @property
+        def volume(self):
+            if self.expired:
+                raise RuntimeError("quote volume expired after lookup")
+            return self._volume
+
+        @property
+        def timestamp(self):
+            if self.expired:
+                raise RuntimeError("quote timestamp expired after lookup")
+            return self._timestamp
+
+    quote = ExpiringQuote()
+    service = object.__new__(WorkspaceDataService)
+    service.session = object()
+    service.market = SimpleNamespace(get_latest_snapshot=AsyncMock(return_value=quote))
+    service.macro = SimpleNamespace()
+    service.technical = SimpleNamespace()
+    service.scores = SimpleNamespace()
+    service.users = SimpleNamespace()
+    service.score_service = SimpleNamespace(
+        get_master_score=AsyncMock(return_value=SimpleNamespace(dict=lambda: {"weights": {}, "date": None}))
+    )
+    service.intelligence = SimpleNamespace(get_market_intelligence=AsyncMock(return_value=None))
+    service._market_rows = AsyncMock(return_value=[])
+    service._macro_rows = AsyncMock(return_value=[])
+    service._technical_rows = AsyncMock(return_value=[])
+    service._daily_scores = AsyncMock(return_value=None)
+    service._build_watchlist_payload = AsyncMock(return_value={"rows": []})
+
+    class FakeAssetCatalogService:
+        def __init__(self, _session):
+            pass
+
+        async def get_assets(self, _symbols):
+            quote.expired = True
+            return {"BTC": {"display_name": "Bitcoin", "asset_class": "crypto"}}
+
+    with patch("backend.services.workspace_data_service.AssetCatalogService", FakeAssetCatalogService):
+        result = asyncio.run(service.get_asset_workspace(7, "BTC", "day", "day", "day", ["BTC"]))
+
+    assert result["quote"]["price"] == 64000.0
+    assert result["quote"]["change_24h"] == 1.5
+    assert result["quote"]["volume"] == 1200.0
+
+
 def test_asset_catalog_read_failure_rolls_back_before_default_fallback():
     service = AssetCatalogService(AsyncMock())
     service.repository = SimpleNamespace(get_assets=AsyncMock(side_effect=RuntimeError("db read failed")))
@@ -301,7 +368,8 @@ def test_frontend_workspace_reads_are_centralized_and_ai_is_explicit():
     assert "fetchLatestPrice" not in workspace
     assert "getDailyScores" not in workspace
     assert "useOverviewSnapshot" not in workspace
-    assert "btcLive?.as_of" in workspace
+    assert "workspace?.quote" in workspace
+    assert "formatTimestamp(assetLive?.as_of || workspace?.generated_at, locale)" in workspace
     assert "fetchAssetWorkspace" in hook
     assert "watchlistSymbols" in hook
     assert "fetchWorkspaceWatchlist" not in hook
