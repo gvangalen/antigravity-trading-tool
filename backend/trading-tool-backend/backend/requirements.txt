@@ -33,6 +33,8 @@ faiss-cpu
 
 # ✅ Logging & Utils
 loguru
+PyJWT
+bcrypt
 
 # ✅ Push Notifications
 pywebpush
