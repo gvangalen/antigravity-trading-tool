@@ -255,6 +255,12 @@ export function useAssetWorkspaceData(symbol, periods, watchlistSymbols) {
     }
   }, [cachedWatchlist.length, normalizedWatchlistSymbols, periods, symbol, workspaceKey]);
 
+  const refreshWorkspaceIfStale = useCallback(() => {
+    const cached = getFreshCache(workspaceCache, workspaceKey, WORKSPACE_CACHE_TTL_MS);
+    const shouldForceNetwork = !cached || isFallbackWorkspace;
+    return reloadWorkspace({ forceNetwork: shouldForceNetwork });
+  }, [isFallbackWorkspace, reloadWorkspace, workspaceKey]);
+
   async function reloadWatchlist() {
     return reloadWorkspace({ forceNetwork: true });
   }
@@ -277,7 +283,7 @@ export function useAssetWorkspaceData(symbol, periods, watchlistSymbols) {
       const now = Date.now();
       if (now - lastForegroundRefreshAtRef.current < FOREGROUND_REFRESH_COOLDOWN_MS) return;
       lastForegroundRefreshAtRef.current = now;
-      void reloadWorkspace({ forceNetwork: true });
+      void refreshWorkspaceIfStale();
     };
 
     const handleFocus = () => refreshIfNeeded();
@@ -290,9 +296,9 @@ export function useAssetWorkspaceData(symbol, periods, watchlistSymbols) {
       window.removeEventListener("focus", handleFocus);
       window.removeEventListener("pageshow", handlePageShow);
     };
-  }, [reloadWorkspace]);
+  }, [refreshWorkspaceIfStale]);
 
-  useVisibilityPolling(() => reloadWorkspace({ forceNetwork: true }), {
+  useVisibilityPolling(() => refreshWorkspaceIfStale(), {
     intervalMs: 60_000,
     backgroundIntervalMs: 300_000,
     runImmediately: false,

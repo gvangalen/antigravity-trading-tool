@@ -182,16 +182,24 @@ async function fetchAuthInternal(
         }
       : {};
 
-  const res = await fetch(`${API_BASE_URL}${path}`, {
-    ...options,
-    credentials: "include",
-    cache: cacheMode as RequestCache,
-    headers: {
-      "Content-Type": "application/json",
-      ...noStoreHeaders,
-      ...Object.fromEntries(buildAuthHeaders(options.headers, method).entries()),
-    },
-  });
+  let res: Response;
+  try {
+    res = await fetch(`${API_BASE_URL}${path}`, {
+      ...options,
+      credentials: "include",
+      cache: cacheMode as RequestCache,
+      headers: {
+        "Content-Type": "application/json",
+        ...noStoreHeaders,
+        ...Object.fromEntries(buildAuthHeaders(options.headers, method).entries()),
+      },
+    });
+  } catch (error: any) {
+    if (error?.name === "AbortError") {
+      error.path = path;
+    }
+    throw error;
+  }
 
   if (!res.ok) {
     const text = await res.text().catch(() => "");

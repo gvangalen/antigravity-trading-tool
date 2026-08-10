@@ -20,7 +20,6 @@ import { useAsset } from "@/app/providers/AssetProvider";
 import { useTranslation } from "@/app/providers/I18nProvider";
 import { useAssetWorkspaceData } from "@/hooks/useAssetWorkspaceData";
 import { useStrategyData } from "@/hooks/useStrategyData";
-import { useWatchlist } from "@/hooks/useWatchlist";
 import IndicatorConfigModal from "@/components/scoring/IndicatorConfigModal";
 import MarketForwardReturnTabs from "@/components/market/MarketForwardReturnTabs";
 import {
@@ -1787,7 +1786,6 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
   const { selectedAsset, setSelectedAsset, availableAssets = [] } = useAsset();
   const { locale } = useTranslation();
   const ui = useMemo(() => getUiCopy(locale), [locale]);
-  const { watchlist, symbols: watchlistSymbolsFromStore } = useWatchlist();
   const symbolFromUrl = searchParams.get("symbol")?.toUpperCase();
   const activeSymbol = symbolFromUrl || selectedAsset || "BTC";
   const [marketTimeframe, setMarketTimeframe] = useState("day");
@@ -1815,18 +1813,6 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
     }
   }, [selectedAsset, setSelectedAsset, symbolFromUrl]);
 
-  const watchlistSymbols = useMemo(() => {
-    const preferred =
-      Array.isArray(watchlistSymbolsFromStore) && watchlistSymbolsFromStore.length
-        ? watchlistSymbolsFromStore
-        : Array.isArray(availableAssets) && availableAssets.length
-        ? availableAssets
-        : ["BTC", "ETH", "SOL", "ADA", "DOT"];
-    return Array.from(
-      new Set(preferred.map((symbol) => String(symbol || "").toUpperCase()).filter(Boolean))
-    ).slice(0, 6);
-  }, [availableAssets, watchlistSymbolsFromStore]);
-
   const periods = useMemo(
     () => ({
       market: marketTimeframe,
@@ -1843,7 +1829,7 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
     isFallbackWorkspace,
     reloadWorkspace,
     reloadWatchlist,
-  } = useAssetWorkspaceData(activeSymbol, periods, watchlistSymbols);
+  } = useAssetWorkspaceData(activeSymbol, periods);
   const { strategies = [] } = useStrategyData({ includeSetups: false });
   const [marketBestSetup, setMarketBestSetup] = useState(null);
 
