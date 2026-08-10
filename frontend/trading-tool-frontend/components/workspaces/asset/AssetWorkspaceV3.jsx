@@ -18,6 +18,7 @@ import {
 
 import { useAsset } from "@/app/providers/AssetProvider";
 import { useTranslation } from "@/app/providers/I18nProvider";
+import { useModal } from "@/components/modal/ModalProvider";
 import { useAssetWorkspaceData } from "@/hooks/useAssetWorkspaceData";
 import { useStrategyData } from "@/hooks/useStrategyData";
 import IndicatorConfigModal from "@/components/scoring/IndicatorConfigModal";
@@ -32,6 +33,7 @@ import {
 import { macroDataAdd } from "@/lib/api/macro";
 import { fetchActiveSetup } from "@/lib/api/setups";
 import { technicalDataAdd } from "@/lib/api/technical";
+import { removeFromWatchlist } from "@/lib/api/watchlist";
 import { updateIntelligenceWeights } from "@/lib/api/scores";
 import { getAssistantPreferences, updateAssistantPreferences } from "@/lib/api/ai";
 import TradingViewSmartChart from "@/components/charts/TradingViewSmartChart";
@@ -206,6 +208,15 @@ function getUiCopy(locale = "nl") {
       live: "Live",
       edit: "Edit",
       remove: "Remove",
+      watchlistActions: "Actions",
+      watchlistRemoveLabel: "Remove asset",
+      watchlistRemoveTitle: "Remove asset?",
+      watchlistRemoveContext: (symbol) => `${symbol} will be removed from your active watchlist.`,
+      watchlistRemoveImpact: "The asset stays available, but disappears from your current tracking and quick context switches.",
+      watchlistRemoveSafety: "This does not trigger orders or data changes. Only your personal watchlist changes.",
+      watchlistRemoveConsequence: "After confirming, your watchlist refreshes and Finn focuses on your remaining assets.",
+      watchlistRemoveConfirm: "Remove asset",
+      watchlistRemoveSuccess: (symbol) => `${symbol} removed from watchlist`,
       marketEmpty: "No market indicators loaded yet.",
       macroEmpty: "No macro indicators loaded yet.",
       technicalEmpty: "No technical indicators loaded yet.",
@@ -325,6 +336,15 @@ function getUiCopy(locale = "nl") {
       live: "Live",
       edit: "Bearbeiten",
       remove: "Entfernen",
+      watchlistActions: "Aktionen",
+      watchlistRemoveLabel: "Asset entfernen",
+      watchlistRemoveTitle: "Asset entfernen?",
+      watchlistRemoveContext: (symbol) => `${symbol} wird aus deiner aktiven Watchlist entfernt.`,
+      watchlistRemoveImpact: "Das Asset bleibt verfügbar, verschwindet aber aus deinem aktuellen Tracking und schnellen Kontextwechseln.",
+      watchlistRemoveSafety: "Dadurch werden keine Orders oder Daten geändert. Nur deine persönliche Watchlist wird angepasst.",
+      watchlistRemoveConsequence: "Nach dem Bestätigen wird die Watchlist neu geladen und FINN fokussiert die verbleibenden Assets.",
+      watchlistRemoveConfirm: "Asset entfernen",
+      watchlistRemoveSuccess: (symbol) => `${symbol} aus Watchlist entfernt`,
       marketEmpty: "Noch keine Marktindikatoren geladen.",
       macroEmpty: "Noch keine Makroindikatoren geladen.",
       technicalEmpty: "Noch keine technischen Indikatoren geladen.",
@@ -443,6 +463,15 @@ function getUiCopy(locale = "nl") {
     live: "Live",
     edit: "Bewerken",
     remove: "Verwijderen",
+    watchlistActions: "Acties",
+    watchlistRemoveLabel: "Asset verwijderen",
+    watchlistRemoveTitle: "Asset verwijderen?",
+    watchlistRemoveContext: (symbol) => `${symbol} verdwijnt uit je actieve watchlist.`,
+    watchlistRemoveImpact: "De asset blijft beschikbaar, maar verdwijnt uit je huidige tracking en snelle contextwissels.",
+    watchlistRemoveSafety: "Dit start geen orders of datawijzigingen. Alleen je persoonlijke watchlist verandert.",
+    watchlistRemoveConsequence: "Na bevestigen vernieuwt je watchlist en focust FINN op je overgebleven assets.",
+    watchlistRemoveConfirm: "Asset verwijderen",
+    watchlistRemoveSuccess: (symbol) => `${symbol} verwijderd van watchlist`,
     marketEmpty: "Nog geen marktindicatoren geladen.",
     macroEmpty: "Nog geen macro-indicatoren geladen.",
     technicalEmpty: "Nog geen technische indicatoren geladen.",
@@ -1246,7 +1275,16 @@ function ActiveAssetCard({
   );
 }
 
-function AssetList({ rows, activeSymbol, activeGroup, onSelect, onGroupChange, onAddAsset, ui }) {
+function AssetList({
+  rows,
+  activeSymbol,
+  activeGroup,
+  onSelect,
+  onRemove,
+  onGroupChange,
+  onAddAsset,
+  ui,
+}) {
   return (
     <section className="rounded-[24px] border border-slate-200/80 bg-white p-3.5 shadow-[0_18px_40px_-36px_rgba(15,23,42,0.26)]">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -1283,22 +1321,30 @@ function AssetList({ rows, activeSymbol, activeGroup, onSelect, onGroupChange, o
       </div>
 
       <div className="mt-3 overflow-hidden rounded-[18px] border border-slate-200 bg-white">
-        <div className="grid grid-cols-[minmax(0,1.5fr)_120px_100px_80px_120px] gap-3 border-b border-slate-100 px-4 py-2.5 text-[9px] font-black uppercase tracking-[0.2em] text-slate-400">
+        <div className="grid grid-cols-[minmax(0,1.5fr)_120px_100px_80px_120px_48px] gap-3 border-b border-slate-100 px-4 py-2.5 text-[9px] font-black uppercase tracking-[0.2em] text-slate-400">
           <div>Asset</div>
           <div className="text-right">{ui.latest}</div>
           <div className="text-right">24u</div>
           <div className="text-right">Score</div>
           <div className="text-right">{ui.bias}</div>
+          <div className="text-right">{ui.watchlistActions}</div>
         </div>
         <div>
           {rows.length ? rows.map((row) => {
             const active = row.symbol === activeSymbol;
             return (
-              <button
+              <div
                 key={row.symbol}
-                type="button"
+                role="button"
+                tabIndex={0}
                 onClick={() => onSelect(row.symbol)}
-                className={`grid w-full grid-cols-[minmax(0,1.5fr)_120px_100px_80px_120px] gap-3 border-b border-slate-100 px-4 py-2.5 text-left transition last:border-b-0 ${
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault();
+                    onSelect(row.symbol);
+                  }
+                }}
+                className={`grid w-full cursor-pointer grid-cols-[minmax(0,1.5fr)_120px_100px_80px_120px_48px] items-center gap-3 border-b border-slate-100 px-4 py-2.5 text-left transition last:border-b-0 ${
                   active ? "bg-blue-50/70" : "hover:bg-slate-50/80"
                 }`}
               >
@@ -1331,7 +1377,21 @@ function AssetList({ rows, activeSymbol, activeGroup, onSelect, onGroupChange, o
                     {row.bias}
                   </span>
                 </div>
-              </button>
+                <div className="flex justify-end">
+                  <button
+                    type="button"
+                    aria-label={`${ui.watchlistRemoveLabel}: ${row.symbol}`}
+                    title={ui.watchlistRemoveLabel}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      onRemove(row);
+                    }}
+                    className="inline-flex h-8 w-8 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-400 transition hover:border-red-200 hover:bg-red-50 hover:text-red-600"
+                  >
+                    <X size={14} />
+                  </button>
+                </div>
+              </div>
             );
           }) : (
             <div className="px-4 py-6 text-center text-xs font-bold text-slate-400">
@@ -1785,6 +1845,7 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
   const searchParams = useSearchParams();
   const { selectedAsset, setSelectedAsset, availableAssets = [] } = useAsset();
   const { locale } = useTranslation();
+  const { openConfirm, showSnackbar } = useModal();
   const ui = useMemo(() => getUiCopy(locale), [locale]);
   const symbolFromUrl = searchParams.get("symbol")?.toUpperCase();
   const activeSymbol = symbolFromUrl || selectedAsset || "BTC";
@@ -2149,6 +2210,61 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
       handleAssetSelect(fallbackRow.symbol);
     }
   };
+  const handleRemoveWatchlistAsset = useCallback((row) => {
+    if (!row?.symbol) return;
+
+    openConfirm({
+      title: ui.watchlistRemoveTitle,
+      context: ui.watchlistRemoveContext(row.symbol),
+      impact: ui.watchlistRemoveImpact,
+      safety: ui.watchlistRemoveSafety,
+      consequence: ui.watchlistRemoveConsequence,
+      tone: "danger",
+      confirmText: ui.watchlistRemoveConfirm,
+      onConfirm: async () => {
+        const normalizedSymbol = String(row.symbol || "").toUpperCase();
+        const remainingRows = watchlistRows.filter(
+          (item) => String(item?.symbol || "").toUpperCase() !== normalizedSymbol
+        );
+
+        setWatchlistRows(remainingRows);
+
+        const removedActiveAsset = normalizedSymbol === activeSymbol;
+        if (removedActiveAsset) {
+          const sameGroupFallback = remainingRows.find((item) => item.assetGroup === row.assetGroup);
+          const nextFallback = sameGroupFallback || remainingRows[0] || null;
+          if (nextFallback?.symbol) {
+            setSelectedAsset(nextFallback.symbol);
+            router.push(
+              buildContextHref({
+                pathname,
+                symbol: nextFallback.symbol,
+                context: initialTab,
+                variant,
+              }),
+              { scroll: false }
+            );
+          }
+        }
+
+        await removeFromWatchlist(normalizedSymbol);
+        await reloadWatchlist();
+        showSnackbar(ui.watchlistRemoveSuccess(normalizedSymbol));
+      },
+    });
+  }, [
+    activeSymbol,
+    initialTab,
+    openConfirm,
+    pathname,
+    reloadWatchlist,
+    router,
+    setSelectedAsset,
+    showSnackbar,
+    ui,
+    variant,
+    watchlistRows,
+  ]);
   const activeAssetName =
     activeWatchlistRow?.displayName ||
     workspaceAsset?.display_name ||
@@ -2276,6 +2392,7 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
         rows={visibleWatchlistRows}
         activeSymbol={activeSymbol}
         onSelect={handleAssetSelect}
+        onRemove={handleRemoveWatchlistAsset}
         activeGroup={activeAssetGroup}
         onGroupChange={handleAssetGroupChange}
         onAddAsset={() => openSearch()}
