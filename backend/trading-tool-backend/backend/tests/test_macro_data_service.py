@@ -2,6 +2,7 @@ import asyncio
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
+from backend.domain.macro_indicator_catalog import get_active_macro_indicator_definitions
 from backend.services.macro_data_service import MacroDataService
 
 
@@ -129,3 +130,22 @@ def test_add_macro_indicator_uses_canonical_macro_source_when_db_row_is_stale():
 
     assert fetch_calls == [("sp500", "fred", "fred:SP500")]
     assert result.value == 7733.85
+
+
+def test_all_active_macro_indicators_resolve_to_catalog_definition_when_db_row_is_stale():
+    service = MacroDataService(AsyncMock())
+
+    stale_db_row = SimpleNamespace(
+        source="legacy",
+        link="https://stale.example/indicator",
+        display_name="Stale row",
+    )
+
+    for definition in get_active_macro_indicator_definitions():
+        resolved = service._resolve_indicator_info(definition["name"], stale_db_row)
+
+        assert resolved is not None
+        assert resolved.name == definition["name"]
+        assert resolved.source == definition["source"]
+        assert resolved.link == definition["link"]
+        assert resolved.category == "macro"

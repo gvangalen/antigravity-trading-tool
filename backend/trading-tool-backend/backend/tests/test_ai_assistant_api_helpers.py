@@ -12,6 +12,7 @@ AiAssistantService = assistant_module.AiAssistantService
 FinnPlanService = importlib.import_module("backend.services.finn_plan_service").FinnPlanService
 state_repo_module = importlib.import_module("backend.infrastructure.repositories.conversation_state_repository")
 ConversationStateRepository = state_repo_module.ConversationStateRepository
+macro_catalog = importlib.import_module("backend.domain.macro_indicator_catalog")
 
 
 def test_profile_capture_extracts_canonical_values():
@@ -171,6 +172,20 @@ def test_indicator_configuration_request_detects_macro_context():
         "SPY",
         {"mode": "indicator", "category": "macro"},
     ) is True
+
+
+def test_all_active_macro_indicators_stay_in_indicator_flow_when_macro_context_is_present():
+    active_macro_definitions = macro_catalog.get_active_macro_indicator_definitions()
+
+    for definition in active_macro_definitions:
+        indicator_name = definition["name"]
+        display_name = definition["display_name"]
+        context = {"mode": "indicator", "category": "macro", "symbol": "BTC"}
+
+        assert api._looks_like_indicator_configuration_request(indicator_name, context) is True
+        assert api._looks_like_indicator_configuration_request(display_name, context) is True
+        assert api._looks_like_watchlist_mutation(f"Voeg {indicator_name} toe", context) is False
+        assert api._looks_like_watchlist_mutation(f"Voeg {display_name} toe", context) is False
 
 
 def test_ensure_pending_action_ids_registers_watchlist_action(monkeypatch):
