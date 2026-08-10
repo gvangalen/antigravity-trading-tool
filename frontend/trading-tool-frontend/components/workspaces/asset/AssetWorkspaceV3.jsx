@@ -957,6 +957,147 @@ function scoreTone(value, ui = getUiCopy("nl")) {
   };
 }
 
+function explainIndicatorAssessment({
+  name,
+  label,
+  score,
+  numericValue,
+  direction,
+  ui,
+}) {
+  const normalizedName = String(name || "").trim().toLowerCase();
+  const safeLabel = label || prettifyName(name, ui);
+  const tone = score === null ? "missing" : score >= 70 ? "high" : score <= 35 ? "low" : "mid";
+
+  const genericByTone = {
+    high: `${safeLabel} supports the current setup and confirms the stronger side of the signal.`,
+    mid: `${safeLabel} is mixed right now and does not create a strong edge on its own.`,
+    low: `${safeLabel} weakens the current setup and still points to limited confirmation.`,
+    missing: ui.unavailable,
+  };
+
+  const movingAverageLabel =
+    normalizedName === "ma_200"
+      ? numericValue >= 1
+        ? ui.aboveMa200
+        : ui.belowMa200
+      : normalizedName === "ma_50"
+        ? numericValue >= 1
+          ? ui.aboveMa50
+          : ui.belowMa50
+        : null;
+
+  const explanations = {
+    change_24h: {
+      high: `${safeLabel} shows strong short-term price expansion and supports current momentum.`,
+      mid: `${safeLabel} is moving, but the short-term move still lacks decisive follow-through.`,
+      low: `${safeLabel} stays weak and keeps short-term momentum under pressure.`,
+    },
+    volume: {
+      high: `${safeLabel} confirms participation and improves confidence in the current move.`,
+      mid: `${safeLabel} is present, but participation is not strong enough to confirm the move clearly.`,
+      low: `${safeLabel} remains thin and does not confirm price action with enough participation.`,
+    },
+    market_volume: {
+      high: `${safeLabel} confirms participation and improves confidence in the current move.`,
+      mid: `${safeLabel} is present, but participation is not strong enough to confirm the move clearly.`,
+      low: `${safeLabel} remains thin and does not confirm price action with enough participation.`,
+    },
+    btc_dominance: {
+      high: `${safeLabel} strongly supports the current market regime for this asset setup.`,
+      mid: `${safeLabel} is balanced and leaves the macro regime mixed.`,
+      low: `${safeLabel} currently works against the preferred market regime for this setup.`,
+    },
+    fear_greed_index: {
+      high: `${safeLabel} sits in a supportive zone for the current setup according to your scoring rules.`,
+      mid: `${safeLabel} is neutral and does not create a strong sentiment edge yet.`,
+      low: `${safeLabel} signals fragile sentiment and keeps risk appetite under pressure.`,
+    },
+    inflation_rate: {
+      high: `${safeLabel} is currently supportive for risk assets under your macro thresholds.`,
+      mid: `${safeLabel} is mixed and does not yet give a clear macro tailwind.`,
+      low: `${safeLabel} remains a macro headwind and keeps risk conditions tighter.`,
+    },
+    oil_price: {
+      high: `${safeLabel} is in a zone that supports your current macro interpretation.`,
+      mid: `${safeLabel} is mixed and does not materially shift the macro backdrop yet.`,
+      low: `${safeLabel} adds macro stress and weighs on the broader risk picture.`,
+    },
+    us10y: {
+      high: `${safeLabel} is currently supportive for your macro regime assessment.`,
+      mid: `${safeLabel} is stable, but rates are not giving a strong directional edge yet.`,
+      low: `${safeLabel} remains a rates headwind and limits macro support.`,
+    },
+    us2y: {
+      high: `${safeLabel} is currently supportive for your macro regime assessment.`,
+      mid: `${safeLabel} is stable, but rates are not giving a strong directional edge yet.`,
+      low: `${safeLabel} remains a rates headwind and limits macro support.`,
+    },
+    vix: {
+      high: `${safeLabel} points to calmer volatility conditions and supports the current setup.`,
+      mid: `${safeLabel} is neutral and keeps volatility context mixed.`,
+      low: `${safeLabel} signals elevated stress and weakens the current risk setup.`,
+    },
+    ma_200: {
+      high: `${safeLabel} is ${movingAverageLabel?.toLowerCase() || direction.toLowerCase()} and confirms the broader trend structure.`,
+      mid: `${safeLabel} is close to balance and gives only limited trend confirmation.`,
+      low: `${safeLabel} is ${movingAverageLabel?.toLowerCase() || direction.toLowerCase()} and weakens the broader trend structure.`,
+    },
+    ma_50: {
+      high: `${safeLabel} is ${movingAverageLabel?.toLowerCase() || direction.toLowerCase()} and supports the active trend.`,
+      mid: `${safeLabel} is balanced and does not yet confirm a strong active trend.`,
+      low: `${safeLabel} is ${movingAverageLabel?.toLowerCase() || direction.toLowerCase()} and keeps the active trend weak.`,
+    },
+    rsi: {
+      high: `${safeLabel} supports momentum and confirms stronger directional control.`,
+      mid: `${safeLabel} is neutral and momentum remains balanced.`,
+      low: `${safeLabel} keeps momentum weak and does not confirm follow-through.`,
+    },
+    adx: {
+      high: `${safeLabel} confirms a stronger trend environment and better directional persistence.`,
+      mid: `${safeLabel} suggests a tradable move, but trend strength is still moderate.`,
+      low: `${safeLabel} indicates weak trend strength and limited persistence.`,
+    },
+    atr_pct: {
+      high: `${safeLabel} shows expanding range conditions that support an active move.`,
+      mid: `${safeLabel} is manageable, but volatility expansion is not decisive yet.`,
+      low: `${safeLabel} remains compressed and limits range expansion.`,
+    },
+    ema_20_gap_pct: {
+      high: `${safeLabel} supports short-term trend alignment and clean follow-through.`,
+      mid: `${safeLabel} is mixed and does not yet show a clear short-term edge.`,
+      low: `${safeLabel} weakens short-term trend alignment and follow-through.`,
+    },
+    ema_50_gap_pct: {
+      high: `${safeLabel} supports medium-term trend alignment and healthy structure.`,
+      mid: `${safeLabel} is mixed and medium-term trend alignment remains incomplete.`,
+      low: `${safeLabel} weakens medium-term trend alignment and structure.`,
+    },
+    macd_hist_pct: {
+      high: `${safeLabel} confirms improving momentum and supports continuation.`,
+      mid: `${safeLabel} is mixed and momentum confirmation remains limited.`,
+      low: `${safeLabel} weakens momentum and does not confirm continuation.`,
+    },
+  };
+
+  const specific =
+    explanations[normalizedName]?.[tone] ||
+    (normalizedName.includes("change") ? explanations.change_24h?.[tone] : null) ||
+    (normalizedName.includes("volume") ? explanations.volume?.[tone] : null) ||
+    (normalizedName.includes("fear") ? explanations.fear_greed_index?.[tone] : null) ||
+    (normalizedName.includes("dominance") ? explanations.btc_dominance?.[tone] : null) ||
+    (normalizedName.includes("inflation") ? explanations.inflation_rate?.[tone] : null) ||
+    (normalizedName.includes("oil") ? explanations.oil_price?.[tone] : null) ||
+    (normalizedName.includes("vix") ? explanations.vix?.[tone] : null) ||
+    (normalizedName.includes("rsi") ? explanations.rsi?.[tone] : null) ||
+    (normalizedName.includes("adx") ? explanations.adx?.[tone] : null) ||
+    (normalizedName.includes("atr") ? explanations.atr_pct?.[tone] : null) ||
+    (normalizedName.includes("ema") ? explanations.ema_20_gap_pct?.[tone] : null) ||
+    (normalizedName.includes("macd") ? explanations.macd_hist_pct?.[tone] : null);
+
+  return specific || genericByTone[tone] || ui.indicatorAssessment(safeLabel, direction, scoreTone(score, ui).label);
+}
+
 function buildRows(items, locale, ui) {
   const source = Array.isArray(items) ? items : [];
 
@@ -979,18 +1120,27 @@ function buildRows(items, locale, ui) {
       score <= 35;
     const rawDetail = String(item?.interpretation || item?.uitleg || item?.action || "").trim();
     const localizedDetail = trimSentence(localizeIndicatorDetail(rawDetail, ui), "");
-    const hasSpecificDetail =
+    const shouldUseBackendDetail =
       localizedDetail &&
       localizedDetail !== ui.unavailable &&
       !isGenericIndicatorExplanation(rawDetail) &&
-      !isGenericIndicatorExplanation(localizedDetail);
+      !isGenericIndicatorExplanation(localizedDetail) &&
+      !ui.indicatorLabels?.[String(name || "").trim().toLowerCase()];
+    const generatedDetail = hasValue
+      ? explainIndicatorAssessment({
+          name,
+          label,
+          score,
+          numericValue,
+          direction,
+          ui,
+        })
+      : ui.unavailable;
     const detail = scoreConflict
       ? ui.positiveMoveWeakScore(value, Math.round(score))
-      : hasSpecificDetail
+      : shouldUseBackendDetail
         ? localizedDetail
-        : hasValue
-          ? ui.indicatorAssessment(label, direction, tone.label)
-          : ui.unavailable;
+        : generatedDetail;
 
     return {
       id: `${name}-${index}`,
