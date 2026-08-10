@@ -753,13 +753,12 @@ function localizeIndicatorDetail(value, ui = getUiCopy("en")) {
     ["Geen actie", ui.unavailable],
     ["No action", ui.unavailable],
     ["Keine Aktion", ui.unavailable],
+    ["Empty", ui.unavailable],
+    ["Leeg", ui.unavailable],
+    ["Leer", ui.unavailable],
     ["Controleer logs", ui.finnContextUnavailable],
     ["Check logs", ui.finnContextUnavailable],
     ["Logs prüfen", ui.finnContextUnavailable],
-    ["Zeer zwakke marktcondities. Lage kwaliteit liquiditeit/momentum.", "Very weak market conditions. Low-quality liquidity/momentum."],
-    ["Lage range (20–40). Zwakke condities, voorzichtig.", "Low range (20–40). Weak conditions, stay cautious."],
-    ["Neutrale zone. Geen duidelijke edge; wacht op bevestiging.", "Neutral zone. No clear edge yet; wait for confirmation."],
-    ["Extreem (80–100). Sterk/oververhit afhankelijk van indicator.", "Extreme range (80–100). Strong or overheated depending on the indicator."],
     ["Geen interpretatie beschikbaar", ui.unavailable],
   ]);
 
@@ -768,12 +767,36 @@ function localizeIndicatorDetail(value, ui = getUiCopy("en")) {
   }
 
   return normalized
-    .replace("Zeer zwakke marktcondities. Lage kwaliteit liquiditeit/momentum.", "Very weak market conditions. Low-quality liquidity/momentum.")
-    .replace("Lage range (20–40). Zwakke condities, voorzichtig.", "Low range (20–40). Weak conditions, stay cautious.")
-    .replace("Neutrale zone. Geen duidelijke edge; wacht op bevestiging.", "Neutral zone. No clear edge yet; wait for confirmation.")
-    .replace("Extreem (80–100). Sterk/oververhit afhankelijk van indicator.", "Extreme range (80–100). Strong or overheated depending on the indicator.")
     .replace("Geen interpretatie beschikbaar", ui.unavailable)
-    .replace("Onvoldoende data", ui.unavailable);
+    .replace("Onvoldoende data", ui.unavailable)
+    .replace("Empty", ui.unavailable);
+}
+
+function isGenericIndicatorExplanation(value) {
+  const normalized = String(value || "").trim().toLowerCase();
+  if (!normalized) return true;
+
+  return [
+    /^empty$/,
+    /^leeg$/,
+    /^leer$/,
+    /geen interpretatie beschikbaar|no interpretation available|keine interpretation verfügbar/,
+    /geen scoreregel match|no matching scoring rule|keine passende scoring-regel/,
+    /interpretatiefout|interpretation error|interpretationsfehler/,
+    /geen actie|no action|keine aktion/,
+    /geen duidelijke edge|no clear edge|keine klare edge/,
+    /zeer lage range|very low range|sehr niedriger bereich/,
+    /lage range|low range|niedriger bereich/,
+    /neutrale zone|neutral zone|neutrale zone/,
+    /extreem|extreme range|extremer bereich/,
+    /zeer zwakke marktcondities|very weak market conditions|sehr schwache marktbedingungen/,
+    /lage kwaliteit liquiditeit\/momentum|low-quality liquidity\/momentum|niedrige liquiditäts\/momentum-qualität/,
+    /zwakke condities|weak conditions|schwache bedingungen/,
+    /sentiment\/conditie extreem zwak|sentiment\/condition extremely weak|sentiment\/zustand extrem schwach/,
+    /sterk\/oververhit afhankelijk van indicator|strong or overheated depending on the indicator|stark\/überhitzt je nach indikator/,
+    /^onvoldoende data$|^insufficient data$|^unzureichende daten$/,
+    /^empty$/i,
+  ].some((pattern) => pattern.test(normalized));
 }
 
 function formatCompactNumber(value, locale, digits = 2) {
@@ -954,12 +977,20 @@ function buildRows(items, locale, ui) {
       numericValue > 0 &&
       score !== null &&
       score <= 35;
+    const rawDetail = String(item?.interpretation || item?.uitleg || item?.action || "").trim();
+    const localizedDetail = trimSentence(localizeIndicatorDetail(rawDetail, ui), "");
+    const hasSpecificDetail =
+      localizedDetail &&
+      localizedDetail !== ui.unavailable &&
+      !isGenericIndicatorExplanation(rawDetail) &&
+      !isGenericIndicatorExplanation(localizedDetail);
     const detail = scoreConflict
       ? ui.positiveMoveWeakScore(value, Math.round(score))
-      : trimSentence(
-          localizeIndicatorDetail(item?.interpretation || item?.uitleg || "", ui),
-          hasValue ? ui.indicatorAssessment(label, direction, tone.label) : ui.unavailable
-        );
+      : hasSpecificDetail
+        ? localizedDetail
+        : hasValue
+          ? ui.indicatorAssessment(label, direction, tone.label)
+          : ui.unavailable;
 
     return {
       id: `${name}-${index}`,
@@ -1627,7 +1658,7 @@ function EvidenceRow({
                 {ui.details}
               </div>
               <p className="mt-1.5 text-[13px] font-medium leading-6 text-slate-600">
-                {row.raw?.interpretation || row.raw?.uitleg || row.raw?.action || row.detail}
+                {row.detail}
               </p>
             </div>
 
