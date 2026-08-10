@@ -343,8 +343,35 @@ def _extract_asset_from_query(query: str) -> Optional[str]:
     return None
 
 
-def _looks_like_watchlist_mutation(query: str) -> bool:
+def _looks_like_indicator_configuration_request(query: str, context_payload: Optional[dict] = None) -> bool:
     q = str(query or "").lower()
+    context_payload = context_payload or {}
+    mode = str(context_payload.get("mode") or "").strip().lower()
+    category = str(context_payload.get("category") or "").strip().lower()
+
+    if mode == "indicator" or category in {"macro", "market", "technical"}:
+        return True
+
+    return any(term in q for term in [
+        "indicator",
+        "indicators",
+        "macro",
+        "market indicator",
+        "market evidence",
+        "technical",
+        "technical indicator",
+        "macro evidence",
+        "technical evidence",
+        "market tabel",
+        "macro tabel",
+        "technical tabel",
+    ])
+
+
+def _looks_like_watchlist_mutation(query: str, context_payload: Optional[dict] = None) -> bool:
+    q = str(query or "").lower()
+    if _looks_like_indicator_configuration_request(query, context_payload):
+        return False
     has_watchlist = "watchlist" in q or "volglijst" in q
     has_mutation = any(term in q for term in [
         "voeg", "toe", "add", "zet", "plaats", "verwijder", "haal", "remove",
@@ -1996,7 +2023,7 @@ async def assistant_chat(
             return await _finalize_finn_response(
                 finn, user_id, finn_response, trace_id, prompt=request.query, context_payload=context_payload
             )
-        if _looks_like_watchlist_mutation(request.query):
+        if _looks_like_watchlist_mutation(request.query, context_payload):
             finn_response = _build_watchlist_mutation_envelope(request.query, context_payload)
             return await _finalize_finn_response(
                 finn, user_id, finn_response, trace_id, db=db, prompt=request.query, context_payload=context_payload
@@ -2597,7 +2624,7 @@ async def assistant_chat_stream(
                 yield _sse_event("envelope", envelope)
                 return
 
-            if _looks_like_watchlist_mutation(request.query):
+            if _looks_like_watchlist_mutation(request.query, context_payload):
                 envelope = _build_watchlist_mutation_envelope(request.query, context_payload)
                 envelope = await _prepare_finn_envelope(finn, user_id, envelope, trace_id, db=db, prompt=request.query, context_payload=context_payload)
                 yield _sse_event("envelope", envelope)

@@ -159,6 +159,20 @@ def test_watchlist_mutation_returns_action_card():
     assert envelope["actions"][0]["symbol"] == "BTC"
 
 
+def test_watchlist_mutation_is_not_detected_for_indicator_context():
+    assert api._looks_like_watchlist_mutation(
+        "Voeg SPY toe",
+        {"mode": "indicator", "category": "macro", "symbol": "BTC"},
+    ) is False
+
+
+def test_indicator_configuration_request_detects_macro_context():
+    assert api._looks_like_indicator_configuration_request(
+        "SPY",
+        {"mode": "indicator", "category": "macro"},
+    ) is True
+
+
 def test_ensure_pending_action_ids_registers_watchlist_action(monkeypatch):
     async def _fake_register(self, user_id, action_type, payload, trace_id=None, ttl_seconds=600):
         assert user_id == 42

@@ -23,6 +23,9 @@ from backend.utils.indicator_score_validation import require_indicator_score
 
 logger = logging.getLogger(__name__)
 
+_FORWARD_RETURN_SYNC_TASKS: dict[str, asyncio.Task] = {}
+_FORWARD_RETURN_SYNC_TASKS_LOCK: asyncio.Lock | None = None
+
 
 FORWARD_RETURN_SYMBOL_SUPPORT: dict[str, dict[str, Any]] = {
     "BTC": {"source": "binance", "minimum_history_years": 5},
@@ -85,6 +88,13 @@ class MarketDataService:
         self.preference_repository = TechnicalDataRepository(db_session)
         self.provider_registry = MarketDataProviderRegistry()
 
+    @staticmethod
+    def _forward_return_sync_lock() -> asyncio.Lock:
+        global _FORWARD_RETURN_SYNC_TASKS_LOCK
+        if _FORWARD_RETURN_SYNC_TASKS_LOCK is None:
+            _FORWARD_RETURN_SYNC_TASKS_LOCK = asyncio.Lock()
+        return _FORWARD_RETURN_SYNC_TASKS_LOCK
+
     async def get_forward_return_support(self, symbol: str) -> dict[str, Any]:
         normalized_symbol = str(symbol or "").strip().upper()
         asset_meta = await AssetCatalogService(self.session).get_asset(normalized_symbol)
@@ -146,9 +156,26 @@ class MarketDataService:
 
         if await self._forward_returns_need_refresh(normalized_symbol, support):
             logger.info("🔁 Forward returns refresh nodig voor %s", normalized_symbol)
-            await self.sync_symbol_forward_returns(normalized_symbol)
+            await self._ensure_single_forward_return_sync(normalized_symbol)
 
         return support
+
+    async def _ensure_single_forward_return_sync(self, symbol: str) -> dict[str, Any]:
+        normalized_symbol = str(symbol or "").strip().upper()
+
+        async with self._forward_return_sync_lock():
+            existing_task = _FORWARD_RETURN_SYNC_TASKS.get(normalized_symbol)
+            if existing_task is None or existing_task.done():
+                existing_task = asyncio.create_task(self.sync_symbol_forward_returns(normalized_symbol))
+                _FORWARD_RETURN_SYNC_TASKS[normalized_symbol] = existing_task
+
+        try:
+            return await existing_task
+        finally:
+            if existing_task.done():
+                async with self._forward_return_sync_lock():
+                    if _FORWARD_RETURN_SYNC_TASKS.get(normalized_symbol) is existing_task:
+                        _FORWARD_RETURN_SYNC_TASKS.pop(normalized_symbol, None)
 
     async def sync_supported_forward_returns(
         self,
