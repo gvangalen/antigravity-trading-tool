@@ -92,6 +92,13 @@ export function AssetProvider({ children }: { children: React.ReactNode }) {
 
     async function hydrateSelectedAssetFromPreferences() {
       try {
+        const savedAsset = normalizeOnboardingAsset(localStorage.getItem("selectedAsset"));
+        if (savedAsset) {
+          setSelectedAssetState(savedAsset);
+          setAvailableAssets((current) => (current.includes(savedAsset) ? current : [...current, savedAsset]));
+          return;
+        }
+
         const preferredAsset = await fetchPreferredAsset();
         if (!preferredAsset) return;
         if (cancelled) return;
@@ -118,7 +125,7 @@ export function AssetProvider({ children }: { children: React.ReactNode }) {
       cancelled = true;
       if (timer) clearTimeout(timer);
     };
-  }, [pathname, preferencesHydrated, sessionChecked, user?.id, user?.ai_preferences]);
+  }, [preferencesHydrated, sessionChecked, user?.id, user?.ai_preferences]);
 
   useEffect(() => {
     setPreferencesHydrated(false);
