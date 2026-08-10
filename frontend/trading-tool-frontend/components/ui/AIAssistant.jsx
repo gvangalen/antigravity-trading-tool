@@ -3,7 +3,7 @@
 import React, { Suspense, useState, useEffect, useLayoutEffect, useRef } from "react";
 import { usePathname, useSearchParams, useRouter } from "next/navigation";
 import { assistantChat, executeAssistantAction, fetchAssistantInsight, getAssistantPreferences, getAssistantSessionDetail, getAssistantSessions, updateAssistantPreferences, assistantChatStream, executePendingAction, fetchFinnState, fetchFinnMissionControl } from "@/lib/api/ai";
-import { Send, Zap, Brain, Shield, BarChart3, Loader2, X, MessageSquare, Target, Activity, FileText, Bot, ChevronDown, ListChecks, Terminal, Sparkles, CheckCircle2, Plus, Search, SlidersHorizontal, Star, ArrowRight } from "lucide-react";
+import { Send, Zap, Brain, Shield, BarChart3, Loader2, X, MessageSquare, Target, Activity, FileText, Bot, ChevronDown, ListChecks, Terminal, Sparkles, CheckCircle2, Plus, Search, SlidersHorizontal } from "lucide-react";
 import useIntelligenceEvents from "@/hooks/useIntelligenceEvents";
 import { useOnboarding } from "@/hooks/useOnboarding";
 import { ChatSkeleton } from "@/components/dashboard/DashboardSkeleton";
@@ -500,34 +500,6 @@ function AIAssistantContent({
   };
 
   const uiText = buildAssistantUiText(at);
-
-  const buildAssetWorkspaceHref = (symbol) => {
-    const encodedSymbol = encodeURIComponent(String(symbol || "BTC").toUpperCase());
-    return activeVariant === "legacy"
-      ? `/asset?symbol=${encodedSymbol}&variant=legacy`
-      : `/asset?symbol=${encodedSymbol}`;
-  };
-
-  const handleSimpleFinnAssetSelect = async (asset) => {
-    const symbol = String(asset?.symbol || "").toUpperCase();
-    if (!symbol) return;
-
-    if (!watchlist.isInWatchlist(symbol)) {
-      await watchlist.add(asset);
-    }
-
-    setSelectedAsset(symbol);
-    try {
-      await initializeAsset(symbol);
-    } catch (error) {
-      console.warn("Kon asset-init niet vooraf laden:", error);
-    }
-
-    router.push(buildAssetWorkspaceHref(symbol), { scroll: false });
-    setIsOpen(false);
-  };
-
-  const simpleFinnAssetSuggestions = FINN_ASSETS.slice(0, 16);
 
   useEffect(() => {
     const handleIndicatorModalCompleted = (event) => {
@@ -5480,25 +5452,14 @@ function AIAssistantContent({
     });
   }, [messages, loading, currentConversationStorageKey]);
 
-  const recentConversationItems = recentConversations
-    .filter((conversation) => conversation?.storageKey === currentConversationStorageKey)
-    .slice(0, MAX_RECENT_FINN_CONVERSATIONS);
-
   const recentFinnSessionItems = availableFinnSessions.slice(0, MAX_RECENT_FINN_CONVERSATIONS);
-
-  const handleRestoreConversation = (conversation) => {
-    if (!conversation || !Array.isArray(conversation.messages) || conversation.messages.length === 0) return;
-    setFinnDraft(null);
-    setActiveState(null);
-    setMessages(conversation.messages);
-  };
 
   const showSimpleFinnHistory =
     !isSimpleFinnModal ||
     messages.length > 0 ||
     loading ||
     Boolean(activeState) ||
-    recentConversationItems.length > 0;
+    recentFinnSessionItems.length > 0;
 
   useEffect(() => {
     if (!isOpen || !hasTraderProfile) return;
@@ -6135,89 +6096,6 @@ function AIAssistantContent({
         {/* MESSAGES AREA */}
         {showSimpleFinnHistory ? (
         <div className={`space-y-4 ${isSimpleFinnModal ? "p-5 pb-8" : "p-6 pb-20"}`}>
-          {isSimpleFinnModal && messages.length === 0 && recentConversationItems.length > 0 && (
-            <div className="space-y-2">
-              <div className="px-1 text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-400 dark:text-slate-500">
-                {uiText.recentConversations}
-              </div>
-              <div className="space-y-2">
-                {recentConversationItems.map((conversation) => (
-                  <button
-                    key={conversation.id}
-                    type="button"
-                    onClick={() => handleRestoreConversation(conversation)}
-                    className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-left transition hover:border-blue-200 hover:bg-blue-50/40 dark:border-slate-800 dark:bg-slate-950/40 dark:hover:border-blue-900/50 dark:hover:bg-blue-950/20"
-                  >
-                    <div className="flex items-center justify-between gap-3">
-                      <p className="truncate text-sm font-semibold text-slate-900 dark:text-slate-100">
-                        {conversation.title}
-                      </p>
-                      <span className="shrink-0 text-[11px] font-medium text-slate-400 dark:text-slate-500">
-                        {formatRecentConversationTime(conversation.updatedAt)}
-                      </span>
-                    </div>
-                    <p className="mt-1 text-[12px] text-slate-500 dark:text-slate-400">
-                      {uiText.continueConversation}
-                    </p>
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-          {isSimpleFinnModal && (
-            <div className="space-y-2">
-              <div className="px-1 text-[10px] font-semibold uppercase tracking-[0.22em] text-slate-400 dark:text-slate-500">
-                Assets
-              </div>
-              <div className="space-y-2">
-                {simpleFinnAssetSuggestions.map((asset) => {
-                  const isInWatchlist = watchlist.isInWatchlist(asset.symbol);
-                  const isActiveAsset = String(globalSymbol || "BTC").toUpperCase() === asset.symbol;
-                  return (
-                    <button
-                      key={`asset-suggestion:${asset.symbol}`}
-                      type="button"
-                      onClick={() => void handleSimpleFinnAssetSelect(asset)}
-                      className={`flex w-full items-center justify-between gap-3 rounded-2xl border px-3 py-3 text-left transition ${
-                        isActiveAsset
-                          ? "border-blue-200 bg-blue-50 dark:border-blue-900/60 dark:bg-blue-950/20"
-                          : "border-slate-200 bg-white hover:border-blue-200 hover:bg-blue-50/40 dark:border-slate-800 dark:bg-slate-900/40 dark:hover:border-blue-900/40 dark:hover:bg-blue-950/10"
-                      }`}
-                    >
-                      <span className="flex min-w-0 items-center gap-3">
-                        <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-300">
-                          <span className="text-base font-black">{asset.icon}</span>
-                        </span>
-                        <span className="min-w-0">
-                          <span className="block truncate text-sm font-semibold text-slate-900 dark:text-slate-100">
-                            {asset.symbol}
-                          </span>
-                          <span className="block truncate text-[12px] text-slate-500 dark:text-slate-400">
-                            {asset.name}
-                          </span>
-                        </span>
-                      </span>
-                      <div className="flex shrink-0 items-center gap-2">
-                        <button
-                          type="button"
-                          aria-label={`${asset.symbol} watchlist`}
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            const action = isInWatchlist ? watchlist.remove(asset.symbol) : watchlist.add(asset);
-                            Promise.resolve(action).then(() => initializeAsset(asset.symbol).catch(() => null));
-                          }}
-                          className={`rounded-lg p-2 ${isInWatchlist ? "text-amber-400" : "text-slate-300 hover:text-amber-400"}`}
-                        >
-                          <Star size={15} fill={isInWatchlist ? "currentColor" : "none"} />
-                        </button>
-                        <ArrowRight size={14} className="text-slate-300" />
-                      </div>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          )}
           {isSimpleFinnModal && (
             <div className="space-y-2">
               <div className="flex items-center justify-between gap-3">
