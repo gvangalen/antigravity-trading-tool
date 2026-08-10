@@ -11,6 +11,7 @@ import { subscribeWorkspaceRefresh } from "@/lib/workspaceSync";
 const WORKSPACE_REQUEST_TIMEOUT_MS = 15000;
 const WORKSPACE_CACHE_TTL_MS = 60_000;
 const FOREGROUND_REFRESH_COOLDOWN_MS = 5_000;
+const WORKSPACE_FORCE_REFRESH_COOLDOWN_MS = 2_500;
 
 const workspaceCache = new Map();
 const workspaceInFlightRequests = new Map();
@@ -27,10 +28,6 @@ function setFreshCache(cache, key, value) {
     value,
     savedAt: Date.now(),
   });
-}
-
-function getWorkspaceRequestKey(workspaceKey, forceNetwork) {
-  return `${workspaceKey}:${forceNetwork ? "fresh" : "cached"}`;
 }
 
 function buildWorkspaceFallback(symbol, periods, quote, daily) {
@@ -122,6 +119,7 @@ export function useAssetWorkspaceData(symbol, periods, watchlistSymbols) {
   const fallbackStartedAtRef = useRef(null);
   const latestWorkspaceRef = useRef(cachedWorkspace || null);
   const lastForegroundRefreshAtRef = useRef(0);
+  const lastSuccessfulRefreshAtRef = useRef(cachedWorkspace ? Date.now() : 0);
   const requestSequenceRef = useRef(0);
   const assetSymbol = String(symbol || "BTC").toUpperCase();
 
@@ -134,6 +132,7 @@ export function useAssetWorkspaceData(symbol, periods, watchlistSymbols) {
     setIsFallbackWorkspace(false);
     fallbackStartedAtRef.current = null;
     latestWorkspaceRef.current = cachedWorkspace || null;
+    lastSuccessfulRefreshAtRef.current = cachedWorkspace ? Date.now() : 0;
   }, [cachedWatchlist, cachedWorkspace, workspaceKey]);
 
   useEffect(() => {
@@ -166,29 +165,48 @@ export function useAssetWorkspaceData(symbol, periods, watchlistSymbols) {
       return cached;
     }
 
+    if (
+      forceNetwork &&
+      cached &&
+      Date.now() - lastSuccessfulRefreshAtRef.current < WORKSPACE_FORCE_REFRESH_COOLDOWN_MS
+    ) {
+      setWorkspace(cached);
+      setWatchlist(Array.isArray(cached?.watchlist?.rows) ? cached.watchlist.rows : []);
+      setWatchlistLoading(false);
+      setLoading(false);
+      return cached;
+    }
+
     const requestId = ++requestSequenceRef.current;
     setLoading(true);
-    const requestKey = getWorkspaceRequestKey(workspaceKey, forceNetwork);
-    let request = workspaceInFlightRequests.get(requestKey);
+    let request = workspaceInFlightRequests.get(workspaceKey);
 
     if (!request) {
       const controller = new AbortController();
       const timeoutId = window.setTimeout(() => controller.abort(), WORKSPACE_REQUEST_TIMEOUT_MS);
-      request = fetchAssetWorkspace(symbol, periods, {
+      const requestPromise = fetchAssetWorkspace(symbol, periods, {
         signal: controller.signal,
         forceFresh: forceNetwork,
         watchlistSymbols: normalizedWatchlistSymbols,
       }).finally(() => {
         window.clearTimeout(timeoutId);
-        workspaceInFlightRequests.delete(requestKey);
+        const activeRequest = workspaceInFlightRequests.get(workspaceKey);
+        if (activeRequest?.promise === requestPromise) {
+          workspaceInFlightRequests.delete(workspaceKey);
+        }
       });
-      workspaceInFlightRequests.set(requestKey, request);
+      request = {
+        promise: requestPromise,
+        forceNetwork,
+      };
+      workspaceInFlightRequests.set(workspaceKey, request);
     }
 
     try {
-      const payload = await request;
+      const payload = await request.promise;
       if (requestId !== requestSequenceRef.current) return payload;
       setFreshCache(workspaceCache, workspaceKey, payload);
+      lastSuccessfulRefreshAtRef.current = Date.now();
       if (fallbackStartedAtRef.current) {
         trackWorkspaceTelemetry("asset_workspace_recovered", {
           fallback_duration_ms: Date.now() - fallbackStartedAtRef.current,
@@ -241,9 +259,11 @@ export function useAssetWorkspaceData(symbol, periods, watchlistSymbols) {
         });
       }
       setWorkspace(fallback);
-      if (!cachedWatchlist.length) {
-        setWatchlist([]);
-      }
+      setWatchlist(Array.isArray(latestWorkspaceRef.current?.watchlist?.rows)
+        ? latestWorkspaceRef.current.watchlist.rows
+        : Array.isArray(cached?.watchlist?.rows)
+          ? cached.watchlist.rows
+          : []);
       setError(nextError);
       setIsFallbackWorkspace(true);
       return fallback;

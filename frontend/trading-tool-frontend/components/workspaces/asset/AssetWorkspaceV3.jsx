@@ -1832,6 +1832,7 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
   } = useAssetWorkspaceData(activeSymbol, periods);
   const { strategies = [] } = useStrategyData({ includeSetups: false });
   const [marketBestSetup, setMarketBestSetup] = useState(null);
+  const lastWorkspaceReloadAtRef = useRef(0);
 
   const categoryData = workspace?.categories || {};
   const marketDayData = categoryData.market?.rows || [];
@@ -1852,6 +1853,13 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
   const macroLoading = workspaceLoading && !hasResolvedWorkspace;
   const technicalLoading = workspaceLoading && !hasResolvedWorkspace;
   const scoresLoading = workspaceLoading && !hasResolvedWorkspace;
+
+  const refreshWorkspaceOnce = useCallback(async () => {
+    const now = Date.now();
+    if (now - lastWorkspaceReloadAtRef.current < 1200) return;
+    lastWorkspaceReloadAtRef.current = now;
+    await reloadWorkspace({ forceNetwork: true });
+  }, [reloadWorkspace]);
 
   useEffect(() => {
     const activeRow = watchlistRows.find((row) => row.symbol === activeSymbol);
@@ -1959,19 +1967,19 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
 
   const addMarket = async (name) => {
     await marketIndicatorAdd(name, activeSymbol);
-    await reloadWorkspace();
+    await refreshWorkspaceOnce();
   };
   const addMacroIndicator = async (name) => {
     await macroDataAdd(name, activeSymbol);
-    await reloadWorkspace();
+    await refreshWorkspaceOnce();
   };
   const addTechnicalIndicator = async (name) => {
     await technicalDataAdd(name, activeSymbol);
-    await reloadWorkspace();
+    await refreshWorkspaceOnce();
   };
   const saveWeights = async (weights) => {
     const result = await updateIntelligenceWeights(weights);
-    await reloadWorkspace();
+    await refreshWorkspaceOnce();
     return result;
   };
 
@@ -2076,13 +2084,13 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
       const detail = event?.detail || {};
       if (String(detail.assetSymbol || "").toUpperCase() !== activeSymbol) return;
 
-      if (["market", "macro", "technical"].includes(detail.category)) void reloadWorkspace();
+      if (["market", "macro", "technical"].includes(detail.category)) void refreshWorkspaceOnce();
     };
 
     window.addEventListener(FINN_INDICATOR_MODAL_COMPLETED_EVENT, refreshCompletedIndicator);
     return () =>
       window.removeEventListener(FINN_INDICATOR_MODAL_COMPLETED_EVENT, refreshCompletedIndicator);
-  }, [activeSymbol, reloadWorkspace]);
+  }, [activeSymbol, refreshWorkspaceOnce]);
 
   useEffect(() => {
     let cancelled = false;
