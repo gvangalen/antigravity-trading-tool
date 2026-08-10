@@ -457,8 +457,8 @@ check_external() {
 }
 
 external_smoke_failed=false
-if ! check_external "${EXTERNAL_BASE_URL}/api/health" "200" "external api health" 20 HEAD \
-  || ! check_external "${EXTERNAL_BASE_URL}/api/system/health" "401" "external deep health gate" 20 HEAD \
+if ! check_external "${EXTERNAL_BASE_URL}/api/health" "200" "external api health" 20 GET \
+  || ! check_external "${EXTERNAL_BASE_URL}/api/system/health" "401" "external deep health gate" 20 GET \
   || ! check_external "${EXTERNAL_BASE_URL}/report" "200,302,307,308" "external report" 20 HEAD; then
   external_smoke_failed=true
 fi
