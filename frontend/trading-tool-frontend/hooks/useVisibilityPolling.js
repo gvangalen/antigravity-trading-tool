@@ -24,6 +24,7 @@ export function useVisibilityPolling(
     intervalMs,
     backgroundIntervalMs = null,
     runImmediately = true,
+    triggerOnVisible = true,
     deps = [],
   }
 ) {
@@ -63,7 +64,7 @@ export function useVisibilityPolling(
 
     const handleVisibilityChange = () => {
       schedule();
-      if (isDocumentVisible()) run();
+      if (triggerOnVisible && isDocumentVisible()) run();
     };
 
     if (runImmediately) run();
@@ -80,5 +81,5 @@ export function useVisibilityPolling(
         document.removeEventListener("visibilitychange", handleVisibilityChange);
       }
     };
-  }, [enabled, intervalMs, backgroundIntervalMs, runImmediately, ...deps]);
+  }, [enabled, intervalMs, backgroundIntervalMs, runImmediately, triggerOnVisible, ...deps]);
 }

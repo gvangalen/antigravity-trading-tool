@@ -9,8 +9,8 @@ import { getDailyScores } from "@/lib/api/scores";
 import { subscribeWorkspaceRefresh } from "@/lib/workspaceSync";
 
 const WORKSPACE_REQUEST_TIMEOUT_MS = 15000;
-const WORKSPACE_CACHE_TTL_MS = 60_000;
-const FOREGROUND_REFRESH_COOLDOWN_MS = 5_000;
+const WORKSPACE_CACHE_TTL_MS = 300_000;
+const FOREGROUND_REFRESH_COOLDOWN_MS = 30_000;
 const WORKSPACE_FORCE_REFRESH_COOLDOWN_MS = 2_500;
 
 const workspaceCache = new Map();
@@ -28,6 +28,10 @@ function setFreshCache(cache, key, value) {
     value,
     savedAt: Date.now(),
   });
+}
+
+function hasFreshWorkspaceCache(key) {
+  return Boolean(getFreshCache(workspaceCache, key, WORKSPACE_CACHE_TTL_MS));
 }
 
 function buildWorkspaceFallback(symbol, periods, quote, daily) {
@@ -277,6 +281,16 @@ export function useAssetWorkspaceData(symbol, periods, watchlistSymbols) {
 
   const refreshWorkspaceIfStale = useCallback(() => {
     const cached = getFreshCache(workspaceCache, workspaceKey, WORKSPACE_CACHE_TTL_MS);
+    if (cached && !isFallbackWorkspace) {
+      if (latestWorkspaceRef.current !== cached) {
+        setWorkspace(cached);
+        setWatchlist(Array.isArray(cached?.watchlist?.rows) ? cached.watchlist.rows : []);
+        setWatchlistLoading(false);
+        setLoading(false);
+      }
+      return Promise.resolve(cached);
+    }
+
     const shouldForceNetwork = !cached || isFallbackWorkspace;
     return reloadWorkspace({ forceNetwork: shouldForceNetwork });
   }, [isFallbackWorkspace, reloadWorkspace, workspaceKey]);
@@ -302,6 +316,7 @@ export function useAssetWorkspaceData(symbol, periods, watchlistSymbols) {
     const refreshIfNeeded = () => {
       const now = Date.now();
       if (now - lastForegroundRefreshAtRef.current < FOREGROUND_REFRESH_COOLDOWN_MS) return;
+      if (hasFreshWorkspaceCache(workspaceKey) && !isFallbackWorkspace) return;
       lastForegroundRefreshAtRef.current = now;
       void refreshWorkspaceIfStale();
     };
@@ -322,6 +337,7 @@ export function useAssetWorkspaceData(symbol, periods, watchlistSymbols) {
     intervalMs: 60_000,
     backgroundIntervalMs: 300_000,
     runImmediately: false,
+    triggerOnVisible: false,
     deps: [symbol, periods.market, periods.macro, periods.technical, watchlistKey],
   });
 
