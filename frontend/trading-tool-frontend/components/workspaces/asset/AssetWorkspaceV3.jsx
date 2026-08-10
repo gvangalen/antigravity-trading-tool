@@ -2129,6 +2129,18 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
     () => watchlistRows.find((row) => row.symbol === activeSymbol) || null,
     [activeSymbol, watchlistRows]
   );
+  const handleAssetGroupChange = (nextGroup) => {
+    const normalizedGroup = normalizeAssetGroup(nextGroup);
+    setActiveAssetGroup(normalizedGroup);
+
+    const activeRowGroup = normalizeAssetGroup(activeWatchlistRow?.assetGroup || activeWatchlistRow?.assetClass);
+    if (activeRowGroup === normalizedGroup) return;
+
+    const fallbackRow = watchlistRows.find((row) => row.assetGroup === normalizedGroup);
+    if (fallbackRow?.symbol) {
+      handleAssetSelect(fallbackRow.symbol);
+    }
+  };
   const activeAssetName =
     activeWatchlistRow?.displayName ||
     workspaceAsset?.display_name ||
@@ -2257,7 +2269,7 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
         activeSymbol={activeSymbol}
         onSelect={handleAssetSelect}
         activeGroup={activeAssetGroup}
-        onGroupChange={setActiveAssetGroup}
+        onGroupChange={handleAssetGroupChange}
         onAddAsset={() => openSearch()}
         ui={ui}
       />
