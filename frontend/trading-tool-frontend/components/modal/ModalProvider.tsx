@@ -25,14 +25,19 @@ export type ModalConfig = {
   description?: ReactNode;
   statusLabel?: string;
   context?: ReactNode;
+  contextLabel?: string;
   impact?: ReactNode;
+  impactLabel?: string;
   safety?: ReactNode;
+  safetyLabel?: string;
   consequence?: ReactNode;
+  consequenceLabel?: string;
   icon?: ReactNode;
   tone?: ModalTone;
   confirmText?: string;
   cancelText?: string;
   busyText?: string;
+  closeLabel?: string;
   closeOnBackdrop?: boolean;
   onConfirm?: () => void | boolean | Promise<void | boolean>;
   onCancel?: () => void;
@@ -121,18 +126,23 @@ function ModalRoot({
   if (!modal) return null;
 
   const {
-    title = "Bevestig actie",
+    title = "Confirm action",
     description,
     statusLabel,
     context,
+    contextLabel = "Context",
     impact,
+    impactLabel = "Impact",
     safety,
+    safetyLabel = "Safety",
     consequence,
+    consequenceLabel = "Next",
     icon,
     tone = "primary",
-    confirmText = "Bevestigen",
-    cancelText = "Annuleren",
+    confirmText = "Confirm",
+    cancelText = "Cancel",
     busyText,
+    closeLabel = "Close",
     onConfirm,
   } = modal;
   const titleId = useId();
@@ -204,7 +214,7 @@ function ModalRoot({
       <button
         onClick={() => onClose()}
         disabled={busy}
-        aria-label="Sluiten"
+        aria-label={closeLabel}
         data-overlay-close="true"
         className="absolute right-4 top-4 z-10 rounded-xl p-2 text-secondary transition-all hover:bg-slate-100 hover:text-slate-900 dark:hover:bg-slate-800 dark:hover:text-white"
       >
@@ -235,10 +245,10 @@ function ModalRoot({
           className="flex-1 space-y-4 overflow-y-auto px-8 py-2 text-[15px] font-medium leading-relaxed text-muted dark:text-slate-400"
         >
           {description ? <div>{description}</div> : null}
-          {context ? <ModalSection label="Context">{context}</ModalSection> : null}
-          {impact ? <ModalSection label="Impact">{impact}</ModalSection> : null}
-          {safety ? <ModalSection label="Veiligheid">{safety}</ModalSection> : null}
-          {consequence ? <ModalSection label="Daarna">{consequence}</ModalSection> : null}
+          {context ? <ModalSection label={contextLabel}>{context}</ModalSection> : null}
+          {impact ? <ModalSection label={impactLabel}>{impact}</ModalSection> : null}
+          {safety ? <ModalSection label={safetyLabel}>{safety}</ModalSection> : null}
+          {consequence ? <ModalSection label={consequenceLabel}>{consequence}</ModalSection> : null}
         </div>
       )}
 
@@ -260,7 +270,7 @@ function ModalRoot({
           })}
         >
           {busy && <div className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" />}
-          {busy ? busyText || "Bezig..." : confirmText}
+          {busy ? busyText || "Working..." : confirmText}
         </button>
       </div>
     </OverlayShell>

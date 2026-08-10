@@ -54,19 +54,19 @@ const SECTION_META = {
     label: "Markt",
     eyebrow: "Market Evidence",
     icon: TrendingUp,
-    empty: "Nog geen marktindicatoren geladen.",
+    empty: "No market indicators loaded yet.",
   },
   macro: {
     label: "Macro",
     eyebrow: "Macro Evidence",
     icon: Globe,
-    empty: "Nog geen macro-indicatoren geladen.",
+    empty: "No macro indicators loaded yet.",
   },
   technical: {
     label: "Technisch",
     eyebrow: "Technical Evidence",
     icon: LineChart,
-    empty: "Nog geen technische indicatoren geladen.",
+    empty: "No technical indicators loaded yet.",
   },
 };
 
@@ -216,7 +216,13 @@ function getUiCopy(locale = "nl") {
       watchlistRemoveSafety: "This does not trigger orders or data changes. Only your personal watchlist changes.",
       watchlistRemoveConsequence: "After confirming, your watchlist refreshes and Finn focuses on your remaining assets.",
       watchlistRemoveConfirm: "Remove asset",
+      watchlistRemoveBusy: "Removing asset...",
       watchlistRemoveSuccess: (symbol) => `${symbol} removed from watchlist`,
+      modalContextLabel: "Context",
+      modalImpactLabel: "Impact",
+      modalSafetyLabel: "Safety",
+      modalConsequenceLabel: "After this",
+      modalCloseLabel: "Close",
       marketEmpty: "No market indicators loaded yet.",
       macroEmpty: "No macro indicators loaded yet.",
       technicalEmpty: "No technical indicators loaded yet.",
@@ -344,7 +350,13 @@ function getUiCopy(locale = "nl") {
       watchlistRemoveSafety: "Dadurch werden keine Orders oder Daten geändert. Nur deine persönliche Watchlist wird angepasst.",
       watchlistRemoveConsequence: "Nach dem Bestätigen wird die Watchlist neu geladen und FINN fokussiert die verbleibenden Assets.",
       watchlistRemoveConfirm: "Asset entfernen",
+      watchlistRemoveBusy: "Asset wird entfernt...",
       watchlistRemoveSuccess: (symbol) => `${symbol} aus Watchlist entfernt`,
+      modalContextLabel: "Kontext",
+      modalImpactLabel: "Auswirkung",
+      modalSafetyLabel: "Sicherheit",
+      modalConsequenceLabel: "Danach",
+      modalCloseLabel: "Schließen",
       marketEmpty: "Noch keine Marktindikatoren geladen.",
       macroEmpty: "Noch keine Makroindikatoren geladen.",
       technicalEmpty: "Noch keine technischen Indikatoren geladen.",
@@ -471,7 +483,13 @@ function getUiCopy(locale = "nl") {
     watchlistRemoveSafety: "Dit start geen orders of datawijzigingen. Alleen je persoonlijke watchlist verandert.",
     watchlistRemoveConsequence: "Na bevestigen vernieuwt je watchlist en focust FINN op je overgebleven assets.",
     watchlistRemoveConfirm: "Asset verwijderen",
+    watchlistRemoveBusy: "Asset verwijderen...",
     watchlistRemoveSuccess: (symbol) => `${symbol} verwijderd van watchlist`,
+    modalContextLabel: "Context",
+    modalImpactLabel: "Impact",
+    modalSafetyLabel: "Veiligheid",
+    modalConsequenceLabel: "Daarna",
+    modalCloseLabel: "Sluiten",
     marketEmpty: "Nog geen marktindicatoren geladen.",
     macroEmpty: "Nog geen macro-indicatoren geladen.",
     technicalEmpty: "Nog geen technische indicatoren geladen.",
@@ -673,6 +691,91 @@ function prettifyName(name, ui = getUiCopy("nl")) {
   return normalized.replace(/_/g, " ").replace(/\b([a-z])/g, (match) => match.toUpperCase());
 }
 
+function localizeSemanticToken(value, ui = getUiCopy("en")) {
+  const normalized = String(value || "").trim().toLowerCase();
+  if (!normalized) return "";
+
+  if (normalized === "insufficient data" || normalized === "onvoldoende data" || normalized === "unzureichende daten") {
+    return ui.unavailable;
+  }
+  if (normalized.includes("above ma200") || normalized.includes("boven ma200") || normalized.includes("über ma200")) {
+    return ui.aboveMa200;
+  }
+  if (normalized.includes("below ma200") || normalized.includes("onder ma200") || normalized.includes("unter ma200")) {
+    return ui.belowMa200;
+  }
+  if (normalized.includes("above ma50") || normalized.includes("boven ma50") || normalized.includes("über ma50")) {
+    return ui.aboveMa50;
+  }
+  if (normalized.includes("below ma50") || normalized.includes("onder ma50") || normalized.includes("unter ma50")) {
+    return ui.belowMa50;
+  }
+  if (normalized.includes("improv") || normalized.includes("verbet") || normalized.includes("verbess")) {
+    return ui.improving;
+  }
+  if (normalized.includes("weaken") || normalized.includes("verslecht") || normalized.includes("schwä")) {
+    return ui.worsening;
+  }
+  if (normalized.includes("stable") || normalized.includes("stabiel") || normalized.includes("stabil")) {
+    return ui.stable;
+  }
+  if (normalized === "neutral" || normalized === "neutraal") {
+    return ui.neutral;
+  }
+  if (normalized === "positive" || normalized === "positief" || normalized === "positiv") {
+    return ui.positive;
+  }
+  if (normalized === "negative" || normalized === "negatief" || normalized === "negativ") {
+    return ui.negative;
+  }
+  if (normalized.includes("buy")) return ui.active;
+  if (normalized.includes("sell")) return ui.weakened;
+  return String(value || "").trim();
+}
+
+function localizeIndicatorDetail(value, ui = getUiCopy("en")) {
+  const normalized = String(value || "").trim();
+  if (!normalized) return "";
+
+  const directMap = new Map([
+    ["Onvoldoende data", ui.unavailable],
+    ["Insufficient data", ui.unavailable],
+    ["Unzureichende Daten", ui.unavailable],
+    ["Geen interpretatie beschikbaar", ui.unavailable],
+    ["No interpretation available", ui.unavailable],
+    ["Keine Interpretation verfügbar", ui.unavailable],
+    ["Geen scoreregel match", ui.unavailable],
+    ["No matching scoring rule", ui.unavailable],
+    ["Keine passende Scoring-Regel", ui.unavailable],
+    ["Interpretatiefout", ui.unavailable],
+    ["Interpretation error", ui.unavailable],
+    ["Interpretationsfehler", ui.unavailable],
+    ["Geen actie", ui.unavailable],
+    ["No action", ui.unavailable],
+    ["Keine Aktion", ui.unavailable],
+    ["Controleer logs", ui.finnContextUnavailable],
+    ["Check logs", ui.finnContextUnavailable],
+    ["Logs prüfen", ui.finnContextUnavailable],
+    ["Zeer zwakke marktcondities. Lage kwaliteit liquiditeit/momentum.", "Very weak market conditions. Low-quality liquidity/momentum."],
+    ["Lage range (20–40). Zwakke condities, voorzichtig.", "Low range (20–40). Weak conditions, stay cautious."],
+    ["Neutrale zone. Geen duidelijke edge; wacht op bevestiging.", "Neutral zone. No clear edge yet; wait for confirmation."],
+    ["Extreem (80–100). Sterk/oververhit afhankelijk van indicator.", "Extreme range (80–100). Strong or overheated depending on the indicator."],
+    ["Geen interpretatie beschikbaar", ui.unavailable],
+  ]);
+
+  if (directMap.has(normalized)) {
+    return directMap.get(normalized);
+  }
+
+  return normalized
+    .replace("Zeer zwakke marktcondities. Lage kwaliteit liquiditeit/momentum.", "Very weak market conditions. Low-quality liquidity/momentum.")
+    .replace("Lage range (20–40). Zwakke condities, voorzichtig.", "Low range (20–40). Weak conditions, stay cautious.")
+    .replace("Neutrale zone. Geen duidelijke edge; wacht op bevestiging.", "Neutral zone. No clear edge yet; wait for confirmation.")
+    .replace("Extreem (80–100). Sterk/oververhit afhankelijk van indicator.", "Extreme range (80–100). Strong or overheated depending on the indicator.")
+    .replace("Geen interpretatie beschikbaar", ui.unavailable)
+    .replace("Onvoldoende data", ui.unavailable);
+}
+
 function formatCompactNumber(value, locale, digits = 2) {
   return new Intl.NumberFormat(locale || "en-US", {
     maximumFractionDigits: digits,
@@ -728,7 +831,7 @@ function formatIndicatorValue(name, value, locale, ui = getUiCopy(locale)) {
   const numericValue = parseIndicatorNumber(raw);
 
   if (typeof raw === "string" && /buy|sell|above|below|bull|bear|neutral|hoog|laag|stijg|daal|trend/i.test(rawString)) {
-    return raw;
+    return localizeSemanticToken(raw, ui);
   }
 
   if (label === "ma_200" && Number.isFinite(numericValue)) {
@@ -781,7 +884,7 @@ function formatIndicatorValue(name, value, locale, ui = getUiCopy(locale)) {
     return formatCompactNumber(numericValue, locale, 2);
   }
 
-  return rawString || ui.unavailable;
+  return localizeSemanticToken(rawString, ui) || ui.unavailable;
 }
 
 function toDirectionLabel(item, score, ui = getUiCopy("nl")) {
@@ -854,7 +957,7 @@ function buildRows(items, locale, ui) {
     const detail = scoreConflict
       ? ui.positiveMoveWeakScore(value, Math.round(score))
       : trimSentence(
-          item?.interpretation || item?.uitleg || "",
+          localizeIndicatorDetail(item?.interpretation || item?.uitleg || "", ui),
           hasValue ? ui.indicatorAssessment(label, direction, tone.label) : ui.unavailable
         );
 
@@ -2218,9 +2321,15 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
       context: ui.watchlistRemoveContext(row.symbol),
       impact: ui.watchlistRemoveImpact,
       safety: ui.watchlistRemoveSafety,
+      contextLabel: ui.modalContextLabel,
+      impactLabel: ui.modalImpactLabel,
+      safetyLabel: ui.modalSafetyLabel,
+      consequenceLabel: ui.modalConsequenceLabel,
+      closeLabel: ui.modalCloseLabel,
       consequence: ui.watchlistRemoveConsequence,
       tone: "danger",
       confirmText: ui.watchlistRemoveConfirm,
+      busyText: ui.watchlistRemoveBusy,
       onConfirm: async () => {
         const normalizedSymbol = String(row.symbol || "").toUpperCase();
         const remainingRows = watchlistRows.filter(

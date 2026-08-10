@@ -128,10 +128,10 @@ export async function updateIntelligenceWeights(weights) {
 // =====================================================
 function fallbackScores() {
   return {
-    macro: { score: null, interpretation: "Onvoldoende data", top_contributors: [] },
-    technical: { score: null, interpretation: "Onvoldoende data", top_contributors: [] },
-    market: { score: null, interpretation: "Onvoldoende data", top_contributors: [] },
-    setup: { score: null, interpretation: "Onvoldoende data", top_contributors: [], active_setups: [] },
+    macro: { score: null, interpretation: "Insufficient data", top_contributors: [] },
+    technical: { score: null, interpretation: "Insufficient data", top_contributors: [] },
+    market: { score: null, interpretation: "Insufficient data", top_contributors: [] },
+    setup: { score: null, interpretation: "Insufficient data", top_contributors: [], active_setups: [] },
     data_status: "insufficient_data"
   };
 }
