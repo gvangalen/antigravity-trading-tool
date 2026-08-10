@@ -257,10 +257,7 @@ async def get_latest_price(
 ):
     try:
         service = MarketDataService(db)
-        result = await service.repository.get_latest_snapshot(symbol.upper())
-        if not result:
-            raise HTTPException(404, f"Geen {symbol} data gevonden")
-        return MarketDataResponse.from_orm(result)
+        return await service.get_latest_market_snapshot(symbol.upper())
     except HTTPException:
         raise
     except Exception as e:

@@ -2,6 +2,8 @@ import asyncio
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
+from fastapi import HTTPException
+
 from backend.services.market_data_service import MarketDataService
 
 
@@ -46,3 +48,102 @@ def test_ensure_forward_returns_ready_skips_sync_when_history_is_fresh():
 
     assert result["supported"] is True
     service.sync_symbol_forward_returns.assert_not_called()
+
+
+def test_get_latest_market_snapshot_falls_back_to_live_provider_when_db_snapshot_is_missing(monkeypatch):
+    service = MarketDataService(AsyncMock())
+    service.repository.get_latest_snapshot = AsyncMock(return_value=None)
+
+    asset_meta = {
+        "symbol": "AAPL",
+        "display_name": "Apple Inc.",
+        "asset_class": "stock",
+        "provider": "twelve_data",
+        "primary_provider": "twelve_data",
+        "provider_symbol": "AAPL",
+        "exchange": "NASDAQ",
+        "market_region": "us",
+        "timezone": "America/New_York",
+        "base_currency": None,
+        "quote_currency": "USD",
+        "entitlement_tier": "internal",
+        "is_delayed": False,
+        "refresh_policy": "securities_live_5m",
+        "metadata": {},
+    }
+
+    class _AssetCatalogStub:
+        def __init__(self, _session):
+            self._session = _session
+
+        async def get_asset(self, symbol):
+            assert symbol == "AAPL"
+            return asset_meta
+
+    live_snapshot = SimpleNamespace(
+        price=313.30,
+        open=311.45,
+        high=314.81,
+        low=310.74,
+        change_percent=-0.11,
+        volume=34_430_000,
+        observed_at=None,
+    )
+    provider = AsyncMock()
+    provider.fetch_latest_snapshot = AsyncMock(return_value=live_snapshot)
+    service.provider_registry.resolve_for_asset = lambda _asset: provider
+
+    monkeypatch.setattr("backend.services.market_data_service.AssetCatalogService", _AssetCatalogStub)
+
+    result = asyncio.run(service.get_latest_market_snapshot("AAPL"))
+
+    assert result.symbol == "AAPL"
+    assert result.id == 0
+    assert result.price == 313.30
+    assert result.change_24h == -0.11
+    assert result.volume == 34_430_000
+
+
+def test_get_latest_market_snapshot_raises_404_when_provider_fallback_fails(monkeypatch):
+    service = MarketDataService(AsyncMock())
+    service.repository.get_latest_snapshot = AsyncMock(return_value=None)
+
+    asset_meta = {
+        "symbol": "SPY",
+        "display_name": "SPDR S&P 500 ETF Trust",
+        "asset_class": "etf",
+        "provider": "twelve_data",
+        "primary_provider": "twelve_data",
+        "provider_symbol": "SPY",
+        "exchange": "AMEX",
+        "market_region": "us",
+        "timezone": "America/New_York",
+        "base_currency": None,
+        "quote_currency": "USD",
+        "entitlement_tier": "internal",
+        "is_delayed": False,
+        "refresh_policy": "securities_live_5m",
+        "metadata": {},
+    }
+
+    class _AssetCatalogStub:
+        def __init__(self, _session):
+            self._session = _session
+
+        async def get_asset(self, symbol):
+            assert symbol == "SPY"
+            return asset_meta
+
+    provider = AsyncMock()
+    provider.fetch_latest_snapshot = AsyncMock(side_effect=RuntimeError("provider down"))
+    service.provider_registry.resolve_for_asset = lambda _asset: provider
+
+    monkeypatch.setattr("backend.services.market_data_service.AssetCatalogService", _AssetCatalogStub)
+
+    try:
+        asyncio.run(service.get_latest_market_snapshot("SPY"))
+    except HTTPException as exc:
+        assert exc.status_code == 404
+        assert "SPY" in str(exc.detail)
+    else:
+        raise AssertionError("Expected HTTPException for failed provider fallback")

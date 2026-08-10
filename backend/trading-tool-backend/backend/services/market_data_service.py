@@ -450,6 +450,44 @@ class MarketDataService:
             "provider_symbol": snapshot.provider_symbol,
         }
 
+    async def get_latest_market_snapshot(self, symbol: str) -> MarketDataResponse:
+        normalized_symbol = str(symbol or "").strip().upper()
+        if not normalized_symbol:
+            raise HTTPException(400, "Symbool is verplicht.")
+
+        snapshot = await self.repository.get_latest_snapshot(normalized_symbol)
+        if snapshot:
+            return MarketDataResponse.from_orm(snapshot)
+
+        asset_meta = await AssetCatalogService(self.session).get_asset(normalized_symbol)
+        asset = AssetRecord(**asset_meta)
+
+        try:
+            provider = self.provider_registry.resolve_for_asset(asset)
+            live_snapshot = await provider.fetch_latest_snapshot(asset)
+        except Exception as exc:
+            logger.error(
+                "❌ Kon live fallback snapshot voor %s niet ophalen via provider %s: %s",
+                normalized_symbol,
+                asset.primary_provider or asset.provider,
+                exc,
+                exc_info=True,
+            )
+            raise HTTPException(404, f"Geen {normalized_symbol} data gevonden") from exc
+
+        observed_at = live_snapshot.observed_at or datetime.now(timezone.utc)
+        return MarketDataResponse(
+            id=0,
+            symbol=normalized_symbol,
+            price=live_snapshot.price,
+            open=live_snapshot.open,
+            high=live_snapshot.high,
+            low=live_snapshot.low,
+            change_24h=live_snapshot.change_percent,
+            volume=live_snapshot.volume,
+            timestamp=observed_at,
+        )
+
     # =========================================================
     # CORE: List / Latest Datasets
     # =========================================================
