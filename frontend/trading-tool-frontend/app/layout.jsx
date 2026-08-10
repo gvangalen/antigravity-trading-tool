@@ -2,7 +2,6 @@ import "@/styles/globals.css";
 import AppProviders from "@/app/providers/AppProviders";
 import AuthGuard from "@/components/auth/AuthGuard";
 import InstallPWA from "@/components/ui/InstallPWA";
-import CacheKiller from "@/components/ui/CacheKiller";
 import { BRANDING } from "@/lib/branding";
 import { getLocaleBootScript, resolveServerFallbackLocale } from "@/lib/i18n";
 
@@ -14,7 +13,7 @@ const STALE_APP_RECOVERY_VERSION =
 export const metadata = {
   title: `${BRANDING.APP_NAME} — ${BRANDING.APP_SLOGAN} Trading Discipline Engine`,
   description: BRANDING.META_DESCRIPTION,
-  metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL || "https://www.tradamind.com"),
+  metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL || "https://tradamind.com"),
   manifest: "/manifest.json",
   alternates: {
     canonical: "/",
@@ -138,7 +137,6 @@ export default function RootLayout({ children }) {
         <script dangerouslySetInnerHTML={{ __html: getLocaleBootScript() }} />
       </head>
       <body className="bg-background text-foreground transition-colors duration-300 selection:bg-blue-600/30">
-        <CacheKiller />
         <AppProviders>
           <AuthGuard>
             {children}

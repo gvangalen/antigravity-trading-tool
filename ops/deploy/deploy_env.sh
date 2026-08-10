@@ -122,14 +122,6 @@ if ! ssh "${SSH_ARGS[@]}" "ubuntu@$SERVER_IP" "
     echo \"❌ TWELVE_DATA_API_KEY ontbreekt in runtime env (\$ENV_FILE).\" >&2
     exit 1
   fi
-  PREVIOUS_FRONTEND_STATIC=\"\$(mktemp -d)\"
-  cleanup_previous_frontend_static() {
-    rm -rf \"\$PREVIOUS_FRONTEND_STATIC\"
-  }
-  trap cleanup_previous_frontend_static EXIT
-  if [ -d frontend/trading-tool-frontend/out/_next/static ]; then
-    cp -R frontend/trading-tool-frontend/out/_next/static/. \"\$PREVIOUS_FRONTEND_STATIC/\"
-  fi
   mkdir -p $DEPLOY_STATE_DIR
   printf '%s\n' '$ROLLBACK_COMMIT' > ${DEPLOY_STATE_DIR}/PREVIOUS_GOOD_COMMIT
   sync_git_ref() {
@@ -166,11 +158,12 @@ if ! ssh "${SSH_ARGS[@]}" "ubuntu@$SERVER_IP" "
 
   cd ../../frontend/trading-tool-frontend
   rm -rf .next
+  git clean -fd out/_next/static
   if [ ! -f out/index.html ]; then
     echo \"❌ Prebuilt frontend export missing: frontend/trading-tool-frontend/out/index.html\" >&2
     exit 1
   fi
-  echo \"✅ Using prebuilt frontend export from git (server build skipped).\"
+  echo \"✅ Using prebuilt frontend export from git (server build skipped). Old static chunks removed to avoid mixed-build clients.\"
 
   cd ../..
   if [ ! -f \"$PM2_CONFIG\" ]; then
