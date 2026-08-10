@@ -115,6 +115,51 @@ def test_ensure_user_config_very_legacy_schema_ignores_priority_too():
     }
 
 
+def test_ensure_user_config_existing_row_with_category_does_not_duplicate_namespace_kwargs():
+    session = AsyncMock()
+    session.flush = AsyncMock()
+    existing_row = SimpleNamespace(
+        _mapping={
+            "id": 11,
+            "user_id": 2,
+            "indicator": "fear_greed_index",
+            "category": "macro",
+            "priority": 9,
+            "enabled": False,
+            "symbol": "BTC",
+            "asset_class": "crypto",
+        }
+    )
+    session.execute = AsyncMock(
+        side_effect=[
+            _ExecuteResult(
+                scalars=["id", "user_id", "indicator", "category", "priority", "enabled", "symbol", "asset_class"]
+            ),
+            _ExecuteResult(first_row=existing_row),
+            _ExecuteResult(),
+        ]
+    )
+    repo = TechnicalDataRepository(session)
+
+    async def run():
+        return await repo.ensure_user_config(
+            2,
+            "fear_greed_index",
+            category="macro",
+            symbol="BTC",
+            asset_class="crypto",
+            priority=7,
+        )
+
+    updated = asyncio.run(run())
+
+    assert updated.category == "macro"
+    assert updated.symbol == "BTC"
+    assert updated.asset_class == "crypto"
+    assert updated.priority == 7
+    assert updated.enabled is True
+
+
 def test_get_user_configs_legacy_schema_returns_global_rows_for_symbol_request():
     session = AsyncMock()
     session.execute = AsyncMock(

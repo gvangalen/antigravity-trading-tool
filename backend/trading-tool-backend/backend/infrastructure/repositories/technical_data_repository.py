@@ -253,6 +253,7 @@ class TechnicalDataRepository:
         existing_result = await self.session.execute(existing_query, params)
         existing = existing_result.first()
         if existing:
+            existing_mapping = dict(existing._mapping)
             update_params = dict(params)
             update_sets: list[str] = []
             if "priority" in columns:
@@ -276,13 +277,23 @@ class TechnicalDataRepository:
                     },
                 )
             await self.session.flush()
+            existing_mapping["category"] = existing_mapping.get("category") or category
+            existing_mapping["symbol"] = existing_mapping.get(
+                "symbol",
+                normalized_symbol if supports_asset_scopes else None,
+            )
+            existing_mapping["asset_class"] = existing_mapping.get(
+                "asset_class",
+                normalized_asset_class if supports_asset_scopes else None,
+            )
+            existing_mapping["priority"] = (
+                priority if "priority" in columns else existing_mapping.get("priority", 100)
+            )
+            existing_mapping["enabled"] = (
+                True if "enabled" in columns else existing_mapping.get("enabled", True)
+            )
             return SimpleNamespace(
-                **dict(existing._mapping),
-                category=(existing._mapping.get("category") or category),
-                symbol=existing._mapping.get("symbol", normalized_symbol if supports_asset_scopes else None),
-                asset_class=existing._mapping.get("asset_class", normalized_asset_class if supports_asset_scopes else None),
-                priority=priority if "priority" in columns else existing._mapping.get("priority", 100),
-                enabled=True if "enabled" in columns else existing._mapping.get("enabled", True),
+                **existing_mapping,
             )
 
         insert_columns = ["user_id", "indicator"]
