@@ -464,11 +464,14 @@ function AIAssistantContent({
   const draftFormRef = useRef(null);
   const handledContextRequestRef = useRef(null);
   const loadedFinnStateRef = useRef(false);
+  const insightCacheKeyRef = useRef("");
   const missionControlCacheKeyRef = useRef("");
   const activeStreamIdRef = useRef(null);
   const profileTelemetryKeyRef = useRef("");
   const missionControlRequestRef = useRef(null);
+  const missionControlRequestKeyRef = useRef("");
   const insightRequestRef = useRef(null);
+  const insightRequestKeyRef = useRef("");
   const finnStateRequestRef = useRef(null);
   const sharedSessionRestoreRef = useRef(false);
   const [showReasoning, setShowReasoning] = useState(false);
@@ -577,8 +580,10 @@ function AIAssistantContent({
     if (!isOpen) return;
     setShowComposerMenu(false);
     setMissionDetailSection("");
-    setStableBriefingText("");
-  }, [isOpen, pathname, globalSymbol]);
+    if (pathname !== "/asset") {
+      setStableBriefingText("");
+    }
+  }, [isOpen, pathname]);
 
   useEffect(() => {
     if (!isOpen || previewSectionsOnly || !autoFocusComposer) return;
@@ -905,8 +910,9 @@ function AIAssistantContent({
   }, [context.page_type, context.symbol, context.timeframe, pathname, globalSymbol]);
 
   useEffect(() => {
+    insightCacheKeyRef.current = `finn-insight:${currentConversationStorageKey}`;
     missionControlCacheKeyRef.current = `finn-mission-control:${pathname || "/assistant"}:${globalSymbol || context.symbol || "BTC"}`;
-  }, [pathname, globalSymbol, context.symbol]);
+  }, [currentConversationStorageKey, pathname, globalSymbol, context.symbol]);
 
   const getLatestAssistantState = () => {
     for (let i = messages.length - 1; i >= 0; i -= 1) {
@@ -3841,6 +3847,9 @@ function AIAssistantContent({
   useEffect(() => {
     if (isOpen) {
       loadMissionControl();
+      if (pathname === "/asset") {
+        loadInsight();
+      }
       if (!previewSectionsOnly) {
         loadFinnState();
       }
@@ -3851,6 +3860,12 @@ function AIAssistantContent({
       loadedFinnStateRef.current = false;
     }
   }, [isOpen, pathname, searchParams, globalSymbol]);
+
+  useEffect(() => {
+    if (!isOpen || pathname !== "/asset") return;
+    void loadInsight();
+    void loadMissionControl();
+  }, [isOpen, pathname, currentConversationStorageKey]);
 
   useEffect(() => {
     if (!isOpen || previewSectionsOnly || sharedSessionRestoreRef.current) return;
@@ -3993,32 +4008,67 @@ function AIAssistantContent({
   }
 
   async function loadInsight() {
-    if (insightRequestRef.current) return insightRequestRef.current;
+    const requestKey = insightCacheKeyRef.current || `finn-insight:${currentConversationStorageKey}`;
+    if (insightRequestRef.current && insightRequestKeyRef.current === requestKey) {
+      return insightRequestRef.current;
+    }
     setInsightLoading(true);
+    if (!insight && typeof window !== "undefined" && requestKey) {
+      try {
+        const cached = window.sessionStorage.getItem(requestKey);
+        if (cached) {
+          const parsed = JSON.parse(cached);
+          if (parsed && typeof parsed === "object") {
+            setInsight((current) => current || parsed);
+          }
+        }
+      } catch (err) {
+        console.warn("Finn insight cache read failed", err);
+      }
+    }
+    insightRequestKeyRef.current = requestKey;
     insightRequestRef.current = (async () => {
       try {
         const res = await fetchAssistantInsight(context);
+        if (requestKey !== insightCacheKeyRef.current) {
+          return res;
+        }
         setInsight(res);
-        setStableBriefingText((current) => current || buildBriefingText(res));
+        setStableBriefingText(buildBriefingText(res));
         setLastUpdated(new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
+        if (res && typeof window !== "undefined" && requestKey) {
+          try {
+            window.sessionStorage.setItem(requestKey, JSON.stringify(res));
+          } catch (cacheError) {
+            console.warn("Finn insight cache write failed", cacheError);
+          }
+        }
         return res;
       } catch (err) {
         console.error("Failed to fetch AI insight", err);
         return null;
       } finally {
-        setInsightLoading(false);
-        insightRequestRef.current = null;
+        if (requestKey === insightCacheKeyRef.current) {
+          setInsightLoading(false);
+        }
+        if (insightRequestKeyRef.current === requestKey) {
+          insightRequestRef.current = null;
+          insightRequestKeyRef.current = "";
+        }
       }
     })();
     return insightRequestRef.current;
   }
 
   async function loadMissionControl() {
-    if (missionControlRequestRef.current) return missionControlRequestRef.current;
+    const requestKey = missionControlCacheKeyRef.current || `finn-mission-control:${pathname || "/assistant"}:${globalSymbol || context.symbol || "BTC"}`;
+    if (missionControlRequestRef.current && missionControlRequestKeyRef.current === requestKey) {
+      return missionControlRequestRef.current;
+    }
     setMissionControlLoading(true);
-    if (!missionControl && typeof window !== "undefined" && missionControlCacheKeyRef.current) {
+    if (!missionControl && typeof window !== "undefined" && requestKey) {
       try {
-        const cached = window.sessionStorage.getItem(missionControlCacheKeyRef.current);
+        const cached = window.sessionStorage.getItem(requestKey);
         if (cached) {
           const parsed = JSON.parse(cached);
           if (parsed && typeof parsed === "object") {
@@ -4029,6 +4079,7 @@ function AIAssistantContent({
         console.warn("Finn Mission Control cache read failed", err);
       }
     }
+    missionControlRequestKeyRef.current = requestKey;
     missionControlRequestRef.current = (async () => {
       let lastError = null;
       for (let attempt = 0; attempt < 2; attempt += 1) {
@@ -4094,10 +4145,13 @@ function AIAssistantContent({
                   null,
               }
             : null;
+          if (requestKey !== missionControlCacheKeyRef.current) {
+            return normalized;
+          }
           setMissionControl(normalized);
-          if (normalized && typeof window !== "undefined" && missionControlCacheKeyRef.current) {
+          if (normalized && typeof window !== "undefined" && requestKey) {
             try {
-              window.sessionStorage.setItem(missionControlCacheKeyRef.current, JSON.stringify(normalized));
+              window.sessionStorage.setItem(requestKey, JSON.stringify(normalized));
             } catch (err) {
               console.warn("Finn Mission Control cache write failed", err);
             }
@@ -4116,14 +4170,19 @@ function AIAssistantContent({
         }
       }
       console.error("Finn overzicht laden mislukt", lastError);
-      setMissionControlLoadError(lastError?.message || uiText.missionControlUnavailable);
-      setMissionControlLoading(false);
+      if (requestKey === missionControlCacheKeyRef.current) {
+        setMissionControlLoadError(lastError?.message || uiText.missionControlUnavailable);
+        setMissionControlLoading(false);
+      }
       return null;
     })();
     try {
       return await missionControlRequestRef.current;
     } finally {
-      missionControlRequestRef.current = null;
+      if (missionControlRequestKeyRef.current === requestKey) {
+        missionControlRequestRef.current = null;
+        missionControlRequestKeyRef.current = "";
+      }
     }
   }
 
