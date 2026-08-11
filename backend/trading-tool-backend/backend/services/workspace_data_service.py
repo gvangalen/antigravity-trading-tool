@@ -16,9 +16,7 @@ from backend.infrastructure.repositories.technical_data_repository import Techni
 from backend.infrastructure.repositories.user_repository import UserRepository
 from backend.services.asset_catalog_service import AssetCatalogService
 from backend.services.intelligence_service import IntelligenceService
-from backend.services.market_data_provider_registry import MarketDataProviderRegistry
 from backend.services.score_service import ScoreService
-from backend.schemas.market_provider_schema import AssetRecord
 
 
 PERIOD_DAYS = {"day": 1, "week": 7, "month": 30, "quarter": 90}
@@ -280,7 +278,6 @@ class WorkspaceDataService:
         self.users = UserRepository(session)
         self.score_service = ScoreService(self.scores, self.users)
         self.intelligence = IntelligenceService(IntelligenceRepository(session))
-        self.provider_registry = MarketDataProviderRegistry()
 
     async def get_asset_workspace(
         self,
@@ -305,7 +302,11 @@ class WorkspaceDataService:
         macro_rows = await self._macro_rows(user_id, symbol, periods["macro"])
         technical_rows = await self._technical_rows(user_id, symbol, periods["technical"])
         quote_snapshot = await self._resolve_quote_snapshot(symbol)
-        regime = await self.intelligence.get_market_intelligence(user_id, symbol)
+        regime = await self.intelligence.get_market_intelligence(
+            user_id,
+            symbol,
+            allow_compute=False,
+        )
         master = await self.score_service.get_master_score(user_id, symbol)
         daily = await self._daily_scores(user_id, symbol)
         session = getattr(self, "session", None)
@@ -477,30 +478,6 @@ class WorkspaceDataService:
             if not symbol:
                 continue
             quote_map[symbol] = _materialize_quote_snapshot(row)
-
-        missing = [symbol for symbol in normalized if not quote_map.get(symbol)]
-        if not missing or not hasattr(self, "session") or self.session is None:
-            return quote_map
-
-        asset_catalog = await AssetCatalogService(self.session).get_assets(missing)
-        for symbol in missing:
-            asset_meta = asset_catalog.get(symbol) or {}
-            if not asset_meta:
-                continue
-            try:
-                asset = AssetRecord(**asset_meta)
-                provider = self.provider_registry.resolve_for_asset(asset)
-                snapshot = await provider.fetch_latest_snapshot(asset)
-            except Exception:
-                continue
-
-            quote_map[symbol] = {
-                "price": _number(snapshot.price),
-                "change_24h": _number(snapshot.change_percent),
-                "volume": _number(snapshot.volume),
-                "timestamp": snapshot.observed_at,
-            }
-
         return quote_map
 
     async def get_indicator_detail(

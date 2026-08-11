@@ -20,7 +20,6 @@ import { useAsset } from "@/app/providers/AssetProvider";
 import { useTranslation } from "@/app/providers/I18nProvider";
 import { useModal } from "@/components/modal/ModalProvider";
 import { useAssetWorkspaceData } from "@/hooks/useAssetWorkspaceData";
-import { useWatchlist } from "@/hooks/useWatchlist";
 import { useStrategyData } from "@/hooks/useStrategyData";
 import IndicatorConfigModal from "@/components/scoring/IndicatorConfigModal";
 import MarketForwardReturnTabs from "@/components/market/MarketForwardReturnTabs";
@@ -541,6 +540,122 @@ const DEFAULT_INTELLIGENCE_WEIGHTS = {
 
 const ANALYSIS_TIMEFRAMES = ["day", "week", "month", "quarter"];
 const ANALYSIS_HIDDEN_INDICATORS_KEY = "analysis_hidden_indicators";
+const ACTIVE_SETUP_CACHE_TTL_MS = 60_000;
+const ASSISTANT_PREFERENCES_CACHE_TTL_MS = 300_000;
+const activeSetupCache = new Map();
+let assistantPreferencesCache = {
+  data: null,
+  updatedAt: 0,
+  inflight: null,
+};
+
+function getFreshActiveSetup(symbol) {
+  const key = String(symbol || "BTC").toUpperCase();
+  const entry = activeSetupCache.get(key);
+  if (!entry) return undefined;
+  if (Date.now() - entry.updatedAt > ACTIVE_SETUP_CACHE_TTL_MS) return undefined;
+  return entry.data;
+}
+
+async function loadActiveSetupShared(symbol, forceFresh = false) {
+  const key = String(symbol || "BTC").toUpperCase();
+  const cached = getFreshActiveSetup(key);
+  if (!forceFresh && cached !== undefined) {
+    return cached;
+  }
+
+  const current = activeSetupCache.get(key);
+  if (!forceFresh && current?.inflight) {
+    return current.inflight;
+  }
+
+  const inflight = fetchActiveSetup(key)
+    .then((result) => {
+      activeSetupCache.set(key, {
+        data: result ?? null,
+        updatedAt: Date.now(),
+        inflight: null,
+      });
+      return result ?? null;
+    })
+    .catch((error) => {
+      activeSetupCache.set(key, {
+        data: current?.data ?? null,
+        updatedAt: current?.updatedAt ?? 0,
+        inflight: null,
+      });
+      throw error;
+    });
+
+  activeSetupCache.set(key, {
+    data: current?.data ?? null,
+    updatedAt: current?.updatedAt ?? 0,
+    inflight,
+  });
+
+  return inflight;
+}
+
+function getFreshAssistantPreferences() {
+  if (!assistantPreferencesCache.updatedAt) return undefined;
+  if (Date.now() - assistantPreferencesCache.updatedAt > ASSISTANT_PREFERENCES_CACHE_TTL_MS) {
+    return undefined;
+  }
+  return assistantPreferencesCache.data;
+}
+
+async function loadAssistantPreferencesShared(forceFresh = false) {
+  const cached = getFreshAssistantPreferences();
+  if (!forceFresh && cached !== undefined) {
+    return cached;
+  }
+
+  if (!forceFresh && assistantPreferencesCache.inflight) {
+    return assistantPreferencesCache.inflight;
+  }
+
+  const inflight = getAssistantPreferences()
+    .then((result) => {
+      assistantPreferencesCache = {
+        data: result ?? null,
+        updatedAt: Date.now(),
+        inflight: null,
+      };
+      return result ?? null;
+    })
+    .catch((error) => {
+      assistantPreferencesCache = {
+        data: assistantPreferencesCache.data,
+        updatedAt: assistantPreferencesCache.updatedAt,
+        inflight: null,
+      };
+      throw error;
+    });
+
+  assistantPreferencesCache = {
+    data: assistantPreferencesCache.data,
+    updatedAt: assistantPreferencesCache.updatedAt,
+    inflight,
+  };
+
+  return inflight;
+}
+
+function mergeAssistantPreferences(patch) {
+  const current = assistantPreferencesCache.data || {};
+  const currentPreferences = current?.preferences || {};
+  assistantPreferencesCache = {
+    data: {
+      ...current,
+      preferences: {
+        ...currentPreferences,
+        ...patch,
+      },
+    },
+    updatedAt: Date.now(),
+    inflight: null,
+  };
+}
 
 function normalizeWeights(weights) {
   const next = Object.fromEntries(
@@ -2128,8 +2243,7 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
   const pathname = usePathname();
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { selectedAsset, setSelectedAsset } = useAsset();
-  const { symbols: persistedWatchlistSymbols = [] } = useWatchlist();
+  const { selectedAsset, setSelectedAsset, availableAssets = [] } = useAsset();
   const { locale } = useTranslation();
   const { openConfirm, showSnackbar } = useModal();
   const ui = useMemo(() => getUiCopy(locale), [locale]);
@@ -2169,15 +2283,8 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
     [macroTimeframe, marketTimeframe, technicalTimeframe]
   );
   const watchlistSymbols = useMemo(
-    () => {
-      const normalizedSymbols = persistedWatchlistSymbols
-        .map((symbol) => String(symbol || "").trim().toUpperCase())
-        .filter(Boolean);
-
-      if (!normalizedSymbols.length) return [];
-      return Array.from(new Set([activeSymbol, ...normalizedSymbols]));
-    },
-    [activeSymbol, persistedWatchlistSymbols]
+    () => availableAssets.map((asset) => String(asset?.symbol || "").toUpperCase()).filter(Boolean),
+    [availableAssets]
   );
 
   const {
@@ -2234,8 +2341,18 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
     let cancelled = false;
 
     async function loadMarketBestSetup() {
+      const cached = getFreshActiveSetup(activeSymbol);
+      if (!cancelled && cached !== undefined) {
+        setMarketBestSetup(
+          cached && String(cached.symbol || activeSymbol).toUpperCase() === activeSymbol
+            ? cached
+            : null
+        );
+      }
+
       try {
-        const result = await fetchActiveSetup(activeSymbol);
+        const result = await loadActiveSetupShared(activeSymbol, cached === undefined);
+        if (cancelled) return;
         if (!cancelled) {
           setMarketBestSetup(
             result && String(result.symbol || activeSymbol).toUpperCase() === activeSymbol
@@ -2347,7 +2464,7 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
 
     async function loadHiddenIndicators() {
       try {
-        const response = await getAssistantPreferences();
+        const response = await loadAssistantPreferencesShared();
         if (cancelled) return;
         setHiddenIndicatorKeys(
           normalizeHiddenIndicatorKeys(response?.preferences?.[ANALYSIS_HIDDEN_INDICATORS_KEY])
@@ -2381,6 +2498,9 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
       await updateAssistantPreferences({
         [ANALYSIS_HIDDEN_INDICATORS_KEY]: nextHiddenIndicatorKeys,
       });
+      mergeAssistantPreferences({
+        [ANALYSIS_HIDDEN_INDICATORS_KEY]: nextHiddenIndicatorKeys,
+      });
     } catch (error) {
       console.error("Failed to persist hidden analysis indicators:", error);
     }
@@ -2392,6 +2512,9 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
 
     try {
       await updateAssistantPreferences({
+        [ANALYSIS_CHART_INTERVAL_KEY]: normalized,
+      });
+      mergeAssistantPreferences({
         [ANALYSIS_CHART_INTERVAL_KEY]: normalized,
       });
     } catch (error) {

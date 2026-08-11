@@ -109,6 +109,35 @@ def test_intelligence_read_returns_insufficient_data_without_running_engine():
     assert result["symbol"] == "BTC"
 
 
+def test_intelligence_read_only_mode_returns_pending_without_running_engine(monkeypatch):
+    daily_score = SimpleNamespace(
+        macro_score=50,
+        technical_score=55,
+        market_score=60,
+        setup_score=40,
+        report_date=date(2026, 8, 11),
+    )
+    repository = SimpleNamespace(get_latest_daily_scores=AsyncMock(return_value=daily_score))
+    service = IntelligenceService(repository)
+    service.invalidate_cached_result(7, "BTC")
+    invoked = False
+
+    def fail_if_engine_runs(**_kwargs):
+        nonlocal invoked
+        invoked = True
+        raise AssertionError("market intelligence engine should not run in read-only mode")
+
+    monkeypatch.setattr("backend.services.intelligence_service.get_market_intelligence", fail_if_engine_runs)
+
+    result = asyncio.run(service.get_market_intelligence(7, "BTC", allow_compute=False))
+
+    assert invoked is False
+    assert result["available"] is False
+    assert result["data_status"] == "pending_refresh"
+    assert result["reason"] == "market_intelligence_not_warmed"
+    assert result["symbol"] == "BTC"
+
+
 def test_watchlist_uses_one_batch_for_quotes_and_one_for_scores():
     service = object.__new__(WorkspaceDataService)
     service.market = SimpleNamespace(
@@ -155,6 +184,17 @@ def test_watchlist_uses_one_batch_for_quotes_and_one_for_scores():
     assert result["rows"][1]["score"] is None
     assert result["rows"][1]["score_status"] == "insufficient_data"
     assert result["rows"][0]["score_freshness"]["source"] == "daily_scores"
+
+
+def test_workspace_quote_reads_do_not_fall_back_to_live_provider_calls():
+    service = object.__new__(WorkspaceDataService)
+    service.market = SimpleNamespace(get_latest_snapshots=AsyncMock(return_value=[]))
+    service.session = object()
+
+    result = asyncio.run(service._resolve_quote_map(["BTC", "ETH"]))
+
+    service.market.get_latest_snapshots.assert_awaited_once_with(["BTC", "ETH"])
+    assert result == {}
 
 
 def test_workspace_macro_rows_follow_active_asset_symbol():

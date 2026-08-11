@@ -64,7 +64,13 @@ class IntelligenceService:
             return
         cls._cache.pop(cls._cache_key(user_id, symbol), None)
 
-    async def get_market_intelligence(self, user_id: int, symbol: str = "BTC") -> Dict[str, Any]:
+    async def get_market_intelligence(
+        self,
+        user_id: int,
+        symbol: str = "BTC",
+        *,
+        allow_compute: bool = True,
+    ) -> Dict[str, Any]:
         cached = self.get_cached_result(user_id, symbol)
         if cached is not None:
             return cached
@@ -96,6 +102,17 @@ class IntelligenceService:
                 "data_status": "insufficient_data",
                 "reason": "category_scores_missing",
                 "missing_categories": missing,
+                "symbol": str(symbol or "BTC").upper(),
+                "as_of": daily_score.report_date.isoformat() if daily_score.report_date else None,
+                "generated_at": datetime.now(timezone.utc).isoformat(),
+                "source": "daily_scores",
+            }
+
+        if not allow_compute:
+            return {
+                "available": False,
+                "data_status": "pending_refresh",
+                "reason": "market_intelligence_not_warmed",
                 "symbol": str(symbol or "BTC").upper(),
                 "as_of": daily_score.report_date.isoformat() if daily_score.report_date else None,
                 "generated_at": datetime.now(timezone.utc).isoformat(),
