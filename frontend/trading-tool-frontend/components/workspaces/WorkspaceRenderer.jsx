@@ -32,15 +32,35 @@ export default function WorkspaceRenderer({ tab = "market", canonicalizeLegacy =
     searchParams.get("symbol") || searchParams.get("asset") || selectedAsset || "BTC"
   );
   const variant = searchParams.get("variant") === "legacy" ? "legacy" : "v3";
+  const hasExplicitSymbol = Boolean(searchParams.get("symbol") || searchParams.get("asset"));
 
   useEffect(() => {
+    if (pathname === "/asset" && variant === "v3" && !hasExplicitSymbol && resolvedSymbol) {
+      const params = new URLSearchParams(queryString);
+      params.set("symbol", resolvedSymbol);
+      if (!params.get("tab")) {
+        params.set("tab", resolvedTab);
+      }
+      router.replace(`/asset?${params.toString()}`, { scroll: false });
+      return;
+    }
+
     if (!canonicalizeLegacy || pathname === "/asset") return;
 
     const params = new URLSearchParams(queryString);
     params.set("symbol", resolvedSymbol);
     params.set("tab", resolvedTab);
     router.replace(`/asset?${params.toString()}`, { scroll: false });
-  }, [canonicalizeLegacy, pathname, queryString, resolvedSymbol, resolvedTab, router]);
+  }, [
+    canonicalizeLegacy,
+    hasExplicitSymbol,
+    pathname,
+    queryString,
+    resolvedSymbol,
+    resolvedTab,
+    router,
+    variant,
+  ]);
 
   if (variant === "legacy") {
     return <AssetWorkspace initialTab={resolvedTab} />;

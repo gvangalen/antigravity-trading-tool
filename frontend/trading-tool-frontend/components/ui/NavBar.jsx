@@ -19,6 +19,7 @@ import {
   Activity
 } from "lucide-react";
 import { useTranslation } from "@/app/providers/I18nProvider";
+import { useAsset } from "@/app/providers/AssetProvider";
 import { BRANDING } from "@/lib/branding";
 import AvatarMenu from "./AvatarMenu";
 import { useAuth as useAuthHook } from "@/components/auth/AuthProvider"; 
@@ -26,13 +27,24 @@ import { useAuth as useAuthHook } from "@/components/auth/AuthProvider";
 export default function NavBar() {
   const { t } = useTranslation();
   const { user } = useAuthHook();
+  const { selectedAsset } = useAsset();
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const [mobileOpen, setMobileOpen] = useState(false);
   const shellCopy = t?.ui?.shell || {};
   const appSlogan = shellCopy.appSlogan || BRANDING.APP_SLOGAN;
   const isAnalysisV3 = searchParams.get("variant") !== "legacy";
-  const analysisHref = isAnalysisV3 ? "/asset" : "/market?variant=legacy";
+  const activeSymbol = String(
+    searchParams.get("symbol") ||
+      searchParams.get("asset") ||
+      selectedAsset ||
+      "BTC"
+  )
+    .trim()
+    .toUpperCase();
+  const analysisHref = isAnalysisV3
+    ? `/asset?symbol=${encodeURIComponent(activeSymbol)}`
+    : `/market?variant=legacy&symbol=${encodeURIComponent(activeSymbol)}`;
 
   const isAdmin = user?.role === 'admin';
   const NAV_ITEMS = [
@@ -93,7 +105,7 @@ export default function NavBar() {
           <button onClick={() => setMobileOpen(true)} className="text-muted hover:text-blue-600 transition-colors">
             <Menu size={24} />
           </button>
-          <Link href="/asset" className="flex items-center gap-3 group">
+          <Link href={analysisHref} className="flex items-center gap-3 group">
             <img src="/tradamind_icon_v2.png" alt="TM" className="h-10 w-10 object-contain rounded-xl group-hover:scale-105 transition-transform" />
             <div className="flex flex-col justify-center">
               <div className="text-sm font-black text-slate-900 dark:text-white tracking-tight leading-none mb-0.5 group-hover:text-blue-600 transition-colors">
@@ -117,7 +129,13 @@ export default function NavBar() {
 
       {/* 💻 DESKTOP BAR */}
       <aside className="hidden lg:flex fixed top-0 left-0 bottom-0 w-64 bg-card dark:bg-[#020617] border-r border-slate-200 dark:border-slate-800 flex-col z-50 transition-colors">
-        <SidebarInner pathname={pathname} onNavigate={() => {}} navItems={NAV_ITEMS} adminLinks={ADMIN_LINKS} />
+        <SidebarInner
+          pathname={pathname}
+          onNavigate={() => {}}
+          navItems={NAV_ITEMS}
+          adminLinks={ADMIN_LINKS}
+          analysisHref={analysisHref}
+        />
       </aside>
 
       {/* 🛸 MOBILE DRAWER */}
@@ -161,7 +179,13 @@ export default function NavBar() {
                   <X size={20} />
                 </button>
               </div>
-              <SidebarInner pathname={pathname} onNavigate={() => setMobileOpen(false)} navItems={NAV_ITEMS} adminLinks={ADMIN_LINKS} />
+              <SidebarInner
+                pathname={pathname}
+                onNavigate={() => setMobileOpen(false)}
+                navItems={NAV_ITEMS}
+                adminLinks={ADMIN_LINKS}
+                analysisHref={analysisHref}
+              />
             </motion.aside>
           </>
         )}
@@ -170,7 +194,7 @@ export default function NavBar() {
   );
 }
 
-function SidebarInner({ pathname, onNavigate, navItems, adminLinks }) {
+function SidebarInner({ pathname, onNavigate, navItems, adminLinks, analysisHref }) {
   const { t } = useTranslation();
   const shellCopy = t?.ui?.shell || {};
   const missionStatement = shellCopy.missionStatement || BRANDING.MISSION_STATEMENT;
@@ -178,7 +202,7 @@ function SidebarInner({ pathname, onNavigate, navItems, adminLinks }) {
   return (
     <div className="flex flex-col h-full bg-card dark:bg-[#020617] transition-colors">
       <Link 
-        href="/asset"
+        href={analysisHref}
         className="p-8 pb-4 hidden md:block select-none group cursor-pointer"
       >
         <div className="flex items-center gap-4 transition-transform duration-500 group-hover:scale-[1.03]">
