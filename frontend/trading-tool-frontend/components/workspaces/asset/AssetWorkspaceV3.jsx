@@ -2166,6 +2166,11 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
     }),
     [macroTimeframe, marketTimeframe, technicalTimeframe]
   );
+  const watchlistSymbols = useMemo(
+    () => availableAssets.map((asset) => String(asset?.symbol || "").toUpperCase()).filter(Boolean),
+    [availableAssets]
+  );
+
   const {
     workspace,
     watchlist: watchlistData,
@@ -2174,7 +2179,7 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
     isFallbackWorkspace,
     reloadWorkspace,
     reloadWatchlist,
-  } = useAssetWorkspaceData(activeSymbol, periods);
+  } = useAssetWorkspaceData(activeSymbol, periods, watchlistSymbols);
   const { strategies = [] } = useStrategyData({ includeSetups: false });
   const [marketBestSetup, setMarketBestSetup] = useState(null);
   const lastWorkspaceReloadAtRef = useRef(0);

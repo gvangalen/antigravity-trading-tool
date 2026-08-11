@@ -121,6 +121,7 @@ export function useAssetWorkspaceData(symbol, periods, watchlistSymbols) {
   const [error, setError] = useState(null);
   const [isFallbackWorkspace, setIsFallbackWorkspace] = useState(false);
   const fallbackStartedAtRef = useRef(null);
+  const activeReloadPromiseRef = useRef(null);
   const latestWorkspaceRef = useRef(cachedWorkspace || null);
   const lastForegroundRefreshAtRef = useRef(0);
   const lastSuccessfulRefreshAtRef = useRef(cachedWorkspace ? Date.now() : 0);
@@ -169,6 +170,10 @@ export function useAssetWorkspaceData(symbol, periods, watchlistSymbols) {
       return cached;
     }
 
+    if (activeReloadPromiseRef.current) {
+      return activeReloadPromiseRef.current;
+    }
+
     if (
       forceNetwork &&
       cached &&
@@ -182,7 +187,10 @@ export function useAssetWorkspaceData(symbol, periods, watchlistSymbols) {
     }
 
     const requestId = ++requestSequenceRef.current;
-    setLoading(true);
+    if (!cached) {
+      setLoading(true);
+      setWatchlistLoading(true);
+    }
     let request = workspaceInFlightRequests.get(workspaceKey);
 
     if (!request) {
@@ -206,7 +214,8 @@ export function useAssetWorkspaceData(symbol, periods, watchlistSymbols) {
       workspaceInFlightRequests.set(workspaceKey, request);
     }
 
-    try {
+    const reloadPromise = (async () => {
+      try {
       const payload = await request.promise;
       if (requestId !== requestSequenceRef.current) return payload;
       setFreshCache(workspaceCache, workspaceKey, payload);
@@ -273,10 +282,22 @@ export function useAssetWorkspaceData(symbol, periods, watchlistSymbols) {
       return fallback;
     } finally {
       if (requestId === requestSequenceRef.current) {
-        setLoading(false);
-        setWatchlistLoading(false);
+        if (!getFreshCache(workspaceCache, workspaceKey, WORKSPACE_CACHE_TTL_MS)) {
+          setLoading(false);
+          setWatchlistLoading(false);
+        } else {
+          setLoading(false);
+          setWatchlistLoading(false);
+        }
+      }
+      if (activeReloadPromiseRef.current === reloadPromise) {
+        activeReloadPromiseRef.current = null;
       }
     }
+    })();
+
+    activeReloadPromiseRef.current = reloadPromise;
+    return reloadPromise;
   }, [cachedWatchlist.length, normalizedWatchlistSymbols, periods, symbol, workspaceKey]);
 
   const refreshWorkspaceIfStale = useCallback(() => {
@@ -322,16 +343,13 @@ export function useAssetWorkspaceData(symbol, periods, watchlistSymbols) {
     };
 
     const handleFocus = () => refreshIfNeeded();
-    const handlePageShow = () => refreshIfNeeded();
 
     window.addEventListener("focus", handleFocus);
-    window.addEventListener("pageshow", handlePageShow);
 
     return () => {
       window.removeEventListener("focus", handleFocus);
-      window.removeEventListener("pageshow", handlePageShow);
     };
-  }, [refreshWorkspaceIfStale]);
+  }, [isFallbackWorkspace, refreshWorkspaceIfStale, workspaceKey]);
 
   useVisibilityPolling(() => refreshWorkspaceIfStale(), {
     intervalMs: 60_000,
