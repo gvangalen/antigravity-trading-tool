@@ -33,6 +33,8 @@ export default function WorkspaceRenderer({ tab = "market", canonicalizeLegacy =
   );
   const variant = searchParams.get("variant") === "legacy" ? "legacy" : "v3";
   const hasExplicitSymbol = Boolean(searchParams.get("symbol") || searchParams.get("asset"));
+  const hasCanonicalSymbol = searchParams.get("symbol") === resolvedSymbol;
+  const hasCanonicalTab = searchParams.get("tab") === resolvedTab;
 
   useEffect(() => {
     if (resolvedSymbol && resolvedSymbol !== selectedAsset) {
@@ -41,7 +43,18 @@ export default function WorkspaceRenderer({ tab = "market", canonicalizeLegacy =
   }, [resolvedSymbol, selectedAsset, setSelectedAsset]);
 
   useEffect(() => {
-    if (!canonicalizeLegacy || pathname === "/asset") return;
+    if (pathname === "/asset") {
+      if (hasCanonicalSymbol && hasCanonicalTab && !searchParams.get("asset")) return;
+
+      const params = new URLSearchParams(queryString);
+      params.set("symbol", resolvedSymbol);
+      params.set("tab", resolvedTab);
+      params.delete("asset");
+      router.replace(`/asset?${params.toString()}`, { scroll: false });
+      return;
+    }
+
+    if (!canonicalizeLegacy) return;
 
     const params = new URLSearchParams(queryString);
     params.set("symbol", resolvedSymbol);
@@ -50,11 +63,14 @@ export default function WorkspaceRenderer({ tab = "market", canonicalizeLegacy =
   }, [
     canonicalizeLegacy,
     hasExplicitSymbol,
+    hasCanonicalSymbol,
+    hasCanonicalTab,
     pathname,
     queryString,
     resolvedSymbol,
     resolvedTab,
     router,
+    searchParams,
     variant,
   ]);
 
