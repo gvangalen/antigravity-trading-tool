@@ -30,6 +30,68 @@ function setFreshCache(cache, key, value) {
   });
 }
 
+function normalizeQuotePayload(quote) {
+  if (!quote || typeof quote !== "object") return null;
+  const price = Number(quote.price);
+  if (!Number.isFinite(price)) return null;
+  const change24h = Number(quote.change_24h);
+  const volume = Number(quote.volume);
+  return {
+    price,
+    change_24h: Number.isFinite(change24h) ? change24h : null,
+    volume: Number.isFinite(volume) ? volume : null,
+    as_of: quote.timestamp ?? quote.as_of ?? null,
+    source: "market_data",
+    status: "available",
+    stale: false,
+    age_seconds: 0,
+  };
+}
+
+function mergeQuoteBackfill(workspace, quoteMap, assetSymbol) {
+  if (!workspace || !quoteMap || quoteMap.size === 0) return workspace;
+
+  let changed = false;
+  const nextWorkspace = { ...workspace };
+  const activeQuote = quoteMap.get(assetSymbol);
+  if (activeQuote && (!nextWorkspace.quote || nextWorkspace.quote.price === null || nextWorkspace.quote.price === undefined)) {
+    nextWorkspace.quote = {
+      ...(nextWorkspace.quote || {}),
+      ...activeQuote,
+    };
+    changed = true;
+  }
+
+  if (Array.isArray(nextWorkspace?.watchlist?.rows)) {
+    const nextRows = nextWorkspace.watchlist.rows.map((row) => {
+      const rowSymbol = String(row?.symbol || "").toUpperCase();
+      const backfilledQuote = quoteMap.get(rowSymbol);
+      if (!backfilledQuote || (row?.price !== null && row?.price !== undefined)) {
+        return row;
+      }
+      changed = true;
+      return {
+        ...row,
+        price: backfilledQuote.price,
+        change_24h: backfilledQuote.change_24h,
+        quote: {
+          ...(row?.quote || {}),
+          ...backfilledQuote,
+        },
+      };
+    });
+
+    if (changed) {
+      nextWorkspace.watchlist = {
+        ...nextWorkspace.watchlist,
+        rows: nextRows,
+      };
+    }
+  }
+
+  return changed ? nextWorkspace : workspace;
+}
+
 function hasFreshWorkspaceCache(key) {
   return Boolean(getFreshCache(workspaceCache, key, WORKSPACE_CACHE_TTL_MS));
 }
@@ -122,6 +184,7 @@ export function useAssetWorkspaceData(symbol, periods, watchlistSymbols) {
   const [isFallbackWorkspace, setIsFallbackWorkspace] = useState(false);
   const fallbackStartedAtRef = useRef(null);
   const activeReloadPromiseRef = useRef(null);
+  const quoteBackfillRequestKeyRef = useRef("");
   const latestWorkspaceRef = useRef(cachedWorkspace || null);
   const latestWatchlistRef = useRef(cachedWatchlist);
   const lastForegroundRefreshAtRef = useRef(0);
@@ -318,6 +381,78 @@ export function useAssetWorkspaceData(symbol, periods, watchlistSymbols) {
     activeReloadPromiseRef.current = reloadPromise;
     return reloadPromise;
   }, [cachedWatchlist.length, normalizedWatchlistSymbols, periods, symbol, workspaceKey]);
+
+  useEffect(() => {
+    const baseWorkspace = latestWorkspaceRef.current;
+    const baseWatchlist = Array.isArray(latestWatchlistRef.current) ? latestWatchlistRef.current : [];
+    const symbolsNeedingQuotes = new Set();
+
+    if (baseWorkspace && (baseWorkspace?.quote?.price === null || baseWorkspace?.quote?.price === undefined)) {
+      symbolsNeedingQuotes.add(assetSymbol);
+    }
+
+    baseWatchlist.forEach((row) => {
+      if (row?.price === null || row?.price === undefined) {
+        const rowSymbol = String(row?.symbol || "").toUpperCase();
+        if (rowSymbol) {
+          symbolsNeedingQuotes.add(rowSymbol);
+        }
+      }
+    });
+
+    if (!symbolsNeedingQuotes.size) {
+      quoteBackfillRequestKeyRef.current = "";
+      return;
+    }
+
+    const sortedSymbols = Array.from(symbolsNeedingQuotes).sort();
+    const requestKey = `${workspaceKey}:quote-backfill:${sortedSymbols.join(",")}`;
+    if (quoteBackfillRequestKeyRef.current === requestKey) return;
+    quoteBackfillRequestKeyRef.current = requestKey;
+
+    let cancelled = false;
+
+    (async () => {
+      const settled = await Promise.allSettled(
+        sortedSymbols.map(async (nextSymbol) => {
+          const quote = await fetchLatestPrice(nextSymbol, { forceFresh: false });
+          return [nextSymbol, normalizeQuotePayload(quote)];
+        })
+      );
+
+      if (cancelled) return;
+
+      const quoteMap = new Map(
+        settled
+          .filter((result) => result.status === "fulfilled" && result.value?.[1]?.price !== null)
+          .map((result) => result.value)
+      );
+
+      if (!quoteMap.size) return;
+
+      setWorkspace((currentWorkspace) => {
+        const mergedWorkspace = mergeQuoteBackfill(
+          currentWorkspace || latestWorkspaceRef.current,
+          quoteMap,
+          assetSymbol,
+        );
+        if (!mergedWorkspace) return currentWorkspace;
+
+        latestWorkspaceRef.current = mergedWorkspace;
+        const nextWatchlistRows = Array.isArray(mergedWorkspace?.watchlist?.rows)
+          ? mergedWorkspace.watchlist.rows
+          : latestWatchlistRef.current;
+        latestWatchlistRef.current = nextWatchlistRows;
+        setWatchlist(nextWatchlistRows);
+        setFreshCache(workspaceCache, workspaceKey, mergedWorkspace);
+        return mergedWorkspace;
+      });
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [assetSymbol, workspaceKey, watchlist]);
 
   const refreshWorkspaceIfStale = useCallback(() => {
     const cached = getFreshCache(workspaceCache, workspaceKey, WORKSPACE_CACHE_TTL_MS);
