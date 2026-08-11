@@ -1,6 +1,12 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import {
+  fetchCachedResource,
+  getCachedResourceSnapshot,
+  markCachedResourceStale,
+  subscribeCachedResource,
+} from '@/lib/clientDataCache';
 
 import {
   fetchStrategies,
@@ -15,78 +21,44 @@ import { fetchSetups } from '@/lib/api/setups';
 
 const STRATEGIES_CACHE_TTL_MS = 60_000;
 const SETUPS_CACHE_TTL_MS = 60_000;
-
-let strategiesCache = [];
-let strategiesCacheUpdatedAt = 0;
-let strategiesInFlightPromise = null;
-
-let setupsCache = [];
-let setupsCacheUpdatedAt = 0;
-let setupsInFlightPromise = null;
+const STRATEGIES_CACHE_KEY = 'strategies:list';
+const SETUPS_CACHE_KEY = 'setups:list:strategy-data';
 
 export function invalidateStrategyDataCaches() {
-  strategiesCache = [];
-  strategiesCacheUpdatedAt = 0;
-  strategiesInFlightPromise = null;
-  setupsCache = [];
-  setupsCacheUpdatedAt = 0;
-  setupsInFlightPromise = null;
-}
-
-function hasFreshStrategiesCache() {
-  return Date.now() - strategiesCacheUpdatedAt < STRATEGIES_CACHE_TTL_MS;
-}
-
-function hasFreshSetupsCache() {
-  return Date.now() - setupsCacheUpdatedAt < SETUPS_CACHE_TTL_MS;
+  markCachedResourceStale(STRATEGIES_CACHE_KEY);
+  markCachedResourceStale(SETUPS_CACHE_KEY);
 }
 
 async function loadStrategiesShared(forceFresh = false) {
-  if (!forceFresh && hasFreshStrategiesCache()) {
-    return strategiesCache;
-  }
-
-  if (!strategiesInFlightPromise) {
-    strategiesInFlightPromise = fetchStrategies()
-      .then((data) => {
-        strategiesCache = Array.isArray(data) ? data.filter(Boolean) : [];
-        strategiesCacheUpdatedAt = Date.now();
-        return strategiesCache;
-      })
-      .finally(() => {
-        strategiesInFlightPromise = null;
-      });
-  }
-
-  return strategiesInFlightPromise;
+  return fetchCachedResource(STRATEGIES_CACHE_KEY, {
+    ttlMs: STRATEGIES_CACHE_TTL_MS,
+    forceFresh,
+    initialData: [],
+    fetcher: async () => {
+      const data = await fetchStrategies();
+      return Array.isArray(data) ? data.filter(Boolean) : [];
+    },
+  });
 }
 
 async function loadSetupsShared(forceFresh = false) {
-  if (!forceFresh && hasFreshSetupsCache()) {
-    return setupsCache;
-  }
-
-  if (!setupsInFlightPromise) {
-    setupsInFlightPromise = fetchSetups()
-      .then((data) => {
-        setupsCache = Array.isArray(data)
-          ? data
-              .filter(Boolean)
-              .map((s) => ({
-                ...s,
-                setup_type: String(s.setup_type || '').toLowerCase(),
-              }))
-              .filter((s) => s.setup_type === 'dca' || s.setup_type === 'trade')
-          : [];
-        setupsCacheUpdatedAt = Date.now();
-        return setupsCache;
-      })
-      .finally(() => {
-        setupsInFlightPromise = null;
-      });
-  }
-
-  return setupsInFlightPromise;
+  return fetchCachedResource(SETUPS_CACHE_KEY, {
+    ttlMs: SETUPS_CACHE_TTL_MS,
+    forceFresh,
+    initialData: [],
+    fetcher: async () => {
+      const data = await fetchSetups();
+      return Array.isArray(data)
+        ? data
+            .filter(Boolean)
+            .map((s) => ({
+              ...s,
+              setup_type: String(s.setup_type || '').toLowerCase(),
+            }))
+            .filter((s) => s.setup_type === 'dca' || s.setup_type === 'trade')
+        : [];
+    },
+  });
 }
 
 // =====================================================================
@@ -94,10 +66,14 @@ async function loadSetupsShared(forceFresh = false) {
 // =====================================================================
 export function useStrategyData(options = {}) {
   const { autoLoad = true, includeSetups = true } = options;
-  const [strategies, setStrategies] = useState(() => (hasFreshStrategiesCache() ? strategiesCache : []));
-  const [setups, setSetups] = useState(() => (includeSetups && hasFreshSetupsCache() ? setupsCache : []));
+  const initialStrategies = getCachedResourceSnapshot(STRATEGIES_CACHE_KEY, []);
+  const initialSetups = getCachedResourceSnapshot(SETUPS_CACHE_KEY, []);
+  const [strategies, setStrategies] = useState(() => initialStrategies.data || []);
+  const [setups, setSetups] = useState(() => (includeSetups ? initialSetups.data || [] : []));
 
-  const [loading, setLoading] = useState(() => autoLoad && (!hasFreshStrategiesCache() || (includeSetups && !hasFreshSetupsCache())));
+  const [loading, setLoading] = useState(
+    () => autoLoad && (!initialStrategies.hasData || (includeSetups && !initialSetups.hasData))
+  );
   const [error, setError] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
 
@@ -143,9 +119,22 @@ export function useStrategyData(options = {}) {
   // INIT LOAD
   // =========================================================
   useEffect(() => {
+    const unsubStrategies = subscribeCachedResource(STRATEGIES_CACHE_KEY, () => {
+      const snapshot = getCachedResourceSnapshot(STRATEGIES_CACHE_KEY, []);
+      setStrategies(snapshot.data || []);
+    });
+    const unsubSetups = subscribeCachedResource(SETUPS_CACHE_KEY, () => {
+      if (!includeSetups) return;
+      const snapshot = getCachedResourceSnapshot(SETUPS_CACHE_KEY, []);
+      setSetups(snapshot.data || []);
+    });
+
     if (!autoLoad) {
       setLoading(false);
-      return;
+      return () => {
+        unsubStrategies();
+        unsubSetups();
+      };
     }
 
     let cancelled = false;
@@ -166,6 +155,8 @@ export function useStrategyData(options = {}) {
 
     return () => {
       cancelled = true;
+      unsubStrategies();
+      unsubSetups();
     };
   }, [autoLoad, includeSetups, loadSetups, loadStrategies]);
 

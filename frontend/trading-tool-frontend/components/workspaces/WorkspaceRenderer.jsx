@@ -26,7 +26,7 @@ export default function WorkspaceRenderer({ tab = "market", canonicalizeLegacy =
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const queryString = searchParams.toString();
-  const { selectedAsset } = useAsset();
+  const { selectedAsset, setSelectedAsset } = useAsset();
   const resolvedTab = normalizeTab(searchParams.get("tab") || tab, tab);
   const resolvedSymbol = normalizeSymbol(
     searchParams.get("symbol") || searchParams.get("asset") || selectedAsset || "BTC"
@@ -35,16 +35,12 @@ export default function WorkspaceRenderer({ tab = "market", canonicalizeLegacy =
   const hasExplicitSymbol = Boolean(searchParams.get("symbol") || searchParams.get("asset"));
 
   useEffect(() => {
-    if (pathname === "/asset" && variant === "v3" && !hasExplicitSymbol && resolvedSymbol) {
-      const params = new URLSearchParams(queryString);
-      params.set("symbol", resolvedSymbol);
-      if (!params.get("tab")) {
-        params.set("tab", resolvedTab);
-      }
-      router.replace(`/asset?${params.toString()}`, { scroll: false });
-      return;
+    if (resolvedSymbol && resolvedSymbol !== selectedAsset) {
+      setSelectedAsset(resolvedSymbol);
     }
+  }, [resolvedSymbol, selectedAsset, setSelectedAsset]);
 
+  useEffect(() => {
     if (!canonicalizeLegacy || pathname === "/asset") return;
 
     const params = new URLSearchParams(queryString);

@@ -123,26 +123,43 @@ export function useAssetWorkspaceData(symbol, periods, watchlistSymbols) {
   const fallbackStartedAtRef = useRef(null);
   const activeReloadPromiseRef = useRef(null);
   const latestWorkspaceRef = useRef(cachedWorkspace || null);
+  const latestWatchlistRef = useRef(cachedWatchlist);
   const lastForegroundRefreshAtRef = useRef(0);
   const lastSuccessfulRefreshAtRef = useRef(cachedWorkspace ? Date.now() : 0);
   const requestSequenceRef = useRef(0);
   const assetSymbol = String(symbol || "BTC").toUpperCase();
 
   useEffect(() => {
-    setWorkspace(cachedWorkspace || null);
-    setWatchlist(cachedWatchlist);
-    setLoading(!cachedWorkspace);
-    setWatchlistLoading(!cachedWorkspace);
+    const fallbackWorkspace = latestWorkspaceRef.current;
+    const fallbackWatchlist = Array.isArray(fallbackWorkspace?.watchlist?.rows)
+      ? fallbackWorkspace.watchlist.rows
+      : latestWatchlistRef.current;
+    const nextWorkspace = cachedWorkspace || fallbackWorkspace || null;
+    const nextWatchlist = cachedWorkspace
+      ? cachedWatchlist
+      : Array.isArray(fallbackWatchlist)
+        ? fallbackWatchlist
+        : [];
+
+    setWorkspace(nextWorkspace);
+    setWatchlist(nextWatchlist);
+    setLoading(!cachedWorkspace && !nextWorkspace);
+    setWatchlistLoading(!cachedWorkspace && !nextWatchlist.length);
     setError(null);
     setIsFallbackWorkspace(false);
     fallbackStartedAtRef.current = null;
-    latestWorkspaceRef.current = cachedWorkspace || null;
+    latestWorkspaceRef.current = nextWorkspace;
+    latestWatchlistRef.current = nextWatchlist;
     lastSuccessfulRefreshAtRef.current = cachedWorkspace ? Date.now() : 0;
   }, [cachedWatchlist, cachedWorkspace, workspaceKey]);
 
   useEffect(() => {
     latestWorkspaceRef.current = workspace || null;
   }, [workspace]);
+
+  useEffect(() => {
+    latestWatchlistRef.current = Array.isArray(watchlist) ? watchlist : [];
+  }, [watchlist]);
 
   function trackWorkspaceTelemetry(eventName, metadata = {}) {
     void trackAssistantEvent({
@@ -187,8 +204,10 @@ export function useAssetWorkspaceData(symbol, periods, watchlistSymbols) {
     }
 
     const requestId = ++requestSequenceRef.current;
-    if (!cached) {
+    if (!cached && !latestWorkspaceRef.current) {
       setLoading(true);
+    }
+    if (!cached && !latestWatchlistRef.current?.length) {
       setWatchlistLoading(true);
     }
     let request = workspaceInFlightRequests.get(workspaceKey);

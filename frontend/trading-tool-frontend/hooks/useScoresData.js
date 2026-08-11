@@ -3,6 +3,12 @@
 import { useEffect, useState } from 'react';
 import { getDailyScores, getAiMasterScore, getScoreHistory, updateIntelligenceWeights } from '@/lib/api/scores';
 import { useTranslation } from "@/app/providers/I18nProvider";
+import {
+  fetchCachedResource,
+  getCachedResourceSnapshot,
+  markCachedResourceStale,
+  subscribeCachedResource,
+} from "@/lib/clientDataCache";
 
 const SCORE_CACHE_TTL_MS = 30_000;
 const scoreCache = new Map();
@@ -63,21 +69,15 @@ export function useScoresData(symbol = "BTC", options = {}) {
   const [error, setError] = useState(null);
 
   const cacheKey = `${symbol}:history:${includeHistory ? "1" : "0"}:master:${includeMaster ? "1" : "0"}:fallback:${fallbackOnError ? "1" : "0"}:locale:${String(locale || "nl").toLowerCase()}`;
+  const resourceKey = `scores:${cacheKey}`;
 
   async function loadScores(forceRefresh = false) {
-    const cached = scoreCache.get(cacheKey);
-    const cacheIsFresh =
-      cached && Date.now() - cached.timestamp < SCORE_CACHE_TTL_MS;
-
-    if (!forceRefresh && cacheIsFresh) {
-      return cached.data;
-    }
-
-    if (!forceRefresh && inflightScoreRequests.has(cacheKey)) {
-      return inflightScoreRequests.get(cacheKey);
-    }
-
-    const request = (async () => {
+    return fetchCachedResource(resourceKey, {
+      ttlMs: SCORE_CACHE_TTL_MS,
+      forceFresh: forceRefresh,
+      initialData: null,
+      keepStaleOnError: true,
+      fetcher: async () => {
       const [dailyRes, masterRes, historyRes] = await Promise.allSettled([
         getDailyScores(symbol, { fallbackOnError }),
         includeMaster ? getAiMasterScore(symbol) : Promise.resolve(null),
@@ -171,21 +171,16 @@ export function useScoresData(symbol = "BTC", options = {}) {
         history
       };
 
-      scoreCache.set(cacheKey, { data: nextScores, timestamp: Date.now() });
       return nextScores;
-    })();
-
-    inflightScoreRequests.set(cacheKey, request);
-
-    try {
-      return await request;
-    } finally {
-      inflightScoreRequests.delete(cacheKey);
-    }
+      },
+    });
   }
 
   async function fetchScores(forceRefresh = false) {
-    setLoading(true);
+    const snapshot = getCachedResourceSnapshot(resourceKey, null);
+    if (!snapshot.hasData) {
+      setLoading(true);
+    }
     setError(null);
     try {
       const nextScores = await loadScores(forceRefresh);
@@ -193,10 +188,10 @@ export function useScoresData(symbol = "BTC", options = {}) {
         setScores(nextScores);
         setHasData(true);
       } else {
-        setHasData(false);
+        setHasData(snapshot.hasData);
       }
     } catch (loadError) {
-      setHasData(false);
+      setHasData(snapshot.hasData);
       setError(loadError);
     } finally {
       setLoading(false);
@@ -206,14 +201,21 @@ export function useScoresData(symbol = "BTC", options = {}) {
   const saveWeights = async (newWeights) => {
     setLoading(true);
     await updateIntelligenceWeights(newWeights);
-    scoreCache.delete(cacheKey);
-    inflightScoreRequests.delete(cacheKey);
+    markCachedResourceStale(resourceKey);
     await fetchScores(true);
   };
 
   useEffect(() => {
+    const unsubscribe = subscribeCachedResource(resourceKey, () => {
+      const snapshot = getCachedResourceSnapshot(resourceKey, null);
+      if (snapshot.data) {
+        setScores(snapshot.data);
+        setHasData(true);
+      }
+    });
     fetchScores();
-  }, [locale, symbol]);
+    return unsubscribe;
+  }, [locale, resourceKey, symbol]);
 
   return { ...scores, loading, hasData, error, saveWeights, refresh: fetchScores };
 }

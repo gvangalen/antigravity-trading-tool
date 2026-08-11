@@ -2,16 +2,16 @@
 
 import { useState, useEffect } from "react";
 import { fetchWatchlist, addToWatchlist, removeFromWatchlist } from "@/lib/api/watchlist";
+import {
+  fetchCachedResource,
+  getCachedResourceSnapshot,
+  markCachedResourceStale,
+  setCachedResourceData,
+  subscribeCachedResource,
+} from "@/lib/clientDataCache";
 
 const WATCHLIST_CACHE_TTL_MS = 30_000;
-
-let watchlistCache = [];
-let watchlistCacheUpdatedAt = 0;
-let watchlistInFlightPromise = null;
-
-function hasFreshWatchlistCache() {
-  return Date.now() - watchlistCacheUpdatedAt < WATCHLIST_CACHE_TTL_MS;
-}
+const WATCHLIST_CACHE_KEY = "watchlist:default";
 
 function normalizeWatchlistItem(item) {
   if (typeof item === "string") {
@@ -36,31 +36,31 @@ function normalizeWatchlistItem(item) {
 }
 
 async function loadWatchlistShared(forceFresh = false) {
-  if (!forceFresh && hasFreshWatchlistCache()) {
-    return watchlistCache;
-  }
-
-  if (!watchlistInFlightPromise) {
-    watchlistInFlightPromise = fetchWatchlist()
-      .then((data) => {
-        watchlistCache = Array.isArray(data) ? data.map(normalizeWatchlistItem).filter((item) => item.symbol) : [];
-        watchlistCacheUpdatedAt = Date.now();
-        return watchlistCache;
-      })
-      .finally(() => {
-        watchlistInFlightPromise = null;
-      });
-  }
-
-  return watchlistInFlightPromise;
+  return fetchCachedResource(WATCHLIST_CACHE_KEY, {
+    ttlMs: WATCHLIST_CACHE_TTL_MS,
+    forceFresh,
+    initialData: [],
+    fetcher: async () => {
+      const data = await fetchWatchlist();
+      return Array.isArray(data)
+        ? data.map(normalizeWatchlistItem).filter((item) => item.symbol)
+        : [];
+    },
+  });
 }
 
 export function useWatchlist(options = {}) {
   const { autoLoad = true } = options;
-  const [watchlist, setWatchlist] = useState(() => (hasFreshWatchlistCache() ? watchlistCache : []));
-  const [loading, setLoading] = useState(() => autoLoad && !hasFreshWatchlistCache());
+  const initialSnapshot = getCachedResourceSnapshot(WATCHLIST_CACHE_KEY, []);
+  const [watchlist, setWatchlist] = useState(initialSnapshot.data || []);
+  const [loading, setLoading] = useState(() => autoLoad && !initialSnapshot.hasData);
 
   useEffect(() => {
+    const unsubscribe = subscribeCachedResource(WATCHLIST_CACHE_KEY, () => {
+      const snapshot = getCachedResourceSnapshot(WATCHLIST_CACHE_KEY, []);
+      setWatchlist(snapshot.data || []);
+    });
+
     if (autoLoad) {
       void loadWatchlist();
     } else {
@@ -70,32 +70,38 @@ export function useWatchlist(options = {}) {
     // Listen for changes from other components
     const handleSync = () => loadWatchlist();
     window.addEventListener("watchlist-updated", handleSync);
-    return () => window.removeEventListener("watchlist-updated", handleSync);
+    return () => {
+      unsubscribe();
+      window.removeEventListener("watchlist-updated", handleSync);
+    };
   }, [autoLoad]);
 
   async function loadWatchlist(forceFresh = false) {
     try {
-      setLoading(true);
+      if (!getCachedResourceSnapshot(WATCHLIST_CACHE_KEY, []).hasData) {
+        setLoading(true);
+      }
       const data = await loadWatchlistShared(forceFresh);
       setWatchlist(data || []);
       return data || [];
     } catch (err) {
       console.error("❌ Watchlist load error:", err);
-      return [];
+      return getCachedResourceSnapshot(WATCHLIST_CACHE_KEY, []).data || [];
     } finally {
       setLoading(false);
     }
   }
 
   const notify = () => {
-    watchlistCacheUpdatedAt = 0;
+    markCachedResourceStale(WATCHLIST_CACHE_KEY);
     window.dispatchEvent(new CustomEvent("watchlist-updated"));
   };
 
   async function add(asset) {
     try {
       await addToWatchlist(asset);
-      await loadWatchlist(true);
+      const data = await loadWatchlist(true);
+      setCachedResourceData(WATCHLIST_CACHE_KEY, data || []);
       notify();
     } catch (err) {
       console.error("❌ Watchlist add error:", err);
@@ -105,7 +111,8 @@ export function useWatchlist(options = {}) {
   async function remove(symbol) {
     try {
       await removeFromWatchlist(symbol);
-      await loadWatchlist(true);
+      const data = await loadWatchlist(true);
+      setCachedResourceData(WATCHLIST_CACHE_KEY, data || []);
       notify();
     } catch (err) {
       console.error("❌ Watchlist remove error:", err);

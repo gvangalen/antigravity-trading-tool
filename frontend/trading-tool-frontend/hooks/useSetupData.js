@@ -2,15 +2,27 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import {
+  fetchCachedResource,
+  getCachedResourceSnapshot,
+  markCachedResourceStale,
+  subscribeCachedResource,
+} from '@/lib/clientDataCache';
+import {
   fetchSetups,
   fetchTopSetups,
   updateSetup,
   deleteSetup,
 } from '@/lib/api/setups';
 
+const SETUPS_CACHE_TTL_MS = 60_000;
+const setupsCacheKey = (setupTypeFilter) => `setups:list:${setupTypeFilter || 'all'}`;
+const TOP_SETUPS_CACHE_KEY = 'setups:top';
+
 export function useSetupData() {
+  const initialSetups = getCachedResourceSnapshot(setupsCacheKey(null), []);
+  const initialTopSetups = getCachedResourceSnapshot(TOP_SETUPS_CACHE_KEY, []);
   const [setups, setSetups] = useState([]);
-  const [topSetups, setTopSetups] = useState([]);
+  const [topSetups, setTopSetups] = useState(initialTopSetups.data || []);
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -22,19 +34,27 @@ export function useSetupData() {
   // 🔁 LOAD
   // ============================================================
   const loadSetups = useCallback(async () => {
-    setLoading(true);
+    const cacheKey = setupsCacheKey(setupTypeFilter);
+    if (!getCachedResourceSnapshot(cacheKey, []).hasData) {
+      setLoading(true);
+    }
     setError('');
 
     try {
-      const data = await fetchSetups({
-        setup_type: setupTypeFilter,
+      const data = await fetchCachedResource(cacheKey, {
+        ttlMs: SETUPS_CACHE_TTL_MS,
+        initialData: [],
+        fetcher: async () => {
+          const next = await fetchSetups({
+            setup_type: setupTypeFilter,
+          });
+          return Array.isArray(next) ? next : [];
+        },
       });
-
-      setSetups(Array.isArray(data) ? data : []);
+      setSetups(data || []);
     } catch (err) {
       console.error('❌ loadSetups fout:', err);
       setError('Kan setups niet laden.');
-      setSetups([]);
     } finally {
       setLoading(false);
     }
@@ -42,18 +62,41 @@ export function useSetupData() {
 
   const loadTopSetups = useCallback(async () => {
     try {
-      const data = await fetchTopSetups();
-      setTopSetups(Array.isArray(data) ? data : []);
+      const data = await fetchCachedResource(TOP_SETUPS_CACHE_KEY, {
+        ttlMs: SETUPS_CACHE_TTL_MS,
+        initialData: [],
+        fetcher: async () => {
+          const next = await fetchTopSetups();
+          return Array.isArray(next) ? next : [];
+        },
+      });
+      setTopSetups(data || []);
     } catch (err) {
       console.error('❌ loadTopSetups fout:', err);
-      setTopSetups([]);
     }
   }, []);
 
   useEffect(() => {
+    const cacheKey = setupsCacheKey(setupTypeFilter);
+    const snapshot = getCachedResourceSnapshot(cacheKey, []);
+    if (snapshot.hasData) {
+      setSetups(snapshot.data || []);
+    } else if (setupTypeFilter === null && initialSetups.hasData) {
+      setSetups(initialSetups.data || []);
+    }
+    const unsubscribeSetups = subscribeCachedResource(cacheKey, () => {
+      setSetups(getCachedResourceSnapshot(cacheKey, []).data || []);
+    });
+    const unsubscribeTopSetups = subscribeCachedResource(TOP_SETUPS_CACHE_KEY, () => {
+      setTopSetups(getCachedResourceSnapshot(TOP_SETUPS_CACHE_KEY, []).data || []);
+    });
     loadSetups();
     loadTopSetups();
-  }, [loadSetups, loadTopSetups]);
+    return () => {
+      unsubscribeSetups();
+      unsubscribeTopSetups();
+    };
+  }, [loadSetups, loadTopSetups, setupTypeFilter]);
 
   // ============================================================
   // 🔁 1. Setups ophalen
@@ -65,12 +108,15 @@ export function useSetupData() {
     try {
       await updateSetup(id, updatedData);
       setSuccessMessage('Setup succesvol opgeslagen.');
+      markCachedResourceStale(setupsCacheKey(setupTypeFilter));
+      markCachedResourceStale(TOP_SETUPS_CACHE_KEY);
       await loadSetups();
+      await loadTopSetups();
     } catch (err) {
       console.error('❌ saveSetup fout:', err);
       setError('Opslaan mislukt.');
     }
-  }, [loadSetups]);
+  }, [loadSetups, loadTopSetups, setupTypeFilter]);
 
   // ============================================================
   // 🗑 4. Setup verwijderen
@@ -78,12 +124,15 @@ export function useSetupData() {
   const removeSetup = useCallback(async (id) => {
     try {
       await deleteSetup(id);
+      markCachedResourceStale(setupsCacheKey(setupTypeFilter));
+      markCachedResourceStale(TOP_SETUPS_CACHE_KEY);
       await loadSetups();
+      await loadTopSetups();
     } catch (err) {
       console.error('❌ removeSetup fout:', err);
       setError('Verwijderen mislukt.');
     }
-  }, [loadSetups]);
+  }, [loadSetups, loadTopSetups, setupTypeFilter]);
 
   // ============================================================
   // 🔍 5. Naam-check
