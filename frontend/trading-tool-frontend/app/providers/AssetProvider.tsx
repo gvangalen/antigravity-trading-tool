@@ -3,12 +3,28 @@
 import React, { createContext, useContext, useState, useEffect } from "react";
 import { usePathname } from "next/navigation";
 import { useAuth } from "@/components/auth/AuthProvider";
+import { useWatchlist } from "@/hooks/useWatchlist";
 import { API_BASE_URL } from "@/lib/config";
 import { buildAuthHeaders } from "@/lib/api/auth";
-import { normalizeOnboardingAsset, readOnboardingAssetPreference } from "@/lib/onboardingAsset";
+import { readOnboardingAssetPreference } from "@/lib/onboardingAsset";
 
 const preferredAssetCache = new Map<string, string | null>();
 const preferredAssetPromise = new Map<string, Promise<string | null>>();
+const DEFAULT_SELECTED_ASSET = "BTC";
+const DEFAULT_AVAILABLE_ASSETS = ["BTC", "ETH", "SOL", "ADA", "DOT"];
+
+function normalizeAssetSymbol(asset: string | null | undefined) {
+  const normalized = String(asset || "").trim().toUpperCase();
+  return /^[A-Z0-9._:-]{1,20}$/.test(normalized) ? normalized : "";
+}
+
+function buildAvailableAssets(symbols: Array<string | null | undefined>) {
+  const normalized = symbols
+    .map((symbol) => normalizeAssetSymbol(symbol))
+    .filter(Boolean);
+
+  return Array.from(new Set(normalized));
+}
 
 type AssetContextType = {
   selectedAsset: string;
@@ -22,27 +38,29 @@ const AssetContext = createContext<AssetContextType | null>(null);
 export function AssetProvider({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const { user, sessionChecked } = useAuth() as any;
-  const [selectedAsset, setSelectedAssetState] = useState<string>("BTC");
-  const [availableAssets, setAvailableAssets] = useState<string[]>(["BTC", "ETH", "SOL", "ADA", "DOT"]);
+  const path = pathname || "/";
+  const isPublicAuthRoute =
+    path.startsWith("/login") ||
+    path.startsWith("/register") ||
+    path.startsWith("/forgot-password") ||
+    path.startsWith("/reset-password");
+  const { watchlist } = useWatchlist({
+    autoLoad: !isPublicAuthRoute && sessionChecked && Boolean(user?.id),
+  });
+  const [selectedAsset, setSelectedAssetState] = useState<string>(DEFAULT_SELECTED_ASSET);
+  const [availableAssets, setAvailableAssets] = useState<string[]>(DEFAULT_AVAILABLE_ASSETS);
   const [preferencesHydrated, setPreferencesHydrated] = useState(false);
 
   // Load from localStorage on mount
   useEffect(() => {
     const saved = localStorage.getItem("selectedAsset");
-    const normalized = normalizeOnboardingAsset(saved);
+    const normalized = normalizeAssetSymbol(saved);
     if (normalized) {
       setSelectedAssetState(normalized);
     }
   }, []);
 
   useEffect(() => {
-    const path = pathname || "/";
-    const isPublicAuthRoute =
-      path.startsWith("/login") ||
-      path.startsWith("/register") ||
-      path.startsWith("/forgot-password") ||
-      path.startsWith("/reset-password");
-
     if (isPublicAuthRoute || preferencesHydrated || !sessionChecked) return;
 
     if (!user?.id) {
@@ -92,7 +110,7 @@ export function AssetProvider({ children }: { children: React.ReactNode }) {
 
     async function hydrateSelectedAssetFromPreferences() {
       try {
-        const savedAsset = normalizeOnboardingAsset(localStorage.getItem("selectedAsset"));
+        const savedAsset = normalizeAssetSymbol(localStorage.getItem("selectedAsset"));
         if (savedAsset) {
           setSelectedAssetState(savedAsset);
           setAvailableAssets((current) => (current.includes(savedAsset) ? current : [...current, savedAsset]));
@@ -131,19 +149,30 @@ export function AssetProvider({ children }: { children: React.ReactNode }) {
     setPreferencesHydrated(false);
   }, [user?.id]);
 
+  useEffect(() => {
+    const watchlistSymbols = Array.isArray(watchlist)
+      ? watchlist.map((item) => item?.symbol)
+      : [];
+    const nextAvailableAssets = buildAvailableAssets(
+      watchlistSymbols.length
+        ? [...watchlistSymbols, selectedAsset]
+        : [selectedAsset, ...DEFAULT_AVAILABLE_ASSETS]
+    );
+
+    setAvailableAssets(nextAvailableAssets.length ? nextAvailableAssets : DEFAULT_AVAILABLE_ASSETS);
+  }, [selectedAsset, watchlist]);
+
   const setSelectedAsset = (asset: string) => {
-    const normalized = normalizeOnboardingAsset(asset);
+    const normalized = normalizeAssetSymbol(asset);
     if (!normalized) return;
     setSelectedAssetState(normalized);
     localStorage.setItem("selectedAsset", normalized);
   };
 
   const addAsset = (asset: string) => {
-    const up = normalizeOnboardingAsset(asset);
+    const up = normalizeAssetSymbol(asset);
     if (!up) return;
-    if (!availableAssets.includes(up)) {
-      setAvailableAssets([...availableAssets, up]);
-    }
+    setAvailableAssets((current) => (current.includes(up) ? current : [...current, up]));
   };
 
   return (

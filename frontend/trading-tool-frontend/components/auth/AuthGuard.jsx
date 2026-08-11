@@ -59,6 +59,7 @@ export default function AuthGuard({ children }) {
       // Redirect logic
       if (!isComplete && 
           !pathname.startsWith("/onboarding") && 
+          !pathname.startsWith("/asset") &&
           !pathname.startsWith("/setup") && 
           !pathname.startsWith("/technical") && 
           !pathname.startsWith("/macro") && 

@@ -1,1 +1,0 @@
-(self.webpackChunk_N_E=self.webpackChunk_N_E||[]).push([[5553],{22331:(e,s,r)=>{"use strict";r.r(s),r.d(s,{default:()=>u});var t=r(95155),n=r(81202);function u(){return(0,t.jsx)(n.A,{tab:"market"})}},61511:(e,s,r)=>{Promise.resolve().then(r.bind(r,22331))}},e=>{e.O(0,[8426,8327,7198,8111,7816,1035,8076,5806,3370,1202,8441,1255,7358],()=>e(e.s=61511)),_N_E=e.O()}]);
