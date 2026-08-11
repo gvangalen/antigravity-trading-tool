@@ -480,6 +480,7 @@ function AIAssistantContent({
   const updateQuery = onQueryChange || setQuery;
   const isSimpleFinnModal = modal;
   const activeVariant = searchParams.get("variant") === "legacy" ? "legacy" : "v3";
+  const isAssetAnalysisPage = pathname === "/asset";
 
   const composerMenuCopy = {
     asset: at("uiText.composerAsset"),
@@ -778,7 +779,11 @@ function AIAssistantContent({
     const blockedCount = Number(missionControl?.summary?.blocked_count || 0);
     const greetingName = preferences?.first_name || "Gerrit";
     const primaryItem = primaryCoachingItem || missionControl?.bot_review_queue?.[0] || missionControl?.workqueue?.[0] || null;
-    const symbol = String(primaryItem?.asset || context?.symbol || globalSymbol || "BTC").trim().toUpperCase();
+    const symbol = String(
+      isAssetAnalysisPage
+        ? context?.symbol || globalSymbol || primaryItem?.asset || "BTC"
+        : primaryItem?.asset || context?.symbol || globalSymbol || "BTC"
+    ).trim().toUpperCase();
     const postureLabel = String(
       missionControl?.summary?.posture ||
       sourceInsight?.market_insight?.posture ||
@@ -3846,9 +3851,8 @@ function AIAssistantContent({
 
   useEffect(() => {
     if (isOpen) {
-      loadMissionControl();
-      if (pathname === "/asset") {
-        loadInsight();
+      if (!isAssetAnalysisPage) {
+        loadMissionControl();
       }
       if (!previewSectionsOnly) {
         loadFinnState();
@@ -3859,13 +3863,13 @@ function AIAssistantContent({
     } else {
       loadedFinnStateRef.current = false;
     }
-  }, [isOpen, pathname, searchParams, globalSymbol]);
+  }, [isOpen, isAssetAnalysisPage, pathname]);
 
   useEffect(() => {
-    if (!isOpen || pathname !== "/asset") return;
+    if (!isOpen || !isAssetAnalysisPage) return;
     void loadInsight();
     void loadMissionControl();
-  }, [isOpen, pathname, currentConversationStorageKey]);
+  }, [currentConversationStorageKey, isAssetAnalysisPage, isOpen]);
 
   useEffect(() => {
     if (!isOpen || previewSectionsOnly || sharedSessionRestoreRef.current) return;
@@ -5361,7 +5365,14 @@ function AIAssistantContent({
     primaryBehaviorCost ||
     primaryBehaviorRule ||
     "";
-  const workspaceBriefingLines = String(stableBriefingText || buildBriefingText(insight) || "")
+  const activeBriefingSymbol = String(context?.symbol || globalSymbol || "BTC").trim().toUpperCase();
+  const stableBriefingMatchesAsset = !isAssetAnalysisPage
+    || !stableBriefingText
+    || stableBriefingText.toUpperCase().includes(activeBriefingSymbol);
+  const resolvedBriefingText = stableBriefingMatchesAsset
+    ? stableBriefingText || buildBriefingText(insight) || ""
+    : buildBriefingText(insight) || "";
+  const workspaceBriefingLines = String(resolvedBriefingText)
     .split("\n")
     .map((line) => line.trim())
     .filter(Boolean);

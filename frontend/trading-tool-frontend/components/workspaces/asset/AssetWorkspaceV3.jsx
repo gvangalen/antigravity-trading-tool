@@ -751,6 +751,7 @@ function summarizeWeightedScores(scores, weights, ui) {
 }
 
 function formatPrice(value, locale) {
+  if (value === null || value === undefined || value === "") return "—";
   const numericValue = Number(value);
   if (!Number.isFinite(numericValue)) return "—";
   return new Intl.NumberFormat(locale || "en-US", {
