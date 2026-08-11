@@ -916,8 +916,10 @@ function AIAssistantContent({
 
   useEffect(() => {
     insightCacheKeyRef.current = `finn-insight:${currentConversationStorageKey}`;
-    missionControlCacheKeyRef.current = `finn-mission-control:${pathname || "/assistant"}:${globalSymbol || context.symbol || "BTC"}`;
-  }, [currentConversationStorageKey, pathname, globalSymbol, context.symbol]);
+    missionControlCacheKeyRef.current = isAssetAnalysisPage
+      ? `finn-mission-control:${pathname || "/assistant"}`
+      : `finn-mission-control:${pathname || "/assistant"}:${globalSymbol || context.symbol || "BTC"}`;
+  }, [currentConversationStorageKey, isAssetAnalysisPage, pathname, globalSymbol, context.symbol]);
 
   const getLatestAssistantState = () => {
     for (let i = messages.length - 1; i >= 0; i -= 1) {
@@ -3851,8 +3853,9 @@ function AIAssistantContent({
 
   useEffect(() => {
     if (isOpen) {
-      if (!isAssetAnalysisPage) {
-        loadMissionControl();
+      loadMissionControl();
+      if (isAssetAnalysisPage) {
+        loadInsight();
       }
       if (!previewSectionsOnly) {
         loadFinnState();
@@ -3868,7 +3871,6 @@ function AIAssistantContent({
   useEffect(() => {
     if (!isOpen || !isAssetAnalysisPage) return;
     void loadInsight();
-    void loadMissionControl();
   }, [currentConversationStorageKey, isAssetAnalysisPage, isOpen]);
 
   useEffect(() => {
@@ -5943,9 +5945,9 @@ function AIAssistantContent({
                 </div>
               )}
               <div className="min-h-[52px]">
-                {stableBriefingText ? (
+                {resolvedBriefingText ? (
                   <p className="whitespace-pre-line text-xs font-semibold text-slate-800 dark:text-slate-200 leading-relaxed italic border-l-3 border-blue-500 pl-3 py-0.5">
-                    {stableBriefingText}
+                    {resolvedBriefingText}
                   </p>
                 ) : insightLoading ? (
                   <div className="border-l-3 border-blue-500 pl-3 py-1 space-y-2 animate-pulse">
