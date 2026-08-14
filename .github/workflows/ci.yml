@@ -50,6 +50,26 @@ jobs:
         working-directory: frontend/trading-tool-frontend
         run: npm ci
 
+      - name: Verify tracked frontend export inputs
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! git rev-parse --verify HEAD^ >/dev/null 2>&1; then
+            echo "ℹ️ No parent commit available for export diff check; skipping tracked frontend export input check."
+            exit 0
+          fi
+
+          changed_files="$(git diff --name-only HEAD^ HEAD)"
+          frontend_source_changed="$(printf '%s\n' "$changed_files" | grep '^frontend/trading-tool-frontend/' | grep -v '^frontend/trading-tool-frontend/out/' || true)"
+          frontend_export_changed="$(printf '%s\n' "$changed_files" | grep '^frontend/trading-tool-frontend/out/' || true)"
+
+          if [ -n "$frontend_source_changed" ] && [ -z "$frontend_export_changed" ]; then
+            echo "Frontend source changed, but the tracked frontend export was not updated:" >&2
+            printf '%s\n' "$frontend_source_changed" >&2
+            echo "Run npm run build in frontend/trading-tool-frontend and commit out/ before pushing." >&2
+            exit 1
+          fi
+
       - name: Run frontend typecheck
         working-directory: frontend/trading-tool-frontend
         run: npm run typecheck
@@ -64,6 +84,17 @@ jobs:
       - name: Run frontend build
         working-directory: frontend/trading-tool-frontend
         run: npm run build
+
+      - name: Verify tracked frontend export output
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! git diff --quiet -- frontend/trading-tool-frontend/out; then
+            echo "Frontend build produced uncommitted changes in frontend/trading-tool-frontend/out." >&2
+            echo "Run npm run build in frontend/trading-tool-frontend and commit the updated export before pushing." >&2
+            git diff --stat -- frontend/trading-tool-frontend/out >&2 || true
+            exit 1
+          fi
 
   mobile-quality:
     runs-on: ubuntu-latest
