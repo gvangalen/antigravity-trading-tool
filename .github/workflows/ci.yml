@@ -166,3 +166,15 @@ jobs:
       - name: Run frontend dependency audit
         working-directory: frontend/trading-tool-frontend
         run: npm run audit:high
+
+  deploy-production:
+    if: github.ref == 'refs/heads/main'
+    needs:
+      - backend-tests
+      - frontend-quality
+      - mobile-quality
+      - security-baseline
+    uses: ./.github/workflows/deploy.yml
+    with:
+      deploy_ref: ${{ github.sha }}
+    secrets: inherit
