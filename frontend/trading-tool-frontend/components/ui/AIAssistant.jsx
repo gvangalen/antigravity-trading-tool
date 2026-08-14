@@ -3925,6 +3925,16 @@ function AIAssistantContent({
   }, [currentConversationStorageKey, isAssetAnalysisPage, isOpen]);
 
   useEffect(() => {
+    if (!isOpen || previewSectionsOnly) return;
+    const generationStatus = String(missionControl?.first_dashboard_context?.generation_status || "").toLowerCase();
+    if (!["pending", "generating", "retry_scheduled"].includes(generationStatus)) return;
+    const timer = window.setInterval(() => {
+      void loadMissionControl();
+    }, 4000);
+    return () => window.clearInterval(timer);
+  }, [isOpen, previewSectionsOnly, missionControl?.first_dashboard_context?.generation_status, currentConversationStorageKey]);
+
+  useEffect(() => {
     if (!isOpen || previewSectionsOnly || sharedSessionRestoreRef.current) return;
     sharedSessionRestoreRef.current = true;
 
@@ -5419,12 +5429,15 @@ function AIAssistantContent({
     primaryBehaviorRule ||
     "";
   const activeBriefingSymbol = String(context?.symbol || globalSymbol || "BTC").trim().toUpperCase();
+  const firstDashboardContext = missionControl?.first_dashboard_context || null;
+  const firstDashboardBriefingText = String(firstDashboardContext?.briefing_text || "").trim();
   const stableBriefingMatchesAsset = !isAssetAnalysisPage
     || !stableBriefingText
     || stableBriefingText.toUpperCase().includes(activeBriefingSymbol);
-  const resolvedBriefingText = stableBriefingMatchesAsset
-    ? stableBriefingText || buildBriefingText(insight) || ""
-    : buildBriefingText(insight) || "";
+  const resolvedBriefingText = firstDashboardBriefingText
+    || (stableBriefingMatchesAsset
+      ? stableBriefingText || buildBriefingText(insight) || ""
+      : buildBriefingText(insight) || "");
   const workspaceBriefingLines = String(resolvedBriefingText)
     .split("\n")
     .map((line) => line.trim())
@@ -5459,28 +5472,34 @@ function AIAssistantContent({
     primaryBehaviorRule ||
     "";
   const defaultWorkspaceActionHint = workspaceBriefingLines[3] || "";
-  const workspaceHeadline = showFirstDashboardGuidance
-    ? at("uiText.workspaceFirstDashboardHeadline", uiText.workspaceFirstDashboardHeadline, {
-        symbol: activeBriefingSymbol,
-      })
+  const firstDashboardHeadline = firstDashboardContext?.headline
+    || at("uiText.workspaceFirstDashboardHeadline", uiText.workspaceFirstDashboardHeadline, {
+      symbol: activeBriefingSymbol,
+    });
+  const firstDashboardSupport = firstDashboardContext?.support
+    || at("uiText.workspaceFirstDashboardSupport", uiText.workspaceFirstDashboardSupport, {
+      symbol: activeBriefingSymbol,
+    });
+  const firstDashboardHint = firstDashboardContext?.action_hint
+    || at("uiText.workspaceFirstDashboardHint", uiText.workspaceFirstDashboardHint, {
+      symbol: activeBriefingSymbol,
+    });
+  const workspaceHeadline = firstDashboardContext
+    ? firstDashboardHeadline
     : workspaceIsStillBuilding
     ? at("uiText.workspaceBuildingHeadline", uiText.workspaceBuildingHeadline, {
         symbol: activeBriefingSymbol,
       })
     : defaultWorkspaceHeadline;
-  const workspaceSupport = showFirstDashboardGuidance
-    ? at("uiText.workspaceFirstDashboardSupport", uiText.workspaceFirstDashboardSupport, {
-        symbol: activeBriefingSymbol,
-      })
+  const workspaceSupport = firstDashboardContext
+    ? firstDashboardSupport
     : workspaceIsStillBuilding
     ? at("uiText.workspaceBuildingSupport", uiText.workspaceBuildingSupport, {
         symbol: activeBriefingSymbol,
       })
     : defaultWorkspaceSupport;
-  const workspaceActionHint = showFirstDashboardGuidance
-    ? at("uiText.workspaceFirstDashboardHint", uiText.workspaceFirstDashboardHint, {
-        symbol: activeBriefingSymbol,
-      })
+  const workspaceActionHint = firstDashboardContext
+    ? firstDashboardHint
     : workspaceIsStillBuilding
     ? at("uiText.workspaceBuildingHint", uiText.workspaceBuildingHint, {
         symbol: activeBriefingSymbol,
@@ -5545,7 +5564,9 @@ function AIAssistantContent({
   const openItemsAreReviews =
     overlayMissionSections.todayItems.length > 0 &&
     overlayMissionSections.todayItems.every((item) => isReviewCandidate(item));
-  const compactOpenLabel = openItemsAreReviews
+  const compactOpenLabel = firstDashboardContext?.review_label
+      ? firstDashboardContext.review_label
+      : openItemsAreReviews
       ? (openSummaryCount === 1 ? uiText.openReviewsOne : at("uiText.openReviewsMany", "", { count: openSummaryCount }))
       : (openSummaryCount === 1 ? uiText.openAttentionOne : at("uiText.openAttentionMany", "", { count: openSummaryCount }));
   const previewQueueSections = missionDetailSections.filter((section) =>

@@ -32,3 +32,11 @@ test("uses compact plan actions instead of inline specialist cards", () => {
   assert.match(planSource, /onFinnAction=\{\(\) => askFinnForPlan\(activePlan, "setup"\)\}/);
   assert.match(planSource, /onAskFinn=\{\(\) => askFinnForPlan\(plan\)\}/);
 });
+
+test("prefers central first-dashboard context over the generic briefing template", () => {
+  assert.match(assistantSource, /missionControl\?\.first_dashboard_context/);
+  assert.match(assistantSource, /firstDashboardBriefingText/);
+  assert.match(assistantSource, /firstDashboardContext\?\.review_label/);
+  assert.match(assistantSource, /generation_status/);
+  assert.match(assistantSource, /setInterval\(\(\) => \{\s*void loadMissionControl\(\)/);
+});
