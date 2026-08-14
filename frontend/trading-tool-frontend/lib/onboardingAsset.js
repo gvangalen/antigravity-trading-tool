@@ -1,8 +1,7 @@
-const SUPPORTED_ONBOARDING_ASSETS = ["BTC", "ETH", "SOL", "ADA", "DOT"];
+const POPULAR_ONBOARDING_ASSETS = ["BTC", "ETH", "AAPL", "MSFT"];
 
 export function normalizeOnboardingAsset(value) {
-  const normalized = String(value || "").trim().toUpperCase();
-  return SUPPORTED_ONBOARDING_ASSETS.includes(normalized) ? normalized : "";
+  return String(value || "").trim().toUpperCase();
 }
 
 export function readOnboardingAssetPreference(preferences = {}) {
@@ -21,5 +20,5 @@ export function buildOnboardingAssetPreferencePatch(asset) {
 }
 
 export function getSupportedOnboardingAssets() {
-  return [...SUPPORTED_ONBOARDING_ASSETS];
+  return [...POPULAR_ONBOARDING_ASSETS];
 }

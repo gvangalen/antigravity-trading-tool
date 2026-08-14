@@ -20,6 +20,7 @@ import {
   clearStoredAuth,
   apiRefresh,
 } from "@/lib/api/auth";
+import { clearOnboardingStatusCache } from "@/lib/api/onboarding";
 import { getActiveLocale, normalizeLocale } from "@/lib/i18n";
 
 /* ===========================================================
@@ -169,6 +170,7 @@ export function AuthProvider({ children }) {
   ------------------------------------------------------- */
   const login = useCallback(async (email: string, password: string, locale?: string | null) => {
     try {
+      clearOnboardingStatusCache();
       const normalizedLocale = normalizeLocale(locale) || getActiveLocale(typeof window !== "undefined" ? window : undefined);
       const res = await fetchWithAuth(`${API_BASE_URL}/api/auth/login`, {
         method: "POST",
@@ -222,6 +224,7 @@ export function AuthProvider({ children }) {
   const logout = useCallback(async () => {
     setUser(null);
     clearStoredAuth();
+    clearOnboardingStatusCache();
 
     try {
       await fetchWithAuth(`${API_BASE_URL}/api/auth/logout`, {

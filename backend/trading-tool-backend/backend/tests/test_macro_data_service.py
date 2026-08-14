@@ -149,3 +149,55 @@ def test_all_active_macro_indicators_resolve_to_catalog_definition_when_db_row_i
         assert resolved.source == definition["source"]
         assert resolved.link == definition["link"]
         assert resolved.category == "macro"
+
+
+def test_resolve_effective_preferences_returns_empty_without_user_scope_rows():
+    service = MacroDataService(AsyncMock())
+    service.preference_repository = SimpleNamespace(
+        list_scope_configs=AsyncMock(return_value=[]),
+    )
+
+    async def fake_get_asset(_symbol):
+        return {"asset_class": "crypto"}
+
+    async def run():
+        from unittest.mock import patch
+
+        with patch("backend.services.macro_data_service.AssetCatalogService") as asset_catalog_cls:
+            asset_catalog_cls.return_value.get_asset = AsyncMock(side_effect=fake_get_asset)
+            return await service.resolve_effective_preferences(7, symbol="BTC")
+
+    result = asyncio.run(run())
+
+    assert result["scope"] == "empty"
+    assert result["symbol"] == "BTC"
+    assert result["asset_class"] == "crypto"
+    assert result["rows"] == []
+
+
+def test_bootstrap_preferences_clears_scope_instead_of_creating_defaults():
+    service = MacroDataService(AsyncMock())
+    service.preference_repository = SimpleNamespace(
+        replace_scope_configs=AsyncMock(return_value=[]),
+    )
+
+    async def fake_get_asset(_symbol):
+        return {"asset_class": "crypto"}
+
+    async def run():
+        from unittest.mock import patch
+
+        with patch("backend.services.macro_data_service.AssetCatalogService") as asset_catalog_cls:
+            asset_catalog_cls.return_value.get_asset = AsyncMock(side_effect=fake_get_asset)
+            return await service.bootstrap_preferences(7, symbol="BTC", scope="symbol")
+
+    result = asyncio.run(run())
+
+    service.preference_repository.replace_scope_configs.assert_awaited_once_with(
+        7,
+        [],
+        category="macro",
+        symbol="BTC",
+        asset_class="crypto",
+    )
+    assert result["rows"] == []

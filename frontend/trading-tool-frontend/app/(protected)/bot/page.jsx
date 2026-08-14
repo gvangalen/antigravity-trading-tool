@@ -2,7 +2,7 @@
 
 import { Suspense, useEffect, useRef, useState, useMemo } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Bot, ChevronDown, Plus, Sparkles, Wallet } from "lucide-react";
+import { ArrowRight, Bot, CheckCircle2, ChevronDown, Lock, Plus, Sparkles, Wallet } from "lucide-react";
 
 import useBotData from "@/hooks/useBotData";
 import { invalidateStrategyDataCaches, useStrategyData } from "@/hooks/useStrategyData";
@@ -26,8 +26,42 @@ import { trackAssistantEvent } from "@/lib/api/assistantAnalytics";
 import { useTranslation } from "@/app/providers/I18nProvider";
 import { useOnboarding } from "@/hooks/useOnboarding";
 import OnboardingBanner from "@/components/onboarding/OnboardingBanner";
-import OnboardingStepGuide from "@/components/onboarding/OnboardingStepGuide";
 import { openFinnContext } from "@/lib/finnCommandSearch";
+
+function SummaryRow({ label, value }) {
+  return (
+    <div className="flex items-center justify-between gap-4 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+      <span className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">{label}</span>
+      <span className="text-sm font-black text-slate-900">{value}</span>
+    </div>
+  );
+}
+
+function ProgressStep({ index, title, subtitle, active, complete, locked }) {
+  return (
+    <div className="rounded-2xl border border-slate-200 bg-white px-4 py-4">
+      <div className="flex items-start gap-3">
+        <div
+          className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl text-sm font-black ${
+            complete
+              ? "bg-emerald-100 text-emerald-700"
+              : active
+                ? "bg-blue-600 text-white"
+                : locked
+                  ? "bg-slate-100 text-slate-400"
+                  : "bg-blue-50 text-blue-700"
+          }`}
+        >
+          {complete ? <CheckCircle2 size={16} /> : index}
+        </div>
+        <div className="min-w-0">
+          <div className="text-base font-black tracking-tight text-slate-900">{title}</div>
+          <div className="mt-1 text-sm font-medium leading-relaxed text-slate-500">{subtitle}</div>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 function persistBotSelection(botId) {
   if (typeof window === "undefined" || !botId) return;
@@ -140,6 +174,7 @@ function BotPageInner() {
   const [assetFilter, setAssetFilter] = useState("all");
   const [currentTime, setCurrentTime] = useState(null);
   const [generatingBotId, setGeneratingBotId] = useState(null);
+  const [continuing, setContinuing] = useState(false);
   const copy = t?.botPage || {};
   const botGuideCopy = copy.onboardingGuide || {};
 
@@ -173,6 +208,7 @@ function BotPageInner() {
   const botStepComplete = Boolean(status?.has_bot || bots.length > 0);
   const onboardingGuidedMode = searchParams.get("onboarding") === "1";
   const showOnboardingGuide = onboardingGuidedMode || botNeedsBot;
+  const activeSymbol = String(searchParams.get("symbol") || status?.active_asset || "").toUpperCase();
 
   useEffect(() => {
     if (!status || status.has_asset) return;
@@ -624,6 +660,60 @@ function BotPageInner() {
     }
   };
 
+  const handleContinue = () => {
+    setContinuing(true);
+    router.push("/onboarding/complete");
+  };
+
+  const suggestedStrategy = useMemo(() => {
+    if (!activeSymbol) return strategies[0] || null;
+    return (
+      strategies.find((strategy) => String(strategy?.symbol || "").toUpperCase() === activeSymbol) ||
+      strategies[0] ||
+      null
+    );
+  }, [activeSymbol, strategies]);
+
+  const suggestedSetup = useMemo(() => {
+    if (suggestedStrategy?.setup) {
+      return suggestedStrategy.setup;
+    }
+    if (suggestedStrategy?.setup_id) {
+      return setups.find((setup) => setup.id === suggestedStrategy.setup_id) || null;
+    }
+    if (!activeSymbol) return null;
+    return setups.find((setup) => String(setup?.symbol || "").toUpperCase() === activeSymbol) || null;
+  }, [activeSymbol, setups, suggestedStrategy]);
+
+  const activeOnboardingBot = useMemo(() => {
+    if (!bots.length) return null;
+    if (activeSymbol) {
+      const exact = resolvedBots.find((bot) => String(bot?.symbol || bot?.strategy?.symbol || bot?.strategy?.setup?.symbol || "").toUpperCase() === activeSymbol);
+      if (exact) return exact;
+    }
+    return resolvedBots[0] || null;
+  }, [activeSymbol, bots.length, resolvedBots]);
+
+  const openOnboardingBotCreation = () => {
+    if (!suggestedStrategy) {
+      router.push(`/onboarding/plan?onboarding=1&step=setup${activeSymbol ? `&symbol=${encodeURIComponent(activeSymbol)}` : ""}`);
+      return;
+    }
+
+    handleAddBot({
+      symbol: activeSymbol || suggestedStrategy.symbol || "",
+      strategy_id: suggestedStrategy.id,
+      is_live: false,
+      mode: "manual",
+      risk_profile: "balanced",
+      budget_total_eur: 1000,
+    });
+  };
+
+  const handleBackToPlan = () => {
+    router.push(`/onboarding/plan?onboarding=1&step=setup${activeSymbol ? `&symbol=${encodeURIComponent(activeSymbol)}` : ""}`);
+  };
+
   return (
     <div className="page-container !max-w-none !px-6 bg-white dark:bg-[#020617] transition-colors h-auto overflow-visible">
       
@@ -644,15 +734,209 @@ function BotPageInner() {
       <OnboardingBanner step="bot" />
 
       {showOnboardingGuide ? (
-        <OnboardingStepGuide
-          copy={botGuideCopy}
-          anchorId="bot-create"
-          guidedMode={onboardingGuidedMode}
-          isComplete={botStepComplete}
-          nextHref="/onboarding/complete"
-        />
+        <div className="mb-10 space-y-6">
+          <section className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm">
+            <div className="mb-4 flex items-center justify-between gap-4">
+              <div>
+                <div className="text-[10px] font-black uppercase tracking-[0.25em] text-blue-600">
+                  {botGuideCopy.stepNumber || "Automation · 4 of 4"}
+                </div>
+                <h1 className="mt-3 text-3xl font-black tracking-tight text-slate-900">
+                  {botGuideCopy.title || "Link one bot to your strategy"}
+                </h1>
+              </div>
+              <button
+                type="button"
+                onClick={handleBackToPlan}
+                className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 px-4 py-2 text-[10px] font-black uppercase tracking-[0.18em] text-slate-600 transition hover:border-blue-200 hover:text-blue-700"
+              >
+                {botGuideCopy.backToPlanCta || "Review My Plan"}
+                <ArrowRight size={14} />
+              </button>
+            </div>
+
+            <div className="grid gap-3 md:grid-cols-4">
+              <SummaryRow label={botGuideCopy.assetLabel || "Asset"} value={activeSymbol || "—"} />
+              <SummaryRow
+                label={botGuideCopy.setupLabel || "Setup"}
+                value={suggestedSetup?.name || botGuideCopy.pendingLabel || "Pending"}
+              />
+              <SummaryRow
+                label={botGuideCopy.strategyLabel || "Strategy"}
+                value={suggestedStrategy?.name || botGuideCopy.pendingLabel || "Pending"}
+              />
+              <SummaryRow
+                label={botGuideCopy.botProgressLabel || "Bot status"}
+                value={botStepComplete ? botGuideCopy.savedLabel || "Saved" : botGuideCopy.pendingLabel || "Open"}
+              />
+            </div>
+          </section>
+
+          <section className="grid gap-3 md:grid-cols-3">
+            <ProgressStep
+              index="1"
+              title={botGuideCopy.createStepTitle || "1. Create bot"}
+              subtitle={botGuideCopy.createStepSubtitle || "Open bot creation and keep the first bot simple."}
+              active={!botStepComplete}
+              complete={Boolean(drawer?.type === "create-bot") || botStepComplete}
+              locked={false}
+            />
+            <ProgressStep
+              index="2"
+              title={botGuideCopy.linkStepTitle || "2. Link strategy"}
+              subtitle={botGuideCopy.linkStepSubtitle || "Use the strategy you just created for the same asset."}
+              active={Boolean(drawer?.type === "create-bot") && !botStepComplete}
+              complete={botStepComplete}
+              locked={!Boolean(drawer?.type === "create-bot") && !botStepComplete}
+            />
+            <ProgressStep
+              index="3"
+              title={botGuideCopy.reviewStepTitle || "3. Review"}
+              subtitle={botGuideCopy.reviewStepSubtitle || "Check mode and budget before you finish onboarding."}
+              active={botStepComplete}
+              complete={false}
+              locked={!botStepComplete}
+            />
+          </section>
+
+          {!botStepComplete ? (
+            <section className="rounded-[28px] border border-slate-200 bg-white p-5 shadow-sm">
+              <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-end">
+                <div className="flex flex-wrap gap-3">
+                  <button
+                    type="button"
+                    onClick={openOnboardingBotCreation}
+                    className="inline-flex items-center justify-center rounded-2xl bg-blue-600 px-5 py-3 text-[11px] font-black uppercase tracking-[0.18em] text-white shadow-lg shadow-blue-500/20 transition hover:bg-blue-700"
+                  >
+                    {botGuideCopy.primaryCta || "Open bot creation"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleBackToPlan}
+                    className="inline-flex items-center justify-center rounded-2xl border border-slate-200 px-5 py-3 text-[11px] font-black uppercase tracking-[0.18em] text-slate-600 transition hover:border-blue-200 hover:text-blue-700"
+                  >
+                    {botGuideCopy.secondaryReviewCta || "Back to My Plan"}
+                  </button>
+                </div>
+              </div>
+
+              <div className="mt-5 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-4 text-sm font-semibold text-amber-800">
+                <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.18em] text-amber-700">
+                  <Lock size={12} />
+                  {botGuideCopy.lockedLabel || "Finish with one saved bot"}
+                </div>
+                <p className="mt-2">
+                  {botGuideCopy.lockedBody || "Save one bot for this strategy to complete onboarding."}
+                </p>
+              </div>
+            </section>
+          ) : (
+            <section className="rounded-[28px] border border-emerald-200 bg-emerald-50 p-5 shadow-sm">
+              <div className="flex flex-col gap-5 md:flex-row md:items-center md:justify-between">
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.18em] text-emerald-700">
+                    <CheckCircle2 size={14} />
+                    {botGuideCopy.completedEyebrow || "Automation ready"}
+                  </div>
+                  <h2 className="mt-2 text-2xl font-black tracking-tight text-slate-900">
+                    {botGuideCopy.completedTitle || "Your first execution flow is ready"}
+                  </h2>
+                  <p className="mt-2 text-sm font-semibold leading-relaxed text-slate-600">
+                    {botGuideCopy.completedBody || "You now have profile, analysis, plan and one bot linked together. Continue when you are ready."}
+                  </p>
+                </div>
+              </div>
+
+              <div className="mt-5 grid gap-3 md:grid-cols-3">
+                <SummaryRow label={botGuideCopy.assetLabel || "Asset"} value={activeSymbol || "—"} />
+                <SummaryRow
+                  label={botGuideCopy.strategyLabel || "Strategy"}
+                  value={activeOnboardingBot?.strategy?.name || suggestedStrategy?.name || "—"}
+                />
+                <SummaryRow
+                  label={botGuideCopy.botLabel || "Bot"}
+                  value={activeOnboardingBot?.name || "—"}
+                />
+              </div>
+
+              <div className="mt-5 grid gap-3 md:grid-cols-3">
+                <div className="rounded-2xl border border-white/80 bg-white px-4 py-4">
+                  <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.18em] text-emerald-700">
+                    <CheckCircle2 size={12} />
+                    {botGuideCopy.reviewModeEyebrow || "Execution mode"}
+                  </div>
+                  <div className="mt-2 text-sm font-black text-slate-900">
+                    {activeOnboardingBot?.is_live ? copy.modeLive : copy.modePaper}
+                  </div>
+                  <p className="mt-1 text-xs font-semibold leading-relaxed text-slate-500">
+                    {botGuideCopy.reviewModeBody || "For onboarding, paper mode is usually the safest starting point."}
+                  </p>
+                </div>
+
+                <div className="rounded-2xl border border-white/80 bg-white px-4 py-4">
+                  <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.18em] text-emerald-700">
+                    <CheckCircle2 size={12} />
+                    {botGuideCopy.reviewBudgetEyebrow || "Budget check"}
+                  </div>
+                  <div className="mt-2 text-sm font-black text-slate-900">
+                    {Number(activeOnboardingBot?.budget_total_eur || activeOnboardingBot?.budget?.total_eur || 0) > 0
+                      ? `EUR ${Number(activeOnboardingBot?.budget_total_eur || activeOnboardingBot?.budget?.total_eur || 0).toLocaleString()}`
+                      : (botGuideCopy.reviewBudgetFallback || "No starter budget set")}
+                  </div>
+                  <p className="mt-1 text-xs font-semibold leading-relaxed text-slate-500">
+                    {botGuideCopy.reviewBudgetBody || "Optional now, but worth checking before you move on to live automation."}
+                  </p>
+                </div>
+
+                <div className="rounded-2xl border border-white/80 bg-white px-4 py-4">
+                  <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.18em] text-emerald-700">
+                    <CheckCircle2 size={12} />
+                    {botGuideCopy.reviewStatusEyebrow || "Review status"}
+                  </div>
+                  <div className="mt-2 text-sm font-black text-slate-900">
+                    {botGuideCopy.reviewStatusTitle || "Ready to finish onboarding"}
+                  </div>
+                  <p className="mt-1 text-xs font-semibold leading-relaxed text-slate-500">
+                    {botGuideCopy.reviewStatusBody || "You can still refine this bot now, or continue and return later from Automation."}
+                  </p>
+                </div>
+              </div>
+
+              <div className="mt-5 flex flex-wrap gap-3">
+                {activeOnboardingBot ? (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => handleOpenBotSettings("general", activeOnboardingBot)}
+                      className="inline-flex items-center justify-center rounded-2xl border border-slate-200 bg-white px-5 py-3 text-[11px] font-black uppercase tracking-[0.18em] text-slate-700 transition hover:border-blue-200 hover:text-blue-700"
+                    >
+                      {botGuideCopy.reviewEditBotCta || "Review bot settings"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleOpenBotSettings("portfolio", activeOnboardingBot)}
+                      className="inline-flex items-center justify-center rounded-2xl border border-slate-200 bg-white px-5 py-3 text-[11px] font-black uppercase tracking-[0.18em] text-slate-700 transition hover:border-blue-200 hover:text-blue-700"
+                    >
+                      {botGuideCopy.reviewBudgetCta || "Review budget"}
+                    </button>
+                  </>
+                ) : null}
+
+                <button
+                  type="button"
+                  onClick={handleContinue}
+                  disabled={continuing}
+                  className="inline-flex items-center justify-center rounded-2xl bg-blue-600 px-5 py-3 text-[11px] font-black uppercase tracking-[0.18em] text-white shadow-lg shadow-blue-500/20 transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {continuing ? botGuideCopy.continuingLabel || "Opening finish…" : botGuideCopy.nextCta || "Finish onboarding"}
+                </button>
+              </div>
+            </section>
+          )}
+        </div>
       ) : null}
 
+      {!showOnboardingGuide ? (
       <div className="max-w-full flex flex-col lg:flex-row gap-8 pb-24 items-start relative">
         
         {/* 🕋 LEFT: MAIN COMMAND CENTER */}
@@ -872,6 +1156,7 @@ function BotPageInner() {
         )}
 
       </div>
+      ) : null}
 
       <Drawer
         isOpen={drawer?.type === "create-bot" || drawer?.type === "edit-bot"}
@@ -900,6 +1185,8 @@ function BotPageInner() {
           strategies={strategies}
           initialData={drawer?.type === "edit-bot" ? drawer?.bot : null}
           initialValues={drawer?.type === "create-bot" ? drawer?.initialValues : null}
+          guidedMode={showOnboardingGuide && drawer?.type === "create-bot"}
+          guidedSymbol={activeSymbol}
           hideActions={false}
           submitLabel={
             drawer?.type === "edit-bot"

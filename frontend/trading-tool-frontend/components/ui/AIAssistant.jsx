@@ -29,6 +29,7 @@ import { normalizeTraderProfilePreferences } from "@/lib/traderProfileOptions";
 import { useTranslation } from "@/app/providers/I18nProvider";
 import FinnCommandCenter from "@/components/finn/FinnCommandCenter";
 import { FINN_ASSETS } from "@/lib/finnCommandSearch";
+import { getWorkspaceSnapshot, subscribeWorkspaceSnapshot } from "@/lib/workspaceSnapshotStore";
 
 const INDICATOR_MODAL_OPEN_EVENT = "finn-indicator-config:open";
 const INDICATOR_MODAL_COMPLETED_EVENT = "finn-indicator-config:completed";
@@ -442,6 +443,7 @@ function AIAssistantContent({
   const [insight, setInsight] = useState(null);
   const [insightLoading, setInsightLoading] = useState(false);
   const [stableBriefingText, setStableBriefingText] = useState("");
+  const [workspaceSnapshot, setWorkspaceSnapshot] = useState(null);
   const [lastUpdated, setLastUpdated] = useState(null);
   const [activeState, setActiveState] = useState(null);
   const [contextMetric, setContextMetric] = useState(null);
@@ -842,6 +844,45 @@ function AIAssistantContent({
     const beginLine = at("briefing.begin.prefix", "", { target: beginTarget });
 
     return [greetingLine, marketLine, reviewLine, beginLine].filter(Boolean).join("\n");
+  };
+
+  const buildSnapshotBriefingText = (snapshot) => {
+    const greetingName = preferences?.first_name || "Gerrit";
+    const symbol = String(
+      snapshot?.symbol ||
+      snapshot?.asset?.symbol ||
+      context?.symbol ||
+      globalSymbol ||
+      "BTC"
+    ).trim().toUpperCase();
+    const nowHour = new Date().getHours();
+    const greetingKey = nowHour < 12 ? "morning" : nowHour < 18 ? "afternoon" : "evening";
+    const greetingLine = `${at(`briefing.greeting.${greetingKey}`, "", { name: greetingName })} ${greetingName}.`;
+    const finnSnapshot = snapshot?.finn || {};
+    const freshness = finnSnapshot?.freshness || {};
+    const headline = String(finnSnapshot?.headline || finnSnapshot?.summary || "").trim();
+    const riskSummary = String(finnSnapshot?.risk_summary || "").trim();
+    const asOfLine = freshness?.as_of
+      ? `Laatste analyse van ${new Date(freshness.as_of).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}.`
+      : "Laatste analyse uit je opgeslagen snapshot.";
+
+    if (headline) {
+      return [
+        greetingLine,
+        headline,
+        riskSummary || asOfLine,
+        freshness?.stale ? "Nieuwe marktgegevens worden op de achtergrond verwerkt." : asOfLine,
+      ]
+        .filter(Boolean)
+        .join("\n");
+    }
+
+    return [
+      greetingLine,
+      at("briefing.market.default", "", { symbol }),
+      "Laatste analyse nog niet beschikbaar.",
+      "Nieuwe marktgegevens worden verwerkt.",
+    ].join("\n");
   };
 
   // Helper to get nested insight consistently
@@ -3853,7 +3894,9 @@ function AIAssistantContent({
 
   useEffect(() => {
     if (isOpen) {
-      loadMissionControl();
+      if (!previewSectionsOnly) {
+        loadMissionControl();
+      }
       if (isAssetAnalysisPage) {
         loadInsight();
       }
@@ -5479,6 +5522,21 @@ function AIAssistantContent({
   ]);
 
   useEffect(() => {
+    if (!previewSectionsOnly) return;
+    const symbol = String(context?.symbol || globalSymbol || "BTC").trim().toUpperCase();
+    setWorkspaceSnapshot(getWorkspaceSnapshot(symbol));
+    return subscribeWorkspaceSnapshot((nextSymbol, snapshot) => {
+      if (nextSymbol !== symbol) return;
+      setWorkspaceSnapshot(snapshot);
+    });
+  }, [previewSectionsOnly, context?.symbol, globalSymbol]);
+
+  useEffect(() => {
+    if (!previewSectionsOnly || !isOpen || isOnboarding) return;
+    setStableBriefingText(buildSnapshotBriefingText(workspaceSnapshot));
+  }, [previewSectionsOnly, isOpen, isOnboarding, workspaceSnapshot, preferences?.first_name, context.symbol, globalSymbol]);
+
+  useEffect(() => {
     if (typeof window === "undefined") return;
     try {
       const raw = window.sessionStorage.getItem(FINN_RECENT_CONVERSATIONS_STORAGE_KEY);
@@ -5949,7 +6007,7 @@ function AIAssistantContent({
                   <p className="whitespace-pre-line text-xs font-semibold text-slate-800 dark:text-slate-200 leading-relaxed italic border-l-3 border-blue-500 pl-3 py-0.5">
                     {resolvedBriefingText}
                   </p>
-                ) : insightLoading ? (
+                ) : insightLoading && !previewSectionsOnly ? (
                   <div className="border-l-3 border-blue-500 pl-3 py-1 space-y-2 animate-pulse">
                     <div className="h-3 w-11/12 rounded-full bg-slate-200 dark:bg-slate-800" />
                     <div className="h-3 w-8/12 rounded-full bg-slate-200 dark:bg-slate-800" />

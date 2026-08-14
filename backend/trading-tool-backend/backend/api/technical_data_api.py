@@ -17,6 +17,7 @@ from backend.schemas.technical_data_schema import (
 )
 from backend.services.technical_data_service import TechnicalDataService
 from backend.infrastructure.repositories.technical_data_repository import TechnicalDataRepository
+from backend.services.asset_catalog_service import AssetCatalogService
 
 logger = logging.getLogger(__name__)
 
@@ -352,12 +353,13 @@ async def put_technical_preferences(
 @router.post("/technical/preferences/sync")
 async def sync_technical_preferences_for_symbol(
     symbol: str = Query(...),
+    reset_existing: bool = Query(False),
     current_user: dict = Depends(get_current_user),
     session: AsyncSession = Depends(get_db),
 ):
     user_id = current_user["id"]
     service = TechnicalDataService(session)
-    result = await service.sync_effective_indicators(user_id, symbol)
+    result = await service.sync_effective_indicators(user_id, symbol, reset_existing=reset_existing)
     await session.commit()
     return result
 

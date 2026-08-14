@@ -73,15 +73,6 @@ def sync_get_scores_for_symbol(user_id: int, symbol: str = "BTC") -> Dict[str, A
 
 
 class MarketDataService:
-    RECOMMENDED_ASSET_CLASS_PRESETS: dict[str, list[str]] = {
-        "crypto": ["change_24h", "volume"],
-        "stock": ["change_24h", "volume"],
-        "etf": ["change_24h", "volume"],
-        "index": ["change_24h", "volume"],
-        "forex": ["change_24h"],
-        "commodity": ["change_24h", "volume"],
-    }
-
     def __init__(self, db_session: AsyncSession):
         self.session = db_session
         self.repository = MarketDataRepository(db_session)
@@ -304,12 +295,11 @@ class MarketDataService:
                     "rows": class_rows,
                 }
 
-        default_rows = await self.preference_repository.list_scope_configs(user_id, category="market")
         return {
-            "scope": "default",
+            "scope": "empty",
             "symbol": normalized_symbol,
             "asset_class": normalized_asset_class,
-            "rows": default_rows,
+            "rows": [],
         }
 
     async def _build_scope_items(self, indicator_names: List[str]) -> List[tuple[str, int]]:
@@ -347,27 +337,20 @@ class MarketDataService:
                 raise ValueError("Een symbool is verplicht voor scope 'symbol'.")
             target_symbol = normalized_symbol
             target_asset_class = normalized_asset_class
-            preset_key = normalized_asset_class
         elif normalized_scope == "asset_class":
             if not normalized_asset_class:
                 raise ValueError("Een asset_class of herleidbaar symbool is verplicht voor scope 'asset_class'.")
             target_symbol = None
             target_asset_class = normalized_asset_class
-            preset_key = normalized_asset_class
         elif normalized_scope == "default":
             target_symbol = None
             target_asset_class = None
-            preset_key = "default"
         else:
             raise ValueError("Scope moet 'default', 'asset_class' of 'symbol' zijn.")
 
-        indicator_names = ["change_24h", "volume"] if preset_key == "default" else list(
-            self.RECOMMENDED_ASSET_CLASS_PRESETS.get(str(preset_key or "").lower(), ["change_24h", "volume"])
-        )
-        normalized_items = await self._build_scope_items(indicator_names)
         rows = await self.preference_repository.replace_scope_configs(
             user_id,
-            normalized_items,
+            [],
             category="market",
             symbol=target_symbol,
             asset_class=target_asset_class,
@@ -379,7 +362,22 @@ class MarketDataService:
             "rows": rows,
         }
 
-    async def sync_effective_indicators(self, user_id: int, symbol: str) -> Dict[str, Any]:
+    async def _reset_symbol_indicator_rows(self, user_id: int, symbol: str) -> None:
+        normalized_symbol = str(symbol or "BTC").strip().upper()
+        existing_rows = await self.repository.get_active_day_indicators(user_id, normalized_symbol)
+        for row in existing_rows:
+            indicator_name = str(getattr(row, "name", "") or "").strip()
+            if not indicator_name:
+                continue
+            await self.repository.delete_user_market_indicator(indicator_name, user_id, normalized_symbol)
+
+    async def sync_effective_indicators(
+        self,
+        user_id: int,
+        symbol: str,
+        *,
+        reset_existing: bool = False,
+    ) -> Dict[str, Any]:
         normalized_symbol = str(symbol or "BTC").strip().upper()
         resolved = await self.resolve_effective_preferences(user_id, symbol=normalized_symbol)
         indicator_names = [normalize_indicator_name(row.indicator) for row in resolved["rows"]]
@@ -391,6 +389,8 @@ class MarketDataService:
             "synced": [],
             "failed": [],
         }
+        if reset_existing:
+            await self._reset_symbol_indicator_rows(user_id, normalized_symbol)
         for indicator_name in indicator_names:
             try:
                 payload = await self.add_user_market_indicator(

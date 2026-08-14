@@ -91,25 +91,12 @@ export default function OnboardingStepGuide({
             </div>
           ) : null}
 
-          {Array.isArray(copy.examples) && copy.examples.length > 0 ? (
-            <div className="mt-4 flex flex-wrap gap-3">
-              {copy.examples.map((example) => (
-                <span
-                  key={example}
-                  className="rounded-full border border-blue-200 bg-white px-3 py-1.5 text-[11px] font-bold text-blue-700"
-                >
-                  {example}
-                </span>
-              ))}
-            </div>
-          ) : null}
-
           {Array.isArray(copy.steps) && copy.steps.length > 0 ? (
             <ol className="mt-5 space-y-2 text-sm font-medium text-slate-600">
-              {copy.steps.map((guideStep) => (
+              {copy.steps.slice(0, 3).map((guideStep, index) => (
                 <li key={guideStep} className="flex items-start gap-3">
                   <span className="mt-0.5 inline-flex h-5 w-5 flex-none items-center justify-center rounded-full bg-blue-600 text-[10px] font-black text-white">
-                    •
+                    {index + 1}
                   </span>
                   <span>{guideStep}</span>
                 </li>
@@ -155,6 +142,16 @@ export default function OnboardingStepGuide({
         </div>
 
         <div className="flex flex-col gap-3 lg:min-w-[220px]">
+          {!showCompletedState ? (
+            <div className="rounded-2xl border border-blue-200 bg-white px-4 py-3 text-sm font-semibold leading-relaxed text-slate-700 shadow-sm">
+              <div className="text-[10px] font-black uppercase tracking-[0.2em] text-blue-600">
+                {copy.actionLabel || "Best next action"}
+              </div>
+              <p className="mt-2">
+                {copy.primaryActionHint || copy.primaryCta}
+              </p>
+            </div>
+          ) : null}
           {showCompletedState && nextHref ? (
             <Link
               href={nextHref}

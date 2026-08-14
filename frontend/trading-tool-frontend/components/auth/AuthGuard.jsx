@@ -15,7 +15,7 @@ export default function AuthGuard({ children }) {
   const router = useRouter();
   const pathname = usePathname();
   const [checkingOnboarding, setCheckingOnboarding] = useState(true);
-  const [onboardingComplete, setOnboardingComplete] = useState(false);
+  const [redirectingToOnboarding, setRedirectingToOnboarding] = useState(false);
   const onboardingCheckInFlight = useRef(false);
 
   // Routes that don't need auth
@@ -31,18 +31,13 @@ export default function AuthGuard({ children }) {
       setCheckingOnboarding(false);
       return;
     }
-    if (onboardingComplete && !pathname.startsWith("/onboarding")) {
-      setCheckingOnboarding(false);
-      return;
-    }
 
     onboardingCheckInFlight.current = true;
     setCheckingOnboarding(true);
     try {
       const status = await getOnboardingStatus();
       
-      // ✅ Use explicit master flag from backend if available, fallback to manual check
-      const isComplete = status?.onboarding_complete ?? (
+      const isComplete = status?.onboarding_complete ?? status?.phases_completed?.complete ?? (
         status?.has_profile &&
         status?.has_asset &&
         status?.has_market &&
@@ -53,22 +48,32 @@ export default function AuthGuard({ children }) {
         status?.has_bot
       );
 
-      debug("🧭 AuthGuard Onboarding Sync:", { isComplete, pathname });
-      setOnboardingComplete(isComplete);
+      const nextRoute = status?.next_route || "/onboarding/profile";
+      const nextUrl = new URL(nextRoute, window.location.origin);
+      const nextPathname = nextUrl.pathname;
+      const currentParams = new URLSearchParams(window.location.search);
+      currentParams.sort();
+      const currentRoute = `${pathname}${currentParams.toString() ? `?${currentParams.toString()}` : ""}`;
+      const nextParams = new URLSearchParams(nextUrl.search);
+      nextParams.sort();
+      const normalizedNextRoute = `${nextPathname}${nextParams.toString() ? `?${nextParams.toString()}` : ""}`;
+      const sameRoute = currentRoute === normalizedNextRoute;
 
-      // Redirect logic
-      if (!isComplete && 
-          !pathname.startsWith("/onboarding") && 
-          !pathname.startsWith("/asset") &&
-          !pathname.startsWith("/setup") && 
-          !pathname.startsWith("/technical") && 
-          !pathname.startsWith("/macro") && 
-          !pathname.startsWith("/market") && 
-          !pathname.startsWith("/strategy") &&
-          !pathname.startsWith("/bot")) {
-        debug("🚧 AuthGuard: Onboarding niet compleet -> naar /onboarding");
-        router.push("/onboarding");
+      debug("🧭 AuthGuard Onboarding Sync:", {
+        isComplete,
+        pathname,
+        nextRoute,
+        sameRoute,
+      });
+
+      if (!isComplete && !pathname.startsWith("/onboarding") && !sameRoute) {
+        debug("🚧 AuthGuard: Onboarding niet compleet -> naar next_route", nextRoute);
+        setRedirectingToOnboarding(true);
+        router.replace(nextRoute);
+        return;
       }
+
+      setRedirectingToOnboarding(false);
 
     } catch (err) {
       console.error("💥 AuthGuard: Onboarding check gefaald", err);
@@ -76,7 +81,7 @@ export default function AuthGuard({ children }) {
       onboardingCheckInFlight.current = false;
       setCheckingOnboarding(false);
     }
-  }, [user, isPublicRoute, onboardingComplete, pathname, router]);
+  }, [user, isPublicRoute, pathname, router]);
 
   useEffect(() => {
     debug("🛡️ AuthGuard check:", { user: !!user, loading, sessionChecked, pathname });
@@ -89,11 +94,7 @@ export default function AuthGuard({ children }) {
     }
 
     if (user && !isPublicRoute) {
-      if (!onboardingComplete) {
-        checkOnboardingStatus();
-      } else {
-        setCheckingOnboarding(false);
-      }
+      checkOnboardingStatus();
     } else {
       setCheckingOnboarding(false);
     }
@@ -103,7 +104,6 @@ export default function AuthGuard({ children }) {
     sessionChecked,
     pathname,
     isPublicRoute,
-    onboardingComplete,
     router,
     checkOnboardingStatus,
   ]);
@@ -111,6 +111,14 @@ export default function AuthGuard({ children }) {
   // Show nothing while loading session ONLY for protected routes
   if ((loading || !sessionChecked) && !isPublicRoute) {
     debug("🛡️ AuthGuard showing loading spinner...", { loading, sessionChecked, isPublicRoute });
+    return (
+      <div className="min-h-screen bg-[#020617] flex items-center justify-center">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+      </div>
+    );
+  }
+
+  if ((!isPublicRoute && checkingOnboarding) || redirectingToOnboarding) {
     return (
       <div className="min-h-screen bg-[#020617] flex items-center justify-center">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>

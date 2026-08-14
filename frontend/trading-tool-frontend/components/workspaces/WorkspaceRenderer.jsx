@@ -53,8 +53,10 @@ export default function WorkspaceRenderer({ tab = "market", canonicalizeLegacy =
       router.replace(`/asset?${params.toString()}`, { scroll: false });
       return;
     }
+  }, [resolvedSymbol, selectedAsset, setSelectedAsset]);
 
-    if (!canonicalizeLegacy) return;
+  useEffect(() => {
+    if (!canonicalizeLegacy || pathname === "/asset") return;
 
     const params = new URLSearchParams(queryString);
     params.set("symbol", resolvedSymbol);

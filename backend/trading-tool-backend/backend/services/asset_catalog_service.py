@@ -10,6 +10,26 @@ from backend.infrastructure.repositories.asset_catalog_repository import AssetCa
 logger = logging.getLogger(__name__)
 
 
+def _search_score(asset: dict[str, Any], query: str) -> tuple[int, str]:
+    symbol = str(asset.get("symbol") or "").upper()
+    display_name = str(asset.get("display_name") or "")
+    normalized_query = str(query or "").strip().upper()
+    query_lower = normalized_query.lower()
+    display_lower = display_name.lower()
+
+    if symbol == normalized_query:
+        return (0, symbol)
+    if symbol.startswith(normalized_query):
+        return (1, symbol)
+    if display_lower.startswith(query_lower):
+        return (2, symbol)
+    if normalized_query in symbol:
+        return (3, symbol)
+    if query_lower in display_lower:
+        return (4, symbol)
+    return (5, symbol)
+
+
 def _default_logo_url(symbol: str, asset_class: str) -> str | None:
     normalized = str(symbol or "").strip().upper()
     if not normalized:
@@ -515,6 +535,52 @@ class AssetCatalogService:
     async def get_asset(self, symbol: str) -> dict[str, Any]:
         assets = await self.get_assets([symbol])
         return assets.get(str(symbol or "").strip().upper(), self._fallback_asset(symbol))
+
+    async def search_assets(
+        self,
+        query: str,
+        asset_classes: list[str] | None = None,
+        limit: int = 12,
+    ) -> list[dict[str, Any]]:
+        normalized_query = str(query or "").strip()
+        if not normalized_query:
+            return []
+
+        normalized_classes = [
+            str(asset_class or "").strip().lower()
+            for asset_class in (asset_classes or [])
+            if str(asset_class or "").strip()
+        ]
+
+        try:
+            db_rows = await self.repository.search_assets(normalized_query, normalized_classes, limit)
+        except Exception as exc:
+            try:
+                await self.session.rollback()
+            except Exception:
+                logger.debug("Asset catalog rollback after search failure also failed", exc_info=True)
+            logger.warning("Asset catalog search failed; falling back to defaults: %s", exc)
+            db_rows = []
+
+        merged: dict[str, dict[str, Any]] = {}
+        for row in db_rows:
+            symbol = str(row.get("symbol") or "").strip().upper()
+            if not symbol:
+                continue
+            merged[symbol] = (await self.get_assets([symbol])).get(symbol, self._fallback_asset(symbol))
+
+        query_lower = normalized_query.lower()
+        for symbol, asset in DEFAULT_ASSET_CATALOG.items():
+            asset_class = str(asset.get("asset_class") or "").strip().lower()
+            if normalized_classes and asset_class not in normalized_classes:
+                continue
+            display_name = str(asset.get("display_name") or "")
+            if query_lower not in symbol.lower() and query_lower not in display_name.lower():
+                continue
+            merged.setdefault(symbol, asset)
+
+        ranked = sorted(merged.values(), key=lambda asset: _search_score(asset, normalized_query))
+        return ranked[:limit]
 
     def _fallback_asset(self, symbol: str) -> dict[str, Any]:
         normalized = str(symbol or "").strip().upper()

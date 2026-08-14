@@ -9,23 +9,25 @@ import { API_BASE_URL } from "@/lib/config";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { useModal } from "@/components/modal/ModalProvider";
 import { useTranslation } from "@/app/providers/I18nProvider";
-import { getOnboardingStatus } from "@/lib/api/onboarding";
+import { clearOnboardingStatusCache, getOnboardingStatus } from "@/lib/api/onboarding";
 
 async function resolvePostRegisterDestination() {
   try {
     const status = await getOnboardingStatus();
-    const isComplete = status?.onboarding_complete ?? (
+    const isComplete = status?.onboarding_complete ?? status?.phases_completed?.complete ?? (
       status?.has_profile &&
-      status?.has_setup &&
-      status?.has_technical &&
-      status?.has_macro &&
+      status?.has_asset &&
       status?.has_market &&
-      status?.has_strategy
+      status?.has_macro &&
+      status?.has_technical &&
+      status?.has_setup &&
+      status?.has_strategy &&
+      status?.has_bot
     );
-    return isComplete ? "/asset" : "/onboarding";
+    return isComplete ? "/asset" : status?.next_route || "/onboarding/profile";
   } catch (error) {
     console.warn("⚠️ Could not resolve onboarding status after register:", error);
-    return "/onboarding";
+    return "/onboarding/profile";
   }
 }
 
@@ -104,6 +106,7 @@ export default function RegisterPage() {
         return;
       }
 
+      clearOnboardingStatusCache();
       const destination = await resolvePostRegisterDestination();
       router.replace(destination);
     } catch (err) {

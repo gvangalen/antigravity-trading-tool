@@ -13,8 +13,10 @@ from backend.schemas.market_data_schema import (
 from backend.schemas.technical_data_schema import (
     TechnicalIndicatorPreferenceItem,
     TechnicalIndicatorPreferenceResponse,
+    TechnicalIndicatorPreferenceUpdate,
 )
 from backend.utils.auth_utils import get_current_user
+from backend.services.asset_catalog_service import AssetCatalogService
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -222,15 +224,67 @@ async def bootstrap_market_preferences(
     )
 
 
-@router.post("/market/preferences/sync")
-async def sync_market_preferences_for_symbol(
-    symbol: str = Query(...),
+@router.put("/market/preferences", response_model=TechnicalIndicatorPreferenceResponse)
+async def put_market_preferences(
+    payload: TechnicalIndicatorPreferenceUpdate,
     current_user: dict = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     user_id = current_user["id"]
     service = MarketDataService(db)
-    result = await service.sync_effective_indicators(user_id, symbol)
+
+    normalized_symbol = str(payload.symbol or "").strip().upper() or None
+    asset_class = str(payload.asset_class or "").strip().lower() or None
+    if normalized_symbol and not asset_class:
+        asset = await AssetCatalogService(db).get_asset(normalized_symbol)
+        asset_class = asset.get("asset_class")
+
+    normalized_items = []
+    for item in payload.indicators:
+        indicator = str(item.indicator or "").strip().lower()
+        if not indicator:
+            continue
+        normalized_items.append((indicator, int(item.priority or 100)))
+
+    await service.preference_repository.replace_scope_configs(
+        user_id,
+        normalized_items,
+        category="market",
+        symbol=normalized_symbol,
+        asset_class=asset_class,
+    )
+    await db.commit()
+
+    rows = await service.preference_repository.list_scope_configs(
+        user_id,
+        category="market",
+        symbol=normalized_symbol,
+        asset_class=asset_class,
+    )
+    return TechnicalIndicatorPreferenceResponse(
+        scope="symbol_override" if normalized_symbol else ("asset_class_override" if asset_class else "default"),
+        symbol=normalized_symbol,
+        asset_class=asset_class,
+        indicators=[
+            TechnicalIndicatorPreferenceItem(
+                indicator=row.indicator,
+                priority=int(row.priority or 100),
+            )
+            for row in rows
+        ],
+    )
+
+
+@router.post("/market/preferences/sync")
+async def sync_market_preferences_for_symbol(
+    symbol: str = Query(...),
+    reset_existing: bool = Query(False),
+    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    user_id = current_user["id"]
+    service = MarketDataService(db)
+    result = await service.sync_effective_indicators(user_id, symbol, reset_existing=reset_existing)
     await db.commit()
     return result
 

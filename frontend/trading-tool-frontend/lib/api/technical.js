@@ -151,7 +151,7 @@ export const bootstrapTechnicalPreferences = async ({
     }
   );
 
-export const syncTechnicalPreferences = async (symbol) =>
-  await fetchAuth(`/api/technical/preferences/sync?symbol=${encodeURIComponent(String(symbol || "BTC").toUpperCase())}`, {
+export const syncTechnicalPreferences = async (symbol, { resetExisting = false } = {}) =>
+  await fetchAuth(`/api/technical/preferences/sync?symbol=${encodeURIComponent(String(symbol || "BTC").toUpperCase())}&reset_existing=${resetExisting ? "true" : "false"}`, {
     method: "POST",
   });

@@ -42,6 +42,8 @@ REQUIRED_COMPLETION_STEPS: List[str] = [
     "bot",
 ]
 
+PHASE_ORDER: List[str] = ["profile", "analysis", "plan", "automation", "complete"]
+
 class OnboardingService:
     def __init__(self, repository: OnboardingRepository):
         self.repository = repository
@@ -61,6 +63,23 @@ class OnboardingService:
         steps = await self.repository.get_user_steps(user_id, DEFAULT_FLOW)
         completed = {s.step_key: s.completed for s in steps}
         inferred_completed = await self.repository.infer_completed_steps(user_id)
+        inferred_state_getter = getattr(self.repository, "infer_onboarding_state", None)
+        inferred_state = (
+            await inferred_state_getter(user_id)
+            if callable(inferred_state_getter)
+            else {
+                "active_asset": None,
+                "has_profile": inferred_completed.get("profile", False),
+                "has_asset": inferred_completed.get("asset", False),
+                "has_market": inferred_completed.get("market", False),
+                "has_macro": inferred_completed.get("macro", False),
+                "has_technical": inferred_completed.get("technical", False),
+                "has_setup": inferred_completed.get("setup", False),
+                "has_strategy": inferred_completed.get("strategy", False),
+                "has_bot": inferred_completed.get("bot", False),
+                "has_exchange": inferred_completed.get("bot", False),
+            }
+        )
         missing_completed_steps = [
             step_key
             for step_key, is_completed in inferred_completed.items()
@@ -81,14 +100,33 @@ class OnboardingService:
             STEP_FLAG_MAP[s]: completed.get(s, False)
             for s in DEFAULT_STEPS
         }
-        status_kwargs["onboarding_complete"] = all(
-            completed.get(step_key, False) for step_key in REQUIRED_COMPLETION_STEPS
+        phases_completed = self._build_phase_completion_map(status_kwargs, inferred_state)
+        phases_unlocked = self._build_phase_unlock_map(phases_completed)
+        phase_missing = self._build_phase_missing_map(status_kwargs, inferred_state)
+        current_phase = self._resolve_current_phase(phases_completed)
+        next_action = self._resolve_next_action(status_kwargs, inferred_state, current_phase)
+        next_route = self._resolve_next_route(
+            status_kwargs,
+            inferred_state,
+            current_phase,
+            next_action,
         )
+
+        status_kwargs["onboarding_complete"] = phases_completed["complete"]
         status_kwargs["pipeline_started"] = pipeline_started
+        status_kwargs["active_asset"] = inferred_state.get("active_asset")
+        status_kwargs["current_phase"] = current_phase
+        status_kwargs["next_action"] = next_action
+        status_kwargs["next_route"] = next_route
+        status_kwargs["phases_completed"] = phases_completed
+        status_kwargs["phases_unlocked"] = phases_unlocked
+        status_kwargs["phase_missing"] = phase_missing
 
         logger.info(
             f"[Onboarding] Status user_id={user_id} "
-            f"completed={completed} pipeline_started={pipeline_started}"
+            f"completed={completed} phases={phases_completed} "
+            f"current_phase={current_phase} next_action={next_action} "
+            f"pipeline_started={pipeline_started}"
         )
 
         return OnboardingStatusResponse(**status_kwargs)
@@ -157,6 +195,126 @@ class OnboardingService:
         await self.repository.reset_flow(user_id, DEFAULT_FLOW)
         logger.info(f"[Onboarding] Reset uitgevoerd voor user_id={user_id}")
         return await self.get_status_dict(user_id)
+
+    def _build_phase_completion_map(self, status_kwargs: Dict[str, bool], inferred_state: Dict[str, object]) -> Dict[str, bool]:
+        profile_complete = bool(status_kwargs.get("has_profile"))
+        analysis_complete = all(
+            bool(status_kwargs.get(key))
+            for key in ["has_asset", "has_market", "has_macro", "has_technical"]
+        )
+        plan_complete = bool(status_kwargs.get("has_setup")) and bool(status_kwargs.get("has_strategy"))
+        # V1 onboarding finishes after one saved bot. Exchange connection can be added later.
+        automation_complete = bool(status_kwargs.get("has_bot"))
+        return {
+            "profile": profile_complete,
+            "analysis": analysis_complete,
+            "plan": plan_complete,
+            "automation": automation_complete,
+            "complete": profile_complete and analysis_complete and plan_complete and automation_complete,
+        }
+
+    def _build_phase_unlock_map(self, phases_completed: Dict[str, bool]) -> Dict[str, bool]:
+        return {
+            "profile": True,
+            "analysis": phases_completed.get("profile", False),
+            "plan": phases_completed.get("analysis", False),
+            "automation": phases_completed.get("plan", False),
+            "complete": phases_completed.get("automation", False),
+        }
+
+    def _build_phase_missing_map(self, status_kwargs: Dict[str, bool], inferred_state: Dict[str, object]) -> Dict[str, List[str]]:
+        return {
+            "profile": [
+                "profile_preferences"
+            ] if not status_kwargs.get("has_profile") else [],
+            "analysis": [
+                token
+                for token, done in [
+                    ("asset", status_kwargs.get("has_asset")),
+                    ("market_indicator", status_kwargs.get("has_market")),
+                    ("macro_indicator", status_kwargs.get("has_macro")),
+                    ("technical_indicator", status_kwargs.get("has_technical")),
+                ]
+                if not done
+            ],
+            "plan": [
+                token
+                for token, done in [
+                    ("setup", status_kwargs.get("has_setup")),
+                    ("strategy", status_kwargs.get("has_strategy")),
+                ]
+                if not done
+            ],
+            "automation": [
+                token
+                for token, done in [
+                    ("exchange_connection", inferred_state.get("has_exchange")),
+                    ("bot", status_kwargs.get("has_bot")),
+                ]
+                if not done
+            ],
+            "complete": [],
+        }
+
+    def _resolve_current_phase(self, phases_completed: Dict[str, bool]) -> str:
+        for phase in PHASE_ORDER[:-1]:
+            if not phases_completed.get(phase, False):
+                return phase
+        return "complete"
+
+    def _resolve_next_action(
+        self,
+        status_kwargs: Dict[str, bool],
+        inferred_state: Dict[str, object],
+        current_phase: str,
+    ) -> str:
+        if current_phase == "profile":
+            return "complete_profile"
+        if current_phase == "analysis":
+            if not status_kwargs.get("has_asset"):
+                return "select_asset"
+            if not status_kwargs.get("has_market"):
+                return "add_market_indicator"
+            if not status_kwargs.get("has_macro"):
+                return "add_macro_indicator"
+            if not status_kwargs.get("has_technical"):
+                return "add_technical_indicator"
+            return "review_analysis"
+        if current_phase == "plan":
+            if not status_kwargs.get("has_setup"):
+                return "create_setup"
+            if not status_kwargs.get("has_strategy"):
+                return "create_strategy"
+            return "confirm_plan"
+        if current_phase == "automation":
+            if not status_kwargs.get("has_bot"):
+                return "create_bot"
+            return "review_automation"
+        return "go_to_analysis"
+
+    def _resolve_next_route(
+        self,
+        status_kwargs: Dict[str, bool],
+        inferred_state: Dict[str, object],
+        current_phase: str,
+        next_action: str,
+    ) -> str:
+        raw_symbol = inferred_state.get("active_asset")
+        symbol = str(raw_symbol).upper() if raw_symbol else ""
+        symbol_query = f"&symbol={symbol}" if symbol else ""
+
+        if current_phase == "profile":
+            return "/onboarding/profile"
+        if next_action == "select_asset":
+            return f"/onboarding/analysis?onboarding=1&step=analysis{symbol_query}"
+        if next_action in {"add_market_indicator", "add_macro_indicator", "add_technical_indicator", "review_analysis"}:
+            return f"/onboarding/analysis?onboarding=1&step=analysis{symbol_query}"
+        if next_action in {"create_setup", "create_strategy", "confirm_plan"}:
+            return f"/onboarding/plan?onboarding=1&step=plan{symbol_query}"
+        if next_action in {"create_bot", "review_automation"}:
+            action = "new_bot"
+            return f"/bot?onboarding=1&step=bot&action={action}{symbol_query}"
+        return f"/dashboard?symbol={symbol}" if symbol else "/dashboard"
 
 async def mark_step_completed(user_id: int, step_key: str, session: AsyncSession) -> OnboardingStatusResponse:
     """

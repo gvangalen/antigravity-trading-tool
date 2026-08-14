@@ -144,6 +144,20 @@ export const getMarketPreferences = async ({ symbol, assetClass } = {}) =>
     forceFresh: true,
   });
 
+export const updateMarketPreferences = async ({
+  symbol = null,
+  assetClass = null,
+  indicators = [],
+} = {}) =>
+  await fetchAuth(`/api/market/preferences`, {
+    method: "PUT",
+    body: JSON.stringify({
+      symbol,
+      asset_class: assetClass,
+      indicators,
+    }),
+  });
+
 export const bootstrapMarketPreferences = async ({
   symbol = null,
   assetClass = null,
@@ -155,7 +169,7 @@ export const bootstrapMarketPreferences = async ({
     { method: "POST" }
   );
 
-export const syncMarketPreferences = async (symbol) =>
-  await fetchAuth(`/api/market/preferences/sync?symbol=${encodeURIComponent(String(symbol || "BTC").toUpperCase())}`, {
+export const syncMarketPreferences = async (symbol, { resetExisting = false } = {}) =>
+  await fetchAuth(`/api/market/preferences/sync?symbol=${encodeURIComponent(String(symbol || "BTC").toUpperCase())}&reset_existing=${resetExisting ? "true" : "false"}`, {
     method: "POST",
   });

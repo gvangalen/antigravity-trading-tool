@@ -9,14 +9,36 @@ import {
   useRef,
   useState,
 } from "react";
+import {
+  CalendarDays,
+  CheckCircle2,
+  ChevronDown,
+  ChevronUp,
+  CircleDollarSign,
+  FlaskConical,
+  Lock,
+  RadioTower,
+  Rocket,
+  Scale,
+  Shield,
+  ShoppingCart,
+  Sparkles,
+} from "lucide-react";
 import { useTranslation } from "@/app/providers/I18nProvider";
 import { useModal } from "@/components/modal/ModalProvider";
 import { actionButtonStyles } from "@/components/ui/actionButtonStyles";
 
 const RISK_PROFILE_ICONS = {
-  conservative: "🛡️",
-  balanced: "⚖️",
-  aggressive: "🚀",
+  conservative: Shield,
+  balanced: Scale,
+  aggressive: Rocket,
+};
+
+const GUIDED_BUDGET_DEFAULTS = {
+  budget_total_eur: 1000,
+  budget_daily_limit_eur: 100,
+  budget_min_order_eur: 25,
+  budget_max_order_eur: 100,
 };
 
 /**
@@ -55,6 +77,8 @@ const AddBotForm = forwardRef(function AddBotForm({
   cancelLabel = "",
   successMessage = "",
   saveFailedMessage = "",
+  guidedMode = false,
+  guidedSymbol = "",
 }, ref) {
   const { t } = useTranslation();
   const copy = t?.botPage?.form || {};
@@ -82,6 +106,9 @@ const AddBotForm = forwardRef(function AddBotForm({
   });
   const [loading, setLoading] = useState(false);
   const [submitError, setSubmitError] = useState("");
+  const [showAdvancedBudget, setShowAdvancedBudget] = useState(false);
+
+  const requiresExplicitBudget = form.is_live || form.mode !== "manual";
 
   /* =====================================================
      INIT / PREFILL
@@ -108,6 +135,54 @@ const AddBotForm = forwardRef(function AddBotForm({
       max_asset_exposure_pct: sourceData.max_asset_exposure_pct ?? sourceData.budget?.max_asset_exposure_pct ?? 100,
     });
   }, [sourceData]);
+
+  useEffect(() => {
+    if (!guidedMode) return;
+
+    const hasAnyBudgetValue = [
+      form.budget_total_eur,
+      form.budget_daily_limit_eur,
+      form.budget_min_order_eur,
+      form.budget_max_order_eur,
+    ].some((value) => Number(value || 0) > 0);
+
+    if (hasAnyBudgetValue) return;
+
+    setForm((current) => ({
+      ...current,
+      ...GUIDED_BUDGET_DEFAULTS,
+    }));
+  }, [
+    form.budget_daily_limit_eur,
+    form.budget_max_order_eur,
+    form.budget_min_order_eur,
+    form.budget_total_eur,
+    guidedMode,
+  ]);
+
+  useEffect(() => {
+    if (!guidedMode || showAdvancedBudget) return;
+
+    const spendPerCycle = Number(form.budget_daily_limit_eur || 0);
+    if (!Number.isFinite(spendPerCycle) || spendPerCycle <= 0) return;
+
+    const nextMinOrder = Number(form.budget_min_order_eur || 0);
+    const nextMaxOrder = Number(form.budget_max_order_eur || 0);
+
+    if (nextMinOrder === spendPerCycle && nextMaxOrder === spendPerCycle) return;
+
+    setForm((current) => ({
+      ...current,
+      budget_min_order_eur: spendPerCycle,
+      budget_max_order_eur: spendPerCycle,
+    }));
+  }, [
+    form.budget_daily_limit_eur,
+    form.budget_max_order_eur,
+    form.budget_min_order_eur,
+    guidedMode,
+    showAdvancedBudget,
+  ]);
 
   /* =====================================================
      LIVE SYNC NAAR PARENT
@@ -151,6 +226,19 @@ const AddBotForm = forwardRef(function AddBotForm({
   const selectedRisk =
     riskProfiles.find((r) => r.value === form.risk_profile) ??
     riskProfiles[1];
+  const SelectedRiskIcon = selectedRisk.icon;
+
+  const onboardingCopy = pageCopy.onboardingGuide || {};
+  const strategyTimeframe = String(selectedStrategy?.timeframe || "").toUpperCase();
+  const cadenceLabel = strategyTimeframe || copy.cadenceFallback || "—";
+  const cadenceSpendLabel = (copy.simpleCycleBudgetLabel || "Spend per {timeframe} cycle").replace(
+    "{timeframe}",
+    cadenceLabel
+  );
+  const cadenceSpendHelp = (copy.simpleCycleBudgetHelp || "For this strategy cadence, this is the amount the bot may use on one buy moment.").replace(
+    "{timeframe}",
+    cadenceLabel
+  );
 
   const getStrategyType = (s) =>
     (s?.strategy_type || s?.type || "manual").toUpperCase();
@@ -195,8 +283,53 @@ const AddBotForm = forwardRef(function AddBotForm({
       };
     }
 
+    const totalBudget = Number(form.budget_total_eur || 0);
+    const dailyLimit = Number(form.budget_daily_limit_eur || 0);
+    const minOrder = Number(form.budget_min_order_eur || 0);
+    const maxOrder = Number(form.budget_max_order_eur || 0);
+
+    if (requiresExplicitBudget) {
+      if (![totalBudget, dailyLimit, minOrder, maxOrder].every((value) => value > 0)) {
+        return {
+          ok: false,
+          message: copy.guidedBudgetRequired || "Vul voor live of automatische bots alle budgetvelden in met geldige startwaarden.",
+        };
+      }
+    }
+
+    if (dailyLimit > totalBudget) {
+      return {
+        ok: false,
+        message: copy.dailyLimitValidation || "Daglimiet mag niet hoger zijn dan het totale budget.",
+      };
+    }
+
+    if (minOrder > maxOrder) {
+      return {
+        ok: false,
+        message: copy.minOrderValidation || "Minimale order mag niet hoger zijn dan de maximale order.",
+      };
+    }
+
+    if (maxOrder > totalBudget) {
+      return {
+        ok: false,
+        message: copy.maxOrderValidation || "Maximale order mag niet hoger zijn dan het totale budget.",
+      };
+    }
+
     return { ok: true };
-  }, [copy.assetExposureValidation, copy.numericValidation, form, pageCopy.createValidation]);
+  }, [
+    copy.assetExposureValidation,
+    copy.dailyLimitValidation,
+    copy.guidedBudgetRequired,
+    copy.maxOrderValidation,
+    copy.minOrderValidation,
+    copy.numericValidation,
+    form,
+    pageCopy.createValidation,
+    requiresExplicitBudget,
+  ]);
 
   const submitForm = useCallback(async () => {
     if (loading) {
@@ -270,6 +403,62 @@ const AddBotForm = forwardRef(function AddBotForm({
 
   return (
     <form ref={formRef} onSubmit={handleSubmit} className="space-y-6">
+      {guidedMode ? (
+        <div className="space-y-4 rounded-[28px] border border-blue-100 bg-blue-50/60 p-5">
+          <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.2em] text-blue-600">
+            <Sparkles size={14} />
+            {onboardingCopy.drawerEyebrow || "Automation · guided creation"}
+          </div>
+
+          <div>
+            <h2 className="text-2xl font-black tracking-tight text-slate-900">
+              {onboardingCopy.drawerTitle || "Create one safe starter bot"}
+            </h2>
+            <p className="mt-2 text-sm font-semibold leading-relaxed text-slate-600">
+              {(onboardingCopy.drawerBody || "Use the saved strategy for {symbol}, start in paper mode or paused mode, and save one bot to complete onboarding.").replace("{symbol}", guidedSymbol || selectedStrategy?.symbol || "this asset")}
+            </p>
+          </div>
+
+          <div className="grid gap-3 md:grid-cols-3">
+            <div className="rounded-2xl border border-white/80 bg-white px-4 py-3">
+              <div className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">
+                {onboardingCopy.drawerStepOneEyebrow || "Step 1"}
+              </div>
+              <div className="mt-2 text-sm font-black text-slate-900">
+                {onboardingCopy.drawerStepOneTitle || "Use your saved strategy"}
+              </div>
+              <div className="mt-1 text-xs font-semibold leading-relaxed text-slate-500">
+                {selectedStrategy?.name || onboardingCopy.pendingLabel || "Pending"}
+              </div>
+            </div>
+
+            <div className="rounded-2xl border border-white/80 bg-white px-4 py-3">
+              <div className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">
+                {onboardingCopy.drawerStepTwoEyebrow || "Step 2"}
+              </div>
+              <div className="mt-2 text-sm font-black text-slate-900">
+                {onboardingCopy.drawerStepTwoTitle || "Keep the first mode safe"}
+              </div>
+              <div className="mt-1 text-xs font-semibold leading-relaxed text-slate-500">
+                {onboardingCopy.drawerStepTwoBody || "Paper mode and manual execution are enough for onboarding."}
+              </div>
+            </div>
+
+            <div className="rounded-2xl border border-white/80 bg-white px-4 py-3">
+              <div className="text-[10px] font-black uppercase tracking-[0.18em] text-slate-400">
+                {onboardingCopy.drawerStepThreeEyebrow || "Step 3"}
+              </div>
+              <div className="mt-2 text-sm font-black text-slate-900">
+                {onboardingCopy.drawerStepThreeTitle || "Save and continue"}
+              </div>
+              <div className="mt-1 text-xs font-semibold leading-relaxed text-slate-500">
+                {onboardingCopy.drawerStepThreeBody || "After saving, you return to the onboarding flow and review the final automation step."}
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
       {/* ================= BOT NAME ================= */}
       <div className="space-y-1.5">
           <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">
@@ -293,10 +482,13 @@ const AddBotForm = forwardRef(function AddBotForm({
           {copy.strategyLabel}
         </label>
 
-        {isEdit ? (
+        {isEdit || (guidedMode && selectedStrategy) ? (
           <div className="w-full bg-slate-50 dark:bg-slate-900 border-2 border-slate-100 dark:border-slate-800 rounded-2xl px-5 py-4 text-sm font-bold text-muted cursor-not-allowed flex items-center justify-between">
             <span>{selectedStrategy ? `${selectedStrategy.name} · ${selectedStrategy.symbol}` : "—"}</span>
-            <div className="text-[9px] bg-slate-200 dark:bg-slate-700 px-2 py-0.5 rounded-md uppercase tracking-tighter">{copy.lockedLabel}</div>
+            <div className="inline-flex items-center gap-1 text-[9px] bg-slate-200 dark:bg-slate-700 px-2 py-0.5 rounded-md uppercase tracking-tighter">
+              <Lock size={10} />
+              {copy.lockedLabel}
+            </div>
           </div>
         ) : (
           <div className="relative">
@@ -355,6 +547,61 @@ const AddBotForm = forwardRef(function AddBotForm({
         </div>
       )}
 
+      {guidedMode ? (
+        <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-800">
+          <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.18em] text-emerald-700">
+            <CheckCircle2 size={12} />
+            {onboardingCopy.drawerHintEyebrow || "Onboarding goal"}
+          </div>
+          <p className="mt-2">
+            {onboardingCopy.drawerHintBody || "You only need one saved bot here. You can refine budget, automation mode, and extra settings after onboarding."}
+          </p>
+        </div>
+      ) : null}
+
+      {guidedMode ? (
+        <div className="grid gap-3 md:grid-cols-3">
+          <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
+            <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">
+              <CalendarDays size={12} />
+              {copy.cadenceCardLabel}
+            </div>
+            <div className="mt-2 text-sm font-black text-slate-900">
+              {copy.cadenceCardValue.replace("{timeframe}", cadenceLabel)}
+            </div>
+            <p className="mt-1 text-xs font-semibold leading-relaxed text-slate-500">
+              {copy.cadenceCardHelp}
+            </p>
+          </div>
+
+          <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
+            <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">
+              <CircleDollarSign size={12} />
+              {copy.budgetCardLabel}
+            </div>
+            <div className="mt-2 text-sm font-black text-slate-900">
+              {copy.budgetCardValue}
+            </div>
+            <p className="mt-1 text-xs font-semibold leading-relaxed text-slate-500">
+              {copy.budgetCardHelp}
+            </p>
+          </div>
+
+          <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-4">
+            <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.18em] text-slate-500">
+              <ShoppingCart size={12} />
+              {copy.orderCardLabel}
+            </div>
+            <div className="mt-2 text-sm font-black text-slate-900">
+              {copy.orderCardValue}
+            </div>
+            <p className="mt-1 text-xs font-semibold leading-relaxed text-slate-500">
+              {copy.orderCardHelp}
+            </p>
+          </div>
+        </div>
+      ) : null}
+
       {/* ================= EXECUTION TYPE & RISK ================= */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div className="space-y-1.5">
@@ -367,14 +614,20 @@ const AddBotForm = forwardRef(function AddBotForm({
                 onClick={() => setForm(s => ({ ...s, is_live: false }))}
                 className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${!form.is_live ? 'bg-white dark:bg-slate-800 text-blue-600 shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
              >
-                {copy.paperTrading}
+                <span className="inline-flex items-center gap-2">
+                  <FlaskConical size={12} />
+                  {copy.paperTrading}
+                </span>
              </button>
              <button 
                 type="button"
                 onClick={() => setForm(s => ({ ...s, is_live: true }))}
                 className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${form.is_live ? 'bg-white dark:bg-slate-800 text-emerald-600 shadow-sm' : 'text-slate-400 hover:text-emerald-600'}`}
              >
-                {copy.liveExchange}
+                <span className="inline-flex items-center gap-2">
+                  <RadioTower size={12} />
+                  {copy.liveExchange}
+                </span>
              </button>
           </div>
         </div>
@@ -420,7 +673,7 @@ const AddBotForm = forwardRef(function AddBotForm({
             >
               {riskProfiles.map((r) => (
                 <option key={r.value} value={r.value}>
-                  {`${r.icon} ${r.label}`}
+                  {r.label}
                 </option>
               ))}
             </select>
@@ -455,36 +708,130 @@ const AddBotForm = forwardRef(function AddBotForm({
         </div>
       </div>
 
-      {(form.is_live || form.mode !== "manual") && (
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          {[
-            ["budget_total_eur", copy.totalBudgetLabel],
-            ["budget_daily_limit_eur", copy.dailyLimitLabel],
-            ["budget_min_order_eur", copy.minOrderLabel],
-            ["budget_max_order_eur", copy.maxOrderLabel],
-          ].map(([key, label]) => (
-            <div key={key} className="space-y-1.5">
-              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">
-                {label}
-              </label>
-              <input
-                type="number"
-                min="0"
-                step="0.01"
-                name={key}
-                className="w-full bg-card border-2 border-slate-100 dark:border-slate-800 rounded-2xl px-4 py-3 text-sm font-bold text-foreground focus:border-blue-600 transition-all outline-none"
-                value={form[key]}
-                onChange={(e) => setForm((s) => ({ ...s, [key]: Number(e.target.value) }))}
-              />
+      {(guidedMode || requiresExplicitBudget) && (
+        guidedMode ? (
+          <div className="space-y-4 rounded-[28px] border border-slate-200 bg-white p-5">
+            <div className="grid gap-4 md:grid-cols-2">
+              {[
+                ["budget_total_eur", copy.totalBudgetLabel, copy.totalBudgetHelp],
+                ["budget_daily_limit_eur", cadenceSpendLabel, cadenceSpendHelp],
+              ].map(([key, label, helpText]) => (
+                <div key={key} className="space-y-1.5">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">
+                    {label}
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    name={key}
+                    className="w-full bg-card border-2 border-slate-100 dark:border-slate-800 rounded-2xl px-4 py-3 text-sm font-bold text-foreground focus:border-blue-600 transition-all outline-none"
+                    value={form[key]}
+                    onChange={(e) => {
+                      const value = Number(e.target.value);
+                      setForm((s) => {
+                        if (key !== "budget_daily_limit_eur" || showAdvancedBudget) {
+                          return { ...s, [key]: value };
+                        }
+
+                        return {
+                          ...s,
+                          budget_daily_limit_eur: value,
+                          budget_min_order_eur: value,
+                          budget_max_order_eur: value,
+                        };
+                      });
+                    }}
+                  />
+                  <p className="px-1 text-[11px] font-semibold leading-relaxed text-slate-500">
+                    {helpText}
+                  </p>
+                </div>
+              ))}
             </div>
-          ))}
-        </div>
+
+            <div className="rounded-2xl border border-blue-100 bg-blue-50 px-4 py-3 text-sm font-semibold text-blue-800">
+              <p>
+                {(copy.simpleBudgetExample || "If this amount is 100, the bot may use at most 100 on one {timeframe} buy moment. By default, one order uses that same amount.").replace(
+                  "{timeframe}",
+                  cadenceLabel
+                )}
+              </p>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setShowAdvancedBudget((current) => !current)}
+              className="inline-flex items-center gap-2 rounded-2xl border border-slate-200 px-4 py-2 text-[10px] font-black uppercase tracking-[0.18em] text-slate-600 transition hover:border-blue-200 hover:text-blue-700"
+            >
+              {showAdvancedBudget
+                ? copy.hideAdvancedBudget || "Hide advanced budget controls"
+                : copy.showAdvancedBudget || "Custom order limits"}
+              {showAdvancedBudget ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+            </button>
+
+            {showAdvancedBudget ? (
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                {[
+                  ["budget_daily_limit_eur", copy.dailyLimitLabel, copy.dailyLimitHelp],
+                  ["budget_min_order_eur", copy.minOrderLabel, copy.minOrderHelp],
+                  ["budget_max_order_eur", copy.maxOrderLabel, copy.maxOrderHelp],
+                ].map(([key, label, helpText]) => (
+                  <div key={key} className="space-y-1.5">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">
+                      {label}
+                    </label>
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      name={key}
+                      className="w-full bg-card border-2 border-slate-100 dark:border-slate-800 rounded-2xl px-4 py-3 text-sm font-bold text-foreground focus:border-blue-600 transition-all outline-none"
+                      value={form[key]}
+                      onChange={(e) => setForm((s) => ({ ...s, [key]: Number(e.target.value) }))}
+                    />
+                    <p className="px-1 text-[11px] font-semibold leading-relaxed text-slate-500">
+                      {helpText}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            ) : null}
+          </div>
+        ) : (
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            {[
+              ["budget_total_eur", copy.totalBudgetLabel, copy.totalBudgetHelp],
+              ["budget_daily_limit_eur", copy.dailyLimitLabel, copy.dailyLimitHelp],
+              ["budget_min_order_eur", copy.minOrderLabel, copy.minOrderHelp],
+              ["budget_max_order_eur", copy.maxOrderLabel, copy.maxOrderHelp],
+            ].map(([key, label, helpText]) => (
+              <div key={key} className="space-y-1.5">
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">
+                  {label}
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  name={key}
+                  className="w-full bg-card border-2 border-slate-100 dark:border-slate-800 rounded-2xl px-4 py-3 text-sm font-bold text-foreground focus:border-blue-600 transition-all outline-none"
+                  value={form[key]}
+                  onChange={(e) => setForm((s) => ({ ...s, [key]: Number(e.target.value) }))}
+                />
+                <p className="px-1 text-[11px] font-semibold leading-relaxed text-slate-500">
+                  {helpText}
+                </p>
+              </div>
+            ))}
+          </div>
+        )
       )}
 
       {/* PROFILE DESCRIPTION */}
       <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-900/50 border-2 border-slate-100 dark:border-slate-800 flex items-center gap-4 transition-all hover:bg-slate-100">
          <div className="w-10 h-10 rounded-xl bg-card border border-slate-100 shadow-sm flex items-center justify-center text-lg">
-            {selectedRisk.icon}
+            <SelectedRiskIcon size={18} className="text-slate-700" />
          </div>
          <div className="text-[11px] font-bold text-slate-500 leading-relaxed italic">
             {selectedRisk.description}

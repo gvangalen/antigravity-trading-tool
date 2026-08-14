@@ -97,6 +97,20 @@ export const getMacroPreferences = async ({ symbol, assetClass } = {}) =>
     forceFresh: true,
   });
 
+export const updateMacroPreferences = async ({
+  symbol = null,
+  assetClass = null,
+  indicators = [],
+} = {}) =>
+  await fetchAuth(`/api/macro/preferences`, {
+    method: "PUT",
+    body: JSON.stringify({
+      symbol,
+      asset_class: assetClass,
+      indicators,
+    }),
+  });
+
 export const bootstrapMacroPreferences = async ({
   symbol = null,
   assetClass = null,
@@ -108,7 +122,7 @@ export const bootstrapMacroPreferences = async ({
     { method: "POST" }
   );
 
-export const syncMacroPreferences = async (symbol) =>
-  await fetchAuth(`/api/macro/preferences/sync?symbol=${encodeURIComponent(String(symbol || "BTC").toUpperCase())}`, {
+export const syncMacroPreferences = async (symbol, { resetExisting = false } = {}) =>
+  await fetchAuth(`/api/macro/preferences/sync?symbol=${encodeURIComponent(String(symbol || "BTC").toUpperCase())}&reset_existing=${resetExisting ? "true" : "false"}`, {
     method: "POST",
   });

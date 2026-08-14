@@ -34,12 +34,10 @@ export default function TradingViewChart({
 
   return (
     <div
-      key={`container-${symbol}-${normalizedInterval}`}
       className="rounded-xl border bg-card overflow-hidden"
       style={{ height }}
     >
       <iframe
-        key={`${widgetUrl}-${indicators.join(",")}`}
         title={`TradingView ${symbol}`}
         src={widgetUrl}
         className="h-full w-full border-0"

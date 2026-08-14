@@ -130,7 +130,7 @@ export function useOnboarding() {
   const stepStatus = useMemo(() => {
     if (!status) return null;
 
-    const steps = {
+    return {
       profile: !!status.has_profile,
       asset: !!status.has_asset,
       market: !!status.has_market,
@@ -139,17 +139,82 @@ export function useOnboarding() {
       setup: !!status.has_setup,
       strategy: !!status.has_strategy,
       bot: !!status.has_bot,
+      has_profile: !!status.has_profile,
+      has_asset: !!status.has_asset,
+      has_market: !!status.has_market,
+      has_macro: !!status.has_macro,
+      has_technical: !!status.has_technical,
+      has_setup: !!status.has_setup,
+      has_strategy: !!status.has_strategy,
+      has_bot: !!status.has_bot,
     };
-    return steps;
   }, [status]);
+
+  const phaseStatus = useMemo(() => {
+    if (!status) return null;
+    const backendPhases = status.phases_completed;
+    if (backendPhases) return backendPhases;
+
+    return {
+      profile: !!status.has_profile,
+      analysis: !!status.has_asset && !!status.has_market && !!status.has_macro && !!status.has_technical,
+      plan: !!status.has_setup && !!status.has_strategy,
+      automation: !!status.has_bot,
+      complete:
+        !!status.has_profile &&
+        !!status.has_asset &&
+        !!status.has_market &&
+        !!status.has_macro &&
+        !!status.has_technical &&
+        !!status.has_setup &&
+        !!status.has_strategy &&
+        !!status.has_bot,
+    };
+  }, [status]);
+
+  const phaseUnlocks = useMemo(() => {
+    if (!status) return null;
+    if (status.phases_unlocked) return status.phases_unlocked;
+
+    return {
+      profile: true,
+      analysis: !!phaseStatus?.profile,
+      plan: !!phaseStatus?.analysis,
+      automation: !!phaseStatus?.plan,
+      complete: !!phaseStatus?.automation,
+    };
+  }, [status, phaseStatus]);
+
+  const phaseMissing = useMemo(() => {
+    if (!status) return null;
+    return status.phase_missing || {
+      profile: phaseStatus?.profile ? [] : ["profile_preferences"],
+      analysis: [
+        !status.has_asset ? "asset" : null,
+        !status.has_market ? "market_indicator" : null,
+        !status.has_macro ? "macro_indicator" : null,
+        !status.has_technical ? "technical_indicator" : null,
+      ].filter(Boolean),
+      plan: [
+        !status.has_setup ? "setup" : null,
+        !status.has_strategy ? "strategy" : null,
+      ].filter(Boolean),
+      automation: [
+        !status.has_bot ? "bot" : null,
+      ].filter(Boolean),
+      complete: [],
+    };
+  }, [status, phaseStatus]);
 
   // =====================================================
   // 4️⃣ Onboarding & pipeline status
   // =====================================================
   const onboardingComplete = useMemo(() => {
-    if (!status && !stepStatus) return false;
-    const done = Boolean(
-      status?.onboarding_complete ?? (
+    if (!status && !stepStatus && !phaseStatus) return false;
+    return Boolean(
+      status?.onboarding_complete ??
+      phaseStatus?.complete ??
+      (
         stepStatus &&
         stepStatus.asset &&
         stepStatus.market &&
@@ -160,8 +225,7 @@ export function useOnboarding() {
         stepStatus.bot
       )
     );
-    return done;
-  }, [status, stepStatus]);
+  }, [status, stepStatus, phaseStatus]);
 
   const pipelineStarted = !!status?.pipeline_started;
 
@@ -185,18 +249,46 @@ export function useOnboarding() {
     bot: stepStatus?.strategy ?? false,
   };
 
+  const currentPhase = status?.current_phase || (
+    !phaseStatus?.profile ? "profile" :
+    !phaseStatus?.analysis ? "analysis" :
+    !phaseStatus?.plan ? "plan" :
+    !phaseStatus?.automation ? "automation" :
+    "complete"
+  );
+  const nextAction = status?.next_action || (
+    currentPhase === "profile" ? "complete_profile" :
+    currentPhase === "analysis" && !status?.has_asset ? "select_asset" :
+    currentPhase === "analysis" && !status?.has_market ? "add_market_indicator" :
+    currentPhase === "analysis" && !status?.has_macro ? "add_macro_indicator" :
+    currentPhase === "analysis" && !status?.has_technical ? "add_technical_indicator" :
+    currentPhase === "plan" && !status?.has_setup ? "create_setup" :
+    currentPhase === "plan" && !status?.has_strategy ? "create_strategy" :
+    currentPhase === "automation" && !status?.has_bot ? "create_bot" :
+    "go_to_analysis"
+  );
+  const nextRoute = status?.next_route || "/onboarding";
+  const activeAsset = status?.active_asset || "";
+
   // =====================================================
   // 6️⃣ Export
   // =====================================================
   return {
     status,
     stepStatus,
+    phaseStatus,
+    phaseUnlocks,
+    phaseMissing,
 
     loading,
     saving,
     error,
 
     onboardingComplete,
+    currentPhase,
+    nextAction,
+    nextRoute,
+    activeAsset,
     pipelineStarted,
     pipelineRunning,
     dashboardReady,

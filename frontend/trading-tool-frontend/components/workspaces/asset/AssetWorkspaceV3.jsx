@@ -20,6 +20,7 @@ import { useAsset } from "@/app/providers/AssetProvider";
 import { useTranslation } from "@/app/providers/I18nProvider";
 import { useModal } from "@/components/modal/ModalProvider";
 import { useAssetWorkspaceData } from "@/hooks/useAssetWorkspaceData";
+import { useWatchlist } from "@/hooks/useWatchlist";
 import { useStrategyData } from "@/hooks/useStrategyData";
 import IndicatorConfigModal from "@/components/scoring/IndicatorConfigModal";
 import MarketForwardReturnTabs from "@/components/market/MarketForwardReturnTabs";
@@ -2244,7 +2245,8 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
   const pathname = usePathname();
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { selectedAsset, setSelectedAsset, availableAssets = [] } = useAsset();
+  const { selectedAsset, setSelectedAsset } = useAsset();
+  const { symbols: persistedWatchlistSymbols = [] } = useWatchlist();
   const { locale } = useTranslation();
   const { openConfirm, showSnackbar } = useModal();
   const ui = useMemo(() => getUiCopy(locale), [locale]);
@@ -2284,8 +2286,15 @@ export default function AssetWorkspaceV3({ initialTab = "market", variant = "v3"
     [macroTimeframe, marketTimeframe, technicalTimeframe]
   );
   const watchlistSymbols = useMemo(
-    () => availableAssets.map((asset) => String(asset?.symbol || "").toUpperCase()).filter(Boolean),
-    [availableAssets]
+    () => {
+      const normalizedSymbols = persistedWatchlistSymbols
+        .map((symbol) => String(symbol || "").trim().toUpperCase())
+        .filter(Boolean);
+
+      if (!normalizedSymbols.length) return [];
+      return Array.from(new Set([activeSymbol, ...normalizedSymbols]));
+    },
+    [activeSymbol, persistedWatchlistSymbols]
   );
 
   const {

@@ -1,6 +1,7 @@
 import asyncio
 from types import SimpleNamespace
 
+from backend.infrastructure.repositories.onboarding_repository import OnboardingRepository
 from backend.services.onboarding_service import DEFAULT_FLOW, OnboardingService
 
 
@@ -134,7 +135,7 @@ def test_get_status_dict_only_backfills_missing_legacy_steps():
     assert status.onboarding_complete is False
 
 
-def test_get_status_dict_marks_legacy_user_complete_without_profile_if_core_steps_exist():
+def test_get_status_dict_keeps_new_flow_incomplete_without_profile():
     repo = FakeOnboardingRepository(
         steps=[
             SimpleNamespace(step_key="profile", completed=False, pipeline_started=False),
@@ -171,7 +172,8 @@ def test_get_status_dict_marks_legacy_user_complete_without_profile_if_core_step
     assert status.has_setup is True
     assert status.has_strategy is True
     assert status.has_bot is True
-    assert status.onboarding_complete is True
+    assert status.onboarding_complete is False
+    assert status.current_phase == "profile"
 
 
 def test_finish_onboarding_does_not_force_complete_incomplete_flow():
@@ -248,3 +250,105 @@ def test_finish_onboarding_keeps_completed_flow_and_starts_pipeline(monkeypatch)
     assert repo.marked_flow_completed is False
     assert kickstarted == [99]
     assert status.onboarding_complete is True
+
+
+def test_status_marks_automation_complete_without_exchange_for_v1_onboarding():
+    repo = FakeOnboardingRepository(
+        steps=[
+            SimpleNamespace(step_key="profile", completed=True, pipeline_started=False),
+            SimpleNamespace(step_key="asset", completed=True, pipeline_started=False),
+            SimpleNamespace(step_key="market", completed=True, pipeline_started=False),
+            SimpleNamespace(step_key="macro", completed=True, pipeline_started=False),
+            SimpleNamespace(step_key="technical", completed=True, pipeline_started=False),
+            SimpleNamespace(step_key="setup", completed=True, pipeline_started=False),
+            SimpleNamespace(step_key="strategy", completed=True, pipeline_started=False),
+            SimpleNamespace(step_key="bot", completed=True, pipeline_started=False),
+        ],
+        inferred_completed={
+            "profile": True,
+            "asset": True,
+            "market": True,
+            "macro": True,
+            "technical": True,
+            "setup": True,
+            "strategy": True,
+            "bot": True,
+        },
+    )
+
+    async def _fake_infer_onboarding_state(user_id: int):
+        return {
+            "active_asset": "BTC",
+            "has_profile": True,
+            "has_asset": True,
+            "has_market": True,
+            "has_macro": True,
+            "has_technical": True,
+            "has_setup": True,
+            "has_strategy": True,
+            "has_bot": True,
+            "has_exchange": False,
+        }
+
+    repo.infer_onboarding_state = _fake_infer_onboarding_state
+    service = OnboardingService(repo)
+
+    status = asyncio.run(service.get_status_dict(user_id=5))
+
+    assert status.phases_completed["automation"] is True
+    assert status.phases_completed["complete"] is True
+    assert status.current_phase == "complete"
+    assert status.next_route == "/dashboard?symbol=BTC"
+
+
+def test_infer_onboarding_state_requires_explicit_asset_and_symbol_scoped_indicator_rows():
+    class FakeUser:
+        ai_preferences = {}
+
+    class FakeScalarResult:
+        def __init__(self, value):
+            self._value = value
+
+        def scalar(self):
+            return self._value
+
+    class FakeColumnsResult:
+        def scalars(self):
+            return SimpleNamespace(all=lambda: [
+                "id",
+                "user_id",
+                "indicator",
+                "category",
+                "symbol",
+                "asset_class",
+                "priority",
+                "enabled",
+                "created_at",
+            ])
+
+    class FakeSession:
+        async def get(self, model, user_id):
+            return FakeUser()
+
+        async def execute(self, query, params=None):
+            sql = str(query)
+            if "information_schema.columns" in sql:
+                return FakeColumnsResult()
+            if "FROM exchange_keys" in sql:
+                return FakeScalarResult(False)
+            if "FROM setups" in sql or "FROM strategies" in sql or "FROM bot_configs" in sql:
+                return FakeScalarResult(False)
+            raise AssertionError(f"Unexpected query executed for blank onboarding state: {sql}")
+
+    repo = OnboardingRepository(FakeSession())
+
+    state = asyncio.run(repo.infer_onboarding_state(user_id=42))
+
+    assert state["active_asset"] is None
+    assert state["has_asset"] is False
+    assert state["has_market"] is False
+    assert state["has_macro"] is False
+    assert state["has_technical"] is False
+    assert state["has_setup"] is False
+    assert state["has_strategy"] is False
+    assert state["has_bot"] is False

@@ -24,15 +24,6 @@ from backend.utils.indicator_score_validation import require_indicator_score
 logger = logging.getLogger(__name__)
 
 class TechnicalDataService:
-    RECOMMENDED_ASSET_CLASS_PRESETS: dict[str, list[str]] = {
-        "crypto": ["rsi", "ma_50", "ma_200", "ema_20_gap_pct", "macd_hist_pct"],
-        "stock": ["rsi", "ma_50", "ma_200", "ema_20_gap_pct", "macd_hist_pct"],
-        "etf": ["rsi", "ma_50", "ma_200", "ema_20_gap_pct", "macd_hist_pct"],
-        "index": ["rsi", "ma_50", "ma_200", "ema_20_gap_pct", "macd_hist_pct"],
-        "forex": ["rsi"],
-        "commodity": ["rsi"],
-    }
-
     def __init__(self, session: AsyncSession):
         self.session = session
         self.repository = TechnicalDataRepository(session)
@@ -150,12 +141,11 @@ class TechnicalDataService:
                     "rows": class_rows,
                 }
 
-        default_rows = await self.repository.list_scope_configs(user_id)
         return {
-            "scope": "default",
+            "scope": "empty",
             "symbol": normalized_symbol,
             "asset_class": normalized_asset_class,
-            "rows": default_rows,
+            "rows": [],
         }
 
     async def bootstrap_preferences(
@@ -182,28 +172,20 @@ class TechnicalDataService:
                 raise ValueError("Een symbool is verplicht voor scope 'symbol'.")
             target_symbol = normalized_symbol
             target_asset_class = normalized_asset_class
-            preset_key = normalized_asset_class
         elif normalized_scope == "asset_class":
             if not normalized_asset_class:
                 raise ValueError("Een asset_class of herleidbaar symbool is verplicht voor scope 'asset_class'.")
             target_symbol = None
             target_asset_class = normalized_asset_class
-            preset_key = normalized_asset_class
         elif normalized_scope == "default":
             target_symbol = None
             target_asset_class = None
-            preset_key = "default"
         else:
             raise ValueError("Scope moet 'default', 'asset_class' of 'symbol' zijn.")
 
-        indicator_names = self._recommended_indicator_names(preset_key)
-        normalized_items = await self._build_scope_items(indicator_names)
-        if not normalized_items:
-            raise ValueError(f"Geen bruikbare indicatoren gevonden voor preset '{normalized_preset}'.")
-
         rows = await self.repository.replace_scope_configs(
             user_id,
-            normalized_items,
+            [],
             symbol=target_symbol,
             asset_class=target_asset_class,
         )
@@ -213,12 +195,6 @@ class TechnicalDataService:
             "asset_class": target_asset_class,
             "rows": rows,
         }
-
-    def _recommended_indicator_names(self, preset_key: Optional[str]) -> List[str]:
-        normalized_key = str(preset_key or "").strip().lower()
-        if normalized_key == "default":
-            return ["rsi"]
-        return list(self.RECOMMENDED_ASSET_CLASS_PRESETS.get(normalized_key, ["rsi"]))
 
     async def _build_scope_items(self, indicator_names: List[str]) -> List[tuple[str, int]]:
         items: List[tuple[str, int]] = []
@@ -250,6 +226,17 @@ class TechnicalDataService:
             persist_preference=True,
         )
 
+    async def _reset_symbol_indicator_rows(self, user_id: int, symbol: str) -> None:
+        normalized_symbol = str(symbol or "BTC").strip().upper()
+        existing_rows = await self.repository.get_day_data(user_id, normalized_symbol)
+        seen: set[str] = set()
+        for row in existing_rows:
+            indicator_name = normalize_indicator_name(getattr(row, "indicator", "") or "")
+            if not indicator_name or indicator_name in seen:
+                continue
+            seen.add(indicator_name)
+            await self.repository.delete_indicator(indicator_name, user_id, normalized_symbol)
+
     async def sync_effective_indicators(
         self,
         user_id: int,
@@ -257,6 +244,7 @@ class TechnicalDataService:
         *,
         persist_preferences: bool = False,
         explicit_indicators: Optional[List[str]] = None,
+        reset_existing: bool = False,
     ) -> Dict[str, Any]:
         resolved_preferences = await self.resolve_effective_preferences(user_id, symbol=symbol)
         asset_class = resolved_preferences["asset_class"]
@@ -277,6 +265,8 @@ class TechnicalDataService:
             "synced": [],
             "failed": [],
         }
+        if reset_existing:
+            await self._reset_symbol_indicator_rows(user_id, symbol)
 
         for indicator_name in indicator_names:
             try:

@@ -7,6 +7,7 @@ import { fetchAssetWorkspace } from "@/lib/api/workspace";
 import { fetchLatestPrice } from "@/lib/api/market";
 import { getDailyScores } from "@/lib/api/scores";
 import { subscribeWorkspaceRefresh } from "@/lib/workspaceSync";
+import { setWorkspaceSnapshot } from "@/lib/workspaceSnapshotStore";
 
 const WORKSPACE_REQUEST_TIMEOUT_MS = 15000;
 const WORKSPACE_CACHE_TTL_MS = 300_000;
@@ -218,6 +219,9 @@ export function useAssetWorkspaceData(symbol, periods, watchlistSymbols) {
 
   useEffect(() => {
     latestWorkspaceRef.current = workspace || null;
+    if (workspace) {
+      setWorkspaceSnapshot(assetSymbol, workspace);
+    }
   }, [workspace]);
 
   useEffect(() => {

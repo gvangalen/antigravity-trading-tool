@@ -7,31 +7,26 @@ import { Mail, Lock, LogIn, ShieldCheck, Eye, EyeOff } from "lucide-react";
 import { useModal } from "@/components/modal/ModalProvider";
 import { useTranslation } from "@/app/providers/I18nProvider";
 import Link from "next/link";
-import { getCachedOnboardingStatus, getOnboardingStatus } from "@/lib/api/onboarding";
+import { clearOnboardingStatusCache, getOnboardingStatus } from "@/lib/api/onboarding";
 
-async function resolvePostLoginDestination(nextPath, options = {}) {
-  const { preferCache = false } = options;
-
+async function resolvePostLoginDestination(nextPath) {
   if (nextPath && !nextPath.startsWith("/login") && !nextPath.startsWith("/register")) {
     return nextPath;
   }
 
   try {
-    const cachedStatus = preferCache ? getCachedOnboardingStatus() : null;
-    if (preferCache && !cachedStatus) {
-      return "/asset";
-    }
-
-    const status = cachedStatus || await getOnboardingStatus({ preferCache });
-    const isComplete = status?.onboarding_complete ?? (
+    const status = await getOnboardingStatus();
+    const isComplete = status?.onboarding_complete ?? status?.phases_completed?.complete ?? (
       status?.has_profile &&
-      status?.has_setup &&
-      status?.has_technical &&
-      status?.has_macro &&
+      status?.has_asset &&
       status?.has_market &&
-      status?.has_strategy
+      status?.has_macro &&
+      status?.has_technical &&
+      status?.has_setup &&
+      status?.has_strategy &&
+      status?.has_bot
     );
-    if (!isComplete) return "/onboarding";
+    if (!isComplete) return status?.next_route || "/onboarding/profile";
   } catch (error) {
     console.warn("⚠️ Could not resolve onboarding status after login:", error);
   }
@@ -65,7 +60,7 @@ function LoginPageContent() {
   useEffect(() => {
     if (!sessionChecked || !isAuthenticated || redirected.current) return;
     redirected.current = true;
-    void resolvePostLoginDestination(nextPath, { preferCache: true }).then((destination) => {
+    void resolvePostLoginDestination(nextPath).then((destination) => {
       router.push(destination);
     });
   }, [isAuthenticated, sessionChecked, nextPath, router]);
@@ -89,7 +84,8 @@ function LoginPageContent() {
     }
 
     showSnackbar(t?.auth?.welcomeBack, "success");
-    const destination = await resolvePostLoginDestination(nextPath, { preferCache: true });
+    clearOnboardingStatusCache();
+    const destination = await resolvePostLoginDestination(nextPath);
     router.push(destination);
   };
 

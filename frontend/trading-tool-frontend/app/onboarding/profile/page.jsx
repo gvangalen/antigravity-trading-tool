@@ -138,7 +138,7 @@ export default function OnboardingProfilePage() {
 
       await updateAssistantPreferences(serializeTraderProfilePreferences(form));
       await completeStep("profile");
-      router.push("/onboarding");
+      router.push("/onboarding/analysis?onboarding=1&step=analysis");
     } catch (err) {
       console.error("Profiel opslaan mislukt", err);
       setError(t?.traderProfile?.onboardingStep?.saveError);

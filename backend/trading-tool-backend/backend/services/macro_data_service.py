@@ -42,15 +42,6 @@ def _extract_numeric_result(result: Any) -> float:
     return float(result)
 
 class MacroDataService:
-    RECOMMENDED_ASSET_CLASS_PRESETS: dict[str, list[str]] = {
-        "crypto": ["fear_greed_index", "btc_dominance", "dxy"],
-        "stock": ["dxy", "fear_greed_index"],
-        "etf": ["dxy", "fear_greed_index"],
-        "index": ["dxy", "fear_greed_index"],
-        "forex": ["dxy", "fear_greed_index"],
-        "commodity": ["dxy", "fear_greed_index", "oil_price"],
-    }
-
     def __init__(self, session: AsyncSession):
         self.session = session
         self.repository = MacroDataRepository(session)
@@ -112,12 +103,11 @@ class MacroDataService:
                     "rows": class_rows,
                 }
 
-        default_rows = await self.preference_repository.list_scope_configs(user_id, category="macro")
         return {
-            "scope": "default",
+            "scope": "empty",
             "symbol": normalized_symbol,
             "asset_class": normalized_asset_class,
-            "rows": default_rows,
+            "rows": [],
         }
 
     async def _build_scope_items(self, indicator_names: List[str]) -> List[tuple[str, int]]:
@@ -155,27 +145,20 @@ class MacroDataService:
                 raise ValueError("Een symbool is verplicht voor scope 'symbol'.")
             target_symbol = normalized_symbol
             target_asset_class = normalized_asset_class
-            preset_key = normalized_asset_class
         elif normalized_scope == "asset_class":
             if not normalized_asset_class:
                 raise ValueError("Een asset_class of herleidbaar symbool is verplicht voor scope 'asset_class'.")
             target_symbol = None
             target_asset_class = normalized_asset_class
-            preset_key = normalized_asset_class
         elif normalized_scope == "default":
             target_symbol = None
             target_asset_class = None
-            preset_key = "default"
         else:
             raise ValueError("Scope moet 'default', 'asset_class' of 'symbol' zijn.")
 
-        indicator_names = ["dxy", "fear_greed_index"] if preset_key == "default" else list(
-            self.RECOMMENDED_ASSET_CLASS_PRESETS.get(str(preset_key or "").lower(), ["dxy", "fear_greed_index"])
-        )
-        normalized_items = await self._build_scope_items(indicator_names)
         rows = await self.preference_repository.replace_scope_configs(
             user_id,
-            normalized_items,
+            [],
             category="macro",
             symbol=target_symbol,
             asset_class=target_asset_class,
@@ -187,7 +170,22 @@ class MacroDataService:
             "rows": rows,
         }
 
-    async def sync_effective_indicators(self, user_id: int, symbol: str) -> Dict[str, Any]:
+    async def _reset_symbol_indicator_rows(self, user_id: int, symbol: str) -> None:
+        normalized_symbol = str(symbol or "BTC").strip().upper()
+        existing_rows = await self.repository.get_active_day_macro_data(user_id, symbol=normalized_symbol)
+        for row in existing_rows:
+            indicator_name = str(getattr(row, "name", "") or "").strip()
+            if not indicator_name:
+                continue
+            await self.repository.delete_user_macro_indicator(indicator_name, user_id, symbol=normalized_symbol)
+
+    async def sync_effective_indicators(
+        self,
+        user_id: int,
+        symbol: str,
+        *,
+        reset_existing: bool = False,
+    ) -> Dict[str, Any]:
         normalized_symbol = str(symbol or "BTC").strip().upper()
         resolved = await self.resolve_effective_preferences(user_id, symbol=normalized_symbol)
         indicator_names = [normalize_indicator_name(row.indicator) for row in resolved["rows"]]
@@ -199,6 +197,8 @@ class MacroDataService:
             "synced": [],
             "failed": [],
         }
+        if reset_existing:
+            await self._reset_symbol_indicator_rows(user_id, normalized_symbol)
         for indicator_name in indicator_names:
             try:
                 payload = await self.add_macro_indicator(

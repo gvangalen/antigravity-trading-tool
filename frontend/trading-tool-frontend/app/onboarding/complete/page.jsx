@@ -12,7 +12,7 @@ export default function OnboardingCompletePage() {
   const router = useRouter();
   const { t } = useTranslation();
   const { runBootstrap, loading } = useBootstrapAgents();
-  const { finish, saving } = useOnboarding();
+  const { activeAsset, finish, saving } = useOnboarding();
 
   useEffect(() => {
     trackAssistantEvent({
@@ -38,7 +38,7 @@ export default function OnboardingCompletePage() {
     } catch (err) {
       console.error("Bootstrap agents error:", err);
     } finally {
-      router.push("/asset");
+      router.push(activeAsset ? `/dashboard?symbol=${encodeURIComponent(activeAsset)}` : "/dashboard");
     }
   };
 
@@ -49,33 +49,35 @@ export default function OnboardingCompletePage() {
       </div>
 
       <h1 className="mb-4 text-4xl font-bold text-[var(--text-dark)]">
-        {t?.traderProfile?.onboardingComplete?.title}
+        {t?.traderProfile?.onboardingComplete?.title || "Gefeliciteerd, je bent klaar."}
       </h1>
 
       <p className="mx-auto mb-10 max-w-xl text-lg leading-relaxed text-[var(--text-light)]">
-        {t?.traderProfile?.onboardingComplete?.description}
+        {t?.traderProfile?.onboardingComplete?.description ||
+          "Je analyse, plan en automatisering zijn ingesteld. FINN houdt vanaf nu je markt, regels en voortgang bij."}
       </p>
 
       <div className="mx-auto mb-10 max-w-2xl rounded-3xl border border-blue-100 bg-blue-50 p-6 text-left shadow-sm">
         <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-[0.22em] text-blue-600">
           <Sparkles size={14} />
-          {t?.traderProfile?.onboardingComplete?.finnSays}
+          {t?.traderProfile?.onboardingComplete?.finnSays || "Today with FINN"}
         </div>
         <p className="mt-3 text-sm font-semibold leading-relaxed text-slate-700">
-          {t?.traderProfile?.onboardingComplete?.finnBody}
+          {t?.traderProfile?.onboardingComplete?.finnBody ||
+            "Your profile, first analysis flow and automation baseline are ready. Start in Analysis and FINN will keep guiding you from there."}
         </p>
         <div className="mt-4 flex flex-wrap gap-2">
           <span className="inline-flex items-center gap-2 rounded-full border border-blue-200 bg-white px-3 py-1.5 text-xs font-bold text-blue-700">
             <LayoutDashboard size={12} />
-            {t?.traderProfile?.onboardingComplete?.chips?.dashboard}
+            {t?.traderProfile?.onboardingComplete?.chips?.dashboard || "Analysis active"}
           </span>
           <span className="inline-flex items-center gap-2 rounded-full border border-blue-200 bg-white px-3 py-1.5 text-xs font-bold text-blue-700">
             <FileText size={12} />
-            {t?.traderProfile?.onboardingComplete?.chips?.report}
+            {t?.traderProfile?.onboardingComplete?.chips?.report || "Plan linked"}
           </span>
           <span className="inline-flex items-center gap-2 rounded-full border border-blue-200 bg-white px-3 py-1.5 text-xs font-bold text-blue-700">
             <Sparkles size={12} />
-            {t?.traderProfile?.onboardingComplete?.chips?.askFinn}
+            {t?.traderProfile?.onboardingComplete?.chips?.askFinn || "Automation saved"}
           </span>
         </div>
       </div>
@@ -86,13 +88,14 @@ export default function OnboardingCompletePage() {
         className="inline-flex items-center gap-2 rounded-xl bg-[var(--primary)] px-6 py-3 font-semibold text-white shadow-md transition hover:bg-[var(--primary-dark)] hover:shadow-lg disabled:opacity-60"
       >
         {loading || saving
-          ? t?.traderProfile?.onboardingComplete?.preparingDashboard
-          : t?.traderProfile?.onboardingComplete?.openDashboard}
+          ? t?.traderProfile?.onboardingComplete?.preparingDashboard || "Preparing analysis"
+          : t?.traderProfile?.onboardingComplete?.openDashboard || "Ga naar Analysis"}
         <ArrowRight size={18} />
       </button>
 
       <p className="mt-6 text-sm text-[var(--text-light)]">
-        {t?.traderProfile?.onboardingComplete?.footer}
+        {t?.traderProfile?.onboardingComplete?.footer ||
+          "Reflection builds automatically later from your decisions, reports and bot activity."}
       </p>
     </div>
   );

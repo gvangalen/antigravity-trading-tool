@@ -2,7 +2,7 @@
 
 import { fetchAuth } from "@/lib/api/auth";
 
-const ONBOARDING_STATUS_CACHE_KEY = "tt_onboarding_status_cache_v1";
+const ONBOARDING_STATUS_CACHE_KEY = "tt_onboarding_status_cache_v2";
 const ONBOARDING_STATUS_CACHE_TTL_MS = 5 * 60 * 1000;
 
 function readOnboardingStatusCache(maxAgeMs = ONBOARDING_STATUS_CACHE_TTL_MS) {
@@ -32,6 +32,16 @@ export function cacheOnboardingStatus(status) {
         savedAt: Date.now(),
       })
     );
+  } catch {
+    // Silent cache failure
+  }
+}
+
+export function clearOnboardingStatusCache() {
+  if (typeof window === "undefined") return;
+
+  try {
+    sessionStorage.removeItem(ONBOARDING_STATUS_CACHE_KEY);
   } catch {
     // Silent cache failure
   }
@@ -109,6 +119,30 @@ export const resetOnboarding = async () => {
     has_strategy: false,
     has_bot: false,
     onboarding_complete: false,
+    current_phase: "profile",
+    next_action: "complete_profile",
+    next_route: "/onboarding/profile",
+    phases_completed: {
+      profile: false,
+      analysis: false,
+      plan: false,
+      automation: false,
+      complete: false,
+    },
+    phases_unlocked: {
+      profile: true,
+      analysis: false,
+      plan: false,
+      automation: false,
+      complete: false,
+    },
+    phase_missing: {
+      profile: ["profile_preferences"],
+      analysis: ["asset", "market_indicator", "macro_indicator", "technical_indicator"],
+      plan: ["setup", "strategy"],
+      automation: ["exchange_connection", "bot"],
+      complete: [],
+    },
   });
   return result;
 };

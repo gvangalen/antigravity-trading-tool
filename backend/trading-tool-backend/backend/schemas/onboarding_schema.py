@@ -1,3 +1,5 @@
+from typing import Dict, List, Optional
+
 from pydantic import BaseModel
 
 class StepRequest(BaseModel):
@@ -14,3 +16,10 @@ class OnboardingStatusResponse(BaseModel):
     has_bot: bool
     onboarding_complete: bool
     pipeline_started: bool
+    active_asset: Optional[str] = None
+    current_phase: str = "profile"
+    next_action: str = "complete_profile"
+    next_route: str = "/onboarding/profile"
+    phases_completed: Dict[str, bool] = {}
+    phases_unlocked: Dict[str, bool] = {}
+    phase_missing: Dict[str, List[str]] = {}

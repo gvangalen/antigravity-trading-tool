@@ -1,13 +1,15 @@
 from __future__ import annotations
 
+import logging
 import re
 from datetime import date, datetime, timezone
+from time import perf_counter
 from typing import Any, Iterable
 
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
-from backend.infrastructure.models import Watchlist
+from backend.infrastructure.models import AiCategoryInsight, Watchlist
 from backend.infrastructure.repositories.intelligence_repository import IntelligenceRepository
 from backend.infrastructure.repositories.macro_data_repository import MacroDataRepository
 from backend.infrastructure.repositories.market_data_repository import MarketDataRepository
@@ -18,6 +20,7 @@ from backend.services.asset_catalog_service import AssetCatalogService
 from backend.services.intelligence_service import IntelligenceService
 from backend.services.score_service import ScoreService
 
+logger = logging.getLogger(__name__)
 
 PERIOD_DAYS = {"day": 1, "week": 7, "month": 30, "quarter": 90}
 STALE_AFTER_SECONDS = {
@@ -288,6 +291,15 @@ class WorkspaceDataService:
         technical_period: str,
         watchlist_symbols: list[str] | None = None,
     ) -> dict[str, Any]:
+        total_started = perf_counter()
+        timings_ms: dict[str, float] = {}
+
+        async def measure(name: str, factory):
+            started = perf_counter()
+            value = await factory()
+            timings_ms[name] = round((perf_counter() - started) * 1000, 2)
+            return value
+
         symbol = str(symbol or "BTC").upper()
         periods = {
             "market": str(market_period or "day").lower(),
@@ -298,19 +310,21 @@ class WorkspaceDataService:
 
         # Repositories share this request's AsyncSession. SQLAlchemy sessions may
         # not provision or execute multiple connections concurrently.
-        market_rows = await self._market_rows(user_id, symbol, periods["market"])
-        macro_rows = await self._macro_rows(user_id, symbol, periods["macro"])
-        technical_rows = await self._technical_rows(user_id, symbol, periods["technical"])
-        quote_snapshot = await self._resolve_quote_snapshot(symbol)
-        regime = await self.intelligence.get_market_intelligence(
-            user_id,
-            symbol,
-            allow_compute=False,
+        market_rows = await measure("market_rows", lambda: self._market_rows(user_id, symbol, periods["market"]))
+        macro_rows = await measure("macro_rows", lambda: self._macro_rows(user_id, symbol, periods["macro"]))
+        technical_rows = await measure("technical_rows", lambda: self._technical_rows(user_id, symbol, periods["technical"]))
+        quote_snapshot = await measure("quote_snapshot", lambda: self._resolve_quote_snapshot(symbol))
+        regime = await measure(
+            "regime",
+            lambda: self.intelligence.get_market_intelligence(user_id, symbol, allow_compute=False),
         )
-        master = await self.score_service.get_master_score(user_id, symbol)
-        daily = await self._daily_scores(user_id, symbol)
+        master = await measure("master_score", lambda: self.score_service.get_master_score(user_id, symbol))
+        daily = await measure("daily_scores", lambda: self._daily_scores(user_id, symbol))
         session = getattr(self, "session", None)
-        asset_catalog = await AssetCatalogService(session).get_assets([symbol]) if session is not None else {}
+        asset_catalog = await measure(
+            "asset_catalog",
+            lambda: AssetCatalogService(session).get_assets([symbol]) if session is not None else self._async_empty_dict(),
+        )
         asset_meta = asset_catalog.get(symbol, {})
 
         quote_payload = {
@@ -342,11 +356,26 @@ class WorkspaceDataService:
             if watchlist_symbols
             else await self._fetch_user_watchlist_symbols(user_id)
         )
-        watchlist_payload = await self._build_watchlist_payload(
-            user_id,
-            effective_watchlist_symbols or [symbol],
-            master_payload.get("weights"),
+        watchlist_payload = await measure(
+            "watchlist",
+            lambda: self._build_watchlist_payload(
+                user_id,
+                effective_watchlist_symbols or [symbol],
+                master_payload.get("weights"),
+            ),
         )
+        finn_snapshot = await measure(
+            "finn_snapshot",
+            lambda: self._build_finn_snapshot(user_id, symbol, master_payload, regime, daily),
+        )
+        timings_ms["total"] = round((perf_counter() - total_started) * 1000, 2)
+        if timings_ms["total"] > 500:
+            logger.info(
+                "Workspace snapshot latency user_id=%s symbol=%s timings_ms=%s",
+                user_id,
+                symbol,
+                timings_ms,
+            )
 
         return {
             "symbol": symbol,
@@ -371,6 +400,8 @@ class WorkspaceDataService:
             "master": master_payload,
             "watchlist": watchlist_payload,
             "regime": regime,
+            "finn": finn_snapshot,
+            "timings_ms": timings_ms,
             "generated_at": datetime.now(timezone.utc).isoformat(),
             "ai_calls": 0,
         }
@@ -480,6 +511,105 @@ class WorkspaceDataService:
             quote_map[symbol] = _materialize_quote_snapshot(row)
         return quote_map
 
+    async def _build_finn_snapshot(
+        self,
+        user_id: int,
+        symbol: str,
+        master_payload: dict[str, Any],
+        regime: dict[str, Any] | None,
+        daily: dict[str, Any] | None,
+    ) -> dict[str, Any]:
+        if not hasattr(self.session, "execute"):
+            return {
+                "status": "unavailable",
+                "source": "workspace_snapshot",
+                "symbol": symbol,
+                "headline": None,
+                "summary": None,
+                "risk_summary": None,
+                "master_bias": master_payload.get("master_bias") or "–",
+                "master_risk": master_payload.get("master_risk") or "–",
+                "regime": "unknown",
+                "strongest_category": None,
+                "categories": {},
+                "freshness": _freshness(master_payload.get("date"), STALE_AFTER_SECONDS["day"], "workspace_snapshot"),
+                "as_of": _iso(master_payload.get("date")),
+            }
+        categories = ("market", "macro", "technical")
+        insights: dict[str, dict[str, Any]] = {}
+        latest_dates: list[Any] = []
+
+        for category in categories:
+            stmt = (
+                select(AiCategoryInsight)
+                .where(
+                    AiCategoryInsight.user_id == user_id,
+                    AiCategoryInsight.category == category,
+                    AiCategoryInsight.symbol == symbol,
+                )
+                .order_by(AiCategoryInsight.date.desc(), AiCategoryInsight.id.desc())
+                .limit(1)
+            )
+            result = await self.session.execute(stmt)
+            row = result.scalars().first()
+            if not row:
+                continue
+            insights[category] = {
+                "summary": row.summary or "",
+                "bias": row.bias or "–",
+                "risk": row.risk or "–",
+                "score": _number(row.avg_score),
+                "as_of": _iso(row.date),
+            }
+            latest_dates.append(row.date)
+
+        master_summary = str(master_payload.get("summary") or "").strip()
+        master_date = master_payload.get("date")
+        freshness = _freshness(master_date, STALE_AFTER_SECONDS["day"], "workspace_snapshot")
+        regime_label = (
+            regime.get("regime_label")
+            or regime.get("label")
+            or regime.get("phase")
+            or regime.get("market_phase")
+            or "unknown"
+        ) if isinstance(regime, dict) else "unknown"
+        strongest_category = max(
+            (
+                (name, _number((daily or {}).get(name, {}).get("score")))
+                for name in categories
+            ),
+            key=lambda item: item[1] if item[1] is not None else float("-inf"),
+            default=(None, None),
+        )[0]
+
+        if master_summary:
+            headline = master_summary
+            summary = master_summary
+            status = "available"
+        else:
+            headline = None
+            summary = None
+            status = "unavailable"
+
+        return {
+            "status": status,
+            "source": "workspace_snapshot",
+            "symbol": symbol,
+            "headline": headline,
+            "summary": summary,
+            "risk_summary": master_payload.get("outlook") or None,
+            "master_bias": master_payload.get("master_bias") or "–",
+            "master_risk": master_payload.get("master_risk") or "–",
+            "regime": regime_label,
+            "strongest_category": strongest_category,
+            "categories": insights,
+            "freshness": freshness,
+            "as_of": _iso(master_date or (max(latest_dates) if latest_dates else None)),
+        }
+
+    async def _async_empty_dict(self) -> dict[str, Any]:
+        return {}
+
     async def get_indicator_detail(
         self,
         user_id: int,
@@ -530,32 +660,65 @@ class WorkspaceDataService:
         }
 
     async def _market_rows(self, user_id: int, symbol: str, period: str) -> list[dict[str, Any]]:
+        allowed: set[str] = set()
+        resolver = getattr(self.market, "resolve_effective_preferences", None)
+        if callable(resolver):
+            resolved = await resolver(user_id, symbol=symbol)
+            allowed = {
+                _indicator_key(row.indicator)
+                for row in resolved.get("rows", [])
+                if str(row.indicator or "").strip()
+            }
         if period == "day":
             rows = await self.market.get_active_day_indicators(user_id, symbol)
-            return [_market_row(row) for row in _latest_by_name(rows, "name")]
+            payload = [_market_row(row) for row in _latest_by_name(rows, "name")]
+            return [row for row in payload if not allowed or _indicator_key(row.get("name")) in allowed]
         else:
             rows = await self.market.get_period_indicators(user_id, symbol, PERIOD_DAYS[period])
-            return _aggregate_by_name(rows, "name", _market_row)
+            payload = _aggregate_by_name(rows, "name", _market_row)
+            return [row for row in payload if not allowed or _indicator_key(row.get("name")) in allowed]
 
     async def _macro_rows(self, user_id: int, symbol: str, period: str) -> list[dict[str, Any]]:
+        allowed: set[str] = set()
+        resolver = getattr(self.macro, "resolve_effective_preferences", None)
+        if callable(resolver):
+            resolved = await resolver(user_id, symbol=symbol)
+            allowed = {
+                _indicator_key(row.indicator)
+                for row in resolved.get("rows", [])
+                if str(row.indicator or "").strip()
+            }
         if period == "day":
             rows = await self.macro.get_active_day_macro_data(user_id, symbol)
-            return [_macro_row(row) for row in _latest_by_name(rows, "name")]
+            payload = [_macro_row(row) for row in _latest_by_name(rows, "name")]
+            return [row for row in payload if not allowed or _indicator_key(row.get("name")) in allowed]
         else:
             rows = await self.macro._get_data_by_days(user_id, PERIOD_DAYS[period], symbol=symbol)
-            return _aggregate_by_name(rows, "name", _macro_row)
+            payload = _aggregate_by_name(rows, "name", _macro_row)
+            return [row for row in payload if not allowed or _indicator_key(row.get("name")) in allowed]
 
     async def _technical_rows(self, user_id: int, symbol: str, period: str) -> list[dict[str, Any]]:
+        allowed: set[str] = set()
+        resolver = getattr(self.technical, "resolve_effective_preferences", None)
+        if callable(resolver):
+            resolved = await resolver(user_id, symbol=symbol)
+            allowed = {
+                _indicator_key(row.indicator)
+                for row in resolved.get("rows", [])
+                if str(row.indicator or "").strip()
+            }
         if period == "day":
             rows = await self.technical.get_day_data(user_id, symbol)
-            return [_technical_row(row) for row in _latest_by_name(rows, "indicator")]
+            payload = [_technical_row(row) for row in _latest_by_name(rows, "indicator")]
+            return [row for row in payload if not allowed or _indicator_key(row.get("name")) in allowed]
         elif period == "week":
             rows = await self.technical.get_week_data(user_id, symbol)
         elif period == "month":
             rows = await self.technical.get_month_data(user_id, symbol)
         else:
             rows = await self.technical.get_quarter_data(user_id, symbol)
-        return _aggregate_by_name(rows, "indicator", _technical_row)
+        payload = _aggregate_by_name(rows, "indicator", _technical_row)
+        return [row for row in payload if not allowed or _indicator_key(row.get("name")) in allowed]
 
     @staticmethod
     def _category_payload(
