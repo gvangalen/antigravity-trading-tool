@@ -1,9 +1,9 @@
 1:"$Sreact.fragment"
 7:I[57150,[],""]
 :HL["/_next/static/css/fd345a29c7edc31d.css","style"]
-2:Tc7a,
+2:Tc60,
 (function () {
-  var VERSION = "local-build-v2-2026-08-14T13:30:11.857Z";
+  var VERSION = "static-export";
   var VERSION_KEY = "tradamind_app_cache_version";
   var RECOVERY_PREFIX = "tradamind_app_cache_recovered_" + VERSION + "_";
   var RECOVERY_COOLDOWN_MS = 30000;
