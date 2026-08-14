@@ -43,6 +43,43 @@ function PortfolioPageInner() {
     });
   }, [bots, portfolios]);
 
+  const filteredBotsForOverview = useMemo(() => {
+    if (envFilter === "all") return aggregatedBotsForOverview;
+    return aggregatedBotsForOverview.filter((bot) =>
+      envFilter === "live" ? Boolean(bot?.is_live) : !bot?.is_live
+    );
+  }, [aggregatedBotsForOverview, envFilter]);
+
+  const fallbackSnapshot = useMemo(() => {
+    const summary = filteredBotsForOverview.reduce(
+      (acc, bot) => {
+        const budgetTotal = Number(bot?.budget?.total_eur ?? 0);
+        const available = Number(bot?.stats?.available_eur ?? budgetTotal);
+        const invested = Number(bot?.stats?.invested_eur ?? 0);
+        const positionValue = Number(bot?.stats?.position_value_eur ?? 0);
+        const btcQty = Number(bot?.stats?.net_qty ?? 0);
+
+        acc.equity += positionValue > 0 || invested > 0 ? available + positionValue : budgetTotal;
+        acc.cash += positionValue > 0 || invested > 0 ? available : budgetTotal;
+        acc.btc_qty += btcQty;
+        acc.btc_value += positionValue;
+        acc.invested += invested;
+        acc.unrealized_pnl += positionValue - invested;
+        return acc;
+      },
+      {
+        equity: 0,
+        cash: 0,
+        btc_qty: 0,
+        btc_value: 0,
+        invested: 0,
+        unrealized_pnl: 0,
+      }
+    );
+
+    return summary;
+  }, [filteredBotsForOverview]);
+
   return (
     <div className="page-container !max-w-none !px-6 bg-white dark:bg-[#020617] transition-colors h-auto overflow-visible pb-24">
       <header className="page-header border-l-4 border-blue-600 pl-8 mb-16">
@@ -78,6 +115,7 @@ function PortfolioPageInner() {
               title={copy.portfolioOverviewCardTitle}
               defaultRange="1W"
               is_live={envFilter === "all" ? null : envFilter === "live"}
+              fallbackSnapshot={fallbackSnapshot}
             />
           </div>
         </div>

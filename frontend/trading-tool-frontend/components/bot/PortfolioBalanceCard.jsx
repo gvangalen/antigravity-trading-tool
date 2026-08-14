@@ -88,6 +88,7 @@ export default function PortfolioBalanceCard({
   defaultRange = "1W",
   title = null,
   is_live = null,
+  fallbackSnapshot = null,
 }) {
   const { t, locale } = useTranslation();
   const copy = t?.botPage?.portfolioBalance || {};
@@ -102,6 +103,15 @@ export default function PortfolioBalanceCard({
     bucket: rangeConfig.bucket,
     limit: rangeConfig.limit,
   });
+
+  const hasMeaningfulHistory = useMemo(() => {
+    if (!Array.isArray(data) || data.length === 0) return false;
+    return data.some((point) =>
+      ["equity", "cash", "btc_value", "btc_qty", "invested", "unrealized_pnl"].some(
+        (key) => Math.abs(Number(point?.[key] ?? 0)) > 0
+      )
+    );
+  }, [data]);
 
   /* =====================================================
      LIVE PORTFOLIO REFRESH
@@ -124,10 +134,18 @@ export default function PortfolioBalanceCard({
   ===================================================== */
 
   const series = useMemo(() => {
-    if (Array.isArray(data) && data.length > 0) return data;
+    if (hasMeaningfulHistory) return data;
 
     const now = new Date();
     const points = [];
+    const fallbackPoint = {
+      equity: Number(fallbackSnapshot?.equity ?? 0),
+      cash: Number(fallbackSnapshot?.cash ?? 0),
+      btc_value: Number(fallbackSnapshot?.btc_value ?? 0),
+      btc_qty: Number(fallbackSnapshot?.btc_qty ?? 0),
+      invested: Number(fallbackSnapshot?.invested ?? 0),
+      unrealized_pnl: Number(fallbackSnapshot?.unrealized_pnl ?? 0),
+    };
 
     for (let i = rangeConfig.limit - 1; i >= 0; i--) {
       const d = new Date(now);
@@ -140,17 +158,12 @@ export default function PortfolioBalanceCard({
 
       points.push({
         ts: d.toISOString(),
-        equity: 0,
-        cash: 0,
-        btc_value: 0,
-        btc_qty: 0,
-        invested: 0,
-        unrealized_pnl: 0,
+        ...fallbackPoint,
       });
     }
 
     return points;
-  }, [data, rangeConfig.bucket, rangeConfig.limit]);
+  }, [data, fallbackSnapshot, hasMeaningfulHistory, rangeConfig.bucket, rangeConfig.limit]);
 
   const { last, delta, pct } = useMemo(
     () => calcDelta(series, mode),
