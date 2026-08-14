@@ -20,8 +20,34 @@ jobs:
     timeout-minutes: 60
 
     steps:
+      - name: Resolve deploy inputs
+        id: deploy-inputs
+        shell: bash
+        env:
+          RAW_SERVER_IP: ${{ secrets.HOST || secrets.SERVER_IP || vars.HOST || vars.SERVER_IP }}
+          RAW_DEPLOY_KEY: ${{ secrets.SSH_PRIVATE_KEY || secrets.DEPLOY_SSH_KEY }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "${RAW_SERVER_IP:-}" ]; then
+            echo "❌ Missing deploy host. Configure Actions secret HOST (preferred) or SERVER_IP." >&2
+            exit 1
+          fi
+
+          if [ -z "${RAW_DEPLOY_KEY:-}" ]; then
+            echo "❌ Missing deploy SSH key. Configure Actions secret SSH_PRIVATE_KEY (preferred) or DEPLOY_SSH_KEY." >&2
+            exit 1
+          fi
+
+          printf 'server_ip=%s\n' "$RAW_SERVER_IP" >> "$GITHUB_OUTPUT"
+          {
+            echo 'deploy_key<<EOF'
+            printf '%s\n' "$RAW_DEPLOY_KEY"
+            echo 'EOF'
+          } >> "$GITHUB_OUTPUT"
+
       - name: Checkout deploy commit
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        uses: actions/checkout@v5.1.0
         with:
           ref: ${{ github.event.workflow_run.head_sha }}
           fetch-depth: 0
@@ -29,7 +55,7 @@ jobs:
       - name: Prepare deploy key
         shell: bash
         env:
-          DEPLOY_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+          DEPLOY_KEY: ${{ steps.deploy-inputs.outputs.deploy_key }}
         run: |
           set -euo pipefail
           printf '%s\n' "$DEPLOY_KEY" > "$RUNNER_TEMP/tradamind-deploy-key"
@@ -58,7 +84,7 @@ jobs:
       - name: Deploy production
         shell: bash
         env:
-          SERVER_IP: ${{ secrets.HOST }}
+          SERVER_IP: ${{ steps.deploy-inputs.outputs.server_ip }}
           SSH_KEY: ${{ runner.temp }}/tradamind-deploy-key
           SKIP_GIT_PUSH: "true"
         run: |
