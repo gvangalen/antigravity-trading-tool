@@ -1,8 +1,33 @@
 import logging
+import asyncio
 from celery import shared_task, chain
 from backend.utils.db import get_db_connection
 
 logger = logging.getLogger(__name__)
+
+
+@shared_task(name="backend.celery_task.onboarding_task.generate_first_dashboard_briefing")
+def generate_first_dashboard_briefing(user_id: int):
+    from backend.infrastructure.database import async_session_factory
+    from backend.services.finn_plan_service import FinnPlanService
+
+    async def _run() -> dict:
+        async with async_session_factory() as session:
+            service = FinnPlanService(session)
+            result = await service.generate_and_store_first_dashboard_briefing(
+                user_id,
+                trigger="onboarding_pipeline",
+            )
+            try:
+                from backend.api.ai_assistant_api import _invalidate_mission_control_cache
+
+                _invalidate_mission_control_cache(user_id)
+            except Exception:
+                logger.debug("Mission control API-cache invalidation skipped for user_id=%s", user_id, exc_info=True)
+            FinnPlanService.invalidate_runtime_caches_for_user(user_id)
+            return result
+
+    return asyncio.run(_run())
 
 
 @shared_task(
@@ -103,6 +128,9 @@ def run_onboarding_pipeline(self, user_id: int):
 
             # 7️⃣ Dagrapport
             generate_daily_report.si(user_id),
+
+            # 8️⃣ First dashboard briefing
+            generate_first_dashboard_briefing.si(user_id),
         )
 
         workflow.apply_async()

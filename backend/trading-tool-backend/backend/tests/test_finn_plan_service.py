@@ -230,6 +230,332 @@ def test_sanitize_context_keeps_strategy_draft_for_short_risk_profile_answer():
     assert sanitized["current_flow"] == "strategy_creation"
 
 
+def test_first_dashboard_observation_prefers_macro_gap_for_btc_swing_profile():
+    service = _service()
+
+    observation, next_action = service._first_dashboard_observation_and_action(
+        "BTC",
+        profile={
+            "trader_types": ["swing_trader"],
+            "risk_profiles": ["balanced"],
+            "primary_timeframes": ["4h", "1d"],
+        },
+        setup={"timeframe": "4H"},
+        strategy={"name": "BTC Swing Plan"},
+        linked_bot={"name": "BTC Bot", "is_live": False, "risk_profile": "balanced"},
+        indicators={"technical": ["RSI", "volume", "ma200"], "macro": [], "market": []},
+        data_readiness={"status": "ready"},
+        has_scores=True,
+        blockers=[],
+    )
+
+    assert "macro context" in observation.lower()
+    assert "macro indicator" in next_action["question"].lower()
+
+
+def test_first_dashboard_observation_changes_for_aapl_missing_market_snapshot():
+    service = _service()
+
+    observation, next_action = service._first_dashboard_observation_and_action(
+        "AAPL",
+        profile={
+            "trader_types": ["investor"],
+            "risk_profiles": ["conservative"],
+            "primary_timeframes": ["1d"],
+        },
+        setup={"timeframe": "1D"},
+        strategy={"name": "AAPL Position Plan"},
+        linked_bot={"name": "AAPL Paper Bot", "is_live": False, "risk_profile": "conservative"},
+        indicators={"technical": ["VWAP"], "macro": ["DXY"], "market": ["price"]},
+        data_readiness={"status": "score_generation_missing"},
+        has_scores=False,
+        blockers=[],
+    )
+
+    assert "waiting for the first complete market snapshot" in observation.lower()
+    assert "review your aapl plan" in next_action["label"].lower()
+
+
+def test_first_dashboard_workqueue_item_uses_relevant_next_action():
+    service = _service()
+
+    item = service._mission_workqueue_from_first_dashboard_context({
+        "asset": "BTC",
+        "observation": "Your plan is technically configured, but it still lacks broader macro context.",
+        "next_action": {
+            "label": "Review suggested macro context",
+            "question": "Would you like to review one relevant macro indicator for BTC before activation?",
+        },
+    })
+
+    assert item["type"] == "first_dashboard_review"
+    assert item["title"] == "Review suggested macro context"
+    assert "macro indicator" in item["next_best_action"]["prompt"].lower()
+
+
+def _first_dashboard_payload(version: str = "ctx-v1"):
+    return {
+        "asset": "BTC",
+        "context_version": version,
+        "allowed_evidence_refs": [
+            "asset.symbol",
+            "indicators.macro",
+            "bot.is_live",
+            "market.status",
+            "market.freshness",
+        ],
+        "fallback_result": {
+            "headline": "Your BTC plan is ready.",
+            "observation": "Your plan still lacks broader macro context.",
+            "reasoning": "Configured technical signals are present, but no macro layer is stored yet.",
+            "next_question": "Would you like to review one relevant macro indicator before activation?",
+            "suggested_action": "Review suggested macro context",
+            "evidence_refs": ["asset.symbol", "indicators.macro"],
+        },
+        "input_snapshot": {"asset": "BTC"},
+    }
+
+
+def test_generate_first_dashboard_briefing_stores_valid_ai_result(monkeypatch):
+    service = FinnPlanService(db_session=object())
+    stored_state = {}
+
+    async def fake_prepare(*, user_id, **kwargs):
+        return _first_dashboard_payload()
+
+    async def fake_load(_user_id):
+        return dict(stored_state)
+
+    async def fake_store(_user_id, state):
+        stored_state.clear()
+        stored_state.update(state)
+
+    monkeypatch.setattr(service, "_prepare_first_dashboard_payload", fake_prepare)
+    monkeypatch.setattr(service, "_load_first_dashboard_briefing_state", fake_load)
+    monkeypatch.setattr(service, "_store_first_dashboard_briefing_state", fake_store)
+    monkeypatch.setattr(finn_plan_module, "get_ai_availability", lambda: {"available": True})
+    monkeypatch.setattr(finn_plan_module, "acquire_ai_call_slot", lambda scope, scheduled=True: True)
+    monkeypatch.setattr(finn_plan_module, "get_user_email_snapshot", lambda user_id: "qa@example.com")
+    monkeypatch.setattr(
+        finn_plan_module,
+        "ask_gpt_json",
+        lambda **kwargs: {
+            "headline": "Your BTC plan is ready for review.",
+            "observation": "The plan is technically configured, but macro context is still missing.",
+            "reasoning": "That matters because your current confirmation layer relies only on technical inputs.",
+            "next_question": "Would you like me to suggest one macro indicator before activation?",
+            "suggested_action": "Review suggested macro context",
+            "evidence_refs": ["asset.symbol", "indicators.macro"],
+        },
+    )
+
+    result = asyncio.run(service.generate_and_store_first_dashboard_briefing(7))
+
+    assert result["status"] == "ready"
+    assert result["response_source"] == "ai_generated"
+    assert stored_state["first_dashboard_briefing"]["status"] == "ready"
+    assert stored_state["first_dashboard_briefing"]["response_source"] == "ai_generated"
+
+
+def test_generate_first_dashboard_briefing_reuses_same_version_ready_state(monkeypatch):
+    service = FinnPlanService(db_session=object())
+
+    async def fake_prepare(*, user_id, **kwargs):
+        return _first_dashboard_payload("ctx-v1")
+
+    async def fake_load(_user_id):
+        return {
+            "first_dashboard_briefing": {
+                "status": "ready",
+                "context_version": "ctx-v1",
+                "result": _first_dashboard_payload()["fallback_result"],
+            }
+        }
+
+    monkeypatch.setattr(service, "_prepare_first_dashboard_payload", fake_prepare)
+    monkeypatch.setattr(service, "_load_first_dashboard_briefing_state", fake_load)
+    monkeypatch.setattr(finn_plan_module, "log_background_ai_skip", lambda **kwargs: None)
+
+    result = asyncio.run(service.generate_and_store_first_dashboard_briefing(7))
+
+    assert result["status"] == "reused"
+    assert result["response_source"] == "cached_ai"
+
+
+def test_generate_first_dashboard_briefing_retries_transient_fallback_when_due(monkeypatch):
+    service = FinnPlanService(db_session=object())
+    stored_state = {}
+
+    async def fake_prepare(*, user_id, **kwargs):
+        return _first_dashboard_payload("ctx-v1")
+
+    async def fake_load(_user_id):
+        return {
+            "first_dashboard_briefing": {
+                "status": "fallback",
+                "context_version": "ctx-v1",
+                "retryable": True,
+                "retry_count": 1,
+                "next_retry_at": "2026-08-14T00:00:00+00:00",
+                "result": _first_dashboard_payload()["fallback_result"],
+            }
+        }
+
+    async def fake_store(_user_id, state):
+        stored_state.clear()
+        stored_state.update(state)
+
+    monkeypatch.setattr(service, "_prepare_first_dashboard_payload", fake_prepare)
+    monkeypatch.setattr(service, "_load_first_dashboard_briefing_state", fake_load)
+    monkeypatch.setattr(service, "_store_first_dashboard_briefing_state", fake_store)
+    monkeypatch.setattr(finn_plan_module, "get_ai_availability", lambda: {"available": True})
+    monkeypatch.setattr(finn_plan_module, "acquire_ai_call_slot", lambda scope, scheduled=True: True)
+    monkeypatch.setattr(finn_plan_module, "get_user_email_snapshot", lambda user_id: "qa@example.com")
+    monkeypatch.setattr(
+        finn_plan_module,
+        "ask_gpt_json",
+        lambda **kwargs: {
+            "headline": "Your BTC plan is ready for review.",
+            "observation": "The plan is technically configured, but macro context is still missing.",
+            "reasoning": "That matters because your current confirmation layer relies only on technical inputs.",
+            "next_question": "Would you like me to suggest one macro indicator before activation?",
+            "suggested_action": "Review suggested macro context",
+            "evidence_refs": ["asset.symbol", "indicators.macro"],
+        },
+    )
+
+    result = asyncio.run(service.generate_and_store_first_dashboard_briefing(7))
+
+    assert result["status"] == "ready"
+    assert stored_state["first_dashboard_briefing"]["status"] == "ready"
+
+
+def test_generate_first_dashboard_briefing_deduplicates_inflight_same_version(monkeypatch):
+    service = FinnPlanService(db_session=object())
+
+    async def fake_prepare(*, user_id, **kwargs):
+        return _first_dashboard_payload("ctx-v1")
+
+    async def fake_load(_user_id):
+        return {
+            "first_dashboard_briefing": {
+                "status": "generating",
+                "context_version": "ctx-v1",
+            }
+        }
+
+    monkeypatch.setattr(service, "_prepare_first_dashboard_payload", fake_prepare)
+    monkeypatch.setattr(service, "_load_first_dashboard_briefing_state", fake_load)
+    monkeypatch.setattr(finn_plan_module, "log_background_ai_skip", lambda **kwargs: None)
+
+    result = asyncio.run(service.generate_and_store_first_dashboard_briefing(7))
+
+    assert result["status"] == "inflight"
+    assert result["response_source"] == "deterministic_fallback"
+
+
+def test_generate_first_dashboard_briefing_falls_back_for_invalid_ai_output(monkeypatch):
+    service = FinnPlanService(db_session=object())
+    stored_state = {}
+
+    async def fake_prepare(*, user_id, **kwargs):
+        return _first_dashboard_payload()
+
+    async def fake_load(_user_id):
+        return dict(stored_state)
+
+    async def fake_store(_user_id, state):
+        stored_state.clear()
+        stored_state.update(state)
+
+    monkeypatch.setattr(service, "_prepare_first_dashboard_payload", fake_prepare)
+    monkeypatch.setattr(service, "_load_first_dashboard_briefing_state", fake_load)
+    monkeypatch.setattr(service, "_store_first_dashboard_briefing_state", fake_store)
+    monkeypatch.setattr(finn_plan_module, "get_ai_availability", lambda: {"available": True})
+    monkeypatch.setattr(finn_plan_module, "acquire_ai_call_slot", lambda scope, scheduled=True: True)
+    monkeypatch.setattr(finn_plan_module, "get_user_email_snapshot", lambda user_id: "qa@example.com")
+    monkeypatch.setattr(
+        finn_plan_module,
+        "ask_gpt_json",
+        lambda **kwargs: {
+            "headline": "Too short",
+            "observation": "Short",
+            "reasoning": "Short",
+            "next_question": "Short",
+            "suggested_action": "Short",
+            "evidence_refs": ["not.allowed"],
+        },
+    )
+
+    result = asyncio.run(service.generate_and_store_first_dashboard_briefing(7))
+
+    assert result["status"] == "fallback"
+    assert stored_state["first_dashboard_briefing"]["status"] == "fallback"
+    assert stored_state["first_dashboard_briefing"]["response_source"] == "deterministic_fallback"
+    assert stored_state["first_dashboard_briefing"]["retryable"] is True
+    assert stored_state["first_dashboard_briefing"]["retry_count"] == 1
+    assert stored_state["first_dashboard_briefing"]["next_retry_at"]
+
+
+def test_resolve_first_dashboard_briefing_uses_cached_ai_for_matching_version():
+    service = _service()
+    payload = _first_dashboard_payload("ctx-v2")
+    stored = {
+        "status": "ready",
+        "context_version": "ctx-v2",
+        "result": {
+            "headline": "Your BTC plan is ready for review.",
+            "observation": "Macro context is still missing from the decision layer.",
+            "reasoning": "That gap matters because broader confirmation is not yet part of the stored setup.",
+            "next_question": "Would you like me to suggest one macro indicator before activation?",
+            "suggested_action": "Review suggested macro context",
+            "evidence_refs": ["asset.symbol", "indicators.macro"],
+        },
+    }
+
+    display = service._resolve_first_dashboard_briefing_display(payload, stored)
+
+    assert display["response_source"] == "cached_ai"
+    assert display["generation_status"] == "ready"
+
+
+def test_resolve_first_dashboard_briefing_uses_fallback_when_context_version_changed():
+    service = _service()
+    payload = _first_dashboard_payload("ctx-v2")
+    stored = {
+        "status": "ready",
+        "context_version": "ctx-v1",
+        "result": {
+            "headline": "Stale result",
+            "observation": "Old observation",
+            "reasoning": "Old reasoning",
+            "next_question": "Old question",
+            "suggested_action": "Old action",
+            "evidence_refs": ["asset.symbol"],
+        },
+    }
+
+    display = service._resolve_first_dashboard_briefing_display(payload, stored)
+
+    assert display["response_source"] == "deterministic_fallback"
+    assert display["briefing"]["headline"] == payload["fallback_result"]["headline"]
+
+
+def test_resolve_first_dashboard_briefing_uses_loading_state_while_generating():
+    service = _service()
+    payload = _first_dashboard_payload("ctx-v2")
+    stored = {
+        "status": "generating",
+        "context_version": "ctx-v2",
+    }
+
+    display = service._resolve_first_dashboard_briefing_display(payload, stored)
+
+    assert display["response_source"] == "briefing_generating"
+    assert display["generation_status"] == "generating"
+    assert display["briefing"]["headline"] == "FINN is reviewing your plan"
+
+
 def test_sanitize_context_drops_stale_plan_draft_for_setup_explain_prompt():
     service = _service()
     context = {

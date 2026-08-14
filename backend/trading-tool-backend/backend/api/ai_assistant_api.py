@@ -3168,5 +3168,9 @@ async def get_finn_mission_control(
         )
         await db.rollback()
     response = await _enrich_with_trader_profile(db, current_user["id"], response)
-    _store_cached_mission_control(current_user["id"], response)
+    generation_status = str(
+        ((response.get("first_dashboard_context") or {}).get("generation_status") or "")
+    ).lower()
+    if generation_status not in {"pending", "generating", "retry_scheduled"}:
+        _store_cached_mission_control(current_user["id"], response)
     return response

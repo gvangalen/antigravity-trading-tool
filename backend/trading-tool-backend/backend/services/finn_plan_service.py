@@ -10,7 +10,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
 from fastapi import HTTPException
-from sqlalchemy import text
+from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.infrastructure.repositories.conversation_state_repository import ConversationStateRepository
@@ -22,8 +22,12 @@ from backend.infrastructure.repositories.report_repository import ReportReposito
 from backend.infrastructure.repositories.score_repository import ScoreRepository
 from backend.infrastructure.repositories.strategy_repository import StrategyRepository
 from backend.infrastructure.repositories.technical_data_repository import TechnicalDataRepository
+from backend.infrastructure.repositories.user_repository import UserRepository
+from backend.infrastructure.models import OnboardingStep
 from backend.schemas.bot_schema import BotConfigCreateSchema, BotConfigUpdateSchema
 from backend.schemas.trading_schema import SetupCreateSchema, StrategyCreateSchema
+from backend.services.ai_availability_service import acquire_ai_call_slot, get_ai_availability
+from backend.services.ai_usage_observability_service import ai_usage_context, get_user_email_snapshot, log_background_ai_skip
 from backend.services.bot_service import BotService
 from backend.services.finn_action_policy_service import FinnActionPolicyService
 from backend.services.finn_execution_governance_service import FinnExecutionGovernanceService
@@ -33,6 +37,8 @@ from backend.services.score_service import ScoreService
 from backend.services.setup_service import SetupService
 from backend.services.strategy_service import StrategyService
 from backend.services.technical_data_service import TechnicalDataService
+from backend.services.trader_profile_service import normalize_trader_profile_preferences
+from backend.utils.openai_client import ask_gpt_json
 from backend.utils.scoring_utils import normalize_indicator_name
 
 
@@ -40,6 +46,12 @@ SUPPORTED_ASSETS = {"BTC", "ETH", "SOL"}
 KNOWN_ASSET_CANDIDATES = ("BTC", "ETH", "SOL", "DOGE", "XRP", "ADA", "BNB", "AVAX", "LINK", "MATIC", "PEPE")
 NUMBER_WITH_DELIMITER = r"([0-9][0-9.,]*)(?=\s|,|/|$)"
 FINN_STATE_VERSION = 2
+FIRST_DASHBOARD_BRIEFING_STATE_VERSION = 1
+FIRST_DASHBOARD_BRIEFING_METADATA_KEY = "first_dashboard_briefing"
+FIRST_DASHBOARD_BRIEFING_ENTRY_POINT = "onboarding_task:first_dashboard_briefing"
+FIRST_DASHBOARD_BRIEFING_PURPOSE = "first_dashboard_briefing"
+FIRST_DASHBOARD_STORAGE_STEP_KEYS = ("bot", "strategy", "setup")
+FIRST_DASHBOARD_MAX_RETRY_ATTEMPTS = 3
 MISSION_CONTROL_PREVIEW_CACHE_TTL_SECONDS = int(os.getenv("MISSION_CONTROL_PREVIEW_CACHE_TTL_SECONDS", "15"))
 MISSION_CONTROL_EXPLAIN_CACHE_TTL_SECONDS = int(os.getenv("MISSION_CONTROL_EXPLAIN_CACHE_TTL_SECONDS", "15"))
 GOVERNANCE_EVENT_CACHE_TTL_SECONDS = int(os.getenv("GOVERNANCE_EVENT_CACHE_TTL_SECONDS", "15"))
@@ -7915,7 +7927,7 @@ class FinnPlanService:
             setups_by_asset: Dict[str, List[Dict[str, Any]]] = {}
             for setup in active_setups:
                 symbol = str(setup.get("symbol") or "").upper()
-                if symbol not in SUPPORTED_ASSETS:
+                if not symbol:
                     continue
                 setups_by_asset.setdefault(symbol, []).append(setup)
                 current = best_setups_by_asset.get(symbol)
@@ -10991,6 +11003,13 @@ class FinnPlanService:
         if not self.session:
             return {}
         try:
+            user = await UserRepository(self.session).get_by_id(user_id)
+            preferences = getattr(user, "ai_preferences", {}) or {} if user else {}
+            active_asset = str(
+                preferences.get("onboarding_asset")
+                or preferences.get("selected_asset")
+                or ""
+            ).strip().upper()
             result = await self.session.execute(
                 text("""
                     SELECT step_key, completed
@@ -11001,6 +11020,7 @@ class FinnPlanService:
             )
             rows = {str(row["step_key"]): bool(row["completed"]) for row in result.mappings()}
             return {
+                "active_asset": active_asset or None,
                 "has_market": rows.get("market", False),
                 "has_macro": rows.get("macro", False),
                 "has_technical": rows.get("technical", False),
@@ -12410,6 +12430,15 @@ class FinnPlanService:
             "skipped_today_count": day_log["skipped_count"],
             "snoozed_today_count": day_log["snoozed_count"],
         }
+        first_dashboard_context = await self._build_first_dashboard_context(
+            user_id,
+            analysis,
+            mission,
+            activity_feed=activity_feed,
+            day_log=day_log,
+        )
+        if first_dashboard_context:
+            mission["first_dashboard_context"] = first_dashboard_context
         behavioral_insight = self._build_behavioral_insight_from_activity(activity_feed, day_log)
         memory: Dict[str, Any] = {}
         if behavioral_insight.get("behavioral_balance_score") is None:
@@ -12515,6 +12544,7 @@ class FinnPlanService:
             "flow": "mission_control",
             "autonomy_level": "advice_only",
             "summary": mission["summary"],
+            "first_dashboard_context": mission.get("first_dashboard_context"),
             "workqueue": mission["workqueue"],
             "workqueue_groups": mission["workqueue_groups"],
             "workqueue_labels": mission["workqueue_labels"],
@@ -12570,6 +12600,1002 @@ class FinnPlanService:
                 "date": analysis.get("date"),
                 "asset_count": analysis.get("asset_count", 0),
             },
+        }
+
+    async def generate_and_store_first_dashboard_briefing(
+        self,
+        user_id: int,
+        *,
+        trigger: str = "onboarding_pipeline",
+    ) -> Dict[str, Any]:
+        payload = await self._prepare_first_dashboard_payload(user_id=user_id)
+        if not payload:
+            return {"status": "skipped", "reason": "not_first_dashboard"}
+
+        current_version = str(payload.get("context_version") or "")
+        state = await self._load_first_dashboard_briefing_state(user_id)
+        stored = state.get(FIRST_DASHBOARD_BRIEFING_METADATA_KEY) or {}
+        stored_version = str(stored.get("context_version") or "")
+        stored_status = str(stored.get("status") or "").lower()
+        asset = str(payload.get("asset") or "BTC")
+
+        retry_due = self._first_dashboard_retry_due(stored)
+        if stored_version == current_version and stored_status == "ready":
+            log_background_ai_skip(
+                user_id=user_id,
+                symbol=asset,
+                purpose=FIRST_DASHBOARD_BRIEFING_PURPOSE,
+                entry_point=FIRST_DASHBOARD_BRIEFING_ENTRY_POINT,
+                reason="first_dashboard_ready_reused",
+            )
+            return {
+                "status": "reused",
+                "context_version": current_version,
+                "response_source": "cached_ai",
+            }
+        if stored_version == current_version and stored_status == "fallback" and not retry_due:
+            log_background_ai_skip(
+                user_id=user_id,
+                symbol=asset,
+                purpose=FIRST_DASHBOARD_BRIEFING_PURPOSE,
+                entry_point=FIRST_DASHBOARD_BRIEFING_ENTRY_POINT,
+                reason="first_dashboard_fallback_reused",
+            )
+            return {
+                "status": "reused",
+                "context_version": current_version,
+                "response_source": "deterministic_fallback",
+            }
+        if stored_version == current_version and stored_status == "generating":
+            log_background_ai_skip(
+                user_id=user_id,
+                symbol=asset,
+                purpose=FIRST_DASHBOARD_BRIEFING_PURPOSE,
+                entry_point=FIRST_DASHBOARD_BRIEFING_ENTRY_POINT,
+                reason="first_dashboard_generation_inflight",
+            )
+            return {
+                "status": "inflight",
+                "context_version": current_version,
+                "response_source": "deterministic_fallback",
+            }
+        if stored_version == current_version and stored_status == "retry_scheduled":
+            stored = {
+                **stored,
+                "status": "generating",
+                "updated_at": _utc_now().isoformat(),
+            }
+
+        started_at = _utc_now().isoformat()
+        await self._store_first_dashboard_briefing_state(
+            user_id,
+            {
+                **state,
+                FIRST_DASHBOARD_BRIEFING_METADATA_KEY: {
+                    "state_version": FIRST_DASHBOARD_BRIEFING_STATE_VERSION,
+                    "status": "generating",
+                    "context_version": current_version,
+                    "trigger": trigger,
+                    "asset": asset,
+                    "retry_count": int(stored.get("retry_count") or 0),
+                    "max_retry_attempts": FIRST_DASHBOARD_MAX_RETRY_ATTEMPTS,
+                    "input_snapshot": payload.get("input_snapshot") or {},
+                    "fallback_result": payload.get("fallback_result") or {},
+                    "updated_at": started_at,
+                    "started_at": started_at,
+                    "error": None,
+                },
+            },
+        )
+
+        availability = get_ai_availability()
+        if not availability.get("available"):
+            return await self._finalize_first_dashboard_briefing_fallback(
+                user_id,
+                payload,
+                state,
+                error=str(availability.get("reason") or "ai_unavailable"),
+                trigger=trigger,
+            )
+
+        scope = f"first_dashboard:{user_id}:{current_version}"
+        if not acquire_ai_call_slot(scope, scheduled=True):
+            return await self._finalize_first_dashboard_briefing_fallback(
+                user_id,
+                payload,
+                state,
+                error="ai_rate_limited",
+                trigger=trigger,
+            )
+
+        ai_result: Dict[str, Any]
+        try:
+            with ai_usage_context(
+                user_id=user_id,
+                user_email=get_user_email_snapshot(user_id),
+                purpose=FIRST_DASHBOARD_BRIEFING_PURPOSE,
+                request_source="background_job",
+                run_kind="scheduled",
+                entry_point=FIRST_DASHBOARD_BRIEFING_ENTRY_POINT,
+                symbol=asset,
+            ):
+                ai_result = await asyncio.to_thread(
+                    ask_gpt_json,
+                    prompt=self._first_dashboard_ai_prompt(payload),
+                    system_role=self._first_dashboard_ai_system_role(),
+                    max_tokens=800,
+                    client_max_retries=1,
+                )
+        except Exception as exc:
+            return await self._finalize_first_dashboard_briefing_fallback(
+                user_id,
+                payload,
+                state,
+                error=str(exc),
+                trigger=trigger,
+            )
+
+        validated = self._validate_first_dashboard_ai_result(
+            ai_result,
+            allowed_refs=payload.get("allowed_evidence_refs") or [],
+        )
+        if not validated:
+            return await self._finalize_first_dashboard_briefing_fallback(
+                user_id,
+                payload,
+                state,
+                error=str(ai_result.get("error") or "invalid_ai_output"),
+                trigger=trigger,
+            )
+
+        finalized_at = _utc_now().isoformat()
+        next_state = {
+            **state,
+            FIRST_DASHBOARD_BRIEFING_METADATA_KEY: {
+                "state_version": FIRST_DASHBOARD_BRIEFING_STATE_VERSION,
+                "status": "ready",
+                "context_version": current_version,
+                "trigger": trigger,
+                "asset": asset,
+                "input_snapshot": payload.get("input_snapshot") or {},
+                "fallback_result": payload.get("fallback_result") or {},
+                "result": validated,
+                "response_source": "ai_generated",
+                "generated_at": finalized_at,
+                "updated_at": finalized_at,
+                "error": None,
+            },
+        }
+        await self._store_first_dashboard_briefing_state(user_id, next_state)
+        return {
+            "status": "ready",
+            "context_version": current_version,
+            "response_source": "ai_generated",
+            "result": validated,
+        }
+
+    async def _build_first_dashboard_context(
+        self,
+        user_id: int,
+        analysis: Dict[str, Any],
+        mission: Dict[str, Any],
+        *,
+        activity_feed: List[Dict[str, Any]],
+        day_log: Dict[str, Any],
+    ) -> Optional[Dict[str, Any]]:
+        payload = await self._prepare_first_dashboard_payload(
+            user_id=user_id,
+            analysis=analysis,
+            mission=mission,
+            activity_feed=activity_feed,
+            day_log=day_log,
+        )
+        if not payload:
+            return None
+
+        stored_state = await self._load_first_dashboard_briefing_state(user_id)
+        stored_briefing = (stored_state.get(FIRST_DASHBOARD_BRIEFING_METADATA_KEY) or {}) if stored_state else {}
+        if stored_briefing:
+            await self.maybe_schedule_first_dashboard_retry(user_id, stored_briefing)
+            stored_state = await self._load_first_dashboard_briefing_state(user_id)
+            stored_briefing = (stored_state.get(FIRST_DASHBOARD_BRIEFING_METADATA_KEY) or {}) if stored_state else {}
+        display = self._resolve_first_dashboard_briefing_display(payload, stored_briefing)
+        context = self._compose_first_dashboard_context(payload, display)
+
+        mission["summary"] = {
+            **(mission.get("summary") or {}),
+            "review_state": "not_reviewed_yet",
+            "review_label": "Not reviewed yet",
+            "posture": "not_reviewed_yet",
+            "first_dashboard_response_source": context.get("response_source"),
+        }
+        seeded_item = self._mission_workqueue_from_first_dashboard_context(context)
+        mission["workqueue"] = self._dedupe_workqueue([seeded_item, *(mission.get("workqueue") or [])])[:10]
+        mission["workqueue_groups"] = self._mission_workqueue_groups(mission["workqueue"])
+        mission["workqueue"] = self._flatten_mission_workqueue_groups(mission["workqueue_groups"])
+        mission["summary"]["workqueue_count"] = len(mission["workqueue"])
+        return context
+
+    async def _prepare_first_dashboard_payload(
+        self,
+        *,
+        user_id: int,
+        analysis: Optional[Dict[str, Any]] = None,
+        mission: Optional[Dict[str, Any]] = None,
+        activity_feed: Optional[List[Dict[str, Any]]] = None,
+        day_log: Optional[Dict[str, Any]] = None,
+    ) -> Optional[Dict[str, Any]]:
+        if not self.session:
+            return None
+
+        local_analysis = analysis
+        local_mission = mission
+        local_activity_feed = activity_feed or []
+        local_day_log = day_log or {}
+
+        if local_analysis is None or local_mission is None:
+            daily = await self.build_portfolio_daily_coach_response(
+                user_id,
+                "Geef mijn daily brief",
+                {"page": "mission_control", "mission_control_fast": True},
+            )
+            local_analysis = (daily.get("state") or {}).get("analysis") or {}
+            local_mission = self._build_mission_control_from_daily_analysis(local_analysis)
+            local_activity_feed = await self._get_recent_finn_activity(user_id, limit=40)
+            local_day_log = self._mission_day_log(local_activity_feed)
+
+        onboarding_status = await self._fetch_onboarding_status(user_id)
+        if not onboarding_status.get("onboarding_complete"):
+            return None
+        if local_activity_feed:
+            return None
+        if any(int((local_day_log or {}).get(key) or 0) > 0 for key in ("handled_count", "skipped_count", "snoozed_count")):
+            return None
+        if (local_mission or {}).get("bot_review_queue"):
+            return None
+
+        active_asset = str(
+            onboarding_status.get("active_asset")
+            or next((item.get("asset") for item in (local_analysis.get("assets") or []) if item.get("asset")), "")
+            or "BTC"
+        ).upper()
+        asset_analysis = next(
+            (item for item in (local_analysis.get("assets") or []) if str(item.get("asset") or "").upper() == active_asset),
+            (local_analysis.get("assets") or [None])[0],
+        )
+        if not asset_analysis:
+            return None
+
+        user = await UserRepository(self.session).get_by_id(user_id)
+        preferences = getattr(user, "ai_preferences", {}) or {} if user else {}
+        profile = normalize_trader_profile_preferences(preferences)
+        setup = asset_analysis.get("setup") or {}
+        active_strategy = asset_analysis.get("active_strategy") or {}
+        strategy = active_strategy.get("strategy") or {}
+        linked_bot = await self._first_dashboard_linked_bot(user_id, active_asset, strategy_id=strategy.get("id"))
+        indicators = await self._first_dashboard_indicator_context(user_id, active_asset)
+        data_readiness = asset_analysis.get("data_readiness") or {}
+        has_scores = bool(asset_analysis.get("has_scores"))
+        blockers = asset_analysis.get("blockers") or []
+        market_snapshot = self._first_dashboard_market_snapshot(asset_analysis, data_readiness=data_readiness, has_scores=has_scores, blockers=blockers)
+        observation, next_action = self._first_dashboard_observation_and_action(
+            active_asset,
+            profile=profile,
+            setup=setup,
+            strategy=strategy,
+            linked_bot=linked_bot,
+            indicators=indicators,
+            data_readiness=data_readiness,
+            has_scores=has_scores,
+            blockers=blockers,
+        )
+        style_bits = []
+        if profile.get("trader_types"):
+            style_bits.append(profile["trader_types"][0].replace("_", " "))
+        timeframes = list(dict.fromkeys([
+            *[str(item) for item in profile.get("primary_timeframes") or [] if item],
+            *([str(setup.get("timeframe"))] if setup.get("timeframe") else []),
+        ]))
+        indicator_bits = [
+            *indicators.get("technical", [])[:3],
+            *indicators.get("macro", [])[:2],
+            *indicators.get("market", [])[:2],
+        ]
+        indicator_text = ", ".join(indicator_bits[:4]) if indicator_bits else None
+        headline_bits = [f"Your {active_asset} plan is ready"]
+        if style_bits:
+            headline_bits.append(f"for your {style_bits[0]} profile")
+        if timeframes:
+            headline_bits.append(f"on {', '.join(timeframes[:3])}")
+        fallback_headline = " ".join(headline_bits) + "."
+
+        fallback_reasoning_parts = []
+        if indicator_text:
+            fallback_reasoning_parts.append(f"Configured indicators: {indicator_text}.")
+        if setup.get("name"):
+            fallback_reasoning_parts.append(f"Setup: {setup.get('name')}.")
+        if strategy.get("name"):
+            fallback_reasoning_parts.append(f"Strategy: {strategy.get('name')}.")
+        if linked_bot:
+            fallback_reasoning_parts.append(
+                f"Bot {linked_bot.get('name') or 'connected bot'} is linked and live trading is {'enabled' if linked_bot.get('is_live') else 'disabled'}."
+            )
+        fallback_reasoning = " ".join(fallback_reasoning_parts[:3]) or "Stored onboarding context is ready for a first dashboard review."
+
+        missing_fields = self._first_dashboard_missing_fields(
+            profile=profile,
+            setup=setup,
+            strategy=strategy,
+            linked_bot=linked_bot,
+            indicators=indicators,
+            market_snapshot=market_snapshot,
+        )
+        allowed_evidence_refs = [
+            "profile.trader_types",
+            "profile.risk_profiles",
+            "profile.primary_timeframes",
+            "asset.symbol",
+            "indicators.technical",
+            "indicators.macro",
+            "indicators.market",
+            "setup.name",
+            "setup.timeframe",
+            "strategy.name",
+            "strategy.entry_rules",
+            "strategy.exit_rules",
+            "strategy.invalidations",
+            "strategy.risk_rules",
+            "bot.name",
+            "bot.is_live",
+            "bot.is_active",
+            "bot.risk_profile",
+            "market.status",
+            "market.blockers",
+            "market.freshness",
+            "missing_fields",
+            "history.behavior",
+        ]
+        fallback_result = {
+            "headline": fallback_headline,
+            "observation": observation,
+            "reasoning": fallback_reasoning,
+            "next_question": next_action["question"],
+            "suggested_action": next_action["label"],
+            "evidence_refs": self._first_dashboard_fallback_evidence_refs(
+                observation=observation,
+                indicators=indicators,
+                linked_bot=linked_bot,
+                market_snapshot=market_snapshot,
+            ),
+        }
+        input_snapshot = {
+            "asset": active_asset,
+            "profile": {
+                "trader_types": profile.get("trader_types") or [],
+                "risk_profiles": profile.get("risk_profiles") or [],
+                "primary_timeframes": profile.get("primary_timeframes") or [],
+            },
+            "indicators": indicators,
+            "setup": {
+                "name": setup.get("name"),
+                "timeframe": setup.get("timeframe"),
+                "setup_type": setup.get("setup_type"),
+            },
+            "strategy": {
+                "id": strategy.get("id"),
+                "name": strategy.get("name"),
+                "entry_rules": self._first_dashboard_rule_values(strategy.get("entry")),
+                "exit_rules": self._first_dashboard_rule_values(strategy.get("targets")),
+                "invalidations": self._first_dashboard_rule_values(strategy.get("stop_loss")),
+                "risk_rules": self._first_dashboard_risk_rules(strategy, linked_bot),
+            },
+            "bot": linked_bot or {},
+            "missing_fields": missing_fields,
+        }
+        context_version = hashlib.sha256(
+            json.dumps(input_snapshot, sort_keys=True, separators=(",", ":"), default=str).encode("utf-8")
+        ).hexdigest()
+        ai_prompt_context = {
+            "profile": input_snapshot["profile"],
+            "asset": {"symbol": active_asset},
+            "indicators": indicators,
+            "setup": input_snapshot["setup"],
+            "strategy": input_snapshot["strategy"],
+            "bot": linked_bot or {},
+            "market": market_snapshot,
+            "missing_fields": missing_fields,
+            "history": {"behavior": "No behavior history exists yet."},
+        }
+        return {
+            "asset": active_asset,
+            "timeframes": timeframes,
+            "profile": profile,
+            "indicators": indicators,
+            "setup": setup,
+            "strategy": strategy,
+            "bot": linked_bot,
+            "data_readiness": data_readiness,
+            "market_snapshot": market_snapshot,
+            "next_action": next_action,
+            "fallback_result": fallback_result,
+            "input_snapshot": input_snapshot,
+            "ai_prompt_context": ai_prompt_context,
+            "context_version": context_version,
+            "allowed_evidence_refs": allowed_evidence_refs,
+        }
+
+    def _resolve_first_dashboard_briefing_display(
+        self,
+        payload: Dict[str, Any],
+        stored_briefing: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        current_version = str(payload.get("context_version") or "")
+        stored_version = str(stored_briefing.get("context_version") or "")
+        stored_status = str(stored_briefing.get("status") or "").lower()
+        result = stored_briefing.get("result") if isinstance(stored_briefing.get("result"), dict) else None
+        validated_result = self._validate_first_dashboard_ai_result(
+            result or {},
+            allowed_refs=payload.get("allowed_evidence_refs") or [],
+        ) if result else None
+
+        if stored_version == current_version and stored_status == "ready" and validated_result:
+            return {
+                "briefing": validated_result,
+                "response_source": "cached_ai",
+                "generation_status": "ready",
+            }
+        if stored_version == current_version and stored_status in {"generating", "retry_scheduled"}:
+            return {
+                "briefing": self._first_dashboard_loading_result(payload.get("asset") or "BTC"),
+                "response_source": "briefing_generating",
+                "generation_status": stored_status,
+            }
+        if stored_version == current_version and stored_status == "fallback":
+            if self._first_dashboard_retry_due(stored_briefing):
+                return {
+                    "briefing": self._first_dashboard_loading_result(payload.get("asset") or "BTC"),
+                    "response_source": "briefing_generating",
+                    "generation_status": "retry_scheduled",
+                }
+            fallback = self._validate_first_dashboard_ai_result(
+                stored_briefing.get("result") or payload.get("fallback_result") or {},
+                allowed_refs=payload.get("allowed_evidence_refs") or [],
+            )
+            if fallback:
+                return {
+                    "briefing": fallback,
+                    "response_source": "deterministic_fallback",
+                    "generation_status": "fallback",
+                }
+        if get_ai_availability().get("available"):
+            return {
+                "briefing": self._first_dashboard_loading_result(payload.get("asset") or "BTC"),
+                "response_source": "briefing_generating",
+                "generation_status": "pending",
+            }
+        return {
+            "briefing": payload.get("fallback_result") or {},
+            "response_source": "deterministic_fallback",
+            "generation_status": stored_status or "pending",
+        }
+
+    def _compose_first_dashboard_context(
+        self,
+        payload: Dict[str, Any],
+        display: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        briefing = display.get("briefing") or {}
+        briefing_lines = [
+            briefing.get("headline"),
+            briefing.get("observation"),
+            briefing.get("reasoning"),
+            briefing.get("next_question"),
+        ]
+        return {
+            "is_first_dashboard": True,
+            "asset": payload.get("asset"),
+            "timeframes": payload.get("timeframes") or [],
+            "profile": payload.get("profile") or {},
+            "indicators": payload.get("indicators") or {},
+            "setup": payload.get("setup") or {},
+            "strategy": payload.get("strategy") or {},
+            "bot": payload.get("bot"),
+            "data_readiness": payload.get("data_readiness") or {},
+            "market_snapshot": payload.get("market_snapshot") or {},
+            "observation": briefing.get("observation"),
+            "reasoning": briefing.get("reasoning"),
+            "next_action": {
+                "label": briefing.get("suggested_action"),
+                "question": briefing.get("next_question"),
+            },
+            "review_state": "not_reviewed_yet",
+            "review_label": "Not reviewed yet",
+            "briefing_lines": [line for line in briefing_lines if line],
+            "briefing_text": "\n".join([line for line in briefing_lines if line]),
+            "headline": briefing.get("headline"),
+            "support": briefing.get("reasoning") or briefing.get("observation"),
+            "action_hint": briefing.get("suggested_action"),
+            "response_source": display.get("response_source"),
+            "generation_status": display.get("generation_status"),
+            "evidence_refs": briefing.get("evidence_refs") or [],
+        }
+
+    async def _finalize_first_dashboard_briefing_fallback(
+        self,
+        user_id: int,
+        payload: Dict[str, Any],
+        existing_state: Dict[str, Any],
+        *,
+        error: str,
+        trigger: str,
+    ) -> Dict[str, Any]:
+        finalized_at = _utc_now().isoformat()
+        fallback_result = payload.get("fallback_result") or {}
+        previous = existing_state.get(FIRST_DASHBOARD_BRIEFING_METADATA_KEY) or {}
+        retry_count = int(previous.get("retry_count") or 0) + 1
+        retryable = self._is_first_dashboard_retryable_error(error)
+        next_retry_at = self._first_dashboard_next_retry_at(retry_count) if retryable and retry_count < FIRST_DASHBOARD_MAX_RETRY_ATTEMPTS else None
+        next_state = {
+            **existing_state,
+            FIRST_DASHBOARD_BRIEFING_METADATA_KEY: {
+                "state_version": FIRST_DASHBOARD_BRIEFING_STATE_VERSION,
+                "status": "fallback",
+                "context_version": payload.get("context_version"),
+                "trigger": trigger,
+                "asset": payload.get("asset"),
+                "retry_count": retry_count,
+                "retryable": retryable,
+                "max_retry_attempts": FIRST_DASHBOARD_MAX_RETRY_ATTEMPTS,
+                "next_retry_at": next_retry_at,
+                "input_snapshot": payload.get("input_snapshot") or {},
+                "fallback_result": fallback_result,
+                "result": fallback_result,
+                "response_source": "deterministic_fallback",
+                "generated_at": finalized_at,
+                "updated_at": finalized_at,
+                "error": error,
+            },
+        }
+        await self._store_first_dashboard_briefing_state(user_id, next_state)
+        return {
+            "status": "fallback",
+            "context_version": payload.get("context_version"),
+            "response_source": "deterministic_fallback",
+            "error": error,
+        }
+
+    async def maybe_schedule_first_dashboard_retry(
+        self,
+        user_id: int,
+        stored_briefing: Dict[str, Any],
+    ) -> bool:
+        if not self.session:
+            return False
+        if not self._first_dashboard_retry_due(stored_briefing):
+            return False
+        step = await self._get_first_dashboard_storage_step(user_id)
+        if not step:
+            return False
+        state = step.step_metadata or {}
+        current = state.get(FIRST_DASHBOARD_BRIEFING_METADATA_KEY) or {}
+        if str(current.get("status") or "").lower() in {"retry_scheduled", "generating"}:
+            return False
+        state[FIRST_DASHBOARD_BRIEFING_METADATA_KEY] = {
+            **current,
+            "status": "retry_scheduled",
+            "updated_at": _utc_now().isoformat(),
+        }
+        step.step_metadata = state
+        await self.session.commit()
+        try:
+            from backend.celery_task.onboarding_task import generate_first_dashboard_briefing
+
+            generate_first_dashboard_briefing.delay(user_id)
+        except Exception:
+            return False
+        return True
+
+    async def _load_first_dashboard_briefing_state(self, user_id: int) -> Dict[str, Any]:
+        step = await self._get_first_dashboard_storage_step(user_id)
+        if not step:
+            return {}
+        return step.step_metadata or {}
+
+    async def _store_first_dashboard_briefing_state(self, user_id: int, state: Dict[str, Any]) -> None:
+        step = await self._get_first_dashboard_storage_step(user_id)
+        if not step:
+            return
+        step.step_metadata = state
+        await self.session.commit()
+
+    async def _get_first_dashboard_storage_step(self, user_id: int) -> Optional[OnboardingStep]:
+        if not self.session:
+            return None
+        result = await self.session.execute(
+            select(OnboardingStep).where(
+                OnboardingStep.user_id == user_id,
+                OnboardingStep.flow == "default",
+                OnboardingStep.step_key.in_(FIRST_DASHBOARD_STORAGE_STEP_KEYS),
+            )
+        )
+        rows = list(result.scalars().all())
+        if not rows:
+            return None
+        rank = {step_key: index for index, step_key in enumerate(FIRST_DASHBOARD_STORAGE_STEP_KEYS)}
+        rows.sort(key=lambda row: rank.get(str(row.step_key), 99))
+        return rows[0]
+
+    def _first_dashboard_ai_system_role(self) -> str:
+        return (
+            "You are FINN. Review one newly completed trading onboarding handoff. "
+            "Assess the stored profile, asset, indicators, setup, strategy, bot state, and market snapshot. "
+            "Return exactly one concrete observation, explain why it matters, and choose exactly one next question or action. "
+            "Do not invent market claims, behavior history, or rule changes. "
+            "Use only the provided evidence references."
+        )
+
+    def _first_dashboard_ai_prompt(self, payload: Dict[str, Any]) -> str:
+        prompt = {
+            "task": {
+                "goal": "Generate the first FINN dashboard briefing after onboarding.",
+                "constraints": [
+                    "Do not list every field back to the user.",
+                    "Choose one observation that reflects real evaluation of the stored context.",
+                    "Use market claims only when supported by supplied market data.",
+                    "Do not claim personal behavior patterns because no behavior history exists yet.",
+                    "Do not change strategy or bot rules.",
+                    "Return valid JSON only.",
+                ],
+                "output_contract": {
+                    "headline": "string",
+                    "observation": "string",
+                    "reasoning": "string",
+                    "next_question": "string",
+                    "suggested_action": "string",
+                    "evidence_refs": payload.get("allowed_evidence_refs") or [],
+                },
+            },
+            "context": payload.get("ai_prompt_context") or {},
+        }
+        return json.dumps(prompt, sort_keys=True, indent=2, default=str)
+
+    def _validate_first_dashboard_ai_result(
+        self,
+        result: Dict[str, Any],
+        *,
+        allowed_refs: List[str],
+    ) -> Optional[Dict[str, Any]]:
+        if not isinstance(result, dict) or result.get("error"):
+            return None
+        required_fields = [
+            "headline",
+            "observation",
+            "reasoning",
+            "next_question",
+            "suggested_action",
+            "evidence_refs",
+        ]
+        cleaned: Dict[str, Any] = {}
+        for field in required_fields:
+            value = result.get(field)
+            if field == "evidence_refs":
+                if not isinstance(value, list):
+                    return None
+                refs = []
+                for item in value:
+                    ref = str(item or "").strip()
+                    if ref and ref in allowed_refs and ref not in refs:
+                        refs.append(ref)
+                if not refs:
+                    return None
+                cleaned[field] = refs[:6]
+                continue
+            text_value = str(value or "").strip()
+            if len(text_value) < 6:
+                return None
+            cleaned[field] = text_value
+        return cleaned
+
+    def _first_dashboard_market_snapshot(
+        self,
+        asset_analysis: Dict[str, Any],
+        *,
+        data_readiness: Dict[str, Any],
+        has_scores: bool,
+        blockers: List[Dict[str, Any]],
+    ) -> Dict[str, Any]:
+        return {
+            "status": data_readiness.get("status") or ("ready" if has_scores else "score_generation_missing"),
+            "freshness": data_readiness.get("message"),
+            "has_scores": has_scores,
+            "blockers": [
+                {
+                    "category": blocker.get("category"),
+                    "range": blocker.get("range"),
+                    "value": blocker.get("value"),
+                }
+                for blocker in (blockers or [])[:3]
+                if isinstance(blocker, dict)
+            ],
+            "scores": {
+                "macro": asset_analysis.get("macro_score"),
+                "technical": asset_analysis.get("technical_score"),
+                "market": asset_analysis.get("market_score"),
+                "setup": asset_analysis.get("setup_score"),
+            },
+        }
+
+    def _first_dashboard_missing_fields(
+        self,
+        *,
+        profile: Dict[str, Any],
+        setup: Dict[str, Any],
+        strategy: Dict[str, Any],
+        linked_bot: Optional[Dict[str, Any]],
+        indicators: Dict[str, List[str]],
+        market_snapshot: Dict[str, Any],
+    ) -> List[str]:
+        missing = []
+        if not profile.get("trader_types"):
+            missing.append("profile.trader_types")
+        if not profile.get("risk_profiles"):
+            missing.append("profile.risk_profiles")
+        if not indicators.get("macro"):
+            missing.append("indicators.macro")
+        if not setup.get("timeframe"):
+            missing.append("setup.timeframe")
+        if not strategy.get("name"):
+            missing.append("strategy.name")
+        if not linked_bot:
+            missing.append("bot.name")
+        if not market_snapshot.get("has_scores"):
+            missing.append("market.status")
+        return missing
+
+    def _first_dashboard_fallback_evidence_refs(
+        self,
+        *,
+        observation: str,
+        indicators: Dict[str, List[str]],
+        linked_bot: Optional[Dict[str, Any]],
+        market_snapshot: Dict[str, Any],
+    ) -> List[str]:
+        refs = ["asset.symbol"]
+        lower_observation = str(observation or "").lower()
+        if "macro" in lower_observation:
+            refs.extend(["indicators.technical", "indicators.macro"])
+        if "market snapshot" in lower_observation or not market_snapshot.get("has_scores"):
+            refs.extend(["market.status", "market.freshness"])
+        if linked_bot:
+            refs.append("bot.is_live")
+        if market_snapshot.get("blockers"):
+            refs.append("market.blockers")
+        if not refs:
+            refs.append("missing_fields")
+        return list(dict.fromkeys(refs))
+
+    def _first_dashboard_rule_values(self, value: Any) -> List[str]:
+        if value is None:
+            return []
+        if isinstance(value, list):
+            return [str(item) for item in value if item not in (None, "")]
+        if isinstance(value, dict):
+            return [f"{key}:{value[key]}" for key in sorted(value.keys()) if value.get(key) not in (None, "", [], {})]
+        return [str(value)]
+
+    def _first_dashboard_risk_rules(
+        self,
+        strategy: Dict[str, Any],
+        linked_bot: Optional[Dict[str, Any]],
+    ) -> List[str]:
+        rules = []
+        for key in ("risk_profile", "position_size", "base_amount_eur", "max_loss"):
+            if strategy.get(key) not in (None, "", [], {}):
+                rules.append(f"{key}:{strategy.get(key)}")
+        if linked_bot and linked_bot.get("risk_profile"):
+            rules.append(f"bot_risk_profile:{linked_bot.get('risk_profile')}")
+        return rules
+
+    def _first_dashboard_loading_result(self, asset: str) -> Dict[str, Any]:
+        symbol = str(asset or "BTC").upper()
+        return {
+            "headline": "FINN is reviewing your plan",
+            "observation": f"I am comparing your {symbol} profile, strategy and connected bot before giving the first recommendation.",
+            "reasoning": "This first dashboard review is still being generated from your stored onboarding context.",
+            "next_question": "Please give me a moment to finish the first review.",
+            "suggested_action": "Review in progress",
+            "evidence_refs": ["asset.symbol", "history.behavior"],
+        }
+
+    def _is_first_dashboard_retryable_error(self, error: str) -> bool:
+        value = str(error or "").strip().lower()
+        if not value:
+            return False
+        return any(token in value for token in [
+            "ai_unavailable",
+            "timeout",
+            "timed out",
+            "rate_limited",
+            "invalid_ai_output",
+            "quota",
+            "offline",
+            "error",
+            "exception",
+        ])
+
+    def _first_dashboard_next_retry_at(self, retry_count: int) -> Optional[str]:
+        retry_windows = {
+            1: 60,
+            2: 300,
+            3: 900,
+        }
+        wait_seconds = retry_windows.get(int(retry_count), 900)
+        return (_utc_now() + timedelta(seconds=wait_seconds)).isoformat()
+
+    def _first_dashboard_retry_due(self, stored_briefing: Dict[str, Any]) -> bool:
+        if not isinstance(stored_briefing, dict):
+            return False
+        if not bool(stored_briefing.get("retryable")):
+            return False
+        if int(stored_briefing.get("retry_count") or 0) >= int(stored_briefing.get("max_retry_attempts") or FIRST_DASHBOARD_MAX_RETRY_ATTEMPTS):
+            return False
+        next_retry_at = stored_briefing.get("next_retry_at")
+        if not next_retry_at:
+            return True
+        try:
+            retry_at = datetime.fromisoformat(str(next_retry_at))
+        except Exception:
+            return True
+        if retry_at.tzinfo is None:
+            retry_at = retry_at.replace(tzinfo=timezone.utc)
+        return retry_at <= _utc_now()
+
+    async def _first_dashboard_indicator_context(self, user_id: int, asset: str) -> Dict[str, List[str]]:
+        result = await self.session.execute(text("""
+            SELECT category, indicator
+            FROM user_indicator_configs
+            WHERE user_id = :user_id
+              AND enabled = TRUE
+              AND (
+                symbol = :symbol
+                OR symbol IS NULL
+                OR symbol = 'GLOBAL'
+              )
+            ORDER BY category ASC, priority ASC, indicator ASC
+        """), {"user_id": user_id, "symbol": asset})
+        by_category: Dict[str, List[str]] = {"market": [], "macro": [], "technical": []}
+        for row in result.mappings().all():
+            category = str(row.get("category") or "").lower()
+            indicator = str(row.get("indicator") or "").strip()
+            if not indicator or category not in by_category:
+                continue
+            if indicator not in by_category[category]:
+                by_category[category].append(indicator.upper() if indicator.lower() == "rsi" else indicator)
+        return by_category
+
+    async def _first_dashboard_linked_bot(
+        self,
+        user_id: int,
+        asset: str,
+        *,
+        strategy_id: Any = None,
+    ) -> Optional[Dict[str, Any]]:
+        bots = await BotService(self.session).repository.get_bot_configs(user_id)
+        if not bots:
+            return None
+        selected = None
+        if strategy_id is not None:
+            selected = next((bot for bot in bots if bot.get("strategy_id") == strategy_id), None)
+        if not selected:
+            selected = next((bot for bot in bots if str(bot.get("symbol") or "").upper() == asset), None)
+        if not selected:
+            return None
+        return {
+            "id": selected.get("id"),
+            "name": selected.get("name"),
+            "is_active": bool(selected.get("is_active")),
+            "is_live": bool(selected.get("is_live")),
+            "mode": selected.get("mode"),
+            "risk_profile": selected.get("risk_profile"),
+        }
+
+    def _first_dashboard_observation_and_action(
+        self,
+        asset: str,
+        *,
+        profile: Dict[str, List[str]],
+        setup: Dict[str, Any],
+        strategy: Dict[str, Any],
+        linked_bot: Optional[Dict[str, Any]],
+        indicators: Dict[str, List[str]],
+        data_readiness: Dict[str, Any],
+        has_scores: bool,
+        blockers: List[Dict[str, Any]],
+    ) -> tuple[str, Dict[str, str]]:
+        if data_readiness.get("status") in {"onboarding_incomplete", "indicator_config_missing", "score_generation_missing"} or not has_scores:
+            return (
+                "I am still waiting for the first complete market snapshot, so I cannot responsibly assess your entry conditions yet.",
+                {
+                    "label": f"Review your {asset} plan",
+                    "question": f"Would you like to review your {asset} plan before the first live snapshot arrives?",
+                },
+            )
+        if blockers:
+            blocker = blockers[0]
+            category = str(blocker.get("category") or "score")
+            return (
+                f"{asset} currently fails one of your entry conditions: {category} is outside your configured range {blocker.get('range')}.",
+                {
+                    "label": "Check missing entry conditions",
+                    "question": f"Would you like to inspect why {category} is blocking your {asset} plan?",
+                },
+            )
+        if not indicators.get("macro"):
+            return (
+                "Your plan is technically configured, but it still lacks broader macro context for the first dashboard review.",
+                {
+                    "label": "Review suggested macro context",
+                    "question": f"Would you like to review one relevant macro indicator for {asset} before activation?",
+                },
+            )
+        if "conservative" in set(profile.get("risk_profiles") or []) and linked_bot and str(linked_bot.get("risk_profile") or "").lower() == "aggressive":
+            return (
+                "Your stored risk profile is conservative, while the linked bot currently uses an aggressive execution profile.",
+                {
+                    "label": f"Review your {asset} plan",
+                    "question": "Would you like to review that risk mismatch before you continue?",
+                },
+            )
+        if linked_bot and not linked_bot.get("is_live"):
+            return (
+                "Your strategy and bot are connected, but live trading remains disabled, which is the safer onboarding state.",
+                {
+                    "label": "Run first simulation",
+                    "question": f"Would you like to run a first simulation for {asset} before any live activation?",
+                },
+            )
+        timeframe = setup.get("timeframe")
+        if timeframe and "swing_trader" in set(profile.get("trader_types") or []) and str(timeframe).lower() in {"5m", "15m", "1h"}:
+            return (
+                f"Your stored swing profile does not line up cleanly with the current {timeframe} setup timeframe.",
+                {
+                    "label": f"Review your {asset} plan",
+                    "question": f"Would you like to review whether {timeframe} is really the right timeframe for this plan?",
+                },
+            )
+        strategy_name = strategy.get("name") or "strategy"
+        return (
+            f"Your {strategy_name} is fully wired, and the current setup does not show a blocking condition yet.",
+            {
+                "label": f"Review your {asset} plan",
+                "question": f"Would you like to review your {asset} plan before you take the next step?",
+            },
+        )
+
+    def _mission_workqueue_from_first_dashboard_context(self, context: Dict[str, Any]) -> Dict[str, Any]:
+        asset = context.get("asset") or "BTC"
+        action = context.get("next_action") or {}
+        return {
+            "id": f"first_dashboard:{asset}",
+            "type": "first_dashboard_review",
+            "priority": "medium",
+            "priority_rank": 4,
+            "sort_rank": 4,
+            "status": "not_reviewed_yet",
+            "resolve_state": "not_reviewed_yet",
+            "asset": asset,
+            "title": action.get("label") or f"Review your {asset} plan",
+            "reason": context.get("observation"),
+            "next_best_action": {
+                "type": "chat_prompt",
+                "label": action.get("label") or f"Review your {asset} plan",
+                "prompt": action.get("question") or f"Review my {asset} plan",
+                "handoff": "daily_coach",
+                "requires_confirmation": False,
+            },
+            "resolve_action": None,
+            "freshness": self._mission_freshness(None, fallback_status="unknown"),
+            "source_ids": {"asset": asset},
         }
 
     def _merge_mission_agent_verdicts(
