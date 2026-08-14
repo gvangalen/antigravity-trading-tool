@@ -148,6 +148,14 @@ function buildAssistantUiText(at) {
     workspaceSummaryRisks: at("uiText.workspaceSummaryRisks"),
     workspaceSummaryPerformance: at("uiText.workspaceSummaryPerformance"),
     workspaceSummaryHistory: at("uiText.workspaceSummaryHistory"),
+    workspaceFirstDashboardHeadline: at("uiText.workspaceFirstDashboardHeadline"),
+    workspaceFirstDashboardSupport: at("uiText.workspaceFirstDashboardSupport"),
+    workspaceFirstDashboardHint: at("uiText.workspaceFirstDashboardHint"),
+    workspaceFirstDashboardLabel: at("uiText.workspaceFirstDashboardLabel"),
+    workspaceBuildingHeadline: at("uiText.workspaceBuildingHeadline"),
+    workspaceBuildingSupport: at("uiText.workspaceBuildingSupport"),
+    workspaceBuildingHint: at("uiText.workspaceBuildingHint"),
+    workspaceBuildingLabel: at("uiText.workspaceBuildingLabel"),
     readOnlyMode: at("uiText.readOnlyMode"),
     paperMode: at("uiText.paperMode"),
     conceptMode: at("uiText.conceptMode"),
@@ -576,7 +584,7 @@ function AIAssistantContent({
   };
   
   // 🧭 Onboarding Context
-  const { stepStatus, onboardingComplete } = useOnboarding();
+  const { stepStatus, onboardingComplete, dashboardReady } = useOnboarding();
   const isOnboarding = (pathname.includes("onboarding") || !onboardingComplete) && pathname !== "/dashboard";
 
   useEffect(() => {
@@ -5421,20 +5429,63 @@ function AIAssistantContent({
     .split("\n")
     .map((line) => line.trim())
     .filter(Boolean);
+  const defaultBriefingLine = at("briefing.market.default", "", {
+    symbol: String(context?.symbol || globalSymbol || "BTC").trim().toUpperCase(),
+  });
+  const workspaceIsStillBuilding =
+    workspaceBriefingLines.length <= 2 &&
+    workspaceBriefingLines[1] === defaultBriefingLine &&
+    overlayMissionSections.todayItems.length === 0 &&
+    overlayMissionSections.reviewItems.length === 0 &&
+    overlayMissionSections.riskItems.length === 0 &&
+    overlayMissionSections.performanceCards.length === 0 &&
+    overlayMissionSections.historyItems.length === 0 &&
+    Number(missionControl?.summary?.open_action_count || 0) === 0 &&
+    Number(missionControl?.summary?.blocked_count || 0) === 0;
+  const showFirstDashboardGuidance =
+    pathname === "/dashboard" &&
+    onboardingComplete &&
+    !dashboardReady &&
+    workspaceIsStillBuilding;
   const workspaceGreeting = workspaceBriefingLines[0] || "";
-  const workspaceHeadline =
+  const defaultWorkspaceHeadline =
     workspaceBriefingLines[1] ||
     compactMissionReason ||
     missionControl?.summary?.headline ||
-    at("briefing.market.default", "", {
-      symbol: String(context?.symbol || globalSymbol || "BTC").trim().toUpperCase(),
-    });
-  const workspaceSupport =
+    defaultBriefingLine;
+  const defaultWorkspaceSupport =
     workspaceBriefingLines[2] ||
     compactMissionReason ||
     primaryBehaviorRule ||
     "";
-  const workspaceActionHint = workspaceBriefingLines[3] || "";
+  const defaultWorkspaceActionHint = workspaceBriefingLines[3] || "";
+  const workspaceHeadline = showFirstDashboardGuidance
+    ? at("uiText.workspaceFirstDashboardHeadline", uiText.workspaceFirstDashboardHeadline, {
+        symbol: activeBriefingSymbol,
+      })
+    : workspaceIsStillBuilding
+    ? at("uiText.workspaceBuildingHeadline", uiText.workspaceBuildingHeadline, {
+        symbol: activeBriefingSymbol,
+      })
+    : defaultWorkspaceHeadline;
+  const workspaceSupport = showFirstDashboardGuidance
+    ? at("uiText.workspaceFirstDashboardSupport", uiText.workspaceFirstDashboardSupport, {
+        symbol: activeBriefingSymbol,
+      })
+    : workspaceIsStillBuilding
+    ? at("uiText.workspaceBuildingSupport", uiText.workspaceBuildingSupport, {
+        symbol: activeBriefingSymbol,
+      })
+    : defaultWorkspaceSupport;
+  const workspaceActionHint = showFirstDashboardGuidance
+    ? at("uiText.workspaceFirstDashboardHint", uiText.workspaceFirstDashboardHint, {
+        symbol: activeBriefingSymbol,
+      })
+    : workspaceIsStillBuilding
+    ? at("uiText.workspaceBuildingHint", uiText.workspaceBuildingHint, {
+        symbol: activeBriefingSymbol,
+      })
+    : defaultWorkspaceActionHint;
   const missionDetailSections = [
     {
       key: "today",
@@ -5740,7 +5791,13 @@ function AIAssistantContent({
 
                       <div className="mt-4 flex flex-wrap items-center gap-2">
                         <span className="rounded-full border border-emerald-200/80 bg-emerald-50 px-2.5 py-1 text-[9px] font-black uppercase tracking-[0.16em] text-emerald-700 dark:border-emerald-900/50 dark:bg-emerald-950/20 dark:text-emerald-300">
-                          {workspaceNeedsAttention ? uiText.workspaceActionNeeded : uiText.workspaceOnTrack}
+                          {showFirstDashboardGuidance
+                            ? uiText.workspaceFirstDashboardLabel
+                            : workspaceIsStillBuilding
+                            ? uiText.workspaceBuildingLabel
+                            : workspaceNeedsAttention
+                            ? uiText.workspaceActionNeeded
+                            : uiText.workspaceOnTrack}
                         </span>
                         <div className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-[10px] font-black uppercase tracking-[0.14em] text-slate-700 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200">
                           <span className="text-slate-400 dark:text-slate-500">{uiText.workspaceStatusMarket}</span>
