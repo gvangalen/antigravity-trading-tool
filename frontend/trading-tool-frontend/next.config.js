@@ -10,7 +10,8 @@ const nextConfig = {
   reactStrictMode: true,
   transpilePackages: ['rc-slider'], // ✅ Native transpiler for Next.js 13+
   generateBuildId: async () => {
-    return 'build-' + Date.now();
+    // Keep the tracked static export deterministic across local and CI builds.
+    return process.env.NEXT_BUILD_ID || 'static-export';
   },
 };
 
