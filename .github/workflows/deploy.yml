@@ -71,7 +71,12 @@ jobs:
           fi
 
           changed_files="$(git diff --name-only HEAD^ HEAD)"
-          frontend_source_changed="$(printf '%s\n' "$changed_files" | grep '^frontend/trading-tool-frontend/' | grep -v '^frontend/trading-tool-frontend/out/' || true)"
+          frontend_source_changed="$(
+            printf '%s\n' "$changed_files" |
+            grep '^frontend/trading-tool-frontend/' |
+            grep -v '^frontend/trading-tool-frontend/out/' |
+            grep -Ev '\.bak$' || true
+          )"
           frontend_export_changed="$(printf '%s\n' "$changed_files" | grep '^frontend/trading-tool-frontend/out/' || true)"
 
           if [ -n "$frontend_source_changed" ] && [ -z "$frontend_export_changed" ]; then
