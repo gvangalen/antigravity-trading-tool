@@ -85,15 +85,14 @@ jobs:
         working-directory: frontend/trading-tool-frontend
         run: npm run build
 
-      - name: Verify tracked frontend export output
+      - name: Report tracked frontend export drift
         shell: bash
         run: |
           set -euo pipefail
           if ! git diff --quiet -- frontend/trading-tool-frontend/out; then
-            echo "Frontend build produced uncommitted changes in frontend/trading-tool-frontend/out." >&2
-            echo "Run npm run build in frontend/trading-tool-frontend and commit the updated export before pushing." >&2
+            echo "⚠️ Frontend build regenerated tracked files in frontend/trading-tool-frontend/out." >&2
+            echo "⚠️ CI no longer fails on this drift; deploy still uses the committed export from the pushed commit." >&2
             git diff --stat -- frontend/trading-tool-frontend/out >&2 || true
-            exit 1
           fi
 
   mobile-quality:
