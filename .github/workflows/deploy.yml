@@ -1,19 +1,21 @@
 name: Auto Deploy
 
 on:
-  workflow_call:
-    inputs:
-      deploy_ref:
-        description: Commit SHA to deploy
-        required: true
-        type: string
+  workflow_run:
+    workflows:
+      - CI
+    types:
+      - completed
 
 concurrency:
-  group: auto-deploy-${{ inputs.deploy_ref }}
+  group: auto-deploy-${{ github.event.workflow_run.head_sha || github.run_id }}
   cancel-in-progress: true
 
 jobs:
   deploy:
+    if: >
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.head_branch == 'main'
     runs-on: ubuntu-latest
     timeout-minutes: 60
 
@@ -47,7 +49,7 @@ jobs:
       - name: Checkout deploy commit
         uses: actions/checkout@v5.1.0
         with:
-          ref: ${{ inputs.deploy_ref }}
+          ref: ${{ github.event.workflow_run.head_sha }}
           fetch-depth: 0
 
       - name: Prepare deploy key
