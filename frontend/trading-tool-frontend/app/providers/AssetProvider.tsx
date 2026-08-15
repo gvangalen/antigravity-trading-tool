@@ -12,6 +12,12 @@ const preferredAssetCache = new Map<string, string | null>();
 const preferredAssetPromise = new Map<string, Promise<string | null>>();
 const DEFAULT_SELECTED_ASSET = "BTC";
 const DEFAULT_AVAILABLE_ASSETS = ["BTC", "ETH", "SOL", "ADA", "DOT"];
+const LEGACY_SELECTED_ASSET_KEY = "selectedAsset";
+
+function selectedAssetStorageKey(userId: string | number | null | undefined) {
+  const normalized = String(userId || "").trim();
+  return normalized ? `selectedAsset:${normalized}` : LEGACY_SELECTED_ASSET_KEY;
+}
 
 function normalizeAssetSymbol(asset: string | null | undefined) {
   const normalized = String(asset || "").trim().toUpperCase();
@@ -50,15 +56,16 @@ export function AssetProvider({ children }: { children: React.ReactNode }) {
   const [selectedAsset, setSelectedAssetState] = useState<string>(DEFAULT_SELECTED_ASSET);
   const [availableAssets, setAvailableAssets] = useState<string[]>(DEFAULT_AVAILABLE_ASSETS);
   const [preferencesHydrated, setPreferencesHydrated] = useState(false);
+  const userStorageKey = selectedAssetStorageKey(user?.id);
 
   // Load from localStorage on mount
   useEffect(() => {
-    const saved = localStorage.getItem("selectedAsset");
+    const saved = localStorage.getItem(userStorageKey);
     const normalized = normalizeAssetSymbol(saved);
     if (normalized) {
       setSelectedAssetState(normalized);
     }
-  }, []);
+  }, [userStorageKey]);
 
   useEffect(() => {
     if (isPublicAuthRoute || preferencesHydrated || !sessionChecked) return;
@@ -110,7 +117,7 @@ export function AssetProvider({ children }: { children: React.ReactNode }) {
 
     async function hydrateSelectedAssetFromPreferences() {
       try {
-        const savedAsset = normalizeAssetSymbol(localStorage.getItem("selectedAsset"));
+        const savedAsset = normalizeAssetSymbol(localStorage.getItem(userStorageKey));
         if (savedAsset) {
           setSelectedAssetState(savedAsset);
           setAvailableAssets((current) => (current.includes(savedAsset) ? current : [...current, savedAsset]));
@@ -122,7 +129,7 @@ export function AssetProvider({ children }: { children: React.ReactNode }) {
         if (cancelled) return;
 
         setSelectedAssetState(preferredAsset);
-        localStorage.setItem("selectedAsset", preferredAsset);
+        localStorage.setItem(userStorageKey, preferredAsset);
         setAvailableAssets((current) =>
           current.includes(preferredAsset) ? current : [...current, preferredAsset]
         );
@@ -143,10 +150,22 @@ export function AssetProvider({ children }: { children: React.ReactNode }) {
       cancelled = true;
       if (timer) clearTimeout(timer);
     };
-  }, [preferencesHydrated, sessionChecked, user?.id, user?.ai_preferences]);
+  }, [preferencesHydrated, sessionChecked, user?.id, user?.ai_preferences, userStorageKey]);
 
   useEffect(() => {
     setPreferencesHydrated(false);
+  }, [user?.id]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (user?.id) {
+      localStorage.removeItem(LEGACY_SELECTED_ASSET_KEY);
+      return;
+    }
+    const legacyAsset = normalizeAssetSymbol(localStorage.getItem(LEGACY_SELECTED_ASSET_KEY));
+    if (legacyAsset) {
+      setSelectedAssetState(legacyAsset);
+    }
   }, [user?.id]);
 
   useEffect(() => {
@@ -166,7 +185,7 @@ export function AssetProvider({ children }: { children: React.ReactNode }) {
     const normalized = normalizeAssetSymbol(asset);
     if (!normalized) return;
     setSelectedAssetState(normalized);
-    localStorage.setItem("selectedAsset", normalized);
+    localStorage.setItem(userStorageKey, normalized);
   };
 
   const addAsset = (asset: string) => {

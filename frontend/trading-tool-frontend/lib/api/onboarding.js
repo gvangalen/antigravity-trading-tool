@@ -1,15 +1,21 @@
 "use client";
 
 import { fetchAuth } from "@/lib/api/auth";
+import { loadUserLocal } from "@/lib/api/user";
 
 const ONBOARDING_STATUS_CACHE_KEY = "tt_onboarding_status_cache_v2";
 const ONBOARDING_STATUS_CACHE_TTL_MS = 5 * 60 * 1000;
+
+function getOnboardingStatusCacheKey() {
+  const userId = loadUserLocal()?.id;
+  return userId ? `${ONBOARDING_STATUS_CACHE_KEY}:${userId}` : ONBOARDING_STATUS_CACHE_KEY;
+}
 
 function readOnboardingStatusCache(maxAgeMs = ONBOARDING_STATUS_CACHE_TTL_MS) {
   if (typeof window === "undefined") return null;
 
   try {
-    const raw = sessionStorage.getItem(ONBOARDING_STATUS_CACHE_KEY);
+    const raw = sessionStorage.getItem(getOnboardingStatusCacheKey());
     if (!raw) return null;
 
     const parsed = JSON.parse(raw);
@@ -26,7 +32,7 @@ export function cacheOnboardingStatus(status) {
 
   try {
     sessionStorage.setItem(
-      ONBOARDING_STATUS_CACHE_KEY,
+      getOnboardingStatusCacheKey(),
       JSON.stringify({
         value: status,
         savedAt: Date.now(),
@@ -41,7 +47,14 @@ export function clearOnboardingStatusCache() {
   if (typeof window === "undefined") return;
 
   try {
-    sessionStorage.removeItem(ONBOARDING_STATUS_CACHE_KEY);
+    const keysToRemove = [];
+    for (let index = 0; index < sessionStorage.length; index += 1) {
+      const key = sessionStorage.key(index);
+      if (key && key.startsWith(ONBOARDING_STATUS_CACHE_KEY)) {
+        keysToRemove.push(key);
+      }
+    }
+    keysToRemove.forEach((key) => sessionStorage.removeItem(key));
   } catch {
     // Silent cache failure
   }

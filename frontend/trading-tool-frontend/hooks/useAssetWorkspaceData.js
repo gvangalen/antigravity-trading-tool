@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useAuth } from "@/components/auth/AuthProvider";
 import { trackAssistantEvent } from "@/lib/api/assistantAnalytics";
 import { useVisibilityPolling } from "@/hooks/useVisibilityPolling";
 import { fetchAssetWorkspace } from "@/lib/api/workspace";
@@ -161,6 +162,7 @@ function buildWorkspaceFallback(symbol, periods, quote, daily) {
 }
 
 export function useAssetWorkspaceData(symbol, periods, watchlistSymbols) {
+  const { user } = useAuth() || {};
   const normalizedWatchlistSymbols = Array.from(
     new Set((watchlistSymbols || []).map((item) => String(item || "").toUpperCase()).filter(Boolean))
   );
@@ -192,6 +194,7 @@ export function useAssetWorkspaceData(symbol, periods, watchlistSymbols) {
   const lastSuccessfulRefreshAtRef = useRef(cachedWorkspace ? Date.now() : 0);
   const requestSequenceRef = useRef(0);
   const assetSymbol = String(symbol || "BTC").toUpperCase();
+  const snapshotScope = String(user?.id || "anonymous");
 
   useEffect(() => {
     const fallbackWorkspace = latestWorkspaceRef.current;
@@ -220,9 +223,9 @@ export function useAssetWorkspaceData(symbol, periods, watchlistSymbols) {
   useEffect(() => {
     latestWorkspaceRef.current = workspace || null;
     if (workspace) {
-      setWorkspaceSnapshot(assetSymbol, workspace);
+      setWorkspaceSnapshot(assetSymbol, workspace, snapshotScope);
     }
-  }, [workspace]);
+  }, [assetSymbol, snapshotScope, workspace]);
 
   useEffect(() => {
     latestWatchlistRef.current = Array.isArray(watchlist) ? watchlist : [];

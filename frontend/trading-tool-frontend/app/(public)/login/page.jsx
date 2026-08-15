@@ -27,6 +27,10 @@ async function resolvePostLoginDestination(nextPath) {
       status?.has_bot
     );
     if (!isComplete) return status?.next_route || "/onboarding/profile";
+    const activeAsset = String(status?.active_asset || "").trim().toUpperCase();
+    if (activeAsset) {
+      return `/asset?symbol=${encodeURIComponent(activeAsset)}`;
+    }
   } catch (error) {
     console.warn("⚠️ Could not resolve onboarding status after login:", error);
   }
