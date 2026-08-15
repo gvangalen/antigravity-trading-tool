@@ -556,6 +556,93 @@ def test_resolve_first_dashboard_briefing_uses_loading_state_while_generating():
     assert display["briefing"]["headline"] == "FINN is reviewing your plan"
 
 
+def test_first_dashboard_allows_onboarding_configuration_activity_only():
+    service = _service()
+    activity = [
+        service._mission_activity_item({
+            "id": "finn-plan-1",
+            "status": "executed",
+            "created_at": _utc_now(),
+            "payload": {
+                "action": {"type": "create_plan"},
+                "result": {"ok": True, "status": "created"},
+            },
+        }),
+        service._mission_activity_item({
+            "id": "finn-strategy-1",
+            "status": "executed",
+            "created_at": _utc_now(),
+            "payload": {
+                "action": {"type": "create_strategy"},
+                "result": {"ok": True, "status": "created"},
+            },
+        }),
+        service._mission_activity_item({
+            "id": "finn-bot-1",
+            "status": "executed",
+            "created_at": _utc_now(),
+            "payload": {
+                "action": {"type": "create_bot"},
+                "result": {"ok": True, "status": "created"},
+            },
+        }),
+    ]
+
+    assert service._first_dashboard_has_blocking_activity(activity) is False
+
+
+def test_first_dashboard_flags_post_onboarding_activity_as_blocking():
+    service = _service()
+    activity = [
+        service._mission_activity_item({
+            "id": "finn-skip-1",
+            "status": "executed",
+            "created_at": _utc_now(),
+            "payload": {
+                "action": {"type": "skip_bot_decision"},
+                "result": {"ok": True, "status": "skipped"},
+            },
+        })
+    ]
+
+    assert service._first_dashboard_has_blocking_activity(activity) is True
+
+
+def test_build_mission_control_response_keeps_working_when_first_dashboard_context_fails(monkeypatch):
+    service = _service()
+
+    async def daily_response(user_id, query, context=None):
+        return {
+            "state": {
+                "analysis": {
+                    "assets": [{"asset": "AAPL"}],
+                    "follow_up_actions": [],
+                    "asset_count": 1,
+                    "date": _utc_now().date().isoformat(),
+                }
+            }
+        }
+
+    async def activity(user_id, limit=40):
+        return []
+
+    async def resolved_ids(user_id):
+        return []
+
+    monkeypatch.setattr(service, "build_portfolio_daily_coach_response", daily_response)
+    monkeypatch.setattr(service, "_get_recent_finn_activity", activity)
+    monkeypatch.setattr(service, "_get_today_resolved_mission_item_ids", resolved_ids)
+    monkeypatch.setattr(service, "_build_first_dashboard_context", AsyncMock(side_effect=RuntimeError("boom")))
+
+    result = asyncio.run(service.build_mission_control_response(7))
+
+    assert result["ok"] is True
+    assert result["first_dashboard_context"]["asset"] == "AAPL"
+    assert result["first_dashboard_context"]["response_source"] == "briefing_error"
+    assert result["first_dashboard_context"]["generation_status"] == "error"
+    assert "Mission Control stays available".lower() in result["first_dashboard_context"]["observation"].lower()
+
+
 def test_sanitize_context_drops_stale_plan_draft_for_setup_explain_prompt():
     service = _service()
     context = {

@@ -24,7 +24,9 @@ async function resolvePostRegisterDestination() {
       status?.has_strategy &&
       status?.has_bot
     );
-    return isComplete ? "/asset" : status?.next_route || "/onboarding/profile";
+    if (!isComplete) return status?.next_route || "/onboarding/profile";
+    const activeAsset = String(status?.active_asset || "").trim().toUpperCase();
+    return activeAsset ? `/asset?symbol=${encodeURIComponent(activeAsset)}` : "/asset";
   } catch (error) {
     console.warn("⚠️ Could not resolve onboarding status after register:", error);
     return "/onboarding/profile";

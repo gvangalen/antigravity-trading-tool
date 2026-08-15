@@ -1,6 +1,7 @@
 import hashlib
 import inspect
 import json
+import logging
 import os
 import re
 import asyncio
@@ -38,6 +39,8 @@ from backend.services.setup_service import SetupService
 from backend.services.strategy_service import StrategyService
 from backend.services.technical_data_service import TechnicalDataService
 from backend.services.trader_profile_service import normalize_trader_profile_preferences
+
+logger = logging.getLogger(__name__)
 from backend.utils.openai_client import ask_gpt_json
 from backend.utils.scoring_utils import normalize_indicator_name
 
@@ -12430,13 +12433,24 @@ class FinnPlanService:
             "skipped_today_count": day_log["skipped_count"],
             "snoozed_today_count": day_log["snoozed_count"],
         }
-        first_dashboard_context = await self._build_first_dashboard_context(
-            user_id,
-            analysis,
-            mission,
-            activity_feed=activity_feed,
-            day_log=day_log,
-        )
+        try:
+            first_dashboard_context = await self._build_first_dashboard_context(
+                user_id,
+                analysis,
+                mission,
+                activity_feed=activity_feed,
+                day_log=day_log,
+            )
+        except Exception as exc:
+            logger.exception(
+                "First dashboard context build failed for user_id=%s trace_id=%s",
+                user_id,
+                self.trace_id,
+            )
+            first_dashboard_context = self._first_dashboard_error_context(
+                analysis,
+                error=str(exc or "first_dashboard_context_exception"),
+            )
         if first_dashboard_context:
             mission["first_dashboard_context"] = first_dashboard_context
         behavioral_insight = self._build_behavioral_insight_from_activity(activity_feed, day_log)
@@ -12600,6 +12614,48 @@ class FinnPlanService:
                 "date": analysis.get("date"),
                 "asset_count": analysis.get("asset_count", 0),
             },
+        }
+
+    def _first_dashboard_error_context(
+        self,
+        analysis: Dict[str, Any],
+        *,
+        error: str,
+    ) -> Dict[str, Any]:
+        asset = "BTC"
+        for item in (analysis.get("assets") or []):
+            candidate = str((item or {}).get("asset") or "").strip().upper()
+            if candidate:
+                asset = candidate
+                break
+        briefing = {
+            "headline": "FINN is reviewing your plan",
+            "observation": f"I could not finish the first {asset} dashboard review yet, so Mission Control stays available while I retry safely.",
+            "reasoning": "Your stored onboarding context is intact, but the first-dashboard briefing encountered a recoverable processing error.",
+            "next_question": "Would you like to continue with Mission Control while FINN retries the first review?",
+            "suggested_action": "Continue in Mission Control",
+        }
+        return {
+            "is_first_dashboard": True,
+            "asset": asset,
+            "briefing_lines": [briefing["headline"], briefing["observation"], briefing["reasoning"], briefing["next_question"]],
+            "briefing_text": "\n".join([briefing["headline"], briefing["observation"], briefing["reasoning"], briefing["next_question"]]),
+            "headline": briefing["headline"],
+            "observation": briefing["observation"],
+            "reasoning": briefing["reasoning"],
+            "support": briefing["reasoning"],
+            "action_hint": briefing["suggested_action"],
+            "next_action": {
+                "label": briefing["suggested_action"],
+                "question": briefing["next_question"],
+            },
+            "review_state": "not_reviewed_yet",
+            "review_label": "Not reviewed yet",
+            "response_source": "briefing_error",
+            "generation_status": "error",
+            "evidence_refs": ["asset.symbol"],
+            "trace_id": self.trace_id,
+            "error": str(error or "first_dashboard_context_exception"),
         }
 
     async def generate_and_store_first_dashboard_briefing(
@@ -12847,7 +12903,7 @@ class FinnPlanService:
         onboarding_status = await self._fetch_onboarding_status(user_id)
         if not onboarding_status.get("onboarding_complete"):
             return None
-        if local_activity_feed:
+        if self._first_dashboard_has_blocking_activity(local_activity_feed):
             return None
         if any(int((local_day_log or {}).get(key) or 0) > 0 for key in ("handled_count", "skipped_count", "snoozed_count")):
             return None
@@ -13023,6 +13079,24 @@ class FinnPlanService:
             "context_version": context_version,
             "allowed_evidence_refs": allowed_evidence_refs,
         }
+
+    def _first_dashboard_has_blocking_activity(self, activity_feed: List[Dict[str, Any]]) -> bool:
+        ignored_types = {
+            "create_plan",
+            "create_strategy",
+            "create_bot",
+            "configure_indicator",
+            "refresh_daily_scores",
+            "agent_controller_handoff",
+        }
+        for item in activity_feed or []:
+            action_type = str((item or {}).get("type") or "").strip().lower()
+            if not action_type:
+                continue
+            if action_type in ignored_types:
+                continue
+            return True
+        return False
 
     def _resolve_first_dashboard_briefing_display(
         self,

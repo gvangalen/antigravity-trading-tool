@@ -40,3 +40,9 @@ test("prefers central first-dashboard context over the generic briefing template
   assert.match(assistantSource, /generation_status/);
   assert.match(assistantSource, /setInterval\(\(\) => \{\s*void loadMissionControl\(\)/);
 });
+
+test("scopes briefing fallbacks and mission-control cache per authenticated user", () => {
+  assert.doesNotMatch(assistantSource, /preferences\?\.first_name\s*\|\|\s*"Gerrit"/);
+  assert.match(assistantSource, /user\?\.first_name\s*\|\|\s*preferences\?\.first_name\s*\|\|\s*"Trader"/);
+  assert.match(assistantSource, /finn-mission-control:\$\{currentConversationStorageKey\}/);
+});

@@ -7,17 +7,26 @@ function normalizeSymbol(symbol) {
   return String(symbol || "BTC").trim().toUpperCase() || "BTC";
 }
 
-export function getWorkspaceSnapshot(symbol) {
-  return snapshots.get(normalizeSymbol(symbol)) || null;
+function normalizeScope(scope) {
+  return String(scope || "anonymous").trim() || "anonymous";
 }
 
-export function setWorkspaceSnapshot(symbol, snapshot) {
+function snapshotKey(symbol, scope) {
+  return `${normalizeScope(scope)}:${normalizeSymbol(symbol)}`;
+}
+
+export function getWorkspaceSnapshot(symbol, scope = "anonymous") {
+  return snapshots.get(snapshotKey(symbol, scope)) || null;
+}
+
+export function setWorkspaceSnapshot(symbol, snapshot, scope = "anonymous") {
   const normalized = normalizeSymbol(symbol);
   if (!snapshot || typeof snapshot !== "object") return;
-  snapshots.set(normalized, snapshot);
+  const key = snapshotKey(normalized, scope);
+  snapshots.set(key, snapshot);
   listeners.forEach((listener) => {
     try {
-      listener(normalized, snapshot);
+      listener(normalized, snapshot, normalizeScope(scope));
     } catch (error) {
       console.error("Workspace snapshot listener failed", error);
     }

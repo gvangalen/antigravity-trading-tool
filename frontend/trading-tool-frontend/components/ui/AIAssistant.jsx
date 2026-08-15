@@ -8,6 +8,7 @@ import useIntelligenceEvents from "@/hooks/useIntelligenceEvents";
 import { useOnboarding } from "@/hooks/useOnboarding";
 import { ChatSkeleton } from "@/components/dashboard/DashboardSkeleton";
 import { useAsset } from "@/app/providers/AssetProvider";
+import { useAuth } from "@/components/auth/AuthProvider";
 import { useWatchlist } from "@/hooks/useWatchlist";
 import { useModal } from "@/components/modal/ModalProvider";
 import { saveNewSetup, fetchSetups } from "@/lib/api/setups";
@@ -435,6 +436,7 @@ function AIAssistantContent({
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const { selectedAsset: globalSymbol, setSelectedAsset } = useAsset();
+  const { user } = useAuth();
   const router = useRouter();
   const watchlist = useWatchlist();
   const { showSnackbar } = useModal();
@@ -787,7 +789,7 @@ function AIAssistantContent({
   const buildBriefingText = (sourceInsight) => {
     const openReviews = countUniqueReviewCandidates(missionControl);
     const blockedCount = Number(missionControl?.summary?.blocked_count || 0);
-    const greetingName = preferences?.first_name || "Gerrit";
+    const greetingName = user?.first_name || preferences?.first_name || "Trader";
     const primaryItem = primaryCoachingItem || missionControl?.bot_review_queue?.[0] || missionControl?.workqueue?.[0] || null;
     const symbol = String(
       isAssetAnalysisPage
@@ -855,7 +857,7 @@ function AIAssistantContent({
   };
 
   const buildSnapshotBriefingText = (snapshot) => {
-    const greetingName = preferences?.first_name || "Gerrit";
+    const greetingName = user?.first_name || preferences?.first_name || "Trader";
     const symbol = String(
       snapshot?.symbol ||
       snapshot?.asset?.symbol ||
@@ -957,18 +959,18 @@ function AIAssistantContent({
   const context = getContext();
   const skipNextFinnRestoreRef = useRef(null);
   const currentConversationStorageKey = React.useMemo(() => {
+    const userScope = String(user?.id || "anonymous");
     const section = String(context.page_type || pathname || "overview").toLowerCase();
     const asset = String(context.symbol || globalSymbol || "BTC").toUpperCase();
     const timeframe = String(context.timeframe || "Day").toLowerCase();
-    return `${section}:${asset}:${timeframe}`;
-  }, [context.page_type, context.symbol, context.timeframe, pathname, globalSymbol]);
+    return `${userScope}:${section}:${asset}:${timeframe}`;
+  }, [user?.id, context.page_type, context.symbol, context.timeframe, pathname, globalSymbol]);
 
   useEffect(() => {
     insightCacheKeyRef.current = `finn-insight:${currentConversationStorageKey}`;
-    missionControlCacheKeyRef.current = isAssetAnalysisPage
-      ? `finn-mission-control:${pathname || "/assistant"}`
-      : `finn-mission-control:${pathname || "/assistant"}:${globalSymbol || context.symbol || "BTC"}`;
-  }, [currentConversationStorageKey, isAssetAnalysisPage, pathname, globalSymbol, context.symbol]);
+    const missionControlSymbol = String(globalSymbol || context.symbol || "BTC").toUpperCase();
+    missionControlCacheKeyRef.current = `finn-mission-control:${currentConversationStorageKey}:${pathname || "/assistant"}:${missionControlSymbol}`;
+  }, [currentConversationStorageKey, pathname, globalSymbol, context.symbol]);
 
   const getLatestAssistantState = () => {
     for (let i = messages.length - 1; i >= 0; i -= 1) {
@@ -4128,7 +4130,9 @@ function AIAssistantContent({
   }
 
   async function loadMissionControl() {
-    const requestKey = missionControlCacheKeyRef.current || `finn-mission-control:${pathname || "/assistant"}:${globalSymbol || context.symbol || "BTC"}`;
+    const requestKey =
+      missionControlCacheKeyRef.current ||
+      `finn-mission-control:${currentConversationStorageKey}:${pathname || "/assistant"}:${String(globalSymbol || context.symbol || "BTC").toUpperCase()}`;
     if (missionControlRequestRef.current && missionControlRequestKeyRef.current === requestKey) {
       return missionControlRequestRef.current;
     }
@@ -5596,12 +5600,13 @@ function AIAssistantContent({
   useEffect(() => {
     if (!previewSectionsOnly) return;
     const symbol = String(context?.symbol || globalSymbol || "BTC").trim().toUpperCase();
-    setWorkspaceSnapshot(getWorkspaceSnapshot(symbol));
-    return subscribeWorkspaceSnapshot((nextSymbol, snapshot) => {
-      if (nextSymbol !== symbol) return;
+    const snapshotScope = String(user?.id || "anonymous");
+    setWorkspaceSnapshot(getWorkspaceSnapshot(symbol, snapshotScope));
+    return subscribeWorkspaceSnapshot((nextSymbol, snapshot, nextScope) => {
+      if (nextSymbol !== symbol || nextScope !== snapshotScope) return;
       setWorkspaceSnapshot(snapshot);
     });
-  }, [previewSectionsOnly, context?.symbol, globalSymbol]);
+  }, [previewSectionsOnly, context?.symbol, globalSymbol, user?.id]);
 
   useEffect(() => {
     if (!previewSectionsOnly || !isOpen || isOnboarding) return;
