@@ -43,6 +43,8 @@ test("prefers central first-dashboard context over the generic briefing template
 
 test("scopes briefing fallbacks and mission-control cache per authenticated user", () => {
   assert.doesNotMatch(assistantSource, /preferences\?\.first_name\s*\|\|\s*"Gerrit"/);
-  assert.match(assistantSource, /user\?\.first_name\s*\|\|\s*preferences\?\.first_name\s*\|\|\s*"Trader"/);
+  assert.doesNotMatch(assistantSource, /user\?\.first_name\s*\|\|\s*preferences\?\.first_name\s*\|\|\s*"Trader"/);
+  assert.match(assistantSource, /user\?\.first_name\s*\|\|\s*"Trader"/);
   assert.match(assistantSource, /finn-mission-control:\$\{currentConversationStorageKey\}/);
+  assert.match(assistantSource, /useEffect\(\(\)\s*=>\s*\{\s*setPreferences\(\{\}\);[\s\S]*sharedSessionRestoreRef\.current = false;[\s\S]*\}, \[user\?\.id\]\)/);
 });

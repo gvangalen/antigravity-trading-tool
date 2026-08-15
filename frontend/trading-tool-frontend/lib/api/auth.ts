@@ -43,6 +43,39 @@ export function clearStoredAuth() {
   clearUserLocal();
 }
 
+const USER_STATE_LOCAL_PREFIXES = [
+  "selectedAsset",
+];
+
+const USER_STATE_SESSION_PREFIXES = [
+  "tt_onboarding_status_cache_v2",
+  "finn-insight:",
+  "finn-mission-control:",
+  "finn-recent-conversations:v1",
+];
+
+function clearStorageKeysByPrefixes(
+  storage: Storage | undefined,
+  prefixes: string[],
+) {
+  if (!storage) return;
+  const keysToRemove: string[] = [];
+  for (let index = 0; index < storage.length; index += 1) {
+    const key = storage.key(index);
+    if (!key) continue;
+    if (prefixes.some((prefix) => key === prefix || key.startsWith(`${prefix}:`))) {
+      keysToRemove.push(key);
+    }
+  }
+  keysToRemove.forEach((key) => storage.removeItem(key));
+}
+
+export function clearClientUserScopedState() {
+  if (typeof window === "undefined") return;
+  clearStorageKeysByPrefixes(window.localStorage, USER_STATE_LOCAL_PREFIXES);
+  clearStorageKeysByPrefixes(window.sessionStorage, USER_STATE_SESSION_PREFIXES);
+}
+
 export function getCsrfToken() {
   if (typeof document === "undefined") return null;
   const match = document.cookie.match(/(?:^|; )csrf_token=([^;]+)/);

@@ -18,6 +18,7 @@ import {
   buildAuthHeaders,
   storeAuthTokens,
   clearStoredAuth,
+  clearClientUserScopedState,
   apiRefresh,
 } from "@/lib/api/auth";
 import { clearOnboardingStatusCache } from "@/lib/api/onboarding";
@@ -194,6 +195,7 @@ export function AuthProvider({ children }) {
       });
       const loginUser = data?.user ?? null;
 
+      clearClientUserScopedState();
       if (loginUser) {
         setUser(loginUser);
         saveUserLocal(loginUser);
@@ -224,6 +226,7 @@ export function AuthProvider({ children }) {
   const logout = useCallback(async () => {
     setUser(null);
     clearStoredAuth();
+    clearClientUserScopedState();
     clearOnboardingStatusCache();
 
     try {

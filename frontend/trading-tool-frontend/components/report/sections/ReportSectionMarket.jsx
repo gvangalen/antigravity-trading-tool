@@ -37,7 +37,7 @@ export default function ReportSectionMarket({ report, isPrint = false }) {
             
             <div className="space-y-1">
               <div className="text-xl font-bold text-slate-900">
-                {copy.greeting} {user?.first_name || "Gerrit"},
+                {copy.greeting} {user?.first_name || "Trader"},
               </div>
               <p className="text-muted font-medium italic">
                 {copy.marketIntro}

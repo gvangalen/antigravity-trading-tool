@@ -9,11 +9,17 @@ import { useTranslation } from "@/app/providers/I18nProvider";
 import Link from "next/link";
 import { clearOnboardingStatusCache, getOnboardingStatus } from "@/lib/api/onboarding";
 
-async function resolvePostLoginDestination(nextPath) {
-  if (nextPath && !nextPath.startsWith("/login") && !nextPath.startsWith("/register")) {
-    return nextPath;
+function normalizeAssetSymbolFromPath(path) {
+  if (!path || !path.startsWith("/asset")) return "";
+  try {
+    const url = new URL(path, "https://tradamind.local");
+    return String(url.searchParams.get("symbol") || "").trim().toUpperCase();
+  } catch {
+    return "";
   }
+}
 
+async function resolvePostLoginDestination(nextPath) {
   try {
     const status = await getOnboardingStatus();
     const isComplete = status?.onboarding_complete ?? status?.phases_completed?.complete ?? (
@@ -29,6 +35,15 @@ async function resolvePostLoginDestination(nextPath) {
     if (!isComplete) return status?.next_route || "/onboarding/profile";
     const activeAsset = String(status?.active_asset || "").trim().toUpperCase();
     if (activeAsset) {
+      const nextAsset = normalizeAssetSymbolFromPath(nextPath);
+      if (nextAsset && nextAsset === activeAsset) {
+        return nextPath;
+      }
+      if (nextPath && !nextPath.startsWith("/login") && !nextPath.startsWith("/register")) {
+        if (!nextPath.startsWith("/asset") && !nextPath.startsWith("/onboarding")) {
+          return nextPath;
+        }
+      }
       return `/asset?symbol=${encodeURIComponent(activeAsset)}`;
     }
   } catch (error) {

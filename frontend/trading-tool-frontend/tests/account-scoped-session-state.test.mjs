@@ -23,6 +23,9 @@ test("stores selected asset per authenticated user instead of a shared browser k
 
 test("post-auth redirects prefer the server-side active asset for completed onboarding users", () => {
   assert.match(loginSource, /status\?\.active_asset/);
+  assert.match(loginSource, /normalizeAssetSymbolFromPath/);
+  assert.match(loginSource, /const nextAsset = normalizeAssetSymbolFromPath\(nextPath\)/);
+  assert.match(loginSource, /if \(nextAsset && nextAsset === activeAsset\)/);
   assert.match(loginSource, /\/asset\?symbol=\$\{encodeURIComponent\(activeAsset\)\}/);
   assert.match(registerSource, /status\?\.active_asset/);
   assert.match(registerSource, /\/asset\?symbol=\$\{encodeURIComponent\(activeAsset\)\}/);

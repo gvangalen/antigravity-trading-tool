@@ -518,6 +518,35 @@ function AIAssistantContent({
   const uiText = buildAssistantUiText(at);
 
   useEffect(() => {
+    setPreferences({});
+    setMessages([]);
+    setInsight(null);
+    setStableBriefingText("");
+    setWorkspaceSnapshot(null);
+    setLastUpdated(null);
+    setActiveState(null);
+    setContextMetric(null);
+    setFinnDraft(null);
+    setMissionControl(null);
+    setMissionControlLoadError(null);
+    setMissionControlLoading(false);
+    setRecentConversations([]);
+    setDraftDrawer(null);
+    setActiveFinnSessionId(null);
+    setAvailableFinnSessions([]);
+    handledContextRequestRef.current = null;
+    loadedFinnStateRef.current = false;
+    insightCacheKeyRef.current = "";
+    missionControlCacheKeyRef.current = "";
+    missionControlRequestRef.current = null;
+    missionControlRequestKeyRef.current = "";
+    insightRequestRef.current = null;
+    insightRequestKeyRef.current = "";
+    finnStateRequestRef.current = null;
+    sharedSessionRestoreRef.current = false;
+  }, [user?.id]);
+
+  useEffect(() => {
     const handleIndicatorModalCompleted = (event) => {
       const { indicator, assetSymbol, category, source } = event?.detail || {};
       if (source !== "finn") return;
@@ -789,7 +818,7 @@ function AIAssistantContent({
   const buildBriefingText = (sourceInsight) => {
     const openReviews = countUniqueReviewCandidates(missionControl);
     const blockedCount = Number(missionControl?.summary?.blocked_count || 0);
-    const greetingName = user?.first_name || preferences?.first_name || "Trader";
+    const greetingName = user?.first_name || "Trader";
     const primaryItem = primaryCoachingItem || missionControl?.bot_review_queue?.[0] || missionControl?.workqueue?.[0] || null;
     const symbol = String(
       isAssetAnalysisPage
@@ -857,7 +886,7 @@ function AIAssistantContent({
   };
 
   const buildSnapshotBriefingText = (snapshot) => {
-    const greetingName = user?.first_name || preferences?.first_name || "Trader";
+    const greetingName = user?.first_name || "Trader";
     const symbol = String(
       snapshot?.symbol ||
       snapshot?.asset?.symbol ||

@@ -18,6 +18,7 @@ from backend.api.ai_assistant_api import (
     _legacy_response_is_generic_failure,
     _legacy_response_needs_finn_rescue,
     _infer_response_source,
+    get_finn_mission_control,
 )
 from backend.schemas.assistant_schema import AssistantChatRequest
 from backend.infrastructure.repositories.conversation_state_repository import ConversationStateRepository
@@ -929,6 +930,47 @@ def test_prepare_finn_envelope_persists_read_only_state_by_default():
         "fallback",
         "response",
     }
+
+
+def test_get_finn_mission_control_survives_non_database_action_failures(monkeypatch):
+    db = SimpleNamespace(rollback=AsyncMock())
+    stored = {}
+    finn = SimpleNamespace(
+        build_mission_control_response=AsyncMock(
+            return_value={"first_dashboard_context": {"generation_status": "ready"}}
+        ),
+        issue_response_actions=AsyncMock(side_effect=RuntimeError("issue actions failed")),
+    )
+
+    monkeypatch.setattr("backend.api.ai_assistant_api._get_cached_mission_control", lambda user_id: None)
+    monkeypatch.setattr(
+        "backend.api.ai_assistant_api._store_cached_mission_control",
+        lambda user_id, payload: stored.update({"user_id": user_id, "payload": payload}),
+    )
+    monkeypatch.setattr("backend.api.ai_assistant_api._new_finn_plan_service", lambda db_session, trace_id=None: finn)
+
+    async def fake_enrich(db_session, user_id, payload=None, *, query=None):
+        return payload or {}
+
+    monkeypatch.setattr("backend.api.ai_assistant_api._enrich_with_trader_profile", fake_enrich)
+
+    request = Request({"type": "http", "headers": [], "client": ("127.0.0.1", 12345)})
+    request.state.trace_id = "trace-mission-control"
+
+    response = asyncio.run(
+        get_finn_mission_control(
+            current_user={"id": 30},
+            db=db,
+            request=request,
+        )
+    )
+
+    finn.build_mission_control_response.assert_awaited_once()
+    finn.issue_response_actions.assert_awaited_once()
+    db.rollback.assert_awaited_once()
+    assert response["first_dashboard_context"]["generation_status"] == "ready"
+    assert stored["user_id"] == 30
+    assert stored["payload"]["first_dashboard_context"]["generation_status"] == "ready"
 
 
 def test_conversation_state_repository_serializes_date_values():
