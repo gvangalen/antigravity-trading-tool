@@ -6,12 +6,34 @@ from backend.utils.db import get_db_connection
 logger = logging.getLogger(__name__)
 
 
+@shared_task(name="backend.celery_task.onboarding_task.enqueue_first_dashboard_briefing")
+def enqueue_first_dashboard_briefing(user_id: int, trigger: str = "bootstrap_agents"):
+    """
+    Backwards-compatible queue shim for production workers that still enqueue a
+    dedicated first-dashboard briefing task from bootstrap flows.
+    """
+    logger.info("🧭 Queueing first dashboard briefing | user_id=%s | trigger=%s", user_id, trigger)
+    generate_first_dashboard_briefing.delay(user_id)
+    return {"status": "queued", "user_id": user_id, "trigger": trigger}
+
+
 @shared_task(name="backend.celery_task.onboarding_task.generate_first_dashboard_briefing")
 def generate_first_dashboard_briefing(user_id: int):
-    from backend.infrastructure.database import async_session_factory
+    from backend.infrastructure.database import async_session_factory, engine, sync_engine
     from backend.services.finn_plan_service import FinnPlanService
 
     async def _run() -> dict:
+        # Celery prefork workers can inherit pooled connections from the parent
+        # process. Clear them before opening an async session for briefing work.
+        try:
+            await engine.dispose()
+        except Exception:
+            logger.debug("Async engine dispose skipped before first-dashboard briefing", exc_info=True)
+        try:
+            sync_engine.dispose()
+        except Exception:
+            logger.debug("Sync engine dispose skipped before first-dashboard briefing", exc_info=True)
+
         async with async_session_factory() as session:
             service = FinnPlanService(session)
             result = await service.generate_and_store_first_dashboard_briefing(
