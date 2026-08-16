@@ -12851,12 +12851,15 @@ class FinnPlanService:
             day_log=day_log,
         )
         if not payload:
-            return None
+            return await self._build_first_dashboard_loading_context(user_id, analysis)
 
         stored_state = await self._load_first_dashboard_briefing_state(user_id)
         stored_briefing = (stored_state.get(FIRST_DASHBOARD_BRIEFING_METADATA_KEY) or {}) if stored_state else {}
         if stored_briefing:
             await self.maybe_schedule_first_dashboard_retry(user_id, stored_briefing)
+            stored_state = await self._load_first_dashboard_briefing_state(user_id)
+            stored_briefing = (stored_state.get(FIRST_DASHBOARD_BRIEFING_METADATA_KEY) or {}) if stored_state else {}
+        if await self._schedule_first_dashboard_generation_if_needed(user_id, payload, stored_state):
             stored_state = await self._load_first_dashboard_briefing_state(user_id)
             stored_briefing = (stored_state.get(FIRST_DASHBOARD_BRIEFING_METADATA_KEY) or {}) if stored_state else {}
         display = self._resolve_first_dashboard_briefing_display(payload, stored_briefing)
@@ -12875,6 +12878,89 @@ class FinnPlanService:
         mission["workqueue"] = self._flatten_mission_workqueue_groups(mission["workqueue_groups"])
         mission["summary"]["workqueue_count"] = len(mission["workqueue"])
         return context
+
+    async def _build_first_dashboard_loading_context(
+        self,
+        user_id: int,
+        analysis: Dict[str, Any],
+    ) -> Optional[Dict[str, Any]]:
+        try:
+            onboarding_status = await self._fetch_onboarding_status(user_id)
+        except Exception:
+            logger.exception(
+                "First dashboard loading context lookup failed for user_id=%s trace_id=%s",
+                user_id,
+                self.trace_id,
+            )
+            return None
+        if not onboarding_status.get("onboarding_complete"):
+            return None
+
+        asset = str(
+            onboarding_status.get("active_asset")
+            or next((item.get("asset") for item in (analysis.get("assets") or []) if item.get("asset")), "")
+            or "BTC"
+        ).upper()
+        payload = self._first_dashboard_minimal_payload(asset)
+        display = {
+            "briefing": self._first_dashboard_loading_result(asset),
+            "response_source": "briefing_generating",
+            "generation_status": "pending",
+        }
+        return self._compose_first_dashboard_context(payload, display)
+
+    async def _schedule_first_dashboard_generation_if_needed(
+        self,
+        user_id: int,
+        payload: Dict[str, Any],
+        stored_state: Dict[str, Any],
+    ) -> bool:
+        if not self.session:
+            return False
+
+        stored_briefing = (stored_state.get(FIRST_DASHBOARD_BRIEFING_METADATA_KEY) or {}) if stored_state else {}
+        current_version = str(payload.get("context_version") or "")
+        stored_version = str(stored_briefing.get("context_version") or "")
+        stored_status = str(stored_briefing.get("status") or "").lower()
+
+        if stored_version == current_version and stored_status in {"ready", "generating", "retry_scheduled"}:
+            return False
+        if stored_version == current_version and stored_status == "fallback" and not self._first_dashboard_retry_due(stored_briefing):
+            return False
+
+        queued_at = _utc_now().isoformat()
+        next_state = {
+            **(stored_state or {}),
+            FIRST_DASHBOARD_BRIEFING_METADATA_KEY: {
+                "state_version": FIRST_DASHBOARD_BRIEFING_STATE_VERSION,
+                "status": "retry_scheduled",
+                "context_version": current_version,
+                "trigger": "mission_control",
+                "asset": payload.get("asset"),
+                "retry_count": int(stored_briefing.get("retry_count") or 0),
+                "retryable": True,
+                "max_retry_attempts": FIRST_DASHBOARD_MAX_RETRY_ATTEMPTS,
+                "next_retry_at": queued_at,
+                "input_snapshot": payload.get("input_snapshot") or {},
+                "fallback_result": payload.get("fallback_result") or {},
+                "updated_at": queued_at,
+                "started_at": stored_briefing.get("started_at") or queued_at,
+                "error": stored_briefing.get("error"),
+            },
+        }
+        await self._store_first_dashboard_briefing_state(user_id, next_state)
+        try:
+            from backend.celery_task.onboarding_task import generate_first_dashboard_briefing
+
+            generate_first_dashboard_briefing.delay(user_id)
+            return True
+        except Exception:
+            logger.exception(
+                "Could not enqueue first dashboard briefing generation for user_id=%s trace_id=%s",
+                user_id,
+                self.trace_id,
+            )
+            return False
 
     async def _prepare_first_dashboard_payload(
         self,
@@ -13136,6 +13222,36 @@ class FinnPlanService:
                 continue
             return True
         return False
+
+    def _first_dashboard_minimal_payload(self, asset: str) -> Dict[str, Any]:
+        symbol = str(asset or "BTC").upper()
+        return {
+            "asset": symbol,
+            "timeframes": [],
+            "profile": {},
+            "indicators": {"market": [], "macro": [], "technical": []},
+            "setup": {},
+            "strategy": {},
+            "bot": None,
+            "data_readiness": {},
+            "market_snapshot": {},
+            "next_action": {
+                "label": f"Review your {symbol} plan",
+                "question": f"Review my {symbol} plan",
+            },
+            "fallback_result": {
+                "headline": f"Your {symbol} plan is ready.",
+                "observation": f"I am still preparing the first {symbol} dashboard review.",
+                "reasoning": "Stored onboarding data is available, but the first dashboard briefing is still being generated.",
+                "next_question": f"Would you like to review your {symbol} plan while FINN finishes the first briefing?",
+                "suggested_action": f"Review your {symbol} plan",
+                "evidence_refs": ["asset.symbol"],
+            },
+            "input_snapshot": {"asset": symbol},
+            "ai_prompt_context": {"asset": {"symbol": symbol}},
+            "context_version": f"pending:{symbol}",
+            "allowed_evidence_refs": ["asset.symbol", "history.behavior"],
+        }
 
     def _resolve_first_dashboard_briefing_display(
         self,

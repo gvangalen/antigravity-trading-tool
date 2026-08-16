@@ -721,6 +721,69 @@ def test_build_mission_control_response_keeps_working_when_first_dashboard_conte
     assert "Mission Control stays available".lower() in result["first_dashboard_context"]["observation"].lower()
 
 
+def test_build_first_dashboard_context_returns_loading_when_payload_is_not_ready(monkeypatch):
+    service = FinnPlanService(db_session=object())
+
+    async def fake_prepare(**kwargs):
+        return None
+
+    async def fake_onboarding_status(user_id):
+        return {"onboarding_complete": True, "active_asset": "BTC"}
+
+    monkeypatch.setattr(service, "_prepare_first_dashboard_payload", fake_prepare)
+    monkeypatch.setattr(service, "_fetch_onboarding_status", fake_onboarding_status)
+
+    result = asyncio.run(
+        service._build_first_dashboard_context(
+            7,
+            {"assets": []},
+            {"summary": {}, "workqueue": [], "workqueue_groups": []},
+            activity_feed=[],
+            day_log={"handled_count": 0, "skipped_count": 0, "snoozed_count": 0},
+        )
+    )
+
+    assert result is not None
+    assert result["asset"] == "BTC"
+    assert result["response_source"] == "briefing_generating"
+    assert result["generation_status"] == "pending"
+    assert result["headline"] == "FINN is reviewing your plan"
+
+
+def test_schedule_first_dashboard_generation_if_needed_queues_missing_state(monkeypatch):
+    service = FinnPlanService(db_session=object())
+    stored_state = {}
+    queued = []
+
+    async def fake_store(_user_id, state):
+        stored_state.clear()
+        stored_state.update(state)
+
+    monkeypatch.setattr(service, "_store_first_dashboard_briefing_state", fake_store)
+
+    class _Task:
+        @staticmethod
+        def delay(user_id):
+            queued.append(user_id)
+
+    monkeypatch.setattr(finn_plan_module, "FIRST_DASHBOARD_MAX_RETRY_ATTEMPTS", 3)
+    monkeypatch.setitem(__import__("sys").modules, "backend.celery_task.onboarding_task", SimpleNamespace(generate_first_dashboard_briefing=_Task))
+
+    scheduled = asyncio.run(
+        service._schedule_first_dashboard_generation_if_needed(
+            7,
+            _first_dashboard_payload("ctx-v7"),
+            {},
+        )
+    )
+
+    assert scheduled is True
+    assert queued == [7]
+    assert stored_state["first_dashboard_briefing"]["status"] == "retry_scheduled"
+    assert stored_state["first_dashboard_briefing"]["context_version"] == "ctx-v7"
+    assert stored_state["first_dashboard_briefing"]["trigger"] == "mission_control"
+
+
 def test_sanitize_context_drops_stale_plan_draft_for_setup_explain_prompt():
     service = _service()
     context = {
