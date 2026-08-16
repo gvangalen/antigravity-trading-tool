@@ -452,7 +452,46 @@ def test_generate_first_dashboard_briefing_deduplicates_inflight_same_version(mo
     result = asyncio.run(service.generate_and_store_first_dashboard_briefing(7))
 
     assert result["status"] == "inflight"
-    assert result["response_source"] == "deterministic_fallback"
+    assert result["response_source"] == "briefing_generating"
+
+
+def test_enqueue_first_dashboard_briefing_records_pending_and_queued_state(monkeypatch):
+    service = FinnPlanService(db_session=object())
+    stored_state = {}
+
+    async def fake_prepare(*, user_id, **kwargs):
+        return _first_dashboard_payload("ctx-v3")
+
+    async def fake_load(_user_id):
+        return dict(stored_state)
+
+    async def fake_store(_user_id, state):
+        stored_state.clear()
+        stored_state.update(state)
+
+    monkeypatch.setattr(service, "_prepare_first_dashboard_payload", fake_prepare)
+    monkeypatch.setattr(service, "_load_first_dashboard_briefing_state", fake_load)
+    monkeypatch.setattr(service, "_store_first_dashboard_briefing_state", fake_store)
+    monkeypatch.setattr(
+        service,
+        "_dispatch_first_dashboard_briefing_task",
+        lambda user_id, **kwargs: {
+            "task_id": kwargs["task_id"],
+            "queue": "ai_generation",
+            "routing_rule": "backend.celery_task.onboarding_task.generate_first_dashboard_briefing",
+        },
+    )
+
+    result = asyncio.run(service.enqueue_first_dashboard_briefing(7, owner_task_id="owner-1"))
+
+    briefing = stored_state["first_dashboard_briefing"]
+    assert result["status"] == "queued"
+    assert result["task_id"] == briefing["task_id"]
+    assert briefing["status"] == "queued"
+    assert briefing["queue"] == "ai_generation"
+    assert briefing["owner_task_id"] == "owner-1"
+    assert briefing["attempt_count"] == 1
+    assert [item["status"] for item in briefing["transition_history"]] == ["pending", "queued"]
 
 
 def test_generate_first_dashboard_briefing_can_take_over_stale_generating_state(monkeypatch):
@@ -499,6 +538,40 @@ def test_generate_first_dashboard_briefing_can_take_over_stale_generating_state(
 
     assert result["status"] == "ready"
     assert stored_state["first_dashboard_briefing"]["status"] == "ready"
+
+
+def test_recover_stale_first_dashboard_state_finalizes_after_max_attempts(monkeypatch):
+    service = FinnPlanService(db_session=object())
+    stored_state = {
+        "first_dashboard_briefing": {
+            "status": "queued",
+            "context_version": "ctx-v1",
+            "attempt_count": 3,
+            "task_id": "task-1",
+            "updated_at": "2026-08-16T09:00:00+00:00",
+            "fallback_result": _first_dashboard_payload("ctx-v1")["fallback_result"],
+        }
+    }
+
+    async def fake_store(_user_id, state):
+        stored_state.clear()
+        stored_state.update(state)
+
+    monkeypatch.setattr(service, "_store_first_dashboard_briefing_state", fake_store)
+
+    recovered = asyncio.run(
+        service._recover_stale_first_dashboard_state_if_needed(
+            7,
+            _first_dashboard_payload("ctx-v1"),
+            stored_state,
+        )
+    )
+
+    briefing = stored_state["first_dashboard_briefing"]
+    assert recovered is True
+    assert briefing["status"] == "fallback"
+    assert briefing["last_error_code"] == "stale_queued_timeout"
+    assert briefing["response_source"] == "deterministic_fallback"
 
 
 def test_generate_first_dashboard_briefing_falls_back_for_invalid_ai_output(monkeypatch):
@@ -854,6 +927,32 @@ def test_inline_generate_first_dashboard_briefing_if_needed_skips_fresh_generati
     )
 
     assert scheduled is False
+
+
+def test_inline_generate_first_dashboard_briefing_if_needed_takes_over_stale_queued_state(monkeypatch):
+    service = FinnPlanService(db_session=object())
+
+    async def fake_generate(_user_id, payload, state, *, trigger, allow_stale_takeover, **kwargs):
+        return {"status": "ready", "response_source": "ai_generated"}
+
+    monkeypatch.setattr(service, "_generate_and_store_first_dashboard_briefing_from_payload", fake_generate)
+
+    scheduled = asyncio.run(
+        service._inline_generate_first_dashboard_briefing_if_needed(
+            7,
+            _first_dashboard_payload("ctx-v7"),
+            {
+                "first_dashboard_briefing": {
+                    "status": "queued",
+                    "context_version": "ctx-v7",
+                    "started_at": "2026-08-16T09:00:00+00:00",
+                    "updated_at": "2026-08-16T09:00:00+00:00",
+                }
+            },
+        )
+    )
+
+    assert scheduled is True
 
 
 def test_sanitize_context_drops_stale_plan_draft_for_setup_explain_prompt():

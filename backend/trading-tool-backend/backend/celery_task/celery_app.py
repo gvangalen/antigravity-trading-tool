@@ -220,6 +220,7 @@ logger.info("🚀 Celery Beat schedule geladen (OPTIMIZED)")
 # 📌 FORCE IMPORTS
 # =========================================================
 try:
+    import backend.celery_task.onboarding_task
     import backend.celery_task.dispatcher
     import backend.celery_task.market_task
     import backend.celery_task.macro_task

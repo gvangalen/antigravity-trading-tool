@@ -53,6 +53,7 @@ TASK_QUEUE_ROUTES: Dict[str, str] = {
     "backend.celery_task.weekly_report_task.generate_weekly_report": "ai_generation",
     "backend.celery_task.monthly_report_task.generate_monthly_report": "ai_generation",
     "backend.celery_task.quarterly_report_task.generate_quarterly_report": "ai_generation",
+    "backend.celery_task.onboarding_task.enqueue_first_dashboard_briefing": "ai_generation",
     "backend.celery_task.onboarding_task.generate_first_dashboard_briefing": "ai_generation",
     "backend.celery_task.global_intelligence_task.run_global_intelligence": "ai_generation",
     "backend.celery_task.global_ingestion_task.run_global_ingestion": "market_data",
@@ -105,6 +106,7 @@ DISPATCH_WINDOW_SECONDS: Dict[str, int] = {
     "backend.celery_task.regime_memory_task.run_regime_memory": 24 * 60 * 60,
     "backend.celery_task.strategy_task.run_daily_strategy_snapshot": 12 * 60 * 60,
     "backend.celery_task.daily_report_task.generate_daily_report": 24 * 60 * 60,
+    "backend.celery_task.onboarding_task.enqueue_first_dashboard_briefing": 24 * 60 * 60,
     "backend.celery_task.onboarding_task.generate_first_dashboard_briefing": 24 * 60 * 60,
 }
 

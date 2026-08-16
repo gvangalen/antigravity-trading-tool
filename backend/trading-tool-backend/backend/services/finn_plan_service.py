@@ -9,6 +9,7 @@ import time
 from copy import deepcopy
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
+from uuid import uuid4
 
 from fastapi import HTTPException
 from sqlalchemy import select, text
@@ -53,9 +54,14 @@ FIRST_DASHBOARD_BRIEFING_STATE_VERSION = 1
 FIRST_DASHBOARD_BRIEFING_METADATA_KEY = "first_dashboard_briefing"
 FIRST_DASHBOARD_BRIEFING_ENTRY_POINT = "onboarding_task:first_dashboard_briefing"
 FIRST_DASHBOARD_BRIEFING_PURPOSE = "first_dashboard_briefing"
+FIRST_DASHBOARD_ENQUEUE_TASK_NAME = "backend.celery_task.onboarding_task.enqueue_first_dashboard_briefing"
+FIRST_DASHBOARD_GENERATION_TASK_NAME = "backend.celery_task.onboarding_task.generate_first_dashboard_briefing"
 FIRST_DASHBOARD_STORAGE_STEP_KEYS = ("bot", "strategy", "setup")
 FIRST_DASHBOARD_MAX_RETRY_ATTEMPTS = 3
-FIRST_DASHBOARD_GENERATING_STALE_SECONDS = int(os.getenv("FIRST_DASHBOARD_GENERATING_STALE_SECONDS", "45"))
+FIRST_DASHBOARD_ACTIVE_STALE_SECONDS = int(
+    os.getenv("FIRST_DASHBOARD_ACTIVE_STALE_SECONDS", os.getenv("FIRST_DASHBOARD_GENERATING_STALE_SECONDS", "45"))
+)
+FIRST_DASHBOARD_TRACE_HISTORY_LIMIT = 24
 MISSION_CONTROL_PREVIEW_CACHE_TTL_SECONDS = int(os.getenv("MISSION_CONTROL_PREVIEW_CACHE_TTL_SECONDS", "15"))
 MISSION_CONTROL_EXPLAIN_CACHE_TTL_SECONDS = int(os.getenv("MISSION_CONTROL_EXPLAIN_CACHE_TTL_SECONDS", "15"))
 GOVERNANCE_EVENT_CACHE_TTL_SECONDS = int(os.getenv("GOVERNANCE_EVENT_CACHE_TTL_SECONDS", "15"))
@@ -12663,11 +12669,36 @@ class FinnPlanService:
             "error_stage": error_stage,
         }
 
+    async def enqueue_first_dashboard_briefing(
+        self,
+        user_id: int,
+        *,
+        trigger: str = "onboarding_pipeline",
+        owner_task_id: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        payload = await self._prepare_first_dashboard_payload(user_id=user_id)
+        if not payload:
+            return {"status": "skipped", "reason": "not_first_dashboard"}
+
+        state = await self._load_first_dashboard_briefing_state(user_id)
+        return await self._enqueue_first_dashboard_briefing_from_payload(
+            user_id,
+            payload,
+            state,
+            trigger=trigger,
+            owner_task_id=owner_task_id,
+        )
+
     async def generate_and_store_first_dashboard_briefing(
         self,
         user_id: int,
         *,
         trigger: str = "onboarding_pipeline",
+        task_id: Optional[str] = None,
+        enqueued_context_version: Optional[str] = None,
+        attempt: Optional[int] = None,
+        queue_name: Optional[str] = None,
+        owner_task_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         payload = await self._prepare_first_dashboard_payload(user_id=user_id)
         if not payload:
@@ -12680,7 +12711,113 @@ class FinnPlanService:
             state,
             trigger=trigger,
             allow_stale_takeover=False,
+            task_id=task_id,
+            attempt=attempt,
+            queue_name=queue_name,
+            owner_task_id=owner_task_id,
+            enqueued_context_version=enqueued_context_version,
         )
+
+    async def _enqueue_first_dashboard_briefing_from_payload(
+        self,
+        user_id: int,
+        payload: Dict[str, Any],
+        state: Dict[str, Any],
+        *,
+        trigger: str,
+        owner_task_id: Optional[str],
+    ) -> Dict[str, Any]:
+        state = state or {}
+
+        current_version = str(payload.get("context_version") or "")
+        stored = state.get(FIRST_DASHBOARD_BRIEFING_METADATA_KEY) or {}
+        stored_version = str(stored.get("context_version") or "")
+        stored_status = str(stored.get("status") or "").lower()
+        asset = str(payload.get("asset") or "BTC")
+        retry_due = self._first_dashboard_retry_due(stored)
+
+        if stored_version == current_version and stored_status == "ready":
+            return {
+                "status": "reused",
+                "context_version": current_version,
+                "response_source": "cached_ai",
+                "task_id": stored.get("task_id"),
+            }
+        if stored_version == current_version and stored_status == "fallback" and not retry_due:
+            return {
+                "status": "reused",
+                "context_version": current_version,
+                "response_source": "deterministic_fallback",
+                "task_id": stored.get("task_id"),
+            }
+
+        active_statuses = {"pending", "queued", "generating", "retry_scheduled"}
+        if stored_version == current_version and stored_status in active_statuses and not self._first_dashboard_generation_stale(stored):
+            return {
+                "status": "inflight",
+                "context_version": current_version,
+                "response_source": "briefing_generating",
+                "task_id": stored.get("task_id"),
+                "queue": stored.get("queue"),
+            }
+
+        attempt_count = self._first_dashboard_next_attempt_count(stored, current_version)
+        if attempt_count > FIRST_DASHBOARD_MAX_RETRY_ATTEMPTS:
+            return await self._finalize_first_dashboard_briefing_fallback(
+                user_id,
+                payload,
+                state,
+                error="stale_generation_timeout",
+                trigger="stale_recovery",
+                task_id=stored.get("task_id"),
+                attempt=attempt_count - 1,
+                owner_task_id=owner_task_id,
+            )
+
+        task_id = uuid4().hex
+        pending_state = await self._transition_first_dashboard_briefing_state(
+            user_id,
+            state,
+            status="pending",
+            payload=payload,
+            trigger=trigger,
+            task_id=task_id,
+            attempt_count=attempt_count,
+            response_source="briefing_generating",
+            owner_task_id=owner_task_id,
+            error_code=None,
+        )
+        dispatch = self._dispatch_first_dashboard_briefing_task(
+            user_id,
+            task_id=task_id,
+            trigger=trigger,
+            context_version=current_version,
+            attempt=attempt_count,
+            owner_task_id=owner_task_id,
+        )
+        await self._transition_first_dashboard_briefing_state(
+            user_id,
+            pending_state,
+            status="queued",
+            payload=payload,
+            trigger=trigger,
+            task_id=task_id,
+            attempt_count=attempt_count,
+            response_source="briefing_generating",
+            owner_task_id=owner_task_id,
+            queue_name=dispatch.get("queue"),
+            routing_rule=dispatch.get("routing_rule"),
+            error_code=None,
+        )
+        return {
+            "status": "queued",
+            "context_version": current_version,
+            "response_source": "briefing_generating",
+            "task_id": task_id,
+            "queue": dispatch.get("queue"),
+            "routing_rule": dispatch.get("routing_rule"),
+            "attempt": attempt_count,
+        }
 
     async def _generate_and_store_first_dashboard_briefing_from_payload(
         self,
@@ -12690,6 +12827,11 @@ class FinnPlanService:
         *,
         trigger: str,
         allow_stale_takeover: bool,
+        task_id: Optional[str] = None,
+        attempt: Optional[int] = None,
+        queue_name: Optional[str] = None,
+        owner_task_id: Optional[str] = None,
+        enqueued_context_version: Optional[str] = None,
     ) -> Dict[str, Any]:
         state = state or {}
 
@@ -12698,6 +12840,7 @@ class FinnPlanService:
         stored_version = str(stored.get("context_version") or "")
         stored_status = str(stored.get("status") or "").lower()
         asset = str(payload.get("asset") or "BTC")
+        attempt_count = int(attempt or stored.get("attempt_count") or 1)
 
         retry_due = self._first_dashboard_retry_due(stored)
         if stored_version == current_version and stored_status == "ready":
@@ -12726,8 +12869,9 @@ class FinnPlanService:
                 "context_version": current_version,
                 "response_source": "deterministic_fallback",
             }
-        generating_stale = stored_version == current_version and stored_status == "generating" and self._first_dashboard_generation_stale(stored)
-        if stored_version == current_version and stored_status == "generating" and not (allow_stale_takeover and generating_stale):
+        active_statuses = {"pending", "queued", "generating", "retry_scheduled"}
+        generating_stale = stored_version == current_version and stored_status in active_statuses and self._first_dashboard_generation_stale(stored)
+        if stored_version == current_version and stored_status in active_statuses and not (allow_stale_takeover and generating_stale):
             log_background_ai_skip(
                 user_id=user_id,
                 symbol=asset,
@@ -12738,35 +12882,32 @@ class FinnPlanService:
             return {
                 "status": "inflight",
                 "context_version": current_version,
-                "response_source": "deterministic_fallback",
+                "response_source": "briefing_generating",
             }
-        if stored_version == current_version and stored_status == "retry_scheduled":
-            stored = {
-                **stored,
-                "status": "generating",
-                "updated_at": _utc_now().isoformat(),
-            }
+        if stored_version == current_version and stored_status == "retry_scheduled" and task_id is None:
+            task_id = str(stored.get("task_id") or "")
+        if enqueued_context_version and enqueued_context_version != current_version:
+            logger.info(
+                "First dashboard context_version changed between enqueue and execution for user_id=%s queued=%s current=%s trace_id=%s",
+                user_id,
+                enqueued_context_version,
+                current_version,
+                self.trace_id,
+            )
 
-        started_at = _utc_now().isoformat()
-        await self._store_first_dashboard_briefing_state(
+        state = await self._transition_first_dashboard_briefing_state(
             user_id,
-            {
-                **state,
-                FIRST_DASHBOARD_BRIEFING_METADATA_KEY: {
-                    "state_version": FIRST_DASHBOARD_BRIEFING_STATE_VERSION,
-                    "status": "generating",
-                    "context_version": current_version,
-                    "trigger": trigger,
-                    "asset": asset,
-                    "retry_count": int(stored.get("retry_count") or 0),
-                    "max_retry_attempts": FIRST_DASHBOARD_MAX_RETRY_ATTEMPTS,
-                    "input_snapshot": payload.get("input_snapshot") or {},
-                    "fallback_result": payload.get("fallback_result") or {},
-                    "updated_at": started_at,
-                    "started_at": started_at,
-                    "error": None,
-                },
-            },
+            state,
+            status="generating",
+            payload=payload,
+            trigger=trigger,
+            task_id=task_id or stored.get("task_id"),
+            attempt_count=attempt_count,
+            response_source="briefing_generating",
+            owner_task_id=owner_task_id or stored.get("owner_task_id"),
+            queue_name=queue_name or stored.get("queue"),
+            routing_rule=stored.get("routing_rule"),
+            error_code=None,
         )
 
         availability = get_ai_availability()
@@ -12777,6 +12918,9 @@ class FinnPlanService:
                 state,
                 error=str(availability.get("reason") or "ai_unavailable"),
                 trigger=trigger,
+                task_id=task_id,
+                attempt=attempt_count,
+                owner_task_id=owner_task_id,
             )
 
         scope = f"first_dashboard:{user_id}:{current_version}"
@@ -12787,6 +12931,9 @@ class FinnPlanService:
                 state,
                 error="ai_rate_limited",
                 trigger=trigger,
+                task_id=task_id,
+                attempt=attempt_count,
+                owner_task_id=owner_task_id,
             )
 
         ai_result: Dict[str, Any]
@@ -12814,6 +12961,9 @@ class FinnPlanService:
                 state,
                 error=str(exc),
                 trigger=trigger,
+                task_id=task_id,
+                attempt=attempt_count,
+                owner_task_id=owner_task_id,
             )
 
         validated = self._validate_first_dashboard_ai_result(
@@ -12827,32 +12977,33 @@ class FinnPlanService:
                 state,
                 error=str(ai_result.get("error") or "invalid_ai_output"),
                 trigger=trigger,
+                task_id=task_id,
+                attempt=attempt_count,
+                owner_task_id=owner_task_id,
             )
 
-        finalized_at = _utc_now().isoformat()
-        next_state = {
-            **state,
-            FIRST_DASHBOARD_BRIEFING_METADATA_KEY: {
-                "state_version": FIRST_DASHBOARD_BRIEFING_STATE_VERSION,
-                "status": "ready",
-                "context_version": current_version,
-                "trigger": trigger,
-                "asset": asset,
-                "input_snapshot": payload.get("input_snapshot") or {},
-                "fallback_result": payload.get("fallback_result") or {},
-                "result": validated,
-                "response_source": "ai_generated",
-                "generated_at": finalized_at,
-                "updated_at": finalized_at,
-                "error": None,
-            },
-        }
-        await self._store_first_dashboard_briefing_state(user_id, next_state)
+        await self._transition_first_dashboard_briefing_state(
+            user_id,
+            state,
+            status="ready",
+            payload=payload,
+            trigger=trigger,
+            task_id=task_id,
+            attempt_count=attempt_count,
+            response_source="ai_generated",
+            owner_task_id=owner_task_id,
+            queue_name=queue_name,
+            routing_rule=stored.get("routing_rule"),
+            error_code=None,
+            result=validated,
+            generated_at=_utc_now().isoformat(),
+        )
         return {
             "status": "ready",
             "context_version": current_version,
             "response_source": "ai_generated",
             "result": validated,
+            "task_id": task_id,
         }
 
     async def _build_first_dashboard_context(
@@ -12877,6 +13028,9 @@ class FinnPlanService:
         stored_state = await self._load_first_dashboard_briefing_state(user_id)
         stored_briefing = (stored_state.get(FIRST_DASHBOARD_BRIEFING_METADATA_KEY) or {}) if stored_state else {}
         if stored_briefing:
+            if await self._recover_stale_first_dashboard_state_if_needed(user_id, payload, stored_state):
+                stored_state = await self._load_first_dashboard_briefing_state(user_id)
+                stored_briefing = (stored_state.get(FIRST_DASHBOARD_BRIEFING_METADATA_KEY) or {}) if stored_state else {}
             await self.maybe_schedule_first_dashboard_retry(user_id, stored_briefing)
             stored_state = await self._load_first_dashboard_briefing_state(user_id)
             stored_briefing = (stored_state.get(FIRST_DASHBOARD_BRIEFING_METADATA_KEY) or {}) if stored_state else {}
@@ -12944,7 +13098,9 @@ class FinnPlanService:
         stored_version = str(stored_briefing.get("context_version") or "")
         stored_status = str(stored_briefing.get("status") or "").lower()
 
-        if stored_version == current_version and stored_status in {"ready", "generating", "retry_scheduled"}:
+        if stored_version == current_version and stored_status == "ready":
+            return False
+        if stored_version == current_version and stored_status in {"pending", "queued", "generating", "retry_scheduled"} and not self._first_dashboard_generation_stale(stored_briefing):
             return False
         if stored_version == current_version and stored_status == "fallback" and not self._first_dashboard_retry_due(stored_briefing):
             return False
@@ -13276,7 +13432,7 @@ class FinnPlanService:
                 "response_source": "cached_ai",
                 "generation_status": "ready",
             }
-        if stored_version == current_version and stored_status in {"generating", "retry_scheduled"}:
+        if stored_version == current_version and stored_status in {"pending", "queued", "generating", "retry_scheduled"}:
             return {
                 "briefing": self._first_dashboard_loading_result(payload.get("asset") or "BTC"),
                 "response_source": "briefing_generating",
@@ -13352,6 +13508,160 @@ class FinnPlanService:
             "evidence_refs": briefing.get("evidence_refs") or [],
         }
 
+    async def _recover_stale_first_dashboard_state_if_needed(
+        self,
+        user_id: int,
+        payload: Dict[str, Any],
+        state: Dict[str, Any],
+    ) -> bool:
+        stored = (state.get(FIRST_DASHBOARD_BRIEFING_METADATA_KEY) or {}) if state else {}
+        if str(stored.get("context_version") or "") != str(payload.get("context_version") or ""):
+            return False
+        status = str(stored.get("status") or "").lower()
+        if status not in {"pending", "queued", "generating", "retry_scheduled"}:
+            return False
+        if not self._first_dashboard_generation_stale(stored):
+            return False
+        attempt_count = int(stored.get("attempt_count") or 0)
+        if attempt_count >= FIRST_DASHBOARD_MAX_RETRY_ATTEMPTS:
+            await self._finalize_first_dashboard_briefing_fallback(
+                user_id,
+                payload,
+                state,
+                error=f"stale_{status}_timeout",
+                trigger="stale_recovery",
+                task_id=stored.get("task_id"),
+                attempt=attempt_count,
+                owner_task_id=stored.get("owner_task_id"),
+            )
+        return True
+
+    async def _transition_first_dashboard_briefing_state(
+        self,
+        user_id: int,
+        state: Dict[str, Any],
+        *,
+        status: str,
+        payload: Dict[str, Any],
+        trigger: str,
+        task_id: Optional[str],
+        attempt_count: int,
+        response_source: Optional[str],
+        owner_task_id: Optional[str],
+        queue_name: Optional[str] = None,
+        routing_rule: Optional[str] = None,
+        error_code: Optional[str] = None,
+        result: Optional[Dict[str, Any]] = None,
+        retry_count: Optional[int] = None,
+        retryable: Optional[bool] = None,
+        next_retry_at: Optional[str] = None,
+        generated_at: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        state = state or {}
+        previous = state.get(FIRST_DASHBOARD_BRIEFING_METADATA_KEY) or {}
+        now_iso = _utc_now().isoformat()
+        transition = {
+            "timestamp": now_iso,
+            "user_id": user_id,
+            "context_version": str(payload.get("context_version") or previous.get("context_version") or ""),
+            "task_id": task_id or previous.get("task_id"),
+            "previous_status": str(previous.get("status") or "") or None,
+            "status": status,
+            "attempt": int(attempt_count or 1),
+            "response_source": response_source,
+            "error_code": error_code,
+        }
+        history = list(previous.get("transition_history") or [])
+        history.append(transition)
+        history = history[-FIRST_DASHBOARD_TRACE_HISTORY_LIMIT:]
+        next_briefing = {
+            **previous,
+            "state_version": FIRST_DASHBOARD_BRIEFING_STATE_VERSION,
+            "status": status,
+            "context_version": transition["context_version"],
+            "trigger": trigger,
+            "owner_trigger": previous.get("owner_trigger") or trigger,
+            "asset": payload.get("asset") or previous.get("asset") or "BTC",
+            "task_id": transition["task_id"],
+            "owner_task_id": owner_task_id or previous.get("owner_task_id"),
+            "queue": queue_name or previous.get("queue"),
+            "routing_rule": routing_rule or previous.get("routing_rule"),
+            "attempt_count": int(attempt_count or previous.get("attempt_count") or 1),
+            "retry_count": int(retry_count if retry_count is not None else previous.get("retry_count") or 0),
+            "retryable": bool(retryable) if retryable is not None else (False if status in {"pending", "queued", "generating", "ready"} else bool(previous.get("retryable"))),
+            "max_retry_attempts": FIRST_DASHBOARD_MAX_RETRY_ATTEMPTS,
+            "next_retry_at": next_retry_at,
+            "input_snapshot": payload.get("input_snapshot") or previous.get("input_snapshot") or {},
+            "fallback_result": payload.get("fallback_result") or previous.get("fallback_result") or {},
+            "response_source": response_source,
+            "transition_history": history,
+            "last_transition": transition,
+            "updated_at": now_iso,
+            "started_at": previous.get("started_at") or now_iso,
+            "error": error_code,
+            "last_error_code": error_code,
+        }
+        if status == "queued":
+            next_briefing["enqueued_at"] = now_iso
+        if status == "generating":
+            next_briefing["generation_started_at"] = now_iso
+        if status in {"pending", "queued", "generating", "retry_scheduled"}:
+            next_briefing.pop("generated_at", None)
+            next_briefing.pop("result", None)
+        if result is not None:
+            next_briefing["result"] = result
+        if generated_at:
+            next_briefing["generated_at"] = generated_at
+        next_state = {
+            **state,
+            FIRST_DASHBOARD_BRIEFING_METADATA_KEY: next_briefing,
+        }
+        await self._store_first_dashboard_briefing_state(user_id, next_state)
+        if not isinstance(self.session, AsyncSession):
+            return next_state
+        return await self._load_first_dashboard_briefing_state(user_id)
+
+    def _dispatch_first_dashboard_briefing_task(
+        self,
+        user_id: int,
+        *,
+        task_id: str,
+        trigger: str,
+        context_version: str,
+        attempt: int,
+        owner_task_id: Optional[str],
+    ) -> Dict[str, Any]:
+        from backend.celery_task.onboarding_task import generate_first_dashboard_briefing
+        from backend.celery_task.queue_policy import resolve_task_queue
+
+        queue_name = resolve_task_queue(FIRST_DASHBOARD_GENERATION_TASK_NAME)
+        async_result = generate_first_dashboard_briefing.apply_async(
+            args=[user_id],
+            kwargs={
+                "trigger": trigger,
+                "enqueued_context_version": context_version,
+                "attempt": attempt,
+                "owner_task_id": owner_task_id,
+            },
+            task_id=task_id,
+            queue=queue_name,
+        )
+        return {
+            "task_id": async_result.id,
+            "queue": queue_name,
+            "routing_rule": FIRST_DASHBOARD_GENERATION_TASK_NAME,
+        }
+
+    def _first_dashboard_next_attempt_count(self, stored: Dict[str, Any], context_version: str) -> int:
+        stored_version = str(stored.get("context_version") or "")
+        if stored_version != str(context_version or ""):
+            return 1
+        return int(stored.get("attempt_count") or 0) + 1
+
+    def _first_dashboard_error_code(self, error: str) -> str:
+        normalized = re.sub(r"[^a-z0-9:_-]+", "_", str(error or "unknown_error").strip().lower()).strip("_")
+        return normalized[:120] or "unknown_error"
+
     async def _finalize_first_dashboard_briefing_fallback(
         self,
         user_id: int,
@@ -13360,40 +13670,41 @@ class FinnPlanService:
         *,
         error: str,
         trigger: str,
+        task_id: Optional[str] = None,
+        attempt: Optional[int] = None,
+        owner_task_id: Optional[str] = None,
     ) -> Dict[str, Any]:
-        finalized_at = _utc_now().isoformat()
         fallback_result = payload.get("fallback_result") or {}
         previous = existing_state.get(FIRST_DASHBOARD_BRIEFING_METADATA_KEY) or {}
         retry_count = int(previous.get("retry_count") or 0) + 1
         retryable = self._is_first_dashboard_retryable_error(error)
         next_retry_at = self._first_dashboard_next_retry_at(retry_count) if retryable and retry_count < FIRST_DASHBOARD_MAX_RETRY_ATTEMPTS else None
-        next_state = {
-            **existing_state,
-            FIRST_DASHBOARD_BRIEFING_METADATA_KEY: {
-                "state_version": FIRST_DASHBOARD_BRIEFING_STATE_VERSION,
-                "status": "fallback",
-                "context_version": payload.get("context_version"),
-                "trigger": trigger,
-                "asset": payload.get("asset"),
-                "retry_count": retry_count,
-                "retryable": retryable,
-                "max_retry_attempts": FIRST_DASHBOARD_MAX_RETRY_ATTEMPTS,
-                "next_retry_at": next_retry_at,
-                "input_snapshot": payload.get("input_snapshot") or {},
-                "fallback_result": fallback_result,
-                "result": fallback_result,
-                "response_source": "deterministic_fallback",
-                "generated_at": finalized_at,
-                "updated_at": finalized_at,
-                "error": error,
-            },
-        }
-        await self._store_first_dashboard_briefing_state(user_id, next_state)
+        error_code = self._first_dashboard_error_code(error)
+        await self._transition_first_dashboard_briefing_state(
+            user_id,
+            existing_state,
+            status="fallback",
+            payload=payload,
+            trigger=trigger,
+            task_id=task_id or previous.get("task_id"),
+            attempt_count=int(attempt or previous.get("attempt_count") or 1),
+            response_source="deterministic_fallback",
+            owner_task_id=owner_task_id or previous.get("owner_task_id"),
+            queue_name=previous.get("queue"),
+            routing_rule=previous.get("routing_rule"),
+            error_code=error_code,
+            result=fallback_result,
+            retry_count=retry_count,
+            retryable=retryable,
+            next_retry_at=next_retry_at,
+            generated_at=_utc_now().isoformat(),
+        )
         return {
             "status": "fallback",
             "context_version": payload.get("context_version"),
             "response_source": "deterministic_fallback",
-            "error": error,
+            "error": error_code,
+            "task_id": task_id or previous.get("task_id"),
         }
 
     async def maybe_schedule_first_dashboard_retry(
@@ -13410,19 +13721,34 @@ class FinnPlanService:
             return False
         state = self._normalize_first_dashboard_state(step.step_metadata)
         current = state.get(FIRST_DASHBOARD_BRIEFING_METADATA_KEY) or {}
-        if str(current.get("status") or "").lower() in {"retry_scheduled", "generating"}:
+        if str(current.get("status") or "").lower() in {"pending", "queued", "retry_scheduled", "generating"}:
             return False
-        state[FIRST_DASHBOARD_BRIEFING_METADATA_KEY] = {
-            **current,
-            "status": "retry_scheduled",
-            "updated_at": _utc_now().isoformat(),
-        }
-        step.step_metadata = state
-        await self.session.commit()
+        await self._transition_first_dashboard_briefing_state(
+            user_id,
+            state,
+            status="retry_scheduled",
+            payload={
+                "asset": current.get("asset") or "BTC",
+                "context_version": current.get("context_version"),
+                "input_snapshot": current.get("input_snapshot") or {},
+                "fallback_result": current.get("fallback_result") or current.get("result") or {},
+            },
+            trigger="retry_scheduler",
+            task_id=current.get("task_id"),
+            attempt_count=int(current.get("attempt_count") or 1),
+            response_source="briefing_generating",
+            owner_task_id=current.get("owner_task_id"),
+            queue_name=current.get("queue"),
+            routing_rule=current.get("routing_rule"),
+            error_code=current.get("last_error_code"),
+            retry_count=int(current.get("retry_count") or 0),
+            retryable=bool(current.get("retryable")),
+            next_retry_at=current.get("next_retry_at"),
+        )
         try:
-            from backend.celery_task.onboarding_task import generate_first_dashboard_briefing
+            from backend.celery_task.onboarding_task import enqueue_first_dashboard_briefing
 
-            generate_first_dashboard_briefing.delay(user_id)
+            enqueue_first_dashboard_briefing.delay(user_id, trigger="retry_scheduler")
         except Exception:
             return False
         return True
@@ -13437,6 +13763,18 @@ class FinnPlanService:
         step = await self._get_first_dashboard_storage_step(user_id)
         if not step:
             return
+        briefing = state.get(FIRST_DASHBOARD_BRIEFING_METADATA_KEY)
+        if isinstance(briefing, dict):
+            briefing = {
+                **briefing,
+                "storage_step_id": step.id,
+                "storage_step_key": step.step_key,
+                "storage_user_id": user_id,
+            }
+            state = {
+                **state,
+                FIRST_DASHBOARD_BRIEFING_METADATA_KEY: briefing,
+            }
         step.step_metadata = state
         await self.session.commit()
 
@@ -13742,7 +14080,7 @@ class FinnPlanService:
         if started_at.tzinfo is None:
             started_at = started_at.replace(tzinfo=timezone.utc)
         age_seconds = (_utc_now() - started_at).total_seconds()
-        return age_seconds >= FIRST_DASHBOARD_GENERATING_STALE_SECONDS
+        return age_seconds >= FIRST_DASHBOARD_ACTIVE_STALE_SECONDS
 
     async def _first_dashboard_indicator_context(self, user_id: int, asset: str) -> Dict[str, List[str]]:
         by_category: Dict[str, List[str]] = {"market": [], "macro": [], "technical": []}

@@ -6,8 +6,32 @@ from backend.utils.db import get_db_connection
 logger = logging.getLogger(__name__)
 
 
-@shared_task(name="backend.celery_task.onboarding_task.generate_first_dashboard_briefing")
-def generate_first_dashboard_briefing(user_id: int):
+@shared_task(name="backend.celery_task.onboarding_task.enqueue_first_dashboard_briefing", bind=True)
+def enqueue_first_dashboard_briefing(self, user_id: int, trigger: str = "onboarding_pipeline"):
+    from backend.infrastructure.database import async_session_factory
+    from backend.services.finn_plan_service import FinnPlanService
+
+    async def _run() -> dict:
+        async with async_session_factory() as session:
+            service = FinnPlanService(session)
+            return await service.enqueue_first_dashboard_briefing(
+                user_id,
+                trigger=trigger,
+                owner_task_id=self.request.id,
+            )
+
+    return asyncio.run(_run())
+
+
+@shared_task(name="backend.celery_task.onboarding_task.generate_first_dashboard_briefing", bind=True)
+def generate_first_dashboard_briefing(
+    self,
+    user_id: int,
+    trigger: str = "onboarding_pipeline",
+    enqueued_context_version: str | None = None,
+    attempt: int | None = None,
+    owner_task_id: str | None = None,
+):
     from backend.infrastructure.database import async_session_factory
     from backend.services.finn_plan_service import FinnPlanService
 
@@ -16,7 +40,12 @@ def generate_first_dashboard_briefing(user_id: int):
             service = FinnPlanService(session)
             result = await service.generate_and_store_first_dashboard_briefing(
                 user_id,
-                trigger="onboarding_pipeline",
+                trigger=trigger,
+                task_id=self.request.id,
+                enqueued_context_version=enqueued_context_version,
+                attempt=attempt,
+                queue_name=(self.request.delivery_info or {}).get("routing_key"),
+                owner_task_id=owner_task_id,
             )
             try:
                 from backend.api.ai_assistant_api import _invalidate_mission_control_cache
@@ -129,8 +158,8 @@ def run_onboarding_pipeline(self, user_id: int):
             # 7️⃣ Dagrapport
             generate_daily_report.si(user_id),
 
-            # 8️⃣ First dashboard briefing
-            generate_first_dashboard_briefing.si(user_id),
+            # 8️⃣ First dashboard briefing enqueue
+            enqueue_first_dashboard_briefing.si(user_id, trigger="onboarding_pipeline"),
         )
 
         workflow.apply_async()
