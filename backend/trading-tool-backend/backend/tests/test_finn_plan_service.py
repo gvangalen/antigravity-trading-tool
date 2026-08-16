@@ -455,6 +455,52 @@ def test_generate_first_dashboard_briefing_deduplicates_inflight_same_version(mo
     assert result["response_source"] == "deterministic_fallback"
 
 
+def test_generate_first_dashboard_briefing_can_take_over_stale_generating_state(monkeypatch):
+    service = FinnPlanService(db_session=object())
+    stored_state = {
+        "first_dashboard_briefing": {
+            "status": "generating",
+            "context_version": "ctx-v1",
+            "started_at": "2026-08-16T09:00:00+00:00",
+            "updated_at": "2026-08-16T09:00:00+00:00",
+        }
+    }
+
+    async def fake_store(_user_id, state):
+        stored_state.clear()
+        stored_state.update(state)
+
+    monkeypatch.setattr(service, "_store_first_dashboard_briefing_state", fake_store)
+    monkeypatch.setattr(finn_plan_module, "get_ai_availability", lambda: {"available": True})
+    monkeypatch.setattr(finn_plan_module, "acquire_ai_call_slot", lambda scope, scheduled=True: True)
+    monkeypatch.setattr(finn_plan_module, "get_user_email_snapshot", lambda user_id: "qa@example.com")
+    monkeypatch.setattr(
+        finn_plan_module,
+        "ask_gpt_json",
+        lambda **kwargs: {
+            "headline": "Your BTC plan is ready for review.",
+            "observation": "The plan is technically configured, but macro context is still missing.",
+            "reasoning": "That matters because your current confirmation layer relies only on technical inputs.",
+            "next_question": "Would you like me to suggest one macro indicator before activation?",
+            "suggested_action": "Review suggested macro context",
+            "evidence_refs": ["asset.symbol", "indicators.macro"],
+        },
+    )
+
+    result = asyncio.run(
+        service._generate_and_store_first_dashboard_briefing_from_payload(
+            7,
+            _first_dashboard_payload("ctx-v1"),
+            stored_state,
+            trigger="mission_control_inline",
+            allow_stale_takeover=True,
+        )
+    )
+
+    assert result["status"] == "ready"
+    assert stored_state["first_dashboard_briefing"]["status"] == "ready"
+
+
 def test_generate_first_dashboard_briefing_falls_back_for_invalid_ai_output(monkeypatch):
     service = FinnPlanService(db_session=object())
     stored_state = {}
@@ -754,7 +800,7 @@ def test_inline_generate_first_dashboard_briefing_if_needed_generates_missing_st
     service = FinnPlanService(db_session=object())
     stored_state = {}
 
-    async def fake_generate(_user_id, payload, state, *, trigger):
+    async def fake_generate(_user_id, payload, state, *, trigger, allow_stale_takeover):
         stored_state.clear()
         stored_state.update(
             {
@@ -782,6 +828,32 @@ def test_inline_generate_first_dashboard_briefing_if_needed_generates_missing_st
     assert stored_state["first_dashboard_briefing"]["status"] == "ready"
     assert stored_state["first_dashboard_briefing"]["context_version"] == "ctx-v7"
     assert stored_state["first_dashboard_briefing"]["trigger"] == "mission_control_inline"
+
+
+def test_inline_generate_first_dashboard_briefing_if_needed_skips_fresh_generating_state(monkeypatch):
+    service = FinnPlanService(db_session=object())
+
+    async def fake_generate(*args, **kwargs):
+        raise AssertionError("fresh generating state should not be taken over")
+
+    monkeypatch.setattr(service, "_generate_and_store_first_dashboard_briefing_from_payload", fake_generate)
+
+    scheduled = asyncio.run(
+        service._inline_generate_first_dashboard_briefing_if_needed(
+            7,
+            _first_dashboard_payload("ctx-v7"),
+            {
+                "first_dashboard_briefing": {
+                    "status": "generating",
+                    "context_version": "ctx-v7",
+                    "started_at": _utc_now().isoformat(),
+                    "updated_at": _utc_now().isoformat(),
+                }
+            },
+        )
+    )
+
+    assert scheduled is False
 
 
 def test_sanitize_context_drops_stale_plan_draft_for_setup_explain_prompt():

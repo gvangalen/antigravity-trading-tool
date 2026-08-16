@@ -55,6 +55,7 @@ FIRST_DASHBOARD_BRIEFING_ENTRY_POINT = "onboarding_task:first_dashboard_briefing
 FIRST_DASHBOARD_BRIEFING_PURPOSE = "first_dashboard_briefing"
 FIRST_DASHBOARD_STORAGE_STEP_KEYS = ("bot", "strategy", "setup")
 FIRST_DASHBOARD_MAX_RETRY_ATTEMPTS = 3
+FIRST_DASHBOARD_GENERATING_STALE_SECONDS = int(os.getenv("FIRST_DASHBOARD_GENERATING_STALE_SECONDS", "45"))
 MISSION_CONTROL_PREVIEW_CACHE_TTL_SECONDS = int(os.getenv("MISSION_CONTROL_PREVIEW_CACHE_TTL_SECONDS", "15"))
 MISSION_CONTROL_EXPLAIN_CACHE_TTL_SECONDS = int(os.getenv("MISSION_CONTROL_EXPLAIN_CACHE_TTL_SECONDS", "15"))
 GOVERNANCE_EVENT_CACHE_TTL_SECONDS = int(os.getenv("GOVERNANCE_EVENT_CACHE_TTL_SECONDS", "15"))
@@ -12678,6 +12679,7 @@ class FinnPlanService:
             payload,
             state,
             trigger=trigger,
+            allow_stale_takeover=False,
         )
 
     async def _generate_and_store_first_dashboard_briefing_from_payload(
@@ -12687,6 +12689,7 @@ class FinnPlanService:
         state: Dict[str, Any],
         *,
         trigger: str,
+        allow_stale_takeover: bool,
     ) -> Dict[str, Any]:
         state = state or {}
 
@@ -12723,7 +12726,8 @@ class FinnPlanService:
                 "context_version": current_version,
                 "response_source": "deterministic_fallback",
             }
-        if stored_version == current_version and stored_status == "generating":
+        generating_stale = stored_version == current_version and stored_status == "generating" and self._first_dashboard_generation_stale(stored)
+        if stored_version == current_version and stored_status == "generating" and not (allow_stale_takeover and generating_stale):
             log_background_ai_skip(
                 user_id=user_id,
                 symbol=asset,
@@ -12950,6 +12954,7 @@ class FinnPlanService:
                 payload,
                 stored_state,
                 trigger="mission_control_inline",
+                allow_stale_takeover=True,
             )
             return True
         except Exception:
@@ -13723,6 +13728,21 @@ class FinnPlanService:
         if retry_at.tzinfo is None:
             retry_at = retry_at.replace(tzinfo=timezone.utc)
         return retry_at <= _utc_now()
+
+    def _first_dashboard_generation_stale(self, stored_briefing: Dict[str, Any]) -> bool:
+        if not isinstance(stored_briefing, dict):
+            return False
+        timestamp = stored_briefing.get("updated_at") or stored_briefing.get("started_at")
+        if not timestamp:
+            return True
+        try:
+            started_at = datetime.fromisoformat(str(timestamp))
+        except Exception:
+            return True
+        if started_at.tzinfo is None:
+            started_at = started_at.replace(tzinfo=timezone.utc)
+        age_seconds = (_utc_now() - started_at).total_seconds()
+        return age_seconds >= FIRST_DASHBOARD_GENERATING_STALE_SECONDS
 
     async def _first_dashboard_indicator_context(self, user_id: int, asset: str) -> Dict[str, List[str]]:
         by_category: Dict[str, List[str]] = {"market": [], "macro": [], "technical": []}
