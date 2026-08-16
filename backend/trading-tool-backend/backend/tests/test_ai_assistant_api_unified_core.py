@@ -973,6 +973,89 @@ def test_get_finn_mission_control_survives_non_database_action_failures(monkeypa
     assert stored["payload"]["first_dashboard_context"]["generation_status"] == "ready"
 
 
+def test_get_finn_mission_control_returns_fallback_when_build_fails(monkeypatch):
+    db = SimpleNamespace(rollback=AsyncMock())
+    stored = {}
+    finn = SimpleNamespace(
+        trace_id="trace-mission-control-fallback",
+        build_mission_control_response=AsyncMock(side_effect=RuntimeError("live mission control exploded")),
+        issue_response_actions=AsyncMock(return_value={}),
+        _first_dashboard_error_context=lambda analysis, *, error: {
+            "is_first_dashboard": True,
+            "asset": "BTC",
+            "headline": "FINN is reviewing your plan",
+            "observation": "Mission Control stays available while the first dashboard review retries safely.",
+            "reasoning": "A recoverable mission-control build failure occurred.",
+            "next_action": {"label": "Continue in Mission Control", "question": "Would you like to continue?"},
+            "review_state": "not_reviewed_yet",
+            "review_label": "Not reviewed yet",
+            "response_source": "briefing_error",
+            "generation_status": "error",
+            "evidence_refs": ["asset.symbol"],
+            "error": error,
+        },
+        _mission_workqueue_from_first_dashboard_context=lambda context: {
+            "id": "first_dashboard:BTC",
+            "type": "first_dashboard_review",
+            "priority": "medium",
+            "priority_rank": 4,
+            "sort_rank": 4,
+            "status": "not_reviewed_yet",
+            "resolve_state": "not_reviewed_yet",
+            "asset": "BTC",
+            "title": "Continue in Mission Control",
+            "reason": context["observation"],
+            "next_best_action": {
+                "type": "chat_prompt",
+                "label": "Continue in Mission Control",
+                "prompt": "Would you like to continue?",
+                "handoff": "daily_coach",
+                "requires_confirmation": False,
+            },
+            "resolve_action": None,
+            "freshness": {"status": "unknown"},
+            "source_ids": {"asset": "BTC"},
+        },
+        _mission_workqueue_groups=lambda items: {"review_now": items},
+        _flatten_mission_workqueue_groups=lambda groups: list(groups.get("review_now") or []),
+    )
+
+    monkeypatch.setattr("backend.api.ai_assistant_api._get_cached_mission_control", lambda user_id: None)
+    monkeypatch.setattr(
+        "backend.api.ai_assistant_api._store_cached_mission_control",
+        lambda user_id, payload: stored.update({"user_id": user_id, "payload": payload}),
+    )
+    monkeypatch.setattr("backend.api.ai_assistant_api._new_finn_plan_service", lambda db_session, trace_id=None: finn)
+
+    async def fake_enrich(db_session, user_id, payload=None, *, query=None):
+        enriched = dict(payload or {})
+        enriched["trader_profile_used"] = True
+        return enriched
+
+    monkeypatch.setattr("backend.api.ai_assistant_api._enrich_with_trader_profile", fake_enrich)
+
+    request = Request({"type": "http", "headers": [], "client": ("127.0.0.1", 12345)})
+    request.state.trace_id = "trace-mission-control-fallback"
+
+    response = asyncio.run(
+        get_finn_mission_control(
+            current_user={"id": 30},
+            db=db,
+            request=request,
+        )
+    )
+
+    finn.build_mission_control_response.assert_awaited_once()
+    finn.issue_response_actions.assert_awaited_once()
+    assert response["first_dashboard_context"]["generation_status"] == "error"
+    assert response["first_dashboard_context"]["response_source"] == "briefing_error"
+    assert response["summary"]["first_dashboard_response_source"] == "briefing_error"
+    assert response["workqueue"][0]["type"] == "first_dashboard_review"
+    assert response["trader_profile_used"] is True
+    assert stored["user_id"] == 30
+    assert stored["payload"]["first_dashboard_context"]["generation_status"] == "error"
+
+
 def test_conversation_state_repository_serializes_date_values():
     class _Session:
         def __init__(self):

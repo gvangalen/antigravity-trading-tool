@@ -1377,6 +1377,91 @@ def _store_cached_mission_control(user_id: int, response: dict) -> None:
 def _invalidate_mission_control_cache(user_id: int) -> None:
     _mission_control_cache.pop(int(user_id), None)
 
+
+def _mission_control_fallback_response(
+    finn: "FinnPlanService",
+    *,
+    error: str,
+) -> Dict[str, Any]:
+    first_dashboard_context = finn._first_dashboard_error_context({}, error=error)
+    fallback_item = finn._mission_workqueue_from_first_dashboard_context(first_dashboard_context)
+    workqueue = [fallback_item]
+    workqueue_groups = finn._mission_workqueue_groups(workqueue)
+    workqueue = finn._flatten_mission_workqueue_groups(workqueue_groups)
+
+    return {
+        "ok": True,
+        "intent": "mission_control",
+        "flow": "mission_control",
+        "autonomy_level": "advice_only",
+        "summary": {
+            "workqueue_count": len(workqueue),
+            "blocked_count": 0,
+            "review_state": "not_reviewed_yet",
+            "review_label": "Not reviewed yet",
+            "posture": "not_reviewed_yet",
+            "first_dashboard_response_source": first_dashboard_context.get("response_source"),
+        },
+        "first_dashboard_context": first_dashboard_context,
+        "workqueue": workqueue,
+        "workqueue_groups": workqueue_groups,
+        "workqueue_labels": {},
+        "open_actions": [],
+        "plan_health": {},
+        "bot_review_queue": [],
+        "activity_feed": [],
+        "day_log": {
+            "handled_count": 0,
+            "skipped_count": 0,
+            "snoozed_count": 0,
+        },
+        "behavioral_insight": {},
+        "behavioral_profile": {},
+        "trend": {},
+        "risk_flags": [],
+        "habit_cards": [],
+        "behavioral_balance_score": None,
+        "agent_verdicts": [],
+        "agent_controller": {},
+        "agent_accountability": {},
+        "agent_learning": {},
+        "agent_rhythm": {},
+        "operating_rules": {},
+        "coaching_loop": {
+            "status": "fallback",
+            "daily_priority_stack": [],
+            "act_now": [],
+            "monitor_only": [],
+            "suppressed_items": [],
+        },
+        "priority_engine": {},
+        "memory_v2": {},
+        "personal_performance": {},
+        "personal_coach": {},
+        "trade_journal_intelligence": {},
+        "portfolio_operating_system": {},
+        "profile_habit_alignment": {},
+        "governance_events_summary": {},
+        "data_readiness": {},
+        "portfolio_risk": {},
+        "analysis": {
+            "mode": "read_only",
+            "route_source": "finn_mission_control_fallback",
+            "context_confidence": {
+                "level": "fallback",
+                "entity_type": "mission_control",
+                "entity_id": "mission_control",
+                "reason": "mission control fallback returned after recoverable build failure",
+                "why": "mission control fallback returned after recoverable build failure",
+            },
+        },
+        "source": {
+            "flow": "daily_coach",
+            "date": None,
+            "asset_count": 0,
+        },
+    }
+
 async def get_assistant_service(db: AsyncSession = Depends(get_db)):
     from backend.services.ai_assistant_service import AiAssistantService
     from backend.services.ai_gateway import AiGateway
@@ -3156,16 +3241,27 @@ async def get_finn_mission_control(
     if cached:
         return cached
     finn = _new_finn_plan_service(db, trace_id=trace_id)
-    response = await finn.build_mission_control_response(
-        current_user["id"],
-        {
-            "page": "assistant",
-            "scope": "mission_control",
-            "mission_control_fast": True,
-            "mission_control_preview_only": True,
-            "allow_cached_mission_control": True,
-        },
-    )
+    try:
+        response = await finn.build_mission_control_response(
+            current_user["id"],
+            {
+                "page": "assistant",
+                "scope": "mission_control",
+                "mission_control_fast": True,
+                "mission_control_preview_only": True,
+                "allow_cached_mission_control": True,
+            },
+        )
+    except Exception as exc:
+        logger.exception(
+            "Mission Control build failed for user %s (trace_id=%s); returning fallback response.",
+            current_user["id"],
+            trace_id,
+        )
+        response = _mission_control_fallback_response(
+            finn,
+            error=str(exc or "mission_control_build_failed"),
+        )
     try:
         await finn.issue_response_actions(current_user["id"], response)
     except (DBAPIError, SQLAlchemyError) as exc:
@@ -3186,7 +3282,14 @@ async def get_finn_mission_control(
             exc_info=exc,
         )
         await db.rollback()
-    response = await _enrich_with_trader_profile(db, current_user["id"], response)
+    try:
+        response = await _enrich_with_trader_profile(db, current_user["id"], response)
+    except Exception:
+        logger.exception(
+            "Mission Control trader-profile enrichment failed for user %s (trace_id=%s); returning unenriched response.",
+            current_user["id"],
+            trace_id,
+        )
     generation_status = str(
         ((response.get("first_dashboard_context") or {}).get("generation_status") or "")
     ).lower()
