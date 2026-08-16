@@ -1467,6 +1467,8 @@ class FinnPlanService:
         context = context or {}
         page_type = str(context.get("page_type") or context.get("page") or "").lower()
         has_explain = self._has_explain_intent(query)
+        if self.looks_like_cross_workspace_plan_review_request(query):
+            return False
         if "report" in page_type and any(phrase in q for phrase in [
             "welk rapport zie ik nu",
             "welk report zie ik nu",
@@ -1497,6 +1499,34 @@ class FinnPlanService:
         ]):
             return True
         return any(term in q for term in ["setup", "strategie", "strategy", "bot", "rapport", "report", "score", "scherm", "pagina", "asset"])
+
+    def looks_like_cross_workspace_plan_review_request(self, query: str) -> bool:
+        q = self._normalized_query(query)
+        review_terms = [
+            "bekijk mijn",
+            "beoordeel mijn",
+            "review mijn",
+            "vergelijk mijn",
+            "volgens jou",
+            "belangrijkste ontbrekende onderdeel",
+            "ontbrekende onderdeel",
+            "concrete observatie",
+            "vervolgstap",
+        ]
+        scope_markers = [
+            "profiel",
+            "profile",
+            "indicatoren",
+            "indicators",
+            "setup",
+            "strategie",
+            "strategy",
+            "gekoppelde bot",
+            "linked bot",
+            "bot",
+        ]
+        matched_scope_markers = sum(1 for marker in scope_markers if marker in q)
+        return matched_scope_markers >= 4 and any(term in q for term in review_terms)
 
     def looks_like_mission_control_explain_request(self, query: str, context: Optional[Dict[str, Any]] = None) -> bool:
         q = self._normalized_query(query)

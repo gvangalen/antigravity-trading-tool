@@ -342,6 +342,28 @@ def test_build_finn_core_rescue_envelope_prefers_context_explain_builder():
     assert response["intent"] == "context_explain"
 
 
+def test_build_finn_core_rescue_envelope_does_not_route_cross_workspace_review_to_context_explain():
+    finn = _finn()
+    finn.build_context_explain_response = AsyncMock(return_value={"intent": "context_explain", "flow": "context_explain"})
+
+    response = asyncio.run(
+        _build_finn_core_rescue_envelope(
+            finn=finn,
+            user_id=30,
+            query=(
+                "Bekijk mijn BTC-profiel, indicatoren, setup, strategie en gekoppelde bot. "
+                "Wat is volgens jou op dit moment het belangrijkste ontbrekende onderdeel van mijn plan? "
+                "Geef een concrete observatie en een vervolgstap."
+            ),
+            context_payload={"page": "/report", "page_type": "Reports", "symbol": "BTC", "setup_id": 262},
+        )
+    )
+
+    finn.build_context_explain_response.assert_not_awaited()
+    assert response["intent"] != "context_explain"
+    assert response["flow"] != "context_explain"
+
+
 def test_build_finn_core_rescue_envelope_prefers_product_help_builder():
     finn = _finn()
     finn.build_product_help_response = AsyncMock(return_value={"intent": "product_help", "flow": "product_help"})
