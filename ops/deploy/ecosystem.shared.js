@@ -62,6 +62,8 @@ const SHARED_RUNTIME_ENV = pickRuntimeEnv([
   "REDIS_URL",
   "CELERY_BROKER_URL",
   "CELERY_RESULT_BACKEND",
+  "TRADAMIND_BUILD_COMMIT_SHA",
+  "TRADAMIND_BUILD_TIME",
 ]);
 
 function createEcosystem(environmentName) {
@@ -94,6 +96,7 @@ function createEcosystem(environmentName) {
           NODE_ENV: "production",
           PORT: environment.frontendPort,
           APP_ENV: environment.appEnv,
+          TRADAMIND_BUILD_SERVICE: "frontend",
         },
         max_memory_restart: "500M",
       },
@@ -105,6 +108,7 @@ function createEcosystem(environmentName) {
         env: {
           ...SHARED_RUNTIME_ENV,
           APP_ENV: environment.appEnv,
+          TRADAMIND_BUILD_SERVICE: "backend",
         },
         max_memory_restart: "500M",
       },
@@ -117,6 +121,7 @@ function createEcosystem(environmentName) {
         env: {
           ...SHARED_RUNTIME_ENV,
           APP_ENV: environment.appEnv,
+          TRADAMIND_BUILD_SERVICE: "celery-worker-default",
         },
         max_memory_restart: "300M",
       },
@@ -129,6 +134,7 @@ function createEcosystem(environmentName) {
         env: {
           ...SHARED_RUNTIME_ENV,
           APP_ENV: environment.appEnv,
+          TRADAMIND_BUILD_SERVICE: "celery-worker-market-portfolio",
         },
         max_memory_restart: "300M",
       },
@@ -141,6 +147,7 @@ function createEcosystem(environmentName) {
         env: {
           ...SHARED_RUNTIME_ENV,
           APP_ENV: environment.appEnv,
+          TRADAMIND_BUILD_SERVICE: "celery-worker-scoring-execution",
         },
         max_memory_restart: "300M",
       },
@@ -153,6 +160,7 @@ function createEcosystem(environmentName) {
         env: {
           ...SHARED_RUNTIME_ENV,
           APP_ENV: environment.appEnv,
+          TRADAMIND_BUILD_SERVICE: "celery-worker-ai-reporting",
         },
         max_memory_restart: "350M",
       },
@@ -165,6 +173,7 @@ function createEcosystem(environmentName) {
         env: {
           ...SHARED_RUNTIME_ENV,
           APP_ENV: environment.appEnv,
+          TRADAMIND_BUILD_SERVICE: "celery-beat",
         },
         max_memory_restart: "200M",
       },

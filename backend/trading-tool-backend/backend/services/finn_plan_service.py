@@ -13431,12 +13431,14 @@ class FinnPlanService:
                 "briefing": validated_result,
                 "response_source": "cached_ai",
                 "generation_status": "ready",
+                "trace": self._first_dashboard_trace_payload(stored_briefing),
             }
         if stored_version == current_version and stored_status in {"pending", "queued", "generating", "retry_scheduled"}:
             return {
                 "briefing": self._first_dashboard_loading_result(payload.get("asset") or "BTC"),
                 "response_source": "briefing_generating",
                 "generation_status": stored_status,
+                "trace": self._first_dashboard_trace_payload(stored_briefing),
             }
         if stored_version == current_version and stored_status == "fallback":
             if self._first_dashboard_retry_due(stored_briefing):
@@ -13444,6 +13446,7 @@ class FinnPlanService:
                     "briefing": self._first_dashboard_loading_result(payload.get("asset") or "BTC"),
                     "response_source": "briefing_generating",
                     "generation_status": "retry_scheduled",
+                    "trace": self._first_dashboard_trace_payload(stored_briefing),
                 }
             fallback = self._validate_first_dashboard_ai_result(
                 stored_briefing.get("result") or payload.get("fallback_result") or {},
@@ -13454,17 +13457,20 @@ class FinnPlanService:
                     "briefing": fallback,
                     "response_source": "deterministic_fallback",
                     "generation_status": "fallback",
+                    "trace": self._first_dashboard_trace_payload(stored_briefing),
                 }
         if get_ai_availability().get("available"):
             return {
                 "briefing": self._first_dashboard_loading_result(payload.get("asset") or "BTC"),
                 "response_source": "briefing_generating",
                 "generation_status": "pending",
+                "trace": self._first_dashboard_trace_payload(stored_briefing),
             }
         return {
             "briefing": payload.get("fallback_result") or {},
             "response_source": "deterministic_fallback",
             "generation_status": stored_status or "pending",
+            "trace": self._first_dashboard_trace_payload(stored_briefing),
         }
 
     def _compose_first_dashboard_context(
@@ -13506,6 +13512,33 @@ class FinnPlanService:
             "response_source": display.get("response_source"),
             "generation_status": display.get("generation_status"),
             "evidence_refs": briefing.get("evidence_refs") or [],
+            "task_id": ((display.get("trace") or {}).get("task_id")),
+            "queue": ((display.get("trace") or {}).get("queue")),
+            "routing_rule": ((display.get("trace") or {}).get("routing_rule")),
+            "attempt_count": ((display.get("trace") or {}).get("attempt_count")),
+            "transition_count": ((display.get("trace") or {}).get("transition_count")),
+            "last_transition": ((display.get("trace") or {}).get("last_transition")),
+            "owner_task_id": ((display.get("trace") or {}).get("owner_task_id")),
+            "trace": display.get("trace") or {},
+        }
+
+    def _first_dashboard_trace_payload(self, stored_briefing: Dict[str, Any]) -> Dict[str, Any]:
+        if not isinstance(stored_briefing, dict):
+            return {}
+        history = list(stored_briefing.get("transition_history") or [])
+        return {
+            "task_id": stored_briefing.get("task_id"),
+            "queue": stored_briefing.get("queue"),
+            "routing_rule": stored_briefing.get("routing_rule"),
+            "attempt_count": stored_briefing.get("attempt_count"),
+            "transition_count": len(history),
+            "last_transition": stored_briefing.get("last_transition"),
+            "owner_task_id": stored_briefing.get("owner_task_id"),
+            "context_version": stored_briefing.get("context_version"),
+            "status": stored_briefing.get("status"),
+            "updated_at": stored_briefing.get("updated_at"),
+            "generated_at": stored_briefing.get("generated_at"),
+            "last_error_code": stored_briefing.get("last_error_code"),
         }
 
     async def _recover_stale_first_dashboard_state_if_needed(

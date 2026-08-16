@@ -20,6 +20,8 @@ _PROCESS_STARTED_AT = datetime.now(timezone.utc)
 _PROCESS_HOSTNAME = socket.gethostname()
 _PROCESS_PID = os.getpid()
 _PROCESS_APP_ENV = os.getenv("APP_ENV", "unknown")
+_PROCESS_BUILD_COMMIT_SHA = os.getenv("TRADAMIND_BUILD_COMMIT_SHA", "unknown")
+_PROCESS_BUILD_TIME = os.getenv("TRADAMIND_BUILD_TIME", "unknown")
 
 
 def runtime_identity_snapshot() -> Dict[str, object]:
@@ -30,6 +32,11 @@ def runtime_identity_snapshot() -> Dict[str, object]:
         "pid": _PROCESS_PID,
         "app_env": _PROCESS_APP_ENV,
         "process_started_at": _PROCESS_STARTED_AT.isoformat(),
+        "build": {
+            "service": os.getenv("TRADAMIND_BUILD_SERVICE", "backend"),
+            "commit_sha": _PROCESS_BUILD_COMMIT_SHA,
+            "build_time": _PROCESS_BUILD_TIME,
+        },
     }
 
 

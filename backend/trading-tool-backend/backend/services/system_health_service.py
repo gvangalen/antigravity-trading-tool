@@ -10,6 +10,7 @@ from sqlalchemy import text
 from backend.celery_task.legacy_queue_drain import summarize_legacy_queue_messages
 from backend.celery_task.queue_policy import DEFAULT_QUEUE, NAMED_QUEUES, rate_limit_summary_by_queue
 from backend.infrastructure.database import async_session_factory
+from backend.services.build_metadata_service import build_metadata_snapshot
 from backend.services.platform_metrics import process_metrics_snapshot
 
 
@@ -19,6 +20,11 @@ PM2_CELERY_WORKER_QUEUE_MAP = {
     "celery-worker-scoring-execution": ["scoring", "execution_critical"],
     "celery-worker-ai-reporting": ["ai_generation"],
 }
+
+FIRST_DASHBOARD_TASK_NAMES = [
+    "backend.celery_task.onboarding_task.enqueue_first_dashboard_briefing",
+    "backend.celery_task.onboarding_task.generate_first_dashboard_briefing",
+]
 
 
 def _utcnow() -> datetime:
@@ -357,11 +363,15 @@ class SystemHealthService:
                 SystemHealthService._celery_active_queues
             )
             stats_result = await SystemHealthService._safe_celery_inspect(SystemHealthService._celery_stats)
+            registered_result = await SystemHealthService._safe_celery_inspect(
+                SystemHealthService._celery_registered
+            )
 
             workers = SystemHealthService._visible_workers(
                 ping_result=ping_result or {},
                 active_queues=active_queues or {},
                 stats_result=stats_result or {},
+                registered_result=registered_result or {},
             )
             workers_by_queue = SystemHealthService._workers_by_queue(active_queues or {})
             worker_mapping_source = "celery_active_queues_inspect"
@@ -391,8 +401,11 @@ class SystemHealthService:
                     ping_result=ping_result or {},
                     active_queues=active_queues or {},
                     stats_result=stats_result or {},
+                    registered_result=registered_result or {},
                     worker_mapping_source=worker_mapping_source,
                 ),
+                registered_tasks=SystemHealthService._registered_task_summary(registered_result or {}),
+                build=build_metadata_snapshot(service="backend"),
                 rate_limits_by_queue=rate_limit_summary_by_queue(),
             )
         except Exception as exc:
@@ -402,6 +415,7 @@ class SystemHealthService:
                 worker_count=0,
                 workers=[],
                 workers_by_queue={},
+                build=build_metadata_snapshot(service="backend"),
                 rate_limits_by_queue=rate_limit_summary_by_queue(),
             )
 
@@ -437,16 +451,25 @@ class SystemHealthService:
         return inspector.stats()
 
     @staticmethod
+    def _celery_registered() -> Optional[Dict[str, Any]]:
+        from backend.celery_task.celery_app import celery_app
+
+        inspector = celery_app.control.inspect(timeout=3.0)
+        return inspector.registered()
+
+    @staticmethod
     def _visible_workers(
         *,
         ping_result: Dict[str, Any],
         active_queues: Dict[str, Any],
         stats_result: Dict[str, Any],
+        registered_result: Dict[str, Any],
     ) -> list[str]:
         workers = set()
         workers.update(SystemHealthService._dict_keys(ping_result))
         workers.update(SystemHealthService._dict_keys(active_queues))
         workers.update(SystemHealthService._dict_keys(stats_result))
+        workers.update(SystemHealthService._dict_keys(registered_result))
         return sorted(worker for worker in workers if isinstance(worker, str) and worker.strip())
 
     @staticmethod
@@ -455,6 +478,7 @@ class SystemHealthService:
         ping_result: Dict[str, Any],
         active_queues: Dict[str, Any],
         stats_result: Dict[str, Any],
+        registered_result: Dict[str, Any],
         worker_mapping_source: Optional[str] = None,
     ) -> list[str]:
         sources = []
@@ -464,9 +488,25 @@ class SystemHealthService:
             sources.append("active_queues")
         if stats_result:
             sources.append("stats")
+        if registered_result:
+            sources.append("registered")
         if worker_mapping_source == "pm2_process_list_static_queue_map":
             sources.append("pm2")
         return sources
+
+    @staticmethod
+    def _registered_task_summary(registered_result: Dict[str, Any]) -> Dict[str, Any]:
+        workers_with_first_dashboard = {}
+        for worker_name, task_names in (registered_result or {}).items():
+            normalized = [str(task_name) for task_name in (task_names or [])]
+            matched = [task_name for task_name in normalized if task_name in FIRST_DASHBOARD_TASK_NAMES]
+            if matched:
+                workers_with_first_dashboard[str(worker_name)] = matched
+        return {
+            "required_tasks": list(FIRST_DASHBOARD_TASK_NAMES),
+            "workers_with_first_dashboard_tasks": workers_with_first_dashboard,
+            "visible_worker_count": len(workers_with_first_dashboard),
+        }
 
     @staticmethod
     def _dict_keys(value: Any) -> list[str]:

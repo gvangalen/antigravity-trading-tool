@@ -12,6 +12,7 @@ from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.routing import APIRoute
 from dotenv import load_dotenv
+from backend.services.build_metadata_service import build_metadata_snapshot
 
 # ------------------------------------------------------------
 # 📌 .env laden
@@ -308,6 +309,7 @@ def health_check():
         "status": "ok",
         "message": "API is running",
         "app_env": os.getenv("APP_ENV", "production"),
+        "build": build_metadata_snapshot(service="backend"),
     }
 
 

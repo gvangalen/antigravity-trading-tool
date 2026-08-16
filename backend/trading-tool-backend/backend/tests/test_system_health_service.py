@@ -191,14 +191,31 @@ def test_check_celery_includes_rate_limit_summary(monkeypatch):
         "_celery_stats",
         staticmethod(lambda: {"worker-a": {"pid": 123}}),
     )
+    monkeypatch.setattr(
+        SystemHealthService,
+        "_celery_registered",
+        staticmethod(
+            lambda: {
+                "worker-a": [
+                    "backend.celery_task.onboarding_task.enqueue_first_dashboard_briefing",
+                    "backend.celery_task.onboarding_task.generate_first_dashboard_briefing",
+                ]
+            }
+        ),
+    )
 
     result = asyncio.run(SystemHealthService._check_celery())
 
     assert result["status"] == "ok"
-    assert result["worker_discovery_sources"] == ["ping", "active_queues", "stats"]
+    assert result["worker_discovery_sources"] == ["ping", "active_queues", "stats", "registered"]
     assert result["workers_by_queue"]["market_data"] == ["worker-a"]
     assert result["rate_limits_by_queue"]["market_data"]["rate_limit"] == "20/m"
     assert result["rate_limits_by_queue"]["portfolio"]["rate_limit"] is None
+    assert result["registered_tasks"]["visible_worker_count"] == 1
+    assert result["registered_tasks"]["workers_with_first_dashboard_tasks"]["worker-a"] == [
+        "backend.celery_task.onboarding_task.enqueue_first_dashboard_briefing",
+        "backend.celery_task.onboarding_task.generate_first_dashboard_briefing",
+    ]
 
 
 def test_check_celery_falls_back_to_active_queues_and_stats_when_ping_is_empty(monkeypatch):
@@ -218,6 +235,7 @@ def test_check_celery_falls_back_to_active_queues_and_stats_when_ping_is_empty(m
         "_celery_stats",
         staticmethod(lambda: {"worker-b": {"pid": 456}}),
     )
+    monkeypatch.setattr(SystemHealthService, "_celery_registered", staticmethod(lambda: None))
 
     result = asyncio.run(SystemHealthService._check_celery())
 
@@ -233,6 +251,7 @@ def test_check_celery_falls_back_to_pm2_snapshot_when_inspect_is_empty(monkeypat
     monkeypatch.setattr(SystemHealthService, "_celery_ping", staticmethod(lambda: None))
     monkeypatch.setattr(SystemHealthService, "_celery_active_queues", staticmethod(lambda: None))
     monkeypatch.setattr(SystemHealthService, "_celery_stats", staticmethod(lambda: None))
+    monkeypatch.setattr(SystemHealthService, "_celery_registered", staticmethod(lambda: None))
     monkeypatch.setattr(
         SystemHealthService,
         "_pm2_celery_workers_snapshot",

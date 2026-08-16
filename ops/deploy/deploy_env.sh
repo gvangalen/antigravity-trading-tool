@@ -89,6 +89,8 @@ else
 fi
 
 TARGET_COMMIT="$(git rev-parse --short HEAD)"
+TARGET_COMMIT_FULL="$(git rev-parse HEAD)"
+BUILD_TIMESTAMP_UTC="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 REMOTE_LAST_GOOD="$(
   ssh "${SSH_ARGS[@]}" "ubuntu@$SERVER_IP" "
     cd $REMOTE_DIR 2>/dev/null || exit 0
@@ -111,6 +113,8 @@ if ! ssh "${SSH_ARGS[@]}" "ubuntu@$SERVER_IP" "
   export APP_ENV=$ENVIRONMENT
   export BACKEND_PORT=$BACKEND_PORT
   export FRONTEND_PORT=$FRONTEND_PORT
+  export TRADAMIND_BUILD_COMMIT_SHA=$TARGET_COMMIT_FULL
+  export TRADAMIND_BUILD_TIME=$BUILD_TIMESTAMP_UTC
   cd $REMOTE_DIR
   ENV_FILE="\$HOME/.secrets/trading.env"
   if [ -f "\$ENV_FILE" ]; then
@@ -172,6 +176,9 @@ if ! ssh "${SSH_ARGS[@]}" "ubuntu@$SERVER_IP" "
     exit 1
   fi
   echo \"✅ Using prebuilt frontend export from git (server build skipped). Old static chunks removed to avoid mixed-build clients.\"
+  cat > out/build-info.json <<EOF
+{\"service\":\"frontend\",\"commit_sha\":\"$TARGET_COMMIT_FULL\",\"build_time\":\"$BUILD_TIMESTAMP_UTC\"}
+EOF
 
   cd ../..
   if [ ! -f \"$PM2_CONFIG\" ]; then

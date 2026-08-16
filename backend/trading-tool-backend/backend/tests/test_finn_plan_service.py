@@ -676,6 +676,35 @@ def test_resolve_first_dashboard_briefing_uses_loading_state_while_generating():
     assert display["briefing"]["headline"] == "FINN is reviewing your plan"
 
 
+def test_compose_first_dashboard_context_exposes_trace_fields():
+    service = _service()
+
+    context = service._compose_first_dashboard_context(
+        _first_dashboard_payload("ctx-v9"),
+        {
+            "briefing": _first_dashboard_payload("ctx-v9")["fallback_result"],
+            "response_source": "briefing_generating",
+            "generation_status": "queued",
+            "trace": {
+                "task_id": "task-123",
+                "queue": "ai_generation",
+                "routing_rule": "backend.celery_task.onboarding_task.generate_first_dashboard_briefing",
+                "attempt_count": 2,
+                "transition_count": 3,
+                "owner_task_id": "owner-123",
+                "last_transition": {"status": "queued"},
+            },
+        },
+    )
+
+    assert context["task_id"] == "task-123"
+    assert context["queue"] == "ai_generation"
+    assert context["attempt_count"] == 2
+    assert context["transition_count"] == 3
+    assert context["owner_task_id"] == "owner-123"
+    assert context["last_transition"]["status"] == "queued"
+
+
 def test_normalize_first_dashboard_state_ignores_malformed_metadata():
     service = _service()
 
