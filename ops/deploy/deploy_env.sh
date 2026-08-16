@@ -124,6 +124,14 @@ if ! ssh "${SSH_ARGS[@]}" "ubuntu@$SERVER_IP" "
   fi
   mkdir -p $DEPLOY_STATE_DIR
   printf '%s\n' '$ROLLBACK_COMMIT' > ${DEPLOY_STATE_DIR}/PREVIOUS_GOOD_COMMIT
+  PREVIOUS_FRONTEND_STATIC=\"\$(mktemp -d /tmp/tradamind-static-backup.XXXXXX)\"
+  cleanup_previous_frontend_static() {
+    rm -rf \"\$PREVIOUS_FRONTEND_STATIC\"
+  }
+  trap cleanup_previous_frontend_static EXIT
+  if [ -d frontend/trading-tool-frontend/out/_next/static ]; then
+    cp -R frontend/trading-tool-frontend/out/_next/static/. \"\$PREVIOUS_FRONTEND_STATIC/\" 2>/dev/null || true
+  fi
   sync_git_ref() {
     for attempt in \$(seq 1 5); do
       rm -f .git/index.lock .git/refs/remotes/origin/$BRANCH.lock .git/refs/remotes/origin/$BRANCH
