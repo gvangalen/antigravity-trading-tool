@@ -23,6 +23,7 @@ from backend.services.ai_usage_observability_service import (
 from backend.services.ai_availability_service import (
     AI_UNAVAILABLE_BUDGET,
     acquire_ai_call_slot,
+    clear_ai_unavailable,
     get_ai_availability,
     mark_ai_unavailable,
     should_emit_block_event,
@@ -72,6 +73,7 @@ _openai_runtime_state: Dict[str, Any] = {
     "last_error": None,
     "last_error_at": None,
 }
+_process_started_at_epoch = int(time.time())
 
 
 def _quota_breaker_active() -> bool:
@@ -88,6 +90,148 @@ def _mark_quota_exhausted() -> None:
     _openai_runtime_state["quota_exhausted_until"] = time.time() + max(60, QUOTA_COOLDOWN_SECONDS)
     _mark_runtime_error("insufficient_quota")
     mark_ai_unavailable(AI_UNAVAILABLE_BUDGET, QUOTA_COOLDOWN_SECONDS)
+
+
+def clear_openai_runtime_breaker() -> None:
+    _openai_runtime_state["quota_exhausted_until"] = 0.0
+    _openai_runtime_state["last_error"] = None
+    _openai_runtime_state["last_error_at"] = None
+    clear_ai_unavailable()
+
+
+def _masked_api_key() -> Optional[str]:
+    if not api_key:
+        return None
+    if len(api_key) <= 12:
+        return f"{api_key[:4]}...{api_key[-2:]}"
+    return f"{api_key[:8]}...{api_key[-4:]}"
+
+
+def _api_key_project_hint() -> Optional[str]:
+    if not api_key:
+        return None
+    return "project_scoped" if api_key.startswith("sk-proj-") else "legacy_or_unknown_scope"
+
+
+def _read_status_code(value: Any) -> Optional[int]:
+    candidate = getattr(value, "status_code", None)
+    if isinstance(candidate, int):
+        return candidate
+    response = getattr(value, "response", None)
+    response_status = getattr(response, "status_code", None)
+    return response_status if isinstance(response_status, int) else None
+
+
+def _read_request_id(value: Any) -> Optional[str]:
+    request_id = getattr(value, "request_id", None) or getattr(value, "_request_id", None)
+    if request_id:
+        return str(request_id)
+    headers = getattr(value, "headers", None)
+    if headers:
+        header_value = headers.get("x-request-id") or headers.get("X-Request-Id")
+        if header_value:
+            return str(header_value)
+    response = getattr(value, "response", None)
+    response_headers = getattr(response, "headers", None)
+    if response_headers:
+        header_value = response_headers.get("x-request-id") or response_headers.get("X-Request-Id")
+        if header_value:
+            return str(header_value)
+    return None
+
+
+def probe_openai_runtime(*, clear_breaker_on_success: bool = True, caller: str = "backend") -> Dict[str, Any]:
+    availability_before = get_ai_availability()
+    started = time.perf_counter()
+    result: Dict[str, Any] = {
+        "caller": caller,
+        "configured": bool(api_key),
+        "model": model,
+        "api_key_masked": _masked_api_key(),
+        "api_key_scope": _api_key_project_hint(),
+        "availability_before": availability_before,
+        "quota_breaker_before": _quota_breaker_active(),
+        "process": {
+            "pid": os.getpid(),
+            "started_at_epoch": _process_started_at_epoch,
+        },
+    }
+
+    if not client or not api_key:
+        result.update(
+            {
+                "ok": False,
+                "error": "ai_unavailable_configuration",
+                "http_status": None,
+                "request_id": None,
+                "duration_ms": round((time.perf_counter() - started) * 1000, 2),
+                "availability_after": get_ai_availability(),
+                "quota_breaker_after": _quota_breaker_active(),
+            }
+        )
+        return result
+
+    if str(availability_before.get("source")) == "environment":
+        result.update(
+            {
+                "ok": False,
+                "error": str(availability_before.get("reason") or AI_UNAVAILABLE_BUDGET),
+                "http_status": None,
+                "request_id": None,
+                "duration_ms": round((time.perf_counter() - started) * 1000, 2),
+                "availability_after": availability_before,
+                "quota_breaker_after": _quota_breaker_active(),
+            }
+        )
+        return result
+
+    try:
+        active_client = client.with_options(max_retries=0)
+        raw_response = active_client.chat.completions.with_raw_response.create(
+            model=model,
+            messages=[
+                {"role": "system", "content": "Return the single token ok."},
+                {"role": "user", "content": "ok"},
+            ],
+            temperature=0,
+            max_tokens=1,
+        )
+        parsed = raw_response.parse()
+        if clear_breaker_on_success:
+            clear_openai_runtime_breaker()
+        result.update(
+            {
+                "ok": True,
+                "http_status": _read_status_code(raw_response) or 200,
+                "request_id": _read_request_id(raw_response) or _read_request_id(parsed),
+                "response_model": str(getattr(parsed, "model", None) or model),
+                "duration_ms": round((time.perf_counter() - started) * 1000, 2),
+                "availability_after": get_ai_availability(),
+                "quota_breaker_after": _quota_breaker_active(),
+                "breaker_cleared": clear_breaker_on_success,
+            }
+        )
+        return result
+    except Exception as exc:
+        message = str(exc)
+        insufficient_quota = "insufficient_quota" in message
+        if insufficient_quota:
+            _mark_quota_exhausted()
+        else:
+            _mark_runtime_error(message)
+        result.update(
+            {
+                "ok": False,
+                "error": message,
+                "http_status": _read_status_code(exc),
+                "request_id": _read_request_id(exc),
+                "insufficient_quota": insufficient_quota,
+                "duration_ms": round((time.perf_counter() - started) * 1000, 2),
+                "availability_after": get_ai_availability(),
+                "quota_breaker_after": _quota_breaker_active(),
+            }
+        )
+        return result
 
 
 def get_openai_runtime_status() -> Dict[str, Any]:
@@ -107,6 +251,12 @@ def get_openai_runtime_status() -> Dict[str, Any]:
         "json_calls": int(_openai_runtime_state.get("json_calls") or 0),
         "last_error": _openai_runtime_state.get("last_error"),
         "last_error_at_epoch": _openai_runtime_state.get("last_error_at"),
+        "api_key_masked": _masked_api_key(),
+        "api_key_scope": _api_key_project_hint(),
+        "process": {
+            "pid": os.getpid(),
+            "started_at_epoch": _process_started_at_epoch,
+        },
         "availability": availability,
     }
 

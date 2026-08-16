@@ -1,13 +1,16 @@
+import asyncio
 import os
 import logging
 from dotenv import load_dotenv
 from fastapi import APIRouter, HTTPException, Depends, Request, Cookie, Header
 
+from backend.celery_task.celery_app import celery_app
+from backend.celery_task.queue_policy import resolve_task_queue
 from backend.utils.auth_utils import decode_token, get_current_user
 from backend.services.system_health_service import SystemHealthService
 from backend.services.finn_product_analytics_service import finn_product_analytics
 from backend.services.system_service import SystemService
-from backend.utils.openai_client import get_openai_runtime_status
+from backend.utils.openai_client import clear_openai_runtime_breaker, get_openai_runtime_status, probe_openai_runtime
 from backend.schemas.system_schema import BootstrapAgentsResponse
 
 logger = logging.getLogger(__name__)
@@ -84,6 +87,52 @@ async def system_finn_analytics(current_user: dict = Depends(require_operator)):
 async def system_openai_runtime(current_user: dict = Depends(require_operator)):
     """Operator view on OpenAI runtime cost controls and quota breaker state."""
     return get_openai_runtime_status()
+
+
+@router.post("/system/openai-runtime/probe")
+async def system_openai_runtime_probe(
+    include_worker: bool = True,
+    current_user: dict = Depends(require_operator),
+):
+    """Run a minimal OpenAI probe from the API process and, optionally, a Celery worker."""
+    backend_probe = probe_openai_runtime(caller="backend")
+    payload = {
+        "backend": backend_probe,
+        "worker": None,
+    }
+    if not include_worker:
+        return payload
+
+    task_name = "backend.celery_task.system_task.probe_openai_runtime"
+    async_result = celery_app.send_task(
+        task_name,
+        queue=resolve_task_queue(task_name),
+    )
+    try:
+        worker_probe = await asyncio.to_thread(async_result.get, timeout=20)
+    except Exception as exc:
+        worker_probe = {
+            "ok": False,
+            "error": str(exc),
+            "task_id": async_result.id,
+        }
+    if isinstance(worker_probe, dict):
+        worker_probe.setdefault("task_id", async_result.id)
+    payload["worker"] = worker_probe
+    return payload
+
+
+@router.post("/system/openai-runtime/reset")
+async def system_openai_runtime_reset(current_user: dict = Depends(require_operator)):
+    """Clear the shared OpenAI quota breaker when operators have validated recovery."""
+    before = get_openai_runtime_status()
+    clear_openai_runtime_breaker()
+    after = get_openai_runtime_status()
+    return {
+        "status": "reset",
+        "before": before,
+        "after": after,
+    }
 
 # =====================================================
 # 🚀 BOOTSTRAP AGENTS (na onboarding)

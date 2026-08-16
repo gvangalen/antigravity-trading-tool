@@ -61,6 +61,54 @@ def test_block_observability_is_deduplicated(monkeypatch):
     assert ai_availability_service.should_emit_block_event("strategy", "ai_unavailable_budget") is True
 
 
+def test_probe_openai_runtime_clears_breaker_after_success(monkeypatch):
+    class _Parsed:
+        model = "gpt-4o-mini"
+
+    class _RawResponse:
+        status_code = 200
+        headers = {"x-request-id": "req_backend_probe"}
+
+        @staticmethod
+        def parse():
+            return _Parsed()
+
+    class _WithRawResponse:
+        @staticmethod
+        def create(**kwargs):
+            return _RawResponse()
+
+    class _Completions:
+        with_raw_response = _WithRawResponse()
+
+    class _Chat:
+        completions = _Completions()
+
+    class _Client:
+        chat = _Chat()
+
+        def with_options(self, **kwargs):
+            return self
+
+    monkeypatch.setenv("OPENAI_CALLS_ENABLED", "true")
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-proj-test-1234567890")
+    monkeypatch.setattr(ai_availability_service, "_redis_client", lambda: None)
+    monkeypatch.setattr(openai_module, "client", _Client())
+    monkeypatch.setattr(openai_module, "api_key", "sk-proj-test-1234567890")
+    ai_availability_service.reset_ai_availability_for_tests()
+    ai_availability_service.mark_ai_unavailable("ai_unavailable_budget", 600)
+    openai_module._openai_runtime_state["quota_exhausted_until"] = datetime.now().timestamp() + 600
+
+    result = openai_module.probe_openai_runtime()
+
+    assert result["ok"] is True
+    assert result["request_id"] == "req_backend_probe"
+    assert result["availability_before"]["available"] is False
+    assert result["availability_after"]["available"] is True
+    assert result["api_key_scope"] == "project_scoped"
+    assert openai_module.get_openai_runtime_status()["quota_breaker_active"] is False
+
+
 class _Repo:
     def __init__(self, latest_report):
         self.latest_report = latest_report

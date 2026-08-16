@@ -55,6 +55,7 @@ TASK_QUEUE_ROUTES: Dict[str, str] = {
     "backend.celery_task.quarterly_report_task.generate_quarterly_report": "ai_generation",
     "backend.celery_task.onboarding_task.enqueue_first_dashboard_briefing": "ai_generation",
     "backend.celery_task.onboarding_task.generate_first_dashboard_briefing": "ai_generation",
+    "backend.celery_task.system_task.probe_openai_runtime": "ai_generation",
     "backend.celery_task.global_intelligence_task.run_global_intelligence": "ai_generation",
     "backend.celery_task.global_ingestion_task.run_global_ingestion": "market_data",
     "backend.celery_task.asset_initialization.initialize_asset_data": "market_data",

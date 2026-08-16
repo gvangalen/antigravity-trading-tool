@@ -38,6 +38,34 @@ def test_shared_breaker_survives_local_state_reset(monkeypatch):
     assert status["retry_after_seconds"] > 0
 
 
+def test_clear_ai_unavailable_clears_shared_breaker(monkeypatch):
+    store = {}
+
+    class _Redis:
+        def setex(self, key, ttl, value):
+            store[key] = value
+
+        def get(self, key):
+            return store.get(key)
+
+        def delete(self, key):
+            store.pop(key, None)
+
+    monkeypatch.setenv("OPENAI_CALLS_ENABLED", "true")
+    monkeypatch.setenv("OPENAI_API_KEY", "sk-test")
+    monkeypatch.setattr(ai_availability_service, "_redis_client", lambda: _Redis())
+    ai_availability_service.reset_ai_availability_for_tests()
+
+    ai_availability_service.mark_ai_unavailable("ai_unavailable_budget", 600)
+    assert ai_availability_service.get_ai_availability()["available"] is False
+
+    ai_availability_service.clear_ai_unavailable()
+
+    status = ai_availability_service.get_ai_availability()
+    assert status["available"] is True
+    assert status["reason"] is None
+
+
 def test_scheduled_call_slots_are_limited_per_scope(monkeypatch):
     monkeypatch.setattr(ai_availability_service, "_redis_client", lambda: None)
     monkeypatch.delenv("OPENAI_MAX_CALLS_PER_SCOPE_WINDOW", raising=False)

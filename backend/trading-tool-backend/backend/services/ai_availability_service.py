@@ -98,6 +98,16 @@ def get_ai_availability() -> Dict[str, Any]:
     }
 
 
+def clear_ai_unavailable() -> None:
+    _local_state.clear()
+    client = _redis_client()
+    if client is not None:
+        try:
+            client.delete(_STATE_KEY)
+        except Exception:
+            pass
+
+
 def mark_ai_unavailable(reason: str = AI_UNAVAILABLE_BUDGET, ttl_seconds: Optional[int] = None) -> None:
     ttl = max(60, int(ttl_seconds or os.getenv("OPENAI_QUOTA_COOLDOWN_SECONDS", "21600")))
     now = int(time.time())
