@@ -22,6 +22,23 @@ def test_system_health_is_operator_only():
     assert 'async def system_health(current_user: dict = Depends(require_operator))' in source
 
 
+def test_openai_runtime_controls_require_strict_admin_and_post_only_for_mutations():
+    source = _read(BACKEND_ROOT / "api" / "system_api.py")
+
+    assert "async def require_strict_admin" in source
+    assert 'async def system_openai_runtime(current_user: dict = Depends(require_strict_admin))' in source
+    assert '@router.post("/system/openai-runtime/probe")' in source
+    assert '@router.post("/system/openai-runtime/reset")' in source
+    assert "openai_runtime_probe_limiter = InMemoryRateLimiter" in source
+    assert '[OPENAI-RUNTIME-AUDIT]' in source
+
+
+def test_ecosystem_explicitly_passes_openai_calls_enabled():
+    source = _read(REPO_ROOT / "ops" / "deploy" / "ecosystem.shared.js")
+
+    assert '"OPENAI_CALLS_ENABLED"' in source
+
+
 def test_market_latest_and_7d_get_routes_are_read_only():
     source = _read(BACKEND_ROOT / "api" / "market_data_api.py")
 

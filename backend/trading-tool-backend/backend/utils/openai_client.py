@@ -5,6 +5,7 @@ import time
 import re
 import asyncio
 import inspect
+import hashlib
 from typing import Any, Dict, Optional
 from pathlib import Path
 
@@ -99,12 +100,11 @@ def clear_openai_runtime_breaker() -> None:
     clear_ai_unavailable()
 
 
-def _masked_api_key() -> Optional[str]:
+def _api_key_fingerprint() -> Optional[str]:
     if not api_key:
         return None
-    if len(api_key) <= 12:
-        return f"{api_key[:4]}...{api_key[-2:]}"
-    return f"{api_key[:8]}...{api_key[-4:]}"
+    digest = hashlib.sha256(api_key.encode("utf-8")).hexdigest()
+    return f"sha256:{digest[:12]}"
 
 
 def _api_key_project_hint() -> Optional[str]:
@@ -147,14 +147,10 @@ def probe_openai_runtime(*, clear_breaker_on_success: bool = True, caller: str =
         "caller": caller,
         "configured": bool(api_key),
         "model": model,
-        "api_key_masked": _masked_api_key(),
+        "api_key_fingerprint": _api_key_fingerprint(),
         "api_key_scope": _api_key_project_hint(),
         "availability_before": availability_before,
         "quota_breaker_before": _quota_breaker_active(),
-        "process": {
-            "pid": os.getpid(),
-            "started_at_epoch": _process_started_at_epoch,
-        },
     }
 
     if not client or not api_key:
@@ -251,12 +247,8 @@ def get_openai_runtime_status() -> Dict[str, Any]:
         "json_calls": int(_openai_runtime_state.get("json_calls") or 0),
         "last_error": _openai_runtime_state.get("last_error"),
         "last_error_at_epoch": _openai_runtime_state.get("last_error_at"),
-        "api_key_masked": _masked_api_key(),
+        "api_key_fingerprint": _api_key_fingerprint(),
         "api_key_scope": _api_key_project_hint(),
-        "process": {
-            "pid": os.getpid(),
-            "started_at_epoch": _process_started_at_epoch,
-        },
         "availability": availability,
     }
 

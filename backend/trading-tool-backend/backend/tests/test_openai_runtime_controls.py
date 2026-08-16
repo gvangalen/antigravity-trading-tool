@@ -106,6 +106,8 @@ def test_probe_openai_runtime_clears_breaker_after_success(monkeypatch):
     assert result["availability_before"]["available"] is False
     assert result["availability_after"]["available"] is True
     assert result["api_key_scope"] == "project_scoped"
+    assert result["api_key_fingerprint"].startswith("sha256:")
+    assert "sk-proj" not in result["api_key_fingerprint"]
     assert openai_module.get_openai_runtime_status()["quota_breaker_active"] is False
 
 

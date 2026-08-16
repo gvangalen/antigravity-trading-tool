@@ -41,6 +41,7 @@ function pickRuntimeEnv(keys) {
 const SHARED_RUNTIME_ENV = pickRuntimeEnv([
   "TWELVE_DATA_API_KEY",
   "OPENAI_API_KEY",
+  "OPENAI_CALLS_ENABLED",
   "FRONTEND_URL",
   "CORS_ORIGINS",
   "CORS_ALLOW_ORIGIN_REGEX",
