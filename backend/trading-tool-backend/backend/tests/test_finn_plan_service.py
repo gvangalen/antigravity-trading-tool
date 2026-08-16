@@ -1,6 +1,7 @@
 import asyncio
 from datetime import datetime, timedelta
 from decimal import Decimal
+from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 from fastapi import HTTPException
@@ -554,6 +555,83 @@ def test_resolve_first_dashboard_briefing_uses_loading_state_while_generating():
     assert display["response_source"] == "briefing_generating"
     assert display["generation_status"] == "generating"
     assert display["briefing"]["headline"] == "FINN is reviewing your plan"
+
+
+def test_normalize_first_dashboard_state_ignores_malformed_metadata():
+    service = _service()
+
+    assert service._normalize_first_dashboard_state(None) == {}
+    assert service._normalize_first_dashboard_state("broken") == {}
+    assert service._normalize_first_dashboard_state({"ok": True}) == {"ok": True}
+
+
+def test_first_dashboard_indicator_context_handles_missing_optional_columns():
+    class _ScalarResult:
+        def all(self):
+            return ["user_id", "indicator"]
+
+    class _MappingsResult:
+        def all(self):
+            return [{"category": None, "indicator": "RSI"}]
+
+    class _Session:
+        def __init__(self):
+            self.calls = 0
+
+        async def execute(self, stmt, params=None):
+            self.calls += 1
+            if self.calls == 1:
+                return SimpleNamespace(scalars=lambda: _ScalarResult())
+            return SimpleNamespace(mappings=lambda: _MappingsResult())
+
+    service = FinnPlanService(db_session=_Session())
+
+    result = asyncio.run(service._first_dashboard_indicator_context(7, "BTC"))
+
+    assert result == {"market": [], "macro": [], "technical": []}
+
+
+def test_prepare_first_dashboard_payload_survives_indicator_and_bot_lookup_failures(monkeypatch):
+    service = FinnPlanService(db_session=object())
+
+    async def fake_onboarding_status(user_id):
+        return {"onboarding_complete": True, "active_asset": "BTC"}
+
+    fake_user_repo = SimpleNamespace(
+        get_by_id=AsyncMock(return_value=SimpleNamespace(ai_preferences={"trader_types": ["swing_trader"], "risk_profiles": ["balanced"]}))
+    )
+
+    monkeypatch.setattr(service, "_fetch_onboarding_status", fake_onboarding_status)
+    monkeypatch.setattr(service, "_first_dashboard_linked_bot", AsyncMock(side_effect=RuntimeError("bot boom")))
+    monkeypatch.setattr(service, "_first_dashboard_indicator_context", AsyncMock(side_effect=RuntimeError("indicator boom")))
+    monkeypatch.setattr(finn_plan_module, "UserRepository", lambda session: fake_user_repo)
+
+    payload = asyncio.run(
+        service._prepare_first_dashboard_payload(
+            user_id=7,
+            analysis={
+                "assets": [
+                    {
+                        "asset": "BTC",
+                        "setup": {"name": "BTC Setup", "timeframe": "4h"},
+                        "active_strategy": {"strategy": {"id": 11, "name": "BTC Strategy"}},
+                        "data_readiness": {"status": "ready", "message": "fresh"},
+                        "has_scores": True,
+                        "blockers": [],
+                    }
+                ]
+            },
+            mission={"bot_review_queue": []},
+            activity_feed=[],
+            day_log={"handled_count": 0, "skipped_count": 0, "snoozed_count": 0},
+        )
+    )
+
+    assert payload is not None
+    assert payload["asset"] == "BTC"
+    assert payload["bot"] is None
+    assert payload["indicators"] == {"market": [], "macro": [], "technical": []}
+    assert payload["fallback_result"]["headline"].startswith("Your BTC plan is ready")
 
 
 def test_first_dashboard_allows_onboarding_configuration_activity_only():

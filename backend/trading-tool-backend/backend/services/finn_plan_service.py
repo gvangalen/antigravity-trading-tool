@@ -615,6 +615,7 @@ class FinnPlanService:
         self.trace_id = trace_id
         self.action_policy_service = FinnActionPolicyService()
         self.execution_governance_service = FinnExecutionGovernanceService()
+        self._user_indicator_config_columns_cache: Optional[set[str]] = None
 
     @classmethod
     def invalidate_runtime_caches_for_user(cls, user_id: int) -> None:
@@ -12450,6 +12451,7 @@ class FinnPlanService:
             first_dashboard_context = self._first_dashboard_error_context(
                 analysis,
                 error=str(exc or "first_dashboard_context_exception"),
+                error_stage="context_build",
             )
         if first_dashboard_context:
             mission["first_dashboard_context"] = first_dashboard_context
@@ -12621,6 +12623,7 @@ class FinnPlanService:
         analysis: Dict[str, Any],
         *,
         error: str,
+        error_stage: str = "first_dashboard_context",
     ) -> Dict[str, Any]:
         asset = "BTC"
         for item in (analysis.get("assets") or []):
@@ -12656,6 +12659,7 @@ class FinnPlanService:
             "evidence_refs": ["asset.symbol"],
             "trace_id": self.trace_id,
             "error": str(error or "first_dashboard_context_exception"),
+            "error_stage": error_stage,
         }
 
     async def generate_and_store_first_dashboard_briefing(
@@ -12900,7 +12904,15 @@ class FinnPlanService:
             local_activity_feed = await self._get_recent_finn_activity(user_id, limit=40)
             local_day_log = self._mission_day_log(local_activity_feed)
 
-        onboarding_status = await self._fetch_onboarding_status(user_id)
+        try:
+            onboarding_status = await self._fetch_onboarding_status(user_id)
+        except Exception:
+            logger.exception(
+                "First dashboard onboarding status lookup failed for user_id=%s trace_id=%s",
+                user_id,
+                self.trace_id,
+            )
+            return None
         if not onboarding_status.get("onboarding_complete"):
             return None
         if self._first_dashboard_has_blocking_activity(local_activity_feed):
@@ -12922,14 +12934,41 @@ class FinnPlanService:
         if not asset_analysis:
             return None
 
-        user = await UserRepository(self.session).get_by_id(user_id)
-        preferences = getattr(user, "ai_preferences", {}) or {} if user else {}
-        profile = normalize_trader_profile_preferences(preferences)
+        preferences: Dict[str, Any] = {}
+        profile = normalize_trader_profile_preferences({})
+        try:
+            user = await UserRepository(self.session).get_by_id(user_id)
+            preferences = getattr(user, "ai_preferences", {}) or {} if user else {}
+            profile = normalize_trader_profile_preferences(preferences)
+        except Exception:
+            logger.exception(
+                "First dashboard profile lookup failed for user_id=%s trace_id=%s",
+                user_id,
+                self.trace_id,
+            )
         setup = asset_analysis.get("setup") or {}
         active_strategy = asset_analysis.get("active_strategy") or {}
         strategy = active_strategy.get("strategy") or {}
-        linked_bot = await self._first_dashboard_linked_bot(user_id, active_asset, strategy_id=strategy.get("id"))
-        indicators = await self._first_dashboard_indicator_context(user_id, active_asset)
+        linked_bot = None
+        try:
+            linked_bot = await self._first_dashboard_linked_bot(user_id, active_asset, strategy_id=strategy.get("id"))
+        except Exception:
+            logger.exception(
+                "First dashboard linked bot lookup failed for user_id=%s asset=%s trace_id=%s",
+                user_id,
+                active_asset,
+                self.trace_id,
+            )
+        indicators = {"market": [], "macro": [], "technical": []}
+        try:
+            indicators = await self._first_dashboard_indicator_context(user_id, active_asset)
+        except Exception:
+            logger.exception(
+                "First dashboard indicator context lookup failed for user_id=%s asset=%s trace_id=%s",
+                user_id,
+                active_asset,
+                self.trace_id,
+            )
         data_readiness = asset_analysis.get("data_readiness") or {}
         has_scores = bool(asset_analysis.get("has_scores"))
         blockers = asset_analysis.get("blockers") or []
@@ -13250,7 +13289,7 @@ class FinnPlanService:
         step = await self._get_first_dashboard_storage_step(user_id)
         if not step:
             return False
-        state = step.step_metadata or {}
+        state = self._normalize_first_dashboard_state(step.step_metadata)
         current = state.get(FIRST_DASHBOARD_BRIEFING_METADATA_KEY) or {}
         if str(current.get("status") or "").lower() in {"retry_scheduled", "generating"}:
             return False
@@ -13273,7 +13312,7 @@ class FinnPlanService:
         step = await self._get_first_dashboard_storage_step(user_id)
         if not step:
             return {}
-        return step.step_metadata or {}
+        return self._normalize_first_dashboard_state(step.step_metadata)
 
     async def _store_first_dashboard_briefing_state(self, user_id: int, state: Dict[str, Any]) -> None:
         step = await self._get_first_dashboard_storage_step(user_id)
@@ -13298,6 +13337,53 @@ class FinnPlanService:
         rank = {step_key: index for index, step_key in enumerate(FIRST_DASHBOARD_STORAGE_STEP_KEYS)}
         rows.sort(key=lambda row: rank.get(str(row.step_key), 99))
         return rows[0]
+
+    def _normalize_first_dashboard_state(self, state: Any) -> Dict[str, Any]:
+        if isinstance(state, dict):
+            return state
+        if state not in (None, "", [], {}):
+            logger.warning(
+                "First dashboard state metadata had unexpected type=%s trace_id=%s; ignoring malformed state.",
+                type(state).__name__,
+                self.trace_id,
+            )
+        return {}
+
+    async def _get_user_indicator_config_columns(self) -> set[str]:
+        if self._user_indicator_config_columns_cache is not None:
+            return self._user_indicator_config_columns_cache
+
+        columns: set[str] = set()
+        try:
+            result = await self.session.execute(
+                text(
+                    """
+                    SELECT column_name
+                    FROM information_schema.columns
+                    WHERE table_schema = 'public'
+                      AND table_name = 'user_indicator_configs'
+                    """
+                )
+            )
+            columns = {str(column_name) for column_name in result.scalars().all()}
+        except Exception:
+            logger.exception(
+                "Could not inspect user_indicator_configs columns for first dashboard indicator context (trace_id=%s).",
+                self.trace_id,
+            )
+
+        if not columns:
+            columns = {
+                "user_id",
+                "indicator",
+                "category",
+                "symbol",
+                "priority",
+                "enabled",
+            }
+
+        self._user_indicator_config_columns_cache = columns
+        return columns
 
     def _first_dashboard_ai_system_role(self) -> str:
         return (
@@ -13525,19 +13611,38 @@ class FinnPlanService:
         return retry_at <= _utc_now()
 
     async def _first_dashboard_indicator_context(self, user_id: int, asset: str) -> Dict[str, List[str]]:
-        result = await self.session.execute(text("""
-            SELECT category, indicator
-            FROM user_indicator_configs
-            WHERE user_id = :user_id
-              AND enabled = TRUE
-              AND (
-                symbol = :symbol
-                OR symbol IS NULL
-                OR symbol = 'GLOBAL'
-              )
-            ORDER BY category ASC, priority ASC, indicator ASC
-        """), {"user_id": user_id, "symbol": asset})
         by_category: Dict[str, List[str]] = {"market": [], "macro": [], "technical": []}
+        columns = await self._get_user_indicator_config_columns()
+        if "user_id" not in columns or "indicator" not in columns:
+            return by_category
+
+        params: Dict[str, Any] = {"user_id": user_id}
+        where_clauses = ["user_id = :user_id"]
+        order_by = ["indicator ASC"]
+
+        if "enabled" in columns:
+            where_clauses.append("enabled = TRUE")
+        if "category" in columns:
+            where_clauses.append("category IN ('market', 'macro', 'technical')")
+            order_by.insert(0, "category ASC")
+        if "symbol" in columns:
+            params["symbol"] = str(asset or "").strip().upper()
+            where_clauses.append("(symbol = :symbol OR symbol IS NULL OR symbol = 'GLOBAL')")
+        if "priority" in columns:
+            order_by.insert(1 if "category" in columns else 0, "priority ASC")
+
+        select_category = "category" if "category" in columns else "NULL AS category"
+        result = await self.session.execute(
+            text(
+                f"""
+                SELECT {select_category}, indicator
+                FROM user_indicator_configs
+                WHERE {' AND '.join(where_clauses)}
+                ORDER BY {', '.join(order_by)}
+                """
+            ),
+            params,
+        )
         for row in result.mappings().all():
             category = str(row.get("category") or "").lower()
             indicator = str(row.get("indicator") or "").strip()
