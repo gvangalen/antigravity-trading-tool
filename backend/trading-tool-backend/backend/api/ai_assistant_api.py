@@ -3166,14 +3166,26 @@ async def get_finn_mission_control(
             "allow_cached_mission_control": True,
         },
     )
-    await _issue_finn_response_actions_safely(
-        finn,
-        db,
-        current_user["id"],
-        response,
-        trace_id=trace_id,
-        route_source="assistant_mission_control",
-    )
+    try:
+        await finn.issue_response_actions(current_user["id"], response)
+    except (DBAPIError, SQLAlchemyError) as exc:
+        logger.warning(
+            "Skipping FINN response action issuance after database failure on %s for user %s (trace_id=%s): %s",
+            "assistant_mission_control",
+            current_user["id"],
+            trace_id,
+            exc,
+        )
+        await db.rollback()
+    except Exception as exc:
+        logger.exception(
+            "Skipping FINN response action issuance after unexpected failure on %s for user %s (trace_id=%s)",
+            "assistant_mission_control",
+            current_user["id"],
+            trace_id,
+            exc_info=exc,
+        )
+        await db.rollback()
     response = await _enrich_with_trader_profile(db, current_user["id"], response)
     generation_status = str(
         ((response.get("first_dashboard_context") or {}).get("generation_status") or "")
