@@ -8,16 +8,25 @@ logger = logging.getLogger(__name__)
 
 @shared_task(name="backend.celery_task.onboarding_task.enqueue_first_dashboard_briefing", bind=True)
 def enqueue_first_dashboard_briefing(self, user_id: int, trigger: str = "onboarding_pipeline"):
-    from backend.infrastructure.database import async_session_factory
+    from backend.infrastructure.database import async_session_factory, engine, sync_engine
     from backend.services.finn_plan_service import FinnPlanService
 
     async def _run() -> dict:
+        try:
+            await engine.dispose()
+        except Exception:
+            logger.debug("Async engine dispose skipped before first-dashboard enqueue", exc_info=True)
+        try:
+            sync_engine.dispose()
+        except Exception:
+            logger.debug("Sync engine dispose skipped before first-dashboard enqueue", exc_info=True)
+
         async with async_session_factory() as session:
             service = FinnPlanService(session)
             return await service.enqueue_first_dashboard_briefing(
                 user_id,
                 trigger=trigger,
-                owner_task_id=self.request.id,
+                owner_task_id=getattr(self.request, "id", None),
             )
 
     return asyncio.run(_run())
@@ -33,18 +42,30 @@ def generate_first_dashboard_briefing(
     owner_task_id: str | None = None,
 ):
     from backend.infrastructure.database import async_session_factory
+    from backend.infrastructure.database import engine, sync_engine
     from backend.services.finn_plan_service import FinnPlanService
 
     async def _run() -> dict:
+        # Celery prefork workers can inherit pooled connections from the parent
+        # process. Clear them before opening an async session for briefing work.
+        try:
+            await engine.dispose()
+        except Exception:
+            logger.debug("Async engine dispose skipped before first-dashboard briefing", exc_info=True)
+        try:
+            sync_engine.dispose()
+        except Exception:
+            logger.debug("Sync engine dispose skipped before first-dashboard briefing", exc_info=True)
+
         async with async_session_factory() as session:
             service = FinnPlanService(session)
             result = await service.generate_and_store_first_dashboard_briefing(
                 user_id,
                 trigger=trigger,
-                task_id=self.request.id,
+                task_id=getattr(self.request, "id", None),
                 enqueued_context_version=enqueued_context_version,
                 attempt=attempt,
-                queue_name=(self.request.delivery_info or {}).get("routing_key"),
+                queue_name=(getattr(self.request, "delivery_info", None) or {}).get("routing_key"),
                 owner_task_id=owner_task_id,
             )
             try:

@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 from dotenv import load_dotenv
 from celery import Celery
 from celery.schedules import crontab
-from celery.signals import before_task_publish
+from celery.signals import before_task_publish, worker_process_init
 from kombu import Queue
 
 # =========================================================
@@ -71,6 +71,30 @@ def stamp_task_publish_time(headers=None, **kwargs):
     """Stamp newly published tasks so deep health can report queue age."""
     if isinstance(headers, dict) and "published_at" not in headers:
         headers["published_at"] = datetime.now(timezone.utc).isoformat()
+
+
+@worker_process_init.connect
+def reset_sqlalchemy_pools_after_fork(**kwargs):
+    """
+    Celery prefork workers may inherit pooled DB connections created in the
+    parent process. Clearing both sync and async pools on worker init prevents
+    asyncpg futures from being bound to the wrong event loop later on.
+    """
+    try:
+        from backend.infrastructure.database import engine, sync_engine
+
+        try:
+            engine.sync_engine.dispose()
+        except Exception:
+            logger.debug("Async engine pool reset skipped", exc_info=True)
+        try:
+            sync_engine.dispose()
+        except Exception:
+            logger.debug("Sync engine pool reset skipped", exc_info=True)
+
+        logger.info("♻️ SQLAlchemy pools reset after Celery worker fork")
+    except Exception:
+        logger.warning("⚠️ Failed to reset SQLAlchemy pools after Celery worker fork", exc_info=True)
 
 # =========================================================
 # 🚀 CELERY BEAT SCHEDULE (GEOPTIMALISEERD)
