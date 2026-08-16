@@ -750,27 +750,28 @@ def test_build_first_dashboard_context_returns_loading_when_payload_is_not_ready
     assert result["headline"] == "FINN is reviewing your plan"
 
 
-def test_schedule_first_dashboard_generation_if_needed_queues_missing_state(monkeypatch):
+def test_inline_generate_first_dashboard_briefing_if_needed_generates_missing_state(monkeypatch):
     service = FinnPlanService(db_session=object())
     stored_state = {}
-    queued = []
 
-    async def fake_store(_user_id, state):
+    async def fake_generate(_user_id, payload, state, *, trigger):
         stored_state.clear()
-        stored_state.update(state)
+        stored_state.update(
+            {
+                "first_dashboard_briefing": {
+                    "status": "ready",
+                    "context_version": payload["context_version"],
+                    "response_source": "ai_generated",
+                    "trigger": trigger,
+                }
+            }
+        )
+        return {"status": "ready", "response_source": "ai_generated"}
 
-    monkeypatch.setattr(service, "_store_first_dashboard_briefing_state", fake_store)
-
-    class _Task:
-        @staticmethod
-        def delay(user_id):
-            queued.append(user_id)
-
-    monkeypatch.setattr(finn_plan_module, "FIRST_DASHBOARD_MAX_RETRY_ATTEMPTS", 3)
-    monkeypatch.setitem(__import__("sys").modules, "backend.celery_task.onboarding_task", SimpleNamespace(generate_first_dashboard_briefing=_Task))
+    monkeypatch.setattr(service, "_generate_and_store_first_dashboard_briefing_from_payload", fake_generate)
 
     scheduled = asyncio.run(
-        service._schedule_first_dashboard_generation_if_needed(
+        service._inline_generate_first_dashboard_briefing_if_needed(
             7,
             _first_dashboard_payload("ctx-v7"),
             {},
@@ -778,10 +779,9 @@ def test_schedule_first_dashboard_generation_if_needed_queues_missing_state(monk
     )
 
     assert scheduled is True
-    assert queued == [7]
-    assert stored_state["first_dashboard_briefing"]["status"] == "retry_scheduled"
+    assert stored_state["first_dashboard_briefing"]["status"] == "ready"
     assert stored_state["first_dashboard_briefing"]["context_version"] == "ctx-v7"
-    assert stored_state["first_dashboard_briefing"]["trigger"] == "mission_control"
+    assert stored_state["first_dashboard_briefing"]["trigger"] == "mission_control_inline"
 
 
 def test_sanitize_context_drops_stale_plan_draft_for_setup_explain_prompt():

@@ -12672,8 +12672,25 @@ class FinnPlanService:
         if not payload:
             return {"status": "skipped", "reason": "not_first_dashboard"}
 
-        current_version = str(payload.get("context_version") or "")
         state = await self._load_first_dashboard_briefing_state(user_id)
+        return await self._generate_and_store_first_dashboard_briefing_from_payload(
+            user_id,
+            payload,
+            state,
+            trigger=trigger,
+        )
+
+    async def _generate_and_store_first_dashboard_briefing_from_payload(
+        self,
+        user_id: int,
+        payload: Dict[str, Any],
+        state: Dict[str, Any],
+        *,
+        trigger: str,
+    ) -> Dict[str, Any]:
+        state = state or {}
+
+        current_version = str(payload.get("context_version") or "")
         stored = state.get(FIRST_DASHBOARD_BRIEFING_METADATA_KEY) or {}
         stored_version = str(stored.get("context_version") or "")
         stored_status = str(stored.get("status") or "").lower()
@@ -12859,7 +12876,7 @@ class FinnPlanService:
             await self.maybe_schedule_first_dashboard_retry(user_id, stored_briefing)
             stored_state = await self._load_first_dashboard_briefing_state(user_id)
             stored_briefing = (stored_state.get(FIRST_DASHBOARD_BRIEFING_METADATA_KEY) or {}) if stored_state else {}
-        if await self._schedule_first_dashboard_generation_if_needed(user_id, payload, stored_state):
+        if await self._inline_generate_first_dashboard_briefing_if_needed(user_id, payload, stored_state):
             stored_state = await self._load_first_dashboard_briefing_state(user_id)
             stored_briefing = (stored_state.get(FIRST_DASHBOARD_BRIEFING_METADATA_KEY) or {}) if stored_state else {}
         display = self._resolve_first_dashboard_briefing_display(payload, stored_briefing)
@@ -12909,7 +12926,7 @@ class FinnPlanService:
         }
         return self._compose_first_dashboard_context(payload, display)
 
-    async def _schedule_first_dashboard_generation_if_needed(
+    async def _inline_generate_first_dashboard_briefing_if_needed(
         self,
         user_id: int,
         payload: Dict[str, Any],
@@ -12927,36 +12944,17 @@ class FinnPlanService:
             return False
         if stored_version == current_version and stored_status == "fallback" and not self._first_dashboard_retry_due(stored_briefing):
             return False
-
-        queued_at = _utc_now().isoformat()
-        next_state = {
-            **(stored_state or {}),
-            FIRST_DASHBOARD_BRIEFING_METADATA_KEY: {
-                "state_version": FIRST_DASHBOARD_BRIEFING_STATE_VERSION,
-                "status": "retry_scheduled",
-                "context_version": current_version,
-                "trigger": "mission_control",
-                "asset": payload.get("asset"),
-                "retry_count": int(stored_briefing.get("retry_count") or 0),
-                "retryable": True,
-                "max_retry_attempts": FIRST_DASHBOARD_MAX_RETRY_ATTEMPTS,
-                "next_retry_at": queued_at,
-                "input_snapshot": payload.get("input_snapshot") or {},
-                "fallback_result": payload.get("fallback_result") or {},
-                "updated_at": queued_at,
-                "started_at": stored_briefing.get("started_at") or queued_at,
-                "error": stored_briefing.get("error"),
-            },
-        }
-        await self._store_first_dashboard_briefing_state(user_id, next_state)
         try:
-            from backend.celery_task.onboarding_task import generate_first_dashboard_briefing
-
-            generate_first_dashboard_briefing.delay(user_id)
+            await self._generate_and_store_first_dashboard_briefing_from_payload(
+                user_id,
+                payload,
+                stored_state,
+                trigger="mission_control_inline",
+            )
             return True
         except Exception:
             logger.exception(
-                "Could not enqueue first dashboard briefing generation for user_id=%s trace_id=%s",
+                "Could not generate first dashboard briefing inline for user_id=%s trace_id=%s",
                 user_id,
                 self.trace_id,
             )
