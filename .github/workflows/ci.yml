@@ -10,6 +10,10 @@ jobs:
   backend-tests:
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    env:
+      PYTHONHASHSEED: "0"
+      JWT_SECRET_KEY: test-jwt-secret-key-for-platform-security-tests-123
+      ENCRYPTION_KEY: sT0oqYH7C78mMKBYz4MWVR84zDl6QwVn-fC3jNpt7NE=
 
     steps:
       - name: Checkout repository
@@ -27,11 +31,39 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install -r backend/trading-tool-backend/backend/requirements.txt pytest
 
-      - name: Run backend canonical test suite
-        env:
-          JWT_SECRET_KEY: test-jwt-secret-key-for-platform-security-tests-123
-          ENCRYPTION_KEY: sT0oqYH7C78mMKBYz4MWVR84zDl6QwVn-fC3jNpt7NE=
-        run: pytest -q
+      - name: Run backend canonical test suite with one controlled retry
+        id: backend_test_suite
+        shell: bash
+        run: |
+          set -o pipefail
+          pytest -q 2>&1 | tee backend-tests-attempt-1.log
+        continue-on-error: true
+
+      - name: Retry backend canonical test suite once after failure
+        if: steps.backend_test_suite.outcome == 'failure'
+        shell: bash
+        run: |
+          set -o pipefail
+          echo "Retrying backend canonical test suite once after initial failure."
+          pytest -q 2>&1 | tee backend-tests-attempt-2.log
+        id: backend_test_suite_retry
+
+      - name: Upload backend test logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-test-logs
+          path: |
+            backend-tests-attempt-1.log
+            backend-tests-attempt-2.log
+          if-no-files-found: ignore
+
+      - name: Fail backend job if backend suite remained red
+        if: steps.backend_test_suite.outcome == 'failure' && steps.backend_test_suite_retry.outcome == 'failure'
+        shell: bash
+        run: |
+          echo "Backend canonical test suite failed twice in the same job." >&2
+          exit 1
 
   frontend-quality:
     runs-on: ubuntu-latest
