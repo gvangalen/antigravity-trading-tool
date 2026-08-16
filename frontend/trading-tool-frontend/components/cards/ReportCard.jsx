@@ -19,7 +19,11 @@ export default function ReportCard() {
       : null;
 
   // ✅ 404 = eerste keer / nog geen rapport
-  const isFirstTime = error === 404;
+  const reportStatus =
+    safeReport && typeof safeReport._status === "string"
+      ? safeReport._status
+      : null;
+  const isFirstTime = error === 404 || reportStatus === "pending_first_report";
 
   // ✅ AI-quote fallback
   const quote =
@@ -62,7 +66,7 @@ export default function ReportCard() {
         )}
 
         {/* 🟢 RAPPORT AANWEZIG */}
-        {!loading && safeReport && (
+        {!loading && safeReport && !reportStatus && (
           <>
             <AIInsightBlock text={quote} variant="dashboard" />
 

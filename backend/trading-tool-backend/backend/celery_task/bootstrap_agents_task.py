@@ -6,6 +6,8 @@ from backend.celery_task.macro_task import fetch_macro_data
 from backend.celery_task.technical_task import fetch_technical_data_day
 from backend.celery_task.setup_task import run_setup_agent_daily
 from backend.celery_task.market_task import run_market_agent_daily
+from backend.celery_task.daily_report_task import generate_daily_report
+from backend.celery_task.onboarding_task import enqueue_first_dashboard_briefing
 from backend.services.portfolio_snapshot_service import snapshot_all_for_user
 
 logger = logging.getLogger(__name__)
@@ -46,6 +48,13 @@ def bootstrap_agents_task(self, user_id: int):
         # 6️⃣ Portfolio snapshot
         logger.info("💰 Creating portfolio snapshot")
         snapshot_all_for_user(user_id=user_id)
+
+        # 7️⃣ First deliverables for fresh onboarding users
+        logger.info("🧾 Queueing first daily report")
+        generate_daily_report.delay(user_id=user_id)
+
+        logger.info("🧭 Queueing first dashboard briefing")
+        enqueue_first_dashboard_briefing.delay(user_id=user_id, trigger="bootstrap_agents")
 
         logger.info(f"✅ Bootstrap complete for user {user_id}")
 

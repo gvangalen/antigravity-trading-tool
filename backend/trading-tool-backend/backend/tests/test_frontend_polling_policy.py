@@ -48,3 +48,11 @@ def test_freshness_sensitive_frontend_calls_are_explicitly_no_store():
     assert "waitUntilVisible()" in report_hook_source
     assert "forceFresh: true" in report_page_source
     assert "forceFresh: true" in report_hook_source
+
+
+def test_report_hook_and_card_handle_pending_first_report_state():
+    report_hook_source = _read(FRONTEND_ROOT / "hooks" / "useReportData.js")
+    report_card_source = _read(FRONTEND_ROOT / "components" / "cards" / "ReportCard.jsx")
+
+    assert 'reportStatus === \'pending_first_report\'' in report_hook_source
+    assert 'reportStatus === "pending_first_report"' in report_card_source

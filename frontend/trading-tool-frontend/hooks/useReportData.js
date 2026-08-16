@@ -118,6 +118,19 @@ export function useReportData(reportType = 'daily') {
 
         if (cancelled) return;
 
+        const reportStatus =
+          data && typeof data === 'object' && !Array.isArray(data)
+            ? data._status
+            : null;
+
+        if (reportStatus === 'pending' || reportStatus === 'pending_first_report') {
+          setReport(data);
+          setLoading(false);
+          setError(null);
+          setStatus('idle');
+          return;
+        }
+
         // ✅ REPORT BESTAAT → STOP ALLES
         if (data && typeof data === 'object' && Object.keys(data).length > 0) {
           setReport(data);

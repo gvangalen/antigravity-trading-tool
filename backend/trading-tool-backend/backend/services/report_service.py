@@ -291,7 +291,14 @@ class ReportService:
         row = await self.repository.get_latest_report(user_id, table_name, symbol=symbol)
         if not row:
             if table_name == "daily_reports":
-                raise ValueError("Geen dagelijks rapport gevonden")
+                return await localize_report_payload(
+                    {
+                        "_status": "pending_first_report",
+                        "headline": "Your first report is being prepared",
+                        "summary": "We are preparing your first daily report from your stored onboarding context.",
+                    },
+                    locale,
+                )
             else:
                 return {"_status": "pending"}
                 

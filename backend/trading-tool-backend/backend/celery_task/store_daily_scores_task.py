@@ -182,6 +182,22 @@ def build_daily_scores_for_user(user_id: int):
 # 2️⃣ CELERY TASK: RULE-BASED DAILY SCORES (ALLE USERS)
 # =========================================================
 @shared_task(
+    name="backend.celery_task.store_daily_scores_task.store_daily_scores_task"
+)
+def store_daily_scores_task(user_id: int):
+    """
+    Bouwt daily scores voor precies één user.
+
+    Deze wrapper wordt gebruikt door de onboarding-pipeline zodat
+    de eerste persoonlijke report- en briefingketen echt kan starten.
+    """
+    if user_id is None:
+        raise ValueError("❌ user_id is verplicht voor store_daily_scores_task")
+
+    build_daily_scores_for_user(user_id)
+
+
+@shared_task(
     name="backend.celery_task.store_daily_scores_task.run_rule_based_daily_scores"
 )
 def run_rule_based_daily_scores():

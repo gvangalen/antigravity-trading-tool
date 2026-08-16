@@ -88,6 +88,7 @@ def run_onboarding_pipeline(self, user_id: int):
     logger.info("=================================================")
 
     conn = get_db_connection()
+    pipeline_claimed = False
 
     try:
         # --------------------------------------------------
@@ -108,6 +109,7 @@ def run_onboarding_pipeline(self, user_id: int):
             rows = cur.fetchall()
 
         conn.commit()
+        pipeline_claimed = True
 
         if not rows:
             logger.warning(f"⚠️ Onboarding al gestart voor user_id={user_id}")
@@ -125,9 +127,9 @@ def run_onboarding_pipeline(self, user_id: int):
         from backend.celery_task.store_daily_scores_task import (
             store_daily_scores_task,
         )
-        from backend.ai_agents.macro_ai_agent import generate_macro_insight
-        from backend.ai_agents.market_ai_agent import generate_market_insight
-        from backend.ai_agents.technical_ai_agent import generate_technical_insight
+        from backend.celery_task.macro_task import generate_macro_insight
+        from backend.celery_task.market_task import run_market_agent_daily
+        from backend.celery_task.technical_task import run_technical_agent_daily
         from backend.celery_task.setup_task import run_setup_agent_daily
 
         # 🔥 JUISTE STRATEGY TASK
@@ -146,8 +148,8 @@ def run_onboarding_pipeline(self, user_id: int):
 
             # 2️⃣–4️⃣ AI insights
             generate_macro_insight.si(user_id),
-            generate_market_insight.si(user_id),
-            generate_technical_insight.si(user_id),
+            run_market_agent_daily.si(user_id),
+            run_technical_agent_daily.si(user_id),
 
             # 5️⃣ Setup agent → beste setup van de dag
             run_setup_agent_daily.si(user_id),
@@ -174,6 +176,23 @@ def run_onboarding_pipeline(self, user_id: int):
 
     except Exception:
         conn.rollback()
+        if pipeline_claimed:
+            try:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        """
+                        UPDATE onboarding_steps
+                        SET pipeline_started = FALSE
+                        WHERE user_id = %s
+                          AND flow = 'default';
+                        """,
+                        (user_id,),
+                    )
+                conn.commit()
+                logger.warning("↩️ pipeline_started teruggezet na fout voor user_id=%s", user_id)
+            except Exception:
+                conn.rollback()
+                logger.exception("❌ Kon pipeline_started niet terugzetten voor user_id=%s", user_id)
         logger.error("❌ Onboarding pipeline fout", exc_info=True)
         raise
 

@@ -38,6 +38,7 @@ TASK_QUEUE_ROUTES: Dict[str, str] = {
     "backend.celery_task.macro_task.generate_macro_insight": "ai_generation",
     "backend.celery_task.technical_task.fetch_technical_data_day": "market_data",
     "backend.celery_task.technical_task.run_technical_agent_daily": "ai_generation",
+    "backend.celery_task.store_daily_scores_task.store_daily_scores_task": "scoring",
     "backend.celery_task.store_daily_scores_task.run_rule_based_daily_scores": "scoring",
     "backend.celery_task.store_daily_scores_task.run_master_score_ai": "ai_generation",
     "backend.celery_task.user_scoring_sync_task.sync_all_users_scores": "scoring",
