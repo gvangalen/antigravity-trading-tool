@@ -757,6 +757,21 @@ def test_education_and_general_request_detection_are_explicit():
     ) is True
 
 
+def test_cross_workspace_plan_review_prompt_does_not_drift_to_context_explain():
+    service = _service()
+    prompt = (
+        "Bekijk mijn BTC-profiel, indicatoren, setup, strategie en gekoppelde bot. "
+        "Wat is volgens jou op dit moment het belangrijkste ontbrekende onderdeel van mijn plan? "
+        "Geef een concrete observatie en een vervolgstap."
+    )
+
+    assert service.looks_like_cross_workspace_plan_review_request(prompt) is True
+    assert service.looks_like_entity_explain_request(
+        prompt,
+        {"page": "/report", "page_type": "Reports", "symbol": "BTC", "setup_id": 262},
+    ) is False
+
+
 def test_build_education_response_covers_core_topic_in_simple_mode():
     service = _service()
 
