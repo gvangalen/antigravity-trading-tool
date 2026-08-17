@@ -720,6 +720,40 @@ class FinnV2ReasoningResult(Base):
     completed_at = Column(DateTime(timezone=True), nullable=True)
 
 
+class FinnV2VerifierResult(Base):
+    __tablename__ = "finn_v2_verifier_results"
+
+    id = Column(String, primary_key=True)
+    run_id = Column(String, ForeignKey("finn_v2_runs.id", ondelete="CASCADE"), nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    draft_id = Column(String, nullable=False)
+    reasoning_result_id = Column(String, ForeignKey("finn_v2_reasoning_results.id", ondelete="SET NULL"), nullable=True, index=True)
+    passed = Column(Boolean, nullable=False)
+    action = Column(String, nullable=False)
+    result_json = Column(JSONB, nullable=False)
+    reason_codes_json = Column(JSONB, nullable=False, default=list, server_default=text("'[]'::jsonb"))
+    deterministic_version = Column(String, nullable=False)
+    semantic_verifier_used = Column(Boolean, nullable=False, default=False, server_default=text("FALSE"))
+    semantic_model = Column(String, nullable=True)
+    repair_attempt = Column(Integer, nullable=False, default=0, server_default=text("0"))
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=text("NOW()"))
+
+
+class FinnV2VerifiedResponse(Base):
+    __tablename__ = "finn_v2_verified_responses"
+
+    id = Column(String, primary_key=True)
+    run_id = Column(String, ForeignKey("finn_v2_runs.id", ondelete="CASCADE"), nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    verifier_result_id = Column(String, ForeignKey("finn_v2_verifier_results.id", ondelete="CASCADE"), nullable=False, index=True)
+    mode = Column(String, nullable=False)
+    verifier_status = Column(String, nullable=False)
+    response_json = Column(JSONB, nullable=False)
+    evidence_set_hash = Column(String, nullable=False)
+    response_version = Column(String, nullable=False)
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=text("NOW()"))
+
+
 class AiPendingAction(Base):
     __tablename__ = 'ai_pending_actions'
 

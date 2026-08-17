@@ -15,6 +15,7 @@ from backend.services.finn_v2_flag_service import FinnV2FlagService
 from backend.services.finn_v2_orchestrator_outcome_service import FinnV2OrchestratorOutcomeService
 from backend.services.finn_v2_policy_engine_service import FinnV2PolicyEngineService
 from backend.services.finn_v2_reasoning_service import FinnV2ReasoningService
+from backend.services.finn_v2_response_verifier_service import FinnV2ResponseVerifierService
 from backend.services.finn_v2_request_analysis_service import FinnV2RequestAnalysisService
 from backend.services.finn_v2_risk_classification_service import FinnV2RiskClassificationService
 from backend.services.finn_v2_tool_execution_service import FinnV2ToolExecutionService
@@ -46,6 +47,7 @@ class FinnV2OrchestratorService:
         self.policy = FinnV2PolicyEngineService(session, self.flags)
         self.risk = FinnV2RiskClassificationService()
         self.reasoning = FinnV2ReasoningService(session, flag_service=self.flags)
+        self.verifier = FinnV2ResponseVerifierService(session, flag_service=self.flags)
         self.complete_placeholder = complete_placeholder
 
     async def execute_run(
@@ -148,6 +150,13 @@ class FinnV2OrchestratorService:
                     run_id=run_id,
                     trace_id=trace_id,
                 )
+            verified_response = None
+            if self.flags.should_run_block7_shadow(user_id) and reasoning_result is not None:
+                verified_response = await self.verifier.verify_run(
+                    user_id=user_id,
+                    run_id=run_id,
+                    trace_id=trace_id,
+                )
             await self._append_trace(
                 run_id=run_id,
                 user_id=user_id,
@@ -163,6 +172,8 @@ class FinnV2OrchestratorService:
                     "policy_class": getattr(policy_decision, "policy_class", None),
                     "proposal_input_required": getattr(policy_decision, "proposal_input_required", False),
                     "reasoning_status": getattr(reasoning_result, "status", None),
+                    "verified_response_mode": getattr(verified_response, "mode", None),
+                    "verified_response_status": getattr(verified_response, "verifier_status", None),
                     "duration_ms": int((monotonic() - started) * 1000),
                 },
             )
