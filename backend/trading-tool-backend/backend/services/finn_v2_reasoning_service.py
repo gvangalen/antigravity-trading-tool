@@ -25,6 +25,7 @@ from backend.schemas.finn_v2_reasoning_schema import (
     ReasoningResult,
 )
 from backend.services.finn_v2_flag_service import FinnV2FlagService
+from backend.services.finn_v2_json_safety import to_json_safe
 from backend.services.finn_v2_reasoning_context_service import FinnV2ReasoningContextService
 from backend.services.finn_v2_reasoning_fallback_service import FinnV2ReasoningFallbackService
 from backend.services.finn_v2_reasoning_prompt_service import FinnV2ReasoningPromptService
@@ -193,7 +194,11 @@ class FinnV2ReasoningService:
             )
 
         availability = openai_client.get_openai_runtime_status()
-        if not self.flags.should_run_block6_shadow(user_id) or not availability.get("configured") or not openai_client.get_ai_availability()["available"]:
+        if (
+            (not self._is_visible_run(run) and not self.flags.should_run_block6_shadow(user_id))
+            or not availability.get("configured")
+            or not openai_client.get_ai_availability()["available"]
+        ):
             result = self.fallbacks.unavailable_draft(
                 run_id=run_id,
                 user_id=user_id,
@@ -373,7 +378,7 @@ class FinnV2ReasoningService:
             schema_version=FINN_V2_REASONING_SCHEMA_VERSION,
             reasoning_version=FINN_V2_REASONING_VERSION,
             model=kwargs["model"],
-            result_json=result.dict() if result is not None else None,
+            result_json=to_json_safe(result.dict()) if result is not None else None,
             error_codes_json=kwargs.get("error_codes", []),
             input_tokens=kwargs.get("input_tokens"),
             output_tokens=kwargs.get("output_tokens"),
@@ -457,3 +462,6 @@ class FinnV2ReasoningService:
 
     def _resolved_model(self) -> str:
         return self.flags.reasoning_model_override() or openai_client.get_openai_runtime_status().get("model") or "unknown"
+
+    def _is_visible_run(self, run) -> bool:
+        return getattr(run, "visibility", None) == "visible" or getattr(run, "feature_mode", None) in {"visible_runtime", "visible_readonly"}

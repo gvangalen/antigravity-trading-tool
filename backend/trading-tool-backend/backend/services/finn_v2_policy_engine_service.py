@@ -12,6 +12,7 @@ from backend.schemas.finn_v2_orchestrator_schema import OrchestratorResult
 from backend.schemas.finn_v2_policy_schema import FinnV2PolicyDecision, POLICY_VERSION
 from backend.schemas.finn_v2_state_schema import FinancialStateSnapshot
 from backend.services.finn_v2_flag_service import FinnV2FlagService
+from backend.services.finn_v2_json_safety import to_json_safe
 from backend.services.finn_v2_risk_classification_service import FinnV2RiskClassificationService
 
 
@@ -199,7 +200,7 @@ class FinnV2PolicyEngineService:
             execution_allowed=decision.execution_allowed,
             shadow_safe=decision.shadow_safe,
             evidence_set_hash=decision.evidence_set_hash,
-            decision_json=decision.dict(),
+            decision_json=to_json_safe(decision.dict()),
             policy_version=decision.policy_version,
             created_at=decision.created_at,
         )

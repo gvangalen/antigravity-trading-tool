@@ -34,6 +34,7 @@ from backend.schemas.finn_v2_reasoning_schema import PersistedReasoningRecord, R
 from backend.schemas.finn_v2_response_schema import FINN_V2_VERIFIED_RESPONSE_VERSION, ResponseDraft, VerifiedResponse
 from backend.schemas.finn_v2_verifier_schema import ClaimVerification, CoverageVerification, SemanticVerificationResult, VerifierResult
 from backend.services.finn_v2_flag_service import FinnV2FlagService
+from backend.services.finn_v2_json_safety import to_json_safe
 from backend.services.finn_v2_proposal_service import FinnV2ProposalService
 from backend.services.finn_v2_reasoning_context_service import FinnV2ReasoningContextService
 from backend.services.finn_v2_response_downgrade_service import FinnV2ResponseDowngradeService
@@ -414,7 +415,7 @@ class FinnV2ResponseVerifierService:
             reasoning_result_id=draft.reasoning_result_id,
             passed=verifier.passed,
             action=verifier.action,
-            result_json=verifier.dict(),
+            result_json=to_json_safe(verifier.dict()),
             reason_codes_json=verifier.reason_codes,
             deterministic_version=verifier.verifier_version,
             semantic_verifier_used=verifier.semantic_verifier_used,
@@ -449,7 +450,7 @@ class FinnV2ResponseVerifierService:
             verifier_result_id=record.verifier_result_id,
             mode=record.mode,
             verifier_status=record.verifier_status,
-            response_json=record.dict(),
+            response_json=to_json_safe(record.dict()),
             evidence_set_hash=record.evidence_set_hash,
             response_version=record.response_version,
             created_at=record.created_at,
