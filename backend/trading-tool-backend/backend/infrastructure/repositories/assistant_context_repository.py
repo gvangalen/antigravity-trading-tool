@@ -41,6 +41,7 @@ class AssistantContextRepository:
     """
     def __init__(self, session: AsyncSession):
         self.session = session
+        self._user_indicator_config_columns_cache: Optional[set[str]] = None
         # Re-use existing repositories by instantiating them with the same shared session
         self.user_repo = UserRepository(session)
         self.state_repo = ConversationStateRepository(session)
@@ -50,6 +51,40 @@ class AssistantContextRepository:
         self.setup_repo = SetupRepository(session)
         self.report_repo = ReportRepository(session)
         self.strategy_repo = StrategyRepository(session)
+
+    async def _get_user_indicator_config_columns(self) -> set[str]:
+        if self._user_indicator_config_columns_cache is not None:
+            return self._user_indicator_config_columns_cache
+
+        try:
+            result = await self.session.execute(
+                text(
+                    """
+                    SELECT column_name
+                    FROM information_schema.columns
+                    WHERE table_schema = 'public'
+                      AND table_name = 'user_indicator_configs'
+                    """
+                )
+            )
+            columns = {str(column_name) for column_name in result.scalars().all()}
+        except Exception:
+            columns = set()
+
+        if not columns:
+            columns = {
+                "id",
+                "user_id",
+                "indicator",
+                "category",
+                "priority",
+                "enabled",
+                "symbol",
+                "created_at",
+            }
+
+        self._user_indicator_config_columns_cache = columns
+        return columns
 
     def _normalize_asset_symbol(self, value: Optional[str]) -> Optional[str]:
         normalized = str(value or "").strip().upper()
@@ -341,18 +376,38 @@ class AssistantContextRepository:
         }
 
     async def _configured_indicator_context(self, user_id: int, asset: str) -> Dict[str, List[str]]:
-        result = await self.session.execute(text("""
-            SELECT category, indicator
+        columns = await self._get_user_indicator_config_columns()
+        category_select = "category" if "category" in columns else "'technical' AS category"
+        conditions = ["user_id = :user_id"]
+        params: Dict[str, Any] = {"user_id": user_id, "symbol": asset}
+
+        if "enabled" in columns:
+            conditions.append("enabled = TRUE")
+        if "symbol" in columns:
+            conditions.append(
+                "("
+                "symbol = :symbol "
+                "OR symbol IS NULL "
+                "OR symbol = 'GLOBAL'"
+                ")"
+            )
+
+        order_parts: List[str] = []
+        if "category" in columns:
+            order_parts.append("category ASC")
+        if "priority" in columns:
+            order_parts.append("priority ASC")
+        order_parts.append("indicator ASC")
+
+        query = text(
+            f"""
+            SELECT {category_select}, indicator
             FROM user_indicator_configs
-            WHERE user_id = :user_id
-              AND enabled = TRUE
-              AND (
-                symbol = :symbol
-                OR symbol IS NULL
-                OR symbol = 'GLOBAL'
-              )
-            ORDER BY category ASC, priority ASC, indicator ASC
-        """), {"user_id": user_id, "symbol": asset})
+            WHERE {' AND '.join(conditions)}
+            ORDER BY {', '.join(order_parts)}
+            """
+        )
+        result = await self.session.execute(query, params)
         by_category: Dict[str, List[str]] = {"market": [], "macro": [], "technical": []}
         for row in result.mappings().all():
             category = str(row.get("category") or "").lower()
