@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from backend.infrastructure.repositories.technical_data_repository import TechnicalDataRepository
+from backend.schemas.finn_v2_evidence_schema import IndicatorConfigurationData, IndicatorConfigurationItem
 
 
 class IndicatorToolAdapter:
@@ -10,19 +11,22 @@ class IndicatorToolAdapter:
     async def execute(self, *, user_id: int, asset: str, **_kwargs):
         configs = await self.repository.get_user_configs(user_id, category="technical", symbol=asset)
         serialized = [
-            {
-                "indicator": row.indicator,
-                "category": row.category,
-                "priority": row.priority,
-                "enabled": row.enabled,
-                "symbol": row.symbol,
-                "asset_class": row.asset_class,
-            }
+            IndicatorConfigurationItem(
+                indicator=row.indicator,
+                category=row.category,
+                priority=row.priority,
+                enabled=row.enabled,
+                symbol=row.symbol,
+                asset_class=row.asset_class,
+            )
             for row in configs
         ]
         return {
-            "data": {"symbol": asset, "technical": serialized},
+            "data": IndicatorConfigurationData(symbol=asset, technical=serialized),
             "summary": {"title": "indicator_configuration", "symbol": asset, "technical_count": len(serialized)},
             "as_of": None,
+            "source": "user_indicator_configs",
+            "schema_name": "IndicatorConfigurationData",
+            "entity_type": "indicator_configuration",
+            "asset": asset,
         }
-

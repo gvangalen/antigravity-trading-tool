@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from backend.infrastructure.repositories.market_data_repository import MarketDataRepository
+from backend.schemas.finn_v2_evidence_schema import MarketSnapshotData
 
 
 class MarketToolAdapter:
@@ -20,8 +21,11 @@ class MarketToolAdapter:
             "as_of": snapshot.timestamp,
         }
         return {
-            "data": payload,
+            "data": MarketSnapshotData(**payload),
             "summary": {"title": "market_snapshot", "symbol": snapshot.symbol, "price": payload["price"]},
             "as_of": snapshot.timestamp,
+            "source": "market_data",
+            "schema_name": "MarketSnapshotData",
+            "entity_type": "market_snapshot",
+            "asset": snapshot.symbol,
         }
-

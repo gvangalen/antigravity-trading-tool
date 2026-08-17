@@ -537,6 +537,63 @@ class FinnV2ToolCall(Base):
     redacted_at = Column(DateTime(timezone=True), nullable=True)
 
 
+class FinnV2EvidenceArtifact(Base):
+    __tablename__ = "finn_v2_evidence_artifacts"
+
+    id = Column(String, primary_key=True)
+    run_id = Column(String, ForeignKey("finn_v2_runs.id", ondelete="CASCADE"), nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    tool_call_id = Column(Integer, ForeignKey("finn_v2_tool_calls.id", ondelete="CASCADE"), nullable=False, unique=True, index=True)
+    tool_name = Column(String, nullable=False)
+    entity_type = Column(String, nullable=True)
+    entity_id = Column(String, nullable=True)
+    asset = Column(String, nullable=True)
+    source = Column(String, nullable=False)
+    resolution_source = Column(String, nullable=False)
+    user_scoped = Column(Boolean, nullable=False, default=True, server_default=text("TRUE"))
+    source_as_of = Column(DateTime(timezone=True), nullable=True)
+    freshness = Column(String, nullable=False)
+    availability = Column(String, nullable=False)
+    schema_name = Column(String, nullable=False)
+    schema_version = Column(String, nullable=False)
+    content_hash = Column(String, nullable=False, index=True)
+    payload_json = Column(JSONB, nullable=True)
+    error_codes_json = Column(JSONB, nullable=False, default=list, server_default=text("'[]'::jsonb"))
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=text("NOW()"))
+    redacted_at = Column(DateTime(timezone=True), nullable=True)
+
+
+class FinnV2StateSnapshot(Base):
+    __tablename__ = "finn_v2_state_snapshots"
+
+    id = Column(String, primary_key=True)
+    run_id = Column(String, ForeignKey("finn_v2_runs.id", ondelete="CASCADE"), nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    revision = Column(Integer, nullable=False)
+    schema_version = Column(String, nullable=False)
+    assembly_version = Column(String, nullable=False)
+    evidence_set_hash = Column(String, nullable=False, index=True)
+    snapshot_json = Column(JSONB, nullable=True)
+    assembled_at = Column(DateTime(timezone=True), nullable=False, server_default=text("NOW()"))
+    redacted_at = Column(DateTime(timezone=True), nullable=True)
+
+
+class FinnV2ValidationResult(Base):
+    __tablename__ = "finn_v2_validation_results"
+
+    id = Column(String, primary_key=True)
+    snapshot_id = Column(String, ForeignKey("finn_v2_state_snapshots.id", ondelete="CASCADE"), nullable=False, index=True)
+    run_id = Column(String, ForeignKey("finn_v2_runs.id", ondelete="CASCADE"), nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    schema_version = Column(String, nullable=False)
+    validator_version = Column(String, nullable=False)
+    evidence_set_hash = Column(String, nullable=False)
+    integrity_status = Column(String, nullable=False, index=True)
+    result_json = Column(JSONB, nullable=True)
+    validated_at = Column(DateTime(timezone=True), nullable=False, server_default=text("NOW()"))
+    redacted_at = Column(DateTime(timezone=True), nullable=True)
+
+
 class AiPendingAction(Base):
     __tablename__ = 'ai_pending_actions'
 

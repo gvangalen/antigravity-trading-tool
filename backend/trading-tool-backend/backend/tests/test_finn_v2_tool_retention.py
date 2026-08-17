@@ -11,11 +11,19 @@ class _FakeToolCallRepo:
         return 4
 
 
+class _FakePayloadRepo:
+    async def redact_payloads_older_than(self, cutoff):
+        return 0
+
+
 def test_tool_retention_redacts_results_before_metadata_deletion():
     service = FinnV2ToolExecutionService(session=object())
     service.calls = _FakeToolCallRepo()
+    service.evidence_repo = _FakePayloadRepo()
+    service.state_repo = _FakePayloadRepo()
+    service.validation_repo = _FakePayloadRepo()
 
     result = asyncio.run(service.apply_retention())
 
-    assert result == {"tool_results_redacted": 2, "tool_metadata_deleted": 4}
-
+    assert result["tool_results_redacted"] == 2
+    assert result["tool_metadata_deleted"] == 4
