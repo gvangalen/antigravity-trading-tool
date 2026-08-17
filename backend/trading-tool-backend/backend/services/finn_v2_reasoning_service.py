@@ -1,0 +1,459 @@
+from __future__ import annotations
+
+import uuid
+from datetime import datetime, timezone
+from time import monotonic
+from typing import Optional
+
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from backend.infrastructure.repositories.finn_v2_orchestrator_repository import FinnV2OrchestratorRepository
+from backend.infrastructure.repositories.finn_v2_policy_repository import FinnV2PolicyRepository
+from backend.infrastructure.repositories.finn_v2_reasoning_repository import FinnV2ReasoningRepository
+from backend.infrastructure.repositories.finn_v2_run_repository import FinnV2RunRepository
+from backend.infrastructure.repositories.finn_v2_state_repository import FinnV2StateRepository
+from backend.infrastructure.repositories.finn_v2_trace_repository import FinnV2TraceRepository
+from backend.infrastructure.repositories.finn_v2_validation_repository import FinnV2ValidationRepository
+from backend.schemas.finn_v2_orchestrator_schema import ORCHESTRATOR_VERSION, OrchestratorResult
+from backend.schemas.finn_v2_policy_schema import POLICY_VERSION, FinnV2PolicyDecision
+from backend.schemas.finn_v2_reasoning_context_schema import REASONING_CONTEXT_VERSION
+from backend.schemas.finn_v2_reasoning_schema import (
+    FINN_V2_REASONING_PROMPT_VERSION,
+    FINN_V2_REASONING_SCHEMA_VERSION,
+    FINN_V2_REASONING_VERSION,
+    PersistedReasoningRecord,
+    ReasoningResult,
+)
+from backend.services.finn_v2_flag_service import FinnV2FlagService
+from backend.services.finn_v2_reasoning_context_service import FinnV2ReasoningContextService
+from backend.services.finn_v2_reasoning_fallback_service import FinnV2ReasoningFallbackService
+from backend.services.finn_v2_reasoning_prompt_service import FinnV2ReasoningPromptService
+from backend.services.platform_metrics import increment_execution_safety_counter, record_latency_sample
+from backend.utils import openai_client
+
+
+class FinnV2ReasoningService:
+    def __init__(self, session: AsyncSession, *, flag_service: Optional[FinnV2FlagService] = None):
+        self.session = session
+        self.flags = flag_service or FinnV2FlagService()
+        self.runs = FinnV2RunRepository(session)
+        self.orchestrators = FinnV2OrchestratorRepository(session)
+        self.policies = FinnV2PolicyRepository(session)
+        self.snapshots = FinnV2StateRepository(session)
+        self.validations = FinnV2ValidationRepository(session)
+        self.reasoning = FinnV2ReasoningRepository(session)
+        self.traces = FinnV2TraceRepository(session)
+        self.contexts = FinnV2ReasoningContextService(
+            session,
+            max_evidence_items=self.flags.reasoning_max_evidence_items(),
+            max_context_bytes=self.flags.reasoning_max_context_bytes(),
+        )
+        self.prompts = FinnV2ReasoningPromptService()
+        self.fallbacks = FinnV2ReasoningFallbackService()
+
+    async def reason(self, *, user_id: int, run_id: str, trace_id: str):
+        run = await self.runs.get_by_id_for_user(run_id=run_id, user_id=user_id)
+        if run is None:
+            raise LookupError("FINN V2 run not found")
+
+        orchestrator_row = await self.orchestrators.get_for_run_version(run_id=run_id, user_id=user_id, orchestrator_version=ORCHESTRATOR_VERSION)
+        if orchestrator_row is None:
+            raise ValueError("orchestrator_not_ready")
+        orchestrator_result = OrchestratorResult.parse_obj(
+            {
+                "orchestrator_result_id": orchestrator_row.id,
+                "run_id": orchestrator_row.run_id,
+                "user_id": orchestrator_row.user_id,
+                "analysis": {
+                    "interaction_mode": orchestrator_row.interaction_mode,
+                    "subject_scopes": orchestrator_row.subject_scopes_json,
+                    "explicit_asset": None,
+                    "explicit_setup_id": None,
+                    "explicit_strategy_id": None,
+                    "explicit_bot_id": None,
+                    "requires_comparison": False,
+                    "requires_gap_analysis": False,
+                    "requests_change": orchestrator_row.interaction_mode in {"PROPOSAL", "ACTION"},
+                    "requests_execution": orchestrator_row.interaction_mode == "ACTION",
+                    "confidence": "medium",
+                    "matched_signals": [],
+                    "unresolved_signals": [],
+                    "reasoning_required": orchestrator_row.interaction_mode in {"EVALUATION", "PROPOSAL", "ACTION"},
+                    "analysis_version": orchestrator_row.analysis_version,
+                },
+                "domain_requirements": {
+                    "required_domains": orchestrator_row.required_domains_json,
+                    "optional_domains": orchestrator_row.optional_domains_json,
+                    "requirement_reason": [],
+                },
+                "tool_plan": orchestrator_row.tool_plan_json,
+                "snapshot_id": orchestrator_row.snapshot_id,
+                "validation_id": orchestrator_row.validation_id,
+                "outcome": orchestrator_row.outcome,
+                "selected_clarification": orchestrator_row.selected_clarification_json,
+                "unavailable_codes": orchestrator_row.unavailable_codes_json,
+                "uncertainty_codes": orchestrator_row.uncertainty_codes_json,
+                "orchestrator_version": orchestrator_row.orchestrator_version,
+                "created_at": orchestrator_row.created_at,
+            }
+        )
+        snapshot = await self.snapshots.get_by_id_for_user(snapshot_id=orchestrator_result.snapshot_id, user_id=user_id) if orchestrator_result.snapshot_id else None
+        validation = await self.validations.get_by_id_for_user(validation_id=orchestrator_result.validation_id, user_id=user_id) if orchestrator_result.validation_id else None
+        policy_row = await self.policies.get_for_run_version(run_id=run_id, user_id=user_id, policy_version=POLICY_VERSION)
+        policy = FinnV2PolicyDecision.parse_obj(policy_row.decision_json) if policy_row is not None else None
+
+        if orchestrator_result.outcome != "reasoning_ready":
+            result = self.fallbacks.deterministic_draft(run_id=run_id, user_id=user_id, orchestrator_result=orchestrator_result, model=self._resolved_model())
+            return await self._persist_record(
+                run_id=run_id,
+                user_id=user_id,
+                orchestrator_result_id=orchestrator_result.orchestrator_result_id,
+                policy_decision_id=policy.policy_decision_id if policy is not None else "",
+                snapshot_id=snapshot.id if snapshot is not None else "",
+                validation_id=validation.id if validation is not None else "",
+                status="unavailable",
+                mode=result.mode,
+                context_version=REASONING_CONTEXT_VERSION,
+                evidence_set_hash=validation.evidence_set_hash if validation is not None else "",
+                input_hash="",
+                model=result.model,
+                result=result,
+                error_codes=orchestrator_result.unavailable_codes or orchestrator_result.uncertainty_codes,
+                retry_count=0,
+            )
+
+        if snapshot is None or validation is None or policy is None:
+            raise ValueError("reasoning_dependencies_missing")
+        if validation.integrity_status == "invalid":
+            result = self.fallbacks.unavailable_draft(
+                run_id=run_id,
+                user_id=user_id,
+                mode=orchestrator_result.analysis.interaction_mode,
+                error_codes=["snapshot_integrity_invalid"],
+                model=self._resolved_model(),
+            )
+            return await self._persist_record(
+                run_id=run_id,
+                user_id=user_id,
+                orchestrator_result_id=orchestrator_result.orchestrator_result_id,
+                policy_decision_id=policy.policy_decision_id,
+                snapshot_id=snapshot.id,
+                validation_id=validation.id,
+                status="unavailable",
+                mode=result.mode,
+                context_version=REASONING_CONTEXT_VERSION,
+                evidence_set_hash=validation.evidence_set_hash,
+                input_hash="",
+                model=result.model,
+                result=result,
+                error_codes=["snapshot_integrity_invalid"],
+                retry_count=0,
+            )
+
+        context = await self.contexts.build(run=run, orchestrator_result=orchestrator_result, snapshot=snapshot, validation=validation, policy=policy)
+        model_name = self._resolved_model()
+        input_hash = self.contexts.input_hash(context, prompt_version=self.prompts.PROMPT_VERSION, model=model_name)
+        reused = await self.reasoning.get_reusable_result(
+            run_id=run_id,
+            user_id=user_id,
+            context_version=context.context_version,
+            evidence_set_hash=context.evidence_set_hash,
+            prompt_version=self.prompts.PROMPT_VERSION,
+            model=model_name,
+        )
+        if reused is not None:
+            await self._append_trace(run_id, user_id, trace_id, "reasoning_result_reused", context, model_name, "ready", 0, 0, input_hash, [])
+            increment_execution_safety_counter("finn_v2_reasoning_reuse_total")
+            return PersistedReasoningRecord(
+                reasoning_result_id=reused.id,
+                run_id=reused.run_id,
+                user_id=reused.user_id,
+                orchestrator_result_id=reused.orchestrator_result_id,
+                policy_decision_id=reused.policy_decision_id,
+                snapshot_id=reused.snapshot_id,
+                validation_id=reused.validation_id,
+                status=reused.status,
+                mode=reused.mode,
+                context_version=reused.context_version,
+                evidence_set_hash=reused.evidence_set_hash,
+                input_hash=reused.input_hash,
+                prompt_version=reused.prompt_version,
+                schema_version=reused.schema_version,
+                reasoning_version=reused.reasoning_version,
+                model=reused.model,
+                result=ReasoningResult.parse_obj(reused.result_json) if reused.result_json else None,
+                error_codes=reused.error_codes_json,
+                input_tokens=reused.input_tokens,
+                output_tokens=reused.output_tokens,
+                reasoning_tokens=reused.reasoning_tokens,
+                latency_ms=reused.latency_ms,
+                retry_count=reused.retry_count,
+                created_at=reused.created_at,
+                completed_at=reused.completed_at,
+            )
+
+        availability = openai_client.get_openai_runtime_status()
+        if not self.flags.should_run_block6_shadow(user_id) or not availability.get("configured") or not openai_client.get_ai_availability()["available"]:
+            result = self.fallbacks.unavailable_draft(
+                run_id=run_id,
+                user_id=user_id,
+                mode=context.interaction_mode,
+                error_codes=[str(openai_client.get_ai_availability().get("reason") or "ai_unavailable_configuration")],
+                model=model_name,
+            )
+            await self._append_trace(run_id, user_id, trace_id, "reasoning_unavailable", context, model_name, "unavailable", None, 0, input_hash, [str(openai_client.get_ai_availability().get("reason") or "ai_unavailable_configuration")])
+            return await self._persist_record(
+                run_id=run_id,
+                user_id=user_id,
+                orchestrator_result_id=orchestrator_result.orchestrator_result_id,
+                policy_decision_id=policy.policy_decision_id,
+                snapshot_id=snapshot.id,
+                validation_id=validation.id,
+                status="unavailable",
+                mode=result.mode,
+                context_version=context.context_version,
+                evidence_set_hash=context.evidence_set_hash,
+                input_hash=input_hash,
+                model=model_name,
+                result=result,
+                error_codes=[str(openai_client.get_ai_availability().get("reason") or "ai_unavailable_configuration")],
+                retry_count=0,
+            )
+
+        return await self._run_model_reasoning(
+            run_id=run_id,
+            user_id=user_id,
+            trace_id=trace_id,
+            orchestrator_result=orchestrator_result,
+            policy=policy,
+            snapshot=snapshot,
+            validation=validation,
+            context=context,
+            model_name=model_name,
+            input_hash=input_hash,
+        )
+
+    async def _run_model_reasoning(self, *, run_id: str, user_id: int, trace_id: str, orchestrator_result, policy, snapshot, validation, context, model_name: str, input_hash: str):
+        started = monotonic()
+        await self._append_trace(run_id, user_id, trace_id, "reasoning_context_built", context, model_name, "pending", None, 0, input_hash, [])
+        retries_allowed = self.flags.reasoning_max_retries()
+        last_error_codes: list[str] = []
+        for attempt in range(retries_allowed + 1):
+            await self._append_trace(run_id, user_id, trace_id, "reasoning_started", context, model_name, "generating", None, attempt, input_hash, [])
+            response = openai_client.ask_gpt_structured_response(
+                prompt=self.prompts.build_user_prompt(context),
+                system_role=self.prompts.build_system_prompt(context),
+                schema=self.prompts.response_schema(),
+                model_override=model_name,
+                timeout_seconds=self.flags.reasoning_timeout_seconds(),
+                max_output_tokens=self.flags.reasoning_max_output_tokens(),
+                client_max_retries=0,
+            )
+            if response.get("error"):
+                error = str(response["error"])
+                last_error_codes = [error]
+                if attempt < retries_allowed and error in {"provider_error", "schema_invalid", "incomplete_structured_response", "timeout"}:
+                    await self._append_trace(run_id, user_id, trace_id, "reasoning_retry", context, model_name, "generating", None, attempt + 1, input_hash, [error])
+                    increment_execution_safety_counter(f"finn_v2_reasoning_retries_total:{error}")
+                    continue
+                status = "unavailable" if error in {"ai_unavailable_budget", "ai_unavailable_configuration", "ai_rate_limited"} else "failed"
+                event = "reasoning_unavailable" if status == "unavailable" else "reasoning_failed"
+                await self._append_trace(run_id, user_id, trace_id, event, context, model_name, status, int((monotonic() - started) * 1000), attempt, input_hash, [error])
+                result = self.fallbacks.unavailable_draft(run_id=run_id, user_id=user_id, mode=context.interaction_mode, error_codes=[error], model=model_name)
+                return await self._persist_record(
+                    run_id=run_id,
+                    user_id=user_id,
+                    orchestrator_result_id=orchestrator_result.orchestrator_result_id,
+                    policy_decision_id=policy.policy_decision_id,
+                    snapshot_id=snapshot.id,
+                    validation_id=validation.id,
+                    status=status,
+                    mode=result.mode,
+                    context_version=context.context_version,
+                    evidence_set_hash=context.evidence_set_hash,
+                    input_hash=input_hash,
+                    model=model_name,
+                    result=result,
+                    error_codes=[error],
+                    retry_count=attempt,
+                    input_tokens=response.get("input_tokens"),
+                    output_tokens=response.get("output_tokens"),
+                    reasoning_tokens=response.get("reasoning_tokens"),
+                    latency_ms=int((monotonic() - started) * 1000),
+                )
+
+            try:
+                result = ReasoningResult.parse_obj(
+                    {
+                        **response["parsed"],
+                        "reasoning_result_id": f"finn-v2-reasoning-{uuid.uuid4().hex}",
+                        "run_id": run_id,
+                        "user_id": user_id,
+                        "prompt_version": self.prompts.PROMPT_VERSION,
+                        "reasoning_version": FINN_V2_REASONING_VERSION,
+                        "model": response.get("model") or model_name,
+                        "created_at": datetime.now(timezone.utc),
+                    }
+                )
+                self._validate_refs(result, context)
+            except Exception as exc:
+                error = "invalid_evidence_refs" if "ref" in str(exc).lower() else "schema_invalid"
+                last_error_codes = [error]
+                if attempt < retries_allowed and error == "schema_invalid":
+                    await self._append_trace(run_id, user_id, trace_id, "reasoning_retry", context, model_name, "generating", None, attempt + 1, input_hash, [error])
+                    increment_execution_safety_counter(f"finn_v2_reasoning_retries_total:{error}")
+                    continue
+                await self._append_trace(run_id, user_id, trace_id, "reasoning_failed", context, model_name, "failed", int((monotonic() - started) * 1000), attempt, input_hash, [error])
+                fallback = self.fallbacks.unavailable_draft(run_id=run_id, user_id=user_id, mode=context.interaction_mode, error_codes=[error], model=model_name)
+                return await self._persist_record(
+                    run_id=run_id,
+                    user_id=user_id,
+                    orchestrator_result_id=orchestrator_result.orchestrator_result_id,
+                    policy_decision_id=policy.policy_decision_id,
+                    snapshot_id=snapshot.id,
+                    validation_id=validation.id,
+                    status="failed",
+                    mode=fallback.mode,
+                    context_version=context.context_version,
+                    evidence_set_hash=context.evidence_set_hash,
+                    input_hash=input_hash,
+                    model=model_name,
+                    result=fallback,
+                    error_codes=[error],
+                    retry_count=attempt,
+                    input_tokens=response.get("input_tokens"),
+                    output_tokens=response.get("output_tokens"),
+                    reasoning_tokens=response.get("reasoning_tokens"),
+                    latency_ms=int((monotonic() - started) * 1000),
+                )
+
+            await self._append_trace(run_id, user_id, trace_id, "reasoning_completed", context, result.model, "ready", int((monotonic() - started) * 1000), attempt, input_hash, [])
+            record_latency_sample("finn_v2_reasoning_latency_ms", int((monotonic() - started) * 1000))
+            increment_execution_safety_counter(f"finn_v2_reasoning_runs_total:{result.mode}:ready:{result.model}")
+            increment_execution_safety_counter(f"finn_v2_reasoning_tokens_total:input:{result.model}")
+            return await self._persist_record(
+                run_id=run_id,
+                user_id=user_id,
+                orchestrator_result_id=orchestrator_result.orchestrator_result_id,
+                policy_decision_id=policy.policy_decision_id,
+                snapshot_id=snapshot.id,
+                validation_id=validation.id,
+                status="ready",
+                mode=result.mode,
+                context_version=context.context_version,
+                evidence_set_hash=context.evidence_set_hash,
+                input_hash=input_hash,
+                model=result.model,
+                result=result,
+                error_codes=[],
+                retry_count=attempt,
+                input_tokens=response.get("input_tokens"),
+                output_tokens=response.get("output_tokens"),
+                reasoning_tokens=response.get("reasoning_tokens"),
+                latency_ms=int((monotonic() - started) * 1000),
+            )
+        raise ValueError(",".join(last_error_codes or ["reasoning_failed"]))
+
+    async def _persist_record(self, **kwargs):
+        result = kwargs.pop("result", None)
+        row = await self.reasoning.create(
+            id=result.reasoning_result_id if result is not None else f"finn-v2-reasoning-{uuid.uuid4().hex}",
+            run_id=kwargs["run_id"],
+            user_id=kwargs["user_id"],
+            orchestrator_result_id=kwargs["orchestrator_result_id"],
+            policy_decision_id=kwargs["policy_decision_id"] or "finn-v2-policy-missing",
+            snapshot_id=kwargs["snapshot_id"] or "finn-v2-snapshot-missing",
+            validation_id=kwargs["validation_id"] or "finn-v2-validation-missing",
+            status=kwargs["status"],
+            mode=kwargs["mode"],
+            context_version=kwargs["context_version"],
+            evidence_set_hash=kwargs["evidence_set_hash"],
+            input_hash=kwargs["input_hash"],
+            prompt_version=self.prompts.PROMPT_VERSION,
+            schema_version=FINN_V2_REASONING_SCHEMA_VERSION,
+            reasoning_version=FINN_V2_REASONING_VERSION,
+            model=kwargs["model"],
+            result_json=result.dict() if result is not None else None,
+            error_codes_json=kwargs.get("error_codes", []),
+            input_tokens=kwargs.get("input_tokens"),
+            output_tokens=kwargs.get("output_tokens"),
+            reasoning_tokens=kwargs.get("reasoning_tokens"),
+            latency_ms=kwargs.get("latency_ms"),
+            retry_count=min(int(kwargs.get("retry_count", 0)), 1),
+            completed_at=datetime.now(timezone.utc),
+        )
+        return PersistedReasoningRecord(
+            reasoning_result_id=row.id,
+            run_id=row.run_id,
+            user_id=row.user_id,
+            orchestrator_result_id=row.orchestrator_result_id,
+            policy_decision_id=row.policy_decision_id,
+            snapshot_id=row.snapshot_id,
+            validation_id=row.validation_id,
+            status=row.status,
+            mode=row.mode,
+            context_version=row.context_version,
+            evidence_set_hash=row.evidence_set_hash,
+            input_hash=row.input_hash,
+            prompt_version=row.prompt_version,
+            schema_version=row.schema_version,
+            reasoning_version=row.reasoning_version,
+            model=row.model,
+            result=ReasoningResult.parse_obj(row.result_json) if row.result_json else None,
+            error_codes=row.error_codes_json,
+            input_tokens=row.input_tokens,
+            output_tokens=row.output_tokens,
+            reasoning_tokens=row.reasoning_tokens,
+            latency_ms=row.latency_ms,
+            retry_count=row.retry_count,
+            created_at=row.created_at,
+            completed_at=row.completed_at,
+        )
+
+    def _validate_refs(self, result: ReasoningResult, context) -> None:
+        valid_refs = {item.evidence_id for item in context.evidence}
+        referenced = set(result.evidence_refs_used)
+        for claim in result.claims:
+            if claim.claim_type in {"fact", "inference", "evaluation"} and not claim.evidence_refs:
+                raise ValueError("invalid_evidence_refs")
+            referenced.update(claim.evidence_refs)
+        for point in result.supporting_points:
+            referenced.update(point.evidence_refs)
+        if result.proposal_candidate is not None:
+            referenced.update(result.proposal_candidate.evidence_refs)
+            if result.proposal_candidate.operation_type not in context.allowed_operation_types:
+                raise ValueError("schema_invalid")
+        if result.next_step and result.next_step.operation_type and context.allowed_operation_types and result.next_step.operation_type not in context.allowed_operation_types:
+            raise ValueError("schema_invalid")
+        if any(ref not in valid_refs for ref in referenced):
+            raise ValueError("invalid_evidence_refs")
+
+    async def _append_trace(self, run_id: str, user_id: int, trace_id: str, event_type: str, context, model: str, status: str, latency_ms: Optional[int], retry_count: int, input_hash: str, error_codes: list[str]) -> None:
+        await self.traces.append_event(
+            run_id=run_id,
+            user_id=user_id,
+            trace_id=trace_id,
+            event_type=event_type,
+            payload_json={
+                "run_id": run_id,
+                "user_id": user_id,
+                "mode": context.interaction_mode,
+                "subject_scopes": context.subject_scopes,
+                "required_domains": context.required_domains,
+                "evidence_count": len(context.evidence),
+                "context_bytes": self.contexts.context_bytes(context),
+                "input_hash": input_hash,
+                "prompt_version": self.prompts.PROMPT_VERSION,
+                "model": model,
+                "status": status,
+                "latency_ms": latency_ms,
+                "retry_count": retry_count,
+                "input_tokens": None,
+                "output_tokens": None,
+                "reasoning_tokens": None,
+                "error_codes": error_codes,
+            },
+        )
+
+    def _resolved_model(self) -> str:
+        return self.flags.reasoning_model_override() or openai_client.get_openai_runtime_status().get("model") or "unknown"

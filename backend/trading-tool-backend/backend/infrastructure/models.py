@@ -690,6 +690,36 @@ class FinnV2EligibilityDecision(Base):
     checked_at = Column(DateTime(timezone=True), nullable=False, server_default=text("NOW()"))
 
 
+class FinnV2ReasoningResult(Base):
+    __tablename__ = "finn_v2_reasoning_results"
+
+    id = Column(String, primary_key=True)
+    run_id = Column(String, ForeignKey("finn_v2_runs.id", ondelete="CASCADE"), nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    orchestrator_result_id = Column(String, ForeignKey("finn_v2_orchestrator_results.id", ondelete="CASCADE"), nullable=False)
+    policy_decision_id = Column(String, ForeignKey("finn_v2_policy_decisions.id", ondelete="CASCADE"), nullable=False)
+    snapshot_id = Column(String, ForeignKey("finn_v2_state_snapshots.id", ondelete="CASCADE"), nullable=False)
+    validation_id = Column(String, ForeignKey("finn_v2_validation_results.id", ondelete="CASCADE"), nullable=False)
+    status = Column(String, nullable=False, index=True)
+    mode = Column(String, nullable=False, index=True)
+    context_version = Column(String, nullable=False)
+    evidence_set_hash = Column(String, nullable=False)
+    input_hash = Column(String, nullable=False, index=True)
+    prompt_version = Column(String, nullable=False)
+    schema_version = Column(String, nullable=False)
+    reasoning_version = Column(String, nullable=False)
+    model = Column(String, nullable=True)
+    result_json = Column(JSONB, nullable=True)
+    error_codes_json = Column(JSONB, nullable=False, default=list, server_default=text("'[]'::jsonb"))
+    input_tokens = Column(Integer, nullable=True)
+    output_tokens = Column(Integer, nullable=True)
+    reasoning_tokens = Column(Integer, nullable=True)
+    latency_ms = Column(Integer, nullable=True)
+    retry_count = Column(Integer, nullable=False, default=0, server_default=text("0"))
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=text("NOW()"))
+    completed_at = Column(DateTime(timezone=True), nullable=True)
+
+
 class AiPendingAction(Base):
     __tablename__ = 'ai_pending_actions'
 

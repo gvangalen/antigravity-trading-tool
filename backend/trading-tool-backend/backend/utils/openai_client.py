@@ -543,6 +543,97 @@ def ask_gpt_json(
 
     return {"error": "Failed to generate valid JSON"}
 
+
+def ask_gpt_structured_response(
+    *,
+    prompt: str,
+    system_role: str,
+    schema: Dict[str, Any],
+    model_override: Optional[str] = None,
+    timeout_seconds: Optional[int] = None,
+    max_output_tokens: Optional[int] = None,
+    client_max_retries: Optional[int] = None,
+) -> Dict[str, Any]:
+    availability = get_ai_availability()
+    if not availability["available"]:
+        _openai_runtime_state["blocked_calls"] = int(_openai_runtime_state.get("blocked_calls") or 0) + 1
+        reason = str(availability.get("reason") or AI_UNAVAILABLE_BUDGET)
+        _log_openai_quota_skip(reason)
+        return {"error": reason, "ai_status": availability}
+    if not client:
+        return {"error": "ai_unavailable_configuration", "ai_status": availability}
+    if not _rate_limit_allows_call():
+        return {"error": "ai_rate_limited", "ai_status": get_ai_availability()}
+    if _quota_breaker_active():
+        _openai_runtime_state["blocked_calls"] = int(_openai_runtime_state.get("blocked_calls") or 0) + 1
+        _log_quota_block_warning("Structured")
+        _log_openai_quota_skip(AI_UNAVAILABLE_BUDGET)
+        return {"error": AI_UNAVAILABLE_BUDGET, "ai_status": get_ai_availability()}
+
+    _openai_runtime_state["json_calls"] = int(_openai_runtime_state.get("json_calls") or 0) + 1
+    active_model = str(model_override or model)
+    started = start_timer()
+    try:
+        active_client = client.with_options(max_retries=client_max_retries) if client_max_retries is not None else client
+        request_kwargs: Dict[str, Any] = {
+            "model": active_model,
+            "input": [
+                {"role": "system", "content": system_role},
+                {"role": "user", "content": prompt},
+            ],
+            "text": {
+                "format": {
+                    "type": "json_schema",
+                    "name": "finn_v2_reasoning_result",
+                    "schema": schema,
+                    "strict": True,
+                }
+            },
+            "max_output_tokens": max_output_tokens or MAX_TOKENS,
+        }
+        if timeout_seconds is not None:
+            request_kwargs["timeout"] = timeout_seconds
+        response = active_client.responses.create(**request_kwargs)
+        parsed = None
+        if getattr(response, "output_parsed", None) is not None:
+            parsed = response.output_parsed
+        elif getattr(response, "output", None):
+            for item in response.output:
+                for content in getattr(item, "content", []) or []:
+                    if getattr(content, "parsed", None) is not None:
+                        parsed = content.parsed
+                        break
+                if parsed is not None:
+                    break
+        if parsed is None:
+            return {"error": "incomplete_structured_response"}
+        usage = getattr(response, "usage", None)
+        input_tokens = int(getattr(usage, "input_tokens", 0) or 0)
+        output_tokens = int(getattr(usage, "output_tokens", 0) or 0)
+        reasoning_tokens = int(getattr(usage, "reasoning_tokens", 0) or 0)
+        _log_openai_usage(
+            model_name=str(getattr(response, "model", None) or active_model),
+            prompt_tokens=input_tokens,
+            completion_tokens=output_tokens,
+            response_time_ms=elapsed_ms(started),
+        )
+        return {
+            "parsed": parsed if isinstance(parsed, dict) else dict(parsed),
+            "model": str(getattr(response, "model", None) or active_model),
+            "input_tokens": input_tokens,
+            "output_tokens": output_tokens,
+            "reasoning_tokens": reasoning_tokens,
+        }
+    except Exception as e:
+        _mark_runtime_error(str(e))
+        if "insufficient_quota" in str(e):
+            _mark_quota_exhausted()
+            _log_openai_quota_skip(AI_UNAVAILABLE_BUDGET)
+            return {"error": AI_UNAVAILABLE_BUDGET, "ai_status": get_ai_availability()}
+        if "timeout" in str(e).lower():
+            return {"error": "timeout"}
+        return {"error": "provider_error"}
+
 # ============================================================
 # 🧠 GPT TEXT CALL
 # ============================================================
