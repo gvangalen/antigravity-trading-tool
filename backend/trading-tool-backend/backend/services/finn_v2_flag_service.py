@@ -187,6 +187,43 @@ class FinnV2FlagService:
     def should_run_block6_shadow(self, user_id: int) -> bool:
         return self.should_run_block5_shadow(user_id) and self.is_reasoning_enabled() and self.is_reasoning_shadow_enabled()
 
+    def is_response_verifier_enabled(self) -> bool:
+        return self._env_bool("FINN_V2_RESPONSE_VERIFIER_ENABLED", False)
+
+    def is_response_delivery_enabled(self) -> bool:
+        return self._env_bool("FINN_V2_RESPONSE_DELIVERY_ENABLED", False)
+
+    def is_response_repair_enabled(self) -> bool:
+        return self._env_bool("FINN_V2_RESPONSE_REPAIR_ENABLED", True)
+
+    def response_max_repair_attempts(self) -> int:
+        return max(0, min(1, self._env_int("FINN_V2_RESPONSE_MAX_REPAIR_ATTEMPTS", 1)))
+
+    def is_semantic_verifier_enabled(self) -> bool:
+        return self._env_bool("FINN_V2_SEMANTIC_VERIFIER_ENABLED", False)
+
+    def semantic_verifier_model(self) -> str | None:
+        value = str(os.getenv("FINN_V2_SEMANTIC_VERIFIER_MODEL", "")).strip()
+        return value or None
+
+    def semantic_verifier_required_modes(self) -> Set[str]:
+        raw = os.getenv("FINN_V2_SEMANTIC_VERIFIER_REQUIRED_MODES", "EVALUATION,PROPOSAL,ACTION")
+        parsed = {item.strip().upper() for item in raw.split(",") if item.strip()}
+        return parsed or {"EVALUATION", "PROPOSAL", "ACTION"}
+
+    def semantic_verifier_timeout_seconds(self) -> int:
+        return self._env_int("FINN_V2_SEMANTIC_VERIFIER_TIMEOUT_SECONDS", 30)
+
+    def semantic_verifier_max_retries(self) -> int:
+        return max(0, min(0, self._env_int("FINN_V2_SEMANTIC_VERIFIER_MAX_RETRIES", 0)))
+
+    def should_run_block7_shadow(self, user_id: int) -> bool:
+        return (
+            self.should_run_block6_shadow(user_id)
+            and self.is_response_verifier_enabled()
+            and self.is_response_delivery_enabled()
+        )
+
     def _is_safe_readonly_config(self) -> bool:
         if not self.is_write_blocked():
             logger.warning("FINN V2 disabled because FINN_V2_WRITE_BLOCKED is false.")
