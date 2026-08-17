@@ -113,3 +113,45 @@ def test_run_service_uses_nested_transaction_for_status_and_trace_atomicity():
     assert "await self.runs.update_status(" in source
     assert "await self.traces.append_event(" in source
     assert ".commit(" not in source
+
+
+def test_visible_run_executes_orchestrator_without_shadow_gate():
+    run = SimpleNamespace(
+        id="run-1",
+        user_id=7,
+        conversation_id="conv-1",
+        trace_id="trace-1",
+        transport="chat",
+        visibility="visible",
+        feature_mode="visible_readonly",
+        client_context_json={"_request_path": "/api/assistant/chat"},
+        status="created",
+    )
+    service = FinnV2RunService(_FakeSession())
+    service.runs = _FakeRunRepo(run)
+    service.traces = _FakeTraceRepo()
+
+    calls = {"shadow_chain": 0, "placeholder": 0, "orchestrator": 0}
+
+    async def _shadow_chain(**_kwargs):
+        calls["shadow_chain"] += 1
+
+    async def _placeholder(**_kwargs):
+        calls["placeholder"] += 1
+
+    async def _orchestrator(**kwargs):
+        calls["orchestrator"] += 1
+        assert kwargs["run_id"] == "run-1"
+        assert kwargs["user_id"] == 7
+        assert kwargs["trace_id"] == "trace-1"
+
+    service.tools = SimpleNamespace(
+        flags=SimpleNamespace(should_run_block4_shadow=lambda _user_id: False),
+        execute_shadow_tool_chain=_shadow_chain,
+    )
+    service.complete_placeholder_run = _placeholder
+    service.orchestrator = SimpleNamespace(execute_run=_orchestrator)
+
+    asyncio.run(service.run_foundation_lifecycle(run_id="run-1", user_id=7))
+
+    assert calls == {"shadow_chain": 0, "placeholder": 0, "orchestrator": 1}

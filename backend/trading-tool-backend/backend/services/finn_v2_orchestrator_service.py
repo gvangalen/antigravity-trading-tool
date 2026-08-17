@@ -96,7 +96,7 @@ class FinnV2OrchestratorService:
             )
             await self._persist_result(result)
             policy_decision = None
-            if self.flags.should_run_block5_shadow(user_id) and snapshot is not None and validation is not None and result.outcome != "failed":
+            if self._should_run_policy(run=run, user_id=user_id) and snapshot is not None and validation is not None and result.outcome != "failed":
                 requested_operation = None
                 if result.analysis.interaction_mode == "ACTION":
                     requested_operation = self.risk.classify_requested_operation(message=run.message)
@@ -144,14 +144,14 @@ class FinnV2OrchestratorService:
                     for code in policy_decision.blocking_codes:
                         increment_execution_safety_counter(f"finn_v2_policy_blocks_total:{code}")
             reasoning_result = None
-            if self.flags.should_run_block6_shadow(user_id) and result.outcome != "failed":
+            if self._should_run_reasoning(run=run, user_id=user_id) and result.outcome != "failed":
                 reasoning_result = await self.reasoning.reason(
                     user_id=user_id,
                     run_id=run_id,
                     trace_id=trace_id,
                 )
             verified_response = None
-            if self.flags.should_run_block7_shadow(user_id) and reasoning_result is not None:
+            if self._should_run_verifier(run=run, user_id=user_id) and reasoning_result is not None:
                 verified_response = await self.verifier.verify_run(
                     user_id=user_id,
                     run_id=run_id,
@@ -249,3 +249,15 @@ class FinnV2OrchestratorService:
             event_type=event_type,
             payload_json=payload_json,
         )
+
+    def _is_visible_run(self, run) -> bool:
+        return getattr(run, "visibility", None) == "visible" or getattr(run, "feature_mode", None) == "visible_readonly"
+
+    def _should_run_policy(self, *, run, user_id: int) -> bool:
+        return self._is_visible_run(run) or self.flags.should_run_block5_shadow(user_id)
+
+    def _should_run_reasoning(self, *, run, user_id: int) -> bool:
+        return self._is_visible_run(run) or self.flags.should_run_block6_shadow(user_id)
+
+    def _should_run_verifier(self, *, run, user_id: int) -> bool:
+        return self._is_visible_run(run) or self.flags.should_run_block7_shadow(user_id)

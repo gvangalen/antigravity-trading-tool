@@ -51,6 +51,17 @@ def test_finn_v2_visible_mode_is_global_for_authenticated_runtime(monkeypatch):
     assert service.resolve_mode(9) == "visible_runtime"
 
 
+def test_finn_v2_v2_only_runtime_resolves_visible_mode_without_canary(monkeypatch):
+    monkeypatch.setenv("FINN_V2_ENABLED", "true")
+    monkeypatch.setenv("FINN_V2_RUNTIME_MODE", "v2_only")
+    monkeypatch.setenv("FINN_V2_WRITE_BLOCKED", "true")
+    monkeypatch.setenv("FINN_V2_MAX_EXECUTES_PER_MINUTE", "0")
+
+    service = FinnV2FlagService()
+
+    assert service.resolve_mode(348) == "visible_runtime"
+
+
 def test_unsafe_v2_config_is_disabled_without_affecting_startup(monkeypatch):
     monkeypatch.setenv("FINN_V2_ENABLED", "true")
     monkeypatch.setenv("FINN_V2_SHADOW_ENABLED", "true")

@@ -168,10 +168,10 @@ class FinnV2RunService:
         await self.transition_run(run_id, user_id, next_status="collecting", response_source="foundation_placeholder")
         await self.transition_run(run_id, user_id, next_status="planned", response_source="foundation_placeholder")
         try:
-            if self.tools.flags.should_run_block4_shadow(user_id):
-                run = await self.runs.get_by_id_for_user(run_id=run_id, user_id=user_id)
-                if run is None:
-                    raise LookupError("FINN V2 run not found")
+            run = await self.runs.get_by_id_for_user(run_id=run_id, user_id=user_id)
+            if run is None:
+                raise LookupError("FINN V2 run not found")
+            if self._is_visible_run(run) or self.tools.flags.should_run_block4_shadow(user_id):
                 await self.orchestrator.execute_run(run_id=run_id, user_id=user_id, trace_id=run.trace_id)
                 await self.complete_run(run_id=run_id, user_id=user_id)
             else:
@@ -185,6 +185,9 @@ class FinnV2RunService:
                 error_message=str(exc),
                 retryable=False,
             )
+
+    def _is_visible_run(self, run) -> bool:
+        return getattr(run, "visibility", None) == "visible" or getattr(run, "feature_mode", None) == "visible_readonly"
 
     async def apply_retention(self, *, message_days: int, trace_days: int) -> Dict[str, int]:
         now = datetime.now(timezone.utc)
