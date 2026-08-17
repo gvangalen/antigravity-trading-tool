@@ -59,3 +59,39 @@ def test_tool_execution_logs_successful_profile_call(monkeypatch):
 
     assert result.success is True
     assert service.calls.rows[-1].status == "completed"
+
+
+def test_state_pipeline_rolls_back_before_failure_trace():
+    class _Session:
+        def __init__(self):
+            self.rollback_calls = 0
+
+        async def rollback(self):
+            self.rollback_calls += 1
+
+    class _TraceRepo:
+        def __init__(self):
+            self.events = []
+
+        async def append_event(self, **kwargs):
+            self.events.append(kwargs)
+            return kwargs
+
+    service = FinnV2ToolExecutionService(session=_Session())
+    service.runs = _FakeRunRepo()
+    service.traces = _TraceRepo()
+
+    async def _explode(**_kwargs):
+        raise TypeError("Object of type datetime is not JSON serializable")
+
+    service.snapshots.assemble_for_run = _explode
+
+    snapshot, validation = asyncio.run(service.run_state_pipeline(run_id="run-1", user_id=7))
+
+    assert snapshot is None
+    assert validation is None
+    assert service.session.rollback_calls == 1
+    assert [event["event_type"] for event in service.traces.events] == [
+        "state_assembly_started",
+        "state_assembly_failed",
+    ]

@@ -469,6 +469,7 @@ class FinnV2ToolExecutionService:
                 },
             )
         except Exception as exc:
+            await self.session.rollback()
             await self._append_trace(
                 run_id=run_id,
                 user_id=user_id,

@@ -46,6 +46,9 @@ class _ArtifactsRepo:
 
 
 class _SnapshotsRepo:
+    def __init__(self):
+        self.created = []
+
     async def get_by_evidence_hash(self, **_kwargs):
         return None
 
@@ -53,6 +56,7 @@ class _SnapshotsRepo:
         return 1
 
     async def create(self, **kwargs):
+        self.created.append(kwargs)
         return SimpleNamespace(**kwargs)
 
 
@@ -65,3 +69,16 @@ def test_state_assembly_uses_only_evidence_artifacts():
 
     assert snapshot.run_id == "run-1"
     assert any(node.node_id == "profile" for node in snapshot.nodes)
+
+
+def test_state_assembly_persists_json_safe_snapshot_payload():
+    service = FinnV2StateAssemblyService(session=object())
+    service.artifacts = _ArtifactsRepo()
+    snapshots = _SnapshotsRepo()
+    service.snapshots = snapshots
+
+    snapshot = asyncio.run(service.assemble_for_run(run_id="run-1", user_id=7))
+
+    stored = snapshots.created[0]["snapshot_json"]
+    assert stored["assembled_at"] == snapshot.assembled_at.isoformat()
+    assert stored["nodes"][0]["evidence"][0]["artifact_id"] == "a1"
