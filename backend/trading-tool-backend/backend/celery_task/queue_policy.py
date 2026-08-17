@@ -63,6 +63,8 @@ TASK_QUEUE_ROUTES: Dict[str, str] = {
     "backend.celery_task.bootstrap_agents_task.bootstrap_agents_task": "ai_generation",
     "backend.celery_task.celery_task_generate_pdf.generate_report_pdf": "ai_generation",
     "backend.celery_task.daily_usage_reset.reset_daily_ai_quotas": "scoring",
+    "backend.celery_task.finn_v2_task.process_shadow_foundation_run": "ai_generation",
+    "backend.celery_task.finn_v2_task.cleanup_finn_v2_retention": "ai_generation",
 }
 
 ALLOWED_DEFAULT_TASKS = {

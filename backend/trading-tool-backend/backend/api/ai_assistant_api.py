@@ -64,6 +64,7 @@ from backend.services.ai_action_engine import AiActionEngine
 from backend.services.ai_availability_service import get_ai_availability
 from backend.services.asset_catalog_service import DEFAULT_ASSET_CATALOG
 from backend.services.finn_response_trace_service import build_finn_response_trace
+from backend.services.finn_v2_gateway_service import FinnV2GatewayService
 
 if TYPE_CHECKING:
     from backend.services.ai_assistant_service import AiAssistantService
@@ -73,6 +74,9 @@ router = APIRouter()
 logger = logging.getLogger(__name__)
 MISSION_CONTROL_CACHE_TTL_SECONDS = int(os.getenv("MISSION_CONTROL_CACHE_TTL_SECONDS", "20"))
 _mission_control_cache: Dict[int, Dict[str, Any]] = {}
+CANONICAL_FINN_PIPELINE_VERSION = "v1_canonical_router"
+CANONICAL_FINN_ROUTER_NAME = "finn_v1_canonical_router"
+CANONICAL_FINN_CONTEXT_BUILDER = "assistant_context_repository.build_canonical_context_graph"
 
 
 async def _issue_finn_response_actions_safely(
@@ -1075,59 +1079,447 @@ async def _build_finn_core_rescue_envelope(
     context_payload: Optional[dict],
 ) -> dict:
     context_payload = context_payload or {}
-    if finn.looks_like_general_capability_request(query):
-        return await finn.build_general_capability_response(user_id, query, context_payload)
-    if finn.looks_like_product_refresh_help_request(query):
-        return await finn.build_product_refresh_help_response(user_id, query, context_payload)
-    if finn.looks_like_product_help_request(query, context_payload):
-        return await finn.build_product_help_response(user_id, query, context_payload)
-    if finn.looks_like_education_request(query):
-        return await finn.build_education_response(user_id, query, context_payload)
-    if finn.looks_like_plan_adherence_review_request(query):
-        return await finn.build_plan_adherence_review_response(user_id, query, context_payload)
-    if finn.looks_like_outcome_tracking_request(query):
-        return await finn.build_outcome_tracking_response(user_id, query, context_payload)
-    if finn.looks_like_governed_action_review_request(query, context_payload):
-        return await finn.build_governed_action_review_response(user_id, query, context_payload)
-    if finn.looks_like_outcome_memory_request(query):
-        return await finn.build_outcome_memory_response(user_id, query, context_payload)
-    if finn.looks_like_personal_coach_request(query):
-        return await finn.build_personal_coach_response(user_id, query, context_payload)
-    if finn.looks_like_personal_performance_request(query):
-        return await finn.build_personal_performance_response(user_id, query, context_payload)
-    if finn.looks_like_trade_journal_intelligence_request(query):
-        return await finn.build_trade_journal_intelligence_response(user_id, query, context_payload)
-    if finn.looks_like_portfolio_intelligence_request(query, context_payload):
-        return await finn.build_portfolio_intelligence_response(user_id, query, context_payload)
-    if finn.looks_like_priority_engine_request(query, context_payload):
-        return await finn.build_priority_engine_response(user_id, query, context_payload)
-    if finn.looks_like_portfolio_operating_system_request(query):
-        return await finn.build_portfolio_operating_system_response(user_id, query, context_payload)
-    if finn.looks_like_decision_review_request(query, context_payload):
-        return await finn.build_decision_review_response(user_id, query, context_payload)
-    if finn.should_route_ultra_implicit_prompt_to_decision_review(query, context_payload):
-        return await finn.build_decision_review_response(user_id, query, context_payload)
-    if finn.looks_like_ultra_implicit_review_prompt(query):
-        return await finn.build_quick_general_help_response(user_id, query, context_payload)
-    if finn.looks_like_mission_control_explain_request(query, context_payload):
-        return await finn.build_mission_control_explain_response(user_id, query, context_payload)
-    if finn.looks_like_entity_explain_request(query, context_payload):
-        return await finn.build_context_explain_response(user_id, query, context_payload)
-    if finn.looks_like_behavioral_intelligence_request(query):
-        return await finn.build_behavioral_intelligence_response(user_id, query, context_payload)
-    if finn.looks_like_weekly_reflection_request(query):
-        return await finn.build_weekly_reflection_response(user_id, query, context_payload)
-    if finn.looks_like_behavioral_memory_request(query):
-        return await finn.build_behavioral_memory_response(user_id, query, context_payload)
-    if finn.looks_like_finn_report_request(query):
-        return await finn.build_finn_report_response(user_id, query, context_payload)
-    if finn.looks_like_daily_coach_request(query):
-        return await finn.build_daily_coach_response(user_id, query, context_payload)
-    if finn.looks_like_indicator_insight_request(query):
-        return await finn.build_indicator_insight_response(user_id, query, context_payload)
-    if finn.looks_like_status_request(query):
-        return await finn.build_status_response(user_id, query, context_payload)
+    decision = _build_finn_route_decision(
+        finn=finn,
+        query=query,
+        context_payload=context_payload,
+        route_source="finn_core_rescue",
+    )
+    response = await _dispatch_finn_route_decision(
+        finn=finn,
+        user_id=user_id,
+        query=query,
+        context_payload=context_payload,
+        decision=decision,
+    )
+    if response is not None:
+        return response
     return await finn.build_general_capability_response(user_id, query, context_payload)
+
+
+def _build_finn_route_decision(
+    *,
+    finn: Any,
+    query: str,
+    context_payload: Optional[dict],
+    route_source: str,
+) -> Dict[str, Any]:
+    context_payload = context_payload or {}
+
+    def decision(
+        *,
+        intent_family: str,
+        selected_handler: str,
+        matched_rule: str,
+        selection_reason: str,
+        response_mode: str = "read_only",
+        requires_context: bool = True,
+        requires_ai: bool = False,
+        action_mode: str = "none",
+    ) -> Dict[str, Any]:
+        return {
+            "pipeline_version": CANONICAL_FINN_PIPELINE_VERSION,
+            "router_name": CANONICAL_FINN_ROUTER_NAME,
+            "route_source": route_source,
+            "intent_family": intent_family,
+            "selected_handler": selected_handler,
+            "response_mode": response_mode,
+            "requires_context": requires_context,
+            "requires_ai": requires_ai,
+            "action_mode": action_mode,
+            "selection_reason": selection_reason,
+            "matched_rules": [matched_rule],
+        }
+
+    if finn.looks_like_daily_score_refresh_request(query):
+        return decision(
+            intent_family="action_request",
+            selected_handler="build_daily_score_refresh_response",
+            matched_rule="daily_score_refresh",
+            selection_reason="refresh_scores_requested",
+            response_mode="actionable",
+            action_mode="confirmable",
+        )
+    if finn.looks_like_product_refresh_help_request(query):
+        return decision(
+            intent_family="clarification",
+            selected_handler="build_product_refresh_help_response",
+            matched_rule="product_refresh_help",
+            selection_reason="refresh_help_requested",
+            requires_context=False,
+        )
+    if finn.looks_like_general_capability_request(query):
+        return decision(
+            intent_family="clarification",
+            selected_handler="build_general_capability_response",
+            matched_rule="general_capability",
+            selection_reason="general_capability_requested",
+            requires_context=False,
+        )
+    if finn.looks_like_product_help_request(query, context_payload):
+        return decision(
+            intent_family="clarification",
+            selected_handler="build_product_help_response",
+            matched_rule="product_help",
+            selection_reason="workspace_product_help_requested",
+        )
+    if finn.looks_like_education_request(query):
+        return decision(
+            intent_family="clarification",
+            selected_handler="build_education_response",
+            matched_rule="education_request",
+            selection_reason="education_requested",
+            requires_context=False,
+        )
+    if finn.looks_like_plan_adherence_review_request(query):
+        return decision(
+            intent_family="plan_review",
+            selected_handler="build_plan_adherence_review_response",
+            matched_rule="plan_adherence_review",
+            selection_reason="plan_review_requested",
+        )
+    if finn.looks_like_outcome_tracking_request(query):
+        return decision(
+            intent_family="report_review",
+            selected_handler="build_outcome_tracking_response",
+            matched_rule="outcome_tracking_review",
+            selection_reason="outcome_tracking_requested",
+        )
+    if finn.looks_like_governed_action_review_request(query, context_payload):
+        return decision(
+            intent_family="action_request",
+            selected_handler="build_governed_action_review_response",
+            matched_rule="governed_action_review",
+            selection_reason="governed_action_review_requested",
+            response_mode="actionable",
+            action_mode="confirmable",
+        )
+    if finn.looks_like_outcome_memory_request(query):
+        return decision(
+            intent_family="reflection_review",
+            selected_handler="build_outcome_memory_response",
+            matched_rule="outcome_memory",
+            selection_reason="outcome_memory_requested",
+        )
+    if finn.looks_like_personal_coach_request(query):
+        return decision(
+            intent_family="reflection_review",
+            selected_handler="build_personal_coach_response",
+            matched_rule="personal_coach",
+            selection_reason="coach_requested",
+            requires_ai=True,
+        )
+    if finn.looks_like_personal_performance_request(query):
+        return decision(
+            intent_family="report_review",
+            selected_handler="build_personal_performance_response",
+            matched_rule="personal_performance",
+            selection_reason="personal_performance_requested",
+        )
+    if finn.looks_like_trade_journal_intelligence_request(query):
+        return decision(
+            intent_family="report_review",
+            selected_handler="build_trade_journal_intelligence_response",
+            matched_rule="trade_journal_intelligence",
+            selection_reason="trade_journal_intelligence_requested",
+        )
+    if finn.looks_like_portfolio_intelligence_request(query, context_payload):
+        return decision(
+            intent_family="plan_review",
+            selected_handler="build_portfolio_intelligence_response",
+            matched_rule="portfolio_intelligence",
+            selection_reason="multi_entity_plan_review_requested",
+        )
+    if finn.looks_like_priority_engine_request(query, context_payload):
+        return decision(
+            intent_family="plan_review",
+            selected_handler="build_priority_engine_response",
+            matched_rule="priority_engine",
+            selection_reason="priority_engine_requested",
+        )
+    if finn.looks_like_portfolio_operating_system_request(query):
+        return decision(
+            intent_family="plan_review",
+            selected_handler="build_portfolio_operating_system_response",
+            matched_rule="portfolio_operating_system",
+            selection_reason="portfolio_operating_system_requested",
+        )
+    if finn.looks_like_decision_review_request(query, context_payload):
+        return decision(
+            intent_family="market_review",
+            selected_handler="build_decision_review_response",
+            matched_rule="decision_review",
+            selection_reason="decision_review_requested",
+        )
+    if finn.should_route_ultra_implicit_prompt_to_decision_review(query, context_payload):
+        return decision(
+            intent_family="market_review",
+            selected_handler="build_decision_review_response",
+            matched_rule="implicit_decision_review",
+            selection_reason="strong_review_context_with_implicit_prompt",
+        )
+    if finn.looks_like_ultra_implicit_review_prompt(query):
+        return decision(
+            intent_family="clarification",
+            selected_handler="build_quick_general_help_response",
+            matched_rule="implicit_help_prompt",
+            selection_reason="implicit_prompt_without_strong_context",
+        )
+    if finn.looks_like_mission_control_explain_request(query, context_payload):
+        return decision(
+            intent_family="fact_lookup",
+            selected_handler="build_mission_control_explain_response",
+            matched_rule="mission_control_explain",
+            selection_reason="mission_control_context_explain",
+        )
+    if finn.looks_like_entity_explain_request(query, context_payload):
+        return decision(
+            intent_family="fact_lookup",
+            selected_handler="build_context_explain_response",
+            matched_rule="entity_explain",
+            selection_reason="entity_resolution_explain",
+        )
+    if finn.looks_like_behavioral_intelligence_request(query):
+        return decision(
+            intent_family="reflection_review",
+            selected_handler="build_behavioral_intelligence_response",
+            matched_rule="behavioral_intelligence",
+            selection_reason="behavioral_intelligence_requested",
+        )
+    if finn.looks_like_weekly_reflection_request(query):
+        return decision(
+            intent_family="reflection_review",
+            selected_handler="build_weekly_reflection_response",
+            matched_rule="weekly_reflection",
+            selection_reason="weekly_reflection_requested",
+        )
+    if finn.looks_like_behavioral_memory_request(query):
+        return decision(
+            intent_family="reflection_review",
+            selected_handler="build_behavioral_memory_response",
+            matched_rule="behavioral_memory",
+            selection_reason="behavioral_memory_requested",
+        )
+    if finn.looks_like_finn_report_request(query):
+        return decision(
+            intent_family="report_review",
+            selected_handler="build_finn_report_response",
+            matched_rule="finn_report",
+            selection_reason="report_review_requested",
+        )
+    if finn.looks_like_bot_decision_request(query) or _legacy_bot_decision_resume(query, context_payload):
+        return decision(
+            intent_family="action_request",
+            selected_handler="build_bot_decision_response",
+            matched_rule="bot_decision",
+            selection_reason="bot_decision_requested",
+            response_mode="actionable",
+            action_mode="confirmable",
+        )
+    if finn.looks_like_bot_decision_review_request(query):
+        return decision(
+            intent_family="market_review",
+            selected_handler="build_bot_decision_review_response",
+            matched_rule="bot_decision_review",
+            selection_reason="bot_decision_review_requested",
+        )
+    if finn.looks_like_bot_execution_decision_request(query):
+        return decision(
+            intent_family="action_request",
+            selected_handler="build_bot_execution_decision_response",
+            matched_rule="bot_execution_decision",
+            selection_reason="bot_execution_decision_requested",
+            response_mode="actionable",
+            action_mode="confirmable",
+        )
+    if finn.is_cancel_request(query):
+        return decision(
+            intent_family="action_request",
+            selected_handler="build_cancel_response",
+            matched_rule="cancel_request",
+            selection_reason="cancel_requested",
+            response_mode="actionable",
+            action_mode="confirmable",
+        )
+    if finn.looks_like_indicator_insight_request(query):
+        return decision(
+            intent_family="fact_lookup",
+            selected_handler="build_indicator_insight_response",
+            matched_rule="indicator_insight",
+            selection_reason="indicator_context_requested",
+        )
+    if finn.looks_like_status_request(query):
+        return decision(
+            intent_family="fact_lookup",
+            selected_handler="build_status_response",
+            matched_rule="status_request",
+            selection_reason="status_requested",
+        )
+    if finn.looks_like_indicator_config_request(query, context_payload):
+        return decision(
+            intent_family="action_request",
+            selected_handler="build_indicator_config_response_for_user",
+            matched_rule="indicator_config",
+            selection_reason="indicator_configuration_requested",
+            response_mode="actionable",
+            action_mode="confirmable",
+        )
+    if _should_use_modern_setup_creation_flow(query, context_payload):
+        return decision(
+            intent_family="action_request",
+            selected_handler="build_setup_response",
+            matched_rule="setup_creation",
+            selection_reason="modern_setup_creation_requested",
+            response_mode="actionable",
+            action_mode="confirmable",
+        )
+    if finn.looks_like_bot_request(query, context_payload):
+        return decision(
+            intent_family="action_request",
+            selected_handler="build_bot_response_for_user",
+            matched_rule="bot_request",
+            selection_reason="bot_mutation_requested",
+            response_mode="actionable",
+            action_mode="confirmable",
+        )
+    if finn.looks_like_strategy_request(query, context_payload):
+        return decision(
+            intent_family="action_request",
+            selected_handler="build_strategy_response_for_user",
+            matched_rule="strategy_request",
+            selection_reason="strategy_mutation_requested",
+            response_mode="actionable",
+            action_mode="confirmable",
+        )
+    if finn.looks_like_plan_request(query, context_payload.get("finn_draft")):
+        return decision(
+            intent_family="action_request",
+            selected_handler="build_response",
+            matched_rule="plan_request",
+            selection_reason="plan_mutation_requested",
+            response_mode="actionable",
+            action_mode="confirmable",
+        )
+    if finn.looks_like_daily_coach_request(query):
+        return decision(
+            intent_family="reflection_review",
+            selected_handler="build_daily_coach_response",
+            matched_rule="daily_coach",
+            selection_reason="daily_coach_requested",
+        )
+    return decision(
+        intent_family="unsupported",
+        selected_handler="legacy_assistant",
+        matched_rule="unsupported",
+        selection_reason="no_canonical_rule_matched",
+        requires_context=False,
+    )
+
+
+async def _apply_canonical_finn_context_graph(
+    *,
+    db: AsyncSession,
+    user_id: int,
+    query: str,
+    context_payload: Optional[dict],
+) -> dict:
+    payload = dict(context_payload or {})
+    payload["user_id"] = user_id
+    payload["context_builder"] = CANONICAL_FINN_CONTEXT_BUILDER
+    if db is None:
+        payload.setdefault("missing_context", [])
+        payload.setdefault("entity_confidence", {})
+        return payload
+    repo = AssistantContextRepository(db)
+    graph = await repo.build_canonical_context_graph(
+        user_id=user_id,
+        query=query,
+        request_context=payload,
+    )
+    payload["canonical_context_graph"] = graph
+    payload["context_builder"] = CANONICAL_FINN_CONTEXT_BUILDER
+    payload["user_id"] = user_id
+    payload["asset"] = graph.get("asset") or payload.get("asset")
+    payload["symbol"] = graph.get("asset") or payload.get("symbol")
+    payload["asset_source"] = graph.get("asset_source")
+    payload["asset_confidence"] = graph.get("asset_confidence")
+    payload["asset_user_scoped"] = graph.get("asset_user_scoped")
+    payload["missing_context"] = graph.get("missing_context") or []
+    payload["entity_confidence"] = graph.get("entity_confidence") or {}
+    payload["overall_context_confidence"] = "high" if not graph.get("missing_context") else "medium"
+
+    setup = graph.get("setup") or {}
+    strategy = graph.get("strategy") or {}
+    bot = graph.get("bot") or {}
+    if setup.get("id"):
+        payload["setup_id"] = setup.get("id")
+        payload["setup_name"] = setup.get("name") or payload.get("setup_name")
+        payload["setup_symbol"] = setup.get("symbol") or payload.get("setup_symbol")
+        payload["setup_timeframe"] = setup.get("timeframe") or payload.get("setup_timeframe")
+        payload["setup_type"] = setup.get("setup_type") or payload.get("setup_type")
+    if strategy.get("id"):
+        payload["strategy_id"] = strategy.get("id")
+    if bot.get("id"):
+        payload["bot_id"] = bot.get("id")
+    payload["setup_confidence"] = (graph.get("entity_confidence") or {}).get("setup")
+    payload["strategy_confidence"] = (graph.get("entity_confidence") or {}).get("strategy")
+    payload["bot_confidence"] = (graph.get("entity_confidence") or {}).get("bot")
+    payload["latest_report"] = graph.get("latest_report") or {}
+    payload["bot_status"] = graph.get("bot_status") or {}
+    payload["indicators"] = graph.get("indicators") or {}
+    return payload
+
+
+async def _dispatch_finn_route_decision(
+    *,
+    finn: Any,
+    user_id: int,
+    query: str,
+    context_payload: Optional[dict],
+    decision: Dict[str, Any],
+) -> Optional[dict]:
+    handler_name = decision.get("selected_handler")
+    if handler_name == "legacy_assistant":
+        return None
+    if handler_name == "build_response":
+        response = finn.build_response(query, context_payload)
+    elif handler_name == "build_setup_response":
+        response = finn.build_setup_response(query, context_payload)
+    elif handler_name == "build_cancel_response":
+        response = await finn.build_cancel_response(user_id, context_payload)
+    else:
+        handler = getattr(finn, handler_name)
+        response = await handler(user_id, query, context_payload)
+
+    if response is None:
+        return None
+    analysis = response.get("analysis") if isinstance(response.get("analysis"), dict) else {}
+    graph = (context_payload or {}).get("canonical_context_graph") if isinstance((context_payload or {}).get("canonical_context_graph"), dict) else {}
+    response["analysis"] = {
+        **analysis,
+        "pipeline_version": decision.get("pipeline_version"),
+        "intent_family": decision.get("intent_family"),
+        "router_name": decision.get("router_name"),
+        "matched_rules": decision.get("matched_rules") or [],
+        "selected_handler": f"finn_plan_service.{handler_name}",
+        "selection_reason": decision.get("selection_reason"),
+        "context_builder": (context_payload or {}).get("context_builder") or CANONICAL_FINN_CONTEXT_BUILDER,
+        "legacy_used": False,
+        "legacy_reason": None,
+        "ai_used": bool(decision.get("requires_ai") and get_ai_availability().get("available")),
+        "missing_context": graph.get("missing_context") or (context_payload or {}).get("missing_context") or [],
+        "entity_confidence": graph.get("entity_confidence") or (context_payload or {}).get("entity_confidence") or {},
+    }
+    state = response.get("state") if isinstance(response.get("state"), dict) else {}
+    state.setdefault("current_flow", response.get("flow"))
+    if (context_payload or {}).get("setup_id") and not state.get("setup_id"):
+        state["setup_id"] = (context_payload or {}).get("setup_id")
+    if (context_payload or {}).get("strategy_id") and not state.get("strategy_id"):
+        state["strategy_id"] = (context_payload or {}).get("strategy_id")
+    if (context_payload or {}).get("bot_id") and not state.get("bot_id"):
+        state["bot_id"] = (context_payload or {}).get("bot_id")
+    response["state"] = state
+    return response
 
 
 def _log_finn_prompt_audit(
@@ -1266,7 +1658,7 @@ def _infer_response_handler(
 ) -> str:
     response = response or {}
     analysis = response.get("analysis") if isinstance(response.get("analysis"), dict) else {}
-    explicit = analysis.get("response_handler") or response.get("response_handler")
+    explicit = analysis.get("response_handler") or response.get("response_handler") or analysis.get("selected_handler")
     if isinstance(explicit, str) and explicit.strip():
         return explicit
 
@@ -1505,6 +1897,15 @@ async def _finalize_finn_response(
         **analysis,
         "response_source": response_source,
         "response_handler": response_handler,
+        "pipeline_version": analysis.get("pipeline_version") or CANONICAL_FINN_PIPELINE_VERSION,
+        "router_name": analysis.get("router_name") or CANONICAL_FINN_ROUTER_NAME,
+        "context_builder": analysis.get("context_builder") or (context_payload or {}).get("context_builder"),
+        "matched_rules": analysis.get("matched_rules") or ([] if route_source.startswith("legacy") else ["finalized_response"]),
+        "legacy_used": analysis.get("legacy_used") if analysis.get("legacy_used") is not None else route_source.startswith("legacy"),
+        "legacy_reason": analysis.get("legacy_reason") or legacy_rescue_reason,
+        "ai_used": analysis.get("ai_used") if analysis.get("ai_used") is not None else response_source == "openai",
+        "missing_context": analysis.get("missing_context") or (context_payload or {}).get("missing_context") or [],
+        "entity_confidence": analysis.get("entity_confidence") or (context_payload or {}).get("entity_confidence") or {},
     }
     response = _attach_trader_profile_metadata(response, context_payload)
     response = _normalize_finn_response_contract(response)
@@ -1656,6 +2057,15 @@ async def _prepare_finn_envelope(
         **analysis,
         "response_source": response_source,
         "response_handler": response_handler,
+        "pipeline_version": analysis.get("pipeline_version") or CANONICAL_FINN_PIPELINE_VERSION,
+        "router_name": analysis.get("router_name") or CANONICAL_FINN_ROUTER_NAME,
+        "context_builder": analysis.get("context_builder") or (context_payload or {}).get("context_builder"),
+        "matched_rules": analysis.get("matched_rules") or ([] if route_source.startswith("legacy") else ["prepared_envelope"]),
+        "legacy_used": analysis.get("legacy_used") if analysis.get("legacy_used") is not None else route_source.startswith("legacy"),
+        "legacy_reason": analysis.get("legacy_reason") or legacy_rescue_reason,
+        "ai_used": analysis.get("ai_used") if analysis.get("ai_used") is not None else response_source == "openai",
+        "missing_context": analysis.get("missing_context") or (context_payload or {}).get("missing_context") or [],
+        "entity_confidence": analysis.get("entity_confidence") or (context_payload or {}).get("entity_confidence") or {},
     }
     envelope = _attach_trader_profile_metadata(envelope, context_payload)
     envelope = _normalize_finn_response_contract(envelope)
@@ -1868,6 +2278,15 @@ async def _finalize_legacy_response(
         **legacy_analysis,
         "response_source": response_source,
         "response_handler": response_handler,
+        "pipeline_version": CANONICAL_FINN_PIPELINE_VERSION,
+        "router_name": CANONICAL_FINN_ROUTER_NAME,
+        "context_builder": (context_payload or {}).get("context_builder"),
+        "matched_rules": ["legacy_fallback"],
+        "legacy_used": True,
+        "legacy_reason": None,
+        "ai_used": response_source == "openai",
+        "missing_context": (context_payload or {}).get("missing_context") or [],
+        "entity_confidence": (context_payload or {}).get("entity_confidence") or {},
     }
     legacy_response = _attach_trader_profile_metadata(legacy_response, context_payload)
     legacy_response = _normalize_finn_response_contract(legacy_response)
@@ -1971,6 +2390,12 @@ async def assistant_chat(
         context_payload = await finn.hydrate_context(user_id, _assistant_context_payload(request.context))
         context_payload = finn.sanitize_context_for_query(request.query, context_payload)
         context_payload = await _enrich_with_trader_profile(db, user_id, context_payload, query=request.query)
+        context_payload = await _apply_canonical_finn_context_graph(
+            db=db,
+            user_id=user_id,
+            query=request.query,
+            context_payload=context_payload,
+        )
         if request.session_id:
             context_payload["session_id"] = request.session_id
         _apply_assistant_rate_limit(
@@ -1979,6 +2404,16 @@ async def assistant_chat(
             query=request.query,
             context=context_payload,
             endpoint="/assistant/chat",
+        )
+        await _enqueue_finn_v2_shadow_run(
+            db=db,
+            user_id=user_id,
+            message=request.query,
+            transport="chat",
+            request_path=_safe_request_path(raw_request, "/api/assistant/chat"),
+            request_id=_safe_request_trace_id(raw_request, trace_id),
+            trace_id=trace_id,
+            context_payload=_assistant_context_payload(request.context),
         )
         _record_finn_product_event(
             user_id=user_id,
@@ -2065,189 +2500,30 @@ async def assistant_chat(
             return await _finalize_finn_response(
                 finn, user_id, follow_up, trace_id, persist_state=True, prompt=request.query, context_payload=context_payload
             )
-        if finn.looks_like_daily_score_refresh_request(request.query):
-            finn_response = await finn.build_daily_score_refresh_response(user_id, request.query, context_payload)
+        route_decision = _build_finn_route_decision(
+            finn=finn,
+            query=request.query,
+            context_payload=context_payload,
+            route_source="finn",
+        )
+        routed_response = await _dispatch_finn_route_decision(
+            finn=finn,
+            user_id=user_id,
+            query=request.query,
+            context_payload=context_payload,
+            decision=route_decision,
+        )
+        if routed_response is not None:
             return await _finalize_finn_response(
-                finn, user_id, finn_response, trace_id, prompt=request.query, context_payload=context_payload
-            )
-        if finn.looks_like_product_refresh_help_request(request.query):
-            finn_response = await finn.build_product_refresh_help_response(user_id, request.query, context_payload)
-            return await _finalize_finn_response(
-                finn, user_id, finn_response, trace_id, prompt=request.query, context_payload=context_payload, latency_ms=(time.perf_counter() - started_at) * 1000
-            )
-        if finn.looks_like_general_capability_request(request.query):
-            finn_response = await finn.build_general_capability_response(user_id, request.query, context_payload)
-            return await _finalize_finn_response(
-                finn, user_id, finn_response, trace_id, prompt=request.query, context_payload=context_payload, latency_ms=(time.perf_counter() - started_at) * 1000
-            )
-        if finn.looks_like_education_request(request.query):
-            finn_response = await finn.build_education_response(user_id, request.query, context_payload)
-            return await _finalize_finn_response(
-                finn, user_id, finn_response, trace_id, prompt=request.query, context_payload=context_payload, latency_ms=(time.perf_counter() - started_at) * 1000
-            )
-        if finn.looks_like_plan_adherence_review_request(request.query):
-            finn_response = await finn.build_plan_adherence_review_response(user_id, request.query, context_payload)
-            return await _finalize_finn_response(
-                finn, user_id, finn_response, trace_id, prompt=request.query, context_payload=context_payload, latency_ms=(time.perf_counter() - started_at) * 1000
-            )
-        if finn.looks_like_outcome_tracking_request(request.query):
-            finn_response = await finn.build_outcome_tracking_response(user_id, request.query, context_payload)
-            return await _finalize_finn_response(
-                finn, user_id, finn_response, trace_id, prompt=request.query, context_payload=context_payload, latency_ms=(time.perf_counter() - started_at) * 1000
-            )
-        if finn.looks_like_governed_action_review_request(request.query, context_payload):
-            finn_response = await finn.build_governed_action_review_response(user_id, request.query, context_payload)
-            return await _finalize_finn_response(
-                finn, user_id, finn_response, trace_id, prompt=request.query, context_payload=context_payload, latency_ms=(time.perf_counter() - started_at) * 1000
-            )
-        if finn.looks_like_outcome_memory_request(request.query):
-            finn_response = await finn.build_outcome_memory_response(user_id, request.query, context_payload)
-            return await _finalize_finn_response(
-                finn, user_id, finn_response, trace_id, prompt=request.query, context_payload=context_payload, latency_ms=(time.perf_counter() - started_at) * 1000
-            )
-        if finn.looks_like_personal_coach_request(request.query):
-            finn_response = await finn.build_personal_coach_response(user_id, request.query, context_payload)
-            return await _finalize_finn_response(
-                finn, user_id, finn_response, trace_id, prompt=request.query, context_payload=context_payload, latency_ms=(time.perf_counter() - started_at) * 1000
-            )
-        if finn.looks_like_personal_performance_request(request.query):
-            finn_response = await finn.build_personal_performance_response(user_id, request.query, context_payload)
-            return await _finalize_finn_response(
-                finn, user_id, finn_response, trace_id, prompt=request.query, context_payload=context_payload, latency_ms=(time.perf_counter() - started_at) * 1000
-            )
-        if finn.looks_like_trade_journal_intelligence_request(request.query):
-            finn_response = await finn.build_trade_journal_intelligence_response(user_id, request.query, context_payload)
-            return await _finalize_finn_response(
-                finn, user_id, finn_response, trace_id, prompt=request.query, context_payload=context_payload, latency_ms=(time.perf_counter() - started_at) * 1000
-            )
-        if finn.looks_like_portfolio_intelligence_request(request.query, context_payload):
-            finn_response = await finn.build_portfolio_intelligence_response(user_id, request.query, context_payload)
-            return await _finalize_finn_response(
-                finn, user_id, finn_response, trace_id, prompt=request.query, context_payload=context_payload, latency_ms=(time.perf_counter() - started_at) * 1000
-            )
-        if finn.looks_like_priority_engine_request(request.query, context_payload):
-            finn_response = await finn.build_priority_engine_response(user_id, request.query, context_payload)
-            return await _finalize_finn_response(
-                finn, user_id, finn_response, trace_id, prompt=request.query, context_payload=context_payload, latency_ms=(time.perf_counter() - started_at) * 1000
-            )
-        if finn.looks_like_portfolio_operating_system_request(request.query):
-            finn_response = await finn.build_portfolio_operating_system_response(user_id, request.query, context_payload)
-            return await _finalize_finn_response(
-                finn, user_id, finn_response, trace_id, prompt=request.query, context_payload=context_payload, latency_ms=(time.perf_counter() - started_at) * 1000
-            )
-        if finn.looks_like_decision_review_request(request.query, context_payload):
-            finn_response = await finn.build_decision_review_response(user_id, request.query, context_payload)
-            return await _finalize_finn_response(
-                finn, user_id, finn_response, trace_id, prompt=request.query, context_payload=context_payload, latency_ms=(time.perf_counter() - started_at) * 1000
-            )
-        if finn.should_route_ultra_implicit_prompt_to_decision_review(request.query, context_payload):
-            finn_response = await finn.build_decision_review_response(user_id, request.query, context_payload)
-            return await _finalize_finn_response(
-                finn, user_id, finn_response, trace_id, prompt=request.query, context_payload=context_payload, latency_ms=(time.perf_counter() - started_at) * 1000
-            )
-        if finn.looks_like_ultra_implicit_review_prompt(request.query):
-            finn_response = await finn.build_quick_general_help_response(user_id, request.query, context_payload)
-            return await _finalize_finn_response(
-                finn, user_id, finn_response, trace_id, prompt=request.query, context_payload=context_payload, latency_ms=(time.perf_counter() - started_at) * 1000
-            )
-        if finn.looks_like_mission_control_explain_request(request.query, context_payload):
-            finn_response = await finn.build_mission_control_explain_response(user_id, request.query, context_payload)
-            return await _finalize_finn_response(
-                finn, user_id, finn_response, trace_id, prompt=request.query, context_payload=context_payload, latency_ms=(time.perf_counter() - started_at) * 1000
-            )
-        if finn.looks_like_entity_explain_request(request.query, context_payload):
-            finn_response = await finn.build_context_explain_response(user_id, request.query, context_payload)
-            return await _finalize_finn_response(
-                finn, user_id, finn_response, trace_id, prompt=request.query, context_payload=context_payload, latency_ms=(time.perf_counter() - started_at) * 1000
-            )
-        if finn.looks_like_product_help_request(request.query, context_payload):
-            finn_response = await finn.build_product_help_response(user_id, request.query, context_payload)
-            return await _finalize_finn_response(
-                finn, user_id, finn_response, trace_id, prompt=request.query, context_payload=context_payload, latency_ms=(time.perf_counter() - started_at) * 1000
-            )
-        if finn.looks_like_bot_decision_request(request.query) or _legacy_bot_decision_resume(
-            request.query,
-            context_payload,
-        ):
-            finn_response = await finn.build_bot_decision_response(user_id, request.query, context_payload)
-            return await _finalize_finn_response(
-                finn, user_id, finn_response, trace_id, persist_state=True, prompt=request.query, context_payload=context_payload
-            )
-        if finn.looks_like_bot_decision_review_request(request.query):
-            finn_response = await finn.build_bot_decision_review_response(user_id, request.query, context_payload)
-            return await _finalize_finn_response(
-                finn, user_id, finn_response, trace_id, prompt=request.query, context_payload=context_payload
-            )
-        if finn.looks_like_bot_execution_decision_request(request.query):
-            finn_response = await finn.build_bot_execution_decision_response(user_id, request.query, context_payload)
-            return await _finalize_finn_response(
-                finn, user_id, finn_response, trace_id, prompt=request.query, context_payload=context_payload
-            )
-        if finn.looks_like_finn_report_request(request.query):
-            finn_response = await finn.build_finn_report_response(user_id, request.query, context_payload)
-            return await _finalize_finn_response(
-                finn, user_id, finn_response, trace_id, prompt=request.query, context_payload=context_payload
-            )
-        if finn.looks_like_behavioral_memory_request(request.query):
-            finn_response = await finn.build_behavioral_memory_response(user_id, request.query, context_payload)
-            return await _finalize_finn_response(
-                finn, user_id, finn_response, trace_id, prompt=request.query, context_payload=context_payload
-            )
-        if finn.looks_like_weekly_reflection_request(request.query):
-            finn_response = await finn.build_weekly_reflection_response(user_id, request.query, context_payload)
-            return await _finalize_finn_response(
-                finn, user_id, finn_response, trace_id, prompt=request.query, context_payload=context_payload
-            )
-        if finn.looks_like_behavioral_intelligence_request(request.query):
-            finn_response = await finn.build_behavioral_intelligence_response(user_id, request.query, context_payload)
-            return await _finalize_finn_response(
-                finn, user_id, finn_response, trace_id, prompt=request.query, context_payload=context_payload
-            )
-        if finn.is_cancel_request(request.query):
-            finn_response = await finn.build_cancel_response(user_id, context_payload)
-            if finn_response:
-                return await _finalize_finn_response(
-                    finn, user_id, finn_response, trace_id, persist_state=True, prompt=request.query, context_payload=context_payload
-                )
-        if finn.looks_like_indicator_insight_request(request.query):
-            finn_response = await finn.build_indicator_insight_response(user_id, request.query, context_payload)
-            return await _finalize_finn_response(
-                finn, user_id, finn_response, trace_id, prompt=request.query, context_payload=context_payload
-            )
-        if finn.looks_like_status_request(request.query):
-            finn_response = await finn.build_status_response(user_id, request.query, context_payload)
-            return await _finalize_finn_response(
-                finn, user_id, finn_response, trace_id, prompt=request.query, context_payload=context_payload
-            )
-        if finn.looks_like_indicator_config_request(request.query, context_payload):
-            finn_response = await finn.build_indicator_config_response_for_user(user_id, request.query, context_payload)
-            return await _finalize_finn_response(
-                finn, user_id, finn_response, trace_id, persist_state=True, prompt=request.query, context_payload=context_payload
-            )
-        if _should_use_modern_setup_creation_flow(request.query, context_payload):
-            finn_response = finn.build_setup_response(request.query, context_payload)
-            return await _finalize_finn_response(
-                finn, user_id, finn_response, trace_id, persist_state=True, prompt=request.query, context_payload=context_payload
-            )
-        if finn.looks_like_bot_request(request.query, context_payload):
-            finn_response = await finn.build_bot_response_for_user(user_id, request.query, context_payload)
-            return await _finalize_finn_response(
-                finn, user_id, finn_response, trace_id, persist_state=True, prompt=request.query, context_payload=context_payload
-            )
-        if finn.looks_like_strategy_request(request.query, context_payload):
-            finn_response = await finn.build_strategy_response_for_user(user_id, request.query, context_payload)
-            return await _finalize_finn_response(
-                finn, user_id, finn_response, trace_id, persist_state=True, prompt=request.query, context_payload=context_payload
-            )
-        if finn.looks_like_plan_request(request.query, context_payload.get("finn_draft")):
-            finn_response = finn.build_response(request.query, context_payload)
-            return await _finalize_finn_response(
-                finn, user_id, finn_response, trace_id, persist_state=True, prompt=request.query, context_payload=context_payload
-            )
-        if finn.looks_like_daily_coach_request(request.query):
-            finn_response = await finn.build_daily_coach_response(user_id, request.query, context_payload)
-            return await _finalize_finn_response(
-                finn, user_id, finn_response, trace_id, prompt=request.query, context_payload=context_payload
+                finn,
+                user_id,
+                routed_response,
+                trace_id,
+                persist_state=route_decision.get("action_mode") == "confirmable",
+                prompt=request.query,
+                context_payload=context_payload,
+                route_source="finn",
+                latency_ms=(time.perf_counter() - started_at) * 1000,
             )
 
         try:
@@ -2329,6 +2605,15 @@ async def assistant_chat(
             **legacy_analysis,
             "response_source": response_source,
             "response_handler": response_handler,
+            "pipeline_version": CANONICAL_FINN_PIPELINE_VERSION,
+            "router_name": CANONICAL_FINN_ROUTER_NAME,
+            "context_builder": context_payload.get("context_builder"),
+            "matched_rules": ["legacy_fallback"],
+            "legacy_used": True,
+            "legacy_reason": None,
+            "ai_used": response_source == "openai",
+            "missing_context": context_payload.get("missing_context") or [],
+            "entity_confidence": context_payload.get("entity_confidence") or {},
         }
         legacy_response = _attach_trader_profile_metadata(legacy_response, context_payload)
         legacy_response = _normalize_finn_response_contract(legacy_response)
@@ -2538,6 +2823,41 @@ def _assistant_context_payload(context) -> dict:
     return context or {}
 
 
+def _safe_request_path(raw_request: Request, fallback: str) -> str:
+    scope = getattr(raw_request, "scope", {}) or {}
+    path = scope.get("path")
+    return path if isinstance(path, str) and path else fallback
+
+
+def _safe_request_trace_id(raw_request: Request, fallback: str) -> str:
+    state = getattr(raw_request, "state", None)
+    return getattr(state, "trace_id", fallback)
+
+
+async def _enqueue_finn_v2_shadow_run(
+    *,
+    db: AsyncSession,
+    user_id: int,
+    message: str,
+    transport: str,
+    request_path: str,
+    request_id: str,
+    trace_id: str,
+    context_payload: Optional[dict] = None,
+) -> None:
+    gateway = FinnV2GatewayService(db)
+    await gateway.enqueue_shadow_run(
+        user_id=user_id,
+        message=message,
+        transport=transport,
+        request_path=request_path,
+        request_id=request_id,
+        trace_id=trace_id,
+        workspace_hints=context_payload or {},
+        client_context={"source": "v1_shadow_adapter"},
+    )
+
+
 def _sse_event(event_name: str, data_val) -> str:
     if isinstance(data_val, dict):
         data_str = json.dumps(data_val, ensure_ascii=False, default=str)
@@ -2569,6 +2889,12 @@ async def assistant_chat_stream(
             context_payload = await finn.hydrate_context(user_id, _assistant_context_payload(request.context))
             context_payload = finn.sanitize_context_for_query(request.query, context_payload)
             context_payload = await _enrich_with_trader_profile(db, user_id, context_payload, query=request.query)
+            context_payload = await _apply_canonical_finn_context_graph(
+                db=db,
+                user_id=user_id,
+                query=request.query,
+                context_payload=context_payload,
+            )
             if request.session_id:
                 context_payload["session_id"] = request.session_id
             _apply_assistant_rate_limit(
@@ -2577,6 +2903,16 @@ async def assistant_chat_stream(
                 query=request.query,
                 context=context_payload,
                 endpoint="/assistant/chat/stream",
+            )
+            await _enqueue_finn_v2_shadow_run(
+                db=db,
+                user_id=user_id,
+                message=request.query,
+                transport="stream",
+                request_path=_safe_request_path(raw_request, "/api/assistant/chat/stream"),
+                request_id=_safe_request_trace_id(raw_request, trace_id),
+                trace_id=trace_id,
+                context_payload=_assistant_context_payload(request.context),
             )
             _record_finn_product_event(
                 user_id=user_id,
@@ -2663,218 +2999,31 @@ async def assistant_chat_stream(
                 )
                 yield _sse_event("envelope", envelope)
                 return
-
-            if finn.looks_like_daily_score_refresh_request(request.query):
-                envelope = await finn.build_daily_score_refresh_response(user_id, request.query, context_payload)
-                envelope = await _prepare_finn_envelope(finn, user_id, envelope, trace_id, prompt=request.query, context_payload=context_payload)
-                yield _sse_event("envelope", envelope)
-                return
-
-            if finn.looks_like_product_refresh_help_request(request.query):
-                envelope = await finn.build_product_refresh_help_response(user_id, request.query, context_payload)
-                envelope = await _prepare_finn_envelope(finn, user_id, envelope, trace_id, prompt=request.query, context_payload=context_payload, latency_ms=(time.perf_counter() - started_at) * 1000)
-                yield _sse_event("envelope", envelope)
-                return
-
-            if finn.looks_like_general_capability_request(request.query):
-                envelope = await finn.build_general_capability_response(user_id, request.query, context_payload)
-                envelope = await _prepare_finn_envelope(finn, user_id, envelope, trace_id, prompt=request.query, context_payload=context_payload, latency_ms=(time.perf_counter() - started_at) * 1000)
-                yield _sse_event("envelope", envelope)
-                return
-
-            if finn.looks_like_product_help_request(request.query, context_payload):
-                envelope = await finn.build_product_help_response(user_id, request.query, context_payload)
-                envelope = await _prepare_finn_envelope(finn, user_id, envelope, trace_id, prompt=request.query, context_payload=context_payload, latency_ms=(time.perf_counter() - started_at) * 1000)
-                yield _sse_event("envelope", envelope)
-                return
-
-            if finn.looks_like_education_request(request.query):
-                envelope = await finn.build_education_response(user_id, request.query, context_payload)
-                envelope = await _prepare_finn_envelope(finn, user_id, envelope, trace_id, prompt=request.query, context_payload=context_payload, latency_ms=(time.perf_counter() - started_at) * 1000)
-                yield _sse_event("envelope", envelope)
-                return
-
-            if finn.looks_like_plan_adherence_review_request(request.query):
-                envelope = await finn.build_plan_adherence_review_response(user_id, request.query, context_payload)
-                envelope = await _prepare_finn_envelope(finn, user_id, envelope, trace_id, prompt=request.query, context_payload=context_payload, latency_ms=(time.perf_counter() - started_at) * 1000)
-                yield _sse_event("envelope", envelope)
-                return
-
-            if finn.looks_like_outcome_tracking_request(request.query):
-                envelope = await finn.build_outcome_tracking_response(user_id, request.query, context_payload)
-                envelope = await _prepare_finn_envelope(finn, user_id, envelope, trace_id, prompt=request.query, context_payload=context_payload, latency_ms=(time.perf_counter() - started_at) * 1000)
-                yield _sse_event("envelope", envelope)
-                return
-
-            if finn.looks_like_governed_action_review_request(request.query, context_payload):
-                envelope = await finn.build_governed_action_review_response(user_id, request.query, context_payload)
-                envelope = await _prepare_finn_envelope(finn, user_id, envelope, trace_id, prompt=request.query, context_payload=context_payload, latency_ms=(time.perf_counter() - started_at) * 1000)
-                yield _sse_event("envelope", envelope)
-                return
-
-            if finn.looks_like_outcome_memory_request(request.query):
-                envelope = await finn.build_outcome_memory_response(user_id, request.query, context_payload)
-                envelope = await _prepare_finn_envelope(finn, user_id, envelope, trace_id, prompt=request.query, context_payload=context_payload, latency_ms=(time.perf_counter() - started_at) * 1000)
-                yield _sse_event("envelope", envelope)
-                return
-
-            if finn.looks_like_personal_coach_request(request.query):
-                envelope = await finn.build_personal_coach_response(user_id, request.query, context_payload)
-                envelope = await _prepare_finn_envelope(finn, user_id, envelope, trace_id, prompt=request.query, context_payload=context_payload, latency_ms=(time.perf_counter() - started_at) * 1000)
-                yield _sse_event("envelope", envelope)
-                return
-
-            if finn.looks_like_personal_performance_request(request.query):
-                envelope = await finn.build_personal_performance_response(user_id, request.query, context_payload)
-                envelope = await _prepare_finn_envelope(finn, user_id, envelope, trace_id, prompt=request.query, context_payload=context_payload, latency_ms=(time.perf_counter() - started_at) * 1000)
-                yield _sse_event("envelope", envelope)
-                return
-
-            if finn.looks_like_trade_journal_intelligence_request(request.query):
-                envelope = await finn.build_trade_journal_intelligence_response(user_id, request.query, context_payload)
-                envelope = await _prepare_finn_envelope(finn, user_id, envelope, trace_id, prompt=request.query, context_payload=context_payload, latency_ms=(time.perf_counter() - started_at) * 1000)
-                yield _sse_event("envelope", envelope)
-                return
-
-            if finn.looks_like_portfolio_intelligence_request(request.query, context_payload):
-                envelope = await finn.build_portfolio_intelligence_response(user_id, request.query, context_payload)
-                envelope = await _prepare_finn_envelope(finn, user_id, envelope, trace_id, prompt=request.query, context_payload=context_payload, latency_ms=(time.perf_counter() - started_at) * 1000)
-                yield _sse_event("envelope", envelope)
-                return
-
-            if finn.looks_like_priority_engine_request(request.query, context_payload):
-                envelope = await finn.build_priority_engine_response(user_id, request.query, context_payload)
-                envelope = await _prepare_finn_envelope(finn, user_id, envelope, trace_id, prompt=request.query, context_payload=context_payload, latency_ms=(time.perf_counter() - started_at) * 1000)
-                yield _sse_event("envelope", envelope)
-                return
-
-            if finn.looks_like_portfolio_operating_system_request(request.query):
-                envelope = await finn.build_portfolio_operating_system_response(user_id, request.query, context_payload)
-                envelope = await _prepare_finn_envelope(finn, user_id, envelope, trace_id, prompt=request.query, context_payload=context_payload, latency_ms=(time.perf_counter() - started_at) * 1000)
-                yield _sse_event("envelope", envelope)
-                return
-
-            if finn.looks_like_decision_review_request(request.query, context_payload):
-                envelope = await finn.build_decision_review_response(user_id, request.query, context_payload)
-                envelope = await _prepare_finn_envelope(finn, user_id, envelope, trace_id, prompt=request.query, context_payload=context_payload, latency_ms=(time.perf_counter() - started_at) * 1000)
-                yield _sse_event("envelope", envelope)
-                return
-
-            if finn.should_route_ultra_implicit_prompt_to_decision_review(request.query, context_payload):
-                envelope = await finn.build_decision_review_response(user_id, request.query, context_payload)
-                envelope = await _prepare_finn_envelope(finn, user_id, envelope, trace_id, prompt=request.query, context_payload=context_payload, latency_ms=(time.perf_counter() - started_at) * 1000)
-                yield _sse_event("envelope", envelope)
-                return
-
-            if finn.looks_like_ultra_implicit_review_prompt(request.query):
-                envelope = await finn.build_quick_general_help_response(user_id, request.query, context_payload)
-                envelope = await _prepare_finn_envelope(finn, user_id, envelope, trace_id, prompt=request.query, context_payload=context_payload, latency_ms=(time.perf_counter() - started_at) * 1000)
-                yield _sse_event("envelope", envelope)
-                return
-
-            if finn.looks_like_mission_control_explain_request(request.query, context_payload):
-                envelope = await finn.build_mission_control_explain_response(user_id, request.query, context_payload)
-                envelope = await _prepare_finn_envelope(finn, user_id, envelope, trace_id, prompt=request.query, context_payload=context_payload, latency_ms=(time.perf_counter() - started_at) * 1000)
-                yield _sse_event("envelope", envelope)
-                return
-
-            if finn.looks_like_entity_explain_request(request.query, context_payload):
-                envelope = await finn.build_context_explain_response(user_id, request.query, context_payload)
-                envelope = await _prepare_finn_envelope(finn, user_id, envelope, trace_id, prompt=request.query, context_payload=context_payload, latency_ms=(time.perf_counter() - started_at) * 1000)
-                yield _sse_event("envelope", envelope)
-                return
-
-            if finn.looks_like_bot_decision_request(request.query) or _legacy_bot_decision_resume(
-                request.query,
-                context_payload,
-            ):
-                envelope = await finn.build_bot_decision_response(user_id, request.query, context_payload)
-                envelope = await _prepare_finn_envelope(finn, user_id, envelope, trace_id, persist_state=True, prompt=request.query, context_payload=context_payload)
-                yield _sse_event("envelope", envelope)
-                return
-
-            if finn.looks_like_bot_decision_review_request(request.query):
-                envelope = await finn.build_bot_decision_review_response(user_id, request.query, context_payload)
-                envelope = await _prepare_finn_envelope(finn, user_id, envelope, trace_id, prompt=request.query, context_payload=context_payload)
-                yield _sse_event("envelope", envelope)
-                return
-
-            if finn.looks_like_bot_execution_decision_request(request.query):
-                envelope = await finn.build_bot_execution_decision_response(user_id, request.query, context_payload)
-                envelope = await _prepare_finn_envelope(finn, user_id, envelope, trace_id, prompt=request.query, context_payload=context_payload)
-                yield _sse_event("envelope", envelope)
-                return
-
-            if finn.looks_like_finn_report_request(request.query):
-                envelope = await finn.build_finn_report_response(user_id, request.query, context_payload)
-                envelope = await _prepare_finn_envelope(finn, user_id, envelope, trace_id, prompt=request.query, context_payload=context_payload)
-                yield _sse_event("envelope", envelope)
-                return
-
-            if finn.looks_like_behavioral_memory_request(request.query):
-                envelope = await finn.build_behavioral_memory_response(user_id, request.query, context_payload)
-                envelope = await _prepare_finn_envelope(finn, user_id, envelope, trace_id, prompt=request.query, context_payload=context_payload)
-                yield _sse_event("envelope", envelope)
-                return
-
-            if finn.looks_like_weekly_reflection_request(request.query):
-                envelope = await finn.build_weekly_reflection_response(user_id, request.query, context_payload)
-                envelope = await _prepare_finn_envelope(finn, user_id, envelope, trace_id, prompt=request.query, context_payload=context_payload)
-                yield _sse_event("envelope", envelope)
-                return
-
-            if finn.looks_like_behavioral_intelligence_request(request.query):
-                envelope = await finn.build_behavioral_intelligence_response(user_id, request.query, context_payload)
-                envelope = await _prepare_finn_envelope(finn, user_id, envelope, trace_id, prompt=request.query, context_payload=context_payload)
-                yield _sse_event("envelope", envelope)
-                return
-
-            if finn.is_cancel_request(request.query):
-                envelope = await finn.build_cancel_response(user_id, context_payload)
-                if envelope:
-                    envelope = await _prepare_finn_envelope(finn, user_id, envelope, trace_id, persist_state=True, prompt=request.query, context_payload=context_payload)
-                    yield _sse_event("envelope", envelope)
-                    return
-
-            if finn.looks_like_indicator_insight_request(request.query):
-                envelope = await finn.build_indicator_insight_response(user_id, request.query, context_payload)
-                envelope = await _prepare_finn_envelope(finn, user_id, envelope, trace_id, prompt=request.query, context_payload=context_payload)
-                yield _sse_event("envelope", envelope)
-                return
-
-            if finn.looks_like_status_request(request.query):
-                envelope = await finn.build_status_response(user_id, request.query, context_payload)
-                envelope = await _prepare_finn_envelope(finn, user_id, envelope, trace_id, prompt=request.query, context_payload=context_payload)
-                yield _sse_event("envelope", envelope)
-                return
-
-            if finn.looks_like_indicator_config_request(request.query, context_payload):
-                envelope = await finn.build_indicator_config_response_for_user(user_id, request.query, context_payload)
-                envelope = await _prepare_finn_envelope(finn, user_id, envelope, trace_id, persist_state=True, prompt=request.query, context_payload=context_payload)
-                yield _sse_event("envelope", envelope)
-                return
-
-            if finn.looks_like_bot_request(request.query, context_payload):
-                envelope = await finn.build_bot_response_for_user(user_id, request.query, context_payload)
-                envelope = await _prepare_finn_envelope(finn, user_id, envelope, trace_id, persist_state=True, prompt=request.query, context_payload=context_payload)
-                yield _sse_event("envelope", envelope)
-                return
-
-            if finn.looks_like_strategy_request(request.query, context_payload):
-                envelope = await finn.build_strategy_response_for_user(user_id, request.query, context_payload)
-                envelope = await _prepare_finn_envelope(finn, user_id, envelope, trace_id, persist_state=True, prompt=request.query, context_payload=context_payload)
-                yield _sse_event("envelope", envelope)
-                return
-
-            if finn.looks_like_plan_request(request.query, context_payload.get("finn_draft")):
-                envelope = finn.build_response(request.query, context_payload)
-                envelope = await _prepare_finn_envelope(finn, user_id, envelope, trace_id, persist_state=True, prompt=request.query, context_payload=context_payload)
-                yield _sse_event("envelope", envelope)
-                return
-
-            if finn.looks_like_daily_coach_request(request.query):
-                envelope = await finn.build_daily_coach_response(user_id, request.query, context_payload)
-                envelope = await _prepare_finn_envelope(finn, user_id, envelope, trace_id, prompt=request.query, context_payload=context_payload)
+            route_decision = _build_finn_route_decision(
+                finn=finn,
+                query=request.query,
+                context_payload=context_payload,
+                route_source="finn_stream",
+            )
+            routed_envelope = await _dispatch_finn_route_decision(
+                finn=finn,
+                user_id=user_id,
+                query=request.query,
+                context_payload=context_payload,
+                decision=route_decision,
+            )
+            if routed_envelope is not None:
+                envelope = await _prepare_finn_envelope(
+                    finn,
+                    user_id,
+                    routed_envelope,
+                    trace_id,
+                    persist_state=route_decision.get("action_mode") == "confirmable",
+                    prompt=request.query,
+                    context_payload=context_payload,
+                    route_source="finn_stream",
+                    latency_ms=(time.perf_counter() - started_at) * 1000,
+                )
                 yield _sse_event("envelope", envelope)
                 return
 
