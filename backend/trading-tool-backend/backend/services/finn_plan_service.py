@@ -4887,7 +4887,7 @@ class FinnPlanService:
                     summary = report.get("summary") or report.get("headline") or report.get("market_summary") or report.get("macro_summary")
                     response = (
                         f"Je kijkt nu naar je meest recente {period_label}"
-                        f"{f' van {report_date}' if report_date else ''}. "
+                        f"{' van ' + str(report_date) if report_date else ''}. "
                         f"{summary if summary else 'Ik kan dit rapport verder uitsplitsen in score, risico en acties als je wilt.'}"
                     )
                     key_takeaways = [item for item in [
@@ -5004,7 +5004,7 @@ class FinnPlanService:
             asset = self._asset_from_query_or_context(query, context)
             response = (
                 f"Ik koppel je huidige context aan strategie #{strategy_id}"
-                f"{f' voor {asset}' if asset else ''}. "
+                f"{' voor ' + str(asset) if asset else ''}. "
                 "Ik baseer dat op je recente leescontext, dus ik ben concreet genoeg om deze strategie te volgen "
                 "ook als ik in deze turn niet de volledige strategie-rij opnieuw ophaal."
             )
@@ -5014,7 +5014,7 @@ class FinnPlanService:
                 entity_type="strategy",
                 entity={"id": strategy_id, "asset": asset},
                 state_overrides={"strategy_id": strategy_id, "asset": asset},
-                summary=f"Je huidige context wijst nu naar strategie #{strategy_id}{f' voor {asset}' if asset else ''}.",
+                summary=f"Je huidige context wijst nu naar strategie #{strategy_id}{' voor ' + str(asset) if asset else ''}.",
                 risk_summary="Zonder de volledige strategie-rij blijft dit een werkhypothese, geen harde uitvoerconclusie.",
                 next_best_action="Open de strategie of vraag Finn om de entry-, stop- en targetlogica uit te leggen.",
                 review_reason="Ik gebruik je recente context om de juiste strategie te volgen voordat je iets verandert.",
@@ -5063,7 +5063,7 @@ class FinnPlanService:
             asset = self._asset_from_query_or_context(query, context)
             response = (
                 f"Ik koppel je huidige context aan setup #{setup_id}"
-                f"{f' voor {asset}' if asset else ''}. "
+                f"{' voor ' + str(asset) if asset else ''}. "
                 "Dat komt uit je recente leescontext, dus ik kan hier al concreet over zijn "
                 "zonder eerst opnieuw de hele setup-rij op te halen."
             )
@@ -5073,7 +5073,7 @@ class FinnPlanService:
                 entity_type="setup",
                 entity={"id": setup_id, "asset": asset},
                 state_overrides={"setup_id": setup_id, "asset": asset},
-                summary=f"Je huidige context wijst nu naar setup #{setup_id}{f' voor {asset}' if asset else ''}.",
+                summary=f"Je huidige context wijst nu naar setup #{setup_id}{' voor ' + str(asset) if asset else ''}.",
                 risk_summary="Zonder de volledige setup-rij blijft dit contextueel nuttig, maar nog geen harde setup-review.",
                 next_best_action="Open de setup of vraag Finn welke blockers of scoreblokken hier het zwaarst wegen.",
                 review_reason="Ik gebruik je recente leescontext om de juiste setup te volgen voordat je verder bouwt.",
@@ -5243,8 +5243,8 @@ class FinnPlanService:
                         f"Ik kan setup #{setup_id} niet opnieuw uit de database bevestigen, "
                         "maar je huidige view wijst nog wel naar deze setup-context. "
                         f"Ik zie hier {setup_view_entity.get('name') or 'de setup'}"
-                        f"{f' voor {asset}' if asset else ''}"
-                        f"{f' op {setup_view_entity.get('timeframe')}' if setup_view_entity.get('timeframe') else ''}. "
+                        f"{' voor ' + str(asset) if asset else ''}"
+                        f"{' op ' + str(setup_view_entity.get('timeframe')) if setup_view_entity.get('timeframe') else ''}. "
                         "Gebruik dit alleen als schermcontext; voor een harde review wil ik de setup opnieuw kunnen laden."
                     ),
                     confidence={
@@ -5269,7 +5269,7 @@ class FinnPlanService:
             }.get(target, target)
             response = (
                 f"Ik kan in deze context niet veilig bevestigen welke {label} je bedoelt."
-                f"{f' Ik zie wel {asset} als je actieve asset-context,' if asset else ''} "
+                f"{' Ik zie wel ' + str(asset) + ' als je actieve asset-context,' if asset else ''} "
                 "maar ik resolve geen setup-, strategie- of bot-id als die niet overtuigend binnen jouw eigen context terugkomt. "
                 f"Open de {label}-surface opnieuw vanuit je eigen account of vraag Finn naar je actieve {label} zonder los id."
             )
