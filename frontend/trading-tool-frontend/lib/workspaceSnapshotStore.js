@@ -4,7 +4,8 @@ const listeners = new Set();
 const snapshots = new Map();
 
 function normalizeSymbol(symbol) {
-  return String(symbol || "BTC").trim().toUpperCase() || "BTC";
+  const normalized = String(symbol || "").trim().toUpperCase();
+  return normalized || "UNKNOWN";
 }
 
 function normalizeScope(scope) {

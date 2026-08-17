@@ -19,6 +19,9 @@ test("stores selected asset per authenticated user instead of a shared browser k
   assert.match(assetProviderSource, /selectedAsset:\$\{normalized\}/);
   assert.match(assetProviderSource, /localStorage\.getItem\(userStorageKey\)/);
   assert.match(assetProviderSource, /localStorage\.setItem\(userStorageKey,\s*normalized\)/);
+  assert.doesNotMatch(assetProviderSource, /DEFAULT_SELECTED_ASSET\s*=\s*"BTC"/);
+  assert.doesNotMatch(assetProviderSource, /setTimeout\(/);
+  assert.match(assetProviderSource, /assetStatus:\s*"loading"\s*\|\s*"resolved"\s*\|\s*"unconfigured"/);
 });
 
 test("post-auth redirects prefer the server-side active asset for completed onboarding users", () => {

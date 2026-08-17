@@ -37,7 +37,7 @@ import { FINN_COMMAND_OPEN_EVENT } from "@/lib/finnCommandSearch";
 export default function FinnWorkspaceShell({ children }) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const { selectedAsset } = useAsset();
+  const { selectedAsset, assetStatus } = useAsset();
   const { user } = useAuth();
   const { t } = useTranslation();
   const [assistantOpen, setAssistantOpen] = useState(false);
@@ -57,7 +57,10 @@ export default function FinnWorkspaceShell({ children }) {
   );
   const userName = user?.first_name || "Trader";
   const shellStatus = t?.ui?.shell?.appSlogan || "Professional";
-  const currentAsset = selectedAsset || "BTC";
+  const currentAsset =
+    assetStatus === "loading"
+      ? "Loading asset"
+      : selectedAsset || "No asset";
   const composerCopy = workspaceCopy.composer || {};
   const onboardingHeaderCopy = workspaceCopy.onboardingHeader || {};
 

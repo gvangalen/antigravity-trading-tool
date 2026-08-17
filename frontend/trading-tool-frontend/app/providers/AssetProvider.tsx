@@ -1,16 +1,16 @@
 "use client";
 
-import React, { createContext, useContext, useState, useEffect } from "react";
+import React, { createContext, useContext, useEffect, useMemo, useState } from "react";
 import { usePathname } from "next/navigation";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { useWatchlist } from "@/hooks/useWatchlist";
 import { API_BASE_URL } from "@/lib/config";
 import { buildAuthHeaders } from "@/lib/api/auth";
+import { normalizeScopedAssetSymbol, resolveScopedAssetStatus } from "@/lib/finnAssetIsolation";
 import { readOnboardingAssetPreference } from "@/lib/onboardingAsset";
 
 const preferredAssetCache = new Map<string, string | null>();
 const preferredAssetPromise = new Map<string, Promise<string | null>>();
-const DEFAULT_SELECTED_ASSET = "BTC";
 const DEFAULT_AVAILABLE_ASSETS = ["BTC", "ETH", "SOL", "ADA", "DOT"];
 const LEGACY_SELECTED_ASSET_KEY = "selectedAsset";
 
@@ -19,22 +19,18 @@ function selectedAssetStorageKey(userId: string | number | null | undefined) {
   return normalized ? `selectedAsset:${normalized}` : LEGACY_SELECTED_ASSET_KEY;
 }
 
-function normalizeAssetSymbol(asset: string | null | undefined) {
-  const normalized = String(asset || "").trim().toUpperCase();
-  return /^[A-Z0-9._:-]{1,20}$/.test(normalized) ? normalized : "";
-}
-
 function buildAvailableAssets(symbols: Array<string | null | undefined>) {
   const normalized = symbols
-    .map((symbol) => normalizeAssetSymbol(symbol))
+    .map((symbol) => normalizeScopedAssetSymbol(symbol) || "")
     .filter(Boolean);
 
   return Array.from(new Set(normalized));
 }
 
 type AssetContextType = {
-  selectedAsset: string;
-  setSelectedAsset: (asset: string) => void;
+  selectedAsset: string | null;
+  assetStatus: "loading" | "resolved" | "unconfigured";
+  setSelectedAsset: (asset: string | null) => void;
   availableAssets: string[];
   addAsset: (asset: string) => void;
 };
@@ -53,19 +49,36 @@ export function AssetProvider({ children }: { children: React.ReactNode }) {
   const { watchlist } = useWatchlist({
     autoLoad: !isPublicAuthRoute && sessionChecked && Boolean(user?.id),
   });
-  const [selectedAsset, setSelectedAssetState] = useState<string>(DEFAULT_SELECTED_ASSET);
+  const [selectedAsset, setSelectedAssetState] = useState<string | null>(null);
   const [availableAssets, setAvailableAssets] = useState<string[]>(DEFAULT_AVAILABLE_ASSETS);
   const [preferencesHydrated, setPreferencesHydrated] = useState(false);
   const userStorageKey = selectedAssetStorageKey(user?.id);
+  const isAuthenticated = Boolean(user?.id);
+  const assetStatus = useMemo<AssetContextType["assetStatus"]>(() => {
+    return resolveScopedAssetStatus({
+      isPublicAuthRoute,
+      sessionChecked,
+      isAuthenticated,
+      preferencesHydrated,
+      selectedAsset,
+    });
+  }, [isAuthenticated, isPublicAuthRoute, preferencesHydrated, selectedAsset, sessionChecked]);
 
-  // Load from localStorage on mount
   useEffect(() => {
-    const saved = localStorage.getItem(userStorageKey);
-    const normalized = normalizeAssetSymbol(saved);
-    if (normalized) {
-      setSelectedAssetState(normalized);
+    if (typeof window === "undefined") return;
+    if (!sessionChecked || isPublicAuthRoute) return;
+
+    const saved = normalizeScopedAssetSymbol(localStorage.getItem(userStorageKey));
+    if (saved) {
+      setSelectedAssetState(saved);
+      return;
     }
-  }, [userStorageKey]);
+
+    if (!isAuthenticated) {
+      const legacy = normalizeScopedAssetSymbol(localStorage.getItem(LEGACY_SELECTED_ASSET_KEY));
+      setSelectedAssetState(legacy || null);
+    }
+  }, [isAuthenticated, isPublicAuthRoute, sessionChecked, userStorageKey]);
 
   useEffect(() => {
     if (isPublicAuthRoute || preferencesHydrated || !sessionChecked) return;
@@ -76,7 +89,6 @@ export function AssetProvider({ children }: { children: React.ReactNode }) {
     }
 
     let cancelled = false;
-    let timer: ReturnType<typeof setTimeout> | null = null;
     const userKey = String(user.id);
 
     async function fetchPreferredAsset() {
@@ -117,7 +129,7 @@ export function AssetProvider({ children }: { children: React.ReactNode }) {
 
     async function hydrateSelectedAssetFromPreferences() {
       try {
-        const savedAsset = normalizeAssetSymbol(localStorage.getItem(userStorageKey));
+        const savedAsset = normalizeScopedAssetSymbol(localStorage.getItem(userStorageKey));
         if (savedAsset) {
           setSelectedAssetState(savedAsset);
           setAvailableAssets((current) => (current.includes(savedAsset) ? current : [...current, savedAsset]));
@@ -125,8 +137,11 @@ export function AssetProvider({ children }: { children: React.ReactNode }) {
         }
 
         const preferredAsset = await fetchPreferredAsset();
-        if (!preferredAsset) return;
         if (cancelled) return;
+        if (!preferredAsset) {
+          setSelectedAssetState(null);
+          return;
+        }
 
         setSelectedAssetState(preferredAsset);
         localStorage.setItem(userStorageKey, preferredAsset);
@@ -142,17 +157,15 @@ export function AssetProvider({ children }: { children: React.ReactNode }) {
       }
     }
 
-    timer = setTimeout(() => {
-      void hydrateSelectedAssetFromPreferences();
-    }, 600);
+    void hydrateSelectedAssetFromPreferences();
 
     return () => {
       cancelled = true;
-      if (timer) clearTimeout(timer);
     };
   }, [preferencesHydrated, sessionChecked, user?.id, user?.ai_preferences, userStorageKey]);
 
   useEffect(() => {
+    setSelectedAssetState(null);
     setPreferencesHydrated(false);
   }, [user?.id]);
 
@@ -162,10 +175,8 @@ export function AssetProvider({ children }: { children: React.ReactNode }) {
       localStorage.removeItem(LEGACY_SELECTED_ASSET_KEY);
       return;
     }
-    const legacyAsset = normalizeAssetSymbol(localStorage.getItem(LEGACY_SELECTED_ASSET_KEY));
-    if (legacyAsset) {
-      setSelectedAssetState(legacyAsset);
-    }
+      const legacyAsset = normalizeScopedAssetSymbol(localStorage.getItem(LEGACY_SELECTED_ASSET_KEY));
+    setSelectedAssetState(legacyAsset || null);
   }, [user?.id]);
 
   useEffect(() => {
@@ -175,21 +186,26 @@ export function AssetProvider({ children }: { children: React.ReactNode }) {
     const nextAvailableAssets = buildAvailableAssets(
       watchlistSymbols.length
         ? [...watchlistSymbols, selectedAsset]
-        : [selectedAsset, ...DEFAULT_AVAILABLE_ASSETS]
+        : [selectedAsset, ...(isAuthenticated ? [] : DEFAULT_AVAILABLE_ASSETS)]
     );
 
     setAvailableAssets(nextAvailableAssets.length ? nextAvailableAssets : DEFAULT_AVAILABLE_ASSETS);
-  }, [selectedAsset, watchlist]);
+  }, [isAuthenticated, selectedAsset, watchlist]);
 
-  const setSelectedAsset = (asset: string) => {
-    const normalized = normalizeAssetSymbol(asset);
+  const setSelectedAsset = (asset: string | null) => {
+    if (asset == null) {
+      setSelectedAssetState(null);
+      localStorage.removeItem(userStorageKey);
+      return;
+    }
+    const normalized = normalizeScopedAssetSymbol(asset);
     if (!normalized) return;
     setSelectedAssetState(normalized);
     localStorage.setItem(userStorageKey, normalized);
   };
 
   const addAsset = (asset: string) => {
-    const up = normalizeAssetSymbol(asset);
+    const up = normalizeScopedAssetSymbol(asset);
     if (!up) return;
     setAvailableAssets((current) => (current.includes(up) ? current : [...current, up]));
   };
@@ -197,6 +213,7 @@ export function AssetProvider({ children }: { children: React.ReactNode }) {
   return (
     <AssetContext.Provider value={{ 
       selectedAsset, 
+      assetStatus,
       setSelectedAsset, 
       availableAssets,
       addAsset

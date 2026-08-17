@@ -1,13 +1,17 @@
 import asyncio
+import json
 from datetime import date
 from decimal import Decimal
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
+import pytest
+from fastapi import BackgroundTasks
 from starlette.requests import Request
 
 from backend.api.ai_assistant_api import (
     assistant_chat,
+    assistant_chat_stream,
     _finalize_finn_response,
     _prepare_finn_envelope,
     _build_finn_core_rescue_envelope,
@@ -27,6 +31,175 @@ from backend.services.finn_plan_service import FinnPlanService
 
 def _finn():
     return FinnPlanService(db_session=None)
+
+
+PRODUCTION_FINN_QUESTION_CONTRACTS = [
+    (
+        "A1",
+        "Bekijk mijn BTC-profiel, indicatoren, setup, strategie en gekoppelde bot. Wat is volgens jou op dit moment het belangrijkste ontbrekende onderdeel van mijn plan? Geef één concrete observatie en één vervolgstap.",
+        "build_portfolio_intelligence_response",
+        "portfolio_intelligence",
+        "plan_review",
+    ),
+    (
+        "A2",
+        "Past mijn huidige BTC-strategie bij mijn risicoprofiel en tradingstijl? Noem één goede aansluiting en één mogelijk conflict.",
+        "build_decision_review_response",
+        "decision_review",
+        "market_review",
+    ),
+    (
+        "A3",
+        "Welke indicatoren gebruik ik momenteel voor BTC, en welk belangrijk perspectief ontbreekt mogelijk nog in mijn analyse?",
+        "build_indicator_insight_response",
+        "indicator_insight",
+        "fact_lookup",
+    ),
+    (
+        "B1",
+        "Wat is mijn actieve BTC-setup en op welke timeframes is deze gebaseerd?",
+        "build_context_explain_response",
+        "context_explain",
+        "fact_lookup",
+    ),
+    (
+        "B2",
+        "Welke belangrijkste entryvoorwaarde uit mijn BTC-strategie moet bevestigd zijn voordat mijn plan een entry toestaat?",
+        "build_context_explain_response",
+        "context_explain",
+        "fact_lookup",
+    ),
+    (
+        "B3",
+        "Welke bot is aan mijn BTC-strategie gekoppeld, en staat deze bot momenteel live?",
+        "build_context_explain_response",
+        "context_explain",
+        "fact_lookup",
+    ),
+    (
+        "B4",
+        "Waarom heeft mijn gekoppelde BTC-bot nu geen positie geopend? Scheid wat je zeker weet van wat nog niet bevestigd kan worden.",
+        "build_context_explain_response",
+        "context_explain",
+        "fact_lookup",
+    ),
+]
+
+
+def _raw_request():
+    return Request({"type": "http", "headers": [], "client": ("127.0.0.1", 12345)})
+
+
+async def _stream_request():
+    return None
+
+
+def _build_canonical_runtime_context(context):
+    return {
+        **(context or {}),
+        "user_id": 30,
+        "page": "/bot",
+        "page_type": "bot",
+        "symbol": "BTC",
+        "asset": "BTC",
+        "asset_source": "workspace_state",
+        "asset_confidence": "high",
+        "asset_user_scoped": True,
+        "setup_id": 501,
+        "strategy_id": 701,
+        "bot_id": 901,
+        "missing_context": [],
+        "entity_confidence": {
+            "asset": "high",
+            "setup": "high",
+            "strategy": "high",
+            "bot": "high",
+        },
+        "context_builder": "assistant_context_repository.build_canonical_context_graph",
+        "canonical_context_graph": {
+            "user_id": 30,
+            "asset": "BTC",
+            "missing_context": [],
+            "entity_confidence": {
+                "asset": "high",
+                "setup": "high",
+                "strategy": "high",
+                "bot": "high",
+            },
+            "setup": {"id": 501, "name": "BTC setup", "timeframe": "4H", "symbol": "BTC"},
+            "strategy": {"id": 701, "setup_id": 501, "name": "BTC strategy"},
+            "bot": {"id": 901, "strategy_id": 701, "name": "BTC bot", "is_live": False},
+        },
+    }
+
+
+def _patch_canonical_endpoint_runtime(monkeypatch, *, case_id, expected_builder, expected_flow):
+    finn = _finn()
+    finn.issue_response_actions = AsyncMock()
+    finn.persist_response_state = AsyncMock()
+
+    async def fake_apply_context_graph(*, db, user_id, query, context_payload):
+        return _build_canonical_runtime_context(context_payload)
+
+    async def fake_localize(payload, **kwargs):
+        return payload
+
+    async def fake_no_disconnect():
+        return False
+
+    def payload():
+        return {
+            "response": f"{case_id} response",
+            "intent": expected_flow,
+            "flow": expected_flow,
+            "state": {
+                "current_flow": expected_flow,
+            },
+            "reasoning": {
+                "confidence_score": 0.91,
+                "risk_detected": False,
+                "reasons": [f"{case_id} contract"],
+                "coaching_level": "standard",
+            },
+        }
+
+    builder_names = [
+        "build_portfolio_intelligence_response",
+        "build_decision_review_response",
+        "build_indicator_insight_response",
+        "build_context_explain_response",
+    ]
+    for builder_name in builder_names:
+        setattr(finn, builder_name, AsyncMock(side_effect=lambda *args, _builder=builder_name, **kwargs: payload()))
+
+    monkeypatch.setattr("backend.api.ai_assistant_api._new_finn_plan_service", lambda db, trace_id=None: finn)
+    monkeypatch.setattr("backend.api.ai_assistant_api._apply_canonical_finn_context_graph", fake_apply_context_graph)
+    monkeypatch.setattr("backend.api.ai_assistant_api._enrich_with_trader_profile", AsyncMock(side_effect=lambda db, user_id, payload=None, query=None: dict(payload or {})))
+    monkeypatch.setattr("backend.api.ai_assistant_api._apply_assistant_rate_limit", lambda **kwargs: None)
+    monkeypatch.setattr("backend.api.ai_assistant_api._record_finn_product_event", lambda **kwargs: {})
+    monkeypatch.setattr("backend.api.ai_assistant_api._localize_finn_response_payload", fake_localize)
+    monkeypatch.setattr("backend.api.ai_assistant_api.get_ai_availability", lambda: {"available": True, "mode": "full", "reason": None})
+    monkeypatch.setattr("backend.services.finn_response_trace_service.get_ai_availability", lambda: {"available": True, "mode": "full", "reason": None})
+
+    service = SimpleNamespace(
+        state_repo=SimpleNamespace(get_state=AsyncMock(return_value=None)),
+        get_chat_response=AsyncMock(),
+        _classify_intent=lambda query: "general_help",
+    )
+    raw_stream_request = SimpleNamespace(is_disconnected=AsyncMock(side_effect=fake_no_disconnect))
+    return finn, service, raw_stream_request
+
+
+async def _collect_stream_envelope(response):
+    chunks = []
+    async for chunk in response.body_iterator:
+        chunks.append(chunk.decode() if isinstance(chunk, bytes) else chunk)
+    payload = "".join(chunks)
+    for block in payload.split("\n\n"):
+        if block.startswith("event: envelope\n"):
+            data = block.split("data: ", 1)[1]
+            return json.loads(data)
+    raise AssertionError(f"No envelope event found in stream payload: {payload}")
 
 
 def test_legacy_response_source_is_fallback_when_ai_is_unavailable(monkeypatch):
@@ -362,6 +535,141 @@ def test_build_finn_core_rescue_envelope_does_not_route_cross_workspace_review_t
     finn.build_context_explain_response.assert_not_awaited()
     assert response["intent"] != "context_explain"
     assert response["flow"] != "context_explain"
+
+
+@pytest.mark.parametrize(
+    ("case_id", "query", "expected_builder", "expected_flow", "expected_family"),
+    PRODUCTION_FINN_QUESTION_CONTRACTS,
+)
+def test_build_finn_core_rescue_envelope_routes_exact_production_questions(case_id, query, expected_builder, expected_flow, expected_family):
+    finn = _finn()
+    finn.issue_response_actions = AsyncMock()
+    finn.persist_response_state = AsyncMock()
+
+    builder_names = [
+        "build_portfolio_intelligence_response",
+        "build_decision_review_response",
+        "build_indicator_insight_response",
+        "build_context_explain_response",
+    ]
+    for builder_name in builder_names:
+        setattr(
+            finn,
+            builder_name,
+            AsyncMock(return_value={"intent": expected_flow, "flow": expected_flow, "response": case_id, "state": {"current_flow": expected_flow}}),
+        )
+
+    response = asyncio.run(
+        _build_finn_core_rescue_envelope(
+            finn=finn,
+            user_id=30,
+            query=query,
+            context_payload={"page": "/bot", "page_type": "Bot", "symbol": "BTC", "setup_id": 501, "strategy_id": 701, "bot_id": 901},
+        )
+    )
+
+    for builder_name in builder_names:
+        mock = getattr(finn, builder_name)
+        if builder_name == expected_builder:
+            mock.assert_awaited_once()
+        else:
+            mock.assert_not_awaited()
+
+    envelope = asyncio.run(
+        _prepare_finn_envelope(
+            finn,
+            30,
+            response,
+            f"trace-{case_id}",
+            prompt=query,
+            context_payload={"page": "/bot", "page_type": "Bot", "symbol": "BTC", "setup_id": 501, "strategy_id": 701, "bot_id": 901},
+        )
+    )
+
+    assert envelope["flow"] == expected_flow
+    assert envelope["response_trace"]["response"]["handler"].endswith(expected_builder)
+    assert envelope["response_trace"]["routing"]["intent_family"] == expected_family
+
+
+@pytest.mark.parametrize(
+    ("case_id", "query", "expected_builder", "expected_flow", "expected_family"),
+    PRODUCTION_FINN_QUESTION_CONTRACTS,
+)
+def test_canonical_chat_and_stream_endpoints_keep_production_question_contracts(
+    monkeypatch,
+    case_id,
+    query,
+    expected_builder,
+    expected_flow,
+    expected_family,
+):
+    finn, service, raw_stream_request = _patch_canonical_endpoint_runtime(
+        monkeypatch,
+        case_id=case_id,
+        expected_builder=expected_builder,
+        expected_flow=expected_flow,
+    )
+
+    chat_response = asyncio.run(
+        assistant_chat(
+            AssistantChatRequest(query=query, history=[], context={"page": "/bot"}, session_id=f"sess-{case_id}"),
+            _raw_request(),
+            None,
+            {"id": 30},
+            service,
+            None,
+        )
+    )
+
+    stream_response = asyncio.run(
+        assistant_chat_stream(
+            AssistantChatRequest(query=query, history=[], context={"page": "/bot"}, session_id=f"sess-{case_id}"),
+            BackgroundTasks(),
+            raw_stream_request,
+            None,
+            {"id": 30},
+            service,
+            None,
+        )
+    )
+    stream_envelope = asyncio.run(_collect_stream_envelope(stream_response))
+
+    for builder_name in [
+        "build_portfolio_intelligence_response",
+        "build_decision_review_response",
+        "build_indicator_insight_response",
+        "build_context_explain_response",
+    ]:
+        mock = getattr(finn, builder_name)
+        if builder_name == expected_builder:
+            assert mock.await_count == 2
+        else:
+            mock.assert_not_awaited()
+
+    chat_trace = chat_response.response_trace
+    stream_trace = stream_envelope["response_trace"]
+
+    assert chat_response.flow == expected_flow
+    assert stream_envelope["flow"] == expected_flow
+    assert chat_trace["routing"]["pipeline_version"] == "v1_canonical_router"
+    assert stream_trace["routing"]["pipeline_version"] == "v1_canonical_router"
+    assert chat_trace["routing"]["intent_family"] == expected_family
+    assert stream_trace["routing"]["intent_family"] == expected_family
+    assert chat_trace["routing"]["selected_handler"].endswith(expected_builder)
+    assert stream_trace["routing"]["selected_handler"].endswith(expected_builder)
+    assert chat_trace["context"]["setup_id"] == 501
+    assert chat_trace["context"]["strategy_id"] == 701
+    assert chat_trace["context"]["bot_id"] == 901
+    assert chat_trace["context"]["entity_confidence"]["bot"] == "high"
+    assert chat_trace["context"]["missing_context"] == []
+    assert stream_trace["context"]["setup_id"] == 501
+    assert stream_trace["context"]["strategy_id"] == 701
+    assert stream_trace["context"]["bot_id"] == 901
+    assert stream_trace["decision"]["ai_available"] is True
+    assert stream_trace["decision"]["legacy_used"] is False
+    assert chat_response.response == f"{case_id} response"
+    assert isinstance(chat_response.response, str) and chat_response.response
+    assert isinstance(stream_envelope["response"], str) and stream_envelope["response"]
 
 
 def test_build_finn_core_rescue_envelope_prefers_product_help_builder():

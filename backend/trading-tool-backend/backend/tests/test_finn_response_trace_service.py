@@ -91,6 +91,51 @@ def test_budget_fallback_trace_explains_why_openai_was_not_used(monkeypatch):
     assert trace["context"]["timeframe"] == "1W"
 
 
+def test_trace_includes_asset_provenance_and_context_confidence(monkeypatch):
+    monkeypatch.setattr(
+        trace_service,
+        "get_ai_availability",
+        lambda: {
+            "available": True,
+            "mode": "full",
+            "reason": None,
+        },
+    )
+    trace = trace_service.build_finn_response_trace(
+        trace_id="trace-provenance",
+        response={
+            "response": "ok",
+            "intent": "portfolio_intelligence",
+            "flow": "portfolio_intelligence",
+            "analysis": {
+                "asset_source": "user_preferences",
+                "asset_confidence": "medium",
+                "asset_user_scoped": True,
+                "profile_confidence": "high",
+                "setup_confidence": "high",
+                "strategy_confidence": "medium",
+                "bot_confidence": "low",
+                "overall_context_confidence": "medium",
+            },
+            "state": {"asset": "AAPL"},
+        },
+        context={"symbol": "AAPL"},
+        route_source="finn",
+        response_source="openai",
+        response_handler="finn_plan_service.build_portfolio_intelligence_response",
+    )
+
+    assert trace["context"]["asset"] == "AAPL"
+    assert trace["context"]["asset_source"] == "user_preferences"
+    assert trace["context"]["asset_confidence"] == "medium"
+    assert trace["context"]["asset_user_scoped"] is True
+    assert trace["context"]["profile_confidence"] == "high"
+    assert trace["context"]["setup_confidence"] == "high"
+    assert trace["context"]["strategy_confidence"] == "medium"
+    assert trace["context"]["bot_confidence"] == "low"
+    assert trace["context"]["overall_context_confidence"] == "medium"
+
+
 def test_trace_endpoint_uses_authenticated_user_scope(monkeypatch):
     captured = {}
 

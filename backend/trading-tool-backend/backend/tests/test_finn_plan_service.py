@@ -4,6 +4,7 @@ from decimal import Decimal
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
+import pytest
 from fastapi import HTTPException
 
 import backend.services.finn_plan_service as finn_plan_module
@@ -19,6 +20,134 @@ from backend.schemas.assistant_schema import AssistantContextSchema
 
 def _service():
     return FinnPlanService(db_session=None)
+
+
+FIXTURE_USER_A_CHAIN = {
+    "user_id": 101,
+    "asset": "BTC",
+    "setup": {
+        "id": 501,
+        "name": "BTC Breakout",
+        "symbol": "BTC",
+        "timeframe": "4H",
+        "setup_type": "trade",
+        "is_active": True,
+    },
+    "strategy": {
+        "id": 701,
+        "name": "BTC Momentum Rules",
+        "symbol": "BTC",
+        "timeframe": "4H",
+        "setup_id": 501,
+        "setup_name": "BTC Breakout",
+        "entry_logic": "Wacht op breakout + retest + volume-bevestiging.",
+        "rules": {
+            "entry": ["Breakout boven range high", "Retest houdt stand", "Volume expansie aanwezig"],
+        },
+    },
+    "bot": {
+        "id": 901,
+        "name": "FINN BTC Executor",
+        "symbol": "BTC",
+        "strategy_id": 701,
+        "strategy_name": "BTC Momentum Rules",
+        "setup_id": 501,
+        "setup_name": "BTC Breakout",
+        "mode": "auto",
+        "is_active": True,
+        "is_live": False,
+    },
+}
+
+FIXTURE_USER_B_CHAIN = {
+    "user_id": 202,
+    "asset": "AAPL",
+    "setup": {
+        "id": 502,
+        "name": "AAPL Pullback",
+        "symbol": "AAPL",
+        "timeframe": "1D",
+        "setup_type": "trade",
+        "is_active": True,
+    },
+    "strategy": {
+        "id": 702,
+        "name": "AAPL Continuation Rules",
+        "symbol": "AAPL",
+        "timeframe": "1D",
+        "setup_id": 502,
+        "setup_name": "AAPL Pullback",
+        "entry_logic": "Koop alleen op bevestigde day-close reclaim.",
+        "rules": {
+            "entry": ["Day close reclaim", "Trend blijft stijgend"],
+        },
+    },
+    "bot": {
+        "id": 902,
+        "name": "FINN AAPL Executor",
+        "symbol": "AAPL",
+        "strategy_id": 702,
+        "strategy_name": "AAPL Continuation Rules",
+        "setup_id": 502,
+        "setup_name": "AAPL Pullback",
+        "mode": "manual",
+        "is_active": False,
+        "is_live": False,
+    },
+}
+
+
+def _patch_owned_context_services(monkeypatch, chains):
+    setup_by_id = {chain["setup"]["id"]: chain for chain in chains}
+    strategy_by_id = {chain["strategy"]["id"]: chain for chain in chains}
+    bot_by_id = {chain["bot"]["id"]: chain for chain in chains}
+
+    class FakeSetupService:
+        def __init__(self, session):
+            self.session = session
+
+        async def get_setup_by_id(self, setup_id, user_id):
+            chain = setup_by_id.get(int(setup_id))
+            if not chain or int(chain["user_id"]) != int(user_id):
+                raise HTTPException(status_code=404, detail="setup not found")
+            return dict(chain["setup"])
+
+    class FakeStrategyRepository:
+        def __init__(self, session):
+            self.session = session
+
+        async def get_raw_strategy_with_setup(self, strategy_id, user_id):
+            chain = strategy_by_id.get(int(strategy_id))
+            if not chain or int(chain["user_id"]) != int(user_id):
+                return None
+            return dict(chain["strategy"])
+
+    class FakeStrategyService:
+        def __init__(self, session):
+            self.session = session
+
+        def _format_strategy_row(self, row):
+            return dict(row) if row else None
+
+    class FakeBotRepository:
+        async def get_bot_config(self, user_id, bot_id):
+            chain = bot_by_id.get(int(bot_id))
+            if not chain or int(chain["user_id"]) != int(user_id):
+                return None
+            return dict(chain["bot"])
+
+    class FakeBotService:
+        def __init__(self, session):
+            self.session = session
+            self.repository = FakeBotRepository()
+
+        async def get_bot_today(self, user_id, symbol, lean=True):
+            return {"decisions": [], "orders": [], "executions": [], "scores": {}, "symbol": symbol}
+
+    monkeypatch.setattr(finn_plan_module, "SetupService", FakeSetupService)
+    monkeypatch.setattr(finn_plan_module, "StrategyRepository", FakeStrategyRepository)
+    monkeypatch.setattr(finn_plan_module, "StrategyService", FakeStrategyService)
+    monkeypatch.setattr(finn_plan_module, "BotService", FakeBotService)
 
 
 def test_profile_focus_line_mentions_mixed_profile_page_context_priority():
@@ -1204,6 +1333,165 @@ def test_build_context_explain_response_can_explain_current_page():
     assert result["analysis"]["entity_type"] == "page"
     assert result["analysis"]["context_confidence"]["level"] == "high"
     assert "dashboard" in result["response"].lower()
+
+
+def test_build_context_explain_response_resolves_user_specific_setup_strategy_bot_chain(monkeypatch):
+    _patch_owned_context_services(monkeypatch, [FIXTURE_USER_A_CHAIN, FIXTURE_USER_B_CHAIN])
+    service = FinnPlanService(db_session=object())
+
+    setup_result = asyncio.run(service.build_context_explain_response(
+        FIXTURE_USER_A_CHAIN["user_id"],
+        "Welke setup heb ik nu open?",
+        {"page": "/setup", "symbol": "BTC", "setup_id": FIXTURE_USER_A_CHAIN["setup"]["id"]},
+    ))
+    strategy_result = asyncio.run(service.build_context_explain_response(
+        FIXTURE_USER_A_CHAIN["user_id"],
+        "Welke strategie bekijk ik nu?",
+        {"page": "/strategy", "symbol": "BTC", "strategy_id": FIXTURE_USER_A_CHAIN["strategy"]["id"]},
+    ))
+    bot_result = asyncio.run(service.build_context_explain_response(
+        FIXTURE_USER_A_CHAIN["user_id"],
+        "Leg mijn bot uit",
+        {"page": "/bot", "symbol": "BTC", "bot_id": FIXTURE_USER_A_CHAIN["bot"]["id"]},
+    ))
+
+    assert setup_result["analysis"]["entity"]["id"] == FIXTURE_USER_A_CHAIN["setup"]["id"]
+    assert setup_result["analysis"]["entity"]["symbol"] == "BTC"
+    assert strategy_result["analysis"]["entity"]["id"] == FIXTURE_USER_A_CHAIN["strategy"]["id"]
+    assert strategy_result["analysis"]["entity"]["setup_id"] == FIXTURE_USER_A_CHAIN["setup"]["id"]
+    assert "gekoppeld aan setup #501" in strategy_result["response"]
+    assert bot_result["analysis"]["entity"]["id"] == FIXTURE_USER_A_CHAIN["bot"]["id"]
+    assert bot_result["analysis"]["entity"]["strategy_id"] == FIXTURE_USER_A_CHAIN["strategy"]["id"]
+    assert bot_result["analysis"]["entity"]["setup_id"] == FIXTURE_USER_A_CHAIN["setup"]["id"]
+    assert "Status: actief" in bot_result["response"]
+
+
+@pytest.mark.parametrize(
+    ("query", "context", "entity_type"),
+    [
+        ("Welke setup heb ik nu open?", {"page": "/setup", "symbol": "BTC", "setup_id": FIXTURE_USER_A_CHAIN["setup"]["id"]}, "setup"),
+        ("Welke strategie bekijk ik nu?", {"page": "/strategy", "symbol": "BTC", "strategy_id": FIXTURE_USER_A_CHAIN["strategy"]["id"]}, "strategy"),
+        ("Leg mijn bot uit", {"page": "/bot", "symbol": "BTC", "bot_id": FIXTURE_USER_A_CHAIN["bot"]["id"]}, "bot"),
+    ],
+)
+def test_build_context_explain_response_never_resolves_foreign_setup_strategy_or_bot_ids(monkeypatch, query, context, entity_type):
+    _patch_owned_context_services(monkeypatch, [FIXTURE_USER_A_CHAIN, FIXTURE_USER_B_CHAIN])
+    service = FinnPlanService(db_session=object())
+
+    result = asyncio.run(service.build_context_explain_response(FIXTURE_USER_B_CHAIN["user_id"], query, context))
+
+    assert result["analysis"]["entity_type"] == entity_type
+    assert result["analysis"]["context_confidence"]["level"] == "low"
+    assert result["analysis"]["context_confidence"]["reason"] == "entity_not_owned_or_not_resolved"
+    assert result["analysis"]["context_explain"]["entity_id"] is None
+    assert result["analysis"]["entity"] == {"asset": "BTC"}
+    assert "resolve geen setup-, strategie- of bot-id" in result["response"]
+
+
+def test_b2_strategy_entry_condition_contract_uses_actual_strategy_rule(monkeypatch):
+    _patch_owned_context_services(monkeypatch, [FIXTURE_USER_A_CHAIN])
+    service = FinnPlanService(db_session=object())
+
+    result = asyncio.run(service.build_context_explain_response(
+        FIXTURE_USER_A_CHAIN["user_id"],
+        "Welke belangrijkste entryvoorwaarde uit mijn BTC-strategie moet bevestigd zijn voordat mijn plan een entry toestaat?",
+        {"page": "/strategy", "symbol": "BTC", "strategy_id": FIXTURE_USER_A_CHAIN["strategy"]["id"]},
+    ))
+
+    assert result["intent"] == "context_explain"
+    assert result["analysis"]["entity_type"] == "strategy"
+    assert result["analysis"]["entity"]["id"] == FIXTURE_USER_A_CHAIN["strategy"]["id"]
+    assert result["analysis"]["context_confidence"]["level"] == "high"
+    assert "Breakout boven range high" in result["response"]
+    assert "vul geen extra tradingwijsheid in" in result["response"]
+
+
+def test_b3_bot_link_and_live_status_contract_uses_real_relation(monkeypatch):
+    _patch_owned_context_services(monkeypatch, [FIXTURE_USER_A_CHAIN])
+    service = FinnPlanService(db_session=object())
+
+    result = asyncio.run(service.build_context_explain_response(
+        FIXTURE_USER_A_CHAIN["user_id"],
+        "Welke bot is aan mijn BTC-strategie gekoppeld, en staat deze bot momenteel live?",
+        {"page": "/bot", "symbol": "BTC", "bot_id": FIXTURE_USER_A_CHAIN["bot"]["id"]},
+    ))
+
+    assert result["intent"] == "context_explain"
+    assert result["analysis"]["entity_type"] == "bot"
+    assert result["analysis"]["entity"]["id"] == FIXTURE_USER_A_CHAIN["bot"]["id"]
+    assert result["analysis"]["entity"]["strategy_id"] == FIXTURE_USER_A_CHAIN["strategy"]["id"]
+    assert "FINN BTC Executor" in result["response"]
+    assert "BTC Momentum Rules" in result["response"]
+    assert "paper / niet-live" in result["response"]
+
+
+def test_b4_bot_no_position_contract_separates_facts_from_unknowns(monkeypatch):
+    _patch_owned_context_services(monkeypatch, [FIXTURE_USER_A_CHAIN])
+    service = FinnPlanService(db_session=object())
+
+    result = asyncio.run(service.build_context_explain_response(
+        FIXTURE_USER_A_CHAIN["user_id"],
+        "Waarom heeft mijn gekoppelde BTC-bot nu geen positie geopend? Scheid wat je zeker weet van wat nog niet bevestigd kan worden.",
+        {"page": "/bot", "symbol": "BTC", "bot_id": FIXTURE_USER_A_CHAIN["bot"]["id"]},
+    ))
+
+    assert result["intent"] == "context_explain"
+    assert result["analysis"]["entity_type"] == "bot"
+    assert "Zeker weet ik:" in result["response"]
+    assert "Nog niet bevestigd:" in result["response"]
+    assert "gekoppeld aan strategie #701" in result["response"]
+    assert "kan in deze context niet bevestigen of alle markttriggers" in result["response"]
+
+
+def test_a3_indicator_contract_names_exact_configured_indicators_and_only_real_gap():
+    service = _service()
+
+    analysis = service._build_indicator_insight_analysis(
+        asset="BTC",
+        categories=["macro", "market", "technical"],
+        daily_scores={
+            "macro_score": 58,
+            "market_score": 61,
+            "technical_score": 64,
+        },
+        macro_rows=[
+            {"name": "btc_dominance", "score": 41, "interpretation": "Dominance blijft hoog.", "timestamp": "2026-08-17T08:00:00"},
+        ],
+        technical_rows=[
+            {"name": "rsi", "score": 55, "interpretation": "RSI is neutraal.", "timestamp": "2026-08-17T08:00:00"},
+        ],
+        market_rows=[
+            {"name": "change_24h", "score": 62, "interpretation": "Prijs houdt stand.", "timestamp": "2026-08-17T08:00:00"},
+        ],
+        market_snapshot={"change_24h": 1.4},
+        available={
+            "macro": [{"name": "btc_dominance", "display_name": "Bitcoin Dominance"}],
+            "market": [{"name": "change_24h", "display_name": "24h Change"}],
+            "technical": [{"name": "rsi", "display_name": "RSI"}, {"name": "volume_profile", "display_name": "Volume Profile"}],
+        },
+        configured={
+            "macro": ["btc_dominance"],
+            "market": ["change_24h"],
+            "technical": ["rsi"],
+        },
+        configs={
+            "macro:btc_dominance": {"score_mode": "contrarian", "weight": 1.0, "rules_count": 3},
+            "market:change_24h": {"score_mode": "standard", "weight": 1.0, "rules_count": 2},
+            "technical:rsi": {"score_mode": "standard", "weight": 1.0, "rules_count": 2},
+        },
+    )
+
+    macro = analysis["categories"]["macro"]
+    market = analysis["categories"]["market"]
+    technical = analysis["categories"]["technical"]
+
+    assert macro["configured_indicators"] == ["btc_dominance"]
+    assert market["configured_indicators"] == ["change_24h"]
+    assert technical["configured_indicators"] == ["rsi"]
+    assert "rsi" not in " ".join(analysis["suggestions"]).lower()
+    assert "btc_dominance" not in " ".join(analysis["suggestions"]).lower()
+    assert "change_24h" not in " ".join(analysis["suggestions"]).lower()
+    assert any("volume profile" in suggestion.lower() or "volume" in suggestion.lower() for suggestion in analysis["suggestions"])
 
 
 def test_build_product_help_response_includes_supported_and_not_supported_capabilities():
@@ -4652,6 +4940,7 @@ def test_indicator_insight_analysis_uses_real_rows_weights_and_unused_options():
             "technical": [],
             "market": [],
         },
+        configured={"macro": ["btc_dominance"], "technical": [], "market": []},
         configs={
             "macro:btc_dominance": {
                 "score_mode": "contrarian",
@@ -4681,6 +4970,7 @@ def test_indicator_insight_message_is_advice_only_and_mentions_missing_data():
         market_rows=[],
         market_snapshot=None,
         available={"macro": [], "technical": [{"name": "rsi", "display_name": "RSI"}], "market": []},
+        configured={"macro": [], "technical": ["rsi"], "market": []},
         configs={},
     )
 
@@ -4702,6 +4992,7 @@ def test_indicator_execution_review_uses_indicator_analysis_contract():
         market_rows=[],
         market_snapshot=None,
         available={"macro": [], "technical": [{"name": "rsi", "display_name": "RSI"}], "market": []},
+        configured={"macro": [], "technical": ["rsi"], "market": []},
         configs={},
     )
 

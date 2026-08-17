@@ -26,6 +26,7 @@ import AddBotForm from "@/components/bot/AddBotForm";
 import { actionButtonStyles } from "@/components/ui/actionButtonStyles";
 import Drawer from "@/components/ui/Drawer";
 import { getAssistantSessionId, trackAssistantEvent } from "@/lib/api/assistantAnalytics";
+import { normalizeScopedAssetSymbol, resolveFinnContextSymbol, shouldBlockFinnSubmission } from "@/lib/finnAssetIsolation";
 import { normalizeTraderProfilePreferences } from "@/lib/traderProfileOptions";
 import { useTranslation } from "@/app/providers/I18nProvider";
 import FinnCommandCenter from "@/components/finn/FinnCommandCenter";
@@ -42,6 +43,11 @@ function normalizeFinnSessionId(value) {
   if (typeof value !== "string") return null;
   const normalized = value.trim();
   return normalized || null;
+}
+
+function scopedRecentConversationStorageKey(userId) {
+  const scope = String(userId || "anonymous").trim() || "anonymous";
+  return `${FINN_RECENT_CONVERSATIONS_STORAGE_KEY}:${scope}`;
 }
 
 function mapBackendSessionMessages(messages = []) {
@@ -435,7 +441,7 @@ function AIAssistantContent({
 }) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const { selectedAsset: globalSymbol, setSelectedAsset } = useAsset();
+  const { selectedAsset: globalSymbol, assetStatus, setSelectedAsset } = useAsset();
   const { user } = useAuth();
   const router = useRouter();
   const watchlist = useWatchlist();
@@ -493,6 +499,10 @@ function AIAssistantContent({
   const isSimpleFinnModal = modal;
   const activeVariant = searchParams.get("variant") === "legacy" ? "legacy" : "v3";
   const isAssetAnalysisPage = pathname === "/asset";
+  const userScopedRecentConversationStorageKey = React.useMemo(
+    () => scopedRecentConversationStorageKey(user?.id),
+    [user?.id],
+  );
 
   const composerMenuCopy = {
     asset: at("uiText.composerAsset"),
@@ -553,11 +563,10 @@ function AIAssistantContent({
 
       const label = String(indicator || "").toUpperCase();
       const symbol =
-        assetSymbol ||
-        searchParams.get("symbol") ||
-        searchParams.get("asset") ||
-        globalSymbol ||
-        "BTC";
+        normalizeScopedAssetSymbol(assetSymbol) ||
+        normalizeScopedAssetSymbol(searchParams.get("symbol") || searchParams.get("asset")) ||
+        normalizeScopedAssetSymbol(globalSymbol);
+      if (!symbol) return;
       const categoryLabel = String(category || "technical").toLowerCase();
 
       setMessages((prev) => [
@@ -586,6 +595,7 @@ function AIAssistantContent({
       page: pathname || "/assistant",
       surface: "finn_overlay",
       asset: globalSymbol || null,
+      user_id: user?.id || null,
       flow_type: "finn_overlay",
     });
     trackAssistantEvent({
@@ -593,9 +603,10 @@ function AIAssistantContent({
       page: pathname || "/assistant",
       surface: "finn_overlay",
       asset: globalSymbol || null,
+      user_id: user?.id || null,
       flow_type: "finn_overlay",
     });
-  }, [isOpen, pathname, globalSymbol]);
+  }, [isOpen, pathname, globalSymbol, user?.id]);
 
   const normalizeStreamingText = (text) => {
     if (!text || text.length < 8) return text;
@@ -950,6 +961,13 @@ function AIAssistantContent({
   }
 
   const getContext = () => {
+    const routeSymbol = normalizeScopedAssetSymbol(searchParams.get("symbol") || searchParams.get("asset"));
+    const resolvedWorkspaceSymbol = resolveFinnContextSymbol({
+      urlSymbol: routeSymbol,
+      activeSetupSymbol: activeSetup?.symbol,
+      selectedAsset: globalSymbol,
+    });
+
     const pageMap = {
       "/dashboard": t?.nav?.dashboard || "Dashboard",
       "/": t?.nav?.dashboard || "Dashboard",
@@ -967,7 +985,8 @@ function AIAssistantContent({
     return {
       page: pathname,
       page_type: pageMap[pathname] || t?.common?.unknown || "Unknown",
-      symbol: searchParams.get("symbol") || searchParams.get("asset") || globalSymbol || "BTC",
+      symbol: resolvedWorkspaceSymbol,
+      asset_resolution_status: assetStatus,
       timeframe:
         searchParams.get("tf") ||
         searchParams.get("interval") ||
@@ -990,14 +1009,14 @@ function AIAssistantContent({
   const currentConversationStorageKey = React.useMemo(() => {
     const userScope = String(user?.id || "anonymous");
     const section = String(context.page_type || pathname || "overview").toLowerCase();
-    const asset = String(context.symbol || globalSymbol || "BTC").toUpperCase();
+    const asset = normalizeScopedAssetSymbol(context.symbol || globalSymbol) || "UNKNOWN";
     const timeframe = String(context.timeframe || "Day").toLowerCase();
     return `${userScope}:${section}:${asset}:${timeframe}`;
   }, [user?.id, context.page_type, context.symbol, context.timeframe, pathname, globalSymbol]);
 
   useEffect(() => {
     insightCacheKeyRef.current = `finn-insight:${currentConversationStorageKey}`;
-    const missionControlSymbol = String(globalSymbol || context.symbol || "BTC").toUpperCase();
+    const missionControlSymbol = normalizeScopedAssetSymbol(globalSymbol || context.symbol) || "UNKNOWN";
     missionControlCacheKeyRef.current = `finn-mission-control:${currentConversationStorageKey}:${pathname || "/assistant"}:${missionControlSymbol}`;
   }, [currentConversationStorageKey, pathname, globalSymbol, context.symbol]);
 
@@ -4161,7 +4180,7 @@ function AIAssistantContent({
   async function loadMissionControl() {
     const requestKey =
       missionControlCacheKeyRef.current ||
-      `finn-mission-control:${currentConversationStorageKey}:${pathname || "/assistant"}:${String(globalSymbol || context.symbol || "BTC").toUpperCase()}`;
+      `finn-mission-control:${currentConversationStorageKey}:${pathname || "/assistant"}:${String(globalSymbol || context.symbol || "UNKNOWN").toUpperCase()}`;
     if (missionControlRequestRef.current && missionControlRequestKeyRef.current === requestKey) {
       return missionControlRequestRef.current;
     }
@@ -4329,6 +4348,10 @@ function AIAssistantContent({
   async function handleChat(directQuery, isSilent = false, overrideContext = null) {
     const nextQuery = directQuery !== undefined ? directQuery : activeQuery;
     if (!nextQuery.trim()) return;
+    if (shouldBlockFinnSubmission({ isAuthenticated: Boolean(user?.id), assetStatus })) {
+      showSnackbar("FINN wacht nog op je accountcontext. Probeer het zo opnieuw.", "warning");
+      return;
+    }
 
     setLoading(true);
     if (!isSilent) updateQuery("");
@@ -4362,7 +4385,7 @@ function AIAssistantContent({
         ...baseRequestContext,
         ...(commandRequest?.context || {}),
       };
-      const analyticsSessionId = getAssistantSessionId();
+      const analyticsSessionId = getAssistantSessionId(user?.id || "anonymous");
       const chatSessionId = activeFinnSessionId || "new";
 
       await assistantChatStream(
@@ -5628,7 +5651,7 @@ function AIAssistantContent({
 
   useEffect(() => {
     if (!previewSectionsOnly) return;
-    const symbol = String(context?.symbol || globalSymbol || "BTC").trim().toUpperCase();
+    const symbol = normalizeScopedAssetSymbol(context?.symbol || globalSymbol) || "UNKNOWN";
     const snapshotScope = String(user?.id || "anonymous");
     setWorkspaceSnapshot(getWorkspaceSnapshot(symbol, snapshotScope));
     return subscribeWorkspaceSnapshot((nextSymbol, snapshot, nextScope) => {
@@ -5645,14 +5668,14 @@ function AIAssistantContent({
   useEffect(() => {
     if (typeof window === "undefined") return;
     try {
-      const raw = window.sessionStorage.getItem(FINN_RECENT_CONVERSATIONS_STORAGE_KEY);
+      const raw = window.sessionStorage.getItem(userScopedRecentConversationStorageKey);
       const parsed = raw ? JSON.parse(raw) : [];
       setRecentConversations(Array.isArray(parsed) ? parsed : []);
     } catch (error) {
       console.warn("Kon recente FINN-gesprekken niet laden:", error);
       setRecentConversations([]);
     }
-  }, []);
+  }, [userScopedRecentConversationStorageKey]);
 
   useEffect(() => {
     if (typeof window === "undefined" || loading) return;
@@ -5679,14 +5702,14 @@ function AIAssistantContent({
       ].slice(0, 12);
 
       try {
-        window.sessionStorage.setItem(FINN_RECENT_CONVERSATIONS_STORAGE_KEY, JSON.stringify(merged));
+        window.sessionStorage.setItem(userScopedRecentConversationStorageKey, JSON.stringify(merged));
       } catch (error) {
         console.warn("Kon recente FINN-gesprekken niet bewaren:", error);
       }
 
       return merged;
     });
-  }, [messages, loading, currentConversationStorageKey]);
+  }, [messages, loading, currentConversationStorageKey, userScopedRecentConversationStorageKey]);
 
   const recentFinnSessionItems = availableFinnSessions.slice(0, MAX_RECENT_FINN_CONVERSATIONS);
 

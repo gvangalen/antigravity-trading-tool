@@ -2012,10 +2012,19 @@ class FinnPlanService:
             return False
         if self.looks_like_status_request(query):
             return False
+        if self.looks_like_cross_workspace_plan_review_request(query):
+            return False
         has_strategy_word = any(word in q for word in ["strategie", "strategy"])
         has_setup_ref = bool(context.get("setup_id")) or bool(re.search(r"\bsetup\s*#?\s*\d+\b", q))
         has_strategy_ref = bool(context.get("strategy_id")) or bool(re.search(r"\bstrateg(?:ie|y)\s*#?\s*\d+\b", q))
-        has_create_intent = any(word in q for word in ["maak", "aanmaken", "creeer", "creeër", "bouw", "instellen", "wil"])
+        has_create_intent = any(phrase in q for phrase in [
+            "maak een strategie",
+            "strategie maken",
+            "strategie aanmaken",
+            "nieuwe strategie",
+            "bouw een strategie",
+            "strategie instellen",
+        ])
         has_update_intent = any(word in q for word in ["pas", "wijzig", "update", "bijwerk", "bijwerken", "verander", "aanpassen"])
         return has_strategy_word and (has_setup_ref or has_strategy_ref or has_create_intent or has_update_intent)
 
@@ -2055,6 +2064,17 @@ class FinnPlanService:
 
     def looks_like_indicator_insight_request(self, query: str) -> bool:
         q = (query or "").lower()
+        if self.looks_like_cross_workspace_plan_review_request(query):
+            return False
+        if any(phrase in q for phrase in [
+            "risicoprofiel en tradingstijl",
+            "past mijn huidige",
+            "entryvoorwaarde",
+            "entry voorwaarde",
+            "gekoppelde bot",
+            "geen positie geopend",
+        ]):
+            return False
         has_data_or_indicator = any(word in q for word in [
             "indicator", "indicatoren", "macro", "technical", "technisch",
             "market data", "marktdata", "market score", "macro score", "technical score",
@@ -2571,6 +2591,8 @@ class FinnPlanService:
     ) -> bool:
         q = self._normalized_query(query)
         context = context or {}
+        if self.looks_like_cross_workspace_plan_review_request(query):
+            return True
         direct_trade_review_cues = [
             "beoordeel deze trade",
             "review deze trade",
@@ -2976,6 +2998,12 @@ class FinnPlanService:
             return False
         if self.looks_like_bot_decision_review_request(query):
             return False
+        if any(phrase in q for phrase in [
+            "risicoprofiel en tradingstijl",
+            "goede aansluiting",
+            "mogelijk conflict",
+        ]) and any(term in q for term in ["strategie", "strategy"]):
+            return True
         review_terms = [
             "beoordeel deze trade",
             "review deze trade",
@@ -4721,6 +4749,9 @@ class FinnPlanService:
         strategy_id = context.get("strategy_id")
         setup_id = context.get("setup_id")
         bot_id = context.get("bot_id")
+        strategy_owned_lookup_failed = False
+        setup_owned_lookup_failed = False
+        bot_owned_lookup_failed = False
         if target == "strategy" and not strategy_id:
             strategy_id = confidence.get("entity_id")
         if target == "setup" and not setup_id:
@@ -4921,12 +4952,28 @@ class FinnPlanService:
             service = StrategyService(self.session)
             row = await repo.get_raw_strategy_with_setup(int(strategy_id), user_id)
             strategy = service._format_strategy_row(row) if row else None
+            if not strategy:
+                strategy_owned_lookup_failed = True
             if strategy:
                 behavioral_coaching = self._profile_behavioral_coaching(context, asset=strategy.get("symbol"), mode="review")
-                response = (
-                    f"Je bekijkt nu strategie #{strategy['id']} '{strategy.get('name')}' voor {strategy.get('symbol')} "
-                    f"op {strategy.get('timeframe')}, gekoppeld aan setup #{strategy.get('setup_id')} '{strategy.get('setup_name')}'."
-                )
+                entry_rule = None
+                strategy_rules = strategy.get("rules") if isinstance(strategy.get("rules"), dict) else {}
+                raw_entry_rules = strategy_rules.get("entry") if isinstance(strategy_rules.get("entry"), list) else []
+                entry_rule = next((str(rule).strip() for rule in raw_entry_rules if str(rule).strip()), None)
+                if not entry_rule:
+                    entry_rule = str(strategy.get("entry_logic") or "").strip() or None
+                q_lower = self._normalized_query(query)
+                if any(term in q_lower for term in ["entryvoorwaarde", "entry voorwaarde", "entry toestaat"]):
+                    response = (
+                        f"De belangrijkste entryvoorwaarde uit strategie #{strategy['id']} '{strategy.get('name')}' is: "
+                        f"{entry_rule or 'ik zie in deze context nog geen expliciete entry-regel terug in de strategiegegevens'}. "
+                        "Ik noem hier bewust alleen wat in je opgeslagen strategie terugkomt en vul geen extra tradingwijsheid in."
+                    )
+                else:
+                    response = (
+                        f"Je bekijkt nu strategie #{strategy['id']} '{strategy.get('name')}' voor {strategy.get('symbol')} "
+                        f"op {strategy.get('timeframe')}, gekoppeld aan setup #{strategy.get('setup_id')} '{strategy.get('setup_name')}'."
+                    )
                 if behavioral_coaching.get("summary"):
                     response = f"{response} {behavioral_coaching['summary']}"
                 risk_summary = "Een strategie is pas sterk als de onderliggende setup en timing nog steeds kloppen."
@@ -4953,7 +5000,7 @@ class FinnPlanService:
                     resolution_title="Wat deze strategie nu voor je betekent",
                 )
 
-        if target == "strategy" and strategy_id:
+        if target == "strategy" and strategy_id and not strategy_owned_lookup_failed:
             asset = self._asset_from_query_or_context(query, context)
             response = (
                 f"Ik koppel je huidige context aan strategie #{strategy_id}"
@@ -4981,6 +5028,9 @@ class FinnPlanService:
                 if exc.status_code != 404:
                     raise
                 setup = None
+                setup_owned_lookup_failed = True
+            if setup is None:
+                setup_owned_lookup_failed = True
             if setup:
                 behavioral_coaching = self._profile_behavioral_coaching(context, asset=setup.get("symbol"), mode="review")
                 response = (
@@ -5009,7 +5059,7 @@ class FinnPlanService:
                     resolution_title="Wat deze setup nu voor je betekent",
                 )
 
-        if target == "setup" and setup_id:
+        if target == "setup" and setup_id and not setup_owned_lookup_failed:
             asset = self._asset_from_query_or_context(query, context)
             response = (
                 f"Ik koppel je huidige context aan setup #{setup_id}"
@@ -5034,6 +5084,8 @@ class FinnPlanService:
             bot_today = {}
             if self.session:
                 bot = await BotService(self.session).repository.get_bot_config(user_id, int(bot_id))
+                if not bot:
+                    bot_owned_lookup_failed = True
                 if bot:
                     try:
                         bot_today = await BotService(self.session).get_bot_today(
@@ -5045,6 +5097,7 @@ class FinnPlanService:
                         bot_today = {}
             if bot:
                 behavioral_coaching = self._profile_behavioral_coaching(context, asset=bot.get("symbol"), mode="review")
+                q_lower = self._normalized_query(query)
                 status_bits = []
                 if bot.get("is_active"):
                     status_bits.append("actief")
@@ -5080,17 +5133,44 @@ class FinnPlanService:
                     if bot.get("is_active") else
                     "Check eerst waarom deze bot niet actief is en of de gekoppelde strategie nog de juiste context heeft."
                 )
-                response = (
-                    f"Je werkt nu met bot #{bot['id']} '{bot.get('name')}' voor {bot.get('symbol')}. "
-                    f"Status: {status_text}. "
-                    f"Deze bot volgt strategie #{bot.get('strategy_id')} '{bot.get('strategy_name')}'"
-                    f"{setup_suffix}. "
-                    f"Mode: {bot.get('mode') or 'manual'}. "
-                    f"Op dit moment draait hij inhoudelijk in state '{operating_state}' en wacht hij vooral op {waiting_for}. "
-                    f"Er staan nu {len(open_decisions)} open decision(s) klaar voor review. "
-                    f"Waarom deze bot bestaat: hij voert de strategie niet autonoom blind uit, maar bewaakt juist de vertaalslag van setup naar concrete review- of execution-momenten. "
-                    f"Volgende logische stap: {next_step}"
-                )
+                if "geen positie geopend" in q_lower:
+                    facts = [
+                        f"Bot #{bot['id']} '{bot.get('name')}' is gekoppeld aan strategie #{bot.get('strategy_id')} '{bot.get('strategy_name')}'.",
+                        f"Status nu: {status_text}.",
+                        f"Er staan {len(open_decisions)} open bot-decision(s) klaar voor review.",
+                    ]
+                    if bot.get("setup_id"):
+                        facts.append(f"De keten loopt via setup #{bot.get('setup_id')} '{bot.get('setup_name')}'.")
+                    unknowns = [
+                        "Ik kan in deze context niet bevestigen of alle markttriggers van de strategie al geraakt zijn.",
+                        "Ik kan hier ook niet bevestigen of een entry expliciet is afgekeurd zonder aparte bot-decision- of execution-rij.",
+                    ]
+                    response = (
+                        "Zeker weet ik:\n"
+                        + "\n".join(f"- {item}" for item in facts)
+                        + "\nNog niet bevestigd:\n"
+                        + "\n".join(f"- {item}" for item in unknowns)
+                    )
+                elif any(term in q_lower for term in ["momenteel live", "staat deze bot live", "welke bot is aan mijn", "gekoppeld"]):
+                    response = (
+                        f"De gekoppelde bot is bot #{bot['id']} '{bot.get('name')}' voor {bot.get('symbol')}. "
+                        f"Deze bot volgt strategie #{bot.get('strategy_id')} '{bot.get('strategy_name')}'"
+                        f"{setup_suffix}. "
+                        f"Live-status: {'live' if bot.get('is_live') else 'paper / niet-live'}. "
+                        f"Activatiestatus: {'actief' if bot.get('is_active') else 'niet actief'}."
+                    )
+                else:
+                    response = (
+                        f"Je werkt nu met bot #{bot['id']} '{bot.get('name')}' voor {bot.get('symbol')}. "
+                        f"Status: {status_text}. "
+                        f"Deze bot volgt strategie #{bot.get('strategy_id')} '{bot.get('strategy_name')}'"
+                        f"{setup_suffix}. "
+                        f"Mode: {bot.get('mode') or 'manual'}. "
+                        f"Op dit moment draait hij inhoudelijk in state '{operating_state}' en wacht hij vooral op {waiting_for}. "
+                        f"Er staan nu {len(open_decisions)} open decision(s) klaar voor review. "
+                        f"Waarom deze bot bestaat: hij voert de strategie niet autonoom blind uit, maar bewaakt juist de vertaalslag van setup naar concrete review- of execution-momenten. "
+                        f"Volgende logische stap: {next_step}"
+                    )
                 if behavioral_coaching.get("summary"):
                     response = f"{response} {behavioral_coaching['summary']}"
                 risk_summary = f"Status nu: {status_text}. Zolang de bot in state '{operating_state}' zit, wil je vooral snappen waarop hij wacht."
@@ -5126,17 +5206,90 @@ class FinnPlanService:
                     resolution_title="Wat deze bot nu voor je betekent",
                 )
 
-            response = f"Je werkt nu met bot #{bot_id}. Als je wilt kan ik uitleggen waarom deze bot actief is, welke strategie hij volgt of welke review-openingen er zijn."
+            if not bot_owned_lookup_failed:
+                response = f"Je werkt nu met bot #{bot_id}. Als je wilt kan ik uitleggen waarom deze bot actief is, welke strategie hij volgt of welke review-openingen er zijn."
+                return self._context_explain_payload(
+                    response=response,
+                    confidence=self._context_confidence_for_target(context, "bot", query=query),
+                    entity_type="bot",
+                    entity={"id": bot_id},
+                    state_overrides={"bot_id": bot_id},
+                    summary=f"Je huidige context wijst naar bot #{bot_id}.",
+                    risk_summary="Zonder botdetails blijft dit vooral een navigatie- en contextuitleg, geen bot-review.",
+                    next_best_action="Vraag Finn welke strategie deze bot volgt of welke review-openingen er nu zijn.",
+                    review_reason="Ik wil eerst de botcontext scherp hebben voordat ik iets over execution of status concludeer.",
+                )
+
+        if target in {"setup", "strategy", "bot"} and any([
+            target == "setup" and setup_owned_lookup_failed,
+            target == "strategy" and strategy_owned_lookup_failed,
+            target == "bot" and bot_owned_lookup_failed,
+        ]):
+            if target == "setup" and any([
+                context.get("setup_name"),
+                context.get("setup_symbol"),
+                context.get("setup_timeframe"),
+            ]):
+                asset = self._asset_from_query_or_context(query, context) or context.get("setup_symbol")
+                setup_view_entity = {
+                    "id": setup_id,
+                    "name": context.get("setup_name"),
+                    "symbol": asset,
+                    "timeframe": context.get("setup_timeframe"),
+                    "setup_type": context.get("setup_type"),
+                }
+                return self._context_explain_payload(
+                    response=(
+                        f"Ik kan setup #{setup_id} niet opnieuw uit de database bevestigen, "
+                        "maar je huidige view wijst nog wel naar deze setup-context. "
+                        f"Ik zie hier {setup_view_entity.get('name') or 'de setup'}"
+                        f"{f' voor {asset}' if asset else ''}"
+                        f"{f' op {setup_view_entity.get('timeframe')}' if setup_view_entity.get('timeframe') else ''}. "
+                        "Gebruik dit alleen als schermcontext; voor een harde review wil ik de setup opnieuw kunnen laden."
+                    ),
+                    confidence={
+                        **confidence,
+                        "level": "medium",
+                        "reason": "view_context_only",
+                        "why": "setup view metadata remained available even though repository reload failed",
+                    },
+                    entity_type="setup",
+                    entity=setup_view_entity,
+                    state_overrides={"setup_id": setup_id, "asset": asset},
+                    summary=f"Je schermcontext wijst nog naar setup #{setup_id}.",
+                    risk_summary="Zonder een verse setup-rij blijft dit schermcontext en geen harde setup-review.",
+                    next_best_action="Ververs of open de setup opnieuw als je een harde inhoudelijke review wilt.",
+                    review_reason="Ik gebruik hier alleen de zichtbare setup-context omdat de reload faalde.",
+                )
+            asset = self._asset_from_query_or_context(query, context)
+            label = {
+                "setup": "setup",
+                "strategy": "strategie",
+                "bot": "bot",
+            }.get(target, target)
+            response = (
+                f"Ik kan in deze context niet veilig bevestigen welke {label} je bedoelt."
+                f"{f' Ik zie wel {asset} als je actieve asset-context,' if asset else ''} "
+                "maar ik resolve geen setup-, strategie- of bot-id als die niet overtuigend binnen jouw eigen context terugkomt. "
+                f"Open de {label}-surface opnieuw vanuit je eigen account of vraag Finn naar je actieve {label} zonder los id."
+            )
+            low_confidence = {
+                **confidence,
+                "level": "low",
+                "entity_id": None,
+                "reason": "entity_not_owned_or_not_resolved",
+                "why": "entity not safely resolved inside current user context",
+            }
             return self._context_explain_payload(
                 response=response,
-                confidence=self._context_confidence_for_target(context, "bot", query=query),
-                entity_type="bot",
-                entity={"id": bot_id},
-                state_overrides={"bot_id": bot_id},
-                summary=f"Je huidige context wijst naar bot #{bot_id}.",
-                risk_summary="Zonder botdetails blijft dit vooral een navigatie- en contextuitleg, geen bot-review.",
-                next_best_action="Vraag Finn welke strategie deze bot volgt of welke review-openingen er nu zijn.",
-                review_reason="Ik wil eerst de botcontext scherp hebben voordat ik iets over execution of status concludeer.",
+                confidence=low_confidence,
+                entity_type=target,
+                entity={"asset": asset},
+                state_overrides={"asset": asset},
+                summary=f"De {label}-id kon niet veilig binnen jouw accountcontext worden bevestigd.",
+                risk_summary="Finn mag hier geen concrete entiteit invullen op basis van een los of niet-eigen id.",
+                next_best_action=f"Open de {label}-view opnieuw vanuit je eigen accountcontext of vraag naar je actieve {label}.",
+                review_reason="Ik bescherm hier expliciet tegen contextlekken tussen accounts.",
             )
 
         if target == "asset":
@@ -7767,6 +7920,7 @@ class FinnPlanService:
         market_rows: List[Any] = []
         market_snapshot = None
         available: Dict[str, List[Dict[str, Any]]] = {"macro": [], "technical": [], "market": []}
+        configured: Dict[str, List[str]] = {"macro": [], "technical": [], "market": []}
         configs: Dict[str, Dict[str, Any]] = {}
 
         if self.session:
@@ -7775,6 +7929,7 @@ class FinnPlanService:
             technical_repo = TechnicalDataRepository(self.session)
             market_repo = MarketDataRepository(self.session)
             config_service = IndicatorConfigService(IndicatorConfigRepository(self.session))
+            configured = await self._configured_indicator_context(user_id, asset)
 
             daily_scores = await score_repo.fetch_daily_scores(user_id, asset)
             if "macro" in categories:
@@ -7813,6 +7968,7 @@ class FinnPlanService:
             market_rows=market_rows,
             market_snapshot=market_snapshot,
             available=available,
+            configured=configured,
             configs=configs,
         )
         response = self._indicator_insight_message(asset, analysis)
@@ -11168,14 +11324,23 @@ class FinnPlanService:
         category: str,
         rows: List[Any],
         available: List[Dict[str, Any]],
+        configured: List[str],
         configs: Dict[str, Dict[str, Any]],
         daily_scores: Optional[Dict[str, Any]],
     ) -> Dict[str, Any]:
         indicators = [self._build_indicator_entry(row, category, configs) for row in rows or []]
         active_names = {entry["normalized"] for entry in indicators if entry.get("normalized")}
+        configured_normalized = {
+            normalize_indicator_name(item) for item in (configured or []) if item
+        }
+        configured_but_missing = [
+            item for item in (configured or [])
+            if normalize_indicator_name(item) not in active_names
+        ]
         missing = [
             item for item in available or []
             if normalize_indicator_name(item.get("name", "")) not in active_names
+            and normalize_indicator_name(item.get("name", "")) not in configured_normalized
         ]
         weak = [entry for entry in indicators if entry.get("score") is not None and entry["score"] < 40]
         neutral = [entry for entry in indicators if entry.get("score") is not None and 40 <= entry["score"] <= 60]
@@ -11194,9 +11359,12 @@ class FinnPlanService:
             "interpretation": (daily_scores or {}).get(f"{category}_interpretation"),
             "top_contributors": self._category_top_contributors(daily_scores, category),
             "active_count": len(indicators),
+            "configured_count": len(configured or []),
             "available_count": len(available or []),
             "coverage_ratio": round((len(indicators) / len(available)) * 100, 1) if available else None,
             "indicators": indicators,
+            "configured_indicators": list(configured or []),
+            "configured_but_missing_data": configured_but_missing,
             "weak_indicators": weak,
             "neutral_indicators": neutral,
             "strong_indicators": strong,
@@ -11218,6 +11386,7 @@ class FinnPlanService:
         market_rows: List[Any],
         market_snapshot: Any,
         available: Dict[str, List[Dict[str, Any]]],
+        configured: Dict[str, List[str]],
         configs: Dict[str, Dict[str, Any]],
     ) -> Dict[str, Any]:
         row_map = {"macro": macro_rows, "technical": technical_rows, "market": market_rows}
@@ -11226,6 +11395,7 @@ class FinnPlanService:
                 category,
                 row_map.get(category, []),
                 available.get(category, []),
+                configured.get(category, []),
                 configs,
                 daily_scores,
             )
@@ -11236,6 +11406,9 @@ class FinnPlanService:
         for category, summary in category_summaries.items():
             if summary["active_count"] == 0:
                 warnings.append(f"{category}: geen actieve indicator-data gevonden")
+            if summary.get("configured_but_missing_data"):
+                names = ", ".join(summary["configured_but_missing_data"][:3])
+                warnings.append(f"{category}: wel geconfigureerd maar nog zonder verse data: {names}")
             if summary["weak_indicators"]:
                 names = ", ".join(i["name"] for i in summary["weak_indicators"][:3])
                 warnings.append(f"{category}: zwakke indicatoren: {names}")
@@ -11275,7 +11448,9 @@ class FinnPlanService:
     def _indicator_insight_reasons(self, analysis: Dict[str, Any]) -> List[str]:
         reasons = []
         for category, summary in (analysis.get("categories") or {}).items():
-            reasons.append(f"{category}: {summary.get('active_count')} actieve indicatoren, score {summary.get('score')}")
+            reasons.append(
+                f"{category}: {summary.get('active_count')} van {summary.get('configured_count')} geconfigureerde indicatoren met data, score {summary.get('score')}"
+            )
         reasons.extend((analysis.get("warnings") or [])[:3])
         return reasons or ["Geen indicator-data gevonden om uit te leggen."]
 
@@ -11291,8 +11466,11 @@ class FinnPlanService:
         for category, summary in (analysis.get("categories") or {}).items():
             score = summary.get("score")
             active_count = summary.get("active_count")
-            available_count = summary.get("available_count")
-            lines.append(f"\n{category.upper()}: score {score}, {active_count}/{available_count} indicatoren actief.")
+            configured_count = summary.get("configured_count")
+            lines.append(f"\n{category.upper()}: score {score}, {active_count}/{configured_count} geconfigureerde indicatoren met data.")
+            if summary.get("configured_but_missing_data"):
+                names = ", ".join(summary["configured_but_missing_data"][:3])
+                lines.append(f"- Wel geconfigureerd, nog zonder verse data: {names}")
             if summary.get("top_contributors"):
                 preview = ", ".join(str(item) for item in summary["top_contributors"][:3])
                 lines.append(f"- Belangrijkste contributors: {preview}")
@@ -11312,6 +11490,8 @@ class FinnPlanService:
             if summary.get("unused_options"):
                 names = ", ".join(item.get("display_name") for item in summary["unused_options"][:3])
                 lines.append(f"- Nog niet actief maar beschikbaar: {names}")
+            elif configured_count == active_count and configured_count:
+                lines.append(f"- Alle {configured_count} geconfigureerde indicatoren zijn al meegenomen.")
             if not summary.get("indicators"):
                 lines.append("- Geen actieve indicator-data gevonden voor deze categorie.")
 
@@ -14146,6 +14326,21 @@ class FinnPlanService:
         return age_seconds >= FIRST_DASHBOARD_ACTIVE_STALE_SECONDS
 
     async def _first_dashboard_indicator_context(self, user_id: int, asset: str) -> Dict[str, List[str]]:
+        return await self._configured_indicator_context(user_id, asset)
+
+    async def _configured_indicator_context(self, user_id: int, asset: str) -> Dict[str, List[str]]:
+        result = await self.session.execute(text("""
+            SELECT category, indicator
+            FROM user_indicator_configs
+            WHERE user_id = :user_id
+              AND enabled = TRUE
+              AND (
+                symbol = :symbol
+                OR symbol IS NULL
+                OR symbol = 'GLOBAL'
+              )
+            ORDER BY category ASC, priority ASC, indicator ASC
+        """), {"user_id": user_id, "symbol": asset})
         by_category: Dict[str, List[str]] = {"market": [], "macro": [], "technical": []}
         columns = await self._get_user_indicator_config_columns()
         if "user_id" not in columns or "indicator" not in columns:

@@ -163,6 +163,25 @@ def build_finn_response_trace(
         or context.get("symbol")
         or context.get("asset")
     )
+    asset_source = (
+        analysis.get("asset_source")
+        or state.get("asset_source")
+        or context.get("asset_source")
+        or ("unknown" if not selected_asset else None)
+    )
+    asset_confidence = (
+        analysis.get("asset_confidence")
+        or state.get("asset_confidence")
+        or context.get("asset_confidence")
+        or ("low" if not selected_asset else None)
+    )
+    asset_user_scoped = bool(
+        analysis.get("asset_user_scoped")
+        if analysis.get("asset_user_scoped") is not None
+        else state.get("asset_user_scoped")
+        if state.get("asset_user_scoped") is not None
+        else context.get("asset_user_scoped")
+    )
     timeframe = state.get("timeframe") or context.get("timeframe") or context.get("setup_timeframe")
     freshness = _find_freshness({"analysis": analysis, "state": state, "context": context})
     source_timestamps = _find_source_timestamps({"analysis": analysis, "state": state, "context": context})
@@ -185,12 +204,33 @@ def build_finn_response_trace(
             "intent_confidence": reasoning.get("confidence_score"),
             "flow": flow,
             "route": route_source,
+            "pipeline_version": analysis.get("pipeline_version"),
+            "intent_family": analysis.get("intent_family"),
+            "router_name": analysis.get("router_name"),
+            "matched_rules": analysis.get("matched_rules") or [],
+            "selected_handler": analysis.get("selected_handler") or response_handler,
+            "selection_reason": analysis.get("selection_reason"),
+            "context_builder": analysis.get("context_builder") or context.get("context_builder"),
         },
         "context": {
+            "user_id": context.get("user_id"),
             "workspace": context.get("page_type") or context.get("page"),
             "asset": selected_asset,
+            "asset_source": asset_source,
+            "asset_confidence": asset_confidence,
+            "asset_user_scoped": asset_user_scoped,
             "timeframe": timeframe,
+            "setup_id": state.get("setup_id") or context.get("setup_id"),
+            "strategy_id": state.get("strategy_id") or context.get("strategy_id"),
+            "bot_id": state.get("bot_id") or context.get("bot_id"),
             "entity": analysis.get("context_entity_resolution") or analysis.get("context_confidence"),
+            "entity_confidence": analysis.get("entity_confidence") or context.get("entity_confidence"),
+            "missing_context": analysis.get("missing_context") or context.get("missing_context") or [],
+            "profile_confidence": analysis.get("profile_confidence") or context.get("profile_confidence"),
+            "setup_confidence": analysis.get("setup_confidence") or context.get("setup_confidence"),
+            "strategy_confidence": analysis.get("strategy_confidence") or context.get("strategy_confidence"),
+            "bot_confidence": analysis.get("bot_confidence") or context.get("bot_confidence"),
+            "overall_context_confidence": analysis.get("overall_context_confidence") or context.get("overall_context_confidence"),
         },
         "data": {
             "sources": _data_sources(
@@ -216,6 +256,9 @@ def build_finn_response_trace(
             "ai_available": bool(ai.get("available")),
             "ai_mode": ai.get("mode"),
             "ai_reason": ai.get("reason"),
+            "legacy_used": bool(analysis.get("legacy_used")),
+            "legacy_reason": analysis.get("legacy_reason"),
+            "ai_used": bool(analysis.get("ai_used")),
             "selection_reason": _selection_reason(response_source, flow, ai),
         },
         "fallback": {
