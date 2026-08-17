@@ -14,6 +14,7 @@ from backend.domain.finn_v2_contract import (
 from backend.infrastructure.repositories.finn_v2_conversation_repository import FinnV2ConversationRepository
 from backend.infrastructure.repositories.finn_v2_run_repository import FinnV2RunRepository
 from backend.infrastructure.repositories.finn_v2_trace_repository import FinnV2TraceRepository
+from backend.services.finn_v2_orchestrator_service import FinnV2OrchestratorService
 from backend.services.finn_v2_tool_execution_service import FinnV2ToolExecutionService
 from backend.schemas.finn_v2_schema import AgentRunStatusEnvelope, PolicyDecision, VerifiedResponse
 
@@ -28,6 +29,7 @@ class FinnV2RunService:
         self.runs = FinnV2RunRepository(session)
         self.traces = FinnV2TraceRepository(session)
         self.tools = FinnV2ToolExecutionService(session)
+        self.orchestrator = FinnV2OrchestratorService(session, complete_placeholder=self.complete_placeholder_run)
 
     async def create_run(self, payload: Dict[str, Any]):
         async with self.session.begin_nested():
@@ -90,14 +92,14 @@ class FinnV2RunService:
             )
         return run
 
-    async def complete_placeholder_run(self, *, run_id: str, user_id: int):
+    async def complete_placeholder_run(self, *, run_id: str, user_id: int, interaction_mode: Optional[str] = None):
         placeholder = build_placeholder_response()
         policy = PolicyDecision().dict()
         await self.transition_run(
             run_id,
             user_id,
             next_status="completed",
-            interaction_mode="UNAVAILABLE",
+            interaction_mode=interaction_mode or "UNAVAILABLE",
             policy_json=policy,
             response_json=placeholder,
             response_source="foundation_placeholder",
@@ -136,8 +138,23 @@ class FinnV2RunService:
     async def run_foundation_lifecycle(self, *, run_id: str, user_id: int) -> None:
         await self.transition_run(run_id, user_id, next_status="collecting", response_source="foundation_placeholder")
         await self.transition_run(run_id, user_id, next_status="planned", response_source="foundation_placeholder")
-        await self.tools.execute_shadow_tool_chain(run_id=run_id, user_id=user_id)
-        await self.complete_placeholder_run(run_id=run_id, user_id=user_id)
+        try:
+            if self.tools.flags.should_run_block4_shadow(user_id):
+                run = await self.runs.get_by_id_for_user(run_id=run_id, user_id=user_id)
+                if run is None:
+                    raise LookupError("FINN V2 run not found")
+                await self.orchestrator.execute_run(run_id=run_id, user_id=user_id, trace_id=run.trace_id)
+            else:
+                await self.tools.execute_shadow_tool_chain(run_id=run_id, user_id=user_id)
+                await self.complete_placeholder_run(run_id=run_id, user_id=user_id)
+        except Exception as exc:
+            await self.fail_run(
+                run_id=run_id,
+                user_id=user_id,
+                error_code="orchestrator_failed",
+                error_message=str(exc),
+                retryable=False,
+            )
 
     async def apply_retention(self, *, message_days: int, trace_days: int) -> Dict[str, int]:
         now = datetime.now(timezone.utc)

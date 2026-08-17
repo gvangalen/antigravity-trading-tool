@@ -81,7 +81,7 @@ SSE_EVENT_BY_STATUS: Mapping[str, str] = {
     "canceled": "run.canceled",
 }
 
-FOUNDATION_PLACEHOLDER_CONTENT = "FINN Core V2 foundation shadow run completed."
+FOUNDATION_PLACEHOLDER_CONTENT = "FINN Core V2 orchestration shadow run completed."
 
 
 class InvalidRunTransitionError(ValueError):

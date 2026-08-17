@@ -594,6 +594,29 @@ class FinnV2ValidationResult(Base):
     redacted_at = Column(DateTime(timezone=True), nullable=True)
 
 
+class FinnV2OrchestratorResult(Base):
+    __tablename__ = "finn_v2_orchestrator_results"
+
+    id = Column(String, primary_key=True)
+    run_id = Column(String, ForeignKey("finn_v2_runs.id", ondelete="CASCADE"), nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    orchestrator_version = Column(String, nullable=False)
+    analysis_version = Column(String, nullable=False)
+    planning_version = Column(String, nullable=False)
+    interaction_mode = Column(String, nullable=False, index=True)
+    subject_scopes_json = Column(JSONB, nullable=False, default=list, server_default=text("'[]'::jsonb"))
+    required_domains_json = Column(JSONB, nullable=False, default=list, server_default=text("'[]'::jsonb"))
+    optional_domains_json = Column(JSONB, nullable=False, default=list, server_default=text("'[]'::jsonb"))
+    tool_plan_json = Column(JSONB, nullable=False)
+    snapshot_id = Column(String, ForeignKey("finn_v2_state_snapshots.id", ondelete="SET NULL"), nullable=True)
+    validation_id = Column(String, ForeignKey("finn_v2_validation_results.id", ondelete="SET NULL"), nullable=True)
+    outcome = Column(String, nullable=False, index=True)
+    selected_clarification_json = Column(JSONB, nullable=True)
+    unavailable_codes_json = Column(JSONB, nullable=False, default=list, server_default=text("'[]'::jsonb"))
+    uncertainty_codes_json = Column(JSONB, nullable=False, default=list, server_default=text("'[]'::jsonb"))
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=text("NOW()"))
+
+
 class AiPendingAction(Base):
     __tablename__ = 'ai_pending_actions'
 

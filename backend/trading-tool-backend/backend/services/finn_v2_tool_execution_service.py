@@ -4,7 +4,7 @@ import asyncio
 import logging
 from datetime import datetime, timedelta, timezone
 from time import monotonic
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -16,6 +16,7 @@ from backend.infrastructure.repositories.finn_v2_tool_call_repository import Fin
 from backend.infrastructure.repositories.finn_v2_trace_repository import FinnV2TraceRepository
 from backend.infrastructure.repositories.finn_v2_validation_repository import FinnV2ValidationRepository
 from backend.schemas.finn_v2_tool_schema import ToolExecutionEnvelope
+from backend.schemas.finn_v2_orchestrator_schema import ToolPlan
 from backend.services.finn_v2_evidence_ingestion_service import FinnV2EvidenceIngestionService
 from backend.services.finn_v2_entity_resolution_service import FinnV2EntityResolutionService
 from backend.services.finn_v2_evidence_validator_service import FinnV2EvidenceValidatorService
@@ -81,10 +82,27 @@ class FinnV2ToolExecutionService:
             return []
         if not self.flags.is_tool_shadow_canary_user(user_id):
             return []
+        plan = ToolPlan(
+            run_id=run_id,
+            interaction_mode="UNAVAILABLE",
+            required_domains=[],
+            optional_domains=[],
+            tool_names=list(FINN_V2_TOOL_ORDER),
+            tool_inputs={tool_name: {} for tool_name in FINN_V2_TOOL_ORDER},
+            max_tool_calls=15,
+            read_only=True,
+            planning_reasons=["legacy_shadow_chain"],
+        )
+        results = await self.execute_tool_plan(run_id=run_id, user_id=user_id, tool_plan=plan)
+        if self.flags.should_run_block3_shadow(user_id):
+            await self._run_state_pipeline(run_id=run_id, user_id=user_id)
+        return results
+
+    async def execute_tool_plan(self, *, run_id: str, user_id: int, tool_plan: ToolPlan) -> List[ToolExecutionResult]:
         started = monotonic()
         results: List[ToolExecutionResult] = []
         shared_state: Dict[str, Any] = {}
-        for tool_name in FINN_V2_TOOL_ORDER:
+        for tool_name in tool_plan.tool_names:
             if monotonic() - started > 20.0:
                 results.append(
                     ToolExecutionResult(
@@ -99,14 +117,15 @@ class FinnV2ToolExecutionService:
                 run_id=run_id,
                 user_id=user_id,
                 tool_name=tool_name,
-                selector={},
+                selector=tool_plan.tool_inputs.get(tool_name, {}),
                 shared_state=shared_state,
                 timeout_seconds=2.0,
             )
             results.append(result)
-        if self.flags.should_run_block3_shadow(user_id):
-            await self._run_state_pipeline(run_id=run_id, user_id=user_id)
         return results
+
+    async def run_state_pipeline(self, *, run_id: str, user_id: int) -> Tuple[Optional[object], Optional[object]]:
+        return await self._run_state_pipeline(run_id=run_id, user_id=user_id)
 
     async def execute_tool(
         self,
@@ -423,10 +442,10 @@ class FinnV2ToolExecutionService:
                 },
             )
 
-    async def _run_state_pipeline(self, *, run_id: str, user_id: int) -> None:
+    async def _run_state_pipeline(self, *, run_id: str, user_id: int) -> Tuple[Optional[object], Optional[object]]:
         run = await self.runs.get_by_id_for_user(run_id=run_id, user_id=user_id)
         if run is None:
-            return
+            return None, None
         started = monotonic()
         await self._append_trace(
             run_id=run_id,
@@ -457,7 +476,7 @@ class FinnV2ToolExecutionService:
                 event_type="state_assembly_failed",
                 payload_json={"run_id": run_id, "user_id": user_id, "issue_codes": [str(exc)], "duration_ms": int((monotonic() - started) * 1000)},
             )
-            return
+            return None, None
 
         validation_started = monotonic()
         await self._append_trace(
@@ -507,6 +526,8 @@ class FinnV2ToolExecutionService:
                 event_type="evidence_validation_failed",
                 payload_json={"run_id": run_id, "user_id": user_id, "snapshot_id": snapshot.snapshot_id, "issue_codes": [str(exc)], "duration_ms": int((monotonic() - validation_started) * 1000)},
             )
+            return snapshot, None
+        return snapshot, validation
 
     async def _append_trace(self, *, run_id: str, user_id: int, trace_id: str, event_type: str, payload_json: Dict[str, Any]) -> None:
         await self.traces.append_event(
