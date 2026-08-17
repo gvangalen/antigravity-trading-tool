@@ -2498,35 +2498,6 @@ async def assistant_chat(
             query=request.query,
             context_payload=context_payload,
         )
-        v2_visible = await _try_v2_visible_delivery(
-            db=db,
-            user_id=user_id,
-            message=request.query,
-            context_payload=context_payload,
-            transport="chat",
-            request_path=_safe_request_path(raw_request, "/api/assistant/chat"),
-            request_id=_safe_request_trace_id(raw_request, trace_id),
-            trace_id=trace_id,
-        )
-        if v2_visible is not None:
-            return AssistantChatResponse(
-                response=v2_visible.get("response") or "",
-                intent=v2_visible.get("intent") or "unavailable",
-                action=v2_visible.get("action"),
-                draft=v2_visible.get("draft"),
-                state=v2_visible.get("state"),
-                reasoning=v2_visible.get("reasoning"),
-                trace_id=trace_id,
-                suggested_actions=v2_visible.get("suggested_actions"),
-                session_id=request.session_id,
-                flow=(v2_visible.get("state") or {}).get("current_flow"),
-                actions=v2_visible.get("actions") or [],
-                can_confirm=bool(v2_visible.get("can_confirm")),
-                summary=v2_visible.get("summary"),
-                risk_summary=v2_visible.get("risk_summary"),
-                next_best_action=v2_visible.get("next_best_action"),
-                response_trace=v2_visible.get("response_trace"),
-            )
         if request.session_id:
             context_payload["session_id"] = request.session_id
         _apply_assistant_rate_limit(
@@ -2535,16 +2506,6 @@ async def assistant_chat(
             query=request.query,
             context=context_payload,
             endpoint="/assistant/chat",
-        )
-        await _enqueue_finn_v2_shadow_run(
-            db=db,
-            user_id=user_id,
-            message=request.query,
-            transport="chat",
-            request_path=_safe_request_path(raw_request, "/api/assistant/chat"),
-            request_id=_safe_request_trace_id(raw_request, trace_id),
-            trace_id=trace_id,
-            context_payload=_assistant_context_payload(request.context),
         )
         _record_finn_product_event(
             user_id=user_id,
@@ -2561,267 +2522,33 @@ async def assistant_chat(
             prompt_text=request.query,
             metadata=_trader_profile_event_metadata(context_payload),
         )
-        if _looks_like_profile_capture(request.query):
-            user_repo = UserRepository(db)
-            profile_patch = _extract_profile_update_from_query(request.query)
-            current_user_row = await user_repo.get_by_id(user_id)
-            current_prefs = getattr(current_user_row, "ai_preferences", {}) or {}
-            merged_profile = normalize_trader_profile_preferences({**current_prefs, **profile_patch})
-            await user_repo.update_ai_preferences(user_id, {
-                "trader_types": merged_profile.get("trader_types", []),
-                "primary_timeframes": merged_profile.get("primary_timeframes", []),
-                "asset_focus": merged_profile.get("asset_focus", []),
-                "behavior_flags": merged_profile.get("behavior_flags", []),
-            })
-            finn_response = _build_profile_saved_envelope(merged_profile)
-            return await _finalize_finn_response(
-                finn, user_id, finn_response, trace_id, prompt=request.query, context_payload=context_payload
-            )
-        if _looks_like_profile_explain(request.query):
-            user_row = await UserRepository(db).get_by_id(user_id)
-            prefs = getattr(user_row, "ai_preferences", {}) or {}
-            finn_response = _build_profile_explain_envelope(normalize_trader_profile_preferences(prefs))
-            return await _finalize_finn_response(
-                finn, user_id, finn_response, trace_id, prompt=request.query, context_payload=context_payload
-            )
-        if _looks_like_setup_strategy_listing_request(request.query):
-            finn_response = await _build_setup_strategy_listing_envelope(db, user_id)
-            return await _finalize_finn_response(
-                finn, user_id, finn_response, trace_id, prompt=request.query, context_payload=context_payload
-            )
-        if _looks_like_watchlist_mutation(request.query, context_payload):
-            finn_response = _build_watchlist_mutation_envelope(request.query, context_payload)
-            return await _finalize_finn_response(
-                finn, user_id, finn_response, trace_id, db=db, prompt=request.query, context_payload=context_payload
-            )
-        state_repo = getattr(service, "state_repo", None)
-        active_legacy_state = await state_repo.get_state(user_id) if state_repo is not None else None
-        active_legacy_flow = str((active_legacy_state or {}).get("current_flow") or "").lower()
-        should_resume_legacy_transaction = (
-            _is_legacy_transactional_flow_name(active_legacy_flow)
-            and not _is_modern_transactional_state_record(active_legacy_state)
-        )
-        if should_resume_legacy_transaction:
-            context_payload["current_flow"] = active_legacy_flow
-        if _should_prefer_legacy_setup_flow(request.query, context_payload) or should_resume_legacy_transaction:
-            if _should_prefer_legacy_setup_flow(request.query, context_payload):
-                _clear_modern_transactional_context(context_payload)
-            response, action, draft, state, reasoning, suggested_actions, actual_session_id = await service.get_chat_response(
-                user_id, request.query, request.history, context_payload, trace_id=trace_id, session_id=request.session_id
-            )
-            return await _finalize_legacy_response(
-                service=service,
-                response=response,
-                action=action,
-                draft=draft,
-                state=state,
-                reasoning=reasoning,
-                suggested_actions=suggested_actions,
-                session_id=actual_session_id or request.session_id,
-                finn=finn,
-                user_id=user_id,
-                trace_id=trace_id,
-                db=db,
-                query=request.query,
-                context_payload=context_payload,
-                started_at=started_at,
-            )
-        follow_up = await _continue_transactional_follow_up(finn, user_id, request.query, context_payload)
-        if follow_up:
-            return await _finalize_finn_response(
-                finn, user_id, follow_up, trace_id, persist_state=True, prompt=request.query, context_payload=context_payload
-            )
-        route_decision = _build_finn_route_decision(
-            finn=finn,
-            query=request.query,
-            context_payload=context_payload,
-            route_source="finn",
-        )
-        routed_response = await _dispatch_finn_route_decision(
-            finn=finn,
+        v2_visible = await _try_v2_visible_delivery(
+            db=db,
             user_id=user_id,
-            query=request.query,
+            message=request.query,
             context_payload=context_payload,
-            decision=route_decision,
-        )
-        if routed_response is not None:
-            return await _finalize_finn_response(
-                finn,
-                user_id,
-                routed_response,
-                trace_id,
-                persist_state=route_decision.get("action_mode") == "confirmable",
-                prompt=request.query,
-                context_payload=context_payload,
-                route_source="finn",
-                latency_ms=(time.perf_counter() - started_at) * 1000,
-            )
-
-        try:
-            response, action, draft, state, reasoning, suggested_actions, actual_session_id = await service.get_chat_response(
-                user_id, request.query, request.history, context_payload, trace_id=trace_id, session_id=request.session_id
-            )
-        except Exception as legacy_exc:
-            logger.warning("⚠️ Legacy assistant failed; trying FINN core rescue | Trace: %s | Error: %s", trace_id, legacy_exc)
-            rescue = await _build_finn_core_rescue_envelope(
-                finn=finn,
-                user_id=user_id,
-                query=request.query,
-                context_payload=context_payload,
-            )
-            return await _finalize_finn_response(
-                finn,
-                user_id,
-                rescue,
-                trace_id,
-                prompt=request.query,
-                context_payload=context_payload,
-                route_source="finn_core_rescue_exception",
-                legacy_rescue_reason="legacy_exception",
-                latency_ms=(time.perf_counter() - started_at) * 1000,
-            )
-        intent = service._classify_intent(request.query)
-        if not isinstance(action, dict):
-            action = None
-        if not isinstance(draft, dict):
-            draft = None
-        if not isinstance(state, dict):
-            state = None
-        reasoning = None
-        if not isinstance(suggested_actions, list):
-            suggested_actions = None
-        if _legacy_response_needs_finn_rescue(
-            finn,
-            request.query,
-            context_payload,
-            response_text=response,
-            action=action,
-            draft=draft,
-            state=state,
-        ):
-            rescue = await _build_finn_core_rescue_envelope(
-                finn=finn,
-                user_id=user_id,
-                query=request.query,
-                context_payload=context_payload,
-            )
-            return await _finalize_finn_response(
-                finn,
-                user_id,
-                rescue,
-                trace_id,
-                prompt=request.query,
-                context_payload=context_payload,
-                route_source="finn_core_rescue_legacy",
-                legacy_rescue_reason="legacy_non_transactional_misroute_or_generic_failure",
-                latency_ms=(time.perf_counter() - started_at) * 1000,
-            )
-        legacy_response = {
-            "response": response,
-            "intent": intent,
-            "flow": (state or {}).get("current_flow"),
-            "draft": draft,
-            "state": state,
-            "actions": action and [action] or [],
-        }
-        legacy_response = finn._build_response_analysis_metadata(
-            legacy_response,
-            context_payload,
-            route_source="legacy",
-        )
-        legacy_analysis = legacy_response.get("analysis") if isinstance(legacy_response.get("analysis"), dict) else {}
-        response_source = _infer_response_source(legacy_response, route_source="legacy_assistant")
-        response_handler = _infer_response_handler(legacy_response, route_source="legacy_assistant")
-        legacy_response["analysis"] = {
-            **legacy_analysis,
-            "response_source": response_source,
-            "response_handler": response_handler,
-            "pipeline_version": CANONICAL_FINN_PIPELINE_VERSION,
-            "router_name": CANONICAL_FINN_ROUTER_NAME,
-            "context_builder": context_payload.get("context_builder"),
-            "matched_rules": ["legacy_fallback"],
-            "legacy_used": True,
-            "legacy_reason": None,
-            "ai_used": response_source == "openai",
-            "missing_context": context_payload.get("missing_context") or [],
-            "entity_confidence": context_payload.get("entity_confidence") or {},
-        }
-        legacy_response = _attach_trader_profile_metadata(legacy_response, context_payload)
-        legacy_response = _normalize_finn_response_contract(legacy_response)
-        legacy_response = _attach_and_record_response_trace(
-            response=legacy_response,
-            user_id=user_id,
-            trace_id=trace_id,
-            context_payload=context_payload,
-            route_source="legacy_assistant",
-            response_source=response_source,
-            response_handler=response_handler,
-            latency_ms=(time.perf_counter() - started_at) * 1000,
-            legacy_rescue_reason=None,
-        )
-        _log_finn_prompt_audit(
-            trace_id=trace_id,
-            user_id=user_id,
-            prompt=request.query,
-            route_source="legacy_assistant",
-            detected_intent=intent,
-            intent_confidence=None,
-            selected_flow=(state or {}).get("current_flow"),
-            selected_entity=_audit_selected_entity(legacy_response, context_payload),
-            context_payload=context_payload,
-            used_draft=bool(draft),
-            draft_summary=_audit_draft_summary(draft),
-            response_type=_audit_response_type(legacy_response),
-            success=_audit_success_label(legacy_response),
-            mode=(legacy_response.get("analysis") or {}).get("mode") or finn._response_mode_for_flow((state or {}).get("current_flow"), draft),
-            context_confidence=(legacy_response.get("analysis") or {}).get("context_confidence"),
-            draft_rejected_reason=(context_payload.get("_finn_sanitization") or {}).get("draft_rejected_reason"),
-            latency_ms=(time.perf_counter() - started_at) * 1000,
-            response_source=response_source,
-            response_handler=response_handler,
-        )
-        _record_finn_product_event(
-            user_id=user_id,
-            event_name="finn_response_received",
-            session_id=actual_session_id or request.session_id,
-            surface="legacy_assistant",
-            page=context_payload.get("page"),
-            asset=context_payload.get("symbol") or context_payload.get("asset"),
-            flow_type=(state or {}).get("current_flow"),
-            bot_id=(state or {}).get("bot_id") or context_payload.get("bot_id"),
-            setup_id=(state or {}).get("setup_id") or context_payload.get("setup_id"),
-            strategy_id=(state or {}).get("strategy_id") or context_payload.get("strategy_id"),
-            trace_id=trace_id,
-            next_best_action=legacy_response.get("next_best_action"),
-            metadata={
-                "intent": intent,
-                "response_source": response_source,
-                "response_handler": response_handler,
-                **_trader_profile_event_metadata(context_payload),
-            },
-        )
-        _record_behavioral_response_events(
-            user_id=user_id,
-            response=legacy_response,
-            context_payload=context_payload,
-            route_source="legacy_assistant",
+            transport="chat",
+            request_path=_safe_request_path(raw_request, "/api/assistant/chat"),
+            request_id=_safe_request_trace_id(raw_request, trace_id),
             trace_id=trace_id,
         )
         return AssistantChatResponse(
-            response=legacy_response.get("response") or response,
-            intent=intent,
-            action=action,
-            draft=draft,
-            state=legacy_response.get("state"),
-            reasoning=reasoning,
-            suggested_actions=suggested_actions,
+            response=v2_visible.get("response") or "",
+            intent=v2_visible.get("intent") or "unavailable",
+            action=v2_visible.get("action"),
+            draft=v2_visible.get("draft"),
+            state=v2_visible.get("state"),
+            reasoning=v2_visible.get("reasoning"),
+            suggested_actions=v2_visible.get("suggested_actions"),
             trace_id=trace_id,
-            session_id=actual_session_id,
-            summary=legacy_response.get("summary"),
-            risk_summary=legacy_response.get("risk_summary"),
-            next_best_action=legacy_response.get("next_best_action"),
-            review_reason=legacy_response.get("review_reason"),
-            response_trace=legacy_response.get("response_trace"),
+            session_id=request.session_id,
+            flow=(v2_visible.get("state") or {}).get("current_flow"),
+            actions=v2_visible.get("actions") or [],
+            can_confirm=bool(v2_visible.get("can_confirm")),
+            summary=v2_visible.get("summary"),
+            risk_summary=v2_visible.get("risk_summary"),
+            next_best_action=v2_visible.get("next_best_action"),
+            response_trace=v2_visible.get("response_trace"),
         )
     except HTTPException:
         raise
@@ -3017,7 +2744,7 @@ async def _try_v2_visible_delivery(
         client_context=context_payload or {},
     )
     if selection.selected_runtime != "v2" or not selection.visible_allowed:
-        return None
+        raise ValueError("v2_runtime_not_selected")
     try:
         envelope = await FinnV2VisibleDeliveryService(db).deliver_assistant_envelope(
             user_id=user_id,
@@ -3033,9 +2760,6 @@ async def _try_v2_visible_delivery(
         return envelope
     except Exception as exc:
         reason = str(exc)
-        technical = {"v2_timeout", "v2_internal_error", "v2_dependency_unavailable", "v2_model_unavailable", "v2_delivery_failure"}
-        if selection.fallback_allowed and reason in technical:
-            return None
         return {
             "response": "Ik kan nu geen veilige verified V2-response uitleveren.",
             "intent": "unavailable",
@@ -3043,7 +2767,16 @@ async def _try_v2_visible_delivery(
             "summary": "De V2-runtime kon geen veilige verified response afleveren.",
             "risk_summary": reason,
             "next_best_action": None,
-            "response_trace": {"trace_id": trace_id, "response_source": FINN_V2_VERIFIED_SOURCE, "runtime_selection": selection.dict(), "error": reason},
+            "response_trace": {
+                "trace_id": trace_id,
+                "run_id": None,
+                "pipeline_version": "finn_v2",
+                "router_name": "finn_v2_orchestrator",
+                "selected_handler": "FinnV2VisibleDeliveryService.deliver_assistant_envelope",
+                "response_source": FINN_V2_VERIFIED_SOURCE,
+                "runtime_selection": selection.dict(),
+                "error": reason,
+            },
             "can_confirm": False,
             "actions": [],
         }
@@ -3084,19 +2817,6 @@ async def assistant_chat_stream(
                 query=request.query,
                 context_payload=context_payload,
             )
-            v2_visible = await _try_v2_visible_delivery(
-                db=db,
-                user_id=user_id,
-                message=request.query,
-                context_payload=context_payload,
-                transport="stream",
-                request_path=_safe_request_path(raw_request, "/api/assistant/chat/stream"),
-                request_id=_safe_request_trace_id(raw_request, trace_id),
-                trace_id=trace_id,
-            )
-            if v2_visible is not None:
-                yield _sse_event("envelope", v2_visible)
-                return
             if request.session_id:
                 context_payload["session_id"] = request.session_id
             _apply_assistant_rate_limit(
@@ -3105,16 +2825,6 @@ async def assistant_chat_stream(
                 query=request.query,
                 context=context_payload,
                 endpoint="/assistant/chat/stream",
-            )
-            await _enqueue_finn_v2_shadow_run(
-                db=db,
-                user_id=user_id,
-                message=request.query,
-                transport="stream",
-                request_path=_safe_request_path(raw_request, "/api/assistant/chat/stream"),
-                request_id=_safe_request_trace_id(raw_request, trace_id),
-                trace_id=trace_id,
-                context_payload=_assistant_context_payload(request.context),
             )
             _record_finn_product_event(
                 user_id=user_id,
@@ -3131,182 +2841,17 @@ async def assistant_chat_stream(
                 prompt_text=request.query,
                 metadata=_trader_profile_event_metadata(context_payload),
             )
-            if _looks_like_profile_capture(request.query):
-                user_repo = UserRepository(db)
-                profile_patch = _extract_profile_update_from_query(request.query)
-                current_user_row = await user_repo.get_by_id(user_id)
-                current_prefs = getattr(current_user_row, "ai_preferences", {}) or {}
-                merged_profile = normalize_trader_profile_preferences({**current_prefs, **profile_patch})
-                await user_repo.update_ai_preferences(user_id, {
-                    "trader_types": merged_profile.get("trader_types", []),
-                    "primary_timeframes": merged_profile.get("primary_timeframes", []),
-                    "asset_focus": merged_profile.get("asset_focus", []),
-                    "behavior_flags": merged_profile.get("behavior_flags", []),
-                })
-                envelope = _build_profile_saved_envelope(merged_profile)
-                envelope = await _prepare_finn_envelope(finn, user_id, envelope, trace_id, prompt=request.query, context_payload=context_payload)
-                yield _sse_event("envelope", envelope)
-                return
-
-            if _looks_like_profile_explain(request.query):
-                user_row = await UserRepository(db).get_by_id(user_id)
-                prefs = getattr(user_row, "ai_preferences", {}) or {}
-                envelope = _build_profile_explain_envelope(normalize_trader_profile_preferences(prefs))
-                envelope = await _prepare_finn_envelope(finn, user_id, envelope, trace_id, prompt=request.query, context_payload=context_payload)
-                yield _sse_event("envelope", envelope)
-                return
-
-            if _looks_like_setup_strategy_listing_request(request.query):
-                envelope = await _build_setup_strategy_listing_envelope(db, user_id)
-                envelope = await _prepare_finn_envelope(finn, user_id, envelope, trace_id, prompt=request.query, context_payload=context_payload)
-                yield _sse_event("envelope", envelope)
-                return
-
-            if _looks_like_watchlist_mutation(request.query, context_payload):
-                envelope = _build_watchlist_mutation_envelope(request.query, context_payload)
-                envelope = await _prepare_finn_envelope(finn, user_id, envelope, trace_id, db=db, prompt=request.query, context_payload=context_payload)
-                yield _sse_event("envelope", envelope)
-                return
-
-            state_repo = getattr(service, "state_repo", None)
-            active_legacy_state = await state_repo.get_state(user_id) if state_repo is not None else None
-            active_legacy_flow = str((active_legacy_state or {}).get("current_flow") or "").lower()
-            should_resume_legacy_transaction = (
-                _is_legacy_transactional_flow_name(active_legacy_flow)
-                and not _is_modern_transactional_state_record(active_legacy_state)
-            )
-            if should_resume_legacy_transaction:
-                context_payload["current_flow"] = active_legacy_flow
-            if _should_prefer_legacy_setup_flow(request.query, context_payload) or should_resume_legacy_transaction:
-                if _should_prefer_legacy_setup_flow(request.query, context_payload):
-                    _clear_modern_transactional_context(context_payload)
-                async for chunk in service.get_chat_response_stream(
-                    user_id,
-                    request.query,
-                    request.history,
-                    context_payload,
-                    trace_id=trace_id,
-                    background_tasks=background_tasks,
-                ):
-                    if await raw_request.is_disconnected():
-                        logger.warning(f"🔌 Client disconnected mid-stream | Trace: {trace_id}. Aborting stream generator.")
-                        return
-                    yield chunk
-                return
-
-            follow_up = await _continue_transactional_follow_up(finn, user_id, request.query, context_payload)
-            if follow_up:
-                envelope = await _prepare_finn_envelope(
-                    finn, user_id, follow_up, trace_id, persist_state=True, prompt=request.query, context_payload=context_payload
-                )
-                yield _sse_event("envelope", envelope)
-                return
-            route_decision = _build_finn_route_decision(
-                finn=finn,
-                query=request.query,
-                context_payload=context_payload,
-                route_source="finn_stream",
-            )
-            routed_envelope = await _dispatch_finn_route_decision(
-                finn=finn,
+            v2_visible = await _try_v2_visible_delivery(
+                db=db,
                 user_id=user_id,
-                query=request.query,
+                message=request.query,
                 context_payload=context_payload,
-                decision=route_decision,
+                transport="stream",
+                request_path=_safe_request_path(raw_request, "/api/assistant/chat/stream"),
+                request_id=_safe_request_trace_id(raw_request, trace_id),
+                trace_id=trace_id,
             )
-            if routed_envelope is not None:
-                envelope = await _prepare_finn_envelope(
-                    finn,
-                    user_id,
-                    routed_envelope,
-                    trace_id,
-                    persist_state=route_decision.get("action_mode") == "confirmable",
-                    prompt=request.query,
-                    context_payload=context_payload,
-                    route_source="finn_stream",
-                    latency_ms=(time.perf_counter() - started_at) * 1000,
-                )
-                yield _sse_event("envelope", envelope)
-                return
-
-            try:
-                async for chunk in service.get_chat_response_stream(
-                    user_id, request.query, request.history, context_payload,
-                    trace_id=trace_id, background_tasks=background_tasks
-                ):
-                    if await raw_request.is_disconnected():
-                        logger.warning(f"🔌 Client disconnected mid-stream | Trace: {trace_id}. Aborting stream generator.")
-                        break
-
-                    event_name = chunk["event"]
-                    data_val = chunk["data"]
-
-                    if event_name == "envelope" and isinstance(data_val, dict):
-                        data_val["trace_id"] = trace_id
-                        if _legacy_response_needs_finn_rescue(
-                            finn,
-                            request.query,
-                            context_payload,
-                            response_text=data_val.get("response"),
-                            action=data_val.get("action"),
-                            draft=data_val.get("draft"),
-                            state=data_val.get("state"),
-                        ):
-                            rescue = await _build_finn_core_rescue_envelope(
-                                finn=finn,
-                                user_id=user_id,
-                                query=request.query,
-                                context_payload=context_payload,
-                            )
-                            rescue = await _prepare_finn_envelope(
-                                finn,
-                                user_id,
-                                rescue,
-                                trace_id,
-                                prompt=request.query,
-                                context_payload=context_payload,
-                                route_source="finn_core_rescue_stream",
-                                legacy_rescue_reason="legacy_stream_non_transactional_misroute_or_generic_failure",
-                                latency_ms=(time.perf_counter() - started_at) * 1000,
-                            )
-                            yield _sse_event("envelope", rescue)
-                            return
-
-                        if not isinstance(data_val.get("response_trace"), dict):
-                            data_val = await _prepare_finn_envelope(
-                                finn,
-                                user_id,
-                                data_val,
-                                trace_id,
-                                db=db,
-                                prompt=request.query,
-                                context_payload=context_payload,
-                                route_source="legacy_assistant_stream",
-                                latency_ms=(time.perf_counter() - started_at) * 1000,
-                            )
-
-                    yield _sse_event(event_name, data_val)
-            except Exception as legacy_exc:
-                logger.warning("⚠️ Legacy assistant stream failed; trying FINN core rescue | Trace: %s | Error: %s", trace_id, legacy_exc)
-                rescue = await _build_finn_core_rescue_envelope(
-                    finn=finn,
-                    user_id=user_id,
-                    query=request.query,
-                    context_payload=context_payload,
-                )
-                rescue = await _prepare_finn_envelope(
-                    finn,
-                    user_id,
-                    rescue,
-                    trace_id,
-                    prompt=request.query,
-                    context_payload=context_payload,
-                    route_source="finn_core_rescue_stream_exception",
-                    legacy_rescue_reason="legacy_stream_exception",
-                    latency_ms=(time.perf_counter() - started_at) * 1000,
-                )
-                yield _sse_event("envelope", rescue)
-                return
+            yield _sse_event("envelope", v2_visible)
         except Exception as e:
             logger.error(f"❌ Error in SSE assistant stream generator | Trace: {trace_id}: {e}", exc_info=True)
             err_payload = json.dumps({"response": "⚠️ Externe stream fout opgetreden. Klik op retry.", "trace_id": trace_id})
@@ -3496,81 +3041,33 @@ async def get_finn_mission_control(
     cached = _get_cached_mission_control(current_user["id"])
     if cached:
         return cached
-    selector = FinnV2RuntimeSelectorService()
-    selection = selector.select(
-        user_id=current_user["id"],
-        message="Today with FINN",
-        surface="today_with_finn",
-        workspace_hints={"surface": "today_with_finn", "page": "assistant"},
-        client_context={"surface": "today_with_finn"},
-    )
-    if selection.selected_runtime == "v2" and selection.visible_allowed:
-        try:
-            response = await FinnV2VisibleDeliveryService(db).deliver_mission_control(
-                user_id=current_user["id"],
-                context_payload={"page": "assistant", "surface": "today_with_finn"},
-                request_id=trace_id or f"mission-{uuid.uuid4().hex}",
-                trace_id=trace_id or f"mission-{uuid.uuid4().hex}",
-            )
-            _store_cached_mission_control(current_user["id"], response)
-            return response
-        except Exception:
-            pass
-    finn = _new_finn_plan_service(db, trace_id=trace_id)
     try:
-        response = await finn.build_mission_control_response(
-            current_user["id"],
-            {
-                "page": "assistant",
-                "scope": "mission_control",
-                "mission_control_fast": True,
-                "mission_control_preview_only": True,
-                "allow_cached_mission_control": True,
+        response = await FinnV2VisibleDeliveryService(db).deliver_mission_control(
+            user_id=current_user["id"],
+            context_payload={"page": "assistant", "surface": "today_with_finn"},
+            request_id=trace_id or f"mission-{uuid.uuid4().hex}",
+            trace_id=trace_id or f"mission-{uuid.uuid4().hex}",
+        )
+    except Exception as exc:
+        response = {
+            "greeting": "Today with FINN",
+            "finn_briefing": {
+                "greeting": "Today with FINN",
+                "summary": "De V2-runtime kon geen veilige Today with FINN-response afleveren.",
+                "suggested_actions": [],
             },
-        )
-    except Exception as exc:
-        logger.exception(
-            "Mission Control build failed for user %s (trace_id=%s); returning fallback response.",
-            current_user["id"],
-            trace_id,
-        )
-        response = _mission_control_fallback_response(
-            finn,
-            error=str(exc or "mission_control_build_failed"),
-        )
-    try:
-        await finn.issue_response_actions(current_user["id"], response)
-    except (DBAPIError, SQLAlchemyError) as exc:
-        logger.warning(
-            "Skipping FINN response action issuance after database failure on %s for user %s (trace_id=%s): %s",
-            "assistant_mission_control",
-            current_user["id"],
-            trace_id,
-            exc,
-        )
-        await db.rollback()
-    except Exception as exc:
-        logger.exception(
-            "Skipping FINN response action issuance after unexpected failure on %s for user %s (trace_id=%s)",
-            "assistant_mission_control",
-            current_user["id"],
-            trace_id,
-            exc_info=exc,
-        )
-        await db.rollback()
-    try:
-        response = await _enrich_with_trader_profile(db, current_user["id"], response)
-    except Exception:
-        logger.exception(
-            "Mission Control trader-profile enrichment failed for user %s (trace_id=%s); returning unenriched response.",
-            current_user["id"],
-            trace_id,
-        )
-    generation_status = str(
-        ((response.get("first_dashboard_context") or {}).get("generation_status") or "")
-    ).lower()
-    if generation_status not in {"pending", "generating", "retry_scheduled"}:
-        _store_cached_mission_control(current_user["id"], response)
+            "generation_status": "failed",
+            "response_trace": {
+                "trace_id": trace_id,
+                "run_id": None,
+                "pipeline_version": "finn_v2",
+                "router_name": "finn_v2_orchestrator",
+                "selected_handler": "FinnV2VisibleDeliveryService.deliver_mission_control",
+                "response_source": FINN_V2_VERIFIED_SOURCE,
+                "error": str(exc or "mission_control_build_failed"),
+            },
+        }
+    _store_cached_mission_control(current_user["id"], response)
     return response
 
 

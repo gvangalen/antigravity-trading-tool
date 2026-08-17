@@ -133,7 +133,7 @@ def _build_canonical_runtime_context(context):
     }
 
 
-def _patch_canonical_endpoint_runtime(monkeypatch, *, case_id, expected_builder, expected_flow):
+def _patch_canonical_endpoint_runtime(monkeypatch, *, case_id, expected_builder, expected_flow, expected_family):
     finn = _finn()
     finn.issue_response_actions = AsyncMock()
     finn.persist_response_state = AsyncMock()
@@ -180,6 +180,30 @@ def _patch_canonical_endpoint_runtime(monkeypatch, *, case_id, expected_builder,
     monkeypatch.setattr("backend.api.ai_assistant_api._localize_finn_response_payload", fake_localize)
     monkeypatch.setattr("backend.api.ai_assistant_api.get_ai_availability", lambda: {"available": True, "mode": "full", "reason": None})
     monkeypatch.setattr("backend.services.finn_response_trace_service.get_ai_availability", lambda: {"available": True, "mode": "full", "reason": None})
+
+    async def fake_try_v2_visible_delivery(**kwargs):
+        context = _build_canonical_runtime_context(kwargs.get("context_payload") or {})
+        await getattr(finn, expected_builder)()
+        return {
+            "response": f"{case_id} response",
+            "intent": expected_flow,
+            "flow": expected_flow,
+            "state": {"current_flow": expected_flow},
+            "response_trace": {
+                "pipeline_version": "finn_v2",
+                "router_name": "finn_v2_orchestrator",
+                "selected_handler": f"finn_v2_visible.{expected_builder}",
+                "routing": {
+                    "pipeline_version": "finn_v2",
+                    "intent_family": expected_family,
+                    "selected_handler": f"finn_v2_visible.{expected_builder}",
+                },
+                "context": context,
+                "decision": {"ai_available": True, "legacy_used": False},
+            },
+        }
+
+    monkeypatch.setattr("backend.api.ai_assistant_api._try_v2_visible_delivery", fake_try_v2_visible_delivery)
 
     service = SimpleNamespace(
         state_repo=SimpleNamespace(get_state=AsyncMock(return_value=None)),
@@ -347,16 +371,22 @@ def test_assistant_chat_passes_enriched_profile_context_into_legacy_service(monk
         })
         return enriched
 
-    async def fake_get_chat_response(user_id, query, history, context, trace_id=None, session_id=None):
-        captured["context"] = context
-        return ("Legacy antwoord", None, None, {"current_flow": "free_chat"}, None, None, "sess-legacy")
+    async def fake_try_v2_visible_delivery(**kwargs):
+        captured["context"] = kwargs["context_payload"]
+        return {
+            "response": "V2 antwoord",
+            "intent": "fact",
+            "state": {"current_flow": "finn_v2_visible"},
+            "response_trace": {"pipeline_version": "finn_v2"},
+        }
 
     monkeypatch.setattr("backend.api.ai_assistant_api._enrich_with_trader_profile", fake_enrich_with_trader_profile)
     monkeypatch.setattr("backend.api.ai_assistant_api._apply_assistant_rate_limit", lambda **kwargs: None)
     monkeypatch.setattr("backend.api.ai_assistant_api._record_finn_product_event", lambda **kwargs: {})
+    monkeypatch.setattr("backend.api.ai_assistant_api._try_v2_visible_delivery", fake_try_v2_visible_delivery)
 
     service = SimpleNamespace(
-        get_chat_response=AsyncMock(side_effect=fake_get_chat_response),
+        get_chat_response=AsyncMock(),
         _classify_intent=lambda query: "general_help",
     )
     raw_request = Request({"type": "http", "headers": [], "client": ("127.0.0.1", 12345)})
@@ -389,24 +419,24 @@ def test_assistant_chat_returns_legacy_response_text_after_profile_overlay(monke
         })
         return enriched
 
-    async def fake_get_chat_response(user_id, query, history, context, trace_id=None, session_id=None):
-        return (
-            "Ik help je hier vooral met uitleg, coaching en review in assistant rond BTC.\n\n"
-            "Voor jouw profiel geldt nu: wacht bij BTC eerst op bevestiging en laat haast of fear of missing out je timing niet overnemen.",
-            None,
-            None,
-            {"current_flow": "free_chat"},
-            None,
-            None,
-            "sess-legacy",
-        )
+    async def fake_try_v2_visible_delivery(**kwargs):
+        return {
+            "response": (
+                "Ik help je hier vooral met uitleg, coaching en review in assistant rond BTC.\n\n"
+                "Voor jouw profiel geldt nu: wacht bij BTC eerst op bevestiging en laat haast of fear of missing out je timing niet overnemen."
+            ),
+            "intent": "evaluation",
+            "state": {"current_flow": "finn_v2_visible"},
+            "response_trace": {"pipeline_version": "finn_v2"},
+        }
 
     monkeypatch.setattr("backend.api.ai_assistant_api._enrich_with_trader_profile", fake_enrich_with_trader_profile)
     monkeypatch.setattr("backend.api.ai_assistant_api._apply_assistant_rate_limit", lambda **kwargs: None)
     monkeypatch.setattr("backend.api.ai_assistant_api._record_finn_product_event", lambda **kwargs: {})
+    monkeypatch.setattr("backend.api.ai_assistant_api._try_v2_visible_delivery", fake_try_v2_visible_delivery)
 
     service = SimpleNamespace(
-        get_chat_response=AsyncMock(side_effect=fake_get_chat_response),
+        get_chat_response=AsyncMock(),
         _classify_intent=lambda query: "general_help",
     )
     raw_request = Request({"type": "http", "headers": [], "client": ("127.0.0.1", 12345)})
@@ -608,6 +638,7 @@ def test_canonical_chat_and_stream_endpoints_keep_production_question_contracts(
         case_id=case_id,
         expected_builder=expected_builder,
         expected_flow=expected_flow,
+        expected_family=expected_family,
     )
 
     chat_response = asyncio.run(
@@ -651,8 +682,8 @@ def test_canonical_chat_and_stream_endpoints_keep_production_question_contracts(
 
     assert chat_response.flow == expected_flow
     assert stream_envelope["flow"] == expected_flow
-    assert chat_trace["routing"]["pipeline_version"] == "v1_canonical_router"
-    assert stream_trace["routing"]["pipeline_version"] == "v1_canonical_router"
+    assert chat_trace["routing"]["pipeline_version"] == "finn_v2"
+    assert stream_trace["routing"]["pipeline_version"] == "finn_v2"
     assert chat_trace["routing"]["intent_family"] == expected_family
     assert stream_trace["routing"]["intent_family"] == expected_family
     assert chat_trace["routing"]["selected_handler"].endswith(expected_builder)
@@ -1265,24 +1296,24 @@ def test_prepare_finn_envelope_persists_read_only_state_by_default():
 def test_get_finn_mission_control_survives_non_database_action_failures(monkeypatch):
     db = SimpleNamespace(rollback=AsyncMock())
     stored = {}
-    finn = SimpleNamespace(
-        build_mission_control_response=AsyncMock(
-            return_value={"first_dashboard_context": {"generation_status": "ready"}}
-        ),
-        issue_response_actions=AsyncMock(side_effect=RuntimeError("issue actions failed")),
-    )
 
     monkeypatch.setattr("backend.api.ai_assistant_api._get_cached_mission_control", lambda user_id: None)
     monkeypatch.setattr(
         "backend.api.ai_assistant_api._store_cached_mission_control",
         lambda user_id, payload: stored.update({"user_id": user_id, "payload": payload}),
     )
-    monkeypatch.setattr("backend.api.ai_assistant_api._new_finn_plan_service", lambda db_session, trace_id=None: finn)
 
-    async def fake_enrich(db_session, user_id, payload=None, *, query=None):
-        return payload or {}
+    class VisibleService:
+        async def deliver_mission_control(self, **kwargs):
+            return {
+                "greeting": "Today with FINN",
+                "finn_briefing": {"summary": "Ready", "suggested_actions": []},
+                "generation_status": "completed",
+                "response_trace": {"pipeline_version": "finn_v2"},
+                "first_dashboard_context": {"generation_status": "ready"},
+            }
 
-    monkeypatch.setattr("backend.api.ai_assistant_api._enrich_with_trader_profile", fake_enrich)
+    monkeypatch.setattr("backend.api.ai_assistant_api.FinnV2VisibleDeliveryService", lambda db_session: VisibleService())
 
     request = Request({"type": "http", "headers": [], "client": ("127.0.0.1", 12345)})
     request.state.trace_id = "trace-mission-control"
@@ -1295,9 +1326,7 @@ def test_get_finn_mission_control_survives_non_database_action_failures(monkeypa
         )
     )
 
-    finn.build_mission_control_response.assert_awaited_once()
-    finn.issue_response_actions.assert_awaited_once()
-    db.rollback.assert_awaited_once()
+    db.rollback.assert_not_awaited()
     assert response["first_dashboard_context"]["generation_status"] == "ready"
     assert stored["user_id"] == 30
     assert stored["payload"]["first_dashboard_context"]["generation_status"] == "ready"
@@ -1306,63 +1335,18 @@ def test_get_finn_mission_control_survives_non_database_action_failures(monkeypa
 def test_get_finn_mission_control_returns_fallback_when_build_fails(monkeypatch):
     db = SimpleNamespace(rollback=AsyncMock())
     stored = {}
-    finn = SimpleNamespace(
-        trace_id="trace-mission-control-fallback",
-        build_mission_control_response=AsyncMock(side_effect=RuntimeError("live mission control exploded")),
-        issue_response_actions=AsyncMock(return_value={}),
-        _first_dashboard_error_context=lambda analysis, *, error: {
-            "is_first_dashboard": True,
-            "asset": "BTC",
-            "headline": "FINN is reviewing your plan",
-            "observation": "Mission Control stays available while the first dashboard review retries safely.",
-            "reasoning": "A recoverable mission-control build failure occurred.",
-            "next_action": {"label": "Continue in Mission Control", "question": "Would you like to continue?"},
-            "review_state": "not_reviewed_yet",
-            "review_label": "Not reviewed yet",
-            "response_source": "briefing_error",
-            "generation_status": "error",
-            "evidence_refs": ["asset.symbol"],
-            "error": error,
-        },
-        _mission_workqueue_from_first_dashboard_context=lambda context: {
-            "id": "first_dashboard:BTC",
-            "type": "first_dashboard_review",
-            "priority": "medium",
-            "priority_rank": 4,
-            "sort_rank": 4,
-            "status": "not_reviewed_yet",
-            "resolve_state": "not_reviewed_yet",
-            "asset": "BTC",
-            "title": "Continue in Mission Control",
-            "reason": context["observation"],
-            "next_best_action": {
-                "type": "chat_prompt",
-                "label": "Continue in Mission Control",
-                "prompt": "Would you like to continue?",
-                "handoff": "daily_coach",
-                "requires_confirmation": False,
-            },
-            "resolve_action": None,
-            "freshness": {"status": "unknown"},
-            "source_ids": {"asset": "BTC"},
-        },
-        _mission_workqueue_groups=lambda items: {"review_now": items},
-        _flatten_mission_workqueue_groups=lambda groups: list(groups.get("review_now") or []),
-    )
 
     monkeypatch.setattr("backend.api.ai_assistant_api._get_cached_mission_control", lambda user_id: None)
     monkeypatch.setattr(
         "backend.api.ai_assistant_api._store_cached_mission_control",
         lambda user_id, payload: stored.update({"user_id": user_id, "payload": payload}),
     )
-    monkeypatch.setattr("backend.api.ai_assistant_api._new_finn_plan_service", lambda db_session, trace_id=None: finn)
 
-    async def fake_enrich(db_session, user_id, payload=None, *, query=None):
-        enriched = dict(payload or {})
-        enriched["trader_profile_used"] = True
-        return enriched
+    class VisibleService:
+        async def deliver_mission_control(self, **kwargs):
+            raise RuntimeError("live mission control exploded")
 
-    monkeypatch.setattr("backend.api.ai_assistant_api._enrich_with_trader_profile", fake_enrich)
+    monkeypatch.setattr("backend.api.ai_assistant_api.FinnV2VisibleDeliveryService", lambda db_session: VisibleService())
 
     request = Request({"type": "http", "headers": [], "client": ("127.0.0.1", 12345)})
     request.state.trace_id = "trace-mission-control-fallback"
@@ -1375,15 +1359,12 @@ def test_get_finn_mission_control_returns_fallback_when_build_fails(monkeypatch)
         )
     )
 
-    finn.build_mission_control_response.assert_awaited_once()
-    finn.issue_response_actions.assert_awaited_once()
-    assert response["first_dashboard_context"]["generation_status"] == "error"
-    assert response["first_dashboard_context"]["response_source"] == "briefing_error"
-    assert response["summary"]["first_dashboard_response_source"] == "briefing_error"
-    assert response["workqueue"][0]["type"] == "first_dashboard_review"
-    assert response["trader_profile_used"] is True
+    db.rollback.assert_not_awaited()
+    assert response["generation_status"] == "failed"
+    assert response["response_trace"]["pipeline_version"] == "finn_v2"
+    assert response["response_trace"]["error"] == "live mission control exploded"
     assert stored["user_id"] == 30
-    assert stored["payload"]["first_dashboard_context"]["generation_status"] == "error"
+    assert stored["payload"]["generation_status"] == "failed"
 
 
 def test_conversation_state_repository_serializes_date_values():

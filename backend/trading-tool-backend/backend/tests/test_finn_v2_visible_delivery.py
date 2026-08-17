@@ -9,10 +9,11 @@ from backend.services.finn_v2_visible_delivery_service import FinnV2VisibleDeliv
 def test_visible_delivery_maps_verified_response_to_assistant_contract():
     service = FinnV2VisibleDeliveryService(session=object())
     service.gateway.run_foundation_now = lambda **kwargs: asyncio.sleep(0, result="run-1")
-    service.delivery.get_delivery_envelope = lambda **kwargs: asyncio.sleep(
+    service.delivery.get_delivery_artifacts = lambda **kwargs: asyncio.sleep(
         0,
-        result=SimpleNamespace(
-            response=VerifiedResponse.parse_obj(
+        result={
+            "delivery_envelope": {"run_id": "run-1", "status": "completed", "delivery_source": "finn_v2_verified"},
+            "verified_response": VerifiedResponse.parse_obj(
                 {
                     "verified_response_id": "vr-1",
                     "run_id": "run-1",
@@ -33,8 +34,15 @@ def test_visible_delivery_maps_verified_response_to_assistant_contract():
                     "verifier_result_id": "verifier-1",
                     "created_at": datetime.now(timezone.utc),
                 }
-            )
-        ),
+            ).dict(),
+            "orchestrator_result": {"outcome": "reasoning_ready"},
+            "policy_result": {"allowed": True},
+            "reasoning_result": {"mode": "PROPOSAL"},
+            "verifier_result": {"passed": True},
+            "tool_calls": [{"tool_name": "read_active_asset"}],
+            "validation_result": {"integrity_status": "valid"},
+            "financial_state_snapshot": {"asset": "BTC"},
+        },
     )
 
     envelope = asyncio.run(
@@ -52,3 +60,5 @@ def test_visible_delivery_maps_verified_response_to_assistant_contract():
     assert envelope["can_confirm"] is True
     assert envelope["actions"][0]["proposal_id"] == "proposal-1"
     assert envelope["response_trace"]["response_source"] == "finn_v2_verified"
+    assert envelope["response_trace"]["pipeline_version"] == "finn_v2"
+    assert envelope["response_trace"]["tool_calls"][0]["tool_name"] == "read_active_asset"

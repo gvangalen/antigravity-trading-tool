@@ -26,6 +26,17 @@ class FinnV2ToolCallRepository:
         result = await self.session.execute(select(FinnV2ToolCall).where(FinnV2ToolCall.id == tool_call_id))
         return result.scalars().first()
 
+    async def list_for_run(self, *, run_id: str, user_id: int) -> list[FinnV2ToolCall]:
+        result = await self.session.execute(
+            select(FinnV2ToolCall)
+            .where(
+                FinnV2ToolCall.run_id == run_id,
+                FinnV2ToolCall.user_id == user_id,
+            )
+            .order_by(FinnV2ToolCall.id.asc())
+        )
+        return list(result.scalars().all())
+
     async def update(self, row: FinnV2ToolCall, **kwargs) -> FinnV2ToolCall:
         for key, value in kwargs.items():
             setattr(row, key, value)
@@ -53,4 +64,3 @@ class FinnV2ToolCallRepository:
         )
         await self.session.flush()
         return int(result.rowcount or 0)
-

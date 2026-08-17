@@ -38,10 +38,17 @@ class FinnV2VisibleDeliveryService:
             request_id=request_id,
             trace_id=trace_id,
         )
-        envelope = await self.delivery.get_delivery_envelope(user_id=user_id, run_id=run_id)
-        if envelope.response is None:
+        artifacts = await self.delivery.get_delivery_artifacts(user_id=user_id, run_id=run_id)
+        envelope = artifacts["delivery_envelope"]
+        verified_response = artifacts.get("verified_response")
+        if verified_response is None:
             raise ValueError("v2_delivery_failure")
-        return self._assistant_contract(envelope.response, trace_id=trace_id, run_id=run_id)
+        return self._assistant_contract(
+            verified_response,
+            trace_id=trace_id,
+            run_id=run_id,
+            artifacts=artifacts,
+        )
 
     async def deliver_mission_control(
         self,
@@ -71,42 +78,70 @@ class FinnV2VisibleDeliveryService:
             "response_trace": envelope.get("response_trace"),
         }
 
-    def _assistant_contract(self, response, *, trace_id: str, run_id: str) -> dict[str, Any]:
-        lines = [response.direct_answer, response.main_observation]
-        lines.extend([f"- {point.title}: {point.explanation}" for point in response.supporting_points])
-        if response.uncertainty_summary:
-            lines.append(response.uncertainty_summary)
-        if response.next_step:
-            lines.append(response.next_step.instruction)
+    def _assistant_contract(self, response: dict[str, Any], *, trace_id: str, run_id: str, artifacts: dict[str, Any]) -> dict[str, Any]:
+        lines = [response.get("direct_answer"), response.get("main_observation")]
+        lines.extend(
+            [
+                f"- {point.get('title')}: {point.get('explanation')}"
+                for point in (response.get("supporting_points") or [])
+                if point.get("title") and point.get("explanation")
+            ]
+        )
+        if response.get("uncertainty_summary"):
+            lines.append(response["uncertainty_summary"])
+        next_step = response.get("next_step") or {}
+        if next_step.get("instruction"):
+            lines.append(next_step["instruction"])
+        response_trace = {
+            "trace_id": trace_id,
+            "run_id": run_id,
+            "pipeline_version": "finn_v2",
+            "router_name": "finn_v2_orchestrator",
+            "selected_handler": "FinnV2VisibleDeliveryService.deliver_assistant_envelope",
+            "response_source": "finn_v2_verified",
+            "verifier_status": response.get("verifier_status"),
+            "mode": response.get("mode"),
+            "orchestrator_result": artifacts.get("orchestrator_result"),
+            "policy_result": artifacts.get("policy_result"),
+            "reasoning_result": artifacts.get("reasoning_result"),
+            "verifier_result": artifacts.get("verifier_result"),
+            "tool_calls": artifacts.get("tool_calls") or [],
+            "validation_result": artifacts.get("validation_result"),
+            "financial_state_snapshot": artifacts.get("financial_state_snapshot"),
+            "verified_response": artifacts.get("verified_response"),
+            "delivery_envelope": artifacts.get("delivery_envelope"),
+        }
         payload = {
             "response": "\n\n".join([line for line in lines if line]),
-            "intent": response.mode.lower(),
+            "intent": str(response.get("mode") or "UNAVAILABLE").lower(),
             "action": None,
             "draft": None,
             "state": {"current_flow": "finn_v2_visible", "run_id": run_id, "surface": "assistant"},
             "reasoning": None,
             "trace_id": trace_id,
-            "suggested_actions": [response.next_step.title] if response.next_step else [],
-            "summary": response.main_observation,
-            "risk_summary": response.uncertainty_summary,
-            "next_best_action": response.next_step.title if response.next_step else response.follow_up_question,
+            "suggested_actions": [next_step.get("title")] if next_step.get("title") else [],
+            "summary": response.get("main_observation"),
+            "risk_summary": response.get("uncertainty_summary"),
+            "next_best_action": next_step.get("title") or response.get("follow_up_question"),
             "review_reason": None,
-            "response_trace": {
-                "trace_id": trace_id,
-                "run_id": run_id,
-                "response_source": "finn_v2_verified",
-                "verifier_status": response.verifier_status,
-                "mode": response.mode,
-            },
-            "can_confirm": bool(response.confirmation_required and response.proposal_id),
+            "response_trace": response_trace,
+            "verified_response": artifacts.get("verified_response"),
+            "delivery_envelope": artifacts.get("delivery_envelope"),
+            "tool_calls": artifacts.get("tool_calls") or [],
+            "financial_state_snapshot": artifacts.get("financial_state_snapshot"),
+            "validation_result": artifacts.get("validation_result"),
+            "orchestrator_result": artifacts.get("orchestrator_result"),
+            "policy_result": artifacts.get("policy_result"),
+            "reasoning_result": artifacts.get("reasoning_result"),
+            "verifier_result": artifacts.get("verifier_result"),
+            "can_confirm": bool(response.get("confirmation_required") and response.get("proposal_id")),
             "actions": [],
         }
-        if response.proposal_id:
+        if response.get("proposal_id"):
             payload["actions"] = [{
                 "type": "v2_proposal",
-                "proposal_id": response.proposal_id,
-                "requires_confirmation": response.confirmation_required,
-                "mode": response.mode,
+                "proposal_id": response["proposal_id"],
+                "requires_confirmation": bool(response.get("confirmation_required")),
+                "mode": response.get("mode"),
             }]
         return payload
-

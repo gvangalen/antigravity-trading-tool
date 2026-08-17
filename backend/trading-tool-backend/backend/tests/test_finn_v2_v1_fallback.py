@@ -4,8 +4,8 @@ from types import SimpleNamespace
 from backend.api.ai_assistant_api import _try_v2_visible_delivery
 
 
-def test_visible_delivery_returns_v1_fallback_on_technical_error(monkeypatch):
-    selection = SimpleNamespace(selected_runtime="v2", visible_allowed=True, fallback_allowed=True, dict=lambda: {"selected_runtime": "v2"})
+def test_visible_delivery_returns_explicit_v2_unavailable_on_technical_error(monkeypatch):
+    selection = SimpleNamespace(selected_runtime="v2", visible_allowed=True, fallback_allowed=False, dict=lambda: {"selected_runtime": "v2"})
 
     class Selector:
         def select(self, **kwargs):
@@ -31,4 +31,6 @@ def test_visible_delivery_returns_v1_fallback_on_technical_error(monkeypatch):
         )
     )
 
-    assert result is None
+    assert result["intent"] == "unavailable"
+    assert result["response_trace"]["pipeline_version"] == "finn_v2"
+    assert result["response_trace"]["error"] == "v2_timeout"

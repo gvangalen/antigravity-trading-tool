@@ -14,6 +14,7 @@ from backend.domain.finn_v2_contract import (
 from backend.infrastructure.repositories.finn_v2_conversation_repository import FinnV2ConversationRepository
 from backend.infrastructure.repositories.finn_v2_run_repository import FinnV2RunRepository
 from backend.infrastructure.repositories.finn_v2_trace_repository import FinnV2TraceRepository
+from backend.services.finn_v2_delivery_service import FinnV2DeliveryService
 from backend.services.finn_v2_orchestrator_service import FinnV2OrchestratorService
 from backend.services.finn_v2_tool_execution_service import FinnV2ToolExecutionService
 from backend.schemas.finn_v2_schema import AgentRunStatusEnvelope, PolicyDecision, VerifiedResponse
@@ -29,7 +30,8 @@ class FinnV2RunService:
         self.runs = FinnV2RunRepository(session)
         self.traces = FinnV2TraceRepository(session)
         self.tools = FinnV2ToolExecutionService(session)
-        self.orchestrator = FinnV2OrchestratorService(session, complete_placeholder=self.complete_placeholder_run)
+        self.delivery = FinnV2DeliveryService(session)
+        self.orchestrator = FinnV2OrchestratorService(session)
 
     async def create_run(self, payload: Dict[str, Any]):
         async with self.session.begin_nested():
@@ -92,17 +94,44 @@ class FinnV2RunService:
             )
         return run
 
-    async def complete_placeholder_run(self, *, run_id: str, user_id: int, interaction_mode: Optional[str] = None):
-        placeholder = build_placeholder_response()
-        policy = PolicyDecision().dict()
+    async def complete_run(self, *, run_id: str, user_id: int, interaction_mode: Optional[str] = None):
+        artifacts = await self.delivery.get_delivery_artifacts(user_id=user_id, run_id=run_id)
+        verified = artifacts.get("verified_response") or {}
+        policy = artifacts.get("policy_result") or PolicyDecision().dict()
+        direct_answer = str(verified.get("direct_answer") or "").strip()
+        main_observation = str(verified.get("main_observation") or "").strip()
+        content = "\n\n".join([part for part in [direct_answer, main_observation] if part]).strip()
+        if not content:
+            placeholder = build_placeholder_response()
+            response_json = {
+                "mode": interaction_mode or "UNAVAILABLE",
+                "content": placeholder.get("content") or "FINN V2 kon geen verified response afronden.",
+                "response_source": "v2_runtime",
+                "verifier_status": "failed",
+                "evidence": [],
+                "uncertainty": [str(artifacts.get("delivery_envelope", {}).get("status") or "delivery_unavailable")],
+                "proposal_id": None,
+                "confirmation_required": False,
+            }
+        else:
+            response_json = {
+                "mode": verified.get("mode") or interaction_mode or "UNAVAILABLE",
+                "content": content,
+                "response_source": "v2_runtime",
+                "verifier_status": verified.get("verifier_status") or "passed",
+                "evidence": [],
+                "uncertainty": verified.get("uncertainty_codes") or [],
+                "proposal_id": verified.get("proposal_id"),
+                "confirmation_required": bool(verified.get("confirmation_required")),
+            }
         await self.transition_run(
             run_id,
             user_id,
             next_status="completed",
-            interaction_mode=interaction_mode or "UNAVAILABLE",
+            interaction_mode=response_json["mode"],
             policy_json=policy,
-            response_json=placeholder,
-            response_source="foundation_placeholder",
+            response_json=response_json,
+            response_source="v2_runtime",
         )
 
     async def fail_run(
@@ -144,9 +173,10 @@ class FinnV2RunService:
                 if run is None:
                     raise LookupError("FINN V2 run not found")
                 await self.orchestrator.execute_run(run_id=run_id, user_id=user_id, trace_id=run.trace_id)
+                await self.complete_run(run_id=run_id, user_id=user_id)
             else:
                 await self.tools.execute_shadow_tool_chain(run_id=run_id, user_id=user_id)
-                await self.complete_placeholder_run(run_id=run_id, user_id=user_id)
+                await self.complete_run(run_id=run_id, user_id=user_id)
         except Exception as exc:
             await self.fail_run(
                 run_id=run_id,

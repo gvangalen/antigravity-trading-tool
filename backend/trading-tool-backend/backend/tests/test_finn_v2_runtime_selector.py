@@ -5,22 +5,13 @@ from backend.services.finn_v2_runtime_selector_service import FinnV2RuntimeSelec
 
 class _Flags:
     def runtime_mode(self):
-        return "v2_canary_readonly"
-
-    def is_canary_user(self, user_id: int):
-        return user_id == 7
-
-    def canary_percent(self):
-        return 0
-
-    def canary_allowed_modes(self):
-        return {"FACT", "EVALUATION"}
+        return "v2_only"
 
     def is_v1_fallback_enabled(self):
-        return True
+        return False
 
 
-def test_runtime_selector_allows_visible_v2_for_canary_readonly_fact_mode():
+def test_runtime_selector_selects_v2_only_for_authenticated_requests():
     service = FinnV2RuntimeSelectorService(flag_service=_Flags())
     service.analysis.analyze = lambda **kwargs: SimpleNamespace(interaction_mode="FACT")
 
@@ -28,4 +19,5 @@ def test_runtime_selector_allows_visible_v2_for_canary_readonly_fact_mode():
 
     assert result.selected_runtime == "v2"
     assert result.visible_allowed is True
-    assert result.shadow_enabled is True
+    assert result.shadow_enabled is False
+    assert result.fallback_allowed is False

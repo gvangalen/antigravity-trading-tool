@@ -26,7 +26,7 @@ class FinnV2FlagService:
         return values or {"chat", "stream"}
 
     def is_enabled_globally(self) -> bool:
-        return self._env_bool("FINN_V2_ENABLED", False)
+        return self._env_bool("FINN_V2_ENABLED", True)
 
     def is_shadow_enabled(self) -> bool:
         return self._env_bool("FINN_V2_SHADOW_ENABLED", False)
@@ -37,7 +37,7 @@ class FinnV2FlagService:
         return str(user_id) in parsed
 
     def is_visible_for_user(self, user_id: int) -> bool:
-        return self._env_bool("FINN_V2_VISIBLE_ENABLED", False) and self.is_canary_user(user_id)
+        return self._env_bool("FINN_V2_VISIBLE_ENABLED", True)
 
     def is_write_blocked(self) -> bool:
         return self._env_bool("FINN_V2_WRITE_BLOCKED", True)
@@ -58,7 +58,7 @@ class FinnV2FlagService:
         return self._env_int("FINN_V2_TRACE_RETENTION_DAYS", 90)
 
     def is_tool_registry_enabled(self) -> bool:
-        return self._env_bool("FINN_V2_TOOL_REGISTRY_ENABLED", False)
+        return self._env_bool("FINN_V2_TOOL_REGISTRY_ENABLED", True)
 
     def is_tool_registry_readonly(self) -> bool:
         return self._env_bool("FINN_V2_TOOL_REGISTRY_READONLY", True)
@@ -81,7 +81,7 @@ class FinnV2FlagService:
         return str(user_id) in parsed
 
     def is_state_assembly_enabled(self) -> bool:
-        return self._env_bool("FINN_V2_STATE_ASSEMBLY_ENABLED", False)
+        return self._env_bool("FINN_V2_STATE_ASSEMBLY_ENABLED", True)
 
     def is_state_shadow_enabled(self) -> bool:
         return self._env_bool("FINN_V2_STATE_SHADOW_ENABLED", False)
@@ -93,16 +93,16 @@ class FinnV2FlagService:
         return self._env_bool("FINN_V2_ORCHESTRATOR_SHADOW_ENABLED", True)
 
     def is_policy_engine_enabled(self) -> bool:
-        return self._env_bool("FINN_V2_POLICY_ENGINE_ENABLED", False)
+        return self._env_bool("FINN_V2_POLICY_ENGINE_ENABLED", True)
 
     def is_proposals_enabled(self) -> bool:
-        return self._env_bool("FINN_V2_PROPOSALS_ENABLED", False)
+        return self._env_bool("FINN_V2_PROPOSALS_ENABLED", True)
 
     def is_confirmations_enabled(self) -> bool:
-        return self._env_bool("FINN_V2_CONFIRMATIONS_ENABLED", False)
+        return self._env_bool("FINN_V2_CONFIRMATIONS_ENABLED", True)
 
     def is_execution_gate_enabled(self) -> bool:
-        return self._env_bool("FINN_V2_EXECUTION_GATE_ENABLED", False)
+        return self._env_bool("FINN_V2_EXECUTION_GATE_ENABLED", True)
 
     def is_live_actions_enabled(self) -> bool:
         return self._env_bool("FINN_V2_LIVE_ACTIONS_ENABLED", False)
@@ -120,10 +120,10 @@ class FinnV2FlagService:
         return self._env_int("FINN_V2_PROPOSAL_TTL_SECONDS", 900)
 
     def is_reasoning_enabled(self) -> bool:
-        return self._env_bool("FINN_V2_REASONING_ENABLED", False)
+        return self._env_bool("FINN_V2_REASONING_ENABLED", True)
 
     def is_reasoning_shadow_enabled(self) -> bool:
-        return self._env_bool("FINN_V2_REASONING_SHADOW_ENABLED", False)
+        return self._env_bool("FINN_V2_REASONING_SHADOW_ENABLED", True)
 
     def reasoning_model_override(self) -> str | None:
         value = str(os.getenv("FINN_V2_REASONING_MODEL", "")).strip()
@@ -166,12 +166,8 @@ class FinnV2FlagService:
     def should_run_block3_shadow(self, user_id: int) -> bool:
         return (
             self.is_enabled_globally()
-            and self.is_shadow_enabled()
             and self.is_tool_registry_enabled()
-            and self.is_tool_shadow_execution_enabled()
             and self.is_state_assembly_enabled()
-            and self.is_state_shadow_enabled()
-            and self.is_tool_shadow_canary_user(user_id)
         )
 
     def should_run_block4_shadow(self, user_id: int) -> bool:
@@ -188,10 +184,10 @@ class FinnV2FlagService:
         return self.should_run_block5_shadow(user_id) and self.is_reasoning_enabled() and self.is_reasoning_shadow_enabled()
 
     def is_response_verifier_enabled(self) -> bool:
-        return self._env_bool("FINN_V2_RESPONSE_VERIFIER_ENABLED", False)
+        return self._env_bool("FINN_V2_RESPONSE_VERIFIER_ENABLED", True)
 
     def is_response_delivery_enabled(self) -> bool:
-        return self._env_bool("FINN_V2_RESPONSE_DELIVERY_ENABLED", False)
+        return self._env_bool("FINN_V2_RESPONSE_DELIVERY_ENABLED", True)
 
     def is_response_repair_enabled(self) -> bool:
         return self._env_bool("FINN_V2_RESPONSE_REPAIR_ENABLED", True)
@@ -225,8 +221,8 @@ class FinnV2FlagService:
         )
 
     def runtime_mode(self) -> str:
-        value = str(os.getenv("FINN_V2_RUNTIME_MODE", "v1_primary")).strip()
-        return value if value in {"v1_primary", "v1_primary_v2_shadow", "v2_canary_readonly", "v2_primary_with_v1_fallback", "v2_only"} else "v1_primary"
+        value = str(os.getenv("FINN_V2_RUNTIME_MODE", "v2_only")).strip()
+        return value if value in {"v2_only"} else "v2_only"
 
     def is_shadow_compare_enabled(self) -> bool:
         return self._env_bool("FINN_V2_SHADOW_COMPARE_ENABLED", False)
@@ -250,19 +246,19 @@ class FinnV2FlagService:
         return values or {"FACT", "EVALUATION"}
 
     def is_v1_fallback_enabled(self) -> bool:
-        return self._env_bool("FINN_V2_V1_FALLBACK_ENABLED", True)
+        return self._env_bool("FINN_V2_V1_FALLBACK_ENABLED", False)
 
     def is_post_cutover_kill_switch_enabled(self) -> bool:
         return self._env_bool("FINN_V2_POST_CUTOVER_KILL_SWITCH", False)
 
     def is_visible_proposals_enabled(self) -> bool:
-        return self._env_bool("FINN_V2_VISIBLE_PROPOSALS_ENABLED", False)
+        return self._env_bool("FINN_V2_VISIBLE_PROPOSALS_ENABLED", True)
 
     def is_confirmation_routes_enabled(self) -> bool:
-        return self._env_bool("FINN_V2_CONFIRMATION_ROUTES_ENABLED", False)
+        return self._env_bool("FINN_V2_CONFIRMATION_ROUTES_ENABLED", True)
 
     def is_action_execution_enabled(self) -> bool:
-        return self._env_bool("FINN_V2_ACTION_EXECUTION_ENABLED", False)
+        return self._env_bool("FINN_V2_ACTION_EXECUTION_ENABLED", True)
 
     def execute_indicator_changes_enabled(self) -> bool:
         return self._env_bool("FINN_V2_EXECUTE_INDICATOR_CHANGES", False)
@@ -299,8 +295,4 @@ class FinnV2FlagService:
             return "disabled"
         if not self._is_safe_readonly_config():
             return "disabled"
-        if self.is_visible_for_user(user_id):
-            return "visible_readonly"
-        if self.is_shadow_enabled():
-            return "shadow"
-        return "disabled"
+        return "visible_runtime"

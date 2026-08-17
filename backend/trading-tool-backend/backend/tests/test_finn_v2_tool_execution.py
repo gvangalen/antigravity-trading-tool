@@ -31,6 +31,11 @@ class _FakeCallRepo:
         return row
 
 
+class _FakeTraceRepo:
+    async def append_event(self, **kwargs):
+        return kwargs
+
+
 def test_tool_execution_returns_feature_disabled_when_registry_off(monkeypatch):
     service = FinnV2ToolExecutionService(session=object())
     monkeypatch.setattr(service.flags, "is_tool_registry_enabled", lambda: False)
@@ -44,6 +49,7 @@ def test_tool_execution_logs_successful_profile_call(monkeypatch):
     service = FinnV2ToolExecutionService(session=object())
     service.runs = _FakeRunRepo()
     service.calls = _FakeCallRepo()
+    service.traces = _FakeTraceRepo()
     monkeypatch.setattr(service.flags, "is_tool_registry_enabled", lambda: True)
     monkeypatch.setattr(service.flags, "is_tool_registry_readonly", lambda: True)
     monkeypatch.setattr(service.flags, "is_tool_call_logging_enabled", lambda: True)
@@ -53,4 +59,3 @@ def test_tool_execution_logs_successful_profile_call(monkeypatch):
 
     assert result.success is True
     assert service.calls.rows[-1].status == "completed"
-

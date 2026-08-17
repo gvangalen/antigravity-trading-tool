@@ -37,11 +37,7 @@ class _FakeResultRepo:
         return kwargs
 
 
-async def _complete_placeholder(**kwargs):
-    return kwargs
-
-
-def test_orchestrator_flow_executes_plan_persists_result_and_completes_placeholder():
+def test_orchestrator_flow_executes_plan_and_persists_result():
     run = SimpleNamespace(
         id="run-1",
         user_id=7,
@@ -51,7 +47,7 @@ def test_orchestrator_flow_executes_plan_persists_result_and_completes_placehold
         workspace_hints_json={},
         client_context_json={},
     )
-    service = FinnV2OrchestratorService(session=object(), complete_placeholder=_complete_placeholder)
+    service = FinnV2OrchestratorService(session=object())
     service.runs = _FakeRunRepo(run)
     service.traces = _FakeTraceRepo()
     service.results = _FakeResultRepo()
@@ -80,10 +76,22 @@ def test_orchestrator_flow_executes_plan_persists_result_and_completes_placehold
                 "validated_at": "2026-08-17T10:00:00+00:00",
             }
         )
-        return SimpleNamespace(snapshot_id="snapshot-1"), validation
+        return SimpleNamespace(id="snapshot-1", snapshot_id="snapshot-1", user_id=7), validation
 
     service.tools.execute_tool_plan = _execute_tool_plan
     service.tools.run_state_pipeline = _run_state_pipeline
+    service.policy.evaluate_run = lambda **kwargs: asyncio.sleep(
+        0,
+        result=SimpleNamespace(
+            policy_class="read",
+            allowed=True,
+            proposal_input_required=False,
+            blocking_codes=[],
+        ),
+    )
+    service.policy.persist = lambda *args, **kwargs: asyncio.sleep(0, result=None)
+    service.reasoning.reason = lambda **kwargs: asyncio.sleep(0, result=SimpleNamespace(status="ready"))
+    service.verifier.verify_run = lambda **kwargs: asyncio.sleep(0, result=SimpleNamespace(mode="FACT", verifier_status="passed"))
 
     result = asyncio.run(service.execute_run(run_id="run-1", user_id=7, trace_id="trace-1"))
 
@@ -93,5 +101,7 @@ def test_orchestrator_flow_executes_plan_persists_result_and_completes_placehold
     assert service.results.created[0]["outcome"] == "reasoning_ready"
     assert [event["event_type"] for event in service.traces.events] == [
         "orchestrator_started",
+        "policy_evaluation_started",
+        "policy_evaluation_completed",
         "orchestrator_completed",
     ]
