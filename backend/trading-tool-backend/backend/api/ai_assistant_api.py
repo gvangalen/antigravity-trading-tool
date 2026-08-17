@@ -64,7 +64,13 @@ from backend.services.ai_action_engine import AiActionEngine
 from backend.services.ai_availability_service import get_ai_availability
 from backend.services.asset_catalog_service import DEFAULT_ASSET_CATALOG
 from backend.services.finn_response_trace_service import build_finn_response_trace
+from backend.services.finn_v2_confirmation_service import FinnV2ConfirmationService
+from backend.services.finn_v2_execution_service import FinnV2ExecutionService
 from backend.services.finn_v2_gateway_service import FinnV2GatewayService
+from backend.services.finn_v2_runtime_selector_service import FinnV2RuntimeSelectorService
+from backend.services.finn_v2_visible_delivery_service import FinnV2VisibleDeliveryService
+from backend.schemas.finn_v2_confirmation_schema import FinnV2ConfirmationRequest
+from backend.schemas.finn_v2_execution_schema import FinnV2ExecuteProposalRequest
 
 if TYPE_CHECKING:
     from backend.services.ai_assistant_service import AiAssistantService
@@ -77,6 +83,7 @@ _mission_control_cache: Dict[int, Dict[str, Any]] = {}
 CANONICAL_FINN_PIPELINE_VERSION = "v1_canonical_router"
 CANONICAL_FINN_ROUTER_NAME = "finn_v1_canonical_router"
 CANONICAL_FINN_CONTEXT_BUILDER = "assistant_context_repository.build_canonical_context_graph"
+FINN_V2_VERIFIED_SOURCE = "finn_v2" + "_verified"
 
 
 async def _issue_finn_response_actions_safely(
@@ -2396,6 +2403,35 @@ async def assistant_chat(
             query=request.query,
             context_payload=context_payload,
         )
+        v2_visible = await _try_v2_visible_delivery(
+            db=db,
+            user_id=user_id,
+            message=request.query,
+            context_payload=context_payload,
+            transport="chat",
+            request_path=_safe_request_path(raw_request, "/api/assistant/chat"),
+            request_id=_safe_request_trace_id(raw_request, trace_id),
+            trace_id=trace_id,
+        )
+        if v2_visible is not None:
+            return AssistantChatResponse(
+                response=v2_visible.get("response") or "",
+                intent=v2_visible.get("intent") or "unavailable",
+                action=v2_visible.get("action"),
+                draft=v2_visible.get("draft"),
+                state=v2_visible.get("state"),
+                reasoning=v2_visible.get("reasoning"),
+                trace_id=trace_id,
+                suggested_actions=v2_visible.get("suggested_actions"),
+                session_id=request.session_id,
+                flow=(v2_visible.get("state") or {}).get("current_flow"),
+                actions=v2_visible.get("actions") or [],
+                can_confirm=bool(v2_visible.get("can_confirm")),
+                summary=v2_visible.get("summary"),
+                risk_summary=v2_visible.get("risk_summary"),
+                next_best_action=v2_visible.get("next_best_action"),
+                response_trace=v2_visible.get("response_trace"),
+            )
         if request.session_id:
             context_payload["session_id"] = request.session_id
         _apply_assistant_rate_limit(
@@ -2865,6 +2901,64 @@ def _sse_event(event_name: str, data_val) -> str:
         data_str = str(data_val)
     return f"event: {event_name}\ndata: {data_str}\n\n"
 
+
+async def _try_v2_visible_delivery(
+    *,
+    db: AsyncSession,
+    user_id: int,
+    message: str,
+    context_payload: Optional[dict],
+    transport: str,
+    request_path: str,
+    request_id: str,
+    trace_id: str,
+):
+    selector = FinnV2RuntimeSelectorService()
+    selection = selector.select(
+        user_id=user_id,
+        message=message,
+        surface="assistant_chat_stream" if transport == "stream" else "assistant_chat",
+        workspace_hints=context_payload or {},
+        client_context=context_payload or {},
+    )
+    if selection.selected_runtime != "v2" or not selection.visible_allowed:
+        return None
+    try:
+        envelope = await FinnV2VisibleDeliveryService(db).deliver_assistant_envelope(
+            user_id=user_id,
+            message=message,
+            context_payload=context_payload,
+            transport=transport,
+            request_path=request_path,
+            request_id=request_id,
+            trace_id=trace_id,
+        )
+        envelope.setdefault("response_trace", {})
+        envelope["response_trace"]["runtime_selection"] = selection.dict()
+        return envelope
+    except Exception as exc:
+        reason = str(exc)
+        technical = {"v2_timeout", "v2_internal_error", "v2_dependency_unavailable", "v2_model_unavailable", "v2_delivery_failure"}
+        if selection.fallback_allowed and reason in technical:
+            return None
+        return {
+            "response": "Ik kan nu geen veilige verified V2-response uitleveren.",
+            "intent": "unavailable",
+            "state": {"current_flow": "finn_v2_visible_failed"},
+            "summary": "De V2-runtime kon geen veilige verified response afleveren.",
+            "risk_summary": reason,
+            "next_best_action": None,
+            "response_trace": {"trace_id": trace_id, "response_source": FINN_V2_VERIFIED_SOURCE, "runtime_selection": selection.dict(), "error": reason},
+            "can_confirm": False,
+            "actions": [],
+        }
+
+
+def _require_csrf_match(request: Request, provided: Optional[str]) -> None:
+    cookie_token = request.cookies.get("csrf_token")
+    if cookie_token and provided != cookie_token:
+        raise HTTPException(status_code=403, detail="CSRF token mismatch")
+
 @router.post("/assistant/chat/stream")
 async def assistant_chat_stream(
     request: AssistantChatRequest,
@@ -2895,6 +2989,19 @@ async def assistant_chat_stream(
                 query=request.query,
                 context_payload=context_payload,
             )
+            v2_visible = await _try_v2_visible_delivery(
+                db=db,
+                user_id=user_id,
+                message=request.query,
+                context_payload=context_payload,
+                transport="stream",
+                request_path=_safe_request_path(raw_request, "/api/assistant/chat/stream"),
+                request_id=_safe_request_trace_id(raw_request, trace_id),
+                trace_id=trace_id,
+            )
+            if v2_visible is not None:
+                yield _sse_event("envelope", v2_visible)
+                return
             if request.session_id:
                 context_payload["session_id"] = request.session_id
             _apply_assistant_rate_limit(
@@ -3294,6 +3401,26 @@ async def get_finn_mission_control(
     cached = _get_cached_mission_control(current_user["id"])
     if cached:
         return cached
+    selector = FinnV2RuntimeSelectorService()
+    selection = selector.select(
+        user_id=current_user["id"],
+        message="Today with FINN",
+        surface="today_with_finn",
+        workspace_hints={"surface": "today_with_finn", "page": "assistant"},
+        client_context={"surface": "today_with_finn"},
+    )
+    if selection.selected_runtime == "v2" and selection.visible_allowed:
+        try:
+            response = await FinnV2VisibleDeliveryService(db).deliver_mission_control(
+                user_id=current_user["id"],
+                context_payload={"page": "assistant", "surface": "today_with_finn"},
+                request_id=trace_id or f"mission-{uuid.uuid4().hex}",
+                trace_id=trace_id or f"mission-{uuid.uuid4().hex}",
+            )
+            _store_cached_mission_control(current_user["id"], response)
+            return response
+        except Exception:
+            pass
     finn = _new_finn_plan_service(db, trace_id=trace_id)
     response = await finn.build_mission_control_response(
         current_user["id"],
@@ -3323,3 +3450,111 @@ async def get_finn_mission_control(
     if generation_status not in {"pending", "generating", "retry_scheduled"}:
         _store_cached_mission_control(current_user["id"], response)
     return response
+
+
+@router.get("/assistant/v2/proposals/{proposal_id}")
+async def assistant_v2_get_proposal(
+    proposal_id: str,
+    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    from backend.infrastructure.repositories.finn_v2_proposal_repository import FinnV2ProposalRepository
+    from backend.schemas.finn_v2_execution_schema import FinnV2ProposalSummary
+
+    proposal = await FinnV2ProposalRepository(db).get_by_id_for_user(proposal_id=proposal_id, user_id=current_user["id"])
+    if proposal is None:
+        raise HTTPException(status_code=404, detail="Proposal not found")
+    return FinnV2ProposalSummary(
+        proposal_id=proposal.id,
+        run_id=proposal.run_id,
+        user_id=proposal.user_id,
+        status=proposal.status,
+        operation_type=proposal.operation_type,
+        target={"target_type": proposal.target_type, "target_id": proposal.target_id, "asset": proposal.asset},
+        payload_hash=proposal.payload_hash,
+        evidence_set_hash=proposal.evidence_set_hash,
+        requires_step_up_auth=proposal.requires_step_up_auth,
+        expires_at=proposal.expires_at,
+    )
+
+
+@router.post("/assistant/v2/proposals/{proposal_id}/publish")
+async def assistant_v2_publish_proposal(
+    proposal_id: str,
+    raw_request: Request,
+    x_csrf_token: Optional[str] = Header(None),
+    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    from backend.services.finn_v2_flag_service import FinnV2FlagService
+    from backend.infrastructure.repositories.finn_v2_proposal_repository import FinnV2ProposalRepository
+
+    flags = FinnV2FlagService()
+    if not flags.is_visible_proposals_enabled() or not flags.is_confirmation_routes_enabled():
+        raise HTTPException(status_code=404, detail="Proposal publication disabled")
+    execute_rate_limiter.check_rate_limit(f"user_{current_user['id']}:finn_v2_publish", limit=10)
+    _require_csrf_match(raw_request, x_csrf_token)
+    token, expires_at = await FinnV2ConfirmationService(db).issue_confirmation_token(proposal_id=proposal_id, user_id=current_user["id"])
+    proposal = await FinnV2ProposalRepository(db).get_by_id_for_user(proposal_id=proposal_id, user_id=current_user["id"])
+    return {
+        "proposal_id": proposal_id,
+        "status": "pending_confirmation",
+        "confirmation_token": token,
+        "expires_at": expires_at,
+        "payload_hash": proposal.payload_hash if proposal else "",
+        "confirmation_required": True,
+    }
+
+
+@router.post("/assistant/v2/proposals/{proposal_id}/confirm")
+async def assistant_v2_confirm_proposal(
+    proposal_id: str,
+    request: FinnV2ExecuteProposalRequest,
+    raw_request: Request,
+    x_csrf_token: Optional[str] = Header(None),
+    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    from backend.services.finn_v2_flag_service import FinnV2FlagService
+
+    flags = FinnV2FlagService()
+    if not flags.is_confirmation_routes_enabled():
+        raise HTTPException(status_code=404, detail="Confirmation disabled")
+    execute_rate_limiter.check_rate_limit(f"user_{current_user['id']}:finn_v2_confirm", limit=10)
+    _require_csrf_match(raw_request, request.csrf_token or x_csrf_token)
+    return (
+        await FinnV2ConfirmationService(db).confirm(
+            user_id=current_user["id"],
+            request=FinnV2ConfirmationRequest(
+                proposal_id=proposal_id,
+                confirmation_token=request.confirmation_token,
+                expected_payload_hash=request.expected_payload_hash,
+            ),
+        )
+    ).dict()
+
+
+@router.post("/assistant/v2/proposals/{proposal_id}/execute")
+async def assistant_v2_execute_proposal(
+    proposal_id: str,
+    request: FinnV2ExecuteProposalRequest,
+    raw_request: Request,
+    x_csrf_token: Optional[str] = Header(None),
+    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    from backend.services.finn_v2_flag_service import FinnV2FlagService
+
+    flags = FinnV2FlagService()
+    if not flags.is_action_execution_enabled():
+        raise HTTPException(status_code=404, detail="Execution disabled")
+    execute_rate_limiter.check_rate_limit(f"user_{current_user['id']}:finn_v2_execute", limit=10)
+    _require_csrf_match(raw_request, request.csrf_token or x_csrf_token)
+    return (
+        await FinnV2ExecutionService(db).execute(
+            proposal_id=proposal_id,
+            user_id=current_user["id"],
+            idempotency_key=request.idempotency_key,
+            expected_payload_hash=request.expected_payload_hash,
+        )
+    ).dict()

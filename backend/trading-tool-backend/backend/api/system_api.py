@@ -7,8 +7,11 @@ from backend.utils.auth_utils import decode_token, get_current_user
 from backend.services.system_health_service import SystemHealthService
 from backend.services.finn_product_analytics_service import finn_product_analytics
 from backend.services.system_service import SystemService
+from backend.services.finn_v2_cutover_service import FinnV2CutoverService
 from backend.utils.openai_client import get_openai_runtime_status
 from backend.schemas.system_schema import BootstrapAgentsResponse
+from backend.infrastructure.database import get_db
+from sqlalchemy.ext.asyncio import AsyncSession
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -84,6 +87,22 @@ async def system_finn_analytics(current_user: dict = Depends(require_operator)):
 async def system_openai_runtime(current_user: dict = Depends(require_operator)):
     """Operator view on OpenAI runtime cost controls and quota breaker state."""
     return get_openai_runtime_status()
+
+
+@router.get("/system/finn-v2/runtime")
+async def system_finn_v2_runtime(
+    current_user: dict = Depends(require_operator),
+    db: AsyncSession = Depends(get_db),
+):
+    return await FinnV2CutoverService(db).runtime_status()
+
+
+@router.get("/system/finn-v2/status")
+async def system_finn_v2_status(
+    current_user: dict = Depends(require_operator),
+    db: AsyncSession = Depends(get_db),
+):
+    return await FinnV2CutoverService(db).operator_snapshot()
 
 # =====================================================
 # 🚀 BOOTSTRAP AGENTS (na onboarding)

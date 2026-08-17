@@ -224,6 +224,64 @@ class FinnV2FlagService:
             and self.is_response_delivery_enabled()
         )
 
+    def runtime_mode(self) -> str:
+        value = str(os.getenv("FINN_V2_RUNTIME_MODE", "v1_primary")).strip()
+        return value if value in {"v1_primary", "v1_primary_v2_shadow", "v2_canary_readonly", "v2_primary_with_v1_fallback", "v2_only"} else "v1_primary"
+
+    def is_shadow_compare_enabled(self) -> bool:
+        return self._env_bool("FINN_V2_SHADOW_COMPARE_ENABLED", False)
+
+    def is_golden_evals_enabled(self) -> bool:
+        return self._env_bool("FINN_V2_GOLDEN_EVALS_ENABLED", False)
+
+    def is_release_gates_enabled(self) -> bool:
+        return self._env_bool("FINN_V2_RELEASE_GATES_ENABLED", False)
+
+    def canary_user_ids(self) -> Set[str]:
+        raw = os.getenv("FINN_V2_CANARY_USER_IDS", "")
+        return {item.strip() for item in raw.split(",") if item.strip()}
+
+    def canary_percent(self) -> int:
+        return max(0, min(100, self._env_int("FINN_V2_CANARY_PERCENT", 0)))
+
+    def canary_allowed_modes(self) -> Set[str]:
+        raw = os.getenv("FINN_V2_CANARY_ALLOWED_MODES", "FACT,EVALUATION")
+        values = {item.strip().upper() for item in raw.split(",") if item.strip()}
+        return values or {"FACT", "EVALUATION"}
+
+    def is_v1_fallback_enabled(self) -> bool:
+        return self._env_bool("FINN_V2_V1_FALLBACK_ENABLED", True)
+
+    def is_post_cutover_kill_switch_enabled(self) -> bool:
+        return self._env_bool("FINN_V2_POST_CUTOVER_KILL_SWITCH", False)
+
+    def is_visible_proposals_enabled(self) -> bool:
+        return self._env_bool("FINN_V2_VISIBLE_PROPOSALS_ENABLED", False)
+
+    def is_confirmation_routes_enabled(self) -> bool:
+        return self._env_bool("FINN_V2_CONFIRMATION_ROUTES_ENABLED", False)
+
+    def is_action_execution_enabled(self) -> bool:
+        return self._env_bool("FINN_V2_ACTION_EXECUTION_ENABLED", False)
+
+    def execute_indicator_changes_enabled(self) -> bool:
+        return self._env_bool("FINN_V2_EXECUTE_INDICATOR_CHANGES", False)
+
+    def execute_setup_changes_enabled(self) -> bool:
+        return self._env_bool("FINN_V2_EXECUTE_SETUP_CHANGES", False)
+
+    def execute_strategy_changes_enabled(self) -> bool:
+        return self._env_bool("FINN_V2_EXECUTE_STRATEGY_CHANGES", False)
+
+    def execute_trade_plan_changes_enabled(self) -> bool:
+        return self._env_bool("FINN_V2_EXECUTE_TRADE_PLAN_CHANGES", False)
+
+    def execute_paper_bot_activation_enabled(self) -> bool:
+        return self._env_bool("FINN_V2_EXECUTE_PAPER_BOT_ACTIVATION", False)
+
+    def execute_live_bot_activation_enabled(self) -> bool:
+        return self._env_bool("FINN_V2_EXECUTE_LIVE_BOT_ACTIVATION", False)
+
     def _is_safe_readonly_config(self) -> bool:
         if not self.is_write_blocked():
             logger.warning("FINN V2 disabled because FINN_V2_WRITE_BLOCKED is false.")
