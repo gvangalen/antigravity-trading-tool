@@ -86,6 +86,12 @@ class FinnV2FlagService:
     def is_state_shadow_enabled(self) -> bool:
         return self._env_bool("FINN_V2_STATE_SHADOW_ENABLED", False)
 
+    def is_orchestrator_enabled(self) -> bool:
+        return self._env_bool("FINN_V2_ORCHESTRATOR_ENABLED", True)
+
+    def is_orchestrator_shadow_enabled(self) -> bool:
+        return self._env_bool("FINN_V2_ORCHESTRATOR_SHADOW_ENABLED", True)
+
     def evidence_payload_retention_days(self) -> int:
         return self._env_int("FINN_V2_EVIDENCE_PAYLOAD_RETENTION_DAYS", 30)
 
@@ -110,6 +116,13 @@ class FinnV2FlagService:
             and self.is_state_assembly_enabled()
             and self.is_state_shadow_enabled()
             and self.is_tool_shadow_canary_user(user_id)
+        )
+
+    def should_run_block4_shadow(self, user_id: int) -> bool:
+        return (
+            self.should_run_block3_shadow(user_id)
+            and self.is_orchestrator_enabled()
+            and self.is_orchestrator_shadow_enabled()
         )
 
     def _is_safe_readonly_config(self) -> bool:
