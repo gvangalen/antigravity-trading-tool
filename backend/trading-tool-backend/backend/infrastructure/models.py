@@ -617,6 +617,79 @@ class FinnV2OrchestratorResult(Base):
     created_at = Column(DateTime(timezone=True), nullable=False, server_default=text("NOW()"))
 
 
+class FinnV2PolicyDecision(Base):
+    __tablename__ = "finn_v2_policy_decisions"
+
+    id = Column(String, primary_key=True)
+    run_id = Column(String, ForeignKey("finn_v2_runs.id", ondelete="CASCADE"), nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    orchestrator_result_id = Column(String, ForeignKey("finn_v2_orchestrator_results.id", ondelete="CASCADE"), nullable=False)
+    snapshot_id = Column(String, ForeignKey("finn_v2_state_snapshots.id", ondelete="SET NULL"), nullable=True)
+    validation_id = Column(String, ForeignKey("finn_v2_validation_results.id", ondelete="SET NULL"), nullable=True)
+    policy_class = Column(String, nullable=False, index=True)
+    operation_type = Column(String, nullable=True, index=True)
+    allowed = Column(Boolean, nullable=False)
+    proposal_allowed = Column(Boolean, nullable=False)
+    confirmation_required = Column(Boolean, nullable=False)
+    step_up_required = Column(Boolean, nullable=False)
+    execution_allowed = Column(Boolean, nullable=False)
+    shadow_safe = Column(Boolean, nullable=False)
+    evidence_set_hash = Column(String, nullable=True)
+    decision_json = Column(JSONB, nullable=False)
+    policy_version = Column(String, nullable=False)
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=text("NOW()"))
+
+
+class FinnV2Proposal(Base):
+    __tablename__ = "finn_v2_proposals"
+
+    id = Column(String, primary_key=True)
+    run_id = Column(String, ForeignKey("finn_v2_runs.id", ondelete="CASCADE"), nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    policy_decision_id = Column(String, ForeignKey("finn_v2_policy_decisions.id", ondelete="CASCADE"), nullable=False)
+    status = Column(String, nullable=False, index=True)
+    operation_type = Column(String, nullable=False, index=True)
+    target_type = Column(String, nullable=False)
+    target_id = Column(String, nullable=True)
+    asset = Column(String, nullable=True)
+    payload_json = Column(JSONB, nullable=False)
+    payload_hash = Column(String, nullable=False)
+    evidence_set_hash = Column(String, nullable=False)
+    idempotency_key = Column(String, nullable=False)
+    requires_step_up_auth = Column(Boolean, nullable=False)
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=text("NOW()"))
+    updated_at = Column(DateTime(timezone=True), nullable=False, server_default=text("NOW()"))
+    expires_at = Column(DateTime(timezone=True), nullable=False)
+
+
+class FinnV2Confirmation(Base):
+    __tablename__ = "finn_v2_confirmations"
+
+    id = Column(String, primary_key=True)
+    proposal_id = Column(String, ForeignKey("finn_v2_proposals.id", ondelete="CASCADE"), nullable=False, index=True)
+    run_id = Column(String, ForeignKey("finn_v2_runs.id", ondelete="CASCADE"), nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    token_hash = Column(String, nullable=False)
+    payload_hash = Column(String, nullable=False)
+    confirmed = Column(Boolean, nullable=False)
+    already_confirmed = Column(Boolean, nullable=False, default=False, server_default=text("FALSE"))
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=text("NOW()"))
+
+
+class FinnV2EligibilityDecision(Base):
+    __tablename__ = "finn_v2_eligibility_decisions"
+
+    id = Column(String, primary_key=True)
+    proposal_id = Column(String, ForeignKey("finn_v2_proposals.id", ondelete="CASCADE"), nullable=False, index=True)
+    run_id = Column(String, ForeignKey("finn_v2_runs.id", ondelete="CASCADE"), nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    eligible = Column(Boolean, nullable=False)
+    policy_class = Column(String, nullable=False, index=True)
+    decision_json = Column(JSONB, nullable=False)
+    eligibility_version = Column(String, nullable=False)
+    checked_at = Column(DateTime(timezone=True), nullable=False, server_default=text("NOW()"))
+
+
 class AiPendingAction(Base):
     __tablename__ = 'ai_pending_actions'
 

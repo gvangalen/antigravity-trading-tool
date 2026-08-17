@@ -92,6 +92,33 @@ class FinnV2FlagService:
     def is_orchestrator_shadow_enabled(self) -> bool:
         return self._env_bool("FINN_V2_ORCHESTRATOR_SHADOW_ENABLED", True)
 
+    def is_policy_engine_enabled(self) -> bool:
+        return self._env_bool("FINN_V2_POLICY_ENGINE_ENABLED", False)
+
+    def is_proposals_enabled(self) -> bool:
+        return self._env_bool("FINN_V2_PROPOSALS_ENABLED", False)
+
+    def is_confirmations_enabled(self) -> bool:
+        return self._env_bool("FINN_V2_CONFIRMATIONS_ENABLED", False)
+
+    def is_execution_gate_enabled(self) -> bool:
+        return self._env_bool("FINN_V2_EXECUTION_GATE_ENABLED", False)
+
+    def is_live_actions_enabled(self) -> bool:
+        return self._env_bool("FINN_V2_LIVE_ACTIONS_ENABLED", False)
+
+    def is_paper_actions_enabled(self) -> bool:
+        return self._env_bool("FINN_V2_PAPER_ACTIONS_ENABLED", False)
+
+    def is_action_kill_switch_enabled(self) -> bool:
+        return self._env_bool("FINN_V2_ACTION_KILL_SWITCH", True)
+
+    def require_step_up_for_live(self) -> bool:
+        return self._env_bool("FINN_V2_REQUIRE_STEP_UP_FOR_LIVE", True)
+
+    def proposal_ttl_seconds(self) -> int:
+        return self._env_int("FINN_V2_PROPOSAL_TTL_SECONDS", 900)
+
     def evidence_payload_retention_days(self) -> int:
         return self._env_int("FINN_V2_EVIDENCE_PAYLOAD_RETENTION_DAYS", 30)
 
@@ -124,6 +151,9 @@ class FinnV2FlagService:
             and self.is_orchestrator_enabled()
             and self.is_orchestrator_shadow_enabled()
         )
+
+    def should_run_block5_shadow(self, user_id: int) -> bool:
+        return self.should_run_block4_shadow(user_id) and self.is_policy_engine_enabled()
 
     def _is_safe_readonly_config(self) -> bool:
         if not self.is_write_blocked():
