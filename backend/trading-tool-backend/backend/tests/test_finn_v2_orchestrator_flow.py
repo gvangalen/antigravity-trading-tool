@@ -119,7 +119,7 @@ def test_orchestrator_runs_policy_reasoning_and_verifier_for_visible_run_without
         workspace_hints_json={},
         client_context_json={},
     )
-    service = FinnV2OrchestratorService(session=object(), complete_placeholder=_complete_placeholder)
+    service = FinnV2OrchestratorService(session=object())
     service.runs = _FakeRunRepo(run)
     service.traces = _FakeTraceRepo()
     service.results = _FakeResultRepo()
