@@ -1,0 +1,16 @@
+{
+  "user_a": {
+    "user_id": 1,
+    "primary_asset": "BTC",
+    "setup_id": 501,
+    "strategy_id": 701,
+    "bot_id": 901
+  },
+  "user_b": {
+    "user_id": 2,
+    "primary_asset": "AAPL",
+    "setup_id": 502,
+    "strategy_id": 702,
+    "bot_id": 902
+  }
+}

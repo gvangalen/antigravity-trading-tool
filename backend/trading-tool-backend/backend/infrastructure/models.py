@@ -754,6 +754,101 @@ class FinnV2VerifiedResponse(Base):
     created_at = Column(DateTime(timezone=True), nullable=False, server_default=text("NOW()"))
 
 
+class FinnV2EvalRun(Base):
+    __tablename__ = "finn_v2_eval_runs"
+
+    id = Column(String, primary_key=True)
+    dataset_path = Column(String, nullable=False)
+    model_mode = Column(String, nullable=False)
+    total_cases = Column(Integer, nullable=False)
+    passed_cases = Column(Integer, nullable=False)
+    failed_cases = Column(Integer, nullable=False)
+    result_json = Column(JSONB, nullable=False)
+    blocking_gate_results_json = Column(JSONB, nullable=False, default=dict, server_default=text("'{}'::jsonb"))
+    aggregate_scores_json = Column(JSONB, nullable=False, default=dict, server_default=text("'{}'::jsonb"))
+    failure_case_ids_json = Column(JSONB, nullable=False, default=list, server_default=text("'[]'::jsonb"))
+    real_model_validation_blocked = Column(Boolean, nullable=False, default=False, server_default=text("FALSE"))
+    blocker_code = Column(String, nullable=True)
+    total_input_tokens = Column(Integer, nullable=False, default=0, server_default=text("0"))
+    total_output_tokens = Column(Integer, nullable=False, default=0, server_default=text("0"))
+    total_reasoning_tokens = Column(Integer, nullable=False, default=0, server_default=text("0"))
+    estimated_cost = Column(Numeric, nullable=False, default=0, server_default=text("0"))
+    latency_p50_ms = Column(Numeric, nullable=False, default=0, server_default=text("0"))
+    latency_p95_ms = Column(Numeric, nullable=False, default=0, server_default=text("0"))
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=text("NOW()"))
+    completed_at = Column(DateTime(timezone=True), nullable=True)
+
+
+class FinnV2EvalCaseResult(Base):
+    __tablename__ = "finn_v2_eval_case_results"
+
+    id = Column(String, primary_key=True)
+    eval_run_id = Column(String, ForeignKey("finn_v2_eval_runs.id", ondelete="CASCADE"), nullable=False, index=True)
+    case_id = Column(String, nullable=False, index=True)
+    category = Column(String, nullable=False, index=True)
+    fixture_user = Column(String, nullable=False)
+    passed = Column(Boolean, nullable=False)
+    blocking_passed = Column(Boolean, nullable=False)
+    expected_mode = Column(String, nullable=False)
+    actual_mode = Column(String, nullable=True)
+    expected_outcome = Column(String, nullable=False)
+    actual_outcome = Column(String, nullable=True)
+    dimension_scores_json = Column(JSONB, nullable=False)
+    blocking_gate_results_json = Column(JSONB, nullable=False, default=dict, server_default=text("'{}'::jsonb"))
+    reason_codes_json = Column(JSONB, nullable=False, default=list, server_default=text("'[]'::jsonb"))
+    latency_ms = Column(Integer, nullable=True)
+    model = Column(String, nullable=True)
+    input_tokens = Column(Integer, nullable=True)
+    output_tokens = Column(Integer, nullable=True)
+    reasoning_tokens = Column(Integer, nullable=True)
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=text("NOW()"))
+
+
+class FinnV2ShadowComparison(Base):
+    __tablename__ = "finn_v2_shadow_comparisons"
+
+    id = Column(String, primary_key=True)
+    run_id = Column(String, nullable=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=True, index=True)
+    surface = Column(String, nullable=False)
+    outcome = Column(String, nullable=False, index=True)
+    result_json = Column(JSONB, nullable=False)
+    reason_codes_json = Column(JSONB, nullable=False, default=list, server_default=text("'[]'::jsonb"))
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=text("NOW()"))
+
+
+class FinnV2ReleaseGateResult(Base):
+    __tablename__ = "finn_v2_release_gate_results"
+
+    id = Column(String, primary_key=True)
+    eval_run_id = Column(String, ForeignKey("finn_v2_eval_runs.id", ondelete="SET NULL"), nullable=True, index=True)
+    passed = Column(Boolean, nullable=False)
+    result_json = Column(JSONB, nullable=False)
+    reason_codes_json = Column(JSONB, nullable=False, default=list, server_default=text("'[]'::jsonb"))
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=text("NOW()"))
+
+
+class FinnV2Execution(Base):
+    __tablename__ = "finn_v2_executions"
+    __table_args__ = (
+        UniqueConstraint("user_id", "idempotency_key", name="ux_finn_v2_execution_user_idempotency"),
+    )
+
+    id = Column(String, primary_key=True)
+    proposal_id = Column(String, ForeignKey("finn_v2_proposals.id", ondelete="CASCADE"), nullable=False, unique=True, index=True)
+    run_id = Column(String, ForeignKey("finn_v2_runs.id", ondelete="CASCADE"), nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    operation_type = Column(String, nullable=False, index=True)
+    status = Column(String, nullable=False, index=True)
+    idempotency_key = Column(String, nullable=False)
+    precondition_hash = Column(String, nullable=False)
+    postcondition_hash = Column(String, nullable=True)
+    result_json = Column(JSONB, nullable=True)
+    error_codes_json = Column(JSONB, nullable=False, default=list, server_default=text("'[]'::jsonb"))
+    started_at = Column(DateTime(timezone=True), nullable=False, server_default=text("NOW()"))
+    completed_at = Column(DateTime(timezone=True), nullable=True)
+
+
 class AiPendingAction(Base):
     __tablename__ = 'ai_pending_actions'
 

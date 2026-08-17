@@ -34,6 +34,7 @@ class FinnV2ConfirmationService:
             proposal.expires_at,
             datetime.now(timezone.utc) + timedelta(seconds=self.flags.proposal_ttl_seconds()),
         )
+        proposal.expires_at = expires_at
         token_hash = self._token_hash(
             proposal_id=proposal.id,
             user_id=user_id,
