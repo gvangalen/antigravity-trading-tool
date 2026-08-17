@@ -257,6 +257,7 @@ try:
     import backend.celery_task.portfolio_snapshot_task
     import backend.celery_task.bootstrap_agents_task
     import backend.celery_task.system_task
+    import backend.celery_task.finn_v2_task
 
     import backend.celery_task.daily_report_task
     import backend.celery_task.weekly_report_task

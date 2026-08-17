@@ -1,0 +1,186 @@
+from __future__ import annotations
+
+import logging
+from datetime import datetime, timedelta, timezone
+from typing import Any, Dict, Optional
+
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from backend.domain.finn_v2_contract import (
+    TRACE_EVENT_BY_STATUS,
+    build_placeholder_response,
+    validate_run_transition,
+)
+from backend.infrastructure.repositories.finn_v2_conversation_repository import FinnV2ConversationRepository
+from backend.infrastructure.repositories.finn_v2_run_repository import FinnV2RunRepository
+from backend.infrastructure.repositories.finn_v2_trace_repository import FinnV2TraceRepository
+from backend.services.finn_v2_tool_execution_service import FinnV2ToolExecutionService
+from backend.schemas.finn_v2_schema import AgentRunStatusEnvelope, PolicyDecision, VerifiedResponse
+
+
+logger = logging.getLogger(__name__)
+
+
+class FinnV2RunService:
+    def __init__(self, session: AsyncSession):
+        self.session = session
+        self.conversations = FinnV2ConversationRepository(session)
+        self.runs = FinnV2RunRepository(session)
+        self.traces = FinnV2TraceRepository(session)
+        self.tools = FinnV2ToolExecutionService(session)
+
+    async def create_run(self, payload: Dict[str, Any]):
+        async with self.session.begin_nested():
+            run = await self.runs.create(**payload)
+            await self.conversations.set_last_run(
+                conversation_id=run.conversation_id,
+                user_id=run.user_id,
+                run_id=run.id,
+            )
+            await self.traces.append_event(
+                run_id=run.id,
+                user_id=run.user_id,
+                trace_id=run.trace_id,
+                event_type="run_created",
+                payload_json=self._trace_payload(run, status="created", response_source=None),
+            )
+        return run
+
+    async def transition_run(
+        self,
+        run_id: str,
+        user_id: int,
+        *,
+        next_status: str,
+        interaction_mode: Optional[str] = None,
+        policy_json: Optional[dict] = None,
+        response_json: Optional[dict] = None,
+        response_source: Optional[str] = None,
+        error_code: Optional[str] = None,
+        error_message: Optional[str] = None,
+        retryable: bool = False,
+    ):
+        run = await self.runs.get_by_id_for_user(run_id=run_id, user_id=user_id)
+        if run is None:
+            raise LookupError("FINN V2 run not found")
+
+        validate_run_transition(run.status, next_status)
+        now = datetime.now(timezone.utc)
+        completed_at = now if next_status == "completed" else None
+        canceled_at = now if next_status == "canceled" else None
+        async with self.session.begin_nested():
+            await self.runs.update_status(
+                run=run,
+                status=next_status,
+                interaction_mode=interaction_mode,
+                policy_json=policy_json,
+                response_json=response_json,
+                error_code=error_code,
+                error_message=error_message,
+                retryable=retryable,
+                completed_at=completed_at,
+                canceled_at=canceled_at,
+            )
+            await self.traces.append_event(
+                run_id=run.id,
+                user_id=run.user_id,
+                trace_id=run.trace_id,
+                event_type=TRACE_EVENT_BY_STATUS[next_status],
+                payload_json=self._trace_payload(run, status=next_status, response_source=response_source),
+            )
+        return run
+
+    async def complete_placeholder_run(self, *, run_id: str, user_id: int):
+        placeholder = build_placeholder_response()
+        policy = PolicyDecision().dict()
+        await self.transition_run(
+            run_id,
+            user_id,
+            next_status="completed",
+            interaction_mode="UNAVAILABLE",
+            policy_json=policy,
+            response_json=placeholder,
+            response_source="foundation_placeholder",
+        )
+
+    async def fail_run(
+        self,
+        *,
+        run_id: str,
+        user_id: int,
+        error_code: str,
+        error_message: str,
+        retryable: bool = False,
+    ) -> None:
+        await self.transition_run(
+            run_id,
+            user_id,
+            next_status="failed",
+            error_code=error_code,
+            error_message=error_message,
+            retryable=retryable,
+            response_source="foundation_placeholder",
+        )
+
+    async def cancel_run(self, *, run_id: str, user_id: int):
+        run = await self.runs.get_by_id_for_user(run_id=run_id, user_id=user_id)
+        if run is None:
+            raise LookupError("FINN V2 run not found")
+        await self.transition_run(
+            run_id,
+            user_id,
+            next_status="canceled",
+            response_source="foundation_placeholder",
+        )
+
+    async def run_foundation_lifecycle(self, *, run_id: str, user_id: int) -> None:
+        await self.transition_run(run_id, user_id, next_status="collecting", response_source="foundation_placeholder")
+        await self.transition_run(run_id, user_id, next_status="planned", response_source="foundation_placeholder")
+        await self.tools.execute_shadow_tool_chain(run_id=run_id, user_id=user_id)
+        await self.complete_placeholder_run(run_id=run_id, user_id=user_id)
+
+    async def apply_retention(self, *, message_days: int, trace_days: int) -> Dict[str, int]:
+        now = datetime.now(timezone.utc)
+        message_cutoff = now - timedelta(days=message_days)
+        trace_cutoff = now - timedelta(days=trace_days)
+        redacted = await self.runs.redact_messages_older_than(message_cutoff)
+        deleted = await self.runs.delete_traces_older_than(trace_cutoff)
+        tool_retention = await self.tools.apply_retention()
+        logger.info(
+            "FINN V2 retention cleanup completed.",
+            extra={"message_redacted": redacted, "traces_deleted": deleted, **tool_retention},
+        )
+        return {"messages_redacted": redacted, "traces_deleted": deleted, **tool_retention}
+
+    def envelope_from_run(self, run) -> AgentRunStatusEnvelope:
+        response = VerifiedResponse(**run.response_json) if run.response_json else None
+        policy = PolicyDecision(**run.policy_json) if run.policy_json else None
+        return AgentRunStatusEnvelope(
+            run_id=run.id,
+            conversation_id=run.conversation_id,
+            status=run.status,
+            mode=run.interaction_mode,
+            visibility=run.visibility,
+            response=response,
+            policy=policy,
+            created_at=run.created_at,
+            updated_at=run.updated_at,
+            completed_at=run.completed_at,
+            error_code=run.error_code,
+            error_message=run.error_message,
+            retryable=bool(run.retryable),
+        )
+
+    def _trace_payload(self, run, *, status: str, response_source: Optional[str]) -> Dict[str, Any]:
+        return {
+            "run_id": run.id,
+            "conversation_id": run.conversation_id,
+            "user_id": run.user_id,
+            "transport": run.transport,
+            "visibility": run.visibility,
+            "feature_mode": run.feature_mode,
+            "status": status,
+            "request_path": getattr(run, "request_path", None) or (run.client_context_json or {}).get("_request_path"),
+            "trace_id": run.trace_id,
+            "response_source": response_source,
+        }

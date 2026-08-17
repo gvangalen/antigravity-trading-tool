@@ -259,6 +259,7 @@ safe_include("backend.api.report_api", "report_api")
 
 safe_include("backend.api.report_public_api", "report_public_api")
 safe_include("backend.api.ai_assistant_api", "ai_assistant_api")
+safe_include("backend.api.finn_v2_api", "finn_v2_api")
 safe_include("backend.api.admin_api", "admin_api")
 safe_include("backend.api.notifications_api", "notifications_api")
 safe_include("backend.api.exchange_api", "exchange_api")

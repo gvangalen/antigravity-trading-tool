@@ -463,6 +463,80 @@ class ChatMessage(Base):
     actions = Column(JSON, nullable=True)   # Custom buttons/forms in JSON format
 
 
+class FinnV2Conversation(Base):
+    __tablename__ = "finn_v2_conversations"
+
+    id = Column(String, primary_key=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    title = Column(String, nullable=True)
+    status = Column(String, nullable=False, default="active")
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=text("NOW()"))
+    updated_at = Column(DateTime(timezone=True), nullable=False, server_default=text("NOW()"))
+    last_run_id = Column(String, nullable=True)
+
+
+class FinnV2Run(Base):
+    __tablename__ = "finn_v2_runs"
+
+    id = Column(String, primary_key=True)
+    conversation_id = Column(String, ForeignKey("finn_v2_conversations.id", ondelete="CASCADE"), nullable=False)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    request_id = Column(String, nullable=False)
+    trace_id = Column(String, nullable=False, index=True)
+    idempotency_key = Column(String, nullable=False)
+    transport = Column(String, nullable=False)
+    visibility = Column(String, nullable=False)
+    feature_mode = Column(String, nullable=False)
+    status = Column(String, nullable=False)
+    interaction_mode = Column(String, nullable=True)
+    message = Column(String, nullable=False)
+    workspace_hints_json = Column(JSONB, nullable=False, default=dict, server_default=text("'{}'::jsonb"))
+    client_context_json = Column(JSONB, nullable=False, default=dict, server_default=text("'{}'::jsonb"))
+    policy_json = Column(JSONB, nullable=True)
+    response_json = Column(JSONB, nullable=True)
+    error_code = Column(String, nullable=True)
+    error_message = Column(String, nullable=True)
+    retryable = Column(Boolean, nullable=False, default=False, server_default=text("FALSE"))
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=text("NOW()"))
+    updated_at = Column(DateTime(timezone=True), nullable=False, server_default=text("NOW()"))
+    completed_at = Column(DateTime(timezone=True), nullable=True)
+    canceled_at = Column(DateTime(timezone=True), nullable=True)
+
+
+class FinnV2RunTrace(Base):
+    __tablename__ = "finn_v2_run_traces"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    run_id = Column(String, ForeignKey("finn_v2_runs.id", ondelete="CASCADE"), nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    trace_id = Column(String, nullable=False, index=True)
+    event_type = Column(String, nullable=False)
+    event_order = Column(Integer, nullable=False)
+    payload_json = Column(JSONB, nullable=False)
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=text("NOW()"))
+
+
+class FinnV2ToolCall(Base):
+    __tablename__ = "finn_v2_tool_calls"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    run_id = Column(String, ForeignKey("finn_v2_runs.id", ondelete="CASCADE"), nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    trace_id = Column(String, nullable=True, index=True)
+    tool_name = Column(String, nullable=False, index=True)
+    status = Column(String, nullable=False, index=True)
+    selector_json = Column(JSONB, nullable=False, default=dict, server_default=text("'{}'::jsonb"))
+    success = Column(Boolean, nullable=True)
+    resolution_source = Column(String, nullable=True)
+    freshness_status = Column(String, nullable=True)
+    result_summary_json = Column(JSONB, nullable=True)
+    error_codes_json = Column(JSONB, nullable=False, default=list, server_default=text("'[]'::jsonb"))
+    started_at = Column(DateTime(timezone=True), nullable=False, server_default=text("NOW()"))
+    completed_at = Column(DateTime(timezone=True), nullable=True)
+    duration_ms = Column(Integer, nullable=True)
+    redacted_at = Column(DateTime(timezone=True), nullable=True)
+
+
 class AiPendingAction(Base):
     __tablename__ = 'ai_pending_actions'
 
