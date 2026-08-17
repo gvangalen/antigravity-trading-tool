@@ -5,10 +5,12 @@ import hashlib
 import logging
 import os
 import uuid
-from datetime import datetime, timezone
+from dataclasses import asdict, is_dataclass
+from datetime import date, datetime, time, timezone
 from typing import Any, Dict, Optional
 
 from fastapi import HTTPException
+from sqlalchemy.inspection import inspect as sa_inspect
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.infrastructure.database import async_session_factory
@@ -242,7 +244,7 @@ class FinnV2GatewayService:
             if any(marker in lowered for marker in SECRET_FIELD_MARKERS):
                 redacted[key] = "[redacted]"
                 continue
-            redacted[key] = value
+            redacted[key] = self._json_safe(value)
         return redacted
 
     def _hash_optional_value(self, value: Optional[str]) -> Optional[str]:
@@ -252,6 +254,38 @@ class FinnV2GatewayService:
         if not salt or len(salt) < 32:
             return None
         return hashlib.sha256(f"{salt}:{value}".encode("utf-8")).hexdigest()
+
+    def _json_safe(self, value: Any) -> Any:
+        if value is None or isinstance(value, (str, int, float, bool)):
+            return value
+        if isinstance(value, (datetime, date, time)):
+            return value.isoformat()
+        if isinstance(value, dict):
+            return {str(key): self._json_safe(item) for key, item in value.items()}
+        if isinstance(value, (list, tuple, set)):
+            return [self._json_safe(item) for item in value]
+        if is_dataclass(value):
+            return self._json_safe(asdict(value))
+        if hasattr(value, "model_dump"):
+            return self._json_safe(value.model_dump(by_alias=True))
+        if hasattr(value, "dict"):
+            return self._json_safe(value.dict())
+        try:
+            mapper = sa_inspect(value)
+        except Exception:
+            mapper = None
+        if mapper is not None and getattr(mapper, "mapper", None) is not None:
+            return {
+                attr.key: self._json_safe(getattr(value, attr.key))
+                for attr in mapper.mapper.column_attrs
+            }
+        if hasattr(value, "__dict__"):
+            return {
+                str(key): self._json_safe(item)
+                for key, item in vars(value).items()
+                if not str(key).startswith("_")
+            }
+        return str(value)
 
 
 async def run_shadow_foundation_job(

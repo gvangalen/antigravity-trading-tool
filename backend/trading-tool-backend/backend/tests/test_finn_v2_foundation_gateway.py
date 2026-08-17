@@ -4,6 +4,7 @@ import asyncio
 import pytest
 from fastapi import HTTPException
 
+from backend.infrastructure.models import MarketData
 from backend.schemas.finn_v2_schema import AgentRunRequest
 from backend.services import finn_v2_gateway_service as gateway_module
 
@@ -83,6 +84,39 @@ def test_gateway_autogenerates_conversation_and_redacts_hints(monkeypatch):
     assert run.client_context_json["cookie_value"] == "[redacted]"
     assert run.client_context_json["_client_ip_hash"] is not None
     assert run.client_context_json["_user_agent_hash"] is not None
+
+
+def test_gateway_serializes_sqlalchemy_objects_in_hints(monkeypatch):
+    monkeypatch.setenv("JWT_SECRET_KEY", "x" * 32)
+    monkeypatch.setattr(gateway_module, "FinnV2ConversationRepository", _FakeConversationRepo)
+    monkeypatch.setattr(gateway_module, "FinnV2RunRepository", _FakeRunRepo)
+    monkeypatch.setattr(gateway_module, "FinnV2RunService", _FakeRunService)
+    monkeypatch.setattr(gateway_module.run_rate_limiter, "check_rate_limit", lambda *args, **kwargs: None)
+
+    service = gateway_module.FinnV2GatewayService(session=object())
+    monkeypatch.setattr(service.flags, "resolve_mode", lambda _user_id: "visible_runtime")
+    monkeypatch.setattr(service.flags, "allows_transport", lambda _transport: True)
+    monkeypatch.setattr(service.flags, "max_runs_per_minute", lambda: 20)
+
+    market_snapshot = MarketData(symbol="BTC", price=109234.12, change_24h=2.3, volume=123456.0)
+
+    run = asyncio.run(
+        service.create_run(
+            user_id=7,
+            request=AgentRunRequest(
+                message="BTC graag",
+                workspace_hints={"market_snapshot": market_snapshot},
+                client_context={"market_snapshot": market_snapshot},
+            ),
+            request_path="/api/assistant/chat",
+            request_id="req-json-safe",
+            trace_id="trace-json-safe",
+        ),
+    )
+
+    assert run.workspace_hints_json["market_snapshot"]["symbol"] == "BTC"
+    assert run.workspace_hints_json["market_snapshot"]["price"] == 109234.12
+    assert run.client_context_json["market_snapshot"]["change_24h"] == 2.3
 
 
 def test_gateway_returns_existing_run_on_same_user_idempotency(monkeypatch):
