@@ -14,6 +14,7 @@ from backend.services.finn_v2_domain_requirement_service import FinnV2DomainRequ
 from backend.services.finn_v2_flag_service import FinnV2FlagService
 from backend.services.finn_v2_orchestrator_outcome_service import FinnV2OrchestratorOutcomeService
 from backend.services.finn_v2_policy_engine_service import FinnV2PolicyEngineService
+from backend.services.finn_v2_reasoning_service import FinnV2ReasoningService
 from backend.services.finn_v2_request_analysis_service import FinnV2RequestAnalysisService
 from backend.services.finn_v2_risk_classification_service import FinnV2RiskClassificationService
 from backend.services.finn_v2_tool_execution_service import FinnV2ToolExecutionService
@@ -44,6 +45,7 @@ class FinnV2OrchestratorService:
         self.outcomes = FinnV2OrchestratorOutcomeService()
         self.policy = FinnV2PolicyEngineService(session, self.flags)
         self.risk = FinnV2RiskClassificationService()
+        self.reasoning = FinnV2ReasoningService(session, flag_service=self.flags)
         self.complete_placeholder = complete_placeholder
 
     async def execute_run(
@@ -92,7 +94,7 @@ class FinnV2OrchestratorService:
             )
             await self._persist_result(result)
             policy_decision = None
-            if self.flags.should_run_block5_shadow(user_id) and result.outcome == "reasoning_ready":
+            if self.flags.should_run_block5_shadow(user_id) and snapshot is not None and validation is not None and result.outcome != "failed":
                 requested_operation = None
                 if result.analysis.interaction_mode == "ACTION":
                     requested_operation = self.risk.classify_requested_operation(message=run.message)
@@ -139,6 +141,13 @@ class FinnV2OrchestratorService:
                     )
                     for code in policy_decision.blocking_codes:
                         increment_execution_safety_counter(f"finn_v2_policy_blocks_total:{code}")
+            reasoning_result = None
+            if self.flags.should_run_block6_shadow(user_id) and result.outcome != "failed":
+                reasoning_result = await self.reasoning.reason(
+                    user_id=user_id,
+                    run_id=run_id,
+                    trace_id=trace_id,
+                )
             await self._append_trace(
                 run_id=run_id,
                 user_id=user_id,
@@ -153,6 +162,7 @@ class FinnV2OrchestratorService:
                     "required_domains": result.domain_requirements.required_domains,
                     "policy_class": getattr(policy_decision, "policy_class", None),
                     "proposal_input_required": getattr(policy_decision, "proposal_input_required", False),
+                    "reasoning_status": getattr(reasoning_result, "status", None),
                     "duration_ms": int((monotonic() - started) * 1000),
                 },
             )

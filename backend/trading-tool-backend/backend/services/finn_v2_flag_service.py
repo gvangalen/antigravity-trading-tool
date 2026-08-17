@@ -119,6 +119,35 @@ class FinnV2FlagService:
     def proposal_ttl_seconds(self) -> int:
         return self._env_int("FINN_V2_PROPOSAL_TTL_SECONDS", 900)
 
+    def is_reasoning_enabled(self) -> bool:
+        return self._env_bool("FINN_V2_REASONING_ENABLED", False)
+
+    def is_reasoning_shadow_enabled(self) -> bool:
+        return self._env_bool("FINN_V2_REASONING_SHADOW_ENABLED", False)
+
+    def reasoning_model_override(self) -> str | None:
+        value = str(os.getenv("FINN_V2_REASONING_MODEL", "")).strip()
+        return value or None
+
+    def reasoning_timeout_seconds(self) -> int:
+        return self._env_int("FINN_V2_REASONING_TIMEOUT_SECONDS", 45)
+
+    def reasoning_max_output_tokens(self) -> int:
+        return self._env_int("FINN_V2_REASONING_MAX_OUTPUT_TOKENS", 1800)
+
+    def reasoning_max_retries(self) -> int:
+        return max(0, min(1, self._env_int("FINN_V2_REASONING_MAX_RETRIES", 1)))
+
+    def reasoning_effort(self) -> str:
+        value = str(os.getenv("FINN_V2_REASONING_EFFORT", "medium")).strip().lower()
+        return value if value in {"low", "medium", "high"} else "medium"
+
+    def reasoning_max_evidence_items(self) -> int:
+        return self._env_int("FINN_V2_REASONING_MAX_EVIDENCE_ITEMS", 30)
+
+    def reasoning_max_context_bytes(self) -> int:
+        return self._env_int("FINN_V2_REASONING_MAX_CONTEXT_BYTES", 131072)
+
     def evidence_payload_retention_days(self) -> int:
         return self._env_int("FINN_V2_EVIDENCE_PAYLOAD_RETENTION_DAYS", 30)
 
@@ -154,6 +183,9 @@ class FinnV2FlagService:
 
     def should_run_block5_shadow(self, user_id: int) -> bool:
         return self.should_run_block4_shadow(user_id) and self.is_policy_engine_enabled()
+
+    def should_run_block6_shadow(self, user_id: int) -> bool:
+        return self.should_run_block5_shadow(user_id) and self.is_reasoning_enabled() and self.is_reasoning_shadow_enabled()
 
     def _is_safe_readonly_config(self) -> bool:
         if not self.is_write_blocked():
