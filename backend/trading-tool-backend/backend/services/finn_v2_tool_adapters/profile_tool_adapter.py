@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from backend.infrastructure.repositories.user_repository import UserRepository
+from backend.schemas.finn_v2_evidence_schema import TraderProfileData
 from backend.services.trader_profile_service import normalize_trader_profile_preferences
 
 
@@ -13,11 +14,13 @@ class ProfileToolAdapter:
         preferences = getattr(user, "ai_preferences", {}) or {}
         profile = normalize_trader_profile_preferences(preferences)
         return {
-            "data": {
-                "trader_profile": profile,
-                "has_profile": any(bool(values) for values in profile.values()),
-            },
+            "data": TraderProfileData(
+                trader_profile=profile,
+                has_profile=any(bool(values) for values in profile.values()),
+            ),
             "summary": {"title": "profile", "keys": [key for key, value in profile.items() if value]},
             "as_of": None,
+            "source": "users.ai_preferences",
+            "schema_name": "TraderProfileData",
+            "entity_type": "profile",
         }
-

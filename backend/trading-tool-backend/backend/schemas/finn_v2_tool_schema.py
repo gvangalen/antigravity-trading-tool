@@ -3,9 +3,10 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any, Dict, List, Literal, Optional
 
-from pydantic import BaseModel, Field, constr
+from pydantic import BaseModel, Field, constr, validator
 
 from backend.domain.finn_v2_tools import FINN_V2_EXTERNAL_ERROR_CODES, FINN_V2_TOOL_ORDER
+from backend.schemas.finn_v2_evidence_schema import ToolDataUnion, parse_tool_payload
 
 
 ToolName = Literal[
@@ -51,11 +52,27 @@ class ToolExecutionEnvelope(BaseModel):
     status: ToolCallStatus
     success: bool
     selector: Dict[str, Any] = Field(default_factory=dict)
-    result: Optional[Dict[str, Any]] = None
+    result: Optional[ToolDataUnion] = None
     result_summary: Optional[Dict[str, Any]] = None
     resolution_source: Optional[str] = None
     freshness_status: Optional[FreshnessStatus] = None
     error_codes: List[str] = Field(default_factory=list)
+    source: str = "internal"
+    schema_name: Optional[str] = None
+    schema_version: str = "2026-08-17.block3"
+    availability: Literal["available", "stale", "ambiguous", "unavailable", "not_collected"] = "available"
+    entity_type: Optional[str] = None
+    entity_id: Optional[str] = None
+    asset: Optional[str] = None
+    tool_call_id: Optional[int] = None
+    artifact_id: Optional[str] = None
+
+    @validator("result", pre=True, always=True)
+    def _parse_result(cls, value, values):
+        return parse_tool_payload(values.get("schema_name"), value)
+
+    class Config:
+        smart_union = True
 
 
 class ToolRegistryEntry(BaseModel):
@@ -75,4 +92,3 @@ def tool_names() -> List[str]:
 
 def external_error_codes() -> List[str]:
     return list(FINN_V2_EXTERNAL_ERROR_CODES)
-

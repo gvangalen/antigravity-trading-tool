@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Literal, Optional
+from typing import Any, List, Literal, Optional
 
 
 ToolName = Literal[
@@ -106,10 +106,18 @@ class ToolExecutionResult:
     tool_name: ToolName
     status: ToolStatus
     success: bool
-    result: Optional[Dict[str, Any]] = None
-    result_summary: Optional[Dict[str, Any]] = None
-    selector: Dict[str, Any] = field(default_factory=dict)
+    result: Optional[Any] = None
+    result_summary: Optional[dict[str, Any]] = None
+    selector: dict[str, Any] = field(default_factory=dict)
     error_codes: List[str] = field(default_factory=list)
     resolution_source: Optional[str] = None
     freshness_status: Optional[FreshnessStatus] = None
-
+    source: str = "internal"
+    schema_name: Optional[str] = None
+    schema_version: str = "2026-08-17.block3"
+    availability: str = "available"
+    entity_type: Optional[str] = None
+    entity_id: Optional[str] = None
+    asset: Optional[str] = None
+    tool_call_id: Optional[int] = None
+    artifact_id: Optional[str] = None

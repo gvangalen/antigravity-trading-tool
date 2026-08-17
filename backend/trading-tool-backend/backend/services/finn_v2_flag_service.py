@@ -80,6 +80,38 @@ class FinnV2FlagService:
         parsed = {item.strip() for item in raw.split(",") if item.strip()}
         return str(user_id) in parsed
 
+    def is_state_assembly_enabled(self) -> bool:
+        return self._env_bool("FINN_V2_STATE_ASSEMBLY_ENABLED", False)
+
+    def is_state_shadow_enabled(self) -> bool:
+        return self._env_bool("FINN_V2_STATE_SHADOW_ENABLED", False)
+
+    def evidence_payload_retention_days(self) -> int:
+        return self._env_int("FINN_V2_EVIDENCE_PAYLOAD_RETENTION_DAYS", 30)
+
+    def state_payload_retention_days(self) -> int:
+        return self._env_int("FINN_V2_STATE_PAYLOAD_RETENTION_DAYS", 30)
+
+    def validation_payload_retention_days(self) -> int:
+        return self._env_int("FINN_V2_VALIDATION_PAYLOAD_RETENTION_DAYS", 90)
+
+    def evidence_max_payload_bytes(self) -> int:
+        return self._env_int("FINN_V2_EVIDENCE_MAX_PAYLOAD_BYTES", 65536)
+
+    def state_max_payload_bytes(self) -> int:
+        return self._env_int("FINN_V2_STATE_MAX_PAYLOAD_BYTES", 262144)
+
+    def should_run_block3_shadow(self, user_id: int) -> bool:
+        return (
+            self.is_enabled_globally()
+            and self.is_shadow_enabled()
+            and self.is_tool_registry_enabled()
+            and self.is_tool_shadow_execution_enabled()
+            and self.is_state_assembly_enabled()
+            and self.is_state_shadow_enabled()
+            and self.is_tool_shadow_canary_user(user_id)
+        )
+
     def _is_safe_readonly_config(self) -> bool:
         if not self.is_write_blocked():
             logger.warning("FINN V2 disabled because FINN_V2_WRITE_BLOCKED is false.")

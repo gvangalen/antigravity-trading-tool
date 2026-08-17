@@ -9,11 +9,19 @@ from typing import Any, Dict, List, Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.domain.finn_v2_tools import FINN_V2_TOOL_ORDER, ToolExecutionResult
+from backend.infrastructure.repositories.finn_v2_evidence_repository import FinnV2EvidenceRepository
 from backend.infrastructure.repositories.finn_v2_run_repository import FinnV2RunRepository
+from backend.infrastructure.repositories.finn_v2_state_repository import FinnV2StateRepository
 from backend.infrastructure.repositories.finn_v2_tool_call_repository import FinnV2ToolCallRepository
+from backend.infrastructure.repositories.finn_v2_trace_repository import FinnV2TraceRepository
+from backend.infrastructure.repositories.finn_v2_validation_repository import FinnV2ValidationRepository
+from backend.schemas.finn_v2_tool_schema import ToolExecutionEnvelope
+from backend.services.finn_v2_evidence_ingestion_service import FinnV2EvidenceIngestionService
 from backend.services.finn_v2_entity_resolution_service import FinnV2EntityResolutionService
+from backend.services.finn_v2_evidence_validator_service import FinnV2EvidenceValidatorService
 from backend.services.finn_v2_flag_service import FinnV2FlagService
 from backend.services.finn_v2_freshness_service import FinnV2FreshnessService
+from backend.services.finn_v2_state_assembly_service import FinnV2StateAssemblyService
 from backend.services.finn_v2_tool_adapters.asset_tool_adapter import AssetToolAdapter
 from backend.services.finn_v2_tool_adapters.bot_tool_adapter import BotToolAdapter
 from backend.services.finn_v2_tool_adapters.indicator_tool_adapter import IndicatorToolAdapter
@@ -30,6 +38,7 @@ from backend.services.finn_v2_tool_adapters.strategy_tool_adapter import Strateg
 from backend.services.finn_v2_tool_adapters.technical_tool_adapter import TechnicalToolAdapter
 from backend.services.finn_v2_tool_redaction_service import FinnV2ToolRedactionService
 from backend.services.finn_v2_tool_registry_service import FinnV2ToolRegistryService
+from backend.services.platform_metrics import increment_execution_safety_counter, record_latency_sample
 
 
 logger = logging.getLogger(__name__)
@@ -45,6 +54,13 @@ class FinnV2ToolExecutionService:
         self.resolver = FinnV2EntityResolutionService(session)
         self.runs = FinnV2RunRepository(session)
         self.calls = FinnV2ToolCallRepository(session)
+        self.traces = FinnV2TraceRepository(session)
+        self.evidence = FinnV2EvidenceIngestionService(session, self.flags)
+        self.snapshots = FinnV2StateAssemblyService(session, self.flags)
+        self.validator = FinnV2EvidenceValidatorService(session)
+        self.evidence_repo = FinnV2EvidenceRepository(session)
+        self.state_repo = FinnV2StateRepository(session)
+        self.validation_repo = FinnV2ValidationRepository(session)
         self.profile_adapter = ProfileToolAdapter(session)
         self.preferences_adapter = PreferencesToolAdapter(session)
         self.asset_adapter = AssetToolAdapter(session)
@@ -88,6 +104,8 @@ class FinnV2ToolExecutionService:
                 timeout_seconds=2.0,
             )
             results.append(result)
+        if self.flags.should_run_block3_shadow(user_id):
+            await self._run_state_pipeline(run_id=run_id, user_id=user_id)
         return results
 
     async def execute_tool(
@@ -153,14 +171,45 @@ class FinnV2ToolExecutionService:
                 selector=selector,
                 resolution_source=payload.get("resolution_source"),
                 freshness_status=freshness_status,
+                source=payload.get("source", "internal"),
+                schema_name=payload.get("schema_name"),
+                availability="stale" if freshness_status == "stale" else "available",
+                entity_type=payload.get("entity_type"),
+                entity_id=payload.get("entity_id"),
+                asset=payload.get("asset"),
             )
         except asyncio.TimeoutError:
-            result = ToolExecutionResult(tool_name=tool_name, status="failed", success=False, selector=selector, error_codes=["tool_timeout"])
+            result = ToolExecutionResult(
+                tool_name=tool_name,
+                status="failed",
+                success=False,
+                selector=selector,
+                error_codes=["tool_timeout"],
+                schema_name=tool_name,
+                availability="unavailable",
+            )
         except LookupError as exc:
-            result = ToolExecutionResult(tool_name=tool_name, status="failed", success=False, selector=selector, error_codes=[str(exc)])
+            code = str(exc)
+            result = ToolExecutionResult(
+                tool_name=tool_name,
+                status="failed",
+                success=False,
+                selector=selector,
+                error_codes=[code],
+                schema_name=tool_name,
+                availability="ambiguous" if code.endswith("_ambiguous") else "unavailable",
+            )
         except Exception:
             logger.exception("FINN V2 tool execution failed", extra={"tool_name": tool_name, "run_id": run_id})
-            result = ToolExecutionResult(tool_name=tool_name, status="failed", success=False, selector=selector, error_codes=["tool_internal_error"])
+            result = ToolExecutionResult(
+                tool_name=tool_name,
+                status="failed",
+                success=False,
+                selector=selector,
+                error_codes=["tool_internal_error"],
+                schema_name=tool_name,
+                availability="unavailable",
+            )
 
         if tool_call is not None:
             duration_ms = int((monotonic() - started) * 1000)
@@ -175,20 +224,45 @@ class FinnV2ToolExecutionService:
                 completed_at=datetime.now(timezone.utc),
                 duration_ms=max(duration_ms, 0),
             )
+            result.tool_call_id = getattr(tool_call, "id", result.tool_call_id)
+        record_latency_sample("finn_v2_tool_execution_duration_ms", int((monotonic() - started) * 1000))
+        if self.flags.should_run_block3_shadow(user_id) and tool_call is not None:
+            await self._ingest_evidence(run_id=run_id, user_id=user_id, trace_id=run.trace_id, result=result)
         return result
 
     async def apply_retention(self) -> Dict[str, int]:
         if not hasattr(self.calls, "redact_results_older_than") or not hasattr(self.calls, "delete_metadata_older_than"):
-            return {"tool_results_redacted": 0, "tool_metadata_deleted": 0}
+            return {
+                "tool_results_redacted": 0,
+                "tool_metadata_deleted": 0,
+                "evidence_payloads_redacted": 0,
+                "state_payloads_redacted": 0,
+                "validation_payloads_redacted": 0,
+            }
         now = datetime.now(timezone.utc)
         result_retention_days = self.flags.tool_result_retention_days()
         metadata_retention_days = self.flags.tool_metadata_retention_days()
         try:
             redacted = await self.calls.redact_results_older_than(now - timedelta(days=result_retention_days))
             deleted = await self.calls.delete_metadata_older_than(now - timedelta(days=metadata_retention_days))
+            evidence_redacted = await self.evidence_repo.redact_payloads_older_than(now - timedelta(days=self.flags.evidence_payload_retention_days()))
+            state_redacted = await self.state_repo.redact_payloads_older_than(now - timedelta(days=self.flags.state_payload_retention_days()))
+            validation_redacted = await self.validation_repo.redact_payloads_older_than(now - timedelta(days=self.flags.validation_payload_retention_days()))
         except AttributeError:
-            return {"tool_results_redacted": 0, "tool_metadata_deleted": 0}
-        return {"tool_results_redacted": redacted, "tool_metadata_deleted": deleted}
+            return {
+                "tool_results_redacted": 0,
+                "tool_metadata_deleted": 0,
+                "evidence_payloads_redacted": 0,
+                "state_payloads_redacted": 0,
+                "validation_payloads_redacted": 0,
+            }
+        return {
+            "tool_results_redacted": redacted,
+            "tool_metadata_deleted": deleted,
+            "evidence_payloads_redacted": evidence_redacted,
+            "state_payloads_redacted": state_redacted,
+            "validation_payloads_redacted": validation_redacted,
+        }
 
     async def _dispatch_tool(self, *, tool_name: str, user_id: int, selector: Dict[str, Any], run, shared_state: Dict[str, Any]) -> Dict[str, Any]:
         workspace_hints = getattr(run, "workspace_hints_json", {}) or {}
@@ -279,3 +353,166 @@ class FinnV2ToolExecutionService:
         resolved = await self.resolver.resolve_bot(user_id=user_id, selector=selector, strategy=strategy_state["strategy"])
         shared_state.update(resolved)
         return resolved
+
+    async def _ingest_evidence(self, *, run_id: str, user_id: int, trace_id: str, result: ToolExecutionResult) -> None:
+        started = monotonic()
+        await self._append_trace(
+            run_id=run_id,
+            user_id=user_id,
+            trace_id=trace_id,
+            event_type="evidence_ingestion_started",
+            payload_json={"run_id": run_id, "user_id": user_id, "tool_call_id": result.tool_call_id, "tool_name": result.tool_name},
+        )
+        try:
+            envelope = ToolExecutionEnvelope(
+                tool_name=result.tool_name,
+                status=result.status,
+                success=result.success,
+                selector=result.selector,
+                result=result.result,
+                result_summary=result.result_summary,
+                resolution_source=result.resolution_source,
+                freshness_status=result.freshness_status,
+                error_codes=result.error_codes,
+                source=result.source,
+                schema_name=result.schema_name,
+                schema_version=result.schema_version,
+                availability=result.availability,
+                entity_type=result.entity_type,
+                entity_id=result.entity_id,
+                asset=result.asset,
+                tool_call_id=result.tool_call_id,
+            )
+            artifact = await self.evidence.ingest_tool_result(
+                user_id=user_id,
+                run_id=run_id,
+                trace_id=trace_id,
+                tool_call_id=int(result.tool_call_id or 0),
+                result=envelope,
+            )
+            result.artifact_id = artifact.artifact_id
+            await self._append_trace(
+                run_id=run_id,
+                user_id=user_id,
+                trace_id=trace_id,
+                event_type="evidence_ingestion_completed",
+                payload_json={
+                    "run_id": run_id,
+                    "user_id": user_id,
+                    "tool_call_id": result.tool_call_id,
+                    "tool_name": result.tool_name,
+                    "artifact_id": artifact.artifact_id,
+                    "duration_ms": int((monotonic() - started) * 1000),
+                },
+            )
+            increment_execution_safety_counter(f"finn_v2_evidence_artifacts_total:{result.tool_name}:{artifact.availability}")
+        except Exception as exc:
+            increment_execution_safety_counter(f"finn_v2_evidence_ingestion_failures_total:{result.tool_name}:{type(exc).__name__}")
+            await self._append_trace(
+                run_id=run_id,
+                user_id=user_id,
+                trace_id=trace_id,
+                event_type="evidence_ingestion_failed",
+                payload_json={
+                    "run_id": run_id,
+                    "user_id": user_id,
+                    "tool_call_id": result.tool_call_id,
+                    "tool_name": result.tool_name,
+                    "issue_codes": [str(exc)],
+                    "duration_ms": int((monotonic() - started) * 1000),
+                },
+            )
+
+    async def _run_state_pipeline(self, *, run_id: str, user_id: int) -> None:
+        run = await self.runs.get_by_id_for_user(run_id=run_id, user_id=user_id)
+        if run is None:
+            return
+        started = monotonic()
+        await self._append_trace(
+            run_id=run_id,
+            user_id=user_id,
+            trace_id=run.trace_id,
+            event_type="state_assembly_started",
+            payload_json={"run_id": run_id, "user_id": user_id},
+        )
+        try:
+            snapshot = await self.snapshots.assemble_for_run(run_id=run_id, user_id=user_id)
+            await self._append_trace(
+                run_id=run_id,
+                user_id=user_id,
+                trace_id=run.trace_id,
+                event_type="state_assembly_completed",
+                payload_json={
+                    "run_id": run_id,
+                    "user_id": user_id,
+                    "snapshot_id": snapshot.snapshot_id,
+                    "duration_ms": int((monotonic() - started) * 1000),
+                },
+            )
+        except Exception as exc:
+            await self._append_trace(
+                run_id=run_id,
+                user_id=user_id,
+                trace_id=run.trace_id,
+                event_type="state_assembly_failed",
+                payload_json={"run_id": run_id, "user_id": user_id, "issue_codes": [str(exc)], "duration_ms": int((monotonic() - started) * 1000)},
+            )
+            return
+
+        validation_started = monotonic()
+        await self._append_trace(
+            run_id=run_id,
+            user_id=user_id,
+            trace_id=run.trace_id,
+            event_type="evidence_validation_started",
+            payload_json={"run_id": run_id, "user_id": user_id, "snapshot_id": snapshot.snapshot_id},
+        )
+        try:
+            validation = await self.validator.validate_snapshot(snapshot)
+            await self._append_trace(
+                run_id=run_id,
+                user_id=user_id,
+                trace_id=run.trace_id,
+                event_type="evidence_validation_completed",
+                payload_json={
+                    "run_id": run_id,
+                    "user_id": user_id,
+                    "snapshot_id": snapshot.snapshot_id,
+                    "validation_id": validation.validation_id,
+                    "integrity_status": validation.integrity_status,
+                    "domain_statuses": {domain.domain: domain.status for domain in validation.domains},
+                    "duration_ms": int((monotonic() - validation_started) * 1000),
+                },
+            )
+            if validation.integrity_status == "invalid":
+                await self._append_trace(
+                    run_id=run_id,
+                    user_id=user_id,
+                    trace_id=run.trace_id,
+                    event_type="evidence_integrity_invalid",
+                    payload_json={
+                        "run_id": run_id,
+                        "user_id": user_id,
+                        "snapshot_id": snapshot.snapshot_id,
+                        "validation_id": validation.validation_id,
+                        "integrity_status": validation.integrity_status,
+                        "issue_codes": [issue.code for issue in validation.issues],
+                    },
+                )
+        except Exception as exc:
+            await self._append_trace(
+                run_id=run_id,
+                user_id=user_id,
+                trace_id=run.trace_id,
+                event_type="evidence_validation_failed",
+                payload_json={"run_id": run_id, "user_id": user_id, "snapshot_id": snapshot.snapshot_id, "issue_codes": [str(exc)], "duration_ms": int((monotonic() - validation_started) * 1000)},
+            )
+
+    async def _append_trace(self, *, run_id: str, user_id: int, trace_id: str, event_type: str, payload_json: Dict[str, Any]) -> None:
+        await self.traces.append_event(
+            run_id=run_id,
+            user_id=user_id,
+            trace_id=trace_id,
+            event_type=event_type,
+            payload_json=payload_json,
+        )

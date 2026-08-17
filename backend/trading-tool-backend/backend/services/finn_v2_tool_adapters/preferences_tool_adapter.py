@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from backend.infrastructure.repositories.user_repository import UserRepository
+from backend.schemas.finn_v2_evidence_schema import UserPreferencesData
 
 
 class PreferencesToolAdapter:
@@ -20,5 +21,11 @@ class PreferencesToolAdapter:
             "selected_asset": preferences.get("selected_asset"),
             "active_asset": preferences.get("active_asset"),
         }
-        return {"data": public_preferences, "summary": {"title": "preferences", "keys": list(public_preferences.keys())}, "as_of": None}
-
+        return {
+            "data": UserPreferencesData(**public_preferences),
+            "summary": {"title": "preferences", "keys": list(public_preferences.keys())},
+            "as_of": None,
+            "source": "users.ai_preferences",
+            "schema_name": "UserPreferencesData",
+            "entity_type": "preferences",
+        }
