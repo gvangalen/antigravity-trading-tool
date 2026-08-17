@@ -35,6 +35,7 @@ PolicyClass = Literal[
     "paper_action",
     "live_action",
     "high_risk_action",
+    "unsupported_action",
 ]
 
 VerifierStatus = Literal[

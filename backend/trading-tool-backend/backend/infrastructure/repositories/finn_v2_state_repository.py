@@ -13,6 +13,15 @@ class FinnV2StateRepository:
     def __init__(self, session: AsyncSession):
         self.session = session
 
+    async def get_by_id_for_user(self, *, snapshot_id: str, user_id: int) -> Optional[FinnV2StateSnapshot]:
+        result = await self.session.execute(
+            select(FinnV2StateSnapshot).where(
+                FinnV2StateSnapshot.id == snapshot_id,
+                FinnV2StateSnapshot.user_id == user_id,
+            )
+        )
+        return result.scalars().first()
+
     async def get_by_evidence_hash(self, *, run_id: str, user_id: int, evidence_set_hash: str) -> Optional[FinnV2StateSnapshot]:
         result = await self.session.execute(
             select(FinnV2StateSnapshot).where(

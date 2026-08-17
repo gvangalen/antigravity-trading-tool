@@ -13,7 +13,9 @@ from backend.schemas.finn_v2_orchestrator_schema import ORCHESTRATOR_VERSION
 from backend.services.finn_v2_domain_requirement_service import FinnV2DomainRequirementService
 from backend.services.finn_v2_flag_service import FinnV2FlagService
 from backend.services.finn_v2_orchestrator_outcome_service import FinnV2OrchestratorOutcomeService
+from backend.services.finn_v2_policy_engine_service import FinnV2PolicyEngineService
 from backend.services.finn_v2_request_analysis_service import FinnV2RequestAnalysisService
+from backend.services.finn_v2_risk_classification_service import FinnV2RiskClassificationService
 from backend.services.finn_v2_tool_execution_service import FinnV2ToolExecutionService
 from backend.services.finn_v2_tool_plan_service import FinnV2ToolPlanService
 from backend.services.platform_metrics import increment_execution_safety_counter, record_latency_sample
@@ -40,6 +42,8 @@ class FinnV2OrchestratorService:
         self.tool_plans = FinnV2ToolPlanService()
         self.tools = FinnV2ToolExecutionService(session, self.flags)
         self.outcomes = FinnV2OrchestratorOutcomeService()
+        self.policy = FinnV2PolicyEngineService(session, self.flags)
+        self.risk = FinnV2RiskClassificationService()
         self.complete_placeholder = complete_placeholder
 
     async def execute_run(
@@ -87,6 +91,54 @@ class FinnV2OrchestratorService:
                 validation=validation,
             )
             await self._persist_result(result)
+            policy_decision = None
+            if self.flags.should_run_block5_shadow(user_id) and result.outcome == "reasoning_ready":
+                requested_operation = None
+                if result.analysis.interaction_mode == "ACTION":
+                    requested_operation = self.risk.classify_requested_operation(message=run.message)
+                await self._append_trace(
+                    run_id=run_id,
+                    user_id=user_id,
+                    trace_id=trace_id,
+                    event_type="policy_evaluation_started",
+                    payload_json={"run_id": run_id, "user_id": user_id, "interaction_mode": result.analysis.interaction_mode},
+                )
+                policy_decision = await self.policy.evaluate_run(
+                    user_id=user_id,
+                    run_id=run_id,
+                    orchestrator_result=result,
+                    snapshot=snapshot,
+                    validation=validation,
+                    requested_operation=requested_operation,
+                )
+                await self.policy.persist(result.orchestrator_result_id, policy_decision)
+                await self._append_trace(
+                    run_id=run_id,
+                    user_id=user_id,
+                    trace_id=trace_id,
+                    event_type="policy_evaluation_completed",
+                    payload_json={
+                        "run_id": run_id,
+                        "user_id": user_id,
+                        "policy_class": policy_decision.policy_class,
+                        "allowed": policy_decision.allowed,
+                        "proposal_input_required": policy_decision.proposal_input_required,
+                        "blocking_codes": policy_decision.blocking_codes,
+                    },
+                )
+                increment_execution_safety_counter(
+                    f"finn_v2_policy_decisions_total:{policy_decision.policy_class}:{str(policy_decision.allowed).lower()}"
+                )
+                if policy_decision.blocking_codes:
+                    await self._append_trace(
+                        run_id=run_id,
+                        user_id=user_id,
+                        trace_id=trace_id,
+                        event_type="policy_blocked",
+                        payload_json={"run_id": run_id, "user_id": user_id, "blocking_codes": policy_decision.blocking_codes},
+                    )
+                    for code in policy_decision.blocking_codes:
+                        increment_execution_safety_counter(f"finn_v2_policy_blocks_total:{code}")
             await self._append_trace(
                 run_id=run_id,
                 user_id=user_id,
@@ -99,6 +151,8 @@ class FinnV2OrchestratorService:
                     "snapshot_id": result.snapshot_id,
                     "validation_id": result.validation_id,
                     "required_domains": result.domain_requirements.required_domains,
+                    "policy_class": getattr(policy_decision, "policy_class", None),
+                    "proposal_input_required": getattr(policy_decision, "proposal_input_required", False),
                     "duration_ms": int((monotonic() - started) * 1000),
                 },
             )

@@ -13,6 +13,15 @@ class FinnV2ValidationRepository:
     def __init__(self, session: AsyncSession):
         self.session = session
 
+    async def get_by_id_for_user(self, *, validation_id: str, user_id: int) -> Optional[FinnV2ValidationResult]:
+        result = await self.session.execute(
+            select(FinnV2ValidationResult).where(
+                FinnV2ValidationResult.id == validation_id,
+                FinnV2ValidationResult.user_id == user_id,
+            )
+        )
+        return result.scalars().first()
+
     async def get_for_snapshot_version(
         self,
         *,
