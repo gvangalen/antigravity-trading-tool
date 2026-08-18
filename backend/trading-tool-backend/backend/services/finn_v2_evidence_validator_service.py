@@ -20,7 +20,7 @@ from backend.services.finn_v2_state_redaction_service import FinnV2StateRedactio
 DOMAIN_TOOLS = {
     "identity_context": ["read_profile", "read_user_preferences", "read_active_asset"],
     "market_context": ["read_active_asset", "read_indicator_configuration", "read_asset_scores", "read_market_snapshot", "read_macro_snapshot", "read_technical_snapshot"],
-    "plan_context": ["read_active_asset", "read_indicator_configuration", "read_active_setup", "read_linked_strategy"],
+    "plan_context": ["read_active_asset", "read_active_setup", "read_linked_strategy"],
     "automation_context": ["read_active_setup", "read_linked_strategy", "read_linked_bot", "read_bot_status"],
     "portfolio_context": ["read_portfolio"],
     "report_context": ["read_latest_report"],

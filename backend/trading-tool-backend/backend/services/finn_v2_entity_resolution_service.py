@@ -36,6 +36,26 @@ class FinnV2EntityResolutionService:
         if explicit:
             return {"asset": explicit, "resolution_source": "explicit_selector"}
 
+        explicit_setup_id = self._coerce_int(selector.get("setup_id"))
+        if explicit_setup_id:
+            setup = await self.setups.get_setup_by_id(explicit_setup_id, user_id)
+            if setup and self._normalize_symbol(setup.get("symbol")):
+                return {"asset": self._normalize_symbol(setup.get("symbol")), "resolution_source": "explicit_setup_link"}
+
+        explicit_strategy_id = self._coerce_int(selector.get("strategy_id"))
+        if explicit_strategy_id:
+            strategy = await self.strategies.get_raw_strategy_with_setup(explicit_strategy_id, user_id)
+            strategy_asset = self._normalize_symbol((strategy or {}).get("setup_symbol"))
+            if strategy_asset:
+                return {"asset": strategy_asset, "resolution_source": "explicit_strategy_link"}
+
+        explicit_bot_id = self._coerce_int(selector.get("bot_id"))
+        if explicit_bot_id:
+            bot = await self.bots.get_bot_config(user_id, explicit_bot_id)
+            bot_asset = self._normalize_symbol((bot or {}).get("symbol") or (bot or {}).get("setup_symbol"))
+            if bot_asset:
+                return {"asset": bot_asset, "resolution_source": "explicit_bot_link"}
+
         state = await self.states.get_state(user_id)
         conversation_symbol = self._normalize_symbol((state or {}).get("asset"))
         if conversation_symbol:
@@ -86,12 +106,16 @@ class FinnV2EntityResolutionService:
             raise LookupError("entity_not_found")
 
         active_setup = await self.setups.get_active_setup(user_id)
-        if active_setup and self._matches_symbol(active_setup.get("symbol"), asset):
+        if active_setup and (asset is None or self._matches_symbol(active_setup.get("symbol"), asset)):
             return {"setup": dict(active_setup), "resolution_source": "active_setup"}
 
-        candidates = [dict(row) for row in await self.setups.get_user_setups(user_id) if self._matches_symbol(row.get("symbol"), asset)]
+        candidates = [
+            dict(row)
+            for row in await self.setups.get_user_setups(user_id)
+            if asset is None or self._matches_symbol(row.get("symbol"), asset)
+        ]
         if len(candidates) == 1:
-            return {"setup": candidates[0], "resolution_source": "single_asset_setup"}
+            return {"setup": candidates[0], "resolution_source": "single_asset_setup" if asset else "single_user_setup"}
         if len(candidates) > 1:
             raise LookupError("setup_ambiguous")
         raise LookupError("setup_not_resolved")

@@ -18,6 +18,7 @@ class ProposalTarget(BaseModel):
         "indicator_configuration",
         "setup",
         "strategy",
+        "watchlist",
         "trade_plan",
         "bot",
         "portfolio",
@@ -65,6 +66,21 @@ class SetupCreateChange(BaseModel):
 class StrategyChange(BaseModel):
     strategy_id: int
     changed_fields: Dict[str, Any]
+
+    class Config:
+        extra = "forbid"
+
+
+class WatchlistChange(BaseModel):
+    asset: str
+    operation: Literal["add", "remove"]
+
+    @validator("asset")
+    def _normalize_asset(cls, value: str) -> str:
+        normalized = str(value).strip().upper()
+        if not normalized:
+            raise ValueError("asset_required")
+        return normalized
 
     class Config:
         extra = "forbid"
@@ -130,6 +146,7 @@ ProposalChangeUnion = Union[
     SetupCreateChange,
     SetupChange,
     StrategyChange,
+    WatchlistChange,
     TradePlanChange,
     BotActivationChange,
     PortfolioRebalanceChange,
@@ -159,6 +176,8 @@ class ValidatedProposalInput(BaseModel):
             "create_setup": SetupCreateChange,
             "update_setup": SetupChange,
             "update_strategy": StrategyChange,
+            "watchlist_add": WatchlistChange,
+            "watchlist_remove": WatchlistChange,
             "save_trade_plan": TradePlanChange,
             "activate_paper_bot": BotActivationChange,
             "activate_live_bot": BotActivationChange,

@@ -73,11 +73,12 @@ def test_policy_mapping_for_fact_evaluation_proposal_and_actions():
     fact = asyncio.run(_evaluate("Welke setup gebruik ik voor BTC?"))
     capability = asyncio.run(_evaluate("Hoi FINN, wat kun je voor mij doen?", "CAPABILITY"))
     unavailable = asyncio.run(_evaluate("Wat is nu de beste trade voor mij zonder verdere context?", "UNAVAILABLE"))
-    evaluation = asyncio.run(_evaluate("Past mijn huidige BTC-strategie bij mijn risicoprofiel?", "EVALUATION"))
-    proposal = asyncio.run(_evaluate("Voeg DXY toe.", "PROPOSAL"))
-    paper = asyncio.run(_evaluate("Activeer mijn paper bot.", "ACTION", "activate_paper_bot"))
-    live = asyncio.run(_evaluate("Zet mijn bot live.", "ACTION", "activate_live_bot"))
-    unsupported = asyncio.run(_evaluate("Doe iets met mijn bot.", "ACTION"))
+    evaluation = asyncio.run(_evaluate("Past mijn huidige BTC-strategie bij mijn risicoprofiel?", "EVALUATE"))
+    proposal = asyncio.run(_evaluate("Voeg DXY toe.", "CREATE_PROPOSAL"))
+    paper = asyncio.run(_evaluate("Activeer mijn paper bot.", "ACTION_PROPOSAL", "activate_paper_bot"))
+    live = asyncio.run(_evaluate("Zet mijn bot live.", "ACTION_PROPOSAL", "activate_live_bot"))
+    unsupported = asyncio.run(_evaluate("Doe iets met mijn bot.", "ACTION_PROPOSAL"))
+    watchlist = asyncio.run(_evaluate("Voeg ETH toe aan mijn watchlist.", "ACTION_PROPOSAL", "watchlist_add"))
 
     assert isinstance(fact, FinnV2PolicyDecision)
     assert fact.policy_class == "read"
@@ -92,6 +93,8 @@ def test_policy_mapping_for_fact_evaluation_proposal_and_actions():
     assert paper.policy_class == "paper_action"
     assert live.policy_class == "high_risk_action"
     assert unsupported.policy_class == "unsupported_action"
+    assert watchlist.policy_class == "proposal"
+    assert watchlist.operation_type == "watchlist_add"
 
 
 def test_policy_allows_deterministic_unavailable_delivery_when_outcome_is_unavailable():

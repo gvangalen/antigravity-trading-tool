@@ -77,3 +77,15 @@ def test_request_analysis_keeps_incomplete_financial_question_unavailable():
     assert result.subject_scopes == ["unknown"]
     assert "financial_domain_unavailable" in result.unresolved_signals
     assert "insufficient_trade_context" in result.unresolved_signals
+
+
+def test_request_analysis_routes_setup_creation_and_watchlist_actions_to_typed_modes():
+    setup_result = SERVICE.analyze(message="Maak een setup voor BTC swing trading met daily trend en 4H entry.")
+    watchlist_result = SERVICE.analyze(message="Voeg ETH toe aan mijn watchlist.")
+
+    assert setup_result.interaction_mode == "CREATE_PROPOSAL"
+    assert setup_result.subject_scopes == ["setup"]
+    assert setup_result.explicit_asset == "BTC"
+    assert watchlist_result.interaction_mode == "ACTION_PROPOSAL"
+    assert watchlist_result.subject_scopes == ["watchlist"]
+    assert watchlist_result.explicit_asset == "ETH"

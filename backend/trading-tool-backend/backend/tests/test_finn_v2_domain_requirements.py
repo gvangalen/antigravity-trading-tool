@@ -36,3 +36,22 @@ def test_domain_requirements_keep_optional_domains_ordered():
 
     assert plan.required_domains == ["report_context", "review_context"]
     assert plan.optional_domains == ["identity_context", "report_context"]
+
+
+def test_domain_requirements_narrow_create_setup_and_watchlist_actions():
+    analysis_service = FinnV2RequestAnalysisService()
+    service = FinnV2DomainRequirementService()
+
+    setup_plan = service.determine(
+        analysis_service.analyze(message="Maak een setup voor BTC swing trading met daily trend en 4H entry.")
+    )
+    watchlist_plan = service.determine(
+        analysis_service.analyze(message="Voeg ETH toe aan mijn watchlist.")
+    )
+
+    assert setup_plan.required_domains == ["identity_context"]
+    assert setup_plan.optional_domains == ["plan_context"]
+    assert "setup_creation_requires_identity_not_existing_plan" in setup_plan.requirement_reason
+    assert watchlist_plan.required_domains == ["identity_context"]
+    assert watchlist_plan.optional_domains == []
+    assert "watchlist_action_requires_identity_context" in watchlist_plan.requirement_reason

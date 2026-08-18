@@ -89,6 +89,7 @@ class FinnV2RequestAnalysisService:
             "profile": ["profiel", "profile", "risicoprofiel", "risk profile", "tradingstijl", "trading style", "stijl"],
             "analysis": ["analyse", "analysis", "markt", "market", "macro", "technical", "technisch", "context"],
             "indicators": ["indicator", "indicatoren", "indicators", "rsi", "macd", "dxy"],
+            "watchlist": ["watchlist", "volglijst"],
             "setup": ["setup", "set-up"],
             "strategy": ["strategie", "strategy", "plan"],
             "bot": ["bot", "automation", "automatisering", "live"],
@@ -121,7 +122,24 @@ class FinnV2RequestAnalysisService:
             return "UNAVAILABLE"
         execution_tokens = ["bevestig", "confirm", "voer nu uit", "execute now", "nu uitvoeren"]
         confirmation_tokens = ["kan je dit bevestigen", "bevestiging", "confirmation", "wil je bevestigen"]
-        action_tokens = ["zet", "activeer", "voer", "execute", "activate", "run this", "go live", "zet live", "voeg toe aan mijn watchlist", "add to my watchlist"]
+        action_tokens = [
+            "zet",
+            "activeer",
+            "voer",
+            "execute",
+            "activate",
+            "run this",
+            "go live",
+            "zet live",
+            "voeg toe aan watchlist",
+            "voeg toe aan mijn watchlist",
+            "add to watchlist",
+            "add to my watchlist",
+            "verwijder uit watchlist",
+            "verwijder uit mijn watchlist",
+            "remove from watchlist",
+            "remove from my watchlist",
+        ]
         proposal_tokens = ["voeg", "add", "maak een voorstel", "proposal", "aanpassen", "wijzig", "change", "adjust", "maak een setup", "create setup"]
         evaluation_tokens = [
             "beoordeel",
@@ -146,6 +164,11 @@ class FinnV2RequestAnalysisService:
         if any(token in normalized for token in confirmation_tokens):
             matched_signals.append("mode:confirmation")
             return "CONFIRMATION"
+        if ("watchlist" in normalized or "volglijst" in normalized) and any(
+            token in normalized for token in ("voeg", "add", "verwijder", "remove", "haal")
+        ):
+            matched_signals.append("mode:action_proposal")
+            return "ACTION_PROPOSAL"
         if any(token in normalized for token in action_tokens):
             matched_signals.append("mode:action_proposal")
             return "ACTION_PROPOSAL"

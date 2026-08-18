@@ -31,6 +31,7 @@ from backend.schemas.finn_v2_proposal_schema import (
     StrategyChange,
     TradePlanChange,
     ValidatedProposalInput,
+    WatchlistChange,
 )
 from backend.schemas.finn_v2_reasoning_context_schema import REASONING_CONTEXT_VERSION
 from backend.schemas.finn_v2_reasoning_schema import PersistedReasoningRecord, ReasoningResult
@@ -51,6 +52,7 @@ from backend.services.platform_metrics import increment_execution_safety_counter
 class FinnV2ResponseVerifierService:
     REQUIRED_SCOPE_TO_DOMAIN = {
         "profile": "identity_context",
+        "watchlist": "identity_context",
         "analysis": "market_context",
         "indicators": "market_context",
         "setup": "plan_context",
@@ -515,6 +517,11 @@ class FinnV2ResponseVerifierService:
             change = SetupChange(setup_id=int(candidate.target_id or changes.get("setup_id") or 0), changed_fields=dict(changes.get("changed_fields") or changes))
         elif operation == "update_strategy":
             change = StrategyChange(strategy_id=int(candidate.target_id or changes.get("strategy_id") or 0), changed_fields=dict(changes.get("changed_fields") or changes))
+        elif operation in {"watchlist_add", "watchlist_remove"}:
+            change = WatchlistChange(
+                asset=str(changes.get("asset") or candidate.asset or "").upper(),
+                operation="remove" if operation == "watchlist_remove" else "add",
+            )
         elif operation == "save_trade_plan":
             change = TradePlanChange(plan_id=str(candidate.target_id or changes.get("plan_id") or "") or None, changed_fields=dict(changes.get("changed_fields") or changes))
         elif operation in {"activate_paper_bot", "activate_live_bot"}:
@@ -602,7 +609,26 @@ class FinnV2ResponseVerifierService:
     def _is_relevant(self, question: str, draft: ResponseDraft) -> bool:
         lowered = question.lower()
         answer = f"{draft.direct_answer} {draft.main_observation}".lower()
-        keywords = [token for token in ["profile", "indicator", "setup", "strategy", "bot", "portfolio", "report", "review", "btc", "eth", "sol", "aapl"] if token in lowered]
+        keywords = [
+            token
+            for token in [
+                "profile",
+                "indicator",
+                "setup",
+                "strategy",
+                "bot",
+                "watchlist",
+                "volglijst",
+                "portfolio",
+                "report",
+                "review",
+                "btc",
+                "eth",
+                "sol",
+                "aapl",
+            ]
+            if token in lowered
+        ]
         if not keywords:
             return True
         return any(token in answer for token in keywords)

@@ -28,3 +28,56 @@ def test_tool_plan_uses_canonical_order_and_explicit_selector():
     ]
     assert plan.tool_inputs["read_active_asset"] == {"asset": "BTC"}
     assert plan.read_only is True
+
+
+def test_tool_plan_keeps_strategy_and_bot_requests_grounded_without_indicator_gate():
+    analysis_service = FinnV2RequestAnalysisService()
+    domain_service = FinnV2DomainRequirementService()
+
+    strategy_analysis = analysis_service.analyze(message="Welke strategie is aan mijn actieve setup gekoppeld?")
+    strategy_plan = FinnV2ToolPlanService().build(
+        run_id="run-strategy",
+        analysis=strategy_analysis,
+        domain_plan=domain_service.determine(strategy_analysis),
+    )
+
+    bot_analysis = analysis_service.analyze(message="Welke bot is aan deze strategie gekoppeld en staat die live?")
+    bot_plan = FinnV2ToolPlanService().build(
+        run_id="run-bot",
+        analysis=bot_analysis,
+        domain_plan=domain_service.determine(bot_analysis),
+    )
+
+    assert strategy_plan.tool_names == ["read_active_asset", "read_active_setup", "read_linked_strategy"]
+    assert "read_indicator_configuration" not in strategy_plan.tool_names
+    assert bot_plan.tool_names == [
+        "read_active_asset",
+        "read_active_setup",
+        "read_linked_strategy",
+        "read_linked_bot",
+        "read_bot_status",
+    ]
+    assert "read_indicator_configuration" not in bot_plan.tool_names
+
+
+def test_tool_plan_routes_setup_creation_and_watchlist_actions_through_proposal_inputs():
+    analysis_service = FinnV2RequestAnalysisService()
+    domain_service = FinnV2DomainRequirementService()
+
+    setup_analysis = analysis_service.analyze(message="Maak een setup voor BTC swing trading met daily trend en 4H entry.")
+    setup_plan = FinnV2ToolPlanService().build(
+        run_id="run-setup-create",
+        analysis=setup_analysis,
+        domain_plan=domain_service.determine(setup_analysis),
+    )
+
+    watchlist_analysis = analysis_service.analyze(message="Voeg ETH toe aan mijn watchlist.")
+    watchlist_plan = FinnV2ToolPlanService().build(
+        run_id="run-watchlist-add",
+        analysis=watchlist_analysis,
+        domain_plan=domain_service.determine(watchlist_analysis),
+    )
+
+    assert setup_plan.tool_names == ["read_profile", "read_user_preferences", "read_active_asset", "read_active_setup"]
+    assert watchlist_plan.tool_names == ["read_active_asset"]
+    assert watchlist_plan.tool_inputs["read_active_asset"] == {"asset": "ETH"}

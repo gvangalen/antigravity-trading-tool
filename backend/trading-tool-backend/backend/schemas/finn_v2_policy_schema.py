@@ -23,6 +23,8 @@ OperationType = Literal[
     "create_setup",
     "update_setup",
     "update_strategy",
+    "watchlist_add",
+    "watchlist_remove",
     "save_trade_plan",
     "activate_paper_bot",
     "activate_live_bot",

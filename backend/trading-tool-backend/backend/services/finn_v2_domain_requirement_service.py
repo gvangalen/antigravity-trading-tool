@@ -8,6 +8,7 @@ class FinnV2DomainRequirementService:
         "profile": {"required": ["identity_context"], "optional": []},
         "analysis": {"required": ["market_context"], "optional": ["identity_context"]},
         "indicators": {"required": ["market_context"], "optional": []},
+        "watchlist": {"required": ["identity_context"], "optional": []},
         "setup": {"required": ["plan_context"], "optional": []},
         "strategy": {"required": ["plan_context"], "optional": ["identity_context"]},
         "bot": {"required": ["automation_context", "plan_context"], "optional": []},
@@ -44,6 +45,14 @@ class FinnV2DomainRequirementService:
 
         if analysis.interaction_mode in {"CREATE_PROPOSAL", "ACTION_PROPOSAL", "CONFIRMATION", "EXECUTION"}:
             reasons.append("read_only_context_for_change_intent")
+        if analysis.interaction_mode == "CREATE_PROPOSAL" and "setup" in analysis.subject_scopes:
+            required_domains = ["identity_context"]
+            optional_domains = ["plan_context"]
+            reasons.append("setup_creation_requires_identity_not_existing_plan")
+        if analysis.interaction_mode in {"ACTION_PROPOSAL", "CONFIRMATION", "EXECUTION"} and "watchlist" in analysis.subject_scopes:
+            required_domains = ["identity_context"]
+            optional_domains = []
+            reasons.append("watchlist_action_requires_identity_context")
         if analysis.interaction_mode == "EVALUATE" and "strategy" in analysis.subject_scopes and "profile" in analysis.subject_scopes:
             required_domains.extend(["identity_context", "plan_context"])
             reasons.append("strategy_fit_requires_identity_and_plan")

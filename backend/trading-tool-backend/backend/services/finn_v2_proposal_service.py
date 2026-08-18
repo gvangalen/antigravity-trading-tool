@@ -119,6 +119,8 @@ class FinnV2ProposalService:
             await self.resolver.resolve_bot(user_id=user_id, selector=selector, strategy=None)
         elif target.target_type == "indicator_configuration":
             await self.resolver.resolve_asset(user_id=user_id, selector=selector, workspace_hints={}, client_context={})
+        elif target.target_type == "watchlist" and target.asset:
+            await self.resolver.resolve_asset(user_id=user_id, selector=selector, workspace_hints={}, client_context={})
         elif target.target_type == "order" and target.asset:
             await self.resolver.resolve_asset(user_id=user_id, selector=selector, workspace_hints={}, client_context={})
 

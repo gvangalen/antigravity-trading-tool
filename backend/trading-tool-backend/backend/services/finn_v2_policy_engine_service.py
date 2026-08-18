@@ -23,6 +23,8 @@ class FinnV2PolicyEngineService:
         "create_setup": ("proposal", ["identity_context"]),
         "update_setup": ("proposal", ["plan_context"]),
         "update_strategy": ("proposal", ["plan_context"]),
+        "watchlist_add": ("proposal", ["identity_context"]),
+        "watchlist_remove": ("proposal", ["identity_context"]),
         "save_trade_plan": ("proposal", ["identity_context", "plan_context"]),
         "activate_paper_bot": ("paper_action", ["plan_context", "automation_context"]),
         "activate_live_bot": ("high_risk_action", ["identity_context", "market_context", "plan_context", "automation_context"]),

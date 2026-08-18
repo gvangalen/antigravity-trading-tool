@@ -274,6 +274,9 @@ class FinnV2FlagService:
     def execute_strategy_changes_enabled(self) -> bool:
         return self._env_bool("FINN_V2_EXECUTE_STRATEGY_CHANGES", False)
 
+    def execute_watchlist_changes_enabled(self) -> bool:
+        return self._env_bool("FINN_V2_EXECUTE_WATCHLIST_CHANGES", False)
+
     def execute_trade_plan_changes_enabled(self) -> bool:
         return self._env_bool("FINN_V2_EXECUTE_TRADE_PLAN_CHANGES", False)
 

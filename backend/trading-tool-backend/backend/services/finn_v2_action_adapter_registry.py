@@ -5,6 +5,8 @@ import json
 from datetime import datetime
 from typing import Any, Awaitable, Callable, Optional
 
+from sqlalchemy import text
+
 from backend.infrastructure.repositories.indicator_config_repository import IndicatorConfigRepository
 from backend.schemas.bot_schema import BotConfigUpdateSchema, TradePlanUpsertSchema
 from backend.schemas.trading_schema import SetupCreateSchema, StrategyCreateSchema
@@ -33,6 +35,8 @@ class FinnV2ActionAdapterRegistry:
             "create_setup": self._create_setup,
             "update_setup": self._update_setup,
             "update_strategy": self._update_strategy,
+            "watchlist_add": self._watchlist_add,
+            "watchlist_remove": self._watchlist_remove,
             "save_trade_plan": self._save_trade_plan,
             "activate_paper_bot": self._activate_paper_bot,
             "activate_live_bot": self._activate_live_bot,
@@ -85,6 +89,38 @@ class FinnV2ActionAdapterRegistry:
             raise ValueError("execution_adapter_unavailable")
         change = payload["change"]
         return await self.strategies.update_strategy(int(change["strategy_id"]), dict(change.get("changed_fields") or {}), user_id)
+
+    async def _watchlist_add(self, user_id: int, payload: dict) -> dict:
+        if not self.flags.execute_watchlist_changes_enabled():
+            raise ValueError("execution_adapter_unavailable")
+        change = payload["change"]
+        asset = str(change.get("asset") or payload.get("target", {}).get("asset") or "").strip().upper()
+        if not asset:
+            raise ValueError("asset_required")
+        await self.session.execute(
+            text(
+                """
+                INSERT INTO watchlists (user_id, symbol, created_at)
+                VALUES (:user_id, :symbol, NOW())
+                ON CONFLICT (user_id, symbol) DO NOTHING
+                """
+            ),
+            {"user_id": user_id, "symbol": asset},
+        )
+        return {"ok": True, "asset": asset, "operation": "watchlist_add"}
+
+    async def _watchlist_remove(self, user_id: int, payload: dict) -> dict:
+        if not self.flags.execute_watchlist_changes_enabled():
+            raise ValueError("execution_adapter_unavailable")
+        change = payload["change"]
+        asset = str(change.get("asset") or payload.get("target", {}).get("asset") or "").strip().upper()
+        if not asset:
+            raise ValueError("asset_required")
+        await self.session.execute(
+            text("DELETE FROM watchlists WHERE user_id = :user_id AND symbol = :symbol"),
+            {"user_id": user_id, "symbol": asset},
+        )
+        return {"ok": True, "asset": asset, "operation": "watchlist_remove"}
 
     async def _save_trade_plan(self, user_id: int, payload: dict) -> dict:
         if not self.flags.execute_trade_plan_changes_enabled():
