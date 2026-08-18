@@ -23,12 +23,16 @@ class _FakeSession:
     def __init__(self, *, is_active=True):
         self.sync_session = SimpleNamespace(is_active=is_active)
         self.rollback_calls = 0
+        self.commit_calls = 0
 
     def begin_nested(self):
         return _NestedTxn()
 
     def get_transaction(self):
         return SimpleNamespace(is_active=self.sync_session.is_active)
+
+    async def commit(self):
+        self.commit_calls += 1
 
     async def rollback(self):
         self.rollback_calls += 1
@@ -51,6 +55,12 @@ class _FakeRunRepo:
                 setattr(run, key, value)
         return run
 
+    async def create(self, **kwargs):
+        return SimpleNamespace(**kwargs)
+
+    async def _commit_with_rollback(self, **_kwargs):
+        await self.session.commit()
+
 
 class _FakeTraceRepo:
     def __init__(self):
@@ -59,6 +69,18 @@ class _FakeTraceRepo:
     async def append_event(self, **kwargs):
         self.events.append(kwargs)
         return kwargs
+
+
+class _FakeConversationRepo:
+    def __init__(self):
+        self.last_run = None
+
+    async def set_last_run(self, *, conversation_id, user_id, run_id):
+        self.last_run = {
+            "conversation_id": conversation_id,
+            "user_id": user_id,
+            "run_id": run_id,
+        }
 
 
 @pytest.mark.parametrize(
@@ -123,7 +145,41 @@ def test_run_service_uses_nested_transaction_for_status_and_trace_atomicity():
     assert "async with self.session.begin_nested()" in source
     assert "await self.runs.update_status(" in source
     assert "await self.traces.append_event(" in source
-    assert ".commit(" not in source
+    assert "await self.runs._commit_with_rollback(" in source
+
+
+def test_create_run_commits_before_lifecycle_can_rollback():
+    session = _FakeSession()
+    service = FinnV2RunService(session)
+    service.runs = _FakeRunRepo(None)
+    service.runs.session = session
+    service.traces = _FakeTraceRepo()
+    service.conversations = _FakeConversationRepo()
+
+    run = asyncio.run(
+        service.create_run(
+            {
+                "id": "run-1",
+                "conversation_id": "conv-1",
+                "user_id": 7,
+                "trace_id": "trace-1",
+                "transport": "chat",
+                "visibility": "visible",
+                "feature_mode": "visible_runtime",
+                "client_context_json": {"_request_path": "/api/assistant/chat"},
+                "status": "created",
+            }
+        )
+    )
+
+    assert run.id == "run-1"
+    assert session.commit_calls == 1
+    assert service.conversations.last_run == {
+        "conversation_id": "conv-1",
+        "user_id": 7,
+        "run_id": "run-1",
+    }
+    assert service.traces.events[0]["event_type"] == "run_created"
 
 
 def test_visible_run_executes_orchestrator_without_shadow_gate():

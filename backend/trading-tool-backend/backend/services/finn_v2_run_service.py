@@ -35,7 +35,7 @@ class FinnV2RunService:
         self.orchestrator = FinnV2OrchestratorService(session)
 
     async def create_run(self, payload: Dict[str, Any]):
-        async with self.session.begin_nested():
+        try:
             run = await self.runs.create(**payload)
             await self.conversations.set_last_run(
                 conversation_id=run.conversation_id,
@@ -49,6 +49,13 @@ class FinnV2RunService:
                 event_type="run_created",
                 payload_json=self._trace_payload(run, status="created", response_source=None),
             )
+            await self.runs._commit_with_rollback(
+                operation="create_run",
+                entity_type="FinnV2Run",
+                run_id=run.id,
+            )
+        except Exception:
+            raise
         return run
 
     async def transition_run(
