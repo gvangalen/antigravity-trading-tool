@@ -113,6 +113,15 @@ def test_add_user_market_indicator_uses_isolated_asset_scope_lookup(monkeypatch)
     outer_session = AsyncMock(name="outer_session")
     isolated_session = AsyncMock(name="isolated_session")
     service = MarketDataService(outer_session)
+    monkeypatch.setattr(
+        "backend.services.market_data_service.sync_score_indicator",
+        lambda *_args, **_kwargs: {
+            "score": 55,
+            "trend": "neutral",
+            "interpretation": "ok",
+            "action": "hold",
+        },
+    )
     service.preference_repository = SimpleNamespace(
         ensure_user_config=AsyncMock(),
     )
