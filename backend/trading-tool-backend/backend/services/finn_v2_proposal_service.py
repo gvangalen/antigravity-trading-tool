@@ -17,6 +17,7 @@ from backend.schemas.finn_v2_policy_schema import FinnV2PolicyDecision
 from backend.schemas.finn_v2_proposal_schema import FinnV2ProposalRecord, ValidatedProposalInput
 from backend.services.finn_v2_entity_resolution_service import FinnV2EntityResolutionService
 from backend.services.finn_v2_flag_service import FinnV2FlagService
+from backend.services.finn_v2_json_safety import to_json_safe
 
 
 class FinnV2ProposalService:
@@ -59,7 +60,7 @@ class FinnV2ProposalService:
             idempotency_key=proposal_input.idempotency_key,
             user_id=user_id,
         )
-        payload_json = proposal_input.dict()
+        payload_json = to_json_safe(proposal_input.dict())
         payload_hash = self._payload_hash(payload_json)
         if existing is not None:
             if existing.payload_hash != payload_hash:

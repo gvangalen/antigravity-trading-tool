@@ -24,6 +24,7 @@ from backend.schemas.finn_v2_proposal_schema import (
     ManualOrderChange,
     PortfolioRebalanceChange,
     ProposalTarget,
+    SetupCreateChange,
     SetupChange,
     StrategyChange,
     TradePlanChange,
@@ -253,6 +254,7 @@ class FinnV2ResponseVerifierService:
 
         claim_results = []
         covered_scopes = set()
+        covered_domains = set()
         for claim in draft.claims:
             refs_valid = bool(claim.evidence_refs) or claim.claim_type in {"recommendation", "uncertainty"}
             if claim.claim_type in {"fact", "inference", "evaluation"} and not claim.evidence_refs:
@@ -270,6 +272,8 @@ class FinnV2ResponseVerifierService:
             if matched_evidence:
                 for evidence in matched_evidence:
                     covered_scopes.add(self._scope_for_domain(evidence.domain))
+                    if evidence.domain:
+                        covered_domains.add(evidence.domain)
                 status, claim_reasons, entailment_valid = self._evaluate_claim_support(claim.text, matched_evidence, claim.claim_type)
             elif claim.claim_type not in {"recommendation", "uncertainty"}:
                 status = "unverifiable"
@@ -290,13 +294,15 @@ class FinnV2ResponseVerifierService:
 
         required_scopes = [scope for scope in orchestrator_result.analysis.subject_scopes if scope != "unknown"]
         covered_scopes.update(self._covered_scopes_from_draft(draft, evidence_by_ref))
+        covered_domains.update(self._covered_domains_from_draft(draft, evidence_by_ref))
         capability_grounding_ok = self._capability_grounding_ok(draft)
         if draft.mode == "CAPABILITY" and capability_grounding_ok:
             covered_scopes.add("capability")
-        missing_scopes = [scope for scope in required_scopes if scope not in covered_scopes]
+        satisfied_scopes = {scope for scope in required_scopes if self._scope_is_covered(scope, covered_scopes, covered_domains)}
+        missing_scopes = [scope for scope in required_scopes if scope not in satisfied_scopes]
         coverage = CoverageVerification(
             required_scopes=required_scopes,
-            covered_scopes=sorted(covered_scopes),
+            covered_scopes=sorted(covered_scopes.union(satisfied_scopes)),
             missing_scopes=missing_scopes,
             coverage_ok=not missing_scopes,
         )
@@ -497,6 +503,10 @@ class FinnV2ResponseVerifierService:
                 before=changes.get("before"),
                 after=changes.get("after"),
             )
+        elif operation == "create_setup":
+            change = SetupCreateChange(
+                setup_fields=dict(changes.get("setup_fields") or changes.get("changed_fields") or changes),
+            )
         elif operation == "update_setup":
             change = SetupChange(setup_id=int(candidate.target_id or changes.get("setup_id") or 0), changed_fields=dict(changes.get("changed_fields") or changes))
         elif operation == "update_strategy":
@@ -563,6 +573,21 @@ class FinnV2ResponseVerifierService:
             if evidence is not None:
                 covered.add(self._scope_for_domain(evidence.domain))
         return {scope for scope in covered if scope}
+
+    def _covered_domains_from_draft(self, draft: ResponseDraft, evidence_by_ref: Dict[str, Any]) -> set[str]:
+        refs = self._all_refs(draft)
+        return {
+            evidence.domain
+            for ref in refs
+            for evidence in [evidence_by_ref.get(ref)]
+            if evidence is not None and evidence.domain
+        }
+
+    def _scope_is_covered(self, scope: str, covered_scopes: set[str], covered_domains: set[str]) -> bool:
+        if scope in covered_scopes:
+            return True
+        mapped_domain = self.REQUIRED_SCOPE_TO_DOMAIN.get(scope)
+        return bool(mapped_domain and mapped_domain in covered_domains)
 
     def _scope_for_domain(self, domain: Optional[str]) -> Optional[str]:
         for scope, mapped in self.REQUIRED_SCOPE_TO_DOMAIN.items():

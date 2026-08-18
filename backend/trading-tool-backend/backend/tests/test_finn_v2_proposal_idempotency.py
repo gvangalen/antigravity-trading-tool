@@ -6,6 +6,7 @@ import asyncio
 from backend.schemas.finn_v2_policy_schema import FinnV2PolicyDecision
 from backend.schemas.finn_v2_proposal_schema import ManualOrderChange, ProposalTarget, ValidatedProposalInput
 from backend.services.finn_v2_proposal_service import FinnV2ProposalService
+from backend.services.finn_v2_json_safety import to_json_safe
 
 
 def test_proposal_creation_is_idempotent_per_user():
@@ -49,8 +50,8 @@ def test_proposal_creation_is_idempotent_per_user():
         target_type="order",
         target_id=None,
         asset="BTC",
-        payload_json=proposal_input.dict(),
-        payload_hash=service._payload_hash(proposal_input.dict()),
+        payload_json=to_json_safe(proposal_input.dict()),
+        payload_hash=service._payload_hash(to_json_safe(proposal_input.dict())),
         evidence_set_hash="hash",
         idempotency_key="d" * 16,
         requires_step_up_auth=False,

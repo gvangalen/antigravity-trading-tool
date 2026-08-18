@@ -7,9 +7,10 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.infrastructure.models import FinnV2ValidationResult
+from backend.infrastructure.repositories.finn_v2_repository_transaction_mixin import FinnV2RepositoryTransactionMixin
 
 
-class FinnV2ValidationRepository:
+class FinnV2ValidationRepository(FinnV2RepositoryTransactionMixin):
     def __init__(self, session: AsyncSession):
         self.session = session
 
@@ -44,7 +45,11 @@ class FinnV2ValidationRepository:
             **kwargs,
         )
         self.session.add(row)
-        await self.session.flush()
+        await self._flush_with_rollback(
+            operation="create",
+            entity_type="FinnV2ValidationResult",
+            run_id=getattr(row, "run_id", None),
+        )
         return row
 
     async def redact_payloads_older_than(self, cutoff: datetime) -> int:
@@ -58,5 +63,5 @@ class FinnV2ValidationRepository:
         for row in rows:
             row.result_json = None
             row.redacted_at = datetime.now(timezone.utc)
-        await self.session.flush()
+        await self._flush_with_rollback(operation="redact_payloads", entity_type="FinnV2ValidationResult")
         return len(rows)

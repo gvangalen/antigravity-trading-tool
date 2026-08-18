@@ -46,6 +46,7 @@ class ReasoningNextStep(BaseModel):
 class ProposalCandidate(BaseModel):
     operation_type: Literal[
         "update_indicator_configuration",
+        "create_setup",
         "update_setup",
         "update_strategy",
         "save_trade_plan",

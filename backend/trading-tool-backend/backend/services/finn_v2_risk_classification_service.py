@@ -19,6 +19,8 @@ class FinnV2RiskClassificationService:
         if "indicator" in normalized or "dxy" in normalized:
             return "update_indicator_configuration"
         if "setup" in normalized:
+            if any(token in normalized for token in ("maak", "create", "new", "nieuw")):
+                return "create_setup"
             return "update_setup"
         if "strategie" in normalized or "strategy" in normalized:
             return "update_strategy"

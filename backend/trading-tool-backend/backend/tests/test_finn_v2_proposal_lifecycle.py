@@ -15,7 +15,13 @@ def test_proposal_creation_requires_typed_payload_and_starts_in_draft():
     service.validations.get_by_id_for_user = lambda **_kwargs: asyncio.sleep(0, result=SimpleNamespace(id="validation-1", evidence_set_hash="hash"))
     service.proposals.get_by_idempotency_key_for_user = lambda **_kwargs: asyncio.sleep(0, result=None)
     service.proposals.get_by_payload_hash_for_run = lambda **_kwargs: asyncio.sleep(0, result=None)
-    service.proposals.create = lambda **kwargs: asyncio.sleep(0, result=SimpleNamespace(**kwargs, created_at=datetime.now(timezone.utc), updated_at=datetime.now(timezone.utc)))
+    captured = {}
+
+    async def _create(**kwargs):
+        captured.update(kwargs)
+        return SimpleNamespace(**kwargs, created_at=datetime.now(timezone.utc), updated_at=datetime.now(timezone.utc))
+
+    service.proposals.create = _create
     service.resolver.resolve_asset = lambda **_kwargs: asyncio.sleep(0, result={"asset": "BTC"})
 
     policy = FinnV2PolicyDecision(
@@ -51,3 +57,5 @@ def test_proposal_creation_requires_typed_payload_and_starts_in_draft():
 
     assert record.status == "draft"
     assert record.operation_type == "manual_order"
+    assert captured["payload_json"]["expires_at"].endswith("+00:00")
+    assert captured["payload_json"]["change"]["quantity"] == "1"

@@ -55,6 +55,13 @@ class SetupChange(BaseModel):
         extra = "forbid"
 
 
+class SetupCreateChange(BaseModel):
+    setup_fields: Dict[str, Any]
+
+    class Config:
+        extra = "forbid"
+
+
 class StrategyChange(BaseModel):
     strategy_id: int
     changed_fields: Dict[str, Any]
@@ -120,6 +127,7 @@ class ManualOrderChange(BaseModel):
 
 ProposalChangeUnion = Union[
     IndicatorConfigurationChange,
+    SetupCreateChange,
     SetupChange,
     StrategyChange,
     TradePlanChange,
@@ -148,6 +156,7 @@ class ValidatedProposalInput(BaseModel):
         change = values.get("change")
         expected = {
             "update_indicator_configuration": IndicatorConfigurationChange,
+            "create_setup": SetupCreateChange,
             "update_setup": SetupChange,
             "update_strategy": StrategyChange,
             "save_trade_plan": TradePlanChange,

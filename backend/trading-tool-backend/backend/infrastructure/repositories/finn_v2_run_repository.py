@@ -7,9 +7,10 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.infrastructure.models import FinnV2Run
+from backend.infrastructure.repositories.finn_v2_repository_transaction_mixin import FinnV2RepositoryTransactionMixin
 
 
-class FinnV2RunRepository:
+class FinnV2RunRepository(FinnV2RepositoryTransactionMixin):
     def __init__(self, session: AsyncSession):
         self.session = session
 
@@ -36,7 +37,11 @@ class FinnV2RunRepository:
             **kwargs,
         )
         self.session.add(row)
-        await self.session.flush()
+        await self._flush_with_rollback(
+            operation="create",
+            entity_type="FinnV2Run",
+            run_id=getattr(row, "id", None),
+        )
         return row
 
     async def update_status(
@@ -71,7 +76,7 @@ class FinnV2RunRepository:
             run.completed_at = completed_at
         if canceled_at is not None:
             run.canceled_at = canceled_at
-        await self.session.flush()
+        await self._flush_with_rollback(operation="update_status", entity_type="FinnV2Run", run_id=run.id)
         return run
 
     async def redact_messages_older_than(self, cutoff: datetime) -> int:
@@ -81,7 +86,7 @@ class FinnV2RunRepository:
         rows = list(result.scalars().all())
         for row in rows:
             row.message = "[redacted by finn_v2_retention]"
-        await self.session.flush()
+        await self._flush_with_rollback(operation="redact_messages", entity_type="FinnV2Run")
         return len(rows)
 
     async def delete_traces_older_than(self, cutoff: datetime) -> int:
@@ -93,5 +98,5 @@ class FinnV2RunRepository:
         rows = list(result.scalars().all())
         for row in rows:
             await self.session.delete(row)
-        await self.session.flush()
+        await self._flush_with_rollback(operation="delete_traces", entity_type="FinnV2RunTrace")
         return len(rows)

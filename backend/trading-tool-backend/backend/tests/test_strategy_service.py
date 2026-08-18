@@ -56,6 +56,18 @@ def test_validate_trade_strategy_reads_trade_plan_when_present():
     )
 
 
+def test_validate_trade_strategy_accepts_canonical_trade_payload():
+    service = StrategyService(db_session=None)
+
+    service._validate_trade_strategy(
+        {
+            "entry": 62000,
+            "stop_loss": 59800,
+            "targets": [64000, 66000],
+        }
+    )
+
+
 def test_validate_trade_strategy_still_rejects_missing_levels_after_normalization():
     service = StrategyService(db_session=None)
 

@@ -19,6 +19,7 @@ from backend.services.finn_v2_risk_classification_service import FinnV2RiskClass
 class FinnV2PolicyEngineService:
     _ACTION_MATRIX = {
         "update_indicator_configuration": ("proposal", ["identity_context", "market_context"]),
+        "create_setup": ("proposal", ["identity_context"]),
         "update_setup": ("proposal", ["plan_context"]),
         "update_strategy": ("proposal", ["plan_context"]),
         "save_trade_plan": ("proposal", ["identity_context", "plan_context"]),

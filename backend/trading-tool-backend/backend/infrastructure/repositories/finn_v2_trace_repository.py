@@ -7,9 +7,10 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.infrastructure.models import FinnV2RunTrace
+from backend.infrastructure.repositories.finn_v2_repository_transaction_mixin import FinnV2RepositoryTransactionMixin
 
 
-class FinnV2TraceRepository:
+class FinnV2TraceRepository(FinnV2RepositoryTransactionMixin):
     def __init__(self, session: AsyncSession):
         self.session = session
 
@@ -44,7 +45,7 @@ class FinnV2TraceRepository:
             created_at=datetime.now(timezone.utc),
         )
         self.session.add(row)
-        await self.session.flush()
+        await self._flush_with_rollback(operation="append_event", entity_type="FinnV2RunTrace", run_id=run_id)
         return row
 
     async def list_for_run(self, *, run_id: str, user_id: int) -> list[FinnV2RunTrace]:

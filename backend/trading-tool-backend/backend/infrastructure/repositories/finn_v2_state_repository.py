@@ -7,9 +7,10 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.infrastructure.models import FinnV2StateSnapshot
+from backend.infrastructure.repositories.finn_v2_repository_transaction_mixin import FinnV2RepositoryTransactionMixin
 
 
-class FinnV2StateRepository:
+class FinnV2StateRepository(FinnV2RepositoryTransactionMixin):
     def __init__(self, session: AsyncSession):
         self.session = session
 
@@ -48,7 +49,11 @@ class FinnV2StateRepository:
             **kwargs,
         )
         self.session.add(row)
-        await self.session.flush()
+        await self._flush_with_rollback(
+            operation="create",
+            entity_type="FinnV2StateSnapshot",
+            run_id=getattr(row, "run_id", None),
+        )
         return row
 
     async def list_for_run(self, *, run_id: str, user_id: int) -> list[FinnV2StateSnapshot]:
@@ -70,5 +75,5 @@ class FinnV2StateRepository:
         for row in rows:
             row.snapshot_json = None
             row.redacted_at = datetime.now(timezone.utc)
-        await self.session.flush()
+        await self._flush_with_rollback(operation="redact_payloads", entity_type="FinnV2StateSnapshot")
         return len(rows)

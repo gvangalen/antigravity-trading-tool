@@ -30,6 +30,7 @@ class FinnV2ActionAdapterRegistry:
     def get(self, operation_type: str) -> Optional[AdapterFn]:
         mapping = {
             "update_indicator_configuration": self._update_indicator_configuration,
+            "create_setup": self._create_setup,
             "update_setup": self._update_setup,
             "update_strategy": self._update_strategy,
             "save_trade_plan": self._save_trade_plan,
@@ -70,6 +71,14 @@ class FinnV2ActionAdapterRegistry:
             raise ValueError("execution_adapter_unavailable")
         change = payload["change"]
         return await self.setups.update_setup(int(change["setup_id"]), dict(change.get("changed_fields") or {}), user_id)
+
+    async def _create_setup(self, user_id: int, payload: dict) -> dict:
+        if not self.flags.execute_setup_changes_enabled():
+            raise ValueError("execution_adapter_unavailable")
+        change = payload["change"]
+        raw_payload = dict(change.get("setup_fields") or {})
+        setup_payload = SetupCreateSchema.parse_obj(raw_payload)
+        return await self.setups.save_setup(setup_payload, raw_payload, user_id)
 
     async def _update_strategy(self, user_id: int, payload: dict) -> dict:
         if not self.flags.execute_strategy_changes_enabled():
