@@ -176,6 +176,7 @@ if ! ssh "${SSH_ARGS[@]}" "ubuntu@$SERVER_IP" "
   python3 backend/scripts/run_sql_migration.py backend/scripts/migrations/2026_08_17_finn_v2_verified_delivery.py
   python3 backend/scripts/run_sql_migration.py backend/scripts/migrations/2026_08_17_finn_v2_evals_cutover_execution.py
   python3 backend/scripts/run_sql_migration.py backend/scripts/migrations/2026_08_18_finn_v2_capability_mode.py
+  python3 backend/scripts/run_sql_migration.py backend/scripts/migrations/2026_08_18_finn_v2_typed_operation_modes.py
 
   cd ../../frontend/trading-tool-frontend
   rm -rf .next
