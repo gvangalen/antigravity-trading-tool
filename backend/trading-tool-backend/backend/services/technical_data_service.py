@@ -5,6 +5,7 @@ from types import SimpleNamespace
 
 from sqlalchemy.ext.asyncio import AsyncSession
 from fastapi import HTTPException
+from backend.infrastructure.database import async_session_factory
 from backend.domain.technical_indicator_catalog import (
     get_active_technical_indicator_definitions,
     get_technical_indicator_definition,
@@ -34,6 +35,23 @@ class TechnicalDataService:
         if catalog_def and catalog_def.get("active"):
             return SimpleNamespace(**catalog_def)
         return db_config
+
+    async def _get_asset_scope(self, symbol: str) -> dict[str, Any]:
+        normalized_symbol = str(symbol or "BTC").strip().upper() or "BTC"
+
+        async with async_session_factory() as isolated_session:
+            try:
+                asset = await AssetCatalogService(isolated_session).get_asset(normalized_symbol)
+                await isolated_session.rollback()
+                return asset
+            except Exception:
+                await isolated_session.rollback()
+                logger.error(
+                    "❌ Technical asset scope lookup failed for %s",
+                    normalized_symbol,
+                    exc_info=True,
+                )
+                return AssetCatalogService(self.session)._fallback_asset(normalized_symbol)
 
     def _score_indicator_with_fallback(self, *, name: str, value: float, user_id: int) -> Dict[str, Any]:
         conn = get_db_connection()
@@ -97,7 +115,7 @@ class TechnicalDataService:
         normalized_asset_class = str(asset_class or "").strip().lower() or None
 
         if normalized_symbol and not normalized_asset_class:
-            asset = await AssetCatalogService(self.session).get_asset(normalized_symbol)
+            asset = await self._get_asset_scope(normalized_symbol)
             normalized_asset_class = str(asset.get("asset_class") or "").strip().lower() or None
 
         return normalized_symbol, normalized_asset_class
@@ -322,7 +340,7 @@ class TechnicalDataService:
         persist_preference: bool = True,
     ) -> Dict[str, Any]:
         name = normalize_indicator_name(name_raw)
-        asset_scope = await AssetCatalogService(self.session).get_asset(symbol)
+        asset_scope = await self._get_asset_scope(symbol)
 
         if persist_preference:
             await self.repository.ensure_user_config(

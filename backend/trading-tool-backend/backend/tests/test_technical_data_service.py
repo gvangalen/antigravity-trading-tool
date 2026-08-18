@@ -153,3 +153,75 @@ def test_bootstrap_preferences_clears_scope_instead_of_creating_defaults():
         asset_class="crypto",
     )
     assert result["rows"] == []
+
+
+def test_add_technical_indicator_uses_isolated_asset_scope_lookup(monkeypatch):
+    outer_session = AsyncMock(name="outer_session")
+    isolated_session = AsyncMock(name="isolated_session")
+    service = TechnicalDataService(outer_session)
+    service.repository = SimpleNamespace(
+        ensure_user_config=AsyncMock(),
+        get_indicator_config=AsyncMock(
+            return_value=SimpleNamespace(
+                name="rsi",
+                source="twelve_data",
+                link="twelve_data:rsi",
+                display_name="RSI",
+                active=True,
+            )
+        ),
+        add_indicator=AsyncMock(
+            return_value=SimpleNamespace(
+                id=9,
+                value=54.0,
+                score=62.0,
+                advies="constructief",
+                uitleg="ok",
+            )
+        ),
+    )
+    service._score_indicator_with_fallback = lambda **_: {
+        "score": 62,
+        "trend": "constructief",
+        "interpretation": "ok",
+        "action": "watch",
+    }
+    service._fetch_indicator_value = AsyncMock(return_value={"value": 54.0})
+
+    class _FactoryContext:
+        async def __aenter__(self):
+            return isolated_session
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+    monkeypatch.setattr(
+        "backend.services.technical_data_service.async_session_factory",
+        lambda: _FactoryContext(),
+    )
+
+    async def fake_get_asset(symbol):
+        assert symbol == "BTC"
+        return {"asset_class": "crypto"}
+
+    async def run():
+        from unittest.mock import patch
+
+        with patch("backend.services.technical_data_service.AssetCatalogService") as asset_catalog_cls, patch(
+            "backend.services.technical_data_service.mark_step_completed",
+            AsyncMock(),
+        ):
+            asset_catalog_cls.return_value.get_asset = AsyncMock(side_effect=fake_get_asset)
+            return await service.add_technical_indicator("RSI", 7, symbol="BTC")
+
+    result = asyncio.run(run())
+
+    assert result["id"] == 9
+    service.repository.ensure_user_config.assert_awaited_once_with(
+        7,
+        "rsi",
+        symbol="BTC",
+        asset_class="crypto",
+    )
+    isolated_session.rollback.assert_awaited()
+    outer_session.rollback.assert_not_awaited()

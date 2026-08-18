@@ -33,6 +33,7 @@ class TechnicalDataRepository:
             )
             columns = {str(column_name) for column_name in result.scalars().all()}
         except Exception:
+            await self.session.rollback()
             columns = set()
 
         if not columns:

@@ -197,3 +197,18 @@ def test_get_user_configs_legacy_schema_returns_global_rows_for_symbol_request()
     query = str(session.execute.await_args_list[1].args[0])
     assert "symbol" not in query.lower()
     assert "asset_class" not in query.lower()
+
+
+def test_get_user_config_columns_rolls_back_when_schema_probe_fails():
+    session = AsyncMock()
+    session.execute = AsyncMock(side_effect=RuntimeError("probe failed"))
+    session.rollback = AsyncMock()
+    repo = TechnicalDataRepository(session)
+
+    async def run():
+        return await repo._get_user_config_columns()
+
+    columns = asyncio.run(run())
+
+    assert "user_id" in columns
+    session.rollback.assert_awaited_once()
