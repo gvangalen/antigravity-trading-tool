@@ -7,6 +7,7 @@ from typing import Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.infrastructure.repositories.finn_v2_policy_repository import FinnV2PolicyRepository
+from backend.domain.finn_v2_contract import normalize_interaction_mode
 from backend.schemas.finn_v2_domain_validation_schema import EvidenceValidationResult
 from backend.schemas.finn_v2_orchestrator_schema import OrchestratorResult
 from backend.schemas.finn_v2_policy_schema import FinnV2PolicyDecision, POLICY_VERSION
@@ -48,7 +49,7 @@ class FinnV2PolicyEngineService:
         if orchestrator_result.user_id != user_id or snapshot.user_id != user_id or validation.user_id != user_id:
             raise LookupError("proposal_not_owned")
 
-        mode = orchestrator_result.analysis.interaction_mode
+        mode = normalize_interaction_mode(orchestrator_result.analysis.interaction_mode)
         domain_statuses = {domain.domain: domain.status for domain in validation.domains}
         reasons: list[str] = []
         warnings: list[str] = []
@@ -62,7 +63,7 @@ class FinnV2PolicyEngineService:
         operation_type = None
         required_domains = list(orchestrator_result.domain_requirements.required_domains)
 
-        if mode == "FACT":
+        if mode == "READ":
             policy_class = "read"
             allowed = orchestrator_result.outcome == "reasoning_ready"
             if not allowed:
@@ -73,7 +74,7 @@ class FinnV2PolicyEngineService:
             if not allowed:
                 blocks.append("orchestrator_not_ready")
             reasons.append("capability_registry_read_only")
-        elif mode == "EVALUATION":
+        elif mode == "EVALUATE":
             policy_class = "advice"
             allowed = orchestrator_result.outcome == "reasoning_ready"
             if not allowed:
@@ -90,13 +91,13 @@ class FinnV2PolicyEngineService:
             if not allowed:
                 blocks.append("orchestrator_not_ready")
             reasons.append("deterministic_clarification_delivery")
-        elif mode == "PROPOSAL":
+        elif mode == "CREATE_PROPOSAL":
             policy_class = "proposal"
             proposal_allowed = True
             confirmation_required = True
             proposal_input_required = True
             allowed = self._domains_satisfy(required_domains, domain_statuses, blocks)
-        elif mode == "ACTION":
+        elif mode in {"ACTION_PROPOSAL", "CONFIRMATION", "EXECUTION"}:
             operation_type = self.risk.classify_requested_operation(message="", requested_operation=requested_operation)
             if operation_type is None or operation_type not in self._ACTION_MATRIX:
                 policy_class = "unsupported_action"
@@ -122,7 +123,7 @@ class FinnV2PolicyEngineService:
             policy_class = "unsupported_action"
             blocks.append("orchestrator_not_ready")
 
-        if validation.integrity_status == "invalid" and mode in {"PROPOSAL", "ACTION"}:
+        if validation.integrity_status == "invalid" and mode in {"CREATE_PROPOSAL", "ACTION_PROPOSAL", "CONFIRMATION", "EXECUTION"}:
             if "snapshot_integrity_invalid" not in blocks:
                 blocks.append("snapshot_integrity_invalid")
             allowed = False

@@ -14,12 +14,14 @@ from backend.schemas.finn_v2_schema import (
 
 def test_finn_v2_schema_literals_match_contract():
     assert get_args(InteractionMode) == (
-        "FACT",
         "CAPABILITY",
-        "EVALUATION",
-        "PROPOSAL",
-        "ACTION",
+        "READ",
+        "EVALUATE",
+        "CREATE_PROPOSAL",
+        "ACTION_PROPOSAL",
         "CLARIFICATION",
+        "CONFIRMATION",
+        "EXECUTION",
         "UNAVAILABLE",
     )
     assert get_args(RunStatus) == (

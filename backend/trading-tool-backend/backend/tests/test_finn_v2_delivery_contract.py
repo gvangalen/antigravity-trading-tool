@@ -15,7 +15,7 @@ def test_delivery_contract_returns_verified_response_only():
                 "verified_response_id": "vr-1",
                 "run_id": "run-1",
                 "user_id": 7,
-                "mode": "FACT",
+                    "mode": "READ",
                 "direct_answer": "De bot staat in paper mode.",
                 "main_observation": "De status is onderbouwd door recente evidence.",
                 "supporting_points": [],
@@ -39,4 +39,4 @@ def test_delivery_contract_returns_verified_response_only():
 
     assert envelope.status == "completed"
     assert envelope.delivery_source == "finn_v2_verified"
-    assert envelope.response.mode == "FACT"
+    assert envelope.response.mode == "READ"

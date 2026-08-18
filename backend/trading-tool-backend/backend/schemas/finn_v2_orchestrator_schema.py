@@ -5,6 +5,7 @@ from typing import Dict, List, Literal, Optional
 
 from pydantic import BaseModel, Field, validator
 
+from backend.domain.finn_v2_contract import normalize_interaction_mode
 from backend.domain.finn_v2_tools import FINN_V2_TOOL_ORDER
 from backend.schemas.finn_v2_domain_validation_schema import ClarificationCandidate
 
@@ -39,7 +40,17 @@ CLARIFICATION_PRIORITY = ["asset", "setup", "strategy", "bot"]
 
 
 class RequestAnalysisResult(BaseModel):
-    interaction_mode: Literal["FACT", "CAPABILITY", "EVALUATION", "PROPOSAL", "ACTION", "UNAVAILABLE"]
+    interaction_mode: Literal[
+        "CAPABILITY",
+        "READ",
+        "EVALUATE",
+        "CREATE_PROPOSAL",
+        "ACTION_PROPOSAL",
+        "CLARIFICATION",
+        "CONFIRMATION",
+        "EXECUTION",
+        "UNAVAILABLE",
+    ]
     subject_scopes: List[
         Literal[
             "capability",
@@ -85,6 +96,10 @@ class RequestAnalysisResult(BaseModel):
             return None
         normalized = str(value).strip().upper()
         return normalized or None
+
+    @validator("interaction_mode", pre=True)
+    def _normalize_mode(cls, value: str) -> str:
+        return normalize_interaction_mode(value)
 
 
 class DomainRequirementPlan(BaseModel):

@@ -14,6 +14,7 @@ from backend.infrastructure.repositories.finn_v2_run_repository import FinnV2Run
 from backend.infrastructure.repositories.finn_v2_state_repository import FinnV2StateRepository
 from backend.infrastructure.repositories.finn_v2_trace_repository import FinnV2TraceRepository
 from backend.infrastructure.repositories.finn_v2_validation_repository import FinnV2ValidationRepository
+from backend.domain.finn_v2_contract import normalize_interaction_mode
 from backend.schemas.finn_v2_orchestrator_schema import ORCHESTRATOR_VERSION, OrchestratorResult
 from backend.schemas.finn_v2_policy_schema import POLICY_VERSION, FinnV2PolicyDecision
 from backend.schemas.finn_v2_reasoning_context_schema import REASONING_CONTEXT_VERSION
@@ -103,6 +104,7 @@ class FinnV2ReasoningService:
                 "created_at": orchestrator_row.created_at,
             }
         )
+        mode = normalize_interaction_mode(orchestrator_result.analysis.interaction_mode)
         snapshot = await self.snapshots.get_by_id_for_user(snapshot_id=orchestrator_result.snapshot_id, user_id=user_id) if orchestrator_result.snapshot_id else None
         validation = await self.validations.get_by_id_for_user(validation_id=orchestrator_result.validation_id, user_id=user_id) if orchestrator_result.validation_id else None
         policy_row = await self.policies.get_for_run_version(run_id=run_id, user_id=user_id, policy_version=POLICY_VERSION)
@@ -134,7 +136,7 @@ class FinnV2ReasoningService:
             result = self.fallbacks.unavailable_draft(
                 run_id=run_id,
                 user_id=user_id,
-                mode=orchestrator_result.analysis.interaction_mode,
+                mode=mode,
                 error_codes=["snapshot_integrity_invalid"],
                 model=self._resolved_model(),
             )
@@ -160,7 +162,7 @@ class FinnV2ReasoningService:
         model_name = self._resolved_model()
         input_hash = self.contexts.input_hash(context, prompt_version=self.prompts.PROMPT_VERSION, model=model_name)
 
-        if context.interaction_mode == "CAPABILITY":
+        if normalize_interaction_mode(context.interaction_mode) == "CAPABILITY":
             result = self.capabilities.build_reasoning_result(
                 run_id=run_id,
                 user_id=user_id,
@@ -334,7 +336,7 @@ class FinnV2ReasoningService:
             if response.get("error"):
                 error = str(response["error"])
                 last_error_codes = [error]
-                if context.interaction_mode == "EVALUATION" and error in {"provider_error", "schema_invalid", "incomplete_structured_response", "timeout"}:
+                if normalize_interaction_mode(context.interaction_mode) == "EVALUATE" and error in {"provider_error", "schema_invalid", "incomplete_structured_response", "timeout"}:
                     result = self.fallbacks.grounded_evaluation_draft(
                         run_id=run_id,
                         user_id=user_id,

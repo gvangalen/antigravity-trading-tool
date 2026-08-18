@@ -7,12 +7,14 @@ from pydantic import BaseModel, Field, constr
 
 
 InteractionMode = Literal[
-    "FACT",
     "CAPABILITY",
-    "EVALUATION",
-    "PROPOSAL",
-    "ACTION",
+    "READ",
+    "EVALUATE",
+    "CREATE_PROPOSAL",
+    "ACTION_PROPOSAL",
     "CLARIFICATION",
+    "CONFIRMATION",
+    "EXECUTION",
     "UNAVAILABLE",
 ]
 

@@ -41,6 +41,19 @@ class FinnV2EntityResolutionService:
         if conversation_symbol:
             return {"asset": conversation_symbol, "resolution_source": "conversation_state"}
 
+        hints = dict(workspace_hints or {})
+        context = dict(client_context or {})
+        workspace_asset = self._normalize_symbol(
+            hints.get("workspace_asset")
+            or hints.get("active_workspace_asset")
+            or context.get("workspace_asset")
+            or context.get("active_workspace_asset")
+        )
+        if workspace_asset:
+            asset = await self.assets.get_asset(workspace_asset)
+            if asset and asset.get("symbol") == workspace_asset:
+                return {"asset": workspace_asset, "resolution_source": "workspace_state"}
+
         user = await self.users.get_by_id(user_id)
         preferences = getattr(user, "ai_preferences", {}) or {}
         selected_asset = self._normalize_symbol(preferences.get("selected_asset"))
@@ -50,8 +63,6 @@ class FinnV2EntityResolutionService:
         if active_asset:
             return {"asset": active_asset, "resolution_source": "active_asset"}
 
-        hints = dict(workspace_hints or {})
-        context = dict(client_context or {})
         hinted = self._normalize_symbol(hints.get("asset") or hints.get("symbol") or context.get("asset") or context.get("symbol"))
         if hinted:
             asset = await self.assets.get_asset(hinted)
@@ -103,6 +114,7 @@ class FinnV2EntityResolutionService:
             row = await self.strategies.get_strategy_by_setup(int(setup["id"]), user_id)
             if row:
                 return {"strategy": dict(row), "resolution_source": "setup_link"}
+            raise LookupError("strategy_not_resolved")
 
         last_strategy = await self.strategies.get_last_strategy(user_id)
         if last_strategy:
@@ -130,6 +142,7 @@ class FinnV2EntityResolutionService:
                 return {"bot": linked[0], "resolution_source": "strategy_link"}
             if len(linked) > 1:
                 raise LookupError("bot_ambiguous")
+            raise LookupError("bot_not_resolved")
         if len(configs) == 1:
             return {"bot": configs[0], "resolution_source": "single_bot"}
         raise LookupError("bot_not_resolved")
@@ -149,4 +162,3 @@ class FinnV2EntityResolutionService:
         except (TypeError, ValueError):
             return None
         return coerced if coerced > 0 else None
-

@@ -6,12 +6,14 @@ from typing import Any, Dict, Mapping, Optional, Tuple
 
 
 INTERACTION_MODES: Tuple[str, ...] = (
-    "FACT",
     "CAPABILITY",
-    "EVALUATION",
-    "PROPOSAL",
-    "ACTION",
+    "READ",
+    "EVALUATE",
+    "CREATE_PROPOSAL",
+    "ACTION_PROPOSAL",
     "CLARIFICATION",
+    "CONFIRMATION",
+    "EXECUTION",
     "UNAVAILABLE",
 )
 
@@ -84,6 +86,13 @@ SSE_EVENT_BY_STATUS: Mapping[str, str] = {
 
 FOUNDATION_PLACEHOLDER_CONTENT = "FINN Core V2 orchestration shadow run completed."
 
+LEGACY_INTERACTION_MODE_ALIASES: Mapping[str, str] = {
+    "FACT": "READ",
+    "EVALUATION": "EVALUATE",
+    "PROPOSAL": "CREATE_PROPOSAL",
+    "ACTION": "ACTION_PROPOSAL",
+}
+
 
 class InvalidRunTransitionError(ValueError):
     pass
@@ -121,3 +130,11 @@ def build_placeholder_response() -> Dict[str, Any]:
         "proposal_id": None,
         "confirmation_required": False,
     }
+
+
+def normalize_interaction_mode(mode: Optional[str]) -> str:
+    normalized = str(mode or "").strip().upper()
+    normalized = LEGACY_INTERACTION_MODE_ALIASES.get(normalized, normalized)
+    if normalized not in INTERACTION_MODES:
+        raise ValueError(f"unsupported_interaction_mode:{mode}")
+    return normalized

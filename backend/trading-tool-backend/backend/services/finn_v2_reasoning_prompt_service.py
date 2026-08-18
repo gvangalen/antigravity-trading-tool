@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from backend.domain.finn_v2_contract import INTERACTION_MODES
+from backend.domain.finn_v2_contract import INTERACTION_MODES, normalize_interaction_mode
 from backend.schemas.finn_v2_reasoning_context_schema import ReasoningContextPackage
 from backend.schemas.finn_v2_reasoning_schema import (
     FINN_V2_REASONING_PROMPT_VERSION,
@@ -19,17 +19,19 @@ class FinnV2ReasoningPromptService:
     PROMPT_VERSION = FINN_V2_REASONING_PROMPT_VERSION
     SCHEMA_VERSION = FINN_V2_REASONING_SCHEMA_VERSION
     MODE_INSTRUCTIONS = {
-        "FACT": "Answer the exact factual question directly, without extra unsolicited advice.",
         "CAPABILITY": (
             "Answer only with capabilities that are explicitly present in the internal capability registry. "
             "Do not invent product features, financial conclusions, or execution behavior. "
             "Explain briefly what FINN can help with today, mention that answers become more specific with more context, "
             "and give at most one relevant next step."
         ),
-        "EVALUATION": "Evaluate the exact question across the relevant domains and provide one best next step.",
-        "PROPOSAL": "Prepare a controlled draft concept only; do not imply any change was executed.",
-        "ACTION": "Interpret the intent safely, prepare a non-executed draft, and respect confirmation boundaries.",
+        "READ": "Answer the exact grounded question directly, without extra unsolicited advice.",
+        "EVALUATE": "Evaluate the exact question across the relevant domains and provide one best next step.",
+        "CREATE_PROPOSAL": "Prepare a controlled draft concept only; do not imply any change was executed.",
+        "ACTION_PROPOSAL": "Interpret the intent safely, prepare a non-executed draft, and respect confirmation boundaries.",
         "CLARIFICATION": "Ask one concise clarification question that is strictly necessary before any financial conclusion.",
+        "CONFIRMATION": "Summarize the exact pending change, state that execution still requires explicit confirmation, and do not imply it already happened.",
+        "EXECUTION": "Describe only the verified execution result and never imply any unverified side effect or live trading behavior.",
         "UNAVAILABLE": (
             "Be explicit that the required financial context is missing or unavailable. "
             "Do not invent any financial conclusion. Briefly explain what FINN can help with once context is available, "
@@ -53,9 +55,13 @@ class FinnV2ReasoningPromptService:
         )
 
     def mode_instruction_for(self, mode: str) -> str:
-        instruction = self.MODE_INSTRUCTIONS.get(str(mode))
-        if instruction is None:
+        try:
+            normalized_mode = normalize_interaction_mode(mode)
+        except ValueError as exc:
             raise FinnV2ReasoningPromptContractError(str(mode))
+        instruction = self.MODE_INSTRUCTIONS.get(normalized_mode)
+        if instruction is None:
+            raise FinnV2ReasoningPromptContractError(str(mode)) from None
         return instruction
 
     def build_user_prompt(self, context: ReasoningContextPackage) -> str:

@@ -6,6 +6,7 @@ from typing import Any, Dict, List, Literal, Optional
 
 from pydantic import BaseModel, Field, constr, root_validator, validator
 
+from backend.domain.finn_v2_contract import normalize_interaction_mode
 
 FINN_V2_REASONING_PROMPT_VERSION = "2026-08-17.block6"
 FINN_V2_REASONING_SCHEMA_VERSION = "2026-08-17.block6"
@@ -91,7 +92,17 @@ class ReasoningResult(BaseModel):
     reasoning_result_id: str
     run_id: str
     user_id: int
-    mode: Literal["FACT", "CAPABILITY", "EVALUATION", "PROPOSAL", "ACTION", "CLARIFICATION", "UNAVAILABLE"]
+    mode: Literal[
+        "CAPABILITY",
+        "READ",
+        "EVALUATE",
+        "CREATE_PROPOSAL",
+        "ACTION_PROPOSAL",
+        "CLARIFICATION",
+        "CONFIRMATION",
+        "EXECUTION",
+        "UNAVAILABLE",
+    ]
     direct_answer: constr(min_length=1, max_length=1200)
     main_observation: constr(min_length=1, max_length=500)
     supporting_points: List[ReasoningSupportingPoint] = Field(default_factory=list, max_items=4)
@@ -113,11 +124,15 @@ class ReasoningResult(BaseModel):
             raise ValueError("too_many_supporting_points")
         return value
 
+    @validator("mode", pre=True)
+    def _normalize_mode(cls, value: str) -> str:
+        return normalize_interaction_mode(value)
+
     @root_validator
     def _validate_proposal_candidate_mode(cls, values):
         mode = values.get("mode")
         proposal_candidate = values.get("proposal_candidate")
-        if proposal_candidate is not None and mode not in {"PROPOSAL", "ACTION"}:
+        if proposal_candidate is not None and mode not in {"CREATE_PROPOSAL", "ACTION_PROPOSAL"}:
             raise ValueError("proposal_candidate_not_allowed")
         return values
 
@@ -134,7 +149,17 @@ class PersistedReasoningRecord(BaseModel):
     snapshot_id: str
     validation_id: str
     status: Literal["pending", "generating", "ready", "unavailable", "failed"]
-    mode: Literal["FACT", "CAPABILITY", "EVALUATION", "PROPOSAL", "ACTION", "CLARIFICATION", "UNAVAILABLE"]
+    mode: Literal[
+        "CAPABILITY",
+        "READ",
+        "EVALUATE",
+        "CREATE_PROPOSAL",
+        "ACTION_PROPOSAL",
+        "CLARIFICATION",
+        "CONFIRMATION",
+        "EXECUTION",
+        "UNAVAILABLE",
+    ]
     context_version: str
     evidence_set_hash: str
     input_hash: str
@@ -151,6 +176,10 @@ class PersistedReasoningRecord(BaseModel):
     retry_count: int = 0
     created_at: datetime
     completed_at: Optional[datetime] = None
+
+    @validator("mode", pre=True)
+    def _normalize_mode(cls, value: str) -> str:
+        return normalize_interaction_mode(value)
 
     class Config:
         extra = "forbid"

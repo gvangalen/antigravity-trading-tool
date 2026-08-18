@@ -16,6 +16,7 @@ from backend.infrastructure.repositories.finn_v2_trace_repository import FinnV2T
 from backend.infrastructure.repositories.finn_v2_validation_repository import FinnV2ValidationRepository
 from backend.infrastructure.repositories.finn_v2_verifier_repository import FinnV2VerifierRepository
 from backend.infrastructure.repositories.finn_v2_verified_response_repository import FinnV2VerifiedResponseRepository
+from backend.domain.finn_v2_contract import normalize_interaction_mode
 from backend.schemas.finn_v2_delivery_schema import FinnV2DeliveryEnvelope
 from backend.schemas.finn_v2_orchestrator_schema import ORCHESTRATOR_VERSION, OrchestratorResult
 from backend.schemas.finn_v2_policy_schema import POLICY_VERSION, FinnV2PolicyDecision
@@ -206,7 +207,7 @@ class FinnV2ResponseVerifierService:
                 )
 
         proposal_id = None
-        if draft.proposal_candidate is not None and draft.mode in {"PROPOSAL", "ACTION"} and verifier.proposal_ok and verifier.policy_ok:
+        if draft.proposal_candidate is not None and normalize_interaction_mode(draft.mode) in {"CREATE_PROPOSAL", "ACTION_PROPOSAL"} and verifier.proposal_ok and verifier.policy_ok:
             proposal_id = await self._create_draft_proposal(
                 run=run,
                 policy=policy,
@@ -220,7 +221,7 @@ class FinnV2ResponseVerifierService:
             draft=draft,
             verifier=verifier,
             proposal_id=proposal_id,
-            confirmation_required=bool(policy.confirmation_required and draft.mode in {"PROPOSAL", "ACTION"}),
+            confirmation_required=bool(policy.confirmation_required and normalize_interaction_mode(draft.mode) in {"CREATE_PROPOSAL", "ACTION_PROPOSAL"}),
         )
         await self._append_trace(trace_id=trace_id, run_id=run.id, user_id=run.user_id, event_type="response_verification_completed", payload={"verifier_result_id": verifier.verifier_result_id, "action": verifier.action, "passed": verifier.passed, "reason_codes": verifier.reason_codes})
         await self._append_trace(trace_id=trace_id, run_id=run.id, user_id=run.user_id, event_type="verified_response_persisted", payload={"verified_response_id": persisted.verified_response_id, "mode": persisted.mode, "verifier_status": persisted.verifier_status})
@@ -330,7 +331,7 @@ class FinnV2ResponseVerifierService:
             reason_codes.append("follow_up_invalid")
 
         policy_ok = bool(policy.allowed)
-        if draft.mode in {"PROPOSAL", "ACTION"} and not policy.proposal_allowed:
+        if normalize_interaction_mode(draft.mode) in {"CREATE_PROPOSAL", "ACTION_PROPOSAL"} and not policy.proposal_allowed:
             policy_ok = False
         if not policy_ok:
             reason_codes.append("policy_violation")
@@ -422,7 +423,7 @@ class FinnV2ResponseVerifierService:
 
     async def _persist_verified_response(self, *, run, draft: ResponseDraft, verifier: VerifierResult, proposal_id: Optional[str], confirmation_required: bool) -> VerifiedResponse:
         verifier_status = "repaired" if verifier.action == "deliver" and verifier.reason_codes else "passed"
-        if draft.mode in {"FACT", "CAPABILITY", "CLARIFICATION", "UNAVAILABLE"} and verifier.reason_codes:
+        if normalize_interaction_mode(draft.mode) in {"READ", "CAPABILITY", "CLARIFICATION", "UNAVAILABLE"} and verifier.reason_codes:
             verifier_status = "downgraded"
         verifier_row = await self.verifiers.create(
             id=verifier.verifier_result_id,
@@ -608,7 +609,7 @@ class FinnV2ResponseVerifierService:
 
     def _mode_purity_ok(self, draft: ResponseDraft) -> bool:
         text = f"{draft.direct_answer} {draft.main_observation}".lower()
-        if draft.mode == "FACT":
+        if normalize_interaction_mode(draft.mode) == "READ":
             return not any(
                 token in text
                 for token in ["saved", "opgeslagen", "aangepast", "uitgevoerd", "executed", "order geplaatst"]
@@ -628,11 +629,11 @@ class FinnV2ResponseVerifierService:
                 "order",
             ]
             return draft.proposal_candidate is None and not any(token in text for token in disallowed)
-        if draft.mode == "CLARIFICATION":
+        if normalize_interaction_mode(draft.mode) == "CLARIFICATION":
             return bool(draft.follow_up_question) and draft.proposal_candidate is None
-        if draft.mode == "UNAVAILABLE":
+        if normalize_interaction_mode(draft.mode) == "UNAVAILABLE":
             return draft.proposal_candidate is None
-        if draft.mode in {"PROPOSAL", "ACTION"}:
+        if normalize_interaction_mode(draft.mode) in {"CREATE_PROPOSAL", "ACTION_PROPOSAL"}:
             return "uitgevoerd" not in text and "already live" not in text
         return True
 
@@ -656,7 +657,7 @@ class FinnV2ResponseVerifierService:
         candidate = draft.proposal_candidate
         if candidate is None:
             return True
-        if draft.mode not in {"PROPOSAL", "ACTION"}:
+        if normalize_interaction_mode(draft.mode) not in {"CREATE_PROPOSAL", "ACTION_PROPOSAL"}:
             return False
         if policy.operation_type and candidate.operation_type != policy.operation_type:
             return False
@@ -712,7 +713,7 @@ class FinnV2ResponseVerifierService:
             return "downgrade_to_fact"
         if "follow_up_invalid" in reason_codes:
             return "downgrade_to_clarification"
-        if draft.mode in {"PROPOSAL", "ACTION"}:
+        if normalize_interaction_mode(draft.mode) in {"CREATE_PROPOSAL", "ACTION_PROPOSAL"}:
             return "downgrade_to_unavailable"
         return "reject"
 

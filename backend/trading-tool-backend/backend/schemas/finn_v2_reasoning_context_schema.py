@@ -5,6 +5,8 @@ from typing import Any, Dict, List, Literal, Optional
 
 from pydantic import BaseModel, Field, constr, validator
 
+from backend.domain.finn_v2_contract import normalize_interaction_mode
+
 
 REASONING_CONTEXT_VERSION = "2026-08-17.block6"
 
@@ -58,7 +60,17 @@ class ReasoningContextPackage(BaseModel):
     user_id: int
     user_message: str
     locale: str
-    interaction_mode: Literal["FACT", "CAPABILITY", "EVALUATION", "PROPOSAL", "ACTION", "CLARIFICATION", "UNAVAILABLE"]
+    interaction_mode: Literal[
+        "CAPABILITY",
+        "READ",
+        "EVALUATE",
+        "CREATE_PROPOSAL",
+        "ACTION_PROPOSAL",
+        "CLARIFICATION",
+        "CONFIRMATION",
+        "EXECUTION",
+        "UNAVAILABLE",
+    ]
     subject_scopes: List[str] = Field(default_factory=list)
     required_domains: List[str] = Field(default_factory=list)
     orchestrator_result_id: str
@@ -80,6 +92,10 @@ class ReasoningContextPackage(BaseModel):
         if len(ids) != len(set(ids)):
             raise ValueError("duplicate_evidence_ids")
         return value
+
+    @validator("interaction_mode", pre=True)
+    def _normalize_mode(cls, value: str) -> str:
+        return normalize_interaction_mode(value)
 
     class Config:
         extra = "forbid"

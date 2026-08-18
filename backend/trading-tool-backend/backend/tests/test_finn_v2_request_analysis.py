@@ -12,7 +12,7 @@ def test_request_analysis_handles_integral_plan_evaluation():
         )
     )
 
-    assert result.interaction_mode == "EVALUATION"
+    assert result.interaction_mode == "EVALUATE"
     assert result.subject_scopes == ["profile", "indicators", "setup", "strategy", "bot"]
     assert result.explicit_asset == "BTC"
     assert result.requires_gap_analysis is True
@@ -21,7 +21,7 @@ def test_request_analysis_handles_integral_plan_evaluation():
 def test_request_analysis_handles_strategy_fit_question():
     result = SERVICE.analyze(message="Past mijn huidige BTC-strategie bij mijn risicoprofiel en tradingstijl?")
 
-    assert result.interaction_mode == "EVALUATION"
+    assert result.interaction_mode == "EVALUATE"
     assert result.subject_scopes == ["profile", "strategy"]
     assert result.explicit_asset == "BTC"
 
@@ -29,7 +29,7 @@ def test_request_analysis_handles_strategy_fit_question():
 def test_request_analysis_handles_indicator_gap_question():
     result = SERVICE.analyze(message="Welke indicatoren heb ik ingesteld en welk belangrijk perspectief ontbreekt nog?")
 
-    assert result.interaction_mode == "EVALUATION"
+    assert result.interaction_mode == "EVALUATE"
     assert result.subject_scopes == ["indicators"]
     assert result.requires_gap_analysis is True
 
@@ -40,7 +40,7 @@ def test_request_analysis_handles_setup_strategy_and_bot_facts():
     bot_result = SERVICE.analyze(message="Welke bot is aan deze strategie gekoppeld?")
     status_result = SERVICE.analyze(message="Staat mijn gekoppelde bot live?")
 
-    assert setup_result.interaction_mode == "FACT"
+    assert setup_result.interaction_mode == "READ"
     assert setup_result.subject_scopes == ["setup"]
     assert strategy_result.subject_scopes == ["setup", "strategy"]
     assert bot_result.subject_scopes == ["strategy", "bot"]

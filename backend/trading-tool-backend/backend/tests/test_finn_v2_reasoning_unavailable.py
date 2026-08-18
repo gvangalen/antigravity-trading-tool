@@ -286,7 +286,7 @@ def test_reasoning_uses_grounded_evaluation_fallback_on_provider_error(monkeypat
     result = asyncio.run(service.reason(user_id=7, run_id="run-eval-1", trace_id="trace-eval-1"))
 
     assert result["status"] == "ready"
-    assert result["mode"] == "EVALUATION"
+    assert result["mode"] == "EVALUATE"
     assert "BTC-plan" in result["result"].direct_answer
     assert result["result"].next_step is not None
     assert set(result["result"].evidence_refs_used) == {"E1", "E2", "E3", "E4", "E5", "E6"}

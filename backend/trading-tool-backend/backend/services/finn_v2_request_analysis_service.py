@@ -51,8 +51,8 @@ class FinnV2RequestAnalysisService:
             token in normalized
             for token in ["vergelijk", "compare", "versus", "vs", "past", "fit", "conflict", "risico", "risk"]
         )
-        requests_change = interaction_mode in {"PROPOSAL", "ACTION"}
-        requests_execution = interaction_mode == "ACTION"
+        requests_change = interaction_mode in {"CREATE_PROPOSAL", "ACTION_PROPOSAL", "CONFIRMATION", "EXECUTION"}
+        requests_execution = interaction_mode == "EXECUTION"
 
         if interaction_mode == "CAPABILITY":
             scopes = ["capability"]
@@ -80,7 +80,7 @@ class FinnV2RequestAnalysisService:
             confidence=confidence,
             matched_signals=matched_signals,
             unresolved_signals=unresolved_signals,
-            reasoning_required=interaction_mode in {"CAPABILITY", "EVALUATION", "PROPOSAL", "ACTION"},
+            reasoning_required=interaction_mode in {"CAPABILITY", "READ", "EVALUATE", "CREATE_PROPOSAL", "ACTION_PROPOSAL", "CONFIRMATION", "EXECUTION"},
         )
 
     def _subject_scopes(self, normalized: str, matched_signals: List[str]) -> List[str]:
@@ -119,8 +119,10 @@ class FinnV2RequestAnalysisService:
         ):
             matched_signals.append("mode:unavailable_financial_context")
             return "UNAVAILABLE"
-        action_tokens = ["zet", "activeer", "voer", "execute", "activate", "run this", "go live", "zet live"]
-        proposal_tokens = ["voeg", "add", "maak een voorstel", "proposal", "aanpassen", "wijzig", "change", "adjust"]
+        execution_tokens = ["bevestig", "confirm", "voer nu uit", "execute now", "nu uitvoeren"]
+        confirmation_tokens = ["kan je dit bevestigen", "bevestiging", "confirmation", "wil je bevestigen"]
+        action_tokens = ["zet", "activeer", "voer", "execute", "activate", "run this", "go live", "zet live", "voeg toe aan mijn watchlist", "add to my watchlist"]
+        proposal_tokens = ["voeg", "add", "maak een voorstel", "proposal", "aanpassen", "wijzig", "change", "adjust", "maak een setup", "create setup"]
         evaluation_tokens = [
             "beoordeel",
             "evaluate",
@@ -136,23 +138,29 @@ class FinnV2RequestAnalysisService:
             "vergelijk",
             "conflict",
         ]
-        fact_tokens = ["welke", "what", "which", "staat", "is", "wat", "who", "where"]
+        read_tokens = ["welke", "what", "which", "staat", "is", "wat", "who", "where", "bekijk", "toon", "show"]
 
+        if any(token in normalized for token in execution_tokens):
+            matched_signals.append("mode:execution")
+            return "EXECUTION"
+        if any(token in normalized for token in confirmation_tokens):
+            matched_signals.append("mode:confirmation")
+            return "CONFIRMATION"
         if any(token in normalized for token in action_tokens):
-            matched_signals.append("mode:action")
-            return "ACTION"
+            matched_signals.append("mode:action_proposal")
+            return "ACTION_PROPOSAL"
         if any(token in normalized for token in proposal_tokens):
-            matched_signals.append("mode:proposal")
-            return "PROPOSAL"
+            matched_signals.append("mode:create_proposal")
+            return "CREATE_PROPOSAL"
         if any(token in normalized for token in evaluation_tokens):
-            matched_signals.append("mode:evaluation")
-            return "EVALUATION"
-        if scopes and any(token in normalized for token in fact_tokens):
-            matched_signals.append("mode:fact")
-            return "FACT"
+            matched_signals.append("mode:evaluate")
+            return "EVALUATE"
+        if scopes and any(token in normalized for token in read_tokens):
+            matched_signals.append("mode:read")
+            return "READ"
         if scopes:
-            matched_signals.append("mode:fact_inferred")
-            return "FACT"
+            matched_signals.append("mode:read_inferred")
+            return "READ"
         return "UNAVAILABLE"
 
     def _extract_asset(self, original: str, normalized: str) -> Optional[str]:

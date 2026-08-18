@@ -42,9 +42,9 @@ class FinnV2DomainRequirementService:
             optional_domains.extend(mapping["optional"])
             reasons.append(f"{scope}->{','.join(mapping['required'])}")
 
-        if analysis.interaction_mode in {"PROPOSAL", "ACTION"}:
+        if analysis.interaction_mode in {"CREATE_PROPOSAL", "ACTION_PROPOSAL", "CONFIRMATION", "EXECUTION"}:
             reasons.append("read_only_context_for_change_intent")
-        if analysis.interaction_mode == "EVALUATION" and "strategy" in analysis.subject_scopes and "profile" in analysis.subject_scopes:
+        if analysis.interaction_mode == "EVALUATE" and "strategy" in analysis.subject_scopes and "profile" in analysis.subject_scopes:
             required_domains.extend(["identity_context", "plan_context"])
             reasons.append("strategy_fit_requires_identity_and_plan")
         return DomainRequirementPlan(
