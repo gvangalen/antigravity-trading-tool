@@ -20,6 +20,12 @@ class FinnV2ReasoningPromptService:
     SCHEMA_VERSION = FINN_V2_REASONING_SCHEMA_VERSION
     MODE_INSTRUCTIONS = {
         "FACT": "Answer the exact factual question directly, without extra unsolicited advice.",
+        "CAPABILITY": (
+            "Answer only with capabilities that are explicitly present in the internal capability registry. "
+            "Do not invent product features, financial conclusions, or execution behavior. "
+            "Explain briefly what FINN can help with today, mention that answers become more specific with more context, "
+            "and give at most one relevant next step."
+        ),
         "EVALUATION": "Evaluate the exact question across the relevant domains and provide one best next step.",
         "PROPOSAL": "Prepare a controlled draft concept only; do not imply any change was executed.",
         "ACTION": "Interpret the intent safely, prepare a non-executed draft, and respect confirmation boundaries.",

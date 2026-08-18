@@ -42,7 +42,7 @@ def test_reasoning_prompt_contains_injection_boundary_and_versions():
     assert service.PROMPT_VERSION in prompt
 
 
-@pytest.mark.parametrize("mode", ["FACT", "EVALUATION", "PROPOSAL", "ACTION", "UNAVAILABLE"])
+@pytest.mark.parametrize("mode", ["FACT", "CAPABILITY", "EVALUATION", "PROPOSAL", "ACTION", "UNAVAILABLE"])
 def test_reasoning_prompt_builds_system_prompt_for_every_context_mode(mode):
     service = FinnV2ReasoningPromptService()
 
@@ -70,6 +70,16 @@ def test_reasoning_prompt_unavailable_instruction_guides_capability_answers():
     assert "Do not invent any financial conclusion" in instruction
     assert "what FINN can help with" in instruction
     assert "at most one relevant next step" in instruction
+
+
+def test_reasoning_prompt_capability_instruction_requires_registry_grounding():
+    service = FinnV2ReasoningPromptService()
+
+    instruction = service.mode_instruction_for("CAPABILITY")
+
+    assert "internal capability registry" in instruction
+    assert "Do not invent product features" in instruction
+    assert "give at most one relevant next step" in instruction
 
 
 def test_reasoning_prompt_raises_explicit_contract_error_for_unknown_mode():

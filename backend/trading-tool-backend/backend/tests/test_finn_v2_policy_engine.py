@@ -71,6 +71,7 @@ def test_policy_mapping_for_fact_evaluation_proposal_and_actions():
     import asyncio
 
     fact = asyncio.run(_evaluate("Welke setup gebruik ik voor BTC?"))
+    capability = asyncio.run(_evaluate("Hoi FINN, wat kun je voor mij doen?", "CAPABILITY"))
     evaluation = asyncio.run(_evaluate("Past mijn huidige BTC-strategie bij mijn risicoprofiel?", "EVALUATION"))
     proposal = asyncio.run(_evaluate("Voeg DXY toe.", "PROPOSAL"))
     paper = asyncio.run(_evaluate("Activeer mijn paper bot.", "ACTION", "activate_paper_bot"))
@@ -79,6 +80,9 @@ def test_policy_mapping_for_fact_evaluation_proposal_and_actions():
 
     assert isinstance(fact, FinnV2PolicyDecision)
     assert fact.policy_class == "read"
+    assert capability.policy_class == "read"
+    assert capability.allowed is True
+    assert capability.reasons == ["capability_registry_read_only"]
     assert evaluation.policy_class == "advice"
     assert proposal.policy_class == "proposal"
     assert proposal.proposal_input_required is True

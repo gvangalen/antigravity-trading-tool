@@ -53,3 +53,25 @@ def test_request_analysis_marks_non_financial_question_unavailable():
     assert result.interaction_mode == "UNAVAILABLE"
     assert result.subject_scopes == ["unknown"]
     assert "financial_domain_unavailable" in result.unresolved_signals
+
+
+def test_request_analysis_routes_dutch_capability_question_to_capability_mode():
+    result = SERVICE.analyze(message="Hoi FINN, wat kun je voor mij doen?")
+
+    assert result.interaction_mode == "CAPABILITY"
+    assert result.subject_scopes == ["capability"]
+    assert result.reasoning_required is True
+
+
+def test_request_analysis_routes_english_capability_question_to_capability_mode():
+    result = SERVICE.analyze(message="What can FINN do for me?")
+
+    assert result.interaction_mode == "CAPABILITY"
+    assert result.subject_scopes == ["capability"]
+
+
+def test_request_analysis_keeps_incomplete_financial_question_unavailable():
+    result = SERVICE.analyze(message="Wat is nu de beste trade voor mij zonder verdere context?")
+
+    assert result.interaction_mode == "UNAVAILABLE"
+    assert "financial_domain_unavailable" in result.unresolved_signals

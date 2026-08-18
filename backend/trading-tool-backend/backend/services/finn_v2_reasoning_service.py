@@ -25,6 +25,7 @@ from backend.schemas.finn_v2_reasoning_schema import (
     ReasoningResult,
 )
 from backend.services.finn_v2_flag_service import FinnV2FlagService
+from backend.services.finn_v2_capability_registry_service import FinnV2CapabilityRegistryService
 from backend.services.finn_v2_json_safety import to_json_safe
 from backend.services.finn_v2_reasoning_context_service import FinnV2ReasoningContextService
 from backend.services.finn_v2_reasoning_fallback_service import FinnV2ReasoningFallbackService
@@ -52,6 +53,7 @@ class FinnV2ReasoningService:
             max_evidence_items=self.flags.reasoning_max_evidence_items(),
             max_context_bytes=self.flags.reasoning_max_context_bytes(),
         )
+        self.capabilities = FinnV2CapabilityRegistryService()
         self.prompts = FinnV2ReasoningPromptService()
         self.fallbacks = FinnV2ReasoningFallbackService()
 
@@ -82,7 +84,7 @@ class FinnV2ReasoningService:
                     "confidence": "medium",
                     "matched_signals": [],
                     "unresolved_signals": [],
-                    "reasoning_required": orchestrator_row.interaction_mode in {"EVALUATION", "PROPOSAL", "ACTION"},
+                    "reasoning_required": orchestrator_row.interaction_mode in {"CAPABILITY", "EVALUATION", "PROPOSAL", "ACTION"},
                     "analysis_version": orchestrator_row.analysis_version,
                 },
                 "domain_requirements": {
@@ -157,6 +159,37 @@ class FinnV2ReasoningService:
         context = await self.contexts.build(run=run, orchestrator_result=orchestrator_result, snapshot=snapshot, validation=validation, policy=policy)
         model_name = self._resolved_model()
         input_hash = self.contexts.input_hash(context, prompt_version=self.prompts.PROMPT_VERSION, model=model_name)
+
+        if context.interaction_mode == "CAPABILITY":
+            result = self.capabilities.build_reasoning_result(
+                run_id=run_id,
+                user_id=user_id,
+                user_message=run.message,
+                locale=context.locale,
+                model=model_name,
+                missing_context=getattr(run, "client_context_json", {}).get("missing_context") or [],
+                asset=getattr(run, "client_context_json", {}).get("asset") or getattr(run, "workspace_hints_json", {}).get("asset"),
+                profile_completed=not bool(getattr(run, "client_context_json", {}).get("trader_profile_used") is False),
+            )
+            await self._append_trace(run_id, user_id, trace_id, "reasoning_capability_registry", context, model_name, "ready", 0, 0, input_hash, [])
+            return await self._persist_record(
+                run_id=run_id,
+                user_id=user_id,
+                orchestrator_result_id=orchestrator_result.orchestrator_result_id,
+                policy_decision_id=policy.policy_decision_id,
+                snapshot_id=snapshot.id,
+                validation_id=validation.id,
+                status="ready",
+                mode=result.mode,
+                context_version=context.context_version,
+                evidence_set_hash=context.evidence_set_hash,
+                input_hash=input_hash,
+                model=model_name,
+                result=result,
+                error_codes=[],
+                retry_count=0,
+            )
+
         reused = await self.reasoning.get_reusable_result(
             run_id=run_id,
             user_id=user_id,

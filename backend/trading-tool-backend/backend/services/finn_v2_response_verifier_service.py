@@ -34,6 +34,7 @@ from backend.schemas.finn_v2_reasoning_schema import PersistedReasoningRecord, R
 from backend.schemas.finn_v2_response_schema import FINN_V2_VERIFIED_RESPONSE_VERSION, ResponseDraft, VerifiedResponse
 from backend.schemas.finn_v2_verifier_schema import ClaimVerification, CoverageVerification, SemanticVerificationResult, VerifierResult
 from backend.services.finn_v2_flag_service import FinnV2FlagService
+from backend.services.finn_v2_capability_registry_service import FinnV2CapabilityRegistryService
 from backend.services.finn_v2_json_safety import to_json_safe
 from backend.services.finn_v2_proposal_service import FinnV2ProposalService
 from backend.services.finn_v2_reasoning_context_service import FinnV2ReasoningContextService
@@ -71,6 +72,7 @@ class FinnV2ResponseVerifierService:
     def __init__(self, session: AsyncSession, *, flag_service: Optional[FinnV2FlagService] = None):
         self.session = session
         self.flags = flag_service or FinnV2FlagService()
+        self.capabilities = FinnV2CapabilityRegistryService()
         self.runs = FinnV2RunRepository(session)
         self.orchestrators = FinnV2OrchestratorRepository(session)
         self.policies = FinnV2PolicyRepository(session)
@@ -288,6 +290,9 @@ class FinnV2ResponseVerifierService:
 
         required_scopes = [scope for scope in orchestrator_result.analysis.subject_scopes if scope != "unknown"]
         covered_scopes.update(self._covered_scopes_from_draft(draft, evidence_by_ref))
+        capability_grounding_ok = self._capability_grounding_ok(draft)
+        if draft.mode == "CAPABILITY" and capability_grounding_ok:
+            covered_scopes.add("capability")
         missing_scopes = [scope for scope in required_scopes if scope not in covered_scopes]
         coverage = CoverageVerification(
             required_scopes=required_scopes,
@@ -305,6 +310,9 @@ class FinnV2ResponseVerifierService:
         mode_purity_ok = self._mode_purity_ok(draft)
         if not mode_purity_ok:
             reason_codes.append("mode_purity_violation")
+
+        if draft.mode == "CAPABILITY" and not capability_grounding_ok:
+            reason_codes.append("capability_claim_not_registered")
 
         uncertainty_ok = self._uncertainty_ok(draft, context)
         if not uncertainty_ok:
@@ -405,7 +413,7 @@ class FinnV2ResponseVerifierService:
 
     async def _persist_verified_response(self, *, run, draft: ResponseDraft, verifier: VerifierResult, proposal_id: Optional[str], confirmation_required: bool) -> VerifiedResponse:
         verifier_status = "repaired" if verifier.action == "deliver" and verifier.reason_codes else "passed"
-        if draft.mode in {"FACT", "CLARIFICATION", "UNAVAILABLE"} and verifier.reason_codes:
+        if draft.mode in {"FACT", "CAPABILITY", "CLARIFICATION", "UNAVAILABLE"} and verifier.reason_codes:
             verifier_status = "downgraded"
         verifier_row = await self.verifiers.create(
             id=verifier.verifier_result_id,
@@ -577,6 +585,21 @@ class FinnV2ResponseVerifierService:
                 token in text
                 for token in ["saved", "opgeslagen", "aangepast", "uitgevoerd", "executed", "order geplaatst"]
             ) and draft.proposal_candidate is None
+        if draft.mode == "CAPABILITY":
+            disallowed = [
+                "koop",
+                "kopen",
+                "verkoop",
+                "buy",
+                "sell",
+                "long",
+                "short",
+                "instappen",
+                "uitstappen",
+                "trade",
+                "order",
+            ]
+            return draft.proposal_candidate is None and not any(token in text for token in disallowed)
         if draft.mode == "CLARIFICATION":
             return bool(draft.follow_up_question) and draft.proposal_candidate is None
         if draft.mode == "UNAVAILABLE":
@@ -655,6 +678,31 @@ class FinnV2ResponseVerifierService:
         if draft.mode in {"PROPOSAL", "ACTION"}:
             return "downgrade_to_unavailable"
         return "reject"
+
+    def _capability_grounding_ok(self, draft: ResponseDraft) -> bool:
+        if draft.mode != "CAPABILITY":
+            return True
+        if draft.proposal_candidate is not None or draft.claims:
+            return False
+        allowed_titles = self.capabilities.claimable_titles()
+        point_titles = {point.title for point in draft.supporting_points}
+        if not point_titles:
+            return False
+        if not point_titles.issubset(allowed_titles):
+            return False
+        text = f"{draft.direct_answer}\n{draft.main_observation}".casefold()
+        forbidden_claims = [
+            "garantie",
+            "guarantee",
+            "altijd winst",
+            "profit",
+            "buy now",
+            "sell now",
+            "koop nu",
+            "verkoop nu",
+            "live order",
+        ]
+        return not any(token in text for token in forbidden_claims)
 
     def _default_uncertainty(self, validation, context) -> str:
         if context.uncertainty_codes:
@@ -740,7 +788,7 @@ class FinnV2ResponseVerifierService:
                     "confidence": "medium",
                     "matched_signals": [],
                     "unresolved_signals": [],
-                    "reasoning_required": row.interaction_mode in {"EVALUATION", "PROPOSAL", "ACTION"},
+                    "reasoning_required": row.interaction_mode in {"CAPABILITY", "EVALUATION", "PROPOSAL", "ACTION"},
                     "analysis_version": row.analysis_version,
                 },
                 "domain_requirements": {

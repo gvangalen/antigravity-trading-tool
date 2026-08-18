@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field, constr
 
 InteractionMode = Literal[
     "FACT",
+    "CAPABILITY",
     "EVALUATION",
     "PROPOSAL",
     "ACTION",

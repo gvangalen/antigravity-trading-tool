@@ -7,6 +7,7 @@ from typing import Any, Dict, Mapping, Optional, Tuple
 
 INTERACTION_MODES: Tuple[str, ...] = (
     "FACT",
+    "CAPABILITY",
     "EVALUATION",
     "PROPOSAL",
     "ACTION",

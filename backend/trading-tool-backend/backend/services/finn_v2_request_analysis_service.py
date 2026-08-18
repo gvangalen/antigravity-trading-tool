@@ -4,6 +4,7 @@ import re
 from typing import Dict, List, Optional
 
 from backend.schemas.finn_v2_orchestrator_schema import RequestAnalysisResult
+from backend.services.finn_v2_capability_registry_service import FinnV2CapabilityRegistryService
 
 
 class FinnV2RequestAnalysisService:
@@ -17,6 +18,9 @@ class FinnV2RequestAnalysisService:
         "SOLANA": "SOL",
         "SOL": "SOL",
     }
+
+    def __init__(self):
+        self.capabilities = FinnV2CapabilityRegistryService()
 
     def analyze(
         self,
@@ -48,7 +52,9 @@ class FinnV2RequestAnalysisService:
         requests_change = interaction_mode in {"PROPOSAL", "ACTION"}
         requests_execution = interaction_mode == "ACTION"
 
-        if not scopes:
+        if interaction_mode == "CAPABILITY":
+            scopes = ["capability"]
+        elif not scopes:
             scopes = ["unknown"]
             unresolved_signals.append("no_financial_scope_detected")
         if interaction_mode == "UNAVAILABLE":
@@ -70,11 +76,12 @@ class FinnV2RequestAnalysisService:
             confidence=confidence,
             matched_signals=matched_signals,
             unresolved_signals=unresolved_signals,
-            reasoning_required=interaction_mode in {"EVALUATION", "PROPOSAL", "ACTION"},
+            reasoning_required=interaction_mode in {"CAPABILITY", "EVALUATION", "PROPOSAL", "ACTION"},
         )
 
     def _subject_scopes(self, normalized: str, matched_signals: List[str]) -> List[str]:
         scope_keywords = {
+            "capability": ["wat kun je", "where can you help", "what can you do", "wat doet finn", "how can you help"],
             "profile": ["profiel", "profile", "risicoprofiel", "risk profile", "tradingstijl", "trading style", "stijl"],
             "analysis": ["analyse", "analysis", "markt", "market", "macro", "technical", "technisch", "context"],
             "indicators": ["indicator", "indicatoren", "indicators", "rsi", "macd", "dxy"],
@@ -93,6 +100,21 @@ class FinnV2RequestAnalysisService:
         return scopes
 
     def _interaction_mode(self, normalized: str, scopes: List[str], matched_signals: List[str]) -> str:
+        if self.capabilities.is_capability_question(normalized):
+            matched_signals.append("mode:capability")
+            return "CAPABILITY"
+        unavailable_financial_tokens = [
+            "beste trade",
+            "best trade",
+            "wat moet ik kopen",
+            "what should i buy",
+            "wat moet ik traden",
+        ]
+        if any(token in normalized for token in unavailable_financial_tokens) and not any(
+            scope in scopes for scope in {"profile", "indicators", "setup", "strategy", "bot", "portfolio"}
+        ):
+            matched_signals.append("mode:unavailable_financial_context")
+            return "UNAVAILABLE"
         action_tokens = ["zet", "activeer", "voer", "execute", "activate", "run this", "go live", "zet live"]
         proposal_tokens = ["voeg", "add", "maak een voorstel", "proposal", "aanpassen", "wijzig", "change", "adjust"]
         evaluation_tokens = [

@@ -58,7 +58,7 @@ class ReasoningContextPackage(BaseModel):
     user_id: int
     user_message: str
     locale: str
-    interaction_mode: Literal["FACT", "EVALUATION", "PROPOSAL", "ACTION", "UNAVAILABLE"]
+    interaction_mode: Literal["FACT", "CAPABILITY", "EVALUATION", "PROPOSAL", "ACTION", "UNAVAILABLE"]
     subject_scopes: List[str] = Field(default_factory=list)
     required_domains: List[str] = Field(default_factory=list)
     orchestrator_result_id: str

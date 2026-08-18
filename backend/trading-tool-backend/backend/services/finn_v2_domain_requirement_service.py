@@ -21,6 +21,13 @@ class FinnV2DomainRequirementService:
         optional_domains: list[str] = []
         reasons: list[str] = []
 
+        if analysis.interaction_mode == "CAPABILITY":
+            return DomainRequirementPlan(
+                required_domains=[],
+                optional_domains=[],
+                requirement_reason=["capability_registry_read_only"],
+            )
+
         for scope in analysis.subject_scopes:
             mapping = self._MAPPING.get(scope)
             if mapping is None:

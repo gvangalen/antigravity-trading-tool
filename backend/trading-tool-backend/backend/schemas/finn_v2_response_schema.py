@@ -27,7 +27,7 @@ class ResponseDraft(BaseModel):
     draft_id: str
     run_id: str
     user_id: int
-    mode: Literal["FACT", "EVALUATION", "PROPOSAL", "ACTION", "CLARIFICATION", "UNAVAILABLE"]
+    mode: Literal["FACT", "CAPABILITY", "EVALUATION", "PROPOSAL", "ACTION", "CLARIFICATION", "UNAVAILABLE"]
     direct_answer: constr(min_length=1, max_length=1200)
     main_observation: constr(min_length=1, max_length=500)
     supporting_points: List[ReasoningSupportingPoint] = Field(default_factory=list, max_items=4)
@@ -67,7 +67,7 @@ class VerifiedResponse(BaseModel):
     verified_response_id: str
     run_id: str
     user_id: int
-    mode: Literal["FACT", "EVALUATION", "PROPOSAL", "ACTION", "CLARIFICATION", "UNAVAILABLE"]
+    mode: Literal["FACT", "CAPABILITY", "EVALUATION", "PROPOSAL", "ACTION", "CLARIFICATION", "UNAVAILABLE"]
     direct_answer: constr(min_length=1, max_length=1200)
     main_observation: constr(min_length=1, max_length=500)
     supporting_points: List[ReasoningSupportingPoint] = Field(default_factory=list, max_items=4)

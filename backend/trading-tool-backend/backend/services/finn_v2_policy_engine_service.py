@@ -66,6 +66,12 @@ class FinnV2PolicyEngineService:
             allowed = orchestrator_result.outcome == "reasoning_ready"
             if not allowed:
                 blocks.append("orchestrator_not_ready")
+        elif mode == "CAPABILITY":
+            policy_class = "read"
+            allowed = orchestrator_result.outcome == "reasoning_ready"
+            if not allowed:
+                blocks.append("orchestrator_not_ready")
+            reasons.append("capability_registry_read_only")
         elif mode == "EVALUATION":
             policy_class = "advice"
             allowed = orchestrator_result.outcome == "reasoning_ready"

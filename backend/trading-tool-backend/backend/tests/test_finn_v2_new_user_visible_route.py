@@ -87,8 +87,8 @@ def test_assistant_chat_v2_only_new_user_returns_verified_v2_envelope(monkeypatc
 
     async def _visible_delivery(**kwargs):
         return {
-            "response": "Ik help je met je profiel, asset, setup en strategie.",
-            "intent": "unavailable",
+            "response": "Ik kan je helpen om je profiel, assets, setup en strategie te begrijpen en veilige vervolgstappen voor te bereiden.",
+            "intent": "capability",
             "state": {"current_flow": "finn_v2_visible", "run_id": "run-new-user", "surface": "assistant"},
             "summary": "Nieuwe user veilig op V2 afgehandeld.",
             "can_confirm": False,
@@ -101,9 +101,9 @@ def test_assistant_chat_v2_only_new_user_returns_verified_v2_envelope(monkeypatc
                 "selected_handler": "FinnV2VisibleDeliveryService.deliver_assistant_envelope",
                 "response_source": "finn_v2_verified",
                 "validation_result": {"validation_id": "validation-1", "integrity_status": "valid"},
-                "reasoning_result": {"reasoning_result_id": "reasoning-1", "status": "completed"},
+                "reasoning_result": {"reasoning_result_id": "reasoning-1", "status": "completed", "mode": "CAPABILITY"},
                 "verifier_result": {"verifier_result_id": "verifier-1", "status": "passed"},
-                "verified_response": {"verified_response_id": "verified-1", "mode": "UNAVAILABLE"},
+                "verified_response": {"verified_response_id": "verified-1", "mode": "CAPABILITY"},
                 "delivery_envelope": {"run_id": "run-new-user", "status": "completed"},
             },
         }
@@ -146,6 +146,7 @@ def test_assistant_chat_v2_only_new_user_returns_verified_v2_envelope(monkeypatc
         assert payload["response_trace"]["pipeline_version"] == "finn_v2"
         assert payload["response_trace"]["router_name"] == "finn_v2_orchestrator"
         assert payload["response_trace"]["selected_handler"] == "FinnV2VisibleDeliveryService.deliver_assistant_envelope"
+        assert payload["response_trace"]["verified_response"]["mode"] == "CAPABILITY"
         assert payload["response_trace"]["verified_response"]["verified_response_id"] == "verified-1"
         assert payload["response_trace"]["reasoning_result"]["reasoning_result_id"] == "reasoning-1"
         assert payload["response_trace"]["verifier_result"]["verifier_result_id"] == "verifier-1"

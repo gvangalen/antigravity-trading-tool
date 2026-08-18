@@ -14,6 +14,7 @@ PLANNING_VERSION = "2026-08-17.block4"
 ORCHESTRATOR_VERSION = "2026-08-17.block4"
 
 SUBJECT_SCOPE_ORDER = [
+    "capability",
     "profile",
     "analysis",
     "indicators",
@@ -38,9 +39,10 @@ CLARIFICATION_PRIORITY = ["asset", "setup", "strategy", "bot"]
 
 
 class RequestAnalysisResult(BaseModel):
-    interaction_mode: Literal["FACT", "EVALUATION", "PROPOSAL", "ACTION", "UNAVAILABLE"]
+    interaction_mode: Literal["FACT", "CAPABILITY", "EVALUATION", "PROPOSAL", "ACTION", "UNAVAILABLE"]
     subject_scopes: List[
         Literal[
+            "capability",
             "profile",
             "analysis",
             "indicators",
