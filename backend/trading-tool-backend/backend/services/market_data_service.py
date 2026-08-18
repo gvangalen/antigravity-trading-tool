@@ -87,9 +87,26 @@ class MarketDataService:
             _FORWARD_RETURN_SYNC_TASKS_LOCK = asyncio.Lock()
         return _FORWARD_RETURN_SYNC_TASKS_LOCK
 
+    async def _get_asset_scope(self, symbol: str) -> dict[str, Any]:
+        normalized_symbol = str(symbol or "BTC").strip().upper() or "BTC"
+
+        async with async_session_factory() as isolated_session:
+            try:
+                asset = await AssetCatalogService(isolated_session).get_asset(normalized_symbol)
+                await isolated_session.rollback()
+                return asset
+            except Exception:
+                await isolated_session.rollback()
+                logger.error(
+                    "❌ Market asset scope lookup failed for %s",
+                    normalized_symbol,
+                    exc_info=True,
+                )
+                return AssetCatalogService(self.session)._fallback_asset(normalized_symbol)
+
     async def get_forward_return_support(self, symbol: str) -> dict[str, Any]:
         normalized_symbol = str(symbol or "").strip().upper()
-        asset_meta = await AssetCatalogService(self.session).get_asset(normalized_symbol)
+        asset_meta = await self._get_asset_scope(normalized_symbol)
         config = FORWARD_RETURN_SYMBOL_SUPPORT.get(normalized_symbol)
         if not config:
             return {
@@ -209,7 +226,10 @@ class MarketDataService:
             targets = list(FORWARD_RETURN_SYMBOL_SUPPORT.keys())
             if asset_class:
                 normalized_class = str(asset_class or "").strip().lower()
-                catalog = await AssetCatalogService(self.session).get_assets(targets)
+                catalog = {
+                    symbol: await self._get_asset_scope(symbol)
+                    for symbol in targets
+                }
                 targets = [
                     symbol for symbol in targets
                     if str(catalog.get(symbol, {}).get("asset_class") or "").strip().lower() == normalized_class
@@ -281,7 +301,7 @@ class MarketDataService:
         normalized_symbol = str(symbol or "").strip().upper() or None
         normalized_asset_class = str(asset_class or "").strip().lower() or None
         if normalized_symbol and not normalized_asset_class:
-            asset = await AssetCatalogService(self.session).get_asset(normalized_symbol)
+            asset = await self._get_asset_scope(normalized_symbol)
             normalized_asset_class = str(asset.get("asset_class") or "").strip().lower() or None
         return normalized_symbol, normalized_asset_class
 
@@ -548,7 +568,7 @@ class MarketDataService:
         if not indicator_name:
             raise HTTPException(400, "❌ Indicator mag niet leeg zijn.")
 
-        asset_scope = await AssetCatalogService(self.session).get_asset(symbol)
+        asset_scope = await self._get_asset_scope(symbol)
         if persist_preference:
             await self.preference_repository.ensure_user_config(
                 user_id,
@@ -566,7 +586,7 @@ class MarketDataService:
         if value is None:
             snapshot = await self.repository.get_latest_snapshot(symbol)
             if not snapshot:
-                asset_meta = await AssetCatalogService(self.session).get_asset(symbol)
+                asset_meta = await self._get_asset_scope(symbol)
                 asset = AssetRecord(**asset_meta)
                 provider = self.provider_registry.resolve_for_asset(asset)
                 live_snapshot = await provider.fetch_latest_snapshot(asset)
@@ -648,7 +668,7 @@ class MarketDataService:
 
     async def delete_user_market_indicator(self, name: str, user_id: int, symbol: str = "BTC") -> dict:
         symbol = symbol.upper() if symbol else "BTC"
-        asset_scope = await AssetCatalogService(self.session).get_asset(symbol)
+        asset_scope = await self._get_asset_scope(symbol)
         await self.preference_repository.remove_user_config(
             user_id,
             normalize_indicator_name(name),

@@ -6,6 +6,7 @@ from types import SimpleNamespace
 from fastapi import HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from backend.infrastructure.database import async_session_factory
 from backend.domain.macro_indicator_catalog import (
     get_active_macro_indicator_definitions,
     get_macro_indicator_definition,
@@ -53,6 +54,23 @@ class MacroDataService:
             return SimpleNamespace(**catalog_def)
         return db_info
 
+    async def _get_asset_scope(self, symbol: str) -> dict[str, Any]:
+        normalized_symbol = str(symbol or "BTC").strip().upper() or "BTC"
+
+        async with async_session_factory() as isolated_session:
+            try:
+                asset = await AssetCatalogService(isolated_session).get_asset(normalized_symbol)
+                await isolated_session.rollback()
+                return asset
+            except Exception:
+                await isolated_session.rollback()
+                logger.error(
+                    "❌ Macro asset scope lookup failed for %s",
+                    normalized_symbol,
+                    exc_info=True,
+                )
+                return AssetCatalogService(self.session)._fallback_asset(normalized_symbol)
+
     async def _resolve_asset_scope(
         self,
         symbol: Optional[str] = None,
@@ -61,7 +79,7 @@ class MacroDataService:
         normalized_symbol = str(symbol or "").strip().upper() or None
         normalized_asset_class = str(asset_class or "").strip().lower() or None
         if normalized_symbol and not normalized_asset_class:
-            asset = await AssetCatalogService(self.session).get_asset(normalized_symbol)
+            asset = await self._get_asset_scope(normalized_symbol)
             normalized_asset_class = str(asset.get("asset_class") or "").strip().lower() or None
         return normalized_symbol, normalized_asset_class
 
@@ -258,7 +276,7 @@ class MacroDataService:
             raise HTTPException(400, "❌ Indicator mag niet leeg zijn.")
 
         normalized_symbol = str(symbol or "").strip().upper() or None
-        asset_scope = await AssetCatalogService(self.session).get_asset(normalized_symbol or "BTC")
+        asset_scope = await self._get_asset_scope(normalized_symbol or "BTC")
         if persist_preference:
             await self.preference_repository.ensure_user_config(
                 user_id,
@@ -423,7 +441,7 @@ class MacroDataService:
 
     async def delete_macro_indicator(self, name: str, user_id: int, symbol: Optional[str] = None) -> dict:
         normalized_symbol = str(symbol or "").strip().upper() or None
-        asset_scope = await AssetCatalogService(self.session).get_asset(normalized_symbol or "BTC")
+        asset_scope = await self._get_asset_scope(normalized_symbol or "BTC")
         await self.preference_repository.remove_user_config(
             user_id,
             normalize_indicator_name(name),

@@ -1,4 +1,5 @@
 import asyncio
+from datetime import datetime
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
@@ -106,6 +107,73 @@ def test_sync_symbol_forward_returns_isolated_rolls_back_failed_sync(monkeypatch
 
     isolated_session.rollback.assert_awaited_once()
     isolated_session.commit.assert_not_awaited()
+
+
+def test_add_user_market_indicator_uses_isolated_asset_scope_lookup(monkeypatch):
+    outer_session = AsyncMock(name="outer_session")
+    isolated_session = AsyncMock(name="isolated_session")
+    service = MarketDataService(outer_session)
+    service.preference_repository = SimpleNamespace(
+        ensure_user_config=AsyncMock(),
+    )
+    service.repository.check_indicator_exists = AsyncMock(return_value=False)
+    service.repository.get_latest_snapshot = AsyncMock(
+        return_value=SimpleNamespace(price=100.0, change_24h=2.5, volume=5000)
+    )
+    service.repository.add_market_data_indicator = AsyncMock(
+        return_value=SimpleNamespace(
+            id=5,
+            name="price",
+            value=100.0,
+            trend="neutral",
+            interpretation="ok",
+            action="hold",
+            score=55,
+            user_id=7,
+            symbol="BTC",
+            timestamp=datetime(2026, 8, 18, 12, 0, 0),
+        )
+    )
+
+    class _FactoryContext:
+        async def __aenter__(self):
+            return isolated_session
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+    monkeypatch.setattr(
+        "backend.services.market_data_service.async_session_factory",
+        lambda: _FactoryContext(),
+    )
+
+    async def fake_get_asset(symbol):
+        assert symbol == "BTC"
+        return {"asset_class": "crypto"}
+
+    async def run():
+        from unittest.mock import patch
+
+        with patch("backend.services.market_data_service.AssetCatalogService") as asset_catalog_cls, patch(
+            "backend.services.onboarding_service.mark_step_completed",
+            AsyncMock(),
+        ):
+            asset_catalog_cls.return_value.get_asset = AsyncMock(side_effect=fake_get_asset)
+            return await service.add_user_market_indicator(7, "price", None, symbol="BTC")
+
+    result = asyncio.run(run())
+
+    assert result.name == "price"
+    assert result.value == 100.0
+    service.preference_repository.ensure_user_config.assert_awaited_once_with(
+        7,
+        "price",
+        category="market",
+        symbol="BTC",
+        asset_class="crypto",
+    )
+    isolated_session.rollback.assert_awaited()
+    outer_session.rollback.assert_not_awaited()
 
 
 def test_get_latest_market_snapshot_falls_back_to_live_provider_when_db_snapshot_is_missing(monkeypatch):
