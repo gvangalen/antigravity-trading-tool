@@ -60,6 +60,24 @@ class FinnV2OrchestratorOutcomeService:
                 unavailable_codes=["orchestrator_missing_validation"],
             )
 
+        if analysis.interaction_mode == "UNAVAILABLE":
+            unavailable_codes = list(analysis.unresolved_signals or []) or ["financial_domain_unavailable"]
+            return OrchestratorResult(
+                orchestrator_result_id=f"finn-v2-orchestrator-{uuid.uuid4().hex}",
+                run_id=run_id,
+                user_id=user_id,
+                analysis=analysis,
+                domain_requirements=domain_requirements,
+                tool_plan=tool_plan,
+                snapshot_id=snapshot_id,
+                validation_id=validation.validation_id,
+                outcome="unavailable",
+                unavailable_codes=unavailable_codes,
+                uncertainty_codes=[],
+                orchestrator_version=ORCHESTRATOR_VERSION,
+                created_at=datetime.now(timezone.utc),
+            )
+
         domain_map = {item.domain: item for item in validation.domains}
         unavailable_codes: list[str] = []
         uncertainty_codes: list[str] = []

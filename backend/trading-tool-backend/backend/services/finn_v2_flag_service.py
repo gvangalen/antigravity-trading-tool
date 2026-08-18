@@ -132,6 +132,9 @@ class FinnV2FlagService:
     def reasoning_timeout_seconds(self) -> int:
         return self._env_int("FINN_V2_REASONING_TIMEOUT_SECONDS", 45)
 
+    def visible_request_timeout_seconds(self) -> int:
+        return max(1, min(10, self._env_int("FINN_V2_VISIBLE_REQUEST_TIMEOUT_SECONDS", 10)))
+
     def reasoning_max_output_tokens(self) -> int:
         return self._env_int("FINN_V2_REASONING_MAX_OUTPUT_TOKENS", 1800)
 

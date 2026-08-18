@@ -36,6 +36,8 @@ class FinnV2RequestAnalysisService:
 
         scopes = self._subject_scopes(normalized, matched_signals)
         interaction_mode = self._interaction_mode(normalized, scopes, matched_signals)
+        if interaction_mode == "UNAVAILABLE" and "mode:unavailable_financial_context" in matched_signals:
+            scopes = []
         explicit_asset = self._extract_asset(text, normalized)
         explicit_setup_id = self._extract_entity_id(text, "setup")
         explicit_strategy_id = self._extract_entity_id(text, "strateg")
@@ -59,6 +61,8 @@ class FinnV2RequestAnalysisService:
             unresolved_signals.append("no_financial_scope_detected")
         if interaction_mode == "UNAVAILABLE":
             unresolved_signals.append("financial_domain_unavailable")
+        if interaction_mode == "UNAVAILABLE" and "mode:unavailable_financial_context" in matched_signals:
+            unresolved_signals.append("insufficient_trade_context")
 
         confidence = self._confidence(scopes=scopes, matched_signals=matched_signals, interaction_mode=interaction_mode)
 

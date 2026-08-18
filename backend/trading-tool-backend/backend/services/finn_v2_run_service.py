@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime, timedelta, timezone
+import asyncio
 from typing import Any, Dict, Optional
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -177,6 +178,9 @@ class FinnV2RunService:
             else:
                 await self.tools.execute_shadow_tool_chain(run_id=run_id, user_id=user_id)
                 await self.complete_run(run_id=run_id, user_id=user_id)
+        except asyncio.CancelledError:
+            logger.warning("FINN V2 lifecycle canceled", extra={"run_id": run_id, "user_id": user_id})
+            raise
         except Exception as exc:
             await self.fail_run(
                 run_id=run_id,

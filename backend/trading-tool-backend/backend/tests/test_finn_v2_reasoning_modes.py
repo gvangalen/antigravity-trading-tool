@@ -20,4 +20,32 @@ def test_clarification_and_unavailable_do_not_need_model_call():
     draft = fallback.deterministic_draft(run_id="run-1", user_id=7, orchestrator_result=orchestrator, model="gpt-test")
 
     assert draft.mode == "CLARIFICATION"
+    assert "nog geen verantwoorde trade" in draft.direct_answer
     assert draft.follow_up_question == "Welke setup bedoel je precies?"
+
+
+def test_unavailable_draft_offers_single_safe_next_step():
+    fallback = FinnV2ReasoningFallbackService()
+    orchestrator = OrchestratorResult(
+        orchestrator_result_id="o-2",
+        run_id="run-2",
+        user_id=7,
+        analysis=RequestAnalysisResult(
+            interaction_mode="UNAVAILABLE",
+            subject_scopes=["unknown"],
+            explicit_asset="BTC",
+            confidence="none",
+            reasoning_required=False,
+        ),
+        domain_requirements=DomainRequirementPlan(),
+        tool_plan=ToolPlan(run_id="run-2", interaction_mode="UNAVAILABLE", max_tool_calls=15),
+        outcome="unavailable",
+        unavailable_codes=["insufficient_trade_context"],
+        created_at=datetime.now(timezone.utc),
+    )
+
+    draft = fallback.deterministic_draft(run_id="run-2", user_id=7, orchestrator_result=orchestrator, model="gpt-test")
+
+    assert draft.mode == "UNAVAILABLE"
+    assert "geen verantwoorde trade" in draft.direct_answer
+    assert draft.follow_up_question == "Wil je eerst je huidige setup voor BTC laten beoordelen?"

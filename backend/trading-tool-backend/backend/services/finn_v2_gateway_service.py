@@ -209,7 +209,27 @@ class FinnV2GatewayService:
             return run.id
         if run.status in {"collecting", "planned"}:
             return run.id
-        await self.run_service.run_foundation_lifecycle(run_id=run.id, user_id=user_id)
+        lifecycle = asyncio.create_task(self.run_service.run_foundation_lifecycle(run_id=run.id, user_id=user_id))
+        try:
+            await asyncio.wait_for(
+                asyncio.shield(lifecycle),
+                timeout=float(self.flags.visible_request_timeout_seconds()),
+            )
+        except asyncio.TimeoutError:
+            lifecycle.cancel()
+            await asyncio.gather(lifecycle, return_exceptions=True)
+            await self.run_service.fail_run(
+                run_id=run.id,
+                user_id=user_id,
+                error_code="visible_request_timeout",
+                error_message="FINN V2 visible lifecycle exceeded the public request budget.",
+                retryable=False,
+            )
+        except asyncio.CancelledError:
+            lifecycle.cancel()
+            await asyncio.gather(lifecycle, return_exceptions=True)
+            await self.run_service.cancel_run(run_id=run.id, user_id=user_id)
+            raise
         return run.id
 
     async def apply_retention_now(self) -> Dict[str, int]:

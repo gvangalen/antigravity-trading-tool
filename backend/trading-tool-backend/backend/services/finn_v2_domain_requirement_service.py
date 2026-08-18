@@ -27,6 +27,12 @@ class FinnV2DomainRequirementService:
                 optional_domains=[],
                 requirement_reason=["capability_registry_read_only"],
             )
+        if analysis.interaction_mode == "UNAVAILABLE":
+            return DomainRequirementPlan(
+                required_domains=[],
+                optional_domains=[],
+                requirement_reason=["deterministic_unavailable_without_provider_call"],
+            )
 
         for scope in analysis.subject_scopes:
             mapping = self._MAPPING.get(scope)
@@ -41,9 +47,6 @@ class FinnV2DomainRequirementService:
         if analysis.interaction_mode == "EVALUATION" and "strategy" in analysis.subject_scopes and "profile" in analysis.subject_scopes:
             required_domains.extend(["identity_context", "plan_context"])
             reasons.append("strategy_fit_requires_identity_and_plan")
-        if analysis.interaction_mode == "UNAVAILABLE":
-            reasons.append("no_financial_domains_detected")
-
         return DomainRequirementPlan(
             required_domains=required_domains,
             optional_domains=optional_domains,

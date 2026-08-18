@@ -74,4 +74,6 @@ def test_request_analysis_keeps_incomplete_financial_question_unavailable():
     result = SERVICE.analyze(message="Wat is nu de beste trade voor mij zonder verdere context?")
 
     assert result.interaction_mode == "UNAVAILABLE"
+    assert result.subject_scopes == ["unknown"]
     assert "financial_domain_unavailable" in result.unresolved_signals
+    assert "insufficient_trade_context" in result.unresolved_signals

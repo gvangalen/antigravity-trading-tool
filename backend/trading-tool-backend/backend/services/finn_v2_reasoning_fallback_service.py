@@ -17,24 +17,31 @@ class FinnV2ReasoningFallbackService:
                 run_id=run_id,
                 user_id=user_id,
                 mode="CLARIFICATION",
-                direct_answer="Er is nog een gerichte verduidelijking nodig voordat FINN V2 inhoudelijk kan redeneren.",
-                main_observation="Een noodzakelijke entityselectie ontbreekt of is ambigu.",
-                uncertainty_summary="De huidige context is onvoldoende eenduidig.",
+                direct_answer="Ik kan nog geen verantwoorde trade of financiële conclusie geven met de huidige context.",
+                main_observation="Er ontbreekt nog één noodzakelijke verduidelijking voordat ik dit veilig kan beoordelen.",
+                uncertainty_summary="Zonder die extra context zou ik moeten gokken.",
                 uncertainty_codes=orchestrator_result.unavailable_codes,
                 follow_up_question=question,
                 evidence_refs_used=[],
                 model=model,
                 created_at=datetime.now(timezone.utc),
             )
+        asset = orchestrator_result.analysis.explicit_asset
+        next_question = (
+            f"Wil je eerst je huidige setup voor {asset} laten beoordelen?"
+            if asset
+            else "Wil je eerst aangeven over welke asset of setup je dit wilt bekijken?"
+        )
         return ReasoningResult(
             reasoning_result_id=f"finn-v2-reasoning-{uuid.uuid4().hex}",
             run_id=run_id,
             user_id=user_id,
             mode="UNAVAILABLE",
-            direct_answer="FINN V2 kan voor deze shadowrun nog geen veilige inhoudelijke analyse opstellen.",
-            main_observation="De orchestratoruitkomst is niet klaar voor modelreasoning.",
-            uncertainty_summary="De beschikbare context is onvolledig of onveilig voor verdere analyse.",
+            direct_answer="Ik kan nog geen verantwoorde trade aanwijzen, omdat essentiële markt- of setupcontext ontbreekt.",
+            main_observation="Zonder actuele context, een geldige setup en voldoende onderbouwing zou ik een financiële conclusie verzinnen.",
+            uncertainty_summary=next_question,
             uncertainty_codes=orchestrator_result.unavailable_codes or orchestrator_result.uncertainty_codes,
+            follow_up_question=next_question,
             evidence_refs_used=[],
             model=model,
             created_at=datetime.now(timezone.utc),
