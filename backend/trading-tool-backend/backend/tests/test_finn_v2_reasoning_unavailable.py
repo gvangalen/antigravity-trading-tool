@@ -4,6 +4,7 @@ from types import SimpleNamespace
 
 from backend.schemas.finn_v2_reasoning_schema import ReasoningResult
 from backend.services.finn_v2_reasoning_service import FinnV2ReasoningService
+from backend.services.finn_v2_reasoning_prompt_service import FinnV2ReasoningPromptContractError
 
 
 def test_reasoning_unavailable_when_ai_disabled(monkeypatch):
@@ -144,3 +145,53 @@ def test_reasoning_persistence_serializes_datetime_payloads():
 
     assert isinstance(captured["result_json"]["created_at"], str)
     assert persisted.result.created_at == result.created_at
+
+
+def test_reasoning_returns_failed_unavailable_record_on_prompt_contract_error(monkeypatch):
+    service = FinnV2ReasoningService(session=object())
+    context = SimpleNamespace(
+        interaction_mode="UNAVAILABLE",
+        context_version="2026-08-17.block6",
+        evidence_set_hash="hash-4",
+        evidence=[],
+        subject_scopes=[],
+        required_domains=[],
+        dict=lambda: {},
+    )
+    orchestrator_result = SimpleNamespace(orchestrator_result_id="orchestrator-4")
+    policy = SimpleNamespace(policy_decision_id="policy-4")
+    snapshot = SimpleNamespace(id="snapshot-4")
+    validation = SimpleNamespace(id="validation-4")
+    service._append_trace = lambda *args, **kwargs: asyncio.sleep(0, result=None)
+    persisted_calls = {}
+
+    async def _persist_record(**kwargs):
+        persisted_calls.update(kwargs)
+        return kwargs
+
+    service._persist_record = _persist_record
+    monkeypatch.setattr(
+        service.prompts,
+        "build_system_prompt",
+        lambda _context: (_ for _ in ()).throw(FinnV2ReasoningPromptContractError("FUTURE_MODE")),
+    )
+
+    result = asyncio.run(
+        service._run_model_reasoning(
+            run_id="run-4",
+            user_id=7,
+            trace_id="trace-4",
+            orchestrator_result=orchestrator_result,
+            policy=policy,
+            snapshot=snapshot,
+            validation=validation,
+            context=context,
+            model_name="gpt-test",
+            input_hash="input-4",
+        )
+    )
+
+    assert result["status"] == "failed"
+    assert persisted_calls["error_codes"] == ["reasoning_prompt_mode_unsupported"]
+    assert persisted_calls["mode"] == "UNAVAILABLE"
+    assert persisted_calls["run_id"] == "run-4"

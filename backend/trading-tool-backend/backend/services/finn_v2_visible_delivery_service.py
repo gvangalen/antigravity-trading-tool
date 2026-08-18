@@ -13,6 +13,14 @@ from backend.services.finn_v2_gateway_service import FinnV2GatewayService
 logger = logging.getLogger(__name__)
 
 
+class FinnV2VisibleDeliveryError(RuntimeError):
+    def __init__(self, code: str, *, run_id: str | None, failure_stage: str):
+        self.code = code
+        self.run_id = run_id
+        self.failure_stage = failure_stage
+        super().__init__(code)
+
+
 class FinnV2VisibleDeliveryService:
     def __init__(self, session: AsyncSession):
         self.session = session
@@ -42,29 +50,55 @@ class FinnV2VisibleDeliveryService:
             request_id=request_id,
             trace_id=trace_id,
         )
-        artifacts = await self.delivery.get_delivery_artifacts(user_id=user_id, run_id=run_id)
-        envelope = artifacts["delivery_envelope"]
-        verified_response = artifacts.get("verified_response")
-        if verified_response is None:
-            logger.error(
-                "FINN V2 visible delivery missing verified response",
+        try:
+            artifacts = await self.delivery.get_delivery_artifacts(user_id=user_id, run_id=run_id)
+            envelope = artifacts["delivery_envelope"]
+            verified_response = artifacts.get("verified_response")
+            if verified_response is None:
+                logger.error(
+                    "FINN V2 visible delivery missing verified response",
+                    extra={
+                        "trace_id": trace_id,
+                        "request_id": request_id,
+                        "user_id": user_id,
+                        "run_id": run_id,
+                        "failure_stage": "delivery_envelope",
+                        "service": "FinnV2VisibleDeliveryService",
+                        "method": "deliver_assistant_envelope",
+                    },
+                )
+                raise FinnV2VisibleDeliveryError(
+                    "v2_delivery_failure",
+                    run_id=run_id,
+                    failure_stage="delivery_envelope",
+                )
+            return self._assistant_contract(
+                verified_response,
+                trace_id=trace_id,
+                run_id=run_id,
+                artifacts=artifacts,
+            )
+        except FinnV2VisibleDeliveryError:
+            raise
+        except Exception as exc:
+            logger.exception(
+                "FINN V2 visible delivery failed",
                 extra={
                     "trace_id": trace_id,
                     "request_id": request_id,
                     "user_id": user_id,
                     "run_id": run_id,
-                    "failure_stage": "delivery_envelope",
+                    "failure_stage": "delivery_artifacts",
                     "service": "FinnV2VisibleDeliveryService",
                     "method": "deliver_assistant_envelope",
+                    "exception_class": exc.__class__.__name__,
                 },
             )
-            raise ValueError("v2_delivery_failure")
-        return self._assistant_contract(
-            verified_response,
-            trace_id=trace_id,
-            run_id=run_id,
-            artifacts=artifacts,
-        )
+            raise FinnV2VisibleDeliveryError(
+                "v2_delivery_failure",
+                run_id=run_id,
+                failure_stage="delivery_artifacts",
+            ) from exc
 
     async def deliver_mission_control(
         self,

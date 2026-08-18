@@ -6,6 +6,7 @@ from backend.main import app
 from backend.schemas.assistant_schema import AssistantChatRequest
 from backend.schemas.finn_v2_state_schema import FinancialStateSnapshot
 from backend.services.finn_v2_evidence_validator_service import FinnV2EvidenceValidatorService
+from backend.services.finn_v2_visible_delivery_service import FinnV2VisibleDeliveryError
 
 
 class _FakeValidationRepo:
@@ -146,7 +147,51 @@ def test_assistant_chat_v2_only_new_user_returns_verified_v2_envelope(monkeypatc
         assert payload["response_trace"]["router_name"] == "finn_v2_orchestrator"
         assert payload["response_trace"]["selected_handler"] == "FinnV2VisibleDeliveryService.deliver_assistant_envelope"
         assert payload["response_trace"]["verified_response"]["verified_response_id"] == "verified-1"
+        assert payload["response_trace"]["reasoning_result"]["reasoning_result_id"] == "reasoning-1"
+        assert payload["response_trace"]["verifier_result"]["verifier_result_id"] == "verifier-1"
         assert payload["response_trace"]["delivery_envelope"]["status"] == "completed"
         assert payload["response"]
     finally:
         app.dependency_overrides.clear()
+
+
+def test_assistant_chat_v2_only_capability_failure_keeps_internal_run_id(monkeypatch):
+    selection = SimpleNamespace(
+        selected_runtime="v2",
+        visible_allowed=True,
+        fallback_allowed=False,
+        dict=lambda: {"selected_runtime": "v2", "runtime_mode": "v2_only"},
+    )
+
+    class Selector:
+        def select(self, **kwargs):
+            return selection
+
+    class Delivery:
+        async def deliver_assistant_envelope(self, **kwargs):
+            raise FinnV2VisibleDeliveryError(
+                "v2_delivery_failure",
+                run_id="run-capability-failed",
+                failure_stage="delivery_envelope",
+            )
+
+    monkeypatch.setattr(ai_assistant_api, "FinnV2RuntimeSelectorService", Selector)
+    monkeypatch.setattr(ai_assistant_api, "FinnV2VisibleDeliveryService", lambda db: Delivery())
+
+    payload = asyncio.run(
+        ai_assistant_api._try_v2_visible_delivery(
+            db=object(),
+            user_id=352,
+            message="Hoi FINN, wat kun je voor mij doen?",
+            context_payload={"locale": "nl", "missing_context": ["asset", "setup", "strategy"]},
+            transport="chat",
+            request_path="/assistant/chat",
+            request_id="req-capability-fail",
+            trace_id="trace-capability-fail",
+        )
+    )
+
+    assert payload["state"]["current_flow"] == "finn_v2_visible_failed"
+    assert payload["response_trace"]["run_id"] == "run-capability-failed"
+    assert payload["response_trace"]["error"] == "v2_delivery_failure"
+    assert payload["response_trace"]["failure_stage"] == "delivery_envelope"

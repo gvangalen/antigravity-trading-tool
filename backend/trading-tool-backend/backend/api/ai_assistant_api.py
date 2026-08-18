@@ -68,7 +68,7 @@ from backend.services.finn_v2_confirmation_service import FinnV2ConfirmationServ
 from backend.services.finn_v2_execution_service import FinnV2ExecutionService
 from backend.services.finn_v2_gateway_service import FinnV2GatewayService
 from backend.services.finn_v2_runtime_selector_service import FinnV2RuntimeSelectorService
-from backend.services.finn_v2_visible_delivery_service import FinnV2VisibleDeliveryService
+from backend.services.finn_v2_visible_delivery_service import FinnV2VisibleDeliveryError, FinnV2VisibleDeliveryService
 from backend.schemas.finn_v2_confirmation_schema import FinnV2ConfirmationRequest
 from backend.schemas.finn_v2_execution_schema import FinnV2ExecuteProposalRequest
 
@@ -2759,7 +2759,7 @@ async def _try_v2_visible_delivery(
         envelope["response_trace"]["runtime_selection"] = selection.dict()
         return envelope
     except Exception as exc:
-        reason = str(exc)
+        reason = getattr(exc, "code", str(exc))
         return {
             "response": "Ik kan nu geen veilige verified V2-response uitleveren.",
             "intent": "unavailable",
@@ -2769,13 +2769,14 @@ async def _try_v2_visible_delivery(
             "next_best_action": None,
             "response_trace": {
                 "trace_id": trace_id,
-                "run_id": None,
+                "run_id": getattr(exc, "run_id", None),
                 "pipeline_version": "finn_v2",
                 "router_name": "finn_v2_orchestrator",
                 "selected_handler": "FinnV2VisibleDeliveryService.deliver_assistant_envelope",
                 "response_source": FINN_V2_VERIFIED_SOURCE,
                 "runtime_selection": selection.dict(),
                 "error": reason,
+                "failure_stage": getattr(exc, "failure_stage", None),
             },
             "can_confirm": False,
             "actions": [],

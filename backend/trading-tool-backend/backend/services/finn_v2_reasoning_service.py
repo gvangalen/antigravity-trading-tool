@@ -28,7 +28,10 @@ from backend.services.finn_v2_flag_service import FinnV2FlagService
 from backend.services.finn_v2_json_safety import to_json_safe
 from backend.services.finn_v2_reasoning_context_service import FinnV2ReasoningContextService
 from backend.services.finn_v2_reasoning_fallback_service import FinnV2ReasoningFallbackService
-from backend.services.finn_v2_reasoning_prompt_service import FinnV2ReasoningPromptService
+from backend.services.finn_v2_reasoning_prompt_service import (
+    FinnV2ReasoningPromptContractError,
+    FinnV2ReasoningPromptService,
+)
 from backend.services.platform_metrics import increment_execution_safety_counter, record_latency_sample
 from backend.utils import openai_client
 
@@ -241,13 +244,54 @@ class FinnV2ReasoningService:
     async def _run_model_reasoning(self, *, run_id: str, user_id: int, trace_id: str, orchestrator_result, policy, snapshot, validation, context, model_name: str, input_hash: str):
         started = monotonic()
         await self._append_trace(run_id, user_id, trace_id, "reasoning_context_built", context, model_name, "pending", None, 0, input_hash, [])
+        try:
+            system_prompt = self.prompts.build_system_prompt(context)
+        except FinnV2ReasoningPromptContractError as exc:
+            await self._append_trace(
+                run_id,
+                user_id,
+                trace_id,
+                "reasoning_failed",
+                context,
+                model_name,
+                "failed",
+                int((monotonic() - started) * 1000),
+                0,
+                input_hash,
+                [exc.code],
+            )
+            fallback = self.fallbacks.unavailable_draft(
+                run_id=run_id,
+                user_id=user_id,
+                mode=context.interaction_mode,
+                error_codes=[exc.code],
+                model=model_name,
+            )
+            return await self._persist_record(
+                run_id=run_id,
+                user_id=user_id,
+                orchestrator_result_id=orchestrator_result.orchestrator_result_id,
+                policy_decision_id=policy.policy_decision_id,
+                snapshot_id=snapshot.id,
+                validation_id=validation.id,
+                status="failed",
+                mode=fallback.mode,
+                context_version=context.context_version,
+                evidence_set_hash=context.evidence_set_hash,
+                input_hash=input_hash,
+                model=model_name,
+                result=fallback,
+                error_codes=[exc.code],
+                retry_count=0,
+                latency_ms=int((monotonic() - started) * 1000),
+            )
         retries_allowed = self.flags.reasoning_max_retries()
         last_error_codes: list[str] = []
         for attempt in range(retries_allowed + 1):
             await self._append_trace(run_id, user_id, trace_id, "reasoning_started", context, model_name, "generating", None, attempt, input_hash, [])
             response = openai_client.ask_gpt_structured_response(
                 prompt=self.prompts.build_user_prompt(context),
-                system_role=self.prompts.build_system_prompt(context),
+                system_role=system_prompt,
                 schema=self.prompts.response_schema(),
                 model_override=model_name,
                 timeout_seconds=self.flags.reasoning_timeout_seconds(),
