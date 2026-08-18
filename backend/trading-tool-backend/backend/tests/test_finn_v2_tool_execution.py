@@ -36,6 +36,11 @@ class _FakeCallRepo:
         return row
 
 
+class _FailingUpdateCallRepo(_FakeCallRepo):
+    async def update(self, row, **kwargs):
+        raise RuntimeError("tool_call_flush_failed")
+
+
 class _FakeTraceRepo:
     async def append_event(self, **kwargs):
         return kwargs
@@ -107,6 +112,33 @@ def test_tool_redaction_service_serializes_nested_objects():
     assert payload["snapshot"]["symbol"] == "BTC"
     assert payload["snapshot"]["captured_at"] == "2026-08-18T10:30:00+00:00"
     assert payload["items"][0]["symbol"] == "AAPL"
+
+
+def test_complete_tool_call_uses_captured_id_when_update_fails(monkeypatch):
+    service = FinnV2ToolExecutionService(session=_FakeSession())
+    service.calls = _FailingUpdateCallRepo()
+
+    result = asyncio.run(
+        service._complete_tool_call(
+            tool_call=SimpleNamespace(id=77),
+            tool_call_id=77,
+            result=SimpleNamespace(
+                tool_name="read_profile",
+                status="completed",
+                success=True,
+                resolution_source=None,
+                freshness_status="fresh",
+                result_summary={"ok": True},
+                error_codes=[],
+            ),
+            duration_ms=5,
+            run_id="run-1",
+            user_id=7,
+            trace_id="trace-1",
+        )
+    )
+
+    assert result is None
 
 
 def test_state_pipeline_rolls_back_before_failure_trace():

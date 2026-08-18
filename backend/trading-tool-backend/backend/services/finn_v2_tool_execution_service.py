@@ -154,14 +154,19 @@ class FinnV2ToolExecutionService:
 
         selector = self.redaction.redact_selector(selector or {})
         tool_call = None
+        tool_call_id = None
         if self.flags.is_tool_call_logging_enabled():
-            tool_call = await self._create_tool_call(
+            tool_call, tool_call_id = await self._create_tool_call(
                 run_id=run.id,
                 user_id=user_id,
                 trace_id=run.trace_id,
                 tool_name=tool_name,
                 selector=selector,
             )
+        if tool_call_id is not None:
+            result_tool_call_id = tool_call_id
+        else:
+            result_tool_call_id = None
 
         started = monotonic()
         try:
@@ -231,13 +236,15 @@ class FinnV2ToolExecutionService:
             duration_ms = int((monotonic() - started) * 1000)
             persisted_tool_call = await self._complete_tool_call(
                 tool_call=tool_call,
+                tool_call_id=tool_call_id,
                 result=result,
                 duration_ms=max(duration_ms, 0),
                 run_id=run_id,
                 user_id=user_id,
                 trace_id=run.trace_id,
             )
-            if persisted_tool_call is not None:
+            result.tool_call_id = tool_call_id
+            if persisted_tool_call is not None and tool_call_id is None:
                 result.tool_call_id = getattr(persisted_tool_call, "id", result.tool_call_id)
         record_latency_sample("finn_v2_tool_execution_duration_ms", int((monotonic() - started) * 1000))
         if self.flags.should_run_block3_shadow(user_id) and tool_call is not None:
@@ -254,6 +261,7 @@ class FinnV2ToolExecutionService:
         selector: Dict[str, Any],
     ):
         tool_call = None
+        tool_call_id = None
         try:
             async with self.session.begin_nested():
                 tool_call = await self.calls.create(
@@ -265,8 +273,9 @@ class FinnV2ToolExecutionService:
                     selector_json=selector,
                     error_codes_json=[],
                 )
+                tool_call_id = getattr(tool_call, "id", None)
                 await self.calls.update(tool_call, status="executing")
-            return tool_call
+            return tool_call, tool_call_id
         except Exception as primary_exc:
             self._log_tool_transaction_exception(
                 message="FINN V2 tool-call persistence failed before execution",
@@ -274,16 +283,17 @@ class FinnV2ToolExecutionService:
                 user_id=user_id,
                 trace_id=trace_id,
                 tool_name=tool_name,
-                tool_call_id=getattr(tool_call, "id", None),
+                tool_call_id=tool_call_id,
                 failure_stage="tool_call_create",
                 primary_exception=primary_exc,
             )
-            return None
+            return None, tool_call_id
 
     async def _complete_tool_call(
         self,
         *,
         tool_call,
+        tool_call_id: Optional[int],
         result: ToolExecutionResult,
         duration_ms: int,
         run_id: str,
@@ -311,7 +321,7 @@ class FinnV2ToolExecutionService:
                 user_id=user_id,
                 trace_id=trace_id,
                 tool_name=result.tool_name,
-                tool_call_id=getattr(tool_call, "id", None),
+                tool_call_id=tool_call_id,
                 failure_stage="tool_call_complete",
                 cleanup_exception=cleanup_exc,
             )
