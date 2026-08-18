@@ -22,7 +22,7 @@ def test_ensure_forward_returns_ready_deduplicates_concurrent_refreshes():
         await asyncio.sleep(0.01)
         return {"status": "ok", "symbol": symbol}
 
-    service.sync_symbol_forward_returns = fake_sync
+    service._sync_symbol_forward_returns_isolated = fake_sync
 
     async def run():
         await asyncio.gather(
@@ -42,12 +42,70 @@ def test_ensure_forward_returns_ready_skips_sync_when_history_is_fresh():
         return_value={"supported": True, "minimum_history_years": 5, "source": "twelve_data"}
     )
     service._forward_returns_need_refresh = AsyncMock(return_value=False)
-    service.sync_symbol_forward_returns = AsyncMock()
+    service._sync_symbol_forward_returns_isolated = AsyncMock()
 
     result = asyncio.run(service.ensure_forward_returns_ready("AAPL"))
 
     assert result["supported"] is True
-    service.sync_symbol_forward_returns.assert_not_called()
+    service._sync_symbol_forward_returns_isolated.assert_not_called()
+
+
+def test_sync_symbol_forward_returns_isolated_uses_dedicated_session(monkeypatch):
+    outer_session = AsyncMock(name="outer_session")
+    isolated_session = AsyncMock(name="isolated_session")
+
+    class _FactoryContext:
+        async def __aenter__(self):
+            return isolated_session
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+    service = MarketDataService(outer_session)
+    sync_mock = AsyncMock(return_value={"status": "ok", "symbol": "BTC"})
+    monkeypatch.setattr(
+        "backend.services.market_data_service.async_session_factory",
+        lambda: _FactoryContext(),
+    )
+    monkeypatch.setattr(MarketDataService, "sync_symbol_forward_returns", sync_mock)
+
+    result = asyncio.run(service._sync_symbol_forward_returns_isolated("BTC"))
+
+    assert result == {"status": "ok", "symbol": "BTC"}
+    sync_mock.assert_awaited_once()
+    isolated_session.commit.assert_awaited_once()
+    isolated_session.rollback.assert_not_awaited()
+    assert sync_mock.await_args_list[0].args == ("BTC",)
+
+
+def test_sync_symbol_forward_returns_isolated_rolls_back_failed_sync(monkeypatch):
+    outer_session = AsyncMock(name="outer_session")
+    isolated_session = AsyncMock(name="isolated_session")
+
+    class _FactoryContext:
+        async def __aenter__(self):
+            return isolated_session
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+    service = MarketDataService(outer_session)
+    sync_mock = AsyncMock(side_effect=RuntimeError("boom"))
+    monkeypatch.setattr(
+        "backend.services.market_data_service.async_session_factory",
+        lambda: _FactoryContext(),
+    )
+    monkeypatch.setattr(MarketDataService, "sync_symbol_forward_returns", sync_mock)
+
+    try:
+        asyncio.run(service._sync_symbol_forward_returns_isolated("BTC"))
+    except RuntimeError as exc:
+        assert str(exc) == "boom"
+    else:
+        raise AssertionError("Expected isolated sync failure to propagate")
+
+    isolated_session.rollback.assert_awaited_once()
+    isolated_session.commit.assert_not_awaited()
 
 
 def test_get_latest_market_snapshot_falls_back_to_live_provider_when_db_snapshot_is_missing(monkeypatch):

@@ -8,6 +8,7 @@ import logging
 from sqlalchemy.ext.asyncio import AsyncSession
 from fastapi import HTTPException
 
+from backend.infrastructure.database import async_session_factory
 from backend.infrastructure.repositories.market_data_repository import MarketDataRepository
 from backend.infrastructure.repositories.technical_data_repository import TechnicalDataRepository
 from backend.schemas.market_data_schema import (
@@ -157,16 +158,43 @@ class MarketDataService:
         async with self._forward_return_sync_lock():
             existing_task = _FORWARD_RETURN_SYNC_TASKS.get(normalized_symbol)
             if existing_task is None or existing_task.done():
-                existing_task = asyncio.create_task(self.sync_symbol_forward_returns(normalized_symbol))
+                existing_task = asyncio.create_task(
+                    self._sync_symbol_forward_returns_isolated(normalized_symbol)
+                )
                 _FORWARD_RETURN_SYNC_TASKS[normalized_symbol] = existing_task
 
         try:
             return await existing_task
+        except Exception:
+            logger.error(
+                "❌ Forward returns sync crashed for %s",
+                normalized_symbol,
+                exc_info=True,
+            )
+            raise
         finally:
             if existing_task.done():
                 async with self._forward_return_sync_lock():
                     if _FORWARD_RETURN_SYNC_TASKS.get(normalized_symbol) is existing_task:
                         _FORWARD_RETURN_SYNC_TASKS.pop(normalized_symbol, None)
+
+    async def _sync_symbol_forward_returns_isolated(self, symbol: str) -> dict[str, Any]:
+        normalized_symbol = str(symbol or "").strip().upper()
+
+        async with async_session_factory() as isolated_session:
+            isolated_service = MarketDataService(isolated_session)
+            try:
+                payload = await isolated_service.sync_symbol_forward_returns(normalized_symbol)
+                await isolated_session.commit()
+                return payload
+            except Exception:
+                await isolated_session.rollback()
+                logger.error(
+                    "❌ Isolated forward returns sync failed for %s",
+                    normalized_symbol,
+                    exc_info=True,
+                )
+                raise
 
     async def sync_supported_forward_returns(
         self,
