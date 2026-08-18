@@ -58,6 +58,8 @@ class _NestedTxn:
 class _FakeSession:
     def __init__(self):
         self.sync_session = SimpleNamespace(is_active=True)
+        self._transaction = SimpleNamespace(is_active=True)
+        self.rollback_calls = 0
 
     def begin_nested(self):
         return _NestedTxn()
@@ -66,7 +68,12 @@ class _FakeSession:
         return True
 
     def get_transaction(self):
-        return SimpleNamespace(is_active=True)
+        return self._transaction
+
+    async def rollback(self):
+        self.rollback_calls += 1
+        self.sync_session.is_active = True
+        self._transaction.is_active = True
 
 
 @dataclass
@@ -199,3 +206,27 @@ def test_freshness_service_accepts_date_values_for_daily_tools():
     freshness = service.freshness_for("read_asset_scores", date.today())
 
     assert freshness in {"fresh", "stale"}
+
+
+def test_tool_execution_rolls_back_failed_session_before_tool_call_completion(monkeypatch):
+    session = _FakeSession()
+    service = FinnV2ToolExecutionService(session=session)
+    service.runs = _FakeRunRepo()
+    service.calls = _FakeCallRepo()
+    service.traces = _FakeTraceRepo()
+    monkeypatch.setattr(service.flags, "is_tool_registry_enabled", lambda: True)
+    monkeypatch.setattr(service.flags, "is_tool_registry_readonly", lambda: True)
+    monkeypatch.setattr(service.flags, "is_tool_call_logging_enabled", lambda: True)
+
+    async def _explode(**_kwargs):
+        session.sync_session.is_active = False
+        session.get_transaction().is_active = False
+        raise RuntimeError("db_read_failed")
+
+    service.profile_adapter.execute = _explode
+
+    result = asyncio.run(service.execute_tool(run_id="run-1", user_id=7, tool_name="read_profile", selector={}))
+
+    assert result.success is False
+    assert result.error_codes == ["tool_internal_error"]
+    assert session.rollback_calls == 1

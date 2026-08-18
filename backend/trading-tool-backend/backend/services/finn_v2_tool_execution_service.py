@@ -169,6 +169,7 @@ class FinnV2ToolExecutionService:
             result_tool_call_id = None
 
         started = monotonic()
+        session_rolled_back = False
         try:
             payload = await asyncio.wait_for(
                 self._dispatch_tool(
@@ -220,7 +221,15 @@ class FinnV2ToolExecutionService:
                 schema_name=tool_name,
                 availability="ambiguous" if code.endswith("_ambiguous") else "unavailable",
             )
-        except Exception:
+        except Exception as exc:
+            session_rolled_back = await self._rollback_failed_session(
+                run_id=run_id,
+                user_id=user_id,
+                trace_id=run.trace_id,
+                tool_name=tool_name,
+                failure_stage="tool_execution",
+                primary_exception=exc,
+            )
             logger.exception("FINN V2 tool execution failed", extra={"tool_name": tool_name, "run_id": run_id})
             result = ToolExecutionResult(
                 tool_name=tool_name,
@@ -233,19 +242,32 @@ class FinnV2ToolExecutionService:
             )
 
         if tool_call is not None:
-            duration_ms = int((monotonic() - started) * 1000)
-            persisted_tool_call = await self._complete_tool_call(
-                tool_call=tool_call,
-                tool_call_id=tool_call_id,
-                result=result,
-                duration_ms=max(duration_ms, 0),
-                run_id=run_id,
-                user_id=user_id,
-                trace_id=run.trace_id,
-            )
-            result.tool_call_id = tool_call_id
-            if persisted_tool_call is not None and tool_call_id is None:
-                result.tool_call_id = getattr(persisted_tool_call, "id", result.tool_call_id)
+            if session_rolled_back:
+                logger.warning(
+                    "FINN V2 skipped tool-call completion after session rollback",
+                    extra={
+                        "trace_id": run.trace_id,
+                        "run_id": run_id,
+                        "user_id": user_id,
+                        "tool_name": tool_name,
+                        "tool_call_id": tool_call_id,
+                        "failure_stage": "tool_call_complete_skipped",
+                    },
+                )
+            else:
+                duration_ms = int((monotonic() - started) * 1000)
+                persisted_tool_call = await self._complete_tool_call(
+                    tool_call=tool_call,
+                    tool_call_id=tool_call_id,
+                    result=result,
+                    duration_ms=max(duration_ms, 0),
+                    run_id=run_id,
+                    user_id=user_id,
+                    trace_id=run.trace_id,
+                )
+                result.tool_call_id = tool_call_id
+                if persisted_tool_call is not None and tool_call_id is None:
+                    result.tool_call_id = getattr(persisted_tool_call, "id", result.tool_call_id)
         record_latency_sample("finn_v2_tool_execution_duration_ms", int((monotonic() - started) * 1000))
         if self.flags.should_run_block3_shadow(user_id) and tool_call is not None:
             await self._ingest_evidence(run_id=run_id, user_id=user_id, trace_id=run.trace_id, result=result)
@@ -277,6 +299,15 @@ class FinnV2ToolExecutionService:
                 await self.calls.update(tool_call, status="executing")
             return tool_call, tool_call_id
         except Exception as primary_exc:
+            await self._rollback_failed_session(
+                run_id=run_id,
+                user_id=user_id,
+                trace_id=trace_id,
+                tool_name=tool_name,
+                tool_call_id=tool_call_id,
+                failure_stage="tool_call_create",
+                primary_exception=primary_exc,
+            )
             self._log_tool_transaction_exception(
                 message="FINN V2 tool-call persistence failed before execution",
                 run_id=run_id,
@@ -315,6 +346,15 @@ class FinnV2ToolExecutionService:
                 )
             return tool_call
         except Exception as cleanup_exc:
+            await self._rollback_failed_session(
+                run_id=run_id,
+                user_id=user_id,
+                trace_id=trace_id,
+                tool_name=result.tool_name,
+                tool_call_id=tool_call_id,
+                failure_stage="tool_call_complete",
+                primary_exception=cleanup_exc,
+            )
             self._log_tool_transaction_exception(
                 message="FINN V2 tool-call persistence failed after execution",
                 run_id=run_id,
@@ -639,7 +679,62 @@ class FinnV2ToolExecutionService:
             "in_transaction": self.session.in_transaction(),
             "transaction_present": transaction is not None,
             "transaction_is_active": getattr(transaction, "is_active", None),
+            "sync_session_active": getattr(getattr(self.session, "sync_session", None), "is_active", None),
         }
+
+    def _session_requires_rollback(self) -> bool:
+        sync_session = getattr(self.session, "sync_session", None)
+        if sync_session is not None and getattr(sync_session, "is_active", True) is False:
+            return True
+        transaction = self.session.get_transaction() if hasattr(self.session, "get_transaction") else None
+        return bool(transaction is not None and getattr(transaction, "is_active", True) is False)
+
+    async def _rollback_failed_session(
+        self,
+        *,
+        run_id: str,
+        user_id: int,
+        trace_id: Optional[str],
+        tool_name: str,
+        failure_stage: str,
+        primary_exception: Exception,
+        tool_call_id: Optional[int] = None,
+    ) -> bool:
+        if not self._session_requires_rollback() or not hasattr(self.session, "rollback"):
+            return False
+        try:
+            await self.session.rollback()
+            logger.warning(
+                "FINN V2 rolled back failed tool session",
+                extra={
+                    "trace_id": trace_id,
+                    "run_id": run_id,
+                    "user_id": user_id,
+                    "tool_name": tool_name,
+                    "tool_call_id": tool_call_id,
+                    "failure_stage": failure_stage,
+                    "primary_exception_class": primary_exception.__class__.__name__,
+                    "primary_exception_message": str(primary_exception),
+                },
+            )
+            return True
+        except Exception as cleanup_exc:
+            logger.exception(
+                "FINN V2 tool session rollback failed",
+                extra={
+                    "trace_id": trace_id,
+                    "run_id": run_id,
+                    "user_id": user_id,
+                    "tool_name": tool_name,
+                    "tool_call_id": tool_call_id,
+                    "failure_stage": failure_stage,
+                    "primary_exception_class": primary_exception.__class__.__name__,
+                    "primary_exception_message": str(primary_exception),
+                    "cleanup_exception_class": cleanup_exc.__class__.__name__,
+                    "cleanup_exception_message": str(cleanup_exc),
+                },
+            )
+            return False
 
     def _log_tool_transaction_exception(
         self,
