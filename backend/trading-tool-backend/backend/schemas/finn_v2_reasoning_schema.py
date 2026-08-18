@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from datetime import datetime
 from typing import Any, Dict, List, Literal, Optional
 
@@ -63,6 +64,24 @@ class ProposalCandidate(BaseModel):
     impact_summary: str
     risk_summary: str
     confirmation_required: bool
+
+    @validator("proposed_changes", pre=True)
+    def _normalize_proposed_changes(cls, value: Any) -> Dict[str, Any]:
+        if value in (None, ""):
+            return {}
+        if isinstance(value, str):
+            try:
+                parsed = json.loads(value)
+            except json.JSONDecodeError as exc:
+                raise ValueError("invalid_proposed_changes_json") from exc
+            if parsed is None:
+                return {}
+            if not isinstance(parsed, dict):
+                raise ValueError("invalid_proposed_changes_type")
+            return parsed
+        if isinstance(value, dict):
+            return value
+        raise ValueError("invalid_proposed_changes_type")
 
     class Config:
         extra = "forbid"

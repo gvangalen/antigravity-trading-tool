@@ -134,7 +134,7 @@ class FinnV2ReasoningPromptService:
                                 "target_type": {"type": "string"},
                                 "target_id": {"type": ["string", "null"]},
                                 "asset": {"type": ["string", "null"]},
-                                "proposed_changes": {"type": "object"},
+                                "proposed_changes": {"type": "string"},
                                 "evidence_refs": {"type": "array", "items": {"type": "string"}},
                                 "impact_summary": {"type": "string"},
                                 "risk_summary": {"type": "string"},
