@@ -177,7 +177,44 @@ class StrategyService:
             "created_at": created_at,
         }
 
+    @staticmethod
+    def normalize_strategy_payload(raw_data: Optional[dict]) -> dict:
+        payload = dict(raw_data or {})
+        nested = {}
+        for key in ("strategy", "payload", "draft"):
+            candidate = payload.get(key)
+            if isinstance(candidate, dict):
+                nested.update(candidate)
+        merged = {**nested, **payload}
+
+        aliases = {
+            "setupId": "setup_id",
+            "setupType": "setup_type",
+            "baseAmount": "base_amount",
+            "executionMode": "execution_mode",
+            "stopLoss": "stop_loss",
+            "decisionCurve": "decision_curve",
+            "decisionCurveName": "decision_curve_name",
+            "decisionCurveId": "decision_curve_id",
+            "targetsText": "targets",
+        }
+        for source, target in aliases.items():
+            if target not in merged and merged.get(source) is not None:
+                merged[target] = merged[source]
+
+        if merged.get("targets") is None and isinstance(merged.get("trade_plan"), dict):
+            trade_plan = merged["trade_plan"]
+            if trade_plan.get("targets") is not None:
+                merged["targets"] = trade_plan.get("targets")
+            if merged.get("stop_loss") is None and trade_plan.get("stop_loss") is not None:
+                merged["stop_loss"] = trade_plan.get("stop_loss")
+            if merged.get("entry") is None and trade_plan.get("entry") is not None:
+                merged["entry"] = trade_plan.get("entry")
+
+        return merged
+
     async def save_strategy(self, payload: StrategyCreateSchema, raw_data: dict, user_id: int):
+        raw_data = self.normalize_strategy_payload(raw_data)
         execution_mode = payload.execution_mode.lower()
         if execution_mode not in ["fixed", "custom"]:
             raise HTTPException(400, "Ongeldige execution_mode")
@@ -277,6 +314,7 @@ class StrategyService:
         return formatted
 
     async def update_strategy(self, strategy_id: int, raw_data: dict, user_id: int):
+        raw_data = self.normalize_strategy_payload(raw_data)
         execution_mode = (raw_data.get("execution_mode") or "").lower()
         if execution_mode not in ["fixed", "custom"]:
             raise HTTPException(400, "Ongeldige execution_mode")
@@ -419,6 +457,7 @@ class StrategyService:
         return {"active": False}
 
     def _validate_trade_strategy(self, raw_data: dict) -> None:
+        raw_data = self.normalize_strategy_payload(raw_data)
         entry = normalize_number(raw_data.get("entry"))
         stop_loss = normalize_number(raw_data.get("stop_loss"))
         targets = normalize_targets(raw_data.get("targets"))

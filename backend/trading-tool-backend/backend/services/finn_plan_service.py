@@ -14329,20 +14329,8 @@ class FinnPlanService:
         return await self._configured_indicator_context(user_id, asset)
 
     async def _configured_indicator_context(self, user_id: int, asset: str) -> Dict[str, List[str]]:
-        result = await self.session.execute(text("""
-            SELECT category, indicator
-            FROM user_indicator_configs
-            WHERE user_id = :user_id
-              AND enabled = TRUE
-              AND (
-                symbol = :symbol
-                OR symbol IS NULL
-                OR symbol = 'GLOBAL'
-              )
-            ORDER BY category ASC, priority ASC, indicator ASC
-        """), {"user_id": user_id, "symbol": asset})
-        by_category: Dict[str, List[str]] = {"market": [], "macro": [], "technical": []}
         columns = await self._get_user_indicator_config_columns()
+        by_category: Dict[str, List[str]] = {"market": [], "macro": [], "technical": []}
         if "user_id" not in columns or "indicator" not in columns:
             return by_category
 

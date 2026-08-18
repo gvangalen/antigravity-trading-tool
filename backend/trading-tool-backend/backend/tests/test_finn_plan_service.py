@@ -854,9 +854,11 @@ def test_first_dashboard_indicator_context_handles_missing_optional_columns():
     class _Session:
         def __init__(self):
             self.calls = 0
+            self.executed = []
 
         async def execute(self, stmt, params=None):
             self.calls += 1
+            self.executed.append({"sql": str(stmt), "params": params or {}})
             if self.calls == 1:
                 return SimpleNamespace(scalars=lambda: _ScalarResult())
             return SimpleNamespace(mappings=lambda: _MappingsResult())
@@ -866,6 +868,9 @@ def test_first_dashboard_indicator_context_handles_missing_optional_columns():
     result = asyncio.run(service._first_dashboard_indicator_context(7, "BTC"))
 
     assert result == {"market": [], "macro": [], "technical": []}
+    assert service.session.executed[1]["params"] == {"user_id": 7}
+    assert "enabled = TRUE" not in service.session.executed[1]["sql"]
+    assert "priority ASC" not in service.session.executed[1]["sql"]
 
 
 def test_prepare_first_dashboard_payload_survives_indicator_and_bot_lookup_failures(monkeypatch):

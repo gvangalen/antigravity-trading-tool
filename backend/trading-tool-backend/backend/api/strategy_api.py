@@ -24,7 +24,7 @@ async def save_strategy(
     service: StrategyService = Depends(get_strategy_service)
 ):
     user_id = current_user["id"]
-    raw_data = await request.json()
+    raw_data = StrategyService.normalize_strategy_payload(await request.json())
     
     try:
         # Hybride valideren ("verplichte velden expliciet")
@@ -70,7 +70,7 @@ async def update_strategy(
     current_user: dict = Depends(get_current_user),
     service: StrategyService = Depends(get_strategy_service)
 ):
-    data = await request.json()
+    data = StrategyService.normalize_strategy_payload(await request.json())
     return await service.update_strategy(strategy_id, data, current_user["id"])
 
 # ==========================================================
