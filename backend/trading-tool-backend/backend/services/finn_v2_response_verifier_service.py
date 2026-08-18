@@ -399,6 +399,8 @@ class FinnV2ResponseVerifierService:
 
     def _merge_semantic(self, verifier: VerifierResult, semantic: SemanticVerificationResult, mode: str) -> VerifierResult:
         if not semantic.available:
+            if not self.flags.is_semantic_verifier_enabled():
+                return verifier
             if mode in self.flags.semantic_verifier_required_modes():
                 reason_codes = self._dedupe(verifier.reason_codes + ["semantic_verifier_unavailable"])
                 return verifier.copy(update={"passed": False, "action": "downgrade_to_unavailable", "reason_codes": reason_codes, "semantic_verifier_used": True})
