@@ -325,3 +325,30 @@ def test_bootstrap_preferences_clears_scope_instead_of_creating_defaults():
         asset_class="crypto",
     )
     assert result["rows"] == []
+
+
+def test_market_asset_scope_falls_back_when_isolated_session_factory_fails(monkeypatch):
+    service = MarketDataService(AsyncMock())
+
+    class _FailingFactoryContext:
+        async def __aenter__(self):
+            raise RuntimeError("factory boom")
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+    monkeypatch.setattr(
+        "backend.services.market_data_service.async_session_factory",
+        lambda: _FailingFactoryContext(),
+    )
+
+    async def run():
+        from unittest.mock import patch
+
+        with patch("backend.services.market_data_service.AssetCatalogService") as asset_catalog_cls:
+            asset_catalog_cls.return_value._fallback_asset.return_value = {"asset_class": "crypto"}
+            return await service._get_asset_scope("BTC")
+
+    result = asyncio.run(run())
+
+    assert result == {"asset_class": "crypto"}

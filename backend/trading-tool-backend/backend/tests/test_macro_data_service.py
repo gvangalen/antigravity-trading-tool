@@ -263,3 +263,30 @@ def test_add_macro_indicator_uses_isolated_asset_scope_lookup(monkeypatch):
     )
     isolated_session.rollback.assert_awaited()
     outer_session.rollback.assert_not_awaited()
+
+
+def test_macro_asset_scope_falls_back_when_isolated_session_factory_fails(monkeypatch):
+    service = MacroDataService(AsyncMock())
+
+    class _FailingFactoryContext:
+        async def __aenter__(self):
+            raise RuntimeError("factory boom")
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+    monkeypatch.setattr(
+        "backend.services.macro_data_service.async_session_factory",
+        lambda: _FailingFactoryContext(),
+    )
+
+    async def run():
+        from unittest.mock import patch
+
+        with patch("backend.services.macro_data_service.AssetCatalogService") as asset_catalog_cls:
+            asset_catalog_cls.return_value._fallback_asset.return_value = {"asset_class": "crypto"}
+            return await service._get_asset_scope("BTC")
+
+    result = asyncio.run(run())
+
+    assert result == {"asset_class": "crypto"}

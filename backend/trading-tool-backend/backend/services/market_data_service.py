@@ -90,19 +90,18 @@ class MarketDataService:
     async def _get_asset_scope(self, symbol: str) -> dict[str, Any]:
         normalized_symbol = str(symbol or "BTC").strip().upper() or "BTC"
 
-        async with async_session_factory() as isolated_session:
-            try:
+        try:
+            async with async_session_factory() as isolated_session:
                 asset = await AssetCatalogService(isolated_session).get_asset(normalized_symbol)
                 await isolated_session.rollback()
                 return asset
-            except Exception:
-                await isolated_session.rollback()
-                logger.error(
-                    "❌ Market asset scope lookup failed for %s",
-                    normalized_symbol,
-                    exc_info=True,
-                )
-                return AssetCatalogService(self.session)._fallback_asset(normalized_symbol)
+        except Exception:
+            logger.error(
+                "❌ Market asset scope lookup failed for %s",
+                normalized_symbol,
+                exc_info=True,
+            )
+            return AssetCatalogService(self.session)._fallback_asset(normalized_symbol)
 
     async def get_forward_return_support(self, symbol: str) -> dict[str, Any]:
         normalized_symbol = str(symbol or "").strip().upper()
