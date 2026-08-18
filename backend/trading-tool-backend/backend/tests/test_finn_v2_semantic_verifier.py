@@ -83,3 +83,10 @@ def test_disabled_semantic_verifier_does_not_downgrade_required_evaluation_mode(
     assert merged.action == "deliver"
     assert merged.reason_codes == []
     assert merged.semantic_verifier_used is False
+
+
+def test_flag_defaults_normalize_legacy_mode_aliases():
+    service = FinnV2ResponseVerifierService(session=object())
+
+    assert service.flags.semantic_verifier_required_modes() == {"EVALUATE", "CREATE_PROPOSAL", "ACTION_PROPOSAL"}
+    assert service.flags.canary_allowed_modes() == {"READ", "EVALUATE"}

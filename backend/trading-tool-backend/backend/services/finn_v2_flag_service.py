@@ -4,6 +4,8 @@ import logging
 import os
 from typing import Set
 
+from backend.domain.finn_v2_contract import normalize_interaction_mode
+
 
 logger = logging.getLogger(__name__)
 
@@ -206,9 +208,9 @@ class FinnV2FlagService:
         return value or None
 
     def semantic_verifier_required_modes(self) -> Set[str]:
-        raw = os.getenv("FINN_V2_SEMANTIC_VERIFIER_REQUIRED_MODES", "EVALUATION,PROPOSAL,ACTION")
-        parsed = {item.strip().upper() for item in raw.split(",") if item.strip()}
-        return parsed or {"EVALUATION", "PROPOSAL", "ACTION"}
+        raw = os.getenv("FINN_V2_SEMANTIC_VERIFIER_REQUIRED_MODES", "EVALUATE,CREATE_PROPOSAL,ACTION_PROPOSAL")
+        parsed = {normalize_interaction_mode(item.strip().upper()) for item in raw.split(",") if item.strip()}
+        return parsed or {"EVALUATE", "CREATE_PROPOSAL", "ACTION_PROPOSAL"}
 
     def semantic_verifier_timeout_seconds(self) -> int:
         return self._env_int("FINN_V2_SEMANTIC_VERIFIER_TIMEOUT_SECONDS", 30)
@@ -244,9 +246,9 @@ class FinnV2FlagService:
         return max(0, min(100, self._env_int("FINN_V2_CANARY_PERCENT", 0)))
 
     def canary_allowed_modes(self) -> Set[str]:
-        raw = os.getenv("FINN_V2_CANARY_ALLOWED_MODES", "FACT,EVALUATION")
-        values = {item.strip().upper() for item in raw.split(",") if item.strip()}
-        return values or {"FACT", "EVALUATION"}
+        raw = os.getenv("FINN_V2_CANARY_ALLOWED_MODES", "READ,EVALUATE")
+        values = {normalize_interaction_mode(item.strip().upper()) for item in raw.split(",") if item.strip()}
+        return values or {"READ", "EVALUATE"}
 
     def is_v1_fallback_enabled(self) -> bool:
         return self._env_bool("FINN_V2_V1_FALLBACK_ENABLED", False)

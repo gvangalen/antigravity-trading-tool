@@ -188,3 +188,78 @@ def test_orchestrator_runs_policy_reasoning_and_verifier_for_visible_run_without
     assert captured["policy"] == 1
     assert captured["reasoning"] == 1
     assert captured["verifier"] == 1
+
+
+def test_orchestrator_classifies_requested_operation_for_action_proposal_modes():
+    run = SimpleNamespace(
+        id="run-3",
+        user_id=7,
+        trace_id="trace-3",
+        status="planned",
+        visibility="visible",
+        feature_mode="visible_readonly",
+        message="Voeg ETH toe aan mijn watchlist.",
+        workspace_hints_json={},
+        client_context_json={},
+    )
+    service = FinnV2OrchestratorService(session=object())
+    service.runs = _FakeRunRepo(run)
+    service.traces = _FakeTraceRepo()
+    service.results = _FakeResultRepo()
+    service.flags.is_tool_registry_enabled = lambda: True
+    service.flags.is_state_assembly_enabled = lambda: True
+    service.flags.should_run_block5_shadow = lambda _user_id: False
+    service.flags.should_run_block6_shadow = lambda _user_id: False
+    service.flags.should_run_block7_shadow = lambda _user_id: False
+    analyzed = service.analysis.analyze(message=run.message)
+    analyzed.interaction_mode = "ACTION_PROPOSAL"
+    analyzed.subject_scopes = ["watchlist"]
+    analyzed.requests_change = True
+    analyzed.requests_execution = False
+    analyzed.reasoning_required = True
+    service.analysis.analyze = lambda **_kwargs: analyzed
+
+    async def _execute_tool_plan(**kwargs):
+        return []
+
+    async def _run_state_pipeline(**_kwargs):
+        validation = EvidenceValidationResult.parse_obj(
+            {
+                "validation_id": "validation-3",
+                "snapshot_id": "snapshot-3",
+                "run_id": "run-3",
+                "user_id": 7,
+                "evidence_set_hash": "hash-3",
+                "integrity_status": "valid",
+                "domains": [
+                    {"domain": "identity_context", "status": "available", "confidence": "high"},
+                    {"domain": "market_context", "status": "available", "confidence": "high"},
+                ],
+                "issues": [],
+                "validated_at": "2026-08-18T10:00:00+00:00",
+            }
+        )
+        return SimpleNamespace(id="snapshot-3", snapshot_id="snapshot-3", user_id=7), validation
+
+    captured = {}
+
+    async def _evaluate_run(**kwargs):
+        captured["requested_operation"] = kwargs["requested_operation"]
+        return SimpleNamespace(
+            policy_class="proposal",
+            allowed=True,
+            proposal_input_required=True,
+            blocking_codes=[],
+        )
+
+    service.tools.execute_tool_plan = _execute_tool_plan
+    service.tools.run_state_pipeline = _run_state_pipeline
+    service.policy.evaluate_run = _evaluate_run
+    service.policy.persist = lambda *args, **kwargs: asyncio.sleep(0, result=None)
+    service.reasoning.reason = lambda **kwargs: asyncio.sleep(0, result=SimpleNamespace(status="ready"))
+    service.verifier.verify_run = lambda **kwargs: asyncio.sleep(0, result=SimpleNamespace(mode="ACTION_PROPOSAL", verifier_status="passed"))
+    service.risk.classify_requested_operation = lambda **_kwargs: "activate_paper_bot"
+
+    asyncio.run(service.execute_run(run_id="run-3", user_id=7, trace_id="trace-3"))
+
+    assert captured["requested_operation"] == "activate_paper_bot"

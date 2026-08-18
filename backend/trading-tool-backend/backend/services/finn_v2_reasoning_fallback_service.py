@@ -232,7 +232,7 @@ class FinnV2ReasoningFallbackService:
             reasoning_result_id=f"finn-v2-reasoning-{uuid.uuid4().hex}",
             run_id=run_id,
             user_id=user_id,
-            mode="EVALUATION",
+            mode="EVALUATE",
             direct_answer=direct_answer,
             main_observation=main_observation,
             supporting_points=[],

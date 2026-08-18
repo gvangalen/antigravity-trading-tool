@@ -807,13 +807,14 @@ class FinnV2ResponseVerifierService:
         )
 
     def _orchestrator_result_from_row(self, row) -> OrchestratorResult:
+        mode = normalize_interaction_mode(row.interaction_mode)
         return OrchestratorResult.parse_obj(
             {
                 "orchestrator_result_id": row.id,
                 "run_id": row.run_id,
                 "user_id": row.user_id,
                 "analysis": {
-                    "interaction_mode": row.interaction_mode,
+                    "interaction_mode": mode,
                     "subject_scopes": row.subject_scopes_json,
                     "explicit_asset": None,
                     "explicit_setup_id": None,
@@ -821,12 +822,12 @@ class FinnV2ResponseVerifierService:
                     "explicit_bot_id": None,
                     "requires_comparison": False,
                     "requires_gap_analysis": False,
-                    "requests_change": row.interaction_mode in {"PROPOSAL", "ACTION"},
-                    "requests_execution": row.interaction_mode == "ACTION",
+                    "requests_change": mode in {"CREATE_PROPOSAL", "ACTION_PROPOSAL", "CONFIRMATION", "EXECUTION"},
+                    "requests_execution": mode == "EXECUTION",
                     "confidence": "medium",
                     "matched_signals": [],
                     "unresolved_signals": [],
-                    "reasoning_required": row.interaction_mode in {"CAPABILITY", "EVALUATION", "PROPOSAL", "ACTION"},
+                    "reasoning_required": mode in {"CAPABILITY", "READ", "EVALUATE", "CREATE_PROPOSAL", "ACTION_PROPOSAL", "CONFIRMATION", "EXECUTION"},
                     "analysis_version": row.analysis_version,
                 },
                 "domain_requirements": {

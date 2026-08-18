@@ -38,7 +38,7 @@ class FinnV2ResponseRepairService:
             updated.uncertainty_summary = uncertainty_summary or "Een deel van de onderliggende context is onzeker of verouderd."
         if "unsupported_noncritical_claim" in reason_codes:
             updated.claims = [claim for claim in updated.claims if claim.claim_type in {"uncertainty", "recommendation"} or claim.evidence_refs]
-        if "mode_purity_violation" in reason_codes and updated.mode == "FACT":
+        if "mode_purity_violation" in reason_codes and updated.mode == "READ":
             updated.proposal_candidate = None
             updated.next_step = None
         return ResponseDraft.parse_obj(updated.dict())

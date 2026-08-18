@@ -16,7 +16,7 @@ class FinnV2ResponseDowngradeService:
             draft_id=f"finn-v2-draft-{uuid.uuid4().hex}",
             run_id=draft.run_id,
             user_id=draft.user_id,
-            mode="FACT",
+            mode="READ",
             direct_answer=draft.direct_answer,
             main_observation=draft.main_observation,
             supporting_points=supporting_points,

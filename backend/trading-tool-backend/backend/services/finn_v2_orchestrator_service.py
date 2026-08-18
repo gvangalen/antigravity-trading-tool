@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.infrastructure.repositories.finn_v2_orchestrator_repository import FinnV2OrchestratorRepository
 from backend.infrastructure.repositories.finn_v2_run_repository import FinnV2RunRepository
 from backend.infrastructure.repositories.finn_v2_trace_repository import FinnV2TraceRepository
+from backend.domain.finn_v2_contract import normalize_interaction_mode
 from backend.schemas.finn_v2_orchestrator_schema import ORCHESTRATOR_VERSION
 from backend.services.finn_v2_domain_requirement_service import FinnV2DomainRequirementService
 from backend.services.finn_v2_flag_service import FinnV2FlagService
@@ -98,7 +99,7 @@ class FinnV2OrchestratorService:
             policy_decision = None
             if self._should_run_policy(run=run, user_id=user_id) and snapshot is not None and validation is not None and result.outcome != "failed":
                 requested_operation = None
-                if result.analysis.interaction_mode == "ACTION":
+                if normalize_interaction_mode(result.analysis.interaction_mode) in {"ACTION_PROPOSAL", "CONFIRMATION", "EXECUTION"}:
                     requested_operation = self.risk.classify_requested_operation(message=run.message)
                 await self._append_trace(
                     run_id=run_id,
