@@ -159,6 +159,14 @@ def test_gateway_marks_visible_timeout_as_terminal_failure():
     assert run_id == "run-timeout-1"
     assert observed["failed"]["run_id"] == "run-timeout-1"
     assert observed["failed"]["error_code"] == "visible_request_timeout"
+    assert observed["failed"]["failure_stage"] == "visible_request_timeout"
+    assert isinstance(observed["failed"]["primary_exception"], TimeoutError)
+
+
+def test_visible_request_timeout_default_covers_live_plan_budget():
+    from backend.services.finn_v2_flag_service import FinnV2FlagService
+
+    assert FinnV2FlagService().visible_request_timeout_seconds() == 20
 
 
 def test_gateway_cancels_run_when_request_is_cancelled():

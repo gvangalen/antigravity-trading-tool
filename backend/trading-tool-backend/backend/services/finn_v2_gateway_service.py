@@ -216,14 +216,17 @@ class FinnV2GatewayService:
                 timeout=float(self.flags.visible_request_timeout_seconds()),
             )
         except asyncio.TimeoutError:
+            timeout_exc = TimeoutError("FINN V2 visible lifecycle exceeded the public request budget.")
             lifecycle.cancel()
             await asyncio.gather(lifecycle, return_exceptions=True)
             await self.run_service.fail_run(
                 run_id=run.id,
                 user_id=user_id,
                 error_code="visible_request_timeout",
-                error_message="FINN V2 visible lifecycle exceeded the public request budget.",
+                error_message=str(timeout_exc),
                 retryable=False,
+                failure_stage="visible_request_timeout",
+                primary_exception=timeout_exc,
             )
         except asyncio.CancelledError:
             lifecycle.cancel()
