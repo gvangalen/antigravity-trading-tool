@@ -1,6 +1,8 @@
 from types import SimpleNamespace
 import asyncio
+from unittest.mock import AsyncMock
 
+from backend.services.asset_catalog_service import AssetCatalogService
 from backend.services.finn_v2_tool_execution_service import FinnV2ToolExecutionService
 
 
@@ -95,3 +97,18 @@ def test_state_pipeline_rolls_back_before_failure_trace():
         "state_assembly_started",
         "state_assembly_failed",
     ]
+
+
+def test_asset_catalog_fallback_does_not_require_session_rollback():
+    service = AssetCatalogService(AsyncMock())
+
+    class _Repo:
+        async def get_assets(self, _symbols):
+            raise RuntimeError("extended read failed")
+
+    service.repository = _Repo()
+
+    result = asyncio.run(service.get_assets(["BTC"]))
+
+    service.session.rollback.assert_not_awaited()
+    assert result["BTC"]["symbol"] == "BTC"

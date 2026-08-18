@@ -372,7 +372,7 @@ def test_asset_catalog_read_failure_rolls_back_before_default_fallback():
 
     result = asyncio.run(service.get_assets(["btc", "ETH"]))
 
-    service.session.rollback.assert_awaited_once()
+    service.session.rollback.assert_not_awaited()
     assert result["BTC"]["display_name"] == "Bitcoin"
     assert result["ETH"]["display_name"] == "Ethereum"
 

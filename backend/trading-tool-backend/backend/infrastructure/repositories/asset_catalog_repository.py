@@ -34,18 +34,30 @@ class AssetCatalogRepository:
             if str(asset_class or "").strip()
         ]
 
-        try:
-            return await self._search_extended_rows(normalized_query, normalized_classes, limit)
-        except Exception:
-            await self.session.rollback()
-            return await self._search_legacy_rows(normalized_query, normalized_classes, limit)
+        return await self._with_legacy_fallback(
+            primary=lambda: self._search_extended_rows(normalized_query, normalized_classes, limit),
+            fallback=lambda: self._search_legacy_rows(normalized_query, normalized_classes, limit),
+        )
 
     async def _fetch_asset_rows(self, symbols: list[str]) -> list[dict[str, Any]]:
+        return await self._with_legacy_fallback(
+            primary=lambda: self._fetch_extended_rows(symbols),
+            fallback=lambda: self._fetch_legacy_rows(symbols),
+        )
+
+    async def _with_legacy_fallback(self, *, primary, fallback):
         try:
-            return await self._fetch_extended_rows(symbols)
+            return await primary()
         except Exception:
-            await self.session.rollback()
-            return await self._fetch_legacy_rows(symbols)
+            transaction = self.session.get_transaction()
+            if transaction is None:
+                return await fallback()
+            async with self.session.begin_nested():
+                try:
+                    return await primary()
+                except Exception:
+                    pass
+            return await fallback()
 
     async def _fetch_extended_rows(self, symbols: list[str]) -> list[dict[str, Any]]:
         result = await self.session.execute(
