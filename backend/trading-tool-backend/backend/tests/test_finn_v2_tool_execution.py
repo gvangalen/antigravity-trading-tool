@@ -1,10 +1,11 @@
 from types import SimpleNamespace
 import asyncio
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from unittest.mock import AsyncMock
 
 from backend.services.asset_catalog_service import AssetCatalogService
+from backend.services.finn_v2_freshness_service import FinnV2FreshnessService
 from backend.services.finn_v2_tool_redaction_service import FinnV2ToolRedactionService
 from backend.services.finn_v2_tool_execution_service import FinnV2ToolExecutionService
 
@@ -190,3 +191,11 @@ def test_asset_catalog_fallback_does_not_require_session_rollback():
 
     service.session.rollback.assert_not_awaited()
     assert result["BTC"]["symbol"] == "BTC"
+
+
+def test_freshness_service_accepts_date_values_for_daily_tools():
+    service = FinnV2FreshnessService()
+
+    freshness = service.freshness_for("read_asset_scores", date.today())
+
+    assert freshness in {"fresh", "stale"}

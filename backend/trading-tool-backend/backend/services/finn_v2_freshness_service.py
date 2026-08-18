@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import date, datetime, time, timezone
 from typing import Optional
 
 from backend.domain.finn_v2_tools import TOOL_FRESHNESS_MAX_AGE_SECONDS
@@ -19,7 +19,12 @@ class FinnV2FreshnessService:
         if as_of is None:
             return "unknown"
         now = datetime.now(timezone.utc)
-        candidate = as_of if as_of.tzinfo else as_of.replace(tzinfo=timezone.utc)
+        candidate = self._normalized_datetime(as_of)
         age_seconds = (now - candidate).total_seconds()
         return "fresh" if age_seconds <= max_age else "stale"
 
+    def _normalized_datetime(self, as_of: date | datetime) -> datetime:
+        if isinstance(as_of, datetime):
+            return as_of if as_of.tzinfo else as_of.replace(tzinfo=timezone.utc)
+        candidate = datetime.combine(as_of, time.min)
+        return candidate.replace(tzinfo=timezone.utc)

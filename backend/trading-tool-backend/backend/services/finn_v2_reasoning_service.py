@@ -334,6 +334,48 @@ class FinnV2ReasoningService:
             if response.get("error"):
                 error = str(response["error"])
                 last_error_codes = [error]
+                if context.interaction_mode == "EVALUATION" and error in {"provider_error", "schema_invalid", "incomplete_structured_response", "timeout"}:
+                    result = self.fallbacks.grounded_evaluation_draft(
+                        run_id=run_id,
+                        user_id=user_id,
+                        context=context,
+                        model=model_name,
+                        error_codes=[error],
+                    )
+                    await self._append_trace(
+                        run_id,
+                        user_id,
+                        trace_id,
+                        "reasoning_fallback_ready",
+                        context,
+                        model_name,
+                        "ready",
+                        int((monotonic() - started) * 1000),
+                        attempt,
+                        input_hash,
+                        [error],
+                    )
+                    return await self._persist_record(
+                        run_id=run_id,
+                        user_id=user_id,
+                        orchestrator_result_id=orchestrator_result.orchestrator_result_id,
+                        policy_decision_id=policy.policy_decision_id,
+                        snapshot_id=snapshot.id,
+                        validation_id=validation.id,
+                        status="ready",
+                        mode=result.mode,
+                        context_version=context.context_version,
+                        evidence_set_hash=context.evidence_set_hash,
+                        input_hash=input_hash,
+                        model=model_name,
+                        result=result,
+                        error_codes=[error],
+                        retry_count=attempt,
+                        input_tokens=response.get("input_tokens"),
+                        output_tokens=response.get("output_tokens"),
+                        reasoning_tokens=response.get("reasoning_tokens"),
+                        latency_ms=int((monotonic() - started) * 1000),
+                    )
                 if attempt < retries_allowed and error in {"provider_error", "schema_invalid", "incomplete_structured_response", "timeout"}:
                     await self._append_trace(run_id, user_id, trace_id, "reasoning_retry", context, model_name, "generating", None, attempt + 1, input_hash, [error])
                     increment_execution_safety_counter(f"finn_v2_reasoning_retries_total:{error}")

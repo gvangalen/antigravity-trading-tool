@@ -625,6 +625,7 @@ def ask_gpt_structured_response(
             "reasoning_tokens": reasoning_tokens,
         }
     except Exception as e:
+        logger.exception("❌ OpenAI structured response error")
         _mark_runtime_error(str(e))
         if "insufficient_quota" in str(e):
             _mark_quota_exhausted()

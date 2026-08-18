@@ -2,6 +2,12 @@ import asyncio
 from datetime import datetime, timezone
 from types import SimpleNamespace
 
+from backend.schemas.finn_v2_reasoning_context_schema import (
+    ReasoningContextPackage,
+    ReasoningDomainStatus,
+    ReasoningEvidenceItem,
+    ReasoningPolicyContext,
+)
 from backend.schemas.finn_v2_reasoning_schema import ReasoningResult
 from backend.services.finn_v2_reasoning_service import FinnV2ReasoningService
 from backend.services.finn_v2_reasoning_prompt_service import FinnV2ReasoningPromptContractError
@@ -93,6 +99,197 @@ def test_visible_reasoning_bypasses_shadow_gate_when_runtime_is_live(monkeypatch
     result = asyncio.run(service.reason(user_id=7, run_id="run-2", trace_id="trace-2"))
 
     assert result == "model-called"
+
+
+def test_reasoning_uses_grounded_evaluation_fallback_on_provider_error(monkeypatch):
+    service = FinnV2ReasoningService(session=object())
+    run = SimpleNamespace(
+        id="run-eval-1",
+        user_id=7,
+        message="Bekijk mijn BTC plan.",
+        visibility="visible",
+        feature_mode="visible_runtime",
+        client_context_json={},
+        workspace_hints_json={"asset": "BTC"},
+    )
+    orchestrator_row = SimpleNamespace(
+        id="orchestrator-eval-1",
+        run_id="run-eval-1",
+        user_id=7,
+        interaction_mode="EVALUATION",
+        analysis_version="2026-08-17.block4",
+        subject_scopes_json=["profile", "indicators", "setup", "strategy", "bot"],
+        required_domains_json=["identity_context", "market_context", "plan_context", "automation_context"],
+        optional_domains_json=[],
+        tool_plan_json={"run_id": "run-eval-1", "interaction_mode": "EVALUATION", "max_tool_calls": 15},
+        snapshot_id="snapshot-eval-1",
+        validation_id="validation-eval-1",
+        outcome="reasoning_ready",
+        selected_clarification_json=None,
+        unavailable_codes_json=[],
+        uncertainty_codes_json=["provider_error"],
+        orchestrator_version="2026-08-17.block4",
+        created_at=datetime.now(timezone.utc),
+    )
+    service.runs.get_by_id_for_user = lambda **_kwargs: asyncio.sleep(0, result=run)
+    service.orchestrators.get_for_run_version = lambda **_kwargs: asyncio.sleep(0, result=orchestrator_row)
+    service.snapshots.get_by_id_for_user = lambda **_kwargs: asyncio.sleep(0, result=SimpleNamespace(id="snapshot-eval-1", snapshot_id="snapshot-eval-1"))
+    service.validations.get_by_id_for_user = lambda **_kwargs: asyncio.sleep(0, result=SimpleNamespace(id="validation-eval-1", validation_id="validation-eval-1", integrity_status="valid", evidence_set_hash="hash-eval", domains=[]))
+    service.policies.get_for_run_version = lambda **_kwargs: asyncio.sleep(
+        0,
+        result=SimpleNamespace(
+            decision_json={
+                "policy_decision_id": "policy-eval-1",
+                "run_id": "run-eval-1",
+                "user_id": 7,
+                "policy_class": "advice",
+                "allowed": True,
+                "proposal_allowed": False,
+                "confirmation_required": False,
+                "step_up_required": False,
+                "execution_allowed": False,
+                "shadow_safe": True,
+                "created_at": "2026-08-18T10:00:00+00:00",
+            }
+        ),
+    )
+    context = ReasoningContextPackage(
+        run_id="run-eval-1",
+        user_id=7,
+        user_message="Bekijk mijn BTC plan.",
+        locale="nl-NL",
+        interaction_mode="EVALUATION",
+        subject_scopes=["profile", "indicators", "setup", "strategy", "bot"],
+        required_domains=["identity_context", "market_context", "plan_context", "automation_context"],
+        orchestrator_result_id="orchestrator-eval-1",
+        snapshot_id="snapshot-eval-1",
+        validation_id="validation-eval-1",
+        policy_decision_id="policy-eval-1",
+        evidence_set_hash="hash-eval",
+        evidence=[
+            ReasoningEvidenceItem(
+                evidence_id="E1",
+                artifact_id="a1",
+                tool_name="read_profile",
+                domain="identity_context",
+                entity_type="profile",
+                source="internal",
+                freshness="not_applicable",
+                confidence="high",
+                facts={"has_profile": False, "trader_profile": {}},
+            ),
+            ReasoningEvidenceItem(
+                evidence_id="E2",
+                artifact_id="a2",
+                tool_name="read_indicator_configuration",
+                domain="market_context",
+                entity_type="indicator_configuration",
+                asset="BTC",
+                source="internal",
+                freshness="unknown",
+                confidence="high",
+                facts={"symbol": "BTC", "configured_indicators": []},
+            ),
+            ReasoningEvidenceItem(
+                evidence_id="E3",
+                artifact_id="a3",
+                tool_name="read_active_setup",
+                domain="plan_context",
+                entity_type="setup",
+                entity_id="282",
+                asset="BTC",
+                source="internal",
+                freshness="unknown",
+                confidence="high",
+                facts={"setup_id": 282, "symbol": "BTC", "timeframe": "4H"},
+            ),
+            ReasoningEvidenceItem(
+                evidence_id="E4",
+                artifact_id="a4",
+                tool_name="read_linked_strategy",
+                domain="plan_context",
+                entity_type="strategy",
+                entity_id="298",
+                asset="BTC",
+                source="internal",
+                freshness="unknown",
+                confidence="high",
+                facts={"strategy_id": 298, "setup_id": 282, "symbol": "BTC", "execution_mode": "fixed", "risk_profile": None},
+            ),
+            ReasoningEvidenceItem(
+                evidence_id="E5",
+                artifact_id="a5",
+                tool_name="read_linked_bot",
+                domain="automation_context",
+                entity_type="bot",
+                entity_id="159",
+                asset="BTC",
+                source="internal",
+                freshness="unknown",
+                confidence="high",
+                facts={"bot_id": 159, "strategy_id": 298, "is_live": False, "is_active": True},
+            ),
+            ReasoningEvidenceItem(
+                evidence_id="E6",
+                artifact_id="a6",
+                tool_name="read_bot_status",
+                domain="automation_context",
+                entity_type="bot_status",
+                entity_id="159",
+                asset="BTC",
+                source="internal",
+                freshness="fresh",
+                confidence="high",
+                facts={"bot_id": 159, "is_live": False, "is_active": True},
+            ),
+        ],
+        domain_statuses=[
+            ReasoningDomainStatus(domain="identity_context", status="available", confidence="high"),
+            ReasoningDomainStatus(domain="market_context", status="available", confidence="medium", issue_codes=["provider_error"]),
+            ReasoningDomainStatus(domain="plan_context", status="available", confidence="high"),
+            ReasoningDomainStatus(domain="automation_context", status="available", confidence="high"),
+        ],
+        policy=ReasoningPolicyContext(
+            policy_class="advice",
+            allowed=True,
+            proposal_allowed=False,
+            confirmation_required=False,
+            step_up_required=False,
+            execution_allowed=False,
+        ),
+        allowed_response_modes=["EVALUATION", "UNAVAILABLE"],
+        allowed_operation_types=[],
+        uncertainty_codes=["provider_error"],
+    )
+    service.contexts.build = lambda **_kwargs: asyncio.sleep(0, result=context)
+    service.contexts.input_hash = lambda *_args, **_kwargs: "hash-input"
+    service.reasoning.get_reusable_result = lambda **_kwargs: asyncio.sleep(0, result=None)
+    service.traces.append_event = lambda **_kwargs: asyncio.sleep(0, result=None)
+    persisted = {}
+
+    async def _persist_record(**kwargs):
+        persisted.update(kwargs)
+        return kwargs
+
+    service._persist_record = _persist_record
+    monkeypatch.setattr(service.flags, "reasoning_max_retries", lambda: 0)
+    monkeypatch.setattr(service.flags, "reasoning_timeout_seconds", lambda: 5)
+    monkeypatch.setattr(service.flags, "reasoning_max_output_tokens", lambda: 600)
+    monkeypatch.setattr(service, "_resolved_model", lambda: "gpt-test")
+    monkeypatch.setattr("backend.services.finn_v2_reasoning_service.openai_client.get_openai_runtime_status", lambda: {"configured": True})
+    monkeypatch.setattr("backend.services.finn_v2_reasoning_service.openai_client.get_ai_availability", lambda: {"available": True})
+    monkeypatch.setattr(
+        "backend.services.finn_v2_reasoning_service.openai_client.ask_gpt_structured_response",
+        lambda **_kwargs: {"error": "provider_error"},
+    )
+
+    result = asyncio.run(service.reason(user_id=7, run_id="run-eval-1", trace_id="trace-eval-1"))
+
+    assert result["status"] == "ready"
+    assert result["mode"] == "EVALUATION"
+    assert "BTC-plan" in result["result"].direct_answer
+    assert result["result"].next_step is not None
+    assert set(result["result"].evidence_refs_used) == {"E1", "E2", "E3", "E4", "E5", "E6"}
 
 
 def test_reasoning_persistence_serializes_datetime_payloads():
