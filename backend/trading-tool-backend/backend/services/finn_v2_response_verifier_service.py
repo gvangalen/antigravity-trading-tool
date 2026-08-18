@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, Optional
@@ -551,8 +552,8 @@ class FinnV2ResponseVerifierService:
         for item in evidence:
             facts = item.facts or {}
             fact_blob = str(facts).lower()
-            if ("live" in haystack or "paper" in haystack) and "is_live" in facts:
-                wants_live = "live" in haystack and "paper" not in haystack
+            if self._mentions_live_mode(haystack) and "is_live" in facts:
+                wants_live = self._asserts_live_mode(haystack)
                 if bool(facts.get("is_live")) != wants_live:
                     return "contradicted", ["paper_live_mismatch"], False
             if item.asset and item.asset.lower() not in haystack and any(token in haystack for token in ["btc", "eth", "sol", "aapl", "tsla", "nvda"]):
@@ -672,7 +673,7 @@ class FinnV2ResponseVerifierService:
 
     def _paper_live_mismatch(self, draft: ResponseDraft, evidence_by_ref: Dict[str, Any]) -> bool:
         text = f"{draft.direct_answer} {draft.main_observation}".lower()
-        if "live" not in text and "paper" not in text:
+        if not self._mentions_live_mode(text):
             return False
         refs = self._all_refs(draft)
         for ref in refs:
@@ -681,11 +682,20 @@ class FinnV2ResponseVerifierService:
                 continue
             if "is_live" not in evidence.facts:
                 continue
-            if "live" in text and "paper" not in text and not bool(evidence.facts.get("is_live")):
+            if self._asserts_live_mode(text) and not bool(evidence.facts.get("is_live")):
                 return True
-            if "paper" in text and bool(evidence.facts.get("is_live")):
+            if self._asserts_paper_mode(text) and bool(evidence.facts.get("is_live")):
                 return True
         return False
+
+    def _mentions_live_mode(self, text: str) -> bool:
+        return self._asserts_live_mode(text) or self._asserts_paper_mode(text)
+
+    def _asserts_live_mode(self, text: str) -> bool:
+        return bool(re.search(r"\blive\b", text)) and not self._asserts_paper_mode(text)
+
+    def _asserts_paper_mode(self, text: str) -> bool:
+        return bool(re.search(r"\bpaper\b", text))
 
     def _decide_action(self, *, draft, reason_codes: list[str], passed: bool, repair_attempt: int, has_clarification: bool) -> str:
         if passed:

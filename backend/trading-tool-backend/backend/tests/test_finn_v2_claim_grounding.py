@@ -74,3 +74,38 @@ def test_claim_grounding_detects_paper_live_contradiction():
     )
 
     assert "paper_live_mismatch" in verifier.reason_codes
+
+
+def test_claim_grounding_does_not_treat_is_live_field_name_as_live_assertion():
+    service, run, orchestrator, policy, validation = _common()
+    draft = ResponseDraft(
+        draft_id="draft-2",
+        run_id="run-1",
+        user_id=7,
+        mode="EVALUATION",
+        direct_answer="Je bot staat in paper mode.",
+        main_observation="Bot 12 heeft is_live false en is_active true.",
+        claims=[
+            ResponseClaim(
+                claim_id="C2",
+                claim_type="fact",
+                text="Bot 12 heeft is_live false en is_active true.",
+                evidence_refs=["E1"],
+                confidence="high",
+            )
+        ],
+        evidence_set_hash="hash-1",
+        created_at=datetime.now(timezone.utc),
+    )
+
+    verifier = service._deterministic_verify(
+        run=run,
+        orchestrator_result=orchestrator,
+        policy=policy,
+        context=_context(is_live=False),
+        validation=validation,
+        draft=draft,
+        repair_attempt=0,
+    )
+
+    assert "paper_live_mismatch" not in verifier.reason_codes
