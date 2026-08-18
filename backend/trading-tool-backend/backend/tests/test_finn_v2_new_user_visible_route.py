@@ -258,3 +258,143 @@ def test_try_v2_visible_delivery_uses_isolated_v2_session(monkeypatch):
     assert observed["delivery_db"] is isolated_session
     assert observed["delivery_db"] is not outer_db
     assert payload["response_trace"]["runtime_selection"]["runtime_mode"] == "v2_only"
+
+
+def test_try_v2_visible_delivery_commits_isolated_session_on_success(monkeypatch):
+    selection = SimpleNamespace(
+        selected_runtime="v2",
+        visible_allowed=True,
+        fallback_allowed=False,
+        dict=lambda: {"selected_runtime": "v2", "runtime_mode": "v2_only"},
+    )
+
+    class Selector:
+        def select(self, **kwargs):
+            return selection
+
+    class Session:
+        def __init__(self):
+            self.commit_calls = 0
+            self.rollback_calls = 0
+            self.sync_session = SimpleNamespace(is_active=True)
+
+        def get_transaction(self):
+            return SimpleNamespace(is_active=True)
+
+        async def commit(self):
+            self.commit_calls += 1
+
+        async def rollback(self):
+            self.rollback_calls += 1
+
+    class _SessionContext:
+        def __init__(self, session):
+            self.session = session
+
+        async def __aenter__(self):
+            return self.session
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+    isolated_session = Session()
+
+    class Delivery:
+        def __init__(self, db):
+            self.db = db
+
+        async def deliver_assistant_envelope(self, **kwargs):
+            return {"response": "ok", "intent": "evaluation", "response_trace": {"run_id": "run-iso-commit"}}
+
+    monkeypatch.setattr(ai_assistant_api, "FinnV2RuntimeSelectorService", Selector)
+    monkeypatch.setattr(ai_assistant_api, "FinnV2VisibleDeliveryService", Delivery)
+    monkeypatch.setattr(ai_assistant_api, "async_session_factory", lambda: _SessionContext(isolated_session))
+
+    payload = asyncio.run(
+        ai_assistant_api._try_v2_visible_delivery(
+            db=object(),
+            user_id=370,
+            message="Bekijk mijn plan.",
+            context_payload={"symbol": "BTC"},
+            transport="chat",
+            request_path="/api/assistant/chat",
+            request_id="req-isolated-commit",
+            trace_id="trace-isolated-commit",
+        )
+    )
+
+    assert payload["response_trace"]["run_id"] == "run-iso-commit"
+    assert isolated_session.commit_calls == 1
+    assert isolated_session.rollback_calls == 0
+
+
+def test_try_v2_visible_delivery_commits_failed_run_state_when_isolated_session_is_still_valid(monkeypatch):
+    selection = SimpleNamespace(
+        selected_runtime="v2",
+        visible_allowed=True,
+        fallback_allowed=False,
+        dict=lambda: {"selected_runtime": "v2", "runtime_mode": "v2_only"},
+    )
+
+    class Selector:
+        def select(self, **kwargs):
+            return selection
+
+    class Session:
+        def __init__(self):
+            self.commit_calls = 0
+            self.rollback_calls = 0
+            self.sync_session = SimpleNamespace(is_active=True)
+
+        def get_transaction(self):
+            return SimpleNamespace(is_active=True)
+
+        async def commit(self):
+            self.commit_calls += 1
+
+        async def rollback(self):
+            self.rollback_calls += 1
+
+    class _SessionContext:
+        def __init__(self, session):
+            self.session = session
+
+        async def __aenter__(self):
+            return self.session
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+    isolated_session = Session()
+
+    class Delivery:
+        def __init__(self, db):
+            self.db = db
+
+        async def deliver_assistant_envelope(self, **kwargs):
+            raise FinnV2VisibleDeliveryError(
+                "v2_delivery_failure",
+                run_id="run-persist-failure",
+                failure_stage="delivery_envelope",
+            )
+
+    monkeypatch.setattr(ai_assistant_api, "FinnV2RuntimeSelectorService", Selector)
+    monkeypatch.setattr(ai_assistant_api, "FinnV2VisibleDeliveryService", Delivery)
+    monkeypatch.setattr(ai_assistant_api, "async_session_factory", lambda: _SessionContext(isolated_session))
+
+    payload = asyncio.run(
+        ai_assistant_api._try_v2_visible_delivery(
+            db=object(),
+            user_id=370,
+            message="Bekijk mijn plan.",
+            context_payload={"symbol": "BTC"},
+            transport="chat",
+            request_path="/api/assistant/chat",
+            request_id="req-isolated-failure",
+            trace_id="trace-isolated-failure",
+        )
+    )
+
+    assert payload["response_trace"]["run_id"] == "run-persist-failure"
+    assert isolated_session.commit_calls == 1
+    assert isolated_session.rollback_calls == 0

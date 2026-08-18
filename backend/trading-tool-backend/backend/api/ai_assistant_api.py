@@ -2692,6 +2692,14 @@ def _safe_request_trace_id(raw_request: Request, fallback: str) -> str:
     return getattr(state, "trace_id", fallback)
 
 
+def _session_requires_rollback(session: AsyncSession) -> bool:
+    sync_session = getattr(session, "sync_session", None)
+    if sync_session is not None and getattr(sync_session, "is_active", True) is False:
+        return True
+    transaction = session.get_transaction()
+    return bool(transaction is not None and getattr(transaction, "is_active", True) is False)
+
+
 async def _enqueue_finn_v2_shadow_run(
     *,
     db: AsyncSession,
@@ -2747,15 +2755,23 @@ async def _try_v2_visible_delivery(
         raise ValueError("v2_runtime_not_selected")
     try:
         async with async_session_factory() as v2_db:
-            envelope = await FinnV2VisibleDeliveryService(v2_db).deliver_assistant_envelope(
-                user_id=user_id,
-                message=message,
-                context_payload=context_payload,
-                transport=transport,
-                request_path=request_path,
-                request_id=request_id,
-                trace_id=trace_id,
-            )
+            try:
+                envelope = await FinnV2VisibleDeliveryService(v2_db).deliver_assistant_envelope(
+                    user_id=user_id,
+                    message=message,
+                    context_payload=context_payload,
+                    transport=transport,
+                    request_path=request_path,
+                    request_id=request_id,
+                    trace_id=trace_id,
+                )
+            except Exception:
+                if _session_requires_rollback(v2_db):
+                    await v2_db.rollback()
+                else:
+                    await v2_db.commit()
+                raise
+            await v2_db.commit()
         envelope.setdefault("response_trace", {})
         envelope["response_trace"]["runtime_selection"] = selection.dict()
         return envelope
