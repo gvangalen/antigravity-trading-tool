@@ -72,6 +72,7 @@ def test_policy_mapping_for_fact_evaluation_proposal_and_actions():
 
     fact = asyncio.run(_evaluate("Welke setup gebruik ik voor BTC?"))
     capability = asyncio.run(_evaluate("Hoi FINN, wat kun je voor mij doen?", "CAPABILITY"))
+    unavailable = asyncio.run(_evaluate("Wat is nu de beste trade voor mij zonder verdere context?", "UNAVAILABLE"))
     evaluation = asyncio.run(_evaluate("Past mijn huidige BTC-strategie bij mijn risicoprofiel?", "EVALUATION"))
     proposal = asyncio.run(_evaluate("Voeg DXY toe.", "PROPOSAL"))
     paper = asyncio.run(_evaluate("Activeer mijn paper bot.", "ACTION", "activate_paper_bot"))
@@ -83,9 +84,34 @@ def test_policy_mapping_for_fact_evaluation_proposal_and_actions():
     assert capability.policy_class == "read"
     assert capability.allowed is True
     assert capability.reasons == ["capability_registry_read_only"]
+    assert unavailable.policy_class == "read"
+    assert unavailable.allowed is False
     assert evaluation.policy_class == "advice"
     assert proposal.policy_class == "proposal"
     assert proposal.proposal_input_required is True
     assert paper.policy_class == "paper_action"
     assert live.policy_class == "high_risk_action"
     assert unsupported.policy_class == "unsupported_action"
+
+
+def test_policy_allows_deterministic_unavailable_delivery_when_outcome_is_unavailable():
+    import asyncio
+
+    orchestrator, snapshot, validation = _context("Wat is nu de beste trade voor mij zonder verdere context?", "UNAVAILABLE")
+    orchestrator.outcome = "unavailable"
+    service = FinnV2PolicyEngineService(session=object())
+
+    decision = asyncio.run(
+        service.evaluate_run(
+            user_id=7,
+            run_id="run-1",
+            orchestrator_result=orchestrator,
+            snapshot=snapshot,
+            validation=validation,
+        )
+    )
+
+    assert decision.policy_class == "read"
+    assert decision.allowed is True
+    assert decision.blocking_codes == []
+    assert decision.reasons == ["deterministic_unavailable_delivery"]

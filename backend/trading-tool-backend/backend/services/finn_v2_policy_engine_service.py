@@ -77,6 +77,18 @@ class FinnV2PolicyEngineService:
             allowed = orchestrator_result.outcome == "reasoning_ready"
             if not allowed:
                 blocks.append("orchestrator_not_ready")
+        elif mode == "UNAVAILABLE":
+            policy_class = "read"
+            allowed = orchestrator_result.outcome == "unavailable"
+            if not allowed:
+                blocks.append("orchestrator_not_ready")
+            reasons.append("deterministic_unavailable_delivery")
+        elif mode == "CLARIFICATION":
+            policy_class = "read"
+            allowed = orchestrator_result.outcome == "clarification_required"
+            if not allowed:
+                blocks.append("orchestrator_not_ready")
+            reasons.append("deterministic_clarification_delivery")
         elif mode == "PROPOSAL":
             policy_class = "proposal"
             proposal_allowed = True
