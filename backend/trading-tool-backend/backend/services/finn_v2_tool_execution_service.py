@@ -151,6 +151,15 @@ class FinnV2ToolExecutionService:
             return ToolExecutionResult(tool_name=tool_name, status="failed", success=False, error_codes=["tool_run_not_owned"])
         if run.status not in {"collecting", "planned"}:
             return ToolExecutionResult(tool_name=tool_name, status="failed", success=False, error_codes=["tool_run_invalid_state"])
+        if self._session_requires_rollback():
+            await self._rollback_failed_session(
+                run_id=run_id,
+                user_id=user_id,
+                trace_id=getattr(run, "trace_id", None),
+                tool_name=tool_name,
+                failure_stage="tool_preflight",
+                primary_exception=RuntimeError("tool_session_requires_rollback_before_execution"),
+            )
 
         selector = self.redaction.redact_selector(selector or {})
         tool_call = None
@@ -242,6 +251,16 @@ class FinnV2ToolExecutionService:
             )
 
         if tool_call is not None:
+            if not session_rolled_back and self._session_requires_rollback():
+                session_rolled_back = await self._rollback_failed_session(
+                    run_id=run_id,
+                    user_id=user_id,
+                    trace_id=run.trace_id,
+                    tool_name=tool_name,
+                    tool_call_id=tool_call_id,
+                    failure_stage="tool_call_pre_complete",
+                    primary_exception=RuntimeError("tool_session_requires_rollback_before_completion"),
+                )
             if session_rolled_back:
                 logger.warning(
                     "FINN V2 skipped tool-call completion after session rollback",
@@ -545,20 +564,52 @@ class FinnV2ToolExecutionService:
             increment_execution_safety_counter(f"finn_v2_evidence_artifacts_total:{result.tool_name}:{artifact.availability}")
         except Exception as exc:
             increment_execution_safety_counter(f"finn_v2_evidence_ingestion_failures_total:{result.tool_name}:{type(exc).__name__}")
-            await self._append_trace(
+            await self._rollback_failed_session(
                 run_id=run_id,
                 user_id=user_id,
                 trace_id=trace_id,
-                event_type="evidence_ingestion_failed",
-                payload_json={
-                    "run_id": run_id,
-                    "user_id": user_id,
-                    "tool_call_id": result.tool_call_id,
-                    "tool_name": result.tool_name,
-                    "issue_codes": [str(exc)],
-                    "duration_ms": int((monotonic() - started) * 1000),
-                },
+                tool_name=result.tool_name,
+                tool_call_id=result.tool_call_id,
+                failure_stage="evidence_ingestion",
+                primary_exception=exc,
             )
+            self._log_tool_transaction_exception(
+                message="FINN V2 evidence ingestion failed",
+                run_id=run_id,
+                user_id=user_id,
+                trace_id=trace_id,
+                tool_name=result.tool_name,
+                tool_call_id=result.tool_call_id,
+                failure_stage="evidence_ingestion",
+                primary_exception=exc,
+            )
+            try:
+                await self._append_trace(
+                    run_id=run_id,
+                    user_id=user_id,
+                    trace_id=trace_id,
+                    event_type="evidence_ingestion_failed",
+                    payload_json={
+                        "run_id": run_id,
+                        "user_id": user_id,
+                        "tool_call_id": result.tool_call_id,
+                        "tool_name": result.tool_name,
+                        "issue_codes": [str(exc)],
+                        "duration_ms": int((monotonic() - started) * 1000),
+                    },
+                )
+            except Exception:
+                logger.exception(
+                    "FINN V2 evidence-ingestion failure trace append failed",
+                    extra={
+                        "trace_id": trace_id,
+                        "run_id": run_id,
+                        "user_id": user_id,
+                        "tool_name": result.tool_name,
+                        "tool_call_id": result.tool_call_id,
+                        "failure_stage": "evidence_ingestion_trace_append",
+                    },
+                )
 
     async def _run_state_pipeline(self, *, run_id: str, user_id: int) -> Tuple[Optional[object], Optional[object]]:
         run = await self.runs.get_by_id_for_user(run_id=run_id, user_id=user_id)

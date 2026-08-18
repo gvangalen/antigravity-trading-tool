@@ -230,3 +230,65 @@ def test_tool_execution_rolls_back_failed_session_before_tool_call_completion(mo
     assert result.success is False
     assert result.error_codes == ["tool_internal_error"]
     assert session.rollback_calls == 1
+
+
+def test_tool_execution_rolls_back_poisoned_session_before_next_tool_call(monkeypatch):
+    session = _FakeSession()
+    session.sync_session.is_active = False
+    session.get_transaction().is_active = False
+    service = FinnV2ToolExecutionService(session=session)
+    service.runs = _FakeRunRepo()
+    service.calls = _FakeCallRepo()
+    service.traces = _FakeTraceRepo()
+    monkeypatch.setattr(service.flags, "is_tool_registry_enabled", lambda: True)
+    monkeypatch.setattr(service.flags, "is_tool_registry_readonly", lambda: True)
+    monkeypatch.setattr(service.flags, "is_tool_call_logging_enabled", lambda: True)
+    service.profile_adapter.execute = lambda **_kwargs: asyncio.sleep(
+        0,
+        result={"data": {"ok": True}, "summary": {"title": "profile"}, "as_of": None},
+    )
+
+    result = asyncio.run(service.execute_tool(run_id="run-1", user_id=7, tool_name="read_profile", selector={}))
+
+    assert result.success is True
+    assert session.rollback_calls == 1
+    assert service.calls.rows[-1].status == "completed"
+
+
+def test_evidence_ingestion_rolls_back_poisoned_session(monkeypatch):
+    session = _FakeSession()
+    service = FinnV2ToolExecutionService(session=session)
+    service.runs = _FakeRunRepo()
+    service.traces = _FakeTraceRepo()
+    monkeypatch.setattr(service.flags, "should_run_block3_shadow", lambda _user_id: True)
+
+    async def _explode(**_kwargs):
+        session.sync_session.is_active = False
+        session.get_transaction().is_active = False
+        raise RuntimeError("artifact_flush_failed")
+
+    service.evidence.ingest_tool_result = _explode
+
+    result = SimpleNamespace(
+        tool_name="read_profile",
+        status="completed",
+        success=True,
+        selector={},
+        result={"ok": True},
+        result_summary={"title": "profile"},
+        resolution_source=None,
+        freshness_status="fresh",
+        error_codes=[],
+        source="internal",
+        schema_name="read_profile",
+        schema_version="2026-08-17.block2",
+        availability="available",
+        entity_type="profile",
+        entity_id=None,
+        asset=None,
+        tool_call_id=12,
+    )
+
+    asyncio.run(service._ingest_evidence(run_id="run-1", user_id=7, trace_id="trace-1", result=result))
+
+    assert session.rollback_calls == 1
