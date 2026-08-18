@@ -23,6 +23,9 @@ class FinnV2ToolCallRepository:
             **kwargs,
         )
         self.session.add(row)
+        run_id = getattr(row, "run_id", None)
+        user_id = getattr(row, "user_id", None)
+        tool_name = getattr(row, "tool_name", None)
         try:
             await self.session.flush()
         except Exception as exc:
@@ -32,9 +35,9 @@ class FinnV2ToolCallRepository:
                     "repository": self.__class__.__name__,
                     "operation": "create",
                     "entity_type": "FinnV2ToolCall",
-                    "run_id": getattr(row, "run_id", None),
-                    "user_id": getattr(row, "user_id", None),
-                    "tool_name": getattr(row, "tool_name", None),
+                    "run_id": run_id,
+                    "user_id": user_id,
+                    "tool_name": tool_name,
                     "exception_class": exc.__class__.__name__,
                 },
             )
@@ -59,6 +62,10 @@ class FinnV2ToolCallRepository:
     async def update(self, row: FinnV2ToolCall, **kwargs) -> FinnV2ToolCall:
         for key, value in kwargs.items():
             setattr(row, key, value)
+        run_id = getattr(row, "run_id", None)
+        user_id = getattr(row, "user_id", None)
+        tool_call_id = getattr(row, "id", None)
+        tool_name = getattr(row, "tool_name", None)
         try:
             await self.session.flush()
         except Exception as exc:
@@ -68,10 +75,10 @@ class FinnV2ToolCallRepository:
                     "repository": self.__class__.__name__,
                     "operation": "update",
                     "entity_type": "FinnV2ToolCall",
-                    "run_id": getattr(row, "run_id", None),
-                    "user_id": getattr(row, "user_id", None),
-                    "tool_call_id": getattr(row, "id", None),
-                    "tool_name": getattr(row, "tool_name", None),
+                    "run_id": run_id,
+                    "user_id": user_id,
+                    "tool_call_id": tool_call_id,
+                    "tool_name": tool_name,
                     "exception_class": exc.__class__.__name__,
                 },
             )

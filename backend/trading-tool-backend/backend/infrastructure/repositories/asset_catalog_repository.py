@@ -46,18 +46,19 @@ class AssetCatalogRepository:
         )
 
     async def _with_legacy_fallback(self, *, primary, fallback):
-        try:
-            return await primary()
-        except Exception:
-            transaction = self.session.get_transaction()
-            if transaction is None:
+        transaction = self.session.get_transaction()
+        if transaction is None:
+            try:
+                return await primary()
+            except Exception:
                 return await fallback()
+
+        try:
             async with self.session.begin_nested():
-                try:
-                    return await primary()
-                except Exception:
-                    pass
-            return await fallback()
+                return await primary()
+        except Exception:
+            async with self.session.begin_nested():
+                return await fallback()
 
     async def _fetch_extended_rows(self, symbols: list[str]) -> list[dict[str, Any]]:
         result = await self.session.execute(

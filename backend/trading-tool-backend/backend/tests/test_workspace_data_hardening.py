@@ -6,6 +6,7 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
+from backend.infrastructure.repositories.asset_catalog_repository import AssetCatalogRepository
 from backend.services.asset_catalog_service import AssetCatalogService
 from backend.services.intelligence_service import IntelligenceService
 from backend.services.workspace_data_service import (
@@ -375,6 +376,43 @@ def test_asset_catalog_read_failure_rolls_back_before_default_fallback():
     service.session.rollback.assert_not_awaited()
     assert result["BTC"]["display_name"] == "Bitcoin"
     assert result["ETH"]["display_name"] == "Ethereum"
+
+
+def test_asset_catalog_repository_uses_savepoints_for_legacy_fallback_inside_transaction():
+    class _NestedTxn:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+    class _Session:
+        def __init__(self):
+            self.begin_nested_calls = 0
+
+        def get_transaction(self):
+            return object()
+
+        def begin_nested(self):
+            self.begin_nested_calls += 1
+            return _NestedTxn()
+
+    repo = AssetCatalogRepository(_Session())
+    attempts = []
+
+    async def _primary():
+        attempts.append("primary")
+        raise RuntimeError("extended query failed")
+
+    async def _fallback():
+        attempts.append("fallback")
+        return [{"symbol": "BTC"}]
+
+    result = asyncio.run(repo._with_legacy_fallback(primary=_primary, fallback=_fallback))
+
+    assert result == [{"symbol": "BTC"}]
+    assert attempts == ["primary", "fallback"]
+    assert repo.session.begin_nested_calls == 2
 
 
 def test_workspace_reads_do_not_parallelize_a_shared_async_session():
