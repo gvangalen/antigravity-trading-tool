@@ -153,7 +153,7 @@ class FinnV2RunService:
         failure_stage: str = "run_failure",
         primary_exception: Optional[Exception] = None,
     ) -> None:
-        if self._session_requires_rollback():
+        if primary_exception is not None or self._session_requires_rollback():
             await self._rollback_failed_session(
                 run_id=run_id,
                 user_id=user_id,
