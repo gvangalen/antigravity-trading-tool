@@ -120,8 +120,10 @@ class FinnV2EvidenceValidatorService:
 
         if asset and setup and self._payload_value(setup.payload, "symbol") and self._payload_value(setup.payload, "symbol") != self._payload_value(asset.payload, "symbol"):
             issues.append(EvidenceIssue(code="conflict_asset_setup", severity="blocking", domain="plan_context", node_id=setup.node_id, message="Setup asset conflicts with resolved asset"))
-        setup_id = self._payload_value(setup.payload, "setup_id") or self._coerce_int(setup.entity_id)
-        strategy_setup_id = self._payload_value(strategy.payload, "setup_id")
+        setup_id = self._payload_value(setup.payload, "setup_id") if setup else None
+        if setup_id is None and setup is not None:
+            setup_id = self._coerce_int(setup.entity_id)
+        strategy_setup_id = self._payload_value(strategy.payload, "setup_id") if strategy else None
         if setup and strategy and strategy_setup_id is not None and setup_id is not None and strategy_setup_id != setup_id:
             issues.append(EvidenceIssue(code="conflict_setup_strategy", severity="blocking", domain="plan_context", node_id=strategy.node_id, message="Strategy conflicts with setup"))
         strategy_id = self._payload_value(strategy.payload, "strategy_id") or self._coerce_int(strategy.entity_id) if strategy else None

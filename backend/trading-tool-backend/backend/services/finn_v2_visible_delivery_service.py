@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from typing import Any, Optional
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -7,6 +8,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.schemas.finn_v2_schema import AgentRunRequest
 from backend.services.finn_v2_delivery_service import FinnV2DeliveryService
 from backend.services.finn_v2_gateway_service import FinnV2GatewayService
+
+
+logger = logging.getLogger(__name__)
 
 
 class FinnV2VisibleDeliveryService:
@@ -42,6 +46,18 @@ class FinnV2VisibleDeliveryService:
         envelope = artifacts["delivery_envelope"]
         verified_response = artifacts.get("verified_response")
         if verified_response is None:
+            logger.error(
+                "FINN V2 visible delivery missing verified response",
+                extra={
+                    "trace_id": trace_id,
+                    "request_id": request_id,
+                    "user_id": user_id,
+                    "run_id": run_id,
+                    "failure_stage": "delivery_envelope",
+                    "service": "FinnV2VisibleDeliveryService",
+                    "method": "deliver_assistant_envelope",
+                },
+            )
             raise ValueError("v2_delivery_failure")
         return self._assistant_contract(
             verified_response,

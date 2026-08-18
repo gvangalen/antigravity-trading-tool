@@ -55,6 +55,8 @@ class FinnV2ReasoningContextService:
         validation: EvidenceValidationResult,
         policy,
     ) -> ReasoningContextPackage:
+        snapshot_model = self._snapshot_model(snapshot)
+        validation_model = self._validation_model(validation)
         artifacts = await self.evidence_repo.list_for_run(run_id=run.id, user_id=run.user_id)
         selected_domains = set(orchestrator_result.domain_requirements.required_domains + orchestrator_result.domain_requirements.optional_domains)
         evidence: list[ReasoningEvidenceItem] = []
@@ -85,7 +87,7 @@ class FinnV2ReasoningContextService:
 
         evidence = self._trim_to_size(evidence)
         domain_statuses = []
-        for item in validation.domains:
+        for item in validation_model.domains:
             if item.domain in selected_domains:
                 domain_statuses.append(
                     ReasoningDomainStatus(
@@ -116,10 +118,10 @@ class FinnV2ReasoningContextService:
             subject_scopes=list(orchestrator_result.analysis.subject_scopes),
             required_domains=list(orchestrator_result.domain_requirements.required_domains),
             orchestrator_result_id=orchestrator_result.orchestrator_result_id,
-            snapshot_id=snapshot.snapshot_id,
-            validation_id=validation.validation_id,
+            snapshot_id=snapshot_model.snapshot_id,
+            validation_id=validation_model.validation_id,
             policy_decision_id=policy.policy_decision_id,
-            evidence_set_hash=validation.evidence_set_hash,
+            evidence_set_hash=validation_model.evidence_set_hash,
             context_version=REASONING_CONTEXT_VERSION,
             evidence=evidence,
             domain_statuses=domain_statuses,
@@ -205,3 +207,46 @@ class FinnV2ReasoningContextService:
         context = getattr(run, "client_context_json", {}) or {}
         hints = getattr(run, "workspace_hints_json", {}) or {}
         return str(context.get("locale") or hints.get("locale") or "nl-NL")
+
+    def _snapshot_model(self, snapshot: Any) -> FinancialStateSnapshot:
+        if isinstance(snapshot, FinancialStateSnapshot):
+            return snapshot
+        if getattr(snapshot, "snapshot_json", None):
+            return FinancialStateSnapshot.parse_obj(snapshot.snapshot_json)
+        return FinancialStateSnapshot.parse_obj(
+            {
+                "snapshot_id": getattr(snapshot, "id"),
+                "run_id": getattr(snapshot, "run_id"),
+                "user_id": getattr(snapshot, "user_id"),
+                "revision": getattr(snapshot, "revision", 1),
+                "schema_version": getattr(snapshot, "schema_version", None),
+                "assembly_version": getattr(snapshot, "assembly_version", None),
+                "evidence_set_hash": getattr(snapshot, "evidence_set_hash", ""),
+                "nodes": [],
+                "edges": [],
+                "tool_outcomes": [],
+                "assembled_at": getattr(snapshot, "assembled_at"),
+                "redacted_at": getattr(snapshot, "redacted_at", None),
+            }
+        )
+
+    def _validation_model(self, validation: Any) -> EvidenceValidationResult:
+        if isinstance(validation, EvidenceValidationResult):
+            return validation
+        if getattr(validation, "result_json", None):
+            return EvidenceValidationResult.parse_obj(validation.result_json)
+        return EvidenceValidationResult.parse_obj(
+            {
+                "validation_id": getattr(validation, "id"),
+                "snapshot_id": getattr(validation, "snapshot_id"),
+                "run_id": getattr(validation, "run_id"),
+                "user_id": getattr(validation, "user_id"),
+                "validator_version": getattr(validation, "validator_version", ""),
+                "evidence_set_hash": getattr(validation, "evidence_set_hash", ""),
+                "integrity_status": getattr(validation, "integrity_status", "degraded"),
+                "domains": [],
+                "issues": [],
+                "validated_at": getattr(validation, "validated_at"),
+                "redacted_at": getattr(validation, "redacted_at", None),
+            }
+        )

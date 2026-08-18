@@ -520,6 +520,22 @@ class FinnV2ToolExecutionService:
                     },
                 )
         except Exception as exc:
+            logger.exception(
+                "FINN V2 evidence validation failed",
+                extra={
+                    "trace_id": run.trace_id,
+                    "user_id": user_id,
+                    "conversation_id": getattr(run, "conversation_id", None),
+                    "run_id": run_id,
+                    "failure_stage": "evidence_validation",
+                    "service": "FinnV2ToolExecutionService",
+                    "method": "_run_state_pipeline",
+                    "exception_class": exc.__class__.__name__,
+                    "exception_message": str(exc),
+                    "transaction_status": self._transaction_status(),
+                    "snapshot_id": snapshot.snapshot_id,
+                },
+            )
             await self._append_trace(
                 run_id=run_id,
                 user_id=user_id,
@@ -538,3 +554,11 @@ class FinnV2ToolExecutionService:
             event_type=event_type,
             payload_json=payload_json,
         )
+
+    def _transaction_status(self) -> Dict[str, Any]:
+        transaction = self.session.get_transaction()
+        return {
+            "in_transaction": self.session.in_transaction(),
+            "transaction_present": transaction is not None,
+            "transaction_is_active": getattr(transaction, "is_active", None),
+        }
