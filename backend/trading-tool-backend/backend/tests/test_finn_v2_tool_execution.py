@@ -1,8 +1,11 @@
 from types import SimpleNamespace
 import asyncio
+from dataclasses import dataclass
+from datetime import datetime, timezone
 from unittest.mock import AsyncMock
 
 from backend.services.asset_catalog_service import AssetCatalogService
+from backend.services.finn_v2_tool_redaction_service import FinnV2ToolRedactionService
 from backend.services.finn_v2_tool_execution_service import FinnV2ToolExecutionService
 
 
@@ -38,6 +41,34 @@ class _FakeTraceRepo:
         return kwargs
 
 
+class _NestedTxn:
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, exc_type, exc, tb):
+        return False
+
+
+class _FakeSession:
+    def __init__(self):
+        self.sync_session = SimpleNamespace(is_active=True)
+
+    def begin_nested(self):
+        return _NestedTxn()
+
+    def in_transaction(self):
+        return True
+
+    def get_transaction(self):
+        return SimpleNamespace(is_active=True)
+
+
+@dataclass
+class _ComplexSummary:
+    symbol: str
+    captured_at: datetime
+
+
 def test_tool_execution_returns_feature_disabled_when_registry_off(monkeypatch):
     service = FinnV2ToolExecutionService(session=object())
     monkeypatch.setattr(service.flags, "is_tool_registry_enabled", lambda: False)
@@ -48,7 +79,7 @@ def test_tool_execution_returns_feature_disabled_when_registry_off(monkeypatch):
 
 
 def test_tool_execution_logs_successful_profile_call(monkeypatch):
-    service = FinnV2ToolExecutionService(session=object())
+    service = FinnV2ToolExecutionService(session=_FakeSession())
     service.runs = _FakeRunRepo()
     service.calls = _FakeCallRepo()
     service.traces = _FakeTraceRepo()
@@ -61,6 +92,21 @@ def test_tool_execution_logs_successful_profile_call(monkeypatch):
 
     assert result.success is True
     assert service.calls.rows[-1].status == "completed"
+
+
+def test_tool_redaction_service_serializes_nested_objects():
+    service = FinnV2ToolRedactionService()
+
+    payload = service.redact_result_summary(
+        {
+            "snapshot": _ComplexSummary(symbol="BTC", captured_at=datetime(2026, 8, 18, 10, 30, tzinfo=timezone.utc)),
+            "items": [_ComplexSummary(symbol="AAPL", captured_at=datetime(2026, 8, 18, 11, 0, tzinfo=timezone.utc))],
+        }
+    )
+
+    assert payload["snapshot"]["symbol"] == "BTC"
+    assert payload["snapshot"]["captured_at"] == "2026-08-18T10:30:00+00:00"
+    assert payload["items"][0]["symbol"] == "AAPL"
 
 
 def test_state_pipeline_rolls_back_before_failure_trace():

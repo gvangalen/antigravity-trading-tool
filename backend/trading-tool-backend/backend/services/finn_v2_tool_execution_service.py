@@ -155,16 +155,13 @@ class FinnV2ToolExecutionService:
         selector = self.redaction.redact_selector(selector or {})
         tool_call = None
         if self.flags.is_tool_call_logging_enabled():
-            tool_call = await self.calls.create(
+            tool_call = await self._create_tool_call(
                 run_id=run.id,
                 user_id=user_id,
                 trace_id=run.trace_id,
                 tool_name=tool_name,
-                status="requested",
-                selector_json=selector,
-                error_codes_json=[],
+                selector=selector,
             )
-            await self.calls.update(tool_call, status="executing")
 
         started = monotonic()
         try:
@@ -232,22 +229,93 @@ class FinnV2ToolExecutionService:
 
         if tool_call is not None:
             duration_ms = int((monotonic() - started) * 1000)
-            await self.calls.update(
-                tool_call,
-                status=result.status,
-                success=result.success,
-                resolution_source=result.resolution_source,
-                freshness_status=result.freshness_status,
-                result_summary_json=result.result_summary,
-                error_codes_json=result.error_codes,
-                completed_at=datetime.now(timezone.utc),
+            persisted_tool_call = await self._complete_tool_call(
+                tool_call=tool_call,
+                result=result,
                 duration_ms=max(duration_ms, 0),
+                run_id=run_id,
+                user_id=user_id,
+                trace_id=run.trace_id,
             )
-            result.tool_call_id = getattr(tool_call, "id", result.tool_call_id)
+            if persisted_tool_call is not None:
+                result.tool_call_id = getattr(persisted_tool_call, "id", result.tool_call_id)
         record_latency_sample("finn_v2_tool_execution_duration_ms", int((monotonic() - started) * 1000))
         if self.flags.should_run_block3_shadow(user_id) and tool_call is not None:
             await self._ingest_evidence(run_id=run_id, user_id=user_id, trace_id=run.trace_id, result=result)
         return result
+
+    async def _create_tool_call(
+        self,
+        *,
+        run_id: str,
+        user_id: int,
+        trace_id: str,
+        tool_name: str,
+        selector: Dict[str, Any],
+    ):
+        tool_call = None
+        try:
+            async with self.session.begin_nested():
+                tool_call = await self.calls.create(
+                    run_id=run_id,
+                    user_id=user_id,
+                    trace_id=trace_id,
+                    tool_name=tool_name,
+                    status="requested",
+                    selector_json=selector,
+                    error_codes_json=[],
+                )
+                await self.calls.update(tool_call, status="executing")
+            return tool_call
+        except Exception as primary_exc:
+            self._log_tool_transaction_exception(
+                message="FINN V2 tool-call persistence failed before execution",
+                run_id=run_id,
+                user_id=user_id,
+                trace_id=trace_id,
+                tool_name=tool_name,
+                tool_call_id=getattr(tool_call, "id", None),
+                failure_stage="tool_call_create",
+                primary_exception=primary_exc,
+            )
+            return None
+
+    async def _complete_tool_call(
+        self,
+        *,
+        tool_call,
+        result: ToolExecutionResult,
+        duration_ms: int,
+        run_id: str,
+        user_id: int,
+        trace_id: str,
+    ):
+        try:
+            async with self.session.begin_nested():
+                await self.calls.update(
+                    tool_call,
+                    status=result.status,
+                    success=result.success,
+                    resolution_source=result.resolution_source,
+                    freshness_status=result.freshness_status,
+                    result_summary_json=result.result_summary,
+                    error_codes_json=result.error_codes,
+                    completed_at=datetime.now(timezone.utc),
+                    duration_ms=duration_ms,
+                )
+            return tool_call
+        except Exception as cleanup_exc:
+            self._log_tool_transaction_exception(
+                message="FINN V2 tool-call persistence failed after execution",
+                run_id=run_id,
+                user_id=user_id,
+                trace_id=trace_id,
+                tool_name=result.tool_name,
+                tool_call_id=getattr(tool_call, "id", None),
+                failure_stage="tool_call_complete",
+                cleanup_exception=cleanup_exc,
+            )
+            return None
 
     async def apply_retention(self) -> Dict[str, int]:
         if not hasattr(self.calls, "redact_results_older_than") or not hasattr(self.calls, "delete_metadata_older_than"):
@@ -562,3 +630,38 @@ class FinnV2ToolExecutionService:
             "transaction_present": transaction is not None,
             "transaction_is_active": getattr(transaction, "is_active", None),
         }
+
+    def _log_tool_transaction_exception(
+        self,
+        *,
+        message: str,
+        run_id: str,
+        user_id: int,
+        trace_id: Optional[str],
+        tool_name: str,
+        tool_call_id: Optional[int] = None,
+        failure_stage: str,
+        primary_exception: Optional[Exception] = None,
+        cleanup_exception: Optional[Exception] = None,
+    ) -> None:
+        exc = cleanup_exception or primary_exception
+        if exc is None:
+            return
+        logger.exception(
+            message,
+            extra={
+                "trace_id": trace_id,
+                "run_id": run_id,
+                "user_id": user_id,
+                "tool_name": tool_name,
+                "tool_call_id": tool_call_id,
+                "failure_stage": failure_stage,
+                "service": "FinnV2ToolExecutionService",
+                "method": "execute_tool",
+                "primary_exception_class": primary_exception.__class__.__name__ if primary_exception else None,
+                "primary_exception_message": str(primary_exception) if primary_exception else None,
+                "cleanup_exception_class": cleanup_exception.__class__.__name__ if cleanup_exception else None,
+                "cleanup_exception_message": str(cleanup_exception) if cleanup_exception else None,
+                "transaction_status": self._transaction_status(),
+            },
+        )

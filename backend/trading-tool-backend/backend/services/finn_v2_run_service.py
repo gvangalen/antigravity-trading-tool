@@ -143,16 +143,42 @@ class FinnV2RunService:
         error_code: str,
         error_message: str,
         retryable: bool = False,
+        failure_stage: str = "run_failure",
+        primary_exception: Optional[Exception] = None,
     ) -> None:
-        await self.transition_run(
-            run_id,
-            user_id,
-            next_status="failed",
-            error_code=error_code,
-            error_message=error_message,
-            retryable=retryable,
-            response_source="foundation_placeholder",
-        )
+        if self._session_requires_rollback():
+            await self._rollback_failed_session(
+                run_id=run_id,
+                user_id=user_id,
+                failure_stage=failure_stage,
+                primary_exception=primary_exception,
+            )
+        try:
+            await self.transition_run(
+                run_id,
+                user_id,
+                next_status="failed",
+                error_code=error_code,
+                error_message=error_message,
+                retryable=retryable,
+                response_source="foundation_placeholder",
+            )
+        except Exception as cleanup_exc:
+            logger.exception(
+                "FINN V2 fail_run cleanup failure",
+                extra={
+                    "run_id": run_id,
+                    "user_id": user_id,
+                    "failure_stage": failure_stage,
+                    "service": "FinnV2RunService",
+                    "method": "fail_run",
+                    "primary_exception_class": primary_exception.__class__.__name__ if primary_exception else None,
+                    "primary_exception_message": str(primary_exception) if primary_exception else None,
+                    "cleanup_exception_class": cleanup_exc.__class__.__name__,
+                    "cleanup_exception_message": str(cleanup_exc),
+                },
+            )
+            raise
 
     async def cancel_run(self, *, run_id: str, user_id: int):
         run = await self.runs.get_by_id_for_user(run_id=run_id, user_id=user_id)
@@ -182,12 +208,26 @@ class FinnV2RunService:
             logger.warning("FINN V2 lifecycle canceled", extra={"run_id": run_id, "user_id": user_id})
             raise
         except Exception as exc:
+            logger.exception(
+                "FINN V2 lifecycle primary failure",
+                extra={
+                    "run_id": run_id,
+                    "user_id": user_id,
+                    "failure_stage": "run_foundation_lifecycle",
+                    "service": "FinnV2RunService",
+                    "method": "run_foundation_lifecycle",
+                    "primary_exception_class": exc.__class__.__name__,
+                    "primary_exception_message": str(exc),
+                },
+            )
             await self.fail_run(
                 run_id=run_id,
                 user_id=user_id,
                 error_code="orchestrator_failed",
                 error_message=str(exc),
                 retryable=False,
+                failure_stage="run_foundation_lifecycle",
+                primary_exception=exc,
             )
 
     def _is_visible_run(self, run) -> bool:
@@ -238,3 +278,37 @@ class FinnV2RunService:
             "trace_id": run.trace_id,
             "response_source": response_source,
         }
+
+    def _session_requires_rollback(self) -> bool:
+        sync_session = getattr(self.session, "sync_session", None)
+        if sync_session is not None and getattr(sync_session, "is_active", True) is False:
+            return True
+        transaction = self.session.get_transaction()
+        return bool(transaction is not None and getattr(transaction, "is_active", True) is False)
+
+    async def _rollback_failed_session(
+        self,
+        *,
+        run_id: str,
+        user_id: int,
+        failure_stage: str,
+        primary_exception: Optional[Exception],
+    ) -> None:
+        try:
+            await self.session.rollback()
+        except Exception as cleanup_exc:
+            logger.exception(
+                "FINN V2 rollback before fail_run failed",
+                extra={
+                    "run_id": run_id,
+                    "user_id": user_id,
+                    "failure_stage": failure_stage,
+                    "service": "FinnV2RunService",
+                    "method": "_rollback_failed_session",
+                    "primary_exception_class": primary_exception.__class__.__name__ if primary_exception else None,
+                    "primary_exception_message": str(primary_exception) if primary_exception else None,
+                    "cleanup_exception_class": cleanup_exc.__class__.__name__,
+                    "cleanup_exception_message": str(cleanup_exc),
+                },
+            )
+            raise

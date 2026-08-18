@@ -187,7 +187,19 @@ class FinnV2OrchestratorService:
                 )
             return result
         except Exception as exc:
-            logger.exception("FINN V2 orchestrator failed", extra={"run_id": run_id, "user_id": user_id})
+            logger.exception(
+                "FINN V2 orchestrator primary failure",
+                extra={
+                    "trace_id": trace_id,
+                    "run_id": run_id,
+                    "user_id": user_id,
+                    "failure_stage": "orchestrator_execute_run",
+                    "service": "FinnV2OrchestratorService",
+                    "method": "execute_run",
+                    "primary_exception_class": exc.__class__.__name__,
+                    "primary_exception_message": str(exc),
+                },
+            )
             result = self.outcomes.build_failed_result(
                 run_id=run_id,
                 user_id=user_id,
@@ -196,20 +208,41 @@ class FinnV2OrchestratorService:
                 tool_plan=tool_plan,
                 unavailable_codes=[str(exc)],
             )
-            await self._persist_result(result)
-            await self._append_trace(
-                run_id=run_id,
-                user_id=user_id,
-                trace_id=trace_id,
-                event_type="orchestrator_failed",
-                payload_json={
-                    "run_id": run_id,
-                    "user_id": user_id,
-                    "issue_codes": result.unavailable_codes,
-                    "duration_ms": int((monotonic() - started) * 1000),
-                },
-            )
+            cleanup_exc = None
+            try:
+                await self._persist_result(result)
+                await self._append_trace(
+                    run_id=run_id,
+                    user_id=user_id,
+                    trace_id=trace_id,
+                    event_type="orchestrator_failed",
+                    payload_json={
+                        "run_id": run_id,
+                        "user_id": user_id,
+                        "issue_codes": result.unavailable_codes,
+                        "duration_ms": int((monotonic() - started) * 1000),
+                    },
+                )
+            except Exception as inner_exc:
+                cleanup_exc = inner_exc
+                logger.exception(
+                    "FINN V2 orchestrator cleanup failure",
+                    extra={
+                        "trace_id": trace_id,
+                        "run_id": run_id,
+                        "user_id": user_id,
+                        "failure_stage": "orchestrator_cleanup",
+                        "service": "FinnV2OrchestratorService",
+                        "method": "execute_run",
+                        "primary_exception_class": exc.__class__.__name__,
+                        "primary_exception_message": str(exc),
+                        "cleanup_exception_class": inner_exc.__class__.__name__,
+                        "cleanup_exception_message": str(inner_exc),
+                    },
+                )
             increment_execution_safety_counter("finn_v2_orchestrator_failures_total")
+            if cleanup_exc is not None:
+                raise exc from cleanup_exc
             raise
 
     async def _persist_result(self, result) -> None:

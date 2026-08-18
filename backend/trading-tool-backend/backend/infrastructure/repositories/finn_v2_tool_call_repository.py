@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from datetime import datetime, timezone
 from typing import Optional
 
@@ -7,6 +8,9 @@ from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.infrastructure.models import FinnV2ToolCall
+
+
+logger = logging.getLogger(__name__)
 
 
 class FinnV2ToolCallRepository:
@@ -19,7 +23,22 @@ class FinnV2ToolCallRepository:
             **kwargs,
         )
         self.session.add(row)
-        await self.session.flush()
+        try:
+            await self.session.flush()
+        except Exception as exc:
+            logger.exception(
+                "FINN V2 tool-call create flush failed",
+                extra={
+                    "repository": self.__class__.__name__,
+                    "operation": "create",
+                    "entity_type": "FinnV2ToolCall",
+                    "run_id": getattr(row, "run_id", None),
+                    "user_id": getattr(row, "user_id", None),
+                    "tool_name": getattr(row, "tool_name", None),
+                    "exception_class": exc.__class__.__name__,
+                },
+            )
+            raise
         return row
 
     async def get_by_id(self, tool_call_id: int) -> Optional[FinnV2ToolCall]:
@@ -40,7 +59,23 @@ class FinnV2ToolCallRepository:
     async def update(self, row: FinnV2ToolCall, **kwargs) -> FinnV2ToolCall:
         for key, value in kwargs.items():
             setattr(row, key, value)
-        await self.session.flush()
+        try:
+            await self.session.flush()
+        except Exception as exc:
+            logger.exception(
+                "FINN V2 tool-call update flush failed",
+                extra={
+                    "repository": self.__class__.__name__,
+                    "operation": "update",
+                    "entity_type": "FinnV2ToolCall",
+                    "run_id": getattr(row, "run_id", None),
+                    "user_id": getattr(row, "user_id", None),
+                    "tool_call_id": getattr(row, "id", None),
+                    "tool_name": getattr(row, "tool_name", None),
+                    "exception_class": exc.__class__.__name__,
+                },
+            )
+            raise
         return row
 
     async def redact_results_older_than(self, cutoff: datetime) -> int:

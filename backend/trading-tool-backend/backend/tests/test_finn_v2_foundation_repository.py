@@ -20,8 +20,19 @@ class _NestedTxn:
 
 
 class _FakeSession:
+    def __init__(self, *, is_active=True):
+        self.sync_session = SimpleNamespace(is_active=is_active)
+        self.rollback_calls = 0
+
     def begin_nested(self):
         return _NestedTxn()
+
+    def get_transaction(self):
+        return SimpleNamespace(is_active=self.sync_session.is_active)
+
+    async def rollback(self):
+        self.rollback_calls += 1
+        self.sync_session.is_active = True
 
 
 class _FakeRunRepo:
@@ -155,3 +166,33 @@ def test_visible_run_executes_orchestrator_without_shadow_gate():
     asyncio.run(service.run_foundation_lifecycle(run_id="run-1", user_id=7))
 
     assert calls == {"shadow_chain": 0, "placeholder": 0, "orchestrator": 1}
+
+
+def test_fail_run_rolls_back_inactive_session_before_transition(monkeypatch):
+    run = SimpleNamespace(
+        id="run-1",
+        user_id=7,
+        conversation_id="conv-1",
+        trace_id="trace-1",
+        transport="chat",
+        visibility="visible",
+        feature_mode="visible_readonly",
+        client_context_json={"_request_path": "/api/assistant/chat"},
+        status="planned",
+    )
+    session = _FakeSession(is_active=False)
+    service = FinnV2RunService(session)
+    service.runs = _FakeRunRepo(run)
+    service.traces = _FakeTraceRepo()
+
+    asyncio.run(
+        service.fail_run(
+            run_id="run-1",
+            user_id=7,
+            error_code="orchestrator_failed",
+            error_message="tool_call_update_failed",
+        )
+    )
+
+    assert session.rollback_calls == 1
+    assert run.status == "failed"
