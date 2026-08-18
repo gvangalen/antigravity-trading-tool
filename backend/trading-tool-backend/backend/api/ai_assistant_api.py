@@ -26,7 +26,7 @@ LOCAL_PROXY_IPS = {"127.0.0.1", "::1", "localhost"}
 
 from typing import List
 from sqlalchemy import select
-from backend.infrastructure.database import get_db
+from backend.infrastructure.database import async_session_factory, get_db
 from backend.utils.auth_utils import get_current_user
 from backend.infrastructure.models import ChatSession, ChatMessage
 from backend.schemas.assistant_schema import (
@@ -2746,15 +2746,16 @@ async def _try_v2_visible_delivery(
     if selection.selected_runtime != "v2" or not selection.visible_allowed:
         raise ValueError("v2_runtime_not_selected")
     try:
-        envelope = await FinnV2VisibleDeliveryService(db).deliver_assistant_envelope(
-            user_id=user_id,
-            message=message,
-            context_payload=context_payload,
-            transport=transport,
-            request_path=request_path,
-            request_id=request_id,
-            trace_id=trace_id,
-        )
+        async with async_session_factory() as v2_db:
+            envelope = await FinnV2VisibleDeliveryService(v2_db).deliver_assistant_envelope(
+                user_id=user_id,
+                message=message,
+                context_payload=context_payload,
+                transport=transport,
+                request_path=request_path,
+                request_id=request_id,
+                trace_id=trace_id,
+            )
         envelope.setdefault("response_trace", {})
         envelope["response_trace"]["runtime_selection"] = selection.dict()
         return envelope

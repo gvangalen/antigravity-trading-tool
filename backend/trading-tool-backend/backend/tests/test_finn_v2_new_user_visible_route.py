@@ -196,3 +196,65 @@ def test_assistant_chat_v2_only_capability_failure_keeps_internal_run_id(monkeyp
     assert payload["response_trace"]["run_id"] == "run-capability-failed"
     assert payload["response_trace"]["error"] == "v2_delivery_failure"
     assert payload["response_trace"]["failure_stage"] == "delivery_envelope"
+
+
+def test_try_v2_visible_delivery_uses_isolated_v2_session(monkeypatch):
+    selection = SimpleNamespace(
+        selected_runtime="v2",
+        visible_allowed=True,
+        fallback_allowed=False,
+        dict=lambda: {"selected_runtime": "v2", "runtime_mode": "v2_only"},
+    )
+
+    class Selector:
+        def select(self, **kwargs):
+            return selection
+
+    observed = {}
+
+    class _SessionContext:
+        def __init__(self, session):
+            self.session = session
+
+        async def __aenter__(self):
+            return self.session
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+    async def _factory():
+        raise AssertionError("factory should not be awaited directly")
+
+    isolated_session = object()
+
+    def _session_factory():
+        return _SessionContext(isolated_session)
+
+    class Delivery:
+        def __init__(self, db):
+            observed["delivery_db"] = db
+
+        async def deliver_assistant_envelope(self, **kwargs):
+            return {"response": "ok", "intent": "evaluation", "response_trace": {"run_id": "run-iso"}}
+
+    monkeypatch.setattr(ai_assistant_api, "FinnV2RuntimeSelectorService", Selector)
+    monkeypatch.setattr(ai_assistant_api, "FinnV2VisibleDeliveryService", Delivery)
+    monkeypatch.setattr(ai_assistant_api, "async_session_factory", _session_factory)
+
+    outer_db = object()
+    payload = asyncio.run(
+        ai_assistant_api._try_v2_visible_delivery(
+            db=outer_db,
+            user_id=370,
+            message="Bekijk mijn BTC-profiel, indicatoren, setup, strategie en gekoppelde bot.",
+            context_payload={"symbol": "BTC", "setup_id": 282, "strategy_id": 298, "bot_id": 159},
+            transport="chat",
+            request_path="/api/assistant/chat",
+            request_id="req-isolated-v2",
+            trace_id="trace-isolated-v2",
+        )
+    )
+
+    assert observed["delivery_db"] is isolated_session
+    assert observed["delivery_db"] is not outer_db
+    assert payload["response_trace"]["runtime_selection"]["runtime_mode"] == "v2_only"
