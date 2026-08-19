@@ -121,7 +121,7 @@ class FinnV2RequestAnalysisService:
             matched_signals.append("mode:unavailable_financial_context")
             return "UNAVAILABLE"
         execution_tokens = ["bevestig", "confirm", "voer nu uit", "execute now", "nu uitvoeren"]
-        confirmation_tokens = ["kan je dit bevestigen", "bevestiging", "confirmation", "wil je bevestigen"]
+        confirmation_tokens = ["kan je dit bevestigen", "kun je dit bevestigen", "bevestiging", "confirmation", "wil je bevestigen"]
         action_tokens = [
             "zet",
             "activeer",
@@ -158,27 +158,27 @@ class FinnV2RequestAnalysisService:
         ]
         read_tokens = ["welke", "what", "which", "staat", "is", "wat", "who", "where", "bekijk", "toon", "show"]
 
-        if any(token in normalized for token in execution_tokens):
+        if self._contains_any_phrase(normalized, execution_tokens):
             matched_signals.append("mode:execution")
             return "EXECUTION"
-        if any(token in normalized for token in confirmation_tokens):
+        if self._contains_any_phrase(normalized, confirmation_tokens):
             matched_signals.append("mode:confirmation")
             return "CONFIRMATION"
         if ("watchlist" in normalized or "volglijst" in normalized) and any(
-            token in normalized for token in ("voeg", "add", "verwijder", "remove", "haal")
+            self._contains_phrase(normalized, token) for token in ("voeg", "add", "verwijder", "remove", "haal")
         ):
             matched_signals.append("mode:action_proposal")
             return "ACTION_PROPOSAL"
-        if any(token in normalized for token in action_tokens):
+        if self._contains_any_phrase(normalized, action_tokens):
             matched_signals.append("mode:action_proposal")
             return "ACTION_PROPOSAL"
-        if any(token in normalized for token in proposal_tokens):
+        if self._contains_any_phrase(normalized, proposal_tokens):
             matched_signals.append("mode:create_proposal")
             return "CREATE_PROPOSAL"
-        if any(token in normalized for token in evaluation_tokens):
+        if self._contains_any_phrase(normalized, evaluation_tokens):
             matched_signals.append("mode:evaluate")
             return "EVALUATE"
-        if scopes and any(token in normalized for token in read_tokens):
+        if scopes and self._contains_any_phrase(normalized, read_tokens):
             matched_signals.append("mode:read")
             return "READ"
         if scopes:
@@ -209,6 +209,12 @@ class FinnV2RequestAnalysisService:
 
     def _normalize_text(self, text: str) -> str:
         return re.sub(r"\s+", " ", text.casefold()).strip()
+
+    def _contains_any_phrase(self, normalized: str, phrases: List[str]) -> bool:
+        return any(self._contains_phrase(normalized, phrase) for phrase in phrases)
+
+    def _contains_phrase(self, normalized: str, phrase: str) -> bool:
+        return bool(re.search(rf"(?<!\w){re.escape(phrase.casefold())}(?!\w)", normalized))
 
     def _confidence(self, *, scopes: List[str], matched_signals: List[str], interaction_mode: str) -> str:
         if interaction_mode == "UNAVAILABLE":

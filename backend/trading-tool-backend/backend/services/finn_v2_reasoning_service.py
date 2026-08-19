@@ -162,6 +162,37 @@ class FinnV2ReasoningService:
         model_name = self._resolved_model()
         input_hash = self.contexts.input_hash(context, prompt_version=self.prompts.PROMPT_VERSION, model=model_name)
 
+        if (
+            normalize_interaction_mode(context.interaction_mode) in {"ACTION_PROPOSAL", "EXECUTION"}
+            and not context.policy.allowed
+            and context.policy.operation_type == "activate_live_bot"
+        ):
+            result = self.fallbacks.blocked_action_draft(
+                run_id=run_id,
+                user_id=user_id,
+                context=context,
+                model=model_name,
+                error_codes=list(context.policy.blocking_codes or ["live_action_disabled"]),
+            )
+            await self._append_trace(run_id, user_id, trace_id, "reasoning_blocked_live_action", context, model_name, "unavailable", 0, 0, input_hash, list(context.policy.blocking_codes or ["live_action_disabled"]))
+            return await self._persist_record(
+                run_id=run_id,
+                user_id=user_id,
+                orchestrator_result_id=orchestrator_result.orchestrator_result_id,
+                policy_decision_id=policy.policy_decision_id,
+                snapshot_id=snapshot.id,
+                validation_id=validation.id,
+                status="unavailable",
+                mode=result.mode,
+                context_version=context.context_version,
+                evidence_set_hash=context.evidence_set_hash,
+                input_hash=input_hash,
+                model=model_name,
+                result=result,
+                error_codes=list(context.policy.blocking_codes or ["live_action_disabled"]),
+                retry_count=0,
+            )
+
         if normalize_interaction_mode(context.interaction_mode) == "CAPABILITY":
             result = self.capabilities.build_reasoning_result(
                 run_id=run_id,

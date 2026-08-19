@@ -302,7 +302,7 @@ class FinnV2ResponseVerifierService:
         capability_grounding_ok = self._capability_grounding_ok(draft)
         if draft.mode == "CAPABILITY" and capability_grounding_ok:
             covered_scopes.add("capability")
-        satisfied_scopes = {scope for scope in required_scopes if self._scope_is_covered(scope, covered_scopes, covered_domains)}
+        satisfied_scopes = {scope for scope in required_scopes if self._scope_is_covered(scope, covered_scopes, covered_domains, draft=draft, policy=policy)}
         missing_scopes = [scope for scope in required_scopes if scope not in satisfied_scopes]
         coverage = CoverageVerification(
             required_scopes=required_scopes,
@@ -597,9 +597,21 @@ class FinnV2ResponseVerifierService:
             if evidence is not None and evidence.domain
         }
 
-    def _scope_is_covered(self, scope: str, covered_scopes: set[str], covered_domains: set[str]) -> bool:
+    def _scope_is_covered(self, scope: str, covered_scopes: set[str], covered_domains: set[str], *, draft: ResponseDraft, policy: FinnV2PolicyDecision) -> bool:
         if scope in covered_scopes:
             return True
+        normalized_mode = normalize_interaction_mode(draft.mode)
+        if normalized_mode == "CREATE_PROPOSAL" and scope == "setup":
+            return "identity_context" in covered_domains or "plan_context" in covered_domains
+        if normalized_mode == "ACTION_PROPOSAL" and scope == "watchlist":
+            return "identity_context" in covered_domains
+        if (
+            normalized_mode == "UNAVAILABLE"
+            and not policy.allowed
+            and policy.operation_type == "activate_live_bot"
+            and scope == "bot"
+        ):
+            return "automation_context" in covered_domains or "plan_context" in covered_domains
         mapped_domain = self.REQUIRED_SCOPE_TO_DOMAIN.get(scope)
         return bool(mapped_domain and mapped_domain in covered_domains)
 
@@ -663,7 +675,13 @@ class FinnV2ResponseVerifierService:
         if normalize_interaction_mode(draft.mode) == "UNAVAILABLE":
             return draft.proposal_candidate is None
         if normalize_interaction_mode(draft.mode) in {"CREATE_PROPOSAL", "ACTION_PROPOSAL"}:
-            return "uitgevoerd" not in text and "already live" not in text
+            if "already live" in text:
+                return False
+            if "uitgevoerd" in text and not any(phrase in text for phrase in ["niet uitgevoerd", "nog niet uitgevoerd"]):
+                return False
+            if "executed" in text and not any(phrase in text for phrase in ["not executed", "not yet executed"]):
+                return False
+            return True
         return True
 
     def _uncertainty_ok(self, draft: ResponseDraft, context) -> bool:

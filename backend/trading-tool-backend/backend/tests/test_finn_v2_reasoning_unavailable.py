@@ -9,6 +9,7 @@ from backend.schemas.finn_v2_reasoning_context_schema import (
     ReasoningPolicyContext,
 )
 from backend.schemas.finn_v2_reasoning_schema import ReasoningResult
+from backend.services.finn_v2_reasoning_fallback_service import FinnV2ReasoningFallbackService
 from backend.services.finn_v2_reasoning_service import FinnV2ReasoningService
 from backend.services.finn_v2_reasoning_prompt_service import FinnV2ReasoningPromptContractError
 
@@ -672,3 +673,222 @@ def test_reasoning_uses_grounded_watchlist_proposal_fallback_on_incomplete_struc
     assert result["result"].proposal_candidate is not None
     assert result["result"].proposal_candidate.operation_type == "watchlist_add"
     assert result["result"].proposal_candidate.proposed_changes["asset"] == "ETH"
+
+
+def test_grounded_evaluation_fallback_prefers_strategy_fit_over_missing_indicators():
+    fallback = FinnV2ReasoningFallbackService()
+    context = ReasoningContextPackage(
+        run_id="run-a2",
+        user_id=7,
+        user_message="Past mijn huidige BTC-strategie bij mijn risicoprofiel en tradingstijl?",
+        locale="nl-NL",
+        interaction_mode="EVALUATE",
+        subject_scopes=["profile", "strategy"],
+        required_domains=["identity_context", "plan_context"],
+        orchestrator_result_id="orchestrator-a2",
+        snapshot_id="snapshot-a2",
+        validation_id="validation-a2",
+        policy_decision_id="policy-a2",
+        evidence_set_hash="hash-a2",
+        evidence=[
+            ReasoningEvidenceItem(
+                evidence_id="E1",
+                artifact_id="a1",
+                tool_name="read_profile",
+                domain="identity_context",
+                entity_type="profile",
+                source="internal",
+                freshness="fresh",
+                confidence="high",
+                facts={"has_profile": True, "trader_profile": {"risk_profile": "balanced"}},
+            ),
+            ReasoningEvidenceItem(
+                evidence_id="E2",
+                artifact_id="a2",
+                tool_name="read_indicator_configuration",
+                domain="market_context",
+                entity_type="indicator_configuration",
+                asset="BTC",
+                source="internal",
+                freshness="fresh",
+                confidence="high",
+                facts={"symbol": "BTC", "configured_indicators": []},
+            ),
+            ReasoningEvidenceItem(
+                evidence_id="E3",
+                artifact_id="a3",
+                tool_name="read_linked_strategy",
+                domain="plan_context",
+                entity_type="strategy",
+                entity_id="309",
+                asset="BTC",
+                source="internal",
+                freshness="fresh",
+                confidence="high",
+                facts={"strategy_id": 309, "setup_id": 293, "symbol": "BTC", "execution_mode": "fixed", "risk_profile": "balanced"},
+            ),
+        ],
+        domain_statuses=[],
+        policy=ReasoningPolicyContext(
+            policy_class="advice",
+            allowed=True,
+            proposal_allowed=False,
+            confirmation_required=False,
+            step_up_required=False,
+            execution_allowed=False,
+            operation_type=None,
+            proposal_input_required=False,
+        ),
+        allowed_response_modes=["EVALUATE", "UNAVAILABLE"],
+        allowed_operation_types=[],
+        uncertainty_codes=[],
+    )
+
+    result = fallback.grounded_evaluation_draft(
+        run_id="run-a2",
+        user_id=7,
+        context=context,
+        model="gpt-test",
+        error_codes=["provider_error"],
+    )
+
+    assert result.mode == "EVALUATE"
+    assert "Strategie 309" in result.direct_answer
+    assert "indicatorconfiguratie" not in result.direct_answer.lower()
+
+
+def test_reasoning_short_circuits_blocked_live_bot_activation_before_provider(monkeypatch):
+    service = FinnV2ReasoningService(session=object())
+    run = SimpleNamespace(
+        id="run-live-bot-1",
+        user_id=7,
+        message="Activeer deze bot live.",
+        visibility="visible",
+        feature_mode="visible_runtime",
+        client_context_json={},
+        workspace_hints_json={"asset": "BTC"},
+    )
+    orchestrator_row = SimpleNamespace(
+        id="orchestrator-live-bot-1",
+        run_id="run-live-bot-1",
+        user_id=7,
+        interaction_mode="ACTION_PROPOSAL",
+        analysis_version="2026-08-17.block4",
+        subject_scopes_json=["bot"],
+        required_domains_json=["plan_context", "automation_context"],
+        optional_domains_json=[],
+        tool_plan_json={"run_id": "run-live-bot-1", "interaction_mode": "ACTION_PROPOSAL", "max_tool_calls": 15},
+        snapshot_id="snapshot-live-bot-1",
+        validation_id="validation-live-bot-1",
+        outcome="reasoning_ready",
+        selected_clarification_json=None,
+        unavailable_codes_json=[],
+        uncertainty_codes_json=[],
+        orchestrator_version="2026-08-17.block4",
+        created_at=datetime.now(timezone.utc),
+    )
+    service.runs.get_by_id_for_user = lambda **_kwargs: asyncio.sleep(0, result=run)
+    service.orchestrators.get_for_run_version = lambda **_kwargs: asyncio.sleep(0, result=orchestrator_row)
+    service.snapshots.get_by_id_for_user = lambda **_kwargs: asyncio.sleep(0, result=SimpleNamespace(id="snapshot-live-bot-1", snapshot_id="snapshot-live-bot-1"))
+    service.validations.get_by_id_for_user = lambda **_kwargs: asyncio.sleep(0, result=SimpleNamespace(id="validation-live-bot-1", validation_id="validation-live-bot-1", integrity_status="valid", evidence_set_hash="hash-live-bot", domains=[]))
+    service.policies.get_for_run_version = lambda **_kwargs: asyncio.sleep(
+        0,
+        result=SimpleNamespace(
+            decision_json={
+                "policy_decision_id": "policy-live-bot-1",
+                "run_id": "run-live-bot-1",
+                "user_id": 7,
+                "policy_class": "high_risk_action",
+                "allowed": False,
+                "proposal_allowed": True,
+                "confirmation_required": True,
+                "step_up_required": True,
+                "execution_allowed": False,
+                "operation_type": "activate_live_bot",
+                "proposal_input_required": True,
+                "blocking_codes": ["live_action_disabled"],
+                "shadow_safe": True,
+                "created_at": "2026-08-19T05:00:00+00:00",
+            }
+        ),
+    )
+    context = ReasoningContextPackage(
+        run_id="run-live-bot-1",
+        user_id=7,
+        user_message=run.message,
+        locale="nl-NL",
+        interaction_mode="ACTION_PROPOSAL",
+        subject_scopes=["bot"],
+        required_domains=["plan_context", "automation_context"],
+        orchestrator_result_id="orchestrator-live-bot-1",
+        snapshot_id="snapshot-live-bot-1",
+        validation_id="validation-live-bot-1",
+        policy_decision_id="policy-live-bot-1",
+        evidence_set_hash="hash-live-bot",
+        evidence=[
+            ReasoningEvidenceItem(
+                evidence_id="E1",
+                artifact_id="a1",
+                tool_name="read_linked_bot",
+                domain="automation_context",
+                entity_type="bot",
+                entity_id="170",
+                asset="BTC",
+                source="internal",
+                freshness="fresh",
+                confidence="high",
+                facts={"bot_id": 170, "strategy_id": 309, "is_live": False},
+            ),
+            ReasoningEvidenceItem(
+                evidence_id="E2",
+                artifact_id="a2",
+                tool_name="read_bot_status",
+                domain="automation_context",
+                entity_type="bot_status",
+                entity_id="170",
+                asset="BTC",
+                source="internal",
+                freshness="fresh",
+                confidence="high",
+                facts={"bot_id": 170, "is_live": False, "is_active": True},
+            ),
+        ],
+        domain_statuses=[],
+        policy=ReasoningPolicyContext(
+            policy_class="high_risk_action",
+            allowed=False,
+            proposal_allowed=True,
+            confirmation_required=True,
+            step_up_required=True,
+            execution_allowed=False,
+            operation_type="activate_live_bot",
+            proposal_input_required=True,
+            blocking_codes=["live_action_disabled"],
+        ),
+        allowed_response_modes=["UNAVAILABLE"],
+        allowed_operation_types=["activate_live_bot"],
+        uncertainty_codes=[],
+    )
+    service.contexts.build = lambda **_kwargs: asyncio.sleep(0, result=context)
+    service.contexts.input_hash = lambda *_args, **_kwargs: "hash-live-bot-input"
+    service.reasoning.get_reusable_result = lambda **_kwargs: asyncio.sleep(0, result=None)
+    service.traces.append_event = lambda **_kwargs: asyncio.sleep(0, result=None)
+    persisted = {}
+
+    async def _persist_record(**kwargs):
+        persisted.update(kwargs)
+        return kwargs
+
+    service._persist_record = _persist_record
+    monkeypatch.setattr(service, "_resolved_model", lambda: "gpt-test")
+
+    def _fail_if_called(**_kwargs):
+        raise AssertionError("provider_call_should_not_happen")
+
+    monkeypatch.setattr("backend.services.finn_v2_reasoning_service.openai_client.ask_gpt_structured_response", _fail_if_called)
+
+    result = asyncio.run(service.reason(user_id=7, run_id="run-live-bot-1", trace_id="trace-live-bot-1"))
+
+    assert result["status"] == "unavailable"
+    assert result["mode"] == "UNAVAILABLE"
+    assert "niet live activeren" in result["result"].direct_answer.lower()

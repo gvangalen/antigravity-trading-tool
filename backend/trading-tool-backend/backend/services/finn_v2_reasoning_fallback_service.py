@@ -444,6 +444,7 @@ class FinnV2ReasoningFallbackService:
         profile_is_empty = not any(profile_facts.get(key) for key in profile_facts)
         indicator_count = len(indicators.facts.get("configured_indicators") or []) if indicators else 0
         execution_mode = strategy.facts.get("execution_mode") if strategy else None
+        risk_profile = strategy.facts.get("risk_profile") if strategy else None
         is_live = bool(bot.facts.get("is_live")) if bot else False
         is_active = bool(bot_status.facts.get("is_active")) if bot_status else bool(bot and bot.facts.get("is_active"))
 
@@ -464,24 +465,7 @@ class FinnV2ReasoningFallbackService:
             requires_confirmation=False,
         )
 
-        if indicator_count == 0:
-            direct_answer = f"Het belangrijkste ontbrekende onderdeel van je {asset}-plan is een bruikbare indicatorconfiguratie die je setup en strategie echt ondersteunt."
-            main_observation = (
-                f"Setup {setup_id}, strategie {strategy_id} en bot {bot_id} zijn gekoppeld, "
-                f"maar voor {asset} staan nog geen geconfigureerde indicatoren klaar om je entries en trendfilter te onderbouwen."
-            )
-            next_step = ReasoningNextStep(
-                title="Activeer je eerste planindicatoren",
-                instruction=(
-                    f"Voeg voor {asset} eerst je belangrijkste trend- en entry-indicatoren toe, "
-                    "zodat FINN je bestaande setup en strategie op echte signalen kan beoordelen."
-                ),
-                operation_type=None,
-                target_entity_type="indicator_configuration",
-                target_entity_id=asset,
-                requires_confirmation=False,
-            )
-        elif scopes == {"indicators"} or ("indicators" in scopes and "strategy" not in scopes and "setup" not in scopes and "bot" not in scopes):
+        if scopes == {"indicators"} or ("indicators" in scopes and "strategy" not in scopes and "setup" not in scopes and "bot" not in scopes):
             direct_answer = (
                 f"Voor {asset} kan ik nu alleen bevestigen dat je indicatorconfiguratie {indicator_count} opgeslagen indicatoren bevat."
             )
@@ -512,6 +496,23 @@ class FinnV2ReasoningFallbackService:
                 operation_type=None,
                 target_entity_type="strategy",
                 target_entity_id=str(strategy_id) if strategy_id is not None else None,
+                requires_confirmation=False,
+            )
+        elif indicator_count == 0:
+            direct_answer = f"Het belangrijkste ontbrekende onderdeel van je {asset}-plan is een bruikbare indicatorconfiguratie die je setup en strategie echt ondersteunt."
+            main_observation = (
+                f"Setup {setup_id}, strategie {strategy_id} en bot {bot_id} zijn gekoppeld, "
+                f"maar voor {asset} staan nog geen geconfigureerde indicatoren klaar om je entries en trendfilter te onderbouwen."
+            )
+            next_step = ReasoningNextStep(
+                title="Activeer je eerste planindicatoren",
+                instruction=(
+                    f"Voeg voor {asset} eerst je belangrijkste trend- en entry-indicatoren toe, "
+                    "zodat FINN je bestaande setup en strategie op echte signalen kan beoordelen."
+                ),
+                operation_type=None,
+                target_entity_type="indicator_configuration",
+                target_entity_id=asset,
                 requires_confirmation=False,
             )
         elif has_profile and not profile_is_empty:

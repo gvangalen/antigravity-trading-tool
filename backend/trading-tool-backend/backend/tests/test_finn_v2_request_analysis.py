@@ -89,3 +89,17 @@ def test_request_analysis_routes_setup_creation_and_watchlist_actions_to_typed_m
     assert watchlist_result.interaction_mode == "ACTION_PROPOSAL"
     assert watchlist_result.subject_scopes == ["watchlist"]
     assert watchlist_result.explicit_asset == "ETH"
+
+
+def test_request_analysis_does_not_treat_read_questions_with_confirmed_wording_as_execution():
+    strategy_result = SERVICE.analyze(
+        message="Welke belangrijkste entryvoorwaarde uit mijn BTC-strategie moet bevestigd zijn voordat mijn plan een entry toestaat?"
+    )
+    bot_result = SERVICE.analyze(
+        message="Waarom heeft mijn gekoppelde BTC-bot nu geen positie geopend? Scheid wat je zeker weet van wat nog niet bevestigd kan worden."
+    )
+
+    assert strategy_result.interaction_mode == "EVALUATE"
+    assert strategy_result.subject_scopes == ["strategy"]
+    assert bot_result.interaction_mode == "READ"
+    assert bot_result.subject_scopes == ["bot"]
