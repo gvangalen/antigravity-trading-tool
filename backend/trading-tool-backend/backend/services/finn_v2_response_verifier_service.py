@@ -275,6 +275,7 @@ class FinnV2ResponseVerifierService:
                 claim_reasons.append("invalid_evidence_ref")
             if matched_evidence:
                 for evidence in matched_evidence:
+                    covered_scopes.update(self._scopes_for_evidence(evidence))
                     covered_scopes.add(self._scope_for_domain(evidence.domain))
                     if evidence.domain:
                         covered_domains.add(evidence.domain)
@@ -585,6 +586,7 @@ class FinnV2ResponseVerifierService:
         for ref in refs:
             evidence = evidence_by_ref.get(ref)
             if evidence is not None:
+                covered.update(self._scopes_for_evidence(evidence))
                 covered.add(self._scope_for_domain(evidence.domain))
         return {scope for scope in covered if scope}
 
@@ -621,6 +623,30 @@ class FinnV2ResponseVerifierService:
                 return scope
         return None
 
+    def _scopes_for_evidence(self, evidence: Any) -> set[str]:
+        tool_name = str(getattr(evidence, "tool_name", "") or "")
+        entity_type = str(getattr(evidence, "entity_type", "") or "")
+        scopes: set[str] = set()
+        if tool_name in {"read_profile", "read_user_preferences"}:
+            scopes.add("profile")
+        if tool_name == "read_indicator_configuration":
+            scopes.add("indicators")
+        if tool_name in {"read_market_snapshot", "read_macro_snapshot", "read_technical_snapshot", "read_asset_scores"}:
+            scopes.add("analysis")
+        if tool_name == "read_active_setup" or entity_type == "setup":
+            scopes.add("setup")
+        if tool_name == "read_linked_strategy" or entity_type == "strategy":
+            scopes.add("strategy")
+        if tool_name in {"read_linked_bot", "read_bot_status"} or entity_type in {"bot", "bot_status"}:
+            scopes.add("bot")
+        if tool_name == "read_latest_report":
+            scopes.add("daily_report")
+        if tool_name == "read_review_history":
+            scopes.add("reflection")
+        if tool_name == "read_portfolio":
+            scopes.add("portfolio")
+        return scopes
+
     def _is_relevant(self, question: str, draft: ResponseDraft) -> bool:
         lowered = question.lower()
         answer = f"{draft.direct_answer} {draft.main_observation}".lower()
@@ -628,10 +654,14 @@ class FinnV2ResponseVerifierService:
             token
             for token in [
                 "profile",
+                "profiel",
                 "indicator",
+                "indicatoren",
                 "setup",
                 "strategy",
+                "strategie",
                 "bot",
+                "plan",
                 "watchlist",
                 "volglijst",
                 "portfolio",
@@ -747,6 +777,8 @@ class FinnV2ResponseVerifierService:
         return self._asserts_live_mode(text) or self._asserts_paper_mode(text)
 
     def _asserts_live_mode(self, text: str) -> bool:
+        if re.search(r"\b(niet|geen|not)\s+live\b", text):
+            return False
         return bool(re.search(r"\blive\b", text)) and not self._asserts_paper_mode(text)
 
     def _asserts_paper_mode(self, text: str) -> bool:

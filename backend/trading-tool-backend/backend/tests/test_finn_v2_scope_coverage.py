@@ -131,3 +131,66 @@ def test_blocked_live_bot_unavailable_is_not_marked_as_paper_live_mismatch():
             "E1": SimpleNamespace(facts={"is_live": False}),
         },
     ) is False
+
+
+def test_read_response_marks_strategy_scope_from_linked_strategy_evidence():
+    service = FinnV2ResponseVerifierService(session=object())
+    draft = ResponseDraft(
+        draft_id="draft-strategy-read",
+        run_id="run-strategy-read",
+        user_id=7,
+        mode="READ",
+        direct_answer="De belangrijkste expliciet opgeslagen entryvoorwaarde in je BTC-strategie 309 is nu een limit entry rond 62000.",
+        main_observation="Wat nog niet bevestigd kan worden, is een extra entryfilter voor BTC.",
+        claims=[
+            ResponseClaim(
+                claim_id="strategy-status",
+                claim_type="fact",
+                text="Strategie 309 voor setup 293 gebruikt execution_mode fixed.",
+                evidence_refs=["E1"],
+                confidence="high",
+            )
+        ],
+        evidence_set_hash="hash-strategy-read",
+        created_at=datetime.now(timezone.utc),
+    )
+
+    verifier = service._deterministic_verify(
+        run=SimpleNamespace(id="run-strategy-read", user_id=7, message="Welke belangrijkste entryvoorwaarde uit mijn BTC-strategie moet bevestigd zijn voordat mijn plan een entry toestaat?", conversation_id="conv-1"),
+        orchestrator_result=SimpleNamespace(analysis=SimpleNamespace(subject_scopes=["strategy"]), selected_clarification=None),
+        policy=SimpleNamespace(allowed=True, proposal_allowed=False, confirmation_required=False, operation_type=None),
+        context=SimpleNamespace(
+            evidence=[SimpleNamespace(evidence_id="E1", domain="plan_context", tool_name="read_linked_strategy", entity_type="strategy", entity_id="309", asset="BTC", freshness="fresh", confidence="high", facts={"strategy_id": 309, "symbol": "BTC"})],
+            uncertainty_codes=[],
+        ),
+        validation=SimpleNamespace(id="validation-strategy-read", evidence_set_hash="hash-strategy-read", integrity_status="valid"),
+        draft=draft,
+        repair_attempt=0,
+    )
+
+    assert verifier.coverage.coverage_ok is True
+    assert verifier.relevance_ok is True
+    assert "response_scope_incomplete" not in verifier.reason_codes
+    assert "response_not_answering_question" not in verifier.reason_codes
+
+
+def test_not_live_read_response_is_not_marked_as_live_mismatch():
+    service = FinnV2ResponseVerifierService(session=object())
+    draft = ResponseDraft(
+        draft_id="draft-not-live-read",
+        run_id="run-not-live-read",
+        user_id=7,
+        mode="READ",
+        direct_answer="Wat ik zeker weet over je BTC-bot: bot 170 is gekoppeld, actief en niet live.",
+        main_observation="Wat ik nog niet bevestigd kan worden, is waarom nog geen positie is geopend.",
+        claims=[],
+        evidence_set_hash="hash-not-live-read",
+        created_at=datetime.now(timezone.utc),
+    )
+
+    assert service._paper_live_mismatch(
+        draft,
+        {
+            "E1": SimpleNamespace(facts={"is_live": False}),
+        },
+    ) is False

@@ -197,7 +197,7 @@ class FinnV2ReasoningFallbackService:
         elif "waarom" in lowered and "positie" in lowered:
             bot_id = bot.facts.get("bot_id") if bot else None
             last_run = bot_status.facts.get("last_run") if bot_status else None
-            direct_answer = f"Wat ik zeker weet: bot {bot_id} is gekoppeld, actief en niet live."
+            direct_answer = f"Wat ik zeker weet over je {asset}-bot: bot {bot_id} is gekoppeld, actief en niet live."
             main_observation = (
                 f"Wat ik nog niet bevestigd kan afleiden: deze evidence bevat geen opgeslagen order- of positiereden die exact verklaart waarom nog geen positie is geopend; de laatste bekende botstatus verwijst alleen naar last_run {last_run}."
             )
@@ -485,12 +485,12 @@ class FinnV2ReasoningFallbackService:
             entry = strategy.facts.get("entry") if strategy else None
             entry_type = strategy.facts.get("entry_type") if strategy else None
             direct_answer = (
-                f"De belangrijkste expliciet opgeslagen entryvoorwaarde in strategie {strategy_id} is nu een {entry_type or 'vaste'} entry rond {entry}."
+                f"De belangrijkste expliciet opgeslagen entryvoorwaarde in je {asset}-strategie {strategy_id} is nu een {entry_type or 'vaste'} entry rond {entry}."
                 if strategy_id is not None and entry is not None
                 else f"Ik zie voor {asset} wel een gekoppelde strategie, maar nog geen expliciet opgeslagen entryvoorwaarde."
             )
             main_observation = (
-                "Wat nog niet bevestigd kan worden, is een extra entryfilter zoals een aparte indicator- of candletrigger; die staat niet expliciet in deze strategie-evidence."
+                f"Wat nog niet bevestigd kan worden, is een extra entryfilter voor {asset}, zoals een aparte indicator- of candletrigger; die staat niet expliciet in deze strategie-evidence."
             )
             next_step = ReasoningNextStep(
                 title="Leg je entrybevestiging expliciet vast",
