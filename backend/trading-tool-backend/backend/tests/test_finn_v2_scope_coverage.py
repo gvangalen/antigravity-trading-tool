@@ -92,3 +92,42 @@ def test_mode_purity_accepts_not_executed_watchlist_proposal_wording():
     )
 
     assert service._mode_purity_ok(draft) is True
+
+
+def test_mode_purity_allows_read_response_to_reference_stored_order_reasoning():
+    service = FinnV2ResponseVerifierService(session=object())
+    draft = ResponseDraft(
+        draft_id="draft-bot-read",
+        run_id="run-bot-read",
+        user_id=7,
+        mode="READ",
+        direct_answer="Wat ik zeker weet: bot 170 is gekoppeld, actief en niet live.",
+        main_observation="Wat ik nog niet bevestigd kan afleiden: deze evidence bevat geen opgeslagen order- of positiereden die exact verklaart waarom nog geen positie is geopend.",
+        claims=[],
+        evidence_set_hash="hash-bot-read",
+        created_at=datetime.now(timezone.utc),
+    )
+
+    assert service._mode_purity_ok(draft) is True
+
+
+def test_blocked_live_bot_unavailable_is_not_marked_as_paper_live_mismatch():
+    service = FinnV2ResponseVerifierService(session=object())
+    draft = ResponseDraft(
+        draft_id="draft-live-blocked",
+        run_id="run-live-blocked",
+        user_id=7,
+        mode="UNAVAILABLE",
+        direct_answer="Ik kan deze bot niet live activeren.",
+        main_observation="De live-activatie blijft geblokkeerd door de actieve safety- en policycontroles.",
+        claims=[],
+        evidence_set_hash="hash-live-blocked",
+        created_at=datetime.now(timezone.utc),
+    )
+
+    assert service._paper_live_mismatch(
+        draft,
+        {
+            "E1": SimpleNamespace(facts={"is_live": False}),
+        },
+    ) is False

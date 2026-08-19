@@ -653,7 +653,7 @@ class FinnV2ResponseVerifierService:
         if normalize_interaction_mode(draft.mode) == "READ":
             return not any(
                 token in text
-                for token in ["saved", "opgeslagen", "aangepast", "uitgevoerd", "executed", "order geplaatst"]
+                for token in ["aangepast", "uitgevoerd", "executed", "order geplaatst"]
             ) and draft.proposal_candidate is None
         if draft.mode == "CAPABILITY":
             disallowed = [
@@ -723,6 +723,11 @@ class FinnV2ResponseVerifierService:
 
     def _paper_live_mismatch(self, draft: ResponseDraft, evidence_by_ref: Dict[str, Any]) -> bool:
         text = f"{draft.direct_answer} {draft.main_observation}".lower()
+        if (
+            normalize_interaction_mode(draft.mode) == "UNAVAILABLE"
+            and "ik kan deze bot niet live activeren" in text
+        ):
+            return False
         if not self._mentions_live_mode(text):
             return False
         refs = self._all_refs(draft)

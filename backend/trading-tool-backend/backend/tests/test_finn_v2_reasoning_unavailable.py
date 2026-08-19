@@ -757,6 +757,64 @@ def test_grounded_evaluation_fallback_prefers_strategy_fit_over_missing_indicato
     assert "indicatorconfiguratie" not in result.direct_answer.lower()
 
 
+def test_grounded_evaluation_fallback_answers_strategy_entry_question_before_indicator_gap():
+    fallback = FinnV2ReasoningFallbackService()
+    context = ReasoningContextPackage(
+        run_id="run-b2",
+        user_id=7,
+        user_message="Welke belangrijkste entryvoorwaarde uit mijn BTC-strategie moet bevestigd zijn voordat mijn plan een entry toestaat?",
+        locale="nl-NL",
+        interaction_mode="EVALUATE",
+        subject_scopes=["strategy"],
+        required_domains=["plan_context"],
+        orchestrator_result_id="orchestrator-b2",
+        snapshot_id="snapshot-b2",
+        validation_id="validation-b2",
+        policy_decision_id="policy-b2",
+        evidence_set_hash="hash-b2",
+        evidence=[
+            ReasoningEvidenceItem(
+                evidence_id="E1",
+                artifact_id="a1",
+                tool_name="read_linked_strategy",
+                domain="plan_context",
+                entity_type="strategy",
+                entity_id="309",
+                asset="BTC",
+                source="internal",
+                freshness="fresh",
+                confidence="high",
+                facts={"strategy_id": 309, "setup_id": 293, "symbol": "BTC", "entry": "62000", "entry_type": "limit"},
+            ),
+        ],
+        domain_statuses=[],
+        policy=ReasoningPolicyContext(
+            policy_class="advice",
+            allowed=True,
+            proposal_allowed=False,
+            confirmation_required=False,
+            step_up_required=False,
+            execution_allowed=False,
+            operation_type=None,
+            proposal_input_required=False,
+        ),
+        allowed_response_modes=["EVALUATE", "UNAVAILABLE"],
+        allowed_operation_types=[],
+        uncertainty_codes=[],
+    )
+
+    result = fallback.grounded_evaluation_draft(
+        run_id="run-b2",
+        user_id=7,
+        context=context,
+        model="gpt-test",
+        error_codes=["provider_error"],
+    )
+
+    assert "entryvoorwaarde" in result.direct_answer.lower()
+    assert "62000" in result.direct_answer
+
+
 def test_reasoning_short_circuits_blocked_live_bot_activation_before_provider(monkeypatch):
     service = FinnV2ReasoningService(session=object())
     run = SimpleNamespace(

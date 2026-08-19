@@ -424,6 +424,7 @@ class FinnV2ReasoningFallbackService:
     ) -> ReasoningResult:
         evidence_by_tool = {item.tool_name: item for item in context.evidence}
         scopes = set(getattr(context, "subject_scopes", []) or [])
+        lowered = self._user_message(context)
         profile = evidence_by_tool.get("read_profile")
         indicators = evidence_by_tool.get("read_indicator_configuration")
         setup = evidence_by_tool.get("read_active_setup")
@@ -478,6 +479,28 @@ class FinnV2ReasoningFallbackService:
                 operation_type=None,
                 target_entity_type="indicator_configuration",
                 target_entity_id=asset,
+                requires_confirmation=False,
+            )
+        elif "entryvoorwaarde" in lowered or "entry toestaat" in lowered:
+            entry = strategy.facts.get("entry") if strategy else None
+            entry_type = strategy.facts.get("entry_type") if strategy else None
+            direct_answer = (
+                f"De belangrijkste expliciet opgeslagen entryvoorwaarde in strategie {strategy_id} is nu een {entry_type or 'vaste'} entry rond {entry}."
+                if strategy_id is not None and entry is not None
+                else f"Ik zie voor {asset} wel een gekoppelde strategie, maar nog geen expliciet opgeslagen entryvoorwaarde."
+            )
+            main_observation = (
+                "Wat nog niet bevestigd kan worden, is een extra entryfilter zoals een aparte indicator- of candletrigger; die staat niet expliciet in deze strategie-evidence."
+            )
+            next_step = ReasoningNextStep(
+                title="Leg je entrybevestiging expliciet vast",
+                instruction=(
+                    f"Controleer of strategie {strategy_id} naast het entryniveau ook een expliciete bevestigingsregel nodig heeft, "
+                    "zoals een candle-close of indicatortrigger."
+                ),
+                operation_type=None,
+                target_entity_type="strategy",
+                target_entity_id=str(strategy_id) if strategy_id is not None else None,
                 requires_confirmation=False,
             )
         elif "strategy" in scopes and "profile" in scopes and not {"setup", "bot", "indicators"}.intersection(scopes):
