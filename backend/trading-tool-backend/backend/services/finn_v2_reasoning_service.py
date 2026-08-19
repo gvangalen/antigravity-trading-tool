@@ -237,12 +237,12 @@ class FinnV2ReasoningService:
             or not availability.get("configured")
             or not openai_client.get_ai_availability()["available"]
         ):
-            result = self.fallbacks.unavailable_draft(
+            result = self._fallback_for_reasoning_error(
                 run_id=run_id,
                 user_id=user_id,
-                mode=context.interaction_mode,
+                context=context,
+                model_name=model_name,
                 error_codes=[str(openai_client.get_ai_availability().get("reason") or "ai_unavailable_configuration")],
-                model=model_name,
             )
             await self._append_trace(run_id, user_id, trace_id, "reasoning_unavailable", context, model_name, "unavailable", None, 0, input_hash, [str(openai_client.get_ai_availability().get("reason") or "ai_unavailable_configuration")])
             return await self._persist_record(
@@ -337,11 +337,11 @@ class FinnV2ReasoningService:
                 error = str(response["error"])
                 last_error_codes = [error]
                 if normalize_interaction_mode(context.interaction_mode) == "EVALUATE" and error in {"provider_error", "schema_invalid", "incomplete_structured_response", "timeout"}:
-                    result = self.fallbacks.grounded_evaluation_draft(
+                    result = self._fallback_for_reasoning_error(
                         run_id=run_id,
                         user_id=user_id,
                         context=context,
-                        model=model_name,
+                        model_name=model_name,
                         error_codes=[error],
                     )
                     await self._append_trace(
@@ -385,7 +385,13 @@ class FinnV2ReasoningService:
                 status = "unavailable" if error in {"ai_unavailable_budget", "ai_unavailable_configuration", "ai_rate_limited"} else "failed"
                 event = "reasoning_unavailable" if status == "unavailable" else "reasoning_failed"
                 await self._append_trace(run_id, user_id, trace_id, event, context, model_name, status, int((monotonic() - started) * 1000), attempt, input_hash, [error])
-                result = self.fallbacks.unavailable_draft(run_id=run_id, user_id=user_id, mode=context.interaction_mode, error_codes=[error], model=model_name)
+                result = self._fallback_for_reasoning_error(
+                    run_id=run_id,
+                    user_id=user_id,
+                    context=context,
+                    model_name=model_name,
+                    error_codes=[error],
+                )
                 return await self._persist_record(
                     run_id=run_id,
                     user_id=user_id,
@@ -430,7 +436,13 @@ class FinnV2ReasoningService:
                     increment_execution_safety_counter(f"finn_v2_reasoning_retries_total:{error}")
                     continue
                 await self._append_trace(run_id, user_id, trace_id, "reasoning_failed", context, model_name, "failed", int((monotonic() - started) * 1000), attempt, input_hash, [error])
-                fallback = self.fallbacks.unavailable_draft(run_id=run_id, user_id=user_id, mode=context.interaction_mode, error_codes=[error], model=model_name)
+                fallback = self._fallback_for_reasoning_error(
+                    run_id=run_id,
+                    user_id=user_id,
+                    context=context,
+                    model_name=model_name,
+                    error_codes=[error],
+                )
                 return await self._persist_record(
                     run_id=run_id,
                     user_id=user_id,
@@ -479,6 +491,56 @@ class FinnV2ReasoningService:
                 latency_ms=int((monotonic() - started) * 1000),
             )
         raise ValueError(",".join(last_error_codes or ["reasoning_failed"]))
+
+    def _fallback_for_reasoning_error(
+        self,
+        *,
+        run_id: str,
+        user_id: int,
+        context,
+        model_name: str,
+        error_codes: list[str],
+    ) -> ReasoningResult:
+        mode = normalize_interaction_mode(context.interaction_mode)
+        if mode == "EVALUATE":
+            return self.fallbacks.grounded_evaluation_draft(
+                run_id=run_id,
+                user_id=user_id,
+                context=context,
+                model=model_name,
+                error_codes=error_codes,
+            )
+        if mode == "READ":
+            return self.fallbacks.grounded_read_draft(
+                run_id=run_id,
+                user_id=user_id,
+                context=context,
+                model=model_name,
+                error_codes=error_codes,
+            )
+        if mode in {"CREATE_PROPOSAL", "ACTION_PROPOSAL"}:
+            if not context.policy.allowed and context.policy.operation_type == "activate_live_bot":
+                return self.fallbacks.blocked_action_draft(
+                    run_id=run_id,
+                    user_id=user_id,
+                    context=context,
+                    model=model_name,
+                    error_codes=error_codes,
+                )
+            return self.fallbacks.grounded_proposal_draft(
+                run_id=run_id,
+                user_id=user_id,
+                context=context,
+                model=model_name,
+                error_codes=error_codes,
+            )
+        return self.fallbacks.unavailable_draft(
+            run_id=run_id,
+            user_id=user_id,
+            mode=context.interaction_mode,
+            error_codes=error_codes,
+            model=model_name,
+        )
 
     async def _persist_record(self, **kwargs):
         result = kwargs.pop("result", None)

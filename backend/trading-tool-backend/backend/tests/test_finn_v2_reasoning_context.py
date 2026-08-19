@@ -181,3 +181,96 @@ def test_reasoning_context_accepts_persisted_snapshot_and_validation_rows():
     assert context.validation_id == "validation-2"
     assert context.evidence_set_hash == "hash-2"
     assert context.allowed_response_modes == ["UNAVAILABLE"]
+
+
+def test_reasoning_context_keeps_linked_strategy_entry_fields():
+    service = FinnV2ReasoningContextService(session=object(), max_evidence_items=30, max_context_bytes=131072)
+    service.evidence_repo.list_for_run = lambda **_kwargs: asyncio.sleep(
+        0,
+        result=[
+            SimpleNamespace(
+                id="artifact-strategy-1",
+                tool_name="read_linked_strategy",
+                entity_type="strategy",
+                entity_id="309",
+                asset="BTC",
+                source="internal",
+                source_as_of=None,
+                freshness="unknown",
+                availability="available",
+                payload_json={
+                    "data": {
+                        "strategy_id": 309,
+                        "setup_id": 293,
+                        "symbol": "BTC",
+                        "timeframe": "4H",
+                        "entry": "62000",
+                        "entry_type": "limit",
+                        "stop_loss": "59800",
+                        "targets": ["64500", "67000"],
+                        "base_amount": 250.0,
+                        "setup_name": "BTC Swing",
+                        "setup_type": "swing",
+                    }
+                },
+            ),
+        ],
+    )
+    run = SimpleNamespace(id="run-3", user_id=7, message="Welke entryvoorwaarde gebruik ik?", client_context_json={}, workspace_hints_json={})
+    orchestrator = OrchestratorResult(
+        orchestrator_result_id="orchestrator-3",
+        run_id="run-3",
+        user_id=7,
+        analysis=RequestAnalysisResult(
+            interaction_mode="READ",
+            subject_scopes=["strategy"],
+            confidence="high",
+            reasoning_required=True,
+        ),
+        domain_requirements=DomainRequirementPlan(required_domains=["plan_context"], optional_domains=[], requirement_reason=[]),
+        tool_plan=ToolPlan(run_id="run-3", interaction_mode="READ", max_tool_calls=15),
+        snapshot_id="snapshot-3",
+        validation_id="validation-3",
+        outcome="reasoning_ready",
+        created_at=datetime.now(timezone.utc),
+    )
+    snapshot = FinancialStateSnapshot(
+        snapshot_id="snapshot-3",
+        run_id="run-3",
+        user_id=7,
+        revision=1,
+        evidence_set_hash="hash-3",
+        assembled_at=datetime.now(timezone.utc),
+    )
+    validation = EvidenceValidationResult(
+        validation_id="validation-3",
+        snapshot_id="snapshot-3",
+        run_id="run-3",
+        user_id=7,
+        evidence_set_hash="hash-3",
+        integrity_status="valid",
+        domains=[DomainValidationResult(domain="plan_context", status="available", confidence="high")],
+        issues=[],
+        validated_at=datetime.now(timezone.utc),
+    )
+    policy = FinnV2PolicyDecision(
+        policy_decision_id="policy-3",
+        run_id="run-3",
+        user_id=7,
+        policy_class="read",
+        allowed=True,
+        proposal_allowed=False,
+        confirmation_required=False,
+        step_up_required=False,
+        execution_allowed=False,
+        shadow_safe=True,
+        created_at=datetime.now(timezone.utc),
+    )
+
+    context = asyncio.run(service.build(run=run, orchestrator_result=orchestrator, snapshot=snapshot, validation=validation, policy=policy))
+
+    strategy_facts = context.evidence[0].facts
+    assert strategy_facts["entry"] == "62000"
+    assert strategy_facts["entry_type"] == "limit"
+    assert strategy_facts["stop_loss"] == "59800"
+    assert strategy_facts["targets"] == ["64500", "67000"]

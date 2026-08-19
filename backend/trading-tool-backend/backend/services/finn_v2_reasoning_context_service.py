@@ -173,7 +173,27 @@ class FinnV2ReasoningContextService:
         if tool_name == "read_active_setup":
             return {key: payload.get(key) for key in ["setup_id", "name", "symbol", "timeframe", "score"] if payload.get(key) is not None}
         if tool_name == "read_linked_strategy":
-            return {key: payload.get(key) for key in ["strategy_id", "setup_id", "name", "symbol", "timeframe", "execution_mode", "risk_profile"] if payload.get(key) is not None}
+            source = payload.get("data") if isinstance(payload.get("data"), dict) else payload
+            return {
+                key: source.get(key)
+                for key in [
+                    "strategy_id",
+                    "setup_id",
+                    "name",
+                    "symbol",
+                    "timeframe",
+                    "execution_mode",
+                    "risk_profile",
+                    "entry",
+                    "entry_type",
+                    "stop_loss",
+                    "targets",
+                    "base_amount",
+                    "setup_name",
+                    "setup_type",
+                ]
+                if source.get(key) is not None
+            }
         if tool_name == "read_linked_bot":
             return {key: payload.get(key) for key in ["bot_id", "name", "symbol", "strategy_id", "is_active", "is_live", "mode"] if payload.get(key) is not None}
         if tool_name == "read_bot_status":

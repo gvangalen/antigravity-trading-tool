@@ -122,6 +122,13 @@ class LinkedStrategyData(BaseModel):
     timeframe: Optional[str] = None
     execution_mode: Optional[str] = None
     risk_profile: Optional[str] = None
+    entry: Optional[str] = None
+    entry_type: Optional[str] = None
+    stop_loss: Optional[str] = None
+    targets: List[str] = Field(default_factory=list)
+    base_amount: Optional[float] = None
+    setup_name: Optional[str] = None
+    setup_type: Optional[str] = None
 
 
 class LinkedBotData(BaseModel):

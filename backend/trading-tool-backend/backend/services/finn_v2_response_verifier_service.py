@@ -332,8 +332,11 @@ class FinnV2ResponseVerifierService:
         if not follow_up_ok:
             reason_codes.append("follow_up_invalid")
 
+        normalized_mode = normalize_interaction_mode(draft.mode)
         policy_ok = bool(policy.allowed)
-        if normalize_interaction_mode(draft.mode) in {"CREATE_PROPOSAL", "ACTION_PROPOSAL"} and not policy.proposal_allowed:
+        if not policy.allowed and normalized_mode in {"UNAVAILABLE", "CLARIFICATION"}:
+            policy_ok = True
+        if normalized_mode in {"CREATE_PROPOSAL", "ACTION_PROPOSAL"} and not policy.proposal_allowed:
             policy_ok = False
         if not policy_ok:
             reason_codes.append("policy_violation")
