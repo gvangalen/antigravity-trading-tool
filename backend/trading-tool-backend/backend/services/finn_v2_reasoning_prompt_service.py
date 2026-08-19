@@ -68,6 +68,7 @@ class FinnV2ReasoningPromptService:
         return (
             "Use the structured context to answer the user question.\n"
             "Respect policy boundaries and keep proposal candidates untrusted.\n"
+            "When you return proposal_candidate.proposed_changes, encode it as a compact JSON object string.\n"
             f"Original user question:\n{context.user_message}"
         )
 
@@ -140,7 +141,7 @@ class FinnV2ReasoningPromptService:
                                 "target_type": {"type": "string"},
                                 "target_id": {"type": ["string", "null"]},
                                 "asset": {"type": ["string", "null"]},
-                                "proposed_changes": {"type": "object", "additionalProperties": True},
+                                "proposed_changes": {"type": "string"},
                                 "evidence_refs": {"type": "array", "items": {"type": "string"}},
                                 "impact_summary": {"type": "string"},
                                 "risk_summary": {"type": "string"},

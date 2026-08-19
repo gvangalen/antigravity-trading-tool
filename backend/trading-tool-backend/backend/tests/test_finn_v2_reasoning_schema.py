@@ -59,4 +59,4 @@ def test_reasoning_prompt_schema_keeps_proposed_changes_openai_compatible():
     schema = FinnV2ReasoningPromptService().response_schema()
     proposal_branch = schema["properties"]["proposal_candidate"]["anyOf"][1]
 
-    assert proposal_branch["properties"]["proposed_changes"] == {"type": "object", "additionalProperties": True}
+    assert proposal_branch["properties"]["proposed_changes"] == {"type": "string"}
