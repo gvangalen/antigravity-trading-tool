@@ -48,7 +48,11 @@ class IndicatorConfigurationItem(BaseModel):
 
 class IndicatorConfigurationData(BaseModel):
     symbol: str
+    asset_class: Optional[str] = None
     technical: List[IndicatorConfigurationItem] = Field(default_factory=list)
+    market: List[IndicatorConfigurationItem] = Field(default_factory=list)
+    macro: List[IndicatorConfigurationItem] = Field(default_factory=list)
+    scope_by_category: dict[str, str] = Field(default_factory=dict)
 
 
 class MasterScoreData(BaseModel):

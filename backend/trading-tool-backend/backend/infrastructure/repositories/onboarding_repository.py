@@ -8,6 +8,7 @@ from backend.services.trader_profile_service import (
     has_trader_profile,
     normalize_trader_profile_preferences,
 )
+from backend.infrastructure.repositories.technical_data_repository import TechnicalDataRepository
 
 
 LEGACY_USER_INDICATOR_CONFIG_COLUMNS = {
@@ -155,40 +156,11 @@ class OnboardingRepository:
             return bool(result.scalar())
 
         symbol_params = {"user_id": user_id, "symbol": onboarding_asset}
-
-        async def _has_indicator_config(category: str) -> bool:
-            if not onboarding_asset:
-                return False
-
-            columns = await self._get_user_config_columns()
-            conditions = ["user_id = :user_id"]
-            params = {"user_id": user_id}
-
-            if "category" in columns:
-                conditions.append("category = :category")
-                params["category"] = category
-
-            if "enabled" in columns:
-                conditions.append("enabled = TRUE")
-
-            if "symbol" in columns:
-                conditions.append("UPPER(COALESCE(symbol, '')) = :symbol")
-                params["symbol"] = onboarding_asset
-            else:
-                return False
-
-            return bool(
-                await _scalar(
-                    f"""
-                    SELECT EXISTS (
-                        SELECT 1
-                        FROM user_indicator_configs
-                        WHERE {' AND '.join(conditions)}
-                    )
-                    """,
-                    params,
-                )
-            )
+        configured_indicators = (
+            await TechnicalDataRepository(self.db).get_configured_indicator_names(user_id, symbol=onboarding_asset)
+            if onboarding_asset
+            else {"market": [], "macro": [], "technical": []}
+        )
 
         has_setup = bool(
             await _scalar(
@@ -250,9 +222,9 @@ class OnboardingRepository:
             "active_asset": onboarding_asset or None,
             "has_profile": has_trader_profile(profile),
             "has_asset": bool(onboarding_asset),
-            "has_market": await _has_indicator_config("market"),
-            "has_macro": await _has_indicator_config("macro"),
-            "has_technical": await _has_indicator_config("technical"),
+            "has_market": bool(configured_indicators.get("market")),
+            "has_macro": bool(configured_indicators.get("macro")),
+            "has_technical": bool(configured_indicators.get("technical")),
             "has_setup": has_setup,
             "has_strategy": has_strategy,
             "has_bot": has_bot,

@@ -69,7 +69,7 @@ def test_configured_indicator_context_skips_enabled_filter_when_column_is_absent
     executed_sql = session.executed[1]["sql"]
     assert "enabled = TRUE" not in executed_sql
     assert "symbol = :symbol" in executed_sql
-    assert session.executed[1]["params"] == {"user_id": 344, "symbol": "BTC"}
+    assert session.executed[1]["params"] == {"user_id": 344, "category": "technical", "symbol": "BTC"}
 
 
 def test_configured_indicator_context_probe_failure_uses_legacy_safe_columns():

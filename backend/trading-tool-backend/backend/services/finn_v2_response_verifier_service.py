@@ -318,6 +318,15 @@ class FinnV2ResponseVerifierService:
         if not relevance_ok:
             reason_codes.append("response_not_answering_question")
 
+        personalization_ok = self._evaluate_personalization_ok(
+            run.message,
+            draft,
+            context,
+            requested_scopes=getattr(getattr(orchestrator_result, "analysis", None), "subject_scopes", None),
+        )
+        if not personalization_ok:
+            reason_codes.append("response_insufficiently_personalized")
+
         mode_purity_ok = self._mode_purity_ok(draft)
         if not mode_purity_ok:
             reason_codes.append("mode_purity_violation")
@@ -362,6 +371,7 @@ class FinnV2ResponseVerifierService:
                 evidence_ok,
                 coverage.coverage_ok,
                 relevance_ok,
+                personalization_ok,
                 mode_purity_ok,
                 uncertainty_ok,
                 follow_up_ok,
@@ -714,6 +724,83 @@ class FinnV2ResponseVerifierService:
             return True
         return True
 
+    def _evaluate_personalization_ok(
+        self,
+        question: str,
+        draft: ResponseDraft,
+        context,
+        *,
+        requested_scopes: Optional[list[str]] = None,
+    ) -> bool:
+        if normalize_interaction_mode(draft.mode) != "EVALUATE":
+            return True
+        lowered_question = question.lower()
+        asks_for_plan_gap = (
+            "belangrijkste ontbrekende onderdeel" in lowered_question
+            or ("concrete observatie" in lowered_question and "vervolgstap" in lowered_question)
+        )
+        if not asks_for_plan_gap:
+            return True
+
+        scopes = set(requested_scopes or [])
+        if not scopes:
+            scopes = set(getattr(getattr(context, "analysis", None), "subject_scopes", []) or [])
+        if not scopes:
+            scopes = set(getattr(context, "subject_scopes", []) or [])
+        required_scopes = {"profile", "indicators", "setup", "strategy", "bot"}
+        if not required_scopes.issubset(scopes):
+            return True
+
+        evidence_by_tool = {
+            str(getattr(item, "tool_name", "") or ""): item
+            for item in getattr(context, "evidence", []) or []
+        }
+        profile = evidence_by_tool.get("read_profile")
+        indicators = evidence_by_tool.get("read_indicator_configuration")
+        setup = evidence_by_tool.get("read_active_setup")
+        strategy = evidence_by_tool.get("read_linked_strategy")
+        bot = evidence_by_tool.get("read_linked_bot")
+        text = f"{draft.direct_answer} {draft.main_observation} {getattr(draft.next_step, 'instruction', '')}".lower()
+
+        plan_anchors: list[str] = []
+        for facts in [
+            getattr(setup, "facts", {}) if setup else {},
+            getattr(strategy, "facts", {}) if strategy else {},
+            getattr(bot, "facts", {}) if bot else {},
+        ]:
+            for key in ("symbol", "name", "timeframe", "setup_id", "strategy_id", "bot_id", "execution_mode"):
+                value = facts.get(key)
+                if value not in (None, "", [], {}):
+                    plan_anchors.append(str(value).lower())
+
+        profile_anchors: list[str] = []
+        profile_facts = getattr(profile, "facts", {}) if profile else {}
+        trader_profile = profile_facts.get("trader_profile") or {}
+        for key in ("risk_profile", "experience_level", "experience", "primary_timeframe", "secondary_timeframe"):
+            value = trader_profile.get(key)
+            if value not in (None, "", [], {}):
+                profile_anchors.append(str(value).lower())
+        style = trader_profile.get("style")
+        if isinstance(style, list):
+            profile_anchors.extend(str(item).lower() for item in style if str(item).strip())
+        elif style not in (None, "", [], {}):
+            profile_anchors.append(str(style).lower())
+
+        indicator_anchors: list[str] = []
+        indicator_facts = getattr(indicators, "facts", {}) if indicators else {}
+        for row in indicator_facts.get("configured_indicators") or []:
+            indicator = (row or {}).get("indicator")
+            category = (row or {}).get("category")
+            if indicator:
+                indicator_anchors.append(str(indicator).lower())
+            if category:
+                indicator_anchors.append(str(category).lower())
+
+        has_plan_anchor = any(anchor and anchor in text for anchor in plan_anchors)
+        has_profile_or_indicator_anchor = any(anchor and anchor in text for anchor in profile_anchors + indicator_anchors)
+        has_next_step = draft.next_step is not None and bool(getattr(draft.next_step, "instruction", "").strip())
+        return has_plan_anchor and has_profile_or_indicator_anchor and has_next_step
+
     def _uncertainty_ok(self, draft: ResponseDraft, context) -> bool:
         requires_uncertainty = bool(context.uncertainty_codes) or any(item.freshness in {"stale", "unknown"} or item.confidence == "low" for item in context.evidence)
         if not requires_uncertainty:
@@ -793,6 +880,8 @@ class FinnV2ResponseVerifierService:
             return "repair_once"
         if "response_scope_incomplete" in reason_codes or "response_not_answering_question" in reason_codes:
             return "downgrade_to_clarification" if has_clarification else "downgrade_to_unavailable"
+        if "response_insufficiently_personalized" in reason_codes:
+            return "downgrade_to_unavailable"
         if "unsupported_noncritical_claim" in reason_codes or "mode_purity_violation" in reason_codes:
             return "downgrade_to_fact"
         if "follow_up_invalid" in reason_codes:

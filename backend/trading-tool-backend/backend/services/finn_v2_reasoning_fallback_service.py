@@ -16,6 +16,35 @@ from backend.schemas.finn_v2_reasoning_schema import (
 
 
 class FinnV2ReasoningFallbackService:
+    @staticmethod
+    def _indicator_names(facts: dict[str, Any], category: str) -> list[str]:
+        rows = facts.get(category) or []
+        names: list[str] = []
+        for row in rows:
+            indicator = str((row or {}).get("indicator") or "").strip()
+            if indicator and indicator not in names:
+                names.append(indicator)
+        if names:
+            return names
+        for row in facts.get("configured_indicators") or []:
+            if str((row or {}).get("category") or "").strip().lower() != category:
+                continue
+            indicator = str((row or {}).get("indicator") or "").strip()
+            if indicator and indicator not in names:
+                names.append(indicator)
+        return names
+
+    @staticmethod
+    def _profile_values(profile_facts: dict[str, Any]) -> tuple[str | None, str | None]:
+        style = profile_facts.get("style")
+        if isinstance(style, list):
+            style = next((str(item).strip() for item in style if str(item).strip()), None)
+        elif style is not None:
+            style = str(style).strip() or None
+        risk_profile = profile_facts.get("risk_profile") or profile_facts.get("riskTolerance")
+        risk_profile = str(risk_profile).strip() if risk_profile else None
+        return style, risk_profile
+
     def deterministic_draft(self, *, run_id: str, user_id: int, orchestrator_result: OrchestratorResult, model: str) -> ReasoningResult:
         mode = orchestrator_result.outcome
         if mode == "clarification_required":
@@ -291,7 +320,12 @@ class FinnV2ReasoningFallbackService:
                     target_type="watchlist",
                     target_id=None,
                     asset=target_asset,
-                    proposed_changes={"asset": target_asset, "operation": "add"},
+                    proposed_changes={
+                        "proposal_status": "draft",
+                        "generation_source": "deterministic_validated",
+                        "asset": target_asset,
+                        "operation": "add",
+                    },
                     evidence_refs=evidence_refs,
                     impact_summary=f"{target_asset} wordt toegevoegd aan je persoonlijke watchlist na bevestiging.",
                     risk_summary="Er wordt niets uitgevoerd zonder expliciete confirmation.",
@@ -365,7 +399,11 @@ class FinnV2ReasoningFallbackService:
                 target_type="setup",
                 target_id=None,
                 asset=requested_asset,
-                proposed_changes={"setup_fields": proposed_fields},
+                proposed_changes={
+                    "proposal_status": "draft",
+                    "generation_source": "deterministic_validated",
+                    "setup_fields": proposed_fields,
+                },
                 evidence_refs=evidence_refs,
                 impact_summary=f"Er wordt een nieuwe {requested_asset}-setup voorbereid op basis van je prompt.",
                 risk_summary="De setup wordt pas opgeslagen na expliciete confirmation.",
@@ -453,6 +491,11 @@ class FinnV2ReasoningFallbackService:
         profile_facts = profile.facts.get("trader_profile", {}) if profile else {}
         has_profile = bool(profile and profile.facts.get("has_profile"))
         profile_is_empty = not any(profile_facts.get(key) for key in profile_facts)
+        profile_style, profile_risk = self._profile_values(profile_facts)
+        indicator_facts = indicators.facts if indicators else {}
+        technical_indicators = self._indicator_names(indicator_facts, "technical")
+        market_indicators = self._indicator_names(indicator_facts, "market")
+        macro_indicators = self._indicator_names(indicator_facts, "macro")
         indicator_count = len(indicators.facts.get("configured_indicators") or []) if indicators else 0
         execution_mode = strategy.facts.get("execution_mode") if strategy else None
         risk_profile = strategy.facts.get("risk_profile") if strategy else None
@@ -560,16 +603,27 @@ class FinnV2ReasoningFallbackService:
                 requires_confirmation=False,
             )
         elif has_profile and not profile_is_empty:
-            direct_answer = f"Het belangrijkste ontbrekende onderdeel van je {asset}-plan is een expliciete koppeling tussen je huidige marktcontext en de voorwaarden van strategie {strategy_id}."
+            technical_label = technical_indicators[0] if technical_indicators else "je technische indicator"
+            context_label = market_indicators[0] if market_indicators else (macro_indicators[0] if macro_indicators else "je extra contextlaag")
+            style_label = profile_style or "tradingstijl"
+            risk_label = profile_risk or risk_profile or "risicoprofiel"
+            direct_answer = (
+                f"Het belangrijkste ontbrekende onderdeel van je {asset}-plan is nu de vertaalslag van je {style_label}-profiel en {risk_label} "
+                f"naar één expliciete beslisregel tussen {technical_label} en {context_label}."
+            )
             main_observation = (
-                f"Je profiel, setup {setup_id}, strategie {strategy_id} en bot {bot_id} zijn aanwezig, "
-                "maar de huidige beoordeling mist nog een expliciete vertaalslag van context naar concrete planvoorwaarden."
+                f"Je profiel, setup {setup_id}, strategie {strategy_id} en bot {bot_id} zijn aanwezig: "
+                f"setup {setup_id} draait op {timeframe or 'onbekend'}, strategie {strategy_id} gebruikt {execution_mode or 'onbekende'} uitvoering "
+                f"en je configuratie bevat {technical_label}"
+                f"{f' plus {context_label}' if context_label != technical_label else ''}, "
+                "maar ik zie nog geen expliciete regel die bepaalt wanneer die signalen samen wel of niet sterk genoeg zijn voor je plan."
             )
             next_step = ReasoningNextStep(
-                title="Toets je setup aan je context",
+                title="Leg je beslisregel vast",
                 instruction=(
-                    f"Controleer eerst of setup {setup_id} en strategie {strategy_id} nog passen bij de huidige marktstructuur, "
-                    "voordat je de bot verder laat volgen."
+                    f"Leg voor {asset} precies vast hoe {technical_label}"
+                    f"{f' samen met {context_label}' if context_label != technical_label else ''} "
+                    f"op timeframe {timeframe or 'je hoofdtimeframe'} moet bevestigen voordat strategie {strategy_id} of bot {bot_id} het plan mag volgen."
                 ),
                 operation_type=None,
                 target_entity_type="setup",

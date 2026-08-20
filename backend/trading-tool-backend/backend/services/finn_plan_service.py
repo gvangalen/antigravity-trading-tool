@@ -14329,46 +14329,8 @@ class FinnPlanService:
         return await self._configured_indicator_context(user_id, asset)
 
     async def _configured_indicator_context(self, user_id: int, asset: str) -> Dict[str, List[str]]:
-        columns = await self._get_user_indicator_config_columns()
-        by_category: Dict[str, List[str]] = {"market": [], "macro": [], "technical": []}
-        if "user_id" not in columns or "indicator" not in columns:
-            return by_category
-
-        params: Dict[str, Any] = {"user_id": user_id}
-        where_clauses = ["user_id = :user_id"]
-        order_by = ["indicator ASC"]
-
-        if "enabled" in columns:
-            where_clauses.append("enabled = TRUE")
-        if "category" in columns:
-            where_clauses.append("category IN ('market', 'macro', 'technical')")
-            order_by.insert(0, "category ASC")
-        if "symbol" in columns:
-            params["symbol"] = str(asset or "").strip().upper()
-            where_clauses.append("(symbol = :symbol OR symbol IS NULL OR symbol = 'GLOBAL')")
-        if "priority" in columns:
-            order_by.insert(1 if "category" in columns else 0, "priority ASC")
-
-        select_category = "category" if "category" in columns else "NULL AS category"
-        result = await self.session.execute(
-            text(
-                f"""
-                SELECT {select_category}, indicator
-                FROM user_indicator_configs
-                WHERE {' AND '.join(where_clauses)}
-                ORDER BY {', '.join(order_by)}
-                """
-            ),
-            params,
-        )
-        for row in result.mappings().all():
-            category = str(row.get("category") or "").lower()
-            indicator = str(row.get("indicator") or "").strip()
-            if not indicator or category not in by_category:
-                continue
-            if indicator not in by_category[category]:
-                by_category[category].append(indicator.upper() if indicator.lower() == "rsi" else indicator)
-        return by_category
+        repository = TechnicalDataRepository(self.session)
+        return await repository.get_configured_indicator_names(user_id, symbol=asset)
 
     async def _first_dashboard_linked_bot(
         self,

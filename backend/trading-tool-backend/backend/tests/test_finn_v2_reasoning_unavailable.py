@@ -980,11 +980,13 @@ def test_reasoning_uses_grounded_watchlist_proposal_fallback_on_incomplete_struc
 
     result = asyncio.run(service.reason(user_id=7, run_id="run-watch-1", trace_id="trace-watch-1"))
 
-    assert result["status"] == "failed"
+    assert result["status"] == "ready"
     assert result["mode"] == "ACTION_PROPOSAL"
     assert result["result"].proposal_candidate is not None
     assert result["result"].proposal_candidate.operation_type == "watchlist_add"
     assert result["result"].proposal_candidate.proposed_changes["asset"] == "ETH"
+    assert result["result"].proposal_candidate.proposed_changes["proposal_status"] == "draft"
+    assert result["error_codes"] == ["incomplete_structured_response", "deterministic_validated"]
 
 
 def test_grounded_evaluation_fallback_prefers_strategy_fit_over_missing_indicators():
@@ -1289,6 +1291,177 @@ def test_grounded_evaluation_fallback_uses_plan_specific_details_when_indicators
     assert "1D" in aapl_result.direct_answer
     assert "220" in aapl_result.main_observation
     assert "245" in aapl_result.main_observation
+    assert btc_result.direct_answer != aapl_result.direct_answer
+    assert btc_result.main_observation != aapl_result.main_observation
+
+
+def test_grounded_evaluation_fallback_personalizes_with_profile_and_indicator_context():
+    fallback = FinnV2ReasoningFallbackService()
+    btc_context = ReasoningContextPackage(
+        run_id="run-g5-btc-personalized",
+        user_id=7,
+        user_message="Bekijk mijn profiel, indicatoren, setup, strategie en gekoppelde bot. Wat is volgens jou op dit moment het belangrijkste ontbrekende onderdeel van mijn plan? Geef één concrete observatie en één vervolgstap.",
+        locale="nl-NL",
+        interaction_mode="EVALUATE",
+        subject_scopes=["profile", "indicators", "setup", "strategy", "bot"],
+        required_domains=["identity_context", "market_context", "plan_context", "automation_context"],
+        orchestrator_result_id="orchestrator-g5-btc-personalized",
+        snapshot_id="snapshot-g5-btc-personalized",
+        validation_id="validation-g5-btc-personalized",
+        policy_decision_id="policy-g5-btc-personalized",
+        evidence_set_hash="hash-g5-btc-personalized",
+        evidence=[
+            ReasoningEvidenceItem(
+                evidence_id="E1",
+                artifact_id="a1",
+                tool_name="read_profile",
+                domain="identity_context",
+                entity_type="profile",
+                source="internal",
+                freshness="fresh",
+                confidence="high",
+                facts={"has_profile": True, "trader_profile": {"style": ["swing"], "risk_profile": "balanced"}},
+            ),
+            ReasoningEvidenceItem(
+                evidence_id="E2",
+                artifact_id="a2",
+                tool_name="read_indicator_configuration",
+                domain="market_context",
+                entity_type="indicator_configuration",
+                asset="BTC",
+                source="internal",
+                freshness="fresh",
+                confidence="high",
+                facts={
+                    "symbol": "BTC",
+                    "technical": [{"indicator": "RSI"}],
+                    "market": [{"indicator": "funding_rate"}],
+                    "macro": [],
+                    "configured_indicators": [
+                        {"indicator": "RSI", "category": "technical"},
+                        {"indicator": "funding_rate", "category": "market"},
+                    ],
+                },
+            ),
+            ReasoningEvidenceItem(
+                evidence_id="E3",
+                artifact_id="a3",
+                tool_name="read_active_setup",
+                domain="plan_context",
+                entity_type="setup",
+                entity_id="295",
+                asset="BTC",
+                source="internal",
+                freshness="fresh",
+                confidence="high",
+                facts={"setup_id": 295, "symbol": "BTC", "name": "BTC Swing 4H Gate Setup", "timeframe": "4H"},
+            ),
+            ReasoningEvidenceItem(
+                evidence_id="E4",
+                artifact_id="a4",
+                tool_name="read_linked_strategy",
+                domain="plan_context",
+                entity_type="strategy",
+                entity_id="311",
+                asset="BTC",
+                source="internal",
+                freshness="fresh",
+                confidence="high",
+                facts={"strategy_id": 311, "setup_id": 295, "symbol": "BTC", "execution_mode": "fixed"},
+            ),
+            ReasoningEvidenceItem(
+                evidence_id="E5",
+                artifact_id="a5",
+                tool_name="read_linked_bot",
+                domain="automation_context",
+                entity_type="bot",
+                entity_id="172",
+                asset="BTC",
+                source="internal",
+                freshness="fresh",
+                confidence="high",
+                facts={"bot_id": 172, "strategy_id": 311, "is_live": False},
+            ),
+            ReasoningEvidenceItem(
+                evidence_id="E6",
+                artifact_id="a6",
+                tool_name="read_bot_status",
+                domain="automation_context",
+                entity_type="bot_status",
+                entity_id="172",
+                asset="BTC",
+                source="internal",
+                freshness="fresh",
+                confidence="high",
+                facts={"bot_id": 172, "is_live": False, "is_active": True},
+            ),
+        ],
+        domain_statuses=[],
+        policy=ReasoningPolicyContext(
+            policy_class="advice",
+            allowed=True,
+            proposal_allowed=False,
+            confirmation_required=False,
+            step_up_required=False,
+            execution_allowed=False,
+            operation_type=None,
+            proposal_input_required=False,
+        ),
+        allowed_response_modes=["EVALUATE", "UNAVAILABLE"],
+        allowed_operation_types=[],
+        uncertainty_codes=["ai_rate_limited"],
+    )
+    aapl_context = btc_context.copy(deep=True)
+    aapl_context.run_id = "run-g5-aapl-personalized"
+    aapl_context.evidence_set_hash = "hash-g5-aapl-personalized"
+    aapl_context.evidence[0].facts = {
+        "has_profile": True,
+        "trader_profile": {"style": ["investor"], "risk_profile": "conservative"},
+    }
+    aapl_context.evidence[1].asset = "AAPL"
+    aapl_context.evidence[1].facts = {
+        "symbol": "AAPL",
+        "technical": [{"indicator": "VWAP"}],
+        "market": [{"indicator": "forward_pe"}],
+        "macro": [{"indicator": "federal_funds_rate"}],
+        "configured_indicators": [
+            {"indicator": "VWAP", "category": "technical"},
+            {"indicator": "forward_pe", "category": "market"},
+            {"indicator": "federal_funds_rate", "category": "macro"},
+        ],
+    }
+    aapl_context.evidence[2].entity_id = "296"
+    aapl_context.evidence[2].asset = "AAPL"
+    aapl_context.evidence[2].facts = {"setup_id": 296, "symbol": "AAPL", "name": "AAPL Investor 1D Gate Setup", "timeframe": "1D"}
+    aapl_context.evidence[3].entity_id = "312"
+    aapl_context.evidence[3].asset = "AAPL"
+    aapl_context.evidence[3].facts = {"strategy_id": 312, "setup_id": 296, "symbol": "AAPL", "execution_mode": "staged"}
+    aapl_context.evidence[4].entity_id = "173"
+    aapl_context.evidence[4].asset = "AAPL"
+    aapl_context.evidence[4].facts = {"bot_id": 173, "strategy_id": 312, "is_live": False}
+    aapl_context.evidence[5].entity_id = "173"
+    aapl_context.evidence[5].asset = "AAPL"
+    aapl_context.evidence[5].facts = {"bot_id": 173, "is_live": False, "is_active": True}
+
+    btc_result = fallback.grounded_evaluation_draft(
+        run_id="run-g5-btc-personalized",
+        user_id=7,
+        context=btc_context,
+        model="gpt-test",
+        error_codes=["ai_rate_limited"],
+    )
+    aapl_result = fallback.grounded_evaluation_draft(
+        run_id="run-g5-aapl-personalized",
+        user_id=7,
+        context=aapl_context,
+        model="gpt-test",
+        error_codes=["ai_rate_limited"],
+    )
+
+    assert "swing" in btc_result.direct_answer.lower() or "balanced" in btc_result.direct_answer.lower()
+    assert "rsi" in btc_result.main_observation.lower() or "funding_rate" in btc_result.main_observation.lower()
+    assert "investor" in aapl_result.direct_answer.lower() or "conservative" in aapl_result.direct_answer.lower()
+    assert "vwap" in aapl_result.main_observation.lower() or "federal_funds_rate" in aapl_result.main_observation.lower()
     assert btc_result.direct_answer != aapl_result.direct_answer
     assert btc_result.main_observation != aapl_result.main_observation
 

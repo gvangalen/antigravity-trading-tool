@@ -377,6 +377,7 @@ class FinnV2ReasoningService:
                     "user_id": user_id,
                     "trace_id": trace_id,
                     "stage": "reasoning_model",
+                    "call_purpose": "primary_reasoning" if attempt == 0 else "retry",
                     "interaction_mode": context.interaction_mode,
                     "attempt": attempt,
                     "model": response.get("model") or model_name,
@@ -388,7 +389,8 @@ class FinnV2ReasoningService:
             if response.get("error"):
                 error = str(response["error"])
                 last_error_codes = [error]
-                if normalize_interaction_mode(context.interaction_mode) == "EVALUATE" and error in {"provider_error", "schema_invalid", "incomplete_structured_response", "timeout"}:
+                normalized_mode = normalize_interaction_mode(context.interaction_mode)
+                if normalized_mode in {"EVALUATE", "CREATE_PROPOSAL", "ACTION_PROPOSAL"} and error in {"provider_error", "schema_invalid", "incomplete_structured_response", "timeout"}:
                     result = self._fallback_for_reasoning_error(
                         run_id=run_id,
                         user_id=user_id,
@@ -407,7 +409,7 @@ class FinnV2ReasoningService:
                         int((monotonic() - started) * 1000),
                         attempt,
                         input_hash,
-                        [error],
+                        [error, "deterministic_validated"],
                     )
                     return await self._persist_record(
                         run_id=run_id,
@@ -423,7 +425,7 @@ class FinnV2ReasoningService:
                         input_hash=input_hash,
                         model=model_name,
                         result=result,
-                        error_codes=[error],
+                        error_codes=[error, "deterministic_validated"],
                         retry_count=attempt,
                         input_tokens=response.get("input_tokens"),
                         output_tokens=response.get("output_tokens"),
@@ -435,7 +437,6 @@ class FinnV2ReasoningService:
                     increment_execution_safety_counter(f"finn_v2_reasoning_retries_total:{error}")
                     continue
                 fallback_ready_modes = {"READ", "EVALUATE"}
-                normalized_mode = normalize_interaction_mode(context.interaction_mode)
                 fallback_status = "ready" if normalized_mode in fallback_ready_modes else None
                 status = fallback_status or ("unavailable" if error in {"ai_unavailable_budget", "ai_unavailable_configuration", "ai_rate_limited"} else "failed")
                 event = "reasoning_unavailable" if status == "unavailable" else "reasoning_failed"

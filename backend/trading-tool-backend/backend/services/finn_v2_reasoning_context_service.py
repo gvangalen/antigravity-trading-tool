@@ -175,17 +175,32 @@ class FinnV2ReasoningContextService:
         if tool_name == "read_active_asset":
             return {key: payload.get(key) for key in ["symbol", "display_name", "asset_class", "market_region", "quote_currency"] if payload.get(key) is not None}
         if tool_name == "read_indicator_configuration":
-            return {
-                "symbol": payload.get("symbol"),
-                "configured_indicators": [
+            source = payload.get("data") if isinstance(payload.get("data"), dict) else payload
+            summary = payload.get("summary") if isinstance(payload.get("summary"), dict) else {}
+            technical = source.get("technical", [])[:12]
+            market = source.get("market", [])[:12]
+            macro = source.get("macro", [])[:12]
+            configured_indicators = []
+            for item in technical + market + macro:
+                configured_indicators.append(
                     {
                         "indicator": item.get("indicator"),
                         "category": item.get("category"),
                         "enabled": item.get("enabled"),
                         "priority": item.get("priority"),
                     }
-                    for item in payload.get("technical", [])[:12]
-                ],
+                )
+            return {
+                "symbol": source.get("symbol") or summary.get("symbol"),
+                "asset_class": source.get("asset_class") or summary.get("asset_class"),
+                "technical": technical,
+                "market": market,
+                "macro": macro,
+                "technical_count": summary.get("technical_count", len(technical)),
+                "market_count": summary.get("market_count", len(market)),
+                "macro_count": summary.get("macro_count", len(macro)),
+                "configured_indicators": configured_indicators,
+                "scope_by_category": source.get("scope_by_category") or {},
             }
         if tool_name == "read_asset_scores":
             return {"symbol": payload.get("symbol"), "daily_scores": payload.get("daily_scores"), "master_score": payload.get("master_score")}

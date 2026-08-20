@@ -274,3 +274,109 @@ def test_reasoning_context_keeps_linked_strategy_entry_fields():
     assert strategy_facts["entry_type"] == "limit"
     assert strategy_facts["stop_loss"] == "59800"
     assert strategy_facts["targets"] == ["64500", "67000"]
+
+
+def test_reasoning_context_keeps_indicator_configuration_domains_and_counts():
+    service = FinnV2ReasoningContextService(session=object(), max_evidence_items=30, max_context_bytes=131072)
+    service.evidence_repo.list_for_run = lambda **_kwargs: asyncio.sleep(
+        0,
+        result=[
+            SimpleNamespace(
+                id="artifact-indicators-1",
+                tool_name="read_indicator_configuration",
+                entity_type="indicator_configuration",
+                entity_id=None,
+                asset="AAPL",
+                source="internal",
+                source_as_of=None,
+                freshness="fresh",
+                availability="available",
+                payload_json={
+                    "data": {
+                        "symbol": "AAPL",
+                        "asset_class": "equity",
+                        "technical": [{"indicator": "vwap", "category": "technical", "enabled": True, "priority": 1}],
+                        "market": [{"indicator": "forward_pe", "category": "market", "enabled": True, "priority": 2}],
+                        "macro": [{"indicator": "federal_funds_rate", "category": "macro", "enabled": True, "priority": 3}],
+                        "scope_by_category": {
+                            "technical": "default",
+                            "market": "default",
+                            "macro": "default",
+                        },
+                    },
+                    "summary": {
+                        "symbol": "AAPL",
+                        "asset_class": "equity",
+                        "technical_count": 1,
+                        "market_count": 1,
+                        "macro_count": 1,
+                        "configured_count": 3,
+                    },
+                },
+            ),
+        ],
+    )
+    run = SimpleNamespace(id="run-indicators-1", user_id=9, message="Welke indicatoren staan actief?", client_context_json={}, workspace_hints_json={})
+    orchestrator = OrchestratorResult(
+        orchestrator_result_id="orchestrator-indicators-1",
+        run_id="run-indicators-1",
+        user_id=9,
+        analysis=RequestAnalysisResult(
+            interaction_mode="READ",
+            subject_scopes=["indicators"],
+            confidence="high",
+            reasoning_required=True,
+        ),
+        domain_requirements=DomainRequirementPlan(required_domains=["market_context"], optional_domains=[], requirement_reason=[]),
+        tool_plan=ToolPlan(run_id="run-indicators-1", interaction_mode="READ", max_tool_calls=15),
+        snapshot_id="snapshot-indicators-1",
+        validation_id="validation-indicators-1",
+        outcome="reasoning_ready",
+        created_at=datetime.now(timezone.utc),
+    )
+    snapshot = FinancialStateSnapshot(
+        snapshot_id="snapshot-indicators-1",
+        run_id="run-indicators-1",
+        user_id=9,
+        revision=1,
+        evidence_set_hash="hash-indicators-1",
+        assembled_at=datetime.now(timezone.utc),
+    )
+    validation = EvidenceValidationResult(
+        validation_id="validation-indicators-1",
+        snapshot_id="snapshot-indicators-1",
+        run_id="run-indicators-1",
+        user_id=9,
+        evidence_set_hash="hash-indicators-1",
+        integrity_status="valid",
+        domains=[DomainValidationResult(domain="market_context", status="available", confidence="high")],
+        issues=[],
+        validated_at=datetime.now(timezone.utc),
+    )
+    policy = FinnV2PolicyDecision(
+        policy_decision_id="policy-indicators-1",
+        run_id="run-indicators-1",
+        user_id=9,
+        policy_class="read",
+        allowed=True,
+        proposal_allowed=False,
+        confirmation_required=False,
+        step_up_required=False,
+        execution_allowed=False,
+        shadow_safe=True,
+        created_at=datetime.now(timezone.utc),
+    )
+
+    context = asyncio.run(service.build(run=run, orchestrator_result=orchestrator, snapshot=snapshot, validation=validation, policy=policy))
+
+    facts = context.evidence[0].facts
+    assert facts["symbol"] == "AAPL"
+    assert facts["asset_class"] == "equity"
+    assert facts["technical_count"] == 1
+    assert facts["market_count"] == 1
+    assert facts["macro_count"] == 1
+    assert facts["configured_indicators"] == [
+        {"indicator": "vwap", "category": "technical", "enabled": True, "priority": 1},
+        {"indicator": "forward_pe", "category": "market", "enabled": True, "priority": 2},
+        {"indicator": "federal_funds_rate", "category": "macro", "enabled": True, "priority": 3},
+    ]

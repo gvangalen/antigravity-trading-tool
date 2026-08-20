@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
 from types import SimpleNamespace
 
-from backend.schemas.finn_v2_reasoning_schema import ProposalCandidate
+from backend.schemas.finn_v2_reasoning_schema import ProposalCandidate, ReasoningNextStep
 from backend.schemas.finn_v2_response_schema import ResponseClaim, ResponseDraft
 from backend.services.finn_v2_response_verifier_service import FinnV2ResponseVerifierService
 
@@ -194,3 +194,123 @@ def test_not_live_read_response_is_not_marked_as_live_mismatch():
             "E1": SimpleNamespace(facts={"is_live": False}),
         },
     ) is False
+
+
+def test_gate5_evaluation_rejects_generic_response_when_profile_and_indicator_grounding_exist():
+    service = FinnV2ResponseVerifierService(session=object())
+    draft = ResponseDraft(
+        draft_id="draft-gate5-generic",
+        run_id="run-gate5-generic",
+        user_id=7,
+        mode="EVALUATE",
+        direct_answer="Het belangrijkste ontbrekende onderdeel van je plan is meer context.",
+        main_observation="Je plan kan nog sterker worden met een duidelijker beoordelingskader.",
+        claims=[
+            ResponseClaim(
+                claim_id="C1",
+                claim_type="evaluation",
+                text="Het plan mist nog context.",
+                evidence_refs=["E1", "E2", "E3", "E4", "E5"],
+                confidence="medium",
+            )
+        ],
+        next_step=ReasoningNextStep(
+            title="Werk je plan bij",
+            instruction="Voeg één vervolgstap toe.",
+            operation_type=None,
+            target_entity_type="setup",
+            target_entity_id="295",
+            requires_confirmation=False,
+        ),
+        evidence_set_hash="hash-gate5",
+        created_at=datetime.now(timezone.utc),
+    )
+
+    verifier = service._deterministic_verify(
+        run=SimpleNamespace(
+            id="run-gate5-generic",
+            user_id=7,
+            message="Bekijk mijn profiel, indicatoren, setup, strategie en gekoppelde bot. Wat is volgens jou op dit moment het belangrijkste ontbrekende onderdeel van mijn plan? Geef één concrete observatie en één vervolgstap.",
+            conversation_id="conv-g5",
+        ),
+        orchestrator_result=SimpleNamespace(
+            analysis=SimpleNamespace(subject_scopes=["profile", "indicators", "setup", "strategy", "bot"]),
+            selected_clarification=None,
+        ),
+        policy=SimpleNamespace(allowed=True, proposal_allowed=False, confirmation_required=False, operation_type=None),
+        context=SimpleNamespace(
+            evidence=[
+                SimpleNamespace(
+                    evidence_id="E1",
+                    domain="identity_context",
+                    tool_name="read_profile",
+                    entity_type="profile",
+                    entity_id="7",
+                    asset=None,
+                    freshness="fresh",
+                    confidence="high",
+                    facts={"has_profile": True, "trader_profile": {"style": ["swing"], "risk_profile": "balanced"}},
+                ),
+                SimpleNamespace(
+                    evidence_id="E2",
+                    domain="market_context",
+                    tool_name="read_indicator_configuration",
+                    entity_type="indicator_configuration",
+                    entity_id=None,
+                    asset="BTC",
+                    freshness="fresh",
+                    confidence="high",
+                    facts={
+                        "symbol": "BTC",
+                        "technical": [{"indicator": "RSI"}],
+                        "market": [{"indicator": "funding_rate"}],
+                        "macro": [],
+                        "configured_indicators": [
+                            {"indicator": "RSI", "category": "technical"},
+                            {"indicator": "funding_rate", "category": "market"},
+                        ],
+                    },
+                ),
+                SimpleNamespace(
+                    evidence_id="E3",
+                    domain="plan_context",
+                    tool_name="read_active_setup",
+                    entity_type="setup",
+                    entity_id="295",
+                    asset="BTC",
+                    freshness="fresh",
+                    confidence="high",
+                    facts={"setup_id": 295, "name": "BTC Swing 4H Gate Setup", "timeframe": "4H", "symbol": "BTC"},
+                ),
+                SimpleNamespace(
+                    evidence_id="E4",
+                    domain="plan_context",
+                    tool_name="read_linked_strategy",
+                    entity_type="strategy",
+                    entity_id="311",
+                    asset="BTC",
+                    freshness="fresh",
+                    confidence="high",
+                    facts={"strategy_id": 311, "setup_id": 295, "symbol": "BTC"},
+                ),
+                SimpleNamespace(
+                    evidence_id="E5",
+                    domain="automation_context",
+                    tool_name="read_linked_bot",
+                    entity_type="bot",
+                    entity_id="172",
+                    asset="BTC",
+                    freshness="fresh",
+                    confidence="high",
+                    facts={"bot_id": 172, "strategy_id": 311, "is_live": False},
+                ),
+            ],
+            uncertainty_codes=[],
+        ),
+        validation=SimpleNamespace(id="validation-gate5", evidence_set_hash="hash-gate5", integrity_status="valid"),
+        draft=draft,
+        repair_attempt=0,
+    )
+
+    assert verifier.passed is False
+    assert "response_insufficiently_personalized" in verifier.reason_codes

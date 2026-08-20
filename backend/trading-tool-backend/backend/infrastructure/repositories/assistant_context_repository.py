@@ -15,6 +15,7 @@ from backend.infrastructure.repositories.score_repository import ScoreRepository
 from backend.infrastructure.repositories.setup_repository import SetupRepository
 from backend.infrastructure.repositories.report_repository import ReportRepository
 from backend.infrastructure.repositories.strategy_repository import StrategyRepository
+from backend.infrastructure.repositories.technical_data_repository import TechnicalDataRepository
 
 logger = logging.getLogger(__name__)
 
@@ -375,47 +376,8 @@ class AssistantContextRepository:
         }
 
     async def _configured_indicator_context(self, user_id: int, asset: str) -> Dict[str, List[str]]:
-        columns = await self._get_user_indicator_config_columns()
-        category_select = "category" if "category" in columns else "'technical' AS category"
-        conditions = ["user_id = :user_id"]
-        params: Dict[str, Any] = {"user_id": user_id, "symbol": asset}
-
-        if "enabled" in columns:
-            conditions.append("enabled = TRUE")
-        if "symbol" in columns:
-            conditions.append(
-                "("
-                "symbol = :symbol "
-                "OR symbol IS NULL "
-                "OR symbol = 'GLOBAL'"
-                ")"
-            )
-
-        order_parts: List[str] = []
-        if "category" in columns:
-            order_parts.append("category ASC")
-        if "priority" in columns:
-            order_parts.append("priority ASC")
-        order_parts.append("indicator ASC")
-
-        query = text(
-            f"""
-            SELECT {category_select}, indicator
-            FROM user_indicator_configs
-            WHERE {' AND '.join(conditions)}
-            ORDER BY {', '.join(order_parts)}
-            """
-        )
-        result = await self.session.execute(query, params)
-        by_category: Dict[str, List[str]] = {"market": [], "macro": [], "technical": []}
-        for row in result.mappings().all():
-            category = str(row.get("category") or "").lower()
-            indicator = str(row.get("indicator") or "").strip()
-            if not indicator or category not in by_category:
-                continue
-            if indicator not in by_category[category]:
-                by_category[category].append(indicator.upper() if indicator.lower() == "rsi" else indicator)
-        return by_category
+        repository = TechnicalDataRepository(self.session)
+        return await repository.get_configured_indicator_names(user_id, symbol=asset)
 
     async def build_context_sequential(self, user_id: int, intent: str, resolved_symbol: Optional[str] = None) -> str:
         """

@@ -218,3 +218,137 @@ def test_get_user_config_columns_rolls_back_when_schema_probe_fails():
         "created_at",
     }
     session.rollback.assert_awaited_once()
+
+
+def test_get_canonical_indicator_configuration_groups_legacy_rows_by_category():
+    session = AsyncMock()
+    session.execute = AsyncMock(
+        side_effect=[
+            _ExecuteResult(scalars=["id", "user_id", "indicator", "category", "created_at"]),
+            _ExecuteResult(
+                rows=[
+                    SimpleNamespace(
+                        _mapping={
+                            "id": 11,
+                            "user_id": 2,
+                            "indicator": "rsi",
+                            "category": "technical",
+                            "created_at": None,
+                        }
+                    ),
+                    SimpleNamespace(
+                        _mapping={
+                            "id": 12,
+                            "user_id": 2,
+                            "indicator": "rsi",
+                            "category": "technical",
+                            "created_at": None,
+                        }
+                    ),
+                ]
+            ),
+            _ExecuteResult(
+                rows=[
+                    SimpleNamespace(
+                        _mapping={
+                            "id": 13,
+                            "user_id": 2,
+                            "indicator": "funding_rate",
+                            "category": "market",
+                            "created_at": None,
+                        }
+                    )
+                ]
+            ),
+            _ExecuteResult(
+                rows=[
+                    SimpleNamespace(
+                        _mapping={
+                            "id": 14,
+                            "user_id": 2,
+                            "indicator": "cpi",
+                            "category": "macro",
+                            "created_at": None,
+                        }
+                    )
+                ]
+            ),
+        ]
+    )
+    repo = TechnicalDataRepository(session)
+
+    async def run():
+        return await repo.get_canonical_indicator_configuration(2, symbol="BTC")
+
+    configuration = asyncio.run(run())
+
+    assert configuration["symbol"] == "BTC"
+    assert configuration["asset_class"] is None
+    assert [row.indicator for row in configuration["technical"]] == ["rsi"]
+    assert [row.indicator for row in configuration["market"]] == ["funding_rate"]
+    assert [row.indicator for row in configuration["macro"]] == ["cpi"]
+    assert configuration["scope_by_category"] == {
+        "technical": "default",
+        "market": "default",
+        "macro": "default",
+    }
+
+
+def test_get_configured_indicator_names_keeps_legacy_domain_counts_without_asset_columns():
+    session = AsyncMock()
+    session.execute = AsyncMock(
+        side_effect=[
+            _ExecuteResult(scalars=["id", "user_id", "indicator", "category", "created_at"]),
+            _ExecuteResult(
+                rows=[
+                    SimpleNamespace(
+                        _mapping={
+                            "id": 11,
+                            "user_id": 2,
+                            "indicator": "rsi",
+                            "category": "technical",
+                            "created_at": None,
+                        }
+                    )
+                ]
+            ),
+            _ExecuteResult(
+                rows=[
+                    SimpleNamespace(
+                        _mapping={
+                            "id": 13,
+                            "user_id": 2,
+                            "indicator": "forward_pe",
+                            "category": "market",
+                            "created_at": None,
+                        }
+                    )
+                ]
+            ),
+            _ExecuteResult(
+                rows=[
+                    SimpleNamespace(
+                        _mapping={
+                            "id": 14,
+                            "user_id": 2,
+                            "indicator": "federal_funds_rate",
+                            "category": "macro",
+                            "created_at": None,
+                        }
+                    )
+                ]
+            ),
+        ]
+    )
+    repo = TechnicalDataRepository(session)
+
+    async def run():
+        return await repo.get_configured_indicator_names(2, symbol="AAPL")
+
+    names = asyncio.run(run())
+
+    assert names == {
+        "technical": ["RSI"],
+        "market": ["forward_pe"],
+        "macro": ["federal_funds_rate"],
+    }
