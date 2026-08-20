@@ -101,8 +101,13 @@ class FinnV2ActionAdapterRegistry:
             text(
                 """
                 INSERT INTO watchlists (user_id, symbol, created_at)
-                VALUES (:user_id, :symbol, NOW())
-                ON CONFLICT (user_id, symbol) DO NOTHING
+                SELECT :user_id, :symbol, NOW()
+                WHERE NOT EXISTS (
+                    SELECT 1
+                    FROM watchlists
+                    WHERE user_id = :user_id
+                      AND symbol = :symbol
+                )
                 """
             ),
             {"user_id": user_id, "symbol": asset},
