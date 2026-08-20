@@ -46,7 +46,22 @@ def test_request_analysis_handles_setup_strategy_and_bot_facts():
     assert bot_result.subject_scopes == ["strategy", "bot"]
     assert status_result.subject_scopes == ["bot"]
 
+def test_request_analysis_routes_setup_create_and_watchlist_action_to_proposals():
+    setup_result = SERVICE.analyze(message="Maak een setup voor BTC swing trading met daily trend en 4H entry.")
+    watchlist_result = SERVICE.analyze(message="Voeg ETH toe aan mijn watchlist.")
 
+    assert setup_result.interaction_mode == "CREATE_PROPOSAL"
+    assert setup_result.primary_subject == "setup"
+    assert watchlist_result.interaction_mode == "ACTION_PROPOSAL"
+    assert watchlist_result.primary_subject == "watchlist"
+
+
+def test_request_analysis_routes_live_bot_activation_to_action_proposal():
+    result = SERVICE.analyze(message="Activeer deze bot live.")
+
+    assert result.interaction_mode == "ACTION_PROPOSAL"
+    assert result.primary_subject == "bot"
+    assert result.action_risk_class == "live_action"
 def test_request_analysis_marks_non_financial_question_unavailable():
     result = SERVICE.analyze(message="Wat is het weer morgen in Amsterdam?")
 

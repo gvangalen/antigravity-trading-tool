@@ -49,6 +49,13 @@ class FinnV2DomainRequirementService:
             required_domains = ["identity_context"]
             optional_domains = ["plan_context"]
             reasons.append("setup_creation_requires_identity_not_existing_plan")
+        if analysis.interaction_mode == "ACTION_PROPOSAL" and analysis.primary_subject == "bot":
+            required_domains = ["identity_context", "plan_context", "automation_context"]
+            optional_domains = []
+            reasons.append("bot_action_requires_plan_and_automation_context")
+            if analysis.action_risk_class == "live_action":
+                required_domains.insert(1, "market_context")
+                reasons.append("live_bot_action_requires_market_context")
         if analysis.interaction_mode in {"ACTION_PROPOSAL", "CONFIRMATION", "EXECUTION"} and "watchlist" in analysis.subject_scopes:
             required_domains = ["identity_context"]
             optional_domains = []

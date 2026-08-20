@@ -33,7 +33,6 @@ def test_tool_plan_uses_canonical_order_and_explicit_selector():
     ]
     assert plan.read_only is True
 
-
 def test_tool_plan_keeps_strategy_and_bot_requests_grounded_without_indicator_gate():
     analysis_service = FinnV2RequestAnalysisService()
     domain_service = FinnV2DomainRequirementService()
@@ -87,3 +86,30 @@ def test_tool_plan_routes_setup_creation_and_watchlist_actions_through_proposal_
     assert watchlist_plan.tool_inputs["read_active_asset"] == {"asset": "ETH"}
     assert watchlist_plan.tool_inputs["read_watchlist"] == {"asset": "ETH"}
     assert watchlist_plan.required_evidence == ["active_asset", "watchlist"]
+
+
+def test_tool_plan_collects_bot_context_for_live_action_proposals():
+    analysis = FinnV2RequestAnalysisService().analyze(message="Zet mijn bot live.")
+    domain_plan = FinnV2DomainRequirementService().determine(analysis)
+
+    plan = FinnV2ToolPlanService().build(run_id="run-live-bot", analysis=analysis, domain_plan=domain_plan)
+
+    assert analysis.interaction_mode == "ACTION_PROPOSAL"
+    assert analysis.primary_subject == "bot"
+    assert analysis.action_risk_class == "live_action"
+    assert plan.tool_names == [
+        "read_active_asset",
+        "read_market_snapshot",
+        "read_active_setup",
+        "read_linked_strategy",
+        "read_linked_bot",
+        "read_bot_status",
+    ]
+    assert plan.required_evidence == [
+        "active_asset",
+        "active_setup",
+        "linked_strategy",
+        "linked_bot",
+        "bot_status",
+        "market_snapshot",
+    ]

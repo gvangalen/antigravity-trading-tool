@@ -204,6 +204,9 @@ class FinnV2RequestAnalysisService:
         if self._contains_any_phrase(normalized, action_tokens):
             matched_signals.append("mode:action_proposal")
             return "ACTION_PROPOSAL"
+        if "live" in normalized and "bot" in scopes and any(token in normalized for token in ["activeer", "activate", "zet"]):
+            matched_signals.append("mode:action_proposal")
+            return "ACTION_PROPOSAL"
         if self._contains_any_phrase(normalized, proposal_tokens):
             matched_signals.append("mode:create_proposal")
             return "CREATE_PROPOSAL"

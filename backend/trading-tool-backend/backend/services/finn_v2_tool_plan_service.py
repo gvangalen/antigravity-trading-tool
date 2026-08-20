@@ -116,6 +116,17 @@ class FinnV2ToolPlanService:
         if analysis.interaction_mode == "ACTION_PROPOSAL":
             if analysis.primary_subject == "watchlist":
                 return ["read_active_asset", "read_watchlist"]
+            if analysis.primary_subject == "bot":
+                tools = [
+                    "read_active_asset",
+                    "read_active_setup",
+                    "read_linked_strategy",
+                    "read_linked_bot",
+                    "read_bot_status",
+                ]
+                if analysis.action_risk_class == "live_action":
+                    tools.append("read_market_snapshot")
+                return tools
             return ["read_active_asset"]
 
         active_domains = list(domain_plan.required_domains) + list(domain_plan.optional_domains)
@@ -165,6 +176,17 @@ class FinnV2ToolPlanService:
         if analysis.interaction_mode == "ACTION_PROPOSAL":
             if analysis.primary_subject == "watchlist":
                 return ["active_asset", "watchlist"]
+            if analysis.primary_subject == "bot":
+                required = [
+                    "active_asset",
+                    "active_setup",
+                    "linked_strategy",
+                    "linked_bot",
+                    "bot_status",
+                ]
+                if analysis.action_risk_class == "live_action":
+                    required.append("market_snapshot")
+                return required
             return ["active_asset"]
         return []
 
