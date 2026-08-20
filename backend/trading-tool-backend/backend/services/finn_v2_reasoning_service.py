@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import uuid
 from datetime import datetime, timezone
 from time import monotonic
@@ -36,6 +37,9 @@ from backend.services.finn_v2_reasoning_prompt_service import (
 )
 from backend.services.platform_metrics import increment_execution_safety_counter, record_latency_sample
 from backend.utils import openai_client
+
+
+logger = logging.getLogger(__name__)
 
 
 class FinnV2ReasoningService:
@@ -355,6 +359,7 @@ class FinnV2ReasoningService:
         last_error_codes: list[str] = []
         for attempt in range(retries_allowed + 1):
             await self._append_trace(run_id, user_id, trace_id, "reasoning_started", context, model_name, "generating", None, attempt, input_hash, [])
+            call_started = monotonic()
             response = openai_client.ask_gpt_structured_response(
                 prompt=self.prompts.build_user_prompt(context),
                 system_role=system_prompt,
@@ -363,6 +368,22 @@ class FinnV2ReasoningService:
                 timeout_seconds=self.flags.reasoning_timeout_seconds(),
                 max_output_tokens=self.flags.reasoning_max_output_tokens(),
                 client_max_retries=0,
+            )
+            call_latency_ms = int((monotonic() - call_started) * 1000)
+            logger.info(
+                "FINN V2 reasoning model call finished",
+                extra={
+                    "run_id": run_id,
+                    "user_id": user_id,
+                    "trace_id": trace_id,
+                    "stage": "reasoning_model",
+                    "interaction_mode": context.interaction_mode,
+                    "attempt": attempt,
+                    "model": response.get("model") or model_name,
+                    "latency_ms": call_latency_ms,
+                    "output_status": "error" if response.get("error") else "ok",
+                    "error_code": response.get("error"),
+                },
             )
             if response.get("error"):
                 error = str(response["error"])

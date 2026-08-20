@@ -40,3 +40,24 @@ def test_delivery_contract_returns_verified_response_only():
     assert envelope.status == "completed"
     assert envelope.delivery_source == "finn_v2_verified"
     assert envelope.response.mode == "READ"
+
+
+def test_delivery_contract_returns_processing_status_without_verified_response():
+    service = FinnV2DeliveryService(session=object())
+    service.runs.get_by_id_for_user = lambda **_kwargs: asyncio.sleep(
+        0,
+        result=SimpleNamespace(
+            id="run-1",
+            conversation_id="conv-1",
+            user_id=7,
+            status="collecting",
+            error_code=None,
+            error_message=None,
+        ),
+    )
+    service.verified.get_latest_for_run = lambda **_kwargs: asyncio.sleep(0, result=None)
+
+    envelope = asyncio.run(service.get_delivery_envelope(user_id=7, run_id="run-1"))
+
+    assert envelope.status == "collecting"
+    assert envelope.response is None

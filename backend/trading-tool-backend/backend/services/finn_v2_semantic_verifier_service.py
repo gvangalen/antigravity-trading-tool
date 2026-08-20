@@ -1,10 +1,15 @@
 from __future__ import annotations
 
+import logging
+from time import monotonic
 from typing import Any, Dict, Optional
 
 from backend.schemas.finn_v2_verifier_schema import SemanticVerificationResult
 from backend.services.finn_v2_flag_service import FinnV2FlagService
 from backend.utils import openai_client
+
+
+logger = logging.getLogger(__name__)
 
 
 class FinnV2SemanticVerifierService:
@@ -63,6 +68,7 @@ class FinnV2SemanticVerifierService:
             "evidence": compact_evidence,
             "deterministic_summary": deterministic_summary,
         }
+        started = monotonic()
         response = openai_client.ask_gpt_structured_response(
             prompt=str(user_prompt),
             system_role=system_prompt,
@@ -70,6 +76,17 @@ class FinnV2SemanticVerifierService:
             model_override=self.flags.semantic_verifier_model(),
             timeout_seconds=self.flags.semantic_verifier_timeout_seconds(),
             client_max_retries=0,
+        )
+        logger.info(
+            "FINN V2 semantic verifier call finished",
+            extra={
+                "stage": "semantic_verifier",
+                "mode": mode,
+                "model": response.get("model") or self.flags.semantic_verifier_model(),
+                "latency_ms": int((monotonic() - started) * 1000),
+                "output_status": "error" if response.get("error") else "ok",
+                "error_code": response.get("error"),
+            },
         )
         if response.get("error"):
             return SemanticVerificationResult(

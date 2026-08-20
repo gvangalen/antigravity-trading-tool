@@ -256,6 +256,21 @@ class FinnV2FlagService:
     def is_post_cutover_kill_switch_enabled(self) -> bool:
         return self._env_bool("FINN_V2_POST_CUTOVER_KILL_SWITCH", False)
 
+    def visible_request_timeout_seconds(self, interaction_mode: str | None = None) -> int:
+        default_timeout = self._env_int("FINN_V2_VISIBLE_REQUEST_TIMEOUT_SECONDS", 20)
+        mode = str(interaction_mode or "").strip().upper()
+        if mode in {"CREATE_PROPOSAL", "ACTION_PROPOSAL", "CONFIRMATION", "EXECUTION"}:
+            return self._env_int(
+                "FINN_V2_VISIBLE_REQUEST_TIMEOUT_MUTATION_SECONDS",
+                max(default_timeout, 45),
+            )
+        if mode in {"CAPABILITY", "UNAVAILABLE", "CLARIFICATION"}:
+            return self._env_int(
+                "FINN_V2_VISIBLE_REQUEST_TIMEOUT_LIGHT_SECONDS",
+                min(default_timeout, 10),
+            )
+        return default_timeout
+
     def is_visible_proposals_enabled(self) -> bool:
         return self._env_bool("FINN_V2_VISIBLE_PROPOSALS_ENABLED", True)
 

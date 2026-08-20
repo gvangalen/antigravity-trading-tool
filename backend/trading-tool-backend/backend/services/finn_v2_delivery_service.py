@@ -39,7 +39,7 @@ class FinnV2DeliveryService:
             raise LookupError("FINN V2 run not found")
         row = await self.verified.get_latest_for_run(run_id=run_id, user_id=user_id)
         response = VerifiedResponse.parse_obj(row.response_json) if row is not None else None
-        status = "completed" if response is not None else ("canceled" if run.status == "canceled" else "failed")
+        status = "completed" if response is not None else run.status
         return FinnV2DeliveryEnvelope(
             run_id=run.id,
             conversation_id=run.conversation_id,
@@ -47,6 +47,8 @@ class FinnV2DeliveryService:
             response=response,
             proposal_id=response.proposal_id if response is not None else None,
             confirmation_required=bool(response.confirmation_required) if response is not None else False,
+            error_code=getattr(run, "error_code", None),
+            error_message=getattr(run, "error_message", None),
         )
 
     async def stream_delivery_events(self, *, user_id: int, run_id: str) -> AsyncIterator[FinnV2StreamEvent]:
@@ -56,6 +58,13 @@ class FinnV2DeliveryService:
                 event="run.completed",
                 run_id=run_id,
                 payload={"response": envelope.response.dict(), "delivery_source": envelope.delivery_source},
+            )
+            return
+        if envelope.status in {"created", "collecting", "planned"}:
+            yield FinnV2StreamEvent(
+                event="run.progress",
+                run_id=run_id,
+                payload={"delivery_source": envelope.delivery_source, "status": envelope.status},
             )
             return
         yield FinnV2StreamEvent(

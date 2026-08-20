@@ -18,6 +18,7 @@ from backend.infrastructure.repositories.finn_v2_conversation_repository import 
 from backend.infrastructure.repositories.finn_v2_run_repository import FinnV2RunRepository
 from backend.schemas.finn_v2_schema import AgentRunRequest
 from backend.services.finn_v2_flag_service import FinnV2FlagService
+from backend.services.finn_v2_request_analysis_service import FinnV2RequestAnalysisService
 from backend.services.finn_v2_run_service import FinnV2RunService
 from backend.utils.rate_limit import InMemoryRateLimiter
 
@@ -35,6 +36,7 @@ class FinnV2GatewayService:
         self.conversations = FinnV2ConversationRepository(session)
         self.runs = FinnV2RunRepository(session)
         self.run_service = FinnV2RunService(session)
+        self.analysis = FinnV2RequestAnalysisService()
 
     async def create_run(
         self,
@@ -209,29 +211,34 @@ class FinnV2GatewayService:
             return run.id
         if run.status in {"collecting", "planned"}:
             return run.id
-        lifecycle = asyncio.create_task(self.run_service.run_foundation_lifecycle(run_id=run.id, user_id=user_id))
-        try:
-            await asyncio.wait_for(
-                asyncio.shield(lifecycle),
-                timeout=float(self.flags.visible_request_timeout_seconds()),
-            )
-        except asyncio.TimeoutError:
-            timeout_exc = TimeoutError("FINN V2 visible lifecycle exceeded the public request budget.")
-            lifecycle.cancel()
-            await asyncio.gather(lifecycle, return_exceptions=True)
-            await self.run_service.fail_run(
+        await self.session.commit()
+        predicted_mode = self._predict_interaction_mode(request)
+        timeout_seconds = float(self.flags.visible_request_timeout_seconds(predicted_mode))
+        lifecycle = asyncio.create_task(
+            run_foundation_lifecycle_owned_job(
                 run_id=run.id,
                 user_id=user_id,
-                error_code="visible_request_timeout",
-                error_message=str(timeout_exc),
-                retryable=False,
-                failure_stage="visible_request_timeout",
-                primary_exception=timeout_exc,
+            ),
+            name=f"finn-v2-visible-lifecycle:{run.id}",
+        )
+        try:
+            await asyncio.wait_for(asyncio.shield(lifecycle), timeout=timeout_seconds)
+        except asyncio.TimeoutError:
+            logger.warning(
+                "FINN V2 visible lifecycle exceeded request budget; returning pending envelope",
+                extra={
+                    "run_id": run.id,
+                    "user_id": user_id,
+                    "trace_id": trace_id,
+                    "interaction_mode": predicted_mode,
+                    "timeout_seconds": timeout_seconds,
+                },
             )
         except asyncio.CancelledError:
-            lifecycle.cancel()
-            await asyncio.gather(lifecycle, return_exceptions=True)
-            await self.run_service.cancel_run(run_id=run.id, user_id=user_id)
+            logger.warning(
+                "FINN V2 visible request canceled while lifecycle continues in owned task",
+                extra={"run_id": run.id, "user_id": user_id, "trace_id": trace_id},
+            )
             raise
         return run.id
 
@@ -258,6 +265,18 @@ class FinnV2GatewayService:
             return client_key
         digest = hashlib.sha256(f"{user_id}:{request_id}".encode("utf-8")).hexdigest()
         return f"finn-v2-{digest[:32]}"
+
+    def _predict_interaction_mode(self, request: AgentRunRequest) -> Optional[str]:
+        try:
+            analysis = self.analysis.analyze(
+                message=request.message,
+                workspace_hints=request.workspace_hints,
+                client_context=request.client_context,
+            )
+        except Exception:
+            logger.exception("FINN V2 could not predict interaction mode for visible timeout budget")
+            return None
+        return getattr(analysis, "interaction_mode", None)
 
     def _redact_hint_map(self, payload: Optional[Dict[str, Any]]) -> Dict[str, Any]:
         source = dict(payload or {})
@@ -330,6 +349,51 @@ async def run_shadow_foundation_job(
         )
         await session.commit()
         return run_id
+
+
+async def run_foundation_lifecycle_owned_job(*, run_id: str, user_id: int) -> None:
+    try:
+        async with async_session_factory() as session:
+            service = FinnV2RunService(session)
+            await service.run_foundation_lifecycle(run_id=run_id, user_id=user_id)
+            await session.commit()
+    except asyncio.CancelledError:
+        logger.warning(
+            "FINN V2 owned lifecycle task canceled; persisting terminal canceled state",
+            extra={"run_id": run_id, "user_id": user_id},
+        )
+        try:
+            async with async_session_factory() as session:
+                service = FinnV2RunService(session)
+                await service.cancel_run(run_id=run_id, user_id=user_id)
+                await session.commit()
+        except Exception:
+            logger.exception(
+                "FINN V2 owned lifecycle cancel cleanup failed",
+                extra={"run_id": run_id, "user_id": user_id, "failure_stage": "lifecycle_cancel_cleanup"},
+            )
+        raise
+    except Exception as exc:
+        logger.exception(
+            "FINN V2 owned lifecycle task failed",
+            extra={"run_id": run_id, "user_id": user_id, "failure_stage": "lifecycle_owner"},
+        )
+        try:
+            async with async_session_factory() as session:
+                service = FinnV2RunService(session)
+                await service.fail_run(
+                    run_id=run_id,
+                    user_id=user_id,
+                    error_code="lifecycle_owner_failed",
+                    error_message=str(exc),
+                    retryable=False,
+                )
+                await session.commit()
+        except Exception:
+            logger.exception(
+                "FINN V2 owned lifecycle failure cleanup failed",
+                extra={"run_id": run_id, "user_id": user_id, "failure_stage": "lifecycle_owner_cleanup"},
+            )
 
 
 async def run_retention_cleanup_job() -> Dict[str, int]:

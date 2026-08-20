@@ -64,7 +64,59 @@ def test_visible_delivery_maps_verified_response_to_assistant_contract():
     assert envelope["response_trace"]["tool_calls"][0]["tool_name"] == "read_active_asset"
 
 
-def test_visible_delivery_preserves_run_id_when_delivery_chain_fails():
+def test_visible_delivery_returns_pending_contract_with_same_run_id():
+    service = FinnV2VisibleDeliveryService(session=object())
+    service.gateway.run_foundation_now = lambda **kwargs: asyncio.sleep(0, result="run-pending")
+    service.delivery.get_delivery_artifacts = lambda **kwargs: asyncio.sleep(
+        0,
+        result={"delivery_envelope": {"status": "planned", "error_code": None}, "verified_response": None},
+    )
+
+    envelope = asyncio.run(
+        service.deliver_assistant_envelope(
+            user_id=1,
+            message="Werk mijn BTC setup bij.",
+            context_payload={"page": "setup"},
+            transport="chat",
+            request_path="/assistant/chat",
+            request_id="req-1",
+            trace_id="trace-1",
+        )
+    )
+
+    assert envelope["intent"] == "processing"
+    assert envelope["state"]["current_flow"] == "finn_v2_visible_pending"
+    assert envelope["state"]["run_id"] == "run-pending"
+    assert envelope["response_trace"]["run_id"] == "run-pending"
+
+
+def test_visible_delivery_returns_terminal_failure_contract_with_same_run_id():
+    service = FinnV2VisibleDeliveryService(session=object())
+    service.gateway.run_foundation_now = lambda **kwargs: asyncio.sleep(0, result="run-failed")
+    service.delivery.get_delivery_artifacts = lambda **kwargs: asyncio.sleep(
+        0,
+        result={"delivery_envelope": {"status": "failed", "error_code": "orchestrator_failed"}, "verified_response": None},
+    )
+
+    envelope = asyncio.run(
+        service.deliver_assistant_envelope(
+            user_id=1,
+            message="Werk mijn BTC setup bij.",
+            context_payload={"page": "setup"},
+            transport="chat",
+            request_path="/assistant/chat",
+            request_id="req-1",
+            trace_id="trace-1",
+        )
+    )
+
+    assert envelope["intent"] == "unavailable"
+    assert envelope["state"]["current_flow"] == "finn_v2_visible_terminal_failed"
+    assert envelope["state"]["run_id"] == "run-failed"
+    assert envelope["response_trace"]["error"] == "orchestrator_failed"
+
+
+def test_visible_delivery_preserves_run_id_when_delivery_chain_raises():
     service = FinnV2VisibleDeliveryService(session=object())
     service.gateway.run_foundation_now = lambda **kwargs: asyncio.sleep(0, result="run-capability-1")
     service.delivery.get_delivery_artifacts = lambda **kwargs: asyncio.sleep(0, result={"delivery_envelope": {"run_id": "run-capability-1"}})
@@ -84,6 +136,6 @@ def test_visible_delivery_preserves_run_id_when_delivery_chain_fails():
     except FinnV2VisibleDeliveryError as exc:
         assert exc.code == "v2_delivery_failure"
         assert exc.run_id == "run-capability-1"
-        assert exc.failure_stage == "delivery_envelope"
+        assert exc.failure_stage == "delivery_artifacts"
     else:
         raise AssertionError("expected visible delivery failure")

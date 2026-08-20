@@ -212,7 +212,10 @@ class FinnV2RunService:
                 await self.tools.execute_shadow_tool_chain(run_id=run_id, user_id=user_id)
                 await self.complete_run(run_id=run_id, user_id=user_id)
         except asyncio.CancelledError:
-            logger.warning("FINN V2 lifecycle canceled", extra={"run_id": run_id, "user_id": user_id})
+            logger.warning(
+                "FINN V2 lifecycle canceled before terminal persistence",
+                extra={"run_id": run_id, "user_id": user_id},
+            )
             raise
         except Exception as exc:
             logger.exception(

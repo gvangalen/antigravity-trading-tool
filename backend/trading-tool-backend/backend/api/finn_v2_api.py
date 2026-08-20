@@ -41,18 +41,14 @@ async def create_finn_v2_run(
     gateway: FinnV2GatewayService = Depends(get_gateway_service),
     run_service: FinnV2RunService = Depends(get_run_service),
 ):
-    run = await gateway.create_run(
+    run_id = await gateway.run_foundation_now(
         user_id=int(current_user["id"]),
-        request=request,
+        request_payload=request.dict(),
         request_path=raw_request.url.path,
         request_id=getattr(raw_request.state, "trace_id", None),
         trace_id=getattr(raw_request.state, "trace_id", None),
-        client_ip=raw_request.client.host if raw_request.client else None,
-        user_agent=raw_request.headers.get("user-agent"),
     )
-    if run.status == "created":
-        await run_service.run_foundation_lifecycle(run_id=run.id, user_id=int(current_user["id"]))
-        run = await gateway.get_run(run_id=run.id, user_id=int(current_user["id"]))
+    run = await gateway.get_run(run_id=run_id, user_id=int(current_user["id"]))
     return run_service.envelope_from_run(run)
 
 

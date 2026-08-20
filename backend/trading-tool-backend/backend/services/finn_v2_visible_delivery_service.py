@@ -55,6 +55,12 @@ class FinnV2VisibleDeliveryService:
             envelope = artifacts["delivery_envelope"]
             verified_response = artifacts.get("verified_response")
             if verified_response is None:
+                if envelope.get("status") in {"created", "collecting", "planned"}:
+                    return self._pending_contract(
+                        trace_id=trace_id,
+                        run_id=run_id,
+                        status=str(envelope.get("status")),
+                    )
                 logger.error(
                     "FINN V2 visible delivery missing verified response",
                     extra={
@@ -62,15 +68,18 @@ class FinnV2VisibleDeliveryService:
                         "request_id": request_id,
                         "user_id": user_id,
                         "run_id": run_id,
+                        "run_status": envelope.get("status"),
                         "failure_stage": "delivery_envelope",
                         "service": "FinnV2VisibleDeliveryService",
                         "method": "deliver_assistant_envelope",
+                        "error_code": envelope.get("error_code"),
                     },
                 )
-                raise FinnV2VisibleDeliveryError(
-                    "v2_delivery_failure",
+                return self._failed_contract(
+                    trace_id=trace_id,
                     run_id=run_id,
-                    failure_stage="delivery_envelope",
+                    status=str(envelope.get("status") or "failed"),
+                    error_code=envelope.get("error_code"),
                 )
             return self._assistant_contract(
                 verified_response,
@@ -195,3 +204,62 @@ class FinnV2VisibleDeliveryService:
                 "mode": response.get("mode"),
             }]
         return payload
+
+    def _pending_contract(self, *, trace_id: str, run_id: str, status: str) -> dict[str, Any]:
+        return {
+            "response": "Ik verwerk je FINN-verzoek nog. Je run blijft actief en komt via dezelfde run-ID beschikbaar zodra de verified response klaar is.",
+            "intent": "processing",
+            "action": None,
+            "draft": None,
+            "state": {
+                "current_flow": "finn_v2_visible_pending",
+                "run_id": run_id,
+                "surface": "assistant",
+                "run_status": status,
+            },
+            "reasoning": None,
+            "trace_id": trace_id,
+            "suggested_actions": [],
+            "summary": "FINN verwerkt je verzoek nog.",
+            "risk_summary": None,
+            "next_best_action": "Wacht kort terwijl FINN deze run afrondt.",
+            "review_reason": None,
+            "response_trace": {
+                "trace_id": trace_id,
+                "run_id": run_id,
+                "response_source": "finn_v2_pending",
+                "delivery_status": status,
+            },
+            "can_confirm": False,
+            "actions": [],
+        }
+
+    def _failed_contract(self, *, trace_id: str, run_id: str, status: str, error_code: Optional[str]) -> dict[str, Any]:
+        return {
+            "response": "Ik kan deze FINN V2-run nu niet veilig afronden. Probeer het opnieuw of controleer de runstatus met dezelfde run-ID.",
+            "intent": "unavailable",
+            "action": None,
+            "draft": None,
+            "state": {
+                "current_flow": "finn_v2_visible_terminal_failed",
+                "run_id": run_id,
+                "surface": "assistant",
+                "run_status": status,
+            },
+            "reasoning": None,
+            "trace_id": trace_id,
+            "suggested_actions": [],
+            "summary": "De FINN V2-run eindigde zonder veilige verified response.",
+            "risk_summary": error_code,
+            "next_best_action": None,
+            "review_reason": None,
+            "response_trace": {
+                "trace_id": trace_id,
+                "run_id": run_id,
+                "response_source": "finn_v2_terminal_failure",
+                "delivery_status": status,
+                "error": error_code or "v2_terminal_failure",
+            },
+            "can_confirm": False,
+            "actions": [],
+        }

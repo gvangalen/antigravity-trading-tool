@@ -252,3 +252,41 @@ def test_fail_run_rolls_back_inactive_session_before_transition(monkeypatch):
 
     assert session.rollback_calls == 1
     assert run.status == "failed"
+
+
+def test_gateway_run_foundation_now_returns_same_run_id_after_visible_budget_timeout(monkeypatch):
+    monkeypatch.setattr(gateway_module, "FinnV2ConversationRepository", _FakeConversationRepo)
+    monkeypatch.setattr(gateway_module, "FinnV2RunRepository", _FakeGatewayRunRepo)
+    monkeypatch.setattr(gateway_module, "FinnV2RunService", _FakeGatewayRunService)
+    monkeypatch.setattr(gateway_module.run_rate_limiter, "check_rate_limit", lambda *args, **kwargs: None)
+
+    observed = []
+
+    async def _slow_owned_job(*, run_id, user_id):
+        await asyncio.sleep(0.01)
+        observed.append((run_id, user_id))
+
+    session = _FakeSession()
+    service = gateway_module.FinnV2GatewayService(session=session)
+    monkeypatch.setattr(gateway_module, "run_foundation_lifecycle_owned_job", _slow_owned_job)
+    monkeypatch.setattr(service.flags, "resolve_mode", lambda _user_id: "visible_runtime")
+    monkeypatch.setattr(service.flags, "allows_transport", lambda _transport: True)
+    monkeypatch.setattr(service.flags, "max_runs_per_minute", lambda: 20)
+    monkeypatch.setattr(service.flags, "visible_request_timeout_seconds", lambda _mode=None: 0)
+
+    async def _exercise():
+        run_id = await service.run_foundation_now(
+            user_id=7,
+            request_payload=AgentRunRequest(message="BTC graag", transport="chat").dict(),
+            request_path="/api/assistant/chat",
+            request_id="req-1",
+            trace_id="trace-1",
+        )
+        await asyncio.sleep(0.02)
+        return run_id
+
+    run_id = asyncio.run(_exercise())
+
+    assert run_id.startswith("finn-v2-run-")
+    assert session.commit_calls == 1
+    assert observed == [(run_id, 7)]
