@@ -37,6 +37,7 @@ from backend.services.finn_v2_tool_adapters.score_tool_adapter import ScoreToolA
 from backend.services.finn_v2_tool_adapters.setup_tool_adapter import SetupToolAdapter
 from backend.services.finn_v2_tool_adapters.strategy_tool_adapter import StrategyToolAdapter
 from backend.services.finn_v2_tool_adapters.technical_tool_adapter import TechnicalToolAdapter
+from backend.services.finn_v2_tool_adapters.watchlist_tool_adapter import WatchlistToolAdapter
 from backend.services.finn_v2_tool_redaction_service import FinnV2ToolRedactionService
 from backend.services.finn_v2_tool_registry_service import FinnV2ToolRegistryService
 from backend.services.platform_metrics import increment_execution_safety_counter, record_latency_sample
@@ -73,6 +74,7 @@ class FinnV2ToolExecutionService:
         self.setup_adapter = SetupToolAdapter()
         self.strategy_adapter = StrategyToolAdapter()
         self.bot_adapter = BotToolAdapter()
+        self.watchlist_adapter = WatchlistToolAdapter(session)
         self.portfolio_adapter = PortfolioToolAdapter(session)
         self.report_adapter = ReportToolAdapter(session)
         self.review_adapter = ReviewToolAdapter()
@@ -465,6 +467,9 @@ class FinnV2ToolExecutionService:
         if tool_name == "read_bot_status":
             bot_state = await self._ensure_bot(user_id=user_id, selector=selector, run=run, shared_state=shared_state)
             return await self.bot_adapter.execute_status(bot=bot_state["bot"])
+        if tool_name == "read_watchlist":
+            asset_state = await self._ensure_asset(user_id=user_id, selector=selector, run=run, shared_state=shared_state)
+            return await self.watchlist_adapter.execute(user_id=user_id, asset=asset_state["asset"])
         if tool_name == "read_portfolio":
             return await self.portfolio_adapter.execute(user_id=user_id)
         if tool_name == "read_latest_report":

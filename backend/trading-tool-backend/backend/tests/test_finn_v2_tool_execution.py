@@ -107,6 +107,48 @@ def test_tool_execution_logs_successful_profile_call(monkeypatch):
     assert service.calls.rows[-1].status == "completed"
 
 
+def test_tool_execution_dispatches_watchlist_adapter(monkeypatch):
+    service = FinnV2ToolExecutionService(session=_FakeSession())
+    service.runs = _FakeRunRepo()
+    service.calls = _FakeCallRepo()
+    service.traces = _FakeTraceRepo()
+    monkeypatch.setattr(service.flags, "is_tool_registry_enabled", lambda: True)
+    monkeypatch.setattr(service.flags, "is_tool_registry_readonly", lambda: True)
+    monkeypatch.setattr(service.flags, "is_tool_call_logging_enabled", lambda: True)
+    service.asset_adapter.execute = lambda **_kwargs: asyncio.sleep(
+        0,
+        result={
+            "data": {"asset": "ETH"},
+            "summary": {"title": "active_asset", "symbol": "ETH"},
+            "resolution_source": "selector",
+            "entity_type": "asset",
+            "entity_id": "ETH",
+            "asset": "ETH",
+            "as_of": None,
+        },
+    )
+    service.watchlist_adapter.execute = lambda **_kwargs: asyncio.sleep(
+        0,
+        result={
+            "data": {"target_asset": "ETH", "contains_target_asset": False, "symbols": []},
+            "summary": {"target_asset": "ETH", "contains_target_asset": False, "symbol_count": 0},
+            "resolution_source": "user_watchlist",
+            "entity_type": "watchlist",
+            "entity_id": "7",
+            "asset": "ETH",
+            "as_of": None,
+        },
+    )
+
+    result = asyncio.run(service.execute_tool(run_id="run-1", user_id=7, tool_name="read_watchlist", selector={"asset": "ETH"}))
+
+    assert result.success is True
+    assert result.result["target_asset"] == "ETH"
+    assert result.result["contains_target_asset"] is False
+    assert service.calls.rows[-1].tool_name == "read_watchlist"
+    assert service.calls.rows[-1].status == "completed"
+
+
 def test_tool_redaction_service_serializes_nested_objects():
     service = FinnV2ToolRedactionService()
 
