@@ -71,3 +71,35 @@ def test_configured_indicator_context_skips_enabled_filter_when_column_is_absent
     assert "symbol = :symbol" in executed_sql
     assert session.executed[1]["params"] == {"user_id": 344, "symbol": "BTC"}
 
+
+def test_configured_indicator_context_probe_failure_uses_legacy_safe_columns():
+    class _ProbeFailureSession:
+        def __init__(self):
+            self.executed = []
+
+        async def execute(self, query, params=None):
+            sql = str(query)
+            self.executed.append({"sql": sql, "params": params or {}})
+            if "information_schema.columns" in sql:
+                raise RuntimeError("probe failed")
+            return _FakeQueryResult(
+                [
+                    {"category": "technical", "indicator": "rsi"},
+                    {"category": "macro", "indicator": "fear_greed_index"},
+                ]
+            )
+
+    session = _ProbeFailureSession()
+    repo = AssistantContextRepository(session)
+
+    result = asyncio.run(repo._configured_indicator_context(344, "BTC"))
+
+    assert result == {
+        "market": [],
+        "macro": ["fear_greed_index"],
+        "technical": ["RSI"],
+    }
+    executed_sql = session.executed[1]["sql"]
+    assert "enabled = TRUE" not in executed_sql
+    assert "priority ASC" not in executed_sql
+    assert "symbol = :symbol" not in executed_sql

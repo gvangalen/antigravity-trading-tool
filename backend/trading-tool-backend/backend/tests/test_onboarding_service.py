@@ -352,3 +352,21 @@ def test_infer_onboarding_state_requires_explicit_asset_and_symbol_scoped_indica
     assert state["has_setup"] is False
     assert state["has_strategy"] is False
     assert state["has_bot"] is False
+
+
+def test_onboarding_repository_schema_probe_failure_uses_legacy_safe_columns():
+    class ProbeFailureSession:
+        async def execute(self, query, params=None):
+            raise RuntimeError("probe failed")
+
+    repo = OnboardingRepository(ProbeFailureSession())
+
+    columns = asyncio.run(repo._get_user_config_columns())
+
+    assert columns == {
+        "id",
+        "user_id",
+        "indicator",
+        "category",
+        "created_at",
+    }

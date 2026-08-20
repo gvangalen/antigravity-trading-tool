@@ -210,5 +210,11 @@ def test_get_user_config_columns_rolls_back_when_schema_probe_fails():
 
     columns = asyncio.run(run())
 
-    assert "user_id" in columns
+    assert columns == {
+        "id",
+        "user_id",
+        "indicator",
+        "category",
+        "created_at",
+    }
     session.rollback.assert_awaited_once()

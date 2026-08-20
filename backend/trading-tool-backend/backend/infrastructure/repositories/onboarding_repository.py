@@ -9,6 +9,16 @@ from backend.services.trader_profile_service import (
     normalize_trader_profile_preferences,
 )
 
+
+LEGACY_USER_INDICATOR_CONFIG_COLUMNS = {
+    "id",
+    "user_id",
+    "indicator",
+    "category",
+    "created_at",
+}
+
+
 class OnboardingRepository:
     def __init__(self, db: AsyncSession):
         self.db = db
@@ -34,17 +44,7 @@ class OnboardingRepository:
             columns = set()
 
         if not columns:
-            columns = {
-                "id",
-                "user_id",
-                "indicator",
-                "category",
-                "symbol",
-                "asset_class",
-                "priority",
-                "enabled",
-                "created_at",
-            }
+            columns = set(LEGACY_USER_INDICATOR_CONFIG_COLUMNS)
 
         self._user_config_columns_cache = columns
         return columns

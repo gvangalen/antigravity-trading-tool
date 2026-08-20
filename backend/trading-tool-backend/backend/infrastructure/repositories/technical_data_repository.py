@@ -7,6 +7,16 @@ from typing import Any, List, Optional
 
 from backend.infrastructure.models import TechnicalDataIndicator, TechnicalIndicatorRule, Indicator, UserIndicatorConfig
 
+
+LEGACY_USER_INDICATOR_CONFIG_COLUMNS = {
+    "id",
+    "user_id",
+    "indicator",
+    "category",
+    "created_at",
+}
+
+
 class TechnicalDataRepository:
     def __init__(self, session: AsyncSession):
         self.session = session
@@ -37,15 +47,7 @@ class TechnicalDataRepository:
             columns = set()
 
         if not columns:
-            columns = {
-                "id",
-                "user_id",
-                "indicator",
-                "category",
-                "priority",
-                "enabled",
-                "created_at",
-            }
+            columns = set(LEGACY_USER_INDICATOR_CONFIG_COLUMNS)
 
         self._user_config_columns_cache = columns
         return columns

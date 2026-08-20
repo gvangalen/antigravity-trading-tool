@@ -30,6 +30,14 @@ SUPPORTED_CONTEXT_ASSET_SOURCES = (
     "unknown",
 )
 
+LEGACY_USER_INDICATOR_CONFIG_COLUMNS = {
+    "id",
+    "user_id",
+    "indicator",
+    "category",
+    "created_at",
+}
+
 class AssistantContextRepository:
     """
     🛡️ AssistantContextRepository is a dedicated, production-grade repository 
@@ -72,16 +80,7 @@ class AssistantContextRepository:
             columns = set()
 
         if not columns:
-            columns = {
-                "id",
-                "user_id",
-                "indicator",
-                "category",
-                "priority",
-                "enabled",
-                "symbol",
-                "created_at",
-            }
+            columns = set(LEGACY_USER_INDICATOR_CONFIG_COLUMNS)
 
         self._user_indicator_config_columns_cache = columns
         return columns
