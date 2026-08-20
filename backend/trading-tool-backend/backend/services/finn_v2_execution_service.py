@@ -44,6 +44,21 @@ class FinnV2ExecutionService:
                 started_at=existing.started_at,
                 completed_at=existing.completed_at,
             )
+        existing_for_proposal = await self.repo.get_for_proposal(proposal_id=proposal_id, user_id=user_id)
+        if existing_for_proposal is not None:
+            return ExecutionResult(
+                execution_id=existing_for_proposal.id,
+                proposal_id=existing_for_proposal.proposal_id,
+                user_id=existing_for_proposal.user_id,
+                operation_type=existing_for_proposal.operation_type,
+                status="already_executed" if existing_for_proposal.status == "succeeded" else existing_for_proposal.status,
+                idempotency_key=existing_for_proposal.idempotency_key,
+                precondition_hash=existing_for_proposal.precondition_hash,
+                postcondition_hash=existing_for_proposal.postcondition_hash,
+                error_codes=existing_for_proposal.error_codes_json,
+                started_at=existing_for_proposal.started_at,
+                completed_at=existing_for_proposal.completed_at,
+            )
         proposal = await self.proposals.get_by_id_for_user(proposal_id=proposal_id, user_id=user_id)
         if proposal is None:
             raise LookupError("proposal_not_owned")

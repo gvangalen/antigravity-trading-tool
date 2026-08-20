@@ -14,6 +14,7 @@ class _Session:
 def test_execution_service_records_postcondition_hash_on_success():
     service = FinnV2ExecutionService(session=_Session())
     service.repo.get_by_idempotency_key_for_user = lambda **kwargs: asyncio.sleep(0, result=None)
+    service.repo.get_for_proposal = lambda **kwargs: asyncio.sleep(0, result=None)
     service.proposals.get_by_id_for_user = lambda **kwargs: asyncio.sleep(
         0,
         result=SimpleNamespace(
@@ -56,6 +57,7 @@ def test_execution_service_persists_json_safe_gate_payload_when_blocked():
         "blocking_codes": ["proposal_not_confirmed"],
     }
     service.repo.get_by_idempotency_key_for_user = lambda **kwargs: asyncio.sleep(0, result=None)
+    service.repo.get_for_proposal = lambda **kwargs: asyncio.sleep(0, result=None)
     service.proposals.get_by_id_for_user = lambda **kwargs: asyncio.sleep(
         0,
         result=SimpleNamespace(

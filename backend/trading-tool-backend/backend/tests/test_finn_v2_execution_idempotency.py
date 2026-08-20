@@ -28,6 +28,7 @@ def test_execution_service_returns_existing_result_for_same_idempotency_key():
             completed_at=datetime.now(timezone.utc),
         ),
     )
+    service.repo.get_for_proposal = lambda **kwargs: asyncio.sleep(0, result=None)
 
     result = asyncio.run(
         service.execute(
@@ -40,3 +41,38 @@ def test_execution_service_returns_existing_result_for_same_idempotency_key():
 
     assert result.status == "already_executed"
     assert result.postcondition_hash == "post"
+
+
+def test_execution_service_returns_existing_result_for_same_proposal():
+    service = FinnV2ExecutionService(session=_Session())
+    service.repo.get_by_idempotency_key_for_user = lambda **kwargs: asyncio.sleep(0, result=None)
+    service.repo.get_for_proposal = lambda **kwargs: asyncio.sleep(
+        0,
+        result=SimpleNamespace(
+            id="exec-2",
+            proposal_id="proposal-1",
+            user_id=7,
+            operation_type="watchlist_add",
+            status="succeeded",
+            idempotency_key="idem-first",
+            precondition_hash="pre-2",
+            postcondition_hash="post-2",
+            error_codes_json=[],
+            started_at=datetime.now(timezone.utc),
+            completed_at=datetime.now(timezone.utc),
+        ),
+    )
+
+    result = asyncio.run(
+        service.execute(
+            proposal_id="proposal-1",
+            user_id=7,
+            idempotency_key="idem-second",
+            expected_payload_hash="hash-1",
+        )
+    )
+
+    assert result.status == "already_executed"
+    assert result.execution_id == "exec-2"
+    assert result.idempotency_key == "idem-first"
+    assert result.postcondition_hash == "post-2"
