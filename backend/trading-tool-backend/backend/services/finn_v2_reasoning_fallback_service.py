@@ -177,6 +177,20 @@ class FinnV2ReasoningFallbackService:
             main_observation = (
                 "De huidige fallback kan die indicatorconfiguratie alleen veilig samenvatten als `read_indicator_configuration` ook echt evidence heeft opgeleverd."
             )
+        elif "actieve plan" in lowered:
+            setup_id = setup.facts.get("setup_id") if setup else None
+            setup_name = setup.facts.get("name") if setup else None
+            timeframe = setup.facts.get("timeframe") if setup else None
+            strategy_id = strategy.facts.get("strategy_id") if strategy else None
+            bot_id = bot.facts.get("bot_id") if bot else None
+            is_live = bool((bot_status or bot).facts.get("is_live")) if (bot_status or bot) else False
+            direct_answer = (
+                f"Je actieve plan voor {asset} bestaat uit setup {setup_id}, strategie {strategy_id} en bot {bot_id}."
+            )
+            main_observation = (
+                f"Setup {setup_id} ({setup_name or 'onbekende setup'}) gebruikt timeframe {timeframe}, "
+                f"strategie {strategy_id} is daaraan gekoppeld en bot {bot_id} staat momenteel {'live' if is_live else 'niet live'}."
+            )
         elif "welke bot" in lowered or ("bot" in lowered and "live" in lowered):
             bot_id = bot.facts.get("bot_id") if bot else None
             is_live = bool((bot_status or bot).facts.get("is_live")) if (bot_status or bot) else False
@@ -201,12 +215,6 @@ class FinnV2ReasoningFallbackService:
             main_observation = (
                 f"Wat ik nog niet bevestigd kan afleiden: deze evidence bevat geen opgeslagen order- of positiereden die exact verklaart waarom nog geen positie is geopend; de laatste bekende botstatus verwijst alleen naar last_run {last_run}."
             )
-        elif "actieve plan" in lowered:
-            direct_answer = (
-                f"Je actieve plan voor {asset} bestaat uit setup {setup.facts.get('setup_id') if setup else None}, "
-                f"strategie {strategy.facts.get('strategy_id') if strategy else None} en bot {bot.facts.get('bot_id') if bot else None}."
-            )
-            main_observation = "Deze koppeling komt rechtstreeks uit de opgeslagen user-scoped setup-, strategie- en botrelaties."
         else:
             direct_answer = f"Je actieve {asset}-setup is setup {setup.facts.get('setup_id') if setup else None}."
             main_observation = (

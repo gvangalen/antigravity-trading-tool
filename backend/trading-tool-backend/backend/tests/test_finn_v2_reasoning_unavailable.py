@@ -547,6 +547,166 @@ def test_reasoning_uses_grounded_read_fallback_on_incomplete_structured_response
     assert set(result["result"].evidence_refs_used) == {"E1", "E2", "E3"}
 
 
+def test_reasoning_prefers_active_plan_fallback_over_generic_bot_read(monkeypatch):
+    service = FinnV2ReasoningService(session=object())
+    run = SimpleNamespace(
+        id="run-read-plan-1",
+        user_id=7,
+        message="Wat is mijn actieve plan en welke bot is daaraan gekoppeld?",
+        visibility="visible",
+        feature_mode="visible_runtime",
+        client_context_json={},
+        workspace_hints_json={"asset": "BTC"},
+    )
+    orchestrator_row = SimpleNamespace(
+        id="orchestrator-read-plan-1",
+        run_id="run-read-plan-1",
+        user_id=7,
+        interaction_mode="READ",
+        analysis_version="2026-08-17.block4",
+        subject_scopes_json=["strategy", "bot"],
+        required_domains_json=["plan_context", "automation_context"],
+        optional_domains_json=[],
+        tool_plan_json={"run_id": "run-read-plan-1", "interaction_mode": "READ", "max_tool_calls": 15},
+        snapshot_id="snapshot-read-plan-1",
+        validation_id="validation-read-plan-1",
+        outcome="reasoning_ready",
+        selected_clarification_json=None,
+        unavailable_codes_json=[],
+        uncertainty_codes_json=[],
+        orchestrator_version="2026-08-17.block4",
+        created_at=datetime.now(timezone.utc),
+    )
+    service.runs.get_by_id_for_user = lambda **_kwargs: asyncio.sleep(0, result=run)
+    service.orchestrators.get_for_run_version = lambda **_kwargs: asyncio.sleep(0, result=orchestrator_row)
+    service.snapshots.get_by_id_for_user = lambda **_kwargs: asyncio.sleep(0, result=SimpleNamespace(id="snapshot-read-plan-1", snapshot_id="snapshot-read-plan-1"))
+    service.validations.get_by_id_for_user = lambda **_kwargs: asyncio.sleep(0, result=SimpleNamespace(id="validation-read-plan-1", validation_id="validation-read-plan-1", integrity_status="valid", evidence_set_hash="hash-read-plan", domains=[]))
+    service.policies.get_for_run_version = lambda **_kwargs: asyncio.sleep(
+        0,
+        result=SimpleNamespace(
+            decision_json={
+                "policy_decision_id": "policy-read-plan-1",
+                "run_id": "run-read-plan-1",
+                "user_id": 7,
+                "policy_class": "read",
+                "allowed": True,
+                "proposal_allowed": False,
+                "confirmation_required": False,
+                "step_up_required": False,
+                "execution_allowed": False,
+                "shadow_safe": True,
+                "created_at": "2026-08-18T10:00:00+00:00",
+            }
+        ),
+    )
+    context = ReasoningContextPackage(
+        run_id="run-read-plan-1",
+        user_id=7,
+        user_message=run.message,
+        locale="nl-NL",
+        interaction_mode="READ",
+        subject_scopes=["strategy", "bot"],
+        required_domains=["plan_context", "automation_context"],
+        orchestrator_result_id="orchestrator-read-plan-1",
+        snapshot_id="snapshot-read-plan-1",
+        validation_id="validation-read-plan-1",
+        policy_decision_id="policy-read-plan-1",
+        evidence_set_hash="hash-read-plan",
+        evidence=[
+            ReasoningEvidenceItem(
+                evidence_id="E1",
+                artifact_id="a1",
+                tool_name="read_active_setup",
+                domain="plan_context",
+                entity_type="setup",
+                entity_id="293",
+                asset="BTC",
+                source="internal",
+                freshness="unknown",
+                confidence="high",
+                facts={"setup_id": 293, "name": "BTC Swing 4H Setup", "symbol": "BTC", "timeframe": "4H"},
+            ),
+            ReasoningEvidenceItem(
+                evidence_id="E2",
+                artifact_id="a2",
+                tool_name="read_linked_strategy",
+                domain="plan_context",
+                entity_type="strategy",
+                entity_id="309",
+                asset="BTC",
+                source="internal",
+                freshness="unknown",
+                confidence="high",
+                facts={"strategy_id": 309, "setup_id": 293, "symbol": "BTC"},
+            ),
+            ReasoningEvidenceItem(
+                evidence_id="E3",
+                artifact_id="a3",
+                tool_name="read_linked_bot",
+                domain="automation_context",
+                entity_type="bot",
+                entity_id="170",
+                asset="BTC",
+                source="internal",
+                freshness="unknown",
+                confidence="high",
+                facts={"bot_id": 170, "strategy_id": 309, "symbol": "BTC", "is_live": False},
+            ),
+            ReasoningEvidenceItem(
+                evidence_id="E4",
+                artifact_id="a4",
+                tool_name="read_bot_status",
+                domain="automation_context",
+                entity_type="bot_status",
+                entity_id="170",
+                asset="BTC",
+                source="internal",
+                freshness="stale",
+                confidence="medium",
+                facts={"bot_id": 170, "is_live": False, "is_active": True},
+            ),
+        ],
+        domain_statuses=[
+            ReasoningDomainStatus(domain="plan_context", status="available", confidence="high"),
+            ReasoningDomainStatus(domain="automation_context", status="degraded", confidence="medium", issue_codes=["bot_status_stale"]),
+        ],
+        policy=ReasoningPolicyContext(
+            policy_class="read",
+            allowed=True,
+            proposal_allowed=False,
+            confirmation_required=False,
+            step_up_required=False,
+            execution_allowed=False,
+        ),
+        allowed_response_modes=["READ", "UNAVAILABLE"],
+        allowed_operation_types=[],
+        uncertainty_codes=["bot_status_stale"],
+    )
+    service.contexts.build = lambda **_kwargs: asyncio.sleep(0, result=context)
+    service.contexts.input_hash = lambda *_args, **_kwargs: "hash-read-plan-input"
+    service.reasoning.get_reusable_result = lambda **_kwargs: asyncio.sleep(0, result=None)
+    service.traces.append_event = lambda **_kwargs: asyncio.sleep(0, result=None)
+    service._persist_record = lambda **kwargs: asyncio.sleep(0, result=kwargs)
+    monkeypatch.setattr(service.flags, "reasoning_max_retries", lambda: 0)
+    monkeypatch.setattr(service.flags, "reasoning_timeout_seconds", lambda: 5)
+    monkeypatch.setattr(service.flags, "reasoning_max_output_tokens", lambda: 600)
+    monkeypatch.setattr(service, "_resolved_model", lambda: "gpt-test")
+    monkeypatch.setattr("backend.services.finn_v2_reasoning_service.openai_client.get_openai_runtime_status", lambda: {"configured": True})
+    monkeypatch.setattr("backend.services.finn_v2_reasoning_service.openai_client.get_ai_availability", lambda: {"available": True})
+    monkeypatch.setattr(
+        "backend.services.finn_v2_reasoning_service.openai_client.ask_gpt_structured_response",
+        lambda **_kwargs: {"error": "incomplete_structured_response"},
+    )
+
+    result = asyncio.run(service.reason(user_id=7, run_id="run-read-plan-1", trace_id="trace-read-plan-1"))
+
+    assert result["status"] == "failed"
+    assert result["mode"] == "READ"
+    assert "Je actieve plan voor BTC bestaat uit setup 293, strategie 309 en bot 170." == result["result"].direct_answer
+    assert "Setup 293 (BTC Swing 4H Setup) gebruikt timeframe 4H" in result["result"].main_observation
+    assert set(result["result"].evidence_refs_used) == {"E1", "E2", "E3", "E4"}
+
+
 def test_reasoning_uses_grounded_watchlist_proposal_fallback_on_incomplete_structured_response(monkeypatch):
     service = FinnV2ReasoningService(session=object())
     run = SimpleNamespace(
