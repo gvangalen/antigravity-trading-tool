@@ -62,6 +62,14 @@ def test_finn_v2_v2_only_runtime_resolves_visible_mode_without_canary(monkeypatc
     assert service.resolve_mode(348) == "visible_runtime"
 
 
+def test_finn_v2_watchlist_execution_is_allowlisted_by_default(monkeypatch):
+    monkeypatch.delenv("FINN_V2_EXECUTE_WATCHLIST_CHANGES", raising=False)
+
+    service = FinnV2FlagService()
+
+    assert service.execute_watchlist_changes_enabled() is True
+
+
 def test_unsafe_v2_config_is_disabled_without_affecting_startup(monkeypatch):
     monkeypatch.setenv("FINN_V2_ENABLED", "true")
     monkeypatch.setenv("FINN_V2_SHADOW_ENABLED", "true")

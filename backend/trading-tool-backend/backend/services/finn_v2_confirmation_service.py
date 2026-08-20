@@ -24,7 +24,7 @@ class FinnV2ConfirmationService:
         self.proposals = FinnV2ProposalRepository(session)
 
     async def issue_confirmation_token(self, *, proposal_id: str, user_id: int) -> tuple[str, datetime]:
-        if not self.flags.is_confirmations_enabled():
+        if not self._confirmations_available():
             raise ValueError("feature_disabled")
         proposal = await self.proposals.get_by_id_for_user(proposal_id=proposal_id, user_id=user_id)
         if proposal is None:
@@ -116,8 +116,26 @@ class FinnV2ConfirmationService:
         )
 
     def _token_hash(self, *, proposal_id: str, user_id: int, payload_hash: str, expires_at: datetime, raw_token: str) -> str:
-        secret = os.getenv("FINN_V2_CONFIRMATION_SECRET")
+        secret = self._confirmation_secret()
         if not secret:
             raise ValueError("feature_disabled")
         message = "|".join([proposal_id, str(user_id), payload_hash, expires_at.isoformat(), raw_token]).encode("utf-8")
         return hmac.new(secret.encode("utf-8"), message, hashlib.sha256).hexdigest()
+
+    def _confirmations_available(self) -> bool:
+        return self.flags.is_confirmations_enabled() or self.flags.is_confirmation_routes_enabled()
+
+    def _confirmation_secret(self) -> Optional[str]:
+        explicit = str(os.getenv("FINN_V2_CONFIRMATION_SECRET", "")).strip()
+        if explicit:
+            return explicit
+
+        jwt_secret = str(os.getenv("JWT_SECRET_KEY", "")).strip()
+        if jwt_secret:
+            return f"finn-v2-confirmation::{jwt_secret}"
+
+        encryption_key = str(os.getenv("ENCRYPTION_KEY", "")).strip()
+        if encryption_key:
+            return f"finn-v2-confirmation::{encryption_key}"
+
+        return None

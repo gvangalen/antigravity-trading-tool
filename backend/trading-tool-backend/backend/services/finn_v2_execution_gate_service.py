@@ -54,10 +54,11 @@ class FinnV2ExecutionGateService:
             )
 
         proposal_confirmed = bool(confirmation and confirmation.confirmed and proposal.status == "confirmed")
+        allowlisted_safe_operation = proposal.operation_type in {"watchlist_add", "watchlist_remove"}
         payload_hash_valid = self._payload_hash(proposal.payload_json) == proposal.payload_hash
         evidence_hash_valid = bool(snapshot and validation and snapshot.evidence_set_hash == proposal.evidence_set_hash and validation.evidence_set_hash == proposal.evidence_set_hash)
         freshness_valid = True
-        kill_switch_clear = not self.flags.is_action_kill_switch_enabled()
+        kill_switch_clear = allowlisted_safe_operation or not self.flags.is_action_kill_switch_enabled()
         feature_enabled = self.flags.is_execution_gate_enabled()
         duplicate_execution_clear = True
         step_up_required = bool(proposal.requires_step_up_auth)
@@ -78,6 +79,8 @@ class FinnV2ExecutionGateService:
             blocking_codes.append("kill_switch_enabled")
         if not feature_enabled:
             blocking_codes.append("feature_disabled")
+        if proposal.operation_type in {"watchlist_add", "watchlist_remove"} and not self.flags.execute_watchlist_changes_enabled():
+            blocking_codes.append("watchlist_action_disabled")
         if proposal.operation_type == "activate_live_bot" and not self.flags.is_live_actions_enabled():
             blocking_codes.append("live_action_disabled")
         if proposal.operation_type in {"manual_order", "portfolio_rebalance"}:
@@ -85,7 +88,7 @@ class FinnV2ExecutionGateService:
         if proposal.operation_type == "activate_live_bot":
             freshness_valid = False
             blocking_codes.append("shadow_mode_execution_blocked")
-        eligible = False
+        eligible = len(blocking_codes) == 0
 
         decision = ExecutionEligibilityDecision(
             eligibility_id=f"finn-v2-eligibility-{uuid.uuid4().hex}",

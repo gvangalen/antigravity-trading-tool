@@ -36,3 +36,34 @@ def test_execution_gate_keeps_confirmed_proposal_ineligible_in_shadow():
     assert result.eligible is False
     assert "kill_switch_enabled" in result.blocking_codes
     assert "step_up_required" in result.blocking_codes
+
+
+def test_execution_gate_allows_confirmed_watchlist_change_as_safe_allowlisted_action():
+    service = FinnV2ExecutionGateService(session=object())
+    service.flags.is_execution_gate_enabled = lambda: True
+    service.flags.is_action_kill_switch_enabled = lambda: True
+    service.flags.execute_watchlist_changes_enabled = lambda: True
+    proposal = SimpleNamespace(
+        id="proposal-1",
+        run_id="run-1",
+        user_id=7,
+        policy_decision_id="policy-1",
+        payload_json={"change": {"asset": "ETH", "operation": "add"}},
+        payload_hash=service._payload_hash({"change": {"asset": "ETH", "operation": "add"}}),
+        evidence_set_hash="hash",
+        requires_step_up_auth=False,
+        operation_type="watchlist_add",
+        status="confirmed",
+        expires_at=datetime.now(timezone.utc) + timedelta(minutes=5),
+    )
+    service.proposals.get_by_id_for_user = lambda **_kwargs: asyncio.sleep(0, result=proposal)
+    service.policies.get_by_id_for_user = lambda **_kwargs: asyncio.sleep(0, result=SimpleNamespace(policy_class="proposal"))
+    service.confirmations.get_for_proposal_user = lambda **_kwargs: asyncio.sleep(0, result=SimpleNamespace(confirmed=True))
+    service.states.get_by_evidence_hash = lambda **_kwargs: asyncio.sleep(0, result=SimpleNamespace(id="snapshot-1", evidence_set_hash="hash"))
+    service.validations.get_for_snapshot_version = lambda **_kwargs: asyncio.sleep(0, result=SimpleNamespace(evidence_set_hash="hash"))
+    service.eligibility.create = lambda **kwargs: asyncio.sleep(0, result=SimpleNamespace(**kwargs))
+
+    result = asyncio.run(service.check_execution_eligibility(user_id=7, run_id="run-1", proposal_id="proposal-1"))
+
+    assert result.eligible is True
+    assert result.blocking_codes == []

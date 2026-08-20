@@ -49,3 +49,28 @@ def test_confirmation_accepts_valid_token_and_is_idempotent(monkeypatch):
 
     assert first.confirmed is True
     assert second.already_confirmed is True
+
+
+def test_confirmation_issue_token_accepts_route_enabled_mode_without_legacy_flag(monkeypatch):
+    monkeypatch.delenv("FINN_V2_CONFIRMATION_SECRET", raising=False)
+    monkeypatch.setenv("JWT_SECRET_KEY", "jwt-secret")
+
+    service = FinnV2ConfirmationService(session=object())
+    service.flags.is_confirmations_enabled = lambda: False
+    service.flags.is_confirmation_routes_enabled = lambda: True
+    proposal = SimpleNamespace(
+        id="proposal-1",
+        run_id="run-1",
+        user_id=7,
+        payload_hash="payload-hash",
+        status="draft",
+        expires_at=datetime.now(timezone.utc) + timedelta(minutes=5),
+    )
+    service.proposals.get_by_id_for_user = lambda **_kwargs: asyncio.sleep(0, result=proposal)
+    service.confirmations.get_for_proposal_user = lambda **_kwargs: asyncio.sleep(0, result=None)
+    service.confirmations.create = lambda **kwargs: asyncio.sleep(0, result=SimpleNamespace(**kwargs))
+    service.proposals.update_status = lambda *_args, **_kwargs: asyncio.sleep(0, result=proposal)
+
+    raw_token, _ = asyncio.run(service.issue_confirmation_token(proposal_id="proposal-1", user_id=7))
+
+    assert len(raw_token) >= 43

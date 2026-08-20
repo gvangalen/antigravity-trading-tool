@@ -67,3 +67,19 @@ def test_confirmation_token_has_sufficient_entropy(monkeypatch):
     raw_token, _ = asyncio.run(service.issue_confirmation_token(proposal_id="proposal-1", user_id=7))
 
     assert len(raw_token) >= 43
+
+
+def test_confirmation_token_falls_back_to_jwt_secret(monkeypatch):
+    monkeypatch.delenv("FINN_V2_CONFIRMATION_SECRET", raising=False)
+    monkeypatch.setenv("JWT_SECRET_KEY", "jwt-secret")
+
+    service = FinnV2ConfirmationService(session=object())
+    token_hash = service._token_hash(
+        proposal_id="proposal-1",
+        user_id=7,
+        payload_hash="payload-hash",
+        expires_at=datetime.now(timezone.utc) + timedelta(minutes=5),
+        raw_token="token-1",
+    )
+
+    assert token_hash

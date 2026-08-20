@@ -83,5 +83,7 @@ def test_tool_plan_routes_setup_creation_and_watchlist_actions_through_proposal_
     )
 
     assert setup_plan.tool_names == ["read_profile", "read_user_preferences", "read_active_asset", "read_active_setup"]
-    assert watchlist_plan.tool_names == ["read_active_asset"]
+    assert watchlist_plan.tool_names == ["read_active_asset", "read_watchlist"]
     assert watchlist_plan.tool_inputs["read_active_asset"] == {"asset": "ETH"}
+    assert watchlist_plan.tool_inputs["read_watchlist"] == {"asset": "ETH"}
+    assert watchlist_plan.required_evidence == ["active_asset", "watchlist"]

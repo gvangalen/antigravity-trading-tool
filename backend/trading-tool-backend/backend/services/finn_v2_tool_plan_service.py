@@ -114,6 +114,8 @@ class FinnV2ToolPlanService:
         if analysis.interaction_mode == "CREATE_PROPOSAL":
             return ["read_profile", "read_user_preferences", "read_active_asset", "read_active_setup"]
         if analysis.interaction_mode == "ACTION_PROPOSAL":
+            if analysis.primary_subject == "watchlist":
+                return ["read_active_asset", "read_watchlist"]
             return ["read_active_asset"]
 
         active_domains = list(domain_plan.required_domains) + list(domain_plan.optional_domains)
