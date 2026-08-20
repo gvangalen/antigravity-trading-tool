@@ -47,6 +47,15 @@ class _FakeTraceRepo:
         return kwargs
 
 
+class _CollectingTraceRepo:
+    def __init__(self):
+        self.events = []
+
+    async def append_event(self, **kwargs):
+        self.events.append(kwargs)
+        return kwargs
+
+
 class _NestedTxn:
     async def __aenter__(self):
         return self
@@ -168,7 +177,7 @@ def test_complete_tool_call_uses_captured_id_when_update_fails(monkeypatch):
     service = FinnV2ToolExecutionService(session=_FakeSession())
     service.calls = _FailingUpdateCallRepo()
 
-    result = asyncio.run(
+    result, rolled_back = asyncio.run(
         service._complete_tool_call(
             tool_call=SimpleNamespace(id=77),
             tool_call_id=77,
@@ -189,6 +198,7 @@ def test_complete_tool_call_uses_captured_id_when_update_fails(monkeypatch):
     )
 
     assert result is None
+    assert rolled_back is True
 
 
 def test_state_pipeline_rolls_back_before_failure_trace():
@@ -334,3 +344,37 @@ def test_evidence_ingestion_rolls_back_poisoned_session(monkeypatch):
     asyncio.run(service._ingest_evidence(run_id="run-1", user_id=7, trace_id="trace-1", result=result))
 
     assert session.rollback_calls == 1
+
+
+def test_tool_execution_skips_evidence_ingestion_after_tool_call_completion_rollback(monkeypatch):
+    class _PoisoningUpdateCallRepo(_FakeCallRepo):
+        def __init__(self, session):
+            super().__init__()
+            self.session = session
+
+        async def update(self, row, **kwargs):
+            self.session.sync_session.is_active = False
+            self.session.get_transaction().is_active = False
+            raise RuntimeError("tool_call_flush_failed")
+
+    session = _FakeSession()
+    service = FinnV2ToolExecutionService(session=session)
+    service.runs = _FakeRunRepo()
+    service.calls = _PoisoningUpdateCallRepo(session)
+    service.traces = _CollectingTraceRepo()
+    service.evidence.ingest_tool_result = AsyncMock(side_effect=AssertionError("evidence ingestion should be skipped"))
+    monkeypatch.setattr(service.flags, "is_tool_registry_enabled", lambda: True)
+    monkeypatch.setattr(service.flags, "is_tool_registry_readonly", lambda: True)
+    monkeypatch.setattr(service.flags, "is_tool_call_logging_enabled", lambda: True)
+    monkeypatch.setattr(service.flags, "should_run_block3_shadow", lambda _user_id: True)
+    service.profile_adapter.execute = lambda **_kwargs: asyncio.sleep(
+        0,
+        result={"data": {"ok": True}, "summary": {"title": "profile"}, "as_of": None},
+    )
+
+    result = asyncio.run(service.execute_tool(run_id="run-1", user_id=7, tool_name="read_profile", selector={}))
+
+    assert result.success is True
+    assert session.rollback_calls == 1
+    assert service.evidence.ingest_tool_result.await_count == 0
+    assert service.traces.events == []

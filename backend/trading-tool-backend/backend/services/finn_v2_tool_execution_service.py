@@ -252,6 +252,7 @@ class FinnV2ToolExecutionService:
                 availability="unavailable",
             )
 
+        persisted_tool_call = None
         if tool_call is not None:
             if not session_rolled_back and self._session_requires_rollback():
                 session_rolled_back = await self._rollback_failed_session(
@@ -277,7 +278,7 @@ class FinnV2ToolExecutionService:
                 )
             else:
                 duration_ms = int((monotonic() - started) * 1000)
-                persisted_tool_call = await self._complete_tool_call(
+                persisted_tool_call, completion_rolled_back = await self._complete_tool_call(
                     tool_call=tool_call,
                     tool_call_id=tool_call_id,
                     result=result,
@@ -286,11 +287,18 @@ class FinnV2ToolExecutionService:
                     user_id=user_id,
                     trace_id=run.trace_id,
                 )
+                session_rolled_back = session_rolled_back or completion_rolled_back
                 result.tool_call_id = tool_call_id
                 if persisted_tool_call is not None and tool_call_id is None:
                     result.tool_call_id = getattr(persisted_tool_call, "id", result.tool_call_id)
         record_latency_sample("finn_v2_tool_execution_duration_ms", int((monotonic() - started) * 1000))
-        if self.flags.should_run_block3_shadow(user_id) and tool_call is not None:
+        if (
+            self.flags.should_run_block3_shadow(user_id)
+            and tool_call is not None
+            and persisted_tool_call is not None
+            and not session_rolled_back
+            and result.tool_call_id is not None
+        ):
             await self._ingest_evidence(run_id=run_id, user_id=user_id, trace_id=run.trace_id, result=result)
         return result
 
@@ -351,7 +359,7 @@ class FinnV2ToolExecutionService:
         run_id: str,
         user_id: int,
         trace_id: str,
-    ):
+    ) -> Tuple[Optional[object], bool]:
         try:
             async with self.session.begin_nested():
                 await self.calls.update(
@@ -365,9 +373,9 @@ class FinnV2ToolExecutionService:
                     completed_at=datetime.now(timezone.utc),
                     duration_ms=duration_ms,
                 )
-            return tool_call
+            return tool_call, False
         except Exception as cleanup_exc:
-            await self._rollback_failed_session(
+            rolled_back = await self._rollback_failed_session(
                 run_id=run_id,
                 user_id=user_id,
                 trace_id=trace_id,
@@ -386,7 +394,7 @@ class FinnV2ToolExecutionService:
                 failure_stage="tool_call_complete",
                 cleanup_exception=cleanup_exc,
             )
-            return None
+            return None, rolled_back
 
     async def apply_retention(self) -> Dict[str, int]:
         if not hasattr(self.calls, "redact_results_older_than") or not hasattr(self.calls, "delete_metadata_older_than"):
@@ -517,6 +525,28 @@ class FinnV2ToolExecutionService:
 
     async def _ingest_evidence(self, *, run_id: str, user_id: int, trace_id: str, result: ToolExecutionResult) -> None:
         started = monotonic()
+        if self._session_requires_rollback():
+            await self._rollback_failed_session(
+                run_id=run_id,
+                user_id=user_id,
+                trace_id=trace_id,
+                tool_name=result.tool_name,
+                tool_call_id=result.tool_call_id,
+                failure_stage="evidence_ingestion_preflight",
+                primary_exception=RuntimeError("evidence_ingestion_session_requires_rollback"),
+            )
+            logger.warning(
+                "FINN V2 skipped evidence ingestion on poisoned session",
+                extra={
+                    "trace_id": trace_id,
+                    "run_id": run_id,
+                    "user_id": user_id,
+                    "tool_name": result.tool_name,
+                    "tool_call_id": result.tool_call_id,
+                    "failure_stage": "evidence_ingestion_preflight",
+                },
+            )
+            return
         await self._append_trace(
             run_id=run_id,
             user_id=user_id,
@@ -756,7 +786,7 @@ class FinnV2ToolExecutionService:
         primary_exception: Exception,
         tool_call_id: Optional[int] = None,
     ) -> bool:
-        if not self._session_requires_rollback() or not hasattr(self.session, "rollback"):
+        if not hasattr(self.session, "rollback"):
             return False
         try:
             await self.session.rollback()
