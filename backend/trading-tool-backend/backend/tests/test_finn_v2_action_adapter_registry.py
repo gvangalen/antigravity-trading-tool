@@ -29,5 +29,12 @@ def test_watchlist_add_uses_schema_compatible_idempotent_insert_without_on_confl
     sql, params = session.calls[0]
     assert "INSERT INTO watchlists" in sql
     assert "WHERE NOT EXISTS" in sql
+    assert "CAST(:insert_user_id AS INTEGER)" in sql
+    assert "CAST(:insert_symbol AS VARCHAR)" in sql
     assert "ON CONFLICT" not in sql
-    assert params == {"user_id": 390, "symbol": "ETH"}
+    assert params == {
+        "insert_user_id": 390,
+        "insert_symbol": "ETH",
+        "lookup_user_id": 390,
+        "lookup_symbol": "ETH",
+    }

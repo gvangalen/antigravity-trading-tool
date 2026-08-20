@@ -101,16 +101,24 @@ class FinnV2ActionAdapterRegistry:
             text(
                 """
                 INSERT INTO watchlists (user_id, symbol, created_at)
-                SELECT :user_id, :symbol, NOW()
+                SELECT
+                    CAST(:insert_user_id AS INTEGER),
+                    CAST(:insert_symbol AS VARCHAR),
+                    NOW()
                 WHERE NOT EXISTS (
                     SELECT 1
                     FROM watchlists
-                    WHERE user_id = :user_id
-                      AND symbol = :symbol
+                    WHERE user_id = CAST(:lookup_user_id AS INTEGER)
+                      AND symbol = CAST(:lookup_symbol AS VARCHAR)
                 )
                 """
             ),
-            {"user_id": user_id, "symbol": asset},
+            {
+                "insert_user_id": user_id,
+                "insert_symbol": asset,
+                "lookup_user_id": user_id,
+                "lookup_symbol": asset,
+            },
         )
         return {"ok": True, "asset": asset, "operation": "watchlist_add"}
 
