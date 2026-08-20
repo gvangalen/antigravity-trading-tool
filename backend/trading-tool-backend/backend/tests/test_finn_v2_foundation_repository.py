@@ -5,6 +5,8 @@ import asyncio
 import pytest
 
 from backend.domain.finn_v2_contract import InvalidRunTransitionError, validate_run_transition
+from backend.schemas.finn_v2_schema import AgentRunRequest
+from backend.services import finn_v2_gateway_service as gateway_module
 from backend.services.finn_v2_run_service import FinnV2RunService
 
 
@@ -252,6 +254,49 @@ def test_fail_run_rolls_back_inactive_session_before_transition(monkeypatch):
 
     assert session.rollback_calls == 1
     assert run.status == "failed"
+
+
+class _FakeConversationRepo:
+    def __init__(self, _session=None):
+        self.rows = {}
+        self.last_run = None
+
+    async def get_by_id_for_user(self, conversation_id, user_id):
+        row = self.rows.get(conversation_id)
+        if row and row.user_id == user_id:
+            return row
+        return None
+
+    async def create(self, *, conversation_id, user_id, title=None):
+        row = SimpleNamespace(id=conversation_id, user_id=user_id, title=title)
+        self.rows[conversation_id] = row
+        return row
+
+    async def set_last_run(self, *, conversation_id, user_id, run_id):
+        self.last_run = {
+            "conversation_id": conversation_id,
+            "user_id": user_id,
+            "run_id": run_id,
+        }
+
+
+class _FakeGatewayRunRepo:
+    def __init__(self, _session):
+        pass
+
+    async def get_by_idempotency_key_for_user(self, *, idempotency_key, user_id):
+        return None
+
+
+class _FakeGatewayRunService:
+    def __init__(self, _session):
+        self.lifecycle_calls = []
+
+    async def create_run(self, payload):
+        return SimpleNamespace(**payload)
+
+    async def run_foundation_lifecycle(self, *, run_id, user_id):
+        self.lifecycle_calls.append((run_id, user_id))
 
 
 def test_gateway_run_foundation_now_returns_same_run_id_after_visible_budget_timeout(monkeypatch):

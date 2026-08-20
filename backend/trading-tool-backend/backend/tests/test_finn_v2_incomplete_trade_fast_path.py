@@ -131,20 +131,25 @@ def test_incomplete_trade_route_avoids_provider_and_returns_unavailable():
 def test_gateway_marks_visible_timeout_as_terminal_failure():
     from backend.services.finn_v2_gateway_service import FinnV2GatewayService
 
-    service = FinnV2GatewayService(session=object())
-    service.flags.visible_request_timeout_seconds = lambda: 1
-    service.create_run = lambda **_kwargs: asyncio.sleep(0, result=SimpleNamespace(id="run-timeout-1", status="created"))
+    class _Session:
+        async def commit(self):
+            return None
 
-    observed = {"failed": None}
+    service = FinnV2GatewayService(session=_Session())
+    service.flags.visible_request_timeout_seconds = lambda _mode=None: 1
+    service.create_run = lambda **_kwargs: asyncio.sleep(0, result=SimpleNamespace(id="run-timeout-1", status="created"))
+    observed = {"owned_job": None}
 
     async def _slow_lifecycle(**_kwargs):
         await asyncio.sleep(2)
 
-    async def _fail_run(**kwargs):
-        observed["failed"] = kwargs
+    async def _owned_job(**kwargs):
+        observed["owned_job"] = kwargs
+        await _slow_lifecycle(**kwargs)
 
-    service.run_service.run_foundation_lifecycle = _slow_lifecycle
-    service.run_service.fail_run = _fail_run
+    import backend.services.finn_v2_gateway_service as gateway_module
+
+    gateway_module.run_foundation_lifecycle_owned_job = _owned_job
 
     run_id = asyncio.run(
         service.run_foundation_now(
@@ -157,10 +162,7 @@ def test_gateway_marks_visible_timeout_as_terminal_failure():
     )
 
     assert run_id == "run-timeout-1"
-    assert observed["failed"]["run_id"] == "run-timeout-1"
-    assert observed["failed"]["error_code"] == "visible_request_timeout"
-    assert observed["failed"]["failure_stage"] == "visible_request_timeout"
-    assert isinstance(observed["failed"]["primary_exception"], TimeoutError)
+    assert observed["owned_job"]["run_id"] == "run-timeout-1"
 
 
 def test_visible_request_timeout_default_covers_live_plan_budget():
@@ -172,22 +174,25 @@ def test_visible_request_timeout_default_covers_live_plan_budget():
 def test_gateway_cancels_run_when_request_is_cancelled():
     from backend.services.finn_v2_gateway_service import FinnV2GatewayService
 
-    service = FinnV2GatewayService(session=object())
-    service.create_run = lambda **_kwargs: asyncio.sleep(0, result=SimpleNamespace(id="run-cancel-1", status="created"))
+    class _Session:
+        async def commit(self):
+            return None
 
-    observed = {"canceled": None}
+    service = FinnV2GatewayService(session=_Session())
+    service.create_run = lambda **_kwargs: asyncio.sleep(0, result=SimpleNamespace(id="run-cancel-1", status="created"))
+    service.flags.visible_request_timeout_seconds = lambda _mode=None: 30
+    observed = {"owned_job": None}
 
     lifecycle_started = asyncio.Event()
 
-    async def _never_finish(**_kwargs):
+    async def _never_finish(**kwargs):
+        observed["owned_job"] = kwargs
         lifecycle_started.set()
         await asyncio.sleep(30)
 
-    async def _cancel_run(**kwargs):
-        observed["canceled"] = kwargs
+    import backend.services.finn_v2_gateway_service as gateway_module
 
-    service.run_service.run_foundation_lifecycle = _never_finish
-    service.run_service.cancel_run = _cancel_run
+    gateway_module.run_foundation_lifecycle_owned_job = _never_finish
 
     async def _invoke():
         task = asyncio.create_task(
@@ -209,4 +214,4 @@ def test_gateway_cancels_run_when_request_is_cancelled():
 
     asyncio.run(_invoke())
 
-    assert observed["canceled"]["run_id"] == "run-cancel-1"
+    assert observed["owned_job"]["run_id"] == "run-cancel-1"

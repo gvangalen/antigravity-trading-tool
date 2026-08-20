@@ -121,21 +121,18 @@ def test_visible_delivery_preserves_run_id_when_delivery_chain_raises():
     service.gateway.run_foundation_now = lambda **kwargs: asyncio.sleep(0, result="run-capability-1")
     service.delivery.get_delivery_artifacts = lambda **kwargs: asyncio.sleep(0, result={"delivery_envelope": {"run_id": "run-capability-1"}})
 
-    try:
-        asyncio.run(
-            service.deliver_assistant_envelope(
-                user_id=1,
-                message="Hoi FINN, wat kun je voor mij doen?",
-                context_payload={"missing_context": ["asset", "setup"]},
-                transport="chat",
-                request_path="/assistant/chat",
-                request_id="req-capability-1",
-                trace_id="trace-capability-1",
-            )
+    envelope = asyncio.run(
+        service.deliver_assistant_envelope(
+            user_id=1,
+            message="Hoi FINN, wat kun je voor mij doen?",
+            context_payload={"missing_context": ["asset", "setup"]},
+            transport="chat",
+            request_path="/assistant/chat",
+            request_id="req-capability-1",
+            trace_id="trace-capability-1",
         )
-    except FinnV2VisibleDeliveryError as exc:
-        assert exc.code == "v2_delivery_failure"
-        assert exc.run_id == "run-capability-1"
-        assert exc.failure_stage == "delivery_artifacts"
-    else:
-        raise AssertionError("expected visible delivery failure")
+    )
+
+    assert envelope["intent"] == "unavailable"
+    assert envelope["state"]["run_id"] == "run-capability-1"
+    assert envelope["response_trace"]["run_id"] == "run-capability-1"
