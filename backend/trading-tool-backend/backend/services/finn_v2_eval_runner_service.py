@@ -15,8 +15,11 @@ from backend.schemas.finn_v2_response_schema import VerifiedResponse
 from backend.services.finn_v2_graders.action_safety_grader import ActionSafetyGrader
 from backend.services.finn_v2_graders.coverage_grader import CoverageGrader
 from backend.services.finn_v2_graders.deterministic_grader import DeterministicGrader
+from backend.services.finn_v2_domain_requirement_service import FinnV2DomainRequirementService
 from backend.services.finn_v2_graders.grounding_grader import GroundingGrader
 from backend.services.finn_v2_graders.quality_grader import QualityGrader
+from backend.services.finn_v2_request_analysis_service import FinnV2RequestAnalysisService
+from backend.services.finn_v2_tool_plan_service import FinnV2ToolPlanService
 from backend.services.finn_v2_visible_delivery_service import FinnV2VisibleDeliveryService
 from backend.utils.openai_client import get_ai_availability
 
@@ -31,6 +34,9 @@ class FinnV2EvalRunnerService:
         self.action_safety = ActionSafetyGrader()
         self.quality = QualityGrader()
         self.visible = FinnV2VisibleDeliveryService(session)
+        self.analysis = FinnV2RequestAnalysisService()
+        self.domain_requirements = FinnV2DomainRequirementService()
+        self.tool_plan = FinnV2ToolPlanService()
 
     async def run_dataset(self, *, dataset_path: str, model_mode: Literal["mock", "real"], persist_results: bool = True) -> EvalRunResult:
         with open(dataset_path, "r", encoding="utf-8") as handle:
@@ -83,7 +89,13 @@ class FinnV2EvalRunnerService:
             for field, value in quality_scores.dict().items():
                 setattr(scores, field, value)
             all_gates = {**blocking_gates, **grounding_gates, **coverage_gates, **action_gates}
-            passed = all(all_gates.values()) and all(v >= 90.0 for k, v in scores.dict().items() if k in {"relevance", "specificity", "completeness", "clarity", "usefulness", "tone", "language_quality"})
+            structural_fields = {"mode", "scopes", "domains", "tools", "entities", "grounding", "coverage", "action_safety", "paper_live"}
+            quality_fields = {"relevance", "specificity", "completeness", "clarity", "usefulness", "tone", "language_quality"}
+            passed = (
+                all(all_gates.values())
+                and all(getattr(scores, field) >= 90.0 for field in structural_fields)
+                and all(getattr(scores, field) >= 90.0 for field in quality_fields)
+            )
             case_result = EvalCaseResult(
                 eval_case_result_id=f"finn-v2-eval-case-{uuid.uuid4().hex}",
                 eval_run_id=eval_run_id,
@@ -93,9 +105,10 @@ class FinnV2EvalRunnerService:
                 passed=passed,
                 blocking_passed=all(all_gates.values()),
                 expected_mode=case.expected_mode,
-                actual_mode=response.mode,
+                actual_mode=str(metadata.get("mode") or response.mode),
                 expected_outcome=case.expected_outcome,
                 actual_outcome="draft_proposal" if response.proposal_id else ("clarification" if response.mode == "CLARIFICATION" else "unavailable" if response.mode == "UNAVAILABLE" else "verified_answer"),
+                actual_metadata=metadata,
                 dimension_scores=scores,
                 blocking_gate_results=all_gates,
                 reason_codes=reasons + grounding_reasons + coverage_reasons + action_reasons,
@@ -175,9 +188,27 @@ class FinnV2EvalRunnerService:
         return result
 
     async def _run_case(self, *, case: GoldenCase, model_mode: str) -> tuple[VerifiedResponse, dict, dict]:
+        analysis = self.analysis.analyze(message=case.message)
+        domain_plan = self.domain_requirements.determine(analysis)
+        tool_plan = self.tool_plan.build(run_id=f"eval-plan-{case.case_id}", analysis=analysis, domain_plan=domain_plan)
+        metadata = {
+            "mode": analysis.interaction_mode,
+            "primary_subject": analysis.primary_subject,
+            "output_contract": analysis.output_contract,
+            "scopes": list(analysis.subject_scopes),
+            "domains": list(domain_plan.required_domains),
+            "optional_domains": list(domain_plan.optional_domains),
+            "tools": list(tool_plan.tool_names),
+            "required_evidence": list(tool_plan.required_evidence),
+            "optional_evidence": list(tool_plan.optional_evidence),
+            "entity_selectors": dict(tool_plan.entity_selectors),
+            "missing_essential_inputs": list(analysis.missing_essential_inputs),
+            "requested_entities": list(analysis.requested_entities),
+            "expected_entity_graph": dict(case.expected_entity_graph),
+        }
         if model_mode == "real" and get_ai_availability().get("available"):
             envelope = await self.visible.deliver_assistant_envelope(
-                user_id=1 if case.fixture_user == "user_a" else 2,
+                user_id=self._fixture_user_id(case),
                 message=case.message,
                 context_payload={"page": case.workspace or "assistant", "locale": case.language},
                 transport="chat",
@@ -188,8 +219,8 @@ class FinnV2EvalRunnerService:
             response = VerifiedResponse(
                 verified_response_id=f"eval-visible-{case.case_id}",
                 run_id=f"eval-run-{case.case_id}",
-                user_id=1 if case.fixture_user == "user_a" else 2,
-                mode=case.expected_mode,
+                user_id=self._fixture_user_id(case),
+                mode=analysis.interaction_mode,
                 direct_answer=envelope["response"],
                 main_observation=envelope.get("summary") or envelope["response"],
                 supporting_points=[],
@@ -205,9 +236,17 @@ class FinnV2EvalRunnerService:
                 verifier_result_id=f"eval-verifier-{case.case_id}",
                 created_at=datetime.now(timezone.utc),
             )
-            return response, {"scopes": case.expected_scopes, "domains": case.expected_required_domains, "tools": case.expected_tools}, {"latency_ms": 1, "model": None, "input_tokens": 0, "output_tokens": 0, "reasoning_tokens": 0}
+            metadata.update(
+                {
+                    "delivery_status": envelope.get("state", {}).get("current_flow"),
+                    "response_trace": envelope.get("response_trace", {}),
+                    "run_id": envelope.get("state", {}).get("run_id"),
+                }
+            )
+            return response, metadata, {"latency_ms": 1, "model": None, "input_tokens": 0, "output_tokens": 0, "reasoning_tokens": 0}
         response = self._mock_response_for_case(case)
-        return response, {"scopes": case.expected_scopes, "domains": case.expected_required_domains, "tools": case.expected_tools}, {"latency_ms": 1, "model": "mock", "input_tokens": 0, "output_tokens": 0, "reasoning_tokens": 0}
+        metadata.update({"delivery_status": "mock_completed", "run_id": response.run_id})
+        return response, metadata, {"latency_ms": 1, "model": "mock", "input_tokens": 0, "output_tokens": 0, "reasoning_tokens": 0}
 
     def _mock_response_for_case(self, case: GoldenCase) -> VerifiedResponse:
         asset = case.required_entities[0] if case.required_entities else ("BTC" if case.fixture_user == "user_a" else "AAPL")
@@ -223,7 +262,7 @@ class FinnV2EvalRunnerService:
         return VerifiedResponse(
             verified_response_id=f"verified-{case.case_id}",
             run_id=f"run-{case.case_id}",
-            user_id=1 if case.fixture_user == "user_a" else 2,
+            user_id=self._fixture_user_id(case),
             mode=case.expected_mode,
             direct_answer=direct,
             main_observation=" ".join(case.required_claim_topics or [asset]),
@@ -240,6 +279,11 @@ class FinnV2EvalRunnerService:
             verifier_result_id=f"verifier-{case.case_id}",
             created_at=datetime.now(timezone.utc),
         )
+
+    def _fixture_user_id(self, case: GoldenCase) -> int:
+        if case.fixture_user_id is not None:
+            return int(case.fixture_user_id)
+        return 1 if case.fixture_user == "user_a" else 2
 
     def _aggregate_scores(self, case_results: list[EvalCaseResult]) -> dict[str, float]:
         if not case_results:

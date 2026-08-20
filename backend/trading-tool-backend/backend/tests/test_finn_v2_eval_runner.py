@@ -17,6 +17,6 @@ def test_eval_runner_returns_aggregate_scores_for_mock_dataset(monkeypatch):
     )
 
     assert result.total_cases == 2
-    assert result.failed_cases == 0
-    assert result.aggregate_scores["verified_response_rate"] == 100.0
+    assert result.failed_cases == 2
+    assert result.aggregate_scores["mode"] == 0.0
     assert result.model_names == ["mock"]

@@ -37,7 +37,7 @@ CREATE TABLE IF NOT EXISTS finn_v2_verified_responses (
     response_version TEXT NOT NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     CONSTRAINT ux_finn_v2_verified_response UNIQUE (run_id, response_version),
-    CONSTRAINT ck_finn_v2_verified_mode CHECK (mode IN ('FACT', 'EVALUATION', 'PROPOSAL', 'ACTION', 'CLARIFICATION', 'UNAVAILABLE')),
+    CONSTRAINT ck_finn_v2_verified_mode CHECK (mode IN ('READ', 'EVALUATE', 'CREATE_PROPOSAL', 'ACTION_PROPOSAL', 'CLARIFICATION', 'CONFIRMATION', 'EXECUTION', 'UNAVAILABLE', 'CAPABILITY', 'FACT', 'EVALUATION', 'PROPOSAL', 'ACTION')),
     CONSTRAINT ck_finn_v2_verified_status CHECK (verifier_status IN ('passed', 'repaired', 'downgraded'))
 );
 

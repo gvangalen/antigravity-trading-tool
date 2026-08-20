@@ -18,6 +18,7 @@ class FinnV2ToolRegistryService:
             ToolDefinition(name="read_linked_strategy", description="Read the strategy linked to the active setup.", depends_on=["read_active_setup"]),
             ToolDefinition(name="read_linked_bot", description="Read the bot linked to the strategy.", depends_on=["read_linked_strategy"]),
             ToolDefinition(name="read_bot_status", description="Read the runtime status of the linked bot.", depends_on=["read_linked_bot"]),
+            ToolDefinition(name="read_watchlist", description="Read the current user watchlist and whether the selected asset is already present.", depends_on=["read_active_asset"]),
             ToolDefinition(name="read_portfolio", description="Read the compact portfolio state."),
             ToolDefinition(name="read_latest_report", description="Read compact metadata for the latest report.", depends_on=["read_active_asset"]),
             ToolDefinition(name="read_review_history", description="Read review history when available.", depends_on=["read_active_asset"]),
@@ -31,4 +32,3 @@ class FinnV2ToolRegistryService:
 
     def ordered_tool_names(self) -> list[str]:
         return list(FINN_V2_TOOL_ORDER)
-

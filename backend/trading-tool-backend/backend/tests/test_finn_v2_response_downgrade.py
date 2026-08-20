@@ -24,3 +24,23 @@ def test_response_downgrade_to_clarification_builds_single_question():
 
     assert result.mode == "CLARIFICATION"
     assert result.follow_up_question == "Welke setup bedoel je precies?"
+
+
+def test_response_downgrade_to_fact_preserves_reasoning_level_evidence_refs():
+    service = FinnV2ResponseDowngradeService()
+    draft = ResponseDraft(
+        draft_id="draft-3",
+        run_id="run-3",
+        user_id=7,
+        mode="READ",
+        direct_answer="Voor BTC is bot Paper Bot gekoppeld aan strategie Swing Strategy.",
+        main_observation="De koppeling komt rechtstreeks uit de opgeslagen automation- en plancontext.",
+        evidence_refs_used=["E1", "E2", "E3"],
+        evidence_set_hash="hash-3",
+        created_at=datetime.now(timezone.utc),
+    )
+
+    result = service.downgrade_to_fact(draft=draft)
+
+    assert result.mode == "FACT"
+    assert result.evidence_refs_used == ["E1", "E2", "E3"]

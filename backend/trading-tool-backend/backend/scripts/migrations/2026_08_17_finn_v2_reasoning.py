@@ -29,7 +29,7 @@ CREATE TABLE IF NOT EXISTS finn_v2_reasoning_results (
     completed_at TIMESTAMPTZ NULL,
     CONSTRAINT ux_finn_v2_reasoning_dedupe UNIQUE (run_id, context_version, evidence_set_hash, prompt_version, model),
     CONSTRAINT ck_finn_v2_reasoning_status CHECK (status IN ('pending', 'generating', 'ready', 'unavailable', 'failed')),
-    CONSTRAINT ck_finn_v2_reasoning_mode CHECK (mode IN ('FACT', 'EVALUATION', 'PROPOSAL', 'ACTION', 'CLARIFICATION', 'UNAVAILABLE')),
+    CONSTRAINT ck_finn_v2_reasoning_mode CHECK (mode IN ('READ', 'EVALUATE', 'CREATE_PROPOSAL', 'ACTION_PROPOSAL', 'CLARIFICATION', 'CONFIRMATION', 'EXECUTION', 'UNAVAILABLE', 'CAPABILITY', 'FACT', 'EVALUATION', 'PROPOSAL', 'ACTION')),
     CONSTRAINT ck_finn_v2_reasoning_retry CHECK (retry_count IN (0, 1))
 );
 

@@ -29,3 +29,19 @@ def test_response_claim_schema_supports_grounded_fact():
     )
 
     assert claim.evidence_refs == ["E1"]
+
+
+def test_response_draft_schema_accepts_reasoning_level_evidence_refs():
+    draft = ResponseDraft(
+        draft_id="draft-2",
+        run_id="run-2",
+        user_id=7,
+        mode="READ",
+        direct_answer="Voor BTC staat een setup actief op 4H.",
+        main_observation="Deze setup is user-scoped gevonden.",
+        evidence_refs_used=["E1", "E2"],
+        evidence_set_hash="hash-2",
+        created_at=datetime.now(timezone.utc),
+    )
+
+    assert draft.evidence_refs_used == ["E1", "E2"]

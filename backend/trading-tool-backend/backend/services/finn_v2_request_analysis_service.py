@@ -35,13 +35,22 @@ class FinnV2RequestAnalysisService:
         unresolved_signals: List[str] = []
 
         scopes = self._subject_scopes(normalized, matched_signals)
-        interaction_mode = self._interaction_mode(normalized, scopes, matched_signals)
-        if interaction_mode == "UNAVAILABLE" and "mode:unavailable_financial_context" in matched_signals:
-            scopes = []
         explicit_asset = self._extract_asset(text, normalized)
         explicit_setup_id = self._extract_entity_id(text, "setup")
         explicit_strategy_id = self._extract_entity_id(text, "strateg")
         explicit_bot_id = self._extract_entity_id(text, "bot")
+        requested_entities = self._requested_entities(
+            explicit_asset=explicit_asset,
+            explicit_setup_id=explicit_setup_id,
+            explicit_strategy_id=explicit_strategy_id,
+            explicit_bot_id=explicit_bot_id,
+        )
+        interaction_mode = self._interaction_mode(normalized, scopes, matched_signals, explicit_asset=explicit_asset)
+        if interaction_mode == "UNAVAILABLE" and "mode:unavailable_financial_context" in matched_signals:
+            scopes = []
+        primary_subject = self._primary_subject(scopes=scopes, interaction_mode=interaction_mode, normalized=normalized)
+        output_contract = self._output_contract(interaction_mode=interaction_mode, primary_subject=primary_subject)
+        action_risk_class = self._action_risk_class(normalized=normalized, interaction_mode=interaction_mode)
 
         requires_gap_analysis = any(
             token in normalized
@@ -51,8 +60,14 @@ class FinnV2RequestAnalysisService:
             token in normalized
             for token in ["vergelijk", "compare", "versus", "vs", "past", "fit", "conflict", "risico", "risk"]
         )
-        requests_change = interaction_mode in {"CREATE_PROPOSAL", "ACTION_PROPOSAL", "CONFIRMATION", "EXECUTION"}
+        requests_change = interaction_mode in {"CREATE_PROPOSAL", "ACTION_PROPOSAL", "PROPOSAL", "ACTION", "CONFIRMATION", "EXECUTION"}
         requests_execution = interaction_mode == "EXECUTION"
+        missing_essential_inputs = self._missing_essential_inputs(
+            interaction_mode=interaction_mode,
+            primary_subject=primary_subject,
+            explicit_asset=explicit_asset,
+            normalized=normalized,
+        )
 
         if interaction_mode == "CAPABILITY":
             scopes = ["capability"]
@@ -73,6 +88,11 @@ class FinnV2RequestAnalysisService:
             explicit_setup_id=explicit_setup_id,
             explicit_strategy_id=explicit_strategy_id,
             explicit_bot_id=explicit_bot_id,
+            primary_subject=primary_subject,
+            requested_entities=requested_entities,
+            output_contract=output_contract,
+            action_risk_class=action_risk_class,
+            missing_essential_inputs=missing_essential_inputs,
             requires_comparison=requires_comparison,
             requires_gap_analysis=requires_gap_analysis,
             requests_change=requests_change,
@@ -80,7 +100,19 @@ class FinnV2RequestAnalysisService:
             confidence=confidence,
             matched_signals=matched_signals,
             unresolved_signals=unresolved_signals,
-            reasoning_required=interaction_mode in {"CAPABILITY", "READ", "EVALUATE", "CREATE_PROPOSAL", "ACTION_PROPOSAL", "CONFIRMATION", "EXECUTION"},
+            reasoning_required=interaction_mode in {
+                "CAPABILITY",
+                "READ",
+                "EVALUATE",
+                "CREATE_PROPOSAL",
+                "ACTION_PROPOSAL",
+                "CONFIRMATION",
+                "EXECUTION",
+                "FACT",
+                "EVALUATION",
+                "PROPOSAL",
+                "ACTION",
+            },
         )
 
     def _subject_scopes(self, normalized: str, matched_signals: List[str]) -> List[str]:
@@ -104,7 +136,7 @@ class FinnV2RequestAnalysisService:
                 matched_signals.append(f"scope:{scope}")
         return scopes
 
-    def _interaction_mode(self, normalized: str, scopes: List[str], matched_signals: List[str]) -> str:
+    def _interaction_mode(self, normalized: str, scopes: List[str], matched_signals: List[str], *, explicit_asset: Optional[str]) -> str:
         if self.capabilities.is_capability_question(normalized):
             matched_signals.append("mode:capability")
             return "CAPABILITY"
@@ -178,6 +210,9 @@ class FinnV2RequestAnalysisService:
         if self._contains_any_phrase(normalized, evaluation_tokens):
             matched_signals.append("mode:evaluate")
             return "EVALUATE"
+        if explicit_asset and any(self._contains_phrase(normalized, token) for token in ("voeg", "add", "verwijder", "remove", "haal")):
+            matched_signals.append("mode:action_proposal")
+            return "ACTION_PROPOSAL"
         if scopes and self._contains_any_phrase(normalized, read_tokens):
             matched_signals.append("mode:read")
             return "READ"
@@ -224,3 +259,77 @@ class FinnV2RequestAnalysisService:
         if scopes:
             return "medium"
         return "low"
+
+    def _requested_entities(
+        self,
+        *,
+        explicit_asset: Optional[str],
+        explicit_setup_id: Optional[int],
+        explicit_strategy_id: Optional[int],
+        explicit_bot_id: Optional[int],
+    ) -> List[str]:
+        entities: List[str] = []
+        if explicit_asset:
+            entities.append("asset")
+        if explicit_setup_id:
+            entities.append("setup")
+        if explicit_strategy_id:
+            entities.append("strategy")
+        if explicit_bot_id:
+            entities.append("bot")
+        return entities
+
+    def _primary_subject(self, *, scopes: List[str], interaction_mode: str, normalized: str) -> Optional[str]:
+        if interaction_mode == "CAPABILITY":
+            return "assistant"
+        if interaction_mode == "ACTION_PROPOSAL" and ("watchlist" in normalized or "volglijst" in normalized):
+            return "watchlist"
+        preferred = ["bot", "strategy", "setup", "indicators", "analysis", "profile", "portfolio", "daily_report", "reflection"]
+        for scope in preferred:
+            if scope in scopes:
+                return scope
+        return scopes[0] if scopes else None
+
+    def _output_contract(self, *, interaction_mode: str, primary_subject: Optional[str]) -> Optional[str]:
+        if interaction_mode == "READ":
+            return f"read_{primary_subject or 'context'}"
+        if interaction_mode == "EVALUATE":
+            return f"evaluate_{primary_subject or 'context'}"
+        if interaction_mode == "CREATE_PROPOSAL":
+            return "proposal_setup_change"
+        if interaction_mode == "ACTION_PROPOSAL":
+            return "proposal_action_change"
+        if interaction_mode == "CLARIFICATION":
+            return "clarification"
+        if interaction_mode == "CONFIRMATION":
+            return "confirmation"
+        if interaction_mode == "EXECUTION":
+            return "execution_result"
+        if interaction_mode == "CAPABILITY":
+            return "capability_overview"
+        if interaction_mode == "UNAVAILABLE":
+            return "safe_unavailable"
+        return None
+
+    def _action_risk_class(self, *, normalized: str, interaction_mode: str) -> Optional[str]:
+        if interaction_mode not in {"ACTION_PROPOSAL", "CONFIRMATION", "EXECUTION"}:
+            return None
+        if "watchlist" in normalized or "volglijst" in normalized:
+            return "watchlist_change"
+        if "live" in normalized:
+            return "live_action"
+        return "paper_action"
+
+    def _missing_essential_inputs(
+        self,
+        *,
+        interaction_mode: str,
+        primary_subject: Optional[str],
+        explicit_asset: Optional[str],
+        normalized: str,
+    ) -> List[str]:
+        missing: List[str] = []
+        if interaction_mode in {"CREATE_PROPOSAL", "ACTION_PROPOSAL"} and primary_subject in {"setup", "strategy", "bot", "watchlist"}:
+            if explicit_asset is None and "deze asset" not in normalized and "mijn actieve" not in normalized and "mijn " not in normalized:
+                missing.append("asset")
+        return missing

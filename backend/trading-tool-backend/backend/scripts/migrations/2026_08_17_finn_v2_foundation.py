@@ -32,7 +32,7 @@ CREATE TABLE IF NOT EXISTS finn_v2_runs (
     visibility TEXT NOT NULL CHECK (visibility IN ('shadow', 'visible')),
     feature_mode TEXT NOT NULL,
     status TEXT NOT NULL CHECK (status IN ('created', 'collecting', 'planned', 'blocked', 'completed', 'failed', 'canceled')),
-    interaction_mode TEXT NULL CHECK (interaction_mode IS NULL OR interaction_mode IN ('FACT', 'EVALUATION', 'PROPOSAL', 'ACTION', 'CLARIFICATION', 'UNAVAILABLE')),
+    interaction_mode TEXT NULL CHECK (interaction_mode IS NULL OR interaction_mode IN ('READ', 'EVALUATE', 'CREATE_PROPOSAL', 'ACTION_PROPOSAL', 'CLARIFICATION', 'CONFIRMATION', 'EXECUTION', 'UNAVAILABLE', 'CAPABILITY', 'FACT', 'EVALUATION', 'PROPOSAL', 'ACTION')),
     message TEXT NOT NULL,
     workspace_hints_json JSONB NOT NULL DEFAULT '{}'::jsonb,
     client_context_json JSONB NOT NULL DEFAULT '{}'::jsonb,

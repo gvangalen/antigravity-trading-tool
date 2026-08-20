@@ -35,9 +35,29 @@ class FinnV2ReasoningContextService:
         "read_linked_strategy": "plan_context",
         "read_linked_bot": "automation_context",
         "read_bot_status": "automation_context",
+        "read_watchlist": "identity_context",
         "read_portfolio": "portfolio_context",
         "read_latest_report": "report_context",
         "read_review_history": "review_context",
+    }
+    DOMAIN_BY_REQUIRED_EVIDENCE = {
+        "profile": "identity_context",
+        "preferences": "identity_context",
+        "active_asset": "identity_context",
+        "asset": "identity_context",
+        "watchlist": "identity_context",
+        "indicator_configuration": "market_context",
+        "asset_scores": "market_context",
+        "market_snapshot": "market_context",
+        "macro_snapshot": "market_context",
+        "technical_snapshot": "market_context",
+        "active_setup": "plan_context",
+        "linked_strategy": "plan_context",
+        "linked_bot": "automation_context",
+        "bot_status": "automation_context",
+        "portfolio": "portfolio_context",
+        "latest_report": "report_context",
+        "review_history": "review_context",
     }
 
     def __init__(self, session: AsyncSession, *, max_evidence_items: int = 30, max_context_bytes: int = 131072):
@@ -59,6 +79,11 @@ class FinnV2ReasoningContextService:
         validation_model = self._validation_model(validation)
         artifacts = await self.evidence_repo.list_for_run(run_id=run.id, user_id=run.user_id)
         selected_domains = set(orchestrator_result.domain_requirements.required_domains + orchestrator_result.domain_requirements.optional_domains)
+        tool_plan = getattr(orchestrator_result, "tool_plan", None)
+        for evidence_key in list(getattr(tool_plan, "required_evidence", []) or []) + list(getattr(tool_plan, "optional_evidence", []) or []):
+            mapped_domain = self.DOMAIN_BY_REQUIRED_EVIDENCE.get(str(evidence_key))
+            if mapped_domain:
+                selected_domains.add(mapped_domain)
         evidence: list[ReasoningEvidenceItem] = []
         index = 1
         for artifact in artifacts:
@@ -198,6 +223,12 @@ class FinnV2ReasoningContextService:
             return {key: payload.get(key) for key in ["bot_id", "name", "symbol", "strategy_id", "is_active", "is_live", "mode"] if payload.get(key) is not None}
         if tool_name == "read_bot_status":
             return {key: payload.get(key) for key in ["bot_id", "is_active", "is_live", "last_run", "mode", "cadence"] if payload.get(key) is not None}
+        if tool_name == "read_watchlist":
+            return {
+                "target_asset": payload.get("target_asset"),
+                "contains_target_asset": payload.get("contains_target_asset"),
+                "symbols": payload.get("symbols", [])[:20],
+            }
         if tool_name == "read_portfolio":
             global_payload = payload.get("global") or payload.get("global_") or {}
             return {"global": global_payload, "bots": payload.get("bots", [])[:8]}

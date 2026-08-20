@@ -12,5 +12,19 @@
     "setup_id": 502,
     "strategy_id": 702,
     "bot_id": 902
+  },
+  "user_388": {
+    "user_id": 388,
+    "primary_asset": "BTC",
+    "setup_id": 293,
+    "strategy_id": 309,
+    "bot_id": 170
+  },
+  "user_389": {
+    "user_id": 389,
+    "primary_asset": "AAPL",
+    "setup_id": 294,
+    "strategy_id": 310,
+    "bot_id": 171
   }
 }

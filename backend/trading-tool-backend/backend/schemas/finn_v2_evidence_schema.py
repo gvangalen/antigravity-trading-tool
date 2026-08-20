@@ -150,6 +150,17 @@ class BotStatusData(BaseModel):
     cadence: Optional[str] = None
 
 
+class WatchlistEntryData(BaseModel):
+    symbol: str
+    present: bool = True
+
+
+class WatchlistData(BaseModel):
+    target_asset: Optional[str] = None
+    contains_target_asset: bool = False
+    symbols: List[WatchlistEntryData] = Field(default_factory=list)
+
+
 class PortfolioGlobalData(BaseModel):
     total_equity: Optional[float] = None
     cash_balance: Optional[float] = None
@@ -203,6 +214,7 @@ ToolDataUnion = Union[
     LinkedStrategyData,
     LinkedBotData,
     BotStatusData,
+    WatchlistData,
     PortfolioData,
     LatestReportData,
     ReviewHistoryData,
@@ -221,6 +233,7 @@ TOOL_DATA_MODEL_BY_NAME = {
     "LinkedStrategyData": LinkedStrategyData,
     "LinkedBotData": LinkedBotData,
     "BotStatusData": BotStatusData,
+    "WatchlistData": WatchlistData,
     "PortfolioData": PortfolioData,
     "LatestReportData": LatestReportData,
     "ReviewHistoryData": ReviewHistoryData,
@@ -239,6 +252,7 @@ PAYLOAD_TYPE_TO_SCHEMA_NAME = {
     "linked_strategy": "LinkedStrategyData",
     "linked_bot": "LinkedBotData",
     "bot_status": "BotStatusData",
+    "watchlist": "WatchlistData",
     "portfolio": "PortfolioData",
     "latest_report": "LatestReportData",
     "review_history": "ReviewHistoryData",

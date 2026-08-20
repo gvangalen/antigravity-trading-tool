@@ -21,7 +21,7 @@ CREATE TABLE IF NOT EXISTS finn_v2_orchestrator_results (
     uncertainty_codes_json JSONB NOT NULL DEFAULT '[]'::jsonb,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     CONSTRAINT ux_finn_v2_orchestrator_run_version UNIQUE (run_id, orchestrator_version),
-    CONSTRAINT ck_finn_v2_orchestrator_mode CHECK (interaction_mode IN ('FACT', 'EVALUATION', 'PROPOSAL', 'ACTION', 'UNAVAILABLE')),
+    CONSTRAINT ck_finn_v2_orchestrator_mode CHECK (interaction_mode IN ('READ', 'EVALUATE', 'CREATE_PROPOSAL', 'ACTION_PROPOSAL', 'CLARIFICATION', 'CONFIRMATION', 'EXECUTION', 'UNAVAILABLE', 'CAPABILITY', 'FACT', 'EVALUATION', 'PROPOSAL', 'ACTION')),
     CONSTRAINT ck_finn_v2_orchestrator_outcome CHECK (outcome IN ('reasoning_ready', 'clarification_required', 'unavailable', 'failed'))
 );
 

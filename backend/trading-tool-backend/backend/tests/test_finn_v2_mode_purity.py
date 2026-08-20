@@ -43,3 +43,20 @@ def test_read_mode_rejects_embedded_proposal_candidate():
             created_at=datetime.now(timezone.utc),
         )
     ) is False
+
+
+def test_read_mode_allows_stored_context_wording_without_write_claim():
+    service = FinnV2ResponseVerifierService(session=object())
+
+    assert service._mode_purity_ok(
+        ResponseDraft(
+            draft_id="draft-3",
+            run_id="run-1",
+            user_id=7,
+            mode="READ",
+            direct_answer="Voor BTC is bot Paper Bot gekoppeld aan strategie Swing Strategy.",
+            main_observation="De koppeling komt rechtstreeks uit de opgeslagen automation- en plancontext.",
+            evidence_set_hash="hash-1",
+            created_at=datetime.now(timezone.utc),
+        )
+    ) is True

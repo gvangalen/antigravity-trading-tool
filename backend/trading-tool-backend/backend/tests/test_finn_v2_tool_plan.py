@@ -5,7 +5,7 @@ from backend.services.finn_v2_tool_plan_service import FinnV2ToolPlanService
 
 def test_tool_plan_uses_canonical_order_and_explicit_selector():
     analysis = FinnV2RequestAnalysisService().analyze(
-        message="Bekijk mijn BTC-profiel, indicatoren, setup, strategie en gekoppelde bot."
+        message="Bekijk mijn BTC-profiel, indicatoren, setup, strategie en gekoppelde bot. Wat ontbreekt nu het meest?"
     )
     domain_plan = FinnV2DomainRequirementService().determine(analysis)
 
@@ -17,16 +17,20 @@ def test_tool_plan_uses_canonical_order_and_explicit_selector():
         "read_user_preferences",
         "read_active_asset",
         "read_indicator_configuration",
-        "read_asset_scores",
-        "read_market_snapshot",
-        "read_macro_snapshot",
-        "read_technical_snapshot",
         "read_active_setup",
         "read_linked_strategy",
         "read_linked_bot",
         "read_bot_status",
     ]
     assert plan.tool_inputs["read_active_asset"] == {"asset": "BTC"}
+    assert plan.required_evidence == [
+        "profile",
+        "active_asset",
+        "indicator_configuration",
+        "active_setup",
+        "linked_strategy",
+        "linked_bot",
+    ]
     assert plan.read_only is True
 
 

@@ -5,7 +5,6 @@ from typing import List, Literal, Optional
 
 from pydantic import BaseModel, Field, constr, root_validator, validator
 
-from backend.domain.finn_v2_contract import normalize_interaction_mode
 from backend.schemas.finn_v2_reasoning_schema import ProposalCandidate, ReasoningNextStep, ReasoningSupportingPoint
 
 
@@ -37,12 +36,17 @@ class ResponseDraft(BaseModel):
         "CLARIFICATION",
         "CONFIRMATION",
         "EXECUTION",
+        "FACT",
+        "EVALUATION",
+        "PROPOSAL",
+        "ACTION",
         "UNAVAILABLE",
     ]
     direct_answer: constr(min_length=1, max_length=1200)
     main_observation: constr(min_length=1, max_length=500)
     supporting_points: List[ReasoningSupportingPoint] = Field(default_factory=list, max_items=4)
     claims: List[ResponseClaim] = Field(default_factory=list)
+    evidence_refs_used: List[str] = Field(default_factory=list)
     uncertainty_summary: Optional[constr(min_length=1, max_length=400)] = None
     uncertainty_codes: List[str] = Field(default_factory=list)
     next_step: Optional[ReasoningNextStep] = None
@@ -59,16 +63,12 @@ class ResponseDraft(BaseModel):
             raise ValueError("too_many_supporting_points")
         return value
 
-    @validator("mode", pre=True)
-    def _normalize_mode(cls, value: str) -> str:
-        return normalize_interaction_mode(value)
-
     @root_validator
     def _validate_mode_contract(cls, values):
         mode = values.get("mode")
         follow_up_question = values.get("follow_up_question")
         proposal_candidate = values.get("proposal_candidate")
-        if proposal_candidate is not None and mode not in {"CREATE_PROPOSAL", "ACTION_PROPOSAL"}:
+        if proposal_candidate is not None and mode not in {"CREATE_PROPOSAL", "ACTION_PROPOSAL", "PROPOSAL", "ACTION"}:
             raise ValueError("proposal_candidate_not_allowed")
         if mode == "CLARIFICATION" and not follow_up_question:
             raise ValueError("clarification_requires_question")
@@ -91,12 +91,17 @@ class VerifiedResponse(BaseModel):
         "CLARIFICATION",
         "CONFIRMATION",
         "EXECUTION",
+        "FACT",
+        "EVALUATION",
+        "PROPOSAL",
+        "ACTION",
         "UNAVAILABLE",
     ]
     direct_answer: constr(min_length=1, max_length=1200)
     main_observation: constr(min_length=1, max_length=500)
     supporting_points: List[ReasoningSupportingPoint] = Field(default_factory=list, max_items=4)
     claims: List[ResponseClaim] = Field(default_factory=list)
+    evidence_refs_used: List[str] = Field(default_factory=list)
     uncertainty_summary: Optional[constr(min_length=1, max_length=400)] = None
     uncertainty_codes: List[str] = Field(default_factory=list)
     next_step: Optional[ReasoningNextStep] = None
@@ -108,10 +113,6 @@ class VerifiedResponse(BaseModel):
     verifier_result_id: str
     response_version: str = FINN_V2_VERIFIED_RESPONSE_VERSION
     created_at: datetime
-
-    @validator("mode", pre=True)
-    def _normalize_mode(cls, value: str) -> str:
-        return normalize_interaction_mode(value)
 
     class Config:
         extra = "forbid"

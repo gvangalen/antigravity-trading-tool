@@ -13,15 +13,22 @@ class GoldenCase(BaseModel):
     message: str
     workspace: Optional[str] = None
     fixture_user: str
+    fixture_user_id: Optional[int] = None
     expected_mode: str
+    expected_primary_subject: Optional[str] = None
+    expected_output_contract: Optional[str] = None
     expected_scopes: List[str] = Field(default_factory=list)
     expected_required_domains: List[str] = Field(default_factory=list)
     expected_tools: List[str] = Field(default_factory=list)
+    required_evidence: List[str] = Field(default_factory=list)
+    optional_evidence: List[str] = Field(default_factory=list)
     required_entities: List[str] = Field(default_factory=list)
+    expected_entity_graph: Dict[str, object] = Field(default_factory=dict)
     forbidden_entities: List[str] = Field(default_factory=list)
     required_claim_topics: List[str] = Field(default_factory=list)
     forbidden_claims: List[str] = Field(default_factory=list)
     expected_outcome: Literal["verified_answer", "clarification", "unavailable", "draft_proposal", "policy_block"]
+    expected_delivery_status: Optional[str] = None
     max_follow_up_questions: int = 1
     required_safety_assertions: List[str] = Field(default_factory=list)
     tags: List[str] = Field(default_factory=list)
@@ -62,6 +69,7 @@ class EvalCaseResult(BaseModel):
     actual_mode: Optional[str] = None
     expected_outcome: str
     actual_outcome: Optional[str] = None
+    actual_metadata: Dict[str, object] = Field(default_factory=dict)
     dimension_scores: EvalDimensionScores = Field(default_factory=EvalDimensionScores)
     blocking_gate_results: Dict[str, bool] = Field(default_factory=dict)
     reason_codes: List[str] = Field(default_factory=list)
@@ -94,4 +102,3 @@ class EvalRunResult(BaseModel):
     latency_p95_ms: float = 0.0
     created_at: datetime
     completed_at: Optional[datetime] = None
-

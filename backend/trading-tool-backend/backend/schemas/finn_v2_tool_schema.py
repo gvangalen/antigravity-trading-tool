@@ -22,6 +22,7 @@ ToolName = Literal[
     "read_linked_strategy",
     "read_linked_bot",
     "read_bot_status",
+    "read_watchlist",
     "read_portfolio",
     "read_latest_report",
     "read_review_history",

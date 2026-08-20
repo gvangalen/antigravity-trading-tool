@@ -72,6 +72,11 @@ class RequestAnalysisResult(BaseModel):
     explicit_setup_id: Optional[int] = None
     explicit_strategy_id: Optional[int] = None
     explicit_bot_id: Optional[int] = None
+    primary_subject: Optional[str] = None
+    requested_entities: List[str] = Field(default_factory=list)
+    output_contract: Optional[str] = None
+    action_risk_class: Optional[str] = None
+    missing_essential_inputs: List[str] = Field(default_factory=list)
     requires_comparison: bool = False
     requires_gap_analysis: bool = False
     requests_change: bool = False
@@ -133,10 +138,16 @@ class DomainRequirementPlan(BaseModel):
 class ToolPlan(BaseModel):
     run_id: str
     interaction_mode: str
+    primary_subject: Optional[str] = None
     required_domains: List[str] = Field(default_factory=list)
     optional_domains: List[str] = Field(default_factory=list)
     tool_names: List[str] = Field(default_factory=list)
     tool_inputs: Dict[str, Dict[str, object]] = Field(default_factory=dict)
+    required_evidence: List[str] = Field(default_factory=list)
+    optional_evidence: List[str] = Field(default_factory=list)
+    entity_selectors: Dict[str, object] = Field(default_factory=dict)
+    clarification_required: bool = False
+    expected_response_contract: Optional[str] = None
     max_tool_calls: int
     read_only: bool = True
     planning_version: str = PLANNING_VERSION

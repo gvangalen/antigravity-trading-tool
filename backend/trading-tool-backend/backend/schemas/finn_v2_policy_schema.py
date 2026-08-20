@@ -19,6 +19,7 @@ PolicyClass = Literal[
     "unsupported_action",
 ]
 OperationType = Literal[
+    "create_setup",
     "update_indicator_configuration",
     "create_setup",
     "update_setup",
@@ -26,6 +27,7 @@ OperationType = Literal[
     "watchlist_add",
     "watchlist_remove",
     "save_trade_plan",
+    "add_watchlist_asset",
     "activate_paper_bot",
     "activate_live_bot",
     "portfolio_rebalance",
