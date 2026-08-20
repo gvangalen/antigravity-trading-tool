@@ -7,6 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.infrastructure.models import FinnV2EligibilityDecision
+from backend.services.finn_v2_json_safety import to_json_safe
 
 
 class FinnV2EligibilityRepository:
@@ -26,6 +27,8 @@ class FinnV2EligibilityRepository:
         return result.scalars().first()
 
     async def create(self, **kwargs) -> FinnV2EligibilityDecision:
+        if "decision_json" in kwargs:
+            kwargs["decision_json"] = to_json_safe(kwargs["decision_json"])
         row = FinnV2EligibilityDecision(
             checked_at=kwargs.pop("checked_at", datetime.now(timezone.utc)),
             **kwargs,

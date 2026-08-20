@@ -15,6 +15,7 @@ from backend.schemas.finn_v2_policy_schema import StepUpProof
 from backend.services.finn_v2_action_adapter_registry import FinnV2ActionAdapterRegistry
 from backend.services.finn_v2_execution_gate_service import FinnV2ExecutionGateService
 from backend.services.finn_v2_flag_service import FinnV2FlagService
+from backend.services.finn_v2_json_safety import to_json_safe
 from backend.services.platform_metrics import increment_execution_safety_counter, record_latency_sample
 
 
@@ -55,6 +56,7 @@ class FinnV2ExecutionService:
             step_up_proof=step_up_proof,
         )
         if not gate.eligible:
+            gate_payload = to_json_safe(gate.dict())
             execution = await self.repo.create(
                 id=f"finn-v2-execution-{uuid.uuid4().hex}",
                 proposal_id=proposal_id,
@@ -63,9 +65,9 @@ class FinnV2ExecutionService:
                 operation_type=proposal.operation_type,
                 status="blocked",
                 idempotency_key=idempotency_key,
-                precondition_hash=self._hash({"proposal": proposal.payload_json, "gate": gate.dict()}),
+                precondition_hash=self._hash({"proposal": proposal.payload_json, "gate": gate_payload}),
                 postcondition_hash=None,
-                result_json=gate.dict(),
+                result_json=gate_payload,
                 error_codes_json=gate.blocking_codes,
                 completed_at=datetime.now(timezone.utc),
             )
@@ -87,7 +89,8 @@ class FinnV2ExecutionService:
         if adapter is None:
             raise ValueError("execution_adapter_unavailable")
         started_at = datetime.now(timezone.utc)
-        precondition_hash = self._hash({"proposal": proposal.payload_json, "gate": gate.dict()})
+        gate_payload = to_json_safe(gate.dict())
+        precondition_hash = self._hash({"proposal": proposal.payload_json, "gate": gate_payload})
         execution = await self.repo.create(
             id=f"finn-v2-execution-{uuid.uuid4().hex}",
             proposal_id=proposal_id,
@@ -147,4 +150,3 @@ class FinnV2ExecutionService:
     def _hash(self, payload: dict) -> str:
         canonical = json.dumps(payload, sort_keys=True, default=str, separators=(",", ":"))
         return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
-

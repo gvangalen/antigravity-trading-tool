@@ -3,6 +3,8 @@ from types import SimpleNamespace
 import asyncio
 
 from backend.schemas.finn_v2_policy_schema import StepUpProof
+from backend.infrastructure.repositories.finn_v2_eligibility_repository import FinnV2EligibilityRepository
+from backend.services.finn_v2_json_safety import to_json_safe
 from backend.services.finn_v2_execution_gate_service import FinnV2ExecutionGateService
 
 
@@ -67,3 +69,37 @@ def test_execution_gate_allows_confirmed_watchlist_change_as_safe_allowlisted_ac
 
     assert result.eligible is True
     assert result.blocking_codes == []
+
+
+def test_execution_gate_repository_serializes_decision_json_before_flush():
+    captured = {}
+
+    class _RepoSession:
+        def add(self, row):
+            captured["row"] = row
+
+        async def flush(self):
+            return None
+
+    repo = FinnV2EligibilityRepository(_RepoSession())
+    decision_json = {
+        "eligible": True,
+        "checked_at": datetime.now(timezone.utc),
+        "blocking_codes": [],
+    }
+
+    row = asyncio.run(
+        repo.create(
+            id="eligibility-1",
+            proposal_id="proposal-1",
+            run_id="run-1",
+            user_id=7,
+            eligible=True,
+            policy_class="proposal",
+            decision_json=decision_json,
+            eligibility_version="2026-08-17.block5",
+        )
+    )
+
+    assert row.decision_json == to_json_safe(decision_json)
+    assert isinstance(row.decision_json["checked_at"], str)
