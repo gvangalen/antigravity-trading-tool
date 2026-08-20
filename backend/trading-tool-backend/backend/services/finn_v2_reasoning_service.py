@@ -434,8 +434,13 @@ class FinnV2ReasoningService:
                     await self._append_trace(run_id, user_id, trace_id, "reasoning_retry", context, model_name, "generating", None, attempt + 1, input_hash, [error])
                     increment_execution_safety_counter(f"finn_v2_reasoning_retries_total:{error}")
                     continue
-                status = "unavailable" if error in {"ai_unavailable_budget", "ai_unavailable_configuration", "ai_rate_limited"} else "failed"
+                fallback_ready_modes = {"READ", "EVALUATE"}
+                normalized_mode = normalize_interaction_mode(context.interaction_mode)
+                fallback_status = "ready" if normalized_mode in fallback_ready_modes else None
+                status = fallback_status or ("unavailable" if error in {"ai_unavailable_budget", "ai_unavailable_configuration", "ai_rate_limited"} else "failed")
                 event = "reasoning_unavailable" if status == "unavailable" else "reasoning_failed"
+                if status == "ready":
+                    event = "reasoning_fallback_ready"
                 await self._append_trace(run_id, user_id, trace_id, event, context, model_name, status, int((monotonic() - started) * 1000), attempt, input_hash, [error])
                 result = self._fallback_for_reasoning_error(
                     run_id=run_id,

@@ -446,6 +446,8 @@ class FinnV2ReasoningFallbackService:
             or "deze asset"
         )
         setup_id = setup.facts.get("setup_id") if setup else None
+        setup_name = setup.facts.get("name") if setup else None
+        timeframe = setup.facts.get("timeframe") if setup else None
         strategy_id = strategy.facts.get("strategy_id") if strategy else None
         bot_id = bot.facts.get("bot_id") if bot else None
         profile_facts = profile.facts.get("trader_profile", {}) if profile else {}
@@ -454,6 +456,11 @@ class FinnV2ReasoningFallbackService:
         indicator_count = len(indicators.facts.get("configured_indicators") or []) if indicators else 0
         execution_mode = strategy.facts.get("execution_mode") if strategy else None
         risk_profile = strategy.facts.get("risk_profile") if strategy else None
+        entry = strategy.facts.get("entry") if strategy else None
+        stop_loss = strategy.facts.get("stop_loss") if strategy else None
+        targets = strategy.facts.get("targets") if strategy else None
+        target_count = len(targets) if isinstance(targets, list) else 0
+        first_target = targets[0] if target_count else None
         is_live = bool(bot.facts.get("is_live")) if bot else False
         is_active = bool(bot_status.facts.get("is_active")) if bot_status else bool(bot and bot.facts.get("is_active"))
 
@@ -530,16 +537,22 @@ class FinnV2ReasoningFallbackService:
                 requires_confirmation=False,
             )
         elif indicator_count == 0:
-            direct_answer = f"Het belangrijkste ontbrekende onderdeel van je {asset}-plan is een bruikbare indicatorconfiguratie die je setup en strategie echt ondersteunt."
+            setup_label = setup_name or f"setup {setup_id}" if setup_id is not None else f"je {asset}-setup"
+            direct_answer = (
+                f"Het belangrijkste ontbrekende onderdeel van je {asset}-plan is een bruikbare indicatorconfiguratie "
+                f"die {setup_label} op timeframe {timeframe or 'onbekend'} en de bestaande strategie echt kan valideren."
+            )
             main_observation = (
-                f"Setup {setup_id}, strategie {strategy_id} en bot {bot_id} zijn gekoppeld, "
-                f"maar voor {asset} staan nog geen geconfigureerde indicatoren klaar om je entries en trendfilter te onderbouwen."
+                f"{setup_label} is gekoppeld aan strategie {strategy_id} en bot {bot_id}, "
+                f"maar voor {asset} staan nog geen geconfigureerde indicatoren klaar om entry {entry or 'onbekend'}, "
+                f"stop {stop_loss or 'onbekend'} en {target_count if target_count else 'je'} target{'s' if target_count != 1 else ''}"
+                f"{f' zoals {first_target}' if first_target else ''} inhoudelijk te onderbouwen."
             )
             next_step = ReasoningNextStep(
                 title="Activeer je eerste planindicatoren",
                 instruction=(
-                    f"Voeg voor {asset} eerst je belangrijkste trend- en entry-indicatoren toe, "
-                    "zodat FINN je bestaande setup en strategie op echte signalen kan beoordelen."
+                    f"Voeg voor {asset} eerst precies één trendfilter voor {timeframe or 'je hoofdtimeframe'} en "
+                    f"één entry-trigger rond {entry or 'je entryniveau'} toe, zodat FINN deze strategie op echte signalen kan beoordelen."
                 ),
                 operation_type=None,
                 target_entity_type="indicator_configuration",
