@@ -106,6 +106,8 @@ def test_structured_response_exposes_incomplete_provider_details(monkeypatch):
         "incomplete_reason": "max_output_tokens",
         "content_types": ["refusal"],
         "refusal": "I cannot comply",
+        "json_parse_error": None,
+        "request_id": None,
     }
 
 

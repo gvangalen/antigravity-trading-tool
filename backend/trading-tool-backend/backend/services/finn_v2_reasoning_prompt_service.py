@@ -28,7 +28,12 @@ class FinnV2ReasoningPromptService:
             "and give at most one relevant next step."
         ),
         "READ": "Answer the exact grounded question directly, without extra unsolicited advice.",
-        "EVALUATE": "Evaluate the exact question across the relevant domains and provide one best next step.",
+        "EVALUATE": (
+            "Evaluate the exact question from the evidence, with exactly one concrete observation and one next step. "
+            "Make the observation specific to the user's actual profile, risk posture, horizon, configured indicators, "
+            "setup timeframe, strategy and bot relationship. Prefer the most decision-relevant tension shown in the evidence; "
+            "do not reuse a generic indicator-pair template when the evidence differs."
+        ),
         "CREATE_PROPOSAL": "Prepare a controlled draft concept only; do not imply any change was executed.",
         "ACTION_PROPOSAL": "Interpret the intent safely, prepare a non-executed draft, and respect confirmation boundaries.",
         "CLARIFICATION": "Ask one concise clarification question that is strictly necessary before any financial conclusion.",

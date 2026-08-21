@@ -595,33 +595,69 @@ def ask_gpt_structured_response(
             request_kwargs["timeout"] = timeout_seconds
         response = active_client.responses.create(**request_kwargs)
         parsed = None
+        parsed_source = None
         if getattr(response, "output_parsed", None) is not None:
             parsed = response.output_parsed
-        elif getattr(response, "output", None):
+            parsed_source = "sdk_parsed"
+        if parsed is None and getattr(response, "output", None):
             for item in response.output:
                 for content in getattr(item, "content", []) or []:
                     if getattr(content, "parsed", None) is not None:
                         parsed = content.parsed
+                        parsed_source = "content_parsed"
                         break
                 if parsed is not None:
                     break
+
+        # `responses.create` returns JSON Schema output as output_text in the
+        # current SDK. Only parse it as strict JSON; do not apply the lenient
+        # legacy JSON sanitizer at this contract boundary.
+        if parsed is None:
+            output_text = getattr(response, "output_text", None)
+            if output_text:
+                try:
+                    candidate = json.loads(output_text)
+                    if isinstance(candidate, dict):
+                        parsed = candidate
+                        parsed_source = "response_output_text"
+                except (TypeError, json.JSONDecodeError):
+                    pass
+
         if parsed is None:
             incomplete_details = getattr(response, "incomplete_details", None)
             output_items = getattr(response, "output", None) or []
             content_types = []
             refusal = None
+            output_text = None
             for item in output_items:
                 for content in getattr(item, "content", []) or []:
                     content_types.append(str(getattr(content, "type", "unknown")))
                     refusal = refusal or getattr(content, "refusal", None)
-            detail = {
-                "response_status": getattr(response, "status", None),
-                "incomplete_reason": getattr(incomplete_details, "reason", None),
-                "content_types": content_types,
-                "refusal": str(refusal)[:500] if refusal else None,
-            }
-            logger.warning("OpenAI structured response incomplete", extra={"structured_response_detail": detail})
-            return {"error": "incomplete_structured_response", "error_detail": detail}
+                    output_text = output_text or getattr(content, "text", None)
+            parse_error = None
+            if output_text:
+                try:
+                    candidate = json.loads(output_text)
+                    if isinstance(candidate, dict):
+                        parsed = candidate
+                        parsed_source = "content_text"
+                except (TypeError, json.JSONDecodeError) as exc:
+                    parse_error = type(exc).__name__
+            if parsed is not None:
+                # Content blocks are used by older SDK response objects which
+                # do not expose response.output_text.
+                pass
+            else:
+                detail = {
+                    "response_status": getattr(response, "status", None),
+                    "incomplete_reason": getattr(incomplete_details, "reason", None),
+                    "content_types": content_types,
+                    "refusal": str(refusal)[:500] if refusal else None,
+                    "json_parse_error": parse_error,
+                    "request_id": _read_request_id(response),
+                }
+                logger.warning("OpenAI structured response incomplete", extra={"structured_response_detail": detail})
+                return {"error": "incomplete_structured_response", "error_detail": detail}
         usage = getattr(response, "usage", None)
         input_tokens = int(getattr(usage, "input_tokens", 0) or 0)
         output_tokens = int(getattr(usage, "output_tokens", 0) or 0)
@@ -638,6 +674,12 @@ def ask_gpt_structured_response(
             "input_tokens": input_tokens,
             "output_tokens": output_tokens,
             "reasoning_tokens": reasoning_tokens,
+            "provider_metadata": {
+                "response_status": getattr(response, "status", None),
+                "response_id": getattr(response, "id", None),
+                "request_id": _read_request_id(response),
+                "parsed_source": parsed_source,
+            },
         }
     except Exception as e:
         logger.exception("❌ OpenAI structured response error")

@@ -572,7 +572,20 @@ class FinnV2ReasoningService:
                     latency_ms=int((monotonic() - started) * 1000),
                 )
 
-            await self._append_trace(run_id, user_id, trace_id, "reasoning_completed", context, result.model, "ready", int((monotonic() - started) * 1000), attempt, input_hash, [])
+            await self._append_trace(
+                run_id,
+                user_id,
+                trace_id,
+                "reasoning_completed",
+                context,
+                result.model,
+                "ready",
+                int((monotonic() - started) * 1000),
+                attempt,
+                input_hash,
+                [],
+                error_details=response.get("provider_metadata"),
+            )
             record_latency_sample("finn_v2_reasoning_latency_ms", int((monotonic() - started) * 1000))
             increment_execution_safety_counter(f"finn_v2_reasoning_runs_total:{result.mode}:ready:{result.model}")
             increment_execution_safety_counter(f"finn_v2_reasoning_tokens_total:input:{result.model}")

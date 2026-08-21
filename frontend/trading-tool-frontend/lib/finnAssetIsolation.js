@@ -12,8 +12,11 @@ export function resolveScopedAssetStatus({
 } = {}) {
   if (isPublicAuthRoute) return selectedAsset ? "resolved" : "unconfigured";
   if (!sessionChecked) return "loading";
+  // A user-scoped URL or workspace selection is already a valid FINN context.
+  // Preference hydration may continue in the background without blocking it.
+  if (selectedAsset) return "resolved";
   if (isAuthenticated && !preferencesHydrated) return "loading";
-  return selectedAsset ? "resolved" : "unconfigured";
+  return "unconfigured";
 }
 
 export function resolveFinnContextSymbol({

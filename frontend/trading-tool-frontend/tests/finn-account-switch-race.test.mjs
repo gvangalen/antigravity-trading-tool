@@ -53,6 +53,16 @@ test("BTC-user logout to AAPL-user direct /bot keeps FINN blocked during hydrati
     true,
   );
 
+  const aaplResolvedFromUrlDuringHydration = {
+    ...aaplHydratingOnBotRoute,
+    selectedAsset: "AAPL",
+  };
+  assert.equal(resolveScopedAssetStatus(aaplResolvedFromUrlDuringHydration), "resolved");
+  assert.equal(
+    shouldBlockFinnSubmission({ isAuthenticated: true, assetStatus: "resolved" }),
+    false,
+  );
+
   const aaplHydrated = {
     ...aaplHydratingOnBotRoute,
     preferencesHydrated: true,
