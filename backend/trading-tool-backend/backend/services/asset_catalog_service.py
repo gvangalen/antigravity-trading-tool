@@ -489,7 +489,8 @@ class AssetCatalogService:
         try:
             db_rows = await self.repository.get_assets(normalized)
         except Exception as exc:
-            logger.warning("Asset catalog query failed; falling back to defaults: %s", exc)
+            logger.exception("Asset catalog query failed; rolling back before defaults fallback")
+            await self._rollback_after_query_failure()
             db_rows = {}
 
         merged: dict[str, dict[str, Any]] = {}
@@ -527,6 +528,15 @@ class AssetCatalogService:
                 "metadata": override.get("metadata") or default.get("metadata") or {},
             }
         return merged
+
+    async def _rollback_after_query_failure(self) -> None:
+        rollback = getattr(self.session, "rollback", None)
+        if rollback is None:
+            return
+        try:
+            await rollback()
+        except Exception:
+            logger.exception("Asset catalog rollback failed after query failure")
 
     async def get_asset(self, symbol: str) -> dict[str, Any]:
         assets = await self.get_assets([symbol])

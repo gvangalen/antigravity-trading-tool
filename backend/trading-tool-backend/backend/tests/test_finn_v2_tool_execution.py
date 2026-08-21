@@ -237,7 +237,7 @@ def test_state_pipeline_rolls_back_before_failure_trace():
     ]
 
 
-def test_asset_catalog_fallback_does_not_require_session_rollback():
+def test_asset_catalog_fallback_rolls_back_failed_session():
     service = AssetCatalogService(AsyncMock())
 
     class _Repo:
@@ -248,7 +248,7 @@ def test_asset_catalog_fallback_does_not_require_session_rollback():
 
     result = asyncio.run(service.get_assets(["BTC"]))
 
-    service.session.rollback.assert_not_awaited()
+    service.session.rollback.assert_awaited_once()
     assert result["BTC"]["symbol"] == "BTC"
 
 

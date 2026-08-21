@@ -1,9 +1,13 @@
 from __future__ import annotations
 
+import logging
 from typing import Any, Sequence
 
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
+
+
+logger = logging.getLogger(__name__)
 
 
 class AssetCatalogRepository:
@@ -51,14 +55,31 @@ class AssetCatalogRepository:
             try:
                 return await primary()
             except Exception:
+                logger.exception("Asset catalog primary query failed; rolling back before legacy fallback")
+                await self._rollback_before_fallback()
                 return await fallback()
 
         try:
             async with self.session.begin_nested():
                 return await primary()
         except Exception:
-            async with self.session.begin_nested():
-                return await fallback()
+            logger.exception("Asset catalog primary query failed inside savepoint; trying legacy fallback")
+            try:
+                async with self.session.begin_nested():
+                    return await fallback()
+            except Exception:
+                # A failed outer transaction cannot start another savepoint. Reset it so
+                # callers that deliberately fall back to static catalog data do not keep
+                # using a poisoned session.
+                logger.exception("Asset catalog legacy fallback failed; rolling back session")
+                await self._rollback_before_fallback()
+                raise
+
+    async def _rollback_before_fallback(self) -> None:
+        rollback = getattr(self.session, "rollback", None)
+        if rollback is None:
+            return
+        await rollback()
 
     async def _fetch_extended_rows(self, symbols: list[str]) -> list[dict[str, Any]]:
         result = await self.session.execute(

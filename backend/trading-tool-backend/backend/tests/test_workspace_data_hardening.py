@@ -373,9 +373,38 @@ def test_asset_catalog_read_failure_rolls_back_before_default_fallback():
 
     result = asyncio.run(service.get_assets(["btc", "ETH"]))
 
-    service.session.rollback.assert_not_awaited()
+    service.session.rollback.assert_awaited_once()
     assert result["BTC"]["display_name"] == "Bitcoin"
     assert result["ETH"]["display_name"] == "Ethereum"
+
+
+def test_asset_catalog_repository_rolls_back_before_legacy_query_after_primary_failure():
+    class _Session:
+        def __init__(self):
+            self.rollback_calls = 0
+
+        def get_transaction(self):
+            return None
+
+        async def rollback(self):
+            self.rollback_calls += 1
+
+    repo = AssetCatalogRepository(_Session())
+    attempts = []
+
+    async def _primary():
+        attempts.append("primary")
+        raise RuntimeError("extended query failed")
+
+    async def _fallback():
+        assert repo.session.rollback_calls == 1
+        attempts.append("fallback")
+        return [{"symbol": "BTC"}]
+
+    result = asyncio.run(repo._with_legacy_fallback(primary=_primary, fallback=_fallback))
+
+    assert result == [{"symbol": "BTC"}]
+    assert attempts == ["primary", "fallback"]
 
 
 def test_asset_catalog_repository_uses_savepoints_for_legacy_fallback_inside_transaction():
