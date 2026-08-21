@@ -130,6 +130,9 @@ class AgentRunStatusEnvelope(BaseModel):
     error_code: Optional[str] = None
     error_message: Optional[str] = None
     retryable: bool = False
+    # Terminal runs expose a safe projection of their persisted V2 chain.
+    # It deliberately contains references and statuses, not evidence payloads.
+    runtime_trace: Dict[str, Any] = Field(default_factory=dict)
 
 
 class AgentRunCancelResponse(BaseModel):

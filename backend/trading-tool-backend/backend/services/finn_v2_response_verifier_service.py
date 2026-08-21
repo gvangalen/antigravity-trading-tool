@@ -776,11 +776,23 @@ class FinnV2ResponseVerifierService:
         profile_anchors: list[str] = []
         profile_facts = getattr(profile, "facts", {}) if profile else {}
         trader_profile = profile_facts.get("trader_profile") or {}
-        for key in ("risk_profile", "experience_level", "experience", "primary_timeframe", "secondary_timeframe"):
+        for key in (
+            "risk_profile",
+            "risk_profiles",
+            "experience_level",
+            "experience_levels",
+            "experience",
+            "primary_timeframe",
+            "primary_timeframes",
+            "secondary_timeframe",
+        ):
             value = trader_profile.get(key)
             if value not in (None, "", [], {}):
-                profile_anchors.append(str(value).lower())
-        style = trader_profile.get("style")
+                if isinstance(value, list):
+                    profile_anchors.extend(str(item).lower() for item in value if str(item).strip())
+                else:
+                    profile_anchors.append(str(value).lower())
+        style = trader_profile.get("style") or trader_profile.get("trader_types")
         if isinstance(style, list):
             profile_anchors.extend(str(item).lower() for item in style if str(item).strip())
         elif style not in (None, "", [], {}):
@@ -926,7 +938,10 @@ class FinnV2ResponseVerifierService:
         return self.flags.is_semantic_verifier_enabled() or mode in self.flags.semantic_verifier_required_modes()
 
     def _all_refs(self, draft: ResponseDraft) -> set[str]:
-        refs = set()
+        # The model's top-level references are part of the structured contract.
+        # Excluding them made complete EVALUATE answers look ungrounded unless
+        # every scope was repeated inside a claim or supporting point.
+        refs = set(draft.evidence_refs_used)
         for claim in draft.claims:
             refs.update(claim.evidence_refs)
         for point in draft.supporting_points:

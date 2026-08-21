@@ -7,6 +7,7 @@ from pydantic import ValidationError
 
 from backend.schemas.finn_v2_reasoning_context_schema import ReasoningContextPackage
 from backend.schemas.finn_v2_reasoning_schema import ReasoningResult
+from backend.services.finn_v2_reasoning_prompt_service import FinnV2ReasoningPromptService
 from backend.services.finn_v2_reasoning_service import FinnV2ReasoningService
 
 
@@ -148,3 +149,17 @@ def test_missing_required_model_field_has_a_sanitized_validation_error():
     assert service._validation_error_details(exc_info.value) == [
         {"path": "direct_answer", "code": "value_error.missing"}
     ]
+
+
+def test_integrated_plan_evaluation_prompt_requires_full_personal_grounding():
+    context = _context().copy(
+        update={
+            "subject_scopes": ["profile", "indicators", "setup", "strategy", "bot"],
+        }
+    )
+
+    prompt = FinnV2ReasoningPromptService().build_user_prompt(context)
+
+    assert "integrated personal plan evaluation" in prompt
+    assert "profile, configured indicators, setup, strategy and bot" in prompt
+    assert "evidence_refs_used" in prompt

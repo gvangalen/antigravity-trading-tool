@@ -5,6 +5,7 @@ from typing import AsyncIterator, Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.infrastructure.repositories.finn_v2_orchestrator_repository import FinnV2OrchestratorRepository
+from backend.infrastructure.repositories.finn_v2_evidence_repository import FinnV2EvidenceRepository
 from backend.infrastructure.repositories.finn_v2_policy_repository import FinnV2PolicyRepository
 from backend.infrastructure.repositories.finn_v2_reasoning_repository import FinnV2ReasoningRepository
 from backend.infrastructure.repositories.finn_v2_run_repository import FinnV2RunRepository
@@ -29,6 +30,7 @@ class FinnV2DeliveryService:
         self.reasoning = FinnV2ReasoningRepository(session)
         self.snapshots = FinnV2StateRepository(session)
         self.tool_calls = FinnV2ToolCallRepository(session)
+        self.evidence = FinnV2EvidenceRepository(session)
         self.validations = FinnV2ValidationRepository(session)
         self.verifiers = FinnV2VerifierRepository(session)
         self.verified = FinnV2VerifiedResponseRepository(session)
@@ -142,6 +144,7 @@ class FinnV2DeliveryService:
                         user_id=user_id,
                     )
         tool_calls = await self.tool_calls.list_for_run(run_id=run_id, user_id=user_id)
+        evidence = await self.evidence.list_for_run(run_id=run_id, user_id=user_id)
         return {
             "run": run,
             "delivery_envelope": envelope.dict(),
@@ -153,6 +156,7 @@ class FinnV2DeliveryService:
             "financial_state_snapshot": getattr(snapshot, "snapshot_json", None),
             "validation_result": getattr(validation, "result_json", None),
             "tool_calls": [self._tool_call_payload(row) for row in tool_calls],
+            "evidence_references": [self._evidence_reference_payload(row) for row in evidence],
         }
 
     def _orchestrator_payload(self, row) -> Optional[dict]:
@@ -194,4 +198,19 @@ class FinnV2DeliveryService:
             "error_codes": row.error_codes_json,
             "started_at": row.started_at.isoformat() if row.started_at else None,
             "completed_at": row.completed_at.isoformat() if row.completed_at else None,
+        }
+
+    def _evidence_reference_payload(self, row) -> dict:
+        """Expose provenance only; artifact payloads remain server-side."""
+        return {
+            "artifact_id": row.id,
+            "tool_call_id": row.tool_call_id,
+            "tool_name": row.tool_name,
+            "entity_type": row.entity_type,
+            "entity_id": row.entity_id,
+            "asset": row.asset,
+            "source": row.source,
+            "freshness": row.freshness,
+            "availability": row.availability,
+            "user_scoped": bool(row.user_scoped),
         }

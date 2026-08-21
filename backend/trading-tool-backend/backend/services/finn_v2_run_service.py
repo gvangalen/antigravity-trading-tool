@@ -258,8 +258,18 @@ class FinnV2RunService:
         )
         return {"messages_redacted": redacted, "traces_deleted": deleted, **tool_retention}
 
-    def envelope_from_run(self, run) -> AgentRunStatusEnvelope:
-        response = VerifiedResponse(**run.response_json) if run.response_json else None
+    async def envelope_from_run(self, run) -> AgentRunStatusEnvelope:
+        response_payload = dict(run.response_json or {})
+        runtime_trace: Dict[str, Any] = {}
+        if run.status in {"completed", "blocked", "failed", "canceled"}:
+            artifacts = await self.delivery.get_delivery_artifacts(user_id=run.user_id, run_id=run.id)
+            verified = artifacts.get("verified_response") or {}
+            reasoning = artifacts.get("reasoning_result") or {}
+            reasoning_provenance = verified.get("reasoning_provenance") or (reasoning.get("result") or {}).get("reasoning_provenance")
+            if reasoning_provenance and not response_payload.get("reasoning_provenance"):
+                response_payload["reasoning_provenance"] = reasoning_provenance
+            runtime_trace = self._terminal_runtime_trace(artifacts)
+        response = VerifiedResponse(**response_payload) if response_payload else None
         policy = PolicyDecision(**run.policy_json) if run.policy_json else None
         return AgentRunStatusEnvelope(
             run_id=run.id,
@@ -275,7 +285,61 @@ class FinnV2RunService:
             error_code=run.error_code,
             error_message=run.error_message,
             retryable=bool(run.retryable),
+            runtime_trace=runtime_trace,
         )
+
+    def _terminal_runtime_trace(self, artifacts: Dict[str, Any]) -> Dict[str, Any]:
+        """Project persisted records for polling/SSE without exposing evidence data."""
+        orchestrator = artifacts.get("orchestrator_result") or {}
+        reasoning = artifacts.get("reasoning_result") or {}
+        reasoning_result = reasoning.get("result") or {}
+        verifier = artifacts.get("verifier_result") or {}
+        validation = artifacts.get("validation_result") or {}
+        verified = artifacts.get("verified_response") or {}
+        delivery = artifacts.get("delivery_envelope") or {}
+        policy = artifacts.get("policy_result") or {}
+        return {
+            "requested_mode": orchestrator.get("interaction_mode"),
+            "delivery": {
+                "status": delivery.get("status"),
+                "verified_response_id": verified.get("verified_response_id"),
+                "response_source": "v2_runtime",
+            },
+            "orchestrator": {
+                "orchestrator_result_id": orchestrator.get("orchestrator_result_id"),
+                "required_domains": orchestrator.get("required_domains") or [],
+                "optional_domains": orchestrator.get("optional_domains") or [],
+                "outcome": orchestrator.get("outcome"),
+                "snapshot_id": orchestrator.get("snapshot_id"),
+                "validation_id": orchestrator.get("validation_id"),
+            },
+            "policy": {
+                "allowed": policy.get("allowed"),
+                "policy_class": policy.get("policy_class"),
+            },
+            "validation": {
+                "integrity_status": validation.get("integrity_status"),
+                "validation_id": validation.get("validation_id"),
+            },
+            "reasoning": {
+                "reasoning_result_id": reasoning.get("reasoning_result_id"),
+                "status": reasoning.get("status"),
+                "mode": reasoning.get("mode"),
+                "model": reasoning.get("model"),
+                "latency_ms": reasoning.get("latency_ms"),
+                "error_codes": reasoning.get("error_codes") or [],
+                "provenance": reasoning_result.get("reasoning_provenance") or {},
+            },
+            "verifier": {
+                "verifier_result_id": verifier.get("verifier_result_id"),
+                "passed": verifier.get("passed"),
+                "action": verifier.get("action"),
+                "reason_codes": verifier.get("reason_codes") or [],
+                "coverage": verifier.get("coverage") or {},
+            },
+            "tool_calls": artifacts.get("tool_calls") or [],
+            "evidence_references": artifacts.get("evidence_references") or [],
+        }
 
     def _trace_payload(self, run, *, status: str, response_source: Optional[str]) -> Dict[str, Any]:
         return {

@@ -49,7 +49,7 @@ async def create_finn_v2_run(
         trace_id=getattr(raw_request.state, "trace_id", None),
     )
     run = await gateway.get_run(run_id=run_id, user_id=int(current_user["id"]))
-    return run_service.envelope_from_run(run)
+    return await run_service.envelope_from_run(run)
 
 
 @router.get("/assistant/v2/runs/{run_id}", response_model=AgentRunStatusEnvelope)
@@ -60,7 +60,7 @@ async def get_finn_v2_run(
     run_service: FinnV2RunService = Depends(get_run_service),
 ):
     run = await gateway.get_run(run_id=run_id, user_id=int(current_user["id"]))
-    return run_service.envelope_from_run(run)
+    return await run_service.envelope_from_run(run)
 
 
 @router.post("/assistant/v2/runs/{run_id}/cancel", response_model=AgentRunCancelResponse)
@@ -75,7 +75,7 @@ async def cancel_finn_v2_run(
         raise HTTPException(status_code=409, detail="FINN V2 run is already terminal")
     await run_service.cancel_run(run_id=run_id, user_id=int(current_user["id"]))
     refreshed = await gateway.get_run(run_id=run_id, user_id=int(current_user["id"]))
-    return AgentRunCancelResponse(run=run_service.envelope_from_run(refreshed))
+    return AgentRunCancelResponse(run=await run_service.envelope_from_run(refreshed))
 
 
 @router.get("/assistant/v2/runs/{run_id}/stream")
@@ -90,7 +90,7 @@ async def stream_finn_v2_run(
         last_status = None
         while True:
             run = await gateway.get_run(run_id=run_id, user_id=int(current_user["id"]))
-            envelope = run_service.envelope_from_run(run)
+            envelope = await run_service.envelope_from_run(run)
             if envelope.status != last_status:
                 yield _sse(f"run.{envelope.status}", envelope.dict())
                 last_status = envelope.status

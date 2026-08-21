@@ -79,6 +79,50 @@ def test_scope_coverage_allows_setup_proposal_when_identity_context_is_sufficien
     assert "response_scope_incomplete" not in verifier.reason_codes
 
 
+def test_scope_coverage_uses_top_level_model_evidence_references():
+    service = FinnV2ResponseVerifierService(session=object())
+    draft = ResponseDraft(
+        draft_id="draft-model-refs",
+        run_id="run-model-refs",
+        user_id=7,
+        mode="EVALUATE",
+        direct_answer="Je BTC-plan bevat setup 293, strategie 309 en bot 170.",
+        main_observation="Je swing_trader-profiel gebruikt RSI en volume voor BTC.",
+        claims=[],
+        evidence_refs_used=["E1", "E2", "E3", "E4", "E5"],
+        next_step=ReasoningNextStep(
+            title="Leg je beslisregel vast",
+            instruction="Leg vast wanneer RSI en volume samen je BTC-setup bevestigen.",
+            operation_type=None,
+            target_entity_type="setup",
+            target_entity_id="293",
+            requires_confirmation=False,
+        ),
+        evidence_set_hash="hash-model-refs",
+        created_at=datetime.now(timezone.utc),
+    )
+    evidence = [
+        SimpleNamespace(evidence_id="E1", domain="identity_context", tool_name="read_profile", entity_type="profile", entity_id="7", asset=None, freshness="fresh", confidence="high", facts={"trader_profile": {"trader_types": ["swing_trader"]}}),
+        SimpleNamespace(evidence_id="E2", domain="market_context", tool_name="read_indicator_configuration", entity_type="indicator_configuration", entity_id=None, asset="BTC", freshness="fresh", confidence="high", facts={"configured_indicators": [{"indicator": "rsi"}]}),
+        SimpleNamespace(evidence_id="E3", domain="plan_context", tool_name="read_active_setup", entity_type="setup", entity_id="293", asset="BTC", freshness="fresh", confidence="high", facts={"setup_id": 293}),
+        SimpleNamespace(evidence_id="E4", domain="plan_context", tool_name="read_linked_strategy", entity_type="strategy", entity_id="309", asset="BTC", freshness="fresh", confidence="high", facts={"strategy_id": 309}),
+        SimpleNamespace(evidence_id="E5", domain="automation_context", tool_name="read_linked_bot", entity_type="bot", entity_id="170", asset="BTC", freshness="fresh", confidence="high", facts={"bot_id": 170}),
+    ]
+
+    verifier = service._deterministic_verify(
+        run=SimpleNamespace(id="run-model-refs", user_id=7, message="Bekijk mijn profiel, indicatoren, setup, strategie en gekoppelde bot. Geef een observatie en vervolgstap.", conversation_id="conv-1"),
+        orchestrator_result=SimpleNamespace(analysis=SimpleNamespace(subject_scopes=["profile", "indicators", "setup", "strategy", "bot"]), selected_clarification=None),
+        policy=SimpleNamespace(allowed=True, proposal_allowed=False, confirmation_required=False, operation_type=None),
+        context=SimpleNamespace(evidence=evidence, uncertainty_codes=[]),
+        validation=SimpleNamespace(id="validation-model-refs", evidence_set_hash="hash-model-refs", integrity_status="valid"),
+        draft=draft,
+        repair_attempt=0,
+    )
+
+    assert verifier.coverage.coverage_ok is True
+    assert "response_scope_incomplete" not in verifier.reason_codes
+
+
 def test_mode_purity_accepts_not_executed_watchlist_proposal_wording():
     service = FinnV2ResponseVerifierService(session=object())
     draft = ResponseDraft(
