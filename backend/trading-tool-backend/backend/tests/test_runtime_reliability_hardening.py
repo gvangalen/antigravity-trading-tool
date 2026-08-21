@@ -76,6 +76,15 @@ def test_deploy_env_applies_mobile_push_token_migration():
     assert "push_token VARCHAR NOT NULL UNIQUE" in migration
 
 
+def test_deploy_env_applies_asset_catalog_and_indicator_scope_migrations():
+    source = (REPO_ROOT / "ops" / "deploy" / "deploy_env.sh").read_text(encoding="utf-8")
+
+    assert "2026_08_05_asset_catalog_provider_routing.py" in source
+    assert "2026_08_06_user_indicator_symbol_overrides.py" in source
+    assert source.index("2026_08_05_asset_catalog.py") < source.index("2026_08_05_asset_catalog_provider_routing.py")
+    assert source.index("2026_08_05_asset_catalog_provider_routing.py") < source.index("2026_08_06_user_indicator_symbol_overrides.py")
+
+
 def test_mission_control_api_uses_short_ttl_cache_and_invalidates_after_finn_execute():
     source = (BACKEND_ROOT / "api" / "ai_assistant_api.py").read_text(encoding="utf-8")
 

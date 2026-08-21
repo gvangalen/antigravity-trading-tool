@@ -33,11 +33,12 @@ import { useAsset } from "@/app/providers/AssetProvider";
 import { useAuth } from "@/components/auth/AuthProvider";
 import { useTranslation } from "@/app/providers/I18nProvider";
 import { FINN_COMMAND_OPEN_EVENT } from "@/lib/finnCommandSearch";
+import { normalizeScopedAssetSymbol } from "@/lib/finnAssetIsolation";
 
 export default function FinnWorkspaceShell({ children }) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const { selectedAsset, assetStatus } = useAsset();
+  const { selectedAsset, assetStatus, setSelectedAsset } = useAsset();
   const { user } = useAuth();
   const { t } = useTranslation();
   const [assistantOpen, setAssistantOpen] = useState(false);
@@ -49,6 +50,7 @@ export default function FinnWorkspaceShell({ children }) {
   const isAdminRoute = pathname?.startsWith("/admin");
   const onboardingQueryMode = searchParams.get("onboarding") === "1";
   const isOnboardingRoute = pathname?.startsWith("/onboarding") || onboardingQueryMode;
+  const requestedAsset = normalizeScopedAssetSymbol(searchParams.get("symbol"));
 
   const workspaceCopy = t?.finnWorkspace || {};
   const activeWorkflow = useMemo(
@@ -63,6 +65,12 @@ export default function FinnWorkspaceShell({ children }) {
       : selectedAsset || "No asset";
   const composerCopy = workspaceCopy.composer || {};
   const onboardingHeaderCopy = workspaceCopy.onboardingHeader || {};
+
+  useEffect(() => {
+    if (requestedAsset && requestedAsset !== selectedAsset) {
+      setSelectedAsset(requestedAsset);
+    }
+  }, [requestedAsset, selectedAsset, setSelectedAsset]);
 
   const openAssistant = () => {
     commandNonceRef.current += 1;

@@ -167,6 +167,8 @@ if ! ssh "${SSH_ARGS[@]}" "ubuntu@$SERVER_IP" "
   python3 backend/scripts/run_sql_migration.py backend/scripts/migrations/2026_07_20_asset_scoped_ai_insights.py
   python3 backend/scripts/run_sql_migration.py backend/scripts/migrations/2026_07_20_finn_response_trace_index.py
   python3 backend/scripts/run_sql_migration.py backend/scripts/migrations/2026_08_05_asset_catalog.py
+  python3 backend/scripts/run_sql_migration.py backend/scripts/migrations/2026_08_05_asset_catalog_provider_routing.py
+  python3 backend/scripts/run_sql_migration.py backend/scripts/migrations/2026_08_06_user_indicator_symbol_overrides.py
   python3 backend/scripts/run_sql_migration.py backend/scripts/migrations/2026_08_17_finn_v2_foundation.py
   python3 backend/scripts/run_sql_migration.py backend/scripts/migrations/2026_08_17_finn_v2_tool_registry.py
   python3 backend/scripts/run_sql_migration.py backend/scripts/migrations/2026_08_17_finn_v2_evidence_state.py
