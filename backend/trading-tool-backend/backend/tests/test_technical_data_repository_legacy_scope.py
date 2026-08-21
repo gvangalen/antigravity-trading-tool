@@ -405,3 +405,53 @@ def test_get_configured_indicator_names_keeps_legacy_domain_counts_without_asset
         "market": ["forward_pe"],
         "macro": ["federal_funds_rate"],
     }
+
+
+def test_canonical_configuration_uses_user_rule_overrides_when_config_rows_are_absent():
+    session = AsyncMock()
+    repo = TechnicalDataRepository(session)
+    empty_payload = {
+        "scope": "empty",
+        "symbol": "AAPL",
+        "asset_class": "stock",
+        "rows": [],
+        "storage_mode": "scoped",
+    }
+    repo.resolve_effective_scope_configs = AsyncMock(
+        side_effect=[dict(empty_payload) for _ in range(3)]
+    )
+    repo._fetch_user_rule_override_configs = AsyncMock(
+        side_effect=[
+            [SimpleNamespace(indicator="vwap", category="technical")],
+            [SimpleNamespace(indicator="volume", category="market")],
+            [SimpleNamespace(indicator="market_regime", category="macro")],
+        ]
+    )
+    repo._user_config_columns_cache = {
+        "id",
+        "user_id",
+        "indicator",
+        "category",
+        "symbol",
+        "asset_class",
+        "priority",
+        "enabled",
+    }
+
+    configuration = asyncio.run(
+        repo.get_canonical_indicator_configuration(407, symbol="AAPL", asset_class="stock")
+    )
+
+    assert [row.indicator for row in configuration["technical"]] == ["vwap"]
+    assert [row.indicator for row in configuration["market"]] == ["volume"]
+    assert [row.indicator for row in configuration["macro"]] == ["market_regime"]
+    assert configuration["scope_by_category"] == {
+        "technical": "user_rule_override",
+        "market": "user_rule_override",
+        "macro": "user_rule_override",
+    }
+    assert configuration["storage_mode_by_category"] == {
+        "technical": "legacy_rule_override",
+        "market": "legacy_rule_override",
+        "macro": "legacy_rule_override",
+    }

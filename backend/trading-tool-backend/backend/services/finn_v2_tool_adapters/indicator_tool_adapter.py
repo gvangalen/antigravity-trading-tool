@@ -34,6 +34,12 @@ class IndicatorToolAdapter:
         technical = self._serialize(configuration["technical"])
         market = self._serialize(configuration["market"])
         macro = self._serialize(configuration["macro"])
+        storage_modes = configuration.get("storage_mode_by_category") or {}
+        source = (
+            "user_indicator_rule_overrides"
+            if "legacy_rule_override" in storage_modes.values()
+            else "user_indicator_configs"
+        )
         return {
             "data": IndicatorConfigurationData(
                 symbol=asset,
@@ -53,7 +59,7 @@ class IndicatorToolAdapter:
                 "configured_count": len(technical) + len(market) + len(macro),
             },
             "as_of": None,
-            "source": "user_indicator_configs",
+            "source": source,
             "schema_name": "IndicatorConfigurationData",
             "entity_type": "indicator_configuration",
             "asset": asset,

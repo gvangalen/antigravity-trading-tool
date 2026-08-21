@@ -5,7 +5,15 @@ from sqlalchemy import select, and_, func, delete, Date, text
 from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional
 
-from backend.infrastructure.models import AssetCatalog, TechnicalDataIndicator, TechnicalIndicatorRule, Indicator, UserIndicatorConfig
+from backend.infrastructure.models import (
+    AssetCatalog,
+    MacroIndicatorRule,
+    MarketIndicatorRule,
+    TechnicalDataIndicator,
+    TechnicalIndicatorRule,
+    Indicator,
+    UserIndicatorConfig,
+)
 from backend.utils.scoring_utils import normalize_indicator_name
 
 
@@ -133,6 +141,57 @@ class TechnicalDataRepository:
             seen.add(key)
             deduped.append(row)
         return deduped
+
+    async def _fetch_user_rule_override_configs(
+        self,
+        user_id: int,
+        *,
+        category: str,
+    ) -> List[SimpleNamespace]:
+        """Read the existing user-owned rule overrides as legacy configurations.
+
+        Older product configuration screens persist an enabled indicator by
+        creating user rule overrides instead of a row in
+        ``user_indicator_configs``.  Keeping this translation at the shared
+        repository boundary means onboarding and FINN V2 consume the same
+        user-scoped configuration contract.
+        """
+        rule_models = {
+            "technical": TechnicalIndicatorRule,
+            "market": MarketIndicatorRule,
+            "macro": MacroIndicatorRule,
+        }
+        model = rule_models.get(str(category or "").strip().lower())
+        if model is None:
+            return []
+
+        stmt = select(model).where(model.user_id == user_id)
+        if hasattr(model, "is_active"):
+            stmt = stmt.where(model.is_active.is_(True))
+        stmt = stmt.order_by(model.id.asc())
+        result = await self.session.execute(stmt)
+
+        rows: List[SimpleNamespace] = []
+        seen: set[str] = set()
+        for priority, row in enumerate(result.scalars().all(), start=1):
+            indicator = normalize_indicator_name(str(getattr(row, "indicator", "") or ""))
+            if not indicator or indicator in seen:
+                continue
+            seen.add(indicator)
+            rows.append(
+                SimpleNamespace(
+                    id=getattr(row, "id", None),
+                    user_id=user_id,
+                    indicator=indicator,
+                    category=category,
+                    symbol=None,
+                    asset_class=None,
+                    priority=priority,
+                    enabled=True,
+                    created_at=None,
+                )
+            )
+        return rows
 
     async def _fetch_scope_configs(
         self,
@@ -362,6 +421,7 @@ class TechnicalDataRepository:
         enabled_only: bool = True,
     ) -> dict[str, Any]:
         normalized_symbol, normalized_asset_class = await self._resolve_effective_scope(symbol, asset_class)
+        supports_rule_override_projection = "enabled" in await self._get_user_config_columns()
         categories = ("technical", "market", "macro")
         category_payloads: dict[str, dict[str, Any]] = {}
         for category in categories:
@@ -372,6 +432,19 @@ class TechnicalDataRepository:
                 asset_class=normalized_asset_class,
                 enabled_only=enabled_only,
             )
+            if supports_rule_override_projection and not category_payloads[category]["rows"]:
+                rule_rows = await self._fetch_user_rule_override_configs(
+                    user_id,
+                    category=category,
+                )
+                if rule_rows:
+                    category_payloads[category] = {
+                        "scope": "user_rule_override",
+                        "symbol": normalized_symbol,
+                        "asset_class": normalized_asset_class,
+                        "rows": rule_rows,
+                        "storage_mode": "legacy_rule_override",
+                    }
 
         return {
             "symbol": normalized_symbol,
