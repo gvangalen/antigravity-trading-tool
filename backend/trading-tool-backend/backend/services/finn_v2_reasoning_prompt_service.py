@@ -99,9 +99,14 @@ class FinnV2ReasoningPromptService:
             evaluation_contract = (
                 "This is an integrated personal plan evaluation. State exactly one observation and one next step. "
                 "Ground them in the user's saved profile, configured indicators, setup, strategy and bot, including concrete "
-                "identifiers or timeframes when present. Put all evidence IDs used by that grounding in evidence_refs_used. "
+                "identifiers or timeframes when present. Your direct_answer, main_observation, or next_step must each together "
+                "name at least one exact saved grounding value from every scope; do not replace those values with generic labels. "
+                "Include the supplied uncertainty summary when the context has uncertainty codes. Put all evidence IDs used by "
+                "that grounding in evidence_refs_used. "
                 "For this request, evidence_refs_used must include at least one ID from every required scope: "
                 f"{json.dumps(scope_refs, ensure_ascii=True, separators=(',', ':'))}. "
+                "Use these saved grounding values when available: "
+                f"{json.dumps(self._integrated_plan_grounding_values(context), ensure_ascii=True, separators=(',', ':'))}. "
                 "Every fact, inference, or evaluation claim must cite evidence that directly supports that claim; do not cite an "
                 "unrelated plan item to support a general conclusion.\n"
             )
@@ -131,6 +136,43 @@ class FinnV2ReasoningPromptService:
             scope: [item.evidence_id for item in context.evidence if item.tool_name in tools]
             for scope, tools in scope_tools.items()
         }
+
+    @staticmethod
+    def _integrated_plan_grounding_values(context: ReasoningContextPackage) -> dict[str, list[str]]:
+        scope_tools = {
+            "profile": {"read_profile", "read_user_preferences"},
+            "indicators": {"read_indicator_configuration"},
+            "setup": {"read_active_setup"},
+            "strategy": {"read_linked_strategy"},
+            "bot": {"read_linked_bot", "read_bot_status"},
+        }
+        values: dict[str, set[str]] = {scope: set() for scope in scope_tools}
+        for item in context.evidence:
+            for scope, tools in scope_tools.items():
+                if item.tool_name not in tools:
+                    continue
+                if item.entity_id:
+                    values[scope].add(str(item.entity_id))
+                facts = item.facts or {}
+                for key in ("setup_id", "strategy_id", "bot_id", "name", "timeframe", "execution_mode", "risk_profile", "experience_level", "style"):
+                    FinnV2ReasoningPromptService._collect_values(values[scope], facts.get(key))
+                if scope == "profile":
+                    FinnV2ReasoningPromptService._collect_values(values[scope], facts.get("trader_profile"))
+                if scope == "indicators":
+                    for row in facts.get("configured_indicators") or []:
+                        FinnV2ReasoningPromptService._collect_values(values[scope], (row or {}).get("indicator"))
+        return {scope: sorted(value for value in scope_values if len(value) >= 2) for scope, scope_values in values.items()}
+
+    @staticmethod
+    def _collect_values(target: set[str], value) -> None:
+        if isinstance(value, dict):
+            for nested in value.values():
+                FinnV2ReasoningPromptService._collect_values(target, nested)
+        elif isinstance(value, (list, tuple, set)):
+            for nested in value:
+                FinnV2ReasoningPromptService._collect_values(target, nested)
+        elif value not in (None, ""):
+            target.add(str(value))
 
     def response_schema(self) -> dict:
         claim_types = [item.value for item in ReasoningClaimType]

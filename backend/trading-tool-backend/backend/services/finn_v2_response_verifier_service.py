@@ -605,7 +605,7 @@ class FinnV2ResponseVerifierService:
         return any(
             count == 0
             and keyword in text
-            and any(marker in text for marker in ("geen", "no ", "without", "ontbreekt", "ontbreken", "missing"))
+            and any(marker in text for marker in ("geen", "no ", "without", "ontbreekt", "ontbreken", "mist", "missing"))
             for keyword, count in absence_checks.items()
         )
 

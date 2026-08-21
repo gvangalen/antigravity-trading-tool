@@ -47,9 +47,10 @@ logger = logging.getLogger(__name__)
 class FinnV2ReasoningContractError(ValueError):
     """Raised when model output is structurally valid but incomplete for the request contract."""
 
-    def __init__(self, *, code: str, missing_scopes: list[str]):
+    def __init__(self, *, code: str, missing_scopes: list[str], path: str = "evidence_refs_used"):
         self.code = code
         self.missing_scopes = missing_scopes
+        self.path = path
         super().__init__(f"{code}:{','.join(missing_scopes)}")
 
 
@@ -532,7 +533,7 @@ class FinnV2ReasoningService:
                 if isinstance(exc, FinnV2ReasoningContractError):
                     repair_validation_errors = [
                         {
-                            "path": "evidence_refs_used",
+                            "path": exc.path,
                             "code": exc.code,
                             "missing_scopes": ",".join(exc.missing_scopes),
                         }
@@ -844,10 +845,10 @@ class FinnV2ReasoningService:
             raise ValueError("schema_invalid")
         if any(ref not in valid_refs for ref in referenced):
             raise ValueError("invalid_evidence_refs")
-        self._validate_integrated_plan_coverage(referenced=referenced, context=context)
+        self._validate_integrated_plan_contract(result=result, referenced=referenced, context=context)
 
-    @staticmethod
-    def _validate_integrated_plan_coverage(*, referenced: set[str], context) -> None:
+    @classmethod
+    def _validate_integrated_plan_contract(cls, *, result: ReasoningResult, referenced: set[str], context) -> None:
         required_scopes = {"profile", "indicators", "setup", "strategy", "bot"}
         if context.interaction_mode != "EVALUATE" or not required_scopes.issubset(set(context.subject_scopes)):
             return
@@ -868,6 +869,77 @@ class FinnV2ReasoningService:
                 code="missing_required_scope_refs",
                 missing_scopes=missing_scopes,
             )
+
+        response_text = " ".join(
+            filter(
+                None,
+                [
+                    result.direct_answer,
+                    result.main_observation,
+                    getattr(result.next_step, "instruction", None),
+                ],
+            )
+        ).lower()
+        missing_grounding = [
+            scope
+            for scope in required_scopes
+            if not any(anchor in response_text for anchor in cls._grounding_anchors(scope=scope, context=context))
+        ]
+        if missing_grounding:
+            raise FinnV2ReasoningContractError(
+                code="missing_required_scope_grounding",
+                missing_scopes=missing_grounding,
+                path="direct_answer",
+            )
+        if context.uncertainty_codes and not result.uncertainty_summary:
+            raise FinnV2ReasoningContractError(
+                code="missing_required_uncertainty",
+                missing_scopes=[],
+                path="uncertainty_summary",
+            )
+
+    @staticmethod
+    def _grounding_anchors(*, scope: str, context) -> set[str]:
+        scope_tools = {
+            "profile": {"read_profile", "read_user_preferences"},
+            "indicators": {"read_indicator_configuration"},
+            "setup": {"read_active_setup"},
+            "strategy": {"read_linked_strategy"},
+            "bot": {"read_linked_bot", "read_bot_status"},
+        }
+        anchors: set[str] = set()
+        for item in context.evidence:
+            if item.tool_name not in scope_tools[scope]:
+                continue
+            if item.entity_id:
+                anchors.add(str(item.entity_id).lower())
+            facts = item.facts or {}
+            for key in ("setup_id", "strategy_id", "bot_id", "name", "timeframe", "execution_mode", "risk_profile", "experience_level", "style"):
+                value = facts.get(key)
+                if value not in (None, "", [], {}):
+                    anchors.update(FinnV2ReasoningService._flatten_anchor_values(value))
+            if scope == "profile":
+                anchors.update(FinnV2ReasoningService._flatten_anchor_values(facts.get("trader_profile") or {}))
+            if scope == "indicators":
+                for row in facts.get("configured_indicators") or []:
+                    anchors.update(FinnV2ReasoningService._flatten_anchor_values((row or {}).get("indicator")))
+        return {anchor for anchor in anchors if len(anchor) >= 2}
+
+    @staticmethod
+    def _flatten_anchor_values(value) -> set[str]:
+        if isinstance(value, dict):
+            return {
+                anchor
+                for nested in value.values()
+                for anchor in FinnV2ReasoningService._flatten_anchor_values(nested)
+            }
+        if isinstance(value, (list, tuple, set)):
+            return {
+                anchor
+                for nested in value
+                for anchor in FinnV2ReasoningService._flatten_anchor_values(nested)
+            }
+        return {str(value).lower()} if value not in (None, "") else set()
 
     def _validation_error_details(self, exc: ValidationError) -> list[dict[str, str]]:
         return [

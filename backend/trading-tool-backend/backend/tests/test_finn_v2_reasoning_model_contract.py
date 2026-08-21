@@ -188,3 +188,28 @@ def test_integrated_plan_evaluation_prompt_lists_required_scope_evidence_refs():
     assert '"setup":["E3"]' in prompt
     assert '"strategy":["E4"]' in prompt
     assert '"bot":["E5"]' in prompt
+
+
+def test_integrated_plan_evaluation_prompt_lists_saved_grounding_values():
+    payload = _context().dict()
+    payload.update(
+        {
+            "subject_scopes": ["profile", "indicators", "setup", "strategy", "bot"],
+            "uncertainty_codes": ["bot_status_stale"],
+            "evidence": [
+                {"evidence_id": "E1", "artifact_id": "a1", "tool_name": "read_profile", "domain": "identity_context", "entity_type": "profile", "source": "profile", "freshness": "fresh", "confidence": "high", "facts": {"trader_profile": {"risk_profile": "balanced"}}},
+                {"evidence_id": "E2", "artifact_id": "a2", "tool_name": "read_indicator_configuration", "domain": "market_context", "entity_type": "indicator_configuration", "source": "indicators", "freshness": "fresh", "confidence": "high", "facts": {"configured_indicators": [{"indicator": "rsi"}]}},
+                {"evidence_id": "E3", "artifact_id": "a3", "tool_name": "read_active_setup", "domain": "plan_context", "entity_type": "setup", "entity_id": "309", "source": "setup", "freshness": "fresh", "confidence": "high", "facts": {"setup_id": 309, "timeframe": "4H"}},
+                {"evidence_id": "E4", "artifact_id": "a4", "tool_name": "read_linked_strategy", "domain": "plan_context", "entity_type": "strategy", "entity_id": "325", "source": "strategy", "freshness": "fresh", "confidence": "high", "facts": {"strategy_id": 325}},
+                {"evidence_id": "E5", "artifact_id": "a5", "tool_name": "read_linked_bot", "domain": "automation_context", "entity_type": "bot", "entity_id": "186", "source": "bot", "freshness": "fresh", "confidence": "high", "facts": {"bot_id": 186}},
+            ],
+        }
+    )
+
+    prompt = FinnV2ReasoningPromptService().build_user_prompt(ReasoningContextPackage.parse_obj(payload))
+
+    assert '"profile":["balanced"]' in prompt
+    assert '"indicators":["rsi"]' in prompt
+    assert '"setup":["309","4H"]' in prompt
+    assert '"strategy":["325"]' in prompt
+    assert '"bot":["186"]' in prompt
