@@ -47,10 +47,18 @@ logger = logging.getLogger(__name__)
 class FinnV2ReasoningContractError(ValueError):
     """Raised when model output is structurally valid but incomplete for the request contract."""
 
-    def __init__(self, *, code: str, missing_scopes: list[str], path: str = "evidence_refs_used"):
+    def __init__(
+        self,
+        *,
+        code: str,
+        missing_scopes: list[str],
+        path: str = "evidence_refs_used",
+        grounding_values: Optional[dict[str, list[str]]] = None,
+    ):
         self.code = code
         self.missing_scopes = missing_scopes
         self.path = path
+        self.grounding_values = grounding_values or {}
         super().__init__(f"{code}:{','.join(missing_scopes)}")
 
 
@@ -536,6 +544,7 @@ class FinnV2ReasoningService:
                             "path": exc.path,
                             "code": exc.code,
                             "missing_scopes": ",".join(exc.missing_scopes),
+                            "grounding_values": exc.grounding_values,
                         }
                     ]
                 else:
@@ -890,6 +899,10 @@ class FinnV2ReasoningService:
                 code="missing_required_scope_grounding",
                 missing_scopes=missing_grounding,
                 path="direct_answer",
+                grounding_values={
+                    scope: sorted(cls._grounding_anchors(scope=scope, context=context))
+                    for scope in missing_grounding
+                },
             )
         if context.uncertainty_codes and not result.uncertainty_summary:
             raise FinnV2ReasoningContractError(

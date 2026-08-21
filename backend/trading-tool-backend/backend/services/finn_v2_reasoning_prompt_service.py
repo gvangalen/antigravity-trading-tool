@@ -90,6 +90,9 @@ class FinnV2ReasoningPromptService:
             "Correct only the listed field paths and error codes, return every required field with valid values, "
             "and do not add fields.\n"
             f"Validation errors: {json.dumps(validation_errors or [], ensure_ascii=True, separators=(',', ':'))}\n"
+            "For missing_required_scope_grounding, copy at least one literal value from grounding_values for each "
+            "missing scope into an answer text field or next_step.instruction. Do not replace those "
+            "literal values with counts, categories, or generic labels.\n"
             if repair_attempt
             else ""
         )

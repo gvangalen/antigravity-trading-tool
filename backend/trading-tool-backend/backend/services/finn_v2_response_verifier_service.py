@@ -255,6 +255,16 @@ class FinnV2ResponseVerifierService:
         if not evidence_ok:
             reason_codes.append("evidence_hash_mismatch")
 
+        # A safe fallback cannot attest that integrated model reasoning satisfied its contract.
+        provenance = draft.reasoning_provenance or {}
+        if (
+            normalize_interaction_mode(draft.mode) == "EVALUATE"
+            and provenance.get("provider_called")
+            and provenance.get("validation_status") != "passed"
+        ):
+            reason_codes.append("model_reasoning_contract_failed")
+        model_reasoning_ok = "model_reasoning_contract_failed" not in reason_codes
+
         claim_results = []
         covered_scopes = set()
         covered_domains = set()
@@ -377,6 +387,7 @@ class FinnV2ResponseVerifierService:
                 proposal_ok,
                 policy_ok,
                 safety_ok,
+                model_reasoning_ok,
                 validation.integrity_status != "invalid",
                 "paper_live_mismatch" not in reason_codes,
             ]

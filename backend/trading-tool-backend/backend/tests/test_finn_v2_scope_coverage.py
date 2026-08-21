@@ -123,6 +123,36 @@ def test_scope_coverage_uses_top_level_model_evidence_references():
     assert "response_scope_incomplete" not in verifier.reason_codes
 
 
+def test_integrated_evaluation_does_not_pass_when_model_reasoning_contract_failed():
+    service = FinnV2ResponseVerifierService(session=object())
+    draft = ResponseDraft(
+        draft_id="draft-invalid-model", run_id="run-invalid-model", user_id=7, mode="EVALUATE",
+        direct_answer="Je balanced profiel met RSI, setup 293, strategie 309 en bot 170 heeft een duidelijke vervolgstap.",
+        main_observation="Leg de regel vast.", claims=[], evidence_refs_used=["E1", "E2", "E3", "E4", "E5"],
+        evidence_set_hash="hash-invalid-model", reasoning_provenance={"provider_called": True, "validation_status": "failed"},
+        created_at=datetime.now(timezone.utc),
+    )
+    evidence = [
+        SimpleNamespace(evidence_id="E1", domain="identity_context", tool_name="read_profile", entity_type="profile", entity_id="7", asset=None, freshness="fresh", confidence="high", facts={"trader_profile": {"risk_profile": "balanced"}}),
+        SimpleNamespace(evidence_id="E2", domain="market_context", tool_name="read_indicator_configuration", entity_type="indicator_configuration", entity_id=None, asset="BTC", freshness="fresh", confidence="high", facts={"configured_indicators": [{"indicator": "rsi"}]}),
+        SimpleNamespace(evidence_id="E3", domain="plan_context", tool_name="read_active_setup", entity_type="setup", entity_id="293", asset="BTC", freshness="fresh", confidence="high", facts={"setup_id": 293}),
+        SimpleNamespace(evidence_id="E4", domain="plan_context", tool_name="read_linked_strategy", entity_type="strategy", entity_id="309", asset="BTC", freshness="fresh", confidence="high", facts={"strategy_id": 309}),
+        SimpleNamespace(evidence_id="E5", domain="automation_context", tool_name="read_linked_bot", entity_type="bot", entity_id="170", asset="BTC", freshness="fresh", confidence="high", facts={"bot_id": 170}),
+    ]
+    verifier = service._deterministic_verify(
+        run=SimpleNamespace(id="run-invalid-model", user_id=7, message="Bekijk mijn profiel, indicatoren, setup, strategie en gekoppelde bot. Geef een observatie en vervolgstap.", conversation_id="conv-1"),
+        orchestrator_result=SimpleNamespace(analysis=SimpleNamespace(subject_scopes=["profile", "indicators", "setup", "strategy", "bot"]), selected_clarification=None),
+        policy=SimpleNamespace(allowed=True, proposal_allowed=False, confirmation_required=False, operation_type=None),
+        context=SimpleNamespace(evidence=evidence, uncertainty_codes=[]),
+        validation=SimpleNamespace(id="validation-invalid-model", evidence_set_hash="hash-invalid-model", integrity_status="valid"),
+        draft=draft,
+        repair_attempt=0,
+    )
+
+    assert verifier.passed is False
+    assert "model_reasoning_contract_failed" in verifier.reason_codes
+
+
 def test_mode_purity_accepts_not_executed_watchlist_proposal_wording():
     service = FinnV2ResponseVerifierService(session=object())
     draft = ResponseDraft(
