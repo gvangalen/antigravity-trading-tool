@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import argparse
 import logging
+import os
 import runpy
 import sys
 from pathlib import Path
@@ -20,6 +21,18 @@ from backend.utils.db import get_db_connection
 
 
 logger = logging.getLogger(__name__)
+
+
+def _timeout_setting(name: str, default_ms: int) -> str:
+    """Return a validated PostgreSQL timeout value for one migration session."""
+    raw_value = os.getenv(name, str(default_ms))
+    try:
+        value = int(raw_value)
+    except ValueError as exc:
+        raise ValueError(f"{name} must be a positive integer in milliseconds") from exc
+    if value <= 0:
+        raise ValueError(f"{name} must be a positive integer in milliseconds")
+    return f"{value}ms"
 
 
 def run_migration(path: str) -> None:
@@ -37,8 +50,18 @@ def run_migration(path: str) -> None:
         raise RuntimeError("Could not connect to database")
 
     try:
+        lock_timeout = _timeout_setting("TRADAMIND_MIGRATION_LOCK_TIMEOUT_MS", 15_000)
+        statement_timeout = _timeout_setting("TRADAMIND_MIGRATION_STATEMENT_TIMEOUT_MS", 120_000)
+        logger.info(
+            "Applying migration %s with lock_timeout=%s statement_timeout=%s",
+            migration_path,
+            lock_timeout,
+            statement_timeout,
+        )
         with conn:
             with conn.cursor() as cur:
+                cur.execute("SET LOCAL lock_timeout = %s", (lock_timeout,))
+                cur.execute("SET LOCAL statement_timeout = %s", (statement_timeout,))
                 cur.execute(sql)
         logger.info("✅ Migration applied: %s", migration_path)
     finally:

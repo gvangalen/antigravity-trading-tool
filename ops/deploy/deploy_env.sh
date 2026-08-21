@@ -18,6 +18,7 @@ STRICT_DEEP_HEALTH="${STRICT_DEEP_HEALTH:-false}"
 STRICT_EXTERNAL_SMOKE="${STRICT_EXTERNAL_SMOKE:-false}"
 DEPLOY_COMPONENT_SET="${DEPLOY_COMPONENT_SET:-full}"
 AUTO_ROLLBACK_ON_FAILURE="${AUTO_ROLLBACK_ON_FAILURE:-true}"
+MIGRATION_COMMAND_TIMEOUT_SECONDS="${MIGRATION_COMMAND_TIMEOUT_SECONDS:-180}"
 # A Celery worker is reported online by PM2 before its task registry is ready.
 # Production cold starts have taken just over a minute, so keep the real
 # deep-health gate but give all workers enough time to finish initializing.
@@ -116,6 +117,7 @@ if ! ssh "${SSH_ARGS[@]}" "ubuntu@$SERVER_IP" "
   export APP_ENV=$ENVIRONMENT
   export BACKEND_PORT=$BACKEND_PORT
   export FRONTEND_PORT=$FRONTEND_PORT
+  export MIGRATION_COMMAND_TIMEOUT_SECONDS=$MIGRATION_COMMAND_TIMEOUT_SECONDS
   export TRADAMIND_BUILD_COMMIT_SHA=$TARGET_COMMIT_FULL
   export TRADAMIND_BUILD_TIME=$BUILD_TIMESTAMP_UTC
   cd $REMOTE_DIR
@@ -160,28 +162,35 @@ if ! ssh "${SSH_ARGS[@]}" "ubuntu@$SERVER_IP" "
   bash ./ops/deploy/bootstrap_runtime_dependencies.sh
 
   cd backend/trading-tool-backend
-  python3 backend/scripts/run_sql_migration.py backend/scripts/migrations/2026_05_18_manual_order_idempotency.py
-  python3 backend/scripts/run_sql_migration.py backend/scripts/migrations/2026_05_24_platform_hardening_phase1.py
-  python3 backend/scripts/run_sql_migration.py backend/scripts/migrations/2026_05_24_runtime_ddl_to_migrations.py
-  python3 backend/scripts/run_sql_migration.py backend/scripts/migrations/2026_05_26_auth_refresh_sessions.py
-  python3 backend/scripts/run_sql_migration.py backend/scripts/migrations/2026_06_10_finn_product_events.py
-  python3 backend/scripts/run_sql_migration.py backend/scripts/migrations/2026_06_24_mobile_push_tokens.py
-  python3 backend/scripts/run_sql_migration.py backend/scripts/migrations/2026_06_28_auth_password_reset_tokens.py
-  python3 backend/scripts/run_sql_migration.py backend/scripts/migrations/2026_07_20_asset_scoped_ai_insights.py
-  python3 backend/scripts/run_sql_migration.py backend/scripts/migrations/2026_07_20_finn_response_trace_index.py
-  python3 backend/scripts/run_sql_migration.py backend/scripts/migrations/2026_08_05_asset_catalog.py
-  python3 backend/scripts/run_sql_migration.py backend/scripts/migrations/2026_08_05_asset_catalog_provider_routing.py
-  python3 backend/scripts/run_sql_migration.py backend/scripts/migrations/2026_08_06_user_indicator_symbol_overrides.py
-  python3 backend/scripts/run_sql_migration.py backend/scripts/migrations/2026_08_17_finn_v2_foundation.py
-  python3 backend/scripts/run_sql_migration.py backend/scripts/migrations/2026_08_17_finn_v2_tool_registry.py
-  python3 backend/scripts/run_sql_migration.py backend/scripts/migrations/2026_08_17_finn_v2_evidence_state.py
-  python3 backend/scripts/run_sql_migration.py backend/scripts/migrations/2026_08_17_finn_v2_orchestrator.py
-  python3 backend/scripts/run_sql_migration.py backend/scripts/migrations/2026_08_17_finn_v2_policy_confirmation.py
-  python3 backend/scripts/run_sql_migration.py backend/scripts/migrations/2026_08_17_finn_v2_reasoning.py
-  python3 backend/scripts/run_sql_migration.py backend/scripts/migrations/2026_08_17_finn_v2_verified_delivery.py
-  python3 backend/scripts/run_sql_migration.py backend/scripts/migrations/2026_08_17_finn_v2_evals_cutover_execution.py
-  python3 backend/scripts/run_sql_migration.py backend/scripts/migrations/2026_08_18_finn_v2_capability_mode.py
-  python3 backend/scripts/run_sql_migration.py backend/scripts/migrations/2026_08_18_finn_v2_typed_operation_modes.py
+  run_migration() {
+    local migration=\"\$1\"
+    echo \"🗃️ Applying migration \$migration (timeout \${MIGRATION_COMMAND_TIMEOUT_SECONDS}s)...\"
+    timeout --foreground \"\${MIGRATION_COMMAND_TIMEOUT_SECONDS}s\" \\
+      python3 backend/scripts/run_sql_migration.py \"\$migration\"
+  }
+  run_migration backend/scripts/migrations/2026_05_18_manual_order_idempotency.py
+  run_migration backend/scripts/migrations/2026_05_24_platform_hardening_phase1.py
+  run_migration backend/scripts/migrations/2026_05_24_runtime_ddl_to_migrations.py
+  run_migration backend/scripts/migrations/2026_05_26_auth_refresh_sessions.py
+  run_migration backend/scripts/migrations/2026_06_10_finn_product_events.py
+  run_migration backend/scripts/migrations/2026_06_24_mobile_push_tokens.py
+  run_migration backend/scripts/migrations/2026_06_28_auth_password_reset_tokens.py
+  run_migration backend/scripts/migrations/2026_07_20_asset_scoped_ai_insights.py
+  run_migration backend/scripts/migrations/2026_07_20_finn_response_trace_index.py
+  run_migration backend/scripts/migrations/2026_08_05_asset_catalog.py
+  run_migration backend/scripts/migrations/2026_08_05_asset_catalog_provider_routing.py
+  run_migration backend/scripts/migrations/2026_08_06_user_indicator_symbol_overrides.py
+  run_migration backend/scripts/migrations/2026_08_17_finn_v2_foundation.py
+  run_migration backend/scripts/migrations/2026_08_17_finn_v2_tool_registry.py
+  run_migration backend/scripts/migrations/2026_08_17_finn_v2_evidence_state.py
+  run_migration backend/scripts/migrations/2026_08_17_finn_v2_orchestrator.py
+  run_migration backend/scripts/migrations/2026_08_17_finn_v2_policy_confirmation.py
+  run_migration backend/scripts/migrations/2026_08_17_finn_v2_reasoning.py
+  run_migration backend/scripts/migrations/2026_08_17_finn_v2_verified_delivery.py
+  run_migration backend/scripts/migrations/2026_08_17_finn_v2_evals_cutover_execution.py
+  run_migration backend/scripts/migrations/2026_08_18_finn_v2_capability_mode.py
+  run_migration backend/scripts/migrations/2026_08_18_finn_v2_typed_operation_modes.py
+  run_migration backend/scripts/migrations/2026_08_20_finn_v2_canonical_modes.py
 
   cd ../../frontend/trading-tool-frontend
   rm -rf .next

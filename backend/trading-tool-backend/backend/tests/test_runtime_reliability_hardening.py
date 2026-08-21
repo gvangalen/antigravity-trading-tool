@@ -21,6 +21,7 @@ def test_deploy_env_supports_backend_only_auto_rollback_and_previous_markers():
 
     assert 'DEPLOY_COMPONENT_SET="${DEPLOY_COMPONENT_SET:-full}"' in source
     assert 'AUTO_ROLLBACK_ON_FAILURE="${AUTO_ROLLBACK_ON_FAILURE:-true}"' in source
+    assert 'MIGRATION_COMMAND_TIMEOUT_SECONDS="${MIGRATION_COMMAND_TIMEOUT_SECONDS:-180}"' in source
     assert 'DEEP_HEALTH_ATTEMPTS="${DEEP_HEALTH_ATTEMPTS:-18}"' in source
     assert 'DEEP_HEALTH_RETRY_DELAY_SECONDS="${DEEP_HEALTH_RETRY_DELAY_SECONDS:-10}"' in source
     assert 'STRICT_EXTERNAL_SMOKE="${STRICT_EXTERNAL_SMOKE:-false}"' in source
@@ -41,6 +42,18 @@ def test_deploy_env_supports_backend_only_auto_rollback_and_previous_markers():
     assert 'for attempt in \\$(seq 1 \\"$DEEP_HEALTH_ATTEMPTS\\"); do' in source
     assert 'Deep health not ready yet' in source
     assert 'bash ./ops/deploy/bootstrap_runtime_dependencies.sh' in source
+    assert 'timeout --foreground \\"\\${MIGRATION_COMMAND_TIMEOUT_SECONDS}s\\"' in source
+    assert "2026_08_20_finn_v2_canonical_modes.py" in source
+    assert source.index("2026_08_18_finn_v2_typed_operation_modes.py") < source.index("2026_08_20_finn_v2_canonical_modes.py")
+
+
+def test_sql_migration_runner_bounds_lock_and_statement_waits():
+    source = (BACKEND_ROOT / "scripts" / "run_sql_migration.py").read_text(encoding="utf-8")
+
+    assert 'TRADAMIND_MIGRATION_LOCK_TIMEOUT_MS' in source
+    assert 'TRADAMIND_MIGRATION_STATEMENT_TIMEOUT_MS' in source
+    assert 'SET LOCAL lock_timeout = %s' in source
+    assert 'SET LOCAL statement_timeout = %s' in source
 
 
 def test_rollback_env_persists_previous_commit_and_pm2_fallback():
