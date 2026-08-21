@@ -30,9 +30,11 @@ def test_scope_coverage_fails_when_a1_reduces_to_indicator_only():
         validation=SimpleNamespace(id="validation-1", evidence_set_hash="hash-1", integrity_status="valid"),
         draft=draft,
         repair_attempt=0,
+        force_action="deliver",
     )
 
     assert verifier.coverage.coverage_ok is False
+    assert verifier.passed is False
     assert "response_scope_incomplete" in verifier.reason_codes
 
 

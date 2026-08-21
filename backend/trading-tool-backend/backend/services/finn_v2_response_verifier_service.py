@@ -205,7 +205,6 @@ class FinnV2ResponseVerifierService:
                     draft=draft,
                     repair_attempt=repair_attempt,
                     force_action="deliver",
-                    force_passed=True,
                 )
 
         proposal_id = None
@@ -238,7 +237,7 @@ class FinnV2ResponseVerifierService:
         await self._append_trace(trace_id=trace_id, run_id=run.id, user_id=run.user_id, event_type="delivery_envelope_built", payload={"run_id": run.id, "delivery_source": envelope.delivery_source})
         return persisted
 
-    def _deterministic_verify(self, *, run, orchestrator_result, policy, context, validation, draft: ResponseDraft, repair_attempt: int, force_action: Optional[str] = None, force_passed: bool = False) -> VerifierResult:
+    def _deterministic_verify(self, *, run, orchestrator_result, policy, context, validation, draft: ResponseDraft, repair_attempt: int, force_action: Optional[str] = None) -> VerifierResult:
         reason_codes: list[str] = []
         evidence_by_ref = {item.evidence_id: item for item in context.evidence}
         schema_ok = True
@@ -364,7 +363,7 @@ class FinnV2ResponseVerifierService:
         if self._paper_live_mismatch(draft, evidence_by_ref):
             reason_codes.append("paper_live_mismatch")
 
-        passed = force_passed or all(
+        passed = all(
             [
                 schema_ok,
                 ownership_ok,
