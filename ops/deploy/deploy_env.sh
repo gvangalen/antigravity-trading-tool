@@ -18,7 +18,10 @@ STRICT_DEEP_HEALTH="${STRICT_DEEP_HEALTH:-false}"
 STRICT_EXTERNAL_SMOKE="${STRICT_EXTERNAL_SMOKE:-false}"
 DEPLOY_COMPONENT_SET="${DEPLOY_COMPONENT_SET:-full}"
 AUTO_ROLLBACK_ON_FAILURE="${AUTO_ROLLBACK_ON_FAILURE:-true}"
-DEEP_HEALTH_ATTEMPTS="${DEEP_HEALTH_ATTEMPTS:-6}"
+# A Celery worker is reported online by PM2 before its task registry is ready.
+# Production cold starts have taken just over a minute, so keep the real
+# deep-health gate but give all workers enough time to finish initializing.
+DEEP_HEALTH_ATTEMPTS="${DEEP_HEALTH_ATTEMPTS:-18}"
 DEEP_HEALTH_RETRY_DELAY_SECONDS="${DEEP_HEALTH_RETRY_DELAY_SECONDS:-10}"
 SSH_ARGS=(
   -i "$SSH_KEY"
