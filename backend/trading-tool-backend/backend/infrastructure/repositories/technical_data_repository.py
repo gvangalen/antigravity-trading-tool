@@ -176,7 +176,10 @@ class TechnicalDataRepository:
                 conditions.append("symbol = :symbol")
                 params["symbol"] = symbol
 
-        if has_asset_class_scope:
+        # A symbol override is already the most specific asset identity. Requiring
+        # a matching class label here can hide a valid row when catalog and legacy
+        # clients use equivalent but differently named classes.
+        if has_asset_class_scope and symbol is None:
             if asset_class is None:
                 conditions.append("asset_class IS NULL")
             else:
@@ -213,7 +216,7 @@ class TechnicalDataRepository:
                 )
                 if has_symbol_scope and symbol is not None and row_symbol not in {None, symbol}:
                     continue
-                if has_asset_class_scope and asset_class is not None and row_asset_class not in {None, asset_class}:
+                if has_asset_class_scope and symbol is None and asset_class is not None and row_asset_class not in {None, asset_class}:
                     continue
             filtered_rows.append(row)
         return filtered_rows

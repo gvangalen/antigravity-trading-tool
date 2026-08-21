@@ -199,6 +199,59 @@ def test_get_user_configs_legacy_schema_returns_global_rows_for_symbol_request()
     assert "asset_class" not in query.lower()
 
 
+def test_symbol_override_is_not_hidden_by_a_different_asset_class_label():
+    session = AsyncMock()
+    session.execute = AsyncMock(
+        side_effect=[
+            _ExecuteResult(
+                scalars=[
+                    "id",
+                    "user_id",
+                    "indicator",
+                    "category",
+                    "priority",
+                    "enabled",
+                    "symbol",
+                    "asset_class",
+                ]
+            ),
+            _ExecuteResult(
+                rows=[
+                    SimpleNamespace(
+                        _mapping={
+                            "id": 11,
+                            "user_id": 2,
+                            "indicator": "rsi",
+                            "category": "technical",
+                            "priority": 1,
+                            "enabled": True,
+                            "symbol": "BTC",
+                            "asset_class": "cryptocurrency",
+                        }
+                    )
+                ]
+            ),
+        ]
+    )
+    repo = TechnicalDataRepository(session)
+
+    async def run():
+        return await repo.resolve_effective_scope_configs(
+            2,
+            category="technical",
+            symbol="BTC",
+            asset_class="crypto",
+        )
+
+    resolved = asyncio.run(run())
+
+    assert resolved["scope"] == "symbol_override"
+    assert [row.indicator for row in resolved["rows"]] == ["rsi"]
+    query = str(session.execute.await_args_list[1].args[0])
+    assert "symbol = :symbol" in query
+    assert "asset_class = :asset_class" not in query
+
+
 def test_get_user_config_columns_rolls_back_when_schema_probe_fails():
     session = AsyncMock()
     session.execute = AsyncMock(side_effect=RuntimeError("probe failed"))
