@@ -2,7 +2,13 @@ from datetime import datetime, timezone
 
 import pytest
 
-from backend.schemas.finn_v2_reasoning_schema import ProposalCandidate, ReasoningClaim, ReasoningResult
+from backend.schemas.finn_v2_reasoning_schema import (
+    ProposalCandidate,
+    ReasoningClaim,
+    ReasoningClaimType,
+    ReasoningConfidence,
+    ReasoningResult,
+)
 from backend.schemas.finn_v2_reasoning_context_schema import ReasoningContextPackage
 from backend.services.finn_v2_reasoning_prompt_service import FinnV2ReasoningPromptService
 
@@ -63,6 +69,14 @@ def test_reasoning_prompt_schema_keeps_proposed_changes_openai_compatible():
     assert proposal_branch["properties"]["proposed_changes"] == {"type": "string"}
 
 
+def test_reasoning_prompt_schema_uses_the_same_canonical_enums_as_pydantic():
+    schema = FinnV2ReasoningPromptService().response_schema()
+    claim = schema["properties"]["claims"]["items"]["properties"]
+
+    assert claim["claim_type"]["enum"] == [item.value for item in ReasoningClaimType]
+    assert claim["confidence"]["enum"] == [item.value for item in ReasoningConfidence]
+
+
 def test_reasoning_prompt_includes_the_grounded_context_and_repair_contract():
     context = ReasoningContextPackage.parse_obj({
         "run_id": "run-1",
@@ -98,7 +112,12 @@ def test_reasoning_prompt_includes_the_grounded_context_and_repair_contract():
         },
     })
 
-    prompt = FinnV2ReasoningPromptService().build_user_prompt(context, repair_attempt=True)
+    prompt = FinnV2ReasoningPromptService().build_user_prompt(
+        context,
+        repair_attempt=True,
+        validation_errors=[{"path": "claims.0.claim_type", "code": "value_error.enum"}],
+    )
 
     assert '"entity_id":"309"' in prompt
     assert "previous response did not satisfy" in prompt
+    assert "claims.0.claim_type" in prompt

@@ -1,11 +1,17 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import List, Literal, Optional
+from typing import Dict, List, Literal, Optional
 
 from pydantic import BaseModel, Field, constr, root_validator, validator
 
-from backend.schemas.finn_v2_reasoning_schema import ProposalCandidate, ReasoningNextStep, ReasoningSupportingPoint
+from backend.schemas.finn_v2_reasoning_schema import (
+    ProposalCandidate,
+    ReasoningClaimType,
+    ReasoningConfidence,
+    ReasoningNextStep,
+    ReasoningSupportingPoint,
+)
 
 
 FINN_V2_RESPONSE_DRAFT_VERSION = "2026-08-17.block7"
@@ -14,10 +20,10 @@ FINN_V2_VERIFIED_RESPONSE_VERSION = "2026-08-17.block7"
 
 class ResponseClaim(BaseModel):
     claim_id: str
-    claim_type: Literal["fact", "inference", "evaluation", "recommendation", "uncertainty"]
+    claim_type: ReasoningClaimType
     text: constr(min_length=1, max_length=600)
     evidence_refs: List[str] = Field(default_factory=list)
-    confidence: Literal["high", "medium", "low"]
+    confidence: ReasoningConfidence
 
     class Config:
         extra = "forbid"
@@ -53,6 +59,7 @@ class ResponseDraft(BaseModel):
     follow_up_question: Optional[constr(min_length=1, max_length=300)] = None
     proposal_candidate: Optional[ProposalCandidate] = None
     reasoning_result_id: Optional[str] = None
+    reasoning_provenance: Dict[str, object] = Field(default_factory=dict)
     evidence_set_hash: str
     draft_version: str = FINN_V2_RESPONSE_DRAFT_VERSION
     created_at: datetime
@@ -111,6 +118,7 @@ class VerifiedResponse(BaseModel):
     verifier_status: Literal["passed", "repaired", "downgraded"]
     evidence_set_hash: str
     verifier_result_id: str
+    reasoning_provenance: Dict[str, object] = Field(default_factory=dict)
     response_version: str = FINN_V2_VERIFIED_RESPONSE_VERSION
     created_at: datetime
 

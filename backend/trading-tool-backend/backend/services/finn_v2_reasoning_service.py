@@ -6,6 +6,8 @@ from datetime import datetime, timezone
 from time import monotonic
 from typing import Optional
 
+from pydantic import ValidationError
+
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.infrastructure.repositories.finn_v2_orchestrator_repository import FinnV2OrchestratorRepository
@@ -357,11 +359,16 @@ class FinnV2ReasoningService:
             )
         retries_allowed = self.flags.reasoning_max_retries()
         last_error_codes: list[str] = []
+        repair_validation_errors: list[dict[str, str]] = []
         for attempt in range(retries_allowed + 1):
             await self._append_trace(run_id, user_id, trace_id, "reasoning_started", context, model_name, "generating", None, attempt, input_hash, [])
             call_started = monotonic()
             response = openai_client.ask_gpt_structured_response(
-                prompt=self.prompts.build_user_prompt(context, repair_attempt=attempt > 0),
+                prompt=self.prompts.build_user_prompt(
+                    context,
+                    repair_attempt=attempt > 0,
+                    validation_errors=repair_validation_errors,
+                ),
                 system_role=system_prompt,
                 schema=self.prompts.response_schema(),
                 model_override=model_name,
@@ -501,10 +508,94 @@ class FinnV2ReasoningService:
                         "prompt_version": self.prompts.PROMPT_VERSION,
                         "reasoning_version": FINN_V2_REASONING_VERSION,
                         "model": response.get("model") or model_name,
+                        "reasoning_provenance": self._reasoning_provenance(
+                            response=response,
+                            model=response.get("model") or model_name,
+                            attempt=attempt,
+                            validation_status="passed",
+                        ),
                         "created_at": datetime.now(timezone.utc),
                     }
                 )
                 self._validate_refs(result, context)
+            except ValidationError as exc:
+                error = "schema_invalid"
+                repair_validation_errors = self._validation_error_details(exc)
+                error_details = self._reasoning_provenance(
+                    response=response,
+                    model=response.get("model") or model_name,
+                    attempt=attempt,
+                    validation_status="failed",
+                    validation_errors=repair_validation_errors,
+                )
+                last_error_codes = [error]
+                if attempt < retries_allowed:
+                    await self._append_trace(
+                        run_id,
+                        user_id,
+                        trace_id,
+                        "reasoning_retry",
+                        context,
+                        model_name,
+                        "generating",
+                        None,
+                        attempt + 1,
+                        input_hash,
+                        [error],
+                        error_details=error_details,
+                    )
+                    increment_execution_safety_counter(f"finn_v2_reasoning_retries_total:{error}")
+                    continue
+                await self._append_trace(
+                    run_id,
+                    user_id,
+                    trace_id,
+                    "reasoning_failed",
+                    context,
+                    model_name,
+                    "failed",
+                    int((monotonic() - started) * 1000),
+                    attempt,
+                    input_hash,
+                    [error],
+                    error_details=error_details,
+                )
+                fallback = self._fallback_for_reasoning_error(
+                    run_id=run_id,
+                    user_id=user_id,
+                    context=context,
+                    model_name=model_name,
+                    error_codes=[error],
+                )
+                fallback.reasoning_provenance = self._reasoning_provenance(
+                    response=response,
+                    model=model_name,
+                    attempt=attempt,
+                    validation_status="failed",
+                    validation_errors=repair_validation_errors,
+                    fallback_reason=error,
+                )
+                return await self._persist_record(
+                    run_id=run_id,
+                    user_id=user_id,
+                    orchestrator_result_id=orchestrator_result.orchestrator_result_id,
+                    policy_decision_id=policy.policy_decision_id,
+                    snapshot_id=snapshot.id,
+                    validation_id=validation.id,
+                    status="failed",
+                    mode=fallback.mode,
+                    context_version=context.context_version,
+                    evidence_set_hash=context.evidence_set_hash,
+                    input_hash=input_hash,
+                    model=model_name,
+                    result=fallback,
+                    error_codes=[error],
+                    retry_count=attempt,
+                    input_tokens=response.get("input_tokens"),
+                    output_tokens=response.get("output_tokens"),
+                    reasoning_tokens=response.get("reasoning_tokens"),
+                    latency_ms=int((monotonic() - started) * 1000),
+                )
             except Exception as exc:
                 error = "invalid_evidence_refs" if "ref" in str(exc).lower() else "schema_invalid"
                 error_details = {
@@ -735,6 +826,42 @@ class FinnV2ReasoningService:
             raise ValueError("schema_invalid")
         if any(ref not in valid_refs for ref in referenced):
             raise ValueError("invalid_evidence_refs")
+
+    def _validation_error_details(self, exc: ValidationError) -> list[dict[str, str]]:
+        return [
+            {
+                "path": ".".join(str(item) for item in error.get("loc", ())),
+                "code": str(error.get("type") or "validation_error"),
+            }
+            for error in exc.errors()
+        ]
+
+    def _reasoning_provenance(
+        self,
+        *,
+        response: dict,
+        model: str,
+        attempt: int,
+        validation_status: str,
+        validation_errors: Optional[list[dict[str, str]]] = None,
+        fallback_reason: Optional[str] = None,
+    ) -> dict:
+        metadata = response.get("provider_metadata") or {}
+        return {
+            "provider_called": True,
+            "provider_status": metadata.get("response_status") or "unknown",
+            "provider_response_id": metadata.get("response_id"),
+            "model": model,
+            "reasoning_source": "model_repair" if attempt else "model",
+            "structured_output_source": metadata.get("parsed_source") or "unknown",
+            "schema_version": FINN_V2_REASONING_SCHEMA_VERSION,
+            "parse_status": "passed",
+            "validation_status": validation_status,
+            "validation_errors": validation_errors or [],
+            "repair_attempted": attempt > 0,
+            "repair_status": "passed" if attempt and validation_status == "passed" else ("failed" if attempt else "not_attempted"),
+            "fallback_reason": fallback_reason,
+        }
 
     async def _append_trace(self, run_id: str, user_id: int, trace_id: str, event_type: str, context, model: str, status: str, latency_ms: Optional[int], retry_count: int, input_hash: str, error_codes: list[str], error_details: Optional[dict] = None) -> None:
         await self.traces.append_event(

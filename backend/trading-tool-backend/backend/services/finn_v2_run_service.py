@@ -120,6 +120,7 @@ class FinnV2RunService:
                 "uncertainty": [str(artifacts.get("delivery_envelope", {}).get("status") or "delivery_unavailable")],
                 "proposal_id": None,
                 "confirmation_required": False,
+                "reasoning_provenance": {},
             }
         else:
             response_json = {
@@ -131,6 +132,7 @@ class FinnV2RunService:
                 "uncertainty": verified.get("uncertainty_codes") or [],
                 "proposal_id": verified.get("proposal_id"),
                 "confirmation_required": bool(verified.get("confirmation_required")),
+                "reasoning_provenance": verified.get("reasoning_provenance") or {},
             }
         await self.transition_run(
             run_id,

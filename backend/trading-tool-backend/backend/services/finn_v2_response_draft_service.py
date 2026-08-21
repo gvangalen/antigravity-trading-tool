@@ -29,6 +29,7 @@ class FinnV2ResponseDraftService:
             follow_up_question=result.follow_up_question,
             proposal_candidate=result.proposal_candidate,
             reasoning_result_id=reasoning_record.reasoning_result_id,
+            reasoning_provenance=dict(result.reasoning_provenance),
             evidence_set_hash=reasoning_record.evidence_set_hash,
             created_at=datetime.now(timezone.utc),
         )

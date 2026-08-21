@@ -113,6 +113,7 @@ class VerifiedResponse(BaseModel):
     uncertainty: List[str] = Field(default_factory=list)
     proposal_id: Optional[str] = None
     confirmation_required: bool = False
+    reasoning_provenance: Dict[str, Any] = Field(default_factory=dict)
 
 
 class AgentRunStatusEnvelope(BaseModel):

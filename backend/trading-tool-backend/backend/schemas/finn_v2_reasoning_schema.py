@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from datetime import datetime
+from enum import Enum
 from typing import Any, Dict, List, Literal, Optional
 
 from pydantic import BaseModel, Field, constr, root_validator, validator
@@ -13,12 +14,40 @@ FINN_V2_REASONING_SCHEMA_VERSION = "2026-08-17.block6"
 FINN_V2_REASONING_VERSION = "2026-08-17.block6"
 
 
+class ReasoningClaimType(str, Enum):
+    FACT = "fact"
+    INFERENCE = "inference"
+    EVALUATION = "evaluation"
+    RECOMMENDATION = "recommendation"
+    UNCERTAINTY = "uncertainty"
+
+
+class ReasoningConfidence(str, Enum):
+    HIGH = "high"
+    MEDIUM = "medium"
+    LOW = "low"
+
+
+class ProposalOperationType(str, Enum):
+    UPDATE_INDICATOR_CONFIGURATION = "update_indicator_configuration"
+    CREATE_SETUP = "create_setup"
+    UPDATE_SETUP = "update_setup"
+    UPDATE_STRATEGY = "update_strategy"
+    WATCHLIST_ADD = "watchlist_add"
+    WATCHLIST_REMOVE = "watchlist_remove"
+    SAVE_TRADE_PLAN = "save_trade_plan"
+    ACTIVATE_PAPER_BOT = "activate_paper_bot"
+    ACTIVATE_LIVE_BOT = "activate_live_bot"
+    PORTFOLIO_REBALANCE = "portfolio_rebalance"
+    MANUAL_ORDER = "manual_order"
+
+
 class ReasoningClaim(BaseModel):
     claim_id: str
-    claim_type: Literal["fact", "inference", "evaluation", "recommendation", "uncertainty"]
+    claim_type: ReasoningClaimType
     text: constr(min_length=1, max_length=600)
     evidence_refs: List[str] = Field(default_factory=list)
-    confidence: Literal["high", "medium", "low"]
+    confidence: ReasoningConfidence
 
     class Config:
         extra = "forbid"
@@ -46,19 +75,7 @@ class ReasoningNextStep(BaseModel):
 
 
 class ProposalCandidate(BaseModel):
-    operation_type: Literal[
-        "update_indicator_configuration",
-        "create_setup",
-        "update_setup",
-        "update_strategy",
-        "watchlist_add",
-        "watchlist_remove",
-        "save_trade_plan",
-        "activate_paper_bot",
-        "activate_live_bot",
-        "portfolio_rebalance",
-        "manual_order",
-    ]
+    operation_type: ProposalOperationType
     target_type: str
     target_id: Optional[str] = None
     asset: Optional[str] = None
@@ -118,6 +135,7 @@ class ReasoningResult(BaseModel):
     prompt_version: str = FINN_V2_REASONING_PROMPT_VERSION
     reasoning_version: str = FINN_V2_REASONING_VERSION
     model: str
+    reasoning_provenance: Dict[str, Any] = Field(default_factory=dict)
     created_at: datetime
 
     @validator("supporting_points")

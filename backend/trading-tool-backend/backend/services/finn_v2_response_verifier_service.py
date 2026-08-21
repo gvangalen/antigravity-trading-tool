@@ -473,6 +473,7 @@ class FinnV2ResponseVerifierService:
             verifier_status=verifier_status,
             evidence_set_hash=draft.evidence_set_hash,
             verifier_result_id=verifier_row.id,
+            reasoning_provenance=dict(draft.reasoning_provenance),
             response_version=FINN_V2_VERIFIED_RESPONSE_VERSION,
             created_at=datetime.now(timezone.utc),
         )

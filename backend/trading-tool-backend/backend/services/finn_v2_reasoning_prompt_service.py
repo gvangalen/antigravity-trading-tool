@@ -7,6 +7,9 @@ from backend.schemas.finn_v2_reasoning_context_schema import ReasoningContextPac
 from backend.schemas.finn_v2_reasoning_schema import (
     FINN_V2_REASONING_PROMPT_VERSION,
     FINN_V2_REASONING_SCHEMA_VERSION,
+    ProposalOperationType,
+    ReasoningClaimType,
+    ReasoningConfidence,
 )
 
 
@@ -71,11 +74,19 @@ class FinnV2ReasoningPromptService:
             raise FinnV2ReasoningPromptContractError(str(mode)) from None
         return instruction
 
-    def build_user_prompt(self, context: ReasoningContextPackage, *, repair_attempt: bool = False) -> str:
+    def build_user_prompt(
+        self,
+        context: ReasoningContextPackage,
+        *,
+        repair_attempt: bool = False,
+        validation_errors: list[dict[str, str]] | None = None,
+    ) -> str:
         context_json = json.dumps(context.dict(), default=str, ensure_ascii=True, separators=(",", ":"))
         repair_instruction = (
             "Your previous response did not satisfy the required structured-output contract. "
-            "Return every required field with valid values and do not add fields.\n"
+            "Correct only the listed field paths and error codes, return every required field with valid values, "
+            "and do not add fields.\n"
+            f"Validation errors: {json.dumps(validation_errors or [], ensure_ascii=True, separators=(',', ':'))}\n"
             if repair_attempt
             else ""
         )
@@ -91,11 +102,14 @@ class FinnV2ReasoningPromptService:
         )
 
     def response_schema(self) -> dict:
+        claim_types = [item.value for item in ReasoningClaimType]
+        confidence_levels = [item.value for item in ReasoningConfidence]
+        operation_types = [item.value for item in ProposalOperationType]
         return {
             "type": "object",
             "additionalProperties": False,
             "properties": {
-                "mode": {"type": "string"},
+                "mode": {"type": "string", "enum": list(INTERACTION_MODES)},
                 "direct_answer": {"type": "string"},
                 "main_observation": {"type": "string"},
                 "supporting_points": {
@@ -119,10 +133,10 @@ class FinnV2ReasoningPromptService:
                         "additionalProperties": False,
                         "properties": {
                             "claim_id": {"type": "string"},
-                            "claim_type": {"type": "string"},
+                            "claim_type": {"type": "string", "enum": claim_types},
                             "text": {"type": "string"},
                             "evidence_refs": {"type": "array", "items": {"type": "string"}},
-                            "confidence": {"type": "string"},
+                            "confidence": {"type": "string", "enum": confidence_levels},
                         },
                         "required": ["claim_id", "claim_type", "text", "evidence_refs", "confidence"],
                     },
@@ -155,7 +169,7 @@ class FinnV2ReasoningPromptService:
                             "type": "object",
                             "additionalProperties": False,
                             "properties": {
-                                "operation_type": {"type": "string"},
+                                "operation_type": {"type": "string", "enum": operation_types},
                                 "target_type": {"type": "string"},
                                 "target_id": {"type": ["string", "null"]},
                                 "asset": {"type": ["string", "null"]},
