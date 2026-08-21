@@ -72,6 +72,12 @@ export const fetchFinnMissionControl = () => {
   });
 };
 
+export const fetchFinnV2Run = (runId) => {
+  return fetchAuth(`/api/assistant/v2/runs/${encodeURIComponent(runId)}`, {
+    method: 'GET',
+  });
+};
+
 // ========================================
 // ⚙️ 5. AI Assistant Preferences
 // ========================================

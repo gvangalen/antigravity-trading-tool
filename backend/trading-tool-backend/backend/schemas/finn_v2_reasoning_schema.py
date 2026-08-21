@@ -8,7 +8,7 @@ from pydantic import BaseModel, Field, constr, root_validator, validator
 
 from backend.domain.finn_v2_contract import normalize_interaction_mode
 
-FINN_V2_REASONING_PROMPT_VERSION = "2026-08-17.block6"
+FINN_V2_REASONING_PROMPT_VERSION = "2026-08-21.context-repair"
 FINN_V2_REASONING_SCHEMA_VERSION = "2026-08-17.block6"
 FINN_V2_REASONING_VERSION = "2026-08-17.block6"
 

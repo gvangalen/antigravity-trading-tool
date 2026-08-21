@@ -35,12 +35,16 @@ STEP_FLAG_MAP = {
 REQUIRED_COMPLETION_STEPS: List[str] = [
     "asset",
     "market",
-    "macro",
     "technical",
     "setup",
     "strategy",
     "bot",
 ]
+
+# Macro context enriches an analysis but is not a prerequisite for a user to
+# complete a valid asset, market and technical onboarding flow.
+ANALYSIS_REQUIRED_FLAGS = ("has_asset", "has_market", "has_technical")
+ANALYSIS_OPTIONAL_FLAGS = {"macro_indicator": "has_macro"}
 
 PHASE_ORDER: List[str] = ["profile", "analysis", "plan", "automation", "complete"]
 
@@ -103,6 +107,7 @@ class OnboardingService:
         phases_completed = self._build_phase_completion_map(status_kwargs, inferred_state)
         phases_unlocked = self._build_phase_unlock_map(phases_completed)
         phase_missing = self._build_phase_missing_map(status_kwargs, inferred_state)
+        optional_missing = self._build_optional_missing_map(status_kwargs)
         current_phase = self._resolve_current_phase(phases_completed)
         next_action = self._resolve_next_action(status_kwargs, inferred_state, current_phase)
         next_route = self._resolve_next_route(
@@ -121,6 +126,7 @@ class OnboardingService:
         status_kwargs["phases_completed"] = phases_completed
         status_kwargs["phases_unlocked"] = phases_unlocked
         status_kwargs["phase_missing"] = phase_missing
+        status_kwargs["optional_missing"] = optional_missing
 
         logger.info(
             f"[Onboarding] Status user_id={user_id} "
@@ -198,10 +204,7 @@ class OnboardingService:
 
     def _build_phase_completion_map(self, status_kwargs: Dict[str, bool], inferred_state: Dict[str, object]) -> Dict[str, bool]:
         profile_complete = bool(status_kwargs.get("has_profile"))
-        analysis_complete = all(
-            bool(status_kwargs.get(key))
-            for key in ["has_asset", "has_market", "has_macro", "has_technical"]
-        )
+        analysis_complete = all(bool(status_kwargs.get(key)) for key in ANALYSIS_REQUIRED_FLAGS)
         plan_complete = bool(status_kwargs.get("has_setup")) and bool(status_kwargs.get("has_strategy"))
         # V1 onboarding finishes after one saved bot. Exchange connection can be added later.
         automation_complete = bool(status_kwargs.get("has_bot"))
@@ -232,7 +235,6 @@ class OnboardingService:
                 for token, done in [
                     ("asset", status_kwargs.get("has_asset")),
                     ("market_indicator", status_kwargs.get("has_market")),
-                    ("macro_indicator", status_kwargs.get("has_macro")),
                     ("technical_indicator", status_kwargs.get("has_technical")),
                 ]
                 if not done
@@ -256,6 +258,15 @@ class OnboardingService:
             "complete": [],
         }
 
+    def _build_optional_missing_map(self, status_kwargs: Dict[str, bool]) -> Dict[str, List[str]]:
+        return {
+            "analysis": [
+                token
+                for token, flag in ANALYSIS_OPTIONAL_FLAGS.items()
+                if not status_kwargs.get(flag)
+            ]
+        }
+
     def _resolve_current_phase(self, phases_completed: Dict[str, bool]) -> str:
         for phase in PHASE_ORDER[:-1]:
             if not phases_completed.get(phase, False):
@@ -275,8 +286,6 @@ class OnboardingService:
                 return "select_asset"
             if not status_kwargs.get("has_market"):
                 return "add_market_indicator"
-            if not status_kwargs.get("has_macro"):
-                return "add_macro_indicator"
             if not status_kwargs.get("has_technical"):
                 return "add_technical_indicator"
             return "review_analysis"

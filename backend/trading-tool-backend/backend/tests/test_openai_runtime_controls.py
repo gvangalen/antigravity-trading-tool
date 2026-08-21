@@ -61,6 +61,54 @@ def test_block_observability_is_deduplicated(monkeypatch):
     assert ai_availability_service.should_emit_block_event("strategy", "ai_unavailable_budget") is True
 
 
+def test_structured_response_exposes_incomplete_provider_details(monkeypatch):
+    class _Incomplete:
+        reason = "max_output_tokens"
+
+    class _Content:
+        type = "refusal"
+        refusal = "I cannot comply"
+
+    class _Output:
+        content = [_Content()]
+
+    class _Response:
+        status = "incomplete"
+        incomplete_details = _Incomplete()
+        output = [_Output()]
+        output_parsed = None
+
+    class _Responses:
+        @staticmethod
+        def create(**_kwargs):
+            return _Response()
+
+    class _Client:
+        responses = _Responses()
+
+        def with_options(self, **_kwargs):
+            return self
+
+    monkeypatch.setattr(openai_module, "client", _Client())
+    monkeypatch.setattr(openai_module, "get_ai_availability", lambda: {"available": True})
+    monkeypatch.setattr(openai_module, "_rate_limit_allows_call", lambda: True)
+    monkeypatch.setattr(openai_module, "_quota_breaker_active", lambda: False)
+
+    result = openai_module.ask_gpt_structured_response(
+        prompt="question",
+        system_role="system",
+        schema={"type": "object", "properties": {}, "required": [], "additionalProperties": False},
+    )
+
+    assert result["error"] == "incomplete_structured_response"
+    assert result["error_detail"] == {
+        "response_status": "incomplete",
+        "incomplete_reason": "max_output_tokens",
+        "content_types": ["refusal"],
+        "refusal": "I cannot comply",
+    }
+
+
 def test_probe_openai_runtime_clears_breaker_after_success(monkeypatch):
     class _Parsed:
         model = "gpt-4o-mini"

@@ -301,6 +301,34 @@ def test_status_marks_automation_complete_without_exchange_for_v1_onboarding():
     assert status.next_route == "/dashboard?symbol=BTC"
 
 
+def test_macro_indicator_is_optional_for_the_canonical_analysis_phase():
+    repo = FakeOnboardingRepository(
+        steps=[
+            SimpleNamespace(step_key=key, completed=True, pipeline_started=False)
+            for key in ("profile", "asset", "market", "technical", "setup", "strategy", "bot")
+        ] + [SimpleNamespace(step_key="macro", completed=False, pipeline_started=False)],
+        inferred_completed={
+            "profile": True,
+            "asset": True,
+            "market": True,
+            "macro": False,
+            "technical": True,
+            "setup": True,
+            "strategy": True,
+            "bot": True,
+        },
+    )
+
+    service = OnboardingService(repo)
+    status = asyncio.run(service.get_status_dict(user_id=12))
+
+    assert status.phases_completed["analysis"] is True
+    assert status.onboarding_complete is True
+    assert status.phase_missing["analysis"] == []
+    assert status.optional_missing["analysis"] == ["macro_indicator"]
+    assert status.current_phase == "complete"
+
+
 def test_infer_onboarding_state_requires_explicit_asset_and_symbol_scoped_indicator_rows():
     class FakeUser:
         ai_preferences = {}

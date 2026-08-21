@@ -361,7 +361,7 @@ class FinnV2ReasoningService:
             await self._append_trace(run_id, user_id, trace_id, "reasoning_started", context, model_name, "generating", None, attempt, input_hash, [])
             call_started = monotonic()
             response = openai_client.ask_gpt_structured_response(
-                prompt=self.prompts.build_user_prompt(context),
+                prompt=self.prompts.build_user_prompt(context, repair_attempt=attempt > 0),
                 system_role=system_prompt,
                 schema=self.prompts.response_schema(),
                 model_override=model_name,
@@ -384,12 +384,30 @@ class FinnV2ReasoningService:
                     "latency_ms": call_latency_ms,
                     "output_status": "error" if response.get("error") else "ok",
                     "error_code": response.get("error"),
+                    "error_detail": response.get("error_detail"),
                 },
             )
             if response.get("error"):
                 error = str(response["error"])
                 last_error_codes = [error]
                 normalized_mode = normalize_interaction_mode(context.interaction_mode)
+                if attempt < retries_allowed and error in {"schema_invalid", "incomplete_structured_response"}:
+                    await self._append_trace(
+                        run_id,
+                        user_id,
+                        trace_id,
+                        "reasoning_repair",
+                        context,
+                        model_name,
+                        "generating",
+                        None,
+                        attempt + 1,
+                        input_hash,
+                        [error],
+                        error_details=response.get("error_detail"),
+                    )
+                    increment_execution_safety_counter(f"finn_v2_reasoning_repairs_total:{error}")
+                    continue
                 if normalized_mode in {"EVALUATE", "CREATE_PROPOSAL", "ACTION_PROPOSAL"} and error in {"provider_error", "schema_invalid", "incomplete_structured_response", "timeout"}:
                     result = self._fallback_for_reasoning_error(
                         run_id=run_id,
@@ -410,6 +428,7 @@ class FinnV2ReasoningService:
                         attempt,
                         input_hash,
                         [error, "deterministic_validated"],
+                        error_details=response.get("error_detail"),
                     )
                     return await self._persist_record(
                         run_id=run_id,
@@ -488,12 +507,42 @@ class FinnV2ReasoningService:
                 self._validate_refs(result, context)
             except Exception as exc:
                 error = "invalid_evidence_refs" if "ref" in str(exc).lower() else "schema_invalid"
+                error_details = {
+                    "exception_class": type(exc).__name__,
+                    "message": str(exc)[:500],
+                }
                 last_error_codes = [error]
                 if attempt < retries_allowed and error == "schema_invalid":
-                    await self._append_trace(run_id, user_id, trace_id, "reasoning_retry", context, model_name, "generating", None, attempt + 1, input_hash, [error])
+                    await self._append_trace(
+                        run_id,
+                        user_id,
+                        trace_id,
+                        "reasoning_retry",
+                        context,
+                        model_name,
+                        "generating",
+                        None,
+                        attempt + 1,
+                        input_hash,
+                        [error],
+                        error_details=error_details,
+                    )
                     increment_execution_safety_counter(f"finn_v2_reasoning_retries_total:{error}")
                     continue
-                await self._append_trace(run_id, user_id, trace_id, "reasoning_failed", context, model_name, "failed", int((monotonic() - started) * 1000), attempt, input_hash, [error])
+                await self._append_trace(
+                    run_id,
+                    user_id,
+                    trace_id,
+                    "reasoning_failed",
+                    context,
+                    model_name,
+                    "failed",
+                    int((monotonic() - started) * 1000),
+                    attempt,
+                    input_hash,
+                    [error],
+                    error_details=error_details,
+                )
                 fallback = self._fallback_for_reasoning_error(
                     run_id=run_id,
                     user_id=user_id,
@@ -674,7 +723,7 @@ class FinnV2ReasoningService:
         if any(ref not in valid_refs for ref in referenced):
             raise ValueError("invalid_evidence_refs")
 
-    async def _append_trace(self, run_id: str, user_id: int, trace_id: str, event_type: str, context, model: str, status: str, latency_ms: Optional[int], retry_count: int, input_hash: str, error_codes: list[str]) -> None:
+    async def _append_trace(self, run_id: str, user_id: int, trace_id: str, event_type: str, context, model: str, status: str, latency_ms: Optional[int], retry_count: int, input_hash: str, error_codes: list[str], error_details: Optional[dict] = None) -> None:
         await self.traces.append_event(
             run_id=run_id,
             user_id=user_id,
@@ -698,6 +747,7 @@ class FinnV2ReasoningService:
                 "output_tokens": None,
                 "reasoning_tokens": None,
                 "error_codes": error_codes,
+                "error_details": error_details or None,
             },
         )
 

@@ -23,3 +23,4 @@ class OnboardingStatusResponse(BaseModel):
     phases_completed: Dict[str, bool] = {}
     phases_unlocked: Dict[str, bool] = {}
     phase_missing: Dict[str, List[str]] = {}
+    optional_missing: Dict[str, List[str]] = {}

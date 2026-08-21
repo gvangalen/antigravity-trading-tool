@@ -606,7 +606,22 @@ def ask_gpt_structured_response(
                 if parsed is not None:
                     break
         if parsed is None:
-            return {"error": "incomplete_structured_response"}
+            incomplete_details = getattr(response, "incomplete_details", None)
+            output_items = getattr(response, "output", None) or []
+            content_types = []
+            refusal = None
+            for item in output_items:
+                for content in getattr(item, "content", []) or []:
+                    content_types.append(str(getattr(content, "type", "unknown")))
+                    refusal = refusal or getattr(content, "refusal", None)
+            detail = {
+                "response_status": getattr(response, "status", None),
+                "incomplete_reason": getattr(incomplete_details, "reason", None),
+                "content_types": content_types,
+                "refusal": str(refusal)[:500] if refusal else None,
+            }
+            logger.warning("OpenAI structured response incomplete", extra={"structured_response_detail": detail})
+            return {"error": "incomplete_structured_response", "error_detail": detail}
         usage = getattr(response, "usage", None)
         input_tokens = int(getattr(usage, "input_tokens", 0) or 0)
         output_tokens = int(getattr(usage, "output_tokens", 0) or 0)
