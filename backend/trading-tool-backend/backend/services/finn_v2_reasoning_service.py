@@ -44,6 +44,15 @@ from backend.utils import openai_client
 logger = logging.getLogger(__name__)
 
 
+class FinnV2ReasoningContractError(ValueError):
+    """Raised when model output is structurally valid but incomplete for the request contract."""
+
+    def __init__(self, *, code: str, missing_scopes: list[str]):
+        self.code = code
+        self.missing_scopes = missing_scopes
+        super().__init__(f"{code}:{','.join(missing_scopes)}")
+
+
 class FinnV2ReasoningService:
     def __init__(self, session: AsyncSession, *, flag_service: Optional[FinnV2FlagService] = None):
         self.session = session
@@ -518,9 +527,18 @@ class FinnV2ReasoningService:
                     }
                 )
                 self._validate_refs(result, context)
-            except ValidationError as exc:
+            except (ValidationError, FinnV2ReasoningContractError) as exc:
                 error = "schema_invalid"
-                repair_validation_errors = self._validation_error_details(exc)
+                if isinstance(exc, FinnV2ReasoningContractError):
+                    repair_validation_errors = [
+                        {
+                            "path": "evidence_refs_used",
+                            "code": exc.code,
+                            "missing_scopes": ",".join(exc.missing_scopes),
+                        }
+                    ]
+                else:
+                    repair_validation_errors = self._validation_error_details(exc)
                 error_details = self._reasoning_provenance(
                     response=response,
                     model=response.get("model") or model_name,
@@ -826,6 +844,30 @@ class FinnV2ReasoningService:
             raise ValueError("schema_invalid")
         if any(ref not in valid_refs for ref in referenced):
             raise ValueError("invalid_evidence_refs")
+        self._validate_integrated_plan_coverage(referenced=referenced, context=context)
+
+    @staticmethod
+    def _validate_integrated_plan_coverage(*, referenced: set[str], context) -> None:
+        required_scopes = {"profile", "indicators", "setup", "strategy", "bot"}
+        if context.interaction_mode != "EVALUATE" or not required_scopes.issubset(set(context.subject_scopes)):
+            return
+        scope_tools = {
+            "profile": {"read_profile", "read_user_preferences"},
+            "indicators": {"read_indicator_configuration"},
+            "setup": {"read_active_setup"},
+            "strategy": {"read_linked_strategy"},
+            "bot": {"read_linked_bot", "read_bot_status"},
+        }
+        missing_scopes = [
+            scope
+            for scope, tools in scope_tools.items()
+            if not any(item.evidence_id in referenced and item.tool_name in tools for item in context.evidence)
+        ]
+        if missing_scopes:
+            raise FinnV2ReasoningContractError(
+                code="missing_required_scope_refs",
+                missing_scopes=missing_scopes,
+            )
 
     def _validation_error_details(self, exc: ValidationError) -> list[dict[str, str]]:
         return [

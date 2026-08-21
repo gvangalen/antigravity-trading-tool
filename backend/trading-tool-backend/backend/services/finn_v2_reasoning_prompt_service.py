@@ -95,10 +95,15 @@ class FinnV2ReasoningPromptService:
         )
         evaluation_contract = ""
         if context.interaction_mode == "EVALUATE" and {"profile", "indicators", "setup", "strategy", "bot"}.issubset(set(context.subject_scopes)):
+            scope_refs = self._integrated_plan_scope_refs(context)
             evaluation_contract = (
                 "This is an integrated personal plan evaluation. State exactly one observation and one next step. "
                 "Ground them in the user's saved profile, configured indicators, setup, strategy and bot, including concrete "
-                "identifiers or timeframes when present. Put all evidence IDs used by that grounding in evidence_refs_used.\n"
+                "identifiers or timeframes when present. Put all evidence IDs used by that grounding in evidence_refs_used. "
+                "For this request, evidence_refs_used must include at least one ID from every required scope: "
+                f"{json.dumps(scope_refs, ensure_ascii=True, separators=(',', ':'))}. "
+                "Every fact, inference, or evaluation claim must cite evidence that directly supports that claim; do not cite an "
+                "unrelated plan item to support a general conclusion.\n"
             )
         return (
             "Use only the following structured context to answer the user question.\n"
@@ -111,6 +116,21 @@ class FinnV2ReasoningPromptService:
             f"Structured context:\n{context_json}\n"
             f"Original user question:\n{context.user_message}"
         )
+
+    @staticmethod
+    def _integrated_plan_scope_refs(context: ReasoningContextPackage) -> dict[str, list[str]]:
+        """Make the model's required evidence coverage explicit for integrated plan reviews."""
+        scope_tools = {
+            "profile": {"read_profile", "read_user_preferences"},
+            "indicators": {"read_indicator_configuration"},
+            "setup": {"read_active_setup"},
+            "strategy": {"read_linked_strategy"},
+            "bot": {"read_linked_bot", "read_bot_status"},
+        }
+        return {
+            scope: [item.evidence_id for item in context.evidence if item.tool_name in tools]
+            for scope, tools in scope_tools.items()
+        }
 
     def response_schema(self) -> dict:
         claim_types = [item.value for item in ReasoningClaimType]

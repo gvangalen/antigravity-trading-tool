@@ -576,6 +576,8 @@ class FinnV2ResponseVerifierService:
         for item in evidence:
             facts = item.facts or {}
             fact_blob = str(facts).lower()
+            if self._is_supported_indicator_absence(haystack, item):
+                return "supported", [], True
             if self._mentions_live_mode(haystack) and "is_live" in facts:
                 wants_live = self._asserts_live_mode(haystack)
                 if bool(facts.get("is_live")) != wants_live:
@@ -589,6 +591,23 @@ class FinnV2ResponseVerifierService:
         if claim_type == "recommendation":
             return "partially_supported", [], True
         return "unverifiable", ["unsupported_noncritical_claim"], False
+
+    @staticmethod
+    def _is_supported_indicator_absence(text: str, evidence: Any) -> bool:
+        if str(getattr(evidence, "tool_name", "") or "") != "read_indicator_configuration":
+            return False
+        facts = getattr(evidence, "facts", {}) or {}
+        absence_checks = {
+            "macro": facts.get("macro_count"),
+            "market": facts.get("market_count"),
+            "technical": facts.get("technical_count"),
+        }
+        return any(
+            count == 0
+            and keyword in text
+            and any(marker in text for marker in ("geen", "no ", "without", "ontbreekt", "ontbreken", "missing"))
+            for keyword, count in absence_checks.items()
+        )
 
     def _covered_scopes_from_draft(self, draft: ResponseDraft, evidence_by_ref: Dict[str, Any]) -> set[str]:
         refs = self._all_refs(draft)

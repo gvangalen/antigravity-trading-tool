@@ -38,3 +38,27 @@ def test_reasoning_result_rejects_invalid_evidence_refs():
 
     with pytest.raises(ValueError):
         service._validate_refs(result, context)
+
+
+def test_integrated_plan_reasoning_requires_evidence_from_each_required_scope():
+    service = FinnV2ReasoningService(session=object())
+    context = ReasoningContextPackage(
+        run_id="run-1", user_id=7, user_message="Evalueer mijn plan", locale="nl-NL", interaction_mode="EVALUATE",
+        subject_scopes=["profile", "indicators", "setup", "strategy", "bot"], orchestrator_result_id="o-1", snapshot_id="s-1",
+        validation_id="v-1", policy_decision_id="p-1", evidence_set_hash="hash",
+        evidence=[
+            ReasoningEvidenceItem(evidence_id="E1", artifact_id="a1", tool_name="read_profile", domain="identity_context", entity_type="profile", source="internal", freshness="fresh", confidence="high"),
+            ReasoningEvidenceItem(evidence_id="E2", artifact_id="a2", tool_name="read_indicator_configuration", domain="market_context", entity_type="indicator_configuration", source="internal", freshness="fresh", confidence="high"),
+            ReasoningEvidenceItem(evidence_id="E3", artifact_id="a3", tool_name="read_active_setup", domain="plan_context", entity_type="setup", source="internal", freshness="fresh", confidence="high"),
+            ReasoningEvidenceItem(evidence_id="E4", artifact_id="a4", tool_name="read_linked_strategy", domain="plan_context", entity_type="strategy", source="internal", freshness="fresh", confidence="high"),
+            ReasoningEvidenceItem(evidence_id="E5", artifact_id="a5", tool_name="read_linked_bot", domain="automation_context", entity_type="bot", source="internal", freshness="fresh", confidence="high"),
+        ],
+        policy=ReasoningPolicyContext(policy_class="advice", allowed=True, proposal_allowed=False, confirmation_required=False, step_up_required=False, execution_allowed=False),
+    )
+    result = ReasoningResult(
+        reasoning_result_id="r-1", run_id="run-1", user_id=7, mode="EVALUATE", direct_answer="Antwoord", main_observation="Observatie",
+        evidence_refs_used=["E1", "E2", "E3", "E4"], model="gpt-test", created_at=datetime.now(timezone.utc),
+    )
+
+    with pytest.raises(ValueError, match="missing_required_scope_refs:bot"):
+        service._validate_refs(result, context)

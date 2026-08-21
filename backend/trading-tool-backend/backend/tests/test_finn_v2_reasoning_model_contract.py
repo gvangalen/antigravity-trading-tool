@@ -163,3 +163,28 @@ def test_integrated_plan_evaluation_prompt_requires_full_personal_grounding():
     assert "integrated personal plan evaluation" in prompt
     assert "profile, configured indicators, setup, strategy and bot" in prompt
     assert "evidence_refs_used" in prompt
+
+
+def test_integrated_plan_evaluation_prompt_lists_required_scope_evidence_refs():
+    payload = _context().dict()
+    payload.update(
+        {
+            "subject_scopes": ["profile", "indicators", "setup", "strategy", "bot"],
+            "evidence": [
+                {"evidence_id": "E1", "artifact_id": "a1", "tool_name": "read_profile", "domain": "identity_context", "entity_type": "profile", "source": "profile", "freshness": "fresh", "confidence": "high"},
+                {"evidence_id": "E2", "artifact_id": "a2", "tool_name": "read_indicator_configuration", "domain": "market_context", "entity_type": "indicator_configuration", "source": "indicators", "freshness": "fresh", "confidence": "high"},
+                {"evidence_id": "E3", "artifact_id": "a3", "tool_name": "read_active_setup", "domain": "plan_context", "entity_type": "setup", "source": "setup", "freshness": "fresh", "confidence": "high"},
+                {"evidence_id": "E4", "artifact_id": "a4", "tool_name": "read_linked_strategy", "domain": "plan_context", "entity_type": "strategy", "source": "strategy", "freshness": "fresh", "confidence": "high"},
+                {"evidence_id": "E5", "artifact_id": "a5", "tool_name": "read_linked_bot", "domain": "automation_context", "entity_type": "bot", "source": "bot", "freshness": "fresh", "confidence": "high"},
+            ],
+        },
+    )
+    context = ReasoningContextPackage.parse_obj(payload)
+
+    prompt = FinnV2ReasoningPromptService().build_user_prompt(context)
+
+    assert '"profile":["E1"]' in prompt
+    assert '"indicators":["E2"]' in prompt
+    assert '"setup":["E3"]' in prompt
+    assert '"strategy":["E4"]' in prompt
+    assert '"bot":["E5"]' in prompt
