@@ -16,10 +16,12 @@ from backend.domain.finn_v2_contract import (
 from backend.infrastructure.repositories.finn_v2_conversation_repository import FinnV2ConversationRepository
 from backend.infrastructure.repositories.finn_v2_run_repository import FinnV2RunRepository
 from backend.infrastructure.repositories.finn_v2_trace_repository import FinnV2TraceRepository
+from backend.infrastructure.database import async_session_factory
 from backend.services.finn_v2_delivery_service import FinnV2DeliveryService
 from backend.services.finn_v2_orchestrator_service import FinnV2OrchestratorService
 from backend.services.finn_v2_tool_execution_service import FinnV2ToolExecutionService
 from backend.schemas.finn_v2_schema import AgentRunStatusEnvelope, PolicyDecision, VerifiedResponse
+from backend.schemas.finn_v2_orchestrator_schema import LifecyclePhaseOutcome
 
 
 logger = logging.getLogger(__name__)
@@ -132,7 +134,13 @@ class FinnV2RunService:
         await self._commit_session_if_possible()
         return run
 
-    async def complete_run(self, *, run_id: str, user_id: int, interaction_mode: Optional[str] = None):
+    async def complete_run(
+        self,
+        *,
+        run_id: str,
+        user_id: int,
+        phase_outcome: LifecyclePhaseOutcome,
+    ):
         artifacts = await self.delivery.get_delivery_artifacts(user_id=user_id, run_id=run_id)
         verified = artifacts.get("verified_response") or {}
         orchestrator = artifacts.get("orchestrator_result") or {}
@@ -142,15 +150,12 @@ class FinnV2RunService:
         direct_answer = str(verified.get("direct_answer") or "").strip()
         main_observation = str(verified.get("main_observation") or "").strip()
         content = "\n\n".join([part for part in [direct_answer, main_observation] if part]).strip()
-        next_status = self._resolve_terminal_status(
-            verified=verified,
-            orchestrator=orchestrator,
-            verifier=verifier,
-            reasoning=reasoning,
-        )
+        next_status = phase_outcome.terminal_status
+        if next_status not in {"clarification_required", "unavailable", "downgraded", "rejected", "completed", "failed"}:
+            raise ValueError("invalid_lifecycle_phase_outcome")
         if not content:
             response_json = self._terminal_placeholder_response(
-                interaction_mode=interaction_mode,
+                interaction_mode=phase_outcome.interaction_mode,
                 terminal_status=next_status,
                 orchestrator=orchestrator,
                 verifier=verifier,
@@ -173,7 +178,7 @@ class FinnV2RunService:
             run_id,
             user_id,
             next_status=next_status,
-            interaction_mode=response_json["mode"],
+            interaction_mode=phase_outcome.interaction_mode or response_json["mode"],
             policy_json=policy,
             response_json=response_json,
             response_source="v2_runtime",
@@ -219,24 +224,6 @@ class FinnV2RunService:
             "confirmation_required": False,
             "reasoning_provenance": reasoning_result.get("reasoning_provenance") or {},
         }
-
-    def _resolve_terminal_status(
-        self,
-        *,
-        verified: Dict[str, Any],
-        orchestrator: Dict[str, Any],
-        verifier: Dict[str, Any],
-        reasoning: Dict[str, Any],
-    ) -> str:
-        if verified:
-            return "downgraded" if verified.get("verifier_status") == "downgraded" else "completed"
-        if verifier.get("action") == "reject":
-            return "rejected"
-        if orchestrator.get("outcome") == "clarification_required":
-            return "clarification_required"
-        if orchestrator.get("outcome") == "unavailable" or reasoning.get("status") == "unavailable":
-            return "unavailable"
-        return "completed"
 
     async def fail_run(
         self,
@@ -304,10 +291,22 @@ class FinnV2RunService:
                 raise LookupError("FINN V2 run not found")
             if self._is_visible_run(run) or self.tools.flags.should_run_block4_shadow(user_id):
                 await self.orchestrator.execute_run(run_id=run_id, user_id=user_id, trace_id=run.trace_id)
-                await self.complete_run(run_id=run_id, user_id=user_id)
+                await self.complete_run(
+                    run_id=run_id,
+                    user_id=user_id,
+                    phase_outcome=self.orchestrator.consume_phase_outcome(),
+                )
             else:
                 await self.tools.execute_shadow_tool_chain(run_id=run_id, user_id=user_id)
-                await self.complete_run(run_id=run_id, user_id=user_id)
+                await self.complete_run(
+                    run_id=run_id,
+                    user_id=user_id,
+                    phase_outcome=LifecyclePhaseOutcome(
+                        terminal_status="completed",
+                        interaction_mode="UNAVAILABLE",
+                        orchestrator_result_id="shadow-foundation",
+                    ),
+                )
         except asyncio.CancelledError:
             logger.warning(
                 "FINN V2 lifecycle canceled before terminal persistence",
@@ -336,6 +335,71 @@ class FinnV2RunService:
                 failure_stage="run_foundation_lifecycle",
                 primary_exception=exc,
             )
+
+    @classmethod
+    async def run_foundation_lifecycle_owned(cls, *, run_id: str, user_id: int) -> None:
+        """Run each lifecycle boundary in a fresh database unit of work.
+
+        The coordinator only exchanges immutable ids and a typed phase outcome
+        between sessions. ORM instances must never survive a rollback boundary.
+        """
+        try:
+            for status in ("queued", "collecting", "planned"):
+                async with async_session_factory() as session:
+                    await cls(session).persist_transition(
+                        run_id,
+                        user_id,
+                        next_status=status,
+                        response_source="foundation_placeholder",
+                    )
+
+            async with async_session_factory() as session:
+                service = cls(session)
+                run = await service.runs.get_by_id_for_user(run_id=run_id, user_id=user_id)
+                if run is None:
+                    raise LookupError("FINN V2 run not found")
+                trace_id = run.trace_id
+                visible = service._is_visible_run(run)
+
+                async def transition_phase(**kwargs) -> None:
+                    async with async_session_factory() as transition_session:
+                        await cls(transition_session).persist_transition(**kwargs)
+
+                if visible or service.tools.flags.should_run_block4_shadow(user_id):
+                    orchestrator = FinnV2OrchestratorService(session, phase_transition=transition_phase)
+                    await orchestrator.execute_run(run_id=run_id, user_id=user_id, trace_id=trace_id)
+                    phase_outcome = orchestrator.consume_phase_outcome()
+                else:
+                    await service.tools.execute_shadow_tool_chain(run_id=run_id, user_id=user_id)
+                    phase_outcome = LifecyclePhaseOutcome(
+                        terminal_status="completed",
+                        interaction_mode="UNAVAILABLE",
+                        orchestrator_result_id="shadow-foundation",
+                    )
+
+            async with async_session_factory() as session:
+                await cls(session).complete_run(
+                    run_id=run_id,
+                    user_id=user_id,
+                    phase_outcome=phase_outcome,
+                )
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            logger.exception(
+                "FINN V2 owned lifecycle primary failure",
+                extra={"run_id": run_id, "user_id": user_id, "primary_exception": str(exc)},
+            )
+            async with async_session_factory() as session:
+                await cls(session).fail_run(
+                    run_id=run_id,
+                    user_id=user_id,
+                    error_code="orchestrator_failed",
+                    error_message=str(exc),
+                    retryable=False,
+                    failure_stage="run_foundation_lifecycle_owned",
+                    primary_exception=exc,
+                )
 
     def _is_visible_run(self, run) -> bool:
         return getattr(run, "visibility", None) == "visible" or getattr(run, "feature_mode", None) == "visible_readonly"
@@ -454,7 +518,10 @@ class FinnV2RunService:
         sync_session = getattr(self.session, "sync_session", None)
         if sync_session is not None and getattr(sync_session, "is_active", True) is False:
             return True
-        transaction = self.session.get_transaction()
+        try:
+            transaction = self.session.get_transaction()
+        except NotImplementedError:
+            transaction = getattr(sync_session, "get_transaction", lambda: None)()
         return bool(transaction is not None and getattr(transaction, "is_active", True) is False)
 
     async def _rollback_failed_session(

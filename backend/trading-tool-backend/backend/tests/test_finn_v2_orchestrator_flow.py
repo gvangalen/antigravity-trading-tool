@@ -332,24 +332,19 @@ def test_orchestrator_terminalizes_a_persisted_verifier_reject_without_a_second_
         semantic_verifier_used=False,
         created_at=datetime.now(timezone.utc),
     )
-    completed = []
-
-    async def _complete_placeholder(**kwargs):
-        completed.append(kwargs)
-
     service.tools.execute_tool_plan = _execute_tool_plan
     service.tools.run_state_pipeline = _run_state_pipeline
     service.policy.evaluate_run = lambda **_kwargs: asyncio.sleep(0, result=SimpleNamespace(policy_class="read", allowed=True, proposal_input_required=False, blocking_codes=[]))
     service.policy.persist = lambda *_args, **_kwargs: asyncio.sleep(0)
     service.reasoning.reason = lambda **_kwargs: asyncio.sleep(0, result=SimpleNamespace(status="completed"))
     service.verifier.verify_run = lambda **_kwargs: asyncio.sleep(0, result=_raise_reject(verifier))
-    service.complete_placeholder = _complete_placeholder
 
     result = asyncio.run(service.execute_run(run_id=run.id, user_id=run.user_id, trace_id=run.trace_id))
 
     assert result.run_id == run.id
     assert len(service.results.created) == 1
-    assert completed == [{"run_id": run.id, "user_id": run.user_id, "interaction_mode": "UNAVAILABLE"}]
+    assert service.consume_phase_outcome().terminal_status == "rejected"
+    assert service.consume_phase_outcome().verifier_action == "reject"
     assert [event["event_type"] for event in service.traces.events][-1] == "orchestrator_rejected"
 
 

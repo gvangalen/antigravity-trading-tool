@@ -4,10 +4,12 @@ import asyncio
 import logging
 from datetime import datetime, timedelta, timezone
 from time import monotonic
+from types import SimpleNamespace
 from typing import Any, Dict, List, Optional, Tuple
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from backend.infrastructure.database import async_session_factory
 from backend.domain.finn_v2_tools import FINN_V2_TOOL_ORDER, ToolExecutionResult
 from backend.infrastructure.repositories.finn_v2_evidence_repository import FinnV2EvidenceRepository
 from backend.infrastructure.repositories.finn_v2_run_repository import FinnV2RunRepository
@@ -49,6 +51,9 @@ logger = logging.getLogger(__name__)
 class FinnV2ToolExecutionService:
     def __init__(self, session: AsyncSession, flag_service: Optional[FinnV2FlagService] = None):
         self.session = session
+        # Unit tests can provide a lightweight fake session. Production uses a
+        # separate short-lived session for each durable tool-call record.
+        self.persistence_session_factory = async_session_factory if isinstance(session, AsyncSession) else None
         self.flags = flag_service or FinnV2FlagService()
         self.registry = FinnV2ToolRegistryService()
         self.redaction = FinnV2ToolRedactionService()
@@ -163,14 +168,23 @@ class FinnV2ToolExecutionService:
                 primary_exception=RuntimeError("tool_session_requires_rollback_before_execution"),
             )
 
+        # A later persistence rollback expires ORM entities. Only immutable data
+        # crosses that boundary so cleanup cannot cause a second DB failure.
+        run_context = SimpleNamespace(
+            id=run.id,
+            trace_id=run.trace_id,
+            workspace_hints_json=dict(getattr(run, "workspace_hints_json", {}) or {}),
+            client_context_json=dict(getattr(run, "client_context_json", {}) or {}),
+        )
+
         selector = self.redaction.redact_selector(selector or {})
         tool_call = None
         tool_call_id = None
         if self.flags.is_tool_call_logging_enabled():
             tool_call, tool_call_id = await self._create_tool_call(
-                run_id=run.id,
+                run_id=run_context.id,
                 user_id=user_id,
-                trace_id=run.trace_id,
+                trace_id=run_context.trace_id,
                 tool_name=tool_name,
                 selector=selector,
             )
@@ -187,7 +201,7 @@ class FinnV2ToolExecutionService:
                     tool_name=tool_name,
                     user_id=user_id,
                     selector=selector,
-                    run=run,
+                    run=run_context,
                     shared_state=shared_state or {},
                 ),
                 timeout=timeout_seconds,
@@ -236,7 +250,7 @@ class FinnV2ToolExecutionService:
             session_rolled_back = await self._rollback_failed_session(
                 run_id=run_id,
                 user_id=user_id,
-                trace_id=run.trace_id,
+                trace_id=run_context.trace_id,
                 tool_name=tool_name,
                 failure_stage="tool_execution",
                 primary_exception=exc,
@@ -258,7 +272,7 @@ class FinnV2ToolExecutionService:
                 session_rolled_back = await self._rollback_failed_session(
                     run_id=run_id,
                     user_id=user_id,
-                    trace_id=run.trace_id,
+                    trace_id=run_context.trace_id,
                     tool_name=tool_name,
                     tool_call_id=tool_call_id,
                     failure_stage="tool_call_pre_complete",
@@ -268,7 +282,7 @@ class FinnV2ToolExecutionService:
                 logger.warning(
                     "FINN V2 skipped tool-call completion after session rollback",
                     extra={
-                        "trace_id": run.trace_id,
+                        "trace_id": run_context.trace_id,
                         "run_id": run_id,
                         "user_id": user_id,
                         "tool_name": tool_name,
@@ -285,7 +299,7 @@ class FinnV2ToolExecutionService:
                     duration_ms=max(duration_ms, 0),
                     run_id=run_id,
                     user_id=user_id,
-                    trace_id=run.trace_id,
+                    trace_id=run_context.trace_id,
                 )
                 session_rolled_back = session_rolled_back or completion_rolled_back
                 result.tool_call_id = tool_call_id
@@ -299,7 +313,7 @@ class FinnV2ToolExecutionService:
             and not session_rolled_back
             and result.tool_call_id is not None
         ):
-            await self._ingest_evidence(run_id=run_id, user_id=user_id, trace_id=run.trace_id, result=result)
+            await self._ingest_evidence(run_id=run_id, user_id=user_id, trace_id=run_context.trace_id, result=result)
         return result
 
     async def _create_tool_call(
@@ -314,18 +328,33 @@ class FinnV2ToolExecutionService:
         tool_call = None
         tool_call_id = None
         try:
-            async with self.session.begin_nested():
-                tool_call = await self.calls.create(
-                    run_id=run_id,
-                    user_id=user_id,
-                    trace_id=trace_id,
-                    tool_name=tool_name,
-                    status="requested",
-                    selector_json=selector,
-                    error_codes_json=[],
-                )
-                tool_call_id = getattr(tool_call, "id", None)
-                await self.calls.update(tool_call, status="executing")
+            if self.persistence_session_factory is not None:
+                async with self.persistence_session_factory() as persistence_session:
+                    calls = FinnV2ToolCallRepository(persistence_session)
+                    row = await calls.create(
+                        run_id=run_id,
+                        user_id=user_id,
+                        trace_id=trace_id,
+                        tool_name=tool_name,
+                        status="requested",
+                        selector_json=selector,
+                        error_codes_json=[],
+                    )
+                    await calls.update(row, status="executing")
+                    await persistence_session.commit()
+                    tool_call_id = row.id
+                return SimpleNamespace(id=tool_call_id), tool_call_id
+            tool_call = await self.calls.create(
+                run_id=run_id,
+                user_id=user_id,
+                trace_id=trace_id,
+                tool_name=tool_name,
+                status="requested",
+                selector_json=selector,
+                error_codes_json=[],
+            )
+            tool_call_id = getattr(tool_call, "id", None)
+            await self.calls.update(tool_call, status="executing")
             return tool_call, tool_call_id
         except Exception as primary_exc:
             await self._rollback_failed_session(
@@ -361,18 +390,38 @@ class FinnV2ToolExecutionService:
         trace_id: str,
     ) -> Tuple[Optional[object], bool]:
         try:
-            async with self.session.begin_nested():
-                await self.calls.update(
-                    tool_call,
-                    status=result.status,
-                    success=result.success,
-                    resolution_source=result.resolution_source,
-                    freshness_status=result.freshness_status,
-                    result_summary_json=result.result_summary,
-                    error_codes_json=result.error_codes,
-                    completed_at=datetime.now(timezone.utc),
-                    duration_ms=duration_ms,
-                )
+            if self.persistence_session_factory is not None:
+                if tool_call_id is None:
+                    raise ValueError("tool_call_id_missing")
+                async with self.persistence_session_factory() as persistence_session:
+                    calls = FinnV2ToolCallRepository(persistence_session)
+                    row = await calls.get_by_id(tool_call_id)
+                    if row is None:
+                        raise LookupError("tool_call_not_found")
+                    await calls.update(
+                        row,
+                        status=result.status,
+                        success=result.success,
+                        resolution_source=result.resolution_source,
+                        freshness_status=result.freshness_status,
+                        result_summary_json=result.result_summary,
+                        error_codes_json=result.error_codes,
+                        completed_at=datetime.now(timezone.utc),
+                        duration_ms=duration_ms,
+                    )
+                    await persistence_session.commit()
+                return SimpleNamespace(id=tool_call_id), False
+            await self.calls.update(
+                tool_call,
+                status=result.status,
+                success=result.success,
+                resolution_source=result.resolution_source,
+                freshness_status=result.freshness_status,
+                result_summary_json=result.result_summary,
+                error_codes_json=result.error_codes,
+                completed_at=datetime.now(timezone.utc),
+                duration_ms=duration_ms,
+            )
             return tool_call, False
         except Exception as cleanup_exc:
             rolled_back = await self._rollback_failed_session(
@@ -772,7 +821,12 @@ class FinnV2ToolExecutionService:
         sync_session = getattr(self.session, "sync_session", None)
         if sync_session is not None and getattr(sync_session, "is_active", True) is False:
             return True
-        transaction = self.session.get_transaction() if hasattr(self.session, "get_transaction") else None
+        try:
+            transaction = self.session.get_transaction() if hasattr(self.session, "get_transaction") else None
+        except NotImplementedError:
+            # Some SQLAlchemy async proxy combinations cannot materialize the
+            # transaction wrapper; the underlying sync session is authoritative.
+            transaction = getattr(sync_session, "get_transaction", lambda: None)()
         return bool(transaction is not None and getattr(transaction, "is_active", True) is False)
 
     async def _rollback_failed_session(
