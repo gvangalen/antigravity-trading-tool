@@ -12,6 +12,7 @@ from backend.services.finn_v2_gateway_service import (
     run_shadow_foundation_job,
 )
 from backend.infrastructure.database import async_session_factory
+from backend.infrastructure.database import engine
 from backend.infrastructure.repositories.finn_v2_dispatch_repository import FinnV2DispatchRepository
 from backend.infrastructure.repositories.finn_v2_run_repository import FinnV2RunRepository
 from backend.infrastructure.models import FinnV2Run
@@ -23,9 +24,17 @@ from backend.celery_task.queue_policy import resolve_task_queue
 logger = logging.getLogger(__name__)
 
 
+def _run_async(coroutine):
+    """Run one Celery task on a fresh loop without reusing asyncpg connections."""
+    # Celery's prefork children execute many tasks, while asyncio.run creates a
+    # loop per task. Discard pooled asyncpg connections from the prior loop.
+    engine.sync_engine.dispose(close=False)
+    return asyncio.run(coroutine)
+
+
 @shared_task(bind=True, name="backend.celery_task.finn_v2_task.process_finn_v2_run")
 def process_finn_v2_run(self, *, run_id: str) -> str:
-    return asyncio.run(_process_finn_v2_run(run_id=run_id, owner=str(self.request.id or "celery")))
+    return _run_async(_process_finn_v2_run(run_id=run_id, owner=str(self.request.id or "celery")))
 
 
 async def _process_finn_v2_run(*, run_id: str, owner: str) -> str:
@@ -63,7 +72,7 @@ async def _process_finn_v2_run(*, run_id: str, owner: str) -> str:
 
 @shared_task(name="backend.celery_task.finn_v2_task.recover_finn_v2_dispatches")
 def recover_finn_v2_dispatches() -> int:
-    return asyncio.run(_recover_finn_v2_dispatches())
+    return _run_async(_recover_finn_v2_dispatches())
 
 
 async def _recover_finn_v2_dispatches() -> int:
@@ -92,7 +101,7 @@ def process_shadow_foundation_run(
     request_id: str,
     trace_id: str,
 ) -> str:
-    return asyncio.run(
+    return _run_async(
         run_shadow_foundation_job(
             user_id=user_id,
             request_payload=request_payload,
@@ -105,6 +114,6 @@ def process_shadow_foundation_run(
 
 @shared_task(name="backend.celery_task.finn_v2_task.cleanup_finn_v2_retention")
 def cleanup_finn_v2_retention() -> Dict[str, int]:
-    result = asyncio.run(run_retention_cleanup_job())
+    result = _run_async(run_retention_cleanup_job())
     logger.info("FINN V2 retention task completed: %s", result)
     return result
