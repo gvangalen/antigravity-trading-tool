@@ -22,7 +22,9 @@ MIGRATION_COMMAND_TIMEOUT_SECONDS="${MIGRATION_COMMAND_TIMEOUT_SECONDS:-180}"
 # A Celery worker is reported online by PM2 before its task registry is ready.
 # Production cold starts have taken just over a minute, so keep the real
 # deep-health gate but give all workers enough time to finish initializing.
-DEEP_HEALTH_ATTEMPTS="${DEEP_HEALTH_ATTEMPTS:-18}"
+# Cold PM2 restarts initialize the four Celery workers sequentially. Keep the
+# deploy gate alive until the last worker can register with Redis/health.
+DEEP_HEALTH_ATTEMPTS="${DEEP_HEALTH_ATTEMPTS:-30}"
 DEEP_HEALTH_RETRY_DELAY_SECONDS="${DEEP_HEALTH_RETRY_DELAY_SECONDS:-10}"
 SSH_ARGS=(
   -i "$SSH_KEY"
