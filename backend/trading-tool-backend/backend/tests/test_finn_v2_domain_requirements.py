@@ -25,7 +25,7 @@ def test_domain_requirements_match_block4_regression_cases():
         "automation_context",
     ]
     assert plan_a2.required_domains == ["identity_context", "plan_context"]
-    assert plan_a3.required_domains == ["market_context"]
+    assert plan_a3.required_domains == ["identity_context", "market_context"]
 
 
 def test_domain_requirements_keep_optional_domains_ordered():

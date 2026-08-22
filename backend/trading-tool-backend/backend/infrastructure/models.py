@@ -473,6 +473,7 @@ class FinnV2Conversation(Base):
     created_at = Column(DateTime(timezone=True), nullable=False, server_default=text("NOW()"))
     updated_at = Column(DateTime(timezone=True), nullable=False, server_default=text("NOW()"))
     last_run_id = Column(String, nullable=True)
+    context_json = Column(JSONB, nullable=False, default=dict, server_default=text("'{}'::jsonb"))
 
 
 class FinnV2Run(Base):

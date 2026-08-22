@@ -154,6 +154,7 @@ class FinnV2ReasoningContextService:
             allowed_response_modes=[orchestrator_result.analysis.interaction_mode],
             allowed_operation_types=[policy.operation_type] if policy.operation_type else [],
             uncertainty_codes=list(orchestrator_result.uncertainty_codes),
+            request_plan=(orchestrator_result.analysis.request_plan.dict() if orchestrator_result.analysis.request_plan else {}),
         )
 
     def input_hash(self, context: ReasoningContextPackage, *, prompt_version: str, model: str) -> str:

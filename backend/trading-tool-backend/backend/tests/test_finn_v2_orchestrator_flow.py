@@ -40,6 +40,18 @@ class _FakeResultRepo:
         return kwargs
 
 
+class _FakeConversationRepo:
+    def __init__(self, context=None):
+        self.context = context or {}
+        self.updated = None
+
+    async def get_context(self, **_kwargs):
+        return dict(self.context)
+
+    async def update_context(self, **kwargs):
+        self.updated = kwargs
+
+
 def test_orchestrator_flow_executes_plan_and_persists_result():
     run = SimpleNamespace(
         id="run-1",
@@ -73,6 +85,7 @@ def test_orchestrator_flow_executes_plan_and_persists_result():
                 "evidence_set_hash": "hash",
                 "integrity_status": "valid",
                 "domains": [
+                    {"domain": "identity_context", "status": "available", "confidence": "high"},
                     {"domain": "plan_context", "status": "available", "confidence": "high"},
                 ],
                 "issues": [],
@@ -148,6 +161,7 @@ def test_orchestrator_runs_policy_reasoning_and_verifier_for_visible_run_without
                 "evidence_set_hash": "hash-2",
                 "integrity_status": "valid",
                 "domains": [
+                    {"domain": "identity_context", "status": "available", "confidence": "high"},
                     {"domain": "plan_context", "status": "available", "confidence": "high"},
                 ],
                 "issues": [],
@@ -191,6 +205,77 @@ def test_orchestrator_runs_policy_reasoning_and_verifier_for_visible_run_without
     assert captured["policy"] == 1
     assert captured["reasoning"] == 1
     assert captured["verifier"] == 1
+
+
+def test_orchestrator_persists_only_verified_conversation_references():
+    run = SimpleNamespace(
+        id="run-conversation-1",
+        user_id=7,
+        trace_id="trace-conversation-1",
+        conversation_id="conversation-1",
+        status="planned",
+        visibility="visible",
+        feature_mode="visible_readonly",
+        message="Welke setup gebruik ik voor BTC?",
+        workspace_hints_json={},
+        client_context_json={},
+    )
+    service = FinnV2OrchestratorService(session=object())
+    service.runs = _FakeRunRepo(run)
+    service.traces = _FakeTraceRepo()
+    service.results = _FakeResultRepo()
+    service.conversations = _FakeConversationRepo({"last_mode": "READ"})
+    service.flags.is_tool_registry_enabled = lambda: True
+    service.flags.is_state_assembly_enabled = lambda: True
+    service.flags.should_run_block5_shadow = lambda _user_id: False
+    service.flags.should_run_block6_shadow = lambda _user_id: False
+    service.flags.should_run_block7_shadow = lambda _user_id: False
+
+    async def _run_state_pipeline(**_kwargs):
+        validation = EvidenceValidationResult.parse_obj(
+            {
+                "validation_id": "validation-conversation-1",
+                "snapshot_id": "snapshot-conversation-1",
+                "run_id": run.id,
+                "user_id": run.user_id,
+                "evidence_set_hash": "hash-conversation-1",
+                "integrity_status": "valid",
+                "domains": [
+                    {"domain": "identity_context", "status": "available", "confidence": "high"},
+                    {"domain": "plan_context", "status": "available", "confidence": "high"},
+                ],
+                "issues": [],
+                "validated_at": "2026-08-17T10:00:00+00:00",
+            }
+        )
+        return SimpleNamespace(snapshot_id="snapshot-conversation-1"), validation
+
+    service.tools.execute_tool_plan = lambda **_kwargs: asyncio.sleep(0, result=[])
+    service.tools.run_state_pipeline = _run_state_pipeline
+    service.policy.evaluate_run = lambda **_kwargs: asyncio.sleep(0, result=SimpleNamespace(policy_class="read", allowed=True, proposal_input_required=False, blocking_codes=[]))
+    service.policy.persist = lambda *_args, **_kwargs: asyncio.sleep(0)
+    service.reasoning.reason = lambda **_kwargs: asyncio.sleep(0, result=SimpleNamespace(status="completed"))
+    service.verifier.verify_run = lambda **_kwargs: asyncio.sleep(
+        0,
+        result=SimpleNamespace(
+            mode="READ",
+            verifier_status="passed",
+            main_observation="The BTC setup is active.",
+            evidence_refs_used=["evidence-setup-1"],
+            proposal_id=None,
+        ),
+    )
+
+    asyncio.run(service.execute_run(run_id=run.id, user_id=run.user_id, trace_id=run.trace_id))
+
+    assert service.conversations.updated["conversation_id"] == "conversation-1"
+    assert service.conversations.updated["context"] == {
+        "last_mode": "READ",
+        "last_user_goal": "read_setup",
+        "resolved_asset": "BTC",
+        "last_evidence_refs": ["evidence-setup-1"],
+        "last_verified_conclusion": "The BTC setup is active.",
+    }
 
 
 def test_orchestrator_classifies_requested_operation_for_action_proposal_modes():
@@ -265,7 +350,7 @@ def test_orchestrator_classifies_requested_operation_for_action_proposal_modes()
 
     asyncio.run(service.execute_run(run_id="run-3", user_id=7, trace_id="trace-3"))
 
-    assert captured["requested_operation"] == "activate_paper_bot"
+    assert captured["requested_operation"] == "watchlist_add"
 
 
 def test_orchestrator_terminalizes_a_persisted_verifier_reject_without_a_second_result():

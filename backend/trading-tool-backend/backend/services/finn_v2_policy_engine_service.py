@@ -95,9 +95,12 @@ class FinnV2PolicyEngineService:
             reasons.append("deterministic_clarification_delivery")
         elif mode == "CREATE_PROPOSAL":
             policy_class = "proposal"
+            operation_type = self.risk.classify_requested_operation(message="", requested_operation=requested_operation)
             proposal_allowed = True
             confirmation_required = True
             proposal_input_required = True
+            if operation_type and operation_type in self._ACTION_MATRIX:
+                policy_class, required_domains = self._ACTION_MATRIX[operation_type]
             allowed = self._domains_satisfy(required_domains, domain_statuses, blocks)
         elif mode in {"ACTION_PROPOSAL", "CONFIRMATION", "EXECUTION"}:
             operation_type = self.risk.classify_requested_operation(message="", requested_operation=requested_operation)

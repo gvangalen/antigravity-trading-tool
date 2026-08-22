@@ -5,6 +5,25 @@ from backend.schemas.finn_v2_tool_schema import ToolSelector
 
 
 class FinnV2ToolPlanService:
+    _SCOPE_TO_TOOL = {
+        "profile": "read_profile",
+        "preferences": "read_user_preferences",
+        "asset": "read_active_asset",
+        "indicators": "read_indicator_configuration",
+        "market_snapshot": "read_market_snapshot",
+        "watchlist": "read_watchlist",
+        "setup": "read_active_setup",
+        "strategy": "read_linked_strategy",
+        "bot": "read_linked_bot",
+        "bot_status": "read_bot_status",
+    }
+    _SCOPE_TO_EVIDENCE = {
+        "profile": "profile", "preferences": "preferences", "asset": "active_asset",
+        "indicators": "indicator_configuration", "watchlist": "watchlist",
+        "market_snapshot": "market_snapshot",
+        "setup": "active_setup", "strategy": "linked_strategy", "bot": "linked_bot",
+        "bot_status": "bot_status",
+    }
     _DOMAIN_TOOLS = {
         "identity_context": ["read_profile", "read_user_preferences", "read_active_asset"],
         "market_context": [
@@ -47,6 +66,7 @@ class FinnV2ToolPlanService:
             run_id=run_id,
             interaction_mode=analysis.interaction_mode,
             primary_subject=analysis.primary_subject,
+            request_plan=analysis.request_plan,
             required_domains=list(domain_plan.required_domains),
             optional_domains=list(domain_plan.optional_domains),
             tool_names=ordered_tools,
@@ -66,6 +86,13 @@ class FinnV2ToolPlanService:
         )
 
     def _tool_names_for(self, *, analysis: RequestAnalysisResult, domain_plan: DomainRequirementPlan) -> list[str]:
+        request_plan = analysis.request_plan
+        if request_plan is not None and request_plan.required_information_scopes:
+            return [
+                self._SCOPE_TO_TOOL[scope]
+                for scope in request_plan.required_information_scopes
+                if scope in self._SCOPE_TO_TOOL
+            ]
         if analysis.interaction_mode == "CAPABILITY":
             return []
         if analysis.interaction_mode == "READ":
@@ -147,6 +174,13 @@ class FinnV2ToolPlanService:
         return ordered_tools
 
     def _required_evidence_for(self, *, analysis: RequestAnalysisResult) -> list[str]:
+        request_plan = analysis.request_plan
+        if request_plan is not None and request_plan.required_information_scopes:
+            return [
+                self._SCOPE_TO_EVIDENCE[scope]
+                for scope in request_plan.required_information_scopes
+                if scope in self._SCOPE_TO_EVIDENCE
+            ]
         if analysis.interaction_mode == "READ":
             if analysis.primary_subject == "setup":
                 return ["active_asset", "active_setup"]

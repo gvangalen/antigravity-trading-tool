@@ -16,6 +16,7 @@ ORCHESTRATOR_VERSION = "2026-08-17.block4"
 
 SUBJECT_SCOPE_ORDER = [
     "capability",
+    "asset",
     "profile",
     "analysis",
     "indicators",
@@ -28,6 +29,18 @@ SUBJECT_SCOPE_ORDER = [
     "portfolio",
     "unknown",
 ]
+INFORMATION_SCOPE_ORDER = [
+    "profile",
+    "preferences",
+    "asset",
+    "indicators",
+    "market_snapshot",
+    "watchlist",
+    "setup",
+    "strategy",
+    "bot",
+    "bot_status",
+]
 DOMAIN_ORDER = [
     "identity_context",
     "market_context",
@@ -38,6 +51,30 @@ DOMAIN_ORDER = [
     "review_context",
 ]
 CLARIFICATION_PRIORITY = ["asset", "setup", "strategy", "bot"]
+
+
+class RequestPlan(BaseModel):
+    """Canonical persisted intent and information contract for a FINN request."""
+
+    user_goal: str = "unknown"
+    interaction_mode: Literal[
+        "CAPABILITY", "READ", "EVALUATE", "CREATE_PROPOSAL", "ACTION_PROPOSAL",
+        "CLARIFICATION", "CONFIRMATION", "EXECUTION", "UNAVAILABLE",
+    ]
+    primary_domains: List[str] = Field(default_factory=list)
+    secondary_domains: List[str] = Field(default_factory=list)
+    required_information_scopes: List[str] = Field(default_factory=list)
+    requested_operation: Optional[str] = None
+    conversation_reference: Optional[str] = None
+    confidence_score: float = Field(default=0.0, ge=0.0, le=1.0)
+
+    @validator("interaction_mode", pre=True)
+    def _normalize_mode(cls, value: str) -> str:
+        return normalize_interaction_mode(value)
+
+    @validator("required_information_scopes", pre=False)
+    def _dedupe_information_scopes(cls, value: List[str]) -> List[str]:
+        return [scope for scope in INFORMATION_SCOPE_ORDER if scope in value]
 
 
 class RequestAnalysisResult(BaseModel):
@@ -55,6 +92,7 @@ class RequestAnalysisResult(BaseModel):
     subject_scopes: List[
         Literal[
             "capability",
+            "asset",
             "profile",
             "analysis",
             "indicators",
@@ -85,6 +123,7 @@ class RequestAnalysisResult(BaseModel):
     matched_signals: List[str] = Field(default_factory=list)
     unresolved_signals: List[str] = Field(default_factory=list)
     reasoning_required: bool
+    request_plan: Optional[RequestPlan] = None
     analysis_version: str = ANALYSIS_VERSION
 
     @validator("subject_scopes", pre=False)
@@ -139,6 +178,7 @@ class ToolPlan(BaseModel):
     run_id: str
     interaction_mode: str
     primary_subject: Optional[str] = None
+    request_plan: Optional[RequestPlan] = None
     required_domains: List[str] = Field(default_factory=list)
     optional_domains: List[str] = Field(default_factory=list)
     tool_names: List[str] = Field(default_factory=list)

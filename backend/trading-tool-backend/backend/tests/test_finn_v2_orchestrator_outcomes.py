@@ -30,6 +30,11 @@ def test_orchestrator_outcome_is_reasoning_ready_for_degraded_non_blocking_domai
         integrity_status="degraded",
         domains=[
             DomainValidationResult(
+                domain="identity_context",
+                status="available",
+                confidence="high",
+            ),
+            DomainValidationResult(
                 domain="automation_context",
                 status="degraded",
                 confidence="medium",
@@ -69,6 +74,11 @@ def test_orchestrator_outcome_picks_single_clarification_candidate_by_priority()
         evidence_set_hash="hash",
         integrity_status="valid",
         domains=[
+            DomainValidationResult(
+                domain="identity_context",
+                status="available",
+                confidence="high",
+            ),
             DomainValidationResult(
                 domain="plan_context",
                 status="available",

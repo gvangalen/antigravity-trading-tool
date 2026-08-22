@@ -7,6 +7,7 @@ from typing import Awaitable, Callable, Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.infrastructure.repositories.finn_v2_orchestrator_repository import FinnV2OrchestratorRepository
+from backend.infrastructure.repositories.finn_v2_conversation_repository import FinnV2ConversationRepository
 from backend.infrastructure.repositories.finn_v2_run_repository import FinnV2RunRepository
 from backend.infrastructure.repositories.finn_v2_trace_repository import FinnV2TraceRepository
 from backend.domain.finn_v2_contract import normalize_interaction_mode
@@ -41,6 +42,7 @@ class FinnV2OrchestratorService:
         self.runs = FinnV2RunRepository(session)
         self.traces = FinnV2TraceRepository(session)
         self.results = FinnV2OrchestratorRepository(session)
+        self.conversations = FinnV2ConversationRepository(session)
         self.analysis = FinnV2RequestAnalysisService()
         self.requirements = FinnV2DomainRequirementService()
         self.tool_plans = FinnV2ToolPlanService()
@@ -78,10 +80,18 @@ class FinnV2OrchestratorService:
             payload_json={"run_id": run_id, "user_id": user_id, "orchestrator_version": ORCHESTRATOR_VERSION},
         )
 
+        conversation_id = getattr(run, "conversation_id", None)
+        conversation_context = {}
+        if conversation_id:
+            conversation_context = await self.conversations.get_context(
+                conversation_id=conversation_id,
+                user_id=user_id,
+            )
         analysis = self.analysis.analyze(
             message=run.message,
             workspace_hints=getattr(run, "workspace_hints_json", {}) or {},
             client_context=getattr(run, "client_context_json", {}) or {},
+            conversation_context=conversation_context,
         )
         domain_requirements = self.requirements.determine(analysis)
         tool_plan = self.tool_plans.build(run_id=run_id, analysis=analysis, domain_plan=domain_requirements)
@@ -103,7 +113,10 @@ class FinnV2OrchestratorService:
             if self._should_run_policy(run=run, user_id=user_id) and snapshot is not None and validation is not None and result.outcome != "failed":
                 requested_operation = None
                 if normalize_interaction_mode(result.analysis.interaction_mode) in {"CREATE_PROPOSAL", "ACTION_PROPOSAL", "CONFIRMATION", "EXECUTION"}:
-                    requested_operation = self.risk.classify_requested_operation(message=run.message)
+                    requested_operation = (
+                        getattr(result.analysis.request_plan, "requested_operation", None)
+                        or self.risk.classify_requested_operation(message=run.message)
+                    )
                 await self._append_trace(
                     run_id=run_id,
                     user_id=user_id,
@@ -172,6 +185,14 @@ class FinnV2OrchestratorService:
                     user_id=user_id,
                     run_id=run_id,
                     trace_id=trace_id,
+                )
+            if verified_response is not None and conversation_id:
+                await self._update_conversation_context(
+                    conversation_id=conversation_id,
+                    user_id=user_id,
+                    existing_context=conversation_context,
+                    result=result,
+                    verified_response=verified_response,
                 )
             await self._append_trace(
                 run_id=run_id,
@@ -327,6 +348,38 @@ class FinnV2OrchestratorService:
             unavailable_codes_json=result.unavailable_codes,
             uncertainty_codes_json=result.uncertainty_codes,
             created_at=result.created_at,
+        )
+
+    async def _update_conversation_context(
+        self,
+        *,
+        conversation_id: str,
+        user_id: int,
+        existing_context: dict,
+        result,
+        verified_response,
+    ) -> None:
+        """Persist only verified references that a follow-up may safely resolve."""
+        selectors = dict(getattr(result.tool_plan, "entity_selectors", {}) or {})
+        request_plan = getattr(result.analysis, "request_plan", None)
+        context = dict(existing_context or {})
+        context.update(
+            {
+                "last_user_goal": getattr(request_plan, "user_goal", None),
+                "last_mode": getattr(verified_response, "mode", None) or result.analysis.interaction_mode,
+                "resolved_asset": selectors.get("asset") or getattr(result.analysis, "explicit_asset", None),
+                "resolved_setup_id": selectors.get("setup_id") or getattr(result.analysis, "explicit_setup_id", None),
+                "resolved_strategy_id": selectors.get("strategy_id") or getattr(result.analysis, "explicit_strategy_id", None),
+                "resolved_bot_id": selectors.get("bot_id") or getattr(result.analysis, "explicit_bot_id", None),
+                "last_evidence_refs": list(getattr(verified_response, "evidence_refs_used", []) or []),
+                "open_proposal_id": getattr(verified_response, "proposal_id", None),
+                "last_verified_conclusion": getattr(verified_response, "main_observation", None),
+            }
+        )
+        await self.conversations.update_context(
+            conversation_id=conversation_id,
+            user_id=user_id,
+            context={key: value for key, value in context.items() if value is not None},
         )
 
     def consume_phase_outcome(self) -> LifecyclePhaseOutcome:

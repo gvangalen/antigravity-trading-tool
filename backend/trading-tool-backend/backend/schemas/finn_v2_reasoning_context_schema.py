@@ -85,6 +85,7 @@ class ReasoningContextPackage(BaseModel):
     allowed_response_modes: List[str] = Field(default_factory=list)
     allowed_operation_types: List[str] = Field(default_factory=list)
     uncertainty_codes: List[str] = Field(default_factory=list)
+    request_plan: Dict[str, Any] = Field(default_factory=dict)
 
     @validator("evidence")
     def _validate_unique_evidence_ids(cls, value: List[ReasoningEvidenceItem]) -> List[ReasoningEvidenceItem]:

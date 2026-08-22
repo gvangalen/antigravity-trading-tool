@@ -3,7 +3,7 @@ from __future__ import annotations
 import re
 from typing import Dict, List, Optional
 
-from backend.schemas.finn_v2_orchestrator_schema import RequestAnalysisResult
+from backend.schemas.finn_v2_orchestrator_schema import RequestAnalysisResult, RequestPlan
 from backend.services.finn_v2_capability_registry_service import FinnV2CapabilityRegistryService
 
 
@@ -28,6 +28,7 @@ class FinnV2RequestAnalysisService:
         message: str,
         workspace_hints: Optional[Dict[str, object]] = None,
         client_context: Optional[Dict[str, object]] = None,
+        conversation_context: Optional[Dict[str, object]] = None,
     ) -> RequestAnalysisResult:
         text = str(message or "").strip()
         normalized = self._normalize_text(text)
@@ -37,7 +38,10 @@ class FinnV2RequestAnalysisService:
         scopes = self._subject_scopes(normalized, matched_signals)
         # An integrated assessment is about the user's plan even when the
         # message uses a natural reference such as "het hele plaatje".
-        if self._is_integrated_plan_request(normalized):
+        integrated_plan = self._is_integrated_plan_request(normalized) or len(
+            set(scopes).intersection({"profile", "indicators", "setup", "strategy", "bot"})
+        ) >= 3
+        if integrated_plan:
             for scope in ["profile", "indicators", "setup", "strategy", "bot"]:
                 if scope not in scopes:
                     scopes.append(scope)
@@ -46,6 +50,12 @@ class FinnV2RequestAnalysisService:
         explicit_setup_id = self._extract_entity_id(text, "setup")
         explicit_strategy_id = self._extract_entity_id(text, "strateg")
         explicit_bot_id = self._extract_entity_id(text, "bot")
+        if self._uses_conversation_reference(normalized):
+            context = conversation_context or {}
+            explicit_asset = explicit_asset or self._context_asset(context.get("resolved_asset"))
+            explicit_setup_id = explicit_setup_id or self._context_entity_id(context.get("resolved_setup_id"))
+            explicit_strategy_id = explicit_strategy_id or self._context_entity_id(context.get("resolved_strategy_id"))
+            explicit_bot_id = explicit_bot_id or self._context_entity_id(context.get("resolved_bot_id"))
         requested_entities = self._requested_entities(
             explicit_asset=explicit_asset,
             explicit_setup_id=explicit_setup_id,
@@ -87,6 +97,15 @@ class FinnV2RequestAnalysisService:
             unresolved_signals.append("insufficient_trade_context")
 
         confidence = self._confidence(scopes=scopes, matched_signals=matched_signals, interaction_mode=interaction_mode)
+        request_plan = self._request_plan(
+            interaction_mode=interaction_mode,
+            scopes=scopes,
+            primary_subject=primary_subject,
+            normalized=normalized,
+            confidence=confidence,
+            conversation_context=conversation_context or {},
+            integrated_plan=integrated_plan,
+        )
 
         return RequestAnalysisResult(
             interaction_mode=interaction_mode,
@@ -116,15 +135,87 @@ class FinnV2RequestAnalysisService:
                 "CONFIRMATION",
                 "EXECUTION",
             },
+            request_plan=request_plan,
         )
+
+    def _request_plan(
+        self,
+        *,
+        interaction_mode: str,
+        scopes: List[str],
+        primary_subject: Optional[str],
+        normalized: str,
+        integrated_plan: bool,
+        confidence: str,
+        conversation_context: Dict[str, object],
+    ) -> RequestPlan:
+        scope_map = {
+            "asset": ["asset"],
+            "profile": ["profile", "preferences"],
+            "analysis": ["asset"],
+            "indicators": ["asset", "indicators"],
+            "watchlist": ["asset", "watchlist"],
+            "setup": ["asset", "setup"],
+            "strategy": ["asset", "setup", "strategy"],
+            "bot": ["asset", "setup", "strategy", "bot", "bot_status"],
+        }
+        required: List[str] = []
+        for scope in scopes:
+            required.extend(scope_map.get(scope, []))
+        if interaction_mode == "EVALUATE" and integrated_plan:
+            required = ["profile", "preferences", "asset", "indicators", "setup", "strategy", "bot", "bot_status"]
+        if interaction_mode == "CREATE_PROPOSAL" and primary_subject == "setup":
+            required = ["profile", "preferences", "asset", "indicators", "setup", "strategy"]
+        if interaction_mode == "ACTION_PROPOSAL" and primary_subject == "watchlist":
+            required = ["asset", "watchlist"]
+        if interaction_mode == "ACTION_PROPOSAL" and primary_subject == "bot" and "live" in normalized:
+            required = ["asset", "setup", "strategy", "bot", "bot_status", "market_snapshot"]
+
+        operation = None
+        if interaction_mode == "CREATE_PROPOSAL" and primary_subject == "setup":
+            operation = "create_setup"
+        elif interaction_mode == "ACTION_PROPOSAL" and primary_subject == "watchlist":
+            operation = "watchlist_add" if any(token in normalized for token in ["voeg", "add"]) else "watchlist_remove"
+        elif interaction_mode == "ACTION_PROPOSAL" and primary_subject == "bot" and "live" in normalized:
+            operation = "activate_live_bot"
+
+        reference = None
+        if self._uses_conversation_reference(normalized):
+            reference = str(conversation_context.get("last_user_goal") or "previous_verified_response")
+        score = {"high": 0.9, "medium": 0.7, "low": 0.4, "none": 0.0}[confidence]
+        return RequestPlan(
+            user_goal=self._user_goal(interaction_mode, primary_subject, normalized, integrated_plan),
+            interaction_mode=interaction_mode,
+            primary_domains=list(scopes),
+            required_information_scopes=required,
+            requested_operation=operation,
+            conversation_reference=reference,
+            confidence_score=score,
+        )
+
+    @staticmethod
+    def _user_goal(interaction_mode: str, primary_subject: Optional[str], normalized: str, integrated_plan: bool) -> str:
+        if interaction_mode == "EVALUATE" and integrated_plan:
+            return "evaluate_complete_plan"
+        if interaction_mode == "CREATE_PROPOSAL" and primary_subject == "setup":
+            return "propose_setup"
+        if interaction_mode == "ACTION_PROPOSAL" and primary_subject == "watchlist":
+            return "propose_watchlist_change"
+        if interaction_mode == "READ":
+            return f"read_{primary_subject or 'context'}"
+        return interaction_mode.casefold()
 
     def _subject_scopes(self, normalized: str, matched_signals: List[str]) -> List[str]:
         scope_keywords = {
-            "capability": ["wat kun je", "where can you help", "what can you do", "wat doet finn", "how can you help"],
+            "capability": ["wat kun je", "waarmee help", "what can you do", "wat doet finn", "how can you help", "hoe kun je mij helpen"],
             "profile": ["profiel", "profile", "risicoprofiel", "risk profile", "tradingstijl", "trading style", "stijl"],
+            "asset": ["actieve asset", "asset heb ik actief", "active asset", "gekozen asset", "huidige instrument", "coin of aandeel", "instrument"],
             "analysis": ["analyse", "analysis", "markt", "market", "macro", "technical", "technisch", "context"],
-            "indicators": ["indicator", "indicatoren", "indicators", "rsi", "macd", "dxy"],
-            "watchlist": ["watchlist", "volglijst"],
+            "indicators": [
+                "indicator", "indicatoren", "indicators", "signaal", "signalen", "rsi", "macd", "dxy",
+                "volume", "vwap", "moving average", "ma_", "marktregime", "market regime",
+            ],
+            "watchlist": ["watchlist", "volglijst", "te volgen", "to follow"],
             "setup": ["setup", "set-up"],
             "strategy": ["strategie", "strategy", "plan"],
             "bot": ["bot", "automation", "automatisering", "live"],
@@ -140,7 +231,9 @@ class FinnV2RequestAnalysisService:
         return scopes
 
     def _interaction_mode(self, normalized: str, scopes: List[str], matched_signals: List[str], *, explicit_asset: Optional[str]) -> str:
-        if self.capabilities.is_capability_question(normalized):
+        if self.capabilities.is_capability_question(normalized) or self._contains_any_phrase(
+            normalized, ["waarmee help", "hoe kun je mij helpen", "how can you help"]
+        ):
             matched_signals.append("mode:capability")
             return "CAPABILITY"
         unavailable_financial_tokens = [
@@ -166,6 +259,7 @@ class FinnV2RequestAnalysisService:
             "run this",
             "go live",
             "zet live",
+            "start live trading",
             "voeg toe aan watchlist",
             "voeg toe aan mijn watchlist",
             "add to watchlist",
@@ -175,7 +269,7 @@ class FinnV2RequestAnalysisService:
             "remove from watchlist",
             "remove from my watchlist",
         ]
-        proposal_tokens = ["voeg", "add", "maak een voorstel", "stel", "voorstel", "proposal", "concept", "voorbereiden", "toevoegen", "aanpassen", "wijzig", "change", "adjust", "maak een setup", "create setup"]
+        proposal_tokens = ["voeg", "add", "maak een voorstel", "stel", "voorstel", "proposal", "concept", "voorbereiden", "bereid", "toevoegen", "aanpassen", "wijzig", "change", "adjust", "maak een setup", "create setup", "setupconcept"]
         evaluation_tokens = [
             "beoordeel",
             "evaluate",
@@ -196,6 +290,7 @@ class FinnV2RequestAnalysisService:
             "zwakste punt",
             "vertrouwen",
             "welke voorwaarde",
+            "weegt",
             "wat betekent dat plan",
             "als ik morgen niets wijzig",
         ]
@@ -207,8 +302,8 @@ class FinnV2RequestAnalysisService:
         if self._contains_any_phrase(normalized, confirmation_tokens):
             matched_signals.append("mode:confirmation")
             return "CONFIRMATION"
-        if ("watchlist" in normalized or "volglijst" in normalized) and any(
-            self._contains_phrase(normalized, token) for token in ("voeg", "add", "verwijder", "remove", "haal")
+        if ("watchlist" in scopes or "watchlist" in normalized or "volglijst" in normalized) and any(
+            self._contains_phrase(normalized, token) for token in ("voeg", "add", "verwijder", "remove", "haal", "zet", "toevoegen", "volgen")
         ):
             matched_signals.append("mode:action_proposal")
             return "ACTION_PROPOSAL"
@@ -219,7 +314,7 @@ class FinnV2RequestAnalysisService:
         if self._contains_any_phrase(normalized, action_tokens) and not no_execution_phrase:
             matched_signals.append("mode:action_proposal")
             return "ACTION_PROPOSAL"
-        if "live" in normalized and "bot" in scopes and any(token in normalized for token in ["activeer", "activate", "zet"]):
+        if "live" in normalized and "bot" in scopes and any(token in normalized for token in ["activeer", "activate", "zet", "maak", "start"]):
             matched_signals.append("mode:action_proposal")
             return "ACTION_PROPOSAL"
         if self._contains_any_phrase(normalized, proposal_tokens):
@@ -283,6 +378,23 @@ class FinnV2RequestAnalysisService:
     def _normalize_text(self, text: str) -> str:
         return re.sub(r"\s+", " ", text.casefold()).strip()
 
+    @staticmethod
+    def _uses_conversation_reference(normalized: str) -> bool:
+        return any(token in normalized for token in ["die ", "dat ", "eerder", "onderbouw", "korter", "anders"])
+
+    @staticmethod
+    def _context_asset(value: object) -> Optional[str]:
+        normalized = str(value or "").strip().upper()
+        return normalized or None
+
+    @staticmethod
+    def _context_entity_id(value: object) -> Optional[int]:
+        try:
+            entity_id = int(value)
+        except (TypeError, ValueError):
+            return None
+        return entity_id if entity_id > 0 else None
+
     def _contains_any_phrase(self, normalized: str, phrases: List[str]) -> bool:
         return any(self._contains_phrase(normalized, phrase) for phrase in phrases)
 
@@ -324,7 +436,7 @@ class FinnV2RequestAnalysisService:
             return "watchlist"
         if interaction_mode == "CREATE_PROPOSAL" and "setup" in normalized:
             return "setup"
-        preferred = ["bot", "strategy", "setup", "indicators", "analysis", "profile", "portfolio", "daily_report", "reflection"]
+        preferred = ["bot", "strategy", "setup", "indicators", "asset", "analysis", "profile", "portfolio", "daily_report", "reflection"]
         for scope in preferred:
             if scope in scopes:
                 return scope

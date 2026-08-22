@@ -35,6 +35,17 @@ class FinnV2DomainRequirementService:
                 requirement_reason=["deterministic_unavailable_without_provider_call"],
             )
 
+        information_domain_map = {
+            "profile": "identity_context", "preferences": "identity_context", "asset": "identity_context",
+            "watchlist": "identity_context", "indicators": "market_context", "market_snapshot": "market_context", "setup": "plan_context",
+            "strategy": "plan_context", "bot": "automation_context", "bot_status": "automation_context",
+        }
+        if analysis.request_plan is not None:
+            for scope in analysis.request_plan.required_information_scopes:
+                domain = information_domain_map.get(scope)
+                if domain:
+                    required_domains.append(domain)
+                    reasons.append(f"information_scope:{scope}->{domain}")
         for scope in analysis.subject_scopes:
             mapping = self._MAPPING.get(scope)
             if mapping is None:

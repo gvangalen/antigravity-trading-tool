@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Any, Dict, Optional
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -38,6 +38,7 @@ class FinnV2ConversationRepository(FinnV2RepositoryTransactionMixin):
             status="active",
             created_at=now,
             updated_at=now,
+            context_json={},
         )
         self.session.add(row)
         await self._flush_with_rollback(operation="create", entity_type="FinnV2Conversation")
@@ -50,3 +51,19 @@ class FinnV2ConversationRepository(FinnV2RepositoryTransactionMixin):
         row.last_run_id = run_id
         row.updated_at = datetime.now(timezone.utc)
         await self._flush_with_rollback(operation="update_last_run", entity_type="FinnV2Conversation", run_id=run_id)
+
+    async def get_context(self, *, conversation_id: str, user_id: int) -> Dict[str, Any]:
+        row = await self.get_by_id_for_user(conversation_id, user_id)
+        return dict(row.context_json or {}) if row is not None else {}
+
+    async def update_context(self, *, conversation_id: str, user_id: int, context: Dict[str, Any]) -> None:
+        row = await self.get_by_id_for_user(conversation_id, user_id)
+        if row is None:
+            return
+        row.context_json = dict(context)
+        row.updated_at = datetime.now(timezone.utc)
+        await self._flush_with_rollback(
+            operation="update_context",
+            entity_type="FinnV2Conversation",
+            run_id=row.last_run_id,
+        )

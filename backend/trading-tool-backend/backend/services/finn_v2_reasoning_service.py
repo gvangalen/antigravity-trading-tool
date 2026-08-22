@@ -90,6 +90,9 @@ class FinnV2ReasoningService:
         orchestrator_row = await self.orchestrators.get_for_run_version(run_id=run_id, user_id=user_id, orchestrator_version=ORCHESTRATOR_VERSION)
         if orchestrator_row is None:
             raise ValueError("orchestrator_not_ready")
+        persisted_tool_plan = dict(orchestrator_row.tool_plan_json or {})
+        persisted_request_plan = persisted_tool_plan.get("request_plan") or {}
+        selectors = persisted_tool_plan.get("entity_selectors") or {}
         orchestrator_result = OrchestratorResult.parse_obj(
             {
                 "orchestrator_result_id": orchestrator_row.id,
@@ -98,10 +101,12 @@ class FinnV2ReasoningService:
                 "analysis": {
                     "interaction_mode": normalize_interaction_mode(orchestrator_row.interaction_mode),
                     "subject_scopes": orchestrator_row.subject_scopes_json,
-                    "explicit_asset": None,
-                    "explicit_setup_id": None,
-                    "explicit_strategy_id": None,
-                    "explicit_bot_id": None,
+                    "explicit_asset": selectors.get("asset"),
+                    "explicit_setup_id": selectors.get("setup_id"),
+                    "explicit_strategy_id": selectors.get("strategy_id"),
+                    "explicit_bot_id": selectors.get("bot_id"),
+                    "primary_subject": persisted_tool_plan.get("primary_subject"),
+                    "output_contract": persisted_tool_plan.get("expected_response_contract"),
                     "requires_comparison": False,
                     "requires_gap_analysis": False,
                     "requests_change": normalize_interaction_mode(orchestrator_row.interaction_mode) in {"CREATE_PROPOSAL", "ACTION_PROPOSAL", "CONFIRMATION", "EXECUTION"},
@@ -110,6 +115,7 @@ class FinnV2ReasoningService:
                     "matched_signals": [],
                     "unresolved_signals": [],
                     "reasoning_required": normalize_interaction_mode(orchestrator_row.interaction_mode) in {"CAPABILITY", "READ", "EVALUATE", "CREATE_PROPOSAL", "ACTION_PROPOSAL", "CONFIRMATION", "EXECUTION"},
+                    "request_plan": persisted_request_plan or None,
                     "analysis_version": orchestrator_row.analysis_version,
                 },
                 "domain_requirements": {
@@ -117,7 +123,7 @@ class FinnV2ReasoningService:
                     "optional_domains": orchestrator_row.optional_domains_json,
                     "requirement_reason": [],
                 },
-                "tool_plan": orchestrator_row.tool_plan_json,
+                "tool_plan": persisted_tool_plan,
                 "snapshot_id": orchestrator_row.snapshot_id,
                 "validation_id": orchestrator_row.validation_id,
                 "outcome": orchestrator_row.outcome,

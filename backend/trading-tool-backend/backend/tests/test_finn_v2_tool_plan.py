@@ -25,11 +25,13 @@ def test_tool_plan_uses_canonical_order_and_explicit_selector():
     assert plan.tool_inputs["read_active_asset"] == {"asset": "BTC"}
     assert plan.required_evidence == [
         "profile",
+        "preferences",
         "active_asset",
         "indicator_configuration",
         "active_setup",
         "linked_strategy",
         "linked_bot",
+        "bot_status",
     ]
     assert plan.read_only is True
 
@@ -91,6 +93,7 @@ def test_tool_plan_routes_setup_creation_and_watchlist_actions_through_proposal_
     ]
     assert setup_plan.required_evidence == [
         "profile",
+        "preferences",
         "active_asset",
         "indicator_configuration",
         "active_setup",
@@ -121,9 +124,9 @@ def test_tool_plan_collects_bot_context_for_live_action_proposals():
     ]
     assert plan.required_evidence == [
         "active_asset",
+        "market_snapshot",
         "active_setup",
         "linked_strategy",
         "linked_bot",
         "bot_status",
-        "market_snapshot",
     ]
