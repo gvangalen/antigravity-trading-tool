@@ -109,6 +109,7 @@ def test_integrated_plan_prompt_preserves_bot_status_semantics_and_personal_grou
     prompt = service.build_user_prompt(context)
 
     assert "Treat is_live=false only as not-live or paper status" in prompt
+    assert "A field absent from bot evidence is unknown, not missing or unconfigured" in prompt
     assert "does not mean manual, inactive, stale or broken" in prompt
     assert "at least one saved profile or risk value" in prompt
     assert "planning rule or review step" in prompt
