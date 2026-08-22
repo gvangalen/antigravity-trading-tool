@@ -19,8 +19,15 @@ INTERACTION_MODES: Tuple[str, ...] = (
 
 RUN_STATUSES: Tuple[str, ...] = (
     "created",
+    "queued",
     "collecting",
     "planned",
+    "reasoning",
+    "verifying",
+    "clarification_required",
+    "unavailable",
+    "downgraded",
+    "rejected",
     "blocked",
     "completed",
     "failed",
@@ -52,12 +59,29 @@ RESPONSE_SOURCES: Tuple[str, ...] = (
     "v2_runtime",
 )
 
-TERMINAL_RUN_STATUSES = {"completed", "blocked", "failed", "canceled"}
+TERMINAL_RUN_STATUSES = {
+    "clarification_required",
+    "unavailable",
+    "downgraded",
+    "rejected",
+    "blocked",
+    "completed",
+    "failed",
+    "canceled",
+}
+ACTIVE_RUN_STATUSES = tuple(status for status in RUN_STATUSES if status not in TERMINAL_RUN_STATUSES)
 
 ALLOWED_RUN_TRANSITIONS: Mapping[str, Tuple[str, ...]] = {
-    "created": ("collecting", "failed", "canceled"),
+    "created": ("queued", "failed", "canceled"),
+    "queued": ("collecting", "failed", "canceled"),
     "collecting": ("planned", "blocked", "failed", "canceled"),
-    "planned": ("completed", "blocked", "failed", "canceled"),
+    "planned": ("reasoning", "clarification_required", "unavailable", "completed", "blocked", "failed", "canceled"),
+    "reasoning": ("verifying", "completed", "downgraded", "rejected", "unavailable", "failed", "canceled"),
+    "verifying": ("completed", "downgraded", "rejected", "unavailable", "failed", "canceled"),
+    "clarification_required": (),
+    "unavailable": (),
+    "downgraded": (),
+    "rejected": (),
     "blocked": (),
     "completed": (),
     "failed": (),
@@ -66,8 +90,15 @@ ALLOWED_RUN_TRANSITIONS: Mapping[str, Tuple[str, ...]] = {
 
 TRACE_EVENT_BY_STATUS: Mapping[str, str] = {
     "created": "run_created",
+    "queued": "run_queued",
     "collecting": "run_collecting",
     "planned": "run_planned",
+    "reasoning": "run_reasoning",
+    "verifying": "run_verifying",
+    "clarification_required": "run_clarification_required",
+    "unavailable": "run_unavailable",
+    "downgraded": "run_downgraded",
+    "rejected": "run_rejected",
     "blocked": "run_blocked",
     "completed": "run_completed_placeholder",
     "failed": "run_failed",
@@ -76,8 +107,15 @@ TRACE_EVENT_BY_STATUS: Mapping[str, str] = {
 
 SSE_EVENT_BY_STATUS: Mapping[str, str] = {
     "created": "run.created",
+    "queued": "run.queued",
     "collecting": "run.collecting",
     "planned": "run.planned",
+    "reasoning": "run.reasoning",
+    "verifying": "run.verifying",
+    "clarification_required": "run.clarification_required",
+    "unavailable": "run.unavailable",
+    "downgraded": "run.downgraded",
+    "rejected": "run.rejected",
     "blocked": "run.blocked",
     "completed": "run.completed",
     "failed": "run.failed",

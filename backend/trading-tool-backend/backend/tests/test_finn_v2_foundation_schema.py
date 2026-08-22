@@ -26,8 +26,15 @@ def test_finn_v2_schema_literals_match_contract():
     )
     assert get_args(RunStatus) == (
         "created",
+        "queued",
         "collecting",
         "planned",
+        "reasoning",
+        "verifying",
+        "clarification_required",
+        "unavailable",
+        "downgraded",
+        "rejected",
         "blocked",
         "completed",
         "failed",

@@ -20,8 +20,15 @@ InteractionMode = Literal[
 
 RunStatus = Literal[
     "created",
+    "queued",
     "collecting",
     "planned",
+    "reasoning",
+    "verifying",
+    "clarification_required",
+    "unavailable",
+    "downgraded",
+    "rejected",
     "blocked",
     "completed",
     "failed",
