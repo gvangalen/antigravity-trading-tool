@@ -317,14 +317,14 @@ class _FakeGatewayRunService:
     def __init__(self, _session):
         self.lifecycle_calls = []
 
-    async def create_run(self, payload):
+    async def create_run(self, payload, *, commit=True):
         return SimpleNamespace(**payload)
 
     async def run_foundation_lifecycle(self, *, run_id, user_id):
         self.lifecycle_calls.append((run_id, user_id))
 
 
-def test_gateway_run_foundation_now_returns_same_run_id_after_visible_budget_timeout(monkeypatch):
+def test_gateway_run_foundation_now_returns_pending_run_without_starting_lifecycle(monkeypatch):
     monkeypatch.setattr(gateway_module, "FinnV2ConversationRepository", _FakeConversationRepo)
     monkeypatch.setattr(gateway_module, "FinnV2RunRepository", _FakeGatewayRunRepo)
     monkeypatch.setattr(gateway_module, "FinnV2RunService", _FakeGatewayRunService)
@@ -359,4 +359,4 @@ def test_gateway_run_foundation_now_returns_same_run_id_after_visible_budget_tim
 
     assert run_id.startswith("finn-v2-run-")
     assert session.commit_calls == 1
-    assert observed == [(run_id, 7)]
+    assert observed == []

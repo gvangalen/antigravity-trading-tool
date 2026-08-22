@@ -44,7 +44,7 @@ class _FakeRunService:
     def __init__(self, _session):
         self.created = []
 
-    async def create_run(self, payload):
+    async def create_run(self, payload, *, commit=True):
         run = SimpleNamespace(**payload)
         self.created.append(run)
         return run

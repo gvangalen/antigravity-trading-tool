@@ -128,7 +128,7 @@ def test_incomplete_trade_route_avoids_provider_and_returns_unavailable():
     assert calls == {"tools": 1, "policy": 1, "reasoning": 1, "verifier": 1}
 
 
-def test_gateway_marks_visible_timeout_as_terminal_failure():
+def test_gateway_returns_pending_without_starting_visible_lifecycle():
     from backend.services.finn_v2_gateway_service import FinnV2GatewayService
 
     class _Session:
@@ -162,7 +162,7 @@ def test_gateway_marks_visible_timeout_as_terminal_failure():
     )
 
     assert run_id == "run-timeout-1"
-    assert observed["owned_job"]["run_id"] == "run-timeout-1"
+    assert observed["owned_job"] is None
 
 
 def test_visible_request_timeout_default_covers_live_plan_budget():
@@ -171,7 +171,7 @@ def test_visible_request_timeout_default_covers_live_plan_budget():
     assert FinnV2FlagService().visible_request_timeout_seconds() == 20
 
 
-def test_gateway_cancels_run_when_request_is_cancelled():
+def test_gateway_cancellation_never_controls_worker_lifecycle():
     from backend.services.finn_v2_gateway_service import FinnV2GatewayService
 
     class _Session:
@@ -183,11 +183,8 @@ def test_gateway_cancels_run_when_request_is_cancelled():
     service.flags.visible_request_timeout_seconds = lambda _mode=None: 30
     observed = {"owned_job": None}
 
-    lifecycle_started = asyncio.Event()
-
     async def _never_finish(**kwargs):
         observed["owned_job"] = kwargs
-        lifecycle_started.set()
         await asyncio.sleep(30)
 
     import backend.services.finn_v2_gateway_service as gateway_module
@@ -204,14 +201,13 @@ def test_gateway_cancels_run_when_request_is_cancelled():
                 trace_id="trace-cancel-1",
             )
         )
-        await lifecycle_started.wait()
         task.cancel()
         try:
             await task
         except asyncio.CancelledError:
             return
-        raise AssertionError("expected request cancellation")
+        return
 
     asyncio.run(_invoke())
 
-    assert observed["owned_job"]["run_id"] == "run-cancel-1"
+    assert observed["owned_job"] is None

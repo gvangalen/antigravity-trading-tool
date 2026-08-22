@@ -191,6 +191,8 @@ if ! ssh "${SSH_ARGS[@]}" "ubuntu@$SERVER_IP" "
   run_migration backend/scripts/migrations/2026_08_18_finn_v2_capability_mode.py
   run_migration backend/scripts/migrations/2026_08_18_finn_v2_typed_operation_modes.py
   run_migration backend/scripts/migrations/2026_08_20_finn_v2_canonical_modes.py
+  run_migration backend/scripts/migrations/2026_08_22_finn_v2_run_lifecycle_statuses.py
+  run_migration backend/scripts/migrations/2026_08_22_finn_v2_dispatch_outbox.py
 
   cd ../../frontend/trading-tool-frontend
   rm -rf .next
