@@ -1,7 +1,7 @@
 import pytest
 
 from backend.domain.finn_v2_contract import INTERACTION_MODES
-from backend.schemas.finn_v2_reasoning_context_schema import ReasoningContextPackage, ReasoningPolicyContext
+from backend.schemas.finn_v2_reasoning_context_schema import ReasoningContextPackage, ReasoningEvidenceItem, ReasoningPolicyContext
 from backend.services.finn_v2_reasoning_prompt_service import (
     FinnV2ReasoningPromptContractError,
     FinnV2ReasoningPromptService,
@@ -89,6 +89,29 @@ def test_evaluate_prompt_keeps_plan_reviews_read_only_and_blocks_live_activation
 
     assert "read-only analysis" in instruction
     assert "never recommend enabling live trading" in instruction
+
+
+def test_integrated_plan_prompt_preserves_bot_status_semantics_and_personal_grounding():
+    service = FinnV2ReasoningPromptService()
+    context = _context("EVALUATE").copy(
+        update={
+            "subject_scopes": ["profile", "indicators", "setup", "strategy", "bot"],
+            "evidence": [
+                ReasoningEvidenceItem(evidence_id="E1", artifact_id="a1", tool_name="read_profile", domain="identity_context", entity_type="profile", source="internal", freshness="fresh", confidence="high"),
+                ReasoningEvidenceItem(evidence_id="E2", artifact_id="a2", tool_name="read_indicator_configuration", domain="market_context", entity_type="indicator_configuration", source="internal", freshness="fresh", confidence="high"),
+                ReasoningEvidenceItem(evidence_id="E3", artifact_id="a3", tool_name="read_active_setup", domain="plan_context", entity_type="setup", source="internal", freshness="fresh", confidence="high"),
+                ReasoningEvidenceItem(evidence_id="E4", artifact_id="a4", tool_name="read_linked_strategy", domain="plan_context", entity_type="strategy", source="internal", freshness="fresh", confidence="high"),
+                ReasoningEvidenceItem(evidence_id="E5", artifact_id="a5", tool_name="read_linked_bot", domain="automation_context", entity_type="bot", source="internal", freshness="fresh", confidence="high"),
+            ],
+        }
+    )
+
+    prompt = service.build_user_prompt(context)
+
+    assert "Treat is_live=false only as not-live or paper status" in prompt
+    assert "does not mean manual, inactive, stale or broken" in prompt
+    assert "at least one saved profile or risk value" in prompt
+    assert "planning rule or review step" in prompt
 
 
 def test_reasoning_prompt_raises_explicit_contract_error_for_unknown_mode():

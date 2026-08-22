@@ -112,7 +112,11 @@ class FinnV2ReasoningPromptService:
                 "Use these saved grounding values when available: "
                 f"{json.dumps(self._integrated_plan_grounding_values(context), ensure_ascii=True, separators=(',', ':'))}. "
                 "Every fact, inference, or evaluation claim must cite evidence that directly supports that claim; do not cite an "
-                "unrelated plan item to support a general conclusion.\n"
+                "unrelated plan item to support a general conclusion. In direct_answer and main_observation, name the asset, "
+                "at least one saved profile or risk value, at least one configured indicator, and a saved setup, strategy or bot "
+                "anchor. Treat is_live=false only as not-live or paper status; it does not mean manual, inactive, stale or broken. "
+                "Do not infer bot health from evidence freshness. Make the next step a planning rule or review step, never a bot "
+                "configuration, activation or trading operation.\n"
             )
         return (
             "Use only the following structured context to answer the user question.\n"
