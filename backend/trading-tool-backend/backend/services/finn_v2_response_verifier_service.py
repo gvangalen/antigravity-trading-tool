@@ -49,6 +49,16 @@ from backend.services.finn_v2_semantic_verifier_service import FinnV2SemanticVer
 from backend.services.platform_metrics import increment_execution_safety_counter
 
 
+class FinnV2VerifierRejected(RuntimeError):
+    """A persisted Block 7 reject that must terminalize the existing run safely."""
+
+    error_code = "verifier_rejected"
+
+    def __init__(self, verifier: VerifierResult):
+        self.verifier = verifier
+        super().__init__(self.error_code)
+
+
 class FinnV2ResponseVerifierService:
     REQUIRED_SCOPE_TO_DOMAIN = {
         "profile": "identity_context",
@@ -192,8 +202,24 @@ class FinnV2ResponseVerifierService:
             elif verifier.action == "downgrade_to_unavailable":
                 draft = self.downgrades.downgrade_to_unavailable(draft=draft, reason=verifier.reason_codes[0] if verifier.reason_codes else None)
             elif verifier.action == "reject":
-                await self._append_trace(trace_id=trace_id, run_id=run.id, user_id=run.user_id, event_type="response_rejected", payload={"draft_id": draft.draft_id, "reason_codes": verifier.reason_codes})
-                raise ValueError("response_rejected")
+                verifier_row = await self._persist_verifier_result(run=run, draft=draft, verifier=verifier)
+                await self._append_trace(
+                    trace_id=trace_id,
+                    run_id=run.id,
+                    user_id=run.user_id,
+                    event_type="response_rejected",
+                    payload={
+                        "draft_id": draft.draft_id,
+                        "verifier_result_id": verifier_row.id,
+                        "action": verifier.action,
+                        "reason_codes": verifier.reason_codes,
+                        "coverage": verifier.coverage.dict(),
+                        "reasoning_result_id": draft.reasoning_result_id,
+                        "evidence_refs": self._all_refs(draft),
+                    },
+                )
+                increment_execution_safety_counter(f"finn_v2_verifier_results_total:{draft.mode}:reject")
+                raise FinnV2VerifierRejected(verifier)
             if verifier.action.startswith("downgrade_"):
                 await self._append_trace(trace_id=trace_id, run_id=run.id, user_id=run.user_id, event_type="response_downgraded", payload={"draft_id": draft.draft_id, "action": verifier.action})
                 verifier = self._deterministic_verify(
@@ -451,21 +477,7 @@ class FinnV2ResponseVerifierService:
         verifier_status = "repaired" if verifier.action == "deliver" and verifier.reason_codes else "passed"
         if normalize_interaction_mode(draft.mode) in {"READ", "CAPABILITY", "CLARIFICATION", "UNAVAILABLE"} and verifier.reason_codes:
             verifier_status = "downgraded"
-        verifier_row = await self.verifiers.create(
-            id=verifier.verifier_result_id,
-            run_id=run.id,
-            user_id=run.user_id,
-            draft_id=draft.draft_id,
-            reasoning_result_id=draft.reasoning_result_id,
-            passed=verifier.passed,
-            action=verifier.action,
-            result_json=to_json_safe(verifier.dict()),
-            reason_codes_json=verifier.reason_codes,
-            deterministic_version=verifier.verifier_version,
-            semantic_verifier_used=verifier.semantic_verifier_used,
-            semantic_model=self.flags.semantic_verifier_model(),
-            repair_attempt=min(1, len(verifier.reason_codes) if verifier_status == "repaired" else 0),
-        )
+        verifier_row = await self._persist_verifier_result(run=run, draft=draft, verifier=verifier)
         record = VerifiedResponse(
             verified_response_id=f"finn-v2-verified-response-{uuid.uuid4().hex}",
             run_id=run.id,
@@ -503,6 +515,23 @@ class FinnV2ResponseVerifierService:
         increment_execution_safety_counter(f"finn_v2_verifier_results_total:{record.mode}:{verifier.action}")
         increment_execution_safety_counter(f"finn_v2_verified_responses_total:{record.mode}:{record.verifier_status}")
         return record
+
+    async def _persist_verifier_result(self, *, run, draft: ResponseDraft, verifier: VerifierResult):
+        return await self.verifiers.create(
+            id=verifier.verifier_result_id,
+            run_id=run.id,
+            user_id=run.user_id,
+            draft_id=draft.draft_id,
+            reasoning_result_id=draft.reasoning_result_id,
+            passed=verifier.passed,
+            action=verifier.action,
+            result_json=to_json_safe(verifier.dict()),
+            reason_codes_json=verifier.reason_codes,
+            deterministic_version=verifier.verifier_version,
+            semantic_verifier_used=verifier.semantic_verifier_used,
+            semantic_model=self.flags.semantic_verifier_model(),
+            repair_attempt=min(1, len(verifier.reason_codes) if verifier.action == "deliver" and verifier.reason_codes else 0),
+        )
 
     async def _create_draft_proposal(self, *, run, policy: FinnV2PolicyDecision, draft: ResponseDraft, validation, trace_id: str) -> Optional[str]:
         proposal_input = self._proposal_input_from_candidate(run=run, draft=draft, validation=validation)

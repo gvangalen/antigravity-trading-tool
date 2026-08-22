@@ -93,3 +93,30 @@ def test_terminal_envelope_hydrates_persisted_v2_chain_without_rerunning_it():
     assert envelope.runtime_trace["verifier"]["coverage"]["coverage_ok"] is True
     assert envelope.runtime_trace["tool_calls"] == artifacts["tool_calls"]
     assert envelope.runtime_trace["evidence_references"] == artifacts["evidence_references"]
+
+
+def test_rejected_run_keeps_verifier_reasoning_provenance_in_its_terminal_envelope():
+    service = FinnV2RunService(session=object())
+    transition = {}
+    service.delivery.get_delivery_artifacts = lambda **_kwargs: asyncio.sleep(
+        0,
+        result={
+            "delivery_envelope": {"status": "completed"},
+            "verified_response": None,
+            "policy_result": {"allowed": True},
+            "reasoning_result": {
+                "result": {"reasoning_provenance": {"provider_called": True, "parse_status": "schema_invalid"}},
+            },
+            "verifier_result": {"action": "reject", "reason_codes": ["response_scope_incomplete"]},
+        },
+    )
+
+    async def _transition_run(*_args, **kwargs):
+        transition.update(kwargs)
+
+    service.transition_run = _transition_run
+    asyncio.run(service.complete_run(run_id="run-rejected-1", user_id=7, interaction_mode="UNAVAILABLE"))
+
+    assert transition["next_status"] == "completed"
+    assert transition["response_json"]["uncertainty"] == ["response_scope_incomplete"]
+    assert transition["response_json"]["reasoning_provenance"]["parse_status"] == "schema_invalid"

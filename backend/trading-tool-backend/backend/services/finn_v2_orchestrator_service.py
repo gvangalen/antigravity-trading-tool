@@ -16,7 +16,7 @@ from backend.services.finn_v2_flag_service import FinnV2FlagService
 from backend.services.finn_v2_orchestrator_outcome_service import FinnV2OrchestratorOutcomeService
 from backend.services.finn_v2_policy_engine_service import FinnV2PolicyEngineService
 from backend.services.finn_v2_reasoning_service import FinnV2ReasoningService
-from backend.services.finn_v2_response_verifier_service import FinnV2ResponseVerifierService
+from backend.services.finn_v2_response_verifier_service import FinnV2ResponseVerifierService, FinnV2VerifierRejected
 from backend.services.finn_v2_request_analysis_service import FinnV2RequestAnalysisService
 from backend.services.finn_v2_risk_classification_service import FinnV2RiskClassificationService
 from backend.services.finn_v2_tool_execution_service import FinnV2ToolExecutionService
@@ -187,6 +187,28 @@ class FinnV2OrchestratorService:
                     interaction_mode=analysis.interaction_mode,
                 )
             return result
+        except FinnV2VerifierRejected as rejection:
+            await self._append_trace(
+                run_id=run_id,
+                user_id=user_id,
+                trace_id=trace_id,
+                event_type="orchestrator_rejected",
+                payload_json={
+                    "run_id": run_id,
+                    "user_id": user_id,
+                    "verifier_result_id": rejection.verifier.verifier_result_id,
+                    "reason_codes": rejection.verifier.reason_codes,
+                    "duration_ms": int((monotonic() - started) * 1000),
+                },
+            )
+            increment_execution_safety_counter("finn_v2_orchestrator_rejections_total")
+            if self.complete_placeholder is not None:
+                await self.complete_placeholder(
+                    run_id=run_id,
+                    user_id=user_id,
+                    interaction_mode="UNAVAILABLE",
+                )
+            return result
         except Exception as exc:
             logger.exception(
                 "FINN V2 orchestrator primary failure",
@@ -211,7 +233,13 @@ class FinnV2OrchestratorService:
             )
             cleanup_exc = None
             try:
-                await self._persist_result(result)
+                existing = await self.results.get_for_run_version(
+                    run_id=run_id,
+                    user_id=user_id,
+                    orchestrator_version=result.orchestrator_version,
+                )
+                if existing is None:
+                    await self._persist_result(result)
                 await self._append_trace(
                     run_id=run_id,
                     user_id=user_id,
@@ -243,7 +271,18 @@ class FinnV2OrchestratorService:
                 )
             increment_execution_safety_counter("finn_v2_orchestrator_failures_total")
             if cleanup_exc is not None:
-                raise exc from cleanup_exc
+                logger.error(
+                    "FINN V2 orchestrator primary failure retained after cleanup error",
+                    extra={
+                        "trace_id": trace_id,
+                        "run_id": run_id,
+                        "user_id": user_id,
+                        "primary_exception_class": exc.__class__.__name__,
+                        "primary_exception_message": str(exc),
+                        "cleanup_exception_class": cleanup_exc.__class__.__name__,
+                        "cleanup_exception_message": str(cleanup_exc),
+                    },
+                )
             raise
 
     async def _persist_result(self, result) -> None:

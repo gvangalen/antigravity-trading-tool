@@ -1,9 +1,12 @@
 import asyncio
+from datetime import datetime, timezone
 from types import SimpleNamespace
 
 from backend.schemas.finn_v2_domain_validation_schema import EvidenceValidationResult
 from backend.schemas.finn_v2_orchestrator_schema import OrchestratorResult
 from backend.services.finn_v2_orchestrator_service import FinnV2OrchestratorService
+from backend.services.finn_v2_response_verifier_service import FinnV2VerifierRejected
+from backend.schemas.finn_v2_verifier_schema import CoverageVerification, VerifierResult
 
 
 class _FakeRunRepo:
@@ -263,3 +266,92 @@ def test_orchestrator_classifies_requested_operation_for_action_proposal_modes()
     asyncio.run(service.execute_run(run_id="run-3", user_id=7, trace_id="trace-3"))
 
     assert captured["requested_operation"] == "activate_paper_bot"
+
+
+def test_orchestrator_terminalizes_a_persisted_verifier_reject_without_a_second_result():
+    run = SimpleNamespace(
+        id="run-rejected-1",
+        user_id=7,
+        trace_id="trace-rejected-1",
+        status="planned",
+        visibility="visible",
+        feature_mode="visible_readonly",
+        message="Bekijk mijn plan.",
+        workspace_hints_json={},
+        client_context_json={},
+    )
+    service = FinnV2OrchestratorService(session=object())
+    service.runs = _FakeRunRepo(run)
+    service.traces = _FakeTraceRepo()
+    service.results = _FakeResultRepo()
+    service.flags.is_tool_registry_enabled = lambda: True
+    service.flags.is_state_assembly_enabled = lambda: True
+    service.flags.should_run_block5_shadow = lambda _user_id: False
+    service.flags.should_run_block6_shadow = lambda _user_id: False
+    service.flags.should_run_block7_shadow = lambda _user_id: False
+
+    async def _execute_tool_plan(**_kwargs):
+        return []
+
+    async def _run_state_pipeline(**_kwargs):
+        validation = EvidenceValidationResult.parse_obj(
+            {
+                "validation_id": "validation-rejected-1",
+                "snapshot_id": "snapshot-rejected-1",
+                "run_id": run.id,
+                "user_id": run.user_id,
+                "evidence_set_hash": "hash-rejected-1",
+                "integrity_status": "valid",
+                "domains": [{"domain": "plan_context", "status": "available", "confidence": "high"}],
+                "issues": [],
+                "validated_at": "2026-08-17T10:00:00+00:00",
+            }
+        )
+        return SimpleNamespace(snapshot_id="snapshot-rejected-1"), validation
+
+    verifier = VerifierResult(
+        verifier_result_id="verifier-rejected-1",
+        run_id=run.id,
+        user_id=run.user_id,
+        draft_id="draft-rejected-1",
+        passed=False,
+        action="reject",
+        claim_results=[],
+        coverage=CoverageVerification(required_scopes=["profile"], covered_scopes=[], missing_scopes=["profile"], coverage_ok=False),
+        schema_ok=True,
+        ownership_ok=True,
+        evidence_ok=False,
+        relevance_ok=True,
+        mode_purity_ok=True,
+        uncertainty_ok=True,
+        follow_up_ok=True,
+        proposal_ok=True,
+        policy_ok=True,
+        safety_ok=True,
+        reason_codes=["response_scope_incomplete"],
+        semantic_verifier_used=False,
+        created_at=datetime.now(timezone.utc),
+    )
+    completed = []
+
+    async def _complete_placeholder(**kwargs):
+        completed.append(kwargs)
+
+    service.tools.execute_tool_plan = _execute_tool_plan
+    service.tools.run_state_pipeline = _run_state_pipeline
+    service.policy.evaluate_run = lambda **_kwargs: asyncio.sleep(0, result=SimpleNamespace(policy_class="read", allowed=True, proposal_input_required=False, blocking_codes=[]))
+    service.policy.persist = lambda *_args, **_kwargs: asyncio.sleep(0)
+    service.reasoning.reason = lambda **_kwargs: asyncio.sleep(0, result=SimpleNamespace(status="completed"))
+    service.verifier.verify_run = lambda **_kwargs: asyncio.sleep(0, result=_raise_reject(verifier))
+    service.complete_placeholder = _complete_placeholder
+
+    result = asyncio.run(service.execute_run(run_id=run.id, user_id=run.user_id, trace_id=run.trace_id))
+
+    assert result.run_id == run.id
+    assert len(service.results.created) == 1
+    assert completed == [{"run_id": run.id, "user_id": run.user_id, "interaction_mode": "UNAVAILABLE"}]
+    assert [event["event_type"] for event in service.traces.events][-1] == "orchestrator_rejected"
+
+
+def _raise_reject(verifier):
+    raise FinnV2VerifierRejected(verifier)

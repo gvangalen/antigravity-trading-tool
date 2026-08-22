@@ -111,16 +111,20 @@ class FinnV2RunService:
         content = "\n\n".join([part for part in [direct_answer, main_observation] if part]).strip()
         if not content:
             placeholder = build_placeholder_response()
+            verifier = artifacts.get("verifier_result") or {}
+            reasoning = artifacts.get("reasoning_result") or {}
+            reasoning_result = reasoning.get("result") or {}
+            reason_codes = list(verifier.get("reason_codes") or [])
             response_json = {
                 "mode": interaction_mode or "UNAVAILABLE",
                 "content": placeholder.get("content") or "FINN V2 kon geen verified response afronden.",
                 "response_source": "v2_runtime",
                 "verifier_status": "failed",
                 "evidence": [],
-                "uncertainty": [str(artifacts.get("delivery_envelope", {}).get("status") or "delivery_unavailable")],
+                "uncertainty": reason_codes or [str(artifacts.get("delivery_envelope", {}).get("status") or "delivery_unavailable")],
                 "proposal_id": None,
                 "confirmation_required": False,
-                "reasoning_provenance": {},
+                "reasoning_provenance": reasoning_result.get("reasoning_provenance") or {},
             }
         else:
             response_json = {

@@ -97,18 +97,18 @@ class FinnV2DeliveryService:
                 verifier_result_id=verified_row.verifier_result_id,
                 user_id=user_id,
             )
+        if verifier is None:
+            verifier = await self.verifiers.get_latest_for_run(run_id=run_id, user_id=user_id)
         reasoning = None
         snapshot = None
         validation = None
-        if verified_row is not None and getattr(verified_row, "response_json", None):
-            verified_response = VerifiedResponse.parse_obj(verified_row.response_json)
-            if verified_response.verifier_result_id and verifier is not None:
-                reasoning_row = await self.reasoning.get_by_id_for_user(
-                    reasoning_result_id=getattr(verifier, "reasoning_result_id", ""),
-                    user_id=user_id,
-                )
-                if reasoning_row is not None:
-                    reasoning = PersistedReasoningRecord(
+        if verifier is not None and getattr(verifier, "reasoning_result_id", None):
+            reasoning_row = await self.reasoning.get_by_id_for_user(
+                reasoning_result_id=verifier.reasoning_result_id,
+                user_id=user_id,
+            )
+            if reasoning_row is not None:
+                reasoning = PersistedReasoningRecord(
                         reasoning_result_id=reasoning_row.id,
                         run_id=reasoning_row.run_id,
                         user_id=reasoning_row.user_id,
@@ -134,15 +134,15 @@ class FinnV2DeliveryService:
                         retry_count=reasoning_row.retry_count,
                         created_at=reasoning_row.created_at,
                         completed_at=reasoning_row.completed_at,
-                    )
-                    snapshot = await self.snapshots.get_by_id_for_user(
-                        snapshot_id=reasoning_row.snapshot_id,
-                        user_id=user_id,
-                    )
-                    validation = await self.validations.get_by_id_for_user(
-                        validation_id=reasoning_row.validation_id,
-                        user_id=user_id,
-                    )
+                )
+                snapshot = await self.snapshots.get_by_id_for_user(
+                    snapshot_id=reasoning_row.snapshot_id,
+                    user_id=user_id,
+                )
+                validation = await self.validations.get_by_id_for_user(
+                    validation_id=reasoning_row.validation_id,
+                    user_id=user_id,
+                )
         tool_calls = await self.tool_calls.list_for_run(run_id=run_id, user_id=user_id)
         evidence = await self.evidence.list_for_run(run_id=run_id, user_id=user_id)
         return {
