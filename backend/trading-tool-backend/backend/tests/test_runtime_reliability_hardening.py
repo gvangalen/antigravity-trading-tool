@@ -22,7 +22,7 @@ def test_deploy_env_supports_backend_only_auto_rollback_and_previous_markers():
     assert 'DEPLOY_COMPONENT_SET="${DEPLOY_COMPONENT_SET:-full}"' in source
     assert 'AUTO_ROLLBACK_ON_FAILURE="${AUTO_ROLLBACK_ON_FAILURE:-true}"' in source
     assert 'MIGRATION_COMMAND_TIMEOUT_SECONDS="${MIGRATION_COMMAND_TIMEOUT_SECONDS:-180}"' in source
-    assert 'DEEP_HEALTH_ATTEMPTS="${DEEP_HEALTH_ATTEMPTS:-18}"' in source
+    assert 'DEEP_HEALTH_ATTEMPTS="${DEEP_HEALTH_ATTEMPTS:-30}"' in source
     assert 'DEEP_HEALTH_RETRY_DELAY_SECONDS="${DEEP_HEALTH_RETRY_DELAY_SECONDS:-10}"' in source
     assert 'STRICT_EXTERNAL_SMOKE="${STRICT_EXTERNAL_SMOKE:-false}"' in source
     assert "lower_bool()" in source
