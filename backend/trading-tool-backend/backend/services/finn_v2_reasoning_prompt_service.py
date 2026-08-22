@@ -38,7 +38,9 @@ class FinnV2ReasoningPromptService:
             "do not reuse a generic indicator-pair template when the evidence differs. "
             "For an integrated plan evaluation, explicitly ground the answer in the saved asset, profile, configured indicators, "
             "setup, strategy and bot whenever those evidence items are present. Cite every evidence item used in "
-            "evidence_refs_used, and do not infer diversification, market claims or missing plan components that are not supported by evidence."
+            "evidence_refs_used, and do not infer diversification, market claims or missing plan components that are not supported by evidence. "
+            "This is read-only analysis: do not recommend or imply an operational change to a setup, strategy or bot, "
+            "and never recommend enabling live trading or changing a bot's live or paper status."
         ),
         "CREATE_PROPOSAL": "Prepare a controlled draft concept only; do not imply any change was executed.",
         "ACTION_PROPOSAL": "Interpret the intent safely, prepare a non-executed draft, and respect confirmation boundaries.",

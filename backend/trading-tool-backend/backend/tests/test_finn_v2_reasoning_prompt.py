@@ -82,6 +82,15 @@ def test_reasoning_prompt_capability_instruction_requires_registry_grounding():
     assert "give at most one relevant next step" in instruction
 
 
+def test_evaluate_prompt_keeps_plan_reviews_read_only_and_blocks_live_activation_advice():
+    service = FinnV2ReasoningPromptService()
+
+    instruction = service.mode_instruction_for("EVALUATE")
+
+    assert "read-only analysis" in instruction
+    assert "never recommend enabling live trading" in instruction
+
+
 def test_reasoning_prompt_raises_explicit_contract_error_for_unknown_mode():
     service = FinnV2ReasoningPromptService()
 
