@@ -88,17 +88,31 @@ class _FakeConversationRepo:
 @pytest.mark.parametrize(
     ("current_status", "next_status"),
     [
-        ("created", "collecting"),
+        ("created", "queued"),
         ("created", "failed"),
         ("created", "canceled"),
+        ("queued", "collecting"),
         ("collecting", "planned"),
         ("collecting", "blocked"),
         ("collecting", "failed"),
         ("collecting", "canceled"),
+        ("planned", "reasoning"),
+        ("planned", "clarification_required"),
+        ("planned", "unavailable"),
         ("planned", "completed"),
         ("planned", "blocked"),
         ("planned", "failed"),
         ("planned", "canceled"),
+        ("reasoning", "verifying"),
+        ("reasoning", "completed"),
+        ("reasoning", "downgraded"),
+        ("reasoning", "rejected"),
+        ("reasoning", "unavailable"),
+        ("reasoning", "failed"),
+        ("verifying", "completed"),
+        ("verifying", "downgraded"),
+        ("verifying", "rejected"),
+        ("verifying", "unavailable"),
     ],
 )
 def test_allowed_run_transitions(current_status, next_status):
@@ -109,11 +123,14 @@ def test_allowed_run_transitions(current_status, next_status):
     ("current_status", "next_status"),
     [
         ("created", "completed"),
+        ("created", "collecting"),
         ("collecting", "completed"),
         ("blocked", "completed"),
         ("completed", "failed"),
         ("failed", "planned"),
         ("canceled", "collecting"),
+        ("verifying", "reasoning"),
+        ("rejected", "completed"),
     ],
 )
 def test_forbidden_run_transitions(current_status, next_status):
@@ -218,13 +235,20 @@ def test_visible_run_executes_orchestrator_without_shadow_gate():
         flags=SimpleNamespace(should_run_block4_shadow=lambda _user_id: False),
         execute_shadow_tool_chain=_shadow_chain,
     )
-    service.complete_placeholder_run = _placeholder
-    service.orchestrator = SimpleNamespace(execute_run=_orchestrator)
+    service.complete_run = _placeholder
+    service.orchestrator = SimpleNamespace(
+        execute_run=_orchestrator,
+        consume_phase_outcome=lambda: SimpleNamespace(
+            terminal_status="completed",
+            interaction_mode="READ",
+            orchestrator_result_id="orchestrator-1",
+        ),
+    )
 
     asyncio.run(service.run_foundation_lifecycle(run_id="run-1", user_id=7))
 
-    assert calls == {"shadow_chain": 0, "placeholder": 0, "orchestrator": 1}
-    assert service.session.commit_calls == 1
+    assert calls == {"shadow_chain": 0, "placeholder": 1, "orchestrator": 1}
+    assert service.session.commit_calls == 3
 
 
 def test_fail_run_rolls_back_inactive_session_before_transition(monkeypatch):

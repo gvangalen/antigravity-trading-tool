@@ -10,7 +10,7 @@ from backend.infrastructure.repositories.finn_v2_orchestrator_repository import 
 from backend.infrastructure.repositories.finn_v2_run_repository import FinnV2RunRepository
 from backend.infrastructure.repositories.finn_v2_trace_repository import FinnV2TraceRepository
 from backend.domain.finn_v2_contract import normalize_interaction_mode
-from backend.schemas.finn_v2_orchestrator_schema import ORCHESTRATOR_VERSION
+from backend.schemas.finn_v2_orchestrator_schema import LifecyclePhaseOutcome, ORCHESTRATOR_VERSION
 from backend.services.finn_v2_domain_requirement_service import FinnV2DomainRequirementService
 from backend.services.finn_v2_flag_service import FinnV2FlagService
 from backend.services.finn_v2_orchestrator_outcome_service import FinnV2OrchestratorOutcomeService
@@ -34,6 +34,7 @@ class FinnV2OrchestratorService:
         *,
         flag_service: Optional[FinnV2FlagService] = None,
         complete_placeholder: Optional[Callable[..., Awaitable[None]]] = None,
+        phase_transition: Optional[Callable[..., Awaitable[None]]] = None,
     ):
         self.session = session
         self.flags = flag_service or FinnV2FlagService()
@@ -50,6 +51,8 @@ class FinnV2OrchestratorService:
         self.reasoning = FinnV2ReasoningService(session, flag_service=self.flags)
         self.verifier = FinnV2ResponseVerifierService(session, flag_service=self.flags)
         self.complete_placeholder = complete_placeholder
+        self.phase_transition = phase_transition
+        self.phase_outcome: Optional[LifecyclePhaseOutcome] = None
 
     async def execute_run(
         self,
@@ -146,6 +149,12 @@ class FinnV2OrchestratorService:
                         increment_execution_safety_counter(f"finn_v2_policy_blocks_total:{code}")
             reasoning_result = None
             if self._should_run_reasoning(run=run, user_id=user_id) and result.outcome != "failed":
+                await self._transition_phase(
+                    run_id=run_id,
+                    user_id=user_id,
+                    next_status="reasoning",
+                    interaction_mode=result.analysis.interaction_mode,
+                )
                 reasoning_result = await self.reasoning.reason(
                     user_id=user_id,
                     run_id=run_id,
@@ -153,6 +162,12 @@ class FinnV2OrchestratorService:
                 )
             verified_response = None
             if self._should_run_verifier(run=run, user_id=user_id) and reasoning_result is not None:
+                await self._transition_phase(
+                    run_id=run_id,
+                    user_id=user_id,
+                    next_status="verifying",
+                    interaction_mode=getattr(reasoning_result, "mode", None) or result.analysis.interaction_mode,
+                )
                 verified_response = await self.verifier.verify_run(
                     user_id=user_id,
                     run_id=run_id,
@@ -180,12 +195,10 @@ class FinnV2OrchestratorService:
             )
             record_latency_sample("finn_v2_orchestrator_duration_ms", int((monotonic() - started) * 1000))
             increment_execution_safety_counter(f"finn_v2_orchestrator_outcomes_total:{result.outcome}")
-            if self.complete_placeholder is not None:
-                await self.complete_placeholder(
-                    run_id=run_id,
-                    user_id=user_id,
-                    interaction_mode=analysis.interaction_mode,
-                )
+            self.phase_outcome = self._build_phase_outcome(
+                result=result,
+                verified_response=verified_response,
+            )
             return result
         except FinnV2VerifierRejected as rejection:
             await self._append_trace(
@@ -202,12 +215,12 @@ class FinnV2OrchestratorService:
                 },
             )
             increment_execution_safety_counter("finn_v2_orchestrator_rejections_total")
-            if self.complete_placeholder is not None:
-                await self.complete_placeholder(
-                    run_id=run_id,
-                    user_id=user_id,
-                    interaction_mode="UNAVAILABLE",
-                )
+            self.phase_outcome = LifecyclePhaseOutcome(
+                terminal_status="rejected",
+                interaction_mode="UNAVAILABLE",
+                orchestrator_result_id=result.orchestrator_result_id,
+                verifier_action="reject",
+            )
             return result
         except Exception as exc:
             logger.exception(
@@ -314,6 +327,46 @@ class FinnV2OrchestratorService:
             created_at=result.created_at,
         )
 
+    def consume_phase_outcome(self) -> LifecyclePhaseOutcome:
+        if self.phase_outcome is None:
+            raise RuntimeError("orchestrator_phase_outcome_missing")
+        return self.phase_outcome
+
+    def _build_phase_outcome(self, *, result, verified_response) -> LifecyclePhaseOutcome:
+        if result.outcome == "clarification_required":
+            return LifecyclePhaseOutcome(
+                terminal_status="clarification_required",
+                interaction_mode=result.analysis.interaction_mode,
+                orchestrator_result_id=result.orchestrator_result_id,
+            )
+        if result.outcome == "unavailable":
+            return LifecyclePhaseOutcome(
+                terminal_status="unavailable",
+                interaction_mode=result.analysis.interaction_mode,
+                orchestrator_result_id=result.orchestrator_result_id,
+            )
+        if result.outcome == "failed":
+            return LifecyclePhaseOutcome(
+                terminal_status="failed",
+                interaction_mode=result.analysis.interaction_mode,
+                orchestrator_result_id=result.orchestrator_result_id,
+            )
+        if verified_response is None:
+            raise RuntimeError("orchestrator_phase_outcome_incomplete")
+        verifier_status = getattr(verified_response, "verifier_status", None)
+        if verifier_status == "downgraded":
+            terminal_status = "downgraded"
+        elif verifier_status == "passed":
+            terminal_status = "completed"
+        else:
+            raise RuntimeError("orchestrator_phase_outcome_invalid_verifier_status")
+        return LifecyclePhaseOutcome(
+            terminal_status=terminal_status,
+            interaction_mode=getattr(verified_response, "mode", None) or result.analysis.interaction_mode,
+            orchestrator_result_id=result.orchestrator_result_id,
+            verifier_action="deliver",
+        )
+
     async def _append_trace(self, *, run_id: str, user_id: int, trace_id: str, event_type: str, payload_json: dict) -> None:
         await self.traces.append_event(
             run_id=run_id,
@@ -334,3 +387,21 @@ class FinnV2OrchestratorService:
 
     def _should_run_verifier(self, *, run, user_id: int) -> bool:
         return self._is_visible_run(run) or self.flags.should_run_block7_shadow(user_id)
+
+    async def _transition_phase(
+        self,
+        *,
+        run_id: str,
+        user_id: int,
+        next_status: str,
+        interaction_mode: Optional[str],
+    ) -> None:
+        if self.phase_transition is None:
+            return
+        await self.phase_transition(
+            run_id=run_id,
+            user_id=user_id,
+            next_status=next_status,
+            interaction_mode=interaction_mode,
+            response_source="v2_runtime",
+        )

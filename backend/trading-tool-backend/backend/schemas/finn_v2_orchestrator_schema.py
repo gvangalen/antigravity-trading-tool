@@ -180,6 +180,7 @@ class OrchestratorResult(BaseModel):
     orchestrator_version: str = ORCHESTRATOR_VERSION
     created_at: datetime
 
+
     @validator("unavailable_codes", "uncertainty_codes", pre=False)
     def _dedupe_codes(cls, value: List[str]) -> List[str]:
         seen = set()
@@ -189,3 +190,23 @@ class OrchestratorResult(BaseModel):
                 ordered.append(item)
                 seen.add(item)
         return ordered
+
+
+class LifecyclePhaseOutcome(BaseModel):
+    """Explicit terminal decision returned to the lifecycle coordinator.
+
+    Persisted block artifacts remain audit evidence. They are deliberately not
+    used by the coordinator to guess which terminal transition is appropriate.
+    """
+
+    terminal_status: Literal[
+        "clarification_required",
+        "unavailable",
+        "downgraded",
+        "rejected",
+        "completed",
+        "failed",
+    ]
+    interaction_mode: str
+    orchestrator_result_id: str
+    verifier_action: Optional[str] = None

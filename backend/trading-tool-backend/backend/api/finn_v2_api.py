@@ -8,6 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from backend.domain.finn_v2_contract import is_terminal_status
 from backend.infrastructure.database import get_db
 from backend.schemas.finn_v2_schema import (
     AgentRunCancelResponse,
@@ -72,7 +73,7 @@ async def cancel_finn_v2_run(
     run_service: FinnV2RunService = Depends(get_run_service),
 ):
     run = await gateway.get_run(run_id=run_id, user_id=int(current_user["id"]))
-    if run.status in {"completed", "blocked", "failed", "canceled"}:
+    if is_terminal_status(run.status):
         raise HTTPException(status_code=409, detail="FINN V2 run is already terminal")
     await run_service.cancel_run(run_id=run_id, user_id=int(current_user["id"]))
     refreshed = await gateway.get_run(run_id=run_id, user_id=int(current_user["id"]))
@@ -95,7 +96,7 @@ async def stream_finn_v2_run(
             if envelope.status != last_status:
                 yield _sse(f"run.{envelope.status}", envelope.dict())
                 last_status = envelope.status
-            if envelope.status in {"completed", "blocked", "failed", "canceled"}:
+            if is_terminal_status(envelope.status):
                 return
             if await raw_request.is_disconnected():
                 return
