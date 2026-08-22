@@ -251,6 +251,62 @@ def test_visible_run_executes_orchestrator_without_shadow_gate():
     assert service.session.commit_calls == 3
 
 
+def test_owned_lifecycle_resumes_planned_run_without_replaying_initial_transitions(monkeypatch):
+    import backend.services.finn_v2_run_service as run_service_module
+
+    run = SimpleNamespace(
+        id="run-planned",
+        user_id=7,
+        conversation_id="conv-1",
+        trace_id="trace-1",
+        transport="chat",
+        visibility="shadow",
+        feature_mode="shadow",
+        client_context_json={},
+        status="planned",
+    )
+    traces = _FakeTraceRepo()
+    transition_statuses = []
+
+    class _OwnedRunRepo(_FakeRunRepo):
+        async def update_status(self, *, run, status, **kwargs):
+            transition_statuses.append(status)
+            return await super().update_status(run=run, status=status, **kwargs)
+
+    class _SessionContext:
+        async def __aenter__(self):
+            return _FakeSession()
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+    async def _shadow_chain(**_kwargs):
+        return []
+
+    async def _complete(self, *, phase_outcome, **_kwargs):
+        assert phase_outcome.terminal_status == "completed"
+
+    monkeypatch.setattr(run_service_module, "async_session_factory", lambda: _SessionContext())
+    monkeypatch.setattr(run_service_module, "FinnV2RunRepository", lambda _session: _OwnedRunRepo(run))
+    monkeypatch.setattr(run_service_module, "FinnV2ConversationRepository", lambda _session: _FakeConversationRepo())
+    monkeypatch.setattr(run_service_module, "FinnV2TraceRepository", lambda _session: traces)
+    monkeypatch.setattr(
+        run_service_module,
+        "FinnV2ToolExecutionService",
+        lambda _session: SimpleNamespace(
+            flags=SimpleNamespace(should_run_block4_shadow=lambda _user_id: False),
+            execute_shadow_tool_chain=_shadow_chain,
+        ),
+    )
+    monkeypatch.setattr(run_service_module, "FinnV2DeliveryService", lambda _session: SimpleNamespace())
+    monkeypatch.setattr(run_service_module, "FinnV2OrchestratorService", lambda *_args, **_kwargs: SimpleNamespace())
+    monkeypatch.setattr(FinnV2RunService, "complete_run", _complete)
+
+    asyncio.run(FinnV2RunService.run_foundation_lifecycle_owned(run_id=run.id, user_id=run.user_id))
+
+    assert transition_statuses == []
+
+
 def test_fail_run_rolls_back_inactive_session_before_transition(monkeypatch):
     run = SimpleNamespace(
         id="run-1",

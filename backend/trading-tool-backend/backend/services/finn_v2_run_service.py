@@ -345,9 +345,19 @@ class FinnV2RunService:
         between sessions. ORM instances must never survive a rollback boundary.
         """
         try:
-            for status in ("queued", "collecting", "planned"):
+            initial_statuses = ("created", "queued", "collecting", "planned")
+            for status in initial_statuses[1:]:
                 async with async_session_factory() as session:
-                    await cls(session).persist_transition(
+                    service = cls(session)
+                    run = await service.runs.get_by_id_for_user(run_id=run_id, user_id=user_id)
+                    if run is None:
+                        raise LookupError("FINN V2 run not found")
+                    # A retry may take over after a worker crash. Never replay a
+                    # persisted lifecycle boundary backwards (for example planned -> queued).
+                    current_index = initial_statuses.index(run.status) if run.status in initial_statuses else len(initial_statuses)
+                    if current_index >= initial_statuses.index(status):
+                        continue
+                    await service.persist_transition(
                         run_id,
                         user_id,
                         next_status=status,

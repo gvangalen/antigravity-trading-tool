@@ -46,6 +46,11 @@ async def _process_finn_v2_run(*, run_id: str, owner: str) -> str:
             await session.commit()
         await FinnV2RunService.run_foundation_lifecycle_owned(run_id=run_id, user_id=user_id)
         async with async_session_factory() as session:
+            completed_run = (
+                await session.execute(select(FinnV2Run).where(FinnV2Run.id == run_id))
+            ).scalars().first()
+            if completed_run is None or not is_terminal_status(completed_run.status):
+                raise RuntimeError("finn_v2_lifecycle_returned_nonterminal")
             await FinnV2DispatchRepository(session).mark_completed(dispatch_id)
             await session.commit()
     except Exception as exc:
