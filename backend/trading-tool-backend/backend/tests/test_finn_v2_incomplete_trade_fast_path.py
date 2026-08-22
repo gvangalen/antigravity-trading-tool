@@ -2,6 +2,8 @@ import asyncio
 from datetime import datetime, timezone
 from types import SimpleNamespace
 
+import pytest
+
 from backend.schemas.finn_v2_domain_validation_schema import EvidenceValidationResult
 from backend.services.finn_v2_domain_requirement_service import FinnV2DomainRequirementService
 from backend.services.finn_v2_orchestrator_service import FinnV2OrchestratorService
@@ -128,28 +130,35 @@ def test_incomplete_trade_route_avoids_provider_and_returns_unavailable():
     assert calls == {"tools": 1, "policy": 1, "reasoning": 1, "verifier": 1}
 
 
-def test_gateway_marks_visible_timeout_as_terminal_failure():
+def test_gateway_enqueues_visible_run_after_commit():
     from backend.services.finn_v2_gateway_service import FinnV2GatewayService
 
     class _Session:
+        add = object()
+
         async def commit(self):
             return None
 
     service = FinnV2GatewayService(session=_Session())
-    service.flags.visible_request_timeout_seconds = lambda _mode=None: 1
     service.create_run = lambda **_kwargs: asyncio.sleep(0, result=SimpleNamespace(id="run-timeout-1", status="created"))
-    observed = {"owned_job": None}
+    observed = []
 
-    async def _slow_lifecycle(**_kwargs):
-        await asyncio.sleep(2)
+    class _Dispatches:
+        async def get_for_run(self, _run_id):
+            return SimpleNamespace(dispatch_id="dispatch-1", task_id="task-1", queue="ai_generation")
 
-    async def _owned_job(**kwargs):
-        observed["owned_job"] = kwargs
-        await _slow_lifecycle(**kwargs)
+        async def mark_dispatched(self, dispatch_id):
+            observed.append(("dispatched", dispatch_id))
 
-    import backend.services.finn_v2_gateway_service as gateway_module
+    class _Task:
+        def apply_async(self, **kwargs):
+            observed.append(("enqueued", kwargs))
 
-    gateway_module.run_foundation_lifecycle_owned_job = _owned_job
+    import backend.celery_task.finn_v2_task as task_module
+
+    service.dispatches = _Dispatches()
+    monkeypatch = pytest.MonkeyPatch()
+    monkeypatch.setattr(task_module, "process_finn_v2_run", _Task())
 
     run_id = asyncio.run(
         service.run_foundation_now(
@@ -162,7 +171,11 @@ def test_gateway_marks_visible_timeout_as_terminal_failure():
     )
 
     assert run_id == "run-timeout-1"
-    assert observed["owned_job"]["run_id"] == "run-timeout-1"
+    assert observed == [
+        ("enqueued", {"kwargs": {"run_id": "run-timeout-1"}, "task_id": "task-1", "queue": "ai_generation"}),
+        ("dispatched", "dispatch-1"),
+    ]
+    monkeypatch.undo()
 
 
 def test_visible_request_timeout_default_covers_live_plan_budget():
@@ -171,47 +184,47 @@ def test_visible_request_timeout_default_covers_live_plan_budget():
     assert FinnV2FlagService().visible_request_timeout_seconds() == 20
 
 
-def test_gateway_cancels_run_when_request_is_cancelled():
+def test_gateway_request_cancellation_does_not_cancel_durable_dispatch():
     from backend.services.finn_v2_gateway_service import FinnV2GatewayService
 
     class _Session:
+        add = object()
+
         async def commit(self):
             return None
 
     service = FinnV2GatewayService(session=_Session())
     service.create_run = lambda **_kwargs: asyncio.sleep(0, result=SimpleNamespace(id="run-cancel-1", status="created"))
-    service.flags.visible_request_timeout_seconds = lambda _mode=None: 30
-    observed = {"owned_job": None}
+    observed = []
 
-    lifecycle_started = asyncio.Event()
+    class _Dispatches:
+        async def get_for_run(self, _run_id):
+            return SimpleNamespace(dispatch_id="dispatch-1", task_id="task-1", queue="ai_generation")
 
-    async def _never_finish(**kwargs):
-        observed["owned_job"] = kwargs
-        lifecycle_started.set()
-        await asyncio.sleep(30)
+        async def mark_dispatched(self, dispatch_id):
+            observed.append(("dispatched", dispatch_id))
 
-    import backend.services.finn_v2_gateway_service as gateway_module
+    class _Task:
+        def apply_async(self, **kwargs):
+            observed.append(("enqueued", kwargs))
 
-    gateway_module.run_foundation_lifecycle_owned_job = _never_finish
+    import backend.celery_task.finn_v2_task as task_module
 
-    async def _invoke():
-        task = asyncio.create_task(
-            service.run_foundation_now(
-                user_id=7,
-                request_payload={"message": "Wat is nu de beste trade voor mij zonder verdere context?", "transport": "chat"},
-                request_path="/api/assistant/chat",
-                request_id="req-cancel-1",
-                trace_id="trace-cancel-1",
-            )
+    service.dispatches = _Dispatches()
+    monkeypatch = pytest.MonkeyPatch()
+    monkeypatch.setattr(task_module, "process_finn_v2_run", _Task())
+
+    run_id = asyncio.run(
+        service.run_foundation_now(
+            user_id=7,
+            request_payload={"message": "Wat is nu de beste trade voor mij zonder verdere context?", "transport": "chat"},
+            request_path="/api/assistant/chat",
+            request_id="req-cancel-1",
+            trace_id="trace-cancel-1",
         )
-        await lifecycle_started.wait()
-        task.cancel()
-        try:
-            await task
-        except asyncio.CancelledError:
-            return
-        raise AssertionError("expected request cancellation")
+    )
 
-    asyncio.run(_invoke())
-
-    assert observed["owned_job"]["run_id"] == "run-cancel-1"
+    assert run_id == "run-cancel-1"
+    assert observed[0][0] == "enqueued"
+    assert observed[0][1]["kwargs"] == {"run_id": "run-cancel-1"}
+    monkeypatch.undo()

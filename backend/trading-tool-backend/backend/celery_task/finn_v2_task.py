@@ -23,6 +23,9 @@ from backend.celery_task.queue_policy import resolve_task_queue
 
 logger = logging.getLogger(__name__)
 
+DISPATCH_LEASE_SECONDS = 300
+DISPATCH_HEARTBEAT_SECONDS = 60
+
 
 def _run_async(coroutine):
     """Run one Celery task on a fresh loop without reusing asyncpg connections."""
@@ -43,15 +46,35 @@ async def _process_finn_v2_run(*, run_id: str, owner: str) -> str:
         run = (await session.execute(select(FinnV2Run).where(FinnV2Run.id == run_id))).scalars().first()
         if run is None or is_terminal_status(run.status):
             return run_id
-        dispatch = await dispatches.claim(run_id=run_id, owner=owner, lease_seconds=300)
+        dispatch = await dispatches.claim(run_id=run_id, owner=owner, lease_seconds=DISPATCH_LEASE_SECONDS)
         if dispatch is None:
             return run_id
         await session.commit()
         dispatch_id = dispatch.dispatch_id
         user_id = run.user_id
+    stop_heartbeat = asyncio.Event()
+
+    async def _heartbeat_loop() -> None:
+        while True:
+            try:
+                await asyncio.wait_for(stop_heartbeat.wait(), timeout=DISPATCH_HEARTBEAT_SECONDS)
+                return
+            except asyncio.TimeoutError:
+                async with async_session_factory() as heartbeat_session:
+                    renewed = await FinnV2DispatchRepository(heartbeat_session).heartbeat(
+                        dispatch_id=dispatch_id,
+                        owner=owner,
+                        lease_seconds=DISPATCH_LEASE_SECONDS,
+                    )
+                    await heartbeat_session.commit()
+                if not renewed:
+                    logger.warning("FINN V2 dispatch lease lost", extra={"run_id": run_id, "dispatch_id": dispatch_id})
+                    return
+
+    heartbeat_task = asyncio.create_task(_heartbeat_loop(), name=f"finn-v2-dispatch-heartbeat:{dispatch_id}")
     try:
         async with async_session_factory() as session:
-            await FinnV2DispatchRepository(session).heartbeat(dispatch_id=dispatch_id, owner=owner, lease_seconds=300)
+            await FinnV2DispatchRepository(session).heartbeat(dispatch_id=dispatch_id, owner=owner, lease_seconds=DISPATCH_LEASE_SECONDS)
             await session.commit()
         await FinnV2RunService.run_foundation_lifecycle_owned(run_id=run_id, user_id=user_id)
         async with async_session_factory() as session:
@@ -60,13 +83,25 @@ async def _process_finn_v2_run(*, run_id: str, owner: str) -> str:
             ).scalars().first()
             if completed_run is None or not is_terminal_status(completed_run.status):
                 raise RuntimeError("finn_v2_lifecycle_returned_nonterminal")
-            await FinnV2DispatchRepository(session).mark_completed(dispatch_id)
+            dispatches = FinnV2DispatchRepository(session)
+            if completed_run.status in {"failed", "canceled"}:
+                if completed_run.retryable:
+                    raise RuntimeError(completed_run.error_code or "finn_v2_retryable_lifecycle_failure")
+                await dispatches.mark_terminal_failure(
+                    dispatch_id=dispatch_id,
+                    error_code=completed_run.error_code or completed_run.status,
+                )
+            else:
+                await dispatches.mark_completed(dispatch_id)
             await session.commit()
     except Exception as exc:
         async with async_session_factory() as session:
             await FinnV2DispatchRepository(session).mark_failure(dispatch_id=dispatch_id, error_code=type(exc).__name__)
             await session.commit()
         raise
+    finally:
+        stop_heartbeat.set()
+        await heartbeat_task
     return run_id
 
 

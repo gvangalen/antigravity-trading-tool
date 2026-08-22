@@ -11,6 +11,7 @@ from backend.infrastructure.models import FinnV2Run, FinnV2RunDispatch
 
 class FinnV2DispatchRepository:
     MAX_ATTEMPTS = 3
+
     def __init__(self, session: AsyncSession):
         self.session = session
 
@@ -81,6 +82,21 @@ class FinnV2DispatchRepository:
     async def mark_completed(self, dispatch_id: str) -> None:
         now = datetime.now(timezone.utc)
         await self.session.execute(update(FinnV2RunDispatch).where(FinnV2RunDispatch.dispatch_id == dispatch_id).values(status="completed", completed_at=now, lease_expires_at=None, updated_at=now))
+
+    async def mark_terminal_failure(self, *, dispatch_id: str, error_code: str) -> None:
+        now = datetime.now(timezone.utc)
+        await self.session.execute(
+            update(FinnV2RunDispatch)
+            .where(FinnV2RunDispatch.dispatch_id == dispatch_id)
+            .values(
+                status="terminal_failure",
+                last_error_code=error_code[:120],
+                owner=None,
+                lease_expires_at=None,
+                completed_at=now,
+                updated_at=now,
+            )
+        )
 
     async def mark_failure(self, *, dispatch_id: str, error_code: str) -> str:
         row = (await self.session.execute(select(FinnV2RunDispatch).where(FinnV2RunDispatch.dispatch_id == dispatch_id))).scalars().first()
