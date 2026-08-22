@@ -112,7 +112,14 @@ class FinnV2ToolPlanService:
                 "read_bot_status",
             ]
         if analysis.interaction_mode == "CREATE_PROPOSAL":
-            return ["read_profile", "read_user_preferences", "read_active_asset", "read_active_setup"]
+            return [
+                "read_profile",
+                "read_user_preferences",
+                "read_active_asset",
+                "read_indicator_configuration",
+                "read_active_setup",
+                "read_linked_strategy",
+            ]
         if analysis.interaction_mode == "ACTION_PROPOSAL":
             if analysis.primary_subject == "watchlist":
                 return ["read_active_asset", "read_watchlist"]
@@ -172,7 +179,13 @@ class FinnV2ToolPlanService:
                     deduped.append(item)
             return deduped
         if analysis.interaction_mode == "CREATE_PROPOSAL":
-            return ["active_asset"]
+            return [
+                "profile",
+                "active_asset",
+                "indicator_configuration",
+                "active_setup",
+                "linked_strategy",
+            ]
         if analysis.interaction_mode == "ACTION_PROPOSAL":
             if analysis.primary_subject == "watchlist":
                 return ["active_asset", "watchlist"]
@@ -197,5 +210,5 @@ class FinnV2ToolPlanService:
                 optional.append("bot_status")
             return optional
         if analysis.interaction_mode == "CREATE_PROPOSAL":
-            return ["active_setup"]
+            return []
         return []

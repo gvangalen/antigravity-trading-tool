@@ -56,6 +56,30 @@ def test_request_analysis_routes_setup_create_and_watchlist_action_to_proposals(
     assert watchlist_result.primary_subject == "watchlist"
 
 
+def test_request_analysis_keeps_natural_integrated_plan_paraphrases_in_evaluate_mode():
+    for message in [
+        "Bekijk het hele plaatje en zeg waar het wringt.",
+        "Waar zit momenteel het zwakste punt in mijn hele plan?",
+        "Welke voorwaarde ontbreekt voordat ik dit plan kan vertrouwen?",
+    ]:
+        result = SERVICE.analyze(message=message)
+
+        assert result.interaction_mode == "EVALUATE"
+        assert result.subject_scopes == ["profile", "indicators", "setup", "strategy", "bot"]
+
+
+def test_request_analysis_treats_safe_setup_concepts_as_create_proposals():
+    for message in [
+        "Maak een veilig concept voor een betere setup bij mijn huidige plan; nog niet opslaan.",
+        "Stel een passende nieuwe setup voor mijn BTC-plan voor, maar voer niets uit.",
+        "Welke setup zou jij als voorstel toevoegen aan mijn huidige BTC-aanpak? Alleen voorbereiden.",
+    ]:
+        result = SERVICE.analyze(message=message)
+
+        assert result.interaction_mode == "CREATE_PROPOSAL"
+        assert result.primary_subject == "setup"
+
+
 def test_request_analysis_routes_live_bot_activation_to_action_proposal():
     result = SERVICE.analyze(message="Activeer deze bot live.")
 

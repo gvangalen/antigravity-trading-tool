@@ -102,7 +102,7 @@ class FinnV2OrchestratorService:
             policy_decision = None
             if self._should_run_policy(run=run, user_id=user_id) and snapshot is not None and validation is not None and result.outcome != "failed":
                 requested_operation = None
-                if normalize_interaction_mode(result.analysis.interaction_mode) in {"ACTION_PROPOSAL", "CONFIRMATION", "EXECUTION"}:
+                if normalize_interaction_mode(result.analysis.interaction_mode) in {"CREATE_PROPOSAL", "ACTION_PROPOSAL", "CONFIRMATION", "EXECUTION"}:
                     requested_operation = self.risk.classify_requested_operation(message=run.message)
                 await self._append_trace(
                     run_id=run_id,

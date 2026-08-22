@@ -46,9 +46,11 @@ class FinnV2DomainRequirementService:
         if analysis.interaction_mode in {"CREATE_PROPOSAL", "ACTION_PROPOSAL", "CONFIRMATION", "EXECUTION"}:
             reasons.append("read_only_context_for_change_intent")
         if analysis.interaction_mode == "CREATE_PROPOSAL" and "setup" in analysis.subject_scopes:
-            required_domains = ["identity_context"]
-            optional_domains = ["plan_context"]
-            reasons.append("setup_creation_requires_identity_not_existing_plan")
+            # A setup proposal must be grounded in the current plan rather
+            # than treating the write boundary as a reason to skip context.
+            required_domains = ["identity_context", "market_context", "plan_context"]
+            optional_domains = []
+            reasons.append("setup_creation_requires_grounded_plan_context")
         if analysis.interaction_mode == "ACTION_PROPOSAL" and analysis.primary_subject == "bot":
             required_domains = ["identity_context", "plan_context", "automation_context"]
             optional_domains = []

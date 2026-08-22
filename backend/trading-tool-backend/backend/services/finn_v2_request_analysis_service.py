@@ -35,6 +35,13 @@ class FinnV2RequestAnalysisService:
         unresolved_signals: List[str] = []
 
         scopes = self._subject_scopes(normalized, matched_signals)
+        # An integrated assessment is about the user's plan even when the
+        # message uses a natural reference such as "het hele plaatje".
+        if self._is_integrated_plan_request(normalized):
+            for scope in ["profile", "indicators", "setup", "strategy", "bot"]:
+                if scope not in scopes:
+                    scopes.append(scope)
+                    matched_signals.append(f"scope:{scope}:integrated_plan")
         explicit_asset = self._extract_asset(text, normalized)
         explicit_setup_id = self._extract_entity_id(text, "setup")
         explicit_strategy_id = self._extract_entity_id(text, "strateg")
@@ -168,7 +175,7 @@ class FinnV2RequestAnalysisService:
             "remove from watchlist",
             "remove from my watchlist",
         ]
-        proposal_tokens = ["voeg", "add", "maak een voorstel", "proposal", "aanpassen", "wijzig", "change", "adjust", "maak een setup", "create setup"]
+        proposal_tokens = ["voeg", "add", "maak een voorstel", "stel", "voorstel", "proposal", "concept", "voorbereiden", "toevoegen", "aanpassen", "wijzig", "change", "adjust", "maak een setup", "create setup"]
         evaluation_tokens = [
             "beoordeel",
             "evaluate",
@@ -183,6 +190,14 @@ class FinnV2RequestAnalysisService:
             "compare",
             "vergelijk",
             "conflict",
+            "hele plaatje",
+            "hele plan",
+            "waar wringt",
+            "zwakste punt",
+            "vertrouwen",
+            "welke voorwaarde",
+            "wat betekent dat plan",
+            "als ik morgen niets wijzig",
         ]
         read_tokens = ["welke", "what", "which", "staat", "is", "wat", "who", "where", "bekijk", "toon", "show"]
 
@@ -197,7 +212,11 @@ class FinnV2RequestAnalysisService:
         ):
             matched_signals.append("mode:action_proposal")
             return "ACTION_PROPOSAL"
-        if self._contains_any_phrase(normalized, action_tokens):
+        if "setup" in scopes and self._contains_any_phrase(normalized, proposal_tokens):
+            matched_signals.append("mode:create_proposal")
+            return "CREATE_PROPOSAL"
+        no_execution_phrase = any(phrase in normalized for phrase in ["voer niets uit", "niet uitvoeren", "nog niet opslaan"])
+        if self._contains_any_phrase(normalized, action_tokens) and not no_execution_phrase:
             matched_signals.append("mode:action_proposal")
             return "ACTION_PROPOSAL"
         if "live" in normalized and "bot" in scopes and any(token in normalized for token in ["activeer", "activate", "zet"]):
@@ -219,6 +238,26 @@ class FinnV2RequestAnalysisService:
             matched_signals.append("mode:read_inferred")
             return "READ"
         return "UNAVAILABLE"
+
+    @staticmethod
+    def _is_integrated_plan_request(normalized: str) -> bool:
+        direct_integrated_reference = any(
+            phrase in normalized
+            for phrase in [
+                "hele plaatje",
+                "hele plan",
+                "zwakste punt",
+                "waar wringt",
+                "belangrijkste ontbrekende onderdeel",
+                "welke voorwaarde ontbreekt",
+            ]
+        )
+        plan_reference = any(phrase in normalized for phrase in ["mijn plan", "dat plan"])
+        evaluation_language = any(
+            phrase in normalized
+            for phrase in ["beoordeel", "bekijk", "ontbreekt", "risico", "vertrouwen", "verbeter", "betekent"]
+        )
+        return direct_integrated_reference or (plan_reference and evaluation_language)
 
     def _extract_asset(self, original: str, normalized: str) -> Optional[str]:
         for token, asset in self._ASSET_ALIASES.items():
@@ -283,6 +322,8 @@ class FinnV2RequestAnalysisService:
             return "assistant"
         if interaction_mode == "ACTION_PROPOSAL" and ("watchlist" in normalized or "volglijst" in normalized):
             return "watchlist"
+        if interaction_mode == "CREATE_PROPOSAL" and "setup" in normalized:
+            return "setup"
         preferred = ["bot", "strategy", "setup", "indicators", "analysis", "profile", "portfolio", "daily_report", "reflection"]
         for scope in preferred:
             if scope in scopes:
