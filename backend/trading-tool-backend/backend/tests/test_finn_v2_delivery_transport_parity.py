@@ -38,4 +38,5 @@ def test_delivery_transport_parity_streams_same_verified_response():
 
     events = asyncio.run(_collect())
 
+    assert envelope.response.mode == "READ"
     assert events[0].payload["response"] == envelope.response.dict()

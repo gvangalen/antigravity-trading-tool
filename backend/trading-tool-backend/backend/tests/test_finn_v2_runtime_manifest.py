@@ -33,6 +33,7 @@ REQUIRED_MIGRATIONS = (
     "2026_08_17_finn_v2_verified_delivery.py",
     "2026_08_17_finn_v2_evals_cutover_execution.py",
     "2026_08_22_finn_v2_run_lifecycle_statuses.py",
+    "2026_08_22_finn_v2_remove_legacy_fact_mode.py",
 )
 
 

@@ -42,10 +42,6 @@ class ResponseDraft(BaseModel):
         "CLARIFICATION",
         "CONFIRMATION",
         "EXECUTION",
-        "FACT",
-        "EVALUATION",
-        "PROPOSAL",
-        "ACTION",
         "UNAVAILABLE",
     ]
     direct_answer: constr(min_length=1, max_length=1200)
@@ -75,7 +71,7 @@ class ResponseDraft(BaseModel):
         mode = values.get("mode")
         follow_up_question = values.get("follow_up_question")
         proposal_candidate = values.get("proposal_candidate")
-        if proposal_candidate is not None and mode not in {"CREATE_PROPOSAL", "ACTION_PROPOSAL", "PROPOSAL", "ACTION"}:
+        if proposal_candidate is not None and mode not in {"CREATE_PROPOSAL", "ACTION_PROPOSAL"}:
             raise ValueError("proposal_candidate_not_allowed")
         if mode == "CLARIFICATION" and not follow_up_question:
             raise ValueError("clarification_requires_question")
@@ -98,10 +94,6 @@ class VerifiedResponse(BaseModel):
         "CLARIFICATION",
         "CONFIRMATION",
         "EXECUTION",
-        "FACT",
-        "EVALUATION",
-        "PROPOSAL",
-        "ACTION",
         "UNAVAILABLE",
     ]
     direct_answer: constr(min_length=1, max_length=1200)

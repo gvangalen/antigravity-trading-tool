@@ -136,6 +136,16 @@ class InvalidRunTransitionError(ValueError):
     pass
 
 
+class FinnV2ModeContractError(ValueError):
+    """Raised when a FINN V2 artifact contains a mode outside the contract."""
+
+    code = "finn_v2_mode_contract_invalid"
+
+    def __init__(self, mode: Optional[str]):
+        self.mode = mode
+        super().__init__(f"{self.code}:{mode}")
+
+
 @dataclass(frozen=True)
 class RunTransition:
     from_status: str
@@ -174,5 +184,5 @@ def normalize_interaction_mode(mode: Optional[str]) -> str:
     normalized = str(mode or "").strip().upper()
     normalized = LEGACY_INTERACTION_MODE_ALIASES.get(normalized, normalized)
     if normalized not in INTERACTION_MODES:
-        raise ValueError(f"unsupported_interaction_mode:{mode}")
+        raise FinnV2ModeContractError(mode)
     return normalized

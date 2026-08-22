@@ -10,7 +10,7 @@ def test_response_repair_adds_uncertainty_and_removes_invalid_follow_up():
         draft_id="draft-1",
         run_id="run-1",
         user_id=7,
-        mode="FACT",
+        mode="READ",
         direct_answer="De context is goed.",
         main_observation="Er is weinig risico.",
         follow_up_question="Wil je meer weten?",

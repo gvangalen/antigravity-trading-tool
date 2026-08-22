@@ -11,7 +11,7 @@ def test_response_downgrade_to_clarification_builds_single_question():
         draft_id="draft-1",
         run_id="run-1",
         user_id=7,
-        mode="EVALUATION",
+        mode="EVALUATE",
         direct_answer="Ik kan dit nog niet precies beoordelen.",
         main_observation="Ik mis een expliciete setupkeuze.",
         evidence_set_hash="hash-1",
@@ -26,7 +26,7 @@ def test_response_downgrade_to_clarification_builds_single_question():
     assert result.follow_up_question == "Welke setup bedoel je precies?"
 
 
-def test_response_downgrade_to_fact_preserves_reasoning_level_evidence_refs():
+def test_response_downgrade_to_fact_preserves_reasoning_level_evidence_refs_as_read():
     service = FinnV2ResponseDowngradeService()
     draft = ResponseDraft(
         draft_id="draft-3",
@@ -42,5 +42,5 @@ def test_response_downgrade_to_fact_preserves_reasoning_level_evidence_refs():
 
     result = service.downgrade_to_fact(draft=draft)
 
-    assert result.mode == "FACT"
+    assert result.mode == "READ"
     assert result.evidence_refs_used == ["E1", "E2", "E3"]

@@ -10,7 +10,7 @@ def _draft(text: str, refs: list[str], *, asset: str = "AAPL") -> ResponseDraft:
         draft_id="draft-1",
         run_id="run-1",
         user_id=7,
-        mode="FACT",
+        mode="READ",
         direct_answer=text,
         main_observation=text,
         claims=[ResponseClaim(claim_id="C1", claim_type="fact", text=text, evidence_refs=refs, confidence="high")],
@@ -82,7 +82,7 @@ def test_claim_grounding_does_not_treat_is_live_field_name_as_live_assertion():
         draft_id="draft-2",
         run_id="run-1",
         user_id=7,
-        mode="EVALUATION",
+        mode="EVALUATE",
         direct_answer="Je bot staat in paper mode.",
         main_observation="Bot 12 heeft is_live false en is_active true.",
         claims=[

@@ -60,7 +60,7 @@ class FinnV2RequestAnalysisService:
             token in normalized
             for token in ["vergelijk", "compare", "versus", "vs", "past", "fit", "conflict", "risico", "risk"]
         )
-        requests_change = interaction_mode in {"CREATE_PROPOSAL", "ACTION_PROPOSAL", "PROPOSAL", "ACTION", "CONFIRMATION", "EXECUTION"}
+        requests_change = interaction_mode in {"CREATE_PROPOSAL", "ACTION_PROPOSAL", "CONFIRMATION", "EXECUTION"}
         requests_execution = interaction_mode == "EXECUTION"
         missing_essential_inputs = self._missing_essential_inputs(
             interaction_mode=interaction_mode,
@@ -108,10 +108,6 @@ class FinnV2RequestAnalysisService:
                 "ACTION_PROPOSAL",
                 "CONFIRMATION",
                 "EXECUTION",
-                "FACT",
-                "EVALUATION",
-                "PROPOSAL",
-                "ACTION",
             },
         )
 

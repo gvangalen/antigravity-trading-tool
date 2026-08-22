@@ -12,7 +12,7 @@ def test_proposal_candidate_must_match_policy_and_target_evidence():
         draft_id="draft-1",
         run_id="run-1",
         user_id=7,
-        mode="PROPOSAL",
+        mode="CREATE_PROPOSAL",
         direct_answer="Ik kan een draft voorstel voorbereiden.",
         main_observation="De bot kan in paper mode worden geactiveerd.",
         proposal_candidate=ProposalCandidate(

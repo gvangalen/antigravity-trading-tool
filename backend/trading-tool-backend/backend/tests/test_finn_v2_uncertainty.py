@@ -11,7 +11,7 @@ def test_uncertainty_is_required_for_stale_evidence():
         draft_id="draft-1",
         run_id="run-1",
         user_id=7,
-        mode="FACT",
+        mode="READ",
         direct_answer="De markttrend is positief.",
         main_observation="De snapshot lijkt sterk.",
         evidence_set_hash="hash-1",

@@ -8,9 +8,11 @@ from typing import Any, Dict, Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.domain.finn_v2_contract import (
+    FinnV2ModeContractError,
     TRACE_EVENT_BY_STATUS,
     build_placeholder_response,
     is_terminal_status,
+    normalize_interaction_mode,
     validate_run_transition,
 )
 from backend.infrastructure.repositories.finn_v2_conversation_repository import FinnV2ConversationRepository
@@ -421,29 +423,47 @@ class FinnV2RunService:
     async def envelope_from_run(self, run) -> AgentRunStatusEnvelope:
         response_payload = dict(run.response_json or {})
         runtime_trace: Dict[str, Any] = {}
-        if is_terminal_status(run.status):
-            artifacts = await self.delivery.get_delivery_artifacts(user_id=run.user_id, run_id=run.id)
-            verified = artifacts.get("verified_response") or {}
-            reasoning = artifacts.get("reasoning_result") or {}
-            reasoning_provenance = verified.get("reasoning_provenance") or (reasoning.get("result") or {}).get("reasoning_provenance")
-            if reasoning_provenance and not response_payload.get("reasoning_provenance"):
-                response_payload["reasoning_provenance"] = reasoning_provenance
-            runtime_trace = self._terminal_runtime_trace(artifacts)
+        try:
+            if response_payload:
+                response_payload["mode"] = normalize_interaction_mode(response_payload.get("mode"))
+            envelope_mode = normalize_interaction_mode(run.interaction_mode) if run.interaction_mode else None
+        except FinnV2ModeContractError as exc:
+            runtime_trace["mode_contract_error"] = {"code": exc.code, "mode": exc.mode}
+            response_payload = {
+                "mode": "UNAVAILABLE",
+                "content": "Deze FINN-run bevat een incompatibel historisch responsecontract.",
+                "response_source": "v2_runtime",
+                "verifier_status": "failed",
+                "evidence": [],
+                "uncertainty": [exc.code],
+                "proposal_id": None,
+                "confirmation_required": False,
+            }
+            envelope_mode = "UNAVAILABLE"
+        else:
+            if is_terminal_status(run.status):
+                artifacts = await self.delivery.get_delivery_artifacts(user_id=run.user_id, run_id=run.id)
+                verified = artifacts.get("verified_response") or {}
+                reasoning = artifacts.get("reasoning_result") or {}
+                reasoning_provenance = verified.get("reasoning_provenance") or (reasoning.get("result") or {}).get("reasoning_provenance")
+                if reasoning_provenance and not response_payload.get("reasoning_provenance"):
+                    response_payload["reasoning_provenance"] = reasoning_provenance
+                runtime_trace = self._terminal_runtime_trace(artifacts)
         response = VerifiedResponse(**response_payload) if response_payload else None
         policy = PolicyDecision(**run.policy_json) if run.policy_json else None
         return AgentRunStatusEnvelope(
             run_id=run.id,
             conversation_id=run.conversation_id,
             status=run.status,
-            mode=run.interaction_mode,
+            mode=envelope_mode,
             visibility=run.visibility,
             response=response,
             policy=policy,
             created_at=run.created_at,
             updated_at=run.updated_at,
             completed_at=run.completed_at,
-            error_code=run.error_code,
-            error_message=run.error_message,
+            error_code=run.error_code or runtime_trace.get("mode_contract_error", {}).get("code"),
+            error_message=run.error_message or ("FINN V2 mode contract is invalid." if runtime_trace.get("mode_contract_error") else None),
             retryable=bool(run.retryable),
             runtime_trace=runtime_trace,
         )

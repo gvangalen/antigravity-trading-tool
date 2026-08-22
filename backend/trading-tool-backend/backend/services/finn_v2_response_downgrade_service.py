@@ -10,13 +10,14 @@ from backend.schemas.finn_v2_response_schema import ResponseDraft
 
 class FinnV2ResponseDowngradeService:
     def downgrade_to_fact(self, *, draft: ResponseDraft) -> ResponseDraft:
+        """Retain the legacy verifier action name while emitting a canonical READ draft."""
         claims = [claim for claim in draft.claims if claim.claim_type in {"fact", "uncertainty"} and claim.evidence_refs]
         supporting_points = [point for point in draft.supporting_points if point.evidence_refs][:4]
         return ResponseDraft(
             draft_id=f"finn-v2-draft-{uuid.uuid4().hex}",
             run_id=draft.run_id,
             user_id=draft.user_id,
-            mode="FACT",
+            mode="READ",
             direct_answer=draft.direct_answer,
             main_observation=draft.main_observation,
             supporting_points=supporting_points,

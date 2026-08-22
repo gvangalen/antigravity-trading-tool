@@ -4,7 +4,7 @@ from typing import AsyncIterator, Optional
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.domain.finn_v2_contract import is_terminal_status
+from backend.domain.finn_v2_contract import FinnV2ModeContractError, is_terminal_status, normalize_interaction_mode
 from backend.infrastructure.repositories.finn_v2_orchestrator_repository import FinnV2OrchestratorRepository
 from backend.infrastructure.repositories.finn_v2_evidence_repository import FinnV2EvidenceRepository
 from backend.infrastructure.repositories.finn_v2_policy_repository import FinnV2PolicyRepository
@@ -41,7 +41,17 @@ class FinnV2DeliveryService:
         if run is None:
             raise LookupError("FINN V2 run not found")
         row = await self.verified.get_latest_for_run(run_id=run_id, user_id=user_id)
-        response = VerifiedResponse.parse_obj(row.response_json) if row is not None else None
+        try:
+            response = self._verified_response_from_payload(row.response_json) if row is not None else None
+        except FinnV2ModeContractError as exc:
+            # Historical corrupt artifacts must not turn status polling or SSE into a 500.
+            return FinnV2DeliveryEnvelope(
+                run_id=run.id,
+                conversation_id=run.conversation_id,
+                status="failed",
+                error_code=exc.code,
+                error_message="FINN V2 response mode contract is invalid.",
+            )
         status = "completed" if response is not None else run.status
         return FinnV2DeliveryEnvelope(
             run_id=run.id,
@@ -53,6 +63,13 @@ class FinnV2DeliveryService:
             error_code=getattr(run, "error_code", None),
             error_message=getattr(run, "error_message", None),
         )
+
+    @staticmethod
+    def _verified_response_from_payload(payload: dict) -> VerifiedResponse:
+        """Read legacy persisted modes without allowing new noncanonical responses."""
+        normalized_payload = dict(payload or {})
+        normalized_payload["mode"] = normalize_interaction_mode(normalized_payload.get("mode"))
+        return VerifiedResponse.parse_obj(normalized_payload)
 
     async def stream_delivery_events(self, *, user_id: int, run_id: str) -> AsyncIterator[FinnV2StreamEvent]:
         envelope = await self.get_delivery_envelope(user_id=user_id, run_id=run_id)

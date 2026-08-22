@@ -107,6 +107,12 @@ def test_deploy_env_applies_asset_catalog_and_indicator_scope_migrations():
     assert source.index("2026_08_05_asset_catalog_provider_routing.py") < source.index("2026_08_06_user_indicator_symbol_overrides.py")
 
 
+def test_deploy_env_applies_the_finn_v2_canonical_mode_backfill():
+    source = (REPO_ROOT / "ops" / "deploy" / "deploy_env.sh").read_text(encoding="utf-8")
+
+    assert "2026_08_22_finn_v2_remove_legacy_fact_mode.py" in source
+
+
 def test_mission_control_api_uses_short_ttl_cache_and_invalidates_after_finn_execute():
     source = (BACKEND_ROOT / "api" / "ai_assistant_api.py").read_text(encoding="utf-8")
 

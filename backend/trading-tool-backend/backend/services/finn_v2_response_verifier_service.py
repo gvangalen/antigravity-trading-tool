@@ -474,15 +474,16 @@ class FinnV2ResponseVerifierService:
         )
 
     async def _persist_verified_response(self, *, run, draft: ResponseDraft, verifier: VerifierResult, proposal_id: Optional[str], confirmation_required: bool) -> VerifiedResponse:
+        canonical_mode = normalize_interaction_mode(draft.mode)
         verifier_status = "repaired" if verifier.action == "deliver" and verifier.reason_codes else "passed"
-        if normalize_interaction_mode(draft.mode) in {"READ", "CAPABILITY", "CLARIFICATION", "UNAVAILABLE"} and verifier.reason_codes:
+        if canonical_mode in {"READ", "CAPABILITY", "CLARIFICATION", "UNAVAILABLE"} and verifier.reason_codes:
             verifier_status = "downgraded"
         verifier_row = await self._persist_verifier_result(run=run, draft=draft, verifier=verifier)
         record = VerifiedResponse(
             verified_response_id=f"finn-v2-verified-response-{uuid.uuid4().hex}",
             run_id=run.id,
             user_id=run.user_id,
-            mode=draft.mode,
+            mode=canonical_mode,
             direct_answer=draft.direct_answer,
             main_observation=draft.main_observation,
             supporting_points=draft.supporting_points,

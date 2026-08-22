@@ -12,7 +12,7 @@ def test_scope_coverage_fails_when_a1_reduces_to_indicator_only():
         draft_id="draft-1",
         run_id="run-1",
         user_id=7,
-        mode="EVALUATION",
+        mode="EVALUATE",
         direct_answer="Je RSI staat goed.",
         main_observation="De indicatoren ogen sterk.",
         claims=[ResponseClaim(claim_id="C1", claim_type="evaluation", text="RSI is sterk.", evidence_refs=["E1"], confidence="high")],

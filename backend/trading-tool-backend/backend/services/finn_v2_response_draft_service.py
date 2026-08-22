@@ -6,6 +6,7 @@ from typing import Any, Dict, List
 
 from backend.schemas.finn_v2_reasoning_schema import PersistedReasoningRecord
 from backend.schemas.finn_v2_response_schema import ResponseClaim, ResponseDraft
+from backend.domain.finn_v2_contract import normalize_interaction_mode
 
 
 class FinnV2ResponseDraftService:
@@ -17,7 +18,7 @@ class FinnV2ResponseDraftService:
             draft_id=f"finn-v2-draft-{uuid.uuid4().hex}",
             run_id=result.run_id,
             user_id=result.user_id,
-            mode=result.mode,
+            mode=normalize_interaction_mode(result.mode),
             direct_answer=result.direct_answer,
             main_observation=result.main_observation,
             supporting_points=list(result.supporting_points),
