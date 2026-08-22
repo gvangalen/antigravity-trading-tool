@@ -34,6 +34,7 @@ class FinnV2OrchestratorService:
         *,
         flag_service: Optional[FinnV2FlagService] = None,
         complete_placeholder: Optional[Callable[..., Awaitable[None]]] = None,
+        phase_transition: Optional[Callable[..., Awaitable[None]]] = None,
     ):
         self.session = session
         self.flags = flag_service or FinnV2FlagService()
@@ -50,6 +51,7 @@ class FinnV2OrchestratorService:
         self.reasoning = FinnV2ReasoningService(session, flag_service=self.flags)
         self.verifier = FinnV2ResponseVerifierService(session, flag_service=self.flags)
         self.complete_placeholder = complete_placeholder
+        self.phase_transition = phase_transition
 
     async def execute_run(
         self,
@@ -146,6 +148,12 @@ class FinnV2OrchestratorService:
                         increment_execution_safety_counter(f"finn_v2_policy_blocks_total:{code}")
             reasoning_result = None
             if self._should_run_reasoning(run=run, user_id=user_id) and result.outcome != "failed":
+                await self._transition_phase(
+                    run_id=run_id,
+                    user_id=user_id,
+                    next_status="reasoning",
+                    interaction_mode=result.analysis.interaction_mode,
+                )
                 reasoning_result = await self.reasoning.reason(
                     user_id=user_id,
                     run_id=run_id,
@@ -153,6 +161,12 @@ class FinnV2OrchestratorService:
                 )
             verified_response = None
             if self._should_run_verifier(run=run, user_id=user_id) and reasoning_result is not None:
+                await self._transition_phase(
+                    run_id=run_id,
+                    user_id=user_id,
+                    next_status="verifying",
+                    interaction_mode=getattr(reasoning_result, "mode", None) or result.analysis.interaction_mode,
+                )
                 verified_response = await self.verifier.verify_run(
                     user_id=user_id,
                     run_id=run_id,
@@ -334,3 +348,21 @@ class FinnV2OrchestratorService:
 
     def _should_run_verifier(self, *, run, user_id: int) -> bool:
         return self._is_visible_run(run) or self.flags.should_run_block7_shadow(user_id)
+
+    async def _transition_phase(
+        self,
+        *,
+        run_id: str,
+        user_id: int,
+        next_status: str,
+        interaction_mode: Optional[str],
+    ) -> None:
+        if self.phase_transition is None:
+            return
+        await self.phase_transition(
+            run_id=run_id,
+            user_id=user_id,
+            next_status=next_status,
+            interaction_mode=interaction_mode,
+            response_source="v2_runtime",
+        )

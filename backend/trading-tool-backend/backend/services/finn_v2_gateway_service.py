@@ -207,9 +207,7 @@ class FinnV2GatewayService:
             request_id=request_id,
             trace_id=trace_id,
         )
-        if run.status in {"completed", "blocked", "failed", "canceled"}:
-            return run.id
-        if run.status in {"collecting", "planned"}:
+        if run.status != "created":
             return run.id
         await self.session.commit()
         predicted_mode = self._predict_interaction_mode(request)

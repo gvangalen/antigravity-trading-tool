@@ -117,6 +117,6 @@ def test_rejected_run_keeps_verifier_reasoning_provenance_in_its_terminal_envelo
     service.transition_run = _transition_run
     asyncio.run(service.complete_run(run_id="run-rejected-1", user_id=7, interaction_mode="UNAVAILABLE"))
 
-    assert transition["next_status"] == "completed"
+    assert transition["next_status"] == "rejected"
     assert transition["response_json"]["uncertainty"] == ["response_scope_incomplete"]
     assert transition["response_json"]["reasoning_provenance"]["parse_status"] == "schema_invalid"

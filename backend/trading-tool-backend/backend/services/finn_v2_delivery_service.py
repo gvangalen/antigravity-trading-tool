@@ -4,6 +4,7 @@ from typing import AsyncIterator, Optional
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from backend.domain.finn_v2_contract import is_terminal_status
 from backend.infrastructure.repositories.finn_v2_orchestrator_repository import FinnV2OrchestratorRepository
 from backend.infrastructure.repositories.finn_v2_evidence_repository import FinnV2EvidenceRepository
 from backend.infrastructure.repositories.finn_v2_policy_repository import FinnV2PolicyRepository
@@ -62,7 +63,7 @@ class FinnV2DeliveryService:
                 payload={"response": envelope.response.dict(), "delivery_source": envelope.delivery_source},
             )
             return
-        if envelope.status in {"created", "collecting", "planned"}:
+        if not is_terminal_status(envelope.status):
             yield FinnV2StreamEvent(
                 event="run.progress",
                 run_id=run_id,
@@ -70,7 +71,7 @@ class FinnV2DeliveryService:
             )
             return
         yield FinnV2StreamEvent(
-            event="run.failed",
+            event=f"run.{envelope.status}",
             run_id=run_id,
             payload={"delivery_source": envelope.delivery_source, "status": envelope.status},
         )

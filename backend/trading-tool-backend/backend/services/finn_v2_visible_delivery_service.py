@@ -5,6 +5,7 @@ from typing import Any, Optional
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from backend.domain.finn_v2_contract import is_terminal_status
 from backend.schemas.finn_v2_schema import AgentRunRequest
 from backend.services.finn_v2_delivery_service import FinnV2DeliveryService
 from backend.services.finn_v2_gateway_service import FinnV2GatewayService
@@ -55,11 +56,12 @@ class FinnV2VisibleDeliveryService:
             envelope = artifacts["delivery_envelope"]
             verified_response = artifacts.get("verified_response")
             if verified_response is None:
-                if envelope.get("status") in {"created", "collecting", "planned"}:
+                status = str(envelope.get("status") or "")
+                if status and not is_terminal_status(status):
                     return self._pending_contract(
                         trace_id=trace_id,
                         run_id=run_id,
-                        status=str(envelope.get("status")),
+                        status=status,
                     )
                 logger.error(
                     "FINN V2 visible delivery missing verified response",
