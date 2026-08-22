@@ -4352,7 +4352,8 @@ function AIAssistantContent({
       try {
         const run = await fetchFinnV2Run(runId);
         if (!terminalStatuses.has(String(run?.status || "").toLowerCase())) {
-          await new Promise((resolve) => window.setTimeout(resolve, 1000));
+          const delayMs = Math.min(1000 + attempt * 250, 3000);
+          await new Promise((resolve) => window.setTimeout(resolve, delayMs));
           continue;
         }
 
@@ -4391,7 +4392,9 @@ function AIAssistantContent({
           console.warn("FINN V2 pending run kon niet worden opgehaald:", error);
         }
       }
-      await new Promise((resolve) => window.setTimeout(resolve, 1000));
+      // Keep pending delivery responsive without continuously hammering the run endpoint.
+      const delayMs = Math.min(1000 + attempt * 250, 3000);
+      await new Promise((resolve) => window.setTimeout(resolve, delayMs));
     }
   }
 

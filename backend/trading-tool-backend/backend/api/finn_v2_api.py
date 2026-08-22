@@ -9,7 +9,7 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.domain.finn_v2_contract import is_terminal_status
-from backend.infrastructure.database import get_db
+from backend.infrastructure.database import async_session_factory, get_db
 from backend.schemas.finn_v2_schema import (
     AgentRunCancelResponse,
     AgentRunRequest,
@@ -35,6 +35,15 @@ def _sse(event_name: str, payload: dict) -> str:
     return f"event: {event_name}\ndata: {json.dumps(payload, default=str)}\n\n"
 
 
+async def _load_run_envelope(*, run_id: str, user_id: int) -> AgentRunStatusEnvelope:
+    """Build a transport envelope without retaining a DB session across SSE waits."""
+    async with async_session_factory() as session:
+        gateway = FinnV2GatewayService(session)
+        run_service = FinnV2RunService(session)
+        run = await gateway.get_run(run_id=run_id, user_id=user_id)
+        return await run_service.envelope_from_run(run)
+
+
 @router.post("/assistant/v2/runs", response_model=AgentRunStatusEnvelope)
 async def create_finn_v2_run(
     request: AgentRunRequest,
@@ -58,11 +67,8 @@ async def create_finn_v2_run(
 async def get_finn_v2_run(
     run_id: str,
     current_user: dict = Depends(get_current_user),
-    gateway: FinnV2GatewayService = Depends(get_gateway_service),
-    run_service: FinnV2RunService = Depends(get_run_service),
 ):
-    run = await gateway.get_run(run_id=run_id, user_id=int(current_user["id"]))
-    return await run_service.envelope_from_run(run)
+    return await _load_run_envelope(run_id=run_id, user_id=int(current_user["id"]))
 
 
 @router.post("/assistant/v2/runs/{run_id}/cancel", response_model=AgentRunCancelResponse)
@@ -85,20 +91,18 @@ async def stream_finn_v2_run(
     run_id: str,
     raw_request: Request,
     current_user: dict = Depends(get_current_user),
-    gateway: FinnV2GatewayService = Depends(get_gateway_service),
-    run_service: FinnV2RunService = Depends(get_run_service),
 ):
     async def event_generator() -> AsyncGenerator[str, None]:
         last_status = None
         while True:
-            run = await gateway.get_run(run_id=run_id, user_id=int(current_user["id"]))
-            envelope = await run_service.envelope_from_run(run)
+            if await raw_request.is_disconnected():
+                return
+
+            envelope = await _load_run_envelope(run_id=run_id, user_id=int(current_user["id"]))
             if envelope.status != last_status:
                 yield _sse(f"run.{envelope.status}", envelope.dict())
                 last_status = envelope.status
             if is_terminal_status(envelope.status):
-                return
-            if await raw_request.is_disconnected():
                 return
             await asyncio.sleep(0.1)
 
