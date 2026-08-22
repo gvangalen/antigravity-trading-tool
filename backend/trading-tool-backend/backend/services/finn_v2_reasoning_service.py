@@ -879,25 +879,20 @@ class FinnV2ReasoningService:
                 missing_scopes=missing_scopes,
             )
 
-        # Claims and supporting points are persisted in the verified response and
-        # independently checked against their evidence references below.
-        response_text = " ".join(
-            filter(
-                None,
-                [
-                    result.direct_answer,
-                    result.main_observation,
-                    *(point.explanation for point in result.supporting_points),
-                    *(claim.text for claim in result.claims),
-                    getattr(result.next_step, "instruction", None),
-                ],
-            )
-        ).lower()
-        missing_grounding = [
+        # Each required scope must be represented by a claim with a direct
+        # evidence reference. Block 7 subsequently verifies each claim's
+        # ownership and entailment before it can reach visible delivery.
+        grounded_claim_scopes = {
             scope
-            for scope in required_scopes
-            if not any(anchor in response_text for anchor in cls._grounding_anchors(scope=scope, context=context))
-        ]
+            for claim in result.claims
+            if claim.claim_type in {"fact", "inference", "evaluation"}
+            for scope, tools in scope_tools.items()
+            if any(
+                item.evidence_id in claim.evidence_refs and item.tool_name in tools
+                for item in context.evidence
+            )
+        }
+        missing_grounding = sorted(required_scopes - grounded_claim_scopes)
         if missing_grounding:
             raise FinnV2ReasoningContractError(
                 code="missing_required_scope_grounding",

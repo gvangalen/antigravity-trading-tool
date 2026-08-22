@@ -91,6 +91,13 @@ def test_integrated_plan_reasoning_requires_visible_grounding_for_each_scope():
         update={
             "direct_answer": "Je balanced profiel met RSI, setup 309 op 4H, strategie 325 en bot 186 heeft een duidelijke vervolgstap.",
             "uncertainty_summary": "De botstatus is mogelijk verouderd.",
+            "claims": [
+                ReasoningClaim(claim_id="C1", claim_type="fact", text="Je profiel is balanced.", evidence_refs=["E1"], confidence="high"),
+                ReasoningClaim(claim_id="C2", claim_type="fact", text="Je indicator is rsi.", evidence_refs=["E2"], confidence="high"),
+                ReasoningClaim(claim_id="C3", claim_type="fact", text="Setup 309 gebruikt 4H.", evidence_refs=["E3"], confidence="high"),
+                ReasoningClaim(claim_id="C4", claim_type="fact", text="Strategie 325 is gekoppeld.", evidence_refs=["E4"], confidence="high"),
+                ReasoningClaim(claim_id="C5", claim_type="fact", text="Bot 186 is gekoppeld.", evidence_refs=["E5"], confidence="high"),
+            ],
         }
     )
     service._validate_refs(grounded, context)
@@ -113,6 +120,12 @@ def test_integrated_plan_grounding_error_exposes_literals_for_the_single_repair_
     )
     result = ReasoningResult(
         reasoning_result_id="r-1", run_id="run-1", user_id=7, mode="EVALUATE", direct_answer="Je balanced profiel met setup 309, strategie 325 en bot 186 heeft aandacht nodig.", main_observation="Leg je regel vast.",
+        claims=[
+            ReasoningClaim(claim_id="C1", claim_type="fact", text="Je profiel is balanced.", evidence_refs=["E1"], confidence="high"),
+            ReasoningClaim(claim_id="C2", claim_type="fact", text="Setup 309 gebruikt 4H.", evidence_refs=["E3"], confidence="high"),
+            ReasoningClaim(claim_id="C3", claim_type="fact", text="Strategie 325 is gekoppeld.", evidence_refs=["E4"], confidence="high"),
+            ReasoningClaim(claim_id="C4", claim_type="fact", text="Bot 186 is gekoppeld.", evidence_refs=["E5"], confidence="high"),
+        ],
         evidence_refs_used=["E1", "E2", "E3", "E4", "E5"], model="gpt-test", created_at=datetime.now(timezone.utc),
     )
 
