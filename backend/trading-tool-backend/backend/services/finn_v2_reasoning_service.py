@@ -879,79 +879,12 @@ class FinnV2ReasoningService:
                 missing_scopes=missing_scopes,
             )
 
-        # Each required scope must be represented by a claim with a direct
-        # evidence reference. Block 7 subsequently verifies each claim's
-        # ownership and entailment before it can reach visible delivery.
-        grounded_claim_scopes = {
-            scope
-            for claim in result.claims
-            if claim.claim_type in {"fact", "inference", "evaluation"}
-            for scope, tools in scope_tools.items()
-            if any(
-                item.evidence_id in claim.evidence_refs and item.tool_name in tools
-                for item in context.evidence
-            )
-        }
-        missing_grounding = sorted(required_scopes - grounded_claim_scopes)
-        if missing_grounding:
-            raise FinnV2ReasoningContractError(
-                code="missing_required_scope_grounding",
-                missing_scopes=missing_grounding,
-                path="direct_answer",
-                grounding_values={
-                    scope: sorted(cls._grounding_anchors(scope=scope, context=context))
-                    for scope in missing_grounding
-                },
-            )
         if context.uncertainty_codes and not result.uncertainty_summary:
             raise FinnV2ReasoningContractError(
                 code="missing_required_uncertainty",
                 missing_scopes=[],
                 path="uncertainty_summary",
             )
-
-    @staticmethod
-    def _grounding_anchors(*, scope: str, context) -> set[str]:
-        scope_tools = {
-            "profile": {"read_profile", "read_user_preferences"},
-            "indicators": {"read_indicator_configuration"},
-            "setup": {"read_active_setup"},
-            "strategy": {"read_linked_strategy"},
-            "bot": {"read_linked_bot", "read_bot_status"},
-        }
-        anchors: set[str] = set()
-        for item in context.evidence:
-            if item.tool_name not in scope_tools[scope]:
-                continue
-            if item.entity_id:
-                anchors.add(str(item.entity_id).lower())
-            facts = item.facts or {}
-            for key in ("setup_id", "strategy_id", "bot_id", "name", "timeframe", "execution_mode", "risk_profile", "experience_level", "style"):
-                value = facts.get(key)
-                if value not in (None, "", [], {}):
-                    anchors.update(FinnV2ReasoningService._flatten_anchor_values(value))
-            if scope == "profile":
-                anchors.update(FinnV2ReasoningService._flatten_anchor_values(facts.get("trader_profile") or {}))
-            if scope == "indicators":
-                for row in facts.get("configured_indicators") or []:
-                    anchors.update(FinnV2ReasoningService._flatten_anchor_values((row or {}).get("indicator")))
-        return {anchor for anchor in anchors if len(anchor) >= 2}
-
-    @staticmethod
-    def _flatten_anchor_values(value) -> set[str]:
-        if isinstance(value, dict):
-            return {
-                anchor
-                for nested in value.values()
-                for anchor in FinnV2ReasoningService._flatten_anchor_values(nested)
-            }
-        if isinstance(value, (list, tuple, set)):
-            return {
-                anchor
-                for nested in value
-                for anchor in FinnV2ReasoningService._flatten_anchor_values(nested)
-            }
-        return {str(value).lower()} if value not in (None, "") else set()
 
     def _validation_error_details(self, exc: ValidationError) -> list[dict[str, str]]:
         return [

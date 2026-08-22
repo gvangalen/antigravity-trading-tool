@@ -90,9 +90,9 @@ class FinnV2ReasoningPromptService:
             "Correct only the listed field paths and error codes, return every required field with valid values, "
             "and do not add fields.\n"
             f"Validation errors: {json.dumps(validation_errors or [], ensure_ascii=True, separators=(',', ':'))}\n"
-            "For missing_required_scope_grounding, add at least one fact, inference, or evaluation claim for each "
-            "missing scope and cite an evidence reference from that scope. The claim text must use the supplied "
-            "grounding values rather than counts, categories, or generic labels.\n"
+            "For missing_required_scope_refs, cite an evidence reference from every missing scope in "
+            "evidence_refs_used and use the supplied grounding values rather than counts, categories, or "
+            "generic labels.\n"
             if repair_attempt
             else ""
         )
@@ -102,9 +102,7 @@ class FinnV2ReasoningPromptService:
             evaluation_contract = (
                 "This is an integrated personal plan evaluation. State exactly one observation and one next step. "
                 "Ground them in the user's saved profile, configured indicators, setup, strategy and bot, including concrete "
-                "identifiers or timeframes when present. Include at least one fact, inference, or evaluation claim for every "
-                "required scope, each with the evidence reference that supports it. Do not replace saved grounding values with "
-                "generic labels in those claims. "
+                "identifiers or timeframes when present. Do not replace saved grounding values with generic labels. "
                 "Include the supplied uncertainty summary when the context has uncertainty codes. Put all evidence IDs used by "
                 "that grounding in evidence_refs_used. "
                 "For this request, evidence_refs_used must include at least one ID from every required scope: "

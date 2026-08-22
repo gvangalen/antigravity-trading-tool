@@ -64,7 +64,7 @@ def test_integrated_plan_reasoning_requires_evidence_from_each_required_scope():
         service._validate_refs(result, context)
 
 
-def test_integrated_plan_reasoning_requires_visible_grounding_for_each_scope():
+def test_integrated_plan_reasoning_accepts_complete_scope_coverage_without_metadata_claims():
     service = FinnV2ReasoningService(session=object())
     context = ReasoningContextPackage(
         run_id="run-1", user_id=7, user_message="Evalueer mijn plan", locale="nl-NL", interaction_mode="EVALUATE",
@@ -81,29 +81,14 @@ def test_integrated_plan_reasoning_requires_visible_grounding_for_each_scope():
     )
     result = ReasoningResult(
         reasoning_result_id="r-1", run_id="run-1", user_id=7, mode="EVALUATE", direct_answer="RSI ondersteunt je plan.", main_observation="De setup heeft aandacht nodig.",
+        uncertainty_summary="De botstatus is mogelijk verouderd.",
         evidence_refs_used=["E1", "E2", "E3", "E4", "E5"], model="gpt-test", created_at=datetime.now(timezone.utc),
     )
 
-    with pytest.raises(ValueError, match="missing_required_scope_grounding"):
-        service._validate_refs(result, context)
-
-    grounded = result.copy(
-        update={
-            "direct_answer": "Je balanced profiel met RSI, setup 309 op 4H, strategie 325 en bot 186 heeft een duidelijke vervolgstap.",
-            "uncertainty_summary": "De botstatus is mogelijk verouderd.",
-            "claims": [
-                ReasoningClaim(claim_id="C1", claim_type="fact", text="Je profiel is balanced.", evidence_refs=["E1"], confidence="high"),
-                ReasoningClaim(claim_id="C2", claim_type="fact", text="Je indicator is rsi.", evidence_refs=["E2"], confidence="high"),
-                ReasoningClaim(claim_id="C3", claim_type="fact", text="Setup 309 gebruikt 4H.", evidence_refs=["E3"], confidence="high"),
-                ReasoningClaim(claim_id="C4", claim_type="fact", text="Strategie 325 is gekoppeld.", evidence_refs=["E4"], confidence="high"),
-                ReasoningClaim(claim_id="C5", claim_type="fact", text="Bot 186 is gekoppeld.", evidence_refs=["E5"], confidence="high"),
-            ],
-        }
-    )
-    service._validate_refs(grounded, context)
+    service._validate_refs(result, context)
 
 
-def test_integrated_plan_grounding_error_exposes_literals_for_the_single_repair_attempt():
+def test_integrated_plan_reasoning_still_requires_scope_coverage_from_model_refs():
     service = FinnV2ReasoningService(session=object())
     context = ReasoningContextPackage(
         run_id="run-1", user_id=7, user_message="Evalueer mijn plan", locale="nl-NL", interaction_mode="EVALUATE",
@@ -126,13 +111,14 @@ def test_integrated_plan_grounding_error_exposes_literals_for_the_single_repair_
             ReasoningClaim(claim_id="C3", claim_type="fact", text="Strategie 325 is gekoppeld.", evidence_refs=["E4"], confidence="high"),
             ReasoningClaim(claim_id="C4", claim_type="fact", text="Bot 186 is gekoppeld.", evidence_refs=["E5"], confidence="high"),
         ],
-        evidence_refs_used=["E1", "E2", "E3", "E4", "E5"], model="gpt-test", created_at=datetime.now(timezone.utc),
+        evidence_refs_used=["E1", "E3", "E4", "E5"], model="gpt-test", created_at=datetime.now(timezone.utc),
     )
 
     with pytest.raises(ValueError) as exc_info:
         service._validate_refs(result, context)
 
-    assert exc_info.value.grounding_values == {"indicators": ["ma_200", "rsi"]}
+    assert exc_info.value.code == "missing_required_scope_refs"
+    assert exc_info.value.missing_scopes == ["indicators"]
 
 
 def test_integrated_plan_reasoning_accepts_grounded_claims_with_valid_evidence_refs():
