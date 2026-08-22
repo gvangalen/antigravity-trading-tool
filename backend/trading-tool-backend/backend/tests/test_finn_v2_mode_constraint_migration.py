@@ -69,6 +69,7 @@ def test_fact_backfill_migration_normalizes_persisted_payloads_and_restricts_new
     for table in ("finn_v2_runs", "finn_v2_orchestrator_results", "finn_v2_reasoning_results", "finn_v2_verified_responses"):
         assert table in source
     assert "jsonb_set" in source
-    assert "'FACT'" in source
-    assert "'READ'" in source
+    for legacy, canonical in (("FACT", "READ"), ("EVALUATION", "EVALUATE"), ("PROPOSAL", "CREATE_PROPOSAL"), ("ACTION", "ACTION_PROPOSAL")):
+        assert f"'{legacy}'" in source
+        assert f"'{canonical}'" in source
     assert "ROLLBACK_SQL" in source
