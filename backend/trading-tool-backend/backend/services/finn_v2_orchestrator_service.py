@@ -193,6 +193,7 @@ class FinnV2OrchestratorService:
                     "duration_ms": int((monotonic() - started) * 1000),
                 },
             )
+            await self._commit_persistence_boundary(stage="orchestrator_completed")
             record_latency_sample("finn_v2_orchestrator_duration_ms", int((monotonic() - started) * 1000))
             increment_execution_safety_counter(f"finn_v2_orchestrator_outcomes_total:{result.outcome}")
             self.phase_outcome = self._build_phase_outcome(
@@ -214,6 +215,7 @@ class FinnV2OrchestratorService:
                     "duration_ms": int((monotonic() - started) * 1000),
                 },
             )
+            await self._commit_persistence_boundary(stage="orchestrator_rejected")
             increment_execution_safety_counter("finn_v2_orchestrator_rejections_total")
             self.phase_outcome = LifecyclePhaseOutcome(
                 terminal_status="rejected",
@@ -398,6 +400,10 @@ class FinnV2OrchestratorService:
     ) -> None:
         if self.phase_transition is None:
             return
+        # The owned lifecycle writes its next phase in a fresh session. Commit
+        # accumulated tool/evidence state first so that session cannot wait on
+        # this session's uncommitted trace sequence.
+        await self._commit_persistence_boundary(stage=f"before_{next_status}_transition")
         await self.phase_transition(
             run_id=run_id,
             user_id=user_id,
@@ -405,3 +411,25 @@ class FinnV2OrchestratorService:
             interaction_mode=interaction_mode,
             response_source="v2_runtime",
         )
+
+    async def _commit_persistence_boundary(self, *, stage: str) -> None:
+        commit = getattr(self.session, "commit", None)
+        if not callable(commit):
+            return
+        try:
+            await commit()
+        except Exception:
+            rollback = getattr(self.session, "rollback", None)
+            if callable(rollback):
+                try:
+                    await rollback()
+                except Exception:
+                    logger.exception(
+                        "FINN V2 orchestrator boundary rollback failed",
+                        extra={"failure_stage": stage},
+                    )
+            logger.exception(
+                "FINN V2 orchestrator persistence boundary failed",
+                extra={"failure_stage": stage},
+            )
+            raise

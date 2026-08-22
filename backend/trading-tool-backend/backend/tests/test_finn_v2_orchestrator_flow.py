@@ -350,3 +350,39 @@ def test_orchestrator_terminalizes_a_persisted_verifier_reject_without_a_second_
 
 def _raise_reject(verifier):
     raise FinnV2VerifierRejected(verifier)
+
+
+def test_orchestrator_commits_before_cross_session_phase_transition():
+    state = {"committed": False, "transitions": []}
+
+    class _Session:
+        async def commit(self):
+            state["committed"] = True
+
+        async def rollback(self):
+            raise AssertionError("rollback must not run for a successful boundary")
+
+    async def _transition(**kwargs):
+        assert state["committed"] is True
+        state["transitions"].append(kwargs)
+
+    service = FinnV2OrchestratorService(session=_Session(), phase_transition=_transition)
+
+    asyncio.run(
+        service._transition_phase(
+            run_id="run-boundary-1",
+            user_id=7,
+            next_status="reasoning",
+            interaction_mode="EVALUATE",
+        )
+    )
+
+    assert state["transitions"] == [
+        {
+            "run_id": "run-boundary-1",
+            "user_id": 7,
+            "next_status": "reasoning",
+            "interaction_mode": "EVALUATE",
+            "response_source": "v2_runtime",
+        }
+    ]
