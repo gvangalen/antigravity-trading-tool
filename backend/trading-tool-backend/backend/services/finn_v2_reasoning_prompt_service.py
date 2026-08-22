@@ -91,7 +91,8 @@ class FinnV2ReasoningPromptService:
             "and do not add fields.\n"
             f"Validation errors: {json.dumps(validation_errors or [], ensure_ascii=True, separators=(',', ':'))}\n"
             "For missing_required_scope_grounding, copy at least one literal value from grounding_values for each "
-            "missing scope into an answer text field or next_step.instruction. Do not replace those "
+            "missing scope into the direct answer, a supporting-point explanation, a claim text, "
+            "or next_step.instruction. Do not replace those "
             "literal values with counts, categories, or generic labels.\n"
             if repair_attempt
             else ""
@@ -102,7 +103,8 @@ class FinnV2ReasoningPromptService:
             evaluation_contract = (
                 "This is an integrated personal plan evaluation. State exactly one observation and one next step. "
                 "Ground them in the user's saved profile, configured indicators, setup, strategy and bot, including concrete "
-                "identifiers or timeframes when present. Your direct_answer, main_observation, or next_step must each together "
+                "identifiers or timeframes when present. Your direct_answer, main_observation, supporting-point explanations, "
+                "claim texts, or next_step must together "
                 "name at least one exact saved grounding value from every scope; do not replace those values with generic labels. "
                 "Include the supplied uncertainty summary when the context has uncertainty codes. Put all evidence IDs used by "
                 "that grounding in evidence_refs_used. "

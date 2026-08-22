@@ -879,12 +879,16 @@ class FinnV2ReasoningService:
                 missing_scopes=missing_scopes,
             )
 
+        # Claims and supporting points are persisted in the verified response and
+        # independently checked against their evidence references below.
         response_text = " ".join(
             filter(
                 None,
                 [
                     result.direct_answer,
                     result.main_observation,
+                    *(point.explanation for point in result.supporting_points),
+                    *(claim.text for claim in result.claims),
                     getattr(result.next_step, "instruction", None),
                 ],
             )
