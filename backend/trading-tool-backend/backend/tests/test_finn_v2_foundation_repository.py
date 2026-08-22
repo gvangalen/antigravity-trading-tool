@@ -40,6 +40,9 @@ class _FakeSession:
         self.rollback_calls += 1
         self.sync_session.is_active = True
 
+    def add(self, _row):
+        pass
+
 
 class _FakeRunRepo:
     def __init__(self, run):
@@ -317,7 +320,7 @@ class _FakeGatewayRunService:
     def __init__(self, _session):
         self.lifecycle_calls = []
 
-    async def create_run(self, payload):
+    async def create_run(self, payload, *, commit=True):
         return SimpleNamespace(**payload)
 
     async def run_foundation_lifecycle(self, *, run_id, user_id):
@@ -331,14 +334,23 @@ def test_gateway_run_foundation_now_returns_same_run_id_after_visible_budget_tim
     monkeypatch.setattr(gateway_module.run_rate_limiter, "check_rate_limit", lambda *args, **kwargs: None)
 
     observed = []
-
-    async def _slow_owned_job(*, run_id, user_id):
-        await asyncio.sleep(0.01)
-        observed.append((run_id, user_id))
+    class _Dispatches:
+        async def create(self, **kwargs):
+            observed.append(("created", kwargs["run_id"]))
+            return SimpleNamespace(task_id="task-1", queue="ai_generation", dispatch_id="dispatch-1")
+        async def get_for_run(self, _run_id):
+            return SimpleNamespace(task_id="task-1", queue="ai_generation", dispatch_id="dispatch-1")
+        async def mark_dispatched(self, dispatch_id):
+            observed.append(("dispatched", dispatch_id))
+    class _Task:
+        def apply_async(self, **kwargs):
+            observed.append(kwargs)
+    import backend.celery_task.finn_v2_task as task_module
+    monkeypatch.setattr(task_module, "process_finn_v2_run", _Task())
 
     session = _FakeSession()
     service = gateway_module.FinnV2GatewayService(session=session)
-    monkeypatch.setattr(gateway_module, "run_foundation_lifecycle_owned_job", _slow_owned_job)
+    service.dispatches = _Dispatches()
     monkeypatch.setattr(service.flags, "resolve_mode", lambda _user_id: "visible_runtime")
     monkeypatch.setattr(service.flags, "allows_transport", lambda _transport: True)
     monkeypatch.setattr(service.flags, "max_runs_per_minute", lambda: 20)
@@ -352,11 +364,14 @@ def test_gateway_run_foundation_now_returns_same_run_id_after_visible_budget_tim
             request_id="req-1",
             trace_id="trace-1",
         )
-        await asyncio.sleep(0.02)
         return run_id
 
     run_id = asyncio.run(_exercise())
 
     assert run_id.startswith("finn-v2-run-")
-    assert session.commit_calls == 1
-    assert observed == [(run_id, 7)]
+    assert session.commit_calls == 2
+    assert observed == [
+        ("created", run_id),
+        {"kwargs": {"run_id": run_id}, "task_id": "task-1", "queue": "ai_generation"},
+        ("dispatched", "dispatch-1"),
+    ]

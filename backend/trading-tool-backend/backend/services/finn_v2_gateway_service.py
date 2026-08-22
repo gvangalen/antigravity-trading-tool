@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-import asyncio
 import hashlib
+import asyncio
 import logging
 import os
 import uuid
@@ -16,6 +16,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.infrastructure.database import async_session_factory
 from backend.infrastructure.repositories.finn_v2_conversation_repository import FinnV2ConversationRepository
 from backend.infrastructure.repositories.finn_v2_run_repository import FinnV2RunRepository
+from backend.infrastructure.repositories.finn_v2_dispatch_repository import FinnV2DispatchRepository
+from backend.celery_task.queue_policy import resolve_task_queue
 from backend.schemas.finn_v2_schema import AgentRunRequest
 from backend.services.finn_v2_flag_service import FinnV2FlagService
 from backend.services.finn_v2_request_analysis_service import FinnV2RequestAnalysisService
@@ -35,6 +37,7 @@ class FinnV2GatewayService:
         self.flags = flag_service or FinnV2FlagService()
         self.conversations = FinnV2ConversationRepository(session)
         self.runs = FinnV2RunRepository(session)
+        self.dispatches = FinnV2DispatchRepository(session)
         self.run_service = FinnV2RunService(session)
         self.analysis = FinnV2RequestAnalysisService()
 
@@ -110,8 +113,19 @@ class FinnV2GatewayService:
                 "retryable": False,
                 "created_at": datetime.now(timezone.utc),
                 "updated_at": datetime.now(timezone.utc),
-            }
+            },
+            commit=False,
         )
+        if hasattr(self.session, "add"):
+            await self.dispatches.create(
+                dispatch_id=f"finn-v2-dispatch-{uuid.uuid4().hex}",
+                run_id=run.id,
+                task_id=f"finn-v2-task-{uuid.uuid4().hex}",
+                queue=resolve_task_queue("backend.celery_task.finn_v2_task.process_finn_v2_run"),
+                routing_rule="finn_v2.lifecycle",
+                status="pending",
+                attempt_count=0,
+            )
         logger.info(
             "FINN V2 run created",
             extra={
@@ -210,34 +224,24 @@ class FinnV2GatewayService:
         if run.status != "created":
             return run.id
         await self.session.commit()
-        predicted_mode = self._predict_interaction_mode(request)
-        timeout_seconds = float(self.flags.visible_request_timeout_seconds(predicted_mode))
-        lifecycle = asyncio.create_task(
-            run_foundation_lifecycle_owned_job(
-                run_id=run.id,
-                user_id=user_id,
-            ),
-            name=f"finn-v2-visible-lifecycle:{run.id}",
-        )
+        if not hasattr(self.session, "add"):
+            return run.id
         try:
-            await asyncio.wait_for(asyncio.shield(lifecycle), timeout=timeout_seconds)
-        except asyncio.TimeoutError:
-            logger.warning(
-                "FINN V2 visible lifecycle exceeded request budget; returning pending envelope",
-                extra={
-                    "run_id": run.id,
-                    "user_id": user_id,
-                    "trace_id": trace_id,
-                    "interaction_mode": predicted_mode,
-                    "timeout_seconds": timeout_seconds,
-                },
+            from backend.celery_task.finn_v2_task import process_finn_v2_run
+
+            dispatch = await self.dispatches.get_for_run(run.id)
+            process_finn_v2_run.apply_async(
+                kwargs={"run_id": run.id},
+                task_id=dispatch.task_id,
+                queue=dispatch.queue,
             )
-        except asyncio.CancelledError:
-            logger.warning(
-                "FINN V2 visible request canceled while lifecycle continues in owned task",
-                extra={"run_id": run.id, "user_id": user_id, "trace_id": trace_id},
-            )
-            raise
+            await self.dispatches.mark_dispatched(dispatch.dispatch_id)
+            await self.session.commit()
+        except Exception as exc:
+            # The committed pending outbox record is recovered by Celery beat;
+            # never run lifecycle work in this request process.
+            await self.session.rollback()
+            logger.warning("FINN V2 dispatch enqueue deferred to recovery", extra={"run_id": run.id, "error": str(exc)})
         return run.id
 
     async def apply_retention_now(self) -> Dict[str, int]:

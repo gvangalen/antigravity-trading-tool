@@ -516,6 +516,27 @@ class FinnV2RunTrace(Base):
     created_at = Column(DateTime(timezone=True), nullable=False, server_default=text("NOW()"))
 
 
+class FinnV2RunDispatch(Base):
+    __tablename__ = "finn_v2_run_dispatches"
+
+    dispatch_id = Column(String, primary_key=True)
+    run_id = Column(String, ForeignKey("finn_v2_runs.id", ondelete="CASCADE"), nullable=False, unique=True, index=True)
+    task_id = Column(String, nullable=False, unique=True)
+    queue = Column(String, nullable=False)
+    routing_rule = Column(String, nullable=False)
+    status = Column(String, nullable=False, default="pending")
+    attempt_count = Column(Integer, nullable=False, default=0)
+    owner = Column(String, nullable=True)
+    claimed_at = Column(DateTime(timezone=True), nullable=True)
+    lease_expires_at = Column(DateTime(timezone=True), nullable=True)
+    next_attempt_at = Column(DateTime(timezone=True), nullable=False, server_default=text("NOW()"))
+    last_error_code = Column(String, nullable=True)
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=text("NOW()"))
+    updated_at = Column(DateTime(timezone=True), nullable=False, server_default=text("NOW()"))
+    dispatched_at = Column(DateTime(timezone=True), nullable=True)
+    completed_at = Column(DateTime(timezone=True), nullable=True)
+
+
 class FinnV2ToolCall(Base):
     __tablename__ = "finn_v2_tool_calls"
 
