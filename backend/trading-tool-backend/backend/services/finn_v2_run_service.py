@@ -207,6 +207,9 @@ class FinnV2RunService:
     async def run_foundation_lifecycle(self, *, run_id: str, user_id: int) -> None:
         await self.transition_run(run_id, user_id, next_status="collecting", response_source="foundation_placeholder")
         await self.transition_run(run_id, user_id, next_status="planned", response_source="foundation_placeholder")
+        # The orchestrator can wait on a provider for tens of seconds. Persist the
+        # lifecycle boundary first so a later rollback cannot erase planned state.
+        await self.session.commit()
         try:
             run = await self.runs.get_by_id_for_user(run_id=run_id, user_id=user_id)
             if run is None:

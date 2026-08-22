@@ -129,6 +129,52 @@ def test_model_schema_error_repairs_once_with_sanitized_field_paths(monkeypatch)
     assert "observation" not in prompts[1]
 
 
+def test_model_call_commits_state_before_waiting_for_provider(monkeypatch):
+    events = []
+
+    class _Session:
+        async def commit(self):
+            events.append("commit")
+
+    service = FinnV2ReasoningService(session=_Session())
+    context = _context()
+
+    async def _persist_record(**kwargs):
+        return kwargs
+
+    async def _append_trace(*_args, **kwargs):
+        if _args[3] == "reasoning_started":
+            events.append("reasoning_started")
+
+    def _call_provider(**_kwargs):
+        events.append("provider")
+        return {"parsed": _model_output(), "model": "gpt-4o-mini", "provider_metadata": {}}
+
+    service._persist_record = _persist_record
+    service._append_trace = _append_trace
+    monkeypatch.setattr(service.flags, "reasoning_max_retries", lambda: 0)
+    monkeypatch.setattr(service.flags, "reasoning_timeout_seconds", lambda: 5)
+    monkeypatch.setattr(service.flags, "reasoning_max_output_tokens", lambda: 600)
+    monkeypatch.setattr("backend.services.finn_v2_reasoning_service.openai_client.ask_gpt_structured_response", _call_provider)
+
+    asyncio.run(
+        service._run_model_reasoning(
+            run_id="run-1",
+            user_id=7,
+            trace_id="trace-1",
+            orchestrator_result=SimpleNamespace(orchestrator_result_id="orchestrator-1"),
+            policy=SimpleNamespace(policy_decision_id="policy-1"),
+            snapshot=SimpleNamespace(id="snapshot-1"),
+            validation=SimpleNamespace(id="validation-1"),
+            context=context,
+            model_name="gpt-4o-mini",
+            input_hash="hash-input",
+        )
+    )
+
+    assert events == ["reasoning_started", "commit", "provider"]
+
+
 def test_missing_required_model_field_has_a_sanitized_validation_error():
     service = FinnV2ReasoningService(session=object())
     payload = _model_output()

@@ -380,6 +380,10 @@ class FinnV2ReasoningService:
         repair_validation_errors: list[dict[str, str]] = []
         for attempt in range(retries_allowed + 1):
             await self._append_trace(run_id, user_id, trace_id, "reasoning_started", context, model_name, "generating", None, attempt, input_hash, [])
+            # Do not hold the transaction that contains tool/evidence state while
+            # waiting for the external provider. This also releases the pooled DB
+            # connection for concurrent FINN runs.
+            await self._commit_before_provider_call()
             call_started = monotonic()
             response = openai_client.ask_gpt_structured_response(
                 prompt=self.prompts.build_user_prompt(
@@ -730,6 +734,11 @@ class FinnV2ReasoningService:
                 latency_ms=int((monotonic() - started) * 1000),
             )
         raise ValueError(",".join(last_error_codes or ["reasoning_failed"]))
+
+    async def _commit_before_provider_call(self) -> None:
+        commit = getattr(self.session, "commit", None)
+        if commit is not None:
+            await commit()
 
     def _fallback_for_reasoning_error(
         self,

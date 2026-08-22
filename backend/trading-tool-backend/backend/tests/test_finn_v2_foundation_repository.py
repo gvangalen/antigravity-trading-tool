@@ -224,6 +224,7 @@ def test_visible_run_executes_orchestrator_without_shadow_gate():
     asyncio.run(service.run_foundation_lifecycle(run_id="run-1", user_id=7))
 
     assert calls == {"shadow_chain": 0, "placeholder": 0, "orchestrator": 1}
+    assert service.session.commit_calls == 1
 
 
 def test_fail_run_rolls_back_inactive_session_before_transition(monkeypatch):
