@@ -47,6 +47,15 @@ def test_deploy_env_supports_backend_only_auto_rollback_and_previous_markers():
     assert source.index("2026_08_18_finn_v2_typed_operation_modes.py") < source.index("2026_08_20_finn_v2_canonical_modes.py")
 
 
+def test_auto_deploy_serializes_production_and_retries_once_after_a_failed_attempt():
+    source = (REPO_ROOT / ".github" / "workflows" / "deploy.yml").read_text(encoding="utf-8")
+
+    assert "group: auto-deploy-production" in source
+    assert "cancel-in-progress: false" in source
+    assert 'for attempt in 1 2; do' in source
+    assert 'sleep 30' in source
+
+
 def test_sql_migration_runner_bounds_lock_and_statement_waits():
     source = (BACKEND_ROOT / "scripts" / "run_sql_migration.py").read_text(encoding="utf-8")
 

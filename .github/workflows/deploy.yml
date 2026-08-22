@@ -8,8 +8,11 @@ on:
       - completed
 
 concurrency:
-  group: auto-deploy-${{ github.event.workflow_run.head_sha || github.run_id }}
-  cancel-in-progress: true
+  # Deployments mutate one shared production host. Serialize all revisions so a
+  # newer CI result cannot interrupt another run halfway through migrations or
+  # the phased PM2 startup.
+  group: auto-deploy-production
+  cancel-in-progress: false
 
 jobs:
   deploy:
@@ -94,4 +97,16 @@ jobs:
           SKIP_GIT_PUSH: "true"
         run: |
           set -euo pipefail
-          ./ops/deploy/deploy_env.sh production main "GitHub Actions production deploy"
+          for attempt in 1 2; do
+            if ./ops/deploy/deploy_env.sh production main "GitHub Actions production deploy"; then
+              exit 0
+            fi
+
+            if [ "$attempt" -eq 2 ]; then
+              echo "❌ Production deploy failed after ${attempt} attempts." >&2
+              exit 1
+            fi
+
+            echo "⚠️ Production deploy attempt ${attempt} failed; retrying once after rollback and worker cooldown." >&2
+            sleep 30
+          done
