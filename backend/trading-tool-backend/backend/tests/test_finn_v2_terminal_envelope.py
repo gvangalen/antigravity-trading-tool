@@ -3,6 +3,7 @@ from datetime import datetime, timezone
 from types import SimpleNamespace
 
 from backend.services.finn_v2_run_service import FinnV2RunService
+from backend.schemas.finn_v2_orchestrator_schema import LifecyclePhaseOutcome
 
 
 def test_terminal_envelope_hydrates_persisted_v2_chain_without_rerunning_it():
@@ -115,7 +116,18 @@ def test_rejected_run_keeps_verifier_reasoning_provenance_in_its_terminal_envelo
         transition.update(kwargs)
 
     service.transition_run = _transition_run
-    asyncio.run(service.complete_run(run_id="run-rejected-1", user_id=7, interaction_mode="UNAVAILABLE"))
+    asyncio.run(
+        service.complete_run(
+            run_id="run-rejected-1",
+            user_id=7,
+            phase_outcome=LifecyclePhaseOutcome(
+                terminal_status="rejected",
+                interaction_mode="UNAVAILABLE",
+                orchestrator_result_id="orchestrator-rejected-1",
+                verifier_action="reject",
+            ),
+        )
+    )
 
     assert transition["next_status"] == "rejected"
     assert transition["response_json"]["uncertainty"] == ["response_scope_incomplete"]

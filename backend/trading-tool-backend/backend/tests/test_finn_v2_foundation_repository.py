@@ -236,7 +236,14 @@ def test_visible_run_executes_orchestrator_without_shadow_gate():
         execute_shadow_tool_chain=_shadow_chain,
     )
     service.complete_run = _placeholder
-    service.orchestrator = SimpleNamespace(execute_run=_orchestrator)
+    service.orchestrator = SimpleNamespace(
+        execute_run=_orchestrator,
+        consume_phase_outcome=lambda: SimpleNamespace(
+            terminal_status="completed",
+            interaction_mode="READ",
+            orchestrator_result_id="orchestrator-1",
+        ),
+    )
 
     asyncio.run(service.run_foundation_lifecycle(run_id="run-1", user_id=7))
 

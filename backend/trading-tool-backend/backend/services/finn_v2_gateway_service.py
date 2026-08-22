@@ -351,10 +351,7 @@ async def run_shadow_foundation_job(
 
 async def run_foundation_lifecycle_owned_job(*, run_id: str, user_id: int) -> None:
     try:
-        async with async_session_factory() as session:
-            service = FinnV2RunService(session)
-            await service.run_foundation_lifecycle(run_id=run_id, user_id=user_id)
-            await session.commit()
+        await FinnV2RunService.run_foundation_lifecycle_owned(run_id=run_id, user_id=user_id)
     except asyncio.CancelledError:
         logger.warning(
             "FINN V2 owned lifecycle task canceled; persisting terminal canceled state",
