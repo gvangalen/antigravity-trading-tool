@@ -159,6 +159,7 @@ def test_verifier_reject_persists_a_typed_result_without_a_verified_response():
         follow_up_question=None,
         proposal_candidate=None,
         reasoning_result_id="reasoning-rejected-1",
+        evidence_refs_used=["evidence-b", "evidence-a"],
         evidence_set_hash="hash-rejected-1",
         created_at=datetime.now(timezone.utc),
     )
@@ -185,3 +186,4 @@ def test_verifier_reject_persists_a_typed_result_without_a_verified_response():
     assert persisted["result_json"]["coverage"]["coverage_ok"] is False
     assert traces[-1]["event_type"] == "response_rejected"
     assert traces[-1]["payload"]["reason_codes"] == ["response_scope_incomplete"]
+    assert traces[-1]["payload"]["evidence_refs"] == ["evidence-a", "evidence-b"]

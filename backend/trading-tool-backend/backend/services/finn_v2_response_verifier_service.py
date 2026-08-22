@@ -215,7 +215,7 @@ class FinnV2ResponseVerifierService:
                         "reason_codes": verifier.reason_codes,
                         "coverage": verifier.coverage.dict(),
                         "reasoning_result_id": draft.reasoning_result_id,
-                        "evidence_refs": self._all_refs(draft),
+                        "evidence_refs": sorted(self._all_refs(draft)),
                     },
                 )
                 increment_execution_safety_counter(f"finn_v2_verifier_results_total:{draft.mode}:reject")
