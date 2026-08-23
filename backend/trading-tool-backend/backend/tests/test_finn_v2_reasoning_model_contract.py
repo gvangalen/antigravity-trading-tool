@@ -129,6 +129,60 @@ def test_model_schema_error_repairs_once_with_sanitized_field_paths(monkeypatch)
     assert "observation" not in prompts[1]
 
 
+def test_model_mode_mismatch_repairs_to_the_requested_mode(monkeypatch):
+    service = FinnV2ReasoningService(session=object())
+    context = _context()
+    persisted = {}
+    prompts = []
+    wrong_mode = _model_output()
+    wrong_mode["mode"] = "READ"
+    responses = iter(
+        [
+            {"parsed": wrong_mode, "model": "gpt-4o-mini", "provider_metadata": {"response_status": "completed", "response_id": "resp-primary", "parsed_source": "response_output_text"}},
+            {"parsed": _model_output(), "model": "gpt-4o-mini", "provider_metadata": {"response_status": "completed", "response_id": "resp-repair", "parsed_source": "response_output_text"}},
+        ]
+    )
+
+    async def _persist_record(**kwargs):
+        persisted.update(kwargs)
+        return kwargs
+
+    async def _append_trace(*_args, **_kwargs):
+        return None
+
+    def _call_provider(**kwargs):
+        prompts.append(kwargs["prompt"])
+        return next(responses)
+
+    service._persist_record = _persist_record
+    service._append_trace = _append_trace
+    monkeypatch.setattr(service.flags, "reasoning_max_retries", lambda: 1)
+    monkeypatch.setattr(service.flags, "reasoning_timeout_seconds", lambda: 5)
+    monkeypatch.setattr(service.flags, "reasoning_max_output_tokens", lambda: 600)
+    monkeypatch.setattr("backend.services.finn_v2_reasoning_service.openai_client.ask_gpt_structured_response", _call_provider)
+
+    result = asyncio.run(
+        service._run_model_reasoning(
+            run_id="run-1",
+            user_id=7,
+            trace_id="trace-1",
+            orchestrator_result=SimpleNamespace(orchestrator_result_id="orchestrator-1"),
+            policy=SimpleNamespace(policy_decision_id="policy-1"),
+            snapshot=SimpleNamespace(id="snapshot-1"),
+            validation=SimpleNamespace(id="validation-1"),
+            context=context,
+            model_name="gpt-4o-mini",
+            input_hash="hash-input",
+        )
+    )
+
+    assert result["status"] == "ready"
+    assert persisted["result"].mode == "EVALUATE"
+    assert persisted["result"].reasoning_provenance["reasoning_source"] == "model_repair"
+    assert '"mode" MUST be exactly "EVALUATE"' in prompts[0]
+    assert "reasoning_mode_mismatch" in prompts[1]
+
+
 def test_model_call_commits_state_before_waiting_for_provider(monkeypatch):
     events = []
 

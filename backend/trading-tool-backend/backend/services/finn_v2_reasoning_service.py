@@ -853,6 +853,18 @@ class FinnV2ReasoningService:
         )
 
     def _validate_refs(self, result: ReasoningResult, context) -> None:
+        expected_mode = normalize_interaction_mode(context.interaction_mode)
+        actual_mode = normalize_interaction_mode(result.mode)
+        if actual_mode != expected_mode:
+            raise FinnV2ReasoningContractError(
+                code="reasoning_mode_mismatch",
+                missing_scopes=[],
+                path="mode",
+                grounding_values={
+                    "expected_mode": [expected_mode],
+                    "actual_mode": [actual_mode],
+                },
+            )
         valid_refs = {item.evidence_id for item in context.evidence}
         referenced = set(result.evidence_refs_used)
         for claim in result.claims:

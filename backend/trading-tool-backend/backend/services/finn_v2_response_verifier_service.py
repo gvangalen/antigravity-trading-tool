@@ -280,6 +280,18 @@ class FinnV2ResponseVerifierService:
         if not ownership_ok:
             reason_codes.append("ownership_violation")
 
+        request_plan_for_mode = getattr(orchestrator_result.analysis, "request_plan", None)
+        expected_mode = normalize_interaction_mode(
+            getattr(
+                orchestrator_result.analysis,
+                "interaction_mode",
+                getattr(request_plan_for_mode, "interaction_mode", draft.mode),
+            )
+        )
+        response_mode_matches_request = normalize_interaction_mode(draft.mode) == expected_mode
+        if not response_mode_matches_request:
+            reason_codes.append("response_mode_mismatch")
+
         evidence_ok = draft.evidence_set_hash == validation.evidence_set_hash
         if not evidence_ok:
             reason_codes.append("evidence_hash_mismatch")
@@ -447,6 +459,7 @@ class FinnV2ResponseVerifierService:
                 relevance_ok,
                 personalization_ok,
                 mode_purity_ok,
+                response_mode_matches_request,
                 uncertainty_ok,
                 follow_up_ok,
                 proposal_ok,
