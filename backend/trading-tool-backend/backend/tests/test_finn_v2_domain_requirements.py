@@ -28,14 +28,14 @@ def test_domain_requirements_match_block4_regression_cases():
     assert plan_a3.required_domains == ["identity_context", "market_context"]
 
 
-def test_domain_requirements_keep_optional_domains_ordered():
+def test_domain_requirements_do_not_execute_unimplemented_report_review_operations():
     analysis_service = FinnV2RequestAnalysisService()
     service = FinnV2DomainRequirementService()
 
     plan = service.determine(analysis_service.analyze(message="Beoordeel mijn reflectie en laatste rapport."))
 
-    assert plan.required_domains == ["report_context", "review_context"]
-    assert plan.optional_domains == ["identity_context", "report_context"]
+    assert plan.required_domains == []
+    assert plan.optional_domains == []
 
 def test_domain_requirements_narrow_create_setup_and_watchlist_actions():
     analysis_service = FinnV2RequestAnalysisService()

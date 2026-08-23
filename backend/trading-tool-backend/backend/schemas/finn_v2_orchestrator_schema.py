@@ -54,6 +54,8 @@ class RequestPlan(BaseModel):
     """Canonical persisted intent and information contract for a FINN request."""
 
     user_goal: str = "unknown"
+    operation_id: Optional[str] = None
+    operation_contract_version: Optional[str] = None
     interaction_mode: Literal[
         "CAPABILITY", "READ", "EVALUATE", "CREATE_PROPOSAL", "ACTION_PROPOSAL",
         "CLARIFICATION", "CONFIRMATION", "EXECUTION", "UNAVAILABLE",
@@ -61,6 +63,7 @@ class RequestPlan(BaseModel):
     primary_domains: List[str] = Field(default_factory=list)
     secondary_domains: List[str] = Field(default_factory=list)
     required_information_scopes: List[str] = Field(default_factory=list)
+    optional_information_scopes: List[str] = Field(default_factory=list)
     requested_operation: Optional[str] = None
     conversation_reference: Optional[str] = None
     referenced_entities: Dict[str, object] = Field(default_factory=dict)
@@ -74,6 +77,10 @@ class RequestPlan(BaseModel):
 
     @validator("required_information_scopes", pre=True)
     def _dedupe_information_scopes(cls, value: List[str]) -> List[str]:
+        return normalize_information_scopes(value or [])
+
+    @validator("optional_information_scopes", pre=True)
+    def _dedupe_optional_information_scopes(cls, value: List[str]) -> List[str]:
         return normalize_information_scopes(value or [])
 
 

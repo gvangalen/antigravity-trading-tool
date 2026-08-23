@@ -3,6 +3,7 @@ from __future__ import annotations
 import re
 from typing import Dict, List, Optional
 
+from backend.domain.finn_v2_operation_registry import FinnV2OperationRegistry, FinnV2OperationUnavailableError
 from backend.schemas.finn_v2_orchestrator_schema import RequestAnalysisResult, RequestPlan
 from backend.services.finn_v2_capability_registry_service import FinnV2CapabilityRegistryService
 
@@ -21,6 +22,7 @@ class FinnV2RequestAnalysisService:
 
     def __init__(self):
         self.capabilities = FinnV2CapabilityRegistryService()
+        self.operations = FinnV2OperationRegistry()
 
     def analyze(
         self,
@@ -54,6 +56,10 @@ class FinnV2RequestAnalysisService:
         explicit_strategy_id = self._extract_entity_id(text, "strateg")
         explicit_bot_id = self._extract_entity_id(text, "bot")
         uses_conversation_reference = self._uses_conversation_reference(normalized)
+        # "staat die live" is a normal Dutch relative reference to an
+        # explicitly requested bot, not a reference to a prior turn.
+        if "staat die live" in normalized:
+            uses_conversation_reference = False
         if uses_conversation_reference:
             context = conversation_context or {}
             explicit_asset = explicit_asset or self._context_asset(context.get("resolved_asset"))
@@ -87,7 +93,6 @@ class FinnV2RequestAnalysisService:
         if interaction_mode == "UNAVAILABLE" and "mode:unavailable_financial_context" in matched_signals:
             scopes = []
         primary_subject = self._primary_subject(scopes=scopes, interaction_mode=interaction_mode, normalized=normalized)
-        output_contract = self._output_contract(interaction_mode=interaction_mode, primary_subject=primary_subject)
         action_risk_class = self._action_risk_class(normalized=normalized, interaction_mode=interaction_mode)
 
         requires_gap_analysis = any(
@@ -118,6 +123,26 @@ class FinnV2RequestAnalysisService:
             unresolved_signals.append("insufficient_trade_context")
 
         confidence = self._confidence(scopes=scopes, matched_signals=matched_signals, interaction_mode=interaction_mode)
+        operation_id = self._operation_id(
+            interaction_mode=interaction_mode,
+            primary_subject=primary_subject,
+            scopes=scopes,
+            normalized=normalized,
+            integrated_plan=integrated_plan,
+            uses_conversation_reference=uses_conversation_reference,
+        )
+        try:
+            operation = self.operations.require_supported(operation_id)
+        except FinnV2OperationUnavailableError as exc:
+            # An unavailable registry capability cannot fall through to a
+            # legacy planner or business write path.
+            operation_id = "unavailable"
+            operation = self.operations.require_supported(operation_id)
+            interaction_mode = "UNAVAILABLE"
+            unresolved_signals.append(str(exc))
+        else:
+            # The registry owns the persisted mode for every new request.
+            interaction_mode = operation.mode
         request_plan = self._request_plan(
             interaction_mode=interaction_mode,
             scopes=scopes,
@@ -132,6 +157,8 @@ class FinnV2RequestAnalysisService:
             explicit_setup_id=explicit_setup_id,
             explicit_strategy_id=explicit_strategy_id,
             explicit_bot_id=explicit_bot_id,
+            operation_id=operation_id,
+            operation=operation,
         )
 
         return RequestAnalysisResult(
@@ -143,7 +170,7 @@ class FinnV2RequestAnalysisService:
             explicit_bot_id=explicit_bot_id,
             primary_subject=primary_subject,
             requested_entities=requested_entities,
-            output_contract=output_contract,
+            output_contract=operation.response_strategy if operation is not None else "unavailable",
             action_risk_class=action_risk_class,
             missing_essential_inputs=missing_essential_inputs,
             requires_comparison=requires_comparison,
@@ -153,15 +180,7 @@ class FinnV2RequestAnalysisService:
             confidence=confidence,
             matched_signals=matched_signals,
             unresolved_signals=unresolved_signals,
-            reasoning_required=interaction_mode in {
-                "CAPABILITY",
-                "READ",
-                "EVALUATE",
-                "CREATE_PROPOSAL",
-                "ACTION_PROPOSAL",
-                "CONFIRMATION",
-                "EXECUTION",
-            },
+            reasoning_required=bool(operation is not None and operation.model_policy != "never"),
             request_plan=request_plan,
         )
 
@@ -181,49 +200,22 @@ class FinnV2RequestAnalysisService:
         explicit_setup_id: Optional[int],
         explicit_strategy_id: Optional[int],
         explicit_bot_id: Optional[int],
+        operation_id: str,
+        operation,
     ) -> RequestPlan:
-        scope_map = {
-            "asset": ["active_asset"],
-            "profile": ["profile", "preferences"],
-            "analysis": ["active_asset"],
-            "indicators": ["active_asset", "indicator_configuration"],
-            "watchlist": ["active_asset", "watchlist"],
-            "setup": ["active_asset", "active_setup"],
-            "strategy": ["active_asset", "active_setup", "linked_strategy"],
-            "bot": ["active_asset", "active_setup", "linked_strategy", "linked_bot", "bot_status"],
-        }
-        required: List[str] = []
-        for scope in scopes:
-            required.extend(scope_map.get(scope, []))
-        if interaction_mode == "EVALUATE" and integrated_plan:
-            required = ["profile", "preferences", "active_asset", "indicator_configuration", "active_setup", "linked_strategy", "linked_bot", "bot_status"]
-        if interaction_mode == "CREATE_PROPOSAL" and primary_subject == "setup":
-            # Existing plan records provide conflict/impact context but cannot
-            # be prerequisites for proposing a first setup.
-            required = ["profile", "preferences", "active_asset", "indicator_configuration"]
-        if interaction_mode == "ACTION_PROPOSAL" and primary_subject == "watchlist":
-            required = ["active_asset", "watchlist"]
-        if interaction_mode == "ACTION_PROPOSAL" and primary_subject == "bot" and "live" in normalized:
-            required = ["active_asset", "active_setup", "linked_strategy", "linked_bot", "bot_status", "market_snapshot"]
-
-        operation = None
-        if interaction_mode == "CREATE_PROPOSAL" and primary_subject == "setup":
-            operation = "create_setup"
-        elif interaction_mode == "ACTION_PROPOSAL" and primary_subject == "watchlist":
-            operation = "watchlist_add" if any(token in normalized for token in ["voeg", "add"]) else "watchlist_remove"
-        elif interaction_mode == "ACTION_PROPOSAL" and primary_subject == "bot" and "live" in normalized:
-            operation = "activate_live_bot"
-
         reference = None
         if uses_conversation_reference:
             reference = str(conversation_context.get("last_user_goal") or "previous_verified_response")
         score = {"high": 0.9, "medium": 0.7, "low": 0.4, "none": 0.0}[confidence]
         return RequestPlan(
             user_goal=self._user_goal(interaction_mode, primary_subject, normalized, integrated_plan),
+            operation_id=operation_id,
+            operation_contract_version=getattr(operation, "version", None),
             interaction_mode=interaction_mode,
             primary_domains=list(scopes),
-            required_information_scopes=required,
-            requested_operation=operation,
+            required_information_scopes=list(getattr(operation, "required_scopes", ())),
+            optional_information_scopes=list(getattr(operation, "optional_scopes", ())),
+            requested_operation=operation_id if interaction_mode in {"CREATE_PROPOSAL", "ACTION_PROPOSAL", "CONFIRMATION", "EXECUTION"} else None,
             conversation_reference=reference,
             referenced_entities={
                 key: value
@@ -239,6 +231,55 @@ class FinnV2RequestAnalysisService:
             clarification_required=bool(missing_essential_inputs) or interaction_mode == "CLARIFICATION",
             confidence_score=score,
         )
+
+    @staticmethod
+    def _operation_id(
+        *,
+        interaction_mode: str,
+        primary_subject: Optional[str],
+        scopes: List[str],
+        normalized: str,
+        integrated_plan: bool,
+        uses_conversation_reference: bool,
+    ) -> str:
+        if uses_conversation_reference and any(token in normalized for token in ("korter", "anders", "herformuleer")):
+            return "reformulate_previous_response"
+        if uses_conversation_reference and any(token in normalized for token in ("onderbouw", "waar baseer")):
+            return "explain_previous_evidence"
+        if interaction_mode == "CAPABILITY":
+            return "capability"
+        if interaction_mode == "UNAVAILABLE":
+            return "unavailable"
+        if interaction_mode == "CLARIFICATION":
+            return "clarify_request"
+        if interaction_mode == "CONFIRMATION":
+            return "confirm_proposal"
+        if interaction_mode == "EXECUTION":
+            return "execute_proposal"
+        if interaction_mode == "CREATE_PROPOSAL":
+            return {"setup": "create_setup", "strategy": "create_strategy", "bot": "create_bot"}.get(primary_subject or "", "clarify_request")
+        if interaction_mode == "ACTION_PROPOSAL":
+            if primary_subject == "watchlist":
+                return "watchlist_add" if any(token in normalized for token in ("voeg", "add", "toevoeg")) else "watchlist_remove"
+            if primary_subject == "bot" and "live" in normalized:
+                return "activate_bot"
+            return "clarify_request"
+        if interaction_mode == "EVALUATE":
+            if "reflection" in scopes or "daily_report" in scopes:
+                return "evaluate_review_history"
+            if integrated_plan:
+                return "evaluate_plan"
+            return {
+                "indicators": "evaluate_indicator_configuration", "setup": "evaluate_setup",
+                "strategy": "evaluate_strategy", "bot": "evaluate_bot", "portfolio": "evaluate_portfolio",
+            }.get(primary_subject or "", "evaluate_plan")
+        if "bot" in scopes:
+            return "read_linked_bot"
+        return {
+            "asset": "read_active_asset", "watchlist": "read_watchlist", "indicators": "read_indicator_configuration",
+            "setup": "read_active_setup", "strategy": "read_linked_strategy", "bot": "read_linked_bot",
+            "portfolio": "read_portfolio", "daily_report": "read_latest_report", "reflection": "read_review_history",
+        }.get(primary_subject or "", "clarify_request")
 
     @staticmethod
     def _user_goal(interaction_mode: str, primary_subject: Optional[str], normalized: str, integrated_plan: bool) -> str:

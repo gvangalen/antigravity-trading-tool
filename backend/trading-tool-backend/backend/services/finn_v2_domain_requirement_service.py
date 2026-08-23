@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from backend.schemas.finn_v2_orchestrator_schema import DomainRequirementPlan, RequestAnalysisResult
+from backend.domain.finn_v2_operation_registry import FinnV2OperationRegistry
 
 
 class FinnV2DomainRequirementService:
@@ -16,24 +17,50 @@ class FinnV2DomainRequirementService:
         "reflection": {"required": ["review_context"], "optional": ["report_context", "identity_context"]},
         "portfolio": {"required": ["portfolio_context"], "optional": []},
     }
+    _SCOPE_DOMAINS = {
+        "profile": "identity_context", "preferences": "identity_context", "active_asset": "identity_context",
+        "watchlist": "identity_context", "indicator_configuration": "market_context", "market_snapshot": "market_context",
+        "active_setup": "plan_context", "linked_strategy": "plan_context", "linked_bot": "automation_context",
+        "bot_status": "automation_context",
+    }
+
+    def __init__(self) -> None:
+        self.operations = FinnV2OperationRegistry()
 
     def determine(self, analysis: RequestAnalysisResult) -> DomainRequirementPlan:
         required_domains: list[str] = []
         optional_domains: list[str] = []
         reasons: list[str] = []
 
+        request_plan = analysis.request_plan
+        if request_plan is not None and request_plan.operation_id:
+            contract = self.operations.require_supported(request_plan.operation_id)
+            for scope in contract.required_scopes:
+                domain = self._SCOPE_DOMAINS.get(scope)
+                if domain:
+                    required_domains.append(domain)
+                    reasons.append(f"contract:{contract.operation_id}:{scope}->{domain}")
+            for scope in contract.optional_scopes:
+                domain = self._SCOPE_DOMAINS.get(scope)
+                if domain:
+                    optional_domains.append(domain)
+                    reasons.append(f"contract_optional:{contract.operation_id}:{scope}->{domain}")
+            if contract.operation_id == "create_setup":
+                reasons.append("setup_creation_uses_optional_existing_plan_context")
+            if contract.operation_id in {"watchlist_add", "watchlist_remove"}:
+                reasons.append("watchlist_action_requires_identity_context")
+            return DomainRequirementPlan(
+                required_domains=self._dedupe_domains(required_domains),
+                optional_domains=self._dedupe_domains(optional_domains),
+                requirement_reason=reasons or [f"contract:{contract.operation_id}:no_evidence"],
+            )
+
+        # Compatibility path for persisted, planless records created before
+        # operation contracts existed.
         if analysis.interaction_mode == "CAPABILITY":
-            return DomainRequirementPlan(
-                required_domains=[],
-                optional_domains=[],
-                requirement_reason=["capability_registry_read_only"],
-            )
+            return DomainRequirementPlan(required_domains=[], optional_domains=[], requirement_reason=["legacy_planless_capability"])
         if analysis.interaction_mode == "UNAVAILABLE":
-            return DomainRequirementPlan(
-                required_domains=[],
-                optional_domains=[],
-                requirement_reason=["deterministic_unavailable_without_provider_call"],
-            )
+            return DomainRequirementPlan(required_domains=[], optional_domains=[], requirement_reason=["legacy_planless_unavailable"])
 
         information_domain_map = {
             "profile": "identity_context", "preferences": "identity_context", "active_asset": "identity_context",
@@ -81,3 +108,8 @@ class FinnV2DomainRequirementService:
             optional_domains=optional_domains,
             requirement_reason=reasons,
         )
+
+    @staticmethod
+    def _dedupe_domains(domains: list[str]) -> list[str]:
+        order = ["identity_context", "market_context", "plan_context", "automation_context"]
+        return [domain for domain in order if domain in domains]

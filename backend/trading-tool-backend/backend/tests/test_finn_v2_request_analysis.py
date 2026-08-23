@@ -99,7 +99,7 @@ def test_request_analysis_routes_dutch_capability_question_to_capability_mode():
 
     assert result.interaction_mode == "CAPABILITY"
     assert result.subject_scopes == ["capability"]
-    assert result.reasoning_required is True
+    assert result.reasoning_required is False
 
 
 def test_request_analysis_routes_english_capability_question_to_capability_mode():

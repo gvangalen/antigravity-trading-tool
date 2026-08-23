@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from backend.domain.finn_v2_contract import primary_tool_for_information_scope
+from backend.domain.finn_v2_operation_registry import FinnV2OperationRegistry
 from backend.schemas.finn_v2_orchestrator_schema import DomainRequirementPlan, RequestAnalysisResult, ToolPlan
 from backend.schemas.finn_v2_tool_schema import ToolSelector
 
@@ -33,6 +34,9 @@ class FinnV2ToolPlanService:
         "report_context": ["read_latest_report"],
         "review_context": ["read_review_history"],
     }
+    def __init__(self) -> None:
+        self.operations = FinnV2OperationRegistry()
+
     def build(self, *, run_id: str, analysis: RequestAnalysisResult, domain_plan: DomainRequirementPlan) -> ToolPlan:
         selector = ToolSelector(
             asset=analysis.explicit_asset,
@@ -69,11 +73,10 @@ class FinnV2ToolPlanService:
 
     def _tool_names_for(self, *, analysis: RequestAnalysisResult, domain_plan: DomainRequirementPlan) -> list[str]:
         request_plan = analysis.request_plan
-        if request_plan is not None and request_plan.required_information_scopes:
-            return [
-                primary_tool_for_information_scope(scope)
-                for scope in request_plan.required_information_scopes
-            ]
+        if request_plan is not None and request_plan.operation_id:
+            # Newly created runs are entirely contract-driven. The fallback
+            # below remains only for historical planless records.
+            return list(self.operations.require_supported(request_plan.operation_id).tool_names)
         if analysis.interaction_mode == "CAPABILITY":
             return []
         if analysis.interaction_mode == "READ":
@@ -149,7 +152,7 @@ class FinnV2ToolPlanService:
 
     def _required_evidence_for(self, *, analysis: RequestAnalysisResult) -> list[str]:
         request_plan = analysis.request_plan
-        if request_plan is not None and request_plan.required_information_scopes:
+        if request_plan is not None and request_plan.operation_id:
             return list(request_plan.required_information_scopes)
         if analysis.interaction_mode == "READ":
             if analysis.primary_subject == "setup":
@@ -202,6 +205,9 @@ class FinnV2ToolPlanService:
         return []
 
     def _optional_evidence_for(self, *, analysis: RequestAnalysisResult) -> list[str]:
+        request_plan = analysis.request_plan
+        if request_plan is not None and request_plan.operation_id:
+            return list(request_plan.optional_information_scopes)
         if analysis.interaction_mode == "EVALUATE":
             optional = ["asset_scores", "market_snapshot", "macro_snapshot", "technical_snapshot"]
             if "bot" not in analysis.subject_scopes and "bot_status" not in optional:
