@@ -131,6 +131,10 @@ class FinnV2ReasoningPromptService:
             "the bot is broken, ineffective, outdated, inactive, limiting, or unsuitable. Do not infer missed "
             "opportunities or strategy conflict from those values. If the status needs attention, make the one "
             "next step a neutral review of the stored status rather than a performance or operational claim. "
+            "Do not identify bot mode or bot status as the missing component of the plan, and do not prescribe "
+            "a decision rule, configuration change, or bot action because of those values. When the evidence "
+            "does not prove one concrete missing component, say that the stored evidence does not establish one "
+            "instead of inventing one; the single next step must then be a neutral review of the saved plan. "
             "This prohibition applies to direct_answer, main_observation, claims, supporting_points and next_step.\n"
             if any(error.get("code") == "unsupported_configuration_causality" for error in validation_errors or [])
             else ""
