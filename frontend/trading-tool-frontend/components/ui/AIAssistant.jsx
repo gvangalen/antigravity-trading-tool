@@ -45,6 +45,10 @@ function normalizeFinnSessionId(value) {
   return normalized || null;
 }
 
+function isFinnV2ConversationId(value) {
+  return typeof value === "string" && value.startsWith("finn-v2-conv-");
+}
+
 function scopedRecentConversationStorageKey(userId) {
   const scope = String(userId || "anonymous").trim() || "anonymous";
   return `${FINN_RECENT_CONVERSATIONS_STORAGE_KEY}:${scope}`;
@@ -4000,6 +4004,11 @@ function AIAssistantContent({
         const latestSessionId = normalizeFinnSessionId(sessions?.[0]?.id);
         const resolvedSessionId = preferredSessionId || latestSessionId;
         if (!resolvedSessionId) return;
+
+        if (isFinnV2ConversationId(resolvedSessionId)) {
+          setActiveFinnSessionId(resolvedSessionId);
+          return;
+        }
 
         const detail = await getAssistantSessionDetail(resolvedSessionId);
         setActiveFinnSessionId(resolvedSessionId);

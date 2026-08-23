@@ -12,7 +12,12 @@ def test_visible_delivery_maps_verified_response_to_assistant_contract():
     service.delivery.get_delivery_artifacts = lambda **kwargs: asyncio.sleep(
         0,
         result={
-            "delivery_envelope": {"run_id": "run-1", "status": "completed", "delivery_source": "finn_v2_verified"},
+            "delivery_envelope": {
+                "run_id": "run-1",
+                "conversation_id": "finn-v2-conv-1",
+                "status": "completed",
+                "delivery_source": "finn_v2_verified",
+            },
             "verified_response": VerifiedResponse.parse_obj(
                 {
                     "verified_response_id": "vr-1",
@@ -62,6 +67,7 @@ def test_visible_delivery_maps_verified_response_to_assistant_contract():
     assert envelope["response_trace"]["response_source"] == "finn_v2_verified"
     assert envelope["response_trace"]["pipeline_version"] == "finn_v2"
     assert envelope["response_trace"]["tool_calls"][0]["tool_name"] == "read_active_asset"
+    assert envelope["session_id"] == "finn-v2-conv-1"
 
 
 def test_visible_delivery_returns_pending_contract_with_same_run_id():
@@ -69,7 +75,7 @@ def test_visible_delivery_returns_pending_contract_with_same_run_id():
     service.gateway.run_foundation_now = lambda **kwargs: asyncio.sleep(0, result="run-pending")
     service.delivery.get_delivery_artifacts = lambda **kwargs: asyncio.sleep(
         0,
-        result={"delivery_envelope": {"status": "planned", "error_code": None}, "verified_response": None},
+        result={"delivery_envelope": {"conversation_id": "finn-v2-conv-pending", "status": "planned", "error_code": None}, "verified_response": None},
     )
 
     envelope = asyncio.run(
@@ -88,6 +94,7 @@ def test_visible_delivery_returns_pending_contract_with_same_run_id():
     assert envelope["state"]["current_flow"] == "finn_v2_visible_pending"
     assert envelope["state"]["run_id"] == "run-pending"
     assert envelope["response_trace"]["run_id"] == "run-pending"
+    assert envelope["session_id"] == "finn-v2-conv-pending"
 
 
 def test_visible_delivery_returns_terminal_failure_contract_with_same_run_id():
@@ -95,7 +102,7 @@ def test_visible_delivery_returns_terminal_failure_contract_with_same_run_id():
     service.gateway.run_foundation_now = lambda **kwargs: asyncio.sleep(0, result="run-failed")
     service.delivery.get_delivery_artifacts = lambda **kwargs: asyncio.sleep(
         0,
-        result={"delivery_envelope": {"status": "failed", "error_code": "orchestrator_failed"}, "verified_response": None},
+        result={"delivery_envelope": {"conversation_id": "finn-v2-conv-failed", "status": "failed", "error_code": "orchestrator_failed"}, "verified_response": None},
     )
 
     envelope = asyncio.run(
@@ -114,6 +121,7 @@ def test_visible_delivery_returns_terminal_failure_contract_with_same_run_id():
     assert envelope["state"]["current_flow"] == "finn_v2_visible_terminal_failed"
     assert envelope["state"]["run_id"] == "run-failed"
     assert envelope["response_trace"]["error"] == "orchestrator_failed"
+    assert envelope["session_id"] == "finn-v2-conv-failed"
 
 
 def test_visible_delivery_preserves_run_id_when_delivery_chain_raises():

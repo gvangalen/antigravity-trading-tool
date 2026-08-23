@@ -19,8 +19,14 @@ class _FakeConversationRepo:
             return row
         return None
 
-    async def create(self, *, conversation_id, user_id, title=None):
-        row = SimpleNamespace(id=conversation_id, user_id=user_id, title=title)
+    async def get_by_session_id_for_user(self, session_id, user_id):
+        for row in self.rows.values():
+            if row.user_id == user_id and getattr(row, "context", {}).get("session_id") == session_id:
+                return row
+        return None
+
+    async def create(self, *, conversation_id, user_id, title=None, context=None):
+        row = SimpleNamespace(id=conversation_id, user_id=user_id, title=title, context=dict(context or {}))
         self.rows[conversation_id] = row
         return row
 
@@ -163,6 +169,61 @@ def test_gateway_owner_mismatch_returns_404(monkeypatch):
         )
 
     assert exc.value.status_code == 404
+
+
+def test_gateway_reuses_the_same_owner_scoped_conversation_for_a_composer_session(monkeypatch):
+    monkeypatch.setattr(gateway_module, "FinnV2ConversationRepository", _FakeConversationRepo)
+    monkeypatch.setattr(gateway_module, "FinnV2RunRepository", _FakeRunRepo)
+    monkeypatch.setattr(gateway_module, "FinnV2RunService", _FakeRunService)
+    monkeypatch.setattr(gateway_module.run_rate_limiter, "check_rate_limit", lambda *args, **kwargs: None)
+
+    service = gateway_module.FinnV2GatewayService(session=object())
+    monkeypatch.setattr(service.flags, "resolve_mode", lambda _user_id: "visible_runtime")
+    monkeypatch.setattr(service.flags, "allows_transport", lambda _transport: True)
+    monkeypatch.setattr(service.flags, "max_runs_per_minute", lambda: 20)
+
+    async def create(message):
+        return await service.create_run(
+            user_id=7,
+            request=AgentRunRequest(message=message, session_id="sess-btc-406"),
+            request_path="/api/assistant/v2/runs",
+            request_id=f"request-{message}",
+            trace_id=f"trace-{message}",
+        )
+
+    async def create_pair():
+        return await create("Welke setup is actief?"), await create("Onderbouw die conclusie.")
+
+    first, second = asyncio.run(create_pair())
+
+    assert first.conversation_id == second.conversation_id
+    assert len(service.conversations.rows) == 1
+    assert next(iter(service.conversations.rows.values())).context["session_id"] == "sess-btc-406"
+
+
+def test_gateway_does_not_resolve_another_users_composer_session(monkeypatch):
+    monkeypatch.setattr(gateway_module, "FinnV2ConversationRepository", _FakeConversationRepo)
+    monkeypatch.setattr(gateway_module, "FinnV2RunRepository", _FakeRunRepo)
+    monkeypatch.setattr(gateway_module, "FinnV2RunService", _FakeRunService)
+    monkeypatch.setattr(gateway_module.run_rate_limiter, "check_rate_limit", lambda *args, **kwargs: None)
+
+    service = gateway_module.FinnV2GatewayService(session=object())
+    monkeypatch.setattr(service.flags, "resolve_mode", lambda _user_id: "visible_runtime")
+    monkeypatch.setattr(service.flags, "allows_transport", lambda _transport: True)
+    monkeypatch.setattr(service.flags, "max_runs_per_minute", lambda: 20)
+    service.conversations.rows["conv-user-7"] = SimpleNamespace(
+        id="conv-user-7", user_id=7, context={"session_id": "shared-browser-key"}
+    )
+
+    run = asyncio.run(service.create_run(
+        user_id=8,
+        request=AgentRunRequest(message="Welke asset is actief?", session_id="shared-browser-key"),
+        request_path="/api/assistant/v2/runs",
+        request_id="request-user-8",
+        trace_id="trace-user-8",
+    ))
+
+    assert run.conversation_id != "conv-user-7"
 
 
 def test_gateway_server_side_idempotency_key_is_stable():

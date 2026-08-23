@@ -363,17 +363,23 @@ class FinnV2OrchestratorService:
         selectors = dict(getattr(result.tool_plan, "entity_selectors", {}) or {})
         request_plan = getattr(result.analysis, "request_plan", None)
         context = dict(existing_context or {})
+        resolved_asset = selectors.get("asset") or getattr(result.analysis, "explicit_asset", None) or context.get("resolved_asset")
+        resolved_setup_id = selectors.get("setup_id") or getattr(result.analysis, "explicit_setup_id", None) or context.get("resolved_setup_id")
+        resolved_strategy_id = selectors.get("strategy_id") or getattr(result.analysis, "explicit_strategy_id", None) or context.get("resolved_strategy_id")
+        resolved_bot_id = selectors.get("bot_id") or getattr(result.analysis, "explicit_bot_id", None) or context.get("resolved_bot_id")
         context.update(
             {
                 "last_user_goal": getattr(request_plan, "user_goal", None),
                 "last_mode": getattr(verified_response, "mode", None) or result.analysis.interaction_mode,
-                "resolved_asset": selectors.get("asset") or getattr(result.analysis, "explicit_asset", None),
-                "resolved_setup_id": selectors.get("setup_id") or getattr(result.analysis, "explicit_setup_id", None),
-                "resolved_strategy_id": selectors.get("strategy_id") or getattr(result.analysis, "explicit_strategy_id", None),
-                "resolved_bot_id": selectors.get("bot_id") or getattr(result.analysis, "explicit_bot_id", None),
+                "resolved_asset": resolved_asset,
+                "resolved_setup_id": resolved_setup_id,
+                "resolved_strategy_id": resolved_strategy_id,
+                "resolved_bot_id": resolved_bot_id,
                 "last_evidence_refs": list(getattr(verified_response, "evidence_refs_used", []) or []),
                 "open_proposal_id": getattr(verified_response, "proposal_id", None),
                 "last_verified_conclusion": getattr(verified_response, "main_observation", None),
+                "last_primary_domains": list(getattr(request_plan, "primary_domains", []) or []),
+                "last_required_information_scopes": list(getattr(request_plan, "required_information_scopes", []) or []),
             }
         )
         await self.conversations.update_context(

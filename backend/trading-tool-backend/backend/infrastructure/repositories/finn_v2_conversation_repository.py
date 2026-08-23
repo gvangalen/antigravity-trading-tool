@@ -23,12 +23,23 @@ class FinnV2ConversationRepository(FinnV2RepositoryTransactionMixin):
         )
         return result.scalars().first()
 
+    async def get_by_session_id_for_user(self, session_id: str, user_id: int) -> Optional[FinnV2Conversation]:
+        """Resolve only a stable composer session belonging to this user."""
+        result = await self.session.execute(
+            select(FinnV2Conversation).where(
+                FinnV2Conversation.user_id == user_id,
+                FinnV2Conversation.context_json["session_id"].astext == session_id,
+            )
+        )
+        return result.scalars().first()
+
     async def create(
         self,
         *,
         conversation_id: str,
         user_id: int,
         title: Optional[str] = None,
+        context: Optional[Dict[str, Any]] = None,
     ) -> FinnV2Conversation:
         now = datetime.now(timezone.utc)
         row = FinnV2Conversation(
@@ -38,7 +49,7 @@ class FinnV2ConversationRepository(FinnV2RepositoryTransactionMixin):
             status="active",
             created_at=now,
             updated_at=now,
-            context_json={},
+            context_json=dict(context or {}),
         )
         self.session.add(row)
         await self._flush_with_rollback(operation="create", entity_type="FinnV2Conversation")

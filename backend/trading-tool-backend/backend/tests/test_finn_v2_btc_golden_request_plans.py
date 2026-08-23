@@ -50,13 +50,27 @@ def test_request_plan_preserves_a_follow_up_reference_without_reusing_unverified
             "resolved_setup_id": 309,
             "resolved_strategy_id": 325,
             "resolved_bot_id": 186,
+            "last_mode": "EVALUATE",
+            "last_primary_domains": ["profile", "indicators", "setup", "strategy", "bot"],
+            "last_required_information_scopes": ["profile", "preferences", "asset", "indicators", "setup", "strategy", "bot", "bot_status"],
         },
     )
 
     assert analysis.request_plan is not None
     assert analysis.request_plan.conversation_reference == "evaluate_complete_plan"
-    assert analysis.request_plan.user_goal == "read_bot"
+    assert analysis.request_plan.user_goal == "evaluate"
     assert analysis.explicit_asset == "BTC"
     assert analysis.explicit_setup_id == 309
     assert analysis.explicit_strategy_id == 325
     assert analysis.explicit_bot_id == 186
+    assert analysis.interaction_mode == "EVALUATE"
+    assert analysis.request_plan.required_information_scopes == [
+        "profile", "preferences", "asset", "indicators", "setup", "strategy", "bot", "bot_status",
+    ]
+
+
+def test_request_plan_requires_a_clarification_when_a_reference_has_no_verified_turn():
+    analysis = ANALYSIS.analyze(message="Waar baseer je dat op?", conversation_context={})
+
+    assert analysis.interaction_mode == "CLARIFICATION"
+    assert "conversation_reference_without_verified_context" in analysis.unresolved_signals

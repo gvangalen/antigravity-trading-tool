@@ -275,6 +275,8 @@ def test_orchestrator_persists_only_verified_conversation_references():
         "resolved_asset": "BTC",
         "last_evidence_refs": ["evidence-setup-1"],
         "last_verified_conclusion": "The BTC setup is active.",
+        "last_primary_domains": ["setup"],
+        "last_required_information_scopes": ["asset", "setup"],
     }
 
 

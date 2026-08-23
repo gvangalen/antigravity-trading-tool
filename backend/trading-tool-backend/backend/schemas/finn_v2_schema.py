@@ -65,6 +65,9 @@ ResponseSource = Literal[
 class AgentRunRequest(BaseModel):
     message: constr(min_length=1, max_length=4000)
     conversation_id: Optional[str] = None
+    # The web composer owns a stable, user-scoped session identifier.  It is
+    # distinct from the persisted V2 conversation id and is resolved server-side.
+    session_id: Optional[constr(min_length=1, max_length=128)] = None
     workspace_hints: Dict[str, Any] = Field(default_factory=dict)
     client_context: Dict[str, Any] = Field(default_factory=dict)
     idempotency_key: Optional[constr(min_length=8, max_length=128)] = None

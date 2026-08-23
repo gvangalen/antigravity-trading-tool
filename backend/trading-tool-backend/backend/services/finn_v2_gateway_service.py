@@ -63,7 +63,11 @@ class FinnV2GatewayService:
             limit=max(self.flags.max_runs_per_minute(), 1),
         )
 
-        conversation = await self._resolve_conversation(user_id=user_id, conversation_id=request.conversation_id)
+        conversation = await self._resolve_conversation(
+            user_id=user_id,
+            conversation_id=request.conversation_id,
+            session_id=request.session_id or (request.client_context or {}).get("session_id"),
+        )
         effective_request_id = request_id or f"finn-v2-req-{uuid.uuid4().hex}"
         effective_trace_id = trace_id or f"finn-v2-trace-{uuid.uuid4().hex}"
         effective_idempotency_key = self._resolve_idempotency_key(
@@ -250,17 +254,35 @@ class FinnV2GatewayService:
             trace_days=self.flags.trace_retention_days(),
         )
 
-    async def _resolve_conversation(self, *, user_id: int, conversation_id: Optional[str]):
+    async def _resolve_conversation(
+        self,
+        *,
+        user_id: int,
+        conversation_id: Optional[str],
+        session_id: Optional[str] = None,
+    ):
         if conversation_id:
             conversation = await self.conversations.get_by_id_for_user(conversation_id, user_id)
             if conversation is None:
                 raise HTTPException(status_code=404, detail="FINN V2 conversation not found")
             return conversation
-        return await self.conversations.create(
-            conversation_id=f"finn-v2-conv-{uuid.uuid4().hex}",
-            user_id=user_id,
-            title="FINN Core V2 shadow conversation",
-        )
+        normalized_session_id = str(session_id or "").strip()
+        # "new" is the legacy pre-session placeholder, not a stable session key.
+        if normalized_session_id and normalized_session_id.casefold() != "new":
+            conversation = await self.conversations.get_by_id_for_user(normalized_session_id, user_id)
+            if conversation is not None:
+                return conversation
+            conversation = await self.conversations.get_by_session_id_for_user(normalized_session_id, user_id)
+            if conversation is not None:
+                return conversation
+        create_kwargs = {
+            "conversation_id": f"finn-v2-conv-{uuid.uuid4().hex}",
+            "user_id": user_id,
+            "title": "FINN Core V2 shadow conversation",
+        }
+        if normalized_session_id and normalized_session_id.casefold() != "new":
+            create_kwargs["context"] = {"session_id": normalized_session_id}
+        return await self.conversations.create(**create_kwargs)
 
     def _resolve_idempotency_key(self, *, user_id: int, client_key: Optional[str], request_id: str) -> str:
         if client_key:

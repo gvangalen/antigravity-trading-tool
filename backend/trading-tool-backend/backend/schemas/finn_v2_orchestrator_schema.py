@@ -66,6 +66,9 @@ class RequestPlan(BaseModel):
     required_information_scopes: List[str] = Field(default_factory=list)
     requested_operation: Optional[str] = None
     conversation_reference: Optional[str] = None
+    referenced_entities: Dict[str, object] = Field(default_factory=dict)
+    missing_information: List[str] = Field(default_factory=list)
+    clarification_required: bool = False
     confidence_score: float = Field(default=0.0, ge=0.0, le=1.0)
 
     @validator("interaction_mode", pre=True)

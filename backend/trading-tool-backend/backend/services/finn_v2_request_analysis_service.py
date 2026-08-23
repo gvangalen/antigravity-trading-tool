@@ -46,11 +46,15 @@ class FinnV2RequestAnalysisService:
                 if scope not in scopes:
                     scopes.append(scope)
                     matched_signals.append(f"scope:{scope}:integrated_plan")
-        explicit_asset = self._extract_asset(text, normalized)
+        explicit_asset = self._extract_asset(text, normalized) or self._asset_from_context(
+            workspace_hints=workspace_hints,
+            client_context=client_context,
+        )
         explicit_setup_id = self._extract_entity_id(text, "setup")
         explicit_strategy_id = self._extract_entity_id(text, "strateg")
         explicit_bot_id = self._extract_entity_id(text, "bot")
-        if self._uses_conversation_reference(normalized):
+        uses_conversation_reference = self._uses_conversation_reference(normalized)
+        if uses_conversation_reference:
             context = conversation_context or {}
             explicit_asset = explicit_asset or self._context_asset(context.get("resolved_asset"))
             explicit_setup_id = explicit_setup_id or self._context_entity_id(context.get("resolved_setup_id"))
@@ -62,7 +66,19 @@ class FinnV2RequestAnalysisService:
             explicit_strategy_id=explicit_strategy_id,
             explicit_bot_id=explicit_bot_id,
         )
+        if explicit_asset and not scopes and self._looks_like_asset_question(normalized):
+            scopes.append("asset")
+            matched_signals.append("scope:asset:resolved_context")
         interaction_mode = self._interaction_mode(normalized, scopes, matched_signals, explicit_asset=explicit_asset)
+        if uses_conversation_reference:
+            interaction_mode, scopes = self._apply_conversation_reference(
+                normalized=normalized,
+                interaction_mode=interaction_mode,
+                scopes=scopes,
+                conversation_context=conversation_context or {},
+                matched_signals=matched_signals,
+                unresolved_signals=unresolved_signals,
+            )
         if interaction_mode == "UNAVAILABLE" and "mode:unavailable_financial_context" in matched_signals:
             scopes = []
         primary_subject = self._primary_subject(scopes=scopes, interaction_mode=interaction_mode, normalized=normalized)
@@ -105,6 +121,12 @@ class FinnV2RequestAnalysisService:
             confidence=confidence,
             conversation_context=conversation_context or {},
             integrated_plan=integrated_plan,
+            missing_essential_inputs=missing_essential_inputs,
+            uses_conversation_reference=uses_conversation_reference,
+            explicit_asset=explicit_asset,
+            explicit_setup_id=explicit_setup_id,
+            explicit_strategy_id=explicit_strategy_id,
+            explicit_bot_id=explicit_bot_id,
         )
 
         return RequestAnalysisResult(
@@ -148,6 +170,12 @@ class FinnV2RequestAnalysisService:
         integrated_plan: bool,
         confidence: str,
         conversation_context: Dict[str, object],
+        missing_essential_inputs: List[str],
+        uses_conversation_reference: bool,
+        explicit_asset: Optional[str],
+        explicit_setup_id: Optional[int],
+        explicit_strategy_id: Optional[int],
+        explicit_bot_id: Optional[int],
     ) -> RequestPlan:
         scope_map = {
             "asset": ["asset"],
@@ -180,7 +208,7 @@ class FinnV2RequestAnalysisService:
             operation = "activate_live_bot"
 
         reference = None
-        if self._uses_conversation_reference(normalized):
+        if uses_conversation_reference:
             reference = str(conversation_context.get("last_user_goal") or "previous_verified_response")
         score = {"high": 0.9, "medium": 0.7, "low": 0.4, "none": 0.0}[confidence]
         return RequestPlan(
@@ -190,6 +218,18 @@ class FinnV2RequestAnalysisService:
             required_information_scopes=required,
             requested_operation=operation,
             conversation_reference=reference,
+            referenced_entities={
+                key: value
+                for key, value in {
+                    "asset": explicit_asset,
+                    "setup_id": explicit_setup_id,
+                    "strategy_id": explicit_strategy_id,
+                    "bot_id": explicit_bot_id,
+                }.items()
+                if value is not None
+            },
+            missing_information=list(missing_essential_inputs),
+            clarification_required=bool(missing_essential_inputs) or interaction_mode == "CLARIFICATION",
             confidence_score=score,
         )
 
@@ -231,9 +271,7 @@ class FinnV2RequestAnalysisService:
         return scopes
 
     def _interaction_mode(self, normalized: str, scopes: List[str], matched_signals: List[str], *, explicit_asset: Optional[str]) -> str:
-        if self.capabilities.is_capability_question(normalized) or self._contains_any_phrase(
-            normalized, ["waarmee help", "hoe kun je mij helpen", "how can you help"]
-        ):
+        if "capability" in scopes or self._is_capability_question(normalized):
             matched_signals.append("mode:capability")
             return "CAPABILITY"
         unavailable_financial_tokens = [
@@ -380,7 +418,65 @@ class FinnV2RequestAnalysisService:
 
     @staticmethod
     def _uses_conversation_reference(normalized: str) -> bool:
-        return any(token in normalized for token in ["die ", "dat ", "eerder", "onderbouw", "korter", "anders"])
+        return any(
+            re.search(rf"(?<!\w){re.escape(token)}(?!\w)", normalized)
+            for token in [
+                "die", "dat", "eerder", "onderbouw", "waar baseer",
+                "korter", "anders", "herformuleer", "dezelfde conclusie",
+            ]
+        )
+
+    def _is_capability_question(self, normalized: str) -> bool:
+        if self.capabilities.is_capability_question(normalized):
+            return True
+        words = set(re.findall(r"[\w-]+", normalized))
+        asks_how = bool(words.intersection({"hoe", "how", "wat", "what"}))
+        asks_help = bool(words.intersection({"help", "helpen", "kan", "can", "doen", "do"}))
+        return asks_how and asks_help and bool(words.intersection({"finn", "tradingcoach", "assistant", "coach"}))
+
+    @staticmethod
+    def _asset_from_context(
+        *,
+        workspace_hints: Optional[Dict[str, object]],
+        client_context: Optional[Dict[str, object]],
+    ) -> Optional[str]:
+        for context in (workspace_hints or {}, client_context or {}):
+            for key in ("asset", "symbol", "active_asset"):
+                value = str(context.get(key) or "").strip().upper()
+                if value:
+                    return value
+        return None
+
+    @staticmethod
+    def _looks_like_asset_question(normalized: str) -> bool:
+        return any(token in normalized for token in [
+            "asset", "instrument", "symbool", "symbol", "geselecteerd", "selected", "actief", "active", "huidig", "current",
+        ])
+
+    def _apply_conversation_reference(
+        self,
+        *,
+        normalized: str,
+        interaction_mode: str,
+        scopes: List[str],
+        conversation_context: Dict[str, object],
+        matched_signals: List[str],
+        unresolved_signals: List[str],
+    ) -> tuple[str, List[str]]:
+        if not conversation_context.get("last_verified_conclusion"):
+            unresolved_signals.append("conversation_reference_without_verified_context")
+            return "CLARIFICATION", scopes
+        inherited_scopes = list(conversation_context.get("last_primary_domains") or [])
+        if inherited_scopes:
+            scopes = inherited_scopes
+        prior_mode = str(conversation_context.get("last_mode") or "READ")
+        if any(token in normalized for token in ["korter", "anders", "herformuleer", "dezelfde conclusie"]):
+            matched_signals.append("conversation:rephrase_verified_conclusion")
+            return prior_mode if prior_mode in {"READ", "EVALUATE"} else "READ", scopes
+        if any(token in normalized for token in ["onderbouw", "waar baseer"]):
+            matched_signals.append("conversation:explain_verified_conclusion")
+            return prior_mode if prior_mode in {"READ", "EVALUATE"} else "READ", scopes
+        return interaction_mode, scopes
 
     @staticmethod
     def _context_asset(value: object) -> Optional[str]:

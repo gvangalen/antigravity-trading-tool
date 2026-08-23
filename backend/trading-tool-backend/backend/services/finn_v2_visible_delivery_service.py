@@ -43,6 +43,8 @@ class FinnV2VisibleDeliveryService:
             user_id=user_id,
             request_payload=AgentRunRequest(
                 message=message,
+                conversation_id=(context_payload or {}).get("conversation_id"),
+                session_id=(context_payload or {}).get("session_id"),
                 workspace_hints=context_payload or {},
                 client_context={"surface": "assistant_visible_v2", **(context_payload or {})},
                 transport=transport,
@@ -62,6 +64,7 @@ class FinnV2VisibleDeliveryService:
                         trace_id=trace_id,
                         run_id=run_id,
                         status=status,
+                        conversation_id=envelope.get("conversation_id"),
                     )
                 logger.error(
                     "FINN V2 visible delivery missing verified response",
@@ -82,6 +85,7 @@ class FinnV2VisibleDeliveryService:
                     run_id=run_id,
                     status=str(envelope.get("status") or "failed"),
                     error_code=envelope.get("error_code"),
+                    conversation_id=envelope.get("conversation_id"),
                 )
             return self._assistant_contract(
                 verified_response,
@@ -173,6 +177,7 @@ class FinnV2VisibleDeliveryService:
             "delivery_envelope": artifacts.get("delivery_envelope"),
         }
         payload = {
+            "session_id": (artifacts.get("delivery_envelope") or {}).get("conversation_id"),
             "response": "\n\n".join([line for line in lines if line]),
             "intent": str(response.get("mode") or "UNAVAILABLE").lower(),
             "action": None,
@@ -207,8 +212,9 @@ class FinnV2VisibleDeliveryService:
             }]
         return payload
 
-    def _pending_contract(self, *, trace_id: str, run_id: str, status: str) -> dict[str, Any]:
+    def _pending_contract(self, *, trace_id: str, run_id: str, status: str, conversation_id: Optional[str]) -> dict[str, Any]:
         return {
+            "session_id": conversation_id,
             "response": "Ik verwerk je FINN-verzoek nog. Je run blijft actief en komt via dezelfde run-ID beschikbaar zodra de verified response klaar is.",
             "intent": "processing",
             "action": None,
@@ -236,8 +242,17 @@ class FinnV2VisibleDeliveryService:
             "actions": [],
         }
 
-    def _failed_contract(self, *, trace_id: str, run_id: str, status: str, error_code: Optional[str]) -> dict[str, Any]:
+    def _failed_contract(
+        self,
+        *,
+        trace_id: str,
+        run_id: str,
+        status: str,
+        error_code: Optional[str],
+        conversation_id: Optional[str],
+    ) -> dict[str, Any]:
         return {
+            "session_id": conversation_id,
             "response": "Ik kan deze FINN V2-run nu niet veilig afronden. Probeer het opnieuw of controleer de runstatus met dezelfde run-ID.",
             "intent": "unavailable",
             "action": None,
