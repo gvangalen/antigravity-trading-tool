@@ -19,6 +19,7 @@ from backend.infrastructure.repositories.finn_v2_verified_response_repository im
 from backend.domain.finn_v2_contract import normalize_interaction_mode
 from backend.schemas.finn_v2_delivery_schema import FinnV2DeliveryEnvelope
 from backend.schemas.finn_v2_orchestrator_schema import ORCHESTRATOR_VERSION, OrchestratorResult
+from backend.schemas.finn_v2_orchestrator_schema import normalize_information_scopes
 from backend.schemas.finn_v2_policy_schema import POLICY_VERSION, FinnV2PolicyDecision
 from backend.schemas.finn_v2_proposal_schema import (
     BotActivationChange,
@@ -62,12 +63,14 @@ class FinnV2VerifierRejected(RuntimeError):
 class FinnV2ResponseVerifierService:
     REQUIRED_SCOPE_TO_DOMAIN = {
         "profile": "identity_context",
+        "preferences": "identity_context",
+        "active_asset": "identity_context",
         "watchlist": "identity_context",
-        "analysis": "market_context",
-        "indicators": "market_context",
-        "setup": "plan_context",
-        "strategy": "plan_context",
-        "bot": "automation_context",
+        "market_snapshot": "market_context",
+        "indicator_configuration": "market_context",
+        "active_setup": "plan_context",
+        "linked_strategy": "plan_context",
+        "linked_bot": "automation_context",
         "daily_report": "report_context",
         "reflection": "review_context",
         "portfolio": "portfolio_context",
@@ -291,6 +294,18 @@ class FinnV2ResponseVerifierService:
             reason_codes.append("model_reasoning_contract_failed")
         model_reasoning_ok = "model_reasoning_contract_failed" not in reason_codes
 
+        request_plan = getattr(orchestrator_result.analysis, "request_plan", None)
+        required_scopes = normalize_information_scopes(
+            getattr(request_plan, "required_information_scopes", [])
+            or [scope for scope in orchestrator_result.analysis.subject_scopes if scope != "unknown"]
+        )
+        # New runs carry a typed RequestPlan. Their coverage must be proven by the
+        # evidence's exact canonical scope, not inferred from a broad domain label.
+        uses_canonical_scope_contract = bool(
+            request_plan is not None
+            and getattr(request_plan, "required_information_scopes", None)
+        )
+
         claim_results = []
         covered_scopes = set()
         covered_domains = set()
@@ -311,7 +326,8 @@ class FinnV2ResponseVerifierService:
             if matched_evidence:
                 for evidence in matched_evidence:
                     covered_scopes.update(self._scopes_for_evidence(evidence))
-                    covered_scopes.add(self._scope_for_domain(evidence.domain))
+                    if not uses_canonical_scope_contract:
+                        covered_scopes.add(self._scope_for_domain(evidence.domain))
                     if evidence.domain:
                         covered_domains.add(evidence.domain)
                 status, claim_reasons, entailment_valid = self._evaluate_claim_support(claim.text, matched_evidence, claim.claim_type)
@@ -332,13 +348,31 @@ class FinnV2ResponseVerifierService:
                 evidence_ok = False
                 reason_codes.extend(code for code in claim_reasons if code not in reason_codes)
 
-        required_scopes = [scope for scope in orchestrator_result.analysis.subject_scopes if scope != "unknown"]
-        covered_scopes.update(self._covered_scopes_from_draft(draft, evidence_by_ref))
+        covered_scopes.update(
+            self._covered_scopes_from_draft(
+                draft,
+                evidence_by_ref,
+                include_domain_fallback=not uses_canonical_scope_contract,
+            )
+        )
         covered_domains.update(self._covered_domains_from_draft(draft, evidence_by_ref))
         capability_grounding_ok = self._capability_grounding_ok(draft)
         if draft.mode == "CAPABILITY" and capability_grounding_ok:
             covered_scopes.add("capability")
-        satisfied_scopes = {scope for scope in required_scopes if self._scope_is_covered(scope, covered_scopes, covered_domains, draft=draft, policy=policy)}
+        if uses_canonical_scope_contract:
+            satisfied_scopes = {scope for scope in required_scopes if scope in covered_scopes}
+        else:
+            satisfied_scopes = {
+                scope
+                for scope in required_scopes
+                if self._scope_is_covered(
+                    scope,
+                    covered_scopes,
+                    covered_domains,
+                    draft=draft,
+                    policy=policy,
+                )
+            }
         missing_scopes = [scope for scope in required_scopes if scope not in satisfied_scopes]
         coverage = CoverageVerification(
             required_scopes=required_scopes,
@@ -650,14 +684,21 @@ class FinnV2ResponseVerifierService:
             for keyword, count in absence_checks.items()
         )
 
-    def _covered_scopes_from_draft(self, draft: ResponseDraft, evidence_by_ref: Dict[str, Any]) -> set[str]:
+    def _covered_scopes_from_draft(
+        self,
+        draft: ResponseDraft,
+        evidence_by_ref: Dict[str, Any],
+        *,
+        include_domain_fallback: bool = True,
+    ) -> set[str]:
         refs = self._all_refs(draft)
         covered = set()
         for ref in refs:
             evidence = evidence_by_ref.get(ref)
             if evidence is not None:
                 covered.update(self._scopes_for_evidence(evidence))
-                covered.add(self._scope_for_domain(evidence.domain))
+                if include_domain_fallback:
+                    covered.add(self._scope_for_domain(evidence.domain))
         return {scope for scope in covered if scope}
 
     def _covered_domains_from_draft(self, draft: ResponseDraft, evidence_by_ref: Dict[str, Any]) -> set[str]:
@@ -673,7 +714,7 @@ class FinnV2ResponseVerifierService:
         if scope in covered_scopes:
             return True
         normalized_mode = normalize_interaction_mode(draft.mode)
-        if normalized_mode == "CREATE_PROPOSAL" and scope == "setup":
+        if normalized_mode == "CREATE_PROPOSAL" and scope == "active_setup":
             return "identity_context" in covered_domains or "plan_context" in covered_domains
         if normalized_mode == "ACTION_PROPOSAL" and scope == "watchlist":
             return "identity_context" in covered_domains
@@ -681,7 +722,7 @@ class FinnV2ResponseVerifierService:
             normalized_mode == "UNAVAILABLE"
             and not policy.allowed
             and policy.operation_type == "activate_live_bot"
-            and scope == "bot"
+            and scope == "linked_bot"
         ):
             return "automation_context" in covered_domains or "plan_context" in covered_domains
         mapped_domain = self.REQUIRED_SCOPE_TO_DOMAIN.get(scope)
@@ -697,18 +738,24 @@ class FinnV2ResponseVerifierService:
         tool_name = str(getattr(evidence, "tool_name", "") or "")
         entity_type = str(getattr(evidence, "entity_type", "") or "")
         scopes: set[str] = set()
-        if tool_name in {"read_profile", "read_user_preferences"}:
+        if tool_name == "read_profile":
             scopes.add("profile")
+        if tool_name == "read_user_preferences":
+            scopes.add("preferences")
+        if tool_name == "read_active_asset" or entity_type == "asset":
+            scopes.add("active_asset")
         if tool_name == "read_indicator_configuration":
-            scopes.add("indicators")
+            scopes.add("indicator_configuration")
         if tool_name in {"read_market_snapshot", "read_macro_snapshot", "read_technical_snapshot", "read_asset_scores"}:
-            scopes.add("analysis")
+            scopes.add("market_snapshot")
         if tool_name == "read_active_setup" or entity_type == "setup":
-            scopes.add("setup")
+            scopes.add("active_setup")
         if tool_name == "read_linked_strategy" or entity_type == "strategy":
-            scopes.add("strategy")
+            scopes.add("linked_strategy")
         if tool_name in {"read_linked_bot", "read_bot_status"} or entity_type in {"bot", "bot_status"}:
-            scopes.add("bot")
+            scopes.add("linked_bot")
+            if tool_name == "read_bot_status" or entity_type == "bot_status":
+                scopes.add("bot_status")
         if tool_name == "read_latest_report":
             scopes.add("daily_report")
         if tool_name == "read_review_history":

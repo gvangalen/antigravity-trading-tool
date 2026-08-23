@@ -36,9 +36,9 @@ class FinnV2DomainRequirementService:
             )
 
         information_domain_map = {
-            "profile": "identity_context", "preferences": "identity_context", "asset": "identity_context",
-            "watchlist": "identity_context", "indicators": "market_context", "market_snapshot": "market_context", "setup": "plan_context",
-            "strategy": "plan_context", "bot": "automation_context", "bot_status": "automation_context",
+            "profile": "identity_context", "preferences": "identity_context", "active_asset": "identity_context",
+            "watchlist": "identity_context", "indicator_configuration": "market_context", "market_snapshot": "market_context", "active_setup": "plan_context",
+            "linked_strategy": "plan_context", "linked_bot": "automation_context", "bot_status": "automation_context",
         }
         if analysis.request_plan is not None:
             for scope in analysis.request_plan.required_information_scopes:
@@ -59,9 +59,9 @@ class FinnV2DomainRequirementService:
         if analysis.interaction_mode == "CREATE_PROPOSAL" and "setup" in analysis.subject_scopes:
             # A setup proposal must be grounded in the current plan rather
             # than treating the write boundary as a reason to skip context.
-            required_domains = ["identity_context", "market_context", "plan_context"]
-            optional_domains = []
-            reasons.append("setup_creation_requires_grounded_plan_context")
+            required_domains = ["identity_context", "market_context"]
+            optional_domains = ["plan_context"]
+            reasons.append("setup_creation_uses_optional_existing_plan_context")
         if analysis.interaction_mode == "ACTION_PROPOSAL" and analysis.primary_subject == "bot":
             required_domains = ["identity_context", "plan_context", "automation_context"]
             optional_domains = []

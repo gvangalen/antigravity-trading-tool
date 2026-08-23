@@ -1,6 +1,7 @@
 from datetime import datetime, timezone
 from types import SimpleNamespace
 
+from backend.schemas.finn_v2_orchestrator_schema import RequestPlan
 from backend.schemas.finn_v2_reasoning_schema import ProposalCandidate, ReasoningNextStep
 from backend.schemas.finn_v2_response_schema import ResponseClaim, ResponseDraft
 from backend.services.finn_v2_response_verifier_service import FinnV2ResponseVerifierService
@@ -36,6 +37,47 @@ def test_scope_coverage_fails_when_a1_reduces_to_indicator_only():
     assert verifier.coverage.coverage_ok is False
     assert verifier.passed is False
     assert "response_scope_incomplete" in verifier.reason_codes
+
+
+def test_request_plan_coverage_does_not_substitute_a_broad_domain_for_evidence_scope():
+    service = FinnV2ResponseVerifierService(session=object())
+    draft = ResponseDraft(
+        draft_id="draft-exact-scope",
+        run_id="run-exact-scope",
+        user_id=7,
+        mode="READ",
+        direct_answer="Je actieve asset is BTC.",
+        main_observation="BTC is de asset in je workspace.",
+        claims=[ResponseClaim(claim_id="C1", claim_type="fact", text="Je actieve asset is BTC.", evidence_refs=["E1"], confidence="high")],
+        evidence_set_hash="hash-exact-scope",
+        created_at=datetime.now(timezone.utc),
+    )
+    verifier = service._deterministic_verify(
+        run=SimpleNamespace(id="run-exact-scope", user_id=7, message="Welke asset bekijk ik nu?", conversation_id="conv-1"),
+        orchestrator_result=SimpleNamespace(
+            analysis=SimpleNamespace(
+                subject_scopes=["asset"],
+                request_plan=RequestPlan(
+                    interaction_mode="READ",
+                    required_information_scopes=["profile", "active_asset"],
+                ),
+            ),
+            selected_clarification=None,
+        ),
+        policy=SimpleNamespace(allowed=True, proposal_allowed=True, confirmation_required=False, operation_type=None),
+        context=SimpleNamespace(
+            evidence=[SimpleNamespace(evidence_id="E1", domain="identity_context", tool_name="read_active_asset", entity_type="asset", entity_id="BTC", asset="BTC", freshness="fresh", confidence="high", facts={"symbol": "BTC"})],
+            uncertainty_codes=[],
+        ),
+        validation=SimpleNamespace(id="validation-exact-scope", evidence_set_hash="hash-exact-scope", integrity_status="valid"),
+        draft=draft,
+        repair_attempt=0,
+        force_action="deliver",
+    )
+
+    assert verifier.coverage.covered_scopes == ["active_asset"]
+    assert verifier.coverage.missing_scopes == ["profile"]
+    assert verifier.coverage.coverage_ok is False
 
 
 def test_scope_coverage_allows_setup_proposal_when_identity_context_is_sufficient():

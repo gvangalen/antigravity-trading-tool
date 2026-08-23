@@ -8,20 +8,20 @@ class FinnV2ToolPlanService:
     _SCOPE_TO_TOOL = {
         "profile": "read_profile",
         "preferences": "read_user_preferences",
-        "asset": "read_active_asset",
-        "indicators": "read_indicator_configuration",
+        "active_asset": "read_active_asset",
+        "indicator_configuration": "read_indicator_configuration",
         "market_snapshot": "read_market_snapshot",
         "watchlist": "read_watchlist",
-        "setup": "read_active_setup",
-        "strategy": "read_linked_strategy",
-        "bot": "read_linked_bot",
+        "active_setup": "read_active_setup",
+        "linked_strategy": "read_linked_strategy",
+        "linked_bot": "read_linked_bot",
         "bot_status": "read_bot_status",
     }
     _SCOPE_TO_EVIDENCE = {
-        "profile": "profile", "preferences": "preferences", "asset": "active_asset",
-        "indicators": "indicator_configuration", "watchlist": "watchlist",
+        "profile": "profile", "preferences": "preferences", "active_asset": "active_asset",
+        "indicator_configuration": "indicator_configuration", "watchlist": "watchlist",
         "market_snapshot": "market_snapshot",
-        "setup": "active_setup", "strategy": "linked_strategy", "bot": "linked_bot",
+        "active_setup": "active_setup", "linked_strategy": "linked_strategy", "linked_bot": "linked_bot",
         "bot_status": "bot_status",
     }
     _DOMAIN_TOOLS = {
@@ -139,14 +139,7 @@ class FinnV2ToolPlanService:
                 "read_bot_status",
             ]
         if analysis.interaction_mode == "CREATE_PROPOSAL":
-            return [
-                "read_profile",
-                "read_user_preferences",
-                "read_active_asset",
-                "read_indicator_configuration",
-                "read_active_setup",
-                "read_linked_strategy",
-            ]
+            return ["read_profile", "read_user_preferences", "read_active_asset", "read_indicator_configuration"]
         if analysis.interaction_mode == "ACTION_PROPOSAL":
             if analysis.primary_subject == "watchlist":
                 return ["read_active_asset", "read_watchlist"]
@@ -213,13 +206,7 @@ class FinnV2ToolPlanService:
                     deduped.append(item)
             return deduped
         if analysis.interaction_mode == "CREATE_PROPOSAL":
-            return [
-                "profile",
-                "active_asset",
-                "indicator_configuration",
-                "active_setup",
-                "linked_strategy",
-            ]
+            return ["profile", "preferences", "active_asset", "indicator_configuration"]
         if analysis.interaction_mode == "ACTION_PROPOSAL":
             if analysis.primary_subject == "watchlist":
                 return ["active_asset", "watchlist"]

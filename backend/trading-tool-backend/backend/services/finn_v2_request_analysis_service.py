@@ -66,7 +66,12 @@ class FinnV2RequestAnalysisService:
             explicit_strategy_id=explicit_strategy_id,
             explicit_bot_id=explicit_bot_id,
         )
-        if explicit_asset and not scopes and self._looks_like_asset_question(normalized):
+        if (
+            explicit_asset
+            and self._looks_like_asset_question(normalized)
+            and "asset" not in scopes
+            and not set(scopes).intersection({"profile", "indicators", "setup", "strategy", "bot", "watchlist"})
+        ):
             scopes.append("asset")
             matched_signals.append("scope:asset:resolved_context")
         interaction_mode = self._interaction_mode(normalized, scopes, matched_signals, explicit_asset=explicit_asset)
@@ -178,26 +183,28 @@ class FinnV2RequestAnalysisService:
         explicit_bot_id: Optional[int],
     ) -> RequestPlan:
         scope_map = {
-            "asset": ["asset"],
+            "asset": ["active_asset"],
             "profile": ["profile", "preferences"],
-            "analysis": ["asset"],
-            "indicators": ["asset", "indicators"],
-            "watchlist": ["asset", "watchlist"],
-            "setup": ["asset", "setup"],
-            "strategy": ["asset", "setup", "strategy"],
-            "bot": ["asset", "setup", "strategy", "bot", "bot_status"],
+            "analysis": ["active_asset"],
+            "indicators": ["active_asset", "indicator_configuration"],
+            "watchlist": ["active_asset", "watchlist"],
+            "setup": ["active_asset", "active_setup"],
+            "strategy": ["active_asset", "active_setup", "linked_strategy"],
+            "bot": ["active_asset", "active_setup", "linked_strategy", "linked_bot", "bot_status"],
         }
         required: List[str] = []
         for scope in scopes:
             required.extend(scope_map.get(scope, []))
         if interaction_mode == "EVALUATE" and integrated_plan:
-            required = ["profile", "preferences", "asset", "indicators", "setup", "strategy", "bot", "bot_status"]
+            required = ["profile", "preferences", "active_asset", "indicator_configuration", "active_setup", "linked_strategy", "linked_bot", "bot_status"]
         if interaction_mode == "CREATE_PROPOSAL" and primary_subject == "setup":
-            required = ["profile", "preferences", "asset", "indicators", "setup", "strategy"]
+            # Existing plan records provide conflict/impact context but cannot
+            # be prerequisites for proposing a first setup.
+            required = ["profile", "preferences", "active_asset", "indicator_configuration"]
         if interaction_mode == "ACTION_PROPOSAL" and primary_subject == "watchlist":
-            required = ["asset", "watchlist"]
+            required = ["active_asset", "watchlist"]
         if interaction_mode == "ACTION_PROPOSAL" and primary_subject == "bot" and "live" in normalized:
-            required = ["asset", "setup", "strategy", "bot", "bot_status", "market_snapshot"]
+            required = ["active_asset", "active_setup", "linked_strategy", "linked_bot", "bot_status", "market_snapshot"]
 
         operation = None
         if interaction_mode == "CREATE_PROPOSAL" and primary_subject == "setup":
@@ -450,7 +457,7 @@ class FinnV2RequestAnalysisService:
     @staticmethod
     def _looks_like_asset_question(normalized: str) -> bool:
         return any(token in normalized for token in [
-            "asset", "instrument", "symbool", "symbol", "geselecteerd", "selected", "actief", "active", "huidig", "current",
+            "asset", "instrument", "symbool", "symbol", "workspace", "markt", "market", "geselecteerd", "selected", "actief", "active", "huidig", "current",
         ])
 
     def _apply_conversation_reference(

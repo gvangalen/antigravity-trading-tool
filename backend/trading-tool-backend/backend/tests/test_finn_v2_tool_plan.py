@@ -88,16 +88,12 @@ def test_tool_plan_routes_setup_creation_and_watchlist_actions_through_proposal_
         "read_user_preferences",
         "read_active_asset",
         "read_indicator_configuration",
-        "read_active_setup",
-        "read_linked_strategy",
     ]
     assert setup_plan.required_evidence == [
         "profile",
         "preferences",
         "active_asset",
         "indicator_configuration",
-        "active_setup",
-        "linked_strategy",
     ]
     assert watchlist_plan.tool_names == ["read_active_asset", "read_watchlist"]
     assert watchlist_plan.tool_inputs["read_active_asset"] == {"asset": "ETH"}
