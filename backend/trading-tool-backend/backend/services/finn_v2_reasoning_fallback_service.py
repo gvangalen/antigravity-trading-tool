@@ -222,6 +222,52 @@ class FinnV2ReasoningFallbackService:
                 created_at=datetime.now(timezone.utc),
             )
 
+        if operation_id == "read_linked_bot" and all(
+            item is not None for item in (active_asset, setup, strategy, bot, bot_status)
+        ):
+            setup_id = setup.facts.get("setup_id")
+            strategy_id = strategy.facts.get("strategy_id")
+            bot_id = bot.facts.get("bot_id")
+            setup_name = setup.facts.get("name") or f"setup {setup_id}"
+            timeframe = setup.facts.get("timeframe")
+            is_live = bool(bot_status.facts.get("is_live", bot.facts.get("is_live")))
+            _add_claim(
+                "active-plan-graph",
+                (
+                    f"Voor {asset} is {setup_name} gekoppeld aan strategie {strategy_id} "
+                    f"en bot {bot_id}; de bot staat {'live' if is_live else 'niet live'}."
+                ),
+                [
+                    active_asset.evidence_id,
+                    setup.evidence_id,
+                    strategy.evidence_id,
+                    bot.evidence_id,
+                    bot_status.evidence_id,
+                ],
+            )
+            timeframe_detail = f" op timeframe {timeframe}" if timeframe else ""
+            return ReasoningResult(
+                reasoning_result_id=f"finn-v2-reasoning-{uuid.uuid4().hex}",
+                run_id=run_id,
+                user_id=user_id,
+                mode="READ",
+                direct_answer=(
+                    f"Voor {asset} gebruikt bot {bot_id} strategie {strategy_id}, "
+                    f"die gekoppeld is aan {setup_name}{timeframe_detail}."
+                ),
+                main_observation=f"Bot {bot_id} staat momenteel {'live' if is_live else 'niet live'}.",
+                supporting_points=[],
+                claims=claims,
+                uncertainty_summary="Er is geen providercall uitgevoerd voor deze opgeslagen planrelaties.",
+                uncertainty_codes=list(error_codes),
+                next_step=None,
+                follow_up_question=None,
+                proposal_candidate=None,
+                evidence_refs_used=refs,
+                model=model,
+                created_at=datetime.now(timezone.utc),
+            )
+
         if setup is not None and setup.facts.get("setup_id") is not None:
             _add_claim(
                 "setup-linked",

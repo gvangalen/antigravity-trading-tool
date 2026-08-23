@@ -117,6 +117,55 @@ def test_new_request_plan_does_not_infer_scope_from_a_legacy_tool_name():
     assert verifier.coverage.missing_scopes == ["active_asset"]
 
 
+def test_verifier_reconstruction_preserves_the_persisted_operation_contract():
+    service = FinnV2ResponseVerifierService(session=object())
+    row = SimpleNamespace(
+        id="orchestrator-linked-bot",
+        run_id="run-linked-bot",
+        user_id=406,
+        interaction_mode="READ",
+        subject_scopes_json=["asset", "setup", "strategy", "bot", "profile", "indicators"],
+        required_domains_json=["identity_context", "plan_context", "automation_context"],
+        optional_domains_json=["market_context"],
+        tool_plan_json={
+            "run_id": "run-linked-bot",
+            "interaction_mode": "READ",
+            "primary_subject": "bot",
+            "entity_selectors": {"asset": "BTC", "setup_id": 309, "strategy_id": 325, "bot_id": 186},
+            "request_plan": RequestPlan(
+                interaction_mode="READ",
+                operation_id="read_linked_bot",
+                required_information_scopes=["active_asset", "active_setup", "linked_strategy", "linked_bot", "bot_status"],
+            ).dict(),
+            "required_domains": ["identity_context", "plan_context", "automation_context"],
+            "optional_domains": ["market_context"],
+            "tool_names": ["read_active_asset", "read_active_setup", "read_linked_strategy", "read_linked_bot", "read_bot_status"],
+            "required_evidence": ["active_asset", "active_setup", "linked_strategy", "linked_bot", "bot_status"],
+            "max_tool_calls": 5,
+        },
+        snapshot_id="snapshot-linked-bot",
+        validation_id="validation-linked-bot",
+        outcome="reasoning_ready",
+        selected_clarification_json=None,
+        unavailable_codes_json=[],
+        uncertainty_codes_json=[],
+        orchestrator_version="finn_v2_orchestrator_v1",
+        analysis_version="finn_v2_request_analysis_v1",
+        created_at=datetime.now(timezone.utc),
+    )
+
+    result = service._orchestrator_result_from_row(row)
+
+    assert result.analysis.request_plan.operation_id == "read_linked_bot"
+    assert result.analysis.request_plan.required_information_scopes == [
+        "active_asset", "active_setup", "linked_strategy", "linked_bot", "bot_status"
+    ]
+    assert result.analysis.explicit_asset == "BTC"
+    assert result.analysis.explicit_setup_id == 309
+    assert result.analysis.explicit_strategy_id == 325
+    assert result.analysis.explicit_bot_id == 186
+
+
 def test_canonical_scope_requires_available_nonempty_evidence():
     service = FinnV2ResponseVerifierService(session=object())
     draft = ResponseDraft(

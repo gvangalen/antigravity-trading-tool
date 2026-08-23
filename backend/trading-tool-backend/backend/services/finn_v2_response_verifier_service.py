@@ -1137,6 +1137,11 @@ class FinnV2ResponseVerifierService:
 
     def _orchestrator_result_from_row(self, row) -> OrchestratorResult:
         mode = normalize_interaction_mode(row.interaction_mode)
+        # The persisted request plan is the canonical operation contract.  Do not
+        # fall back to broad legacy subject scopes when reconstructing Block 7.
+        persisted_tool_plan = dict(row.tool_plan_json or {})
+        persisted_request_plan = persisted_tool_plan.get("request_plan") or {}
+        selectors = persisted_tool_plan.get("entity_selectors") or {}
         return OrchestratorResult.parse_obj(
             {
                 "orchestrator_result_id": row.id,
@@ -1145,10 +1150,12 @@ class FinnV2ResponseVerifierService:
                 "analysis": {
                     "interaction_mode": mode,
                     "subject_scopes": row.subject_scopes_json,
-                    "explicit_asset": None,
-                    "explicit_setup_id": None,
-                    "explicit_strategy_id": None,
-                    "explicit_bot_id": None,
+                    "explicit_asset": selectors.get("asset"),
+                    "explicit_setup_id": selectors.get("setup_id"),
+                    "explicit_strategy_id": selectors.get("strategy_id"),
+                    "explicit_bot_id": selectors.get("bot_id"),
+                    "primary_subject": persisted_tool_plan.get("primary_subject"),
+                    "output_contract": persisted_tool_plan.get("expected_response_contract"),
                     "requires_comparison": False,
                     "requires_gap_analysis": False,
                     "requests_change": mode in {"CREATE_PROPOSAL", "ACTION_PROPOSAL", "CONFIRMATION", "EXECUTION"},
@@ -1157,6 +1164,7 @@ class FinnV2ResponseVerifierService:
                     "matched_signals": [],
                     "unresolved_signals": [],
                     "reasoning_required": mode in {"CAPABILITY", "READ", "EVALUATE", "CREATE_PROPOSAL", "ACTION_PROPOSAL", "CONFIRMATION", "EXECUTION"},
+                    "request_plan": persisted_request_plan or None,
                     "analysis_version": row.analysis_version,
                 },
                 "domain_requirements": {
@@ -1164,7 +1172,7 @@ class FinnV2ResponseVerifierService:
                     "optional_domains": row.optional_domains_json,
                     "requirement_reason": [],
                 },
-                "tool_plan": row.tool_plan_json,
+                "tool_plan": persisted_tool_plan,
                 "snapshot_id": row.snapshot_id,
                 "validation_id": row.validation_id,
                 "outcome": row.outcome,
