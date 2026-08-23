@@ -35,6 +35,7 @@ REQUIRED_MIGRATIONS = (
     "2026_08_22_finn_v2_run_lifecycle_statuses.py",
     "2026_08_22_finn_v2_remove_legacy_fact_mode.py",
     "2026_08_23_finn_v2_evidence_information_scope.py",
+    "2026_08_23_finn_v2_artifact_operation_contract.py",
 )
 
 

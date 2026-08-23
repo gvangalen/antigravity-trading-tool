@@ -125,3 +125,5 @@ class ToolExecutionResult:
     tool_call_id: Optional[int] = None
     artifact_id: Optional[str] = None
     information_scope: Optional[str] = None
+    operation_id: Optional[str] = None
+    operation_contract_version: Optional[str] = None

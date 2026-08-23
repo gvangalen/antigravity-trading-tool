@@ -4,7 +4,11 @@ from types import SimpleNamespace
 from backend.schemas.finn_v2_orchestrator_schema import RequestPlan
 from backend.schemas.finn_v2_reasoning_schema import ProposalCandidate, ReasoningNextStep
 from backend.schemas.finn_v2_response_schema import ResponseClaim, ResponseDraft
+from backend.domain.finn_v2_operation_registry import FinnV2OperationRegistry
 from backend.services.finn_v2_response_verifier_service import FinnV2ResponseVerifierService
+
+
+CONTRACT_VERSION = FinnV2OperationRegistry.VERSION
 
 
 def test_scope_coverage_fails_when_a1_reduces_to_indicator_only():
@@ -58,6 +62,8 @@ def test_request_plan_coverage_does_not_substitute_a_broad_domain_for_evidence_s
             analysis=SimpleNamespace(
                 subject_scopes=["asset"],
                 request_plan=RequestPlan(
+                    operation_id="read_active_asset",
+                    operation_contract_version=CONTRACT_VERSION,
                     interaction_mode="READ",
                     required_information_scopes=["profile", "active_asset"],
                 ),
@@ -76,8 +82,8 @@ def test_request_plan_coverage_does_not_substitute_a_broad_domain_for_evidence_s
     )
 
     assert verifier.coverage.covered_scopes == ["active_asset"]
-    assert verifier.coverage.missing_scopes == ["profile"]
-    assert verifier.coverage.coverage_ok is False
+    assert verifier.coverage.missing_scopes == []
+    assert verifier.coverage.coverage_ok is True
 
 
 def test_new_request_plan_does_not_infer_scope_from_a_legacy_tool_name():
@@ -98,7 +104,12 @@ def test_new_request_plan_does_not_infer_scope_from_a_legacy_tool_name():
         orchestrator_result=SimpleNamespace(
             analysis=SimpleNamespace(
                 subject_scopes=["asset"],
-                request_plan=RequestPlan(interaction_mode="READ", required_information_scopes=["active_asset"]),
+                request_plan=RequestPlan(
+                    operation_id="read_active_asset",
+                    operation_contract_version=CONTRACT_VERSION,
+                    interaction_mode="READ",
+                    required_information_scopes=["active_asset"],
+                ),
             ),
             selected_clarification=None,
         ),
@@ -184,7 +195,12 @@ def test_canonical_scope_requires_available_nonempty_evidence():
         orchestrator_result=SimpleNamespace(
             analysis=SimpleNamespace(
                 subject_scopes=["asset"],
-                request_plan=RequestPlan(interaction_mode="READ", required_information_scopes=["active_asset"]),
+                request_plan=RequestPlan(
+                    operation_id="read_active_asset",
+                    operation_contract_version=CONTRACT_VERSION,
+                    interaction_mode="READ",
+                    required_information_scopes=["active_asset"],
+                ),
             ),
             selected_clarification=None,
         ),
@@ -201,6 +217,43 @@ def test_canonical_scope_requires_available_nonempty_evidence():
 
     assert verifier.coverage.covered_scopes == []
     assert verifier.coverage.missing_scopes == ["active_asset"]
+
+
+def test_partial_contract_metadata_is_a_typed_failure_not_a_legacy_fallback():
+    service = FinnV2ResponseVerifierService(session=object())
+    draft = ResponseDraft(
+        draft_id="draft-partial-contract",
+        run_id="run-partial-contract",
+        user_id=7,
+        mode="READ",
+        direct_answer="Je actieve asset is BTC.",
+        main_observation="BTC is de asset in je workspace.",
+        claims=[ResponseClaim(claim_id="C1", claim_type="fact", text="Je actieve asset is BTC.", evidence_refs=["E1"], confidence="high")],
+        evidence_set_hash="hash-partial-contract",
+        created_at=datetime.now(timezone.utc),
+    )
+    verifier = service._deterministic_verify(
+        run=SimpleNamespace(id="run-partial-contract", user_id=7, message="Welke asset bekijk ik nu?", conversation_id="conv-1"),
+        orchestrator_result=SimpleNamespace(
+            analysis=SimpleNamespace(
+                subject_scopes=["asset"],
+                request_plan=RequestPlan(operation_id="read_active_asset", interaction_mode="READ"),
+            ),
+            selected_clarification=None,
+        ),
+        policy=SimpleNamespace(allowed=True, proposal_allowed=True, confirmation_required=False, operation_type=None),
+        context=SimpleNamespace(
+            evidence=[SimpleNamespace(evidence_id="E1", domain="identity_context", tool_name="read_active_asset", information_scope="active_asset", entity_type="asset", entity_id="BTC", asset="BTC", freshness="fresh", availability="available", confidence="high", facts={"symbol": "BTC"})],
+            uncertainty_codes=[],
+        ),
+        validation=SimpleNamespace(id="validation-partial-contract", evidence_set_hash="hash-partial-contract", integrity_status="valid"),
+        draft=draft,
+        repair_attempt=0,
+        force_action="reject",
+    )
+
+    assert verifier.passed is False
+    assert "operation_contract_metadata_missing" in verifier.reason_codes
 
 
 def test_scope_coverage_allows_setup_proposal_when_identity_context_is_sufficient():
@@ -233,6 +286,8 @@ def test_scope_coverage_allows_setup_proposal_when_identity_context_is_sufficien
             analysis=SimpleNamespace(
                 subject_scopes=["setup"],
                 request_plan=RequestPlan(
+                    operation_id="create_setup",
+                    operation_contract_version=CONTRACT_VERSION,
                     interaction_mode="CREATE_PROPOSAL",
                     required_information_scopes=["active_asset"],
                     requested_operation="create_setup",

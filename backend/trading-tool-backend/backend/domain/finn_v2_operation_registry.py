@@ -9,7 +9,26 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Optional
 
-from backend.domain.finn_v2_contract import INFORMATION_SCOPE_ORDER, primary_tool_for_information_scope
+from backend.domain.finn_v2_contract import INFORMATION_SCOPE_ORDER
+
+
+# This is the sole scope-to-tool binding used while materializing contracts.
+# Runtime services consume the persisted bindings on the resolved contract.
+_SCOPE_TOOL_BINDINGS = {
+    "profile": "read_profile",
+    "preferences": "read_user_preferences",
+    "active_asset": "read_active_asset",
+    "watchlist": "read_watchlist",
+    "indicator_configuration": "read_indicator_configuration",
+    "market_snapshot": "read_market_snapshot",
+    "active_setup": "read_active_setup",
+    "linked_strategy": "read_linked_strategy",
+    "linked_bot": "read_linked_bot",
+    "bot_status": "read_bot_status",
+    "portfolio": "read_portfolio",
+    "latest_report": "read_latest_report",
+    "review_history": "read_review_history",
+}
 
 
 class FinnV2OperationContractError(ValueError):
@@ -54,7 +73,7 @@ class OperationContract:
                 self,
                 "scope_tool_bindings",
                 tuple(
-                    (scope, primary_tool_for_information_scope(scope))
+                    (scope, _SCOPE_TOOL_BINDINGS[scope])
                     for scope in self.required_scopes
                     if scope != "capability"
                 ),
@@ -124,7 +143,10 @@ class FinnV2OperationRegistry:
             if contract.supported:
                 for scope in contract.required_scopes:
                     if scope != "capability":
-                        primary_tool_for_information_scope(scope)
+                        if scope not in _SCOPE_TOOL_BINDINGS:
+                            raise FinnV2OperationContractError(
+                                f"missing_scope_binding:{contract.operation_id}:{scope}"
+                            )
 
 
 def _read(operation_id: str, domain: str, scopes: tuple[str, ...], aliases: tuple[str, ...]) -> OperationContract:
@@ -155,7 +177,7 @@ _CONTRACTS: tuple[OperationContract, ...] = (
     # SetupService validates these three fields unconditionally. Timeframe and
     # score/market-condition details are useful trusted inputs, but are not
     # schema-required and must not be invented by FINN.
-    OperationContract("create_setup", FinnV2OperationRegistry.VERSION, "setup", "CREATE_PROPOSAL", ("maak setup", "create setup", "setup voor"), required_inputs=("name", "symbol", "setup_type"), required_scopes=("profile", "preferences", "active_asset", "indicator_configuration"), optional_scopes=("active_setup", "linked_strategy"), model_policy="optional", response_strategy="proposal_draft", policy_class="proposal", proposal_type="create_setup", confirmation_required=True, execution_adapter="create_setup", idempotency_rule="proposal_payload_hash", postcondition="setup_created_for_user_asset"),
+    OperationContract("create_setup", FinnV2OperationRegistry.VERSION, "setup", "CREATE_PROPOSAL", ("maak setup", "create setup", "setup voor"), required_inputs=("name", "symbol", "setup_type"), required_scopes=("active_asset",), optional_scopes=("profile", "preferences", "indicator_configuration", "active_setup", "linked_strategy"), model_policy="optional", response_strategy="proposal_draft", policy_class="proposal", proposal_type="create_setup", confirmation_required=True, execution_adapter="create_setup", idempotency_rule="proposal_payload_hash", postcondition="setup_created_for_user_asset"),
     OperationContract("update_setup", FinnV2OperationRegistry.VERSION, "setup", "CREATE_PROPOSAL", ("wijzig setup",), required_inputs=("setup_id", "changed_fields"), required_scopes=("active_asset", "active_setup"), proposal_type="update_setup", confirmation_required=True, execution_adapter="update_setup", idempotency_rule="proposal_payload_hash", postcondition="setup_updated_for_user"),
     _gap("delete_setup", "setup", "CREATE_PROPOSAL", ("verwijder setup",), "delete_setup_execution_adapter_missing"),
     OperationContract("evaluate_setup", FinnV2OperationRegistry.VERSION, "setup", "EVALUATE", ("beoordeel setup",), required_scopes=("active_asset", "active_setup"), optional_scopes=("indicator_configuration",), model_policy="required", response_strategy="model_reasoning", policy_class="advice"),

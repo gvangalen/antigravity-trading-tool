@@ -127,6 +127,8 @@ class FinnV2ToolExecutionService:
                 selector=tool_plan.tool_inputs.get(tool_name, {}),
                 shared_state=shared_state,
                 timeout_seconds=2.0,
+                operation_id=getattr(getattr(tool_plan, "request_plan", None), "operation_id", None),
+                operation_contract_version=getattr(getattr(tool_plan, "request_plan", None), "operation_contract_version", None),
             )
             results.append(result)
         return results
@@ -143,6 +145,8 @@ class FinnV2ToolExecutionService:
         selector: Dict[str, Any],
         shared_state: Optional[Dict[str, Any]] = None,
         timeout_seconds: float = 2.0,
+        operation_id: Optional[str] = None,
+        operation_contract_version: Optional[str] = None,
     ) -> ToolExecutionResult:
         if not self.flags.is_tool_registry_enabled():
             return ToolExecutionResult(tool_name=tool_name, status="failed", success=False, error_codes=["tool_feature_disabled"])
@@ -187,6 +191,8 @@ class FinnV2ToolExecutionService:
                 trace_id=run_context.trace_id,
                 tool_name=tool_name,
                 selector=selector,
+                operation_id=operation_id,
+                operation_contract_version=operation_contract_version,
             )
         if tool_call_id is not None:
             result_tool_call_id = tool_call_id
@@ -317,6 +323,8 @@ class FinnV2ToolExecutionService:
                 if persisted_tool_call is not None and tool_call_id is None:
                     result.tool_call_id = getattr(persisted_tool_call, "id", result.tool_call_id)
         record_latency_sample("finn_v2_tool_execution_duration_ms", int((monotonic() - started) * 1000))
+        result.operation_id = operation_id
+        result.operation_contract_version = operation_contract_version
         if (
             self.flags.should_run_block3_shadow(user_id)
             and tool_call is not None
@@ -335,6 +343,8 @@ class FinnV2ToolExecutionService:
         trace_id: str,
         tool_name: str,
         selector: Dict[str, Any],
+        operation_id: Optional[str] = None,
+        operation_contract_version: Optional[str] = None,
     ):
         tool_call = None
         tool_call_id = None
@@ -347,6 +357,8 @@ class FinnV2ToolExecutionService:
                         user_id=user_id,
                         trace_id=trace_id,
                         tool_name=tool_name,
+                        operation_id=operation_id,
+                        operation_contract_version=operation_contract_version,
                         status="requested",
                         selector_json=selector,
                         error_codes_json=[],
@@ -360,6 +372,8 @@ class FinnV2ToolExecutionService:
                 user_id=user_id,
                 trace_id=trace_id,
                 tool_name=tool_name,
+                operation_id=operation_id,
+                operation_contract_version=operation_contract_version,
                 status="requested",
                 selector_json=selector,
                 error_codes_json=[],
@@ -634,6 +648,8 @@ class FinnV2ToolExecutionService:
                 asset=result.asset,
                 tool_call_id=result.tool_call_id,
                 information_scope=result.information_scope,
+                operation_id=getattr(result, "operation_id", None),
+                operation_contract_version=getattr(result, "operation_contract_version", None),
             )
             artifact = await self.evidence.ingest_tool_result(
                 user_id=user_id,

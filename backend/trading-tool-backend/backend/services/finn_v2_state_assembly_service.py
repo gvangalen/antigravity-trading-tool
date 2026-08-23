@@ -81,6 +81,8 @@ class FinnV2StateAssemblyService:
             # Historical rows predate the persisted scope column. They remain
             # readable, while new rows always carry their canonical scope.
             information_scope=getattr(row, "information_scope", None),
+            operation_id=getattr(row, "operation_id", None),
+            operation_contract_version=getattr(row, "operation_contract_version", None),
             entity_type=row.entity_type,
             entity_id=row.entity_id,
             asset=row.asset,

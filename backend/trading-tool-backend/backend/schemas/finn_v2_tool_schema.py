@@ -69,6 +69,8 @@ class ToolExecutionEnvelope(BaseModel):
     tool_call_id: Optional[int] = None
     artifact_id: Optional[str] = None
     information_scope: Optional[InformationScope] = None
+    operation_id: Optional[str] = None
+    operation_contract_version: Optional[str] = None
 
     @validator("result", pre=True, always=True)
     def _parse_result(cls, value, values):

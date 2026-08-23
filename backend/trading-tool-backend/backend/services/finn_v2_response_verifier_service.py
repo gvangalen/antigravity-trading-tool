@@ -17,6 +17,7 @@ from backend.infrastructure.repositories.finn_v2_validation_repository import Fi
 from backend.infrastructure.repositories.finn_v2_verifier_repository import FinnV2VerifierRepository
 from backend.infrastructure.repositories.finn_v2_verified_response_repository import FinnV2VerifiedResponseRepository
 from backend.domain.finn_v2_contract import normalize_information_scope, normalize_interaction_mode
+from backend.domain.finn_v2_operation_registry import FinnV2OperationRegistry
 from backend.schemas.finn_v2_delivery_schema import FinnV2DeliveryEnvelope
 from backend.schemas.finn_v2_orchestrator_schema import ORCHESTRATOR_VERSION, OrchestratorResult
 from backend.schemas.finn_v2_orchestrator_schema import normalize_information_scopes
@@ -311,15 +312,39 @@ class FinnV2ResponseVerifierService:
         model_reasoning_ok = "model_reasoning_contract_failed" not in reason_codes
 
         request_plan = getattr(orchestrator_result.analysis, "request_plan", None)
-        required_scopes = normalize_information_scopes(
-            getattr(request_plan, "required_information_scopes", [])
-            or [scope for scope in orchestrator_result.analysis.subject_scopes if scope != "unknown"]
-        )
+        operation_id = getattr(request_plan, "operation_id", None)
+        contract_version = getattr(request_plan, "operation_contract_version", None)
+        has_contract_metadata = bool(operation_id and contract_version)
+        has_partial_contract_metadata = bool(operation_id or contract_version) and not has_contract_metadata
+        contract_metadata_ok = not has_partial_contract_metadata
+        if has_contract_metadata:
+            try:
+                contract = FinnV2OperationRegistry().require_supported(operation_id)
+            except ValueError:
+                # A persisted but unknown contract is a typed internal failure,
+                # never permission to reinterpret the run as a legacy request.
+                reason_codes.append("operation_contract_unknown")
+                required_scopes = []
+                contract_metadata_ok = False
+            else:
+                if contract.version != contract_version:
+                    reason_codes.append("operation_contract_version_mismatch")
+                    required_scopes = []
+                    contract_metadata_ok = False
+                else:
+                    required_scopes = list(contract.required_scopes)
+        elif has_partial_contract_metadata:
+            # New runs must never silently become legacy runs when persistence
+            # drops one half of their resolved contract identity.
+            reason_codes.append("operation_contract_metadata_missing")
+            required_scopes = []
+        else:
+            required_scopes = normalize_information_scopes(
+                [scope for scope in orchestrator_result.analysis.subject_scopes if scope != "unknown"]
+            )
         # New runs carry a typed RequestPlan. Their coverage must be proven by the
         # evidence's exact canonical scope, not inferred from a broad domain label.
-        uses_canonical_scope_contract = bool(
-            request_plan is not None
-        )
+        uses_canonical_scope_contract = has_contract_metadata or has_partial_contract_metadata
 
         claim_results = []
         covered_scopes = set()
@@ -470,6 +495,7 @@ class FinnV2ResponseVerifierService:
                 policy_ok,
                 safety_ok,
                 model_reasoning_ok,
+                contract_metadata_ok,
                 validation.integrity_status != "invalid",
                 "paper_live_mismatch" not in reason_codes,
             ]

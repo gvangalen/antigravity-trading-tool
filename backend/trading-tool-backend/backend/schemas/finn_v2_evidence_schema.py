@@ -281,6 +281,8 @@ class EvidenceArtifact(BaseModel):
     tool_call_id: int
     tool_name: str
     information_scope: Optional[InformationScope] = None
+    operation_id: Optional[str] = None
+    operation_contract_version: Optional[str] = None
     entity_type: Optional[str] = None
     entity_id: Optional[str] = None
     asset: Optional[str] = None
