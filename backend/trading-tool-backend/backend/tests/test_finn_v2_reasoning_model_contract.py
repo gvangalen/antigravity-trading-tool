@@ -440,7 +440,11 @@ def test_model_repairs_unsupported_indicator_configuration_inference(monkeypatch
     unsupported = _model_output()
     unsupported["main_observation"] = "De beperkte indicatorconfiguratie kan leiden tot een minder robuuste handelsstrategie."
     repaired = _model_output()
-    repaired["main_observation"] = "Je configuratie bevat RSI en volume; de evidence toont geen expliciete beslisregel die deze signalen combineert."
+    repaired["main_observation"] = "Je BTC-configuratie bevat RSI en volume, naast de opgeslagen setup en strategie."
+    repaired["next_step"] = {
+        "title": "Neem je strategie door",
+        "instruction": "Neem je opgeslagen BTC-strategie door naast je balanced profiel en leg de huidige uitvoering vast.",
+    }
     responses = iter(
         [
             {"parsed": unsupported, "model": "gpt-4o-mini", "provider_metadata": {"response_status": "completed", "response_id": "resp-primary", "parsed_source": "response_output_text"}},
@@ -485,6 +489,8 @@ def test_model_repairs_unsupported_indicator_configuration_inference(monkeypatch
     assert persisted["result"].reasoning_provenance["reasoning_source"] == "model_repair"
     assert "unsupported_indicator_configuration_inference" in prompts[1]
     assert "Do not describe zero configured items in a category as a gap" in prompts[1]
+    assert "does not prove that indicators must be combined" in prompts[1]
+    assert "Do not infer that such a rule is absent" in prompts[1]
 
 
 def test_configuration_causality_does_not_join_unrelated_statements(monkeypatch):

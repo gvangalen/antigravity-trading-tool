@@ -109,10 +109,12 @@ class FinnV2ReasoningPromptService:
             "For unsupported_indicator_configuration_inference, treat configured indicators and "
             "category counts only as facts: do not call them insufficient, missing, limiting, required, or causal "
             "unless the supplied evidence explicitly proves that conclusion. Do not describe zero configured items in "
-            "a category as a gap. Instead, choose one neutral, evidence-grounded planning observation and make the "
-            "next step a review or documentation step, phrased without claiming that any indicator configuration is "
-            "incomplete. This prohibition applies to direct_answer, main_observation, claims, supporting_points and "
-            "next_step.\n"
+            "a category as a gap. Configuration evidence also does not prove that indicators must be combined, confirm "
+            "each other, be strong enough, or have a missing decision rule. Do not infer that such a rule is absent. "
+            "Instead, choose one neutral, evidence-grounded planning observation and make the next step a review or "
+            "documentation step about the saved profile, strategy, setup, or bot, phrased without claiming that any "
+            "indicator configuration or rule is incomplete. This prohibition applies to direct_answer, "
+            "main_observation, claims, supporting_points and next_step.\n"
             if any(error.get("code") == "unsupported_indicator_configuration_inference" for error in validation_errors or [])
             else ""
         )
