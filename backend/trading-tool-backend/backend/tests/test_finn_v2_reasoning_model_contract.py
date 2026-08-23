@@ -536,3 +536,5 @@ def test_integrated_plan_evaluation_prompt_lists_saved_grounding_values():
     assert '"strategy":["100","112","125","325","92"]' in prompt
     assert '"bot":["186"]' in prompt
     assert "Never say a stop loss, entry, or target is absent" in prompt
+    assert "zero configured count for an indicator category is only a configuration fact" in prompt
+    assert "never present it as an absent or limiting fact" in prompt
