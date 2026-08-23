@@ -24,6 +24,10 @@ def test_deploy_env_supports_backend_only_auto_rollback_and_previous_markers():
     assert 'MIGRATION_COMMAND_TIMEOUT_SECONDS="${MIGRATION_COMMAND_TIMEOUT_SECONDS:-180}"' in source
     assert 'DEEP_HEALTH_ATTEMPTS="${DEEP_HEALTH_ATTEMPTS:-30}"' in source
     assert 'DEEP_HEALTH_RETRY_DELAY_SECONDS="${DEEP_HEALTH_RETRY_DELAY_SECONDS:-10}"' in source
+    assert 'BACKEND_INITIAL_LISTEN_ATTEMPTS="${BACKEND_INITIAL_LISTEN_ATTEMPTS:-180}"' in source
+    assert 'BACKEND_INITIAL_HEALTH_ATTEMPTS="${BACKEND_INITIAL_HEALTH_ATTEMPTS:-90}"' in source
+    assert 'BACKEND_RECOVERY_LISTEN_ATTEMPTS="${BACKEND_RECOVERY_LISTEN_ATTEMPTS:-180}"' in source
+    assert 'BACKEND_RECOVERY_HEALTH_ATTEMPTS="${BACKEND_RECOVERY_HEALTH_ATTEMPTS:-90}"' in source
     assert 'STRICT_EXTERNAL_SMOKE="${STRICT_EXTERNAL_SMOKE:-false}"' in source
     assert "lower_bool()" in source
     assert 'if [ "$DEPLOY_COMPONENT_SET" = "backend_only" ]; then' in source
@@ -38,6 +42,10 @@ def test_deploy_env_supports_backend_only_auto_rollback_and_previous_markers():
     assert 'BACKEND_APP="${BACKEND_APP:-backend}"' in source
     assert 'wait_for_backend_listen()' in source
     assert 'restart_backend_app()' in source
+    assert 'wait_for_backend_listen "$BACKEND_INITIAL_LISTEN_ATTEMPTS"' in source
+    assert 'wait_for_backend_health "$BACKEND_INITIAL_HEALTH_ATTEMPTS"' in source
+    assert 'wait_for_backend_listen "$BACKEND_RECOVERY_LISTEN_ATTEMPTS"' in source
+    assert 'wait_for_backend_health "$BACKEND_RECOVERY_HEALTH_ATTEMPTS"' in source
     assert 'deep_health_ready=false' in source
     assert 'for attempt in \\$(seq 1 \\"$DEEP_HEALTH_ATTEMPTS\\"); do' in source
     assert 'Deep health not ready yet' in source

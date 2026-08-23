@@ -26,6 +26,13 @@ MIGRATION_COMMAND_TIMEOUT_SECONDS="${MIGRATION_COMMAND_TIMEOUT_SECONDS:-180}"
 # deploy gate alive until the last worker can register with Redis/health.
 DEEP_HEALTH_ATTEMPTS="${DEEP_HEALTH_ATTEMPTS:-30}"
 DEEP_HEALTH_RETRY_DELAY_SECONDS="${DEEP_HEALTH_RETRY_DELAY_SECONDS:-10}"
+# A production cold start can take more than two minutes while routers and
+# worker-facing dependencies initialize. Do not tear down a healthy startup
+# before it has had a chance to bind and answer the lightweight health check.
+BACKEND_INITIAL_LISTEN_ATTEMPTS="${BACKEND_INITIAL_LISTEN_ATTEMPTS:-180}"
+BACKEND_INITIAL_HEALTH_ATTEMPTS="${BACKEND_INITIAL_HEALTH_ATTEMPTS:-90}"
+BACKEND_RECOVERY_LISTEN_ATTEMPTS="${BACKEND_RECOVERY_LISTEN_ATTEMPTS:-180}"
+BACKEND_RECOVERY_HEALTH_ATTEMPTS="${BACKEND_RECOVERY_HEALTH_ATTEMPTS:-90}"
 SSH_ARGS=(
   -i "$SSH_KEY"
   -o StrictHostKeyChecking=no
@@ -318,12 +325,12 @@ PY
   }
 
   stabilize_backend_app() {
-    if wait_for_backend_listen 120 && wait_for_backend_health 60; then
+    if wait_for_backend_listen "$BACKEND_INITIAL_LISTEN_ATTEMPTS" && wait_for_backend_health "$BACKEND_INITIAL_HEALTH_ATTEMPTS"; then
       return 0
     fi
     restart_backend_app
-    wait_for_backend_listen 150
-    wait_for_backend_health 120
+    wait_for_backend_listen "$BACKEND_RECOVERY_LISTEN_ATTEMPTS"
+    wait_for_backend_health "$BACKEND_RECOVERY_HEALTH_ATTEMPTS"
   }
 
   rebuild_pm2_processes() {
