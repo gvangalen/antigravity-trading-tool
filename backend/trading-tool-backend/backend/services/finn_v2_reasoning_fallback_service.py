@@ -282,10 +282,36 @@ class FinnV2ReasoningFallbackService:
         evidence_by_tool = {item.tool_name: item for item in context.evidence}
         active_asset = evidence_by_tool.get("read_active_asset")
         asset = active_asset.facts.get("symbol") if active_asset else None
-        lowered = context.user_message.lower()
+        request_plan = context.request_plan or {}
+        operation_id = request_plan.get("operation_id")
+        operation_state = request_plan.get("operation_state") or {}
 
-        if context.policy.operation_type == "watchlist_add":
-            target_asset = self._first_asset_symbol(context.user_message) or asset
+        if (operation_id == "watchlist_add" or not operation_id) and context.policy.operation_type == "watchlist_add":
+            target_asset = str((operation_state.get("collected_inputs") or {}).get("asset") or "").upper()
+            if not target_asset and not operation_id:
+                # Historical planless reasoning records are read-only
+                # compatibility input; new runs always use operation_state.
+                target_asset = self._first_asset_symbol(context.user_message) or asset or ""
+            if not target_asset:
+                from backend.services.finn_v2_operation_state_service import FinnV2OperationStateService
+                return ReasoningResult(
+                    reasoning_result_id=f"finn-v2-reasoning-{uuid.uuid4().hex}",
+                    run_id=run_id,
+                    user_id=user_id,
+                    mode="CLARIFICATION",
+                    direct_answer="Ik kan de watchlist-wijziging nog niet voorbereiden zonder één doelasset.",
+                    main_observation="Er ontbreekt nog één noodzakelijke detailkeuze voordat ik een voorstel kan opbouwen.",
+                    supporting_points=[],
+                    claims=[],
+                    uncertainty_summary="Er wordt niets aangepast zonder een valide voorstel en bevestiging.",
+                    uncertainty_codes=list(error_codes),
+                    next_step=None,
+                    follow_up_question=FinnV2OperationStateService.clarification_question("asset"),
+                    proposal_candidate=None,
+                    evidence_refs_used=[],
+                    model=model,
+                    created_at=datetime.now(timezone.utc),
+                )
             evidence_refs = [active_asset.evidence_id] if active_asset else []
             return ReasoningResult(
                 reasoning_result_id=f"finn-v2-reasoning-{uuid.uuid4().hex}",
@@ -336,14 +362,31 @@ class FinnV2ReasoningFallbackService:
                 created_at=datetime.now(timezone.utc),
             )
 
-        requested_asset = self._first_asset_symbol(context.user_message) or asset
-        timeframe = self._first_timeframe(context.user_message)
-        if requested_asset is None or timeframe is None:
-            question = (
-                "Voor welke asset en welk primaire timeframe wil je deze setup precies voorbereiden?"
-                if requested_asset is None and timeframe is None
-                else ("Welk primary timeframe wil je voor deze setup gebruiken?" if timeframe is None else "Voor welke asset wil je deze setup precies voorbereiden?")
+        if operation_id and operation_id != "create_setup":
+            return self.unavailable_draft(
+                run_id=run_id,
+                user_id=user_id,
+                mode="UNAVAILABLE",
+                model=model,
+                error_codes=[*error_codes, "proposal_operation_contract_missing"],
             )
+        missing = list(operation_state.get("missing_required_inputs") or [])
+        if not operation_id:
+            requested_asset = self._first_asset_symbol(context.user_message) or asset
+            timeframe = self._first_timeframe(context.user_message)
+            if requested_asset is None or timeframe is None:
+                missing = ["symbol" if requested_asset is None else "timeframe"]
+            else:
+                operation_state = {
+                    "collected_inputs": {
+                        "symbol": requested_asset,
+                        "timeframe": timeframe,
+                        "setup_type": "trade",
+                    }
+                }
+        if missing:
+            from backend.services.finn_v2_operation_state_service import FinnV2OperationStateService
+            question = FinnV2OperationStateService.clarification_question(operation_state.get("next_missing_input") or missing[0])
             return ReasoningResult(
                 reasoning_result_id=f"finn-v2-reasoning-{uuid.uuid4().hex}",
                 run_id=run_id,
@@ -363,16 +406,16 @@ class FinnV2ReasoningFallbackService:
                 created_at=datetime.now(timezone.utc),
             )
 
-        style = "swing" if "swing" in lowered else ("scalp" if "scalp" in lowered else "trade")
-        proposed_fields = {
-            "symbol": requested_asset,
-            "timeframe": timeframe,
-            "setup_type": style,
-        }
-        if "daily trend" in lowered or "dagtrend" in lowered:
-            proposed_fields["trend_timeframe"] = "1D"
-        if "4h entry" in lowered or "4h" in lowered:
-            proposed_fields["entry_timeframe"] = "4H"
+        proposed_fields = dict(operation_state.get("collected_inputs") or {})
+        requested_asset = str(proposed_fields.get("symbol") or asset or "").upper()
+        if not requested_asset:
+            return self.unavailable_draft(
+                run_id=run_id,
+                user_id=user_id,
+                mode="UNAVAILABLE",
+                model=model,
+                error_codes=[*error_codes, "proposal_asset_missing_after_validation"],
+            )
         evidence_refs = [item.evidence_id for item in [active_asset, evidence_by_tool.get("read_profile"), evidence_by_tool.get("read_user_preferences")] if item is not None]
         return ReasoningResult(
             reasoning_result_id=f"finn-v2-reasoning-{uuid.uuid4().hex}",

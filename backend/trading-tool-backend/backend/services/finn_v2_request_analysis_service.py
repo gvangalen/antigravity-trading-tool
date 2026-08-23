@@ -6,6 +6,7 @@ from typing import Dict, List, Optional
 from backend.domain.finn_v2_operation_registry import FinnV2OperationRegistry, FinnV2OperationUnavailableError
 from backend.schemas.finn_v2_orchestrator_schema import RequestAnalysisResult, RequestPlan
 from backend.services.finn_v2_capability_registry_service import FinnV2CapabilityRegistryService
+from backend.services.finn_v2_operation_state_service import FinnV2OperationStateService
 
 
 class FinnV2RequestAnalysisService:
@@ -23,6 +24,7 @@ class FinnV2RequestAnalysisService:
     def __init__(self):
         self.capabilities = FinnV2CapabilityRegistryService()
         self.operations = FinnV2OperationRegistry()
+        self.operation_state = FinnV2OperationStateService()
 
     def analyze(
         self,
@@ -131,6 +133,13 @@ class FinnV2RequestAnalysisService:
             integrated_plan=integrated_plan,
             uses_conversation_reference=uses_conversation_reference,
         )
+        pending_operation_id = self.operation_state.pending_operation_id(conversation_context or {})
+        if (
+            pending_operation_id
+            and interaction_mode not in {"CAPABILITY", "CONFIRMATION", "EXECUTION"}
+            and "mode:unavailable_financial_context" not in matched_signals
+        ):
+            operation_id = pending_operation_id
         try:
             operation = self.operations.require_supported(operation_id)
         except FinnV2OperationUnavailableError as exc:
@@ -143,6 +152,14 @@ class FinnV2RequestAnalysisService:
         else:
             # The registry owns the persisted mode for every new request.
             interaction_mode = operation.mode
+        guided_state = self.operation_state.resolve(
+            contract=operation,
+            message=text,
+            explicit_asset=explicit_asset,
+            conversation_context=conversation_context,
+        ) if operation.required_inputs else None
+        if guided_state is not None:
+            missing_essential_inputs = list(guided_state.missing_required_inputs)
         request_plan = self._request_plan(
             interaction_mode=interaction_mode,
             scopes=scopes,
@@ -159,6 +176,7 @@ class FinnV2RequestAnalysisService:
             explicit_bot_id=explicit_bot_id,
             operation_id=operation_id,
             operation=operation,
+            operation_state=guided_state.dict() if guided_state is not None else {},
         )
 
         return RequestAnalysisResult(
@@ -202,6 +220,7 @@ class FinnV2RequestAnalysisService:
         explicit_bot_id: Optional[int],
         operation_id: str,
         operation,
+        operation_state: Dict[str, object],
     ) -> RequestPlan:
         reference = None
         if uses_conversation_reference:
@@ -228,6 +247,7 @@ class FinnV2RequestAnalysisService:
                 if value is not None
             },
             missing_information=list(missing_essential_inputs),
+            operation_state=operation_state,
             clarification_required=bool(missing_essential_inputs) or interaction_mode == "CLARIFICATION",
             confidence_score=score,
         )

@@ -76,11 +76,10 @@ class FinnV2PolicyEngineService:
             # Domain requirements were already derived by the registry-backed
             # planner. Policy consumes that result and never adds scopes.
             policy_class = contract.policy_class
-            operation_type = (
-                contract.execution_adapter or contract.operation_id
-                if contract.mode in {"CREATE_PROPOSAL", "ACTION_PROPOSAL", "CONFIRMATION", "EXECUTION"}
-                else None
-            )
+            # The persisted policy schema uses execution-adapter operation
+            # types. Workflow-only confirmation/execution contracts therefore
+            # intentionally have no business operation type of their own.
+            operation_type = contract.execution_adapter
             proposal_allowed = contract.proposal_type is not None
             confirmation_required = contract.confirmation_required
             proposal_input_required = contract.proposal_type is not None

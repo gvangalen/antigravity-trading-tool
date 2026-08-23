@@ -130,6 +130,32 @@ def test_request_analysis_routes_setup_creation_and_watchlist_actions_to_typed_m
     assert watchlist_result.explicit_asset == "ETH"
 
 
+def test_guided_setup_state_collects_verified_inputs_without_premature_proposal():
+    first_turn = SERVICE.analyze(
+        message="Maak een setup voor BTC swing trading met daily trend en 4H entry."
+    )
+
+    assert first_turn.request_plan.operation_id == "create_setup"
+    assert first_turn.request_plan.operation_state["collected_inputs"] == {
+        "symbol": "BTC",
+        "setup_type": "trade",
+        "timeframe": "4H",
+        "market_condition": "trend_defined",
+    }
+    assert first_turn.request_plan.operation_state["missing_required_inputs"] == ["name"]
+    assert first_turn.request_plan.clarification_required is True
+
+    second_turn = SERVICE.analyze(
+        message="De naam is BTC swing daily-4H.",
+        conversation_context={"operation_state": first_turn.request_plan.operation_state},
+    )
+
+    assert second_turn.interaction_mode == "CREATE_PROPOSAL"
+    assert second_turn.request_plan.operation_id == "create_setup"
+    assert second_turn.request_plan.operation_state["missing_required_inputs"] == []
+    assert second_turn.request_plan.operation_state["collected_inputs"]["name"] == "BTC swing daily-4H"
+
+
 def test_request_analysis_does_not_treat_read_questions_with_confirmed_wording_as_execution():
     strategy_result = SERVICE.analyze(
         message="Welke belangrijkste entryvoorwaarde uit mijn BTC-strategie moet bevestigd zijn voordat mijn plan een entry toestaat?"

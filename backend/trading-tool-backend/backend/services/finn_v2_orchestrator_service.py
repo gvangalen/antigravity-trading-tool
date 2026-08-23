@@ -367,6 +367,7 @@ class FinnV2OrchestratorService:
         resolved_setup_id = selectors.get("setup_id") or getattr(result.analysis, "explicit_setup_id", None) or context.get("resolved_setup_id")
         resolved_strategy_id = selectors.get("strategy_id") or getattr(result.analysis, "explicit_strategy_id", None) or context.get("resolved_strategy_id")
         resolved_bot_id = selectors.get("bot_id") or getattr(result.analysis, "explicit_bot_id", None) or context.get("resolved_bot_id")
+        operation_state = dict(getattr(request_plan, "operation_state", {}) or {})
         context.update(
             {
                 "last_user_goal": getattr(request_plan, "user_goal", None),
@@ -382,6 +383,8 @@ class FinnV2OrchestratorService:
                 "last_required_information_scopes": list(getattr(request_plan, "required_information_scopes", []) or []),
             }
         )
+        if operation_state:
+            context["operation_state"] = operation_state
         await self.conversations.update_context(
             conversation_id=conversation_id,
             user_id=user_id,

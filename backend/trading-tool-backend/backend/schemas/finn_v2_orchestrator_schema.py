@@ -68,6 +68,10 @@ class RequestPlan(BaseModel):
     conversation_reference: Optional[str] = None
     referenced_entities: Dict[str, object] = Field(default_factory=dict)
     missing_information: List[str] = Field(default_factory=list)
+    # This is persisted in the existing conversation context as JSON.  Keeping
+    # the shape here prevents guided operations from falling back to untyped
+    # prompt-local slots on later turns.
+    operation_state: Dict[str, object] = Field(default_factory=dict)
     clarification_required: bool = False
     confidence_score: float = Field(default=0.0, ge=0.0, le=1.0)
 
@@ -82,6 +86,20 @@ class RequestPlan(BaseModel):
     @validator("optional_information_scopes", pre=True)
     def _dedupe_optional_information_scopes(cls, value: List[str]) -> List[str]:
         return normalize_information_scopes(value or [])
+
+
+class FinnV2OperationState(BaseModel):
+    """Typed, persisted state for a single guided FINN operation."""
+
+    operation_id: str
+    contract_version: str
+    collected_inputs: Dict[str, object] = Field(default_factory=dict)
+    missing_required_inputs: List[str] = Field(default_factory=list)
+    next_missing_input: Optional[str] = None
+
+    @validator("missing_required_inputs", pre=False)
+    def _dedupe_missing_inputs(cls, value: List[str]) -> List[str]:
+        return list(dict.fromkeys(str(item) for item in value if item))
 
 
 class RequestAnalysisResult(BaseModel):
