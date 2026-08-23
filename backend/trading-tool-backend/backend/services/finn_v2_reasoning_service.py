@@ -956,17 +956,29 @@ class FinnV2ReasoningService:
             "leidt tot",
             "oorzaakt",
             "niet ideaal",
+            "effectiviteit",
+            "effectief",
+            "ondermijnen",
+            "ondermijnt",
+            "verouderde botconfiguratie",
+            "werkt niet",
+            "mogelijk niet optimaal",
             "limit",
             "restrict",
             "missed opportunit",
             "causes",
             "prevents",
             "ineffective",
+            "undermine",
         }
+        bot_status_terms = {"stale", "verouderd", "outdated"}
         # Evidence-backed facts and unrelated uncertainty may coexist in a response.
         # Require the mode and causal language to occur in the same statement.
         if any(
-            any(term in statement.lower() for term in mode_terms)
+            (
+                any(term in statement.lower() for term in mode_terms)
+                or any(term in statement.lower() for term in bot_status_terms)
+            )
             and any(term in statement.lower() for term in causal_terms)
             for statement in statements
         ):

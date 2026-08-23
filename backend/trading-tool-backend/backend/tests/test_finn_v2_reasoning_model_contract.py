@@ -255,6 +255,81 @@ def test_model_repairs_unsupported_configuration_causality(monkeypatch):
     assert "unsupported_configuration_causality" in prompts[1]
 
 
+def test_model_repairs_unsupported_stale_bot_status_causality(monkeypatch):
+    service = FinnV2ReasoningService(session=object())
+    context_payload = _context().dict()
+    context_payload["evidence"].append(
+        {
+            "evidence_id": "E2",
+            "artifact_id": "artifact-2",
+            "tool_name": "read_bot_status",
+            "domain": "automation_context",
+            "entity_type": "bot_status",
+            "entity_id": "186",
+            "asset": "BTC",
+            "source": "bot_repository",
+            "freshness": "fresh",
+            "confidence": "high",
+            "facts": {"mode": "manual", "status": "stale", "is_live": False},
+        }
+    )
+    context = ReasoningContextPackage.parse_obj(context_payload)
+    persisted = {}
+    prompts = []
+    unsupported = _model_output()
+    unsupported["direct_answer"] = "De stale botstatus ondermijnt de effectiviteit van je plan."
+    unsupported["main_observation"] = "De bot staat in handmatige modus met een stale status."
+    unsupported["claims"][0]["text"] = "De stale status kan de trading-prestaties beperken."
+    repaired = _model_output()
+    repaired["direct_answer"] = "De botstatus is opgeslagen als stale en de bot staat niet live."
+    repaired["main_observation"] = "Controleer de opgeslagen botstatus voordat je de uitvoering van je plan beoordeelt."
+    repaired["claims"][0]["text"] = "De botstatus is stale en de bot staat niet live."
+    responses = iter(
+        [
+            {"parsed": unsupported, "model": "gpt-4o-mini", "provider_metadata": {"response_status": "completed", "response_id": "resp-primary", "parsed_source": "response_output_text"}},
+            {"parsed": repaired, "model": "gpt-4o-mini", "provider_metadata": {"response_status": "completed", "response_id": "resp-repair", "parsed_source": "response_output_text"}},
+        ]
+    )
+
+    async def _persist_record(**kwargs):
+        persisted.update(kwargs)
+        return kwargs
+
+    async def _append_trace(*_args, **_kwargs):
+        return None
+
+    def _call_provider(**kwargs):
+        prompts.append(kwargs["prompt"])
+        return next(responses)
+
+    service._persist_record = _persist_record
+    service._append_trace = _append_trace
+    monkeypatch.setattr(service.flags, "reasoning_max_retries", lambda: 1)
+    monkeypatch.setattr(service.flags, "reasoning_timeout_seconds", lambda: 5)
+    monkeypatch.setattr(service.flags, "reasoning_max_output_tokens", lambda: 600)
+    monkeypatch.setattr("backend.services.finn_v2_reasoning_service.openai_client.ask_gpt_structured_response", _call_provider)
+
+    result = asyncio.run(
+        service._run_model_reasoning(
+            run_id="run-1",
+            user_id=7,
+            trace_id="trace-1",
+            orchestrator_result=SimpleNamespace(orchestrator_result_id="orchestrator-1"),
+            policy=SimpleNamespace(policy_decision_id="policy-1"),
+            snapshot=SimpleNamespace(id="snapshot-1"),
+            validation=SimpleNamespace(id="validation-1"),
+            context=context,
+            model_name="gpt-4o-mini",
+            input_hash="hash-input",
+        )
+    )
+
+    assert result["status"] == "ready"
+    assert persisted["result"].reasoning_provenance["reasoning_source"] == "model_repair"
+    assert "unsupported_configuration_causality" in prompts[1]
+    assert "stale status" in prompts[1]
+
+
 def test_model_repairs_unsupported_indicator_configuration_inference(monkeypatch):
     service = FinnV2ReasoningService(session=object())
     context_payload = _context().dict()
