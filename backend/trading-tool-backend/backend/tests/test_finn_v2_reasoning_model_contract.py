@@ -480,6 +480,38 @@ def test_integrated_plan_evaluation_prompt_lists_required_scope_evidence_refs():
     assert '"bot":["E5"]' in prompt
 
 
+def test_registry_integrated_plan_prompt_lists_every_canonical_required_scope():
+    payload = _context().dict()
+    payload.update(
+        {
+            "request_plan": {
+                "operation_id": "evaluate_complete_plan",
+                "interaction_mode": "EVALUATE",
+                "required_information_scopes": [
+                    "profile", "preferences", "active_asset", "indicator_configuration",
+                    "active_setup", "linked_strategy", "linked_bot", "bot_status",
+                ],
+            },
+            "evidence": [
+                {"evidence_id": "Eprof", "artifact_id": "a1", "tool_name": "read_profile", "domain": "identity_context", "entity_type": "profile", "source": "profile", "freshness": "fresh", "confidence": "high"},
+                {"evidence_id": "Eprefs", "artifact_id": "a2", "tool_name": "read_user_preferences", "domain": "identity_context", "entity_type": "preferences", "source": "preferences", "freshness": "fresh", "confidence": "high"},
+                {"evidence_id": "Easset", "artifact_id": "a3", "tool_name": "read_active_asset", "domain": "identity_context", "entity_type": "asset", "source": "asset", "freshness": "fresh", "confidence": "high"},
+                {"evidence_id": "Einds", "artifact_id": "a4", "tool_name": "read_indicator_configuration", "domain": "market_context", "entity_type": "indicator_configuration", "source": "indicators", "freshness": "fresh", "confidence": "high"},
+                {"evidence_id": "Esetup", "artifact_id": "a5", "tool_name": "read_active_setup", "domain": "plan_context", "entity_type": "setup", "source": "setup", "freshness": "fresh", "confidence": "high"},
+                {"evidence_id": "Estrat", "artifact_id": "a6", "tool_name": "read_linked_strategy", "domain": "plan_context", "entity_type": "strategy", "source": "strategy", "freshness": "fresh", "confidence": "high"},
+                {"evidence_id": "Ebot", "artifact_id": "a7", "tool_name": "read_linked_bot", "domain": "automation_context", "entity_type": "bot", "source": "bot", "freshness": "fresh", "confidence": "high"},
+                {"evidence_id": "Estatus", "artifact_id": "a8", "tool_name": "read_bot_status", "domain": "automation_context", "entity_type": "bot_status", "source": "bot", "freshness": "fresh", "confidence": "high"},
+            ],
+        }
+    )
+
+    prompt = FinnV2ReasoningPromptService().build_user_prompt(ReasoningContextPackage.parse_obj(payload))
+
+    assert '"active_asset":["Easset"]' in prompt
+    assert '"preferences":["Eprefs"]' in prompt
+    assert '"bot_status":["Estatus"]' in prompt
+
+
 def test_integrated_plan_evaluation_prompt_lists_saved_grounding_values():
     payload = _context().dict()
     payload.update(

@@ -53,6 +53,23 @@ class FinnV2ReasoningPromptService:
             "and give at most one relevant next step or clarification question."
         ),
     }
+    CANONICAL_SCOPE_TOOLS = {
+        "profile": {"read_profile"},
+        "preferences": {"read_user_preferences"},
+        "active_asset": {"read_active_asset"},
+        "indicator_configuration": {"read_indicator_configuration"},
+        "active_setup": {"read_active_setup"},
+        "linked_strategy": {"read_linked_strategy"},
+        "linked_bot": {"read_linked_bot"},
+        "bot_status": {"read_bot_status"},
+    }
+    LEGACY_SCOPE_TOOLS = {
+        "profile": {"read_profile", "read_user_preferences"},
+        "indicators": {"read_indicator_configuration"},
+        "setup": {"read_active_setup"},
+        "strategy": {"read_linked_strategy"},
+        "bot": {"read_linked_bot", "read_bot_status"},
+    }
 
     def build_system_prompt(self, context: ReasoningContextPackage) -> str:
         mode_instruction = self.mode_instruction_for(context.interaction_mode)
@@ -99,7 +116,7 @@ class FinnV2ReasoningPromptService:
             else ""
         )
         evaluation_contract = ""
-        if context.interaction_mode == "EVALUATE" and {"profile", "indicators", "setup", "strategy", "bot"}.issubset(set(context.subject_scopes)):
+        if self._is_integrated_plan_evaluation(context):
             scope_refs = self._integrated_plan_scope_refs(context)
             evaluation_contract = (
                 "This is an integrated personal plan evaluation. State exactly one observation and one next step. "
@@ -137,30 +154,43 @@ class FinnV2ReasoningPromptService:
             f"Original user question:\n{context.user_message}"
         )
 
-    @staticmethod
-    def _integrated_plan_scope_refs(context: ReasoningContextPackage) -> dict[str, list[str]]:
+    @classmethod
+    def _integrated_plan_scope_tools(cls, context: ReasoningContextPackage) -> dict[str, set[str]]:
+        required_scopes = (context.request_plan or {}).get("required_information_scopes") or []
+        if required_scopes:
+            # New runs must use the persisted OperationContract rather than the
+            # historical subject labels that predate canonical scopes.
+            return {
+                scope: cls.CANONICAL_SCOPE_TOOLS[scope]
+                for scope in required_scopes
+                if scope in cls.CANONICAL_SCOPE_TOOLS
+            }
+        return cls.LEGACY_SCOPE_TOOLS
+
+    @classmethod
+    def _is_integrated_plan_evaluation(cls, context: ReasoningContextPackage) -> bool:
+        if context.interaction_mode != "EVALUATE":
+            return False
+        required_scopes = (context.request_plan or {}).get("required_information_scopes") or []
+        if not required_scopes:
+            return {"profile", "indicators", "setup", "strategy", "bot"}.issubset(
+                set(context.subject_scopes)
+            )
+        scope_tools = cls._integrated_plan_scope_tools(context)
+        return {"profile", "active_setup", "linked_strategy", "linked_bot"}.issubset(scope_tools)
+
+    @classmethod
+    def _integrated_plan_scope_refs(cls, context: ReasoningContextPackage) -> dict[str, list[str]]:
         """Make the model's required evidence coverage explicit for integrated plan reviews."""
-        scope_tools = {
-            "profile": {"read_profile", "read_user_preferences"},
-            "indicators": {"read_indicator_configuration"},
-            "setup": {"read_active_setup"},
-            "strategy": {"read_linked_strategy"},
-            "bot": {"read_linked_bot", "read_bot_status"},
-        }
+        scope_tools = cls._integrated_plan_scope_tools(context)
         return {
             scope: [item.evidence_id for item in context.evidence if item.tool_name in tools]
             for scope, tools in scope_tools.items()
         }
 
-    @staticmethod
-    def _integrated_plan_grounding_values(context: ReasoningContextPackage) -> dict[str, list[str]]:
-        scope_tools = {
-            "profile": {"read_profile", "read_user_preferences"},
-            "indicators": {"read_indicator_configuration"},
-            "setup": {"read_active_setup"},
-            "strategy": {"read_linked_strategy"},
-            "bot": {"read_linked_bot", "read_bot_status"},
-        }
+    @classmethod
+    def _integrated_plan_grounding_values(cls, context: ReasoningContextPackage) -> dict[str, list[str]]:
+        scope_tools = cls._integrated_plan_scope_tools(context)
         values: dict[str, set[str]] = {scope: set() for scope in scope_tools}
         for item in context.evidence:
             for scope, tools in scope_tools.items():
@@ -170,12 +200,12 @@ class FinnV2ReasoningPromptService:
                     values[scope].add(str(item.entity_id))
                 facts = item.facts or {}
                 for key in ("setup_id", "strategy_id", "bot_id", "name", "timeframe", "execution_mode", "risk_profile", "experience_level", "style"):
-                    FinnV2ReasoningPromptService._collect_values(values[scope], facts.get(key))
+                    cls._collect_values(values[scope], facts.get(key))
                 if scope == "profile":
-                    FinnV2ReasoningPromptService._collect_values(values[scope], facts.get("trader_profile"))
-                if scope == "indicators":
+                    cls._collect_values(values[scope], facts.get("trader_profile"))
+                if scope == "indicator_configuration" or scope == "indicators":
                     for row in facts.get("configured_indicators") or []:
-                        FinnV2ReasoningPromptService._collect_values(values[scope], (row or {}).get("indicator"))
+                        cls._collect_values(values[scope], (row or {}).get("indicator"))
         return {scope: sorted(value for value in scope_values if len(value) >= 2) for scope, scope_values in values.items()}
 
     @staticmethod
