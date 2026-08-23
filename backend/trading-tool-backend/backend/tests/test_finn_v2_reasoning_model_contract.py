@@ -491,6 +491,7 @@ def test_model_repairs_unsupported_indicator_configuration_inference(monkeypatch
     assert "Do not describe zero configured items in a category as a gap" in prompts[1]
     assert "does not prove that indicators must be combined" in prompts[1]
     assert "Do not infer that such a rule is absent" in prompts[1]
+    assert "does not prove one concrete missing component" in prompts[1]
 
 
 def test_configuration_causality_does_not_join_unrelated_statements(monkeypatch):
