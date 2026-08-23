@@ -284,6 +284,39 @@ def test_tool_execution_rolls_back_failed_session_before_tool_call_completion(mo
     assert session.rollback_calls == 1
 
 
+def test_tool_timeout_rolls_back_before_evidence_reuses_session(monkeypatch):
+    session = _FakeSession()
+    service = FinnV2ToolExecutionService(session=session)
+    service.runs = _FakeRunRepo()
+    service.calls = _FakeCallRepo()
+    service.traces = _FakeTraceRepo()
+    service.evidence.ingest_tool_result = AsyncMock(side_effect=AssertionError("timeout must skip evidence ingestion"))
+    monkeypatch.setattr(service.flags, "is_tool_registry_enabled", lambda: True)
+    monkeypatch.setattr(service.flags, "is_tool_registry_readonly", lambda: True)
+    monkeypatch.setattr(service.flags, "is_tool_call_logging_enabled", lambda: True)
+    monkeypatch.setattr(service.flags, "should_run_block3_shadow", lambda _user_id: True)
+
+    async def _hang(**_kwargs):
+        await asyncio.sleep(0.01)
+
+    service.profile_adapter.execute = _hang
+
+    result = asyncio.run(
+        service.execute_tool(
+            run_id="run-1",
+            user_id=7,
+            tool_name="read_profile",
+            selector={},
+            timeout_seconds=0.001,
+        )
+    )
+
+    assert result.success is False
+    assert result.error_codes == ["tool_timeout"]
+    assert session.rollback_calls == 1
+    assert service.evidence.ingest_tool_result.await_count == 0
+
+
 def test_tool_execution_rolls_back_poisoned_session_before_next_tool_call(monkeypatch):
     session = _FakeSession()
     session.sync_session.is_active = False

@@ -226,6 +226,17 @@ class FinnV2ToolExecutionService:
                 asset=payload.get("asset"),
             )
         except asyncio.TimeoutError:
+            # wait_for cancels the adapter while it may be using this session.
+            # Roll back before any completion or evidence persistence reuses it.
+            session_rolled_back = await self._rollback_failed_session(
+                run_id=run_id,
+                user_id=user_id,
+                trace_id=run_context.trace_id,
+                tool_name=tool_name,
+                tool_call_id=tool_call_id,
+                failure_stage="tool_timeout",
+                primary_exception=asyncio.TimeoutError("tool_timeout"),
+            )
             result = ToolExecutionResult(
                 tool_name=tool_name,
                 status="failed",
