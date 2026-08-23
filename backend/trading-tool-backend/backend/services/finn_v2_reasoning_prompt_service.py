@@ -115,6 +115,8 @@ class FinnV2ReasoningPromptService:
                 "unrelated plan item to support a general conclusion. In direct_answer and main_observation, name the asset, "
                 "at least one saved profile or risk value, at least one configured indicator, and a saved setup, strategy or bot "
                 "anchor. Treat is_live=false only as not-live or paper status; it does not mean manual, inactive, stale or broken. "
+                "Likewise, a configured bot mode is only a configuration fact: do not infer that it limits performance, causes "
+                "missed opportunities, or conflicts with a strategy unless the evidence explicitly states that causal relationship. "
                 "Do not infer bot health from evidence freshness. A field absent from bot evidence is unknown, not missing or "
                 "unconfigured: do not infer configuration propagation or absence from a linked strategy into a bot. Make the next "
                 "step a planning rule or review step, never a bot "

@@ -882,6 +882,56 @@ class FinnV2ReasoningService:
         if any(ref not in valid_refs for ref in referenced):
             raise ValueError("invalid_evidence_refs")
         self._validate_integrated_plan_contract(result=result, referenced=referenced, context=context)
+        self._validate_configuration_causality(result=result, context=context)
+
+    @staticmethod
+    def _validate_configuration_causality(*, result: ReasoningResult, context) -> None:
+        """Reject causal conclusions that are unsupported by a configuration value alone."""
+        bot_mode_values = {
+            str((item.facts or {}).get("mode") or "").lower()
+            for item in context.evidence
+            if item.tool_name in {"read_linked_bot", "read_bot_status"}
+        }
+        bot_mode_values.discard("")
+        if not bot_mode_values:
+            return
+
+        text = " ".join(
+            [
+                result.direct_answer or "",
+                result.main_observation or "",
+                *(claim.text for claim in result.claims),
+                *(point.explanation for point in result.supporting_points),
+                result.next_step.instruction if result.next_step is not None else "",
+            ]
+        ).lower()
+        mode_terms_by_value = {
+            "manual": {"manual", "handmatig", "handmatige"},
+            "automated": {"automated", "automatisch", "geautomatiseerd"},
+        }
+        mode_terms = set().union(*(mode_terms_by_value.get(value, {value}) for value in bot_mode_values))
+        causal_terms = {
+            "beperkt",
+            "belemmer",
+            "gemiste kans",
+            "gemiste kansen",
+            "leidt tot",
+            "oorzaakt",
+            "niet ideaal",
+            "limit",
+            "restrict",
+            "missed opportunit",
+            "causes",
+            "prevents",
+            "ineffective",
+        }
+        if any(term in text for term in mode_terms) and any(term in text for term in causal_terms):
+            raise FinnV2ReasoningContractError(
+                code="unsupported_configuration_causality",
+                missing_scopes=[],
+                path="claims",
+                grounding_values={"supported_bot_mode_facts": sorted(bot_mode_values)},
+            )
 
     @classmethod
     def _validate_integrated_plan_contract(cls, *, result: ReasoningResult, referenced: set[str], context) -> None:
