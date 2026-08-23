@@ -30,6 +30,30 @@ REQUIRED_FINN_V2_COLUMNS = (
         nullable=True,
     ),
     RequiredColumn(
+        table_name="finn_v2_tool_calls",
+        column_name="operation_id",
+        udt_name="text",
+        nullable=True,
+    ),
+    RequiredColumn(
+        table_name="finn_v2_tool_calls",
+        column_name="operation_contract_version",
+        udt_name="text",
+        nullable=True,
+    ),
+    RequiredColumn(
+        table_name="finn_v2_evidence_artifacts",
+        column_name="operation_id",
+        udt_name="text",
+        nullable=True,
+    ),
+    RequiredColumn(
+        table_name="finn_v2_evidence_artifacts",
+        column_name="operation_contract_version",
+        udt_name="text",
+        nullable=True,
+    ),
+    RequiredColumn(
         table_name="finn_v2_conversations",
         column_name="context_json",
         udt_name="jsonb",
@@ -85,6 +109,14 @@ def assert_finn_v2_schema(connection: Any) -> None:
         cursor.execute("SELECT context_json FROM finn_v2_conversations LIMIT 1")
         cursor.fetchone()
         cursor.execute("SELECT information_scope FROM finn_v2_evidence_artifacts LIMIT 1")
+        cursor.fetchone()
+        cursor.execute(
+            "SELECT operation_id, operation_contract_version FROM finn_v2_tool_calls LIMIT 1"
+        )
+        cursor.fetchone()
+        cursor.execute(
+            "SELECT operation_id, operation_contract_version FROM finn_v2_evidence_artifacts LIMIT 1"
+        )
         cursor.fetchone()
 
 

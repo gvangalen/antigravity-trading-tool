@@ -37,12 +37,17 @@ class _Connection:
 def test_schema_health_accepts_the_conversation_context_contract():
     connection = _Connection({
         ("finn_v2_evidence_artifacts", "information_scope"): ("text", "text", "YES", None),
+        ("finn_v2_tool_calls", "operation_id"): ("text", "text", "YES", None),
+        ("finn_v2_tool_calls", "operation_contract_version"): ("text", "text", "YES", None),
+        ("finn_v2_evidence_artifacts", "operation_id"): ("text", "text", "YES", None),
+        ("finn_v2_evidence_artifacts", "operation_contract_version"): ("text", "text", "YES", None),
         ("finn_v2_conversations", "context_json"): ("jsonb", "jsonb", "NO", "'{}'::jsonb"),
     })
 
     assert_finn_v2_schema(connection)
 
     assert any("SELECT context_json FROM finn_v2_conversations" in statement for statement, _ in connection.cursor_instance.executed)
+    assert any("SELECT operation_id, operation_contract_version FROM finn_v2_tool_calls" in statement for statement, _ in connection.cursor_instance.executed)
 
 
 @pytest.mark.parametrize(
@@ -57,6 +62,10 @@ def test_schema_health_accepts_the_conversation_context_contract():
 def test_schema_health_rejects_incompatible_context_contract(metadata, error_code):
     connection = _Connection({
         ("finn_v2_evidence_artifacts", "information_scope"): ("text", "text", "YES", None),
+        ("finn_v2_tool_calls", "operation_id"): ("text", "text", "YES", None),
+        ("finn_v2_tool_calls", "operation_contract_version"): ("text", "text", "YES", None),
+        ("finn_v2_evidence_artifacts", "operation_id"): ("text", "text", "YES", None),
+        ("finn_v2_evidence_artifacts", "operation_contract_version"): ("text", "text", "YES", None),
         ("finn_v2_conversations", "context_json"): metadata,
     })
 

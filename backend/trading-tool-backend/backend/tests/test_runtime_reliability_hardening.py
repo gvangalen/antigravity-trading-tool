@@ -55,11 +55,13 @@ def test_deploy_env_supports_backend_only_auto_rollback_and_previous_markers():
     assert source.index("2026_08_18_finn_v2_typed_operation_modes.py") < source.index("2026_08_20_finn_v2_canonical_modes.py")
     assert "2026_08_23_finn_v2_conversation_context.py" in source
     assert "2026_08_23_finn_v2_evidence_information_scope.py" in source
+    assert "2026_08_23_finn_v2_artifact_operation_contract.py" in source
     assert "python3 -m backend.scripts.check_finn_v2_schema" in source
     assert source.index("2026_08_22_finn_v2_remove_legacy_fact_mode.py") < source.index("2026_08_23_finn_v2_conversation_context.py")
     assert source.index("2026_08_23_finn_v2_conversation_context.py") < source.index("python3 -m backend.scripts.check_finn_v2_schema")
     assert source.index("2026_08_23_finn_v2_conversation_context.py") < source.index("2026_08_23_finn_v2_evidence_information_scope.py")
     assert source.index("2026_08_23_finn_v2_evidence_information_scope.py") < source.index("python3 -m backend.scripts.check_finn_v2_schema")
+    assert source.index("2026_08_23_finn_v2_artifact_operation_contract.py") < source.index("python3 -m backend.scripts.check_finn_v2_schema")
     assert source.index("python3 -m backend.scripts.check_finn_v2_schema") < source.index("pm2_start_app()")
 
 
