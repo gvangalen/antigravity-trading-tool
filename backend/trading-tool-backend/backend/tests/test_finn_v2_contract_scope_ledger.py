@@ -69,4 +69,3 @@ def test_evaluate_plan_contract_binds_every_required_scope_once():
 
     assert set(bindings) == set(contract.required_scopes)
     assert len(bindings) == len(contract.required_scopes)
-
