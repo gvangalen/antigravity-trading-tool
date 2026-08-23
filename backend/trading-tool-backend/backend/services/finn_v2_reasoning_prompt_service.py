@@ -104,6 +104,17 @@ class FinnV2ReasoningPromptService:
         validation_errors: list[dict[str, str]] | None = None,
     ) -> str:
         context_json = json.dumps(context.dict(), default=str, ensure_ascii=True, separators=(",", ":"))
+        indicator_repair_instruction = (
+            "For unsupported_indicator_configuration_inference, treat configured indicators and "
+            "category counts only as facts: do not call them insufficient, missing, limiting, required, or causal "
+            "unless the supplied evidence explicitly proves that conclusion. Do not describe zero configured items in "
+            "a category as a gap. Instead, choose one neutral, evidence-grounded planning observation and make the "
+            "next step a review or documentation step, phrased without claiming that any indicator configuration is "
+            "incomplete. This prohibition applies to direct_answer, main_observation, claims, supporting_points and "
+            "next_step.\n"
+            if any(error.get("code") == "unsupported_indicator_configuration_inference" for error in validation_errors or [])
+            else ""
+        )
         repair_instruction = (
             "Your previous response did not satisfy the required structured-output contract. "
             "Correct only the listed field paths and error codes, return every required field with valid values, "
@@ -111,9 +122,7 @@ class FinnV2ReasoningPromptService:
             f"Validation errors: {json.dumps(validation_errors or [], ensure_ascii=True, separators=(',', ':'))}\n"
             "For missing_required_scope_refs, cite an evidence reference from every missing scope in "
             "evidence_refs_used and use the supplied grounding values rather than counts, categories, or "
-            "generic labels. For unsupported_indicator_configuration_inference, treat configured indicators and "
-            "category counts only as facts: do not call them insufficient, missing, limiting, required, or causal "
-            "unless the supplied evidence explicitly proves that conclusion.\n"
+            f"generic labels. {indicator_repair_instruction}"
             if repair_attempt
             else ""
         )

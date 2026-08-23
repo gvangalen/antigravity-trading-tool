@@ -322,6 +322,7 @@ def test_model_repairs_unsupported_indicator_configuration_inference(monkeypatch
     assert result["status"] == "ready"
     assert persisted["result"].reasoning_provenance["reasoning_source"] == "model_repair"
     assert "unsupported_indicator_configuration_inference" in prompts[1]
+    assert "Do not describe zero configured items in a category as a gap" in prompts[1]
 
 
 def test_configuration_causality_does_not_join_unrelated_statements(monkeypatch):
