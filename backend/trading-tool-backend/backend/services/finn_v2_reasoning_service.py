@@ -1059,14 +1059,15 @@ class FinnV2ReasoningService:
             for item in context.evidence
             if item.tool_name == "read_linked_strategy"
         ]
-        populated_fields = {
-            field
+        populated_values = {
+            field: facts[field]
             for facts in strategy_facts
             for field in ("entry", "stop_loss", "targets")
             if facts.get(field) not in (None, "", [], {})
         }
-        if not populated_fields:
+        if not populated_values:
             return
+        populated_fields = set(populated_values)
 
         statements = [
             result.direct_answer or "",
@@ -1093,7 +1094,14 @@ class FinnV2ReasoningService:
                 code="unsupported_stored_field_absence",
                 missing_scopes=[],
                 path="claims",
-                grounding_values={"populated_strategy_fields": sorted(unsupported)},
+                grounding_values={
+                    "populated_strategy_fields": sorted(unsupported),
+                    # A repair must preserve the canonical values, not only their names.
+                    "populated_strategy_values": {
+                        field: populated_values[field]
+                        for field in sorted(unsupported)
+                    },
+                },
             )
 
     @staticmethod

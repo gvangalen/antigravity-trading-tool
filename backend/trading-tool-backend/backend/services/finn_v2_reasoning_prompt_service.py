@@ -101,7 +101,7 @@ class FinnV2ReasoningPromptService:
         context: ReasoningContextPackage,
         *,
         repair_attempt: bool = False,
-        validation_errors: list[dict[str, str]] | None = None,
+        validation_errors: list[dict[str, object]] | None = None,
     ) -> str:
         context_json = json.dumps(context.dict(), default=str, ensure_ascii=True, separators=(",", ":"))
         indicator_repair_instruction = (
@@ -126,11 +126,14 @@ class FinnV2ReasoningPromptService:
             else ""
         )
         stored_field_repair_instruction = (
-            "For unsupported_stored_field_absence, retain every supplied strategy field as present. "
+            "For unsupported_stored_field_absence, the following canonical saved strategy values are present and "
+            "must be retained exactly: "
+            f"{json.dumps(self._repair_grounding_values(validation_errors, 'unsupported_stored_field_absence'), ensure_ascii=True, separators=(',', ':'))}. "
             "Do not call an entry, stop loss, target, or exit level missing, absent, unspecified, or unavailable "
             "when its saved value is in the grounding context. Use the saved field as a fact or choose a different "
-            "evidence-grounded observation. This prohibition applies to direct_answer, main_observation, claims, "
-            "supporting_points and next_step.\n"
+            "evidence-grounded observation. If the evidence does not prove a missing plan component, say that it "
+            "does not establish one and make the single next step a neutral review or documentation step. This "
+            "prohibition applies to direct_answer, main_observation, claims, supporting_points and next_step.\n"
             if any(error.get("code") == "unsupported_stored_field_absence" for error in validation_errors or [])
             else ""
         )
@@ -190,6 +193,16 @@ class FinnV2ReasoningPromptService:
             f"Structured context:\n{context_json}\n"
             f"Original user question:\n{context.user_message}"
         )
+
+    @staticmethod
+    def _repair_grounding_values(validation_errors: list[dict[str, object]] | None, code: str) -> dict[str, object]:
+        """Expose the bounded canonical facts that are needed for a model repair."""
+        for error in validation_errors or []:
+            if error.get("code") == code:
+                values = error.get("grounding_values")
+                if isinstance(values, dict):
+                    return values
+        return {}
 
     @classmethod
     def _integrated_plan_scope_tools(cls, context: ReasoningContextPackage) -> dict[str, set[str]]:
