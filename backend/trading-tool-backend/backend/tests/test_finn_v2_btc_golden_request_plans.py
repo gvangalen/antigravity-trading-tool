@@ -1,5 +1,6 @@
 import pytest
 
+from backend.domain.finn_v2_operation_registry import FinnV2OperationRegistry
 from backend.services.finn_v2_domain_requirement_service import FinnV2DomainRequirementService
 from backend.services.finn_v2_request_analysis_service import FinnV2RequestAnalysisService
 from backend.services.finn_v2_tool_plan_service import FinnV2ToolPlanService
@@ -8,6 +9,7 @@ from backend.services.finn_v2_tool_plan_service import FinnV2ToolPlanService
 ANALYSIS = FinnV2RequestAnalysisService()
 DOMAINS = FinnV2DomainRequirementService()
 TOOLS = FinnV2ToolPlanService()
+REGISTRY = FinnV2OperationRegistry()
 
 
 GOLDEN_FAMILIES = [
@@ -28,16 +30,20 @@ GOLDEN_FAMILIES = [
 def test_btc_golden_paraphrases_keep_a_canonical_request_contract(mode, goal, messages, required_scopes):
     for index, message in enumerate(messages):
         analysis = ANALYSIS.analyze(message=message)
+        contract = REGISTRY.require_supported(analysis.request_plan.operation_id)
         assert analysis.interaction_mode == mode
         assert analysis.request_plan is not None
-        assert analysis.request_plan.interaction_mode == mode
+        assert analysis.request_plan.interaction_mode == contract.mode
+        assert analysis.request_plan.operation_contract_version == contract.version
+        assert analysis.request_plan.required_information_scopes == list(contract.required_scopes)
+        assert analysis.request_plan.optional_information_scopes == list(contract.optional_scopes)
         if goal is not None:
             assert analysis.request_plan.user_goal == goal
         for scope in required_scopes:
             assert scope in analysis.request_plan.required_information_scopes
         plan = TOOLS.build(run_id=f"golden-{mode}-{index}", analysis=analysis, domain_plan=DOMAINS.determine(analysis))
         assert plan.request_plan == analysis.request_plan
-        assert all(tool.startswith("read_") for tool in plan.tool_names)
+        assert plan.tool_names == list(contract.tool_names)
 
 
 def test_request_plan_preserves_a_follow_up_reference_without_reusing_unverified_text():

@@ -13,6 +13,8 @@ import uuid
 import pytest
 from sqlalchemy import text
 
+from backend.domain.finn_v2_operation_registry import FinnV2OperationRegistry
+
 
 pytestmark = pytest.mark.skipif(
     os.getenv("FINN_V2_PG_INTEGRATION") != "1",
@@ -82,6 +84,8 @@ async def _run_regression() -> None:
             user_id=conversation["user_id"],
             tool_name="read_profile",
             selector={},
+            operation_id="evaluate_plan",
+            operation_contract_version=FinnV2OperationRegistry.VERSION,
         )
         assert result.error_codes == ["tool_internal_error"]
 
@@ -90,5 +94,20 @@ async def _run_regression() -> None:
             text("SELECT status FROM finn_v2_runs WHERE id = :id"), {"id": run_id}
         )
         assert status == "collecting"
+        operation_metadata = await verification_session.execute(
+            text(
+                """
+                SELECT operation_id, operation_contract_version
+                FROM finn_v2_tool_calls
+                WHERE run_id = :id
+                ORDER BY id DESC
+                LIMIT 1
+                """
+            ),
+            {"id": run_id},
+        )
+        row = operation_metadata.mappings().one()
+        assert row["operation_id"] == "evaluate_plan"
+        assert row["operation_contract_version"] == FinnV2OperationRegistry.VERSION
         await verification_session.execute(text("DELETE FROM finn_v2_runs WHERE id = :id"), {"id": run_id})
         await verification_session.commit()
