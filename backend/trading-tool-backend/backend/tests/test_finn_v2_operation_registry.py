@@ -45,6 +45,19 @@ def test_write_contract_requires_confirmable_proposal():
         )
 
 
+def test_contract_rejects_an_input_that_is_both_required_and_optional():
+    with pytest.raises(ValueError, match="input_overlap"):
+        OperationContract(
+            operation_id="bad_inputs",
+            version="test",
+            domain="test",
+            mode="READ",
+            aliases=(),
+            required_inputs=("asset",),
+            optional_inputs=("asset",),
+        )
+
+
 def test_registry_is_the_complete_mode_scope_and_tool_source_for_new_requests():
     service = FinnV2RequestAnalysisService()
     cases = [

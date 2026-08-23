@@ -7,7 +7,7 @@ services may consume a contract but must not add scopes, tools or write rules.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import FrozenSet, Mapping, Optional
+from typing import Optional
 
 from backend.domain.finn_v2_contract import INFORMATION_SCOPE_ORDER, primary_tool_for_information_scope
 
@@ -27,7 +27,9 @@ class OperationContract:
     domain: str
     mode: str
     aliases: tuple[str, ...]
+    semantic_description: str = ""
     required_inputs: tuple[str, ...] = ()
+    optional_inputs: tuple[str, ...] = ()
     required_scopes: tuple[str, ...] = ()
     optional_scopes: tuple[str, ...] = ()
     model_policy: str = "never"  # never | optional | required
@@ -51,6 +53,8 @@ class OperationContract:
             raise FinnV2OperationContractError(f"invalid_mode:{self.operation_id}:{self.mode}")
         if set(self.required_scopes).intersection(self.optional_scopes):
             raise FinnV2OperationContractError(f"scope_overlap:{self.operation_id}")
+        if set(self.required_inputs).intersection(self.optional_inputs):
+            raise FinnV2OperationContractError(f"input_overlap:{self.operation_id}")
         unknown = set(self.required_scopes + self.optional_scopes).difference(INFORMATION_SCOPE_ORDER)
         if unknown:
             raise FinnV2OperationContractError(f"unknown_scope:{self.operation_id}:{sorted(unknown)}")

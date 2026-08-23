@@ -51,10 +51,6 @@ class FinnV2DomainRequirementService:
                 if domain:
                     optional_domains.append(domain)
                     reasons.append(f"contract_optional:{contract.operation_id}:{scope}->{domain}")
-            if contract.operation_id == "create_setup":
-                reasons.append("setup_creation_uses_optional_existing_plan_context")
-            if contract.operation_id in {"watchlist_add", "watchlist_remove"}:
-                reasons.append("watchlist_action_requires_identity_context")
             return DomainRequirementPlan(
                 required_domains=self._dedupe_domains(required_domains),
                 optional_domains=self._dedupe_domains(optional_domains),
