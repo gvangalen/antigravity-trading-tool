@@ -921,6 +921,7 @@ class FinnV2ReasoningService:
             raise ValueError("invalid_evidence_refs")
         self._validate_integrated_plan_contract(result=result, referenced=referenced, context=context)
         self._validate_configuration_causality(result=result, context=context)
+        self._validate_indicator_configuration_inference(result=result, context=context)
         self._validate_market_causality(result=result, context=context)
 
     @staticmethod
@@ -974,6 +975,67 @@ class FinnV2ReasoningService:
                 missing_scopes=[],
                 path="claims",
                 grounding_values={"supported_bot_mode_facts": sorted(bot_mode_values)},
+            )
+
+    @staticmethod
+    def _validate_indicator_configuration_inference(*, result: ReasoningResult, context) -> None:
+        """Keep configured indicators factual unless the evidence proves a requirement or effect."""
+        indicator_rows = [
+            row
+            for item in context.evidence
+            if item.tool_name == "read_indicator_configuration"
+            for row in (item.facts or {}).get("configured_indicators", [])
+        ]
+        if not indicator_rows:
+            return
+
+        statements = [
+            result.direct_answer or "",
+            result.main_observation or "",
+            *(claim.text for claim in result.claims),
+            *(point.explanation for point in result.supporting_points),
+            result.next_step.instruction if result.next_step is not None else "",
+        ]
+        indicator_terms = {
+            "indicatorconfiguratie",
+            "indicator configuration",
+            "indicatoren",
+            "indicators",
+        }
+        unsupported_inference_terms = {
+            "beperkte indicator",
+            "onvoldoende indicator",
+            "te weinig indicator",
+            "niet genoeg indicator",
+            "insufficient indicator",
+            "limited indicator",
+            "missing indicator",
+            "ontbrekende indicator",
+            "zonder macro",
+            "without macro",
+            "kan leiden tot",
+            "leidt tot",
+            "beperkt",
+            "minder robuust",
+            "less robust",
+        }
+        if any(
+            any(term in statement.lower() for term in indicator_terms)
+            and any(term in statement.lower() for term in unsupported_inference_terms)
+            for statement in statements
+        ):
+            configured_indicators = sorted(
+                {
+                    str((row or {}).get("indicator"))
+                    for row in indicator_rows
+                    if (row or {}).get("indicator")
+                }
+            )
+            raise FinnV2ReasoningContractError(
+                code="unsupported_indicator_configuration_inference",
+                missing_scopes=[],
+                path="claims",
+                grounding_values={"configured_indicators": configured_indicators},
             )
 
     @staticmethod
