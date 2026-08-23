@@ -922,6 +922,7 @@ class FinnV2ReasoningService:
         self._validate_integrated_plan_contract(result=result, referenced=referenced, context=context)
         self._validate_configuration_causality(result=result, context=context)
         self._validate_indicator_configuration_inference(result=result, context=context)
+        self._validate_stored_field_absence(result=result, context=context)
         self._validate_market_causality(result=result, context=context)
 
     @staticmethod
@@ -1048,6 +1049,51 @@ class FinnV2ReasoningService:
                 missing_scopes=[],
                 path="claims",
                 grounding_values={"configured_indicators": configured_indicators},
+            )
+
+    @staticmethod
+    def _validate_stored_field_absence(*, result: ReasoningResult, context) -> None:
+        """Do not let narrative text erase a populated strategy field."""
+        strategy_facts = [
+            item.facts or {}
+            for item in context.evidence
+            if item.tool_name == "read_linked_strategy"
+        ]
+        populated_fields = {
+            field
+            for facts in strategy_facts
+            for field in ("entry", "stop_loss", "targets")
+            if facts.get(field) not in (None, "", [], {})
+        }
+        if not populated_fields:
+            return
+
+        statements = [
+            result.direct_answer or "",
+            result.main_observation or "",
+            *(claim.text for claim in result.claims),
+            *(point.explanation for point in result.supporting_points),
+            result.next_step.instruction if result.next_step is not None else "",
+        ]
+        field_terms = {
+            "entry": {"entry", "instap", "instapniveau"},
+            "stop_loss": {"stop-loss", "stop loss", "stoploss"},
+            "targets": {"target", "targets", "doel", "doelen", "exit-niveau", "exit niveau", "exit levels"},
+        }
+        absence_terms = {"geen", "zonder", "ontbreekt", "ontbreken", "mist", "missing", "absent", "no "}
+        unsupported = {
+            field
+            for statement in statements
+            for field in populated_fields
+            if any(term in statement.lower() for term in field_terms[field])
+            and any(term in statement.lower() for term in absence_terms)
+        }
+        if unsupported:
+            raise FinnV2ReasoningContractError(
+                code="unsupported_stored_field_absence",
+                missing_scopes=[],
+                path="claims",
+                grounding_values={"populated_strategy_fields": sorted(unsupported)},
             )
 
     @staticmethod

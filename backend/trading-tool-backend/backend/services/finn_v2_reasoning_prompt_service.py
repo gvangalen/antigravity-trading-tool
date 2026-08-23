@@ -125,6 +125,15 @@ class FinnV2ReasoningPromptService:
             if any(error.get("code") == "unsupported_configuration_causality" for error in validation_errors or [])
             else ""
         )
+        stored_field_repair_instruction = (
+            "For unsupported_stored_field_absence, retain every supplied strategy field as present. "
+            "Do not call an entry, stop loss, target, or exit level missing, absent, unspecified, or unavailable "
+            "when its saved value is in the grounding context. Use the saved field as a fact or choose a different "
+            "evidence-grounded observation. This prohibition applies to direct_answer, main_observation, claims, "
+            "supporting_points and next_step.\n"
+            if any(error.get("code") == "unsupported_stored_field_absence" for error in validation_errors or [])
+            else ""
+        )
         repair_instruction = (
             "Your previous response did not satisfy the required structured-output contract. "
             "Correct only the listed field paths and error codes, return every required field with valid values, "
@@ -132,7 +141,7 @@ class FinnV2ReasoningPromptService:
             f"Validation errors: {json.dumps(validation_errors or [], ensure_ascii=True, separators=(',', ':'))}\n"
             "For missing_required_scope_refs, cite an evidence reference from every missing scope in "
             "evidence_refs_used and use the supplied grounding values rather than counts, categories, or "
-            f"generic labels. {indicator_repair_instruction}{bot_configuration_repair_instruction}"
+            f"generic labels. {indicator_repair_instruction}{bot_configuration_repair_instruction}{stored_field_repair_instruction}"
             if repair_attempt
             else ""
         )
