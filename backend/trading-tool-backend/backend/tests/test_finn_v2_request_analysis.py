@@ -68,6 +68,17 @@ def test_request_analysis_keeps_natural_integrated_plan_paraphrases_in_evaluate_
         assert result.subject_scopes == ["profile", "indicators", "setup", "strategy", "bot"]
 
 
+def test_request_analysis_routes_complete_asset_plan_to_full_plan_contract():
+    result = SERVICE.analyze(message="Beoordeel mijn volledige BTC-plan en benoem het belangrijkste zwakke punt.")
+
+    assert result.request_plan.operation_id == "evaluate_plan"
+    assert result.interaction_mode == "EVALUATE"
+    assert result.request_plan.required_information_scopes == [
+        "profile", "preferences", "active_asset", "indicator_configuration",
+        "active_setup", "linked_strategy", "linked_bot", "bot_status",
+    ]
+
+
 def test_request_analysis_treats_safe_setup_concepts_as_create_proposals():
     for message in [
         "Maak een veilig concept voor een betere setup bij mijn huidige plan; nog niet opslaan.",
@@ -154,6 +165,19 @@ def test_guided_setup_state_collects_verified_inputs_without_premature_proposal(
     assert second_turn.request_plan.operation_id == "create_setup"
     assert second_turn.request_plan.operation_state["missing_required_inputs"] == []
     assert second_turn.request_plan.operation_state["collected_inputs"]["name"] == "BTC swing daily-4H"
+
+
+def test_explicit_watchlist_operation_does_not_resume_pending_setup_state():
+    setup_turn = SERVICE.analyze(message="Help me een nieuwe BTC-setup als concept te maken.")
+
+    watchlist_turn = SERVICE.analyze(
+        message="Voeg XRP toe aan mijn watchlist.",
+        conversation_context={"operation_state": setup_turn.request_plan.operation_state},
+    )
+
+    assert watchlist_turn.request_plan.operation_id == "watchlist_add"
+    assert watchlist_turn.interaction_mode == "ACTION_PROPOSAL"
+    assert watchlist_turn.request_plan.operation_state["collected_inputs"]["asset"] == "XRP"
 
 
 def test_guided_operation_state_retains_verified_context_without_reasking_fields():

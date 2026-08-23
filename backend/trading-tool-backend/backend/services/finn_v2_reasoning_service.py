@@ -257,19 +257,25 @@ class FinnV2ReasoningService:
                 retry_count=0,
             )
 
-        if contract is not None and contract.model_policy == "never":
-            result = self.fallbacks.grounded_read_draft(
+        request_plan_payload = getattr(context, "request_plan", None) or {}
+        operation_state = dict(request_plan_payload.get("operation_state") or {})
+        missing_required_inputs = list(operation_state.get("missing_required_inputs") or [])
+        deterministic_proposal = contract is not None and contract.response_strategy == "proposal_draft" and bool(missing_required_inputs)
+        if contract is not None and (contract.model_policy == "never" or deterministic_proposal):
+            result = self._deterministic_contract_draft(
+                contract=contract,
                 run_id=run_id,
                 user_id=user_id,
                 context=context,
                 model=model_name,
-                error_codes=[],
             )
             result.reasoning_provenance = {
                 "provider_called": False,
                 "reasoning_source": "deterministic_contract",
                 "operation_id": contract.operation_id,
                 "model_policy": contract.model_policy,
+                "response_strategy": contract.response_strategy,
+                "missing_required_inputs": missing_required_inputs,
                 "validation_status": "passed",
             }
             await self._append_trace(run_id, user_id, trace_id, "reasoning_deterministic_contract", context, model_name, "ready", 0, 0, input_hash, [])
@@ -373,6 +379,24 @@ class FinnV2ReasoningService:
             context=context,
             model_name=model_name,
             input_hash=input_hash,
+        )
+
+    def _deterministic_contract_draft(self, *, contract, run_id: str, user_id: int, context, model: str) -> ReasoningResult:
+        """Use the contract response strategy without consulting the provider."""
+        if contract.response_strategy == "proposal_draft":
+            return self.fallbacks.grounded_proposal_draft(
+                run_id=run_id,
+                user_id=user_id,
+                context=context,
+                model=model,
+                error_codes=[],
+            )
+        return self.fallbacks.grounded_read_draft(
+            run_id=run_id,
+            user_id=user_id,
+            context=context,
+            model=model,
+            error_codes=[],
         )
 
     async def _run_model_reasoning(self, *, run_id: str, user_id: int, trace_id: str, orchestrator_result, policy, snapshot, validation, context, model_name: str, input_hash: str):

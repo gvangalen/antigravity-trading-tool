@@ -7,6 +7,7 @@ from backend.domain.finn_v2_operation_registry import FinnV2OperationRegistry, F
 from backend.schemas.finn_v2_orchestrator_schema import RequestAnalysisResult, RequestPlan
 from backend.services.finn_v2_capability_registry_service import FinnV2CapabilityRegistryService
 from backend.services.finn_v2_operation_state_service import FinnV2OperationStateService
+from backend.services.asset_catalog_service import DEFAULT_ASSET_CATALOG
 
 
 class FinnV2RequestAnalysisService:
@@ -136,9 +137,13 @@ class FinnV2RequestAnalysisService:
         if uses_conversation_reference and "conversation_reference_without_verified_context" in unresolved_signals:
             operation_id = "clarify_request"
         pending_operation_id = self.operation_state.pending_operation_id(conversation_context or {})
+        # A pending guided operation owns bare follow-up values such as a setup
+        # name, but it must never hijack a later explicit product operation.
+        # This keeps one conversation useful without turning a watchlist request
+        # into a continuation of an unfinished setup proposal.
         if (
             pending_operation_id
-            and interaction_mode not in {"CAPABILITY", "CONFIRMATION", "EXECUTION"}
+            and operation_id in {"clarify_request", "unavailable"}
             and "mode:unavailable_financial_context" not in matched_signals
         ):
             operation_id = pending_operation_id
@@ -455,7 +460,11 @@ class FinnV2RequestAnalysisService:
                 "welke voorwaarde ontbreekt",
             ]
         )
-        plan_reference = any(phrase in normalized for phrase in ["mijn plan", "dat plan"])
+        # Natural references include compounds such as "BTC-plan" and phrases
+        # like "mijn volledige plan". Tokenizing punctuation prevents the
+        # strategy keyword "plan" from narrowing these requests to one domain.
+        plan_tokens = set(re.findall(r"[a-z0-9]+", normalized))
+        plan_reference = "plan" in plan_tokens or any(phrase in normalized for phrase in ["mijn plan", "dat plan"])
         evaluation_language = any(
             phrase in normalized
             for phrase in ["beoordeel", "bekijk", "ontbreekt", "risico", "vertrouwen", "verbeter", "betekent"]
@@ -469,7 +478,10 @@ class FinnV2RequestAnalysisService:
         explicit_candidates = re.findall(r"\b[A-Z]{2,6}\b", original)
         for candidate in explicit_candidates:
             normalized_candidate = candidate.strip().upper()
-            if normalized_candidate in self._ASSET_ALIASES.values():
+            # The catalog is the product authority for supported symbols. This
+            # avoids maintaining a smaller FINN-only alias list that can reject
+            # a valid, confirmable watchlist target such as XRP.
+            if normalized_candidate in DEFAULT_ASSET_CATALOG:
                 return normalized_candidate
         return None
 
