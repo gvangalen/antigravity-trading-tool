@@ -32,6 +32,7 @@ class OperationContract:
     optional_inputs: tuple[str, ...] = ()
     required_scopes: tuple[str, ...] = ()
     optional_scopes: tuple[str, ...] = ()
+    scope_tool_bindings: tuple[tuple[str, str], ...] = ()
     model_policy: str = "never"  # never | optional | required
     response_strategy: str = "deterministic_structured_summary"
     policy_class: str = "read"
@@ -46,6 +47,18 @@ class OperationContract:
     capability_gap: Optional[str] = None
 
     def __post_init__(self) -> None:
+        # Bindings are materialized on the immutable contract so downstream
+        # services consume one resolved scope-to-tool map, never a local mode map.
+        if not self.scope_tool_bindings:
+            object.__setattr__(
+                self,
+                "scope_tool_bindings",
+                tuple(
+                    (scope, primary_tool_for_information_scope(scope))
+                    for scope in self.required_scopes
+                    if scope != "capability"
+                ),
+            )
         if self.mode not in {
             "CAPABILITY", "READ", "EVALUATE", "CREATE_PROPOSAL", "ACTION_PROPOSAL",
             "CLARIFICATION", "CONFIRMATION", "EXECUTION", "UNAVAILABLE",
@@ -65,14 +78,16 @@ class OperationContract:
             raise FinnV2OperationContractError(f"write_contract_incomplete:{self.operation_id}")
         if self.execution_adapter and not self.idempotency_rule:
             raise FinnV2OperationContractError(f"adapter_without_idempotency:{self.operation_id}")
+        bindings = dict(self.scope_tool_bindings)
+        if len(bindings) != len(self.scope_tool_bindings):
+            raise FinnV2OperationContractError(f"duplicate_scope_binding:{self.operation_id}")
+        missing_bindings = set(self.required_scopes).difference({"capability"}, bindings)
+        if missing_bindings:
+            raise FinnV2OperationContractError(f"missing_scope_binding:{self.operation_id}:{sorted(missing_bindings)}")
 
     @property
     def tool_names(self) -> tuple[str, ...]:
-        return tuple(
-            primary_tool_for_information_scope(scope)
-            for scope in self.required_scopes
-            if scope != "capability"
-        )
+        return tuple(tool for scope, tool in self.scope_tool_bindings if scope in self.required_scopes)
 
 
 class FinnV2OperationRegistry:
