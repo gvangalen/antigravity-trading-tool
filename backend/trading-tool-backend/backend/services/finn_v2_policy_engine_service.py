@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.infrastructure.repositories.finn_v2_policy_repository import FinnV2PolicyRepository
 from backend.domain.finn_v2_contract import normalize_interaction_mode
+from backend.domain.finn_v2_operation_registry import FinnV2OperationRegistry
 from backend.schemas.finn_v2_domain_validation_schema import EvidenceValidationResult
 from backend.schemas.finn_v2_orchestrator_schema import OrchestratorResult
 from backend.schemas.finn_v2_policy_schema import FinnV2PolicyDecision, POLICY_VERSION
@@ -37,6 +38,7 @@ class FinnV2PolicyEngineService:
         self.flags = flag_service or FinnV2FlagService()
         self.decisions = FinnV2PolicyRepository(session)
         self.risk = FinnV2RiskClassificationService()
+        self.operations = FinnV2OperationRegistry()
 
     async def evaluate_run(
         self,
@@ -51,7 +53,13 @@ class FinnV2PolicyEngineService:
         if orchestrator_result.user_id != user_id or snapshot.user_id != user_id or validation.user_id != user_id:
             raise LookupError("proposal_not_owned")
 
-        mode = normalize_interaction_mode(orchestrator_result.analysis.interaction_mode)
+        request_plan = getattr(orchestrator_result.analysis, "request_plan", None)
+        contract = None
+        if request_plan is not None and request_plan.operation_id:
+            candidate = self.operations.require_supported(request_plan.operation_id)
+            if candidate.mode == normalize_interaction_mode(orchestrator_result.analysis.interaction_mode):
+                contract = candidate
+        mode = contract.mode if contract is not None else normalize_interaction_mode(orchestrator_result.analysis.interaction_mode)
         domain_statuses = {domain.domain: domain.status for domain in validation.domains}
         reasons: list[str] = []
         warnings: list[str] = []
@@ -64,55 +72,68 @@ class FinnV2PolicyEngineService:
         proposal_input_required = False
         operation_type = None
         required_domains = list(orchestrator_result.domain_requirements.required_domains)
+        if contract is not None:
+            # Domain requirements were already derived by the registry-backed
+            # planner. Policy consumes that result and never adds scopes.
+            policy_class = contract.policy_class
+            operation_type = (
+                contract.execution_adapter or contract.operation_id
+                if contract.mode in {"CREATE_PROPOSAL", "ACTION_PROPOSAL", "CONFIRMATION", "EXECUTION"}
+                else None
+            )
+            proposal_allowed = contract.proposal_type is not None
+            confirmation_required = contract.confirmation_required
+            proposal_input_required = contract.proposal_type is not None
 
         if mode == "READ":
-            policy_class = "read"
+            policy_class = contract.policy_class if contract is not None else "read"
             allowed = orchestrator_result.outcome == "reasoning_ready"
             if not allowed:
                 blocks.append("orchestrator_not_ready")
         elif mode == "CAPABILITY":
-            policy_class = "read"
+            policy_class = contract.policy_class if contract is not None else "read"
             allowed = orchestrator_result.outcome == "reasoning_ready"
             if not allowed:
                 blocks.append("orchestrator_not_ready")
             reasons.append("capability_registry_read_only")
         elif mode == "EVALUATE":
-            policy_class = "advice"
+            policy_class = contract.policy_class if contract is not None else "advice"
             allowed = orchestrator_result.outcome == "reasoning_ready"
             if not allowed:
                 blocks.append("orchestrator_not_ready")
         elif mode == "UNAVAILABLE":
-            policy_class = "read"
+            policy_class = contract.policy_class if contract is not None else "read"
             allowed = orchestrator_result.outcome == "unavailable"
             if not allowed:
                 blocks.append("orchestrator_not_ready")
             reasons.append("deterministic_unavailable_delivery")
         elif mode == "CLARIFICATION":
-            policy_class = "read"
+            policy_class = contract.policy_class if contract is not None else "read"
             allowed = orchestrator_result.outcome == "clarification_required"
             if not allowed:
                 blocks.append("orchestrator_not_ready")
             reasons.append("deterministic_clarification_delivery")
         elif mode == "CREATE_PROPOSAL":
-            policy_class = "proposal"
-            operation_type = self.risk.classify_requested_operation(message="", requested_operation=requested_operation)
-            proposal_allowed = True
-            confirmation_required = True
-            proposal_input_required = True
-            if operation_type and operation_type in self._ACTION_MATRIX:
+            policy_class = contract.policy_class if contract is not None else "proposal"
+            operation_type = operation_type or self.risk.classify_requested_operation(message="", requested_operation=requested_operation)
+            proposal_allowed = contract.proposal_type is not None if contract is not None else True
+            confirmation_required = contract.confirmation_required if contract is not None else True
+            proposal_input_required = contract.proposal_type is not None if contract is not None else True
+            if contract is None and operation_type and operation_type in self._ACTION_MATRIX:
                 policy_class, required_domains = self._ACTION_MATRIX[operation_type]
             allowed = self._domains_satisfy(required_domains, domain_statuses, blocks)
         elif mode in {"ACTION_PROPOSAL", "CONFIRMATION", "EXECUTION"}:
-            operation_type = self.risk.classify_requested_operation(message="", requested_operation=requested_operation)
-            if operation_type is None or operation_type not in self._ACTION_MATRIX:
+            operation_type = operation_type or self.risk.classify_requested_operation(message="", requested_operation=requested_operation)
+            if contract is None and (operation_type is None or operation_type not in self._ACTION_MATRIX):
                 policy_class = "unsupported_action"
                 blocks.append("action_target_unresolved")
                 blocks.append("operation_unsupported")
             else:
-                policy_class, required_domains = self._ACTION_MATRIX[operation_type]
-                proposal_allowed = True
-                confirmation_required = True
-                proposal_input_required = True
+                if contract is None:
+                    policy_class, required_domains = self._ACTION_MATRIX[operation_type]
+                    proposal_allowed = True
+                    confirmation_required = True
+                    proposal_input_required = True
                 step_up_required = operation_type == "activate_live_bot" and self.flags.require_step_up_for_live()
                 allowed = self._domains_satisfy(required_domains, domain_statuses, blocks)
                 self._apply_action_specific_rules(

@@ -18,6 +18,7 @@ from backend.infrastructure.repositories.finn_v2_state_repository import FinnV2S
 from backend.infrastructure.repositories.finn_v2_trace_repository import FinnV2TraceRepository
 from backend.infrastructure.repositories.finn_v2_validation_repository import FinnV2ValidationRepository
 from backend.domain.finn_v2_contract import normalize_interaction_mode
+from backend.domain.finn_v2_operation_registry import FinnV2OperationRegistry
 from backend.schemas.finn_v2_orchestrator_schema import ORCHESTRATOR_VERSION, OrchestratorResult
 from backend.schemas.finn_v2_policy_schema import POLICY_VERSION, FinnV2PolicyDecision
 from backend.schemas.finn_v2_reasoning_context_schema import REASONING_CONTEXT_VERSION
@@ -81,6 +82,7 @@ class FinnV2ReasoningService:
         self.capabilities = FinnV2CapabilityRegistryService()
         self.prompts = FinnV2ReasoningPromptService()
         self.fallbacks = FinnV2ReasoningFallbackService()
+        self.operations = FinnV2OperationRegistry()
 
     async def reason(self, *, user_id: int, run_id: str, trace_id: str):
         run = await self.runs.get_by_id_for_user(run_id=run_id, user_id=user_id)
@@ -191,6 +193,8 @@ class FinnV2ReasoningService:
         context = await self.contexts.build(run=run, orchestrator_result=orchestrator_result, snapshot=snapshot, validation=validation, policy=policy)
         model_name = self._resolved_model()
         input_hash = self.contexts.input_hash(context, prompt_version=self.prompts.PROMPT_VERSION, model=model_name)
+        request_plan = orchestrator_result.analysis.request_plan
+        contract = self.operations.require_supported(request_plan.operation_id) if request_plan and request_plan.operation_id else None
 
         if (
             normalize_interaction_mode(context.interaction_mode) in {"ACTION_PROPOSAL", "EXECUTION"}
@@ -235,6 +239,40 @@ class FinnV2ReasoningService:
                 profile_completed=not bool(getattr(run, "client_context_json", {}).get("trader_profile_used") is False),
             )
             await self._append_trace(run_id, user_id, trace_id, "reasoning_capability_registry", context, model_name, "ready", 0, 0, input_hash, [])
+            return await self._persist_record(
+                run_id=run_id,
+                user_id=user_id,
+                orchestrator_result_id=orchestrator_result.orchestrator_result_id,
+                policy_decision_id=policy.policy_decision_id,
+                snapshot_id=snapshot.id,
+                validation_id=validation.id,
+                status="ready",
+                mode=result.mode,
+                context_version=context.context_version,
+                evidence_set_hash=context.evidence_set_hash,
+                input_hash=input_hash,
+                model=model_name,
+                result=result,
+                error_codes=[],
+                retry_count=0,
+            )
+
+        if contract is not None and contract.model_policy == "never":
+            result = self.fallbacks.grounded_read_draft(
+                run_id=run_id,
+                user_id=user_id,
+                context=context,
+                model=model_name,
+                error_codes=[],
+            )
+            result.reasoning_provenance = {
+                "provider_called": False,
+                "reasoning_source": "deterministic_contract",
+                "operation_id": contract.operation_id,
+                "model_policy": contract.model_policy,
+                "validation_status": "passed",
+            }
+            await self._append_trace(run_id, user_id, trace_id, "reasoning_deterministic_contract", context, model_name, "ready", 0, 0, input_hash, [])
             return await self._persist_record(
                 run_id=run_id,
                 user_id=user_id,
@@ -986,19 +1024,35 @@ class FinnV2ReasoningService:
 
     @classmethod
     def _validate_integrated_plan_contract(cls, *, result: ReasoningResult, referenced: set[str], context) -> None:
-        required_scopes = {"profile", "indicators", "setup", "strategy", "bot"}
-        if context.interaction_mode != "EVALUATE" or not required_scopes.issubset(set(context.subject_scopes)):
+        request_plan = context.request_plan or {}
+        required_scopes = set(request_plan.get("required_information_scopes") or [])
+        legacy_scope_names = not bool(required_scopes)
+        if not required_scopes:
+            # Historical contexts created before the registry did not persist a
+            # RequestPlan. Preserve their validation semantics without using
+            # this branch for new runs.
+            required_scopes = {"profile", "indicators", "setup", "strategy", "bot"}
+        if context.interaction_mode != "EVALUATE":
             return
         scope_tools = {
-            "profile": {"read_profile", "read_user_preferences"},
-            "indicators": {"read_indicator_configuration"},
-            "setup": {"read_active_setup"},
-            "strategy": {"read_linked_strategy"},
-            "bot": {"read_linked_bot", "read_bot_status"},
+            "profile": {"read_profile"}, "preferences": {"read_user_preferences"},
+            "active_asset": {"read_active_asset"}, "indicator_configuration": {"read_indicator_configuration"},
+            "market_snapshot": {"read_market_snapshot"}, "watchlist": {"read_watchlist"},
+            "active_setup": {"read_active_setup"}, "linked_strategy": {"read_linked_strategy"},
+            "linked_bot": {"read_linked_bot"}, "bot_status": {"read_bot_status"},
         }
+        if legacy_scope_names:
+            scope_tools = {
+                "profile": {"read_profile", "read_user_preferences"},
+                "indicators": {"read_indicator_configuration"},
+                "setup": {"read_active_setup"},
+                "strategy": {"read_linked_strategy"},
+                "bot": {"read_linked_bot", "read_bot_status"},
+            }
         missing_scopes = [
             scope
-            for scope, tools in scope_tools.items()
+            for scope in required_scopes
+            for tools in [scope_tools.get(scope, set())]
             if not any(item.evidence_id in referenced and item.tool_name in tools for item in context.evidence)
         ]
         if missing_scopes:
