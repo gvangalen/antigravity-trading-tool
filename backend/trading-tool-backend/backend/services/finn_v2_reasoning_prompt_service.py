@@ -102,6 +102,7 @@ class FinnV2ReasoningPromptService:
         *,
         repair_attempt: bool = False,
         validation_errors: list[dict[str, object]] | None = None,
+        previous_response: dict[str, object] | None = None,
     ) -> str:
         context_json = json.dumps(context.dict(), default=str, ensure_ascii=True, separators=(",", ":"))
         indicator_repair_instruction = (
@@ -116,7 +117,9 @@ class FinnV2ReasoningPromptService:
             else ""
         )
         bot_configuration_repair_instruction = (
-            "For unsupported_configuration_causality, keep bot mode and status strictly factual. "
+            "For unsupported_configuration_causality, the following saved bot configuration facts are canonical: "
+            f"{json.dumps(self._repair_grounding_values(validation_errors, 'unsupported_configuration_causality'), ensure_ascii=True, separators=(',', ':'))}. "
+            "Keep bot mode and status strictly factual. "
             "A manual mode or a stale status may be named only as the stored value; it does not prove that "
             "the bot is broken, ineffective, outdated, inactive, limiting, or unsuitable. Do not infer missed "
             "opportunities or strategy conflict from those values. If the status needs attention, make the one "
@@ -144,7 +147,8 @@ class FinnV2ReasoningPromptService:
             f"Validation errors: {json.dumps(validation_errors or [], ensure_ascii=True, separators=(',', ':'))}\n"
             "For missing_required_scope_refs, cite an evidence reference from every missing scope in "
             "evidence_refs_used and use the supplied grounding values rather than counts, categories, or "
-            f"generic labels. {indicator_repair_instruction}{bot_configuration_repair_instruction}{stored_field_repair_instruction}"
+            f"generic labels. Previous rejected structured response: {json.dumps(previous_response or {}, ensure_ascii=True, separators=(',', ':'))}. "
+            f"Do not repeat the rejected claim. {indicator_repair_instruction}{bot_configuration_repair_instruction}{stored_field_repair_instruction}"
             if repair_attempt
             else ""
         )

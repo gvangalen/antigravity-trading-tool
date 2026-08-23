@@ -405,6 +405,8 @@ def test_model_repairs_unsupported_populated_strategy_field_absence(monkeypatch)
     assert "stop loss" in prompts[1]
     assert '"stop_loss":"92"' in prompts[1]
     assert '"targets":["112","125"]' in prompts[1]
+    assert "Previous rejected structured response" in prompts[1]
+    assert "targets ontbreken" in prompts[1]
 
 
 def test_model_repairs_unsupported_indicator_configuration_inference(monkeypatch):

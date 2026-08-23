@@ -421,7 +421,8 @@ class FinnV2ReasoningService:
             )
         retries_allowed = self.flags.reasoning_max_retries()
         last_error_codes: list[str] = []
-        repair_validation_errors: list[dict[str, str]] = []
+        repair_validation_errors: list[dict[str, object]] = []
+        repair_previous_response: dict[str, object] | None = None
         for attempt in range(retries_allowed + 1):
             await self._append_trace(run_id, user_id, trace_id, "reasoning_started", context, model_name, "generating", None, attempt, input_hash, [])
             # Do not hold the transaction that contains tool/evidence state while
@@ -434,6 +435,7 @@ class FinnV2ReasoningService:
                     context,
                     repair_attempt=attempt > 0,
                     validation_errors=repair_validation_errors,
+                    previous_response=repair_previous_response,
                 ),
                 system_role=system_prompt,
                 schema=self.prompts.response_schema(),
@@ -595,8 +597,12 @@ class FinnV2ReasoningService:
                             "grounding_values": exc.grounding_values,
                         }
                     ]
+                    # Semantic contract repairs need to see the rejected claim so
+                    # they can replace it. Generic schema repairs stay sanitized.
+                    repair_previous_response = response.get("parsed")
                 else:
                     repair_validation_errors = self._validation_error_details(exc)
+                    repair_previous_response = None
                 error_details = self._reasoning_provenance(
                     response=response,
                     model=response.get("model") or model_name,
