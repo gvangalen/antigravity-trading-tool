@@ -1042,6 +1042,11 @@ class FinnV2ReasoningService:
             "linked_bot": {"read_linked_bot"}, "bot_status": {"read_bot_status"},
         }
         if legacy_scope_names:
+            # Historical planless contexts only had a subject list. Preserve
+            # their former integrated-plan guard instead of applying new
+            # contract scopes to every isolated evaluation.
+            if not required_scopes.issubset(set(context.subject_scopes)):
+                return
             scope_tools = {
                 "profile": {"read_profile", "read_user_preferences"},
                 "indicators": {"read_indicator_configuration"},

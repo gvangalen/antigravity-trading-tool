@@ -5,6 +5,7 @@ from backend.domain.finn_v2_operation_registry import (
     FinnV2OperationUnavailableError,
     OperationContract,
 )
+from backend.services.finn_v2_request_analysis_service import FinnV2RequestAnalysisService
 
 
 def test_registry_manifest_has_one_valid_contract_per_operation():
@@ -42,3 +43,38 @@ def test_write_contract_requires_confirmable_proposal():
             mode="CREATE_PROPOSAL",
             aliases=(),
         )
+
+
+def test_registry_is_the_complete_mode_scope_and_tool_source_for_new_requests():
+    service = FinnV2RequestAnalysisService()
+    cases = [
+        ("Hoi FINN, wat kun je voor mij doen?", "capability"),
+        ("Welke setup staat voor BTC actief?", "read_active_setup"),
+        ("Welke indicatoren staan voor BTC ingesteld?", "read_indicator_configuration"),
+        ("Bekijk mijn profiel, indicatoren, setup, strategie en bot. Wat ontbreekt?", "evaluate_plan"),
+        ("Maak een setup voor BTC swing trading.", "create_setup"),
+        ("Voeg ETH toe aan mijn watchlist.", "watchlist_add"),
+    ]
+    registry = FinnV2OperationRegistry()
+
+    for message, operation_id in cases:
+        analysis = service.analyze(message=message)
+        contract = registry.require_supported(operation_id)
+
+        assert analysis.request_plan.operation_id == contract.operation_id
+        assert analysis.interaction_mode == contract.mode
+        assert analysis.request_plan.required_information_scopes == list(contract.required_scopes)
+        assert analysis.request_plan.optional_information_scopes == list(contract.optional_scopes)
+
+
+def test_all_deterministic_read_contracts_are_explicitly_provider_free():
+    registry = FinnV2OperationRegistry()
+
+    deterministic_reads = [
+        contract
+        for contract in registry.list()
+        if contract.supported and contract.mode in {"CAPABILITY", "READ", "UNAVAILABLE", "CLARIFICATION"}
+    ]
+
+    assert deterministic_reads
+    assert all(contract.model_policy == "never" for contract in deterministic_reads)

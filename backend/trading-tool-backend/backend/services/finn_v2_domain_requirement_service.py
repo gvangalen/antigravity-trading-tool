@@ -35,6 +35,12 @@ class FinnV2DomainRequirementService:
         request_plan = analysis.request_plan
         if request_plan is not None and request_plan.operation_id:
             contract = self.operations.require_supported(request_plan.operation_id)
+            if contract.operation_id == "unavailable":
+                return DomainRequirementPlan(
+                    required_domains=[],
+                    optional_domains=[],
+                    requirement_reason=["deterministic_unavailable_without_provider_call"],
+                )
             for scope in contract.required_scopes:
                 domain = self._SCOPE_DOMAINS.get(scope)
                 if domain:

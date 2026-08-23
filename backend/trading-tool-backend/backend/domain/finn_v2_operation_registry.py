@@ -120,7 +120,7 @@ _CONTRACTS: tuple[OperationContract, ...] = (
     OperationContract("capability", FinnV2OperationRegistry.VERSION, "system", "CAPABILITY", ("wat kun je", "what can you", "capabilities"), required_scopes=("capability",), response_strategy="deterministic_template"),
     OperationContract("clarify_request", FinnV2OperationRegistry.VERSION, "system", "CLARIFICATION", (), response_strategy="clarification"),
     OperationContract("unavailable", FinnV2OperationRegistry.VERSION, "system", "UNAVAILABLE", (), response_strategy="unavailable"),
-    OperationContract("explain_previous_evidence", FinnV2OperationRegistry.VERSION, "system", "EVALUATE", ("onderbouw", "evidence", "waarom"), required_scopes=("active_asset",), model_policy="required", response_strategy="model_reasoning"),
+    OperationContract("explain_previous_evidence", FinnV2OperationRegistry.VERSION, "system", "EVALUATE", ("onderbouw", "evidence", "waarom"), required_scopes=("profile", "preferences", "active_asset", "indicator_configuration", "active_setup", "linked_strategy", "linked_bot", "bot_status"), model_policy="required", response_strategy="model_reasoning"),
     OperationContract("reformulate_previous_response", FinnV2OperationRegistry.VERSION, "system", "READ", ("korter", "anders formuleren", "reformuleer"), response_strategy="deterministic_structured_summary"),
     _read("read_active_asset", "asset", ("active_asset",), ("actieve asset", "welke asset")),
     _gap("select_asset", "asset", "ACTION_PROPOSAL", ("selecteer asset",), "select_asset_execution_adapter_missing"),

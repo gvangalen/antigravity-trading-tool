@@ -133,6 +133,8 @@ class FinnV2RequestAnalysisService:
             integrated_plan=integrated_plan,
             uses_conversation_reference=uses_conversation_reference,
         )
+        if uses_conversation_reference and "conversation_reference_without_verified_context" in unresolved_signals:
+            operation_id = "clarify_request"
         pending_operation_id = self.operation_state.pending_operation_id(conversation_context or {})
         if (
             pending_operation_id
