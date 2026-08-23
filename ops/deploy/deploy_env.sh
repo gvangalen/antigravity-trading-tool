@@ -206,7 +206,7 @@ if ! ssh "${SSH_ARGS[@]}" "ubuntu@$SERVER_IP" "
   run_migration backend/scripts/migrations/2026_08_23_finn_v2_conversation_context.py
   echo \"🩺 Checking FINN V2 schema contract before process startup...\"
   timeout --foreground "\${MIGRATION_COMMAND_TIMEOUT_SECONDS}s" \
-    python3 backend/scripts/check_finn_v2_schema.py
+    python3 -m backend.scripts.check_finn_v2_schema
 
   cd ../../frontend/trading-tool-frontend
   rm -rf .next
