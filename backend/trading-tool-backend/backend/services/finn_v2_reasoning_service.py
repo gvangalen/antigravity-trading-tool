@@ -883,6 +883,7 @@ class FinnV2ReasoningService:
             raise ValueError("invalid_evidence_refs")
         self._validate_integrated_plan_contract(result=result, referenced=referenced, context=context)
         self._validate_configuration_causality(result=result, context=context)
+        self._validate_market_causality(result=result, context=context)
 
     @staticmethod
     def _validate_configuration_causality(*, result: ReasoningResult, context) -> None:
@@ -931,6 +932,52 @@ class FinnV2ReasoningService:
                 missing_scopes=[],
                 path="claims",
                 grounding_values={"supported_bot_mode_facts": sorted(bot_mode_values)},
+            )
+
+    @staticmethod
+    def _validate_market_causality(*, result: ReasoningResult, context) -> None:
+        """Require market measurements before judging a plan against current conditions."""
+        text = " ".join(
+            [
+                result.direct_answer or "",
+                result.main_observation or "",
+                *(claim.text for claim in result.claims),
+                *(point.explanation for point in result.supporting_points),
+                result.next_step.instruction if result.next_step is not None else "",
+            ]
+        ).lower()
+        market_condition_terms = {
+            "huidige marktomstandigheden",
+            "current market conditions",
+            "marktvolatiliteit",
+            "market volatility",
+            "volatiliteit in de crypto",
+            "given the volatility",
+        }
+        if not any(term in text for term in market_condition_terms):
+            return
+
+        measurement_keys = {
+            "price",
+            "current_price",
+            "last_price",
+            "close",
+            "atr",
+            "volatility",
+            "volatiliteit",
+            "change_24h",
+            "market_regime",
+        }
+        has_market_measurement = any(
+            any(key in (item.facts or {}) for key in measurement_keys)
+            for item in context.evidence
+        )
+        if not has_market_measurement:
+            raise FinnV2ReasoningContractError(
+                code="unsupported_market_causality",
+                missing_scopes=["market_measurement"],
+                path="claims",
+                grounding_values={"required_market_measurement_keys": sorted(measurement_keys)},
             )
 
     @classmethod
