@@ -6,5 +6,8 @@ def test_finn_v2_conversation_context_migration_is_idempotent_and_reversible():
     source = migration.read_text()
 
     assert "ADD COLUMN IF NOT EXISTS context_json JSONB" in source
+    assert "SET context_json = '{}'::jsonb" in source
+    assert "ALTER COLUMN context_json SET DEFAULT '{}'::jsonb" in source
+    assert "ALTER COLUMN context_json SET NOT NULL" in source
     assert "DROP COLUMN IF EXISTS context_json" in source
     assert "ROLLBACK_SQL" in source

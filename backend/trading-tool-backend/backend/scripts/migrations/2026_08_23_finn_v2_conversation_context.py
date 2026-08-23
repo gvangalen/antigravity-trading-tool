@@ -2,7 +2,17 @@
 
 SQL = """
 ALTER TABLE finn_v2_conversations
-ADD COLUMN IF NOT EXISTS context_json JSONB NOT NULL DEFAULT '{}'::jsonb;
+ADD COLUMN IF NOT EXISTS context_json JSONB;
+
+UPDATE finn_v2_conversations
+SET context_json = '{}'::jsonb
+WHERE context_json IS NULL;
+
+ALTER TABLE finn_v2_conversations
+ALTER COLUMN context_json SET DEFAULT '{}'::jsonb;
+
+ALTER TABLE finn_v2_conversations
+ALTER COLUMN context_json SET NOT NULL;
 """
 
 

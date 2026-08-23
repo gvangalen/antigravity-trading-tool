@@ -45,6 +45,11 @@ def test_deploy_env_supports_backend_only_auto_rollback_and_previous_markers():
     assert 'timeout --foreground \\"\\${MIGRATION_COMMAND_TIMEOUT_SECONDS}s\\"' in source
     assert "2026_08_20_finn_v2_canonical_modes.py" in source
     assert source.index("2026_08_18_finn_v2_typed_operation_modes.py") < source.index("2026_08_20_finn_v2_canonical_modes.py")
+    assert "2026_08_23_finn_v2_conversation_context.py" in source
+    assert "python3 backend/scripts/check_finn_v2_schema.py" in source
+    assert source.index("2026_08_22_finn_v2_remove_legacy_fact_mode.py") < source.index("2026_08_23_finn_v2_conversation_context.py")
+    assert source.index("2026_08_23_finn_v2_conversation_context.py") < source.index("python3 backend/scripts/check_finn_v2_schema.py")
+    assert source.index("python3 backend/scripts/check_finn_v2_schema.py") < source.index("pm2_start_app()")
 
 
 def test_auto_deploy_serializes_production_and_retries_once_after_a_failed_attempt():
