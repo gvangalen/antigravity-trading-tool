@@ -277,7 +277,7 @@ def test_model_repairs_unsupported_stale_bot_status_causality(monkeypatch):
     persisted = {}
     prompts = []
     unsupported = _model_output()
-    unsupported["direct_answer"] = "De stale botstatus ondermijnt de effectiviteit van je plan."
+    unsupported["direct_answer"] = "De stale botstatus kan de prestaties en reactietijd van je plan beïnvloeden."
     unsupported["main_observation"] = "De bot staat in handmatige modus met een stale status."
     unsupported["claims"][0]["text"] = "De stale status kan de trading-prestaties beperken."
     repaired = _model_output()
@@ -328,6 +328,7 @@ def test_model_repairs_unsupported_stale_bot_status_causality(monkeypatch):
     assert persisted["result"].reasoning_provenance["reasoning_source"] == "model_repair"
     assert "unsupported_configuration_causality" in prompts[1]
     assert "stale status" in prompts[1]
+    assert "reactietijd" in prompts[1]
 
 
 def test_model_repairs_unsupported_populated_strategy_field_absence(monkeypatch):
