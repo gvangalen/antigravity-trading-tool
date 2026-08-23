@@ -156,6 +156,26 @@ def test_guided_setup_state_collects_verified_inputs_without_premature_proposal(
     assert second_turn.request_plan.operation_state["collected_inputs"]["name"] == "BTC swing daily-4H"
 
 
+def test_guided_operation_state_retains_verified_context_without_reasking_fields():
+    analysis = SERVICE.analyze(
+        message="Maak een setup voor BTC swing trading.",
+        conversation_context={
+            "resolved_asset": "BTC",
+            "resolved_setup_id": 309,
+            "resolved_strategy_id": 325,
+            "resolved_bot_id": 186,
+            "last_verified_conclusion": "De bestaande BTC-setup gebruikt 4H voor entries.",
+            "last_evidence_refs": ["artifact-asset", "artifact-setup"],
+        },
+    )
+
+    state = analysis.request_plan.operation_state
+    assert state["resolved_entities"] == {"asset": "BTC", "setup_id": 309, "strategy_id": 325, "bot_id": 186}
+    assert state["previous_verified_conclusion"] == "De bestaande BTC-setup gebruikt 4H voor entries."
+    assert state["previous_evidence_refs"] == ["artifact-asset", "artifact-setup"]
+    assert state["missing_required_inputs"] == ["name"]
+
+
 def test_request_analysis_does_not_treat_read_questions_with_confirmed_wording_as_execution():
     strategy_result = SERVICE.analyze(
         message="Welke belangrijkste entryvoorwaarde uit mijn BTC-strategie moet bevestigd zijn voordat mijn plan een entry toestaat?"

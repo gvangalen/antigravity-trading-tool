@@ -25,12 +25,30 @@ class FinnV2OperationStateService:
         collected = dict(existing.collected_inputs) if existing is not None else {}
         collected.update(self._explicit_inputs(contract=contract, message=message, explicit_asset=explicit_asset))
         missing = [field for field in contract.required_inputs if self._is_missing(collected.get(field))]
+        context = conversation_context or {}
+        resolved_entities = dict(existing.resolved_entities) if existing is not None else {}
+        resolved_entities.update(
+            {
+                key: value
+                for key, value in {
+                    "asset": explicit_asset or context.get("resolved_asset"),
+                    "setup_id": context.get("resolved_setup_id"),
+                    "strategy_id": context.get("resolved_strategy_id"),
+                    "bot_id": context.get("resolved_bot_id"),
+                }.items()
+                if value is not None
+            }
+        )
         return FinnV2OperationState(
             operation_id=contract.operation_id,
             contract_version=contract.version,
             collected_inputs=collected,
+            resolved_entities=resolved_entities,
             missing_required_inputs=missing,
             next_missing_input=missing[0] if missing else None,
+            open_proposal_id=context.get("open_proposal_id"),
+            previous_verified_conclusion=context.get("last_verified_conclusion"),
+            previous_evidence_refs=list(context.get("last_evidence_refs") or []),
         )
 
     @staticmethod
