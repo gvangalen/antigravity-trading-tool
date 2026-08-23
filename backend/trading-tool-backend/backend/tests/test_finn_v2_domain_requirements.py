@@ -48,12 +48,12 @@ def test_domain_requirements_narrow_create_setup_and_watchlist_actions():
         analysis_service.analyze(message="Voeg ETH toe aan mijn watchlist.")
     )
 
-    assert setup_plan.required_domains == ["identity_context", "market_context"]
-    assert setup_plan.optional_domains == ["plan_context"]
-    assert "setup_creation_uses_optional_existing_plan_context" in setup_plan.requirement_reason
+    assert setup_plan.required_domains == ["identity_context"]
+    assert setup_plan.optional_domains == ["market_context", "plan_context"]
+    assert "contract:create_setup:active_asset->identity_context" in setup_plan.requirement_reason
     assert watchlist_plan.required_domains == ["identity_context"]
     assert watchlist_plan.optional_domains == []
-    assert "watchlist_action_requires_identity_context" in watchlist_plan.requirement_reason
+    assert "contract:watchlist_add:active_asset->identity_context" in watchlist_plan.requirement_reason
 
 
 def test_domain_requirements_expand_live_bot_actions_to_full_context():

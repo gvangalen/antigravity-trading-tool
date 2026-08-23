@@ -198,6 +198,12 @@ class FinnV2ReasoningFallbackService:
             if configured_count is None:
                 configured_count = len(configured) or len(names)
             rendered_names = ", ".join(names) if names else "geen indicatoren"
+            if active_asset is not None:
+                _add_claim(
+                    "indicator-configuration-asset",
+                    f"Deze indicatorconfiguratie is gekoppeld aan je actieve asset {asset}.",
+                    [active_asset.evidence_id],
+                )
             _add_claim(
                 "indicator-configuration",
                 f"Voor {asset} zijn {configured_count} indicatorconfiguraties opgeslagen: {rendered_names}.",

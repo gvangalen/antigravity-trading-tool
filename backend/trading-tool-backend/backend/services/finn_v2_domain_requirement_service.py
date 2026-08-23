@@ -53,7 +53,14 @@ class FinnV2DomainRequirementService:
                     reasons.append(f"contract_optional:{contract.operation_id}:{scope}->{domain}")
             return DomainRequirementPlan(
                 required_domains=self._dedupe_domains(required_domains),
-                optional_domains=self._dedupe_domains(optional_domains),
+                # Domains are only an execution grouping. A domain that has a
+                # required contract scope must not be represented as optional
+                # merely because another scope shares that domain.
+                optional_domains=[
+                    domain
+                    for domain in self._dedupe_domains(optional_domains)
+                    if domain not in self._dedupe_domains(required_domains)
+                ],
                 requirement_reason=reasons or [f"contract:{contract.operation_id}:no_evidence"],
             )
 

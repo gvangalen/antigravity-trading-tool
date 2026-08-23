@@ -10,6 +10,7 @@ from backend.schemas.finn_v2_reasoning_context_schema import (
     ReasoningPolicyContext,
 )
 from backend.schemas.finn_v2_response_schema import ResponseDraft
+from backend.domain.finn_v2_operation_registry import FinnV2OperationRegistry
 from backend.services.finn_v2_reasoning_fallback_service import FinnV2ReasoningFallbackService
 from backend.services.finn_v2_response_verifier_service import FinnV2ResponseVerifierService
 
@@ -71,9 +72,22 @@ def _context(*, operation_id, required_scope, message, evidence):
         ),
         (
             "read_indicator_configuration",
-            "indicator_configuration",
+            ["active_asset", "indicator_configuration"],
             "Welke indicatoren staan voor BTC ingesteld?",
             [
+                ReasoningEvidenceItem(
+                    evidence_id="Easset",
+                    artifact_id="artifact-active-asset",
+                    tool_name="read_active_asset",
+                    information_scope="active_asset",
+                    domain="identity_context",
+                    entity_type="asset",
+                    asset="BTC",
+                    source="workspace",
+                    freshness="fresh",
+                    confidence="high",
+                    facts={"symbol": "BTC", "asset_class": "crypto"},
+                ),
                 ReasoningEvidenceItem(
                     evidence_id="Econfig",
                     artifact_id="artifact-indicators",
@@ -102,6 +116,7 @@ def _context(*, operation_id, required_scope, message, evidence):
 def test_registry_read_contracts_carry_required_evidence_into_verifier(
     operation_id, required_scope, message, evidence
 ):
+    required_scopes = required_scope if isinstance(required_scope, list) else [required_scope]
     context = _context(
         operation_id=operation_id,
         required_scope=required_scope,
@@ -133,11 +148,12 @@ def test_registry_read_contracts_carry_required_evidence_into_verifier(
         run=SimpleNamespace(id=context.run_id, user_id=context.user_id, message=message, conversation_id="conversation-read-contract"),
         orchestrator_result=SimpleNamespace(
             analysis=SimpleNamespace(
-                subject_scopes=[required_scope],
+                subject_scopes=required_scopes,
                 request_plan=RequestPlan(
                     interaction_mode="READ",
-                    required_information_scopes=[required_scope],
+                    required_information_scopes=required_scopes,
                     operation_id=operation_id,
+                    operation_contract_version=FinnV2OperationRegistry.VERSION,
                 ),
             ),
             selected_clarification=None,
