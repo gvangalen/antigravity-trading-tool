@@ -3,6 +3,7 @@ from types import SimpleNamespace
 
 from backend.schemas.finn_v2_response_schema import ResponseDraft
 from backend.services.finn_v2_response_downgrade_service import FinnV2ResponseDowngradeService
+from backend.services.finn_v2_response_verifier_service import FinnV2ResponseVerifierService
 
 
 def test_response_downgrade_to_clarification_builds_single_question():
@@ -44,3 +45,17 @@ def test_response_downgrade_to_fact_preserves_reasoning_level_evidence_refs_as_r
 
     assert result.mode == "READ"
     assert result.evidence_refs_used == ["E1", "E2", "E3"]
+
+
+def test_evaluate_claim_downgrade_never_changes_the_request_to_read():
+    verifier = FinnV2ResponseVerifierService(session=object())
+
+    action = verifier._decide_action(
+        draft=type("Draft", (), {"mode": "EVALUATE"})(),
+        reason_codes=["unsupported_noncritical_claim"],
+        passed=False,
+        repair_attempt=1,
+        has_clarification=False,
+    )
+
+    assert action == "downgrade_to_unavailable"

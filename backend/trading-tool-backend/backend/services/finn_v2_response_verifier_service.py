@@ -288,7 +288,11 @@ class FinnV2ResponseVerifierService:
                 getattr(request_plan_for_mode, "interaction_mode", draft.mode),
             )
         )
-        response_mode_matches_request = normalize_interaction_mode(draft.mode) == expected_mode
+        actual_mode = normalize_interaction_mode(draft.mode)
+        # A verifier-generated safe terminal response may narrow an otherwise
+        # evaluative request to clarification or unavailability. A factual READ
+        # downgrade is never a valid substitute for another requested mode.
+        response_mode_matches_request = actual_mode == expected_mode or actual_mode in {"CLARIFICATION", "UNAVAILABLE"}
         if not response_mode_matches_request:
             reason_codes.append("response_mode_mismatch")
 
@@ -1030,6 +1034,8 @@ class FinnV2ResponseVerifierService:
         if "response_insufficiently_personalized" in reason_codes:
             return "downgrade_to_unavailable"
         if "unsupported_noncritical_claim" in reason_codes or "mode_purity_violation" in reason_codes:
+            if normalize_interaction_mode(draft.mode) != "READ":
+                return "downgrade_to_unavailable"
             return "downgrade_to_fact"
         if "follow_up_invalid" in reason_codes:
             return "downgrade_to_clarification"
