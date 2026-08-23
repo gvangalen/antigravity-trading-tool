@@ -961,7 +961,10 @@ class FinnV2ReasoningService:
             "gemiste kans",
             "gemiste kansen",
             "leidt tot",
+            "leiden tot",
             "oorzaakt",
+            "risico",
+            "ineffici",
             "niet ideaal",
             "effectiviteit",
             "effectief",
@@ -984,7 +987,7 @@ class FinnV2ReasoningService:
             "ineffective",
             "undermine",
         }
-        bot_status_terms = {"stale", "verouderd", "outdated"}
+        bot_status_terms = {"stale", "verouder", "outdated"}
         # Evidence-backed facts and unrelated uncertainty may coexist in a response.
         # Require the mode and causal language to occur in the same statement.
         if any(
