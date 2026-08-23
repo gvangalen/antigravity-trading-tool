@@ -522,7 +522,7 @@ def test_integrated_plan_evaluation_prompt_lists_saved_grounding_values():
                 {"evidence_id": "E1", "artifact_id": "a1", "tool_name": "read_profile", "domain": "identity_context", "entity_type": "profile", "source": "profile", "freshness": "fresh", "confidence": "high", "facts": {"trader_profile": {"risk_profile": "balanced"}}},
                 {"evidence_id": "E2", "artifact_id": "a2", "tool_name": "read_indicator_configuration", "domain": "market_context", "entity_type": "indicator_configuration", "source": "indicators", "freshness": "fresh", "confidence": "high", "facts": {"configured_indicators": [{"indicator": "rsi"}]}},
                 {"evidence_id": "E3", "artifact_id": "a3", "tool_name": "read_active_setup", "domain": "plan_context", "entity_type": "setup", "entity_id": "309", "source": "setup", "freshness": "fresh", "confidence": "high", "facts": {"setup_id": 309, "timeframe": "4H"}},
-                {"evidence_id": "E4", "artifact_id": "a4", "tool_name": "read_linked_strategy", "domain": "plan_context", "entity_type": "strategy", "entity_id": "325", "source": "strategy", "freshness": "fresh", "confidence": "high", "facts": {"strategy_id": 325}},
+                {"evidence_id": "E4", "artifact_id": "a4", "tool_name": "read_linked_strategy", "domain": "plan_context", "entity_type": "strategy", "entity_id": "325", "source": "strategy", "freshness": "fresh", "confidence": "high", "facts": {"strategy_id": 325, "entry": "100", "stop_loss": "92", "targets": ["112", "125"]}},
                 {"evidence_id": "E5", "artifact_id": "a5", "tool_name": "read_linked_bot", "domain": "automation_context", "entity_type": "bot", "entity_id": "186", "source": "bot", "freshness": "fresh", "confidence": "high", "facts": {"bot_id": 186}},
             ],
         }
@@ -533,5 +533,6 @@ def test_integrated_plan_evaluation_prompt_lists_saved_grounding_values():
     assert '"profile":["balanced"]' in prompt
     assert '"indicators":["rsi"]' in prompt
     assert '"setup":["309","4H"]' in prompt
-    assert '"strategy":["325"]' in prompt
+    assert '"strategy":["100","112","125","325","92"]' in prompt
     assert '"bot":["186"]' in prompt
+    assert "Never say a stop loss, entry, or target is absent" in prompt

@@ -134,6 +134,9 @@ class FinnV2ReasoningPromptService:
                 "anchor. Treat is_live=false only as not-live or paper status; it does not mean manual, inactive, stale or broken. "
                 "Likewise, a configured bot mode is only a configuration fact: do not infer that it limits performance, causes "
                 "missed opportunities, or conflicts with a strategy unless the evidence explicitly states that causal relationship. "
+                "Treat every supplied strategy field as the current saved value. Never say a stop loss, entry, or target is "
+                "absent when the supplied grounding values contain one; if no value is supplied, describe that field as unknown "
+                "rather than absent. "
                 "Do not judge a stop-loss, target, or setup against current market conditions or volatility unless the cited "
                 "evidence includes a current price, volatility measurement, ATR, or market-regime value. "
                 "Do not infer bot health from evidence freshness. A field absent from bot evidence is unknown, not missing or "
@@ -199,7 +202,23 @@ class FinnV2ReasoningPromptService:
                 if item.entity_id:
                     values[scope].add(str(item.entity_id))
                 facts = item.facts or {}
-                for key in ("setup_id", "strategy_id", "bot_id", "name", "timeframe", "execution_mode", "risk_profile", "experience_level", "style"):
+                for key in (
+                    "setup_id",
+                    "strategy_id",
+                    "bot_id",
+                    "name",
+                    "timeframe",
+                    "execution_mode",
+                    "risk_profile",
+                    "experience_level",
+                    "style",
+                    "entry",
+                    "entry_type",
+                    "stop_loss",
+                    "targets",
+                    "setup_type",
+                    "base_amount",
+                ):
                     cls._collect_values(values[scope], facts.get(key))
                 if scope == "profile":
                     cls._collect_values(values[scope], facts.get("trader_profile"))
