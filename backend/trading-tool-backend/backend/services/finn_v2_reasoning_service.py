@@ -897,15 +897,13 @@ class FinnV2ReasoningService:
         if not bot_mode_values:
             return
 
-        text = " ".join(
-            [
-                result.direct_answer or "",
-                result.main_observation or "",
-                *(claim.text for claim in result.claims),
-                *(point.explanation for point in result.supporting_points),
-                result.next_step.instruction if result.next_step is not None else "",
-            ]
-        ).lower()
+        statements = [
+            result.direct_answer or "",
+            result.main_observation or "",
+            *(claim.text for claim in result.claims),
+            *(point.explanation for point in result.supporting_points),
+            result.next_step.instruction if result.next_step is not None else "",
+        ]
         mode_terms_by_value = {
             "manual": {"manual", "handmatig", "handmatige"},
             "automated": {"automated", "automatisch", "geautomatiseerd"},
@@ -926,7 +924,13 @@ class FinnV2ReasoningService:
             "prevents",
             "ineffective",
         }
-        if any(term in text for term in mode_terms) and any(term in text for term in causal_terms):
+        # Evidence-backed facts and unrelated uncertainty may coexist in a response.
+        # Require the mode and causal language to occur in the same statement.
+        if any(
+            any(term in statement.lower() for term in mode_terms)
+            and any(term in statement.lower() for term in causal_terms)
+            for statement in statements
+        ):
             raise FinnV2ReasoningContractError(
                 code="unsupported_configuration_causality",
                 missing_scopes=[],

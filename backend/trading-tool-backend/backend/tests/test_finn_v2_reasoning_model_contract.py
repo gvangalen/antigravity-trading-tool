@@ -255,6 +255,68 @@ def test_model_repairs_unsupported_configuration_causality(monkeypatch):
     assert "unsupported_configuration_causality" in prompts[1]
 
 
+def test_configuration_causality_does_not_join_unrelated_statements(monkeypatch):
+    service = FinnV2ReasoningService(session=object())
+    context_payload = _context().dict()
+    context_payload["evidence"].append(
+        {
+            "evidence_id": "E2",
+            "artifact_id": "artifact-2",
+            "tool_name": "read_linked_bot",
+            "domain": "automation_context",
+            "entity_type": "bot",
+            "entity_id": "186",
+            "asset": "BTC",
+            "source": "bot_repository",
+            "freshness": "fresh",
+            "confidence": "high",
+            "facts": {"mode": "manual", "is_live": False},
+        }
+    )
+    context = ReasoningContextPackage.parse_obj(context_payload)
+    persisted = {}
+    result = _model_output()
+    result["direct_answer"] = "De bot staat in handmatige modus en is niet live."
+    result["main_observation"] = "Een deel van de marktcontext is beperkt beschikbaar."
+    result["claims"][0]["text"] = "Setup 309 gebruikt timeframe 4H."
+    result["claims"][0]["evidence_refs"] = ["E1"]
+
+    async def _persist_record(**kwargs):
+        persisted.update(kwargs)
+        return kwargs
+
+    async def _append_trace(*_args, **_kwargs):
+        return None
+
+    service._persist_record = _persist_record
+    service._append_trace = _append_trace
+    monkeypatch.setattr(service.flags, "reasoning_max_retries", lambda: 0)
+    monkeypatch.setattr(service.flags, "reasoning_timeout_seconds", lambda: 5)
+    monkeypatch.setattr(service.flags, "reasoning_max_output_tokens", lambda: 600)
+    monkeypatch.setattr(
+        "backend.services.finn_v2_reasoning_service.openai_client.ask_gpt_structured_response",
+        lambda **_kwargs: {"parsed": result, "model": "gpt-4o-mini", "provider_metadata": {"response_status": "completed", "response_id": "resp-primary", "parsed_source": "response_output_text"}},
+    )
+
+    persisted_result = asyncio.run(
+        service._run_model_reasoning(
+            run_id="run-1",
+            user_id=7,
+            trace_id="trace-1",
+            orchestrator_result=SimpleNamespace(orchestrator_result_id="orchestrator-1"),
+            policy=SimpleNamespace(policy_decision_id="policy-1"),
+            snapshot=SimpleNamespace(id="snapshot-1"),
+            validation=SimpleNamespace(id="validation-1"),
+            context=context,
+            model_name="gpt-4o-mini",
+            input_hash="hash-input",
+        )
+    )
+
+    assert persisted_result["status"] == "ready"
+    assert persisted["result"].reasoning_provenance["validation_status"] == "passed"
+
+
 def test_model_repairs_unsupported_market_causality(monkeypatch):
     service = FinnV2ReasoningService(session=object())
     context = _context()
