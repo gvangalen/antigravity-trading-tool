@@ -118,12 +118,18 @@ class FinnV2ReasoningFallbackService:
                 model=model,
             )
         evidence_by_tool = {item.tool_name: item for item in evidence}
+        request_plan = context.request_plan or {}
+        operation_id = request_plan.get("operation_id")
+        active_asset = evidence_by_tool.get("read_active_asset")
+        indicators = evidence_by_tool.get("read_indicator_configuration")
         setup = evidence_by_tool.get("read_active_setup")
         strategy = evidence_by_tool.get("read_linked_strategy")
         bot = evidence_by_tool.get("read_linked_bot")
         bot_status = evidence_by_tool.get("read_bot_status")
         asset = (
-            (setup.facts.get("symbol") if setup else None)
+            (active_asset.facts.get("symbol") if active_asset else None)
+            or (indicators.facts.get("symbol") if indicators else None)
+            or (setup.facts.get("symbol") if setup else None)
             or (strategy.facts.get("symbol") if strategy else None)
             or (bot.facts.get("symbol") if bot else None)
             or "deze asset"
@@ -148,6 +154,72 @@ class FinnV2ReasoningFallbackService:
                     evidence_refs=deduped,
                     confidence="high",
                 )
+            )
+
+        # The operation registry determines which evidence scope a read operation
+        # must carry through reasoning. This keeps deterministic reads provider-free
+        # without letting the verifier infer coverage from prompt wording.
+        if operation_id == "read_active_asset" and active_asset is not None:
+            symbol = str(active_asset.facts.get("symbol") or asset).upper()
+            asset_class = active_asset.facts.get("asset_class") or active_asset.facts.get("asset_type")
+            _add_claim(
+                "active-asset",
+                f"Je actieve asset is {symbol}.",
+                [active_asset.evidence_id],
+            )
+            detail = f" ({asset_class})" if asset_class else ""
+            return ReasoningResult(
+                reasoning_result_id=f"finn-v2-reasoning-{uuid.uuid4().hex}",
+                run_id=run_id,
+                user_id=user_id,
+                mode="READ",
+                direct_answer=f"Je actieve asset is {symbol}{detail}.",
+                main_observation="Dit komt rechtstreeks uit je user-scoped actieve assetcontext.",
+                supporting_points=[],
+                claims=claims,
+                uncertainty_summary="Er is geen providercall uitgevoerd voor deze opgeslagen context.",
+                uncertainty_codes=list(error_codes),
+                next_step=None,
+                follow_up_question=None,
+                proposal_candidate=None,
+                evidence_refs_used=refs,
+                model=model,
+                created_at=datetime.now(timezone.utc),
+            )
+
+        if operation_id == "read_indicator_configuration" and indicators is not None:
+            configured = list(indicators.facts.get("configured_indicators") or [])
+            names: list[str] = []
+            for category in ("market", "macro", "technical"):
+                for name in self._indicator_names(indicators.facts, category):
+                    if name not in names:
+                        names.append(name)
+            configured_count = indicators.facts.get("configured_count")
+            if configured_count is None:
+                configured_count = len(configured) or len(names)
+            rendered_names = ", ".join(names) if names else "geen indicatoren"
+            _add_claim(
+                "indicator-configuration",
+                f"Voor {asset} zijn {configured_count} indicatorconfiguraties opgeslagen: {rendered_names}.",
+                [indicators.evidence_id],
+            )
+            return ReasoningResult(
+                reasoning_result_id=f"finn-v2-reasoning-{uuid.uuid4().hex}",
+                run_id=run_id,
+                user_id=user_id,
+                mode="READ",
+                direct_answer=f"Voor {asset} staan {configured_count} indicatoren ingesteld: {rendered_names}.",
+                main_observation="Deze configuratie komt rechtstreeks uit je opgeslagen, asset-scoped indicatorregels.",
+                supporting_points=[],
+                claims=claims,
+                uncertainty_summary="Er is geen providercall uitgevoerd voor deze opgeslagen configuratie.",
+                uncertainty_codes=list(error_codes),
+                next_step=None,
+                follow_up_question=None,
+                proposal_candidate=None,
+                evidence_refs_used=refs,
+                model=model,
+                created_at=datetime.now(timezone.utc),
             )
 
         if setup is not None and setup.facts.get("setup_id") is not None:
