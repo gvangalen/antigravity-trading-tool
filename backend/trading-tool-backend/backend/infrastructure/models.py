@@ -567,6 +567,7 @@ class FinnV2EvidenceArtifact(Base):
     user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     tool_call_id = Column(Integer, ForeignKey("finn_v2_tool_calls.id", ondelete="CASCADE"), nullable=False, unique=True, index=True)
     tool_name = Column(String, nullable=False)
+    information_scope = Column(String, nullable=True, index=True)
     entity_type = Column(String, nullable=True)
     entity_id = Column(String, nullable=True)
     asset = Column(String, nullable=True)

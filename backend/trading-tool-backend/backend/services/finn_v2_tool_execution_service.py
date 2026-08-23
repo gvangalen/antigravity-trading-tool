@@ -622,6 +622,7 @@ class FinnV2ToolExecutionService:
                 entity_id=result.entity_id,
                 asset=result.asset,
                 tool_call_id=result.tool_call_id,
+                information_scope=result.information_scope,
             )
             artifact = await self.evidence.ingest_tool_result(
                 user_id=user_id,

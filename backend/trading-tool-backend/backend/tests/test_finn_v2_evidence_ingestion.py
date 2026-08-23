@@ -57,5 +57,5 @@ def test_evidence_ingestion_creates_artifact_from_typed_tool_output():
     )
 
     assert artifact.tool_name == "read_profile"
+    assert artifact.information_scope.value == "profile"
     assert artifact.availability == "available"
-

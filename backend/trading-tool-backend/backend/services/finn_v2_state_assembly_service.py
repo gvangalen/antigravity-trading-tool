@@ -78,6 +78,9 @@ class FinnV2StateAssemblyService:
             user_id=row.user_id,
             tool_call_id=row.tool_call_id,
             tool_name=row.tool_name,
+            # Historical rows predate the persisted scope column. They remain
+            # readable, while new rows always carry their canonical scope.
+            information_scope=getattr(row, "information_scope", None),
             entity_type=row.entity_type,
             entity_id=row.entity_id,
             asset=row.asset,
@@ -133,6 +136,7 @@ class FinnV2StateAssemblyService:
             entity_id=artifact.entity_id,
             asset=artifact.asset,
             payload_type=payload_type,
+            information_scope=artifact.information_scope,
             payload=parsed_payload,
             availability=artifact.availability,
             freshness=artifact.freshness,
@@ -194,6 +198,7 @@ class FinnV2StateAssemblyService:
             artifact_id=artifact.artifact_id,
             tool_call_id=artifact.tool_call_id,
             tool_name=artifact.tool_name,
+            information_scope=artifact.information_scope,
             content_hash=artifact.content_hash,
             source=artifact.source,
             source_as_of=artifact.source_as_of,
@@ -213,6 +218,7 @@ class FinnV2StateAssemblyService:
             {
                 "artifact_id": artifact.artifact_id,
                 "tool_name": artifact.tool_name,
+                "information_scope": artifact.information_scope.value if artifact.information_scope else None,
                 "content_hash": artifact.content_hash,
                 "availability": artifact.availability,
             }

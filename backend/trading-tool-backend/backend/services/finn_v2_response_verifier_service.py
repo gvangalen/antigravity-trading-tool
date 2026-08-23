@@ -16,7 +16,7 @@ from backend.infrastructure.repositories.finn_v2_trace_repository import FinnV2T
 from backend.infrastructure.repositories.finn_v2_validation_repository import FinnV2ValidationRepository
 from backend.infrastructure.repositories.finn_v2_verifier_repository import FinnV2VerifierRepository
 from backend.infrastructure.repositories.finn_v2_verified_response_repository import FinnV2VerifiedResponseRepository
-from backend.domain.finn_v2_contract import normalize_interaction_mode
+from backend.domain.finn_v2_contract import normalize_information_scope, normalize_interaction_mode
 from backend.schemas.finn_v2_delivery_schema import FinnV2DeliveryEnvelope
 from backend.schemas.finn_v2_orchestrator_schema import ORCHESTRATOR_VERSION, OrchestratorResult
 from backend.schemas.finn_v2_orchestrator_schema import normalize_information_scopes
@@ -303,7 +303,6 @@ class FinnV2ResponseVerifierService:
         # evidence's exact canonical scope, not inferred from a broad domain label.
         uses_canonical_scope_contract = bool(
             request_plan is not None
-            and getattr(request_plan, "required_information_scopes", None)
         )
 
         claim_results = []
@@ -325,7 +324,12 @@ class FinnV2ResponseVerifierService:
                 claim_reasons.append("invalid_evidence_ref")
             if matched_evidence:
                 for evidence in matched_evidence:
-                    covered_scopes.update(self._scopes_for_evidence(evidence))
+                    covered_scopes.update(
+                        self._scopes_for_evidence(
+                            evidence,
+                            allow_legacy=not uses_canonical_scope_contract,
+                        )
+                    )
                     if not uses_canonical_scope_contract:
                         covered_scopes.add(self._scope_for_domain(evidence.domain))
                     if evidence.domain:
@@ -353,6 +357,7 @@ class FinnV2ResponseVerifierService:
                 draft,
                 evidence_by_ref,
                 include_domain_fallback=not uses_canonical_scope_contract,
+                allow_legacy=not uses_canonical_scope_contract,
             )
         )
         covered_domains.update(self._covered_domains_from_draft(draft, evidence_by_ref))
@@ -690,13 +695,14 @@ class FinnV2ResponseVerifierService:
         evidence_by_ref: Dict[str, Any],
         *,
         include_domain_fallback: bool = True,
+        allow_legacy: bool = True,
     ) -> set[str]:
         refs = self._all_refs(draft)
         covered = set()
         for ref in refs:
             evidence = evidence_by_ref.get(ref)
             if evidence is not None:
-                covered.update(self._scopes_for_evidence(evidence))
+                covered.update(self._scopes_for_evidence(evidence, allow_legacy=allow_legacy))
                 if include_domain_fallback:
                     covered.add(self._scope_for_domain(evidence.domain))
         return {scope for scope in covered if scope}
@@ -715,7 +721,7 @@ class FinnV2ResponseVerifierService:
             return True
         normalized_mode = normalize_interaction_mode(draft.mode)
         if normalized_mode == "CREATE_PROPOSAL" and scope == "active_setup":
-            return "identity_context" in covered_domains or "plan_context" in covered_domains
+            return False
         if normalized_mode == "ACTION_PROPOSAL" and scope == "watchlist":
             return "identity_context" in covered_domains
         if (
@@ -734,7 +740,16 @@ class FinnV2ResponseVerifierService:
                 return scope
         return None
 
-    def _scopes_for_evidence(self, evidence: Any) -> set[str]:
+    def _scopes_for_evidence(self, evidence: Any, *, allow_legacy: bool = False) -> set[str]:
+        if getattr(evidence, "availability", "available") not in {"available", "stale"}:
+            return set()
+        if not (getattr(evidence, "facts", None) or {}):
+            return set()
+        persisted_scope = getattr(evidence, "information_scope", None)
+        if persisted_scope:
+            return {normalize_information_scope(persisted_scope)}
+        if not allow_legacy:
+            return set()
         tool_name = str(getattr(evidence, "tool_name", "") or "")
         entity_type = str(getattr(evidence, "entity_type", "") or "")
         scopes: set[str] = set()

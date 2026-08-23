@@ -5,7 +5,7 @@ from typing import Any, Dict, List, Literal, Optional
 
 from pydantic import BaseModel, Field, constr, validator
 
-from backend.domain.finn_v2_contract import normalize_interaction_mode
+from backend.domain.finn_v2_contract import InformationScope, normalize_interaction_mode
 
 
 REASONING_CONTEXT_VERSION = "2026-08-17.block6"
@@ -15,6 +15,7 @@ class ReasoningEvidenceItem(BaseModel):
     evidence_id: constr(min_length=2, max_length=8)
     artifact_id: str
     tool_name: str
+    information_scope: Optional[InformationScope] = None
     domain: str
     entity_type: str
     entity_id: Optional[str] = None

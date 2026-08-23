@@ -95,6 +95,7 @@ class FinnV2ReasoningContextService:
                 evidence_id=f"E{index}",
                 artifact_id=artifact.id,
                 tool_name=artifact.tool_name,
+                information_scope=getattr(artifact, "information_scope", None),
                 domain=domain,
                 entity_type=artifact.entity_type or "unknown",
                 entity_id=artifact.entity_id,

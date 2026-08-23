@@ -5,6 +5,8 @@ from typing import List, Literal, Optional, Union
 
 from pydantic import BaseModel, Field, validator
 
+from backend.domain.finn_v2_contract import InformationScope
+
 
 SCHEMA_VERSION = "2026-08-17.block3"
 
@@ -278,6 +280,7 @@ class EvidenceArtifact(BaseModel):
     user_id: int
     tool_call_id: int
     tool_name: str
+    information_scope: Optional[InformationScope] = None
     entity_type: Optional[str] = None
     entity_id: Optional[str] = None
     asset: Optional[str] = None

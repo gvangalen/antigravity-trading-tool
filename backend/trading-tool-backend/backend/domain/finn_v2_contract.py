@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
+from enum import Enum
 from typing import Any, Dict, Mapping, Optional, Tuple
 
 
@@ -130,6 +131,109 @@ LEGACY_INTERACTION_MODE_ALIASES: Mapping[str, str] = {
     "PROPOSAL": "CREATE_PROPOSAL",
     "ACTION": "ACTION_PROPOSAL",
 }
+
+
+class InformationScope(str, Enum):
+    """Canonical fact scope carried from a tool result into persisted evidence."""
+
+    CAPABILITY = "capability"
+    PROFILE = "profile"
+    PREFERENCES = "preferences"
+    ACTIVE_ASSET = "active_asset"
+    INDICATOR_CONFIGURATION = "indicator_configuration"
+    MARKET_SNAPSHOT = "market_snapshot"
+    WATCHLIST = "watchlist"
+    ACTIVE_SETUP = "active_setup"
+    LINKED_STRATEGY = "linked_strategy"
+    LINKED_BOT = "linked_bot"
+    BOT_STATUS = "bot_status"
+
+
+INFORMATION_SCOPE_ORDER: Tuple[str, ...] = tuple(scope.value for scope in InformationScope)
+INFORMATION_SCOPE_ALIASES: Mapping[str, str] = {
+    "capability": InformationScope.CAPABILITY.value,
+    "asset": InformationScope.ACTIVE_ASSET.value,
+    "active_asset": InformationScope.ACTIVE_ASSET.value,
+    "indicators": InformationScope.INDICATOR_CONFIGURATION.value,
+    "indicator_configuration": InformationScope.INDICATOR_CONFIGURATION.value,
+    "setup": InformationScope.ACTIVE_SETUP.value,
+    "active_setup": InformationScope.ACTIVE_SETUP.value,
+    "strategy": InformationScope.LINKED_STRATEGY.value,
+    "linked_strategy": InformationScope.LINKED_STRATEGY.value,
+    "bot": InformationScope.LINKED_BOT.value,
+    "linked_bot": InformationScope.LINKED_BOT.value,
+    "analysis": InformationScope.MARKET_SNAPSHOT.value,
+}
+
+# This is the only tool-to-scope mapping for newly created FINN V2 artifacts.
+TOOL_OUTPUT_SCOPES: Mapping[str, InformationScope] = {
+    "read_profile": InformationScope.PROFILE,
+    "read_user_preferences": InformationScope.PREFERENCES,
+    "read_active_asset": InformationScope.ACTIVE_ASSET,
+    "read_indicator_configuration": InformationScope.INDICATOR_CONFIGURATION,
+    "read_asset_scores": InformationScope.MARKET_SNAPSHOT,
+    "read_market_snapshot": InformationScope.MARKET_SNAPSHOT,
+    "read_macro_snapshot": InformationScope.MARKET_SNAPSHOT,
+    "read_technical_snapshot": InformationScope.MARKET_SNAPSHOT,
+    "read_active_setup": InformationScope.ACTIVE_SETUP,
+    "read_linked_strategy": InformationScope.LINKED_STRATEGY,
+    "read_linked_bot": InformationScope.LINKED_BOT,
+    "read_bot_status": InformationScope.BOT_STATUS,
+    "read_watchlist": InformationScope.WATCHLIST,
+    "read_portfolio": InformationScope.PROFILE,
+    "read_latest_report": InformationScope.MARKET_SNAPSHOT,
+    "read_review_history": InformationScope.PROFILE,
+}
+PRIMARY_TOOL_BY_INFORMATION_SCOPE: Mapping[InformationScope, str] = {
+    InformationScope.PROFILE: "read_profile",
+    InformationScope.PREFERENCES: "read_user_preferences",
+    InformationScope.ACTIVE_ASSET: "read_active_asset",
+    InformationScope.INDICATOR_CONFIGURATION: "read_indicator_configuration",
+    InformationScope.MARKET_SNAPSHOT: "read_market_snapshot",
+    InformationScope.WATCHLIST: "read_watchlist",
+    InformationScope.ACTIVE_SETUP: "read_active_setup",
+    InformationScope.LINKED_STRATEGY: "read_linked_strategy",
+    InformationScope.LINKED_BOT: "read_linked_bot",
+    InformationScope.BOT_STATUS: "read_bot_status",
+}
+
+
+class FinnV2InformationScopeContractError(ValueError):
+    code = "finn_v2_information_scope_contract_invalid"
+
+    def __init__(self, scope: Optional[object]):
+        self.scope = scope
+        super().__init__(f"{self.code}:{scope}")
+
+
+def normalize_information_scope(scope: Optional[object]) -> str:
+    if isinstance(scope, InformationScope):
+        return scope.value
+    normalized = str(scope or "").strip().lower()
+    canonical = INFORMATION_SCOPE_ALIASES.get(normalized, normalized)
+    if canonical not in INFORMATION_SCOPE_ORDER:
+        raise FinnV2InformationScopeContractError(scope)
+    return canonical
+
+
+def normalize_information_scopes(scopes: list[object]) -> list[str]:
+    normalized = {normalize_information_scope(scope) for scope in scopes}
+    return [scope for scope in INFORMATION_SCOPE_ORDER if scope in normalized]
+
+
+def information_scope_for_tool(tool_name: str) -> InformationScope:
+    try:
+        return TOOL_OUTPUT_SCOPES[tool_name]
+    except KeyError as exc:
+        raise FinnV2InformationScopeContractError(tool_name) from exc
+
+
+def primary_tool_for_information_scope(scope: object) -> str:
+    canonical = InformationScope(normalize_information_scope(scope))
+    try:
+        return PRIMARY_TOOL_BY_INFORMATION_SCOPE[canonical]
+    except KeyError as exc:
+        raise FinnV2InformationScopeContractError(scope) from exc
 
 
 class InvalidRunTransitionError(ValueError):

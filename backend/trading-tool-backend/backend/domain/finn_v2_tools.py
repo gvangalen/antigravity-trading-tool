@@ -124,3 +124,4 @@ class ToolExecutionResult:
     asset: Optional[str] = None
     tool_call_id: Optional[int] = None
     artifact_id: Optional[str] = None
+    information_scope: Optional[str] = None

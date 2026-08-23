@@ -5,6 +5,7 @@ from typing import Any, Dict, List, Literal, Optional
 
 from pydantic import BaseModel, Field, constr, validator
 
+from backend.domain.finn_v2_contract import InformationScope, information_scope_for_tool, normalize_information_scope
 from backend.domain.finn_v2_tools import FINN_V2_EXTERNAL_ERROR_CODES, FINN_V2_TOOL_ORDER
 from backend.schemas.finn_v2_evidence_schema import ToolDataUnion, parse_tool_payload
 
@@ -67,10 +68,21 @@ class ToolExecutionEnvelope(BaseModel):
     asset: Optional[str] = None
     tool_call_id: Optional[int] = None
     artifact_id: Optional[str] = None
+    information_scope: Optional[InformationScope] = None
 
     @validator("result", pre=True, always=True)
     def _parse_result(cls, value, values):
         return parse_tool_payload(values.get("schema_name"), value)
+
+    @validator("information_scope", pre=True, always=True)
+    def _enforce_canonical_output_scope(cls, value, values):
+        expected = information_scope_for_tool(str(values.get("tool_name") or ""))
+        if value is None:
+            return expected
+        normalized = normalize_information_scope(value)
+        if normalized != expected.value:
+            raise ValueError(f"finn_v2_tool_scope_mismatch:{values.get('tool_name')}:{normalized}")
+        return expected
 
     class Config:
         smart_union = True

@@ -5,7 +5,13 @@ from typing import Dict, List, Literal, Optional
 
 from pydantic import BaseModel, Field, validator
 
-from backend.domain.finn_v2_contract import normalize_interaction_mode
+from backend.domain.finn_v2_contract import (
+    INFORMATION_SCOPE_ALIASES,
+    INFORMATION_SCOPE_ORDER,
+    normalize_information_scope,
+    normalize_information_scopes,
+    normalize_interaction_mode,
+)
 from backend.domain.finn_v2_tools import FINN_V2_TOOL_ORDER
 from backend.schemas.finn_v2_domain_validation_schema import ClarificationCandidate
 
@@ -32,33 +38,6 @@ SUBJECT_SCOPE_ORDER = [
 # These identifiers are the persisted information contract between Blocks 2-7.
 # Subject labels (for example ``asset`` or ``setup``) are intentionally not used
 # here because they previously drifted from evidence and verifier terminology.
-INFORMATION_SCOPE_ORDER = [
-    "capability",
-    "profile",
-    "preferences",
-    "active_asset",
-    "indicator_configuration",
-    "market_snapshot",
-    "watchlist",
-    "active_setup",
-    "linked_strategy",
-    "linked_bot",
-    "bot_status",
-]
-INFORMATION_SCOPE_ALIASES = {
-    "capability": "capability",
-    "asset": "active_asset",
-    "active_asset": "active_asset",
-    "indicators": "indicator_configuration",
-    "indicator_configuration": "indicator_configuration",
-    "setup": "active_setup",
-    "active_setup": "active_setup",
-    "strategy": "linked_strategy",
-    "linked_strategy": "linked_strategy",
-    "bot": "linked_bot",
-    "linked_bot": "linked_bot",
-    "analysis": "market_snapshot",
-}
 DOMAIN_ORDER = [
     "identity_context",
     "market_context",
@@ -69,20 +48,6 @@ DOMAIN_ORDER = [
     "review_context",
 ]
 CLARIFICATION_PRIORITY = ["asset", "setup", "strategy", "bot"]
-
-
-def normalize_information_scope(scope: object) -> str:
-    """Return the canonical persisted scope or fail loudly for a bad contract."""
-    normalized = str(scope or "").strip().lower()
-    canonical = INFORMATION_SCOPE_ALIASES.get(normalized, normalized)
-    if canonical not in INFORMATION_SCOPE_ORDER:
-        raise ValueError(f"finn_v2_information_scope_contract_invalid:{scope}")
-    return canonical
-
-
-def normalize_information_scopes(scopes: List[object]) -> List[str]:
-    normalized = {normalize_information_scope(scope) for scope in scopes}
-    return [scope for scope in INFORMATION_SCOPE_ORDER if scope in normalized]
 
 
 class RequestPlan(BaseModel):

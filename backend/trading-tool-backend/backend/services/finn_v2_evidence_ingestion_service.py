@@ -69,6 +69,7 @@ class FinnV2EvidenceIngestionService:
             user_id=user_id,
             tool_call_id=tool_call_id,
             tool_name=result.tool_name,
+            information_scope=result.information_scope.value if result.information_scope else None,
             entity_type=result.entity_type,
             entity_id=result.entity_id,
             asset=result.asset,
@@ -90,6 +91,7 @@ class FinnV2EvidenceIngestionService:
         payload_json = self.redaction.payload_to_jsonable(payload_override if payload_override is not None else result.result)
         canonical = {
             "tool_name": result.tool_name,
+            "information_scope": result.information_scope.value if result.information_scope else None,
             "entity_type": result.entity_type,
             "entity_id": result.entity_id,
             "source_as_of": self._normalize_datetime(self._extract_source_as_of(result)).isoformat()
@@ -129,6 +131,7 @@ class FinnV2EvidenceIngestionService:
             user_id=row.user_id,
             tool_call_id=row.tool_call_id,
             tool_name=row.tool_name,
+            information_scope=row.information_scope,
             entity_type=row.entity_type,
             entity_id=row.entity_id,
             asset=row.asset,

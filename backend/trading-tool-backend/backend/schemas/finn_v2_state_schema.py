@@ -5,6 +5,7 @@ from typing import List, Literal, Optional
 
 from pydantic import BaseModel, Field, validator
 
+from backend.domain.finn_v2_contract import InformationScope
 from backend.schemas.finn_v2_evidence_schema import PAYLOAD_TYPE_TO_SCHEMA_NAME, SCHEMA_VERSION, ToolDataUnion, parse_tool_payload
 
 
@@ -15,6 +16,7 @@ class EvidenceReference(BaseModel):
     artifact_id: str
     tool_call_id: int
     tool_name: str
+    information_scope: Optional[InformationScope] = None
     content_hash: str
     source: str
     source_as_of: Optional[datetime] = None
@@ -26,6 +28,7 @@ class StateNode(BaseModel):
     entity_id: Optional[str] = None
     asset: Optional[str] = None
     payload_type: str
+    information_scope: Optional[InformationScope] = None
     payload: Optional[ToolDataUnion] = None
     availability: Literal["available", "stale", "ambiguous", "unavailable", "not_collected"]
     freshness: Literal["fresh", "stale", "unknown", "not_applicable"]

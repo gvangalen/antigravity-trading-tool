@@ -5,7 +5,7 @@ import asyncio
 from backend.services.finn_v2_state_assembly_service import FinnV2StateAssemblyService
 
 
-def _artifact(tool_name, artifact_id, tool_call_id, payload_json, availability="available", asset=None, entity_id=None):
+def _artifact(tool_name, artifact_id, tool_call_id, payload_json, availability="available", asset=None, entity_id=None, information_scope=None):
     schema_name_map = {
         "read_profile": "TraderProfileData",
         "read_user_preferences": "UserPreferencesData",
@@ -17,6 +17,7 @@ def _artifact(tool_name, artifact_id, tool_call_id, payload_json, availability="
         user_id=7,
         tool_call_id=tool_call_id,
         tool_name=tool_name,
+        information_scope=information_scope,
         entity_type=tool_name.replace("read_", ""),
         entity_id=entity_id,
         asset=asset,
@@ -39,9 +40,9 @@ def _artifact(tool_name, artifact_id, tool_call_id, payload_json, availability="
 class _ArtifactsRepo:
     async def list_for_run(self, *, run_id, user_id):
         return [
-            _artifact("read_profile", "a1", 1, {"trader_profile": {"trader_types": ["investor"]}, "has_profile": True}),
-            _artifact("read_user_preferences", "a2", 2, {"selected_asset": "BTC"}),
-            _artifact("read_active_asset", "a3", 3, {"symbol": "BTC"}, asset="BTC", entity_id="BTC"),
+            _artifact("read_profile", "a1", 1, {"trader_profile": {"trader_types": ["investor"]}, "has_profile": True}, information_scope="profile"),
+            _artifact("read_user_preferences", "a2", 2, {"selected_asset": "BTC"}, information_scope="preferences"),
+            _artifact("read_active_asset", "a3", 3, {"symbol": "BTC"}, asset="BTC", entity_id="BTC", information_scope="active_asset"),
         ]
 
 
@@ -82,3 +83,14 @@ def test_state_assembly_persists_json_safe_snapshot_payload():
     stored = snapshots.created[0]["snapshot_json"]
     assert stored["assembled_at"] == snapshot.assembled_at.isoformat()
     assert stored["nodes"][0]["evidence"][0]["artifact_id"] == "a1"
+
+
+def test_state_assembly_preserves_the_persisted_information_scope():
+    service = FinnV2StateAssemblyService(session=object())
+    service.artifacts = _ArtifactsRepo()
+    service.snapshots = _SnapshotsRepo()
+
+    snapshot = asyncio.run(service.assemble_for_run(run_id="run-1", user_id=7))
+
+    assert snapshot.nodes[0].information_scope == "profile"
+    assert snapshot.nodes[0].evidence[0].information_scope == "profile"

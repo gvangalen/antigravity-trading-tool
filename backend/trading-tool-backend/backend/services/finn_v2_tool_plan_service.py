@@ -1,29 +1,11 @@
 from __future__ import annotations
 
+from backend.domain.finn_v2_contract import primary_tool_for_information_scope
 from backend.schemas.finn_v2_orchestrator_schema import DomainRequirementPlan, RequestAnalysisResult, ToolPlan
 from backend.schemas.finn_v2_tool_schema import ToolSelector
 
 
 class FinnV2ToolPlanService:
-    _SCOPE_TO_TOOL = {
-        "profile": "read_profile",
-        "preferences": "read_user_preferences",
-        "active_asset": "read_active_asset",
-        "indicator_configuration": "read_indicator_configuration",
-        "market_snapshot": "read_market_snapshot",
-        "watchlist": "read_watchlist",
-        "active_setup": "read_active_setup",
-        "linked_strategy": "read_linked_strategy",
-        "linked_bot": "read_linked_bot",
-        "bot_status": "read_bot_status",
-    }
-    _SCOPE_TO_EVIDENCE = {
-        "profile": "profile", "preferences": "preferences", "active_asset": "active_asset",
-        "indicator_configuration": "indicator_configuration", "watchlist": "watchlist",
-        "market_snapshot": "market_snapshot",
-        "active_setup": "active_setup", "linked_strategy": "linked_strategy", "linked_bot": "linked_bot",
-        "bot_status": "bot_status",
-    }
     _DOMAIN_TOOLS = {
         "identity_context": ["read_profile", "read_user_preferences", "read_active_asset"],
         "market_context": [
@@ -89,9 +71,8 @@ class FinnV2ToolPlanService:
         request_plan = analysis.request_plan
         if request_plan is not None and request_plan.required_information_scopes:
             return [
-                self._SCOPE_TO_TOOL[scope]
+                primary_tool_for_information_scope(scope)
                 for scope in request_plan.required_information_scopes
-                if scope in self._SCOPE_TO_TOOL
             ]
         if analysis.interaction_mode == "CAPABILITY":
             return []
@@ -169,11 +150,7 @@ class FinnV2ToolPlanService:
     def _required_evidence_for(self, *, analysis: RequestAnalysisResult) -> list[str]:
         request_plan = analysis.request_plan
         if request_plan is not None and request_plan.required_information_scopes:
-            return [
-                self._SCOPE_TO_EVIDENCE[scope]
-                for scope in request_plan.required_information_scopes
-                if scope in self._SCOPE_TO_EVIDENCE
-            ]
+            return list(request_plan.required_information_scopes)
         if analysis.interaction_mode == "READ":
             if analysis.primary_subject == "setup":
                 return ["active_asset", "active_setup"]

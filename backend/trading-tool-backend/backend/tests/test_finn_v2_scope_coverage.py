@@ -66,7 +66,7 @@ def test_request_plan_coverage_does_not_substitute_a_broad_domain_for_evidence_s
         ),
         policy=SimpleNamespace(allowed=True, proposal_allowed=True, confirmation_required=False, operation_type=None),
         context=SimpleNamespace(
-            evidence=[SimpleNamespace(evidence_id="E1", domain="identity_context", tool_name="read_active_asset", entity_type="asset", entity_id="BTC", asset="BTC", freshness="fresh", confidence="high", facts={"symbol": "BTC"})],
+                evidence=[SimpleNamespace(evidence_id="E1", domain="identity_context", tool_name="read_active_asset", information_scope="active_asset", entity_type="asset", entity_id="BTC", asset="BTC", freshness="fresh", availability="available", confidence="high", facts={"symbol": "BTC"})],
             uncertainty_codes=[],
         ),
         validation=SimpleNamespace(id="validation-exact-scope", evidence_set_hash="hash-exact-scope", integrity_status="valid"),
@@ -78,6 +78,80 @@ def test_request_plan_coverage_does_not_substitute_a_broad_domain_for_evidence_s
     assert verifier.coverage.covered_scopes == ["active_asset"]
     assert verifier.coverage.missing_scopes == ["profile"]
     assert verifier.coverage.coverage_ok is False
+
+
+def test_new_request_plan_does_not_infer_scope_from_a_legacy_tool_name():
+    service = FinnV2ResponseVerifierService(session=object())
+    draft = ResponseDraft(
+        draft_id="draft-no-persisted-scope",
+        run_id="run-no-persisted-scope",
+        user_id=7,
+        mode="READ",
+        direct_answer="Je actieve asset is BTC.",
+        main_observation="BTC is de asset in je workspace.",
+        claims=[ResponseClaim(claim_id="C1", claim_type="fact", text="Je actieve asset is BTC.", evidence_refs=["E1"], confidence="high")],
+        evidence_set_hash="hash-no-persisted-scope",
+        created_at=datetime.now(timezone.utc),
+    )
+    verifier = service._deterministic_verify(
+        run=SimpleNamespace(id="run-no-persisted-scope", user_id=7, message="Welke asset bekijk ik nu?", conversation_id="conv-1"),
+        orchestrator_result=SimpleNamespace(
+            analysis=SimpleNamespace(
+                subject_scopes=["asset"],
+                request_plan=RequestPlan(interaction_mode="READ", required_information_scopes=["active_asset"]),
+            ),
+            selected_clarification=None,
+        ),
+        policy=SimpleNamespace(allowed=True, proposal_allowed=True, confirmation_required=False, operation_type=None),
+        context=SimpleNamespace(
+            evidence=[SimpleNamespace(evidence_id="E1", domain="identity_context", tool_name="read_active_asset", entity_type="asset", entity_id="BTC", asset="BTC", freshness="fresh", availability="available", confidence="high", facts={"symbol": "BTC"})],
+            uncertainty_codes=[],
+        ),
+        validation=SimpleNamespace(id="validation-no-persisted-scope", evidence_set_hash="hash-no-persisted-scope", integrity_status="valid"),
+        draft=draft,
+        repair_attempt=0,
+        force_action="deliver",
+    )
+
+    assert verifier.coverage.covered_scopes == []
+    assert verifier.coverage.missing_scopes == ["active_asset"]
+
+
+def test_canonical_scope_requires_available_nonempty_evidence():
+    service = FinnV2ResponseVerifierService(session=object())
+    draft = ResponseDraft(
+        draft_id="draft-unavailable-scope",
+        run_id="run-unavailable-scope",
+        user_id=7,
+        mode="READ",
+        direct_answer="Je actieve asset is BTC.",
+        main_observation="BTC is de asset in je workspace.",
+        claims=[ResponseClaim(claim_id="C1", claim_type="fact", text="Je actieve asset is BTC.", evidence_refs=["E1"], confidence="high")],
+        evidence_set_hash="hash-unavailable-scope",
+        created_at=datetime.now(timezone.utc),
+    )
+    verifier = service._deterministic_verify(
+        run=SimpleNamespace(id="run-unavailable-scope", user_id=7, message="Welke asset bekijk ik nu?", conversation_id="conv-1"),
+        orchestrator_result=SimpleNamespace(
+            analysis=SimpleNamespace(
+                subject_scopes=["asset"],
+                request_plan=RequestPlan(interaction_mode="READ", required_information_scopes=["active_asset"]),
+            ),
+            selected_clarification=None,
+        ),
+        policy=SimpleNamespace(allowed=True, proposal_allowed=True, confirmation_required=False, operation_type=None),
+        context=SimpleNamespace(
+            evidence=[SimpleNamespace(evidence_id="E1", domain="identity_context", tool_name="read_active_asset", information_scope="active_asset", entity_type="asset", entity_id="BTC", asset="BTC", freshness="fresh", availability="unavailable", confidence="high", facts={})],
+            uncertainty_codes=[],
+        ),
+        validation=SimpleNamespace(id="validation-unavailable-scope", evidence_set_hash="hash-unavailable-scope", integrity_status="valid"),
+        draft=draft,
+        repair_attempt=0,
+        force_action="deliver",
+    )
+
+    assert verifier.coverage.covered_scopes == []
+    assert verifier.coverage.missing_scopes == ["active_asset"]
 
 
 def test_scope_coverage_allows_setup_proposal_when_identity_context_is_sufficient():
@@ -106,10 +180,20 @@ def test_scope_coverage_allows_setup_proposal_when_identity_context_is_sufficien
     )
     verifier = service._deterministic_verify(
         run=SimpleNamespace(id="run-setup-proposal", user_id=7, message="Maak een setup voor BTC swing trading met daily trend en 4H entry.", conversation_id="conv-1"),
-        orchestrator_result=SimpleNamespace(analysis=SimpleNamespace(subject_scopes=["setup"]), selected_clarification=None),
+        orchestrator_result=SimpleNamespace(
+            analysis=SimpleNamespace(
+                subject_scopes=["setup"],
+                request_plan=RequestPlan(
+                    interaction_mode="CREATE_PROPOSAL",
+                    required_information_scopes=["active_asset"],
+                    requested_operation="create_setup",
+                ),
+            ),
+            selected_clarification=None,
+        ),
         policy=SimpleNamespace(allowed=True, proposal_allowed=True, confirmation_required=True, operation_type=None),
         context=SimpleNamespace(
-            evidence=[SimpleNamespace(evidence_id="E1", domain="identity_context", tool_name="read_active_asset", entity_type="asset", entity_id="BTC", asset="BTC", freshness="fresh", confidence="high", facts={"symbol": "BTC"})],
+                evidence=[SimpleNamespace(evidence_id="E1", domain="identity_context", tool_name="read_active_asset", information_scope="active_asset", entity_type="asset", entity_id="BTC", asset="BTC", freshness="fresh", availability="available", confidence="high", facts={"symbol": "BTC"})],
             uncertainty_codes=[],
         ),
         validation=SimpleNamespace(id="validation-setup", evidence_set_hash="hash-setup", integrity_status="valid"),

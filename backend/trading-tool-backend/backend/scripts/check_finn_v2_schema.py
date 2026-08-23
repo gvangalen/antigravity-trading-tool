@@ -24,6 +24,12 @@ class RequiredColumn:
 
 REQUIRED_FINN_V2_COLUMNS = (
     RequiredColumn(
+        table_name="finn_v2_evidence_artifacts",
+        column_name="information_scope",
+        udt_name="text",
+        nullable=True,
+    ),
+    RequiredColumn(
         table_name="finn_v2_conversations",
         column_name="context_json",
         udt_name="jsonb",
@@ -77,6 +83,8 @@ def assert_finn_v2_schema(connection: Any) -> None:
 
         # This read catches permissions or a malformed relation before PM2 starts.
         cursor.execute("SELECT context_json FROM finn_v2_conversations LIMIT 1")
+        cursor.fetchone()
+        cursor.execute("SELECT information_scope FROM finn_v2_evidence_artifacts LIMIT 1")
         cursor.fetchone()
 
 

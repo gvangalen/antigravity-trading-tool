@@ -19,6 +19,9 @@ class _Cursor:
 
     def fetchone(self):
         if self.executed[-1][1]:
+            parameters = self.executed[-1][1]
+            if isinstance(self.metadata, dict):
+                return self.metadata.get((parameters[0], parameters[1]))
             return self.metadata
         return None
 
@@ -32,7 +35,10 @@ class _Connection:
 
 
 def test_schema_health_accepts_the_conversation_context_contract():
-    connection = _Connection(("jsonb", "jsonb", "NO", "'{}'::jsonb"))
+    connection = _Connection({
+        ("finn_v2_evidence_artifacts", "information_scope"): ("text", "text", "YES", None),
+        ("finn_v2_conversations", "context_json"): ("jsonb", "jsonb", "NO", "'{}'::jsonb"),
+    })
 
     assert_finn_v2_schema(connection)
 
@@ -49,7 +55,10 @@ def test_schema_health_accepts_the_conversation_context_contract():
     ],
 )
 def test_schema_health_rejects_incompatible_context_contract(metadata, error_code):
-    connection = _Connection(metadata)
+    connection = _Connection({
+        ("finn_v2_evidence_artifacts", "information_scope"): ("text", "text", "YES", None),
+        ("finn_v2_conversations", "context_json"): metadata,
+    })
 
     with pytest.raises(FinnV2SchemaHealthError, match=error_code):
         assert_finn_v2_schema(connection)
