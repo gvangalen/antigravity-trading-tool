@@ -260,7 +260,18 @@ def test_model_repairs_unsupported_configuration_causality(monkeypatch):
     repair_trace = next(trace for trace in traces if trace["event_type"] == "reasoning_retry")
     assert repair_trace["error_details"]["primary_structured_reasoning"]["claims"][0]["claim_id"] == "C1"
     assert repair_trace["error_details"]["repair_contract"]["rejected_claims"] == [
-        {"claim_id": "C1", "path": "claims[0]", "evidence_refs": ["E1"]}
+        {
+            "claim_id": None,
+            "path": "main_observation",
+            "text": "De handmatige modus beperkt de effectiviteit van de bot.",
+            "evidence_refs": ["E1"],
+        },
+        {
+            "claim_id": "C1",
+            "path": "claims[0]",
+            "text": "De handmatige modus leidt tot gemiste kansen.",
+            "evidence_refs": ["E1"],
+        },
     ]
 
 

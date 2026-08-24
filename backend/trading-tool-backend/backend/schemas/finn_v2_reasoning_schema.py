@@ -177,6 +177,7 @@ class ReasoningRepairClaimContext(BaseModel):
 
     claim_id: Optional[str] = None
     path: str
+    text: str
     evidence_refs: List[str] = Field(default_factory=list)
 
     class Config:

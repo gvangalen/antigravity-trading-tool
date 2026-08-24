@@ -197,18 +197,50 @@ class FinnV2ReasoningPromptService:
             for field in issue.grounding_values.get("rejected_fields", [])
             if isinstance(field, dict) and field.get("path")
         }
+        response = previous_response or {}
+        response_evidence_refs = [str(ref) for ref in response.get("evidence_refs_used") or []]
         rejected_claims = []
-        for index, claim in enumerate((previous_response or {}).get("claims") or []):
-            if not isinstance(claim, dict):
-                continue
-            path = f"claims[{index}]"
-            if rejected_paths and path not in rejected_paths:
+
+        # Verifier issues can target top-level response fields as well as entries
+        # in claims. Keep the exact field path so one bounded repair can remove or
+        # neutralize the rejected assertion instead of guessing which text failed.
+        candidates = [
+            ("direct_answer", None, response.get("direct_answer"), response_evidence_refs),
+            ("main_observation", None, response.get("main_observation"), response_evidence_refs),
+        ]
+        next_step = response.get("next_step")
+        if isinstance(next_step, dict):
+            candidates.append(("next_step", None, next_step.get("instruction"), response_evidence_refs))
+        for index, point in enumerate(response.get("supporting_points") or []):
+            if isinstance(point, dict):
+                candidates.append(
+                    (
+                        f"supporting_points[{index}]",
+                        None,
+                        point.get("explanation"),
+                        [str(ref) for ref in point.get("evidence_refs") or []],
+                    )
+                )
+        for index, claim in enumerate(response.get("claims") or []):
+            if isinstance(claim, dict):
+                candidates.append(
+                    (
+                        f"claims[{index}]",
+                        str(claim.get("claim_id")) if claim.get("claim_id") else None,
+                        claim.get("text"),
+                        [str(ref) for ref in claim.get("evidence_refs") or []],
+                    )
+                )
+
+        for path, claim_id, text, evidence_refs in candidates:
+            if path not in rejected_paths or not isinstance(text, str) or not text.strip():
                 continue
             rejected_claims.append(
                 ReasoningRepairClaimContext(
-                    claim_id=str(claim.get("claim_id")) if claim.get("claim_id") else None,
+                    claim_id=claim_id,
                     path=path,
-                    evidence_refs=[str(ref) for ref in claim.get("evidence_refs") or []],
+                    text=text.strip(),
+                    evidence_refs=evidence_refs,
                 )
             )
         forbidden_relationships = sorted(
