@@ -383,6 +383,52 @@ def test_integrated_evaluation_does_not_pass_when_model_reasoning_contract_faile
     assert "model_reasoning_contract_failed" in verifier.reason_codes
 
 
+def test_evidence_limited_evaluation_is_not_treated_as_a_model_contract_bypass():
+    service = FinnV2ResponseVerifierService(session=object())
+    draft = ResponseDraft(
+        draft_id="draft-evidence-limited", run_id="run-evidence-limited", user_id=7, mode="EVALUATE",
+        direct_answer="De beschikbare evidence bevestigt je opgeslagen planonderdelen, maar bewijst geen betrouwbaar causaal zwak punt.",
+        main_observation="De beschikbare gegevens bewijzen geen direct verband tussen een opgeslagen veld en een plantekort.",
+        claims=[
+            {
+                "claim_id": "C1",
+                "claim_type": "fact",
+                "text": "Setup 293 is opgeslagen.",
+                "evidence_refs": ["E3"],
+                "confidence": "high",
+            }
+        ],
+        evidence_refs_used=["E1", "E2", "E3", "E4", "E5"],
+        evidence_set_hash="hash-evidence-limited",
+        reasoning_provenance={
+            "provider_called": True,
+            "reasoning_source": "contract_evidence_limitation",
+            "validation_status": "evidence_limited",
+        },
+        created_at=datetime.now(timezone.utc),
+    )
+    evidence = [
+        SimpleNamespace(evidence_id="E1", domain="identity_context", tool_name="read_profile", entity_type="profile", entity_id="7", asset=None, freshness="fresh", confidence="high", facts={"trader_profile": {"risk_profile": "balanced"}}),
+        SimpleNamespace(evidence_id="E2", domain="market_context", tool_name="read_indicator_configuration", entity_type="indicator_configuration", entity_id=None, asset="BTC", freshness="fresh", confidence="high", facts={"configured_indicators": [{"indicator": "rsi"}]}),
+        SimpleNamespace(evidence_id="E3", domain="plan_context", tool_name="read_active_setup", entity_type="setup", entity_id="293", asset="BTC", freshness="fresh", confidence="high", facts={"setup_id": 293}),
+        SimpleNamespace(evidence_id="E4", domain="plan_context", tool_name="read_linked_strategy", entity_type="strategy", entity_id="309", asset="BTC", freshness="fresh", confidence="high", facts={"strategy_id": 309}),
+        SimpleNamespace(evidence_id="E5", domain="automation_context", tool_name="read_linked_bot", entity_type="bot", entity_id="170", asset="BTC", freshness="fresh", confidence="high", facts={"bot_id": 170}),
+    ]
+
+    verifier = service._deterministic_verify(
+        run=SimpleNamespace(id="run-evidence-limited", user_id=7, message="Beoordeel mijn plan.", conversation_id="conv-1"),
+        orchestrator_result=SimpleNamespace(analysis=SimpleNamespace(subject_scopes=["profile", "indicators", "setup", "strategy", "bot"]), selected_clarification=None),
+        policy=SimpleNamespace(allowed=True, proposal_allowed=False, confirmation_required=False, operation_type=None),
+        context=SimpleNamespace(evidence=evidence, uncertainty_codes=[]),
+        validation=SimpleNamespace(id="validation-evidence-limited", evidence_set_hash="hash-evidence-limited", integrity_status="valid"),
+        draft=draft,
+        repair_attempt=1,
+    )
+
+    assert "model_reasoning_contract_failed" not in verifier.reason_codes
+    assert verifier.coverage.coverage_ok is True
+
+
 def test_mode_purity_accepts_not_executed_watchlist_proposal_wording():
     service = FinnV2ResponseVerifierService(session=object())
     draft = ResponseDraft(

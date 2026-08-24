@@ -807,7 +807,7 @@ def test_configuration_causality_rejects_non_bot_configuration_claims():
     assert details["forbidden_claim_relationships"] == ["configuration_or_status_implies_causality"]
 
 
-def test_repeated_configuration_causality_receives_only_one_semantic_repair(monkeypatch):
+def test_repeated_configuration_causality_ends_with_evidence_limitation_after_one_repair(monkeypatch):
     service = FinnV2ReasoningService(session=object())
     context_payload = _context().dict()
     context_payload["evidence"].append(
@@ -849,9 +849,16 @@ def test_repeated_configuration_causality_receives_only_one_semantic_repair(monk
         validation=SimpleNamespace(id="validation-1"), context=context, model_name="gpt-4o-mini", input_hash="hash-input",
     ))
 
-    assert result["status"] == "failed"
+    assert result["status"] == "ready"
     assert len(calls) == 2
-    assert persisted["result"].reasoning_provenance["repair_status"] == "failed"
+    reasoning = persisted["result"]
+    assert reasoning.mode == "EVALUATE"
+    assert reasoning.reasoning_provenance["repair_status"] == "failed"
+    assert reasoning.reasoning_provenance["reasoning_source"] == "contract_evidence_limitation"
+    assert reasoning.reasoning_provenance["validation_status"] == "evidence_limited"
+    assert "handmatige mode" not in reasoning.direct_answer.lower()
+    assert "handmatige mode" not in reasoning.main_observation.lower()
+    assert reasoning.claims[0].evidence_refs == ["E1"]
 
 
 def test_model_repairs_unsupported_market_causality(monkeypatch):

@@ -686,6 +686,53 @@ class FinnV2ReasoningService:
                     [error],
                     error_details=error_details,
                 )
+                if (
+                    isinstance(exc, FinnV2ReasoningContractError)
+                    and repair_contract is not None
+                    and normalize_interaction_mode(context.interaction_mode) == "EVALUATE"
+                ):
+                    # The model had one bounded chance to repair a semantically
+                    # unsupported conclusion. Preserve the gathered facts, but do
+                    # not invent a replacement weakness once that repair fails.
+                    limited = self.fallbacks.evidence_limited_evaluation_draft(
+                        run_id=run_id,
+                        user_id=user_id,
+                        context=context,
+                        model=model_name,
+                        error_codes=["evidence_limitation_after_repair"],
+                    )
+                    self._validate_refs(limited, context)
+                    limited.reasoning_provenance = self._reasoning_provenance(
+                        response=response,
+                        model=model_name,
+                        attempt=attempt,
+                        validation_status="evidence_limited",
+                        validation_errors=repair_validation_errors,
+                        fallback_reason=error,
+                        repair_audit=repair_contract,
+                    )
+                    limited.reasoning_provenance["reasoning_source"] = "contract_evidence_limitation"
+                    return await self._persist_record(
+                        run_id=run_id,
+                        user_id=user_id,
+                        orchestrator_result_id=orchestrator_result.orchestrator_result_id,
+                        policy_decision_id=policy.policy_decision_id,
+                        snapshot_id=snapshot.id,
+                        validation_id=validation.id,
+                        status="ready",
+                        mode=limited.mode,
+                        context_version=context.context_version,
+                        evidence_set_hash=context.evidence_set_hash,
+                        input_hash=input_hash,
+                        model=model_name,
+                        result=limited,
+                        error_codes=["evidence_limitation_after_repair"],
+                        retry_count=attempt,
+                        input_tokens=response.get("input_tokens"),
+                        output_tokens=response.get("output_tokens"),
+                        reasoning_tokens=response.get("reasoning_tokens"),
+                        latency_ms=int((monotonic() - started) * 1000),
+                    )
                 fallback = self._fallback_for_reasoning_error(
                     run_id=run_id,
                     user_id=user_id,

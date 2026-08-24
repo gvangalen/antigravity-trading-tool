@@ -303,10 +303,15 @@ class FinnV2ResponseVerifierService:
 
         # A safe fallback cannot attest that integrated model reasoning satisfied its contract.
         provenance = draft.reasoning_provenance or {}
+        evidence_limited_contract_outcome = (
+            provenance.get("reasoning_source") == "contract_evidence_limitation"
+            and provenance.get("validation_status") == "evidence_limited"
+        )
         if (
             normalize_interaction_mode(draft.mode) == "EVALUATE"
             and provenance.get("provider_called")
             and provenance.get("validation_status") != "passed"
+            and not evidence_limited_contract_outcome
         ):
             reason_codes.append("model_reasoning_contract_failed")
         model_reasoning_ok = "model_reasoning_contract_failed" not in reason_codes

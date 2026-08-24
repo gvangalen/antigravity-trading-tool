@@ -895,6 +895,93 @@ class FinnV2ReasoningFallbackService:
             created_at=datetime.now(timezone.utc),
         )
 
+    def evidence_limited_evaluation_draft(
+        self,
+        *,
+        run_id: str,
+        user_id: int,
+        context: ReasoningContextPackage,
+        model: str,
+        error_codes: list[str],
+    ) -> ReasoningResult:
+        """Return facts plus an explicit limitation after an unsafe model evaluation.
+
+        A configuration-only artifact can prove saved facts, but it cannot prove
+        why a plan is weak. Keep the factual claims from the normal grounded
+        draft and replace only the unsupported evaluative conclusion.
+        """
+        result = self.grounded_evaluation_draft(
+            run_id=run_id,
+            user_id=user_id,
+            context=context,
+            model=model,
+            error_codes=error_codes,
+        )
+        if result.mode != "EVALUATE":
+            # A rejected model response can still have valid evidence even when it
+            # cannot support one of the normal deterministic evaluation claims.
+            # Keep the requested evaluation mode and state only that bounded fact.
+            evidence = list(context.evidence)
+            if not evidence:
+                return result
+            first_evidence = evidence[0]
+            result = ReasoningResult(
+                reasoning_result_id=f"finn-v2-reasoning-{uuid.uuid4().hex}",
+                run_id=run_id,
+                user_id=user_id,
+                mode="EVALUATE",
+                direct_answer="De beschikbare evidence wordt veilig beperkt beoordeeld.",
+                main_observation="Er is evidence beschikbaar voor een feitelijke beoordeling.",
+                supporting_points=[],
+                claims=[
+                    ReasoningClaim(
+                        claim_id="evidence-limitation-context",
+                        claim_type="fact",
+                        text=(
+                            "Voor deze beoordeling is opgeslagen evidence beschikbaar "
+                            f"uit {first_evidence.tool_name}."
+                        ),
+                        evidence_refs=[first_evidence.evidence_id],
+                        confidence="high",
+                    )
+                ],
+                uncertainty_summary="",
+                uncertainty_codes=[],
+                next_step=None,
+                follow_up_question=None,
+                proposal_candidate=None,
+                evidence_refs_used=[first_evidence.evidence_id],
+                model=model,
+                created_at=datetime.now(timezone.utc),
+            )
+
+        result.direct_answer = (
+            "De beschikbare evidence bevestigt je opgeslagen planonderdelen, "
+            "maar bewijst geen betrouwbaar causaal zwak punt."
+        )
+        result.main_observation = (
+            "Ik kan je profiel, indicatorconfiguratie, setup, strategie en bot "
+            "feitelijk onderbouwen, maar deze run bevat geen direct bewijs van een "
+            "verband tussen een opgeslagen veld en een plantekort."
+        )
+        result.uncertainty_summary = (
+            "Voor een onderbouwde zwaktebeoordeling is expliciete evaluatie-, "
+            "uitvoerings- of marktuitkomst-evidence nodig."
+        )
+        result.next_step = ReasoningNextStep(
+            title="Voeg toetsbare plan-evidence toe",
+            instruction=(
+                "Leg een concrete beslisregel of een beoordeelde uitvoerings- "
+                "of marktuitkomst vast voordat FINN een oorzaak als zwak punt beoordeelt."
+            ),
+            operation_type=None,
+            target_entity_type=None,
+            target_entity_id=None,
+            requires_confirmation=False,
+        )
+        result.uncertainty_codes = list(dict.fromkeys([*error_codes, "evidence_limitation_after_repair"]))
+        return result
+
     def _first_asset_symbol(self, text: str) -> str | None:
         match = re.search(r"\b(BTC|ETH|SOL|AAPL|TSLA|NVDA)\b", text.upper())
         return match.group(1) if match else None
