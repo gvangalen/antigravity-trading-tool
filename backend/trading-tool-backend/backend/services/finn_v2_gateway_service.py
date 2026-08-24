@@ -234,10 +234,16 @@ class FinnV2GatewayService:
             from backend.celery_task.finn_v2_task import process_finn_v2_run
 
             dispatch = await self.dispatches.get_for_run(run.id)
-            process_finn_v2_run.apply_async(
-                kwargs={"run_id": run.id},
-                task_id=dispatch.task_id,
-                queue=dispatch.queue,
+            # Celery's broker client is synchronous. It must never hold the
+            # request event loop after the run and outbox record are durable.
+            await asyncio.wait_for(
+                asyncio.to_thread(
+                    process_finn_v2_run.apply_async,
+                    kwargs={"run_id": run.id},
+                    task_id=dispatch.task_id,
+                    queue=dispatch.queue,
+                ),
+                timeout=1.0,
             )
             await self.dispatches.mark_dispatched(dispatch.dispatch_id)
             await self.session.commit()
