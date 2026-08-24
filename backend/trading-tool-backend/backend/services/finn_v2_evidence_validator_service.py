@@ -185,12 +185,7 @@ class FinnV2EvidenceValidatorService:
         return ClarificationCandidate(code=candidate_code, domain=domain, question=question, entity_type=entity_type)
 
     def _stale_code(self, tool_name: str) -> str:
-        mapping = {
-            "read_market_snapshot": "market_snapshot_stale",
-            "read_macro_snapshot": "macro_snapshot_stale",
-            "read_technical_snapshot": "technical_snapshot_stale",
-            "read_bot_status": "bot_status_stale",
-            "read_portfolio": "portfolio_stale",
-            "read_latest_report": "report_stale",
-        }
-        return mapping.get(tool_name, "source_unavailable")
+        # Freshness describes the collected artifact, not the entity returned by
+        # the tool. Preserve the source for traceability without manufacturing an
+        # entity status such as "bot_status_stale" from source recency.
+        return f"evidence_freshness_stale:{tool_name}"

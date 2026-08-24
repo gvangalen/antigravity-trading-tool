@@ -358,6 +358,77 @@ def test_model_repairs_unsupported_stale_bot_status_causality(monkeypatch):
     assert "manual" in prompts[1]
 
 
+def test_model_repair_treats_stale_artifact_freshness_as_an_evidence_limitation(monkeypatch):
+    service = FinnV2ReasoningService(session=object())
+    context_payload = _context().dict()
+    context_payload["evidence"].append(
+        {
+            "evidence_id": "E2",
+            "artifact_id": "artifact-2",
+            "tool_name": "read_bot_status",
+            "domain": "automation_context",
+            "entity_type": "bot_status",
+            "entity_id": "186",
+            "asset": "BTC",
+            "source": "bot_repository",
+            "freshness": "stale",
+            "confidence": "medium",
+            "facts": {"is_live": False},
+        }
+    )
+    context = ReasoningContextPackage.parse_obj(context_payload)
+    persisted = {}
+    prompts = []
+    unsupported = _model_output()
+    unsupported["direct_answer"] = "De stale botstatus maakt je plan minder betrouwbaar."
+    unsupported["main_observation"] = "De stale status veroorzaakt vertraging in je uitvoering."
+    unsupported["claims"][0]["text"] = "De botstatus is stale en beperkt de effectiviteit."
+    repaired = _model_output()
+    repaired["direct_answer"] = "De beschikbare evidence bewijst geen betrouwbaar zwak punt in de botuitvoering."
+    repaired["main_observation"] = "De bot staat niet live; de recency van de statusbron is onvoldoende om de uitvoering te beoordelen."
+    repaired["claims"][0]["text"] = "Bot 186 staat niet live volgens de opgeslagen status."
+    repaired["uncertainty_summary"] = "De statusbron is niet recent genoeg voor een oordeel over uitvoering."
+    responses = iter(
+        [
+            {"parsed": unsupported, "model": "gpt-4o-mini", "provider_metadata": {"response_status": "completed", "response_id": "resp-primary", "parsed_source": "response_output_text"}},
+            {"parsed": repaired, "model": "gpt-4o-mini", "provider_metadata": {"response_status": "completed", "response_id": "resp-repair", "parsed_source": "response_output_text"}},
+        ]
+    )
+
+    async def _persist_record(**kwargs):
+        persisted.update(kwargs)
+        return kwargs
+
+    async def _append_trace(*_args, **_kwargs):
+        return None
+
+    def _call_provider(**kwargs):
+        prompts.append(kwargs["prompt"])
+        return next(responses)
+
+    service._persist_record = _persist_record
+    service._append_trace = _append_trace
+    monkeypatch.setattr(service.flags, "reasoning_max_retries", lambda: 1)
+    monkeypatch.setattr(service.flags, "reasoning_timeout_seconds", lambda: 5)
+    monkeypatch.setattr(service.flags, "reasoning_max_output_tokens", lambda: 600)
+    monkeypatch.setattr("backend.services.finn_v2_reasoning_service.openai_client.ask_gpt_structured_response", _call_provider)
+
+    result = asyncio.run(
+        service._run_model_reasoning(
+            run_id="run-1", user_id=7, trace_id="trace-1",
+            orchestrator_result=SimpleNamespace(orchestrator_result_id="orchestrator-1"),
+            policy=SimpleNamespace(policy_decision_id="policy-1"),
+            snapshot=SimpleNamespace(id="snapshot-1"), validation=SimpleNamespace(id="validation-1"),
+            context=context, model_name="gpt-4o-mini", input_hash="hash-input",
+        )
+    )
+
+    assert result["status"] == "ready"
+    assert persisted["result"].reasoning_provenance["reasoning_source"] == "model_repair"
+    assert "Artifact freshness labels" in prompts[1]
+    assert "never report them as an entity status" in prompts[1]
+
+
 def test_configuration_causality_rejects_localized_stale_status_effects():
     service = FinnV2ReasoningService(session=object())
     context_payload = _context().dict()

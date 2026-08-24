@@ -69,7 +69,7 @@ def test_integrated_plan_reasoning_accepts_complete_scope_coverage_without_metad
     context = ReasoningContextPackage(
         run_id="run-1", user_id=7, user_message="Evalueer mijn plan", locale="nl-NL", interaction_mode="EVALUATE",
         subject_scopes=["profile", "indicators", "setup", "strategy", "bot"], orchestrator_result_id="o-1", snapshot_id="s-1",
-        validation_id="v-1", policy_decision_id="p-1", evidence_set_hash="hash", uncertainty_codes=["bot_status_stale"],
+        validation_id="v-1", policy_decision_id="p-1", evidence_set_hash="hash", uncertainty_codes=["evidence_freshness_stale:read_bot_status"],
         evidence=[
             ReasoningEvidenceItem(evidence_id="E1", artifact_id="a1", tool_name="read_profile", domain="identity_context", entity_type="profile", source="internal", freshness="fresh", confidence="high", facts={"trader_profile": {"risk_profile": "balanced"}}),
             ReasoningEvidenceItem(evidence_id="E2", artifact_id="a2", tool_name="read_indicator_configuration", domain="market_context", entity_type="indicator_configuration", source="internal", freshness="fresh", confidence="high", facts={"configured_indicators": [{"indicator": "rsi"}]}),

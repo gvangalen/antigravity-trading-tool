@@ -38,7 +38,7 @@ def test_orchestrator_outcome_is_reasoning_ready_for_degraded_non_blocking_domai
                 domain="automation_context",
                 status="degraded",
                 confidence="medium",
-                issues=[EvidenceIssue(code="bot_status_stale", severity="warning", domain="automation_context", message="stale")],
+                issues=[EvidenceIssue(code="evidence_freshness_stale:read_bot_status", severity="warning", domain="automation_context", message="stale")],
             ),
             DomainValidationResult(
                 domain="plan_context",
@@ -61,7 +61,7 @@ def test_orchestrator_outcome_is_reasoning_ready_for_degraded_non_blocking_domai
     )
 
     assert result.outcome == "reasoning_ready"
-    assert result.uncertainty_codes == ["bot_status_stale"]
+    assert result.uncertainty_codes == ["evidence_freshness_stale:read_bot_status"]
 
 
 def test_orchestrator_outcome_picks_single_clarification_candidate_by_priority():
