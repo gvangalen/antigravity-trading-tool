@@ -540,13 +540,15 @@ class FinnV2ReasoningFallbackService:
                 model=model,
                 error_codes=[*error_codes, "proposal_asset_missing_after_validation"],
             )
+        timeframe = str(proposed_fields.get("timeframe") or "").strip().upper()
+        timeframe_detail = f" met {timeframe} als primair timeframe" if timeframe else ""
         evidence_refs = [item.evidence_id for item in [active_asset, evidence_by_tool.get("read_profile"), evidence_by_tool.get("read_user_preferences")] if item is not None]
         return ReasoningResult(
             reasoning_result_id=f"finn-v2-reasoning-{uuid.uuid4().hex}",
             run_id=run_id,
             user_id=user_id,
             mode="CREATE_PROPOSAL",
-            direct_answer=f"Ik kan een concept-setup voor {requested_asset} voorbereiden met {timeframe} als primair timeframe.",
+            direct_answer=f"Ik kan een concept-setup voor {requested_asset} voorbereiden{timeframe_detail}.",
             main_observation="Deze setup is nog niet opgeslagen; het gaat om een voorstel dat eerst bevestigd moet worden.",
             supporting_points=[],
             claims=[],

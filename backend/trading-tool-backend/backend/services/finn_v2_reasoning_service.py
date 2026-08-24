@@ -4,7 +4,7 @@ import logging
 import uuid
 from datetime import datetime, timezone
 from time import monotonic
-from typing import Optional
+from typing import Any, Optional
 
 from pydantic import ValidationError
 
@@ -54,7 +54,7 @@ class FinnV2ReasoningContractError(ValueError):
         code: str,
         missing_scopes: list[str],
         path: str = "evidence_refs_used",
-        grounding_values: Optional[dict[str, list[str]]] = None,
+        grounding_values: Optional[dict[str, Any]] = None,
     ):
         self.code = code
         self.missing_scopes = missing_scopes
@@ -447,6 +447,8 @@ class FinnV2ReasoningService:
         last_error_codes: list[str] = []
         repair_validation_errors: list[dict[str, object]] = []
         repair_previous_response: dict[str, object] | None = None
+        repair_contract: dict[str, object] | None = None
+        semantic_repair_used = False
         for attempt in range(retries_allowed + 1):
             await self._append_trace(run_id, user_id, trace_id, "reasoning_started", context, model_name, "generating", None, attempt, input_hash, [])
             # Do not hold the transaction that contains tool/evidence state while
@@ -605,6 +607,7 @@ class FinnV2ReasoningService:
                             model=response.get("model") or model_name,
                             attempt=attempt,
                             validation_status="passed",
+                            repair_audit=repair_contract,
                         ),
                         "created_at": datetime.now(timezone.utc),
                     }
@@ -624,6 +627,11 @@ class FinnV2ReasoningService:
                     # Semantic contract repairs need to see the rejected claim so
                     # they can replace it. Generic schema repairs stay sanitized.
                     repair_previous_response = response.get("parsed")
+                    repair_contract = self.prompts.build_repair_contract(
+                        context=context,
+                        validation_errors=repair_validation_errors,
+                        previous_response=repair_previous_response,
+                    ).dict()
                 else:
                     repair_validation_errors = self._validation_error_details(exc)
                     repair_previous_response = None
@@ -635,7 +643,14 @@ class FinnV2ReasoningService:
                     validation_errors=repair_validation_errors,
                 )
                 last_error_codes = [error]
-                if attempt < retries_allowed:
+                # Semantic repairs are bounded to one attempt. A second invalid
+                # result must remain fail-closed rather than retrying the same claim.
+                can_repair = attempt < retries_allowed and (
+                    not isinstance(exc, FinnV2ReasoningContractError) or not semantic_repair_used
+                )
+                if can_repair:
+                    if isinstance(exc, FinnV2ReasoningContractError):
+                        semantic_repair_used = True
                     await self._append_trace(
                         run_id,
                         user_id,
@@ -648,7 +663,11 @@ class FinnV2ReasoningService:
                         attempt + 1,
                         input_hash,
                         [error],
-                        error_details=error_details,
+                        error_details={
+                            **error_details,
+                            "repair_contract": repair_contract,
+                            "primary_structured_reasoning": repair_previous_response,
+                        },
                     )
                     increment_execution_safety_counter(f"finn_v2_reasoning_retries_total:{error}")
                     continue
@@ -680,6 +699,7 @@ class FinnV2ReasoningService:
                     validation_status="failed",
                     validation_errors=repair_validation_errors,
                     fallback_reason=error,
+                    repair_audit=repair_contract,
                 )
                 return await self._persist_record(
                     run_id=run_id,
@@ -957,28 +977,51 @@ class FinnV2ReasoningService:
 
     @staticmethod
     def _validate_configuration_causality(*, result: ReasoningResult, context) -> None:
-        """Reject causal conclusions that are unsupported by a configuration value alone."""
-        bot_mode_values = {
-            str((item.facts or {}).get("mode") or "").lower()
-            for item in context.evidence
-            if item.tool_name in {"read_linked_bot", "read_bot_status"}
+        """Reject causal conclusions that are unsupported by configuration/status evidence."""
+        configuration_tools = {
+            "read_active_setup",
+            "read_linked_strategy",
+            "read_linked_bot",
+            "read_bot_status",
+            "read_indicator_configuration",
         }
-        bot_mode_values.discard("")
-        if not bot_mode_values:
+        configuration_fields = {
+            "mode", "status", "is_live", "is_active", "setup_type", "timeframe", "execution_mode",
+        }
+        configuration_facts = []
+        configuration_terms = set()
+        value_aliases = {
+            "manual": {"manual", "handmatig", "handmatige"},
+            "automated": {"automated", "automatisch", "geautomatiseerd"},
+            "false": {"niet live", "not live", "paper", "false"},
+            "true": {"live", "active", "actief", "true"},
+        }
+        for item in context.evidence:
+            if item.tool_name not in configuration_tools:
+                continue
+            for field, value in (item.facts or {}).items():
+                if field not in configuration_fields or value in (None, ""):
+                    continue
+                normalized_value = str(value).lower()
+                configuration_facts.append(
+                    {
+                        "evidence_id": item.evidence_id,
+                        "tool_name": item.tool_name,
+                        "field": field,
+                        "value": value,
+                    }
+                )
+                configuration_terms.update(value_aliases.get(normalized_value, {normalized_value}))
+        if not configuration_facts:
             return
 
         statements = [
-            result.direct_answer or "",
-            result.main_observation or "",
-            *(claim.text for claim in result.claims),
-            *(point.explanation for point in result.supporting_points),
-            result.next_step.instruction if result.next_step is not None else "",
+            ("direct_answer", None, result.direct_answer or ""),
+            ("main_observation", None, result.main_observation or ""),
+            *[(f"claims[{index}]", claim.claim_id, claim.text) for index, claim in enumerate(result.claims)],
+            *[(f"supporting_points[{index}]", None, point.explanation) for index, point in enumerate(result.supporting_points)],
+            ("next_step", None, result.next_step.instruction if result.next_step is not None else ""),
         ]
-        mode_terms_by_value = {
-            "manual": {"manual", "handmatig", "handmatige"},
-            "automated": {"automated", "automatisch", "geautomatiseerd"},
-        }
-        mode_terms = set().union(*(mode_terms_by_value.get(value, {value}) for value in bot_mode_values))
         causal_terms = {
             "beperkt",
             "belemmer",
@@ -1011,22 +1054,24 @@ class FinnV2ReasoningService:
             "ineffective",
             "undermine",
         }
-        bot_status_terms = {"stale", "verouder", "outdated"}
         # Evidence-backed facts and unrelated uncertainty may coexist in a response.
-        # Require the mode and causal language to occur in the same statement.
-        if any(
-            (
-                any(term in statement.lower() for term in mode_terms)
-                or any(term in statement.lower() for term in bot_status_terms)
-            )
+        # Require the configuration value and causal language to occur together.
+        rejected_fields = [
+            {"path": path, "claim_id": claim_id}
+            for path, claim_id, statement in statements
+            if any(term in statement.lower() for term in configuration_terms)
             and any(term in statement.lower() for term in causal_terms)
-            for statement in statements
-        ):
+        ]
+        if rejected_fields:
             raise FinnV2ReasoningContractError(
                 code="unsupported_configuration_causality",
                 missing_scopes=[],
                 path="claims",
-                grounding_values={"supported_bot_mode_facts": sorted(bot_mode_values)},
+                grounding_values={
+                    "configuration_facts": configuration_facts,
+                    "rejected_fields": rejected_fields,
+                    "forbidden_claim_relationships": ["configuration_or_status_implies_causality"],
+                },
             )
 
     @staticmethod
@@ -1258,6 +1303,7 @@ class FinnV2ReasoningService:
         validation_status: str,
         validation_errors: Optional[list[dict[str, str]]] = None,
         fallback_reason: Optional[str] = None,
+        repair_audit: Optional[dict[str, object]] = None,
     ) -> dict:
         metadata = response.get("provider_metadata") or {}
         return {
@@ -1273,6 +1319,7 @@ class FinnV2ReasoningService:
             "validation_errors": validation_errors or [],
             "repair_attempted": attempt > 0,
             "repair_status": "passed" if attempt and validation_status == "passed" else ("failed" if attempt else "not_attempted"),
+            "repair_contract": repair_audit if attempt else None,
             "fallback_reason": fallback_reason,
         }
 

@@ -98,7 +98,19 @@ class FinnV2OperationStateService:
                 values["setup_type"] = "dca"
             elif any(token in lowered for token in ("trade", "swing", "scalp", "setup")):
                 values["setup_type"] = "trade"
-            named = re.search(r"(?:naam|name)\s*(?:is|:)?\s*[\"']?([\w .-]{2,80})", text, re.IGNORECASE)
+            named = re.search(
+                r"(?:naam|name)\s*(?:is|:)?\s*[\"']?([\w .-]{2,80})",
+                text,
+                re.IGNORECASE,
+            )
+            if named is None:
+                # A pending guided operation has already asked specifically for
+                # a name, so accept the common natural-language follow-up too.
+                named = re.search(
+                    r"\b(?:noem\s+(?:hem|haar)|ik\s+noem\s+(?:hem|haar)|hij\s+heet|het\s+heet)\s+[\"']?([\w .-]{2,80})",
+                    text,
+                    re.IGNORECASE,
+                )
             if named:
                 values["name"] = named.group(1).strip(" .")
             timeframe = self._TIMEFRAME.search(text)

@@ -8,6 +8,9 @@ from backend.schemas.finn_v2_reasoning_schema import (
     FINN_V2_REASONING_PROMPT_VERSION,
     FINN_V2_REASONING_SCHEMA_VERSION,
     ProposalOperationType,
+    ReasoningRepairClaimContext,
+    ReasoningRepairContract,
+    ReasoningRepairIssue,
     ReasoningClaimType,
     ReasoningConfidence,
 )
@@ -105,61 +108,22 @@ class FinnV2ReasoningPromptService:
         previous_response: dict[str, object] | None = None,
     ) -> str:
         context_json = json.dumps(context.dict(), default=str, ensure_ascii=True, separators=(",", ":"))
-        indicator_repair_instruction = (
-            "For unsupported_indicator_configuration_inference, treat configured indicators and "
-            "category counts only as facts: do not call them insufficient, missing, limiting, required, or causal "
-            "unless the supplied evidence explicitly proves that conclusion. Do not describe zero configured items in "
-            "a category as a gap. Configuration evidence also does not prove that indicators must be combined, confirm "
-            "each other, be strong enough, or have a missing decision rule. Do not infer that such a rule is absent. "
-            "Do not describe an indicator interaction, timing condition, signal threshold, confirmation rule, or decision "
-            "rule as the missing component of the plan. When the supplied evidence does not prove one concrete missing "
-            "component, state that the stored evidence does not establish one instead of inventing one. In that case, make "
-            "the single next step a neutral review of the saved plan; it must not prescribe how configured indicators work "
-            "together. "
-            "Instead, choose one neutral, evidence-grounded planning observation and make the next step a review or "
-            "documentation step about the saved profile, strategy, setup, or bot, phrased without claiming that any "
-            "indicator configuration or rule is incomplete. This prohibition applies to direct_answer, "
-            "main_observation, claims, supporting_points and next_step.\n"
-            if any(error.get("code") == "unsupported_indicator_configuration_inference" for error in validation_errors or [])
-            else ""
-        )
-        bot_configuration_repair_instruction = (
-            "For unsupported_configuration_causality, the following saved bot configuration facts are canonical: "
-            f"{json.dumps(self._repair_grounding_values(validation_errors, 'unsupported_configuration_causality'), ensure_ascii=True, separators=(',', ':'))}. "
-            "Keep bot mode and status strictly factual. "
-            "A manual mode or a stale status may be named only as the stored value; it does not prove that "
-            "the bot is broken, ineffective, outdated, inactive, limiting, or unsuitable. Do not infer missed "
-            "opportunities or strategy conflict from those values. If the status needs attention, make the one "
-            "next step a neutral review of the stored status rather than a performance or operational claim. "
-            "Do not identify bot mode or bot status as the missing component of the plan, and do not prescribe "
-            "a decision rule, configuration change, or bot action because of those values. When the evidence "
-            "does not prove one concrete missing component, say that the stored evidence does not establish one "
-            "instead of inventing one; the single next step must then be a neutral review of the saved plan. "
-            "This prohibition applies to direct_answer, main_observation, claims, supporting_points and next_step.\n"
-            if any(error.get("code") == "unsupported_configuration_causality" for error in validation_errors or [])
-            else ""
-        )
-        stored_field_repair_instruction = (
-            "For unsupported_stored_field_absence, the following canonical saved strategy values are present and "
-            "must be retained exactly: "
-            f"{json.dumps(self._repair_grounding_values(validation_errors, 'unsupported_stored_field_absence'), ensure_ascii=True, separators=(',', ':'))}. "
-            "Do not call an entry, stop loss, target, or exit level missing, absent, unspecified, or unavailable "
-            "when its saved value is in the grounding context. Use the saved field as a fact or choose a different "
-            "evidence-grounded observation. If the evidence does not prove a missing plan component, say that it "
-            "does not establish one and make the single next step a neutral review or documentation step. This "
-            "prohibition applies to direct_answer, main_observation, claims, supporting_points and next_step.\n"
-            if any(error.get("code") == "unsupported_stored_field_absence" for error in validation_errors or [])
-            else ""
+        repair_contract = self.build_repair_contract(
+            context=context,
+            validation_errors=validation_errors,
+            previous_response=previous_response,
         )
         repair_instruction = (
-            "Your previous response did not satisfy the required structured-output contract. "
-            "Correct only the listed field paths and error codes, return every required field with valid values, "
-            "and do not add fields.\n"
-            f"Validation errors: {json.dumps(validation_errors or [], ensure_ascii=True, separators=(',', ':'))}\n"
-            "For missing_required_scope_refs, cite an evidence reference from every missing scope in "
-            "evidence_refs_used and use the supplied grounding values rather than counts, categories, or "
-            f"generic labels. Previous rejected structured response: {json.dumps(previous_response or {}, ensure_ascii=True, separators=(',', ':'))}. "
-            f"Do not repeat the rejected claim. {indicator_repair_instruction}{bot_configuration_repair_instruction}{stored_field_repair_instruction}"
+            "Your previous response was rejected by the evidence contract. Perform exactly one bounded repair. "
+            "Only change rejected fields or replace them with evidence-supported content. A saved configuration or "
+            "status is factual only; it cannot be described as a cause, risk, limitation, weakness, or effect unless "
+            "the supplied evidence explicitly supports that relationship. Do not invent a weak point just because the "
+            "question asks for one: use state_evidence_limitation when the evidence does not establish it. "
+            "Choose only these repair actions: remove_claim, narrow_claim, convert_causality_to_observation, "
+            "replace_with_supported_claim, or state_evidence_limitation. Return every required schema field and do not "
+            "repeat a forbidden relationship.\n"
+            f"Typed repair contract: {json.dumps(repair_contract.dict(), ensure_ascii=True, separators=(',', ':'))}\n"
+            f"Previous rejected structured response: {json.dumps(previous_response or {}, ensure_ascii=True, separators=(',', ':'))}."
             if repair_attempt
             else ""
         )
@@ -210,14 +174,65 @@ class FinnV2ReasoningPromptService:
         )
 
     @staticmethod
-    def _repair_grounding_values(validation_errors: list[dict[str, object]] | None, code: str) -> dict[str, object]:
-        """Expose the bounded canonical facts that are needed for a model repair."""
-        for error in validation_errors or []:
-            if error.get("code") == code:
-                values = error.get("grounding_values")
-                if isinstance(values, dict):
-                    return values
-        return {}
+    def build_repair_contract(
+        *,
+        context: ReasoningContextPackage,
+        validation_errors: list[dict[str, object]] | None,
+        previous_response: dict[str, object] | None,
+    ) -> ReasoningRepairContract:
+        """Build the bounded model-repair input without exposing unrelated runtime data."""
+        request_plan = context.request_plan or {}
+        issues = [
+            ReasoningRepairIssue(
+                path=str(error.get("path") or "response"),
+                code=str(error.get("code") or "validation_error"),
+                missing_scopes=[scope for scope in str(error.get("missing_scopes") or "").split(",") if scope],
+                grounding_values=error.get("grounding_values") if isinstance(error.get("grounding_values"), dict) else {},
+            )
+            for error in validation_errors or []
+        ]
+        rejected_paths = {
+            str(field.get("path"))
+            for issue in issues
+            for field in issue.grounding_values.get("rejected_fields", [])
+            if isinstance(field, dict) and field.get("path")
+        }
+        rejected_claims = []
+        for index, claim in enumerate((previous_response or {}).get("claims") or []):
+            if not isinstance(claim, dict):
+                continue
+            path = f"claims[{index}]"
+            if rejected_paths and path not in rejected_paths:
+                continue
+            rejected_claims.append(
+                ReasoningRepairClaimContext(
+                    claim_id=str(claim.get("claim_id")) if claim.get("claim_id") else None,
+                    path=path,
+                    evidence_refs=[str(ref) for ref in claim.get("evidence_refs") or []],
+                )
+            )
+        forbidden_relationships = sorted(
+            {
+                str(relationship)
+                for issue in issues
+                for relationship in issue.grounding_values.get("forbidden_claim_relationships", [])
+            }
+        )
+        return ReasoningRepairContract(
+            operation_id=request_plan.get("operation_id"),
+            contract_version=request_plan.get("operation_contract_version"),
+            original_user_question=context.user_message,
+            verifier_issues=issues,
+            rejected_claims=rejected_claims,
+            forbidden_claim_relationships=forbidden_relationships,
+            allowed_actions=[
+                "remove_claim",
+                "narrow_claim",
+                "convert_causality_to_observation",
+                "replace_with_supported_claim",
+                "state_evidence_limitation",
+            ],
+        )
 
     @classmethod
     def _integrated_plan_scope_tools(cls, context: ReasoningContextPackage) -> dict[str, set[str]]:

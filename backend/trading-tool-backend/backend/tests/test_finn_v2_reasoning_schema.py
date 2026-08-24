@@ -119,5 +119,6 @@ def test_reasoning_prompt_includes_the_grounded_context_and_repair_contract():
     )
 
     assert '"entity_id":"309"' in prompt
-    assert "previous response did not satisfy" in prompt
+    assert "previous response was rejected by the evidence contract" in prompt
+    assert '"allowed_actions"' in prompt
     assert "claims.0.claim_type" in prompt

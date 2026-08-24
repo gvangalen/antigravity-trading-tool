@@ -8,7 +8,7 @@ from pydantic import ValidationError
 from backend.schemas.finn_v2_reasoning_context_schema import ReasoningContextPackage
 from backend.schemas.finn_v2_reasoning_schema import ReasoningResult
 from backend.services.finn_v2_reasoning_prompt_service import FinnV2ReasoningPromptService
-from backend.services.finn_v2_reasoning_service import FinnV2ReasoningService
+from backend.services.finn_v2_reasoning_service import FinnV2ReasoningContractError, FinnV2ReasoningService
 
 
 def _context():
@@ -126,7 +126,7 @@ def test_model_schema_error_repairs_once_with_sanitized_field_paths(monkeypatch)
     assert persisted["result"].reasoning_provenance["reasoning_source"] == "model_repair"
     assert persisted["result"].reasoning_provenance["validation_status"] == "passed"
     assert "claims.0.claim_type" in prompts[1]
-    assert "observation" not in prompts[1]
+    assert '"claim_type":"observation"' not in prompts[1]
 
 
 def test_model_mode_mismatch_repairs_to_the_requested_mode(monkeypatch):
@@ -204,6 +204,7 @@ def test_model_repairs_unsupported_configuration_causality(monkeypatch):
     context = ReasoningContextPackage.parse_obj(context_payload)
     persisted = {}
     prompts = []
+    traces = []
     unsupported = _model_output()
     unsupported["main_observation"] = "De handmatige modus beperkt de effectiviteit van de bot."
     unsupported["claims"][0]["text"] = "De handmatige modus leidt tot gemiste kansen."
@@ -221,7 +222,8 @@ def test_model_repairs_unsupported_configuration_causality(monkeypatch):
         persisted.update(kwargs)
         return kwargs
 
-    async def _append_trace(*_args, **_kwargs):
+    async def _append_trace(*args, **kwargs):
+        traces.append({"event_type": args[3], "error_details": kwargs.get("error_details")})
         return None
 
     def _call_provider(**kwargs):
@@ -253,7 +255,13 @@ def test_model_repairs_unsupported_configuration_causality(monkeypatch):
     assert result["status"] == "ready"
     assert persisted["result"].reasoning_provenance["reasoning_source"] == "model_repair"
     assert "unsupported_configuration_causality" in prompts[1]
-    assert "Do not identify bot mode or bot status as the missing component" in prompts[1]
+    assert '"forbidden_claim_relationships":["configuration_or_status_implies_causality"]' in prompts[1]
+    assert '"path":"claims[0]"' in prompts[1]
+    repair_trace = next(trace for trace in traces if trace["event_type"] == "reasoning_retry")
+    assert repair_trace["error_details"]["primary_structured_reasoning"]["claims"][0]["claim_id"] == "C1"
+    assert repair_trace["error_details"]["repair_contract"]["rejected_claims"] == [
+        {"claim_id": "C1", "path": "claims[0]", "evidence_refs": ["E1"]}
+    ]
 
 
 def test_model_repairs_unsupported_stale_bot_status_causality(monkeypatch):
@@ -489,10 +497,7 @@ def test_model_repairs_unsupported_indicator_configuration_inference(monkeypatch
     assert result["status"] == "ready"
     assert persisted["result"].reasoning_provenance["reasoning_source"] == "model_repair"
     assert "unsupported_indicator_configuration_inference" in prompts[1]
-    assert "Do not describe zero configured items in a category as a gap" in prompts[1]
-    assert "does not prove that indicators must be combined" in prompts[1]
-    assert "Do not infer that such a rule is absent" in prompts[1]
-    assert "does not prove one concrete missing component" in prompts[1]
+    assert '"allowed_actions"' in prompts[1]
 
 
 def test_configuration_causality_does_not_join_unrelated_statements(monkeypatch):
@@ -555,6 +560,89 @@ def test_configuration_causality_does_not_join_unrelated_statements(monkeypatch)
 
     assert persisted_result["status"] == "ready"
     assert persisted["result"].reasoning_provenance["validation_status"] == "passed"
+
+
+def test_configuration_causality_rejects_non_bot_configuration_claims():
+    service = FinnV2ReasoningService(session=object())
+    context_payload = _context().dict()
+    context_payload["evidence"][0]["facts"] = {"setup_type": "swing", "timeframe": "4H"}
+    context = ReasoningContextPackage.parse_obj(context_payload)
+    result = ReasoningResult.parse_obj(
+        {
+            **_model_output(),
+            "reasoning_result_id": "reasoning-1",
+            "run_id": "run-1",
+            "user_id": 7,
+            "prompt_version": "test",
+            "reasoning_version": "test",
+            "model": "gpt-4o-mini",
+            "created_at": datetime.now(timezone.utc),
+            "claims": [
+                {
+                    "claim_id": "C1",
+                    "claim_type": "evaluation",
+                    "text": "De swing setup verhoogt het risico van dit plan.",
+                    "evidence_refs": ["E1"],
+                    "confidence": "high",
+                }
+            ],
+        }
+    )
+
+    with pytest.raises(FinnV2ReasoningContractError) as exc_info:
+        service._validate_configuration_causality(result=result, context=context)
+
+    details = exc_info.value.grounding_values
+    assert details["rejected_fields"] == [{"path": "claims[0]", "claim_id": "C1"}]
+    assert details["configuration_facts"][0]["field"] == "setup_type"
+    assert details["forbidden_claim_relationships"] == ["configuration_or_status_implies_causality"]
+
+
+def test_repeated_configuration_causality_receives_only_one_semantic_repair(monkeypatch):
+    service = FinnV2ReasoningService(session=object())
+    context_payload = _context().dict()
+    context_payload["evidence"].append(
+        {
+            "evidence_id": "E2", "artifact_id": "artifact-2", "tool_name": "read_linked_bot",
+            "domain": "automation_context", "entity_type": "bot", "entity_id": "186", "asset": "BTC",
+            "source": "bot_repository", "freshness": "fresh", "confidence": "high",
+            "facts": {"mode": "manual"},
+        }
+    )
+    context = ReasoningContextPackage.parse_obj(context_payload)
+    invalid = _model_output()
+    invalid["claims"][0]["text"] = "De handmatige mode beperkt de effectiviteit van de bot."
+    calls = []
+    persisted = {}
+
+    async def _persist_record(**kwargs):
+        persisted.update(kwargs)
+        return kwargs
+
+    async def _append_trace(*_args, **_kwargs):
+        return None
+
+    def _call_provider(**kwargs):
+        calls.append(kwargs["prompt"])
+        return {"parsed": invalid, "model": "gpt-4o-mini", "provider_metadata": {"response_status": "completed", "response_id": f"resp-{len(calls)}", "parsed_source": "response_output_text"}}
+
+    service._persist_record = _persist_record
+    service._append_trace = _append_trace
+    monkeypatch.setattr(service.flags, "reasoning_max_retries", lambda: 2)
+    monkeypatch.setattr(service.flags, "reasoning_timeout_seconds", lambda: 5)
+    monkeypatch.setattr(service.flags, "reasoning_max_output_tokens", lambda: 600)
+    monkeypatch.setattr("backend.services.finn_v2_reasoning_service.openai_client.ask_gpt_structured_response", _call_provider)
+
+    result = asyncio.run(service._run_model_reasoning(
+        run_id="run-1", user_id=7, trace_id="trace-1",
+        orchestrator_result=SimpleNamespace(orchestrator_result_id="orchestrator-1"),
+        policy=SimpleNamespace(policy_decision_id="policy-1"), snapshot=SimpleNamespace(id="snapshot-1"),
+        validation=SimpleNamespace(id="validation-1"), context=context, model_name="gpt-4o-mini", input_hash="hash-input",
+    ))
+
+    assert result["status"] == "failed"
+    assert len(calls) == 2
+    assert persisted["result"].reasoning_provenance["repair_status"] == "failed"
 
 
 def test_model_repairs_unsupported_market_causality(monkeypatch):

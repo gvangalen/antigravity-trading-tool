@@ -160,6 +160,50 @@ class ReasoningResult(BaseModel):
         extra = "forbid"
 
 
+class ReasoningRepairIssue(BaseModel):
+    """Sanitized verifier feedback supplied to the single bounded model repair."""
+
+    path: str
+    code: str
+    missing_scopes: List[str] = Field(default_factory=list)
+    grounding_values: Dict[str, Any] = Field(default_factory=dict)
+
+    class Config:
+        extra = "forbid"
+
+
+class ReasoningRepairClaimContext(BaseModel):
+    """The evidence available to one rejected model claim."""
+
+    claim_id: Optional[str] = None
+    path: str
+    evidence_refs: List[str] = Field(default_factory=list)
+
+    class Config:
+        extra = "forbid"
+
+
+class ReasoningRepairContract(BaseModel):
+    """Bounded, auditable input for one Block 6 repair attempt."""
+
+    operation_id: Optional[str] = None
+    contract_version: Optional[str] = None
+    original_user_question: str
+    verifier_issues: List[ReasoningRepairIssue] = Field(default_factory=list)
+    rejected_claims: List[ReasoningRepairClaimContext] = Field(default_factory=list)
+    forbidden_claim_relationships: List[str] = Field(default_factory=list)
+    allowed_actions: List[Literal[
+        "remove_claim",
+        "narrow_claim",
+        "convert_causality_to_observation",
+        "replace_with_supported_claim",
+        "state_evidence_limitation",
+    ]] = Field(default_factory=list)
+
+    class Config:
+        extra = "forbid"
+
+
 class PersistedReasoningRecord(BaseModel):
     reasoning_result_id: str
     run_id: str

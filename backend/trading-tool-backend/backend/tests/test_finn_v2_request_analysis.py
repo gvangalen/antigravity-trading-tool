@@ -167,6 +167,20 @@ def test_guided_setup_state_collects_verified_inputs_without_premature_proposal(
     assert second_turn.request_plan.operation_state["collected_inputs"]["name"] == "BTC swing daily-4H"
 
 
+def test_guided_setup_state_accepts_natural_name_follow_up():
+    first_turn = SERVICE.analyze(message="Help me een nieuwe BTC-setup als concept te maken.")
+
+    second_turn = SERVICE.analyze(
+        message="Noem hem BTC Daily 4H concept.",
+        conversation_context={"operation_state": first_turn.request_plan.operation_state},
+    )
+
+    state = second_turn.request_plan.operation_state
+    assert second_turn.request_plan.operation_id == "create_setup"
+    assert state["missing_required_inputs"] == []
+    assert state["collected_inputs"]["name"] == "BTC Daily 4H concept"
+
+
 def test_explicit_watchlist_operation_does_not_resume_pending_setup_state():
     setup_turn = SERVICE.analyze(message="Help me een nieuwe BTC-setup als concept te maken.")
 
