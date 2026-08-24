@@ -174,3 +174,15 @@ def test_deterministic_setup_proposal_uses_completed_typed_state_without_write()
     assert result.proposal_candidate.proposed_changes["proposal_status"] == "draft"
     assert result.proposal_candidate.proposed_changes["setup_fields"]["name"] == "BTC Daily 4H concept"
     assert "4H" in result.direct_answer
+
+
+def test_complete_proposal_contracts_remain_deterministic():
+    service = FinnV2ReasoningService(session=object())
+    contract = FinnV2OperationRegistry().require_supported("create_setup")
+
+    assert contract.response_strategy == "proposal_draft"
+    assert contract.model_policy == "optional"
+    assert service._uses_deterministic_contract_response(contract) is True
+    assert service._uses_deterministic_contract_response(
+        FinnV2OperationRegistry().require_supported("evaluate_plan")
+    ) is False

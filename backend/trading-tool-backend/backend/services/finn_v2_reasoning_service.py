@@ -261,7 +261,7 @@ class FinnV2ReasoningService:
         request_plan_payload = getattr(context, "request_plan", None) or {}
         operation_state = dict(request_plan_payload.get("operation_state") or {})
         missing_required_inputs = list(operation_state.get("missing_required_inputs") or [])
-        deterministic_proposal = contract is not None and contract.response_strategy == "proposal_draft" and bool(missing_required_inputs)
+        deterministic_proposal = self._uses_deterministic_contract_response(contract)
         if contract is not None and (contract.model_policy == "never" or deterministic_proposal):
             result = self._deterministic_contract_draft(
                 contract=contract,
@@ -381,6 +381,11 @@ class FinnV2ReasoningService:
             model_name=model_name,
             input_hash=input_hash,
         )
+
+    @staticmethod
+    def _uses_deterministic_contract_response(contract) -> bool:
+        """Keep typed proposal payloads independent from optional model wording."""
+        return contract is not None and contract.response_strategy == "proposal_draft"
 
     def _deterministic_contract_draft(self, *, contract, run_id: str, user_id: int, context, model: str) -> ReasoningResult:
         """Use the contract response strategy without consulting the provider."""
