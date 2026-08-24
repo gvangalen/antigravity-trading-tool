@@ -859,6 +859,8 @@ def test_repeated_configuration_causality_ends_with_evidence_limitation_after_on
     assert "handmatige mode" not in reasoning.direct_answer.lower()
     assert "handmatige mode" not in reasoning.main_observation.lower()
     assert reasoning.claims[0].evidence_refs == ["E1"]
+    assert reasoning.evidence_refs_used == ["E1", "E2"]
+    assert [claim.evidence_refs for claim in reasoning.claims] == [["E1"], ["E2"]]
 
 
 def test_model_repairs_unsupported_market_causality(monkeypatch):
