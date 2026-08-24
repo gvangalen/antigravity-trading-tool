@@ -402,6 +402,86 @@ def test_configuration_causality_rejects_localized_stale_status_effects():
     }
 
 
+def test_configuration_causality_rejects_entity_status_from_stale_evidence_and_live_mismatch():
+    service = FinnV2ReasoningService(session=object())
+    context_payload = _context().dict()
+    context_payload["evidence"].append(
+        {
+            "evidence_id": "E2",
+            "artifact_id": "artifact-2",
+            "tool_name": "read_bot_status",
+            "domain": "automation_context",
+            "entity_type": "bot_status",
+            "entity_id": "186",
+            "asset": "BTC",
+            "source": "bot_repository",
+            "freshness": "stale",
+            "confidence": "high",
+            "facts": {"is_live": False},
+        }
+    )
+    result_payload = _model_output()
+    result_payload.update(
+        {
+            "reasoning_result_id": "reasoning-1",
+            "run_id": "run-1",
+            "user_id": 7,
+            "model": "gpt-4o-mini",
+            "created_at": datetime.now(timezone.utc),
+        }
+    )
+    result_payload["direct_answer"] = "De bot is live maar de status is stale."
+    result_payload["main_observation"] = "De stale status bewijst dat de bot niet optimaal werkt."
+
+    with pytest.raises(FinnV2ReasoningContractError) as exc_info:
+        service._validate_configuration_causality(
+            result=ReasoningResult.parse_obj(result_payload),
+            context=ReasoningContextPackage.parse_obj(context_payload),
+        )
+
+    assert {item["path"] for item in exc_info.value.grounding_values["rejected_fields"]} == {
+        "direct_answer",
+        "main_observation",
+    }
+
+
+def test_configuration_causality_allows_an_evidence_freshness_limitation():
+    service = FinnV2ReasoningService(session=object())
+    context_payload = _context().dict()
+    context_payload["evidence"].append(
+        {
+            "evidence_id": "E2",
+            "artifact_id": "artifact-2",
+            "tool_name": "read_bot_status",
+            "domain": "automation_context",
+            "entity_type": "bot_status",
+            "entity_id": "186",
+            "asset": "BTC",
+            "source": "bot_repository",
+            "freshness": "stale",
+            "confidence": "high",
+            "facts": {"is_live": False},
+        }
+    )
+    result_payload = _model_output()
+    result_payload.update(
+        {
+            "reasoning_result_id": "reasoning-1",
+            "run_id": "run-1",
+            "user_id": 7,
+            "model": "gpt-4o-mini",
+            "created_at": datetime.now(timezone.utc),
+        }
+    )
+    result_payload["direct_answer"] = "De bot staat niet live; de bron voor de statusgegevens is niet vers."
+    result_payload["main_observation"] = "De beschikbare evidence bewijst daarom geen oorzakelijk zwak punt."
+
+    service._validate_configuration_causality(
+        result=ReasoningResult.parse_obj(result_payload),
+        context=ReasoningContextPackage.parse_obj(context_payload),
+    )
+
+
 def test_model_repairs_unsupported_populated_strategy_field_absence(monkeypatch):
     service = FinnV2ReasoningService(session=object())
     context_payload = _context().dict()

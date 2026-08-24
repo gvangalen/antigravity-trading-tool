@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import re
 import uuid
 from datetime import datetime, timezone
 from time import monotonic
@@ -1016,6 +1017,15 @@ class FinnV2ReasoningService:
         if not configuration_facts:
             return
 
+        has_stale_evidence = any(
+            str(getattr(item, "freshness", "")).lower() == "stale"
+            for item in context.evidence
+        )
+        has_not_live_configuration = any(
+            fact["field"] == "is_live" and fact["value"] is False
+            for fact in configuration_facts
+        )
+
         statements = [
             ("direct_answer", None, result.direct_answer or ""),
             ("main_observation", None, result.main_observation or ""),
@@ -1063,12 +1073,33 @@ class FinnV2ReasoningService:
         }
         # Evidence-backed facts and unrelated uncertainty may coexist in a response.
         # Require the configuration value and causal language to occur together.
-        rejected_fields = [
-            {"path": path, "claim_id": claim_id}
-            for path, claim_id, statement in statements
-            if any(term in statement.lower() for term in configuration_terms)
-            and any(term in statement.lower() for term in causal_terms)
-        ]
+        rejected_fields = []
+        for path, claim_id, statement in statements:
+            lowered = statement.lower()
+            configuration_causality = (
+                any(term in lowered for term in configuration_terms)
+                and any(term in lowered for term in causal_terms)
+            )
+            # Artifact freshness describes the recency of a read, not the state
+            # or effectiveness of the configured entity itself.
+            freshness_attributed_as_status = (
+                has_stale_evidence
+                and "status" in lowered
+                and any(term in lowered for term in value_aliases["stale"])
+                # A source may honestly describe its own freshness. It may not
+                # turn that artifact metadata into an entity-state claim.
+                and not any(
+                    term in lowered
+                    for term in {"evidence", "bron", "artifact", "freshness", "gegevensbron"}
+                )
+            )
+            # Keep the model contract aligned with the verifier's persisted
+            # is_live fact before a response reaches the delivery boundary.
+            contradicts_not_live = has_not_live_configuration and bool(
+                re.search(r"\b(?:is|staat|are)\s+live\b", lowered)
+            )
+            if configuration_causality or freshness_attributed_as_status or contradicts_not_live:
+                rejected_fields.append({"path": path, "claim_id": claim_id})
         if rejected_fields:
             raise FinnV2ReasoningContractError(
                 code="unsupported_configuration_causality",
