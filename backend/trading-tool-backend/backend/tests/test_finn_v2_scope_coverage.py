@@ -389,15 +389,9 @@ def test_evidence_limited_evaluation_is_not_treated_as_a_model_contract_bypass()
         draft_id="draft-evidence-limited", run_id="run-evidence-limited", user_id=7, mode="EVALUATE",
         direct_answer="De beschikbare evidence bevestigt je opgeslagen planonderdelen, maar bewijst geen betrouwbaar causaal zwak punt.",
         main_observation="De beschikbare gegevens bewijzen geen direct verband tussen een opgeslagen veld en een plantekort.",
-        claims=[
-            {
-                "claim_id": "C1",
-                "claim_type": "fact",
-                "text": "Setup 293 is opgeslagen.",
-                "evidence_refs": ["E3"],
-                "confidence": "high",
-            }
-        ],
+        # An evidence-limited result may cite the complete ledger without
+        # inventing a factual claim that one isolated artifact cannot entail.
+        claims=[],
         evidence_refs_used=["E1", "E2", "E3", "E4", "E5"],
         evidence_set_hash="hash-evidence-limited",
         reasoning_provenance={
@@ -427,6 +421,8 @@ def test_evidence_limited_evaluation_is_not_treated_as_a_model_contract_bypass()
 
     assert "model_reasoning_contract_failed" not in verifier.reason_codes
     assert verifier.coverage.coverage_ok is True
+    assert verifier.passed is True
+    assert verifier.action == "deliver"
 
 
 def test_mode_purity_accepts_not_executed_watchlist_proposal_wording():

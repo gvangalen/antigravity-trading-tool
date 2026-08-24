@@ -920,16 +920,6 @@ class FinnV2ReasoningFallbackService:
                 model=model,
             )
 
-        claims = [
-            ReasoningClaim(
-                claim_id=f"evidence-limitation-{index}",
-                claim_type="fact",
-                text=f"Opgeslagen evidence uit {item.tool_name} is beschikbaar voor deze beoordeling.",
-                evidence_refs=[item.evidence_id],
-                confidence="high",
-            )
-            for index, item in enumerate(evidence, start=1)
-        ]
         result = ReasoningResult(
             reasoning_result_id=f"finn-v2-reasoning-{uuid.uuid4().hex}",
             run_id=run_id,
@@ -945,7 +935,11 @@ class FinnV2ReasoningFallbackService:
                 "verband tussen een opgeslagen veld en een plantekort."
             ),
             supporting_points=[],
-            claims=claims,
+            # This is an evidence limitation, not a claim about what the
+            # configuration causes. The full evidence ledger remains attached
+            # below, so coverage survives without inventing neutral-sounding
+            # claims the verifier cannot entail from a single artifact.
+            claims=[],
             uncertainty_summary=(
                 "Voor een onderbouwde zwaktebeoordeling is expliciete evaluatie-, "
                 "uitvoerings- of marktuitkomst-evidence nodig."
