@@ -263,13 +263,13 @@ def test_model_repairs_unsupported_configuration_causality(monkeypatch):
         {
             "claim_id": None,
             "path": "main_observation",
-            "text": "De handmatige modus beperkt de effectiviteit van de bot.",
+            "text": "[REJECTED: see primary reasoning trace]",
             "evidence_refs": ["E1"],
         },
         {
             "claim_id": "C1",
             "path": "claims[0]",
-            "text": "De handmatige modus leidt tot gemiste kansen.",
+            "text": "[REJECTED: see primary reasoning trace]",
             "evidence_refs": ["E1"],
         },
     ]
@@ -354,8 +354,8 @@ def test_model_repairs_unsupported_stale_bot_status_causality(monkeypatch):
     assert result["status"] == "ready"
     assert persisted["result"].reasoning_provenance["reasoning_source"] == "model_repair"
     assert "unsupported_configuration_causality" in prompts[1]
-    assert "stale status" in prompts[1]
-    assert "manual" in prompts[1]
+    assert "[REJECTED: see primary reasoning trace]" in prompts[1]
+    assert "Een veroudering in de botstatus" not in prompts[1]
 
 
 def test_model_repair_treats_stale_artifact_freshness_as_an_evidence_limitation(monkeypatch):

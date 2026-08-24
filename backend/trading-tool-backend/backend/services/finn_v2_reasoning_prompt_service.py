@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 import json
 
 from backend.domain.finn_v2_contract import INTERACTION_MODES, normalize_interaction_mode
@@ -113,6 +114,10 @@ class FinnV2ReasoningPromptService:
             validation_errors=validation_errors,
             previous_response=previous_response,
         )
+        sanitized_previous_response = self._sanitize_rejected_response(
+            response=previous_response or {},
+            repair_contract=repair_contract,
+        )
         repair_instruction = (
             "Your previous response was rejected by the evidence contract. Perform exactly one bounded repair. "
             "Only change rejected fields or replace them with evidence-supported content. A saved configuration or "
@@ -129,7 +134,7 @@ class FinnV2ReasoningPromptService:
             "replace_with_supported_claim, or state_evidence_limitation. Return every required schema field and do not "
             "repeat a forbidden relationship.\n"
             f"Typed repair contract: {json.dumps(repair_contract.dict(), ensure_ascii=True, separators=(',', ':'))}\n"
-            f"Previous rejected structured response: {json.dumps(previous_response or {}, ensure_ascii=True, separators=(',', ':'))}."
+            f"Previous rejected structured response: {json.dumps(sanitized_previous_response, ensure_ascii=True, separators=(',', ':'))}."
             if repair_attempt
             else ""
         )
@@ -245,7 +250,10 @@ class FinnV2ReasoningPromptService:
                 ReasoningRepairClaimContext(
                     claim_id=claim_id,
                     path=path,
-                    text=text.strip(),
+                    # The original text remains in the append-only primary
+                    # reasoning trace. The retry only needs a typed field path
+                    # and its supporting evidence, not the rejected wording.
+                    text="[REJECTED: see primary reasoning trace]",
                     evidence_refs=evidence_refs,
                 )
             )
@@ -271,6 +279,31 @@ class FinnV2ReasoningPromptService:
                 "state_evidence_limitation",
             ],
         )
+
+    @staticmethod
+    def _sanitize_rejected_response(
+        *, response: dict[str, object], repair_contract: ReasoningRepairContract,
+    ) -> dict[str, object]:
+        """Keep repair structure while preventing rejected text from anchoring a retry."""
+        sanitized = copy.deepcopy(response)
+        marker = "[REJECTED: replace only through the typed repair contract]"
+        for claim in repair_contract.rejected_claims:
+            path = claim.path
+            if path in {"direct_answer", "main_observation"}:
+                sanitized[path] = marker
+            elif path == "next_step" and isinstance(sanitized.get("next_step"), dict):
+                sanitized["next_step"]["instruction"] = marker
+            elif path.startswith("claims["):
+                index = int(path.removeprefix("claims[").removesuffix("]"))
+                claims = sanitized.get("claims") or []
+                if index < len(claims) and isinstance(claims[index], dict):
+                    claims[index]["text"] = marker
+            elif path.startswith("supporting_points["):
+                index = int(path.removeprefix("supporting_points[").removesuffix("]"))
+                points = sanitized.get("supporting_points") or []
+                if index < len(points) and isinstance(points[index], dict):
+                    points[index]["explanation"] = marker
+        return sanitized
 
     @classmethod
     def _integrated_plan_scope_tools(cls, context: ReasoningContextPackage) -> dict[str, set[str]]:

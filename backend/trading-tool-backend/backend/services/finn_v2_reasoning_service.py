@@ -994,7 +994,7 @@ class FinnV2ReasoningService:
         value_aliases = {
             "manual": {"manual", "handmatig", "handmatige"},
             "automated": {"automated", "automatisch", "geautomatiseerd"},
-            "stale": {"stale", "verouderd", "verouderde", "outdated"},
+            "stale": {"stale", "verouderd", "verouderde", "veroudering", "outdated"},
             "false": {"niet live", "not live", "paper", "false"},
             "true": {"live", "active", "actief", "true"},
         }
