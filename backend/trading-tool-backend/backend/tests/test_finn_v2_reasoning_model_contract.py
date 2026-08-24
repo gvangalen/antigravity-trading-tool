@@ -358,6 +358,50 @@ def test_model_repairs_unsupported_stale_bot_status_causality(monkeypatch):
     assert "manual" in prompts[1]
 
 
+def test_configuration_causality_rejects_localized_stale_status_effects():
+    service = FinnV2ReasoningService(session=object())
+    context_payload = _context().dict()
+    context_payload["evidence"].append(
+        {
+            "evidence_id": "E2",
+            "artifact_id": "artifact-2",
+            "tool_name": "read_bot_status",
+            "domain": "automation_context",
+            "entity_type": "bot_status",
+            "entity_id": "186",
+            "asset": "BTC",
+            "source": "bot_repository",
+            "freshness": "fresh",
+            "confidence": "high",
+            "facts": {"status": "stale"},
+        }
+    )
+    result_payload = _model_output()
+    result_payload.update(
+        {
+            "reasoning_result_id": "reasoning-1",
+            "run_id": "run-1",
+            "user_id": 7,
+            "model": "gpt-4o-mini",
+            "created_at": datetime.now(timezone.utc),
+        }
+    )
+    result_payload["direct_answer"] = "De verouderde botstatus voegt onzekerheid toe aan de strategie."
+    result_payload["main_observation"] = "De stale status kan vertragingen in de uitvoering veroorzaken."
+
+    with pytest.raises(FinnV2ReasoningContractError) as exc_info:
+        service._validate_configuration_causality(
+            result=ReasoningResult.parse_obj(result_payload),
+            context=ReasoningContextPackage.parse_obj(context_payload),
+        )
+
+    assert exc_info.value.code == "unsupported_configuration_causality"
+    assert {item["path"] for item in exc_info.value.grounding_values["rejected_fields"]} == {
+        "direct_answer",
+        "main_observation",
+    }
+
+
 def test_model_repairs_unsupported_populated_strategy_field_absence(monkeypatch):
     service = FinnV2ReasoningService(session=object())
     context_payload = _context().dict()

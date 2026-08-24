@@ -993,6 +993,7 @@ class FinnV2ReasoningService:
         value_aliases = {
             "manual": {"manual", "handmatig", "handmatige"},
             "automated": {"automated", "automatisch", "geautomatiseerd"},
+            "stale": {"stale", "verouderd", "verouderde", "outdated"},
             "false": {"niet live", "not live", "paper", "false"},
             "true": {"live", "active", "actief", "true"},
         }
@@ -1038,6 +1039,12 @@ class FinnV2ReasoningService:
             "invloed",
             "beinvloed",
             "beïnvloed",
+            "onzekerheid",
+            "onzeker",
+            "vertraging",
+            "vertragingen",
+            "delay",
+            "delays",
             "prestatie",
             "prestaties",
             "reactietijd",
