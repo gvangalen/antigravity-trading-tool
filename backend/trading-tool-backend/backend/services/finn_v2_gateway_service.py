@@ -227,19 +227,20 @@ class FinnV2GatewayService:
         )
         if run.status != "created":
             return run.id
+        run_id = run.id
         await self.session.commit()
         if not hasattr(self.session, "add"):
-            return run.id
+            return run_id
         try:
             from backend.celery_task.finn_v2_task import process_finn_v2_run
 
-            dispatch = await self.dispatches.get_for_run(run.id)
+            dispatch = await self.dispatches.get_for_run(run_id)
             # Celery's broker client is synchronous. It must never hold the
             # request event loop after the run and outbox record are durable.
             await asyncio.wait_for(
                 asyncio.to_thread(
                     process_finn_v2_run.apply_async,
-                    kwargs={"run_id": run.id},
+                    kwargs={"run_id": run_id},
                     task_id=dispatch.task_id,
                     queue=dispatch.queue,
                 ),
@@ -251,8 +252,8 @@ class FinnV2GatewayService:
             # The committed pending outbox record is recovered by Celery beat;
             # never run lifecycle work in this request process.
             await self.session.rollback()
-            logger.warning("FINN V2 dispatch enqueue deferred to recovery", extra={"run_id": run.id, "error": str(exc)})
-        return run.id
+            logger.warning("FINN V2 dispatch enqueue deferred to recovery", extra={"run_id": run_id, "error": str(exc)})
+        return run_id
 
     async def apply_retention_now(self) -> Dict[str, int]:
         return await self.run_service.apply_retention(
