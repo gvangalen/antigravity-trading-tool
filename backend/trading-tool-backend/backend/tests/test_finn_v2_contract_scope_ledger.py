@@ -5,8 +5,11 @@ import pytest
 
 from backend.domain.finn_v2_operation_registry import FinnV2OperationRegistry
 from backend.schemas.finn_v2_evidence_schema import EvidenceArtifact
+from backend.schemas.finn_v2_orchestrator_schema import RequestPlan
+from backend.schemas.finn_v2_response_schema import ResponseClaim, ResponseDraft
 from backend.schemas.finn_v2_tool_schema import ToolExecutionEnvelope
 from backend.services.finn_v2_state_assembly_service import FinnV2StateAssemblyService
+from backend.services.finn_v2_response_verifier_service import FinnV2ResponseVerifierService
 
 
 SCOPE_CASES = (
@@ -69,3 +72,76 @@ def test_evaluate_plan_contract_binds_every_required_scope_once():
 
     assert set(bindings) == set(contract.required_scopes)
     assert len(bindings) == len(contract.required_scopes)
+
+
+def test_contract_coverage_uses_all_valid_persisted_artifacts_not_only_draft_references():
+    """A clarification/proposal draft cannot erase valid required evidence."""
+    from types import SimpleNamespace
+
+    contract = FinnV2OperationRegistry().require_supported("evaluate_plan")
+    evidence = [
+        SimpleNamespace(
+            evidence_id=f"E{index}",
+            information_scope=scope,
+            availability="available",
+            facts={"scope": scope},
+            domain="plan_context",
+            tool_name=dict(contract.scope_tool_bindings)[scope],
+            asset=None,
+            entity_type="test",
+            entity_id=None,
+            freshness="fresh",
+            confidence="high",
+        )
+        for index, scope in enumerate(contract.required_scopes, start=1)
+    ]
+    draft = ResponseDraft(
+        draft_id="draft-contract-ledger",
+        run_id="run-contract-ledger",
+        user_id=406,
+        mode="EVALUATE",
+        direct_answer="Je plancontext is beschikbaar.",
+        main_observation="Controleer de samenhang van je planregels.",
+        claims=[
+            ResponseClaim(
+                claim_id="claim-profile",
+                claim_type="fact",
+                text="Je plancontext is beschikbaar.",
+                evidence_refs=["E1"],
+                confidence="high",
+            )
+        ],
+        evidence_set_hash="contract-ledger",
+        created_at=datetime.now(timezone.utc),
+    )
+
+    verifier = FinnV2ResponseVerifierService(session=object())._deterministic_verify(
+        run=SimpleNamespace(
+            id="run-contract-ledger",
+            user_id=406,
+            message="Beoordeel mijn volledige plan.",
+            conversation_id="conversation-contract-ledger",
+        ),
+        orchestrator_result=SimpleNamespace(
+            analysis=SimpleNamespace(
+                subject_scopes=[],
+                request_plan=RequestPlan(
+                    operation_id=contract.operation_id,
+                    operation_contract_version=contract.version,
+                    interaction_mode=contract.mode,
+                ),
+            ),
+            selected_clarification=None,
+        ),
+        policy=SimpleNamespace(allowed=True, proposal_allowed=True, confirmation_required=False, operation_type=None),
+        context=SimpleNamespace(evidence=evidence, uncertainty_codes=[]),
+        validation=SimpleNamespace(id="validation-contract-ledger", evidence_set_hash="contract-ledger", integrity_status="valid"),
+        draft=draft,
+        repair_attempt=0,
+        force_action="deliver",
+    )
+
+    assert verifier.coverage.required_scopes == list(contract.required_scopes)
+    assert verifier.coverage.covered_scopes == sorted(contract.required_scopes)
+    assert verifier.coverage.missing_scopes == []
+    assert verifier.coverage.coverage_ok is True

@@ -347,7 +347,16 @@ class FinnV2ResponseVerifierService:
         uses_canonical_scope_contract = has_contract_metadata or has_partial_contract_metadata
 
         claim_results = []
-        covered_scopes = set()
+        # A contract run's coverage is the persisted evidence ledger, not a
+        # side effect of which artifacts a response draft happened to cite.
+        # Claim verification below still requires every material claim to cite
+        # valid evidence, but valid required evidence must not disappear from
+        # coverage merely because a deterministic clarification has no claim.
+        covered_scopes = (
+            self._covered_scopes_from_evidence(context.evidence, allow_legacy=False)
+            if uses_canonical_scope_contract
+            else set()
+        )
         covered_domains = set()
         for claim in draft.claims:
             refs_valid = bool(claim.evidence_refs) or claim.claim_type in {"recommendation", "uncertainty"}
@@ -748,6 +757,12 @@ class FinnV2ResponseVerifierService:
                 covered.update(self._scopes_for_evidence(evidence, allow_legacy=allow_legacy))
                 if include_domain_fallback:
                     covered.add(self._scope_for_domain(evidence.domain))
+        return {scope for scope in covered if scope}
+
+    def _covered_scopes_from_evidence(self, evidence_items: list[Any], *, allow_legacy: bool) -> set[str]:
+        covered: set[str] = set()
+        for evidence in evidence_items:
+            covered.update(self._scopes_for_evidence(evidence, allow_legacy=allow_legacy))
         return {scope for scope in covered if scope}
 
     def _covered_domains_from_draft(self, draft: ResponseDraft, evidence_by_ref: Dict[str, Any]) -> set[str]:
