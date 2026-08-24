@@ -703,6 +703,9 @@ def test_model_repairs_unsupported_indicator_configuration_inference(monkeypatch
     assert result["status"] == "ready"
     assert persisted["result"].reasoning_provenance["reasoning_source"] == "model_repair"
     assert "unsupported_indicator_configuration_inference" in prompts[1]
+    assert "indicator_configuration_implies_insufficiency_or_risk" in prompts[1]
+    assert "[REJECTED: see primary reasoning trace]" in prompts[1]
+    assert "De beperkte indicatorconfiguratie" not in prompts[1]
     assert '"allowed_actions"' in prompts[1]
 
 

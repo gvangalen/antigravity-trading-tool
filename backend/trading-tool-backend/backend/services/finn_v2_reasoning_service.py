@@ -1125,11 +1125,11 @@ class FinnV2ReasoningService:
             return
 
         statements = [
-            result.direct_answer or "",
-            result.main_observation or "",
-            *(claim.text for claim in result.claims),
-            *(point.explanation for point in result.supporting_points),
-            result.next_step.instruction if result.next_step is not None else "",
+            ("direct_answer", None, result.direct_answer or ""),
+            ("main_observation", None, result.main_observation or ""),
+            *[(f"claims[{index}]", claim.claim_id, claim.text) for index, claim in enumerate(result.claims)],
+            *[(f"supporting_points[{index}]", None, point.explanation) for index, point in enumerate(result.supporting_points)],
+            ("next_step", None, result.next_step.instruction if result.next_step is not None else ""),
         ]
         indicator_terms = {
             "indicatorconfiguratie",
@@ -1154,11 +1154,13 @@ class FinnV2ReasoningService:
             "minder robuust",
             "less robust",
         }
-        if any(
-            any(term in statement.lower() for term in indicator_terms)
+        rejected_fields = [
+            {"path": path, "claim_id": claim_id}
+            for path, claim_id, statement in statements
+            if any(term in statement.lower() for term in indicator_terms)
             and any(term in statement.lower() for term in unsupported_inference_terms)
-            for statement in statements
-        ):
+        ]
+        if rejected_fields:
             configured_indicators = sorted(
                 {
                     str((row or {}).get("indicator"))
@@ -1170,7 +1172,13 @@ class FinnV2ReasoningService:
                 code="unsupported_indicator_configuration_inference",
                 missing_scopes=[],
                 path="claims",
-                grounding_values={"configured_indicators": configured_indicators},
+                grounding_values={
+                    "configured_indicators": configured_indicators,
+                    "rejected_fields": rejected_fields,
+                    "forbidden_claim_relationships": [
+                        "indicator_configuration_implies_insufficiency_or_risk"
+                    ],
+                },
             )
 
     @staticmethod
