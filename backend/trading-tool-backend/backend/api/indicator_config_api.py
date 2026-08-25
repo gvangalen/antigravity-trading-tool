@@ -9,9 +9,14 @@ from backend.schemas.indicator_config_schema import (
     IndicatorConfigResponse,
     IndicatorSettingsUpdate,
     IndicatorCustomRulesSave,
-    IndicatorResetPayload
+    IndicatorResetPayload,
+    IndicatorConfigReconciliationAssign,
 )
 from backend.infrastructure.repositories.indicator_config_repository import IndicatorConfigRepository
+from backend.infrastructure.repositories.indicator_config_reconciliation_repository import (
+    IndicatorConfigReconciliationError,
+    IndicatorConfigReconciliationRepository,
+)
 from backend.services.indicator_config_service import IndicatorConfigService
 
 router = APIRouter()
@@ -20,6 +25,35 @@ logger = logging.getLogger(__name__)
 async def get_indicator_config_service(db: AsyncSession = Depends(get_db)):
     repo = IndicatorConfigRepository(db)
     return IndicatorConfigService(repo)
+
+
+@router.get("/indicator_config/reconciliations")
+async def list_indicator_config_reconciliations(
+    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """List only this user's legacy selections that require an explicit asset."""
+    repository = IndicatorConfigReconciliationRepository(db)
+    return {"items": await repository.list_pending(current_user["id"])}
+
+
+@router.post("/indicator_config/reconciliations/assign")
+async def assign_indicator_config_reconciliation(
+    payload: IndicatorConfigReconciliationAssign,
+    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Move one user-owned historic config through the canonical product write."""
+    try:
+        repository = IndicatorConfigReconciliationRepository(db)
+        result = await repository.assign_to_asset(
+            reconciliation_id=payload.reconciliation_id,
+            user_id=current_user["id"],
+            symbol=payload.symbol,
+        )
+        return {"ok": True, "reconciliation": result}
+    except IndicatorConfigReconciliationError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 # =========================================================
 # ✅ 1) GET indicator config (USER override + template fallback)

@@ -20,8 +20,10 @@ class _Cursor:
     def fetchone(self):
         if self.executed[-1][1]:
             parameters = self.executed[-1][1]
-            if isinstance(self.metadata, dict):
+            if isinstance(self.metadata, dict) and len(parameters) == 2:
                 return self.metadata.get((parameters[0], parameters[1]))
+            if isinstance(self.metadata, dict):
+                return None
             return self.metadata
         return None
 
@@ -46,6 +48,9 @@ def test_schema_health_accepts_the_conversation_context_contract():
         ("user_indicator_configs", "provenance"): ("text", "text", "NO", "'product_api'::text"),
         ("user_indicator_configs", "source_record_id"): ("bigint", "int8", "YES", None),
         ("user_indicator_configs", "updated_at"): ("timestamp without time zone", "timestamp", "NO", "CURRENT_TIMESTAMP"),
+        ("finn_v2_indicator_config_reconciliations", "source_record_ids"): ("jsonb", "jsonb", "NO", None),
+        ("finn_v2_indicator_config_reconciliations", "legacy_config_json"): ("jsonb", "jsonb", "NO", "'{}'::jsonb"),
+        ("finn_v2_indicator_config_reconciliations", "status"): ("text", "text", "NO", "'asset_scope_required'::text"),
     })
 
     assert_finn_v2_schema(connection)
@@ -75,6 +80,9 @@ def test_schema_health_rejects_incompatible_context_contract(metadata, error_cod
         ("user_indicator_configs", "provenance"): ("text", "text", "NO", "'product_api'::text"),
         ("user_indicator_configs", "source_record_id"): ("bigint", "int8", "YES", None),
         ("user_indicator_configs", "updated_at"): ("timestamp without time zone", "timestamp", "NO", "CURRENT_TIMESTAMP"),
+        ("finn_v2_indicator_config_reconciliations", "source_record_ids"): ("jsonb", "jsonb", "NO", None),
+        ("finn_v2_indicator_config_reconciliations", "legacy_config_json"): ("jsonb", "jsonb", "NO", "'{}'::jsonb"),
+        ("finn_v2_indicator_config_reconciliations", "status"): ("text", "text", "NO", "'asset_scope_required'::text"),
     })
 
     with pytest.raises(FinnV2SchemaHealthError, match=error_code):

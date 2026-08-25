@@ -62,6 +62,7 @@ def test_deploy_env_supports_backend_only_auto_rollback_and_previous_markers():
     assert source.index("2026_08_23_finn_v2_conversation_context.py") < source.index("2026_08_23_finn_v2_evidence_information_scope.py")
     assert source.index("2026_08_23_finn_v2_evidence_information_scope.py") < source.index("python3 -m backend.scripts.check_finn_v2_schema")
     assert source.index("2026_08_23_finn_v2_artifact_operation_contract.py") < source.index("python3 -m backend.scripts.check_finn_v2_schema")
+    assert source.index("2026_08_25_finn_v2_indicator_config_reconciliation.py") < source.index("python3 -m backend.scripts.check_finn_v2_schema")
     assert source.index("python3 -m backend.scripts.check_finn_v2_schema") < source.index("pm2_start_app()")
 
 

@@ -86,6 +86,26 @@ REQUIRED_FINN_V2_COLUMNS = (
         udt_name="timestamp",
         nullable=False,
     ),
+    RequiredColumn(
+        table_name="finn_v2_indicator_config_reconciliations",
+        column_name="source_record_ids",
+        udt_name="jsonb",
+        nullable=False,
+    ),
+    RequiredColumn(
+        table_name="finn_v2_indicator_config_reconciliations",
+        column_name="legacy_config_json",
+        udt_name="jsonb",
+        nullable=False,
+        default_fragment="'{}'::jsonb",
+    ),
+    RequiredColumn(
+        table_name="finn_v2_indicator_config_reconciliations",
+        column_name="status",
+        udt_name="text",
+        nullable=False,
+        default_fragment="'asset_scope_required'",
+    ),
 )
 
 
@@ -149,6 +169,61 @@ def assert_finn_v2_schema(connection: Any) -> None:
             "FROM user_indicator_configs LIMIT 1"
         )
         cursor.fetchone()
+        cursor.execute(
+            "SELECT source_user_id, category, indicator, status "
+            "FROM finn_v2_indicator_config_reconciliations LIMIT 1"
+        )
+        cursor.fetchone()
+
+        # A legacy user selection may only be present when it is traceable in
+        # reconciliation. This blocks releases that point runtime reads at an
+        # empty canonical table while silently abandoning old user data.
+        for table_name in (
+            "technical_indicator_rules",
+            "market_indicator_rules",
+            "macro_indicator_rules",
+        ):
+            cursor.execute(
+                f"""
+                SELECT COUNT(*)
+                FROM {table_name} AS legacy
+                WHERE legacy.user_id IS NOT NULL
+                  AND NOT EXISTS (
+                    SELECT 1
+                    FROM finn_v2_indicator_config_reconciliations AS reconciliation
+                    WHERE reconciliation.source_table = %s
+                      AND reconciliation.source_user_id = legacy.user_id
+                      AND reconciliation.source_record_ids @> jsonb_build_array(legacy.id)
+                  )
+                """,
+                (table_name,),
+            )
+            unresolved = cursor.fetchone()
+            if unresolved and int(unresolved[0] or 0) > 0:
+                raise FinnV2SchemaHealthError(
+                    f"finn_v2_indicator_cutover_unreconciled_legacy_rows:{table_name}:{unresolved[0]}"
+                )
+
+        cursor.execute(
+            """
+            SELECT COUNT(*)
+            FROM user_indicator_configs AS legacy
+            WHERE legacy.symbol IS NULL
+              AND NOT EXISTS (
+                SELECT 1
+                FROM finn_v2_indicator_config_reconciliations AS reconciliation
+                WHERE reconciliation.source_table = 'user_indicator_configs'
+                  AND reconciliation.source_user_id = legacy.user_id
+                  AND reconciliation.source_record_ids @> jsonb_build_array(legacy.id)
+              )
+            """
+        )
+        unresolved = cursor.fetchone()
+        if unresolved and int(unresolved[0] or 0) > 0:
+            raise FinnV2SchemaHealthError(
+                "finn_v2_indicator_cutover_unreconciled_legacy_rows:user_indicator_configs:"
+                f"{unresolved[0]}"
+            )
 
 
 def main() -> None:

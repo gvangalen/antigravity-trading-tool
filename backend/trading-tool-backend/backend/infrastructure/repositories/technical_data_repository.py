@@ -642,6 +642,7 @@ class TechnicalDataRepository:
         config_json: Optional[dict[str, Any]] = None,
         priority: int = 100,
         provenance: str = "indicator_config_api",
+        source_record_id: Optional[int] = None,
     ) -> SimpleNamespace:
         """Persist user-specific scoring settings beside the canonical selection."""
         normalized_symbol, normalized_asset_class = await self._resolve_effective_scope(symbol, asset_class)
@@ -663,6 +664,7 @@ class TechnicalDataRepository:
                 UPDATE user_indicator_configs
                 SET config_json = CAST(:config_json AS JSONB),
                     provenance = :provenance,
+                    source_record_id = COALESCE(:source_record_id, source_record_id),
                     updated_at = CURRENT_TIMESTAMP
                 WHERE user_id = :user_id
                   AND symbol = :symbol
@@ -677,11 +679,14 @@ class TechnicalDataRepository:
                 "indicator": indicator,
                 "config_json": dumps(config_json or {}),
                 "provenance": provenance,
+                "source_record_id": source_record_id,
             },
         )
         await self.session.flush()
         row.config_json = config_json or {}
         row.provenance = provenance
+        if source_record_id is not None:
+            row.source_record_id = source_record_id
         return row
 
     async def get_latest_for_user(self, user_id: int, symbol: Optional[str] = None, limit: int = 50) -> List[TechnicalDataIndicator]:
