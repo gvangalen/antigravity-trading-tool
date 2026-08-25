@@ -363,6 +363,9 @@ class FinnV2OrchestratorService:
         selectors = dict(getattr(result.tool_plan, "entity_selectors", {}) or {})
         request_plan = getattr(result.analysis, "request_plan", None)
         context = dict(existing_context or {})
+        from backend.services.finn_v2_operation_state_service import FinnV2OperationStateService
+
+        context["conversation_state_version"] = FinnV2OperationStateService.CONTEXT_STATE_VERSION
         verified_context = dict(context.get("last_verified_context") or {})
         resolved_asset = selectors.get("asset") or getattr(result.analysis, "explicit_asset", None) or verified_context.get("resolved_entities", {}).get("asset")
         resolved_setup_id = selectors.get("setup_id") or getattr(result.analysis, "explicit_setup_id", None) or verified_context.get("resolved_entities", {}).get("setup_id")
@@ -431,8 +434,10 @@ class FinnV2OrchestratorService:
                 "reason_codes": ["guided_operation_cancelled"],
             }
         elif operation_state:
-            context["operation_state"] = operation_state
             context["active_guided_operation"] = operation_state
+            # New conversations have a single typed guided-operation field.
+            # The legacy value is read only for historical planless contexts.
+            context.pop("operation_state", None)
         await self.conversations.update_context(
             conversation_id=conversation_id,
             user_id=user_id,

@@ -270,6 +270,7 @@ def test_orchestrator_persists_only_verified_conversation_references():
 
     assert service.conversations.updated["conversation_id"] == "conversation-1"
     context = service.conversations.updated["context"]
+    assert context["conversation_state_version"] == "finn_v2.conversation-contracts.v1"
     assert context["last_mode"] == "READ"
     assert context["last_user_goal"] == "read_setup"
     assert context["resolved_asset"] == "BTC"

@@ -311,6 +311,22 @@ def test_active_guided_operation_has_priority_over_legacy_state():
     assert analysis.request_plan.operation_state["collected_inputs"]["name"] == "BTC Daily 4H concept"
 
 
+def test_canonical_conversation_does_not_resume_a_legacy_guided_state():
+    analysis = SERVICE.analyze(
+        message="Welke indicatoren staan voor BTC ingesteld?",
+        conversation_context={
+            "conversation_state_version": "finn_v2.conversation-contracts.v1",
+            "operation_state": {
+                "operation_id": "create_setup",
+                "contract_version": "2026-08-23.operation-contracts.v1",
+                "missing_required_inputs": ["name"],
+            },
+        },
+    )
+
+    assert analysis.request_plan.operation_id == "read_indicator_configuration"
+
+
 def test_guided_setup_cancel_closes_typed_state_without_selecting_a_write_operation():
     first_turn = SERVICE.analyze(message="Help me een nieuwe BTC-setup als concept te maken.")
 

@@ -87,7 +87,7 @@ class FinnV2OperationClassificationService:
     def _conversation_operation(
         self, *, facts: FinnV2PreprocessedRequest, context: Mapping[str, object]
     ) -> Optional[SemanticOperationClassification]:
-        raw_state = context.get("active_guided_operation") or context.get("operation_state")
+        raw_state = self._guided_state_payload(context)
         if isinstance(raw_state, Mapping) and raw_state.get("missing_required_inputs"):
             operation_id = str(raw_state.get("operation_id") or "")
             # Capability requests always start a fresh, read-only operation;
@@ -110,6 +110,12 @@ class FinnV2OperationClassificationService:
             if facts.discourse_act == "reformulation":
                 return self._result("reformulate_previous_response", facts, "high", "conversation", ())
         return None
+
+    @staticmethod
+    def _guided_state_payload(context: Mapping[str, object]) -> object:
+        from backend.services.finn_v2_operation_state_service import FinnV2OperationStateService
+
+        return FinnV2OperationStateService._guided_state_payload(context)
 
     def _candidates(
         self, *, facts: FinnV2PreprocessedRequest, context: Mapping[str, object]
@@ -212,7 +218,7 @@ class FinnV2OperationClassificationValidator:
         # example, a setup name is correctly a read-like utterance while it
         # still fills the required ``name`` input of CREATE_PROPOSAL.
         if classification.selector_source == "conversation":
-            active = (conversation_context or {}).get("active_guided_operation") or (conversation_context or {}).get("operation_state")
+            active = FinnV2OperationClassificationService._guided_state_payload(conversation_context or {})
             if isinstance(active, Mapping) and active.get("operation_id") == contract.operation_id:
                 return None
         if contract.allowed_action_polarities and facts.action_polarity not in contract.allowed_action_polarities:

@@ -229,10 +229,11 @@ class FinnV2RequestAnalysisService:
         reference = None
         if uses_conversation_reference:
             verified_context = dict(conversation_context.get("last_verified_context") or {})
+            is_canonical_context = bool(conversation_context.get("conversation_state_version"))
             reference = str(
                 verified_context.get("verified_response_id")
-                or conversation_context.get("last_verified_response_id")
-                or conversation_context.get("last_user_goal")
+                or (None if is_canonical_context else conversation_context.get("last_verified_response_id"))
+                or (None if is_canonical_context else conversation_context.get("last_user_goal"))
                 or "previous_verified_response"
             )
         score = {"high": 0.9, "medium": 0.7, "low": 0.4, "none": 0.0}[confidence]

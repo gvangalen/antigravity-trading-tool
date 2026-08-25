@@ -11,6 +11,7 @@ from backend.schemas.finn_v2_orchestrator_schema import FinnV2OperationState
 class FinnV2OperationStateService:
     """Collect only explicit or verified operation inputs, one field at a time."""
 
+    CONTEXT_STATE_VERSION = "finn_v2.conversation-contracts.v1"
     _TIMEFRAME = re.compile(r"\b(1m|5m|15m|30m|1h|4h|1d|1w|1M)\b", re.IGNORECASE)
 
     def resolve(
@@ -74,7 +75,7 @@ class FinnV2OperationStateService:
         # The typed state supersedes the legacy compatibility field for every
         # newly created conversation.  Historical contexts still fall back to
         # ``operation_state`` until they are naturally rewritten.
-        raw = context.get("active_guided_operation") or context.get("operation_state")
+        raw = FinnV2OperationStateService._guided_state_payload(context)
         if not isinstance(raw, dict) or context.get("open_proposal_id"):
             return None
         try:
@@ -138,7 +139,7 @@ class FinnV2OperationStateService:
         return FinnV2OperationRegistry().require_supported(operation_id)
 
     def _existing_state(self, contract: OperationContract, context: Mapping[str, object]) -> Optional[FinnV2OperationState]:
-        raw = context.get("active_guided_operation") or context.get("operation_state")
+        raw = self._guided_state_payload(context)
         if not isinstance(raw, dict):
             return None
         try:
@@ -148,6 +149,13 @@ class FinnV2OperationStateService:
         if state.operation_id != contract.operation_id or state.contract_version != contract.version:
             return None
         return state
+
+    @classmethod
+    def _guided_state_payload(cls, context: Mapping[str, object]) -> object:
+        """Read the legacy field only from planless historical conversations."""
+        if context.get("conversation_state_version") == cls.CONTEXT_STATE_VERSION:
+            return context.get("active_guided_operation")
+        return context.get("active_guided_operation") or context.get("operation_state")
 
     def _explicit_inputs(self, *, contract: OperationContract, message: str, explicit_asset: Optional[str]) -> dict[str, object]:
         text = str(message or "").strip()
