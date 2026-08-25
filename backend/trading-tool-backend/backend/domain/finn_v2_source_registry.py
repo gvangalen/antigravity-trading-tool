@@ -7,10 +7,10 @@ not duplicate operation or mode decisions.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from enum import StrEnum
+from enum import Enum
 
 
-class SourceClassification(StrEnum):
+class SourceClassification(str, Enum):
     CANONICAL_PRODUCT_STATE = "CANONICAL_PRODUCT_STATE"
     SYSTEM_DEFINITION = "SYSTEM_DEFINITION"
     IMMUTABLE_EVIDENCE_SNAPSHOT = "IMMUTABLE_EVIDENCE_SNAPSHOT"

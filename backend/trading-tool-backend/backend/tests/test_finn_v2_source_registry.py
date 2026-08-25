@@ -1,3 +1,7 @@
+import ast
+from enum import Enum
+from pathlib import Path
+
 import pytest
 
 from backend.domain.finn_v2_operation_registry import FinnV2OperationRegistry
@@ -58,3 +62,16 @@ def test_legacy_indicator_rules_are_not_runtime_user_selection_sources():
         "market_indicator_rules",
         "macro_indicator_rules",
     }
+
+
+def test_source_classification_keeps_python_310_compatible_string_enum_contract():
+    """Celery workers run on Python 3.10, which has no enum.StrEnum."""
+    assert issubclass(SourceClassification, str)
+    assert issubclass(SourceClassification, Enum)
+
+    registry_source = Path(__file__).parents[1] / "domain" / "finn_v2_source_registry.py"
+    tree = ast.parse(registry_source.read_text(encoding="utf-8"))
+    source_class = next(
+        node for node in tree.body if isinstance(node, ast.ClassDef) and node.name == "SourceClassification"
+    )
+    assert [base.id for base in source_class.bases if isinstance(base, ast.Name)] == ["str", "Enum"]
