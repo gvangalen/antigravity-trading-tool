@@ -609,6 +609,8 @@ class FinnV2ResponseVerifierService:
             tool_for_field = {
                 "asset": "read_active_asset",
                 "indicator_configuration": "read_indicator_configuration",
+                "configured_count": "read_indicator_configuration",
+                "indicator_names": "read_indicator_configuration",
                 "setup": "read_active_setup",
                 "timeframe": "read_active_setup",
                 "strategy": "read_linked_strategy",
@@ -626,6 +628,13 @@ class FinnV2ResponseVerifierService:
                     *(row.get("indicator") for row in facts.get("configured_indicators") or [] if isinstance(row, dict)),
                     *(row.get("indicator") for category in ("market", "macro", "technical") for row in facts.get(category) or [] if isinstance(row, dict)),
                 ]
+            elif field == "configured_count":
+                values = [facts.get("configured_count")]
+            elif field == "indicator_names":
+                values = [
+                    *(row.get("indicator") for row in facts.get("configured_indicators") or [] if isinstance(row, dict)),
+                    *(row.get("indicator") for category in ("market", "macro", "technical") for row in facts.get(category) or [] if isinstance(row, dict)),
+                ]
             elif field == "setup":
                 values = [facts.get("setup_id"), facts.get("name")]
             elif field == "timeframe":
@@ -636,6 +645,9 @@ class FinnV2ResponseVerifierService:
                 values = [facts.get("bot_id"), facts.get("name")]
             elif field == "bot_status":
                 return "live" in rendered or "paper" in rendered or "niet live" in rendered
+            if field == "indicator_names":
+                expected = [str(value).casefold() for value in values if value not in (None, "")]
+                return bool(expected) and all(value in rendered for value in expected)
             return any(str(value).casefold() in rendered for value in values if value not in (None, ""))
 
         return [field for field in required_fields if has_value(field)]

@@ -37,6 +37,8 @@ _RESPONSE_FIELDS = frozenset(
     {
         "asset",
         "indicator_configuration",
+        "configured_count",
+        "indicator_names",
         "setup",
         "timeframe",
         "strategy",
@@ -441,7 +443,7 @@ _CONTRACTS: tuple[OperationContract, ...] = (
     _read("read_watchlist", "asset", ("active_asset", "watchlist"), ("watchlist", "volglijst")),
     OperationContract("watchlist_add", FinnV2OperationRegistry.VERSION, "watchlist", "ACTION_PROPOSAL", ("voeg", "add", "watchlist"), required_inputs=("asset",), required_scopes=("active_asset", "watchlist"), proposal_type="watchlist_add", confirmation_required=True, execution_adapter="watchlist_add", idempotency_rule="user_asset_unique", postcondition="watchlist_contains_asset", response_strategy="proposal_draft", policy_class="proposal"),
     OperationContract("watchlist_remove", FinnV2OperationRegistry.VERSION, "watchlist", "ACTION_PROPOSAL", ("verwijder", "remove", "watchlist"), required_inputs=("asset",), required_scopes=("active_asset", "watchlist"), proposal_type="watchlist_remove", confirmation_required=True, execution_adapter="watchlist_remove", idempotency_rule="user_asset_absent", postcondition="watchlist_excludes_asset", response_strategy="proposal_draft", policy_class="proposal"),
-    _read("read_indicator_configuration", "indicators", ("active_asset", "indicator_configuration"), ("indicator", "rsi", "vwap", "volume"), ("asset", "indicator_configuration")),
+    _read("read_indicator_configuration", "indicators", ("active_asset", "indicator_configuration"), ("indicator", "rsi", "vwap", "volume"), ("asset", "configured_count", "indicator_names")),
     _gap("create_indicator_configuration", "indicators", "CREATE_PROPOSAL", ("maak indicator",), "create_indicator_configuration_adapter_missing"),
     _gap("update_indicator_configuration", "indicators", "CREATE_PROPOSAL", ("wijzig indicator",), "proposal_payload_contract_missing"),
     _gap("delete_indicator_configuration", "indicators", "CREATE_PROPOSAL", ("verwijder indicator",), "delete_indicator_configuration_adapter_missing"),

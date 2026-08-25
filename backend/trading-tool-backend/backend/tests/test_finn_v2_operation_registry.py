@@ -27,6 +27,12 @@ def test_supported_read_contracts_have_canonical_tools_and_no_model_call():
     assert setup.tool_names == ("read_active_asset", "read_active_setup")
 
 
+def test_indicator_read_contract_requires_a_visible_count_and_all_indicator_names():
+    contract = FinnV2OperationRegistry().require_supported("read_indicator_configuration")
+
+    assert contract.required_response_fields == ("asset", "configured_count", "indicator_names")
+
+
 def test_unimplemented_operations_are_capability_gaps_not_executable():
     registry = FinnV2OperationRegistry()
 
