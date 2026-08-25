@@ -46,16 +46,9 @@ async def _async_initialize(user_id: int, symbol: str):
                 asset_class=asset_scope.get("asset_class"),
             )
             if not user_configs:
-                # Fallback: copy BTC indicators if user has no custom config
-                btc_data = await tech_repo.get_latest_data_fallback(user_id, symbol="BTC")
-                for d in btc_data:
-                    await tech_repo.ensure_user_config(user_id, d.indicator)
-                await db.commit()
-                user_configs = await tech_repo.get_user_configs(
-                    user_id,
-                    symbol=symbol,
-                    asset_class=asset_scope.get("asset_class"),
-                )
+                # A configuration for BTC is not a safe default for another
+                # asset. Product setup owns creating explicit user selections.
+                logger.info("No canonical indicator configuration for user=%s symbol=%s", user_id, symbol)
 
             # 3. Trigger a fresh scan for this symbol via ScoreService logic
             # The get_daily_scores method has the "Runtime Engine" built-in

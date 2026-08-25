@@ -72,9 +72,12 @@ def generate_scores_db(category: str, user_id: Optional[int] = None, symbol: str
             if user_id is not None and category == "technical":
                 # Haal eerst de config op
                 cur.execute("""
-                    SELECT indicator FROM user_indicator_configs 
-                    WHERE user_id = %s AND category = %s
-                """, (user_id, category))
+                    SELECT indicator FROM user_indicator_configs
+                    WHERE user_id = %s
+                      AND category = %s
+                      AND symbol = %s
+                      AND enabled = TRUE
+                """, (user_id, category, symbol))
                 configs = [r[0] for r in cur.fetchall()]
                 
                 if configs:
@@ -86,13 +89,9 @@ def generate_scores_db(category: str, user_id: Optional[int] = None, symbol: str
                         ORDER BY {name_col}, timestamp DESC
                     """, (user_id, symbol, configs))
                 else:
-                    # Fallback naar alles wat we hebben voor dit symbool
-                    cur.execute(f"""
-                        SELECT DISTINCT ON ({name_col}) {name_col}, value
-                        FROM {data_table}
-                        WHERE user_id = %s AND symbol = %s
-                        ORDER BY {name_col}, timestamp DESC
-                    """, (user_id, symbol))
+                    # Missing canonical preferences are not permission to score
+                    # unrelated indicator data for this user and asset.
+                    return {"scores": {}, "total_score": 10, "top_contributors": []}
             
             elif user_id is not None:
                 if category == "macro":

@@ -1,5 +1,5 @@
 import logging
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.infrastructure.database import get_db
@@ -28,12 +28,13 @@ async def get_indicator_config_service(db: AsyncSession = Depends(get_db)):
 async def get_indicator_config(
     category: str,
     indicator: str,
+    symbol: str = Query(...),
     current_user: dict = Depends(get_current_user),
     service: IndicatorConfigService = Depends(get_indicator_config_service)
 ):
     try:
         user_id = current_user["id"]
-        col_res = await service.get_indicator_config(category, indicator, user_id)
+        col_res = await service.get_indicator_config(category, indicator, user_id, symbol)
         return col_res
     except ValueError as e:
         logger.warning("⚠️ Ongeldige indicator config request: %s", e)
@@ -57,6 +58,7 @@ async def update_indicator_settings(
             category=payload.category,
             indicator=payload.indicator,
             user_id=user_id,
+            symbol=payload.symbol,
             score_mode=payload.score_mode,
             weight=payload.weight
         )
@@ -83,6 +85,7 @@ async def save_custom_rules(
             category=payload.category,
             indicator=payload.indicator,
             user_id=user_id,
+            symbol=payload.symbol,
             rules=payload.rules,
             weight=payload.weight
         )
@@ -108,7 +111,8 @@ async def reset_indicator_rules(
         await service.reset_indicator_rules(
             category=payload.category,
             indicator=payload.indicator,
-            user_id=user_id
+            user_id=user_id,
+            symbol=payload.symbol,
         )
         return {"ok": True}
     except ValueError as e:

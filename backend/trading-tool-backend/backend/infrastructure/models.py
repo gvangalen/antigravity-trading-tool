@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Numeric, Boolean, DateTime, Date, ForeignKey, text, JSON, UniqueConstraint
+from sqlalchemy import BigInteger, Column, Integer, String, Numeric, Boolean, DateTime, Date, ForeignKey, text, JSON, UniqueConstraint
 from datetime import datetime
 
 from backend.infrastructure.database import Base
@@ -189,9 +189,8 @@ class MarketIndicatorRule(Base):
 class UserIndicatorConfig(Base):
     """
     🎯 SINGLE SOURCE OF TRUTH voor User Indicator Preferences.
-    Supports both:
-    - global defaults (symbol NULL)
-    - asset-specific overrides (symbol filled)
+    Every FINN-facing preference is asset-scoped.  Historical NULL-symbol rows
+    are retained for migration/audit only and are never selected for FINN V2.
     """
     __tablename__ = 'user_indicator_configs'
 
@@ -203,7 +202,11 @@ class UserIndicatorConfig(Base):
     asset_class = Column(String, nullable=True)
     priority = Column(Integer, default=100)
     enabled = Column(Boolean, default=True)
+    config_json = Column(JSON, default=dict, nullable=False)
+    provenance = Column(String, default='product_api', nullable=False)
+    source_record_id = Column(BigInteger, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 
 class MacroData(Base):
     __tablename__ = 'macro_data'

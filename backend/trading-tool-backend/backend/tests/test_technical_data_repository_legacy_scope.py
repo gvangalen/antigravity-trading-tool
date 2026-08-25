@@ -2,25 +2,16 @@ import asyncio
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
+import pytest
+
+from backend.domain.finn_v2_source_registry import FinnV2CanonicalSourceError
 from backend.infrastructure.repositories.technical_data_repository import TechnicalDataRepository
 
 
-class _ScalarResult:
-    def __init__(self, values):
-        self._values = values
-
-    def all(self):
-        return self._values
-
-
 class _ExecuteResult:
-    def __init__(self, *, scalars=None, rows=None, first_row=None):
-        self._scalars = scalars or []
+    def __init__(self, *, rows=None, first_row=None):
         self._rows = rows or []
         self._first_row = first_row
-
-    def scalars(self):
-        return _ScalarResult(self._scalars)
 
     def fetchall(self):
         return self._rows
@@ -29,417 +20,37 @@ class _ExecuteResult:
         return self._first_row
 
 
-def test_ensure_user_config_legacy_schema_ignores_symbol_and_asset_class_columns():
-    session = AsyncMock()
-    session.flush = AsyncMock()
-    session.execute = AsyncMock(
-        side_effect=[
-            _ExecuteResult(scalars=["id", "user_id", "indicator", "category", "priority", "enabled", "created_at"]),
-            _ExecuteResult(first_row=None),
-            _ExecuteResult(),
-        ]
-    )
-    repo = TechnicalDataRepository(session)
-
-    async def run():
-        return await repo.ensure_user_config(
-            2,
-            "fear_greed_index",
-            category="macro",
-            symbol="BTC",
-            asset_class="crypto",
-            priority=7,
-        )
-
-    created = asyncio.run(run())
-
-    assert created.symbol is None
-    assert created.asset_class is None
-
-    existing_query = str(session.execute.await_args_list[1].args[0])
-    insert_query = str(session.execute.await_args_list[2].args[0])
-    insert_params = session.execute.await_args_list[2].args[1]
-
-    assert "symbol" not in existing_query.lower()
-    assert "asset_class" not in existing_query.lower()
-    assert "symbol" not in insert_query.lower()
-    assert "asset_class" not in insert_query.lower()
-    assert insert_params == {
-        "user_id": 2,
-        "indicator": "fear_greed_index",
-        "priority": 7,
-        "category": "macro",
-    }
-
-
-def test_ensure_user_config_very_legacy_schema_ignores_priority_too():
-    session = AsyncMock()
-    session.flush = AsyncMock()
-    session.execute = AsyncMock(
-        side_effect=[
-            _ExecuteResult(scalars=["id", "user_id", "indicator", "category"]),
-            _ExecuteResult(first_row=None),
-            _ExecuteResult(),
-        ]
-    )
-    repo = TechnicalDataRepository(session)
-
-    async def run():
-        return await repo.ensure_user_config(
-            2,
-            "fear_greed_index",
-            category="macro",
-            symbol="BTC",
-            asset_class="crypto",
-            priority=7,
-        )
-
-    created = asyncio.run(run())
-
-    assert created.priority == 100
-    assert created.symbol is None
-    assert created.asset_class is None
-
-    existing_query = str(session.execute.await_args_list[1].args[0])
-    insert_query = str(session.execute.await_args_list[2].args[0])
-    insert_params = session.execute.await_args_list[2].args[1]
-
-    assert "priority" not in existing_query.lower()
-    assert "enabled" not in existing_query.lower()
-    assert "created_at" not in existing_query.lower()
-    assert "priority" not in insert_query.lower()
-    assert insert_params == {
-        "user_id": 2,
-        "indicator": "fear_greed_index",
-        "category": "macro",
-    }
-
-
-def test_ensure_user_config_existing_row_with_category_does_not_duplicate_namespace_kwargs():
-    session = AsyncMock()
-    session.flush = AsyncMock()
-    existing_row = SimpleNamespace(
+def _row(*, record_id: int, user_id: int, indicator: str, category: str, symbol: str):
+    return SimpleNamespace(
         _mapping={
-            "id": 11,
-            "user_id": 2,
-            "indicator": "fear_greed_index",
-            "category": "macro",
-            "priority": 9,
-            "enabled": False,
-            "symbol": "BTC",
-            "asset_class": "crypto",
+            "id": record_id,
+            "user_id": user_id,
+            "indicator": indicator,
+            "category": category,
+            "symbol": symbol,
+            "asset_class": "crypto" if symbol == "BTC" else "stock",
+            "priority": record_id,
+            "enabled": True,
+            "config_json": {},
+            "provenance": "product_api",
+            "source_record_id": record_id,
+            "created_at": None,
+            "updated_at": None,
         }
     )
-    session.execute = AsyncMock(
-        side_effect=[
-            _ExecuteResult(
-                scalars=["id", "user_id", "indicator", "category", "priority", "enabled", "symbol", "asset_class"]
-            ),
-            _ExecuteResult(first_row=existing_row),
-            _ExecuteResult(),
-        ]
-    )
-    repo = TechnicalDataRepository(session)
-
-    async def run():
-        return await repo.ensure_user_config(
-            2,
-            "fear_greed_index",
-            category="macro",
-            symbol="BTC",
-            asset_class="crypto",
-            priority=7,
-        )
-
-    updated = asyncio.run(run())
-
-    assert updated.category == "macro"
-    assert updated.symbol == "BTC"
-    assert updated.asset_class == "crypto"
-    assert updated.priority == 7
-    assert updated.enabled is True
 
 
-def test_get_user_configs_legacy_schema_returns_global_rows_for_symbol_request():
+def test_explicit_asset_read_never_falls_back_to_asset_class_or_default_rows():
     session = AsyncMock()
-    session.execute = AsyncMock(
-        side_effect=[
-            _ExecuteResult(scalars=["id", "user_id", "indicator", "category", "priority", "enabled", "created_at"]),
-            _ExecuteResult(
-                rows=[
-                    SimpleNamespace(
-                        _mapping={
-                            "id": 11,
-                            "user_id": 2,
-                            "indicator": "fear_greed_index",
-                            "category": "macro",
-                            "priority": 1,
-                            "enabled": True,
-                            "created_at": None,
-                        }
-                    )
-                ]
-            ),
-        ]
-    )
-    repo = TechnicalDataRepository(session)
-
-    async def run():
-        return await repo.get_user_configs(2, category="macro", symbol="BTC", asset_class="crypto")
-
-    rows = asyncio.run(run())
-
-    assert len(rows) == 1
-    assert rows[0].indicator == "fear_greed_index"
-    assert rows[0].symbol is None
-    assert rows[0].asset_class is None
-
-    query = str(session.execute.await_args_list[1].args[0])
-    assert "symbol" not in query.lower()
-    assert "asset_class" not in query.lower()
-
-
-def test_symbol_override_is_not_hidden_by_a_different_asset_class_label():
-    session = AsyncMock()
-    session.execute = AsyncMock(
-        side_effect=[
-            _ExecuteResult(
-                scalars=[
-                    "id",
-                    "user_id",
-                    "indicator",
-                    "category",
-                    "priority",
-                    "enabled",
-                    "symbol",
-                    "asset_class",
-                ]
-            ),
-            _ExecuteResult(
-                rows=[
-                    SimpleNamespace(
-                        _mapping={
-                            "id": 11,
-                            "user_id": 2,
-                            "indicator": "rsi",
-                            "category": "technical",
-                            "priority": 1,
-                            "enabled": True,
-                            "symbol": "BTC",
-                            "asset_class": "cryptocurrency",
-                        }
-                    )
-                ]
-            ),
-        ]
-    )
-    repo = TechnicalDataRepository(session)
-
-    async def run():
-        return await repo.resolve_effective_scope_configs(
-            2,
-            category="technical",
-            symbol="BTC",
-            asset_class="crypto",
-        )
-
-    resolved = asyncio.run(run())
-
-    assert resolved["scope"] == "symbol_override"
-    assert [row.indicator for row in resolved["rows"]] == ["rsi"]
-    query = str(session.execute.await_args_list[1].args[0])
-    assert "symbol = :symbol" in query
-    assert "asset_class = :asset_class" not in query
-
-
-def test_get_user_config_columns_rolls_back_when_schema_probe_fails():
-    session = AsyncMock()
-    session.execute = AsyncMock(side_effect=RuntimeError("probe failed"))
-    session.rollback = AsyncMock()
-    repo = TechnicalDataRepository(session)
-
-    async def run():
-        return await repo._get_user_config_columns()
-
-    columns = asyncio.run(run())
-
-    assert columns == {
-        "id",
-        "user_id",
-        "indicator",
-        "category",
-        "created_at",
-    }
-    session.rollback.assert_awaited_once()
-
-
-def test_get_canonical_indicator_configuration_groups_legacy_rows_by_category():
-    session = AsyncMock()
-    session.execute = AsyncMock(
-        side_effect=[
-            _ExecuteResult(scalars=["id", "user_id", "indicator", "category", "created_at"]),
-            _ExecuteResult(
-                rows=[
-                    SimpleNamespace(
-                        _mapping={
-                            "id": 11,
-                            "user_id": 2,
-                            "indicator": "rsi",
-                            "category": "technical",
-                            "created_at": None,
-                        }
-                    ),
-                    SimpleNamespace(
-                        _mapping={
-                            "id": 12,
-                            "user_id": 2,
-                            "indicator": "rsi",
-                            "category": "technical",
-                            "created_at": None,
-                        }
-                    ),
-                ]
-            ),
-            _ExecuteResult(
-                rows=[
-                    SimpleNamespace(
-                        _mapping={
-                            "id": 13,
-                            "user_id": 2,
-                            "indicator": "funding_rate",
-                            "category": "market",
-                            "created_at": None,
-                        }
-                    )
-                ]
-            ),
-            _ExecuteResult(
-                rows=[
-                    SimpleNamespace(
-                        _mapping={
-                            "id": 14,
-                            "user_id": 2,
-                            "indicator": "cpi",
-                            "category": "macro",
-                            "created_at": None,
-                        }
-                    )
-                ]
-            ),
-        ]
-    )
-    repo = TechnicalDataRepository(session)
-
-    async def run():
-        return await repo.get_canonical_indicator_configuration(2, symbol="BTC")
-
-    configuration = asyncio.run(run())
-
-    assert configuration["symbol"] == "BTC"
-    assert configuration["asset_class"] is None
-    assert [row.indicator for row in configuration["technical"]] == ["rsi"]
-    assert [row.indicator for row in configuration["market"]] == ["funding_rate"]
-    assert [row.indicator for row in configuration["macro"]] == ["cpi"]
-    assert configuration["scope_by_category"] == {
-        "technical": "default",
-        "market": "default",
-        "macro": "default",
-    }
-
-
-def test_get_configured_indicator_names_keeps_legacy_domain_counts_without_asset_columns():
-    session = AsyncMock()
-    session.execute = AsyncMock(
-        side_effect=[
-            _ExecuteResult(scalars=["id", "user_id", "indicator", "category", "created_at"]),
-            _ExecuteResult(
-                rows=[
-                    SimpleNamespace(
-                        _mapping={
-                            "id": 11,
-                            "user_id": 2,
-                            "indicator": "rsi",
-                            "category": "technical",
-                            "created_at": None,
-                        }
-                    )
-                ]
-            ),
-            _ExecuteResult(
-                rows=[
-                    SimpleNamespace(
-                        _mapping={
-                            "id": 13,
-                            "user_id": 2,
-                            "indicator": "forward_pe",
-                            "category": "market",
-                            "created_at": None,
-                        }
-                    )
-                ]
-            ),
-            _ExecuteResult(
-                rows=[
-                    SimpleNamespace(
-                        _mapping={
-                            "id": 14,
-                            "user_id": 2,
-                            "indicator": "federal_funds_rate",
-                            "category": "macro",
-                            "created_at": None,
-                        }
-                    )
-                ]
-            ),
-        ]
-    )
-    repo = TechnicalDataRepository(session)
-
-    async def run():
-        return await repo.get_configured_indicator_names(2, symbol="AAPL")
-
-    names = asyncio.run(run())
-
-    assert names == {
-        "technical": ["RSI"],
-        "market": ["forward_pe"],
-        "macro": ["federal_funds_rate"],
-    }
-
-
-def test_canonical_configuration_never_projects_unscoped_legacy_rules_into_explicit_asset():
-    session = AsyncMock()
-    repo = TechnicalDataRepository(session)
-    empty_payload = {
-        "scope": "empty",
-        "symbol": "AAPL",
-        "asset_class": "stock",
-        "rows": [],
-        "storage_mode": "scoped",
-    }
-    repo.resolve_effective_scope_configs = AsyncMock(
-        side_effect=[dict(empty_payload) for _ in range(3)]
-    )
-    repo._fetch_user_rule_override_configs = AsyncMock(
-        side_effect=[
-            [SimpleNamespace(indicator="vwap", category="technical")],
-            [SimpleNamespace(indicator="volume", category="market")],
-            [SimpleNamespace(indicator="market_regime", category="macro")],
-        ]
-    )
-    repo._user_config_columns_cache = {
-        "id",
-        "user_id",
-        "indicator",
-        "category",
-        "symbol",
-        "asset_class",
-        "priority",
-        "enabled",
-    }
+    session.execute = AsyncMock(side_effect=[
+        _ExecuteResult(rows=[]),
+        _ExecuteResult(rows=[]),
+        _ExecuteResult(rows=[]),
+    ])
+    repository = TechnicalDataRepository(session)
 
     configuration = asyncio.run(
-        repo.get_canonical_indicator_configuration(407, symbol="AAPL", asset_class="stock")
+        repository.get_canonical_indicator_configuration(406, symbol="BTC", asset_class="crypto")
     )
 
     assert configuration["technical"] == []
@@ -450,9 +61,53 @@ def test_canonical_configuration_never_projects_unscoped_legacy_rules_into_expli
         "market": "empty",
         "macro": "empty",
     }
+    for call in session.execute.await_args_list:
+        query = str(call.args[0])
+        assert "symbol = :symbol" in query
+        assert "symbol IS NULL" not in query
+        assert call.args[1]["user_id"] == 406
+        assert call.args[1]["symbol"] == "BTC"
+
+
+def test_canonical_indicator_configuration_preserves_exact_owner_symbol_and_provenance():
+    session = AsyncMock()
+    session.execute = AsyncMock(side_effect=[
+        _ExecuteResult(rows=[_row(record_id=1, user_id=406, indicator="rsi", category="technical", symbol="BTC"), _row(record_id=2, user_id=406, indicator="ma_200", category="technical", symbol="BTC")]),
+        _ExecuteResult(rows=[_row(record_id=3, user_id=406, indicator="volume", category="market", symbol="BTC")]),
+        _ExecuteResult(rows=[]),
+    ])
+    repository = TechnicalDataRepository(session)
+
+    configuration = asyncio.run(
+        repository.get_canonical_indicator_configuration(406, symbol="BTC", asset_class="crypto")
+    )
+
+    assert [row.indicator for row in configuration["technical"]] == ["rsi", "ma_200"]
+    assert [row.indicator for row in configuration["market"]] == ["volume"]
     assert configuration["storage_mode_by_category"] == {
-        "technical": "scoped",
-        "market": "scoped",
-        "macro": "scoped",
+        "technical": "canonical_asset_scoped",
+        "market": "canonical_asset_scoped",
+        "macro": "canonical_asset_scoped",
     }
-    repo._fetch_user_rule_override_configs.assert_not_awaited()
+    for row in [*configuration["technical"], *configuration["market"]]:
+        assert row.user_id == 406
+        assert row.symbol == "BTC"
+        assert row.provenance == "product_api"
+        assert row.source_record_id == row.id
+
+
+def test_canonical_indicator_configuration_requires_a_user_and_asset_scope():
+    repository = TechnicalDataRepository(AsyncMock())
+
+    with pytest.raises(FinnV2CanonicalSourceError, match="missing_canonical_asset:indicator_configuration"):
+        asyncio.run(repository.get_canonical_indicator_configuration(406))
+
+    with pytest.raises(FinnV2CanonicalSourceError, match="missing_canonical_owner:indicator_configuration"):
+        repository._source_registry.get("indicator_configuration").validate_request(user_id=None, symbol="BTC")
+
+
+def test_new_indicator_write_requires_an_asset_scope():
+    repository = TechnicalDataRepository(AsyncMock())
+
+    with pytest.raises(FinnV2CanonicalSourceError, match="missing_canonical_asset:indicator_configuration"):
+        asyncio.run(repository.ensure_user_config(406, "rsi", category="technical"))

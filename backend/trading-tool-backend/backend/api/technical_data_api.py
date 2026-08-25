@@ -30,7 +30,7 @@ logger.info("🚀 technical_data_api.py geladen — asynchrone Clean Architectur
 # ===============================================================
 @router.get("/technical_data", response_model=List[TechnicalDataResponse])
 async def get_technical_data(
-    symbol: Optional[str] = Query(None),
+    symbol: str = Query(...),
     current_user: dict = Depends(get_current_user),
     session: AsyncSession = Depends(get_db)
 ):
@@ -211,7 +211,7 @@ async def get_technical_quarter_data(
 @router.delete("/technical_data/{indicator}")
 async def delete_technical_indicator(
     indicator: str,
-    symbol: Optional[str] = Query(None),
+    symbol: str = Query(...),
     current_user: dict = Depends(get_current_user),
     session: AsyncSession = Depends(get_db)
 ):
@@ -274,7 +274,7 @@ async def get_indicator_history(
 
 @router.get("/technical/preferences", response_model=TechnicalIndicatorPreferenceResponse)
 async def get_technical_preferences(
-    symbol: Optional[str] = Query(None),
+    symbol: str = Query(...),
     asset_class: Optional[str] = Query(None),
     current_user: dict = Depends(get_current_user),
     session: AsyncSession = Depends(get_db),
@@ -311,6 +311,8 @@ async def put_technical_preferences(
     repo = TechnicalDataRepository(session)
 
     normalized_symbol = str(payload.symbol or "").strip().upper() or None
+    if normalized_symbol is None:
+        raise HTTPException(status_code=400, detail="symbol is required for personal indicator preferences")
     asset_class = str(payload.asset_class or "").strip().lower() or None
     if normalized_symbol and not asset_class:
         asset = await AssetCatalogService(session).get_asset(normalized_symbol)
@@ -366,9 +368,9 @@ async def sync_technical_preferences_for_symbol(
 
 @router.post("/technical/preferences/bootstrap", response_model=TechnicalIndicatorPreferenceResponse)
 async def bootstrap_technical_preferences(
-    symbol: Optional[str] = Query(None),
+    symbol: str = Query(...),
     asset_class: Optional[str] = Query(None),
-    scope: str = Query("asset_class"),
+    scope: str = Query("symbol"),
     preset: str = Query("recommended"),
     current_user: dict = Depends(get_current_user),
     session: AsyncSession = Depends(get_db),

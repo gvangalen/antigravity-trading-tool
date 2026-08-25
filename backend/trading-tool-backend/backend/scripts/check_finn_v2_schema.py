@@ -60,6 +60,32 @@ REQUIRED_FINN_V2_COLUMNS = (
         nullable=False,
         default_fragment="'{}'::jsonb",
     ),
+    RequiredColumn(
+        table_name="user_indicator_configs",
+        column_name="config_json",
+        udt_name="jsonb",
+        nullable=False,
+        default_fragment="'{}'::jsonb",
+    ),
+    RequiredColumn(
+        table_name="user_indicator_configs",
+        column_name="provenance",
+        udt_name="text",
+        nullable=False,
+        default_fragment="'product_api'",
+    ),
+    RequiredColumn(
+        table_name="user_indicator_configs",
+        column_name="source_record_id",
+        udt_name="int8",
+        nullable=True,
+    ),
+    RequiredColumn(
+        table_name="user_indicator_configs",
+        column_name="updated_at",
+        udt_name="timestamp",
+        nullable=False,
+    ),
 )
 
 
@@ -116,6 +142,11 @@ def assert_finn_v2_schema(connection: Any) -> None:
         cursor.fetchone()
         cursor.execute(
             "SELECT operation_id, operation_contract_version FROM finn_v2_evidence_artifacts LIMIT 1"
+        )
+        cursor.fetchone()
+        cursor.execute(
+            "SELECT user_id, symbol, category, indicator, provenance, source_record_id "
+            "FROM user_indicator_configs LIMIT 1"
         )
         cursor.fetchone()
 

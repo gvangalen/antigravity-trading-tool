@@ -54,7 +54,7 @@ async def add_user_market_indicator(
 @router.get("/market_data/indicators", response_model=List[MarketDataIndicatorResponse])
 async def list_user_market_indicators(
     limit: int = Query(200, ge=1, le=1000),
-    symbol: Optional[str] = Query(None),
+    symbol: str = Query(...),
     current_user: dict = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
@@ -69,7 +69,7 @@ async def list_user_market_indicators(
 @router.delete("/market_data/indicator/{name}")
 async def delete_market_indicator(
     name: str,
-    symbol: Optional[str] = Query(None),
+    symbol: str = Query(...),
     current_user: dict = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
@@ -166,7 +166,7 @@ async def get_market_indicator_rules(
 
 @router.get("/market/preferences", response_model=TechnicalIndicatorPreferenceResponse)
 async def get_market_preferences(
-    symbol: Optional[str] = Query(None),
+    symbol: str = Query(...),
     asset_class: Optional[str] = Query(None),
     current_user: dict = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
@@ -190,9 +190,9 @@ async def get_market_preferences(
 
 @router.post("/market/preferences/bootstrap", response_model=TechnicalIndicatorPreferenceResponse)
 async def bootstrap_market_preferences(
-    symbol: Optional[str] = Query(None),
+    symbol: str = Query(...),
     asset_class: Optional[str] = Query(None),
-    scope: str = Query("asset_class"),
+    scope: str = Query("symbol"),
     preset: str = Query("recommended"),
     current_user: dict = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
@@ -234,6 +234,8 @@ async def put_market_preferences(
     service = MarketDataService(db)
 
     normalized_symbol = str(payload.symbol or "").strip().upper() or None
+    if normalized_symbol is None:
+        raise HTTPException(status_code=400, detail="symbol is required for personal indicator preferences")
     asset_class = str(payload.asset_class or "").strip().lower() or None
     if normalized_symbol and not asset_class:
         asset = await AssetCatalogService(db).get_asset(normalized_symbol)

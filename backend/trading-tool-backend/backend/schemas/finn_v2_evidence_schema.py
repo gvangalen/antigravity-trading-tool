@@ -46,6 +46,8 @@ class IndicatorConfigurationItem(BaseModel):
     enabled: bool = True
     symbol: Optional[str] = None
     asset_class: Optional[str] = None
+    source_record_id: Optional[int] = None
+    provenance: Optional[str] = None
 
 
 class IndicatorConfigurationData(BaseModel):
@@ -59,6 +61,7 @@ class IndicatorConfigurationData(BaseModel):
     market: List[IndicatorConfigurationItem] = Field(default_factory=list)
     macro: List[IndicatorConfigurationItem] = Field(default_factory=list)
     scope_by_category: dict[str, str] = Field(default_factory=dict)
+    provenance: str = "user_indicator_configs"
 
 
 class MasterScoreData(BaseModel):

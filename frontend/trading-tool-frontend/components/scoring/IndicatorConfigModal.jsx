@@ -368,14 +368,14 @@ export default function IndicatorConfigModal({
   }, []);
 
   useEffect(() => {
-    if (!isOpen || !category || !normalizedIndicator) return;
+    if (!isOpen || !category || !normalizedIndicator || !assetSymbol) return;
 
     let active = true;
     setLoading(true);
     setAdvancedOpen(false);
 
     Promise.all([
-      getIndicatorConfig(category, normalizedIndicator),
+      getIndicatorConfig(category, normalizedIndicator, assetSymbol),
       getAssistantPreferences().catch(() => null),
     ])
       .then(([configResponse, preferencesResponse]) => {
@@ -407,7 +407,7 @@ export default function IndicatorConfigModal({
     return () => {
       active = false;
     };
-  }, [category, copy, indicatorLabel, isOpen, normalizedIndicator, showSnackbar]);
+  }, [assetSymbol, category, copy, indicatorLabel, isOpen, normalizedIndicator, showSnackbar]);
 
   const handleConfirm = useCallback(async () => {
     if (!indicator || !category || !draft || saving || !isValidDraft) return;
@@ -417,16 +417,18 @@ export default function IndicatorConfigModal({
     try {
       if (draft.score_mode === "custom") {
         await saveCustomRules({
-          category,
-          indicator,
+        category,
+        indicator,
+        symbol: assetSymbol,
           rules: Array.isArray(draft.rules) ? draft.rules : [],
         });
       }
 
       await updateIndicatorSettings({
-        category,
-        indicator,
-        score_mode: draft.score_mode || "standard",
+          category,
+          indicator,
+          symbol: assetSymbol,
+          score_mode: draft.score_mode || "standard",
         weight: typeof draft.weight === "number" ? draft.weight : 1,
       });
 

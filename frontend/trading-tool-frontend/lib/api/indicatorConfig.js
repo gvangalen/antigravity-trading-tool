@@ -6,10 +6,10 @@ import { fetchAuth } from '@/lib/api/auth';
 // ======================================================
 // 🔹 1. Indicator config ophalen
 // ======================================================
-export async function getIndicatorConfig(category, indicator) {
+export async function getIndicatorConfig(category, indicator, symbol) {
   try {
     return await fetchAuth(
-      `/api/indicator_config/${category}/${indicator}`
+      `/api/indicator_config/${category}/${indicator}?symbol=${encodeURIComponent(symbol)}`
     );
   } catch (err) {
     console.error("❌ getIndicatorConfig:", err);
@@ -24,6 +24,7 @@ export async function getIndicatorConfig(category, indicator) {
 export async function updateIndicatorSettings({
   category,
   indicator,
+  symbol,
   score_mode,
   weight,
 }) {
@@ -33,6 +34,7 @@ export async function updateIndicatorSettings({
       body: JSON.stringify({
         category,
         indicator,
+        symbol,
         score_mode,
         weight,
       }),
@@ -50,6 +52,7 @@ export async function updateIndicatorSettings({
 export async function saveCustomRules({
   category,
   indicator,
+  symbol,
   rules,
 }) {
   try {
@@ -58,6 +61,7 @@ export async function saveCustomRules({
       body: JSON.stringify({
         category,
         indicator,
+        symbol,
         rules,
       }),
     });
@@ -73,7 +77,8 @@ export async function saveCustomRules({
 // ======================================================
 export async function resetIndicatorConfig(
   category,
-  indicator
+  indicator,
+  symbol,
 ) {
   try {
     return await fetchAuth(`/api/indicator_config/reset`, {
@@ -81,6 +86,7 @@ export async function resetIndicatorConfig(
       body: JSON.stringify({
         category,
         indicator,
+        symbol,
       }),
     });
   } catch (err) {

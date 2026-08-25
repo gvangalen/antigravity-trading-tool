@@ -210,6 +210,7 @@ export default function TechnicalIndicatorScoreView({
               <IndicatorScorePanel
                 category="technical"
                 indicator={selected.name}
+                assetSymbol={assetSymbol}
               />
             </div>
           </div>

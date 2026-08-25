@@ -38,6 +38,7 @@ function normalizeIndicatorName(name) {
 export default function IndicatorScorePanel({
   indicator,
   category,
+  assetSymbol,
   deferred = false,
   onDraftChange,
 }) {
@@ -58,13 +59,13 @@ export default function IndicatorScorePanel({
      Load indicator config
   --------------------------- */
   const loadConfig = useCallback(async () => {
-    if (!normalizedIndicator || !category) return;
+    if (!normalizedIndicator || !category || !assetSymbol) return;
 
     setLoading(true);
     setErrorMsg("");
 
     try {
-      const res = await getIndicatorConfig(category, normalizedIndicator);
+      const res = await getIndicatorConfig(category, normalizedIndicator, assetSymbol);
 
       setConfig({
         rules: Array.isArray(res?.rules) ? res.rules : [],
@@ -90,7 +91,7 @@ export default function IndicatorScorePanel({
     } finally {
       setLoading(false);
     }
-  }, [category, normalizedIndicator, showSnackbar]);
+  }, [assetSymbol, category, normalizedIndicator, showSnackbar]);
 
   useEffect(() => {
     loadConfig();
@@ -114,6 +115,7 @@ export default function IndicatorScorePanel({
         await updateIndicatorSettings({
           category,
           indicator: normalizedIndicator,
+          symbol: assetSymbol,
           score_mode: nextMode,
           weight: nextWeight,
         });
@@ -133,7 +135,7 @@ export default function IndicatorScorePanel({
         showSnackbar(copy.saveFailed, "danger");
       }
     },
-    [category, normalizedIndicator, showSnackbar]
+    [assetSymbol, category, normalizedIndicator, showSnackbar]
   );
 
   /* ---------------------------
@@ -155,6 +157,7 @@ export default function IndicatorScorePanel({
         await apiSaveCustomRules({
           category,
           indicator: normalizedIndicator,
+          symbol: assetSymbol,
           rules: rulesOnly,
         });
 
@@ -162,6 +165,7 @@ export default function IndicatorScorePanel({
         await updateIndicatorSettings({
           category,
           indicator: normalizedIndicator,
+          symbol: assetSymbol,
           score_mode: "custom",
           weight: nextWeight,
         });
@@ -179,7 +183,7 @@ export default function IndicatorScorePanel({
         showSnackbar(copy.customSaveFailed, "danger");
       }
     },
-    [category, normalizedIndicator, showSnackbar]
+    [assetSymbol, category, normalizedIndicator, showSnackbar]
   );
 
   /* ---------------------------

@@ -232,6 +232,7 @@ export default function MacroIndicatorScoreView({
               <IndicatorScorePanel
                 category="macro"
                 indicator={selected.name}
+                assetSymbol={assetSymbol}
               />
             </div>
           </div>

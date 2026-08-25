@@ -224,6 +224,7 @@ export default function MarketIndicatorScoreView({
               <IndicatorScorePanel
                 category="market"
                 indicator={indicator.name}
+                assetSymbol={assetSymbol}
               />
             </div>
           </div>

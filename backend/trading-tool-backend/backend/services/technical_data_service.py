@@ -131,32 +131,21 @@ class TechnicalDataService:
             asset_class=asset_class,
         )
 
-        if normalized_symbol:
-            symbol_rows = await self.repository.list_scope_configs(
-                user_id,
-                symbol=normalized_symbol,
-                asset_class=normalized_asset_class,
-            )
-            if symbol_rows:
-                return {
-                    "scope": "symbol_override",
-                    "symbol": normalized_symbol,
-                    "asset_class": normalized_asset_class,
-                    "rows": symbol_rows,
-                }
+        if not normalized_symbol:
+            raise ValueError("Een symbool is verplicht voor persoonlijke indicatorconfiguratie.")
 
-        if normalized_asset_class:
-            class_rows = await self.repository.list_scope_configs(
-                user_id,
-                asset_class=normalized_asset_class,
-            )
-            if class_rows:
-                return {
-                    "scope": "asset_class_override",
-                    "symbol": normalized_symbol,
-                    "asset_class": normalized_asset_class,
-                    "rows": class_rows,
-                }
+        symbol_rows = await self.repository.list_scope_configs(
+            user_id,
+            symbol=normalized_symbol,
+            asset_class=normalized_asset_class,
+        )
+        if symbol_rows:
+            return {
+                "scope": "symbol_override",
+                "symbol": normalized_symbol,
+                "asset_class": normalized_asset_class,
+                "rows": symbol_rows,
+            }
 
         return {
             "scope": "empty",
@@ -171,34 +160,25 @@ class TechnicalDataService:
         *,
         symbol: Optional[str] = None,
         asset_class: Optional[str] = None,
-        scope: str = "asset_class",
+        scope: str = "symbol",
         preset: str = "recommended",
     ) -> Dict[str, Any]:
         normalized_symbol, normalized_asset_class = await self._resolve_asset_scope(
             symbol=symbol,
             asset_class=asset_class,
         )
-        normalized_scope = str(scope or "asset_class").strip().lower()
+        normalized_scope = str(scope or "symbol").strip().lower()
         normalized_preset = str(preset or "recommended").strip().lower()
 
         if normalized_preset != "recommended":
             raise ValueError(f"Onbekende preset '{preset}'.")
 
-        if normalized_scope == "symbol":
-            if not normalized_symbol:
-                raise ValueError("Een symbool is verplicht voor scope 'symbol'.")
-            target_symbol = normalized_symbol
-            target_asset_class = normalized_asset_class
-        elif normalized_scope == "asset_class":
-            if not normalized_asset_class:
-                raise ValueError("Een asset_class of herleidbaar symbool is verplicht voor scope 'asset_class'.")
-            target_symbol = None
-            target_asset_class = normalized_asset_class
-        elif normalized_scope == "default":
-            target_symbol = None
-            target_asset_class = None
-        else:
-            raise ValueError("Scope moet 'default', 'asset_class' of 'symbol' zijn.")
+        if normalized_scope != "symbol":
+            raise ValueError("Persoonlijke indicatorconfiguratie ondersteunt uitsluitend scope 'symbol'.")
+        if not normalized_symbol:
+            raise ValueError("Een symbool is verplicht voor scope 'symbol'.")
+        target_symbol = normalized_symbol
+        target_asset_class = normalized_asset_class
 
         rows = await self.repository.replace_scope_configs(
             user_id,
@@ -207,7 +187,7 @@ class TechnicalDataService:
             asset_class=target_asset_class,
         )
         return {
-            "scope": "symbol_override" if target_symbol else ("asset_class_override" if target_asset_class else "default"),
+            "scope": "symbol_override",
             "symbol": target_symbol,
             "asset_class": target_asset_class,
             "rows": rows,

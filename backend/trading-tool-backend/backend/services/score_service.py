@@ -57,16 +57,7 @@ class ScoreService:
             )
 
             if not user_configs:
-                logger.info(f"🆕 Initializing global indicator config for user {user_id} from BTC data...")
-                btc_data = await tech_repo.get_latest_data_fallback(user_id, symbol="BTC")
-                for d in btc_data:
-                    await tech_repo.ensure_user_config(user_id, d.indicator)
-                await self.repository.db.commit()
-                user_configs = await tech_repo.get_user_configs(
-                    user_id,
-                    symbol=symbol,
-                    asset_class=asset_scope.get("asset_class"),
-                )
+                logger.info("No canonical indicator configuration for user=%s symbol=%s", user_id, symbol)
 
             for conf in user_configs:
                 exists = await tech_repo.check_duplicate(conf.indicator, user_id, symbol)

@@ -4861,7 +4861,7 @@ function AIAssistantContent({
           }
         } else {
           const [config, rows] = await Promise.all([
-            getIndicatorConfig(res.category, res.indicator),
+            getIndicatorConfig(res.category, res.indicator, symbol),
             res.category === "macro" ? fetchMacroData() : technicalDataAll(symbol),
           ]);
           const configFound = Boolean(config?.indicator === res.indicator && Array.isArray(config?.rules) && config.rules.length === 5);

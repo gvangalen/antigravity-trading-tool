@@ -8,25 +8,26 @@ import {
   resetIndicatorConfig,
 } from "@/lib/api/indicatorConfig";
 
-export default function useIndicatorConfig(category, indicator) {
+export default function useIndicatorConfig(category, indicator, symbol) {
   const [config, setConfig] = useState(null);
   const [loading, setLoading] = useState(true);
 
   async function load() {
     setLoading(true);
-    const data = await getIndicatorConfig(category, indicator);
+    const data = await getIndicatorConfig(category, indicator, symbol);
     setConfig(data);
     setLoading(false);
   }
 
   useEffect(() => {
-    if (category && indicator) load();
-  }, [category, indicator]);
+    if (category && indicator && symbol) load();
+  }, [category, indicator, symbol]);
 
   async function save(settings) {
     await updateIndicatorSettings({
       category,
       indicator,
+      symbol,
       ...settings,
     });
     await load();
@@ -36,13 +37,14 @@ export default function useIndicatorConfig(category, indicator) {
     await saveCustomRules({
       category,
       indicator,
+      symbol,
       rules,
     });
     await load();
   }
 
   async function reset() {
-    await resetIndicatorConfig(category, indicator);
+    await resetIndicatorConfig(category, indicator, symbol);
     await load();
   }
 

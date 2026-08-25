@@ -1,6 +1,7 @@
 import asyncio
 from types import SimpleNamespace
 
+import backend.infrastructure.repositories.onboarding_repository as onboarding_repository_module
 from backend.infrastructure.repositories.onboarding_repository import OnboardingRepository
 from backend.services.onboarding_service import DEFAULT_FLOW, OnboardingService
 
@@ -382,19 +383,32 @@ def test_infer_onboarding_state_requires_explicit_asset_and_symbol_scoped_indica
     assert state["has_bot"] is False
 
 
-def test_onboarding_repository_schema_probe_failure_uses_legacy_safe_columns():
-    class ProbeFailureSession:
+def test_onboarding_repository_reads_canonical_symbol_scoped_indicator_configuration(monkeypatch):
+    class _CanonicalRepository:
+        def __init__(self, session):
+            self.session = session
+
+        async def get_configured_indicator_names(self, user_id, *, symbol):
+            assert user_id == 42
+            assert symbol == "BTC"
+            return {"market": ["volume"], "macro": [], "technical": ["RSI"]}
+
+    monkeypatch.setattr(onboarding_repository_module, "TechnicalDataRepository", _CanonicalRepository)
+    class _ScalarResult:
+        def scalar(self):
+            return False
+
+    class _Session:
+        async def get(self, model, user_id):
+            assert user_id == 42
+            return SimpleNamespace(ai_preferences={"selected_asset": "BTC"})
+
         async def execute(self, query, params=None):
-            raise RuntimeError("probe failed")
+            return _ScalarResult()
 
-    repo = OnboardingRepository(ProbeFailureSession())
+    repo = OnboardingRepository(_Session())
 
-    columns = asyncio.run(repo._get_user_config_columns())
+    state = asyncio.run(repo.infer_onboarding_state(user_id=42))
 
-    assert columns == {
-        "id",
-        "user_id",
-        "indicator",
-        "category",
-        "created_at",
-    }
+    assert state["has_market"] is True
+    assert state["has_technical"] is True

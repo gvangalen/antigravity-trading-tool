@@ -52,11 +52,20 @@ class FinnV2ActionAdapterRegistry:
             raise ValueError("execution_adapter_unavailable")
         change = payload["change"]
         after = change.get("after") or {}
+        symbol = str(
+            after.get("symbol")
+            or change.get("asset")
+            or payload.get("target", {}).get("asset")
+            or ""
+        ).strip().upper()
+        if not symbol:
+            raise ValueError("asset_required")
         if "rules" in after:
             await self.indicators.save_custom_rules(
                 category=str(after.get("category") or "technical"),
                 indicator=str(after.get("indicator_id") or change.get("indicator_id")),
                 user_id=user_id,
+                symbol=symbol,
                 rules=after.get("rules") or [],
                 weight=float(after.get("weight") or 1.0),
             )
@@ -65,6 +74,7 @@ class FinnV2ActionAdapterRegistry:
                 category=str(after.get("category") or "technical"),
                 indicator=str(after.get("indicator_id") or change.get("indicator_id")),
                 user_id=user_id,
+                symbol=symbol,
                 score_mode=str(after.get("score_mode") or "standard"),
                 weight=float(after.get("weight") or 1.0),
             )

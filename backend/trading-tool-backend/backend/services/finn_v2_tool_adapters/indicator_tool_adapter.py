@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from backend.infrastructure.repositories.technical_data_repository import TechnicalDataRepository
+from backend.domain.finn_v2_source_registry import FinnV2InformationSourceRegistry
 from backend.schemas.finn_v2_evidence_schema import IndicatorConfigurationData, IndicatorConfigurationItem
 from backend.services.asset_catalog_service import AssetCatalogService
 
@@ -9,6 +10,7 @@ class IndicatorToolAdapter:
     def __init__(self, session):
         self.session = session
         self.repository = TechnicalDataRepository(session)
+        self.source_registry = FinnV2InformationSourceRegistry()
 
     @staticmethod
     def _serialize(rows):
@@ -20,16 +22,22 @@ class IndicatorToolAdapter:
                 enabled=row.enabled,
                 symbol=row.symbol,
                 asset_class=row.asset_class,
+                source_record_id=row.id,
+                provenance=row.provenance,
             )
             for row in rows
         ]
 
     async def execute(self, *, user_id: int, asset: str, **_kwargs):
         requested_symbol = str(asset or "").strip().upper()
-        asset_meta = await AssetCatalogService(self.session).get_asset(asset)
+        self.source_registry.get("indicator_configuration").validate_request(
+            user_id=user_id,
+            symbol=requested_symbol,
+        )
+        asset_meta = await AssetCatalogService(self.session).get_asset(requested_symbol)
         configuration = await self.repository.get_canonical_indicator_configuration(
             user_id,
-            symbol=asset,
+            symbol=requested_symbol,
             asset_class=asset_meta.get("asset_class"),
         )
         technical = self._serialize(configuration["technical"])
@@ -40,17 +48,11 @@ class IndicatorToolAdapter:
             if getattr(row, "user_id", user_id) != user_id:
                 raise ValueError("indicator_owner_mismatch")
             row_symbol = str(getattr(row, "symbol", "") or "").strip().upper()
-            if row_symbol and row_symbol != requested_symbol:
+            if row_symbol != requested_symbol:
                 raise ValueError("indicator_symbol_mismatch")
-        storage_modes = configuration.get("storage_mode_by_category") or {}
-        source = (
-            "user_indicator_rule_overrides"
-            if "legacy_rule_override" in storage_modes.values()
-            else "user_indicator_configs"
-        )
         return {
             "data": IndicatorConfigurationData(
-                symbol=asset,
+                symbol=requested_symbol,
                 asset_class=configuration.get("asset_class"),
                 owner_user_id=user_id,
                 requested_symbol=requested_symbol,
@@ -60,6 +62,7 @@ class IndicatorToolAdapter:
                 market=market,
                 macro=macro,
                 scope_by_category=configuration.get("scope_by_category") or {},
+                provenance="user_indicator_configs",
             ),
             "summary": {
                 "title": "indicator_configuration",
@@ -71,8 +74,8 @@ class IndicatorToolAdapter:
                 "configured_count": len(technical) + len(market) + len(macro),
             },
             "as_of": None,
-            "source": source,
+            "source": "user_indicator_configs",
             "schema_name": "IndicatorConfigurationData",
             "entity_type": "indicator_configuration",
-            "asset": asset,
+            "asset": requested_symbol,
         }

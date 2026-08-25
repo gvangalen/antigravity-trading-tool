@@ -48,7 +48,7 @@ async def add_macro_indicator(
 
 @router.get("/macro_data", response_model=List[MacroDataResponse])
 async def get_macro_indicators(
-    symbol: Optional[str] = Query(None),
+    symbol: str = Query(...),
     current_user: dict = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
@@ -63,7 +63,7 @@ async def get_macro_indicators(
 @router.delete("/macro_data/{name}")
 async def delete_macro_indicator(
     name: str,
-    symbol: Optional[str] = Query(None),
+    symbol: str = Query(...),
     current_user: dict = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
@@ -159,7 +159,7 @@ async def get_rules_for_macro_indicator(
 
 @router.get("/macro/preferences", response_model=TechnicalIndicatorPreferenceResponse)
 async def get_macro_preferences(
-    symbol: Optional[str] = Query(None),
+    symbol: str = Query(...),
     asset_class: Optional[str] = Query(None),
     current_user: dict = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
@@ -183,9 +183,9 @@ async def get_macro_preferences(
 
 @router.post("/macro/preferences/bootstrap", response_model=TechnicalIndicatorPreferenceResponse)
 async def bootstrap_macro_preferences(
-    symbol: Optional[str] = Query(None),
+    symbol: str = Query(...),
     asset_class: Optional[str] = Query(None),
-    scope: str = Query("asset_class"),
+    scope: str = Query("symbol"),
     preset: str = Query("recommended"),
     current_user: dict = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
@@ -227,6 +227,8 @@ async def put_macro_preferences(
     service = MacroDataService(db)
 
     normalized_symbol = str(payload.symbol or "").strip().upper() or None
+    if normalized_symbol is None:
+        raise HTTPException(status_code=400, detail="symbol is required for personal indicator preferences")
     asset_class = str(payload.asset_class or "").strip().lower() or None
     if normalized_symbol and not asset_class:
         asset = await AssetCatalogService(db).get_asset(normalized_symbol)

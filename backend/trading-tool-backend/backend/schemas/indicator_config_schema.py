@@ -17,17 +17,20 @@ class IndicatorConfigResponse(BaseModel):
     rules: List[IndicatorBucketRule]
 
 class IndicatorSettingsUpdate(BaseModel):
+    symbol: str
     category: str
     indicator: str
     score_mode: Optional[str] = None
     weight: Optional[float] = 1.0
 
 class IndicatorCustomRulesSave(BaseModel):
+    symbol: str
     category: str
     indicator: str
     weight: Optional[float] = 1.0
     rules: List[dict] # Allow raw dict because frontend sends score, trend, etc.
 
 class IndicatorResetPayload(BaseModel):
+    symbol: str
     category: str
     indicator: str

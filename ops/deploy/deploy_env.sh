@@ -206,6 +206,7 @@ if ! ssh "${SSH_ARGS[@]}" "ubuntu@$SERVER_IP" "
   run_migration backend/scripts/migrations/2026_08_23_finn_v2_conversation_context.py
   run_migration backend/scripts/migrations/2026_08_23_finn_v2_evidence_information_scope.py
   run_migration backend/scripts/migrations/2026_08_23_finn_v2_artifact_operation_contract.py
+  run_migration backend/scripts/migrations/2026_08_25_canonical_user_indicator_configs.py
   echo \"🩺 Checking FINN V2 schema contract before process startup...\"
   timeout --foreground "\${MIGRATION_COMMAND_TIMEOUT_SECONDS}s" \
     python3 -m backend.scripts.check_finn_v2_schema

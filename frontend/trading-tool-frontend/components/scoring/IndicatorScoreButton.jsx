@@ -5,7 +5,7 @@ import { Settings } from "lucide-react";
 import { useModal } from "@/components/modal/ModalProvider";
 import IndicatorScorePanel from "./IndicatorScorePanel";
 
-export default function IndicatorScoreButton({ indicator, category }) {
+export default function IndicatorScoreButton({ indicator, category, assetSymbol }) {
   const { openModal } = useModal();
   const { t } = useTranslation();
   const copy = t?.legacyComponents?.indicatorScore || {};
@@ -17,6 +17,7 @@ export default function IndicatorScoreButton({ indicator, category }) {
         <IndicatorScorePanel
           indicator={indicator}
           category={category}
+          assetSymbol={assetSymbol}
         />
       ),
     });

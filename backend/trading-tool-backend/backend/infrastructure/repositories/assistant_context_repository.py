@@ -31,14 +31,6 @@ SUPPORTED_CONTEXT_ASSET_SOURCES = (
     "unknown",
 )
 
-LEGACY_USER_INDICATOR_CONFIG_COLUMNS = {
-    "id",
-    "user_id",
-    "indicator",
-    "category",
-    "created_at",
-}
-
 class AssistantContextRepository:
     """
     🛡️ AssistantContextRepository is a dedicated, production-grade repository 
@@ -50,7 +42,6 @@ class AssistantContextRepository:
     """
     def __init__(self, session: AsyncSession):
         self.session = session
-        self._user_indicator_config_columns_cache: Optional[set[str]] = None
         # Re-use existing repositories by instantiating them with the same shared session
         self.user_repo = UserRepository(session)
         self.state_repo = ConversationStateRepository(session)
@@ -60,31 +51,6 @@ class AssistantContextRepository:
         self.setup_repo = SetupRepository(session)
         self.report_repo = ReportRepository(session)
         self.strategy_repo = StrategyRepository(session)
-
-    async def _get_user_indicator_config_columns(self) -> set[str]:
-        if self._user_indicator_config_columns_cache is not None:
-            return self._user_indicator_config_columns_cache
-
-        try:
-            result = await self.session.execute(
-                text(
-                    """
-                    SELECT column_name
-                    FROM information_schema.columns
-                    WHERE table_schema = 'public'
-                      AND table_name = 'user_indicator_configs'
-                    """
-                )
-            )
-            columns = {str(column_name) for column_name in result.scalars().all()}
-        except Exception:
-            columns = set()
-
-        if not columns:
-            columns = set(LEGACY_USER_INDICATOR_CONFIG_COLUMNS)
-
-        self._user_indicator_config_columns_cache = columns
-        return columns
 
     def _normalize_asset_symbol(self, value: Optional[str]) -> Optional[str]:
         normalized = str(value or "").strip().upper()

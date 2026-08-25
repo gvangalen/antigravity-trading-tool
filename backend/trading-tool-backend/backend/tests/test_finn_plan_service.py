@@ -842,35 +842,18 @@ def test_normalize_first_dashboard_state_ignores_malformed_metadata():
     assert service._normalize_first_dashboard_state({"ok": True}) == {"ok": True}
 
 
-def test_first_dashboard_indicator_context_handles_missing_optional_columns():
-    class _ScalarResult:
-        def all(self):
-            return ["user_id", "indicator"]
+def test_first_dashboard_indicator_context_uses_canonical_symbol_scoped_repository(monkeypatch):
+    repository = SimpleNamespace(
+        get_configured_indicator_names=AsyncMock(
+            return_value={"market": ["volume"], "macro": [], "technical": ["RSI"]}
+        )
+    )
+    monkeypatch.setattr(finn_plan_module, "TechnicalDataRepository", lambda _session: repository)
 
-    class _MappingsResult:
-        def all(self):
-            return [{"category": None, "indicator": "RSI"}]
+    result = asyncio.run(FinnPlanService(db_session=object())._first_dashboard_indicator_context(7, "BTC"))
 
-    class _Session:
-        def __init__(self):
-            self.calls = 0
-            self.executed = []
-
-        async def execute(self, stmt, params=None):
-            self.calls += 1
-            self.executed.append({"sql": str(stmt), "params": params or {}})
-            if self.calls == 1:
-                return SimpleNamespace(scalars=lambda: _ScalarResult())
-            return SimpleNamespace(mappings=lambda: _MappingsResult())
-
-    service = FinnPlanService(db_session=_Session())
-
-    result = asyncio.run(service._first_dashboard_indicator_context(7, "BTC"))
-
-    assert result == {"market": [], "macro": [], "technical": []}
-    assert service.session.executed[1]["params"] == {"user_id": 7}
-    assert "enabled = TRUE" not in service.session.executed[1]["sql"]
-    assert "priority ASC" not in service.session.executed[1]["sql"]
+    assert result == {"market": ["volume"], "macro": [], "technical": ["RSI"]}
+    repository.get_configured_indicator_names.assert_awaited_once_with(7, symbol="BTC")
 
 
 def test_prepare_first_dashboard_payload_survives_indicator_and_bot_lookup_failures(monkeypatch):
@@ -3653,6 +3636,7 @@ def test_macro_indicator_config_accepts_existing_standard_or_contrarian_draft():
     draft = empty_indicator_config_draft()
     draft["indicator"] = "btc_dominance"
     draft["display_name"] = "Bitcoin Dominance"
+    draft["symbol"] = "BTC"
     draft["score_mode"] = "contrarian"
     draft["weight"] = 2.0
     draft["rules"] = [{"score": score} for score in [10, 25, 50, 75, 100]]
@@ -3669,6 +3653,7 @@ def test_macro_indicator_custom_bucket_rules_are_parsed_and_confirmable():
     draft = empty_indicator_config_draft()
     draft["indicator"] = "btc_dominance"
     draft["display_name"] = "Bitcoin Dominance"
+    draft["symbol"] = "BTC"
     draft["score_mode"] = "custom"
     draft["weight"] = 1.0
     draft["rules"] = [
@@ -3700,6 +3685,7 @@ def test_macro_indicator_custom_bucket_rules_can_be_collected_across_turns():
     draft = empty_indicator_config_draft()
     draft["indicator"] = "btc_dominance"
     draft["display_name"] = "Bitcoin Dominance"
+    draft["symbol"] = "BTC"
     draft["score_mode"] = "custom"
     draft["weight"] = 1.0
     draft["rules"] = [
@@ -3766,6 +3752,7 @@ def test_indicator_reset_draft_does_not_require_score_mode_or_weight():
     draft["operation"] = "reset"
     draft["indicator"] = "btc_dominance"
     draft["display_name"] = "Bitcoin Dominance"
+    draft["symbol"] = "BTC"
     draft["score_mode"] = None
     draft["weight"] = None
 

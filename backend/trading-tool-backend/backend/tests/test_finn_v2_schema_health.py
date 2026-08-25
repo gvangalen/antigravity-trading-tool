@@ -42,6 +42,10 @@ def test_schema_health_accepts_the_conversation_context_contract():
         ("finn_v2_evidence_artifacts", "operation_id"): ("text", "text", "YES", None),
         ("finn_v2_evidence_artifacts", "operation_contract_version"): ("text", "text", "YES", None),
         ("finn_v2_conversations", "context_json"): ("jsonb", "jsonb", "NO", "'{}'::jsonb"),
+        ("user_indicator_configs", "config_json"): ("jsonb", "jsonb", "NO", "'{}'::jsonb"),
+        ("user_indicator_configs", "provenance"): ("text", "text", "NO", "'product_api'::text"),
+        ("user_indicator_configs", "source_record_id"): ("bigint", "int8", "YES", None),
+        ("user_indicator_configs", "updated_at"): ("timestamp without time zone", "timestamp", "NO", "CURRENT_TIMESTAMP"),
     })
 
     assert_finn_v2_schema(connection)
@@ -67,6 +71,10 @@ def test_schema_health_rejects_incompatible_context_contract(metadata, error_cod
         ("finn_v2_evidence_artifacts", "operation_id"): ("text", "text", "YES", None),
         ("finn_v2_evidence_artifacts", "operation_contract_version"): ("text", "text", "YES", None),
         ("finn_v2_conversations", "context_json"): metadata,
+        ("user_indicator_configs", "config_json"): ("jsonb", "jsonb", "NO", "'{}'::jsonb"),
+        ("user_indicator_configs", "provenance"): ("text", "text", "NO", "'product_api'::text"),
+        ("user_indicator_configs", "source_record_id"): ("bigint", "int8", "YES", None),
+        ("user_indicator_configs", "updated_at"): ("timestamp without time zone", "timestamp", "NO", "CURRENT_TIMESTAMP"),
     })
 
     with pytest.raises(FinnV2SchemaHealthError, match=error_code):

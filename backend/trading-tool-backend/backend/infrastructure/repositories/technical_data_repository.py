@@ -1,3 +1,4 @@
+from json import dumps
 from types import SimpleNamespace
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -7,22 +8,29 @@ from typing import Any, Dict, List, Optional
 
 from backend.infrastructure.models import (
     AssetCatalog,
-    MacroIndicatorRule,
-    MarketIndicatorRule,
     TechnicalDataIndicator,
-    TechnicalIndicatorRule,
     Indicator,
+    TechnicalIndicatorRule,
     UserIndicatorConfig,
 )
+from backend.domain.finn_v2_source_registry import FinnV2InformationSourceRegistry
 from backend.utils.scoring_utils import normalize_indicator_name
 
 
-LEGACY_USER_INDICATOR_CONFIG_COLUMNS = {
+CANONICAL_USER_INDICATOR_CONFIG_COLUMNS = {
     "id",
     "user_id",
     "indicator",
     "category",
+    "symbol",
+    "asset_class",
+    "priority",
+    "enabled",
+    "config_json",
+    "provenance",
+    "source_record_id",
     "created_at",
+    "updated_at",
 }
 
 
@@ -30,42 +38,20 @@ class TechnicalDataRepository:
     def __init__(self, session: AsyncSession):
         self.session = session
         self._user_config_columns_cache: Optional[set[str]] = None
+        self._source_registry = FinnV2InformationSourceRegistry()
 
     @staticmethod
     def _eq_or_null(column, value):
         return column.is_(None) if value is None else column == value
 
     async def _get_user_config_columns(self) -> set[str]:
-        if self._user_config_columns_cache is not None:
-            return self._user_config_columns_cache
-
-        try:
-            result = await self.session.execute(
-                text(
-                    """
-                    SELECT column_name
-                    FROM information_schema.columns
-                    WHERE table_schema = 'public'
-                      AND table_name = 'user_indicator_configs'
-                    """
-                )
-            )
-            columns = {str(column_name) for column_name in result.scalars().all()}
-        except Exception:
-            rollback = getattr(self.session, "rollback", None)
-            if rollback is not None:
-                await rollback()
-            columns = set()
-
-        if not columns:
-            columns = set(LEGACY_USER_INDICATOR_CONFIG_COLUMNS)
-
-        self._user_config_columns_cache = columns
-        return columns
+        # The deploy schema gate guarantees this exact contract before the
+        # backend starts. Runtime probing/fallback made an old schema silently
+        # behave as a second source of truth.
+        return set(CANONICAL_USER_INDICATOR_CONFIG_COLUMNS)
 
     async def _supports_asset_scopes(self) -> bool:
-        columns = await self._get_user_config_columns()
-        return "symbol" in columns or "asset_class" in columns
+        return True
 
     @staticmethod
     def _normalize_scope(symbol: Optional[str], asset_class: Optional[str]) -> tuple[Optional[str], Optional[str]]:
@@ -110,7 +96,11 @@ class TechnicalDataRepository:
             asset_class=mapping.get("asset_class"),
             priority=mapping.get("priority", 100),
             enabled=mapping.get("enabled", True),
+            config_json=mapping.get("config_json") or {},
+            provenance=mapping.get("provenance") or "product_api",
+            source_record_id=mapping.get("source_record_id"),
             created_at=mapping.get("created_at"),
+            updated_at=mapping.get("updated_at"),
         )
 
     @staticmethod
@@ -142,57 +132,6 @@ class TechnicalDataRepository:
             deduped.append(row)
         return deduped
 
-    async def _fetch_user_rule_override_configs(
-        self,
-        user_id: int,
-        *,
-        category: str,
-    ) -> List[SimpleNamespace]:
-        """Read the existing user-owned rule overrides as legacy configurations.
-
-        Older product configuration screens persist an enabled indicator by
-        creating user rule overrides instead of a row in
-        ``user_indicator_configs``.  Keeping this translation at the shared
-        repository boundary means onboarding and FINN V2 consume the same
-        user-scoped configuration contract.
-        """
-        rule_models = {
-            "technical": TechnicalIndicatorRule,
-            "market": MarketIndicatorRule,
-            "macro": MacroIndicatorRule,
-        }
-        model = rule_models.get(str(category or "").strip().lower())
-        if model is None:
-            return []
-
-        stmt = select(model).where(model.user_id == user_id)
-        if hasattr(model, "is_active"):
-            stmt = stmt.where(model.is_active.is_(True))
-        stmt = stmt.order_by(model.id.asc())
-        result = await self.session.execute(stmt)
-
-        rows: List[SimpleNamespace] = []
-        seen: set[str] = set()
-        for priority, row in enumerate(result.scalars().all(), start=1):
-            indicator = normalize_indicator_name(str(getattr(row, "indicator", "") or ""))
-            if not indicator or indicator in seen:
-                continue
-            seen.add(indicator)
-            rows.append(
-                SimpleNamespace(
-                    id=getattr(row, "id", None),
-                    user_id=user_id,
-                    indicator=indicator,
-                    category=category,
-                    symbol=None,
-                    asset_class=None,
-                    priority=priority,
-                    enabled=True,
-                    created_at=None,
-                )
-            )
-        return rows
-
     async def _fetch_scope_configs(
         self,
         user_id: int,
@@ -216,6 +155,10 @@ class TechnicalDataRepository:
             "category",
             "symbol",
             "asset_class",
+            "config_json",
+            "provenance",
+            "source_record_id",
+            "updated_at",
         ])
 
         conditions = ["user_id = :user_id"]
@@ -273,7 +216,7 @@ class TechnicalDataRepository:
                     getattr(row, "symbol", None),
                     getattr(row, "asset_class", None),
                 )
-                if has_symbol_scope and symbol is not None and row_symbol not in {None, symbol}:
+                if has_symbol_scope and symbol is not None and row_symbol != symbol:
                     continue
                 if has_asset_class_scope and symbol is None and asset_class is not None and row_asset_class not in {None, asset_class}:
                     continue
@@ -290,42 +233,15 @@ class TechnicalDataRepository:
         normalized_symbol, normalized_asset_class = await self._resolve_effective_scope(symbol, asset_class)
 
         columns = await self._get_user_config_columns()
-        if "symbol" not in columns and "asset_class" not in columns:
-            return await self._fetch_scope_configs(
-                user_id,
-                category=category,
-                symbol=None,
-                asset_class=None,
-                enabled_only=True,
-            )
-
-        if normalized_symbol:
-            symbol_rows = await self._fetch_scope_configs(
-                user_id,
-                category=category,
-                symbol=normalized_symbol,
-                asset_class=normalized_asset_class,
-                enabled_only=True,
-            )
-            if symbol_rows:
-                return symbol_rows
-
-        if normalized_asset_class:
-            class_rows = await self._fetch_scope_configs(
-                user_id,
-                category=category,
-                symbol=None,
-                asset_class=normalized_asset_class,
-                enabled_only=True,
-            )
-            if class_rows:
-                return class_rows
-
+        self._source_registry.get("indicator_configuration").validate_request(
+            user_id=user_id,
+            symbol=normalized_symbol,
+        )
         return await self._fetch_scope_configs(
             user_id,
             category=category,
-            symbol=None,
-            asset_class=None,
+            symbol=normalized_symbol,
+            asset_class=normalized_asset_class,
             enabled_only=True,
         )
 
@@ -340,76 +256,25 @@ class TechnicalDataRepository:
     ) -> dict[str, Any]:
         normalized_symbol, normalized_asset_class = await self._resolve_effective_scope(symbol, asset_class)
 
-        if not await self._supports_asset_scopes():
-            rows = await self._fetch_scope_configs(
-                user_id,
-                category=category,
-                symbol=None,
-                asset_class=None,
-                enabled_only=enabled_only,
-            )
-            deduped_rows = self._dedupe_indicator_rows(rows)
-            return {
-                "scope": "default" if deduped_rows else "empty",
-                "symbol": normalized_symbol,
-                "asset_class": normalized_asset_class,
-                "rows": deduped_rows,
-                "storage_mode": "legacy_global",
-            }
-
-        if normalized_symbol:
-            symbol_rows = self._dedupe_indicator_rows(
-                await self._fetch_scope_configs(
-                    user_id,
-                    category=category,
-                    symbol=normalized_symbol,
-                    asset_class=normalized_asset_class,
-                    enabled_only=enabled_only,
-                )
-            )
-            if symbol_rows:
-                return {
-                    "scope": "symbol_override",
-                    "symbol": normalized_symbol,
-                    "asset_class": normalized_asset_class,
-                    "rows": symbol_rows,
-                    "storage_mode": "scoped",
-                }
-
-        if normalized_asset_class:
-            class_rows = self._dedupe_indicator_rows(
-                await self._fetch_scope_configs(
-                    user_id,
-                    category=category,
-                    symbol=None,
-                    asset_class=normalized_asset_class,
-                    enabled_only=enabled_only,
-                )
-            )
-            if class_rows:
-                return {
-                    "scope": "asset_class_override",
-                    "symbol": normalized_symbol,
-                    "asset_class": normalized_asset_class,
-                    "rows": class_rows,
-                    "storage_mode": "scoped",
-                }
-
-        default_rows = self._dedupe_indicator_rows(
+        self._source_registry.get("indicator_configuration").validate_request(
+            user_id=user_id,
+            symbol=normalized_symbol,
+        )
+        symbol_rows = self._dedupe_indicator_rows(
             await self._fetch_scope_configs(
                 user_id,
                 category=category,
-                symbol=None,
-                asset_class=None,
+                symbol=normalized_symbol,
+                asset_class=normalized_asset_class,
                 enabled_only=enabled_only,
             )
         )
         return {
-            "scope": "default" if default_rows else "empty",
+            "scope": "symbol" if symbol_rows else "empty",
             "symbol": normalized_symbol,
             "asset_class": normalized_asset_class,
-            "rows": default_rows,
-            "storage_mode": "scoped",
+            "rows": symbol_rows,
+            "storage_mode": "canonical_asset_scoped",
         }
 
     async def get_canonical_indicator_configuration(
@@ -421,7 +286,10 @@ class TechnicalDataRepository:
         enabled_only: bool = True,
     ) -> dict[str, Any]:
         normalized_symbol, normalized_asset_class = await self._resolve_effective_scope(symbol, asset_class)
-        supports_rule_override_projection = "enabled" in await self._get_user_config_columns()
+        self._source_registry.get("indicator_configuration").validate_request(
+            user_id=user_id,
+            symbol=normalized_symbol,
+        )
         categories = ("technical", "market", "macro")
         category_payloads: dict[str, dict[str, Any]] = {}
         for category in categories:
@@ -432,22 +300,6 @@ class TechnicalDataRepository:
                 asset_class=normalized_asset_class,
                 enabled_only=enabled_only,
             )
-            # Legacy rule overrides carry a user but no asset identity.  They
-            # cannot prove configuration for an explicit workspace/request
-            # symbol, so never project them into an asset-scoped V2 read.
-            if supports_rule_override_projection and normalized_symbol is None and not category_payloads[category]["rows"]:
-                rule_rows = await self._fetch_user_rule_override_configs(
-                    user_id,
-                    category=category,
-                )
-                if rule_rows:
-                    category_payloads[category] = {
-                        "scope": "user_rule_override",
-                        "symbol": normalized_symbol,
-                        "asset_class": normalized_asset_class,
-                        "rows": rule_rows,
-                        "storage_mode": "legacy_rule_override",
-                    }
 
         return {
             "symbol": normalized_symbol,
@@ -498,6 +350,10 @@ class TechnicalDataRepository:
         priority: int = 100,
     ):
         normalized_symbol, normalized_asset_class = await self._resolve_effective_scope(symbol, asset_class)
+        self._source_registry.get("indicator_configuration").validate_request(
+            user_id=user_id,
+            symbol=normalized_symbol,
+        )
         columns = await self._get_user_config_columns()
         has_symbol_scope = "symbol" in columns
         has_asset_class_scope = "asset_class" in columns
@@ -520,13 +376,6 @@ class TechnicalDataRepository:
                 conditions.append("symbol = :symbol")
                 params["symbol"] = normalized_symbol
 
-        if has_asset_class_scope:
-            if normalized_asset_class is None:
-                conditions.append("asset_class IS NULL")
-            else:
-                conditions.append("asset_class = :asset_class")
-                params["asset_class"] = normalized_asset_class
-
         existing_select_fields = self._ordered_existing_columns(columns, [
             "id",
             "user_id",
@@ -537,6 +386,10 @@ class TechnicalDataRepository:
             "category",
             "symbol",
             "asset_class",
+            "config_json",
+            "provenance",
+            "source_record_id",
+            "updated_at",
         ])
         existing_query = text(
             f"""
@@ -558,6 +411,11 @@ class TechnicalDataRepository:
                 update_params["priority"] = priority
             if "enabled" in columns:
                 update_sets.append("enabled = TRUE")
+            if "asset_class" in columns and normalized_asset_class is not None:
+                update_sets.append("asset_class = :asset_class")
+                update_params["asset_class"] = normalized_asset_class
+            if "updated_at" in columns:
+                update_sets.append("updated_at = CURRENT_TIMESTAMP")
 
             if update_sets:
                 await self.session.execute(
@@ -589,6 +447,8 @@ class TechnicalDataRepository:
             existing_mapping["enabled"] = (
                 True if "enabled" in columns else existing_mapping.get("enabled", True)
             )
+            existing_mapping["config_json"] = existing_mapping.get("config_json") or {}
+            existing_mapping["provenance"] = existing_mapping.get("provenance") or "product_api"
             return SimpleNamespace(
                 **existing_mapping,
             )
@@ -610,6 +470,14 @@ class TechnicalDataRepository:
         if "enabled" in columns:
             insert_columns.append("enabled")
             insert_values.append("TRUE")
+        if "config_json" in columns:
+            insert_columns.append("config_json")
+            insert_values.append("CAST(:config_json AS JSONB)")
+            insert_params["config_json"] = "{}"
+        if "provenance" in columns:
+            insert_columns.append("provenance")
+            insert_values.append(":provenance")
+            insert_params["provenance"] = "product_api"
         if "symbol" in columns:
             insert_columns.append("symbol")
             insert_values.append(":symbol")
@@ -638,7 +506,11 @@ class TechnicalDataRepository:
             asset_class=normalized_asset_class if has_asset_class_scope else None,
             priority=priority if "priority" in columns else 100,
             enabled=True,
+            config_json={},
+            provenance="product_api",
+            source_record_id=None,
             created_at=None,
+            updated_at=None,
         )
 
     async def remove_user_config(
@@ -650,6 +522,10 @@ class TechnicalDataRepository:
         asset_class: Optional[str] = None,
     ):
         normalized_symbol, normalized_asset_class = await self._resolve_effective_scope(symbol, asset_class)
+        self._source_registry.get("indicator_configuration").validate_request(
+            user_id=user_id,
+            symbol=normalized_symbol,
+        )
         columns = await self._get_user_config_columns()
         has_symbol_scope = "symbol" in columns
         has_asset_class_scope = "asset_class" in columns
@@ -672,13 +548,6 @@ class TechnicalDataRepository:
                 conditions.append("symbol = :symbol")
                 params["symbol"] = normalized_symbol
 
-        if has_asset_class_scope:
-            if normalized_asset_class is None:
-                conditions.append("asset_class IS NULL")
-            else:
-                conditions.append("asset_class = :asset_class")
-                params["asset_class"] = normalized_asset_class
-
         await self.session.execute(
             text(
                 f"""
@@ -699,10 +568,10 @@ class TechnicalDataRepository:
     ) -> List[UserIndicatorConfig]:
         normalized_symbol, normalized_asset_class = await self._resolve_effective_scope(symbol, asset_class)
         columns = await self._get_user_config_columns()
-        if "symbol" not in columns:
-            normalized_symbol = None
-        if "asset_class" not in columns:
-            normalized_asset_class = None
+        self._source_registry.get("indicator_configuration").validate_request(
+            user_id=user_id,
+            symbol=normalized_symbol,
+        )
         return await self._fetch_scope_configs(
             user_id,
             category=category,
@@ -722,10 +591,10 @@ class TechnicalDataRepository:
     ) -> List[UserIndicatorConfig]:
         normalized_symbol, normalized_asset_class = await self._resolve_effective_scope(symbol, asset_class)
         columns = await self._get_user_config_columns()
-        if "symbol" not in columns:
-            normalized_symbol = None
-        if "asset_class" not in columns:
-            normalized_asset_class = None
+        self._source_registry.get("indicator_configuration").validate_request(
+            user_id=user_id,
+            symbol=normalized_symbol,
+        )
 
         conditions = ["user_id = :user_id"]
         params: dict[str, Any] = {"user_id": user_id}
@@ -738,13 +607,6 @@ class TechnicalDataRepository:
             else:
                 conditions.append("symbol = :symbol")
                 params["symbol"] = normalized_symbol
-        if "asset_class" in columns:
-            if normalized_asset_class is None:
-                conditions.append("asset_class IS NULL")
-            else:
-                conditions.append("asset_class = :asset_class")
-                params["asset_class"] = normalized_asset_class
-
         await self.session.execute(
             text(
                 f"""
@@ -768,6 +630,59 @@ class TechnicalDataRepository:
                 )
             )
         return created
+
+    async def set_indicator_config_metadata(
+        self,
+        user_id: int,
+        indicator: str,
+        category: str,
+        *,
+        symbol: str,
+        asset_class: Optional[str] = None,
+        config_json: Optional[dict[str, Any]] = None,
+        priority: int = 100,
+        provenance: str = "indicator_config_api",
+    ) -> SimpleNamespace:
+        """Persist user-specific scoring settings beside the canonical selection."""
+        normalized_symbol, normalized_asset_class = await self._resolve_effective_scope(symbol, asset_class)
+        self._source_registry.get("indicator_configuration").validate_request(
+            user_id=user_id,
+            symbol=normalized_symbol,
+        )
+        row = await self.ensure_user_config(
+            user_id,
+            indicator,
+            category,
+            symbol=normalized_symbol,
+            asset_class=normalized_asset_class,
+            priority=priority,
+        )
+        await self.session.execute(
+            text(
+                """
+                UPDATE user_indicator_configs
+                SET config_json = CAST(:config_json AS JSONB),
+                    provenance = :provenance,
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE user_id = :user_id
+                  AND symbol = :symbol
+                  AND category = :category
+                  AND indicator = :indicator
+                """
+            ),
+            {
+                "user_id": user_id,
+                "symbol": normalized_symbol,
+                "category": category,
+                "indicator": indicator,
+                "config_json": dumps(config_json or {}),
+                "provenance": provenance,
+            },
+        )
+        await self.session.flush()
+        row.config_json = config_json or {}
+        row.provenance = provenance
+        return row
 
     async def get_latest_for_user(self, user_id: int, symbol: Optional[str] = None, limit: int = 50) -> List[TechnicalDataIndicator]:
         stmt = select(TechnicalDataIndicator).where(TechnicalDataIndicator.user_id == user_id)

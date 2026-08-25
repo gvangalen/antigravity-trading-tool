@@ -10,45 +10,9 @@ from backend.services.trader_profile_service import (
 )
 from backend.infrastructure.repositories.technical_data_repository import TechnicalDataRepository
 
-
-LEGACY_USER_INDICATOR_CONFIG_COLUMNS = {
-    "id",
-    "user_id",
-    "indicator",
-    "category",
-    "created_at",
-}
-
-
 class OnboardingRepository:
     def __init__(self, db: AsyncSession):
         self.db = db
-        self._user_config_columns_cache: set[str] | None = None
-
-    async def _get_user_config_columns(self) -> set[str]:
-        if self._user_config_columns_cache is not None:
-            return self._user_config_columns_cache
-
-        try:
-            result = await self.db.execute(
-                text(
-                    """
-                    SELECT column_name
-                    FROM information_schema.columns
-                    WHERE table_schema = 'public'
-                      AND table_name = 'user_indicator_configs'
-                    """
-                )
-            )
-            columns = {str(column_name) for column_name in result.scalars().all()}
-        except Exception:
-            columns = set()
-
-        if not columns:
-            columns = set(LEGACY_USER_INDICATOR_CONFIG_COLUMNS)
-
-        self._user_config_columns_cache = columns
-        return columns
 
     async def get_user_steps(self, user_id: int, flow: str) -> List[OnboardingStep]:
         stmt = select(OnboardingStep).where(

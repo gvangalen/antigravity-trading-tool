@@ -622,7 +622,6 @@ class FinnPlanService:
         self.trace_id = trace_id
         self.action_policy_service = FinnActionPolicyService()
         self.execution_governance_service = FinnExecutionGovernanceService()
-        self._user_indicator_config_columns_cache: Optional[set[str]] = None
 
     @classmethod
     def invalidate_runtime_caches_for_user(cls, user_id: int) -> None:
@@ -7950,7 +7949,12 @@ class FinnPlanService:
                         continue
                     key = f"{category}:{normalize_indicator_name(name)}"
                     try:
-                        config = await config_service.get_indicator_config(category, normalize_indicator_name(name), user_id)
+                        config = await config_service.get_indicator_config(
+                            category,
+                            normalize_indicator_name(name),
+                            user_id,
+                            asset,
+                        )
                         configs[key] = {
                             "score_mode": config.score_mode,
                             "weight": config.weight,
@@ -10328,8 +10332,6 @@ class FinnPlanService:
                 technical_exact = await self._find_indicator_exact("technical", indicator)
                 if technical_exact:
                     draft["category"] = "technical"
-                    if not draft.get("symbol"):
-                        draft["symbol"] = "BTC"
                     category = "technical"
                     exact = technical_exact
             elif not exact and category == "technical":
@@ -10342,10 +10344,36 @@ class FinnPlanService:
                 draft["indicator"] = exact["name"]
                 draft["display_name"] = exact.get("display_name") or exact["name"]
                 draft["indicator_options"] = []
+                symbol = str(draft.get("symbol") or "").strip().upper()
+                if not symbol:
+                    # User-scoped config is always asset-scoped. Leave the draft
+                    # incomplete so the guided flow asks for the asset instead of
+                    # reading an unscoped legacy rule.
+                    return
                 config_repository = IndicatorConfigRepository(self.session)
                 config_service = IndicatorConfigService(config_repository)
-                config = await config_service.get_indicator_config(category, exact["name"], user_id)
-                _, has_user_override = await config_repository.get_indicator_rules(category, exact["name"], user_id)
+                config = await config_service.get_indicator_config(
+                    category,
+                    exact["name"],
+                    user_id,
+                    symbol,
+                )
+                configured_rows = await TechnicalDataRepository(self.session).get_user_configs(
+                    user_id,
+                    category,
+                    symbol=symbol,
+                )
+                config_row = next(
+                    (
+                        row
+                        for row in configured_rows
+                        if normalize_indicator_name(row.indicator) == normalize_indicator_name(exact["name"])
+                    ),
+                    None,
+                )
+                has_user_override = bool(
+                    config_row and dict(getattr(config_row, "config_json", {}) or {})
+                )
                 config_rules = [rule.dict() for rule in config.rules]
                 node_active = await self._indicator_node_is_active(user_id, category, exact["name"], draft.get("symbol"))
                 draft["existing_config_snapshot"] = {
@@ -10440,22 +10468,16 @@ class FinnPlanService:
         return [dict(row) for row in result.mappings().all()]
 
     async def _indicator_node_is_active(self, user_id: int, category: str, indicator: str, symbol: Optional[str] = None) -> bool:
-        if category == "macro":
-            return await MacroDataService(self.session).repository.check_indicator_exists(user_id, indicator)
-        if category == "technical":
-            result = await self.session.execute(text("""
-                SELECT COUNT(*) AS count
-                FROM user_indicator_configs
-                WHERE user_id = :user_id
-                  AND category = 'technical'
-                  AND indicator = :indicator
-                  AND (
-                    (:symbol IS NOT NULL AND (symbol = :symbol OR symbol IS NULL))
-                    OR (:symbol IS NULL AND symbol IS NULL)
-                  )
-            """), {"user_id": user_id, "indicator": indicator, "symbol": symbol})
-            return int(result.scalar() or 0) > 0
-        return False
+        normalized_symbol = str(symbol or "").strip().upper()
+        if category not in {"macro", "market", "technical"} or not normalized_symbol:
+            return False
+        rows = await TechnicalDataRepository(self.session).get_user_configs(
+            user_id,
+            category=category,
+            symbol=normalized_symbol,
+        )
+        normalized_indicator = normalize_indicator_name(indicator)
+        return any(normalize_indicator_name(row.indicator) == normalized_indicator for row in rows)
 
     def _extract_indicator_custom_bucket_rules(self, query: str, current_rules: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
         q = (query or "").lower()
@@ -10615,9 +10637,7 @@ class FinnPlanService:
                     if not isinstance(score, (int, float)) or int(float(score)) < 10 or int(float(score)) > 100:
                         invalid.append({"field": "rules", "reason": "bucket-scores moeten tussen 10 en 100 liggen"})
                         break
-        if draft.get("operation") == "delete" and draft.get("category") == "technical" and not draft.get("symbol"):
-            missing.append("symbol")
-        if draft.get("operation") not in {"reset", "delete"} and draft.get("category") == "technical" and draft.get("activate_node") and not draft.get("symbol"):
+        if not draft.get("symbol"):
             missing.append("symbol")
 
         next_question = missing[0] if missing else (invalid[0]["field"] if invalid else None)
@@ -14048,42 +14068,6 @@ class FinnPlanService:
                 self.trace_id,
             )
         return {}
-
-    async def _get_user_indicator_config_columns(self) -> set[str]:
-        if self._user_indicator_config_columns_cache is not None:
-            return self._user_indicator_config_columns_cache
-
-        columns: set[str] = set()
-        try:
-            result = await self.session.execute(
-                text(
-                    """
-                    SELECT column_name
-                    FROM information_schema.columns
-                    WHERE table_schema = 'public'
-                      AND table_name = 'user_indicator_configs'
-                    """
-                )
-            )
-            columns = {str(column_name) for column_name in result.scalars().all()}
-        except Exception:
-            logger.exception(
-                "Could not inspect user_indicator_configs columns for first dashboard indicator context (trace_id=%s).",
-                self.trace_id,
-            )
-
-        if not columns:
-            columns = {
-                "user_id",
-                "indicator",
-                "category",
-                "symbol",
-                "priority",
-                "enabled",
-            }
-
-        self._user_indicator_config_columns_cache = columns
-        return columns
 
     def _first_dashboard_ai_system_role(self) -> str:
         return (
@@ -21150,7 +21134,7 @@ class FinnPlanService:
 
         indicator = draft["indicator"]
         category = draft["category"]
-        symbol = draft.get("symbol") or "BTC"
+        symbol = str(draft.get("symbol") or "").strip().upper()
         try:
             config_service = IndicatorConfigService(IndicatorConfigRepository(self.session))
             if draft.get("operation") == "delete":
@@ -21163,12 +21147,13 @@ class FinnPlanService:
                 else:
                     raise HTTPException(400, "Onbekende indicator category")
             elif draft.get("operation") == "reset":
-                await config_service.reset_indicator_rules(category, indicator, user_id)
+                await config_service.reset_indicator_rules(category, indicator, user_id, symbol)
             elif draft.get("score_mode") == "custom":
                 await config_service.save_custom_rules(
                     category=category,
                     indicator=indicator,
                     user_id=user_id,
+                    symbol=symbol,
                     rules=draft.get("rules") or [],
                     weight=float(draft["weight"]),
                 )
@@ -21177,6 +21162,7 @@ class FinnPlanService:
                     category=category,
                     indicator=indicator,
                     user_id=user_id,
+                    symbol=symbol,
                     score_mode=draft["score_mode"],
                     weight=float(draft["weight"]),
                 )
@@ -21191,7 +21177,12 @@ class FinnPlanService:
             elif draft.get("activate_node") and category == "technical":
                 technical_service = TechnicalDataService(self.session)
                 if await technical_service.repository.check_duplicate(indicator, user_id, symbol):
-                    await technical_service.repository.ensure_user_config(user_id, indicator, "technical")
+                    await technical_service.repository.ensure_user_config(
+                        user_id,
+                        indicator,
+                        "technical",
+                        symbol=symbol,
+                    )
                 else:
                     await technical_service.add_technical_indicator(indicator, user_id, symbol)
                 node_active = True
@@ -22391,18 +22382,20 @@ class FinnPlanService:
             if category == "technical":
                 technical_rows = await TechnicalDataService(self.session).get_day_indicators(user_id, symbol=symbol)
                 active_after_action = sorted({normalize_indicator_name(row.indicator) for row in technical_rows})
-                config_rows = await self.session.execute(text("""
-                    SELECT COUNT(*) AS count
-                    FROM user_indicator_configs
-                    WHERE user_id = :user_id
-                      AND category = 'technical'
-                      AND indicator = :indicator
-                      AND (
-                        (:symbol IS NOT NULL AND (symbol = :symbol OR symbol IS NULL))
-                        OR (:symbol IS NULL AND symbol IS NULL)
-                      )
-                """), {"user_id": user_id, "indicator": indicator, "symbol": symbol})
-                config_count = int(config_rows.scalar() or 0)
+                normalized_symbol = str(symbol or "").strip().upper()
+                configured_rows = (
+                    await TechnicalDataRepository(self.session).get_user_configs(
+                        user_id,
+                        category="technical",
+                        symbol=normalized_symbol,
+                    )
+                    if normalized_symbol
+                    else []
+                )
+                config_count = sum(
+                    normalize_indicator_name(row.indicator) == normalize_indicator_name(indicator)
+                    for row in configured_rows
+                )
                 removed_ok = normalize_indicator_name(indicator) not in active_after_action and config_count == 0
             elif category == "macro":
                 macro_rows = await MacroDataService(self.session).get_latest_macro_indicators(user_id)
@@ -22421,37 +22414,40 @@ class FinnPlanService:
                 raise HTTPException(500, f"Indicator delete read-after-write verificatie faalde: {verified}")
             return verified
 
-        config = await IndicatorConfigService(IndicatorConfigRepository(self.session)).get_indicator_config(category, indicator, user_id)
+        normalized_symbol = str(symbol or "").strip().upper()
+        if not normalized_symbol:
+            raise HTTPException(422, "Een asset is vereist voor indicator-configuratie.")
+        config = await IndicatorConfigService(IndicatorConfigRepository(self.session)).get_indicator_config(
+            category,
+            indicator,
+            user_id,
+            normalized_symbol,
+        )
         rules_ok = bool(config and len(config.rules) == 5)
-        table = {
-            "macro": "macro_indicator_rules",
-            "technical": "technical_indicator_rules",
-        }.get(category)
-        if not table:
+        if category not in {"macro", "technical"}:
             raise HTTPException(400, "Onbekende indicator category")
-        override_rows = await self.session.execute(text("""
-            SELECT COUNT(*) AS count
-            FROM {table}
-            WHERE user_id = :user_id AND indicator = :indicator
-        """.format(table=table)), {"user_id": user_id, "indicator": indicator})
-        override_count = int(override_rows.scalar() or 0)
-        override_ok = override_count == 5 if require_override else override_count == 0
+        configured_rows = await TechnicalDataRepository(self.session).get_user_configs(
+            user_id,
+            category,
+            symbol=normalized_symbol,
+        )
+        config_row = next(
+            (
+                row
+                for row in configured_rows
+                if normalize_indicator_name(row.indicator) == normalize_indicator_name(indicator)
+            ),
+            None,
+        )
+        has_personal_metadata = bool(
+            config_row and dict(getattr(config_row, "config_json", {}) or {})
+        )
+        override_ok = has_personal_metadata if require_override else not has_personal_metadata
         node_ok = True
         if node_active and category == "macro":
             node_ok = await MacroDataService(self.session).repository.check_indicator_exists(user_id, indicator)
-        elif node_active and category == "technical":
-            config_rows = await self.session.execute(text("""
-                SELECT COUNT(*) AS count
-                FROM user_indicator_configs
-                WHERE user_id = :user_id
-                  AND category = 'technical'
-                  AND indicator = :indicator
-                  AND (
-                    (:symbol IS NOT NULL AND (symbol = :symbol OR symbol IS NULL))
-                    OR (:symbol IS NULL AND symbol IS NULL)
-                  )
-            """), {"user_id": user_id, "indicator": indicator, "symbol": symbol})
-            node_ok = int(config_rows.scalar() or 0) > 0
+        elif node_active:
+            node_ok = await self._indicator_node_is_active(user_id, category, indicator, symbol)
         verified = {
             "indicator_config": rules_ok and override_ok,
             node_key: node_ok,
