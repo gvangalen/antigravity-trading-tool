@@ -5,6 +5,7 @@ from typing import AsyncIterator, Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.domain.finn_v2_contract import FinnV2ModeContractError, is_terminal_status, normalize_interaction_mode
+from backend.domain.finn_v2_operation_registry import FinnV2OperationRegistry
 from backend.infrastructure.repositories.finn_v2_orchestrator_repository import FinnV2OrchestratorRepository
 from backend.infrastructure.repositories.finn_v2_evidence_repository import FinnV2EvidenceRepository
 from backend.infrastructure.repositories.finn_v2_policy_repository import FinnV2PolicyRepository
@@ -175,6 +176,40 @@ class FinnV2DeliveryService:
             "validation_result": getattr(validation, "result_json", None),
             "tool_calls": [self._tool_call_payload(row) for row in tool_calls],
             "evidence_references": [self._evidence_reference_payload(row) for row in evidence],
+            "contract_trace": self._contract_trace(
+                orchestrator=orchestrator,
+                verifier=verifier,
+                response=envelope.response,
+                run=run,
+            ),
+        }
+
+    @staticmethod
+    def _contract_trace(*, orchestrator, verifier, response, run) -> dict:
+        """Expose contract provenance, never raw evidence or provider payloads."""
+        plan = dict(getattr(orchestrator, "tool_plan_json", {}) or {}).get("request_plan", {})
+        verifier_payload = dict(getattr(verifier, "result_json", {}) or {})
+        operation_id = plan.get("operation_id")
+        try:
+            model_policy = FinnV2OperationRegistry().get(operation_id).model_policy if operation_id else None
+        except Exception:
+            # Historical planless artifacts remain readable, but new runs are
+            # rejected earlier if their resolved contract is missing.
+            model_policy = None
+        return {
+            "operation_id": operation_id,
+            "contract_version": plan.get("operation_contract_version"),
+            "requested_mode": plan.get("interaction_mode"),
+            "delivered_mode": getattr(response, "mode", None),
+            "conversation_id": getattr(run, "conversation_id", None),
+            "active_operation_status": (plan.get("operation_state") or {}).get("status"),
+            "missing_input_field": (plan.get("operation_state") or {}).get("next_missing_input"),
+            "proposal_id": getattr(response, "proposal_id", None),
+            "model_policy": model_policy,
+            "reasoning_source": (getattr(response, "reasoning_provenance", {}) or {}).get("source"),
+            "verifier_status": getattr(response, "verifier_status", None),
+            "required_scopes": verifier_payload.get("coverage", {}).get("required_scopes", []),
+            "covered_scopes": verifier_payload.get("coverage", {}).get("covered_scopes", []),
         }
 
     def _orchestrator_payload(self, row) -> Optional[dict]:
@@ -214,6 +249,9 @@ class FinnV2DeliveryService:
             "selector": row.selector_json,
             "result_summary": row.result_summary_json,
             "error_codes": row.error_codes_json,
+            "information_scope": getattr(row, "information_scope", None),
+            "operation_id": getattr(row, "operation_id", None),
+            "operation_contract_version": getattr(row, "operation_contract_version", None),
             "started_at": row.started_at.isoformat() if row.started_at else None,
             "completed_at": row.completed_at.isoformat() if row.completed_at else None,
         }
@@ -231,4 +269,7 @@ class FinnV2DeliveryService:
             "freshness": row.freshness,
             "availability": row.availability,
             "user_scoped": bool(row.user_scoped),
+            "information_scope": getattr(row, "information_scope", None),
+            "operation_id": getattr(row, "operation_id", None),
+            "operation_contract_version": getattr(row, "operation_contract_version", None),
         }

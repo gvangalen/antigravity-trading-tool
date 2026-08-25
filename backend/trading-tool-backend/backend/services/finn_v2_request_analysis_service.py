@@ -7,6 +7,10 @@ from backend.domain.finn_v2_operation_registry import FinnV2OperationRegistry, F
 from backend.schemas.finn_v2_orchestrator_schema import RequestAnalysisResult, RequestPlan
 from backend.services.finn_v2_capability_registry_service import FinnV2CapabilityRegistryService
 from backend.services.finn_v2_operation_state_service import FinnV2OperationStateService
+from backend.services.finn_v2_operation_classification_service import (
+    FinnV2OperationClassificationService,
+    FinnV2OperationClassificationValidator,
+)
 from backend.services.asset_catalog_service import DEFAULT_ASSET_CATALOG
 
 
@@ -26,6 +30,8 @@ class FinnV2RequestAnalysisService:
         self.capabilities = FinnV2CapabilityRegistryService()
         self.operations = FinnV2OperationRegistry()
         self.operation_state = FinnV2OperationStateService()
+        self.classifier = FinnV2OperationClassificationService(self.operations)
+        self.classification_validator = FinnV2OperationClassificationValidator()
 
     def analyze(
         self,
@@ -37,6 +43,7 @@ class FinnV2RequestAnalysisService:
     ) -> RequestAnalysisResult:
         text = str(message or "").strip()
         normalized = self._normalize_text(text)
+        semantic = self.classifier.classify(message=text, conversation_context=conversation_context)
         matched_signals: List[str] = []
         unresolved_signals: List[str] = []
 
@@ -134,9 +141,24 @@ class FinnV2RequestAnalysisService:
             integrated_plan=integrated_plan,
             uses_conversation_reference=uses_conversation_reference,
         )
+        pending_operation_id = self.operation_state.pending_operation_id(conversation_context or {})
+        # The semantic classifier owns new operation recognition.  Retain the
+        # legacy analyzer only as a compatibility signal when it is more
+        # specific for historical phrasing; its output is still validated by
+        # the registry before planning can start.
+        if (
+            semantic.operation_id != "clarify_request"
+            and not (pending_operation_id and semantic.discourse == "clarification_answer" and semantic.action == "unknown")
+        ):
+            operation_id = semantic.operation_id
+        if (
+            pending_operation_id
+            and semantic.discourse == "clarification_answer"
+            and semantic.action == "unknown"
+        ):
+            operation_id = pending_operation_id
         if uses_conversation_reference and "conversation_reference_without_verified_context" in unresolved_signals:
             operation_id = "clarify_request"
-        pending_operation_id = self.operation_state.pending_operation_id(conversation_context or {})
         # A pending guided operation owns bare follow-up values such as a setup
         # name, but it must never hijack a later explicit product operation.
         # This keeps one conversation useful without turning a watchlist request
@@ -159,6 +181,11 @@ class FinnV2RequestAnalysisService:
         else:
             # The registry owns the persisted mode for every new request.
             interaction_mode = operation.mode
+            if not self.classification_validator.validate(semantic):
+                operation_id = "clarify_request"
+                operation = self.operations.require_supported(operation_id)
+                interaction_mode = operation.mode
+                unresolved_signals.append("operation_action_mismatch")
         guided_state = self.operation_state.resolve(
             contract=operation,
             message=text,
@@ -184,6 +211,10 @@ class FinnV2RequestAnalysisService:
             operation_id=operation_id,
             operation=operation,
             operation_state=guided_state.dict() if guided_state is not None else {},
+            context_asset=self._asset_from_context(workspace_hints=workspace_hints, client_context=client_context),
+            target_asset=explicit_asset if operation_id in {"watchlist_add", "watchlist_remove"} else None,
+            requested_action=semantic.action if semantic.action != "unknown" else None,
+            discourse_type=semantic.discourse,
         )
 
         return RequestAnalysisResult(
@@ -228,6 +259,10 @@ class FinnV2RequestAnalysisService:
         operation_id: str,
         operation,
         operation_state: Dict[str, object],
+        context_asset: Optional[str],
+        target_asset: Optional[str],
+        requested_action: Optional[str],
+        discourse_type: str,
     ) -> RequestPlan:
         reference = None
         if uses_conversation_reference:
@@ -255,6 +290,10 @@ class FinnV2RequestAnalysisService:
             },
             missing_information=list(missing_essential_inputs),
             operation_state=operation_state,
+            context_asset=context_asset,
+            target_asset=target_asset,
+            requested_action=requested_action,
+            discourse_type=discourse_type,
             clarification_required=bool(missing_essential_inputs) or interaction_mode == "CLARIFICATION",
             confidence_score=score,
         )

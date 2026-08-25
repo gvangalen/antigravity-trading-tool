@@ -175,6 +175,7 @@ class FinnV2VisibleDeliveryService:
             "financial_state_snapshot": artifacts.get("financial_state_snapshot"),
             "verified_response": artifacts.get("verified_response"),
             "delivery_envelope": artifacts.get("delivery_envelope"),
+            "contract_trace": artifacts.get("contract_trace"),
         }
         payload = {
             "session_id": (artifacts.get("delivery_envelope") or {}).get("conversation_id"),
@@ -200,6 +201,7 @@ class FinnV2VisibleDeliveryService:
             "policy_result": artifacts.get("policy_result"),
             "reasoning_result": artifacts.get("reasoning_result"),
             "verifier_result": artifacts.get("verifier_result"),
+            "contract_trace": artifacts.get("contract_trace"),
             "can_confirm": bool(response.get("confirmation_required") and response.get("proposal_id")),
             "actions": [],
         }

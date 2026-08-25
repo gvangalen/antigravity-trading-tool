@@ -710,6 +710,21 @@ class FinnV2ResponseVerifierService:
 
     def _evaluate_claim_support(self, text: str, evidence: list[Any], claim_type: str) -> tuple[str, list[str], bool]:
         haystack = text.lower()
+        # A stored configuration or status establishes only its own value.  It
+        # cannot, by itself, support a claim about an outcome, risk or causal
+        # weakness in a user's plan.
+        causal_language = (
+            "veroorzaakt", "leidt tot", "verbeter", "zal helpen", "beperkt ",
+            "verhoogt", "verlaagt", "maakt .* zwak", "maakt .* sterker",
+        )
+        if any(re.search(pattern, haystack) for pattern in causal_language):
+            causal_support = any(
+                bool((getattr(item, "facts", {}) or {}).get("causal_evidence"))
+                or bool((getattr(item, "facts", {}) or {}).get("causal_relation"))
+                for item in evidence
+            )
+            if not causal_support:
+                return "unsupported", ["unsupported_configuration_causality"], False
         for item in evidence:
             facts = item.facts or {}
             fact_blob = str(facts).lower()

@@ -61,3 +61,44 @@ def test_delivery_contract_returns_processing_status_without_verified_response()
 
     assert envelope.status == "collecting"
     assert envelope.response is None
+
+
+def test_public_contract_trace_exposes_registry_policy_without_provider_payloads():
+    trace = FinnV2DeliveryService._contract_trace(
+        orchestrator=SimpleNamespace(
+            tool_plan_json={
+                "request_plan": {
+                    "operation_id": "read_active_asset",
+                    "operation_contract_version": "2026-08-23.operation-contracts.v1",
+                    "interaction_mode": "READ",
+                    "operation_state": {"status": "completed"},
+                }
+            }
+        ),
+        verifier=SimpleNamespace(
+            result_json={"coverage": {"required_scopes": ["active_asset"], "covered_scopes": ["active_asset"]}}
+        ),
+        response=SimpleNamespace(
+            mode="READ",
+            proposal_id=None,
+            reasoning_provenance={"source": "deterministic_read"},
+            verifier_status="passed",
+        ),
+        run=SimpleNamespace(conversation_id="conversation-1"),
+    )
+
+    assert trace == {
+        "operation_id": "read_active_asset",
+        "contract_version": "2026-08-23.operation-contracts.v1",
+        "requested_mode": "READ",
+        "delivered_mode": "READ",
+        "conversation_id": "conversation-1",
+        "active_operation_status": "completed",
+        "missing_input_field": None,
+        "proposal_id": None,
+        "model_policy": "never",
+        "reasoning_source": "deterministic_read",
+        "verifier_status": "passed",
+        "required_scopes": ["active_asset"],
+        "covered_scopes": ["active_asset"],
+    }

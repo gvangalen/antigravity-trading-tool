@@ -76,7 +76,7 @@ class FinnV2OperationStateService:
         return questions.get(field or "", "Welk ontbrekend detail wil je voor dit voorstel vastleggen?")
 
     def _existing_state(self, contract: OperationContract, context: Mapping[str, object]) -> Optional[FinnV2OperationState]:
-        raw = context.get("operation_state")
+        raw = context.get("active_guided_operation") or context.get("operation_state")
         if not isinstance(raw, dict):
             return None
         try:

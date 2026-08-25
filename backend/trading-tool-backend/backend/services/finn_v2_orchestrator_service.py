@@ -359,19 +359,44 @@ class FinnV2OrchestratorService:
         result,
         verified_response,
     ) -> None:
-        """Persist only verified references that a follow-up may safely resolve."""
+        """Persist a durable lineage without letting failed turns poison context."""
         selectors = dict(getattr(result.tool_plan, "entity_selectors", {}) or {})
         request_plan = getattr(result.analysis, "request_plan", None)
         context = dict(existing_context or {})
-        resolved_asset = selectors.get("asset") or getattr(result.analysis, "explicit_asset", None) or context.get("resolved_asset")
-        resolved_setup_id = selectors.get("setup_id") or getattr(result.analysis, "explicit_setup_id", None) or context.get("resolved_setup_id")
-        resolved_strategy_id = selectors.get("strategy_id") or getattr(result.analysis, "explicit_strategy_id", None) or context.get("resolved_strategy_id")
-        resolved_bot_id = selectors.get("bot_id") or getattr(result.analysis, "explicit_bot_id", None) or context.get("resolved_bot_id")
+        verified_context = dict(context.get("last_verified_context") or {})
+        resolved_asset = selectors.get("asset") or getattr(result.analysis, "explicit_asset", None) or verified_context.get("resolved_entities", {}).get("asset")
+        resolved_setup_id = selectors.get("setup_id") or getattr(result.analysis, "explicit_setup_id", None) or verified_context.get("resolved_entities", {}).get("setup_id")
+        resolved_strategy_id = selectors.get("strategy_id") or getattr(result.analysis, "explicit_strategy_id", None) or verified_context.get("resolved_entities", {}).get("strategy_id")
+        resolved_bot_id = selectors.get("bot_id") or getattr(result.analysis, "explicit_bot_id", None) or verified_context.get("resolved_entities", {}).get("bot_id")
         operation_state = dict(getattr(request_plan, "operation_state", {}) or {})
-        context.update(
-            {
+        response_mode = getattr(verified_response, "mode", None) or result.analysis.interaction_mode
+        # A deterministic unavailable/clarification can be verifier-valid as a
+        # delivery, but it is not a reusable factual conclusion for a later
+        # turn.  Preserve the last usable grounded context instead.
+        is_verified = (
+            getattr(verified_response, "verifier_status", None) in {"passed", "repaired"}
+            and response_mode not in {"UNAVAILABLE", "CLARIFICATION"}
+        )
+        if is_verified:
+            verified_context = {
+                "verified_response_id": getattr(verified_response, "verified_response_id", None),
+                "operation_id": getattr(request_plan, "operation_id", None),
+                "contract_version": getattr(request_plan, "operation_contract_version", None),
+                "mode": response_mode,
+                "conclusion": getattr(verified_response, "main_observation", None),
+                "evidence_refs": list(getattr(verified_response, "evidence_refs_used", []) or []),
+                "required_scopes": list(getattr(request_plan, "required_information_scopes", []) or []),
+                "resolved_entities": {
+                    key: value for key, value in {
+                        "asset": resolved_asset, "setup_id": resolved_setup_id,
+                        "strategy_id": resolved_strategy_id, "bot_id": resolved_bot_id,
+                    }.items() if value is not None
+                },
+            }
+            context.update(
+                {
                 "last_user_goal": getattr(request_plan, "user_goal", None),
-                "last_mode": getattr(verified_response, "mode", None) or result.analysis.interaction_mode,
+                "last_mode": response_mode,
                 "resolved_asset": resolved_asset,
                 "resolved_setup_id": resolved_setup_id,
                 "resolved_strategy_id": resolved_strategy_id,
@@ -381,10 +406,19 @@ class FinnV2OrchestratorService:
                 "last_verified_conclusion": getattr(verified_response, "main_observation", None),
                 "last_primary_domains": list(getattr(request_plan, "primary_domains", []) or []),
                 "last_required_information_scopes": list(getattr(request_plan, "required_information_scopes", []) or []),
+                }
+            )
+        else:
+            context["last_turn_diagnostics"] = {
+                "operation_id": getattr(request_plan, "operation_id", None),
+                "mode": response_mode,
+                "verifier_status": getattr(verified_response, "verifier_status", None),
+                "reason_codes": list(getattr(verified_response, "uncertainty_codes", []) or []),
             }
-        )
+        context["last_verified_context"] = {key: value for key, value in verified_context.items() if value is not None}
         if operation_state:
             context["operation_state"] = operation_state
+            context["active_guided_operation"] = operation_state
         await self.conversations.update_context(
             conversation_id=conversation_id,
             user_id=user_id,

@@ -67,6 +67,10 @@ class RequestPlan(BaseModel):
     requested_operation: Optional[str] = None
     conversation_reference: Optional[str] = None
     referenced_entities: Dict[str, object] = Field(default_factory=dict)
+    context_asset: Optional[str] = None
+    target_asset: Optional[str] = None
+    requested_action: Optional[str] = None
+    discourse_type: str = "new_request"
     missing_information: List[str] = Field(default_factory=list)
     # This is persisted in the existing conversation context as JSON.  Keeping
     # the shape here prevents guided operations from falling back to untyped
@@ -100,6 +104,7 @@ class FinnV2OperationState(BaseModel):
     open_proposal_id: Optional[str] = None
     previous_verified_conclusion: Optional[str] = None
     previous_evidence_refs: List[str] = Field(default_factory=list)
+    status: str = "collecting"
 
     @validator("missing_required_inputs", pre=False)
     def _dedupe_missing_inputs(cls, value: List[str]) -> List[str]:

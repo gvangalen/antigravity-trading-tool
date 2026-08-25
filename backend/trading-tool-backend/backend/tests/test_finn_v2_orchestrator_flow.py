@@ -269,14 +269,72 @@ def test_orchestrator_persists_only_verified_conversation_references():
     asyncio.run(service.execute_run(run_id=run.id, user_id=run.user_id, trace_id=run.trace_id))
 
     assert service.conversations.updated["conversation_id"] == "conversation-1"
-    assert service.conversations.updated["context"] == {
-        "last_mode": "READ",
-        "last_user_goal": "read_setup",
-        "resolved_asset": "BTC",
-        "last_evidence_refs": ["evidence-setup-1"],
-        "last_verified_conclusion": "The BTC setup is active.",
-        "last_primary_domains": ["setup"],
-            "last_required_information_scopes": ["active_asset", "active_setup"],
+    context = service.conversations.updated["context"]
+    assert context["last_mode"] == "READ"
+    assert context["last_user_goal"] == "read_setup"
+    assert context["resolved_asset"] == "BTC"
+    assert context["last_evidence_refs"] == ["evidence-setup-1"]
+    assert context["last_verified_conclusion"] == "The BTC setup is active."
+    assert context["last_primary_domains"] == ["setup"]
+    assert context["last_required_information_scopes"] == ["active_asset", "active_setup"]
+    assert context["last_verified_context"] == {
+        "operation_id": "read_active_setup",
+        "contract_version": "2026-08-23.operation-contracts.v1",
+        "mode": "READ",
+        "conclusion": "The BTC setup is active.",
+        "evidence_refs": ["evidence-setup-1"],
+        "required_scopes": ["active_asset", "active_setup"],
+        "resolved_entities": {"asset": "BTC"},
+    }
+
+
+def test_unavailable_delivery_records_diagnostics_without_overwriting_verified_context():
+    service = FinnV2OrchestratorService(session=object())
+    service.conversations = _FakeConversationRepo()
+    previous = {
+        "last_verified_context": {
+            "verified_response_id": "verified-previous",
+            "operation_id": "read_active_setup",
+            "mode": "READ",
+            "conclusion": "BTC uses the saved 4H setup.",
+            "evidence_refs": ["evidence-previous"],
+            "resolved_entities": {"asset": "BTC", "setup_id": 309},
+        }
+    }
+    result = SimpleNamespace(
+        analysis=SimpleNamespace(
+            explicit_asset=None,
+            explicit_setup_id=None,
+            explicit_strategy_id=None,
+            explicit_bot_id=None,
+            interaction_mode="UNAVAILABLE",
+            request_plan=SimpleNamespace(operation_id="unavailable", operation_contract_version="contract-v1", operation_state={}),
+        ),
+        tool_plan=SimpleNamespace(entity_selectors={}),
+    )
+    response = SimpleNamespace(
+        verifier_status="passed",
+        mode="UNAVAILABLE",
+        uncertainty_codes=["insufficient_context"],
+    )
+
+    asyncio.run(
+        service._update_conversation_context(
+            conversation_id="conversation-1",
+            user_id=7,
+            existing_context=previous,
+            result=result,
+            verified_response=response,
+        )
+    )
+
+    context = service.conversations.updated["context"]
+    assert context["last_verified_context"] == previous["last_verified_context"]
+    assert context["last_turn_diagnostics"] == {
+        "operation_id": "unavailable",
+        "mode": "UNAVAILABLE",
+        "verifier_status": "passed",
+        "reason_codes": ["insufficient_context"],
     }
 
 
