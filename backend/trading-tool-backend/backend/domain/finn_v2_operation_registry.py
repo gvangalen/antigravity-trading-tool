@@ -147,6 +147,11 @@ class FinnV2OperationRegistry:
                             raise FinnV2OperationContractError(
                                 f"missing_scope_binding:{contract.operation_id}:{scope}"
                             )
+            if contract.operation_id in {"confirm_proposal", "execute_proposal"}:
+                if contract.execution_adapter is not None or contract.proposal_type not in {"confirmation", "execution"}:
+                    raise FinnV2OperationContractError(
+                        f"invalid_workflow_contract:{contract.operation_id}"
+                    )
 
 
 def _read(operation_id: str, domain: str, scopes: tuple[str, ...], aliases: tuple[str, ...]) -> OperationContract:

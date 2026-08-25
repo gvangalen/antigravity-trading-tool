@@ -79,6 +79,8 @@ def test_policy_mapping_for_fact_evaluation_proposal_and_actions():
     live = asyncio.run(_evaluate("Zet mijn bot live.", "ACTION_PROPOSAL", "activate_live_bot"))
     unsupported = asyncio.run(_evaluate("Doe iets met mijn bot.", "ACTION_PROPOSAL"))
     watchlist = asyncio.run(_evaluate("Voeg ETH toe aan mijn watchlist.", "ACTION_PROPOSAL", "watchlist_add"))
+    confirmation = asyncio.run(_evaluate("Bevestig dit voorstel."))
+    execution = asyncio.run(_evaluate("Voer dit voorstel uit."))
 
     assert isinstance(fact, FinnV2PolicyDecision)
     assert fact.policy_class == "read"
@@ -95,6 +97,10 @@ def test_policy_mapping_for_fact_evaluation_proposal_and_actions():
     assert unsupported.policy_class == "unsupported_action"
     assert watchlist.policy_class == "proposal"
     assert watchlist.operation_type == "watchlist_add"
+    assert confirmation.workflow_type == "proposal_confirmation"
+    assert confirmation.operation_type is None
+    assert execution.workflow_type == "proposal_execution"
+    assert execution.operation_type is None
 
 
 def test_policy_allows_deterministic_unavailable_delivery_when_outcome_is_unavailable():

@@ -26,7 +26,7 @@ class FinnV2OperationClassificationService:
 
     _ACTION_WORDS = {
         "confirm": ("bevestig", "confirm"),
-        "execute": ("uitvoeren", "execute"),
+        "execute": ("uitvoeren", "uitvoer", "voer", "execute"),
         "activate": ("activeer", "activate", "live"),
         "remove": ("verwijder", "remove", "haal"),
         "add": ("voeg", "add", "toevoeg", "zet"),
@@ -89,6 +89,10 @@ class FinnV2OperationClassificationService:
             if action == "confirm":
                 if words.intersection(candidates):
                     return action
+                continue
+            # "Voer niets uit" and comparable negated imperatives describe a
+            # safety constraint for a proposal, not an execution request.
+            if action == "execute" and words.intersection({"niet", "niets", "geen", "zonder"}):
                 continue
             if any(word == token or word.startswith(token) for word in words for token in candidates):
                 return action

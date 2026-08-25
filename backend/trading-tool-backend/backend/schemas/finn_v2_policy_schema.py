@@ -21,7 +21,6 @@ PolicyClass = Literal[
 OperationType = Literal[
     "create_setup",
     "update_indicator_configuration",
-    "create_setup",
     "update_setup",
     "update_strategy",
     "watchlist_add",
@@ -33,6 +32,7 @@ OperationType = Literal[
     "portfolio_rebalance",
     "manual_order",
 ]
+WorkflowType = Literal["proposal_confirmation", "proposal_execution"]
 
 
 class FinnV2PolicyDecision(BaseModel):
@@ -41,6 +41,9 @@ class FinnV2PolicyDecision(BaseModel):
     user_id: int
     policy_class: PolicyClass
     operation_type: Optional[OperationType] = None
+    # Workflow turns intentionally do not masquerade as a business adapter.
+    # They are typed separately so confirmation/execution remains traceable.
+    workflow_type: Optional[WorkflowType] = None
     allowed: bool
     proposal_allowed: bool
     proposal_input_required: bool = False

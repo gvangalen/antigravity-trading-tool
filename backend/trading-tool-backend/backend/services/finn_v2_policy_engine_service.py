@@ -71,6 +71,7 @@ class FinnV2PolicyEngineService:
         step_up_required = False
         proposal_input_required = False
         operation_type = None
+        workflow_type = None
         required_domains = list(orchestrator_result.domain_requirements.required_domains)
         if contract is not None:
             # Domain requirements were already derived by the registry-backed
@@ -80,6 +81,10 @@ class FinnV2PolicyEngineService:
             # types. Workflow-only confirmation/execution contracts therefore
             # intentionally have no business operation type of their own.
             operation_type = contract.execution_adapter
+            if contract.operation_id == "confirm_proposal":
+                workflow_type = "proposal_confirmation"
+            elif contract.operation_id == "execute_proposal":
+                workflow_type = "proposal_execution"
             proposal_allowed = contract.proposal_type is not None
             confirmation_required = contract.confirmation_required
             proposal_input_required = contract.proposal_type is not None
@@ -159,6 +164,7 @@ class FinnV2PolicyEngineService:
             user_id=user_id,
             policy_class=policy_class,
             operation_type=operation_type,
+            workflow_type=workflow_type,
             allowed=bool(allowed and not blocks),
             proposal_allowed=proposal_allowed and policy_class != "unsupported_action",
             proposal_input_required=proposal_input_required and policy_class != "unsupported_action",

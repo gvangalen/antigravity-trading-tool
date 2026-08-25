@@ -91,3 +91,15 @@ def test_all_deterministic_read_contracts_are_explicitly_provider_free():
 
     assert deterministic_reads
     assert all(contract.model_policy == "never" for contract in deterministic_reads)
+
+
+def test_workflow_contracts_are_not_business_execution_adapters():
+    registry = FinnV2OperationRegistry()
+
+    confirmation = registry.require_supported("confirm_proposal")
+    execution = registry.require_supported("execute_proposal")
+
+    assert confirmation.execution_adapter is None
+    assert confirmation.proposal_type == "confirmation"
+    assert execution.execution_adapter is None
+    assert execution.proposal_type == "execution"
