@@ -294,55 +294,6 @@ class FinnV2RequestAnalysisService:
         )
 
     @staticmethod
-    def _operation_id(
-        *,
-        interaction_mode: str,
-        primary_subject: Optional[str],
-        scopes: List[str],
-        normalized: str,
-        integrated_plan: bool,
-        uses_conversation_reference: bool,
-    ) -> str:
-        if uses_conversation_reference and any(token in normalized for token in ("korter", "anders", "herformuleer")):
-            return "reformulate_previous_response"
-        if uses_conversation_reference and any(token in normalized for token in ("onderbouw", "waar baseer")):
-            return "explain_previous_evidence"
-        if interaction_mode == "CAPABILITY":
-            return "capability"
-        if interaction_mode == "UNAVAILABLE":
-            return "unavailable"
-        if interaction_mode == "CLARIFICATION":
-            return "clarify_request"
-        if interaction_mode == "CONFIRMATION":
-            return "confirm_proposal"
-        if interaction_mode == "EXECUTION":
-            return "execute_proposal"
-        if interaction_mode == "CREATE_PROPOSAL":
-            return {"setup": "create_setup", "strategy": "create_strategy", "bot": "create_bot"}.get(primary_subject or "", "clarify_request")
-        if interaction_mode == "ACTION_PROPOSAL":
-            if primary_subject == "watchlist":
-                return "watchlist_add" if any(token in normalized for token in ("voeg", "add", "toevoeg")) else "watchlist_remove"
-            if primary_subject == "bot" and "live" in normalized:
-                return "activate_bot"
-            return "clarify_request"
-        if interaction_mode == "EVALUATE":
-            if "reflection" in scopes or "daily_report" in scopes:
-                return "evaluate_review_history"
-            if integrated_plan:
-                return "evaluate_plan"
-            return {
-                "indicators": "evaluate_indicator_configuration", "setup": "evaluate_setup",
-                "strategy": "evaluate_strategy", "bot": "evaluate_bot", "portfolio": "evaluate_portfolio",
-            }.get(primary_subject or "", "evaluate_plan")
-        if "bot" in scopes:
-            return "read_linked_bot"
-        return {
-            "asset": "read_active_asset", "watchlist": "read_watchlist", "indicators": "read_indicator_configuration",
-            "setup": "read_active_setup", "strategy": "read_linked_strategy", "bot": "read_linked_bot",
-            "portfolio": "read_portfolio", "daily_report": "read_latest_report", "reflection": "read_review_history",
-        }.get(primary_subject or "", "clarify_request")
-
-    @staticmethod
     def _user_goal(interaction_mode: str, primary_subject: Optional[str], normalized: str, integrated_plan: bool) -> str:
         if interaction_mode == "EVALUATE" and integrated_plan:
             return "evaluate_complete_plan"
