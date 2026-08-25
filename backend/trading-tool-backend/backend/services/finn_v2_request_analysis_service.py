@@ -134,24 +134,11 @@ class FinnV2RequestAnalysisService:
             unresolved_signals.append("insufficient_trade_context")
 
         confidence = self._confidence(scopes=scopes, matched_signals=matched_signals, interaction_mode=interaction_mode)
-        operation_id = self._operation_id(
-            interaction_mode=interaction_mode,
-            primary_subject=primary_subject,
-            scopes=scopes,
-            normalized=normalized,
-            integrated_plan=integrated_plan,
-            uses_conversation_reference=uses_conversation_reference,
-        )
+        # New V2 runs select their operation exclusively through the semantic
+        # front door.  The legacy analyzer remains below only to reconstruct
+        # historical planless records, never to choose a new contract.
+        operation_id = semantic.operation_id
         pending_operation_id = self.operation_state.pending_operation_id(conversation_context or {})
-        # The semantic classifier owns new operation recognition.  Retain the
-        # legacy analyzer only as a compatibility signal when it is more
-        # specific for historical phrasing; its output is still validated by
-        # the registry before planning can start.
-        if (
-            semantic.operation_id != "clarify_request"
-            and not (pending_operation_id and semantic.discourse == "clarification_answer" and semantic.action == "unknown")
-        ):
-            operation_id = semantic.operation_id
         if (
             pending_operation_id
             and semantic.discourse == "clarification_answer"

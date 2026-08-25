@@ -40,14 +40,26 @@ class FinnV2OperationClassificationService:
     _DOMAIN_WORDS = {
         "capability": ("finn", "help", "helpen", "kan", "doen"),
         "watchlist": ("watchlist", "volglijst", "volgen"),
-        "indicators": ("indicator", "rsi", "vwap", "volume", "ma200", "ma_200"),
+        "indicators": (
+            "indicator", "rsi", "vwap", "volume", "ma200", "ma_200",
+            "signaal", "signalen", "trendindicator",
+        ),
         "setup": ("setup",),
         "strategy": ("strategie", "strategy"),
         "bot": ("bot", "automation", "automatisering"),
         "plan": ("plan", "profiel", "profile"),
         "reports": ("rapport", "report"),
         "reviews": ("reflectie", "reflection", "review"),
-        "asset": ("asset", "instrument", "bitcoin", "btc", "aapl"),
+        "portfolio": ("portfolio", "portefeuille"),
+        "asset": (
+            "asset", "instrument", "bitcoin", "btc", "aapl", "coin",
+            "aandeel", "workspace", "markt", "market",
+        ),
+        # These are recognised domains with no executable V2 contract.  They
+        # must reach the registry's safe unavailable contract, not a legacy
+        # request-analysis fallback.
+        "trade": ("trade", "entry", "positie", "position"),
+        "non_financial": ("weer", "weather", "amsterdam"),
     }
 
     def __init__(self, registry: Optional[FinnV2OperationRegistry] = None):
@@ -96,7 +108,10 @@ class FinnV2OperationClassificationService:
         # A graph request must keep every persisted relationship available.  A
         # bot mention therefore wins over an otherwise narrower strategy/setup
         # mention; the bot contract reads the full setup -> strategy -> bot graph.
-        for domain in ("bot", "strategy", "setup", "watchlist", "indicators", "reports", "reviews"):
+        for domain in (
+            "bot", "strategy", "setup", "watchlist", "indicators", "portfolio",
+            "reports", "reviews",
+        ):
             if domain in matches:
                 return domain
         return matches[0] if matches else "unknown"
@@ -125,12 +140,16 @@ class FinnV2OperationClassificationService:
             return "confirm_proposal"
         if action == "execute":
             return "execute_proposal"
+        if domain in {"trade", "non_financial"}:
+            return "unavailable"
         if domain == "watchlist":
             return "watchlist_remove" if action == "remove" else "watchlist_add" if action in {"add", "create"} else "read_watchlist"
         if domain == "reports":
             return "read_latest_report"
         if domain == "reviews":
             return "evaluate_review_history" if action == "evaluate" else "read_review_history"
+        if domain == "portfolio":
+            return "evaluate_portfolio" if action == "evaluate" else "read_portfolio"
         if action == "create" and domain in {"setup", "plan"}:
             return "create_setup"
         if action == "add" and domain == "setup":
