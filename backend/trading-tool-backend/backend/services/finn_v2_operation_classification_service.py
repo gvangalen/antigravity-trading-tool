@@ -29,22 +29,24 @@ class FinnV2OperationClassificationService:
         "execute": ("uitvoeren", "execute"),
         "activate": ("activeer", "activate", "live"),
         "remove": ("verwijder", "remove", "haal"),
-        "add": ("voeg", "add", "toevoeg"),
-        "create": ("maak", "mak", "create", "stel", "voorbereiden"),
+        "add": ("voeg", "add", "toevoeg", "zet"),
+        "create": ("maak", "mak", "create", "stel", "bereid", "voorbereiden", "setupconcept"),
         "update": ("wijzig", "update"),
-        "evaluate": ("beoordeel", "evaluate", "zwak", "risico", "past", "ontbreekt", "ontbrekende", "vertrouwen", "voorwaarde", "entryvoorwaarde"),
+        "evaluate": ("beoordeel", "evaluate", "zwak", "risico", "past", "fit", "wringt", "ontbreekt", "ontbrekende", "vertrouwen", "voorwaarde", "entryvoorwaarde", "weegt"),
         "explain": ("onderbouw", "waarom", "bewijs"),
         "reformulate": ("korter", "herformuleer", "anders"),
         "read": ("welke", "wat", "toon", "bekijk", "staat", "heb"),
     }
     _DOMAIN_WORDS = {
         "capability": ("finn", "help", "helpen", "kan", "doen"),
-        "watchlist": ("watchlist", "volglijst"),
+        "watchlist": ("watchlist", "volglijst", "volgen"),
         "indicators": ("indicator", "rsi", "vwap", "volume", "ma200", "ma_200"),
         "setup": ("setup",),
         "strategy": ("strategie", "strategy"),
         "bot": ("bot", "automation", "automatisering"),
         "plan": ("plan", "profiel", "profile"),
+        "reports": ("rapport", "report"),
+        "reviews": ("reflectie", "reflection", "review"),
         "asset": ("asset", "instrument", "bitcoin", "btc", "aapl"),
     }
 
@@ -59,12 +61,16 @@ class FinnV2OperationClassificationService:
         action = self._action(words)
         domain = self._domain(words)
         discourse = self._discourse(words, conversation_context or {})
-        operation = self._operation(action=action, domain=domain, discourse=discourse)
+        operation = self._operation(action=action, domain=domain, discourse=discourse, words=words)
         confidence = "high" if action != "unknown" and domain != "unknown" else "medium" if domain != "unknown" else "low"
         return SemanticOperationClassification(operation, action, domain, discourse, confidence)
 
     def _action(self, words: set[str]) -> str:
-        for action in ("confirm", "execute", "remove", "add", "activate", "create", "update", "evaluate", "explain", "reformulate", "read"):
+        # State questions ("staat hij live?", "is de bot live?") read a
+        # configuration; only an imperative live request is an activation.
+        if "live" in words and words.intersection({"staat", "is", "welke", "toon"}):
+            return "read"
+        for action in ("confirm", "execute", "remove", "activate", "add", "create", "update", "evaluate", "explain", "reformulate", "read"):
             candidates = self._ACTION_WORDS[action]
             # Confirmation is a workflow command, not a description of a
             # condition that should be confirmed before an entry.
@@ -87,6 +93,12 @@ class FinnV2OperationClassificationService:
             matches.remove("capability")
         if "plan" in matches:
             return "plan"
+        # A graph request must keep every persisted relationship available.  A
+        # bot mention therefore wins over an otherwise narrower strategy/setup
+        # mention; the bot contract reads the full setup -> strategy -> bot graph.
+        for domain in ("bot", "strategy", "setup", "watchlist", "indicators", "reports", "reviews"):
+            if domain in matches:
+                return domain
         return matches[0] if matches else "unknown"
 
     @staticmethod
@@ -104,7 +116,7 @@ class FinnV2OperationClassificationService:
         return "new_request"
 
     @staticmethod
-    def _operation(*, action: str, domain: str, discourse: str) -> str:
+    def _operation(*, action: str, domain: str, discourse: str, words: set[str]) -> str:
         if discourse == "evidence_follow_up":
             return "explain_previous_evidence"
         if discourse == "reformulation":
@@ -114,13 +126,17 @@ class FinnV2OperationClassificationService:
         if action == "execute":
             return "execute_proposal"
         if domain == "watchlist":
-            return "watchlist_remove" if action == "remove" else "watchlist_add" if action == "add" else "read_watchlist"
+            return "watchlist_remove" if action == "remove" else "watchlist_add" if action in {"add", "create"} else "read_watchlist"
+        if domain == "reports":
+            return "read_latest_report"
+        if domain == "reviews":
+            return "evaluate_review_history" if action == "evaluate" else "read_review_history"
         if action == "create" and domain in {"setup", "plan"}:
             return "create_setup"
         if action == "add" and domain == "setup":
             return "create_setup"
         if domain == "bot" and action == "activate":
-            return "activate_bot"
+            return "activate_paper_bot" if "paper" in words else "activate_bot"
         if action == "evaluate":
             if domain in {"plan", "unknown"}:
                 return "evaluate_plan"
@@ -148,7 +164,7 @@ class FinnV2OperationClassificationValidator:
     """Reject semantic/action mismatches before a contract enters planning."""
 
     _ACTIONS_BY_OPERATION = {
-        "watchlist_add": {"add"}, "watchlist_remove": {"remove"}, "create_setup": {"create", "add"},
+        "watchlist_add": {"add", "create"}, "watchlist_remove": {"remove"}, "create_setup": {"create", "add"},
         "activate_bot": {"activate"}, "confirm_proposal": {"confirm"}, "execute_proposal": {"execute"},
         "evaluate_plan": {"evaluate"}, "explain_previous_evidence": {"explain"},
         "reformulate_previous_response": {"reformulate"},
