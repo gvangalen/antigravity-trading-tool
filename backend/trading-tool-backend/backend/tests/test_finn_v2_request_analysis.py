@@ -362,6 +362,29 @@ def test_guided_operation_state_retains_verified_context_without_reasking_fields
     assert state["missing_required_inputs"] == ["name"]
 
 
+def test_canonical_guided_state_reads_only_verified_conversation_lineage():
+    analysis = SERVICE.analyze(
+        message="Maak een setup voor BTC swing trading.",
+        conversation_context={
+            "conversation_state_version": "finn_v2.conversation-contracts.v1",
+            "resolved_asset": "AAPL",
+            "last_verified_conclusion": "legacy conclusion",
+            "last_verified_context": {
+                "verified_response_id": "verified-btc",
+                "conclusion": "BTC needs an entry rule.",
+                "evidence_refs": ["artifact-btc"],
+                "resolved_entities": {"asset": "BTC", "setup_id": 309},
+            },
+        },
+    )
+
+    state = analysis.request_plan.operation_state
+    assert state["resolved_entities"] == {"asset": "BTC", "setup_id": 309}
+    assert state["previous_verified_response_id"] == "verified-btc"
+    assert state["previous_verified_conclusion"] == "BTC needs an entry rule."
+    assert state["previous_evidence_refs"] == ["artifact-btc"]
+
+
 def test_follow_up_references_the_previous_verified_response_not_a_text_label():
     analysis = SERVICE.analyze(
         message="Onderbouw die conclusie.",

@@ -28,16 +28,18 @@ class FinnV2OperationStateService:
         missing = [field for field in contract.required_inputs if self._is_missing(collected.get(field))]
         context = conversation_context or {}
         verified_context = dict(context.get("last_verified_context") or {})
+        resolved_context = dict(verified_context.get("resolved_entities") or {})
+        is_canonical_context = context.get("conversation_state_version") == self.CONTEXT_STATE_VERSION
         resolved_entities = dict(existing.resolved_entities) if existing is not None else {}
         target_entities = dict(existing.target_entities) if existing is not None else {}
         resolved_entities.update(
             {
                 key: value
                 for key, value in {
-                    "asset": explicit_asset or context.get("resolved_asset"),
-                    "setup_id": context.get("resolved_setup_id"),
-                    "strategy_id": context.get("resolved_strategy_id"),
-                    "bot_id": context.get("resolved_bot_id"),
+                    "asset": explicit_asset or resolved_context.get("asset") or (None if is_canonical_context else context.get("resolved_asset")),
+                    "setup_id": resolved_context.get("setup_id") or (None if is_canonical_context else context.get("resolved_setup_id")),
+                    "strategy_id": resolved_context.get("strategy_id") or (None if is_canonical_context else context.get("resolved_strategy_id")),
+                    "bot_id": resolved_context.get("bot_id") or (None if is_canonical_context else context.get("resolved_bot_id")),
                 }.items()
                 if value is not None
             }
@@ -57,15 +59,15 @@ class FinnV2OperationStateService:
             open_proposal_id=context.get("open_proposal_id"),
             previous_verified_response_id=(
                 verified_context.get("verified_response_id")
-                or context.get("last_verified_response_id")
+                or (None if is_canonical_context else context.get("last_verified_response_id"))
             ),
             previous_verified_conclusion=(
                 verified_context.get("conclusion")
-                or context.get("last_verified_conclusion")
+                or (None if is_canonical_context else context.get("last_verified_conclusion"))
             ),
             previous_evidence_refs=list(
                 verified_context.get("evidence_refs")
-                or context.get("last_evidence_refs")
+                or ([] if is_canonical_context else context.get("last_evidence_refs"))
                 or []
             ),
         )
