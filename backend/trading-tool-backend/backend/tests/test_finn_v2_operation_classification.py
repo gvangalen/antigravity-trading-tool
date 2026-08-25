@@ -93,6 +93,13 @@ def test_target_polarity_is_not_reversed_by_workspace_context():
     assert remove.operation_id == "watchlist_remove"
 
 
+def test_separable_dutch_execution_verb_selects_the_execution_contract():
+    result = CLASSIFIER.classify(message="Voer dit voorstel uit.")
+
+    assert result.operation_id == "execute_proposal"
+    assert result.action == "execute"
+
+
 @pytest.mark.parametrize("message", ("Maak iets nieuws.", "Wijzig mijn instellingen.", "Voeg iets toe."))
 def test_ambiguous_action_without_a_domain_remains_a_clarification(message):
     assert CLASSIFIER.classify(message=message).operation_id == "clarify_request"

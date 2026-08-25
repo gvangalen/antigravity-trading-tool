@@ -34,7 +34,10 @@ class FinnV2RequestPreprocessorService:
 
     _ACTION_PATTERNS = (
         ("confirm", ("bevestig", "confirm")),
-        ("execute", ("uitvoeren", "execute", "voer uit")),
+        # Dutch separable verbs may put the object between "voer" and
+        # "uit" ("voer dit voorstel uit"). The imperative stem is still
+        # an unambiguous execution act once the registry resolves its domain.
+        ("execute", ("uitvoeren", "execute", "voer")),
         ("remove", ("verwijder", "remove", "haal", "halen", "stop met")),
         ("add", ("voeg", "add", "toevoeg", "zet op", "volg")),
         ("activate", ("activeer", "activate", "schakel", "start", "zet live", "go live")),
