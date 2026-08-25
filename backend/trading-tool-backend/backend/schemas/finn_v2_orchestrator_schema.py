@@ -102,6 +102,7 @@ class FinnV2OperationState(BaseModel):
     missing_required_inputs: List[str] = Field(default_factory=list)
     next_missing_input: Optional[str] = None
     open_proposal_id: Optional[str] = None
+    previous_verified_response_id: Optional[str] = None
     previous_verified_conclusion: Optional[str] = None
     previous_evidence_refs: List[str] = Field(default_factory=list)
     status: str = "collecting"

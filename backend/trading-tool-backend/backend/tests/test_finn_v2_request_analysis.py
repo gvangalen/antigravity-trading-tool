@@ -245,6 +245,25 @@ def test_guided_operation_state_retains_verified_context_without_reasking_fields
     assert state["missing_required_inputs"] == ["name"]
 
 
+def test_follow_up_references_the_previous_verified_response_not_a_text_label():
+    analysis = SERVICE.analyze(
+        message="Onderbouw die conclusie.",
+        conversation_context={
+            "last_verified_context": {
+                "verified_response_id": "verified-btc-plan-1",
+                "operation_id": "evaluate_plan",
+                "mode": "EVALUATE",
+                "conclusion": "The BTC plan needs a documented decision rule.",
+                "evidence_refs": ["artifact-plan-1"],
+                "resolved_entities": {"asset": "BTC", "bot_id": 186},
+            },
+        },
+    )
+
+    assert analysis.request_plan.operation_id == "explain_previous_evidence"
+    assert analysis.request_plan.conversation_reference == "verified-btc-plan-1"
+
+
 def test_request_analysis_does_not_treat_read_questions_with_confirmed_wording_as_execution():
     strategy_result = SERVICE.analyze(
         message="Welke belangrijkste entryvoorwaarde uit mijn BTC-strategie moet bevestigd zijn voordat mijn plan een entry toestaat?"

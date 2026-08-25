@@ -261,7 +261,13 @@ class FinnV2RequestAnalysisService:
     ) -> RequestPlan:
         reference = None
         if uses_conversation_reference:
-            reference = str(conversation_context.get("last_user_goal") or "previous_verified_response")
+            verified_context = dict(conversation_context.get("last_verified_context") or {})
+            reference = str(
+                verified_context.get("verified_response_id")
+                or conversation_context.get("last_verified_response_id")
+                or conversation_context.get("last_user_goal")
+                or "previous_verified_response"
+            )
         score = {"high": 0.9, "medium": 0.7, "low": 0.4, "none": 0.0}[confidence]
         return RequestPlan(
             user_goal=self._user_goal(interaction_mode, primary_subject, normalized, integrated_plan),
@@ -530,7 +536,11 @@ class FinnV2RequestAnalysisService:
         matched_signals: List[str],
         unresolved_signals: List[str],
     ) -> tuple[str, List[str]]:
-        if not conversation_context.get("last_verified_conclusion"):
+        verified_context = dict(conversation_context.get("last_verified_context") or {})
+        if not (
+            conversation_context.get("last_verified_conclusion")
+            or verified_context.get("conclusion")
+        ):
             unresolved_signals.append("conversation_reference_without_verified_context")
             return "CLARIFICATION", scopes
         inherited_scopes = list(conversation_context.get("last_primary_domains") or [])

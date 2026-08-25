@@ -402,6 +402,7 @@ class FinnV2OrchestratorService:
                 "resolved_strategy_id": resolved_strategy_id,
                 "resolved_bot_id": resolved_bot_id,
                 "last_evidence_refs": list(getattr(verified_response, "evidence_refs_used", []) or []),
+                "last_verified_response_id": getattr(verified_response, "verified_response_id", None),
                 "open_proposal_id": getattr(verified_response, "proposal_id", None),
                 "last_verified_conclusion": getattr(verified_response, "main_observation", None),
                 "last_primary_domains": list(getattr(request_plan, "primary_domains", []) or []),

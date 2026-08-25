@@ -26,6 +26,7 @@ class FinnV2OperationStateService:
         collected.update(self._explicit_inputs(contract=contract, message=message, explicit_asset=explicit_asset))
         missing = [field for field in contract.required_inputs if self._is_missing(collected.get(field))]
         context = conversation_context or {}
+        verified_context = dict(context.get("last_verified_context") or {})
         resolved_entities = dict(existing.resolved_entities) if existing is not None else {}
         resolved_entities.update(
             {
@@ -47,8 +48,19 @@ class FinnV2OperationStateService:
             missing_required_inputs=missing,
             next_missing_input=missing[0] if missing else None,
             open_proposal_id=context.get("open_proposal_id"),
-            previous_verified_conclusion=context.get("last_verified_conclusion"),
-            previous_evidence_refs=list(context.get("last_evidence_refs") or []),
+            previous_verified_response_id=(
+                verified_context.get("verified_response_id")
+                or context.get("last_verified_response_id")
+            ),
+            previous_verified_conclusion=(
+                verified_context.get("conclusion")
+                or context.get("last_verified_conclusion")
+            ),
+            previous_evidence_refs=list(
+                verified_context.get("evidence_refs")
+                or context.get("last_evidence_refs")
+                or []
+            ),
         )
 
     @staticmethod
