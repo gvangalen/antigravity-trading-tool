@@ -90,10 +90,18 @@ class FinnV2OperationClassificationService:
         raw_state = context.get("active_guided_operation") or context.get("operation_state")
         if isinstance(raw_state, Mapping) and raw_state.get("missing_required_inputs"):
             operation_id = str(raw_state.get("operation_id") or "")
+            # Capability requests always start a fresh, read-only operation;
+            # an unfinished proposal may resume only after a valid slot answer.
+            if facts.discourse_act == "capability":
+                return None
             # An explicitly new operation must not be hijacked by an unfinished draft.
             if facts.discourse_act == "operation_request" and facts.explicit_entities:
                 return None
-            if operation_id and facts.action_polarity not in {"confirm", "execute"}:
+            if (
+                operation_id
+                and facts.discourse_act == "clarification_answer"
+                and facts.action_polarity not in {"confirm", "execute"}
+            ):
                 return self._result(operation_id, facts, "high", "conversation", (self.registry.get(operation_id),))
         verified = context.get("last_verified_context") or context.get("last_verified_conclusion")
         if verified:

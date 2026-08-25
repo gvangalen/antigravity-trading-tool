@@ -258,7 +258,38 @@ def test_guided_watchlist_target_asset_is_typed_and_never_reuses_workspace_asset
     assert analysis.request_plan.context_asset == "BTC"
     assert analysis.request_plan.target_asset == "ADA"
     assert state["collected_inputs"]["asset"] == "ADA"
+    assert state["target_entities"] == {"asset": "ADA"}
     assert state["missing_required_inputs"] == []
+
+
+def test_capability_question_with_plan_terms_keeps_its_own_contract_over_conversation_state():
+    analysis = SERVICE.analyze(
+        message="Leg kort uit welke analyses en acties je ondersteunt voor mijn plan.",
+        conversation_context={
+            "last_verified_context": {"verified_response_id": "verified-plan"},
+            "active_guided_operation": {
+                "operation_id": "create_setup",
+                "contract_version": "2026-08-23.operation-contracts.v1",
+                "missing_required_inputs": ["name"],
+            },
+        },
+    )
+
+    assert analysis.request_plan.operation_id == "capability"
+    assert analysis.interaction_mode == "CAPABILITY"
+    assert analysis.reasoning_required is False
+
+
+def test_technical_configuration_request_uses_indicator_contract_and_scopes():
+    analysis = SERVICE.analyze(
+        message="Vat mijn technische configuratie voor Bitcoin samen.",
+        conversation_context={"resolved_asset": "AAPL"},
+    )
+
+    assert analysis.request_plan.operation_id == "read_indicator_configuration"
+    assert analysis.interaction_mode == "READ"
+    assert analysis.explicit_asset == "BTC"
+    assert analysis.request_plan.required_information_scopes == ["active_asset", "indicator_configuration"]
 
 
 def test_active_guided_operation_has_priority_over_legacy_state():

@@ -28,6 +28,7 @@ class FinnV2OperationStateService:
         context = conversation_context or {}
         verified_context = dict(context.get("last_verified_context") or {})
         resolved_entities = dict(existing.resolved_entities) if existing is not None else {}
+        target_entities = dict(existing.target_entities) if existing is not None else {}
         resolved_entities.update(
             {
                 key: value
@@ -40,11 +41,16 @@ class FinnV2OperationStateService:
                 if value is not None
             }
         )
+        if contract.operation_id in {"watchlist_add", "watchlist_remove"}:
+            target_asset = collected.get("asset")
+            if target_asset:
+                target_entities["asset"] = target_asset
         return FinnV2OperationState(
             operation_id=contract.operation_id,
             contract_version=contract.version,
             collected_inputs=collected,
             resolved_entities=resolved_entities,
+            target_entities=target_entities,
             missing_required_inputs=missing,
             next_missing_input=missing[0] if missing else None,
             open_proposal_id=context.get("open_proposal_id"),
@@ -78,9 +84,16 @@ class FinnV2OperationStateService:
         return state.operation_id if state.missing_required_inputs else None
 
     @staticmethod
-    def clarification_question(field: Optional[str]) -> str:
+    def clarification_question(
+        field: Optional[str], *, contract: Optional[OperationContract] = None, collected_inputs: Optional[Mapping[str, object]] = None
+    ) -> str:
+        collected = collected_inputs or {}
         questions = {
-            "name": "Welke korte naam wil je voor deze setup gebruiken?",
+            "name": (
+                f"Welke naam wil je deze {str(collected.get('symbol') or '').upper()}-setup geven?"
+                if contract is not None and contract.operation_id == "create_setup" and collected.get("symbol")
+                else "Welke korte naam wil je voor deze setup gebruiken?"
+            ),
             "symbol": "Voor welke asset wil je deze setup precies voorbereiden?",
             "setup_type": "Wil je een trade- of DCA-setup voorbereiden?",
             "setup_id": "Welke bestaande setup wil je aanpassen?",

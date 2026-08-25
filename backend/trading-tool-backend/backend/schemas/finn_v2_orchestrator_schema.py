@@ -105,6 +105,10 @@ class FinnV2OperationState(BaseModel):
     contract_version: str
     collected_inputs: Dict[str, object] = Field(default_factory=dict)
     resolved_entities: Dict[str, object] = Field(default_factory=dict)
+    # Targets are deliberately separate from the workspace-scoped entities.
+    # A watchlist target, for example, must never become the asset selector
+    # used by the owner-scoped reads that prepare its proposal.
+    target_entities: Dict[str, object] = Field(default_factory=dict)
     missing_required_inputs: List[str] = Field(default_factory=list)
     next_missing_input: Optional[str] = None
     open_proposal_id: Optional[str] = None

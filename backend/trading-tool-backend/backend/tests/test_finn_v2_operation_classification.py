@@ -152,3 +152,33 @@ def test_follow_up_requires_verified_context_in_the_contract_manifest():
 
     assert no_context.operation_id == "clarify_request"
     assert with_context.operation_id == "explain_previous_evidence"
+
+
+@pytest.mark.parametrize(
+    "message",
+    (
+        "Wat kun je voor mij doen binnen mijn handelsplan?",
+        "Leg kort uit welke analyses en acties je ondersteunt.",
+    ),
+)
+def test_capability_request_never_gets_hijacked_by_verified_or_guided_context(message):
+    result = CLASSIFIER.classify(
+        message=message,
+        conversation_context={
+            "last_verified_context": {"verified_response_id": "verified-1"},
+            "active_guided_operation": {
+                "operation_id": "create_setup",
+                "contract_version": "2026-08-23.operation-contracts.v1",
+                "missing_required_inputs": ["name"],
+            },
+        },
+    )
+
+    assert result.operation_id == "capability"
+    assert result.selector_source == "deterministic"
+
+
+def test_technical_configuration_is_an_indicator_read_not_a_workspace_asset_read():
+    result = CLASSIFIER.classify(message="Vat mijn technische configuratie voor dit instrument samen.")
+
+    assert result.operation_id == "read_indicator_configuration"

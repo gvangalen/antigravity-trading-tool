@@ -76,7 +76,10 @@ def test_tool_plan_routes_setup_creation_and_watchlist_actions_through_proposal_
         domain_plan=domain_service.determine(setup_analysis),
     )
 
-    watchlist_analysis = analysis_service.analyze(message="Voeg ETH toe aan mijn watchlist.")
+    watchlist_analysis = analysis_service.analyze(
+        message="Voeg ETH toe aan mijn watchlist.",
+        workspace_hints={"symbol": "BTC"},
+    )
     watchlist_plan = FinnV2ToolPlanService().build(
         run_id="run-watchlist-add",
         analysis=watchlist_analysis,
@@ -86,8 +89,8 @@ def test_tool_plan_routes_setup_creation_and_watchlist_actions_through_proposal_
     assert setup_plan.tool_names == ["read_active_asset"]
     assert setup_plan.required_evidence == ["active_asset"]
     assert watchlist_plan.tool_names == ["read_active_asset", "read_watchlist"]
-    assert watchlist_plan.tool_inputs["read_active_asset"] == {"asset": "ETH"}
-    assert watchlist_plan.tool_inputs["read_watchlist"] == {"asset": "ETH"}
+    assert watchlist_plan.tool_inputs["read_active_asset"] == {"asset": "BTC"}
+    assert watchlist_plan.tool_inputs["read_watchlist"] == {"asset": "BTC"}
     assert watchlist_plan.required_evidence == ["active_asset", "watchlist"]
 
 

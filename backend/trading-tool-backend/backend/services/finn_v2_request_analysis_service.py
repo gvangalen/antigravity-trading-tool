@@ -59,11 +59,10 @@ class FinnV2RequestAnalysisService:
         explicit_setup_id = self._extract_entity_id(text, "setup")
         explicit_strategy_id = self._extract_entity_id(text, "strateg")
         explicit_bot_id = self._extract_entity_id(text, "bot")
-        uses_conversation_reference = self._uses_conversation_reference(normalized)
-        # "staat die live" is a normal Dutch relative reference to an
-        # explicitly requested bot, not a reference to a prior turn.
-        if "staat die live" in normalized:
-            uses_conversation_reference = False
+        # Only the preprocessor may mark a conversation reference.  This
+        # avoids turning ordinary Dutch pronouns into stale conversation
+        # selectors later in the pipeline.
+        uses_conversation_reference = bool(preprocessed.conversation_reference_markers)
         if uses_conversation_reference:
             context = conversation_context or {}
             explicit_asset = explicit_asset or self._context_asset(context.get("resolved_asset"))
@@ -89,26 +88,8 @@ class FinnV2RequestAnalysisService:
                 conversation_context=conversation_context,
             )
             operation_id = "clarify_request"
-        elif (
-            pending_operation_id
-            and semantic.discourse == "clarification_answer"
-            and semantic.action == "unknown"
-        ):
-            operation_id = pending_operation_id
         if uses_conversation_reference and "conversation_reference_without_verified_context" in unresolved_signals:
             operation_id = "clarify_request"
-        # A pending guided operation owns bare follow-up values such as a setup
-        # name, but it must never hijack a later explicit product operation.
-        # This keeps one conversation useful without turning a watchlist request
-        # into a continuation of an unfinished setup proposal.
-        if (
-            cancelled_guided_state is None
-            and
-            pending_operation_id
-            and operation_id in {"clarify_request", "unavailable"}
-            and "mode:unavailable_financial_context" not in matched_signals
-        ):
-            operation_id = pending_operation_id
         try:
             operation = self.operations.require_supported(operation_id)
         except FinnV2OperationUnavailableError as exc:
@@ -182,7 +163,10 @@ class FinnV2RequestAnalysisService:
             operation=operation,
             operation_state=guided_state.dict() if guided_state is not None else {},
             context_asset=context_asset,
-            target_asset=message_asset if operation_id in {"watchlist_add", "watchlist_remove"} else None,
+            target_asset=(
+                (guided_state.target_entities.get("asset") if guided_state is not None else None)
+                or message_asset
+            ) if operation_id in {"watchlist_add", "watchlist_remove"} else None,
             referenced_asset=message_asset or explicit_asset,
             requested_action=semantic.action if semantic.action != "unknown" else None,
             discourse_type=semantic.discourse,

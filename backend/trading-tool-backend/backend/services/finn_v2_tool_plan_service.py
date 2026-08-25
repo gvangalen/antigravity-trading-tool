@@ -38,8 +38,18 @@ class FinnV2ToolPlanService:
         self.operations = FinnV2OperationRegistry()
 
     def build(self, *, run_id: str, analysis: RequestAnalysisResult, domain_plan: DomainRequirementPlan) -> ToolPlan:
+        request_plan = analysis.request_plan
+        operation_id = request_plan.operation_id if request_plan is not None else None
+        # Proposal targets and read context are separate contract facts. The
+        # target is carried in operation state/payload; preparing a watchlist
+        # proposal still reads the user's active workspace context.
+        selector_asset = (
+            request_plan.context_asset
+            if operation_id in {"watchlist_add", "watchlist_remove"} and request_plan.context_asset
+            else analysis.explicit_asset
+        )
         selector = ToolSelector(
-            asset=analysis.explicit_asset,
+            asset=selector_asset,
             setup_id=analysis.explicit_setup_id,
             strategy_id=analysis.explicit_strategy_id,
             bot_id=analysis.explicit_bot_id,

@@ -46,6 +46,9 @@ class FinnV2RequestPreprocessorService:
         "watchlist": ("watchlist", "volglijst"),
         "indicator_configuration": (
             "indicator",
+            "indicatorconfiguratie",
+            "technische configuratie",
+            "technical configuration",
             "signaal",
             "signalen",
             "trendindicator",
@@ -125,7 +128,19 @@ class FinnV2RequestPreprocessorService:
         discourse = self._discourse_act(normalized, entities, references, action)
         # A bare explicit asset is useful only as a possible guided slot answer.
         # The conversation resolver decides whether it fills an open field.
-        slot_answer = asset if asset and len(re.findall(r"[\w-]+", normalized)) <= 8 else None
+        short_turn = len(re.findall(r"[\w-]+", normalized)) <= 10
+        is_interrogative = bool(re.match(r"^(?:welke|welk|wat|waar|hoe|who|what|which|where|how)\b", normalized))
+        slot_answer = asset if asset and short_turn and not is_interrogative else None
+        if (
+            action == "read"
+            and short_turn
+            and (not entities or set(entities).issubset({"asset"}))
+            and (
+                slot_answer is not None
+                or re.search(r"\b(?:naam|name|noem\s+(?:hem|haar)|ik\s+noem|hij\s+heet|het\s+heet)\b", normalized)
+            )
+        ):
+            discourse = "clarification_answer"
         return FinnV2PreprocessedRequest(
             normalized_text=normalized,
             language="en" if re.search(r"\b(what|which|add|remove|create|evaluate)\b", normalized) else "nl",
@@ -202,6 +217,27 @@ class FinnV2RequestPreprocessorService:
 
     @classmethod
     def _discourse_act(cls, text: str, entities: tuple[str, ...], references: tuple[str, ...], action: str) -> str:
+        # A direct capability question is a new request even when it happens
+        # to mention plan domains or an earlier conversation. It must not be
+        # reinterpreted as a request to explain previous evidence.
+        if action == "read" and any(
+            phrase in text
+            for phrase in (
+                "wat kan",
+                "wat kun je",
+                "welke analyses",
+                "welke acties",
+                "welke taken",
+                "wat ondersteun",
+                "what can",
+                "what can you",
+                "waarmee",
+                "mogelijkheden",
+                "help me",
+                "hoe helpt",
+            )
+        ):
+            return "capability"
         if "reformulation" in references:
             return "reformulation"
         if "previous_verified_conclusion" in references:
@@ -214,22 +250,6 @@ class FinnV2RequestPreprocessorService:
             return "evaluation"
         if action in {"add", "remove", "create", "update", "activate", "confirm", "execute"}:
             return "operation_request"
-        if action == "read" and any(
-            phrase in text
-            for phrase in (
-                "wat kan",
-                "wat kun je",
-                "welke analyses",
-                "welke acties",
-                "what can",
-                "what can you",
-                "waarmee",
-                "mogelijkheden",
-                "help me",
-                "hoe helpt",
-            )
-        ):
-            return "capability"
         return "information_request"
 
     @staticmethod
