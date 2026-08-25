@@ -43,7 +43,17 @@ class FinnV2RequestAnalysisService:
     ) -> RequestAnalysisResult:
         text = str(message or "").strip()
         normalized = self._normalize_text(text)
-        semantic = self.classifier.classify(message=text, conversation_context=conversation_context)
+        semantic = self.classifier.classify(
+            message=text,
+            conversation_context=conversation_context,
+            workspace_hints=workspace_hints,
+            client_context=client_context,
+        )
+        preprocessed = self.classifier.preprocessor.preprocess(
+            message=text,
+            workspace_hints=workspace_hints,
+            client_context=client_context,
+        )
         matched_signals: List[str] = []
         unresolved_signals: List[str] = []
 
@@ -58,11 +68,10 @@ class FinnV2RequestAnalysisService:
                 if scope not in scopes:
                     scopes.append(scope)
                     matched_signals.append(f"scope:{scope}:integrated_plan")
-        message_asset = self._extract_asset(text, normalized)
-        context_asset = self._asset_from_context(
-            workspace_hints=workspace_hints,
-            client_context=client_context,
-        )
+        # The preprocessor owns hard request facts. In particular, an explicit
+        # target asset can never be replaced by workspace or conversation state.
+        message_asset = preprocessed.referenced_asset
+        context_asset = preprocessed.workspace_context_asset
         explicit_asset = message_asset or context_asset
         explicit_setup_id = self._extract_entity_id(text, "setup")
         explicit_strategy_id = self._extract_entity_id(text, "strateg")
@@ -223,6 +232,9 @@ class FinnV2RequestAnalysisService:
             referenced_asset=message_asset or explicit_asset,
             requested_action=semantic.action if semantic.action != "unknown" else None,
             discourse_type=semantic.discourse,
+            selector_source=semantic.selector_source,
+            selector_confidence=semantic.confidence,
+            candidate_operation_ids=list(semantic.candidate_operation_ids),
         )
 
         return RequestAnalysisResult(
@@ -272,6 +284,9 @@ class FinnV2RequestAnalysisService:
         referenced_asset: Optional[str],
         requested_action: Optional[str],
         discourse_type: str,
+        selector_source: str,
+        selector_confidence: str,
+        candidate_operation_ids: List[str],
     ) -> RequestPlan:
         reference = None
         if uses_conversation_reference:
@@ -310,6 +325,9 @@ class FinnV2RequestAnalysisService:
             referenced_asset=referenced_asset,
             requested_action=requested_action,
             discourse_type=discourse_type,
+            selector_source=selector_source,
+            selector_confidence=selector_confidence,
+            candidate_operation_ids=candidate_operation_ids,
             clarification_required=bool(missing_essential_inputs) or interaction_mode == "CLARIFICATION",
             confidence_score=score,
         )

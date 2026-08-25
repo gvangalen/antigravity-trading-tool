@@ -6,8 +6,8 @@ services may consume a contract but must not add scopes, tools or write rules.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import Optional
+from dataclasses import dataclass, replace
+from typing import Mapping, Optional
 
 from backend.domain.finn_v2_contract import INFORMATION_SCOPE_ORDER
 
@@ -65,6 +65,19 @@ class OperationContract:
     mode: str
     aliases: tuple[str, ...]
     semantic_description: str = ""
+    # Selection metadata belongs to the same immutable contract as scopes and
+    # policy. The request selector may rank candidates with it, but cannot use
+    # it to invent a mode, tool or operation outside this manifest.
+    positive_examples: tuple[str, ...] = ()
+    negative_examples: tuple[str, ...] = ()
+    required_discourse_acts: tuple[str, ...] = ()
+    required_entities: tuple[str, ...] = ()
+    any_entities: tuple[str, ...] = ()
+    allowed_action_polarities: tuple[str, ...] = ()
+    selection_required_terms: tuple[str, ...] = ()
+    requires_verified_context: bool = False
+    ambiguity_rule: str = "clarify"
+    selection_priority: int = 0
     required_inputs: tuple[str, ...] = ()
     optional_inputs: tuple[str, ...] = ()
     required_scopes: tuple[str, ...] = ()
@@ -140,7 +153,10 @@ class FinnV2OperationRegistry:
     VERSION = "2026-08-23.operation-contracts.v1"
 
     def __init__(self) -> None:
-        self._contracts = {contract.operation_id: contract for contract in _CONTRACTS}
+        self._contracts = {
+            contract.operation_id: self._with_selection_metadata(contract)
+            for contract in _CONTRACTS
+        }
         self._validate_manifest()
 
     def get(self, operation_id: str) -> OperationContract:
@@ -158,10 +174,58 @@ class FinnV2OperationRegistry:
     def list(self) -> tuple[OperationContract, ...]:
         return tuple(self._contracts.values())
 
+    def candidate_operations(
+        self,
+        *,
+        entities: tuple[str, ...],
+        action_polarity: str,
+        discourse_act: str,
+        has_verified_context: bool,
+        normalized_text: str,
+    ) -> tuple[OperationContract, ...]:
+        """Return manifest-approved candidates, never a second intent map."""
+        entity_set = set(entities)
+        candidates = []
+        for contract in self._contracts.values():
+            if not contract.supported or contract.operation_id in {"clarify_request", "unavailable"}:
+                continue
+            # A contract without declared selection metadata is deliberately
+            # not eligible for a new natural-language run. Capability gaps and
+            # historical-only contracts must never become accidental defaults.
+            if not any((
+                contract.required_discourse_acts,
+                contract.required_entities,
+                contract.any_entities,
+                contract.allowed_action_polarities,
+                contract.requires_verified_context,
+            )):
+                continue
+            if contract.requires_verified_context and not has_verified_context:
+                continue
+            if contract.required_discourse_acts and discourse_act not in contract.required_discourse_acts:
+                continue
+            if contract.allowed_action_polarities and action_polarity not in contract.allowed_action_polarities:
+                continue
+            if contract.selection_required_terms and not all(
+                term in normalized_text for term in contract.selection_required_terms
+            ):
+                continue
+            if contract.required_entities and not set(contract.required_entities).issubset(entity_set):
+                continue
+            if contract.any_entities and not set(contract.any_entities).intersection(entity_set):
+                continue
+            candidates.append(contract)
+        return tuple(sorted(candidates, key=lambda item: item.selection_priority, reverse=True))
+
     def resolve_alias(self, text: str) -> Optional[OperationContract]:
         normalized = str(text or "").casefold()
         matches = [contract for contract in self._contracts.values() if any(alias in normalized for alias in contract.aliases)]
         return max(matches, key=lambda item: len(max(item.aliases, key=len))) if matches else None
+
+    @staticmethod
+    def _with_selection_metadata(contract: OperationContract) -> OperationContract:
+        metadata = _OPERATION_SELECTION_METADATA.get(contract.operation_id, {})
+        return replace(contract, **metadata) if metadata else contract
 
     def _validate_manifest(self) -> None:
         if len(self._contracts) != len(_CONTRACTS):
@@ -196,6 +260,145 @@ def _read(
 
 def _gap(operation_id: str, domain: str, mode: str, aliases: tuple[str, ...], reason: str) -> OperationContract:
     return OperationContract(operation_id, FinnV2OperationRegistry.VERSION, domain, mode, aliases, supported=False, capability_gap=reason)
+
+
+# Selection constraints are part of the same manifest as each executable
+# contract.  They intentionally describe concepts and discourse, rather than
+# encoding a list of production prompt strings in the runtime selector.
+_OPERATION_SELECTION_METADATA: Mapping[str, dict] = {
+    "capability": {
+        "semantic_description": "Explain FINN's supported reads, analyses, proposals and safe actions.",
+        "positive_examples": ("Wat kan FINN doen?", "Welke analyses ondersteun je?"),
+        "negative_examples": ("Onderbouw die conclusie.", "Beoordeel mijn plan."),
+        "required_discourse_acts": ("capability",),
+        "selection_priority": 100,
+    },
+    "explain_previous_evidence": {
+        "required_discourse_acts": ("evidence_follow_up",),
+        "requires_verified_context": True,
+        "selection_priority": 100,
+    },
+    "reformulate_previous_response": {
+        "required_discourse_acts": ("reformulation",),
+        "requires_verified_context": True,
+        "selection_priority": 100,
+    },
+    "read_active_asset": {
+        "any_entities": ("asset",),
+        "required_discourse_acts": ("information_request",),
+        "allowed_action_polarities": ("read",),
+        "selection_priority": 20,
+    },
+    "read_indicator_configuration": {
+        "any_entities": ("indicator_configuration",),
+        "required_discourse_acts": ("information_request",),
+        "allowed_action_polarities": ("read",),
+        "selection_priority": 40,
+    },
+    "read_active_setup": {
+        "any_entities": ("setup",),
+        "required_discourse_acts": ("information_request",),
+        "allowed_action_polarities": ("read",),
+        "selection_priority": 30,
+    },
+    "read_linked_strategy": {
+        "any_entities": ("strategy",),
+        "required_discourse_acts": ("information_request",),
+        "allowed_action_polarities": ("read",),
+        "selection_priority": 30,
+    },
+    "read_linked_bot": {
+        "any_entities": ("bot",),
+        "required_discourse_acts": ("information_request",),
+        "allowed_action_polarities": ("read",),
+        "selection_priority": 30,
+    },
+    "read_bot_status": {
+        "any_entities": ("bot",),
+        "required_discourse_acts": ("information_request",),
+        "allowed_action_polarities": ("read",),
+        "selection_priority": 35,
+    },
+    "read_watchlist": {
+        "any_entities": ("watchlist",),
+        "required_discourse_acts": ("information_request",),
+        "allowed_action_polarities": ("read",),
+        "selection_priority": 30,
+    },
+    "read_active_plan": {
+        "required_entities": ("setup", "strategy", "bot"),
+        "required_discourse_acts": ("information_request",),
+        "allowed_action_polarities": ("read",),
+        "selection_priority": 80,
+    },
+    "evaluate_plan": {
+        "any_entities": ("plan", "setup", "strategy", "bot", "indicator_configuration"),
+        "required_discourse_acts": ("evaluation",),
+        "allowed_action_polarities": ("evaluate", "read"),
+        "selection_priority": 80,
+    },
+    "evaluate_indicator_configuration": {
+        "any_entities": ("indicator_configuration",),
+        "required_discourse_acts": ("evaluation",),
+        "selection_priority": 40,
+    },
+    "evaluate_setup": {
+        "any_entities": ("setup",),
+        "required_discourse_acts": ("evaluation",),
+        "selection_priority": 40,
+    },
+    "evaluate_strategy": {
+        "any_entities": ("strategy",),
+        "required_discourse_acts": ("evaluation",),
+        "selection_priority": 40,
+    },
+    "evaluate_bot": {
+        "any_entities": ("bot",),
+        "required_discourse_acts": ("evaluation",),
+        "selection_priority": 40,
+    },
+    "create_setup": {
+        "any_entities": ("setup",),
+        "required_discourse_acts": ("operation_request",),
+        "allowed_action_polarities": ("create", "add"),
+        "selection_priority": 80,
+    },
+    "watchlist_add": {
+        "any_entities": ("watchlist",),
+        "required_discourse_acts": ("operation_request",),
+        "allowed_action_polarities": ("add",),
+        "selection_priority": 80,
+    },
+    "watchlist_remove": {
+        "any_entities": ("watchlist",),
+        "required_discourse_acts": ("operation_request",),
+        "allowed_action_polarities": ("remove",),
+        "selection_priority": 80,
+    },
+    "activate_bot": {
+        "any_entities": ("bot",),
+        "required_discourse_acts": ("operation_request",),
+        "allowed_action_polarities": ("activate",),
+        "selection_priority": 80,
+    },
+    "activate_paper_bot": {
+        "any_entities": ("bot",),
+        "required_discourse_acts": ("operation_request",),
+        "allowed_action_polarities": ("activate",),
+        "selection_required_terms": ("paper",),
+        "selection_priority": 90,
+    },
+    "confirm_proposal": {
+        "required_discourse_acts": ("operation_request",),
+        "allowed_action_polarities": ("confirm",),
+        "selection_priority": 100,
+    },
+    "execute_proposal": {
+        "required_discourse_acts": ("operation_request",),
+        "allowed_action_polarities": ("execute",),
+        "selection_priority": 100,
+    },
+}
 
 
 _CONTRACTS: tuple[OperationContract, ...] = (

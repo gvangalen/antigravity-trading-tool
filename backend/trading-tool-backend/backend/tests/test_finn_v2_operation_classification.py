@@ -102,3 +102,39 @@ def test_complete_graph_request_uses_the_plan_contract():
     result = CLASSIFIER.classify(message="Welke setup, strategie en bot heb ik voor mijn actieve asset?")
 
     assert result.operation_id == "read_active_plan"
+
+
+def test_manifest_candidates_exclude_contracts_without_selection_metadata():
+    facts = CLASSIFIER.preprocessor.preprocess(message="Welke indicatoren gebruik ik?")
+
+    candidates = CLASSIFIER.registry.candidate_operations(
+        entities=facts.explicit_entities,
+        action_polarity=facts.action_polarity,
+        discourse_act=facts.discourse_act,
+        has_verified_context=False,
+        normalized_text=facts.normalized_text,
+    )
+
+    assert [contract.operation_id for contract in candidates] == ["read_indicator_configuration"]
+
+
+def test_explicit_target_asset_never_replaces_workspace_context_asset():
+    facts = CLASSIFIER.preprocessor.preprocess(
+        message="Voeg Cardano toe aan mijn watchlist.",
+        workspace_hints={"symbol": "BTC"},
+    )
+
+    assert facts.workspace_context_asset == "BTC"
+    assert facts.explicit_target_asset == "ADA"
+    assert facts.referenced_asset == "ADA"
+
+
+def test_follow_up_requires_verified_context_in_the_contract_manifest():
+    no_context = CLASSIFIER.classify(message="Onderbouw die conclusie.")
+    with_context = CLASSIFIER.classify(
+        message="Onderbouw die conclusie.",
+        conversation_context={"last_verified_context": {"verified_response_id": "verified-1"}},
+    )
+
+    assert no_context.operation_id == "clarify_request"
+    assert with_context.operation_id == "explain_previous_evidence"

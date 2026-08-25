@@ -74,6 +74,9 @@ class RequestPlan(BaseModel):
     referenced_asset: Optional[str] = None
     requested_action: Optional[str] = None
     discourse_type: str = "new_request"
+    selector_source: str = "deterministic"
+    selector_confidence: str = "low"
+    candidate_operation_ids: List[str] = Field(default_factory=list)
     missing_information: List[str] = Field(default_factory=list)
     # This is persisted in the existing conversation context as JSON.  Keeping
     # the shape here prevents guided operations from falling back to untyped

@@ -384,6 +384,8 @@ class FinnV2OrchestratorService:
                 "contract_version": getattr(request_plan, "operation_contract_version", None),
                 "mode": response_mode,
                 "conclusion": getattr(verified_response, "main_observation", None),
+                "response": getattr(verified_response, "direct_answer", None),
+                "run_id": getattr(verified_response, "run_id", None),
                 "evidence_refs": list(getattr(verified_response, "evidence_refs_used", []) or []),
                 "required_scopes": list(getattr(request_plan, "required_information_scopes", []) or []),
                 "resolved_entities": {
@@ -405,6 +407,8 @@ class FinnV2OrchestratorService:
                 "last_verified_response_id": getattr(verified_response, "verified_response_id", None),
                 "open_proposal_id": getattr(verified_response, "proposal_id", None),
                 "last_verified_conclusion": getattr(verified_response, "main_observation", None),
+                "last_verified_response_text": getattr(verified_response, "direct_answer", None),
+                "last_verified_run_id": getattr(verified_response, "run_id", None),
                 "last_primary_domains": list(getattr(request_plan, "primary_domains", []) or []),
                 "last_required_information_scopes": list(getattr(request_plan, "required_information_scopes", []) or []),
                 }
