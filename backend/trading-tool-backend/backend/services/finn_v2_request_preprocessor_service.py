@@ -43,7 +43,7 @@ class FinnV2RequestPreprocessorService:
         ("evaluate", ("beoordeel", "evaluate", "zwak", "risico", "past", "fit", "ontbrek", "ontbreek", "vertrouwen")),
     )
     _ENTITY_TERMS = {
-        "watchlist": ("watchlist", "volglijst"),
+        "watchlist": ("watchlist", "volglijst", "follow"),
         "indicator_configuration": (
             "indicator",
             "indicatorconfiguratie",
@@ -105,17 +105,23 @@ class FinnV2RequestPreprocessorService:
                 entity_positions["bot_status"] = bot_status_position
         entities = tuple(entity_positions)
         plan_components = {"indicator_configuration", "setup", "strategy", "bot"}
-        if len(plan_components.intersection(entities)) >= 3 and "plan" not in entities:
+        relational_components = plan_components.intersection(entities)
+        relational_graph = "bot" in relational_components and bool({"setup", "strategy"}.intersection(relational_components))
+        explicit_plan = bool(re.search(r"\b(?:mijn\s+)?(?:actieve\s+)?plan\b|\bactive\s+plan\b", normalized))
+        # Two linked plan entities are a graph request, not two isolated reads.
+        # This remains a fact about the request's explicit nouns; the registry
+        # remains responsible for selecting the graph contract and its tools.
+        if (relational_graph or explicit_plan) and "plan" not in entities:
             entities = (*entities, "plan")
         # "mijn strategie ... mijn plan" commonly refers to one component
         # inside a plan. Keep ``plan`` as an aggregate entity only when it is
         # the sole entity or the user actually listed several components.
-        if "plan" in entities and plan_components.intersection(entities) and len(plan_components.intersection(entities)) < 3:
+        if "plan" in entities and relational_components and not relational_graph and not explicit_plan:
             entities = tuple(entity for entity in entities if entity != "plan")
         # The aggregate plan is the semantic subject when the user explicitly
         # names several plan components. Otherwise preserve the first entity
         # mentioned in natural language for registry candidate ranking.
-        primary_entity = "plan" if "plan" in entities and len(plan_components.intersection(entities)) >= 3 else next(
+        primary_entity = "plan" if "plan" in entities and (relational_graph or explicit_plan) else next(
             (entity for entity in entities if entity != "plan"),
             "plan" if "plan" in entities else None,
         )
@@ -125,6 +131,8 @@ class FinnV2RequestPreprocessorService:
             if self._contains_any(normalized, terms)
         )
         action = self._action_polarity(normalized)
+        if action == "add" and re.search(r"\bvolg(?:en)?\b", normalized) and "watchlist" not in entities:
+            entities = (*entities, "watchlist")
         discourse = self._discourse_act(normalized, entities, references, action)
         # A bare explicit asset is useful only as a possible guided slot answer.
         # The conversation resolver decides whether it fills an open field.
@@ -147,7 +155,7 @@ class FinnV2RequestPreprocessorService:
             action_polarity=action,
             explicit_entities=entities,
             primary_entity=primary_entity,
-            explicit_target_asset=asset if action in {"add", "remove"} else None,
+            explicit_target_asset=asset if action in {"add", "remove", "create"} and "watchlist" in entities else None,
             referenced_asset=asset,
             workspace_context_asset=context_asset,
             conversation_reference_markers=references,
@@ -206,6 +214,16 @@ class FinnV2RequestPreprocessorService:
             return "read"
         if "live" in text and re.search(r"\b(activeer|activate|schakel|start|zet|maak)\b", text):
             return "activate"
+        # A requested concept/proposal is an operation request even when it is
+        # phrased as a question. This recognizes the product act, not a fixed
+        # sentence or a specific asset.
+        if re.search(r"\b(?:voorstel|proposal)\b", text) and re.search(r"\b(?:volg(?:en)?|follow)\b", text):
+            return "add"
+        if re.search(r"\bsetupconcept\b", text) or (
+            re.search(r"\b(?:voorstel|proposal|concept)\b", text)
+            and re.search(r"\b(?:setup|set-up)\b", text)
+        ):
+            return "create"
         if re.search(r"\bzet\b.+\bop\b", text):
             return "add"
         for polarity, terms in self._ACTION_PATTERNS:
@@ -229,12 +247,14 @@ class FinnV2RequestPreprocessorService:
                 "welke acties",
                 "welke taken",
                 "wat ondersteun",
+                "wat doet finn",
                 "what can",
                 "what can you",
                 "waarmee",
                 "mogelijkheden",
                 "help me",
                 "hoe helpt",
+                "hoe kun je",
             )
         ):
             return "capability"
@@ -245,7 +265,7 @@ class FinnV2RequestPreprocessorService:
         if "contextual_entity" in references:
             return "contextual_follow_up"
         if action == "evaluate" or any(
-            phrase in text for phrase in ("zwakste", "betrouwbaar", "waar zit", "voorwaarde", "waar wringt", "hele plaatje")
+            phrase in text for phrase in ("zwakste", "betrouwbaar", "waar zit", "voorwaarde", "waar wringt", "hele plaatje", "weegt", "belangrijkst")
         ):
             return "evaluation"
         if action in {"add", "remove", "create", "update", "activate", "confirm", "execute"}:

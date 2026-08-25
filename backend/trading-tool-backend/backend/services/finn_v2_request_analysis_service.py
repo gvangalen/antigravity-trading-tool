@@ -63,6 +63,11 @@ class FinnV2RequestAnalysisService:
         # avoids turning ordinary Dutch pronouns into stale conversation
         # selectors later in the pipeline.
         uses_conversation_reference = bool(preprocessed.conversation_reference_markers)
+        if uses_conversation_reference and not (
+            (conversation_context or {}).get("last_verified_context")
+            or (conversation_context or {}).get("last_verified_conclusion")
+        ) and preprocessed.discourse_act in {"evidence_follow_up", "reformulation"}:
+            unresolved_signals.append("conversation_reference_without_verified_context")
         if uses_conversation_reference:
             context = conversation_context or {}
             explicit_asset = explicit_asset or self._context_asset(context.get("resolved_asset"))

@@ -75,7 +75,7 @@ def test_request_analysis_handles_setup_strategy_and_bot_facts():
     assert setup_result.interaction_mode == "READ"
     assert setup_result.subject_scopes == ["setup"]
     assert strategy_result.subject_scopes == ["setup", "strategy"]
-    assert bot_result.subject_scopes == ["strategy", "bot"]
+    assert bot_result.subject_scopes == ["setup", "strategy", "bot"]
     assert status_result.subject_scopes == ["bot"]
 
 def test_request_analysis_routes_setup_create_and_watchlist_action_to_proposals():
@@ -413,6 +413,6 @@ def test_request_analysis_does_not_treat_read_questions_with_confirmed_wording_a
     )
 
     assert strategy_result.interaction_mode == "EVALUATE"
-    assert strategy_result.subject_scopes == ["strategy"]
+    assert strategy_result.subject_scopes == ["setup", "strategy"]
     assert bot_result.interaction_mode == "READ"
     assert bot_result.subject_scopes == ["bot"]

@@ -349,10 +349,10 @@ _OPERATION_SELECTION_METADATA: Mapping[str, dict] = {
         "selection_focus_entities": ("watchlist",),
     },
     "read_active_plan": {
-        "required_entities": ("setup", "strategy", "bot"),
+        "any_entities": ("plan",),
         "required_discourse_acts": ("information_request",),
         "allowed_action_polarities": ("read",),
-        "selection_priority": 80,
+        "selection_priority": 90,
         "selection_focus_entities": ("plan",),
     },
     "evaluate_plan": {
@@ -397,7 +397,7 @@ _OPERATION_SELECTION_METADATA: Mapping[str, dict] = {
     "watchlist_add": {
         "any_entities": ("watchlist",),
         "required_discourse_acts": ("operation_request",),
-        "allowed_action_polarities": ("add",),
+        "allowed_action_polarities": ("add", "create"),
         "selection_priority": 80,
     },
     "watchlist_remove": {
