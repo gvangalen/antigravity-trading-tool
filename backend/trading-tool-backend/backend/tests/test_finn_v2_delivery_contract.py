@@ -71,12 +71,24 @@ def test_public_contract_trace_exposes_registry_policy_without_provider_payloads
                     "operation_id": "read_active_asset",
                     "operation_contract_version": "2026-08-23.operation-contracts.v1",
                     "interaction_mode": "READ",
+                    "context_asset": "BTC",
+                    "target_asset": None,
+                    "referenced_asset": "BTC",
+                    "conversation_reference": "verified-response-1",
                     "operation_state": {"status": "completed"},
                 }
             }
         ),
         verifier=SimpleNamespace(
-            result_json={"coverage": {"required_scopes": ["active_asset"], "covered_scopes": ["active_asset"]}}
+            result_json={
+                "coverage": {
+                    "required_scopes": ["active_asset"],
+                    "covered_scopes": ["active_asset"],
+                    "required_response_fields": ["asset"],
+                    "covered_response_fields": ["asset"],
+                },
+                "reason_codes": [],
+            }
         ),
         response=SimpleNamespace(
             mode="READ",
@@ -93,6 +105,10 @@ def test_public_contract_trace_exposes_registry_policy_without_provider_payloads
         "requested_mode": "READ",
         "delivered_mode": "READ",
         "conversation_id": "conversation-1",
+        "conversation_reference": "verified-response-1",
+        "context_asset": "BTC",
+        "target_asset": None,
+        "referenced_asset": "BTC",
         "active_operation_status": "completed",
         "missing_input_field": None,
         "proposal_id": None,
@@ -101,4 +117,7 @@ def test_public_contract_trace_exposes_registry_policy_without_provider_payloads
         "verifier_status": "passed",
         "required_scopes": ["active_asset"],
         "covered_scopes": ["active_asset"],
+        "required_response_fields": ["asset"],
+        "covered_response_fields": ["asset"],
+        "verifier_reasons": [],
     }

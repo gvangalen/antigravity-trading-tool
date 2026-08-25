@@ -202,6 +202,10 @@ class FinnV2DeliveryService:
             "requested_mode": plan.get("interaction_mode"),
             "delivered_mode": getattr(response, "mode", None),
             "conversation_id": getattr(run, "conversation_id", None),
+            "conversation_reference": plan.get("conversation_reference"),
+            "context_asset": plan.get("context_asset"),
+            "target_asset": plan.get("target_asset"),
+            "referenced_asset": plan.get("referenced_asset"),
             "active_operation_status": (plan.get("operation_state") or {}).get("status"),
             "missing_input_field": (plan.get("operation_state") or {}).get("next_missing_input"),
             "proposal_id": getattr(response, "proposal_id", None),
@@ -210,6 +214,9 @@ class FinnV2DeliveryService:
             "verifier_status": getattr(response, "verifier_status", None),
             "required_scopes": verifier_payload.get("coverage", {}).get("required_scopes", []),
             "covered_scopes": verifier_payload.get("coverage", {}).get("covered_scopes", []),
+            "required_response_fields": verifier_payload.get("coverage", {}).get("required_response_fields", []),
+            "covered_response_fields": verifier_payload.get("coverage", {}).get("covered_response_fields", []),
+            "verifier_reasons": verifier_payload.get("reason_codes", []),
         }
 
     def _orchestrator_payload(self, row) -> Optional[dict]:
