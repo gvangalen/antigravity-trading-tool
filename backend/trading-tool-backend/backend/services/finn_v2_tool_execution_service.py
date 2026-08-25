@@ -675,6 +675,14 @@ class FinnV2ToolExecutionService:
             )
             increment_execution_safety_counter(f"finn_v2_evidence_artifacts_total:{result.tool_name}:{artifact.availability}")
         except Exception as exc:
+            if str(exc) == "evidence_scope_mismatch":
+                # Evidence that cannot prove the request's owner and asset is
+                # not a partial success. Preserve the typed boundary failure
+                # so later validation/verifier stages fail closed.
+                result.success = False
+                result.status = "failed"
+                result.availability = "unavailable"
+                result.error_codes = list(dict.fromkeys([*result.error_codes, "evidence_scope_mismatch"]))
             increment_execution_safety_counter(f"finn_v2_evidence_ingestion_failures_total:{result.tool_name}:{type(exc).__name__}")
             await self._rollback_failed_session(
                 run_id=run_id,

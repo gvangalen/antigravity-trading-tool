@@ -80,6 +80,7 @@ class FinnV2ResponseVerifierService:
     BLOCKING_CODES = {
         "ownership_violation",
         "cross_user_evidence",
+        "evidence_scope_mismatch",
         "evidence_hash_mismatch",
         "policy_violation",
         "paper_live_mismatch",

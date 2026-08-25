@@ -475,7 +475,10 @@ class FinnV2RequestAnalysisService:
 
     def _extract_asset(self, original: str, normalized: str) -> Optional[str]:
         for token, asset in self._ASSET_ALIASES.items():
-            if re.search(rf"\b{re.escape(token)}\b", normalized):
+            # ``normalized`` is lowercase.  Matching the catalog aliases in the
+            # same representation prevents a title-cased name such as Bitcoin
+            # from falling through to stale conversation context.
+            if re.search(rf"\b{re.escape(token.lower())}\b", normalized):
                 return asset
         explicit_candidates = re.findall(r"\b[A-Z]{2,6}\b", original)
         for candidate in explicit_candidates:

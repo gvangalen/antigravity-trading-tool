@@ -51,6 +51,10 @@ class IndicatorConfigurationItem(BaseModel):
 class IndicatorConfigurationData(BaseModel):
     symbol: str
     asset_class: Optional[str] = None
+    owner_user_id: Optional[int] = None
+    requested_symbol: Optional[str] = None
+    resolved_symbol: Optional[str] = None
+    source_record_ids: List[int] = Field(default_factory=list)
     technical: List[IndicatorConfigurationItem] = Field(default_factory=list)
     market: List[IndicatorConfigurationItem] = Field(default_factory=list)
     macro: List[IndicatorConfigurationItem] = Field(default_factory=list)

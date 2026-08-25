@@ -45,6 +45,7 @@ class FinnV2EvidenceIngestionService:
             raise ValueError("artifact_run_mismatch")
         if tool_call.tool_name != result.tool_name:
             raise ValueError("artifact_schema_invalid")
+        self._validate_scope_provenance(user_id=user_id, result=result)
 
         existing = await self.artifacts.get_by_tool_call_id(tool_call_id=tool_call_id, user_id=user_id)
         if existing is not None:
@@ -88,6 +89,30 @@ class FinnV2EvidenceIngestionService:
             error_codes_json=list(result.error_codes),
         )
         return self._to_schema(row)
+
+    @staticmethod
+    def _normalize_symbol(value: Any) -> str | None:
+        normalized = str(value or "").strip().upper()
+        return normalized or None
+
+    def _validate_scope_provenance(self, *, user_id: int, result: ToolExecutionEnvelope) -> None:
+        """Reject evidence that cannot prove the requesting user and asset scope."""
+        payload = self.redaction.payload_to_jsonable(result.result) if result.result is not None else {}
+        if not isinstance(payload, dict):
+            payload = {}
+        payload_owner = payload.get("owner_user_id")
+        if payload_owner is not None and int(payload_owner) != user_id:
+            raise ValueError("evidence_scope_mismatch")
+
+        requested = self._normalize_symbol((result.selector or {}).get("asset"))
+        resolved = self._normalize_symbol(result.asset)
+        payload_symbol = self._normalize_symbol(payload.get("resolved_symbol") or payload.get("symbol"))
+        if requested and resolved and requested != resolved:
+            raise ValueError("evidence_scope_mismatch")
+        if requested and payload_symbol and requested != payload_symbol:
+            raise ValueError("evidence_scope_mismatch")
+        if resolved and payload_symbol and resolved != payload_symbol:
+            raise ValueError("evidence_scope_mismatch")
 
     def _content_hash(self, result: ToolExecutionEnvelope, payload_override: Any = None) -> str:
         payload_json = self.redaction.payload_to_jsonable(payload_override if payload_override is not None else result.result)

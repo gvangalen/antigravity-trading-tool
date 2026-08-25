@@ -407,7 +407,7 @@ def test_get_configured_indicator_names_keeps_legacy_domain_counts_without_asset
     }
 
 
-def test_canonical_configuration_uses_user_rule_overrides_when_config_rows_are_absent():
+def test_canonical_configuration_never_projects_unscoped_legacy_rules_into_explicit_asset():
     session = AsyncMock()
     repo = TechnicalDataRepository(session)
     empty_payload = {
@@ -442,16 +442,17 @@ def test_canonical_configuration_uses_user_rule_overrides_when_config_rows_are_a
         repo.get_canonical_indicator_configuration(407, symbol="AAPL", asset_class="stock")
     )
 
-    assert [row.indicator for row in configuration["technical"]] == ["vwap"]
-    assert [row.indicator for row in configuration["market"]] == ["volume"]
-    assert [row.indicator for row in configuration["macro"]] == ["market_regime"]
+    assert configuration["technical"] == []
+    assert configuration["market"] == []
+    assert configuration["macro"] == []
     assert configuration["scope_by_category"] == {
-        "technical": "user_rule_override",
-        "market": "user_rule_override",
-        "macro": "user_rule_override",
+        "technical": "empty",
+        "market": "empty",
+        "macro": "empty",
     }
     assert configuration["storage_mode_by_category"] == {
-        "technical": "legacy_rule_override",
-        "market": "legacy_rule_override",
-        "macro": "legacy_rule_override",
+        "technical": "scoped",
+        "market": "scoped",
+        "macro": "scoped",
     }
+    repo._fetch_user_rule_override_configs.assert_not_awaited()

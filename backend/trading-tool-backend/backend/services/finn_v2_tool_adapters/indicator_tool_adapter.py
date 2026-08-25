@@ -25,6 +25,7 @@ class IndicatorToolAdapter:
         ]
 
     async def execute(self, *, user_id: int, asset: str, **_kwargs):
+        requested_symbol = str(asset or "").strip().upper()
         asset_meta = await AssetCatalogService(self.session).get_asset(asset)
         configuration = await self.repository.get_canonical_indicator_configuration(
             user_id,
@@ -34,6 +35,13 @@ class IndicatorToolAdapter:
         technical = self._serialize(configuration["technical"])
         market = self._serialize(configuration["market"])
         macro = self._serialize(configuration["macro"])
+        rows = [*configuration["technical"], *configuration["market"], *configuration["macro"]]
+        for row in rows:
+            if getattr(row, "user_id", user_id) != user_id:
+                raise ValueError("indicator_owner_mismatch")
+            row_symbol = str(getattr(row, "symbol", "") or "").strip().upper()
+            if row_symbol and row_symbol != requested_symbol:
+                raise ValueError("indicator_symbol_mismatch")
         storage_modes = configuration.get("storage_mode_by_category") or {}
         source = (
             "user_indicator_rule_overrides"
@@ -44,6 +52,10 @@ class IndicatorToolAdapter:
             "data": IndicatorConfigurationData(
                 symbol=asset,
                 asset_class=configuration.get("asset_class"),
+                owner_user_id=user_id,
+                requested_symbol=requested_symbol,
+                resolved_symbol=requested_symbol,
+                source_record_ids=[row.id for row in rows if getattr(row, "id", None) is not None],
                 technical=technical,
                 market=market,
                 macro=macro,

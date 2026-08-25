@@ -34,6 +34,16 @@ def test_request_analysis_handles_indicator_gap_question():
     assert result.requires_gap_analysis is True
 
 
+def test_request_analysis_explicit_bitcoin_overrides_stale_conversation_asset():
+    result = SERVICE.analyze(
+        message="Met welke signalen analyseer ik Bitcoin momenteel?",
+        conversation_context={"resolved_asset": "AAPL"},
+    )
+
+    assert result.explicit_asset == "BTC"
+    assert result.request_plan.referenced_entities["asset"] == "BTC"
+
+
 def test_request_analysis_handles_setup_strategy_and_bot_facts():
     setup_result = SERVICE.analyze(message="Welke setup gebruik ik voor BTC?")
     strategy_result = SERVICE.analyze(message="Welke strategie is aan mijn actieve setup gekoppeld?")

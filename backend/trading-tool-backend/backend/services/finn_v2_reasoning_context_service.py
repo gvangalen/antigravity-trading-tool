@@ -85,10 +85,19 @@ class FinnV2ReasoningContextService:
             if mapped_domain:
                 selected_domains.add(mapped_domain)
         evidence: list[ReasoningEvidenceItem] = []
+        provenance_issues: list[str] = []
+        request_plan = (orchestrator_result.analysis.request_plan.dict() if orchestrator_result.analysis.request_plan else {})
+        referenced = request_plan.get("referenced_entities") or {}
+        expected_asset = str(referenced.get("asset") or "").strip().upper() or None
         index = 1
         for artifact in artifacts:
             domain = self.DOMAIN_BY_TOOL.get(artifact.tool_name)
             if domain not in selected_domains:
+                continue
+            artifact_asset = str(artifact.asset or "").strip().upper() or None
+            artifact_owner = getattr(artifact, "user_id", run.user_id)
+            if artifact_owner != run.user_id or (expected_asset and artifact_asset and artifact_asset != expected_asset):
+                provenance_issues.append("evidence_scope_mismatch")
                 continue
             facts = self._sanitize_facts(artifact.payload_json or {}, artifact.tool_name)
             item = ReasoningEvidenceItem(
@@ -154,8 +163,8 @@ class FinnV2ReasoningContextService:
             policy=policy_context,
             allowed_response_modes=[orchestrator_result.analysis.interaction_mode],
             allowed_operation_types=[policy.operation_type] if policy.operation_type else [],
-            uncertainty_codes=list(orchestrator_result.uncertainty_codes),
-            request_plan=(orchestrator_result.analysis.request_plan.dict() if orchestrator_result.analysis.request_plan else {}),
+            request_plan=request_plan,
+            uncertainty_codes=list(dict.fromkeys([*orchestrator_result.uncertainty_codes, *provenance_issues])),
         )
 
     def input_hash(self, context: ReasoningContextPackage, *, prompt_version: str, model: str) -> str:
@@ -195,6 +204,10 @@ class FinnV2ReasoningContextService:
             return {
                 "symbol": source.get("symbol") or summary.get("symbol"),
                 "asset_class": source.get("asset_class") or summary.get("asset_class"),
+                "owner_user_id": source.get("owner_user_id"),
+                "requested_symbol": source.get("requested_symbol"),
+                "resolved_symbol": source.get("resolved_symbol"),
+                "source_record_ids": source.get("source_record_ids", []),
                 "technical": technical,
                 "market": market,
                 "macro": macro,

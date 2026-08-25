@@ -432,7 +432,10 @@ class TechnicalDataRepository:
                 asset_class=normalized_asset_class,
                 enabled_only=enabled_only,
             )
-            if supports_rule_override_projection and not category_payloads[category]["rows"]:
+            # Legacy rule overrides carry a user but no asset identity.  They
+            # cannot prove configuration for an explicit workspace/request
+            # symbol, so never project them into an asset-scoped V2 read.
+            if supports_rule_override_projection and normalized_symbol is None and not category_payloads[category]["rows"]:
                 rule_rows = await self._fetch_user_rule_override_configs(
                     user_id,
                     category=category,
