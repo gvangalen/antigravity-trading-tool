@@ -73,6 +73,7 @@ class OperationContract:
     required_discourse_acts: tuple[str, ...] = ()
     required_entities: tuple[str, ...] = ()
     any_entities: tuple[str, ...] = ()
+    selection_focus_entities: tuple[str, ...] = ()
     allowed_action_polarities: tuple[str, ...] = ()
     selection_required_terms: tuple[str, ...] = ()
     requires_verified_context: bool = False
@@ -182,6 +183,7 @@ class FinnV2OperationRegistry:
         discourse_act: str,
         has_verified_context: bool,
         normalized_text: str,
+        primary_entity: Optional[str] = None,
     ) -> tuple[OperationContract, ...]:
         """Return manifest-approved candidates, never a second intent map."""
         entity_set = set(entities)
@@ -215,7 +217,19 @@ class FinnV2OperationRegistry:
             if contract.any_entities and not set(contract.any_entities).intersection(entity_set):
                 continue
             candidates.append(contract)
-        return tuple(sorted(candidates, key=lambda item: item.selection_priority, reverse=True))
+        return tuple(sorted(
+            candidates,
+            key=lambda item: self.candidate_rank(item, primary_entity=primary_entity),
+            reverse=True,
+        ))
+
+    @staticmethod
+    def candidate_rank(contract: OperationContract, *, primary_entity: Optional[str]) -> tuple[int, int]:
+        """Return the manifest rank used by both selection and ambiguity checks."""
+        return (
+            int(bool(primary_entity and primary_entity in contract.selection_focus_entities)),
+            contract.selection_priority,
+        )
 
     def resolve_alias(self, text: str) -> Optional[OperationContract]:
         normalized = str(text or "").casefold()
@@ -288,74 +302,89 @@ _OPERATION_SELECTION_METADATA: Mapping[str, dict] = {
         "required_discourse_acts": ("information_request",),
         "allowed_action_polarities": ("read",),
         "selection_priority": 20,
+        "selection_focus_entities": ("asset",),
     },
     "read_indicator_configuration": {
         "any_entities": ("indicator_configuration",),
         "required_discourse_acts": ("information_request",),
         "allowed_action_polarities": ("read",),
         "selection_priority": 40,
+        "selection_focus_entities": ("indicator_configuration",),
     },
     "read_active_setup": {
         "any_entities": ("setup",),
         "required_discourse_acts": ("information_request",),
         "allowed_action_polarities": ("read",),
         "selection_priority": 30,
+        "selection_focus_entities": ("setup",),
     },
     "read_linked_strategy": {
         "any_entities": ("strategy",),
         "required_discourse_acts": ("information_request",),
         "allowed_action_polarities": ("read",),
-        "selection_priority": 30,
+        "selection_priority": 31,
+        "selection_focus_entities": ("strategy",),
     },
     "read_linked_bot": {
         "any_entities": ("bot",),
         "required_discourse_acts": ("information_request",),
         "allowed_action_polarities": ("read",),
         "selection_priority": 30,
+        "selection_focus_entities": ("bot",),
     },
     "read_bot_status": {
-        "any_entities": ("bot",),
+        "required_entities": ("bot_status",),
         "required_discourse_acts": ("information_request",),
         "allowed_action_polarities": ("read",),
         "selection_priority": 35,
+        "selection_focus_entities": ("bot",),
     },
     "read_watchlist": {
         "any_entities": ("watchlist",),
         "required_discourse_acts": ("information_request",),
         "allowed_action_polarities": ("read",),
         "selection_priority": 30,
+        "selection_focus_entities": ("watchlist",),
     },
     "read_active_plan": {
         "required_entities": ("setup", "strategy", "bot"),
         "required_discourse_acts": ("information_request",),
         "allowed_action_polarities": ("read",),
         "selection_priority": 80,
+        "selection_focus_entities": ("plan",),
     },
     "evaluate_plan": {
-        "any_entities": ("plan", "setup", "strategy", "bot", "indicator_configuration"),
+        # Plan evaluation is deliberately distinct from evaluating a single
+        # setup, strategy, bot or indicator configuration.
+        "any_entities": ("plan",),
         "required_discourse_acts": ("evaluation",),
         "allowed_action_polarities": ("evaluate", "read"),
         "selection_priority": 80,
+        "selection_focus_entities": ("plan",),
     },
     "evaluate_indicator_configuration": {
         "any_entities": ("indicator_configuration",),
         "required_discourse_acts": ("evaluation",),
         "selection_priority": 40,
+        "selection_focus_entities": ("indicator_configuration",),
     },
     "evaluate_setup": {
         "any_entities": ("setup",),
         "required_discourse_acts": ("evaluation",),
         "selection_priority": 40,
+        "selection_focus_entities": ("setup",),
     },
     "evaluate_strategy": {
         "any_entities": ("strategy",),
         "required_discourse_acts": ("evaluation",),
         "selection_priority": 40,
+        "selection_focus_entities": ("strategy",),
     },
     "evaluate_bot": {
         "any_entities": ("bot",),
         "required_discourse_acts": ("evaluation",),
         "selection_priority": 40,
+        "selection_focus_entities": ("bot",),
     },
     "create_setup": {
         "any_entities": ("setup",),
@@ -410,8 +439,8 @@ _CONTRACTS: tuple[OperationContract, ...] = (
     _read("read_active_asset", "asset", ("active_asset",), ("actieve asset", "welke asset"), ("asset",)),
     _gap("select_asset", "asset", "ACTION_PROPOSAL", ("selecteer asset",), "select_asset_execution_adapter_missing"),
     _read("read_watchlist", "asset", ("active_asset", "watchlist"), ("watchlist", "volglijst")),
-    OperationContract("watchlist_add", FinnV2OperationRegistry.VERSION, "asset", "ACTION_PROPOSAL", ("voeg", "add", "watchlist"), required_inputs=("asset",), required_scopes=("active_asset", "watchlist"), proposal_type="watchlist_add", confirmation_required=True, execution_adapter="watchlist_add", idempotency_rule="user_asset_unique", postcondition="watchlist_contains_asset", response_strategy="proposal_draft", policy_class="proposal"),
-    OperationContract("watchlist_remove", FinnV2OperationRegistry.VERSION, "asset", "ACTION_PROPOSAL", ("verwijder", "remove", "watchlist"), required_inputs=("asset",), required_scopes=("active_asset", "watchlist"), proposal_type="watchlist_remove", confirmation_required=True, execution_adapter="watchlist_remove", idempotency_rule="user_asset_absent", postcondition="watchlist_excludes_asset", response_strategy="proposal_draft", policy_class="proposal"),
+    OperationContract("watchlist_add", FinnV2OperationRegistry.VERSION, "watchlist", "ACTION_PROPOSAL", ("voeg", "add", "watchlist"), required_inputs=("asset",), required_scopes=("active_asset", "watchlist"), proposal_type="watchlist_add", confirmation_required=True, execution_adapter="watchlist_add", idempotency_rule="user_asset_unique", postcondition="watchlist_contains_asset", response_strategy="proposal_draft", policy_class="proposal"),
+    OperationContract("watchlist_remove", FinnV2OperationRegistry.VERSION, "watchlist", "ACTION_PROPOSAL", ("verwijder", "remove", "watchlist"), required_inputs=("asset",), required_scopes=("active_asset", "watchlist"), proposal_type="watchlist_remove", confirmation_required=True, execution_adapter="watchlist_remove", idempotency_rule="user_asset_absent", postcondition="watchlist_excludes_asset", response_strategy="proposal_draft", policy_class="proposal"),
     _read("read_indicator_configuration", "indicators", ("active_asset", "indicator_configuration"), ("indicator", "rsi", "vwap", "volume"), ("asset", "indicator_configuration")),
     _gap("create_indicator_configuration", "indicators", "CREATE_PROPOSAL", ("maak indicator",), "create_indicator_configuration_adapter_missing"),
     _gap("update_indicator_configuration", "indicators", "CREATE_PROPOSAL", ("wijzig indicator",), "proposal_payload_contract_missing"),

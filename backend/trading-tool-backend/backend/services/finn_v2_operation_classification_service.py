@@ -14,6 +14,9 @@ from backend.services.finn_v2_request_preprocessor_service import (
     FinnV2PreprocessedRequest,
     FinnV2RequestPreprocessorService,
 )
+from backend.services.finn_v2_structured_operation_selector_service import (
+    FinnV2StructuredOperationSelectorService,
+)
 
 
 @dataclass(frozen=True)
@@ -34,9 +37,11 @@ class FinnV2OperationClassificationService:
         self,
         registry: Optional[FinnV2OperationRegistry] = None,
         preprocessor: Optional[FinnV2RequestPreprocessorService] = None,
+        structured_selector: Optional[FinnV2StructuredOperationSelectorService] = None,
     ):
         self.registry = registry or FinnV2OperationRegistry()
         self.preprocessor = preprocessor or FinnV2RequestPreprocessorService()
+        self.structured_selector = structured_selector or FinnV2StructuredOperationSelectorService()
 
     def classify(
         self,
@@ -54,10 +59,30 @@ class FinnV2OperationClassificationService:
             return continuation
         candidates = self._candidates(facts=facts, context=conversation_context or {})
         selected = self._select_deterministically(facts=facts, candidates=candidates)
+        if selected is None and self._may_use_structured_selection(candidates):
+            selection, _error = self.structured_selector.select(
+                message=message,
+                candidate_contracts=candidates,
+                facts={
+                    "entities": facts.explicit_entities,
+                    "action_polarity": facts.action_polarity,
+                    "discourse_act": facts.discourse_act,
+                    "referenced_asset": facts.referenced_asset,
+                },
+                verified_context=(conversation_context or {}).get("last_verified_context"),
+            )
+            if selection is not None and selection.confidence >= 0.75:
+                return self._result(selection.operation_id, facts, "high", "structured", candidates)
         if selected is None:
             return self._result("clarify_request", facts, "low", "clarification", candidates)
         confidence = "high" if len(candidates) == 1 else "medium"
         return self._result(selected.operation_id, facts, confidence, "deterministic", candidates)
+
+    @staticmethod
+    def _may_use_structured_selection(candidates: tuple[OperationContract, ...]) -> bool:
+        # Deterministic contracts must never cause a provider call merely to
+        # resolve a wording ambiguity. They receive one typed clarification.
+        return len(candidates) > 1 and all(contract.model_policy != "never" for contract in candidates)
 
     def _conversation_operation(
         self, *, facts: FinnV2PreprocessedRequest, context: Mapping[str, object]
@@ -81,14 +106,23 @@ class FinnV2OperationClassificationService:
     def _candidates(
         self, *, facts: FinnV2PreprocessedRequest, context: Mapping[str, object]
     ) -> tuple[OperationContract, ...]:
+        # A deictic phrase without a verified predecessor is still allowed to
+        # describe an explicitly named entity in the current request. It must
+        # not manufacture a conversation reference or block normal reads.
+        discourse = facts.discourse_act
+        if discourse == "contextual_follow_up" and not (
+            context.get("last_verified_context") or context.get("last_verified_conclusion")
+        ):
+            discourse = "information_request"
         return self.registry.candidate_operations(
             entities=facts.explicit_entities,
             action_polarity=facts.action_polarity,
-            discourse_act=facts.discourse_act,
+            discourse_act=discourse,
             has_verified_context=bool(
                 context.get("last_verified_context") or context.get("last_verified_conclusion")
             ),
             normalized_text=facts.normalized_text,
+            primary_entity=facts.primary_entity,
         )
 
     def _select_deterministically(
@@ -98,7 +132,9 @@ class FinnV2OperationClassificationService:
             # The registry returns candidates in its declared selection order.
             # Equal-priority candidates are real ambiguity, never a reason to
             # derive a new local operation or mode.
-            if len(candidates) == 1 or candidates[0].selection_priority > candidates[1].selection_priority:
+            first_rank = self.registry.candidate_rank(candidates[0], primary_entity=facts.primary_entity)
+            second_rank = self.registry.candidate_rank(candidates[1], primary_entity=facts.primary_entity) if len(candidates) > 1 else None
+            if second_rank is None or first_rank > second_rank:
                 return candidates[0]
         if not candidates:
             return self.registry.get("unavailable") if facts.discourse_act == "information_request" and not facts.explicit_entities else None
@@ -125,14 +161,65 @@ class FinnV2OperationClassificationService:
 
 
 class FinnV2OperationClassificationValidator:
-    """Ensure a selector can only hand a registered supported contract onward."""
+    """Validate a selected contract against deterministic request facts.
+
+    This is the final selection boundary.  It deliberately validates only
+    contract metadata and user-provided facts: it must not infer a different
+    operation, mode, scope, tool or policy after selection.
+    """
 
     def __init__(self, registry: Optional[FinnV2OperationRegistry] = None):
         self.registry = registry or FinnV2OperationRegistry()
 
-    def validate(self, classification: SemanticOperationClassification) -> bool:
+    def validate(
+        self,
+        classification: SemanticOperationClassification,
+        *,
+        facts: Optional[FinnV2PreprocessedRequest] = None,
+        conversation_context: Optional[Mapping[str, object]] = None,
+    ) -> bool:
+        return self.validation_error(
+            classification,
+            facts=facts,
+            conversation_context=conversation_context,
+        ) is None
+
+    def validation_error(
+        self,
+        classification: SemanticOperationClassification,
+        *,
+        facts: Optional[FinnV2PreprocessedRequest] = None,
+        conversation_context: Optional[Mapping[str, object]] = None,
+    ) -> Optional[str]:
         try:
-            self.registry.require_supported(classification.operation_id)
+            contract = self.registry.require_supported(classification.operation_id)
         except ValueError:
-            return False
-        return classification.selector_source in {"deterministic", "conversation", "structured", "clarification"}
+            return "operation_not_supported"
+        if classification.selector_source not in {"deterministic", "conversation", "structured", "clarification"}:
+            return "selector_source_invalid"
+        if facts is None:
+            return None
+        # A continuation is validated against the persisted guided contract,
+        # not against the grammatical form of a short slot answer.  For
+        # example, a setup name is correctly a read-like utterance while it
+        # still fills the required ``name`` input of CREATE_PROPOSAL.
+        if classification.selector_source == "conversation":
+            active = (conversation_context or {}).get("active_guided_operation") or (conversation_context or {}).get("operation_state")
+            if isinstance(active, Mapping) and active.get("operation_id") == contract.operation_id:
+                return None
+        if contract.allowed_action_polarities and facts.action_polarity not in contract.allowed_action_polarities:
+            return "operation_action_mismatch"
+        if contract.required_entities and not set(contract.required_entities).issubset(facts.explicit_entities):
+            return "operation_required_entity_missing"
+        if contract.any_entities and not set(contract.any_entities).intersection(facts.explicit_entities):
+            return "operation_entity_mismatch"
+        if contract.requires_verified_context:
+            context = conversation_context or {}
+            if not (context.get("last_verified_context") or context.get("last_verified_conclusion")):
+                return "operation_verified_context_missing"
+        # An action contract that receives an explicit target must retain that
+        # target; a workspace asset is context, not an action substitute.
+        if contract.operation_id in {"watchlist_add", "watchlist_remove"}:
+            if facts.explicit_target_asset and not facts.referenced_asset:
+                return "operation_target_asset_invalid"
+        return None

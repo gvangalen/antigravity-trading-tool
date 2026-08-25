@@ -57,17 +57,14 @@ class FinnV2RequestAnalysisService:
         matched_signals: List[str] = []
         unresolved_signals: List[str] = []
 
-        scopes = self._subject_scopes(normalized, matched_signals)
+        # The preprocessor and OperationContract registry are the only
+        # operation-selection inputs for new runs.  Legacy subject labels are
+        # reconstructed below strictly for backwards-compatible diagnostics;
+        # they never choose a mode, tool, scope or policy.
+        scopes: List[str] = []
         # An integrated assessment is about the user's plan even when the
         # message uses a natural reference such as "het hele plaatje".
-        integrated_plan = self._is_integrated_plan_request(normalized) or len(
-            set(scopes).intersection({"profile", "indicators", "setup", "strategy", "bot"})
-        ) >= 3
-        if integrated_plan:
-            for scope in ["profile", "indicators", "setup", "strategy", "bot"]:
-                if scope not in scopes:
-                    scopes.append(scope)
-                    matched_signals.append(f"scope:{scope}:integrated_plan")
+        integrated_plan = False
         # The preprocessor owns hard request facts. In particular, an explicit
         # target asset can never be replaced by workspace or conversation state.
         message_asset = preprocessed.referenced_asset
@@ -93,57 +90,7 @@ class FinnV2RequestAnalysisService:
             explicit_strategy_id=explicit_strategy_id,
             explicit_bot_id=explicit_bot_id,
         )
-        if (
-            explicit_asset
-            and self._looks_like_asset_question(normalized)
-            and "asset" not in scopes
-            and not set(scopes).intersection({"profile", "indicators", "setup", "strategy", "bot", "watchlist"})
-        ):
-            scopes.append("asset")
-            matched_signals.append("scope:asset:resolved_context")
-        interaction_mode = self._interaction_mode(normalized, scopes, matched_signals, explicit_asset=explicit_asset)
-        if uses_conversation_reference:
-            interaction_mode, scopes = self._apply_conversation_reference(
-                normalized=normalized,
-                interaction_mode=interaction_mode,
-                scopes=scopes,
-                conversation_context=conversation_context or {},
-                matched_signals=matched_signals,
-                unresolved_signals=unresolved_signals,
-            )
-        if interaction_mode == "UNAVAILABLE" and "mode:unavailable_financial_context" in matched_signals:
-            scopes = []
-        primary_subject = self._primary_subject(scopes=scopes, interaction_mode=interaction_mode, normalized=normalized)
-        action_risk_class = self._action_risk_class(normalized=normalized, interaction_mode=interaction_mode)
-
-        requires_gap_analysis = any(
-            token in normalized
-            for token in ["ontbreekt", "ontbrekende", "ontbrekend", "missing", "mist", "gap", "perspectief ontbreekt"]
-        )
-        requires_comparison = any(
-            token in normalized
-            for token in ["vergelijk", "compare", "versus", "vs", "past", "fit", "conflict", "risico", "risk"]
-        )
-        requests_change = interaction_mode in {"CREATE_PROPOSAL", "ACTION_PROPOSAL", "CONFIRMATION", "EXECUTION"}
-        requests_execution = interaction_mode == "EXECUTION"
-        missing_essential_inputs = self._missing_essential_inputs(
-            interaction_mode=interaction_mode,
-            primary_subject=primary_subject,
-            explicit_asset=explicit_asset,
-            normalized=normalized,
-        )
-
-        if interaction_mode == "CAPABILITY":
-            scopes = ["capability"]
-        elif not scopes:
-            scopes = ["unknown"]
-            unresolved_signals.append("no_financial_scope_detected")
-        if interaction_mode == "UNAVAILABLE":
-            unresolved_signals.append("financial_domain_unavailable")
-        if interaction_mode == "UNAVAILABLE" and "mode:unavailable_financial_context" in matched_signals:
-            unresolved_signals.append("insufficient_trade_context")
-
-        confidence = self._confidence(scopes=scopes, matched_signals=matched_signals, interaction_mode=interaction_mode)
+        missing_essential_inputs: List[str] = []
         # New V2 runs select their operation exclusively through the semantic
         # front door.  The legacy analyzer remains below only to reconstruct
         # historical planless records, never to choose a new contract.
@@ -188,11 +135,32 @@ class FinnV2RequestAnalysisService:
         else:
             # The registry owns the persisted mode for every new request.
             interaction_mode = operation.mode
-            if not self.classification_validator.validate(semantic):
+            validation_error = self.classification_validator.validation_error(
+                semantic,
+                facts=preprocessed,
+                conversation_context=conversation_context,
+            )
+            if validation_error is not None:
                 operation_id = "clarify_request"
                 operation = self.operations.require_supported(operation_id)
                 interaction_mode = operation.mode
-                unresolved_signals.append("operation_action_mismatch")
+                unresolved_signals.append(validation_error)
+        scopes = self._presentation_subject_scopes(operation, preprocessed.explicit_entities)
+        integrated_plan = operation.operation_id == "evaluate_plan"
+        primary_subject = self._presentation_primary_subject(operation)
+        action_risk_class = self._contract_action_risk_class(operation)
+        requires_gap_analysis = semantic.discourse == "evaluation" and any(
+            token in normalized
+            for token in ("ontbreekt", "ontbrekende", "ontbrekend", "missing", "mist", "gap", "zwak", "risico")
+        )
+        requires_comparison = operation.operation_id in {"evaluate_plan", "evaluate_strategy"}
+        requests_change = operation.mode in {"CREATE_PROPOSAL", "ACTION_PROPOSAL", "CONFIRMATION", "EXECUTION"}
+        requests_execution = operation.mode == "EXECUTION"
+        confidence = semantic.confidence
+        if interaction_mode == "UNAVAILABLE":
+            unresolved_signals.append("financial_domain_unavailable")
+            if "beste trade" in normalized or "best trade" in normalized:
+                unresolved_signals.append("insufficient_trade_context")
         # A workspace asset may enrich a setup draft, but it is never a
         # substitute for the asset explicitly requested by a write operation.
         operation_asset = (
@@ -343,6 +311,58 @@ class FinnV2RequestAnalysisService:
         if interaction_mode == "READ":
             return f"read_{primary_subject or 'context'}"
         return interaction_mode.casefold()
+
+    @staticmethod
+    def _presentation_subject_scopes(operation, explicit_entities: tuple[str, ...]) -> List[str]:
+        """Map contract facts to legacy response diagnostics only.
+
+        The result is retained for historical API compatibility.  Execution
+        services consume the persisted contract scopes, not these labels.
+        """
+        entity_labels = {
+            "profile": "profile",
+            "indicator_configuration": "indicators",
+            "watchlist": "watchlist",
+            "setup": "setup",
+            "strategy": "strategy",
+            "bot": "bot",
+            "bot_status": "bot",
+            "asset": "asset",
+        }
+        labels: List[str] = []
+        if operation.operation_id == "capability":
+            return ["capability"]
+        # These labels are a legacy presentation diagnostic.  They reflect the
+        # user's explicit subjects, while the immutable contract still owns
+        # the complete evidence scopes consumed by tools and the verifier.
+        for entity in ("profile", "indicator_configuration", "setup", "strategy", "bot", "bot_status", "watchlist", "asset"):
+            label = entity_labels.get(entity)
+            if entity in explicit_entities and label and label not in labels:
+                labels.append(label)
+        if operation.operation_id == "evaluate_plan" and not labels:
+            labels = ["profile", "indicators", "setup", "strategy", "bot"]
+        domain_label = {
+            "setup": "setup", "strategy": "strategy", "bot": "bot",
+            "watchlist": "watchlist", "plan": "setup", "indicators": "indicators", "system": "unknown",
+        }.get(operation.domain)
+        if domain_label and domain_label not in labels:
+            labels.append(domain_label)
+        return labels or ["unknown"]
+
+    @staticmethod
+    def _presentation_primary_subject(operation) -> Optional[str]:
+        return {
+            "system": "capability" if operation.operation_id == "capability" else "unknown",
+            "plan": "setup",
+        }.get(operation.domain, operation.domain)
+
+    @staticmethod
+    def _contract_action_risk_class(operation) -> str:
+        if operation.policy_class == "high_risk_action":
+            return "live_action"
+        if operation.mode in {"CREATE_PROPOSAL", "ACTION_PROPOSAL", "CONFIRMATION", "EXECUTION"}:
+            return "proposal_action"
+        return "read_only"
 
     def _subject_scopes(self, normalized: str, matched_signals: List[str]) -> List[str]:
         scope_keywords = {

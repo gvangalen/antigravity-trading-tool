@@ -20,6 +20,7 @@ class FinnV2PreprocessedRequest:
     language: str
     action_polarity: str
     explicit_entities: tuple[str, ...]
+    primary_entity: Optional[str]
     explicit_target_asset: Optional[str]
     referenced_asset: Optional[str]
     workspace_context_asset: Optional[str]
@@ -39,7 +40,7 @@ class FinnV2RequestPreprocessorService:
         ("activate", ("activeer", "activate", "schakel", "start", "zet live", "go live")),
         ("update", ("wijzig", "update", "pas aan")),
         ("create", ("maak", "maken", "create", "ontwerp", "stel", "bereid")),
-        ("evaluate", ("beoordeel", "evaluate", "zwak", "risico", "past", "fit", "ontbreekt", "vertrouwen")),
+        ("evaluate", ("beoordeel", "evaluate", "zwak", "risico", "past", "fit", "ontbrek", "ontbreek", "vertrouwen")),
     )
     _ENTITY_TERMS = {
         "watchlist": ("watchlist", "volglijst"),
@@ -55,14 +56,12 @@ class FinnV2RequestPreprocessorService:
             "ma_200",
             "marktregime",
         ),
+        "profile": ("profiel", "risicoprofiel", "tradingstijl", "risk profile", "trading style"),
         "setup": ("setup", "set-up"),
         "strategy": ("strategie", "strategy"),
         "bot": ("bot", "automation", "automatisering"),
         "plan": (
             "plan",
-            "profiel",
-            "tradingstijl",
-            "risicoprofiel",
             "plaatje",
             "voorwaarde",
             "zwakste",
@@ -94,9 +93,28 @@ class FinnV2RequestPreprocessorService:
         normalized = re.sub(r"\s+", " ", original.casefold()).strip()
         asset = self._asset_from_text(original)
         context_asset = self._asset_from_context(workspace_hints, client_context)
-        entities = tuple(
-            entity for entity, terms in self._ENTITY_TERMS.items()
-            if self._contains_any(normalized, terms)
+        entity_positions = self._entity_positions(normalized)
+        if "bot" in entity_positions:
+            bot_status_position = self._first_term_position(
+                normalized, ("live", "status", "draait", "actief")
+            )
+            if bot_status_position is not None:
+                entity_positions["bot_status"] = bot_status_position
+        entities = tuple(entity_positions)
+        plan_components = {"indicator_configuration", "setup", "strategy", "bot"}
+        if len(plan_components.intersection(entities)) >= 3 and "plan" not in entities:
+            entities = (*entities, "plan")
+        # "mijn strategie ... mijn plan" commonly refers to one component
+        # inside a plan. Keep ``plan`` as an aggregate entity only when it is
+        # the sole entity or the user actually listed several components.
+        if "plan" in entities and plan_components.intersection(entities) and len(plan_components.intersection(entities)) < 3:
+            entities = tuple(entity for entity in entities if entity != "plan")
+        # The aggregate plan is the semantic subject when the user explicitly
+        # names several plan components. Otherwise preserve the first entity
+        # mentioned in natural language for registry candidate ranking.
+        primary_entity = "plan" if "plan" in entities and len(plan_components.intersection(entities)) >= 3 else next(
+            (entity for entity in entities if entity != "plan"),
+            "plan" if "plan" in entities else None,
         )
         references = tuple(
             marker
@@ -113,6 +131,7 @@ class FinnV2RequestPreprocessorService:
             language="en" if re.search(r"\b(what|which|add|remove|create|evaluate)\b", normalized) else "nl",
             action_polarity=action,
             explicit_entities=entities,
+            primary_entity=primary_entity,
             explicit_target_asset=asset if action in {"add", "remove"} else None,
             referenced_asset=asset,
             workspace_context_asset=context_asset,
@@ -127,7 +146,7 @@ class FinnV2RequestPreprocessorService:
         inflection_stems = {
             "indicator", "signaal", "trendindicator", "setup", "haal", "maak",
             "toevoeg", "verwijder", "activeer", "bevestig", "formuleer",
-            "herformuleer",
+            "herformuleer", "ontbrek", "ontbreek",
         }
         return any(
             re.search(rf"(?<!\w){re.escape(term)}(?!\w)", text)
@@ -138,6 +157,29 @@ class FinnV2RequestPreprocessorService:
             )
             for term in terms
         )
+
+    @classmethod
+    def _entity_positions(cls, text: str) -> dict[str, int]:
+        """Return explicit entities in the order they appear in the request."""
+        matches: list[tuple[int, str]] = []
+        for entity, terms in cls._ENTITY_TERMS.items():
+            positions = [
+                match.start()
+                for term in terms
+                for match in re.finditer(rf"(?<!\\w){re.escape(term)}(?!\\w)", text)
+            ]
+            if positions:
+                matches.append((min(positions), entity))
+        return {entity: position for position, entity in sorted(matches)}
+
+    @staticmethod
+    def _first_term_position(text: str, terms: tuple[str, ...]) -> Optional[int]:
+        positions = [
+            match.start()
+            for term in terms
+            for match in re.finditer(rf"(?<!\\w){re.escape(term)}(?!\\w)", text)
+        ]
+        return min(positions) if positions else None
 
     def _action_polarity(self, text: str) -> str:
         # Declarative and interrogative verb forms ("volg ik", "bevestigd")
@@ -167,7 +209,7 @@ class FinnV2RequestPreprocessorService:
         if "contextual_entity" in references:
             return "contextual_follow_up"
         if action == "evaluate" or any(
-            phrase in text for phrase in ("zwakste", "betrouwbaar", "waar zit", "belangrijkste", "voorwaarde", "waar wringt", "hele plaatje")
+            phrase in text for phrase in ("zwakste", "betrouwbaar", "waar zit", "voorwaarde", "waar wringt", "hele plaatje")
         ):
             return "evaluation"
         if action in {"add", "remove", "create", "update", "activate", "confirm", "execute"}:

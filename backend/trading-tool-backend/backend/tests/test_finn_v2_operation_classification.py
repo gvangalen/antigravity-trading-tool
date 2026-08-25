@@ -113,6 +113,7 @@ def test_manifest_candidates_exclude_contracts_without_selection_metadata():
         discourse_act=facts.discourse_act,
         has_verified_context=False,
         normalized_text=facts.normalized_text,
+        primary_entity=facts.primary_entity,
     )
 
     assert [contract.operation_id for contract in candidates] == ["read_indicator_configuration"]
