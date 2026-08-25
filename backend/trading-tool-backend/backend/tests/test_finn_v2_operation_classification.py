@@ -104,6 +104,19 @@ def test_complete_graph_request_uses_the_plan_contract():
     assert result.operation_id == "read_active_plan"
 
 
+def test_deterministic_read_candidates_never_call_the_structured_selector():
+    class ExplodingSelector:
+        def select(self, **_kwargs):
+            raise AssertionError("deterministic READ selection must not call a provider")
+
+    classifier = FinnV2OperationClassificationService(structured_selector=ExplodingSelector())
+
+    result = classifier.classify(message="Welke setup of strategie gebruik ik?")
+
+    assert result.operation_id == "read_active_setup"
+    assert result.selector_source == "deterministic"
+
+
 def test_manifest_candidates_exclude_contracts_without_selection_metadata():
     facts = CLASSIFIER.preprocessor.preprocess(message="Welke indicatoren gebruik ik?")
 

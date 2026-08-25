@@ -238,6 +238,29 @@ def test_watchlist_target_never_inherits_the_workspace_asset():
     assert analysis.request_plan.operation_state["missing_required_inputs"] == ["asset"]
 
 
+def test_guided_watchlist_target_asset_is_typed_and_never_reuses_workspace_asset():
+    analysis = SERVICE.analyze(
+        message="De bedoelde targetasset is ADA.",
+        workspace_hints={"symbol": "BTC"},
+        conversation_context={
+            "active_guided_operation": {
+                "operation_id": "watchlist_add",
+                "contract_version": "2026-08-23.operation-contracts.v1",
+                "collected_inputs": {},
+                "resolved_entities": {},
+                "missing_required_inputs": ["asset"],
+            }
+        },
+    )
+
+    state = analysis.request_plan.operation_state
+    assert analysis.request_plan.operation_id == "watchlist_add"
+    assert analysis.request_plan.context_asset == "BTC"
+    assert analysis.request_plan.target_asset == "ADA"
+    assert state["collected_inputs"]["asset"] == "ADA"
+    assert state["missing_required_inputs"] == []
+
+
 def test_active_guided_operation_has_priority_over_legacy_state():
     analysis = SERVICE.analyze(
         message="Noem hem BTC Daily 4H concept.",

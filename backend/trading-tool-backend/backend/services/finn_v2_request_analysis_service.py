@@ -5,29 +5,15 @@ from typing import Dict, List, Optional
 
 from backend.domain.finn_v2_operation_registry import FinnV2OperationRegistry, FinnV2OperationUnavailableError
 from backend.schemas.finn_v2_orchestrator_schema import RequestAnalysisResult, RequestPlan
-from backend.services.finn_v2_capability_registry_service import FinnV2CapabilityRegistryService
 from backend.services.finn_v2_operation_state_service import FinnV2OperationStateService
 from backend.services.finn_v2_operation_classification_service import (
     FinnV2OperationClassificationService,
     FinnV2OperationClassificationValidator,
 )
-from backend.services.asset_catalog_service import DEFAULT_ASSET_CATALOG, resolve_catalog_symbol
 
 
 class FinnV2RequestAnalysisService:
-    _ASSET_ALIASES = {
-        "BITCOIN": "BTC",
-        "BTC": "BTC",
-        "APPLE": "AAPL",
-        "AAPL": "AAPL",
-        "ETHEREUM": "ETH",
-        "ETH": "ETH",
-        "SOLANA": "SOL",
-        "SOL": "SOL",
-    }
-
     def __init__(self):
-        self.capabilities = FinnV2CapabilityRegistryService()
         self.operations = FinnV2OperationRegistry()
         self.operation_state = FinnV2OperationStateService()
         self.classifier = FinnV2OperationClassificationService(self.operations)
@@ -364,180 +350,6 @@ class FinnV2RequestAnalysisService:
             return "proposal_action"
         return "read_only"
 
-    def _subject_scopes(self, normalized: str, matched_signals: List[str]) -> List[str]:
-        scope_keywords = {
-            "capability": ["wat kun je", "waarmee help", "what can you do", "wat doet finn", "how can you help", "hoe kun je mij helpen"],
-            "profile": ["profiel", "profile", "risicoprofiel", "risk profile", "tradingstijl", "trading style", "stijl"],
-            "asset": ["actieve asset", "asset heb ik actief", "active asset", "gekozen asset", "huidige instrument", "coin of aandeel", "instrument"],
-            "analysis": ["analyse", "analysis", "markt", "market", "macro", "technical", "technisch", "context"],
-            "indicators": [
-                "indicator", "indicatoren", "indicators", "signaal", "signalen", "rsi", "macd", "dxy",
-                "volume", "vwap", "moving average", "ma_", "marktregime", "market regime",
-            ],
-            "watchlist": ["watchlist", "volglijst", "te volgen", "to follow"],
-            "setup": ["setup", "set-up"],
-            "strategy": ["strategie", "strategy", "plan"],
-            "bot": ["bot", "automation", "automatisering", "live"],
-            "daily_report": ["rapport", "report", "dagrapport", "daily report"],
-            "reflection": ["reflectie", "reflection", "review", "terugblik"],
-            "portfolio": ["portfolio", "portefeuille"],
-        }
-        scopes: List[str] = []
-        for scope, keywords in scope_keywords.items():
-            if any(keyword in normalized for keyword in keywords):
-                scopes.append(scope)
-                matched_signals.append(f"scope:{scope}")
-        return scopes
-
-    def _interaction_mode(self, normalized: str, scopes: List[str], matched_signals: List[str], *, explicit_asset: Optional[str]) -> str:
-        if "capability" in scopes or self._is_capability_question(normalized):
-            matched_signals.append("mode:capability")
-            return "CAPABILITY"
-        unavailable_financial_tokens = [
-            "beste trade",
-            "best trade",
-            "wat moet ik kopen",
-            "what should i buy",
-            "wat moet ik traden",
-        ]
-        if any(token in normalized for token in unavailable_financial_tokens) and not any(
-            scope in scopes for scope in {"profile", "indicators", "setup", "strategy", "bot", "portfolio"}
-        ):
-            matched_signals.append("mode:unavailable_financial_context")
-            return "UNAVAILABLE"
-        execution_tokens = ["bevestig", "confirm", "voer nu uit", "execute now", "nu uitvoeren"]
-        confirmation_tokens = ["kan je dit bevestigen", "kun je dit bevestigen", "bevestiging", "confirmation", "wil je bevestigen"]
-        action_tokens = [
-            "zet",
-            "activeer",
-            "voer",
-            "execute",
-            "activate",
-            "run this",
-            "go live",
-            "zet live",
-            "start live trading",
-            "voeg toe aan watchlist",
-            "voeg toe aan mijn watchlist",
-            "add to watchlist",
-            "add to my watchlist",
-            "verwijder uit watchlist",
-            "verwijder uit mijn watchlist",
-            "remove from watchlist",
-            "remove from my watchlist",
-        ]
-        proposal_tokens = ["voeg", "add", "maak een voorstel", "stel", "voorstel", "proposal", "concept", "voorbereiden", "bereid", "toevoegen", "aanpassen", "wijzig", "change", "adjust", "maak een setup", "create setup", "setupconcept"]
-        evaluation_tokens = [
-            "beoordeel",
-            "evaluate",
-            "past",
-            "fit",
-            "risico",
-            "risk",
-            "ontbreekt",
-            "missing",
-            "belangrijkste",
-            "grootste",
-            "compare",
-            "vergelijk",
-            "conflict",
-            "hele plaatje",
-            "hele plan",
-            "waar wringt",
-            "zwakste punt",
-            "vertrouwen",
-            "welke voorwaarde",
-            "weegt",
-            "wat betekent dat plan",
-            "als ik morgen niets wijzig",
-        ]
-        read_tokens = ["welke", "what", "which", "staat", "is", "wat", "who", "where", "bekijk", "toon", "show"]
-
-        if self._contains_any_phrase(normalized, execution_tokens):
-            matched_signals.append("mode:execution")
-            return "EXECUTION"
-        if self._contains_any_phrase(normalized, confirmation_tokens):
-            matched_signals.append("mode:confirmation")
-            return "CONFIRMATION"
-        if ("watchlist" in scopes or "watchlist" in normalized or "volglijst" in normalized) and any(
-            self._contains_phrase(normalized, token) for token in ("voeg", "add", "verwijder", "remove", "haal", "zet", "toevoegen", "volgen")
-        ):
-            matched_signals.append("mode:action_proposal")
-            return "ACTION_PROPOSAL"
-        if "setup" in scopes and self._contains_any_phrase(normalized, proposal_tokens):
-            matched_signals.append("mode:create_proposal")
-            return "CREATE_PROPOSAL"
-        no_execution_phrase = any(phrase in normalized for phrase in ["voer niets uit", "niet uitvoeren", "nog niet opslaan"])
-        if self._contains_any_phrase(normalized, action_tokens) and not no_execution_phrase:
-            matched_signals.append("mode:action_proposal")
-            return "ACTION_PROPOSAL"
-        if "live" in normalized and "bot" in scopes and any(token in normalized for token in ["activeer", "activate", "zet", "maak", "start"]):
-            matched_signals.append("mode:action_proposal")
-            return "ACTION_PROPOSAL"
-        if self._contains_any_phrase(normalized, proposal_tokens):
-            matched_signals.append("mode:create_proposal")
-            return "CREATE_PROPOSAL"
-        if self._contains_any_phrase(normalized, evaluation_tokens):
-            matched_signals.append("mode:evaluate")
-            return "EVALUATE"
-        if explicit_asset and any(self._contains_phrase(normalized, token) for token in ("voeg", "add", "verwijder", "remove", "haal")):
-            matched_signals.append("mode:action_proposal")
-            return "ACTION_PROPOSAL"
-        if scopes and self._contains_any_phrase(normalized, read_tokens):
-            matched_signals.append("mode:read")
-            return "READ"
-        if scopes:
-            matched_signals.append("mode:read_inferred")
-            return "READ"
-        return "UNAVAILABLE"
-
-    @staticmethod
-    def _is_integrated_plan_request(normalized: str) -> bool:
-        direct_integrated_reference = any(
-            phrase in normalized
-            for phrase in [
-                "hele plaatje",
-                "hele plan",
-                "zwakste punt",
-                "waar wringt",
-                "belangrijkste ontbrekende onderdeel",
-                "welke voorwaarde ontbreekt",
-            ]
-        )
-        # Natural references include compounds such as "BTC-plan" and phrases
-        # like "mijn volledige plan". Tokenizing punctuation prevents the
-        # strategy keyword "plan" from narrowing these requests to one domain.
-        plan_tokens = set(re.findall(r"[a-z0-9]+", normalized))
-        plan_reference = "plan" in plan_tokens or any(phrase in normalized for phrase in ["mijn plan", "dat plan"])
-        evaluation_language = any(
-            phrase in normalized
-            for phrase in ["beoordeel", "bekijk", "ontbreekt", "risico", "vertrouwen", "verbeter", "betekent"]
-        )
-        return direct_integrated_reference or (plan_reference and evaluation_language)
-
-    def _extract_asset(self, original: str, normalized: str) -> Optional[str]:
-        # The catalog is the canonical authority for user-facing aliases. It
-        # supports symbols and display names without consulting stale context.
-        for token in re.findall(r"[A-Za-z0-9]+", original):
-            resolved = resolve_catalog_symbol(token)
-            if resolved:
-                return resolved
-        for token, asset in self._ASSET_ALIASES.items():
-            # ``normalized`` is lowercase.  Matching the catalog aliases in the
-            # same representation prevents a title-cased name such as Bitcoin
-            # from falling through to stale conversation context.
-            if re.search(rf"\b{re.escape(token.lower())}\b", normalized):
-                return asset
-        explicit_candidates = re.findall(r"\b[A-Z]{2,6}\b", original)
-        for candidate in explicit_candidates:
-            normalized_candidate = candidate.strip().upper()
-            # The catalog is the product authority for supported symbols. This
-            # avoids maintaining a smaller FINN-only alias list that can reject
-            # a valid, confirmable watchlist target such as XRP.
-            if normalized_candidate in DEFAULT_ASSET_CATALOG:
-                return normalized_candidate
-        return None
-
     def _extract_entity_id(self, original: str, keyword_root: str) -> Optional[int]:
         match = re.search(rf"\b{keyword_root}[a-z]*\s+#?(\d+)\b", original, re.IGNORECASE)
         if not match:
@@ -561,62 +373,6 @@ class FinnV2RequestAnalysisService:
             ]
         )
 
-    def _is_capability_question(self, normalized: str) -> bool:
-        if self.capabilities.is_capability_question(normalized):
-            return True
-        words = set(re.findall(r"[\w-]+", normalized))
-        asks_how = bool(words.intersection({"hoe", "how", "wat", "what"}))
-        asks_help = bool(words.intersection({"help", "helpen", "kan", "can", "doen", "do"}))
-        return asks_how and asks_help and bool(words.intersection({"finn", "tradingcoach", "assistant", "coach"}))
-
-    @staticmethod
-    def _asset_from_context(
-        *,
-        workspace_hints: Optional[Dict[str, object]],
-        client_context: Optional[Dict[str, object]],
-    ) -> Optional[str]:
-        for context in (workspace_hints or {}, client_context or {}):
-            for key in ("asset", "symbol", "active_asset"):
-                resolved = resolve_catalog_symbol(context.get(key))
-                if resolved:
-                    return resolved
-        return None
-
-    @staticmethod
-    def _looks_like_asset_question(normalized: str) -> bool:
-        return any(token in normalized for token in [
-            "asset", "instrument", "symbool", "symbol", "workspace", "markt", "market", "geselecteerd", "selected", "actief", "active", "huidig", "current",
-        ])
-
-    def _apply_conversation_reference(
-        self,
-        *,
-        normalized: str,
-        interaction_mode: str,
-        scopes: List[str],
-        conversation_context: Dict[str, object],
-        matched_signals: List[str],
-        unresolved_signals: List[str],
-    ) -> tuple[str, List[str]]:
-        verified_context = dict(conversation_context.get("last_verified_context") or {})
-        if not (
-            conversation_context.get("last_verified_conclusion")
-            or verified_context.get("conclusion")
-        ):
-            unresolved_signals.append("conversation_reference_without_verified_context")
-            return "CLARIFICATION", scopes
-        inherited_scopes = list(conversation_context.get("last_primary_domains") or [])
-        if inherited_scopes:
-            scopes = inherited_scopes
-        prior_mode = str(conversation_context.get("last_mode") or "READ")
-        if any(token in normalized for token in ["korter", "anders", "herformuleer", "dezelfde conclusie"]):
-            matched_signals.append("conversation:rephrase_verified_conclusion")
-            return prior_mode if prior_mode in {"READ", "EVALUATE"} else "READ", scopes
-        if any(token in normalized for token in ["onderbouw", "waar baseer"]):
-            matched_signals.append("conversation:explain_verified_conclusion")
-            return prior_mode if prior_mode in {"READ", "EVALUATE"} else "READ", scopes
-        return interaction_mode, scopes
-
     @staticmethod
     def _context_asset(value: object) -> Optional[str]:
         normalized = str(value or "").strip().upper()
@@ -629,21 +385,6 @@ class FinnV2RequestAnalysisService:
         except (TypeError, ValueError):
             return None
         return entity_id if entity_id > 0 else None
-
-    def _contains_any_phrase(self, normalized: str, phrases: List[str]) -> bool:
-        return any(self._contains_phrase(normalized, phrase) for phrase in phrases)
-
-    def _contains_phrase(self, normalized: str, phrase: str) -> bool:
-        return bool(re.search(rf"(?<!\w){re.escape(phrase.casefold())}(?!\w)", normalized))
-
-    def _confidence(self, *, scopes: List[str], matched_signals: List[str], interaction_mode: str) -> str:
-        if interaction_mode == "UNAVAILABLE":
-            return "none"
-        if len(scopes) >= 2 and len(matched_signals) >= 3:
-            return "high"
-        if scopes:
-            return "medium"
-        return "low"
 
     def _requested_entities(
         self,
@@ -663,60 +404,3 @@ class FinnV2RequestAnalysisService:
         if explicit_bot_id:
             entities.append("bot")
         return entities
-
-    def _primary_subject(self, *, scopes: List[str], interaction_mode: str, normalized: str) -> Optional[str]:
-        if interaction_mode == "CAPABILITY":
-            return "assistant"
-        if interaction_mode == "ACTION_PROPOSAL" and ("watchlist" in normalized or "volglijst" in normalized):
-            return "watchlist"
-        if interaction_mode == "CREATE_PROPOSAL" and "setup" in normalized:
-            return "setup"
-        preferred = ["bot", "strategy", "setup", "indicators", "asset", "analysis", "profile", "portfolio", "daily_report", "reflection"]
-        for scope in preferred:
-            if scope in scopes:
-                return scope
-        return scopes[0] if scopes else None
-
-    def _output_contract(self, *, interaction_mode: str, primary_subject: Optional[str]) -> Optional[str]:
-        if interaction_mode == "READ":
-            return f"read_{primary_subject or 'context'}"
-        if interaction_mode == "EVALUATE":
-            return f"evaluate_{primary_subject or 'context'}"
-        if interaction_mode == "CREATE_PROPOSAL":
-            return "proposal_setup_change"
-        if interaction_mode == "ACTION_PROPOSAL":
-            return "proposal_action_change"
-        if interaction_mode == "CLARIFICATION":
-            return "clarification"
-        if interaction_mode == "CONFIRMATION":
-            return "confirmation"
-        if interaction_mode == "EXECUTION":
-            return "execution_result"
-        if interaction_mode == "CAPABILITY":
-            return "capability_overview"
-        if interaction_mode == "UNAVAILABLE":
-            return "safe_unavailable"
-        return None
-
-    def _action_risk_class(self, *, normalized: str, interaction_mode: str) -> Optional[str]:
-        if interaction_mode not in {"ACTION_PROPOSAL", "CONFIRMATION", "EXECUTION"}:
-            return None
-        if "watchlist" in normalized or "volglijst" in normalized:
-            return "watchlist_change"
-        if "live" in normalized:
-            return "live_action"
-        return "paper_action"
-
-    def _missing_essential_inputs(
-        self,
-        *,
-        interaction_mode: str,
-        primary_subject: Optional[str],
-        explicit_asset: Optional[str],
-        normalized: str,
-    ) -> List[str]:
-        missing: List[str] = []
-        if interaction_mode in {"CREATE_PROPOSAL", "ACTION_PROPOSAL"} and primary_subject in {"setup", "strategy", "bot", "watchlist"}:
-            if explicit_asset is None and "deze asset" not in normalized and "mijn actieve" not in normalized and "mijn " not in normalized:
-                missing.append("asset")
-        return missing
