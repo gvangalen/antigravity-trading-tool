@@ -30,6 +30,24 @@ _SCOPE_TOOL_BINDINGS = {
     "review_history": "read_review_history",
 }
 
+# Response fields are deliberately separate from evidence scopes.  A contract
+# can require a graph answer to visibly name its resolved entities without
+# turning those presentation requirements into additional tool requirements.
+_RESPONSE_FIELDS = frozenset(
+    {
+        "asset",
+        "indicator_configuration",
+        "setup",
+        "timeframe",
+        "strategy",
+        "bot",
+        "bot_status",
+        "observation",
+        "evidence",
+        "next_step",
+    }
+)
+
 
 class FinnV2OperationContractError(ValueError):
     code = "finn_v2_operation_contract_invalid"
@@ -61,6 +79,10 @@ class OperationContract:
     idempotency_rule: Optional[str] = None
     postcondition: Optional[str] = None
     verifier_rules: tuple[str, ...] = ("grounded", "mode_pure")
+    # These are semantic response fields, not additional evidence scopes.
+    # They prevent a graph response from silently omitting an entity that was
+    # successfully collected and verified.
+    required_response_fields: tuple[str, ...] = ()
     allowed_terminal_outcomes: tuple[str, ...] = ("completed", "clarification_required", "unavailable")
     supported: bool = True
     capability_gap: Optional[str] = None
@@ -90,6 +112,11 @@ class OperationContract:
         unknown = set(self.required_scopes + self.optional_scopes).difference(INFORMATION_SCOPE_ORDER)
         if unknown:
             raise FinnV2OperationContractError(f"unknown_scope:{self.operation_id}:{sorted(unknown)}")
+        unknown_response_fields = set(self.required_response_fields).difference(_RESPONSE_FIELDS)
+        if unknown_response_fields:
+            raise FinnV2OperationContractError(
+                f"unknown_response_field:{self.operation_id}:{sorted(unknown_response_fields)}"
+            )
         if self.model_policy not in {"never", "optional", "required"}:
             raise FinnV2OperationContractError(f"invalid_model_policy:{self.operation_id}")
         write = self.mode in {"CREATE_PROPOSAL", "ACTION_PROPOSAL", "CONFIRMATION", "EXECUTION"}
@@ -154,8 +181,17 @@ class FinnV2OperationRegistry:
                     )
 
 
-def _read(operation_id: str, domain: str, scopes: tuple[str, ...], aliases: tuple[str, ...]) -> OperationContract:
-    return OperationContract(operation_id, FinnV2OperationRegistry.VERSION, domain, "READ", aliases, required_scopes=scopes)
+def _read(
+    operation_id: str,
+    domain: str,
+    scopes: tuple[str, ...],
+    aliases: tuple[str, ...],
+    response_fields: tuple[str, ...] = (),
+) -> OperationContract:
+    return OperationContract(
+        operation_id, FinnV2OperationRegistry.VERSION, domain, "READ", aliases,
+        required_scopes=scopes, required_response_fields=response_fields,
+    )
 
 
 def _gap(operation_id: str, domain: str, mode: str, aliases: tuple[str, ...], reason: str) -> OperationContract:
@@ -168,17 +204,17 @@ _CONTRACTS: tuple[OperationContract, ...] = (
     OperationContract("unavailable", FinnV2OperationRegistry.VERSION, "system", "UNAVAILABLE", (), response_strategy="unavailable"),
     OperationContract("explain_previous_evidence", FinnV2OperationRegistry.VERSION, "system", "EVALUATE", ("onderbouw", "evidence", "waarom"), required_scopes=("profile", "preferences", "active_asset", "indicator_configuration", "active_setup", "linked_strategy", "linked_bot", "bot_status"), model_policy="required", response_strategy="model_reasoning"),
     OperationContract("reformulate_previous_response", FinnV2OperationRegistry.VERSION, "system", "READ", ("korter", "anders formuleren", "reformuleer"), response_strategy="deterministic_structured_summary"),
-    _read("read_active_asset", "asset", ("active_asset",), ("actieve asset", "welke asset")),
+    _read("read_active_asset", "asset", ("active_asset",), ("actieve asset", "welke asset"), ("asset",)),
     _gap("select_asset", "asset", "ACTION_PROPOSAL", ("selecteer asset",), "select_asset_execution_adapter_missing"),
     _read("read_watchlist", "asset", ("active_asset", "watchlist"), ("watchlist", "volglijst")),
     OperationContract("watchlist_add", FinnV2OperationRegistry.VERSION, "asset", "ACTION_PROPOSAL", ("voeg", "add", "watchlist"), required_inputs=("asset",), required_scopes=("active_asset", "watchlist"), proposal_type="watchlist_add", confirmation_required=True, execution_adapter="watchlist_add", idempotency_rule="user_asset_unique", postcondition="watchlist_contains_asset", response_strategy="proposal_draft", policy_class="proposal"),
     OperationContract("watchlist_remove", FinnV2OperationRegistry.VERSION, "asset", "ACTION_PROPOSAL", ("verwijder", "remove", "watchlist"), required_inputs=("asset",), required_scopes=("active_asset", "watchlist"), proposal_type="watchlist_remove", confirmation_required=True, execution_adapter="watchlist_remove", idempotency_rule="user_asset_absent", postcondition="watchlist_excludes_asset", response_strategy="proposal_draft", policy_class="proposal"),
-    _read("read_indicator_configuration", "indicators", ("active_asset", "indicator_configuration"), ("indicator", "rsi", "vwap", "volume")),
+    _read("read_indicator_configuration", "indicators", ("active_asset", "indicator_configuration"), ("indicator", "rsi", "vwap", "volume"), ("asset", "indicator_configuration")),
     _gap("create_indicator_configuration", "indicators", "CREATE_PROPOSAL", ("maak indicator",), "create_indicator_configuration_adapter_missing"),
     _gap("update_indicator_configuration", "indicators", "CREATE_PROPOSAL", ("wijzig indicator",), "proposal_payload_contract_missing"),
     _gap("delete_indicator_configuration", "indicators", "CREATE_PROPOSAL", ("verwijder indicator",), "delete_indicator_configuration_adapter_missing"),
     OperationContract("evaluate_indicator_configuration", FinnV2OperationRegistry.VERSION, "indicators", "EVALUATE", ("beoordeel indicator",), required_scopes=("active_asset", "indicator_configuration"), model_policy="required", response_strategy="model_reasoning", policy_class="advice"),
-    _read("read_active_setup", "setup", ("active_asset", "active_setup"), ("actieve setup", "welke setup")),
+    _read("read_active_setup", "setup", ("active_asset", "active_setup"), ("actieve setup", "welke setup"), ("setup", "timeframe")),
     # SetupService validates these three fields unconditionally. Timeframe and
     # score/market-condition details are useful trusted inputs, but are not
     # schema-required and must not be invented by FINN.
@@ -186,13 +222,13 @@ _CONTRACTS: tuple[OperationContract, ...] = (
     OperationContract("update_setup", FinnV2OperationRegistry.VERSION, "setup", "CREATE_PROPOSAL", ("wijzig setup",), required_inputs=("setup_id", "changed_fields"), required_scopes=("active_asset", "active_setup"), proposal_type="update_setup", confirmation_required=True, execution_adapter="update_setup", idempotency_rule="proposal_payload_hash", postcondition="setup_updated_for_user"),
     _gap("delete_setup", "setup", "CREATE_PROPOSAL", ("verwijder setup",), "delete_setup_execution_adapter_missing"),
     OperationContract("evaluate_setup", FinnV2OperationRegistry.VERSION, "setup", "EVALUATE", ("beoordeel setup",), required_scopes=("active_asset", "active_setup"), optional_scopes=("indicator_configuration",), model_policy="required", response_strategy="model_reasoning", policy_class="advice"),
-    _read("read_linked_strategy", "strategy", ("active_asset", "active_setup", "linked_strategy"), ("welke strategie", "strategie")),
+    _read("read_linked_strategy", "strategy", ("active_asset", "active_setup", "linked_strategy"), ("welke strategie", "strategie"), ("setup", "strategy")),
     _gap("create_strategy", "strategy", "CREATE_PROPOSAL", ("maak strategie",), "create_strategy_execution_adapter_missing"),
     OperationContract("update_strategy", FinnV2OperationRegistry.VERSION, "strategy", "CREATE_PROPOSAL", ("wijzig strategie",), required_inputs=("strategy_id", "changed_fields"), required_scopes=("active_asset", "active_setup", "linked_strategy"), proposal_type="update_strategy", confirmation_required=True, execution_adapter="update_strategy", idempotency_rule="proposal_payload_hash", postcondition="strategy_updated_for_user"),
     _gap("delete_strategy", "strategy", "CREATE_PROPOSAL", ("verwijder strategie",), "delete_strategy_execution_adapter_missing"),
     OperationContract("evaluate_strategy", FinnV2OperationRegistry.VERSION, "strategy", "EVALUATE", ("beoordeel strategie", "strategie past"), required_scopes=("profile", "preferences", "active_asset", "active_setup", "linked_strategy"), model_policy="required", response_strategy="model_reasoning", policy_class="advice"),
-    _read("read_linked_bot", "bot", ("active_asset", "active_setup", "linked_strategy", "linked_bot", "bot_status"), ("welke bot", "gekoppelde bot")),
-    _read("read_bot_status", "bot", ("active_asset", "active_setup", "linked_strategy", "linked_bot", "bot_status"), ("bot status", "staat hij live")),
+    _read("read_linked_bot", "bot", ("active_asset", "active_setup", "linked_strategy", "linked_bot", "bot_status"), ("welke bot", "gekoppelde bot"), ("setup", "strategy", "bot", "bot_status")),
+    _read("read_bot_status", "bot", ("active_asset", "active_setup", "linked_strategy", "linked_bot", "bot_status"), ("bot status", "staat hij live"), ("bot", "bot_status")),
     _gap("create_bot", "bot", "CREATE_PROPOSAL", ("maak bot",), "create_bot_execution_adapter_missing"),
     _gap("update_bot", "bot", "CREATE_PROPOSAL", ("wijzig bot",), "update_bot_execution_adapter_missing"),
     _gap("delete_bot", "bot", "CREATE_PROPOSAL", ("verwijder bot",), "delete_bot_execution_adapter_missing"),
@@ -200,8 +236,8 @@ _CONTRACTS: tuple[OperationContract, ...] = (
     OperationContract("activate_bot", FinnV2OperationRegistry.VERSION, "bot", "ACTION_PROPOSAL", ("activeer bot",), required_inputs=("bot_id",), required_scopes=("active_asset", "market_snapshot", "active_setup", "linked_strategy", "linked_bot", "bot_status"), proposal_type="activate_live_bot", confirmation_required=True, execution_adapter="activate_live_bot", idempotency_rule="proposal_payload_hash", postcondition="live_bot_active", response_strategy="policy_denial", policy_class="high_risk_action"),
     OperationContract("activate_paper_bot", FinnV2OperationRegistry.VERSION, "bot", "ACTION_PROPOSAL", ("activeer paper bot",), required_inputs=("bot_id",), required_scopes=("active_asset", "active_setup", "linked_strategy", "linked_bot", "bot_status"), proposal_type="activate_paper_bot", confirmation_required=True, execution_adapter="activate_paper_bot", idempotency_rule="proposal_payload_hash", postcondition="paper_bot_active", response_strategy="proposal_draft", policy_class="paper_action"),
     _gap("deactivate_bot", "bot", "ACTION_PROPOSAL", ("deactiveer bot",), "deactivate_bot_execution_adapter_missing"),
-    OperationContract("read_active_plan", FinnV2OperationRegistry.VERSION, "plan", "READ", ("mijn actieve plan", "setup strategie bot"), required_scopes=("active_asset", "active_setup", "linked_strategy", "linked_bot", "bot_status")),
-    OperationContract("evaluate_plan", FinnV2OperationRegistry.VERSION, "plan", "EVALUATE", ("belangrijkste ontbrekende", "bekijk mijn profiel", "beoordeel mijn plan"), required_scopes=("profile", "preferences", "active_asset", "indicator_configuration", "active_setup", "linked_strategy", "linked_bot", "bot_status"), model_policy="required", response_strategy="model_reasoning", policy_class="advice"),
+    OperationContract("read_active_plan", FinnV2OperationRegistry.VERSION, "plan", "READ", ("mijn actieve plan", "setup strategie bot"), required_scopes=("active_asset", "active_setup", "linked_strategy", "linked_bot", "bot_status"), required_response_fields=("setup", "strategy", "bot", "bot_status")),
+    OperationContract("evaluate_plan", FinnV2OperationRegistry.VERSION, "plan", "EVALUATE", ("belangrijkste ontbrekende", "bekijk mijn profiel", "beoordeel mijn plan"), required_scopes=("profile", "preferences", "active_asset", "indicator_configuration", "active_setup", "linked_strategy", "linked_bot", "bot_status"), model_policy="required", response_strategy="model_reasoning", policy_class="advice", required_response_fields=("observation", "evidence", "next_step")),
     _gap("read_portfolio", "portfolio", "READ", ("portfolio", "portefeuille"), "portfolio_contract_not_yet_grounded"),
     _gap("evaluate_portfolio", "portfolio", "EVALUATE", ("beoordeel portfolio",), "portfolio_contract_not_yet_grounded"),
     _gap("read_latest_report", "reports", "READ", ("laatste rapport",), "report_contract_not_yet_grounded"),

@@ -331,23 +331,28 @@ class FinnV2ResponseVerifierService:
                 # never permission to reinterpret the run as a legacy request.
                 reason_codes.append("operation_contract_unknown")
                 required_scopes = []
+                required_response_fields = []
                 contract_metadata_ok = False
             else:
                 if contract.version != contract_version:
                     reason_codes.append("operation_contract_version_mismatch")
                     required_scopes = []
+                    required_response_fields = []
                     contract_metadata_ok = False
                 else:
                     required_scopes = list(contract.required_scopes)
+                    required_response_fields = list(contract.required_response_fields)
         elif has_partial_contract_metadata:
             # New runs must never silently become legacy runs when persistence
             # drops one half of their resolved contract identity.
             reason_codes.append("operation_contract_metadata_missing")
             required_scopes = []
+            required_response_fields = []
         else:
             required_scopes = normalize_information_scopes(
                 [scope for scope in orchestrator_result.analysis.subject_scopes if scope != "unknown"]
             )
+            required_response_fields = []
         # New runs carry a typed RequestPlan. Their coverage must be proven by the
         # evidence's exact canonical scope, not inferred from a broad domain label.
         uses_canonical_scope_contract = has_contract_metadata or has_partial_contract_metadata
@@ -440,9 +445,29 @@ class FinnV2ResponseVerifierService:
             covered_scopes=sorted(covered_scopes.union(satisfied_scopes)),
             missing_scopes=missing_scopes,
             coverage_ok=not missing_scopes,
+            required_response_fields=required_response_fields,
+            covered_response_fields=self._covered_response_fields(
+                draft=draft,
+                evidence=list(context.evidence),
+                required_fields=required_response_fields,
+            ),
+        )
+        coverage = coverage.copy(
+            update={
+                "missing_response_fields": [
+                    field for field in coverage.required_response_fields
+                    if field not in coverage.covered_response_fields
+                ],
+                "response_coverage_ok": not any(
+                    field not in coverage.covered_response_fields
+                    for field in coverage.required_response_fields
+                ),
+            }
         )
         if not coverage.coverage_ok:
             reason_codes.append("response_scope_incomplete")
+        if not coverage.response_coverage_ok:
+            reason_codes.append("response_field_incomplete")
 
         relevance_ok = self._is_relevant(run.message, draft)
         if not relevance_ok:
@@ -500,6 +525,7 @@ class FinnV2ResponseVerifierService:
                 ownership_ok,
                 evidence_ok,
                 coverage.coverage_ok,
+                coverage.response_coverage_ok,
                 relevance_ok,
                 personalization_ok,
                 mode_purity_ok,
@@ -546,6 +572,73 @@ class FinnV2ResponseVerifierService:
             created_at=datetime.now(timezone.utc),
         )
         return verifier
+
+    @staticmethod
+    def _covered_response_fields(*, draft: ResponseDraft, evidence: list, required_fields: list[str]) -> list[str]:
+        """Measure delivery completeness from the contract and validated evidence.
+
+        Evidence coverage proves that facts were collected. Response coverage proves
+        that an operation which promises a graph or evaluation actually exposes the
+        required, evidence-backed parts to the user.
+        """
+        if not required_fields:
+            return []
+        facts_by_tool = {
+            str(item.tool_name): dict(getattr(item, "facts", {}) or {})
+            for item in evidence
+        }
+        rendered = " ".join(
+            str(value or "")
+            for value in (
+                draft.direct_answer,
+                draft.main_observation,
+                draft.uncertainty_summary,
+                getattr(draft.next_step, "instruction", None),
+                draft.follow_up_question,
+                *list(draft.supporting_points or []),
+            )
+        ).casefold()
+
+        def has_value(field: str) -> bool:
+            if field == "observation":
+                return bool(str(draft.main_observation or "").strip())
+            if field == "evidence":
+                return bool(draft.evidence_refs_used or any(claim.evidence_refs for claim in draft.claims))
+            if field == "next_step":
+                return bool(draft.next_step or draft.follow_up_question)
+            tool_for_field = {
+                "asset": "read_active_asset",
+                "indicator_configuration": "read_indicator_configuration",
+                "setup": "read_active_setup",
+                "timeframe": "read_active_setup",
+                "strategy": "read_linked_strategy",
+                "bot": "read_linked_bot",
+                "bot_status": "read_bot_status",
+            }.get(field)
+            facts = facts_by_tool.get(tool_for_field or "", {})
+            if not facts:
+                return False
+            values: list[object] = []
+            if field == "asset":
+                values = [facts.get("symbol"), facts.get("display_name")]
+            elif field == "indicator_configuration":
+                values = [
+                    *(row.get("indicator") for row in facts.get("configured_indicators") or [] if isinstance(row, dict)),
+                    *(row.get("indicator") for category in ("market", "macro", "technical") for row in facts.get(category) or [] if isinstance(row, dict)),
+                ]
+            elif field == "setup":
+                values = [facts.get("setup_id"), facts.get("name")]
+            elif field == "timeframe":
+                values = [facts.get("timeframe")]
+            elif field == "strategy":
+                values = [facts.get("strategy_id"), facts.get("name")]
+            elif field == "bot":
+                values = [facts.get("bot_id"), facts.get("name")]
+            elif field == "bot_status":
+                return "live" in rendered or "paper" in rendered or "niet live" in rendered
+            return any(str(value).casefold() in rendered for value in values if value not in (None, ""))
+
+        return [field for field in required_fields if has_value(field)]
 
     def _merge_semantic(self, verifier: VerifierResult, semantic: SemanticVerificationResult, mode: str) -> VerifierResult:
         if not semantic.available:

@@ -42,7 +42,7 @@ class FinnV2OperationClassificationService:
         "watchlist": ("watchlist", "volglijst", "volgen"),
         "indicators": (
             "indicator", "rsi", "vwap", "volume", "ma200", "ma_200",
-            "signaal", "signalen", "trendindicator",
+            "signaal", "signalen", "trendindicator", "configuratie", "technische",
         ),
         "setup": ("setup",),
         "strategy": ("strategie", "strategy"),
@@ -52,7 +52,7 @@ class FinnV2OperationClassificationService:
         "reviews": ("reflectie", "reflection", "review"),
         "portfolio": ("portfolio", "portefeuille"),
         "asset": (
-            "asset", "instrument", "bitcoin", "btc", "aapl", "coin",
+            "asset", "instrument", "bitcoin", "btc", "cardano", "ada", "aapl", "coin",
             "aandeel", "workspace", "markt", "market",
         ),
         # These are recognised domains with no executable V2 contract.  They
@@ -73,6 +73,11 @@ class FinnV2OperationClassificationService:
         words = set(re.findall(r"\w+", normalized_message))
         action = self._action(words)
         domain = self._domain(words)
+        # A capability request can name product domains (for example a trading
+        # plan) without becoming a plan read.  This is a discourse distinction,
+        # not a FINN-specific prompt exception.
+        if self._is_capability_discourse(normalized_message):
+            domain, action = "capability", "read"
         if domain == "unknown" and action == "unknown":
             # Contract aliases may enrich semantic recognition but never
             # contribute scopes, tools or policy.  The resolved contract is
@@ -84,6 +89,12 @@ class FinnV2OperationClassificationService:
         operation = self._operation(action=action, domain=domain, discourse=discourse, words=words)
         confidence = "high" if action != "unknown" and domain != "unknown" else "medium" if domain != "unknown" else "low"
         return SemanticOperationClassification(operation, action, domain, discourse, confidence)
+
+    @staticmethod
+    def _is_capability_discourse(text: str) -> bool:
+        asks = any(phrase in text for phrase in ("wat kun je", "welke taken", "wat ondersteun", "mogelijkheden", "grenzen", "what can you", "what do you support"))
+        tokens = set(re.findall(r"\w+", text))
+        return asks and bool(tokens.intersection({"finn", "je", "jij", "you"}))
 
     def _action(self, words: set[str]) -> str:
         # State questions ("staat hij live?", "is de bot live?") read a

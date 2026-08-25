@@ -88,6 +88,23 @@ def _asset_defaults(
 
 
 DEFAULT_ASSET_CATALOG: dict[str, dict[str, Any]] = {
+    "ADA": _asset_defaults(
+        symbol="ADA",
+        display_name="Cardano",
+        asset_class="crypto",
+        tradingview_symbol="BINANCE:ADAUSDT",
+        yahoo_symbol="ADA-USD",
+        primary_provider="binance",
+        provider_symbol="ADAUSDT",
+        exchange="BINANCE",
+        market_region="global",
+        timezone="UTC",
+        base_currency="ADA",
+        quote_currency="USDT",
+        coingecko_id="cardano",
+        coincap_id="cardano",
+        refresh_policy="crypto_live_1m",
+    ),
     "BTC": _asset_defaults(
         symbol="BTC",
         display_name="Bitcoin",
@@ -474,6 +491,22 @@ DEFAULT_ASSET_CATALOG: dict[str, dict[str, Any]] = {
         refresh_policy="securities_live_5m",
     ),
 }
+
+
+def resolve_catalog_symbol(value: object) -> str | None:
+    """Resolve a user-facing catalog symbol or display name to one symbol.
+
+    FINN uses this only for explicit user input.  It deliberately does not
+    infer a symbol from a workspace, asset class, or another user's records.
+    """
+    normalized = str(value or "").strip().casefold()
+    if not normalized:
+        return None
+    for symbol, asset in DEFAULT_ASSET_CATALOG.items():
+        candidates = {symbol.casefold(), str(asset.get("display_name") or "").casefold()}
+        if normalized in candidates:
+            return symbol
+    return None
 
 
 class AssetCatalogService:

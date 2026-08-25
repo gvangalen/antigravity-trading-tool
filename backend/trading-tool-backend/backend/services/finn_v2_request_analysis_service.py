@@ -11,7 +11,7 @@ from backend.services.finn_v2_operation_classification_service import (
     FinnV2OperationClassificationService,
     FinnV2OperationClassificationValidator,
 )
-from backend.services.asset_catalog_service import DEFAULT_ASSET_CATALOG
+from backend.services.asset_catalog_service import DEFAULT_ASSET_CATALOG, resolve_catalog_symbol
 
 
 class FinnV2RequestAnalysisService:
@@ -59,10 +59,11 @@ class FinnV2RequestAnalysisService:
                     scopes.append(scope)
                     matched_signals.append(f"scope:{scope}:integrated_plan")
         message_asset = self._extract_asset(text, normalized)
-        explicit_asset = message_asset or self._asset_from_context(
+        context_asset = self._asset_from_context(
             workspace_hints=workspace_hints,
             client_context=client_context,
         )
+        explicit_asset = message_asset or context_asset
         explicit_setup_id = self._extract_entity_id(text, "setup")
         explicit_strategy_id = self._extract_entity_id(text, "strateg")
         explicit_bot_id = self._extract_entity_id(text, "bot")
@@ -217,8 +218,9 @@ class FinnV2RequestAnalysisService:
             operation_id=operation_id,
             operation=operation,
             operation_state=guided_state.dict() if guided_state is not None else {},
-            context_asset=self._asset_from_context(workspace_hints=workspace_hints, client_context=client_context),
+            context_asset=context_asset,
             target_asset=message_asset if operation_id in {"watchlist_add", "watchlist_remove"} else None,
+            referenced_asset=message_asset or explicit_asset,
             requested_action=semantic.action if semantic.action != "unknown" else None,
             discourse_type=semantic.discourse,
         )
@@ -267,6 +269,7 @@ class FinnV2RequestAnalysisService:
         operation_state: Dict[str, object],
         context_asset: Optional[str],
         target_asset: Optional[str],
+        referenced_asset: Optional[str],
         requested_action: Optional[str],
         discourse_type: str,
     ) -> RequestPlan:
@@ -304,6 +307,7 @@ class FinnV2RequestAnalysisService:
             operation_state=operation_state,
             context_asset=context_asset,
             target_asset=target_asset,
+            referenced_asset=referenced_asset,
             requested_action=requested_action,
             discourse_type=discourse_type,
             clarification_required=bool(missing_essential_inputs) or interaction_mode == "CLARIFICATION",
@@ -474,6 +478,12 @@ class FinnV2RequestAnalysisService:
         return direct_integrated_reference or (plan_reference and evaluation_language)
 
     def _extract_asset(self, original: str, normalized: str) -> Optional[str]:
+        # The catalog is the canonical authority for user-facing aliases. It
+        # supports symbols and display names without consulting stale context.
+        for token in re.findall(r"[A-Za-z0-9]+", original):
+            resolved = resolve_catalog_symbol(token)
+            if resolved:
+                return resolved
         for token, asset in self._ASSET_ALIASES.items():
             # ``normalized`` is lowercase.  Matching the catalog aliases in the
             # same representation prevents a title-cased name such as Bitcoin
@@ -529,9 +539,9 @@ class FinnV2RequestAnalysisService:
     ) -> Optional[str]:
         for context in (workspace_hints or {}, client_context or {}):
             for key in ("asset", "symbol", "active_asset"):
-                value = str(context.get(key) or "").strip().upper()
-                if value:
-                    return value
+                resolved = resolve_catalog_symbol(context.get(key))
+                if resolved:
+                    return resolved
         return None
 
     @staticmethod

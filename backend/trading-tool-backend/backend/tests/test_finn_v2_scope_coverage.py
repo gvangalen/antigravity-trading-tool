@@ -11,6 +11,61 @@ from backend.services.finn_v2_response_verifier_service import FinnV2ResponseVer
 CONTRACT_VERSION = FinnV2OperationRegistry.VERSION
 
 
+def test_response_coverage_requires_the_contractual_setup_strategy_bot_graph():
+    draft = ResponseDraft(
+        draft_id="draft-graph-response",
+        run_id="run-graph-response",
+        user_id=7,
+        mode="READ",
+        direct_answer="Je actieve BTC-plan gebruikt setup 293, strategie 309 en bot 170.",
+        main_observation="Bot 170 staat niet live.",
+        evidence_refs_used=["E1", "E2", "E3", "E4"],
+        evidence_set_hash="hash-graph-response",
+        created_at=datetime.now(timezone.utc),
+    )
+    evidence = [
+        SimpleNamespace(tool_name="read_active_setup", facts={"setup_id": 293, "name": "BTC swing", "timeframe": "4H"}),
+        SimpleNamespace(tool_name="read_linked_strategy", facts={"strategy_id": 309, "name": "BTC strategy"}),
+        SimpleNamespace(tool_name="read_linked_bot", facts={"bot_id": 170, "name": "BTC paper bot"}),
+        SimpleNamespace(tool_name="read_bot_status", facts={"is_live": False}),
+    ]
+
+    covered = FinnV2ResponseVerifierService._covered_response_fields(
+        draft=draft,
+        evidence=evidence,
+        required_fields=["setup", "strategy", "bot", "bot_status"],
+    )
+
+    assert covered == ["setup", "strategy", "bot", "bot_status"]
+
+
+def test_response_coverage_does_not_treat_collected_graph_evidence_as_a_visible_answer():
+    draft = ResponseDraft(
+        draft_id="draft-hidden-graph",
+        run_id="run-hidden-graph",
+        user_id=7,
+        mode="READ",
+        direct_answer="Je plancontext is beschikbaar.",
+        main_observation="Ik heb de opgeslagen relaties gecontroleerd.",
+        evidence_set_hash="hash-hidden-graph",
+        created_at=datetime.now(timezone.utc),
+    )
+    evidence = [
+        SimpleNamespace(tool_name="read_active_setup", facts={"setup_id": 293}),
+        SimpleNamespace(tool_name="read_linked_strategy", facts={"strategy_id": 309}),
+        SimpleNamespace(tool_name="read_linked_bot", facts={"bot_id": 170}),
+        SimpleNamespace(tool_name="read_bot_status", facts={"is_live": False}),
+    ]
+
+    covered = FinnV2ResponseVerifierService._covered_response_fields(
+        draft=draft,
+        evidence=evidence,
+        required_fields=["setup", "strategy", "bot", "bot_status"],
+    )
+
+    assert covered == []
+
+
 def test_scope_coverage_fails_when_a1_reduces_to_indicator_only():
     service = FinnV2ResponseVerifierService(session=object())
     draft = ResponseDraft(

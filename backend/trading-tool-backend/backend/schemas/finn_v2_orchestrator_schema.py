@@ -69,6 +69,9 @@ class RequestPlan(BaseModel):
     referenced_entities: Dict[str, object] = Field(default_factory=dict)
     context_asset: Optional[str] = None
     target_asset: Optional[str] = None
+    # A current prompt may refer to an asset without changing the workspace
+    # context or being the target of an action. Keep all three roles explicit.
+    referenced_asset: Optional[str] = None
     requested_action: Optional[str] = None
     discourse_type: str = "new_request"
     missing_information: List[str] = Field(default_factory=list)

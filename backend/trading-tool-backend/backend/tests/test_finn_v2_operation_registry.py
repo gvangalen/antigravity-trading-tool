@@ -58,6 +58,18 @@ def test_contract_rejects_an_input_that_is_both_required_and_optional():
         )
 
 
+def test_contract_rejects_unknown_required_response_field():
+    with pytest.raises(ValueError, match="unknown_response_field"):
+        OperationContract(
+            operation_id="bad_response_contract",
+            version="test",
+            domain="test",
+            mode="READ",
+            aliases=(),
+            required_response_fields=("unknown_graph_node",),
+        )
+
+
 def test_registry_is_the_complete_mode_scope_and_tool_source_for_new_requests():
     service = FinnV2RequestAnalysisService()
     cases = [

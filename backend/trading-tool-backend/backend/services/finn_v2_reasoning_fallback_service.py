@@ -228,7 +228,7 @@ class FinnV2ReasoningFallbackService:
                 created_at=datetime.now(timezone.utc),
             )
 
-        if operation_id == "read_linked_bot" and all(
+        if operation_id in {"read_linked_bot", "read_active_plan"} and all(
             item is not None for item in (active_asset, setup, strategy, bot, bot_status)
         ):
             setup_id = setup.facts.get("setup_id")
@@ -258,8 +258,8 @@ class FinnV2ReasoningFallbackService:
                 user_id=user_id,
                 mode="READ",
                 direct_answer=(
-                    f"Voor {asset} gebruikt bot {bot_id} strategie {strategy_id}, "
-                    f"die gekoppeld is aan {setup_name}{timeframe_detail}."
+                    f"Je actieve {asset}-plan gebruikt {setup_name}{timeframe_detail}, "
+                    f"strategie {strategy_id} en bot {bot_id}."
                 ),
                 main_observation=f"Bot {bot_id} staat momenteel {'live' if is_live else 'niet live'}.",
                 supporting_points=[],

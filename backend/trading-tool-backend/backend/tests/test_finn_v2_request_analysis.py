@@ -44,6 +44,28 @@ def test_request_analysis_explicit_bitcoin_overrides_stale_conversation_asset():
     assert result.request_plan.referenced_entities["asset"] == "BTC"
 
 
+def test_request_analysis_keeps_context_target_and_reference_assets_distinct():
+    result = SERVICE.analyze(
+        message="Voeg Cardano toe aan mijn watchlist.",
+        workspace_hints={"symbol": "BTC"},
+        conversation_context={"resolved_asset": "AAPL"},
+    )
+
+    assert result.request_plan.operation_id == "watchlist_add"
+    assert result.request_plan.context_asset == "BTC"
+    assert result.request_plan.target_asset == "ADA"
+    assert result.request_plan.referenced_asset == "ADA"
+    assert result.request_plan.operation_state["collected_inputs"]["asset"] == "ADA"
+
+
+def test_request_analysis_keeps_capability_discourse_when_it_mentions_plan_features():
+    result = SERVICE.analyze(message="Hoi FINN, wat kun je voor mijn plan, setup en bot doen?")
+
+    assert result.request_plan.operation_id == "capability"
+    assert result.interaction_mode == "CAPABILITY"
+    assert result.request_plan.required_information_scopes == ["capability"]
+
+
 def test_request_analysis_handles_setup_strategy_and_bot_facts():
     setup_result = SERVICE.analyze(message="Welke setup gebruik ik voor BTC?")
     strategy_result = SERVICE.analyze(message="Welke strategie is aan mijn actieve setup gekoppeld?")

@@ -26,6 +26,10 @@ class CoverageVerification(BaseModel):
     covered_scopes: List[str] = Field(default_factory=list)
     missing_scopes: List[str] = Field(default_factory=list)
     coverage_ok: bool
+    required_response_fields: List[str] = Field(default_factory=list)
+    covered_response_fields: List[str] = Field(default_factory=list)
+    missing_response_fields: List[str] = Field(default_factory=list)
+    response_coverage_ok: bool = True
 
     class Config:
         extra = "forbid"
