@@ -27,14 +27,14 @@ class FinnV2OperationClassificationService:
     _ACTION_WORDS = {
         "confirm": ("bevestig", "confirm"),
         "execute": ("uitvoeren", "uitvoer", "voer", "execute"),
-        "activate": ("activeer", "activate", "live"),
-        "remove": ("verwijder", "remove", "haal"),
-        "add": ("voeg", "add", "toevoeg", "zet"),
-        "create": ("maak", "mak", "create", "stel", "bereid", "voorbereiden", "setupconcept"),
+        "activate": ("activeer", "activate", "schakel", "start", "live"),
+        "remove": ("verwijder", "remove", "haal", "hal", "stop"),
+        "add": ("voeg", "add", "toevoeg", "zet", "volg"),
+        "create": ("maak", "mak", "create", "stel", "bereid", "voorbereiden", "ontwerp", "setupconcept"),
         "update": ("wijzig", "update"),
-        "evaluate": ("beoordeel", "evaluate", "zwak", "risico", "past", "fit", "wringt", "ontbreekt", "ontbrekende", "vertrouwen", "voorwaarde", "entryvoorwaarde", "weegt"),
-        "explain": ("onderbouw", "waarom", "bewijs"),
-        "reformulate": ("korter", "herformuleer", "anders"),
+        "evaluate": ("beoordeel", "evaluate", "zwak", "risico", "past", "fit", "wringt", "ontbreekt", "ontbrekende", "vertrouwen", "betrouwbaar", "voorwaarde", "entryvoorwaarde", "weegt"),
+        "explain": ("onderbouw", "waarom", "bewijs", "baseer", "leg"),
+        "reformulate": ("korter", "herformuleer", "anders", "andere", "compacter"),
         "read": ("welke", "wat", "toon", "bekijk", "staat", "heb"),
     }
     _DOMAIN_WORDS = {
@@ -69,9 +69,17 @@ class FinnV2OperationClassificationService:
         # Hyphenated asset-plan phrasing (for example ``BTC-plan``) carries
         # both an asset selector and a plan domain.  Keep those concepts
         # separate instead of letting the asset token erase the user goal.
-        words = set(re.findall(r"\w+", str(message or "").casefold()))
+        normalized_message = re.sub(r"\bset[-\s]+up\b", "setup", str(message or "").casefold())
+        words = set(re.findall(r"\w+", normalized_message))
         action = self._action(words)
         domain = self._domain(words)
+        if domain == "unknown" and action == "unknown":
+            # Contract aliases may enrich semantic recognition but never
+            # contribute scopes, tools or policy.  The resolved contract is
+            # still validated below before a new run can plan work.
+            alias_contract = self.registry.resolve_alias(normalized_message)
+            if alias_contract is not None:
+                domain = alias_contract.domain
         discourse = self._discourse(words, conversation_context or {})
         operation = self._operation(action=action, domain=domain, discourse=discourse, words=words)
         confidence = "high" if action != "unknown" and domain != "unknown" else "medium" if domain != "unknown" else "low"
@@ -94,7 +102,11 @@ class FinnV2OperationClassificationService:
             # safety constraint for a proposal, not an execution request.
             if action == "execute" and words.intersection({"niet", "niets", "geen", "zonder"}):
                 continue
-            if any(word == token or word.startswith(token) for word in words for token in candidates):
+            if any(
+                word == token or (token != "volg" and word.startswith(token))
+                for word in words
+                for token in candidates
+            ):
                 return action
         return "unknown"
 
@@ -108,6 +120,8 @@ class FinnV2OperationClassificationService:
         if "capability" in matches and len(matches) > 1:
             matches.remove("capability")
         if "plan" in matches:
+            return "plan"
+        if {"setup", "strategy", "bot"}.issubset(matches):
             return "plan"
         # A graph request must keep every persisted relationship available.  A
         # bot mention therefore wins over an otherwise narrower strategy/setup
@@ -126,9 +140,9 @@ class FinnV2OperationClassificationService:
         if isinstance(active, dict) and active.get("missing_required_inputs"):
             return "clarification_answer"
         verified = context.get("last_verified_context") or context.get("last_verified_conclusion")
-        if verified and words.intersection({"onderbouw", "bewijs", "waarom"}):
+        if verified and words.intersection({"onderbouw", "bewijs", "waarom", "baseer", "leg", "evidence", "bron", "bronnen"}):
             return "evidence_follow_up"
-        if verified and words.intersection({"korter", "herformuleer", "anders"}):
+        if verified and words.intersection({"korter", "herformuleer", "anders", "andere", "compacter"}):
             return "reformulation"
         if verified and words.intersection({"die", "dat", "eerder"}):
             return "contextual_follow_up"
