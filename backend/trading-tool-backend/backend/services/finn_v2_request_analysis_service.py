@@ -58,7 +58,8 @@ class FinnV2RequestAnalysisService:
                 if scope not in scopes:
                     scopes.append(scope)
                     matched_signals.append(f"scope:{scope}:integrated_plan")
-        explicit_asset = self._extract_asset(text, normalized) or self._asset_from_context(
+        message_asset = self._extract_asset(text, normalized)
+        explicit_asset = message_asset or self._asset_from_context(
             workspace_hints=workspace_hints,
             client_context=client_context,
         )
@@ -186,10 +187,17 @@ class FinnV2RequestAnalysisService:
                 operation = self.operations.require_supported(operation_id)
                 interaction_mode = operation.mode
                 unresolved_signals.append("operation_action_mismatch")
+        # A workspace asset may enrich a setup draft, but it is never a
+        # substitute for the asset explicitly requested by a write operation.
+        operation_asset = (
+            message_asset
+            if operation_id in {"watchlist_add", "watchlist_remove"}
+            else explicit_asset
+        )
         guided_state = self.operation_state.resolve(
             contract=operation,
             message=text,
-            explicit_asset=explicit_asset,
+            explicit_asset=operation_asset,
             conversation_context=conversation_context,
         ) if operation.required_inputs else None
         if guided_state is not None:
@@ -212,7 +220,7 @@ class FinnV2RequestAnalysisService:
             operation=operation,
             operation_state=guided_state.dict() if guided_state is not None else {},
             context_asset=self._asset_from_context(workspace_hints=workspace_hints, client_context=client_context),
-            target_asset=explicit_asset if operation_id in {"watchlist_add", "watchlist_remove"} else None,
+            target_asset=message_asset if operation_id in {"watchlist_add", "watchlist_remove"} else None,
             requested_action=semantic.action if semantic.action != "unknown" else None,
             discourse_type=semantic.discourse,
         )

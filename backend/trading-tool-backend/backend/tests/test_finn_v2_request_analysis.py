@@ -194,6 +194,37 @@ def test_explicit_watchlist_operation_does_not_resume_pending_setup_state():
     assert watchlist_turn.request_plan.operation_state["collected_inputs"]["asset"] == "XRP"
 
 
+def test_watchlist_target_never_inherits_the_workspace_asset():
+    analysis = SERVICE.analyze(
+        message="Voeg toe aan mijn watchlist.",
+        workspace_hints={"symbol": "BTC"},
+    )
+
+    assert analysis.request_plan.operation_id == "watchlist_add"
+    assert analysis.request_plan.context_asset == "BTC"
+    assert analysis.request_plan.target_asset is None
+    assert analysis.request_plan.operation_state["missing_required_inputs"] == ["asset"]
+
+
+def test_active_guided_operation_has_priority_over_legacy_state():
+    analysis = SERVICE.analyze(
+        message="Noem hem BTC Daily 4H concept.",
+        conversation_context={
+            "active_guided_operation": {
+                "operation_id": "create_setup",
+                "contract_version": "2026-08-23.operation-contracts.v1",
+                "collected_inputs": {"symbol": "BTC", "setup_type": "trade"},
+                "resolved_entities": {},
+                "missing_required_inputs": ["name"],
+            },
+            "operation_state": {"operation_id": "watchlist_add", "missing_required_inputs": ["asset"]},
+        },
+    )
+
+    assert analysis.request_plan.operation_id == "create_setup"
+    assert analysis.request_plan.operation_state["collected_inputs"]["name"] == "BTC Daily 4H concept"
+
+
 def test_guided_operation_state_retains_verified_context_without_reasking_fields():
     analysis = SERVICE.analyze(
         message="Maak een setup voor BTC swing trading.",

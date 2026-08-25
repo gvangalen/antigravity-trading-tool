@@ -53,7 +53,10 @@ class FinnV2OperationStateService:
 
     @staticmethod
     def pending_operation_id(context: Mapping[str, object]) -> Optional[str]:
-        raw = context.get("operation_state")
+        # The typed state supersedes the legacy compatibility field for every
+        # newly created conversation.  Historical contexts still fall back to
+        # ``operation_state`` until they are naturally rewritten.
+        raw = context.get("active_guided_operation") or context.get("operation_state")
         if not isinstance(raw, dict) or context.get("open_proposal_id"):
             return None
         try:
