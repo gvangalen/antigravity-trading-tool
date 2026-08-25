@@ -225,6 +225,21 @@ def test_active_guided_operation_has_priority_over_legacy_state():
     assert analysis.request_plan.operation_state["collected_inputs"]["name"] == "BTC Daily 4H concept"
 
 
+def test_guided_setup_cancel_closes_typed_state_without_selecting_a_write_operation():
+    first_turn = SERVICE.analyze(message="Help me een nieuwe BTC-setup als concept te maken.")
+
+    cancelled = SERVICE.analyze(
+        message="Annuleer dit voorstel.",
+        conversation_context={"active_guided_operation": first_turn.request_plan.operation_state},
+    )
+
+    assert cancelled.request_plan.operation_id == "clarify_request"
+    assert cancelled.interaction_mode == "CLARIFICATION"
+    assert cancelled.request_plan.operation_state["operation_id"] == "create_setup"
+    assert cancelled.request_plan.operation_state["status"] == "cancelled"
+    assert cancelled.request_plan.operation_state["missing_required_inputs"] == []
+
+
 def test_guided_operation_state_retains_verified_context_without_reasking_fields():
     analysis = SERVICE.analyze(
         message="Maak een setup voor BTC swing trading.",

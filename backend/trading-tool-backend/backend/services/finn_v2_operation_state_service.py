@@ -90,6 +90,40 @@ class FinnV2OperationStateService:
         }
         return questions.get(field or "", "Welk ontbrekend detail wil je voor dit voorstel vastleggen?")
 
+    def cancel(
+        self,
+        *,
+        operation_id: str,
+        conversation_context: Optional[Mapping[str, object]],
+    ) -> Optional[FinnV2OperationState]:
+        """Return a terminal typed state without executing or deleting data."""
+        try:
+            contract = self._registry_contract(operation_id)
+        except ValueError:
+            return None
+        existing = self._existing_state(contract, conversation_context or {})
+        if existing is None:
+            return None
+        return existing.copy(
+            update={
+                "missing_required_inputs": [],
+                "next_missing_input": None,
+                "open_proposal_id": None,
+                "status": "cancelled",
+            }
+        )
+
+    @staticmethod
+    def is_cancel_intent(message: str) -> bool:
+        words = set(re.findall(r"\w+", str(message or "").casefold()))
+        return bool(words.intersection({"annuleer", "annuleren", "cancel", "stop", "stoppen"}))
+
+    @staticmethod
+    def _registry_contract(operation_id: str) -> OperationContract:
+        from backend.domain.finn_v2_operation_registry import FinnV2OperationRegistry
+
+        return FinnV2OperationRegistry().require_supported(operation_id)
+
     def _existing_state(self, contract: OperationContract, context: Mapping[str, object]) -> Optional[FinnV2OperationState]:
         raw = context.get("active_guided_operation") or context.get("operation_state")
         if not isinstance(raw, dict):

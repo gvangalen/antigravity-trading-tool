@@ -417,7 +417,16 @@ class FinnV2OrchestratorService:
                 "reason_codes": list(getattr(verified_response, "uncertainty_codes", []) or []),
             }
         context["last_verified_context"] = {key: value for key, value in verified_context.items() if value is not None}
-        if operation_state:
+        if operation_state.get("status") == "cancelled":
+            context.pop("operation_state", None)
+            context.pop("active_guided_operation", None)
+            context["last_turn_diagnostics"] = {
+                "operation_id": operation_state.get("operation_id"),
+                "mode": response_mode,
+                "verifier_status": getattr(verified_response, "verifier_status", None),
+                "reason_codes": ["guided_operation_cancelled"],
+            }
+        elif operation_state:
             context["operation_state"] = operation_state
             context["active_guided_operation"] = operation_state
         await self.conversations.update_context(

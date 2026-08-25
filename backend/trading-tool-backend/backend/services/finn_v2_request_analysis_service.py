@@ -139,7 +139,14 @@ class FinnV2RequestAnalysisService:
         # historical planless records, never to choose a new contract.
         operation_id = semantic.operation_id
         pending_operation_id = self.operation_state.pending_operation_id(conversation_context or {})
-        if (
+        cancelled_guided_state = None
+        if pending_operation_id and self.operation_state.is_cancel_intent(text):
+            cancelled_guided_state = self.operation_state.cancel(
+                operation_id=pending_operation_id,
+                conversation_context=conversation_context,
+            )
+            operation_id = "clarify_request"
+        elif (
             pending_operation_id
             and semantic.discourse == "clarification_answer"
             and semantic.action == "unknown"
@@ -152,6 +159,8 @@ class FinnV2RequestAnalysisService:
         # This keeps one conversation useful without turning a watchlist request
         # into a continuation of an unfinished setup proposal.
         if (
+            cancelled_guided_state is None
+            and
             pending_operation_id
             and operation_id in {"clarify_request", "unavailable"}
             and "mode:unavailable_financial_context" not in matched_signals
@@ -181,12 +190,14 @@ class FinnV2RequestAnalysisService:
             if operation_id in {"watchlist_add", "watchlist_remove"}
             else explicit_asset
         )
-        guided_state = self.operation_state.resolve(
-            contract=operation,
-            message=text,
-            explicit_asset=operation_asset,
-            conversation_context=conversation_context,
-        ) if operation.required_inputs else None
+        guided_state = cancelled_guided_state or (
+            self.operation_state.resolve(
+                contract=operation,
+                message=text,
+                explicit_asset=operation_asset,
+                conversation_context=conversation_context,
+            ) if operation.required_inputs else None
+        )
         if guided_state is not None:
             missing_essential_inputs = list(guided_state.missing_required_inputs)
         request_plan = self._request_plan(

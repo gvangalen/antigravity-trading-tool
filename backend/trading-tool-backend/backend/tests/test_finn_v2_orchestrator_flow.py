@@ -338,6 +338,66 @@ def test_unavailable_delivery_records_diagnostics_without_overwriting_verified_c
     }
 
 
+def test_cancelled_guided_operation_is_removed_without_erasing_verified_context():
+    service = FinnV2OrchestratorService(session=object())
+    service.conversations = _FakeConversationRepo()
+    previous = {
+        "last_verified_context": {
+            "verified_response_id": "verified-previous",
+            "operation_id": "read_active_setup",
+            "mode": "READ",
+            "conclusion": "BTC uses the saved 4H setup.",
+            "evidence_refs": ["evidence-previous"],
+            "resolved_entities": {"asset": "BTC", "setup_id": 309},
+        },
+        "active_guided_operation": {
+            "operation_id": "create_setup",
+            "contract_version": "2026-08-23.operation-contracts.v1",
+            "collected_inputs": {"symbol": "BTC", "setup_type": "trade"},
+            "missing_required_inputs": ["name"],
+        },
+    }
+    result = SimpleNamespace(
+        analysis=SimpleNamespace(
+            explicit_asset=None,
+            explicit_setup_id=None,
+            explicit_strategy_id=None,
+            explicit_bot_id=None,
+            interaction_mode="CLARIFICATION",
+            request_plan=SimpleNamespace(
+                operation_id="clarify_request",
+                operation_contract_version="contract-v1",
+                operation_state={
+                    "operation_id": "create_setup",
+                    "status": "cancelled",
+                },
+            ),
+        ),
+        tool_plan=SimpleNamespace(entity_selectors={}),
+    )
+    response = SimpleNamespace(
+        verifier_status="passed",
+        mode="CLARIFICATION",
+        uncertainty_codes=[],
+    )
+
+    asyncio.run(
+        service._update_conversation_context(
+            conversation_id="conversation-1",
+            user_id=7,
+            existing_context=previous,
+            result=result,
+            verified_response=response,
+        )
+    )
+
+    context = service.conversations.updated["context"]
+    assert context["last_verified_context"] == previous["last_verified_context"]
+    assert "active_guided_operation" not in context
+    assert "operation_state" not in context
+    assert context["last_turn_diagnostics"]["reason_codes"] == ["guided_operation_cancelled"]
+
+
 def test_orchestrator_classifies_requested_operation_for_action_proposal_modes():
     run = SimpleNamespace(
         id="run-3",
