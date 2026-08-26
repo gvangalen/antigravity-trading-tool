@@ -65,7 +65,13 @@ class FinnV2StructuredOperationSelectorService:
                     "Select exactly one FINN operation from the supplied immutable manifest. "
                     "Do not select modes, tools, scopes, policies, or execution. "
                     "Use clarify_request for ambiguity, unsupported_financial_operation for "
-                    "understood but unsupported finance requests, and off_topic for non-finance. "
+                    "understood but unsupported finance or trading-product requests, and off_topic "
+                    "only for requests unrelated to finance, FINN, or a trading workspace. "
+                    "When conversation_state has last_verified_context and the user asks for the "
+                    "basis, evidence, a shorter version, or a reformulation of the prior answer, "
+                    "select the corresponding lineage operation and set conversation_reference to "
+                    "previous_verified_response. Treat an overview of a user's setup, strategy, "
+                    "and bot as read_active_plan, not as ambiguity. "
                     "Return the strict schema only."
                 ),
             output_spec=StructuredOutputSpec(

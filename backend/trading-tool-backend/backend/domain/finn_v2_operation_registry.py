@@ -315,6 +315,7 @@ _OPERATION_SELECTION_METADATA: Mapping[str, dict] = {
         "selection_priority": 100,
     },
     "reformulate_previous_response": {
+        "semantic_description": "Rephrase, shorten, simplify, or restyle the user's immediately previous verified FINN response without changing its meaning.",
         "required_discourse_acts": ("reformulation",),
         "requires_verified_context": True,
         "selection_priority": 100,
@@ -369,6 +370,7 @@ _OPERATION_SELECTION_METADATA: Mapping[str, dict] = {
         "selection_focus_entities": ("watchlist",),
     },
     "read_active_plan": {
+        "semantic_description": "Read and summarize the user's linked active setup, strategy, bot, and bot status as one trading plan overview.",
         "any_entities": ("plan",),
         "required_discourse_acts": ("information_request",),
         "allowed_action_polarities": ("read",),
