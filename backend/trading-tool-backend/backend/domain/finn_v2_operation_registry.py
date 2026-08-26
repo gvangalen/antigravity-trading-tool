@@ -87,6 +87,9 @@ class OperationContract:
     optional_scopes: tuple[str, ...] = ()
     scope_tool_bindings: tuple[tuple[str, str], ...] = ()
     model_policy: str = "never"  # never | optional | required
+    # Context policy is part of the immutable operation contract.  It keeps
+    # HTTP entrypoints from guessing whether a request needs user state.
+    context_policy: str = "contract_scoped"  # minimal | contract_scoped
     response_strategy: str = "deterministic_structured_summary"
     policy_class: str = "read"
     proposal_type: Optional[str] = None
@@ -135,6 +138,8 @@ class OperationContract:
             )
         if self.model_policy not in {"never", "optional", "required"}:
             raise FinnV2OperationContractError(f"invalid_model_policy:{self.operation_id}")
+        if self.context_policy not in {"minimal", "contract_scoped"}:
+            raise FinnV2OperationContractError(f"invalid_context_policy:{self.operation_id}")
         write = self.mode in {"CREATE_PROPOSAL", "ACTION_PROPOSAL", "CONFIRMATION", "EXECUTION"}
         if write and self.supported and (not self.proposal_type or not self.confirmation_required):
             raise FinnV2OperationContractError(f"write_contract_incomplete:{self.operation_id}")
@@ -282,6 +287,21 @@ def _gap(operation_id: str, domain: str, mode: str, aliases: tuple[str, ...], re
 # contract.  They intentionally describe concepts and discourse, rather than
 # encoding a list of production prompt strings in the runtime selector.
 _OPERATION_SELECTION_METADATA: Mapping[str, dict] = {
+    "clarify_request": {
+        "semantic_description": "Ask one focused clarification when the user's FINN request does not identify a supported operation.",
+    },
+    "unavailable": {
+        "semantic_description": "Respond safely when the request cannot be fulfilled from an available FINN contract.",
+    },
+    "explain_financial_concept": {
+        "semantic_description": "Explain a general financial concept, indicator, or trading term without reading the user's workspace or using product tools.",
+    },
+    "unsupported_financial_operation": {
+        "semantic_description": "State that a financial product operation is not supported by a safe FINN contract.",
+    },
+    "off_topic": {
+        "semantic_description": "Decline a request unrelated to financial education, FINN, or the user's trading workspace.",
+    },
     "capability": {
         "semantic_description": "Explain FINN's supported reads, analyses, proposals and safe actions.",
         "positive_examples": ("Wat kan FINN doen?", "Welke analyses ondersteun je?"),
@@ -433,12 +453,12 @@ _OPERATION_SELECTION_METADATA: Mapping[str, dict] = {
 
 
 _CONTRACTS: tuple[OperationContract, ...] = (
-    OperationContract("capability", FinnV2OperationRegistry.VERSION, "system", "CAPABILITY", ("wat kun je", "what can you", "capabilities"), required_scopes=("capability",), response_strategy="deterministic_template"),
-    OperationContract("clarify_request", FinnV2OperationRegistry.VERSION, "system", "CLARIFICATION", (), response_strategy="clarification"),
-    OperationContract("unavailable", FinnV2OperationRegistry.VERSION, "system", "UNAVAILABLE", (), response_strategy="unavailable"),
-    OperationContract("explain_financial_concept", FinnV2OperationRegistry.VERSION, "financial_education", "READ", (), required_inputs=("concept",), model_policy="never", response_strategy="financial_concept_explanation"),
-    OperationContract("unsupported_financial_operation", FinnV2OperationRegistry.VERSION, "financial_unsupported", "UNAVAILABLE", (), model_policy="never", response_strategy="unsupported_operation"),
-    OperationContract("off_topic", FinnV2OperationRegistry.VERSION, "off_topic", "UNAVAILABLE", (), model_policy="never", response_strategy="off_topic"),
+    OperationContract("capability", FinnV2OperationRegistry.VERSION, "system", "CAPABILITY", ("wat kun je", "what can you", "capabilities"), required_scopes=("capability",), response_strategy="deterministic_template", context_policy="minimal"),
+    OperationContract("clarify_request", FinnV2OperationRegistry.VERSION, "system", "CLARIFICATION", (), response_strategy="clarification", context_policy="minimal"),
+    OperationContract("unavailable", FinnV2OperationRegistry.VERSION, "system", "UNAVAILABLE", (), response_strategy="unavailable", context_policy="minimal"),
+    OperationContract("explain_financial_concept", FinnV2OperationRegistry.VERSION, "financial_education", "READ", (), required_inputs=("concept",), model_policy="never", response_strategy="financial_concept_explanation", context_policy="minimal"),
+    OperationContract("unsupported_financial_operation", FinnV2OperationRegistry.VERSION, "financial_unsupported", "UNAVAILABLE", (), model_policy="never", response_strategy="unsupported_operation", context_policy="minimal"),
+    OperationContract("off_topic", FinnV2OperationRegistry.VERSION, "off_topic", "UNAVAILABLE", (), model_policy="never", response_strategy="off_topic", context_policy="minimal"),
     OperationContract("explain_previous_evidence", FinnV2OperationRegistry.VERSION, "system", "EVALUATE", ("onderbouw", "evidence", "waarom"), required_scopes=("profile", "preferences", "active_asset", "indicator_configuration", "active_setup", "linked_strategy", "linked_bot", "bot_status"), model_policy="required", response_strategy="model_reasoning"),
     OperationContract("reformulate_previous_response", FinnV2OperationRegistry.VERSION, "system", "READ", ("korter", "anders formuleren", "reformuleer"), response_strategy="deterministic_structured_summary"),
     _read("read_active_asset", "asset", ("active_asset",), ("actieve asset", "welke asset"), ("asset",)),

@@ -35,7 +35,10 @@ class FinnV2ReasoningFallbackService:
         return ReasoningResult(
             reasoning_result_id=f"finn-v2-reasoning-{uuid.uuid4().hex}", run_id=run_id, user_id=user_id,
             mode=mode, direct_answer=answer, main_observation=observation,
-            uncertainty_summary="", uncertainty_codes=[], evidence_refs_used=[], model=model,
+            # Empty strings violate the persisted response schema. General
+            # concept explanations are complete deterministic responses, so
+            # they carry no uncertainty summary at all.
+            uncertainty_summary=None, uncertainty_codes=[], evidence_refs_used=[], model=model,
             created_at=datetime.now(timezone.utc),
         )
     @staticmethod

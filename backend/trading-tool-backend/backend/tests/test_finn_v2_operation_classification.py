@@ -111,17 +111,37 @@ def test_complete_graph_request_uses_the_plan_contract():
     assert result.operation_id == "read_active_plan"
 
 
-def test_deterministic_read_candidates_never_call_the_structured_selector():
-    class ExplodingSelector:
-        def select(self, **_kwargs):
-            raise AssertionError("deterministic READ selection must not call a provider")
+def test_model_first_selector_receives_read_candidates():
+    captured = {}
 
-    classifier = FinnV2OperationClassificationService(structured_selector=ExplodingSelector())
+    class Selector:
+        def select(self, **kwargs):
+            captured.update(kwargs)
+            return type("Selection", (), {"operation_id": "read_active_setup", "confidence": 0.95})(), None
+
+    classifier = FinnV2OperationClassificationService(structured_selector=Selector())
 
     result = classifier.classify(message="Welke setup of strategie gebruik ik?")
 
     assert result.operation_id == "read_active_setup"
-    assert result.selector_source == "deterministic"
+    assert result.selector_source == "structured"
+    assert [contract.operation_id for contract in captured["candidate_contracts"]][:2] == ["read_active_setup", "read_linked_strategy"]
+
+
+def test_provider_failure_fallback_stays_inside_the_same_contract_boundary():
+    class ExplodingSelector:
+        def select(self, **_kwargs):
+            raise AssertionError("provider should be disabled for this failure-path unit test")
+
+    classifier = FinnV2OperationClassificationService(structured_selector=ExplodingSelector())
+
+    result = classifier.classify(
+        message="Maak iets nieuws.",
+        allow_structured_selection=False,
+    )
+
+    assert result.operation_id == "clarify_request"
+    assert result.selector_source == "provider_fallback"
 
 
 def test_manifest_candidates_exclude_contracts_without_selection_metadata():
@@ -182,7 +202,7 @@ def test_capability_request_never_gets_hijacked_by_verified_or_guided_context(me
     )
 
     assert result.operation_id == "capability"
-    assert result.selector_source == "deterministic"
+    assert result.selector_source == "provider_fallback"
 
 
 def test_technical_configuration_is_an_indicator_read_not_a_workspace_asset_read():

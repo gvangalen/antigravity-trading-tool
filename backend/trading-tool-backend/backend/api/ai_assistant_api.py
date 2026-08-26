@@ -1487,6 +1487,23 @@ async def _apply_canonical_finn_context_graph(
     return payload
 
 
+def _preflight_v2_runtime_selection(
+    *,
+    user_id: int,
+    query: str,
+    transport: str,
+    context_payload: Optional[dict],
+):
+    selector = FinnV2RuntimeSelectorService()
+    return selector.select(
+        user_id=user_id,
+        message=query,
+        surface="assistant_chat_stream" if transport == "stream" else "assistant_chat",
+        workspace_hints=context_payload or {},
+        client_context=context_payload or {},
+    )
+
+
 async def _dispatch_finn_route_decision(
     *,
     finn: Any,
@@ -2488,14 +2505,14 @@ async def assistant_chat(
     started_at = time.perf_counter()
     try:
         user_id = current_user["id"]
-        finn = _new_finn_plan_service(db)
-        context_payload = await finn.hydrate_context(user_id, _assistant_context_payload(request.context))
-        context_payload = finn.sanitize_context_for_query(request.query, context_payload)
-        context_payload = await _enrich_with_trader_profile(db, user_id, context_payload, query=request.query)
-        context_payload = await _apply_canonical_finn_context_graph(
-            db=db,
+        # Keep the entry boundary limited to client state and transport
+        # controls. The durable FINN V2 run selects its contract before it
+        # reads personalized context in the lifecycle worker.
+        context_payload = dict(_assistant_context_payload(request.context))
+        runtime_selection = _preflight_v2_runtime_selection(
             user_id=user_id,
             query=request.query,
+            transport="chat",
             context_payload=context_payload,
         )
         if request.session_id:
@@ -2531,6 +2548,7 @@ async def assistant_chat(
             request_path=_safe_request_path(raw_request, "/api/assistant/chat"),
             request_id=_safe_request_trace_id(raw_request, trace_id),
             trace_id=trace_id,
+            runtime_selection=runtime_selection,
         )
         return AssistantChatResponse(
             response=v2_visible.get("response") or "",
@@ -2742,14 +2760,13 @@ async def _try_v2_visible_delivery(
     request_path: str,
     request_id: str,
     trace_id: str,
+    runtime_selection=None,
 ):
-    selector = FinnV2RuntimeSelectorService()
-    selection = selector.select(
+    selection = runtime_selection or _preflight_v2_runtime_selection(
         user_id=user_id,
-        message=message,
-        surface="assistant_chat_stream" if transport == "stream" else "assistant_chat",
-        workspace_hints=context_payload or {},
-        client_context=context_payload or {},
+        query=message,
+        transport=transport,
+        context_payload=context_payload,
     )
     if selection.selected_runtime != "v2" or not selection.visible_allowed:
         raise ValueError("v2_runtime_not_selected")
@@ -2838,14 +2855,13 @@ async def assistant_chat_stream(
 
     async def event_generator():
         try:
-            finn = _new_finn_plan_service(db)
-            context_payload = await finn.hydrate_context(user_id, _assistant_context_payload(request.context))
-            context_payload = finn.sanitize_context_for_query(request.query, context_payload)
-            context_payload = await _enrich_with_trader_profile(db, user_id, context_payload, query=request.query)
-            context_payload = await _apply_canonical_finn_context_graph(
-                db=db,
+            # Match the non-streaming boundary exactly. Selection and any
+            # contract-required context collection happen after run creation.
+            context_payload = dict(_assistant_context_payload(request.context))
+            runtime_selection = _preflight_v2_runtime_selection(
                 user_id=user_id,
                 query=request.query,
+                transport="stream",
                 context_payload=context_payload,
             )
             if request.session_id:
@@ -2881,6 +2897,7 @@ async def assistant_chat_stream(
                 request_path=_safe_request_path(raw_request, "/api/assistant/chat/stream"),
                 request_id=_safe_request_trace_id(raw_request, trace_id),
                 trace_id=trace_id,
+                runtime_selection=runtime_selection,
             )
             yield _sse_event("envelope", v2_visible)
         except Exception as e:

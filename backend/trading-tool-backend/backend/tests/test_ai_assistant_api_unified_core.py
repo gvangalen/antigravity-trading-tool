@@ -357,7 +357,7 @@ def test_record_behavioral_response_events_tracks_profile_guidance_and_friction(
     assert recorded[2][1]["metadata"]["requires_ack"] is True
 
 
-def test_assistant_chat_passes_enriched_profile_context_into_legacy_service(monkeypatch):
+def test_assistant_chat_defers_profile_context_until_after_run_selection(monkeypatch):
     captured = {}
 
     async def fake_enrich_with_trader_profile(db, user_id, payload=None, *, query=None):
@@ -402,8 +402,7 @@ def test_assistant_chat_passes_enriched_profile_context_into_legacy_service(monk
         )
     )
 
-    assert captured["context"]["trader_profile_used"] is True
-    assert captured["context"]["trader_profile"]["behavior_flags"] == ["fomo"]
+    assert captured["context"] == {"page": "/dashboard", "session_id": "sess-legacy"}
     assert response.session_id == "sess-legacy"
 
 
@@ -453,6 +452,54 @@ def test_assistant_chat_returns_legacy_response_text_after_profile_overlay(monke
     )
 
     assert "fear of missing out" in response.response
+
+
+def test_assistant_chat_skips_canonical_graph_for_simple_financial_concept(monkeypatch):
+    graph_called = False
+    captured = {}
+
+    async def fake_enrich_with_trader_profile(db, user_id, payload=None, *, query=None):
+        enriched = dict(payload or {})
+        enriched.update({"page": "/assistant", "symbol": "BTC"})
+        return enriched
+
+    async def fake_apply_canonical_finn_context_graph(**kwargs):
+        nonlocal graph_called
+        graph_called = True
+        return kwargs["context_payload"]
+
+    async def fake_try_v2_visible_delivery(**kwargs):
+        captured["runtime_selection"] = kwargs["runtime_selection"]
+        captured["context_payload"] = kwargs["context_payload"]
+        return {
+            "response": "RSI is een momentumindicator.",
+            "intent": "read",
+            "state": {"current_flow": "finn_v2_visible", "run_id": "run-rsi"},
+            "response_trace": {"pipeline_version": "finn_v2"},
+        }
+
+    monkeypatch.setattr("backend.api.ai_assistant_api._enrich_with_trader_profile", fake_enrich_with_trader_profile)
+    monkeypatch.setattr("backend.api.ai_assistant_api._apply_canonical_finn_context_graph", fake_apply_canonical_finn_context_graph)
+    monkeypatch.setattr("backend.api.ai_assistant_api._apply_assistant_rate_limit", lambda **kwargs: None)
+    monkeypatch.setattr("backend.api.ai_assistant_api._record_finn_product_event", lambda **kwargs: {})
+    monkeypatch.setattr("backend.api.ai_assistant_api._try_v2_visible_delivery", fake_try_v2_visible_delivery)
+
+    response = asyncio.run(
+        assistant_chat(
+            AssistantChatRequest(query="Wat betekent RSI?", history=[], context={"page": "/assistant"}, session_id="sess-rsi"),
+            Request({"type": "http", "headers": [], "client": ("127.0.0.1", 12345)}),
+            None,
+            {"id": 30},
+            SimpleNamespace(get_chat_response=AsyncMock(), _classify_intent=lambda query: "general_help"),
+            None,
+        )
+    )
+
+    assert graph_called is False
+    assert captured["runtime_selection"].operation_id is None
+    assert captured["runtime_selection"].skip_canonical_context_graph is False
+    assert captured["context_payload"] == {"page": "/assistant", "session_id": "sess-rsi"}
+    assert response.response == "RSI is een momentumindicator."
 
 
 def test_legacy_response_is_generic_failure_detects_default_failures():

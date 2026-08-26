@@ -56,6 +56,7 @@ class RequestPlan(BaseModel):
     user_goal: str = "unknown"
     operation_id: Optional[str] = None
     operation_contract_version: Optional[str] = None
+    skip_canonical_context_graph: bool = False
     interaction_mode: Literal[
         "CAPABILITY", "READ", "EVALUATE", "CREATE_PROPOSAL", "ACTION_PROPOSAL",
         "CLARIFICATION", "CONFIRMATION", "EXECUTION", "UNAVAILABLE",

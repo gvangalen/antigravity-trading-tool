@@ -37,6 +37,10 @@ class FinnV2RuntimeSelection(BaseModel):
     runtime_mode: Literal["v1_primary", "v1_primary_v2_shadow", "v2_canary_readonly", "v2_primary_with_v1_fallback", "v2_only"]
     selected_runtime: Literal["v1", "v2"]
     interaction_mode: Optional[str] = None
+    operation_id: Optional[str] = None
+    selector_source: Optional[str] = None
+    reasoning_required: bool = True
+    skip_canonical_context_graph: bool = False
     visible_allowed: bool = False
     shadow_enabled: bool = False
     fallback_allowed: bool = False
@@ -56,4 +60,3 @@ class FinnV2RuntimeStatus(BaseModel):
     canary_allowed_modes: List[str] = Field(default_factory=list)
     v1_fallback_enabled: bool = True
     post_cutover_kill_switch: bool = False
-

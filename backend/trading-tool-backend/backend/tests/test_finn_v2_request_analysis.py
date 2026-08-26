@@ -145,6 +145,23 @@ def test_request_analysis_routes_dutch_capability_question_to_capability_mode():
     assert result.reasoning_required is False
 
 
+def test_request_analysis_preserves_financial_concept_in_request_plan():
+    result = SERVICE.analyze(message="Wat betekent RSI?")
+
+    assert result.request_plan.operation_id == "explain_financial_concept"
+    assert result.interaction_mode == "READ"
+    assert result.reasoning_required is False
+    assert result.request_plan.referenced_entities["concept"] == "RSI"
+
+
+def test_financial_concept_is_a_resolved_contract_input_not_a_guided_slot():
+    result = FinnV2RequestAnalysisService().analyze(message="Wat betekent RSI?")
+
+    assert result.request_plan.operation_id == "explain_financial_concept"
+    assert result.request_plan.skip_canonical_context_graph is True
+    assert result.missing_essential_inputs == []
+
+
 def test_request_analysis_routes_english_capability_question_to_capability_mode():
     result = SERVICE.analyze(message="What can FINN do for me?")
 

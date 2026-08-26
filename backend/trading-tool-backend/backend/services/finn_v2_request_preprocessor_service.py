@@ -176,8 +176,19 @@ class FinnV2RequestPreprocessorService:
 
     @staticmethod
     def _financial_concept(text: str) -> Optional[str]:
-        concepts = ("rsi", "vwap", "volume", "moving average", "ma200", "ma_200", "stop loss", "risk reward", "dca", "dollar cost averaging")
-        return next((concept for concept in concepts if concept in text), None)
+        concepts = {
+            "rsi": "RSI",
+            "vwap": "VWAP",
+            "volume": "volume",
+            "moving average": "moving average",
+            "ma200": "MA200",
+            "ma_200": "MA200",
+            "stop loss": "stop loss",
+            "risk reward": "risk reward",
+            "dca": "DCA",
+            "dollar cost averaging": "dollar cost averaging",
+        }
+        return next((label for concept, label in concepts.items() if concept in text), None)
 
     @classmethod
     def _contains_any(cls, text: str, terms: tuple[str, ...]) -> bool:

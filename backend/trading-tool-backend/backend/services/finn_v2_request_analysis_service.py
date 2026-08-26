@@ -26,6 +26,7 @@ class FinnV2RequestAnalysisService:
         workspace_hints: Optional[Dict[str, object]] = None,
         client_context: Optional[Dict[str, object]] = None,
         conversation_context: Optional[Dict[str, object]] = None,
+        allow_structured_selection: bool = True,
     ) -> RequestAnalysisResult:
         text = str(message or "").strip()
         normalized = self._normalize_text(text)
@@ -34,6 +35,7 @@ class FinnV2RequestAnalysisService:
             conversation_context=conversation_context,
             workspace_hints=workspace_hints,
             client_context=client_context,
+            allow_structured_selection=allow_structured_selection,
         )
         preprocessed = self.classifier.preprocessor.preprocess(
             message=text,
@@ -140,13 +142,20 @@ class FinnV2RequestAnalysisService:
             if operation_id in {"watchlist_add", "watchlist_remove"}
             else explicit_asset
         )
+        # ``concept`` is a normalized request fact, not a guided slot.  A
+        # selected financial-concept contract therefore has its required input
+        # before any stateful clarification logic is considered.
+        concept_input_is_present = (
+            operation_id == "explain_financial_concept"
+            and bool(preprocessed.financial_concept)
+        )
         guided_state = cancelled_guided_state or (
             self.operation_state.resolve(
                 contract=operation,
                 message=text,
                 explicit_asset=operation_asset,
                 conversation_context=conversation_context,
-            ) if operation.required_inputs else None
+            ) if operation.required_inputs and not concept_input_is_present else None
         )
         if guided_state is not None:
             missing_essential_inputs = list(guided_state.missing_required_inputs)
@@ -164,6 +173,7 @@ class FinnV2RequestAnalysisService:
             explicit_setup_id=explicit_setup_id,
             explicit_strategy_id=explicit_strategy_id,
             explicit_bot_id=explicit_bot_id,
+            financial_concept=preprocessed.financial_concept,
             operation_id=operation_id,
             operation=operation,
             operation_state=guided_state.dict() if guided_state is not None else {},
@@ -223,6 +233,7 @@ class FinnV2RequestAnalysisService:
         explicit_setup_id: Optional[int],
         explicit_strategy_id: Optional[int],
         explicit_bot_id: Optional[int],
+        financial_concept: Optional[str],
         operation_id: str,
         operation,
         operation_state: Dict[str, object],
@@ -254,6 +265,7 @@ class FinnV2RequestAnalysisService:
             user_goal=self._user_goal(interaction_mode, primary_subject, normalized, integrated_plan),
             operation_id=operation_id,
             operation_contract_version=getattr(operation, "version", None),
+            skip_canonical_context_graph=getattr(operation, "context_policy", None) == "minimal",
             interaction_mode=interaction_mode,
             primary_domains=list(scopes),
             required_information_scopes=list(getattr(operation, "required_scopes", ())),
@@ -267,6 +279,7 @@ class FinnV2RequestAnalysisService:
                     "setup_id": explicit_setup_id,
                     "strategy_id": explicit_strategy_id,
                     "bot_id": explicit_bot_id,
+                    "concept": financial_concept,
                 }.items()
                 if value is not None
             },

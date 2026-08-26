@@ -53,20 +53,13 @@ class FinnV2OperationClassificationService:
         conversation_context: Optional[Mapping[str, object]] = None,
         workspace_hints: Optional[Mapping[str, object]] = None,
         client_context: Optional[Mapping[str, object]] = None,
+        allow_structured_selection: bool = True,
     ) -> SemanticOperationClassification:
         facts = self.preprocessor.preprocess(
             message=message, workspace_hints=workspace_hints, client_context=client_context
         )
-        if facts.domain_hint == "off_topic":
-            return self._result("off_topic", facts, "high", "domain", ())
-        if facts.financial_concept and facts.discourse_act == "information_request" and not facts.explicit_target_asset and not facts.explicit_entities:
-            return self._result("explain_financial_concept", facts, "high", "domain", ())
-        continuation = self._conversation_operation(facts=facts, context=conversation_context or {})
-        if continuation is not None:
-            return continuation
-        candidates = self._candidates(facts=facts, context=conversation_context or {})
-        selected = self._select_deterministically(facts=facts, candidates=candidates)
-        if selected is None and self._may_use_structured_selection(candidates):
+        candidates = self._selector_candidates(facts=facts, context=conversation_context or {})
+        if allow_structured_selection:
             selection, _error = self.structured_selector.select(
                 message=message,
                 candidate_contracts=candidates,
@@ -80,18 +73,94 @@ class FinnV2OperationClassificationService:
             )
             if selection is not None and selection.confidence >= 0.75:
                 return self._result(selection.operation_id, facts, "high", "structured", candidates)
-        if selected is None:
-            return self._result("clarify_request", facts, "low", "clarification", candidates)
-        if not selected.supported:
-            return self._result("unsupported_financial_operation", facts, "high", "capability_gap", candidates, unsupported_capability=selected.capability_gap)
-        confidence = "high" if len(candidates) == 1 else "medium"
-        return self._result(selected.operation_id, facts, confidence, "deterministic", candidates)
+        # This is a provider-failure safety outcome, not a parallel selector.
+        # The same manifest candidates and deterministic validator bound it;
+        # no context, tool, policy, or operation may be invented here.
+        fallback = self._provider_failure_fallback(
+            facts=facts,
+            candidates=candidates,
+            context=conversation_context or {},
+        )
+        return self._result(
+            fallback.operation_id,
+            facts,
+            "medium",
+            "provider_fallback",
+            candidates,
+            unsupported_capability=fallback.capability_gap,
+        )
+
+    def _selector_candidates(
+        self, *, facts: FinnV2PreprocessedRequest, context: Mapping[str, object]
+    ) -> tuple[OperationContract, ...]:
+        if facts.domain_hint == "off_topic":
+            return (self.registry.get("off_topic"),)
+
+        candidates = list(self._candidates(facts=facts, context=context))
+        continuation = self._conversation_operation(facts=facts, context=context)
+        if continuation is not None:
+            candidates.insert(0, self.registry.get(continuation.operation_id))
+        if self._is_financial_concept_explanation_request(facts):
+            candidates.insert(0, self.registry.get("explain_financial_concept"))
+        if not candidates:
+            fallback_id = (
+                "unavailable"
+                if "beste trade" in facts.normalized_text or "best trade" in facts.normalized_text
+                else
+                "unsupported_financial_operation"
+                if facts.domain_hint == "financial" and facts.discourse_act == "operation_request" and facts.explicit_entities
+                else "clarify_request"
+            )
+            candidates.append(self.registry.get(fallback_id))
+        # Preserve declared rank while making the safe clarification outcome
+        # available when a free-form request remains materially ambiguous.
+        if candidates[0].operation_id not in {"off_topic", "clarify_request", "unsupported_financial_operation"}:
+            candidates.append(self.registry.get("clarify_request"))
+        deduped: list[OperationContract] = []
+        for candidate in candidates:
+            if candidate.operation_id not in {item.operation_id for item in deduped}:
+                deduped.append(candidate)
+        return tuple(deduped)
+
+    def _provider_failure_fallback(
+        self,
+        *,
+        facts: FinnV2PreprocessedRequest,
+        candidates: tuple[OperationContract, ...],
+        context: Mapping[str, object],
+    ) -> OperationContract:
+        if facts.domain_hint == "off_topic":
+            return self.registry.get("off_topic")
+        continuation = self._conversation_operation(facts=facts, context=context)
+        if continuation is not None:
+            return self.registry.get(continuation.operation_id)
+        if self._is_financial_concept_explanation_request(facts):
+            return self.registry.get("explain_financial_concept")
+        if "beste trade" in facts.normalized_text or "best trade" in facts.normalized_text:
+            return self.registry.get("unavailable")
+        selected = self._select_deterministically(facts=facts, candidates=candidates)
+        if selected is not None:
+            return selected
+        if facts.domain_hint == "financial" and facts.discourse_act == "operation_request" and facts.explicit_entities:
+            return self.registry.get("unsupported_financial_operation")
+        return self.registry.get("clarify_request")
 
     @staticmethod
-    def _may_use_structured_selection(candidates: tuple[OperationContract, ...]) -> bool:
-        # Deterministic contracts must never cause a provider call merely to
-        # resolve a wording ambiguity. They receive one typed clarification.
-        return len(candidates) > 1 and all(contract.model_policy != "never" for contract in candidates)
+    def _is_financial_concept_explanation_request(facts: FinnV2PreprocessedRequest) -> bool:
+        if not facts.financial_concept or facts.discourse_act != "information_request" or facts.explicit_target_asset:
+            return False
+        if not facts.explicit_entities:
+            return True
+        normalized = facts.normalized_text
+        explanation_pattern = (
+            normalized.startswith("wat betekent ")
+            or normalized.startswith("wat is ")
+            or normalized.startswith("what is ")
+            or normalized.startswith("what does ")
+            or normalized.startswith("leg uit")
+            or normalized.startswith("uitleg")
+        )
+        return explanation_pattern and set(facts.explicit_entities).issubset({"indicator_configuration"})
 
     def _conversation_operation(
         self, *, facts: FinnV2PreprocessedRequest, context: Mapping[str, object]
@@ -222,7 +291,7 @@ class FinnV2OperationClassificationValidator:
             contract = self.registry.require_supported(classification.operation_id)
         except ValueError:
             return "operation_not_supported"
-        if classification.selector_source not in {"deterministic", "conversation", "structured", "clarification", "domain", "capability_gap"}:
+        if classification.selector_source not in {"deterministic", "conversation", "structured", "clarification", "domain", "capability_gap", "provider_fallback"}:
             return "selector_source_invalid"
         if facts is None:
             return None
@@ -230,7 +299,7 @@ class FinnV2OperationClassificationValidator:
         # not against the grammatical form of a short slot answer.  For
         # example, a setup name is correctly a read-like utterance while it
         # still fills the required ``name`` input of CREATE_PROPOSAL.
-        if classification.selector_source == "conversation":
+        if classification.selector_source in {"conversation", "provider_fallback"}:
             active = FinnV2OperationClassificationService._guided_state_payload(conversation_context or {})
             if isinstance(active, Mapping) and active.get("operation_id") == contract.operation_id:
                 return None
