@@ -1,9 +1,4 @@
-"""Bounded structured selection between existing FINN V2 contracts.
-
-The selector receives a small manifest-derived candidate set.  It cannot add
-operations, modes, tools or policies; the caller validates its result against
-the same immutable registry before allowing execution.
-"""
+"""Strict model-first selection from the immutable FINN V2 manifest."""
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -25,7 +20,7 @@ class FinnV2StructuredOperationSelection:
 
 
 class FinnV2StructuredOperationSelectorService:
-    """Use strict JSON only when deterministic registry ranking is tied."""
+    """Select one registry contract; never expose tools, modes, or policy."""
 
     def __init__(self, provider: Optional[Callable[..., Mapping[str, Any]]] = None):
         self._provider = provider or openai_client.ask_gpt_structured_response
@@ -41,31 +36,42 @@ class FinnV2StructuredOperationSelectorService:
         candidate_ids = tuple(contract.operation_id for contract in candidate_contracts)
         if not candidate_ids:
             return None, "selector_no_candidates"
-        response = self._provider(
-            prompt=str({
-                "message": message,
-                "facts": dict(facts),
-                "verified_context": self._safe_context(verified_context),
-                "candidate_operations": [
-                    {
-                        "operation_id": contract.operation_id,
-                        "description": contract.semantic_description,
-                        "required_inputs": contract.required_inputs,
-                        "required_entities": contract.required_entities,
-                        "required_scopes": contract.required_scopes,
-                    }
-                    for contract in candidate_contracts
-                ],
-            }),
-            system_role=(
-                "Select exactly one FINN operation from the supplied candidates. "
-                "Do not select tools, modes, policies, or unsupported operations. "
-                "Return the strict schema only."
-            ),
-            schema=self._schema(candidate_ids),
-            timeout_seconds=4,
-            client_max_retries=0,
-        )
+        try:
+            response = self._provider(
+                prompt=str({
+                    "message": message,
+                    "facts": dict(facts),
+                    "conversation_state": self._safe_context(verified_context),
+                    "operation_manifest": [
+                        {
+                            "operation_id": contract.operation_id,
+                            "semantic_description": contract.semantic_description,
+                            "domain": contract.domain,
+                            "supported": contract.supported,
+                            "executable": bool(contract.execution_adapter),
+                            "required_entities": contract.required_entities,
+                            "required_conversation_state": contract.requires_verified_context,
+                            "required_inputs": contract.required_inputs,
+                            "positive_examples": contract.positive_examples,
+                            "hard_negative_examples": contract.negative_examples,
+                            "allowed_action_polarities": contract.allowed_action_polarities,
+                        }
+                        for contract in candidate_contracts
+                    ],
+                }),
+                system_role=(
+                    "Select exactly one FINN operation from the supplied immutable manifest. "
+                    "Do not select modes, tools, scopes, policies, or execution. "
+                    "Use clarify_request for ambiguity, unsupported_financial_operation for "
+                    "understood but unsupported finance requests, and off_topic for non-finance. "
+                    "Return the strict schema only."
+                ),
+                schema=self._schema(candidate_ids),
+                timeout_seconds=4,
+                client_max_retries=0,
+            )
+        except Exception as exc:
+            return None, f"selector_provider_exception:{type(exc).__name__}"
         if response.get("error"):
             return None, f"selector_{response['error']}"
         parsed = response.get("parsed")
@@ -122,7 +128,7 @@ class FinnV2StructuredOperationSelectorService:
         raw = context or {}
         return {
             key: raw[key]
-            for key in ("operation_id", "contract_version", "mode", "resolved_entities", "evidence_refs")
+            for key in ("last_verified_context", "active_guided_operation", "last_turn_diagnostics")
             if key in raw
         }
 

@@ -26,7 +26,6 @@ class FinnV2RequestAnalysisService:
         workspace_hints: Optional[Dict[str, object]] = None,
         client_context: Optional[Dict[str, object]] = None,
         conversation_context: Optional[Dict[str, object]] = None,
-        allow_structured_selection: bool = True,
     ) -> RequestAnalysisResult:
         text = str(message or "").strip()
         normalized = self._normalize_text(text)
@@ -35,7 +34,6 @@ class FinnV2RequestAnalysisService:
             conversation_context=conversation_context,
             workspace_hints=workspace_hints,
             client_context=client_context,
-            allow_structured_selection=allow_structured_selection,
         )
         preprocessed = self.classifier.preprocessor.preprocess(
             message=text,

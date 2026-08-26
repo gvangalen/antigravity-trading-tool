@@ -125,23 +125,21 @@ def test_model_first_selector_receives_read_candidates():
 
     assert result.operation_id == "read_active_setup"
     assert result.selector_source == "structured"
-    assert [contract.operation_id for contract in captured["candidate_contracts"]][:2] == ["read_active_setup", "read_linked_strategy"]
+    offered = {contract.operation_id for contract in captured["candidate_contracts"]}
+    assert {"read_active_setup", "read_linked_strategy", "clarify_request", "off_topic"}.issubset(offered)
 
 
-def test_provider_failure_fallback_stays_inside_the_same_contract_boundary():
+def test_provider_failure_is_terminal_and_never_selects_a_local_operation():
     class ExplodingSelector:
         def select(self, **_kwargs):
-            raise AssertionError("provider should be disabled for this failure-path unit test")
+            return None, "selector_provider_unavailable"
 
     classifier = FinnV2OperationClassificationService(structured_selector=ExplodingSelector())
 
-    result = classifier.classify(
-        message="Maak iets nieuws.",
-        allow_structured_selection=False,
-    )
+    result = classifier.classify(message="Maak iets nieuws.")
 
-    assert result.operation_id == "clarify_request"
-    assert result.selector_source == "provider_fallback"
+    assert result.operation_id == "unavailable"
+    assert result.selector_source == "provider_unavailable"
 
 
 def test_manifest_candidates_exclude_contracts_without_selection_metadata():
@@ -202,7 +200,7 @@ def test_capability_request_never_gets_hijacked_by_verified_or_guided_context(me
     )
 
     assert result.operation_id == "capability"
-    assert result.selector_source == "provider_fallback"
+    assert result.selector_source == "structured"
 
 
 def test_technical_configuration_is_an_indicator_read_not_a_workspace_asset_read():
