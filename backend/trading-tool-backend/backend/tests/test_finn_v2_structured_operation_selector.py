@@ -52,3 +52,8 @@ def test_structured_selector_rejects_a_provider_operation_outside_candidates():
 
     assert selection is None
     assert error == "selector_operation_outside_candidates"
+
+
+def test_selector_provider_timeout_has_a_safe_operational_floor(monkeypatch):
+    monkeypatch.setenv("FINN_V2_SELECTOR_TIMEOUT_SECONDS", "4")
+    assert FinnV2StructuredOperationSelectorService._timeout_seconds() == 15

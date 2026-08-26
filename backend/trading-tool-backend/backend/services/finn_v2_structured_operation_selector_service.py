@@ -1,6 +1,7 @@
 """Strict model-first selection from the immutable FINN V2 manifest."""
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass
 from typing import Any, Callable, Mapping, Optional
 
@@ -71,7 +72,7 @@ class FinnV2StructuredOperationSelectorService:
                 name="finn_v2_operation_selection",
                 schema=self._schema(candidate_ids),
             ),
-                timeout_seconds=4,
+                timeout_seconds=self._timeout_seconds(),
                 client_max_retries=0,
             )
         except Exception as exc:
@@ -104,6 +105,11 @@ class FinnV2StructuredOperationSelectorService:
             missing_inputs=tuple(raw_inputs),
             ambiguity_reason=self._optional_text(parsed.get("ambiguity_reason")),
         ), None
+
+    @staticmethod
+    def _timeout_seconds() -> int:
+        """Keep the provider deadline above normal Responses API latency."""
+        return max(15, int(os.getenv("FINN_V2_SELECTOR_TIMEOUT_SECONDS", "30")))
 
     @staticmethod
     def _schema(candidate_ids: tuple[str, ...]) -> dict[str, object]:
