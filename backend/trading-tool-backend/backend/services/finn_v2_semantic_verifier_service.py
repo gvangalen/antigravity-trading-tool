@@ -7,6 +7,7 @@ from typing import Any, Dict, Optional
 from backend.schemas.finn_v2_verifier_schema import SemanticVerificationResult
 from backend.services.finn_v2_flag_service import FinnV2FlagService
 from backend.utils import openai_client
+from backend.utils.openai_client import StructuredOutputSpec
 
 
 logger = logging.getLogger(__name__)
@@ -14,8 +15,6 @@ logger = logging.getLogger(__name__)
 
 class FinnV2SemanticVerifierService:
     SCHEMA = {
-        "name": "finn_v2_semantic_verifier",
-        "schema": {
             "type": "object",
             "additionalProperties": False,
             "properties": {
@@ -38,8 +37,6 @@ class FinnV2SemanticVerifierService:
                 "follow_up_ok",
                 "reason_codes",
             ],
-        },
-        "strict": True,
     }
 
     def __init__(self, flag_service: Optional[FinnV2FlagService] = None):
@@ -72,7 +69,7 @@ class FinnV2SemanticVerifierService:
         response = openai_client.ask_gpt_structured_response(
             prompt=str(user_prompt),
             system_role=system_prompt,
-            schema=self.SCHEMA,
+            output_spec=StructuredOutputSpec(name="finn_v2_semantic_verifier", schema=self.SCHEMA),
             model_override=self.flags.semantic_verifier_model(),
             timeout_seconds=self.flags.semantic_verifier_timeout_seconds(),
             client_max_retries=0,

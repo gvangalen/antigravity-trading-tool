@@ -6,6 +6,7 @@ from typing import Any, Callable, Mapping, Optional
 
 from backend.domain.finn_v2_operation_registry import OperationContract
 from backend.utils import openai_client
+from backend.utils.openai_client import StructuredOutputSpec
 
 
 @dataclass(frozen=True)
@@ -66,13 +67,18 @@ class FinnV2StructuredOperationSelectorService:
                     "understood but unsupported finance requests, and off_topic for non-finance. "
                     "Return the strict schema only."
                 ),
+            output_spec=StructuredOutputSpec(
+                name="finn_v2_operation_selection",
                 schema=self._schema(candidate_ids),
+            ),
                 timeout_seconds=4,
                 client_max_retries=0,
             )
         except Exception as exc:
             return None, f"selector_provider_exception:{type(exc).__name__}"
         if response.get("error"):
+            if response["error"] == "structured_schema_contract_error":
+                return None, "selector_schema_contract_error"
             return None, f"selector_{response['error']}"
         parsed = response.get("parsed")
         if not isinstance(parsed, Mapping):
@@ -102,25 +108,21 @@ class FinnV2StructuredOperationSelectorService:
     @staticmethod
     def _schema(candidate_ids: tuple[str, ...]) -> dict[str, object]:
         return {
-            "name": "finn_v2_operation_selection",
-            "strict": True,
-            "schema": {
-                "type": "object",
-                "additionalProperties": False,
-                "properties": {
-                    "operation_id": {"type": "string", "enum": list(candidate_ids)},
-                    "confidence": {"type": "number", "minimum": 0, "maximum": 1},
-                    "entities": {"type": "object", "additionalProperties": {"type": "string"}},
-                    "target_asset": {"type": ["string", "null"]},
-                    "conversation_reference": {"type": ["string", "null"]},
-                    "missing_inputs": {"type": "array", "items": {"type": "string"}},
-                    "ambiguity_reason": {"type": ["string", "null"]},
-                },
-                "required": [
-                    "operation_id", "confidence", "entities", "target_asset",
-                    "conversation_reference", "missing_inputs", "ambiguity_reason",
-                ],
+            "type": "object",
+            "additionalProperties": False,
+            "properties": {
+                "operation_id": {"type": "string", "enum": list(candidate_ids)},
+                "confidence": {"type": "number", "minimum": 0, "maximum": 1},
+                "entities": {"type": "object", "additionalProperties": {"type": "string"}},
+                "target_asset": {"type": ["string", "null"]},
+                "conversation_reference": {"type": ["string", "null"]},
+                "missing_inputs": {"type": "array", "items": {"type": "string"}},
+                "ambiguity_reason": {"type": ["string", "null"]},
             },
+            "required": [
+                "operation_id", "confidence", "entities", "target_asset",
+                "conversation_reference", "missing_inputs", "ambiguity_reason",
+            ],
         }
 
     @staticmethod

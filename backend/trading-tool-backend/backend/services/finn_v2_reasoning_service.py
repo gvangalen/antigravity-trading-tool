@@ -41,6 +41,7 @@ from backend.services.finn_v2_reasoning_prompt_service import (
 )
 from backend.services.platform_metrics import increment_execution_safety_counter, record_latency_sample
 from backend.utils import openai_client
+from backend.utils.openai_client import StructuredOutputSpec
 
 
 logger = logging.getLogger(__name__)
@@ -475,7 +476,10 @@ class FinnV2ReasoningService:
                     previous_response=repair_previous_response,
                 ),
                 system_role=system_prompt,
-                schema=self.prompts.response_schema(),
+                output_spec=StructuredOutputSpec(
+                    name="finn_v2_reasoning_result",
+                    schema=self.prompts.response_schema(),
+                ),
                 model_override=model_name,
                 timeout_seconds=self.flags.reasoning_timeout_seconds(),
                 max_output_tokens=self.flags.reasoning_max_output_tokens(),

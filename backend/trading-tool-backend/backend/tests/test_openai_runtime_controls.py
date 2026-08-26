@@ -4,6 +4,7 @@ from types import SimpleNamespace
 from backend.services.report_service import ReportService
 from backend.services import ai_availability_service
 from backend.utils import openai_client as openai_module
+from backend.utils.openai_client import StructuredOutputSpec
 
 
 def test_openai_quota_breaker_short_circuits_json_calls(monkeypatch):
@@ -97,7 +98,7 @@ def test_structured_response_exposes_incomplete_provider_details(monkeypatch):
     result = openai_module.ask_gpt_structured_response(
         prompt="question",
         system_role="system",
-        schema={"type": "object", "properties": {}, "required": [], "additionalProperties": False},
+        output_spec=StructuredOutputSpec("test_runtime", {"type": "object", "properties": {}, "required": [], "additionalProperties": False}),
     )
 
     assert result["error"] == "incomplete_structured_response"

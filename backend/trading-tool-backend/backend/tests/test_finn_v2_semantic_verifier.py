@@ -13,7 +13,9 @@ def test_semantic_verifier_uses_strict_structured_output(monkeypatch):
     service.flags.semantic_verifier_timeout_seconds = lambda: 30
 
     def _fake_structured_response(**kwargs):
-        assert kwargs["schema"]["strict"] is True
+        assert kwargs["output_spec"].name == "finn_v2_semantic_verifier"
+        assert kwargs["output_spec"].strict is True
+        assert kwargs["output_spec"].schema["type"] == "object"
         return {
             "parsed": {
                 "passes": True,

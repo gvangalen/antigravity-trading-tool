@@ -6,6 +6,7 @@ import re
 import asyncio
 import inspect
 import hashlib
+from dataclasses import dataclass
 from typing import Any, Dict, Optional
 from pathlib import Path
 
@@ -75,6 +76,58 @@ _openai_runtime_state: Dict[str, Any] = {
     "last_error_at": None,
 }
 _process_started_at_epoch = int(time.time())
+
+
+class StructuredOutputContractError(ValueError):
+    """Raised when an internal caller violates the structured-output boundary."""
+
+
+@dataclass(frozen=True)
+class StructuredOutputSpec:
+    """Raw JSON Schema plus the only provider wrapper metadata we allow."""
+
+    name: str
+    schema: Dict[str, Any]
+    strict: bool = True
+
+
+def _validate_structured_output_spec(spec: StructuredOutputSpec) -> None:
+    if not isinstance(spec, StructuredOutputSpec):
+        raise StructuredOutputContractError("structured_output_spec_required")
+    if not isinstance(spec.name, str) or not spec.name.strip():
+        raise StructuredOutputContractError("structured_output_name_invalid")
+    if not isinstance(spec.strict, bool):
+        raise StructuredOutputContractError("structured_output_strict_invalid")
+    if not isinstance(spec.schema, dict):
+        raise StructuredOutputContractError("structured_output_schema_not_object")
+    if "schema" in spec.schema and {"name", "strict"}.intersection(spec.schema):
+        raise StructuredOutputContractError("structured_output_provider_wrapper_rejected")
+    if "schema" in spec.schema and isinstance(spec.schema.get("schema"), dict):
+        raise StructuredOutputContractError("structured_output_double_schema_nesting")
+    if not isinstance(spec.schema.get("type"), str) or not spec.schema["type"]:
+        raise StructuredOutputContractError("structured_output_root_type_required")
+
+
+def build_structured_response_request(
+    *,
+    model_name: str,
+    prompt: str,
+    system_role: str,
+    output_spec: StructuredOutputSpec,
+    max_output_tokens: int,
+    timeout_seconds: Optional[int] = None,
+) -> Dict[str, Any]:
+    """Serialize the one canonical Responses API JSON-schema payload."""
+    _validate_structured_output_spec(output_spec)
+    request: Dict[str, Any] = {
+        "model": model_name,
+        "input": [{"role": "system", "content": system_role}, {"role": "user", "content": prompt}],
+        "text": {"format": {"type": "json_schema", "name": output_spec.name, "schema": output_spec.schema, "strict": output_spec.strict}},
+        "max_output_tokens": max_output_tokens,
+    }
+    if timeout_seconds is not None:
+        request["timeout"] = timeout_seconds
+    return request
 
 
 def _quota_breaker_active() -> bool:
@@ -548,12 +601,18 @@ def ask_gpt_structured_response(
     *,
     prompt: str,
     system_role: str,
-    schema: Dict[str, Any],
+    output_spec: StructuredOutputSpec,
     model_override: Optional[str] = None,
     timeout_seconds: Optional[int] = None,
     max_output_tokens: Optional[int] = None,
     client_max_retries: Optional[int] = None,
 ) -> Dict[str, Any]:
+    try:
+        _validate_structured_output_spec(output_spec)
+    except StructuredOutputContractError as exc:
+        # A developer contract error must not consume a provider slot or be
+        # surfaced as a user-facing rate limit.
+        return {"error": "structured_schema_contract_error", "error_detail": str(exc)}
     availability = get_ai_availability()
     if not availability["available"]:
         _openai_runtime_state["blocked_calls"] = int(_openai_runtime_state.get("blocked_calls") or 0) + 1
@@ -575,24 +634,14 @@ def ask_gpt_structured_response(
     started = start_timer()
     try:
         active_client = client.with_options(max_retries=client_max_retries) if client_max_retries is not None else client
-        request_kwargs: Dict[str, Any] = {
-            "model": active_model,
-            "input": [
-                {"role": "system", "content": system_role},
-                {"role": "user", "content": prompt},
-            ],
-            "text": {
-                "format": {
-                    "type": "json_schema",
-                    "name": "finn_v2_reasoning_result",
-                    "schema": schema,
-                    "strict": True,
-                }
-            },
-            "max_output_tokens": max_output_tokens or MAX_TOKENS,
-        }
-        if timeout_seconds is not None:
-            request_kwargs["timeout"] = timeout_seconds
+        request_kwargs = build_structured_response_request(
+            model_name=active_model,
+            prompt=prompt,
+            system_role=system_role,
+            output_spec=output_spec,
+            max_output_tokens=max_output_tokens or MAX_TOKENS,
+            timeout_seconds=timeout_seconds,
+        )
         response = active_client.responses.create(**request_kwargs)
         parsed = None
         parsed_source = None
@@ -683,6 +732,8 @@ def ask_gpt_structured_response(
         }
     except Exception as e:
         logger.exception("❌ OpenAI structured response error")
+        if _is_provider_schema_contract_error(str(e)):
+            return {"error": "structured_schema_contract_error", "error_detail": "provider_rejected_schema"}
         _mark_runtime_error(str(e))
         if "insufficient_quota" in str(e):
             _mark_quota_exhausted()
@@ -691,6 +742,11 @@ def ask_gpt_structured_response(
         if "timeout" in str(e).lower():
             return {"error": "timeout"}
         return {"error": "provider_error"}
+
+
+def _is_provider_schema_contract_error(message: str) -> bool:
+    normalized = message.casefold()
+    return "invalid schema" in normalized or ("json schema" in normalized and "type" in normalized)
 
 # ============================================================
 # 🧠 GPT TEXT CALL

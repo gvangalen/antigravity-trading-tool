@@ -1,4 +1,5 @@
 from backend.utils import openai_client as openai_module
+from backend.utils.openai_client import StructuredOutputSpec
 from backend.services import ai_availability_service
 
 
@@ -81,7 +82,7 @@ def test_central_structured_response_path_uses_parsed_output_only(monkeypatch):
     result = openai_module.ask_gpt_structured_response(
         prompt="prompt",
         system_role="system",
-        schema={"type": "object", "properties": {}, "required": [], "additionalProperties": False},
+        output_spec=StructuredOutputSpec("test_reasoning", {"type": "object", "properties": {}, "required": [], "additionalProperties": False}),
     )
 
     assert result["parsed"]["mode"] == "FACT"
@@ -99,7 +100,7 @@ def test_central_structured_response_path_parses_completed_output_text(monkeypat
     result = openai_module.ask_gpt_structured_response(
         prompt="prompt",
         system_role="system",
-        schema={"type": "object", "properties": {}, "required": [], "additionalProperties": False},
+        output_spec=StructuredOutputSpec("test_reasoning", {"type": "object", "properties": {}, "required": [], "additionalProperties": False}),
     )
 
     assert result["parsed"]["mode"] == "READ"

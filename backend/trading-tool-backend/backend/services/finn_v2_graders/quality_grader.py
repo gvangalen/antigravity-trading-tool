@@ -5,13 +5,11 @@ from typing import Optional
 from backend.schemas.finn_v2_eval_schema import EvalDimensionScores
 from backend.schemas.finn_v2_response_schema import VerifiedResponse
 from backend.utils import openai_client
+from backend.utils.openai_client import StructuredOutputSpec
 
 
 class QualityGrader:
     SCHEMA = {
-        "name": "finn_v2_quality_grader",
-        "strict": True,
-        "schema": {
             "type": "object",
             "additionalProperties": False,
             "properties": {
@@ -27,7 +25,6 @@ class QualityGrader:
                 "language_quality": {"type": "number"},
             },
             "required": ["relevance", "specificity", "completeness", "clarity", "usefulness", "brevity", "tone", "uncertainty_quality", "next_step_quality", "language_quality"],
-        },
     }
 
     def grade_mock(self, *, response: VerifiedResponse) -> EvalDimensionScores:
@@ -50,7 +47,7 @@ class QualityGrader:
         result = openai_client.ask_gpt_structured_response(
             prompt=f"Question: {prompt}\nResponse: {response.dict()}",
             system_role="Score the response for relevance, specificity, completeness, clarity, usefulness, brevity, tone, uncertainty quality, next-step quality, and language quality on 0-100.",
-            schema=self.SCHEMA,
+            output_spec=StructuredOutputSpec(name="finn_v2_quality_grader", schema=self.SCHEMA),
             model_override=model,
             client_max_retries=0,
         )
@@ -59,4 +56,3 @@ class QualityGrader:
         parsed = result.get("parsed") or {}
         scores = EvalDimensionScores(**parsed)
         return scores, result.get("model"), result
-

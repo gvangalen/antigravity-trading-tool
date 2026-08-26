@@ -45,6 +45,7 @@ class FinnV2EvalRunnerService:
         eval_run_id = f"finn-v2-eval-run-{uuid.uuid4().hex}"
         case_results: list[EvalCaseResult] = []
         blocked = model_mode == "real" and not get_ai_availability().get("available")
+        blocker_code = "REAL_MODEL_EVAL_BLOCKED" if blocked else None
         if persist_results:
             run_record = await self.repo.create_run(
                 id=eval_run_id,
@@ -143,6 +144,13 @@ class FinnV2EvalRunnerService:
                     reasoning_tokens=case_result.reasoning_tokens,
                     created_at=case_result.created_at,
                 )
+            # A repeated schema rejection can never become an accuracy signal.
+            # Stop the real batch immediately rather than burning provider
+            # quota and surfacing an internal contract fault as rate limiting.
+            if model_mode == "real" and metadata.get("selector_error") == "selector_schema_contract_error":
+                blocked = True
+                blocker_code = "SELECTOR_SCHEMA_CONTRACT_ERROR"
+                break
         latencies = [item.latency_ms or 0 for item in case_results]
         aggregate_scores = self._aggregate_scores(case_results)
         blocking_gate_results = self._aggregate_blocking_gates(case_results)
@@ -157,7 +165,7 @@ class FinnV2EvalRunnerService:
             aggregate_scores=aggregate_scores,
             failure_case_ids=[item.case_id for item in case_results if not item.passed],
             real_model_validation_blocked=blocked,
-            blocker_code="REAL_MODEL_EVAL_BLOCKED" if blocked else None,
+            blocker_code=blocker_code,
             model_names=sorted({item.model for item in case_results if item.model}),
             total_input_tokens=sum(item.input_tokens or 0 for item in case_results),
             total_output_tokens=sum(item.output_tokens or 0 for item in case_results),
@@ -205,6 +213,7 @@ class FinnV2EvalRunnerService:
             "missing_essential_inputs": list(analysis.missing_essential_inputs),
             "requested_entities": list(analysis.requested_entities),
             "expected_entity_graph": dict(case.expected_entity_graph),
+            "selector_error": analysis.request_plan.selection_reason_code if analysis.request_plan else None,
         }
         if model_mode == "real" and get_ai_availability().get("available"):
             envelope = await self.visible.deliver_assistant_envelope(
