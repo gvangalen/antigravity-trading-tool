@@ -27,6 +27,18 @@ def test_selector_responses_payload_wraps_raw_schema_exactly_once():
     assert payload["schema"]["properties"]["operation_id"]["enum"] == [
         "explain_financial_concept", "clarify_request"
     ]
+    assert payload["schema"]["properties"]["entities"] == {
+        "type": "object",
+        "additionalProperties": False,
+        "properties": {
+            "concept": {"type": ["string", "null"]},
+            "asset": {"type": ["string", "null"]},
+            "setup_id": {"type": ["string", "null"]},
+            "strategy_id": {"type": ["string", "null"]},
+            "bot_id": {"type": ["string", "null"]},
+        },
+        "required": ["concept", "asset", "setup_id", "strategy_id", "bot_id"],
+    }
     assert set(payload["schema"]["required"]) == {
         "operation_id", "confidence", "entities", "target_asset",
         "conversation_reference", "missing_inputs", "ambiguity_reason",

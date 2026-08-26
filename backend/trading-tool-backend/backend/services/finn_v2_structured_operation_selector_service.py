@@ -113,7 +113,21 @@ class FinnV2StructuredOperationSelectorService:
             "properties": {
                 "operation_id": {"type": "string", "enum": list(candidate_ids)},
                 "confidence": {"type": "number", "minimum": 0, "maximum": 1},
-                "entities": {"type": "object", "additionalProperties": {"type": "string"}},
+                # OpenAI strict JSON Schema requires closed objects to list
+                # every property in required. Nullable fields preserve the
+                # absence of an entity without reopening the schema.
+                "entities": {
+                    "type": "object",
+                    "additionalProperties": False,
+                    "properties": {
+                        "concept": {"type": ["string", "null"]},
+                        "asset": {"type": ["string", "null"]},
+                        "setup_id": {"type": ["string", "null"]},
+                        "strategy_id": {"type": ["string", "null"]},
+                        "bot_id": {"type": ["string", "null"]},
+                    },
+                    "required": ["concept", "asset", "setup_id", "strategy_id", "bot_id"],
+                },
                 "target_asset": {"type": ["string", "null"]},
                 "conversation_reference": {"type": ["string", "null"]},
                 "missing_inputs": {"type": "array", "items": {"type": "string"}},
