@@ -1,0 +1,3 @@
+[
+  {"eval_id":"holdout-concept-1","dataset":"holdout","input_query":"Kun je RSI in gewone taal duiden?","expected_operation_id":"explain_financial_concept","expected_domain":"financial_education","expected_supported":true,"expected_entities":{"concept":"RSI"},"expected_action_polarity":"read","provider_call_expected":true}
+]

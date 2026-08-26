@@ -1,0 +1,4 @@
+[
+  {"eval_id":"dev-concept-1","dataset":"development","input_query":"Wat betekent RSI?","expected_operation_id":"explain_financial_concept","expected_domain":"financial_education","expected_supported":true,"expected_entities":{"concept":"RSI"},"expected_action_polarity":"read","provider_call_expected":true},
+  {"eval_id":"dev-indicators-1","dataset":"development","input_query":"Welke indicatoren heb ik voor BTC ingesteld?","expected_operation_id":"read_indicator_configuration","expected_domain":"indicators","expected_supported":true,"expected_entities":{"asset":"BTC"},"expected_action_polarity":"read","provider_call_expected":true}
+]
