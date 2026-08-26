@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import Literal
 
 from pydantic import BaseModel, Field
 
@@ -11,7 +12,7 @@ from backend.domain.finn_v2_operation_registry import FinnV2OperationRegistry
 
 class SelectorEvalCase(BaseModel):
     eval_id: str
-    dataset: str
+    dataset: Literal["development", "regression", "holdout"]
     input_query: str
     conversation_context: dict = Field(default_factory=dict)
     expected_operation_id: str
@@ -39,7 +40,9 @@ def load_and_validate(paths: list[Path]) -> list[SelectorEvalCase]:
     cases: list[SelectorEvalCase] = []
     ids: set[str] = set()
     queries: set[str] = set()
-    operations: set[str] = set()
+    operations_by_dataset: dict[str, set[str]] = {
+        "development": set(), "regression": set(), "holdout": set(),
+    }
     holdout_queries: list[str] = []
     for path in paths:
         for raw in json.loads(path.read_text(encoding="utf-8")):
@@ -56,12 +59,16 @@ def load_and_validate(paths: list[Path]) -> list[SelectorEvalCase]:
                 raise ValueError(f"contract_expectation_mismatch:{case.eval_id}")
             if contract.mode in {"CREATE_PROPOSAL", "ACTION_PROPOSAL"} and case.expected_supported and not contract.execution_adapter:
                 raise ValueError(f"non_executable_write_expected:{case.eval_id}")
-            ids.add(case.eval_id); queries.add(normalized); operations.add(case.expected_operation_id); cases.append(case)
+            ids.add(case.eval_id)
+            queries.add(normalized)
+            operations_by_dataset[case.dataset].add(case.expected_operation_id)
+            cases.append(case)
             if case.dataset == "holdout":
                 holdout_queries.append(normalized)
-    missing = REQUIRED_OPERATIONS.difference(operations)
-    if missing:
-        raise ValueError(f"required_operation_coverage_missing:{sorted(missing)}")
+    for dataset, operations in operations_by_dataset.items():
+        missing = REQUIRED_OPERATIONS.difference(operations)
+        if missing:
+            raise ValueError(f"required_operation_coverage_missing:{dataset}:{sorted(missing)}")
     prompt_examples = {
         example.casefold().strip()
         for contract in registry.list()
