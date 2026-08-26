@@ -385,7 +385,7 @@ class FinnV2ReasoningService:
     @staticmethod
     def _uses_deterministic_contract_response(contract) -> bool:
         """Keep typed proposal payloads independent from optional model wording."""
-        return contract is not None and contract.response_strategy == "proposal_draft"
+        return contract is not None and (contract.response_strategy == "proposal_draft" or contract.model_policy == "never")
 
     def _deterministic_contract_draft(self, *, contract, run_id: str, user_id: int, context, model: str) -> ReasoningResult:
         """Use the contract response strategy without consulting the provider."""
@@ -396,6 +396,11 @@ class FinnV2ReasoningService:
                 context=context,
                 model=model,
                 error_codes=[],
+            )
+        if contract.operation_id in {"off_topic", "unsupported_financial_operation", "explain_financial_concept"}:
+            return self.fallbacks.safe_terminal_draft(
+                run_id=run_id, user_id=user_id, operation_id=contract.operation_id,
+                context=context, model=model,
             )
         return self.fallbacks.grounded_read_draft(
             run_id=run_id,

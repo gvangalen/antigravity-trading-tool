@@ -16,6 +16,28 @@ from backend.schemas.finn_v2_reasoning_schema import (
 
 
 class FinnV2ReasoningFallbackService:
+    def safe_terminal_draft(self, *, run_id: str, user_id: int, operation_id: str, context: ReasoningContextPackage, model: str) -> ReasoningResult:
+        plan = context.request_plan or {}
+        if operation_id == "off_topic":
+            answer = "Ik help je graag met financiële planning, marktcontext, setups, strategieën en bots."
+            observation = "Deze vraag valt buiten FINN's financiële en productondersteuning."
+            mode = "UNAVAILABLE"
+        elif operation_id == "unsupported_financial_operation":
+            capability = plan.get("unsupported_capability") or "Deze bewerking"
+            answer = f"{capability} wordt nog niet veilig door FINN ondersteund. Ik kan hiervoor geen actie uitvoeren."
+            observation = "De gevraagde financiële bewerking is herkend, maar heeft geen toegestane uitvoeringsadapter."
+            mode = "UNAVAILABLE"
+        else:
+            concept = plan.get("referenced_entities", {}).get("concept") or "dit financiële begrip"
+            answer = f"{concept} is een algemeen financieel analysebegrip. FINN kan het uitleggen, maar trekt zonder jouw bewijs geen persoonlijke conclusie."
+            observation = "Dit is algemene educatie en gebruikt geen persoonlijke accountgegevens."
+            mode = "READ"
+        return ReasoningResult(
+            reasoning_result_id=f"finn-v2-reasoning-{uuid.uuid4().hex}", run_id=run_id, user_id=user_id,
+            mode=mode, direct_answer=answer, main_observation=observation,
+            uncertainty_summary="", uncertainty_codes=[], evidence_refs_used=[], model=model,
+            created_at=datetime.now(timezone.utc),
+        )
     @staticmethod
     def _indicator_names(facts: dict[str, Any], category: str) -> list[str]:
         rows = facts.get(category) or []

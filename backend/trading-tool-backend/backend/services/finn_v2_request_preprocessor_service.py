@@ -27,6 +27,8 @@ class FinnV2PreprocessedRequest:
     conversation_reference_markers: tuple[str, ...]
     discourse_act: str
     possible_slot_answer: Optional[str]
+    domain_hint: str = "unknown"
+    financial_concept: Optional[str] = None
 
 
 class FinnV2RequestPreprocessorService:
@@ -152,6 +154,10 @@ class FinnV2RequestPreprocessorService:
             )
         ):
             discourse = "clarification_answer"
+        concept = self._financial_concept(normalized)
+        # Conversation acts and product verbs are meaningful FINN requests
+        # even where no financial noun appears in this short turn.
+        domain_hint = "financial" if (entities or asset or concept or references or action != "read" or discourse == "capability" or any(term in normalized for term in ("trade", "beleggen", "investment", "rendement", "risk", "risico"))) else "off_topic"
         return FinnV2PreprocessedRequest(
             normalized_text=normalized,
             language="en" if re.search(r"\b(what|which|add|remove|create|evaluate)\b", normalized) else "nl",
@@ -164,7 +170,14 @@ class FinnV2RequestPreprocessorService:
             conversation_reference_markers=references,
             discourse_act=discourse,
             possible_slot_answer=slot_answer,
+            domain_hint=domain_hint,
+            financial_concept=concept,
         )
+
+    @staticmethod
+    def _financial_concept(text: str) -> Optional[str]:
+        concepts = ("rsi", "vwap", "volume", "moving average", "ma200", "ma_200", "stop loss", "risk reward", "dca", "dollar cost averaging")
+        return next((concept for concept in concepts if concept in text), None)
 
     @classmethod
     def _contains_any(cls, text: str, terms: tuple[str, ...]) -> bool:

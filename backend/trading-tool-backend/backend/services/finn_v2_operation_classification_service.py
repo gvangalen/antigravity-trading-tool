@@ -28,6 +28,9 @@ class SemanticOperationClassification:
     confidence: str
     selector_source: str = "deterministic"
     candidate_operation_ids: tuple[str, ...] = ()
+    supported: bool = True
+    reason_code: Optional[str] = None
+    unsupported_capability: Optional[str] = None
 
 
 class FinnV2OperationClassificationService:
@@ -54,6 +57,10 @@ class FinnV2OperationClassificationService:
         facts = self.preprocessor.preprocess(
             message=message, workspace_hints=workspace_hints, client_context=client_context
         )
+        if facts.domain_hint == "off_topic":
+            return self._result("off_topic", facts, "high", "domain", ())
+        if facts.financial_concept and facts.discourse_act == "information_request" and not facts.explicit_target_asset and not facts.explicit_entities:
+            return self._result("explain_financial_concept", facts, "high", "domain", ())
         continuation = self._conversation_operation(facts=facts, context=conversation_context or {})
         if continuation is not None:
             return continuation
@@ -75,6 +82,8 @@ class FinnV2OperationClassificationService:
                 return self._result(selection.operation_id, facts, "high", "structured", candidates)
         if selected is None:
             return self._result("clarify_request", facts, "low", "clarification", candidates)
+        if not selected.supported:
+            return self._result("unsupported_financial_operation", facts, "high", "capability_gap", candidates, unsupported_capability=selected.capability_gap)
         confidence = "high" if len(candidates) == 1 else "medium"
         return self._result(selected.operation_id, facts, confidence, "deterministic", candidates)
 
@@ -161,6 +170,7 @@ class FinnV2OperationClassificationService:
         confidence: str,
         source: str,
         candidates: tuple[OperationContract, ...],
+        unsupported_capability: Optional[str] = None,
     ) -> SemanticOperationClassification:
         contract = self.registry.get(operation_id)
         return SemanticOperationClassification(
@@ -171,6 +181,9 @@ class FinnV2OperationClassificationService:
             confidence=confidence,
             selector_source=source,
             candidate_operation_ids=tuple(item.operation_id for item in candidates),
+            supported=contract.supported,
+            reason_code=unsupported_capability or ("off_topic" if operation_id == "off_topic" else None),
+            unsupported_capability=unsupported_capability,
         )
 
 
@@ -209,7 +222,7 @@ class FinnV2OperationClassificationValidator:
             contract = self.registry.require_supported(classification.operation_id)
         except ValueError:
             return "operation_not_supported"
-        if classification.selector_source not in {"deterministic", "conversation", "structured", "clarification"}:
+        if classification.selector_source not in {"deterministic", "conversation", "structured", "clarification", "domain", "capability_gap"}:
             return "selector_source_invalid"
         if facts is None:
             return None

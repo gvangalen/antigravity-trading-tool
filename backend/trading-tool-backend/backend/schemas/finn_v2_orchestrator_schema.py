@@ -77,6 +77,10 @@ class RequestPlan(BaseModel):
     selector_source: str = "deterministic"
     selector_confidence: str = "low"
     candidate_operation_ids: List[str] = Field(default_factory=list)
+    selection_domain: Optional[str] = None
+    selection_supported: Optional[bool] = None
+    selection_reason_code: Optional[str] = None
+    unsupported_capability: Optional[str] = None
     missing_information: List[str] = Field(default_factory=list)
     # This is persisted in the existing conversation context as JSON.  Keeping
     # the shape here prevents guided operations from falling back to untyped

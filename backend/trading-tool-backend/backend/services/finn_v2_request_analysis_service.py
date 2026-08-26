@@ -178,6 +178,10 @@ class FinnV2RequestAnalysisService:
             selector_source=semantic.selector_source,
             selector_confidence=semantic.confidence,
             candidate_operation_ids=list(semantic.candidate_operation_ids),
+            selection_domain=semantic.domain,
+            selection_supported=semantic.supported,
+            selection_reason_code=semantic.reason_code,
+            unsupported_capability=semantic.unsupported_capability,
         )
 
         return RequestAnalysisResult(
@@ -230,6 +234,10 @@ class FinnV2RequestAnalysisService:
         selector_source: str,
         selector_confidence: str,
         candidate_operation_ids: List[str],
+        selection_domain: Optional[str],
+        selection_supported: Optional[bool],
+        selection_reason_code: Optional[str],
+        unsupported_capability: Optional[str],
     ) -> RequestPlan:
         reference = None
         if uses_conversation_reference:
@@ -272,6 +280,10 @@ class FinnV2RequestAnalysisService:
             selector_source=selector_source,
             selector_confidence=selector_confidence,
             candidate_operation_ids=candidate_operation_ids,
+            selection_domain=selection_domain,
+            selection_supported=selection_supported,
+            selection_reason_code=selection_reason_code,
+            unsupported_capability=unsupported_capability,
             clarification_required=bool(missing_essential_inputs) or interaction_mode == "CLARIFICATION",
             confidence_score=score,
         )

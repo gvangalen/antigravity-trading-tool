@@ -191,7 +191,7 @@ class FinnV2OperationRegistry:
         entity_set = set(entities)
         candidates = []
         for contract in self._contracts.values():
-            if not contract.supported or contract.operation_id in {"clarify_request", "unavailable"}:
+            if not contract.supported or contract.operation_id in {"clarify_request", "unavailable", "off_topic", "unsupported_financial_operation", "explain_financial_concept"}:
                 continue
             # A contract without declared selection metadata is deliberately
             # not eligible for a new natural-language run. Capability gaps and
@@ -436,6 +436,9 @@ _CONTRACTS: tuple[OperationContract, ...] = (
     OperationContract("capability", FinnV2OperationRegistry.VERSION, "system", "CAPABILITY", ("wat kun je", "what can you", "capabilities"), required_scopes=("capability",), response_strategy="deterministic_template"),
     OperationContract("clarify_request", FinnV2OperationRegistry.VERSION, "system", "CLARIFICATION", (), response_strategy="clarification"),
     OperationContract("unavailable", FinnV2OperationRegistry.VERSION, "system", "UNAVAILABLE", (), response_strategy="unavailable"),
+    OperationContract("explain_financial_concept", FinnV2OperationRegistry.VERSION, "financial_education", "READ", (), required_inputs=("concept",), model_policy="never", response_strategy="financial_concept_explanation"),
+    OperationContract("unsupported_financial_operation", FinnV2OperationRegistry.VERSION, "financial_unsupported", "UNAVAILABLE", (), model_policy="never", response_strategy="unsupported_operation"),
+    OperationContract("off_topic", FinnV2OperationRegistry.VERSION, "off_topic", "UNAVAILABLE", (), model_policy="never", response_strategy="off_topic"),
     OperationContract("explain_previous_evidence", FinnV2OperationRegistry.VERSION, "system", "EVALUATE", ("onderbouw", "evidence", "waarom"), required_scopes=("profile", "preferences", "active_asset", "indicator_configuration", "active_setup", "linked_strategy", "linked_bot", "bot_status"), model_policy="required", response_strategy="model_reasoning"),
     OperationContract("reformulate_previous_response", FinnV2OperationRegistry.VERSION, "system", "READ", ("korter", "anders formuleren", "reformuleer"), response_strategy="deterministic_structured_summary"),
     _read("read_active_asset", "asset", ("active_asset",), ("actieve asset", "welke asset"), ("asset",)),
