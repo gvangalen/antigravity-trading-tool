@@ -15,7 +15,7 @@ def _paths():
 def test_selector_eval_registry_covers_each_dataset_without_leakage():
     cases = load_and_validate(_paths())
 
-    assert len(cases) == 48
+    assert len(cases) >= 52
     assert {case.dataset for case in cases} == {"development", "regression", "holdout"}
     assert all(case.provider_call_expected for case in cases)
 

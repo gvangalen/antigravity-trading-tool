@@ -2,6 +2,7 @@ from backend.domain.finn_v2_operation_registry import FinnV2OperationRegistry
 from backend.services.finn_v2_structured_operation_selector_service import FinnV2StructuredOperationSelectorService
 from backend.utils import openai_client
 from backend.utils.openai_client import StructuredOutputSpec
+from types import SimpleNamespace
 
 
 def test_selector_responses_payload_wraps_raw_schema_exactly_once():
@@ -102,3 +103,12 @@ def test_provider_429_remains_rate_limited_for_the_selector():
 
     assert selection is None
     assert error == "selector_ai_rate_limited"
+
+
+def test_provider_rate_limit_metadata_preserves_retry_after():
+    error = Exception("rate limit reached")
+    error.response = SimpleNamespace(status_code=429, headers={"retry-after": "7", "x-request-id": "req-rate"})
+
+    assert openai_client._is_rate_limited_exception(error) is True
+    assert openai_client._retry_after_seconds(error) == 7.0
+    assert openai_client._read_request_id(error) == "req-rate"

@@ -193,6 +193,21 @@ def _read_request_id(value: Any) -> Optional[str]:
     return None
 
 
+def _retry_after_seconds(value: Any) -> Optional[float]:
+    """Extract Retry-After from a provider exception for caller-controlled backoff."""
+    response = getattr(value, "response", None)
+    headers = getattr(response, "headers", None) or {}
+    raw = headers.get("retry-after") or headers.get("Retry-After")
+    try:
+        return max(0.0, float(raw)) if raw is not None else None
+    except (TypeError, ValueError):
+        return None
+
+
+def _is_rate_limited_exception(value: Any) -> bool:
+    return _read_status_code(value) == 429 or "rate limit" in str(value).casefold()
+
+
 def probe_openai_runtime(*, clear_breaker_on_success: bool = True, caller: str = "backend") -> Dict[str, Any]:
     availability_before = get_ai_availability()
     started = time.perf_counter()
@@ -739,6 +754,16 @@ def ask_gpt_structured_response(
             _mark_quota_exhausted()
             _log_openai_quota_skip(AI_UNAVAILABLE_BUDGET)
             return {"error": AI_UNAVAILABLE_BUDGET, "ai_status": get_ai_availability()}
+        if _is_rate_limited_exception(e):
+            return {
+                "error": "ai_rate_limited",
+                "error_detail": "provider_http_429",
+                "provider_metadata": {
+                    "http_status": _read_status_code(e),
+                    "request_id": _read_request_id(e),
+                    "retry_after_seconds": _retry_after_seconds(e),
+                },
+            }
         if "timeout" in str(e).lower():
             return {"error": "timeout"}
         return {"error": "provider_error"}

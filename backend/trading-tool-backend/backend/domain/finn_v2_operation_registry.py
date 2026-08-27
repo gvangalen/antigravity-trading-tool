@@ -321,6 +321,7 @@ _OPERATION_SELECTION_METADATA: Mapping[str, dict] = {
         "selection_priority": 100,
     },
     "read_active_asset": {
+        "semantic_description": "Read the user's currently selected trading instrument or symbol. This includes requests for the current market, workspace instrument, selected symbol, or active asset even when no ticker is named.",
         "any_entities": ("asset",),
         "required_discourse_acts": ("information_request",),
         "allowed_action_polarities": ("read",),

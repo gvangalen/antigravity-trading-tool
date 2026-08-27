@@ -9,6 +9,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import time
 from collections import Counter
 from pathlib import Path
 from statistics import median
@@ -19,6 +20,7 @@ from backend.domain.finn_v2_operation_registry import FinnV2OperationRegistry
 from backend.services.finn_v2_operation_classification_service import FinnV2OperationClassificationService, FinnV2OperationClassificationValidator
 from backend.services.finn_v2_selector_eval_registry import SelectorEvalCase, load_and_validate
 from backend.services.finn_v2_structured_operation_selector_service import FinnV2StructuredOperationSelectorService
+from backend.services.ai_usage_observability_service import ai_usage_context
 from backend.utils import openai_client
 
 DATASETS = ("development", "regression", "holdout")
@@ -50,7 +52,10 @@ def run_case(case: SelectorEvalCase) -> dict[str, Any]:
     raw: dict[str, Any] = {}
 
     def provider(**kwargs: Any) -> Mapping[str, Any]:
-        response = openai_client.ask_gpt_structured_response(**kwargs)
+        # Eval calls receive their own scope: they never contend with a user
+        # request or another testcase in the product call-slot limiter.
+        with ai_usage_context(entry_point=f"selector_eval:{case.eval_id}", user_id=f"eval:{case.eval_id}"):
+            response = openai_client.ask_gpt_structured_response(**kwargs)
         raw.update(response)
         return response
 
@@ -82,6 +87,7 @@ def run_case(case: SelectorEvalCase) -> dict[str, Any]:
         },
         "provider_status": (raw.get("provider_metadata") or {}).get("response_status"),
         "provider_response_id": (raw.get("provider_metadata") or {}).get("response_id"),
+        "provider_metadata": raw.get("provider_metadata") or {},
         "parse_status": parse_status, "validation_status": validation_status, "latency_ms": latency_ms,
         "failure_category": category, "error": raw.get("error") or classification_error or validation_error,
         "matches": {
@@ -95,6 +101,38 @@ def run_case(case: SelectorEvalCase) -> dict[str, Any]:
             "clarification": clarification == case.expected_clarification,
         },
     }
+
+
+def retry_delay(row: Mapping[str, Any], *, attempt: int, base_seconds: float) -> float | None:
+    if row.get("failure_category") != "provider" or row.get("error") != "ai_rate_limited":
+        return None
+    metadata = row.get("provider_metadata") or {}
+    retry_after = metadata.get("retry_after_seconds") if isinstance(metadata, Mapping) else None
+    try:
+        return max(0.0, float(retry_after)) if retry_after is not None else base_seconds * (2 ** (attempt - 1))
+    except (TypeError, ValueError):
+        return base_seconds * (2 ** (attempt - 1))
+
+
+def run_case_with_retries(case: SelectorEvalCase, *, max_retries: int, backoff_seconds: float) -> dict[str, Any]:
+    attempts: list[dict[str, Any]] = []
+    for attempt in range(1, max_retries + 2):
+        row = run_case(case)
+        attempts.append({
+            "attempt": attempt,
+            "error": row.get("error"),
+            "failure_category": row.get("failure_category"),
+            "provider_status": row.get("provider_status"),
+            "provider_response_id": row.get("provider_response_id"),
+            "latency_ms": row.get("latency_ms"),
+        })
+        delay = retry_delay(row, attempt=attempt, base_seconds=backoff_seconds)
+        if delay is None or attempt > max_retries:
+            row["attempts"] = attempts
+            row["retry_count"] = attempt - 1
+            return row
+        time.sleep(delay)
+    raise AssertionError("unreachable")
 
 
 def rate(rows: list[dict[str, Any]], metric: str) -> float:
@@ -129,21 +167,23 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("dataset", choices=DATASETS)
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--min-interval-seconds", type=float, default=2.0)
+    parser.add_argument("--max-rate-limit-retries", type=int, default=3)
+    parser.add_argument("--rate-limit-backoff-seconds", type=float, default=5.0)
     args = parser.parse_args()
     if os.getenv("FINN_V2_REAL_SELECTOR_EVAL") != "1":
         raise SystemExit("FINN_V2_REAL_SELECTOR_EVAL=1 is required to spend provider calls")
     cases = [case for case in load_and_validate(fixture_paths()) if case.dataset == args.dataset]
     rows: list[dict[str, Any]] = []
-    previous_infrastructure_error: str | None = None
     for case in cases:
-        row = run_case(case)
+        if rows:
+            time.sleep(max(0.0, args.min_interval_seconds))
+        row = run_case_with_retries(
+            case,
+            max_retries=max(0, args.max_rate_limit_retries),
+            backoff_seconds=max(0.0, args.rate_limit_backoff_seconds),
+        )
         rows.append(row)
-        if row["failure_category"] in {"provider", "schema", "timeout"}:
-            if previous_infrastructure_error == row["failure_category"]:
-                break
-            previous_infrastructure_error = row["failure_category"]
-        else:
-            previous_infrastructure_error = None
     report = build_report(args.dataset, rows)
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(report, indent=2, ensure_ascii=True) + "\n", encoding="utf-8")

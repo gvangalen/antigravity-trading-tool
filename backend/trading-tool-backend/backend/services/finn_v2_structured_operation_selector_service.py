@@ -77,6 +77,9 @@ class FinnV2StructuredOperationSelectorService:
                     "about portfolio management, investing, or trading remains financial even if no "
                     "ticker or FINN object is named, so use unsupported_financial_operation rather "
                     "than off_topic when no supported contract exists. "
+                    "A request for the current selected instrument, symbol, market, or workspace asset "
+                    "is read_active_asset even if it does not name a ticker; do not ask for clarification "
+                    "when FINN can read that active workspace state. "
                     "Return the strict schema only."
                 ),
             output_spec=StructuredOutputSpec(
