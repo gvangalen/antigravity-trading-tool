@@ -26,12 +26,17 @@ class SelectorEvalCase(BaseModel):
     provider_call_expected: bool = True
 
 
-REQUIRED_OPERATIONS = {
+REQUIRED_OPERATION_FAMILIES = {
     "capability", "read_active_asset", "read_indicator_configuration",
     "read_active_setup", "read_active_plan", "evaluate_plan",
     "explain_previous_evidence", "reformulate_previous_response", "create_setup",
     "watchlist_add", "watchlist_remove", "activate_bot", "off_topic",
     "unsupported_financial_operation", "clarify_request", "explain_financial_concept",
+}
+
+OPERATION_FAMILY = {
+    "read_indicator_configuration": "read_indicator_configuration",
+    "evaluate_indicator_configuration": "read_indicator_configuration",
 }
 
 
@@ -40,7 +45,7 @@ def load_and_validate(paths: list[Path]) -> list[SelectorEvalCase]:
     cases: list[SelectorEvalCase] = []
     ids: set[str] = set()
     queries: set[str] = set()
-    operations_by_dataset: dict[str, set[str]] = {
+    families_by_dataset: dict[str, set[str]] = {
         "development": set(), "regression": set(), "holdout": set(),
     }
     holdout_queries: list[str] = []
@@ -61,12 +66,14 @@ def load_and_validate(paths: list[Path]) -> list[SelectorEvalCase]:
                 raise ValueError(f"non_executable_write_expected:{case.eval_id}")
             ids.add(case.eval_id)
             queries.add(normalized)
-            operations_by_dataset[case.dataset].add(case.expected_operation_id)
+            families_by_dataset[case.dataset].add(
+                OPERATION_FAMILY.get(case.expected_operation_id, case.expected_operation_id)
+            )
             cases.append(case)
             if case.dataset == "holdout":
                 holdout_queries.append(normalized)
-    for dataset, operations in operations_by_dataset.items():
-        missing = REQUIRED_OPERATIONS.difference(operations)
+    for dataset, families in families_by_dataset.items():
+        missing = REQUIRED_OPERATION_FAMILIES.difference(families)
         if missing:
             raise ValueError(f"required_operation_coverage_missing:{dataset}:{sorted(missing)}")
     prompt_examples = {
