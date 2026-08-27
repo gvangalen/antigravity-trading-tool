@@ -105,7 +105,9 @@ class FinnV2StructuredOperationSelectorService:
         return FinnV2StructuredOperationSelection(
             operation_id=operation_id,
             confidence=float(confidence),
-            entities={str(key): str(value) for key, value in raw_entities.items()},
+            # Normalize an occasional JSON delimiter preserved inside a
+            # structured string before the entity reaches contract consumers.
+            entities={str(key): self._entity_text(value) for key, value in raw_entities.items()},
             target_asset=self._optional_text(parsed.get("target_asset")),
             conversation_reference=self._optional_text(parsed.get("conversation_reference")),
             missing_inputs=tuple(raw_inputs),
@@ -163,3 +165,7 @@ class FinnV2StructuredOperationSelectorService:
     @staticmethod
     def _optional_text(value: object) -> Optional[str]:
         return str(value) if isinstance(value, str) and value else None
+
+    @staticmethod
+    def _entity_text(value: object) -> str:
+        return str(value).strip().strip(",;:)}]\"'").strip()

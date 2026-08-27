@@ -57,3 +57,21 @@ def test_structured_selector_rejects_a_provider_operation_outside_candidates():
 def test_selector_provider_timeout_has_a_safe_operational_floor(monkeypatch):
     monkeypatch.setenv("FINN_V2_SELECTOR_TIMEOUT_SECONDS", "4")
     assert FinnV2StructuredOperationSelectorService._timeout_seconds() == 15
+
+
+def test_selector_normalizes_structured_entity_transport_delimiters():
+    selector = FinnV2StructuredOperationSelectorService(
+        provider=lambda **_kwargs: {"parsed": {
+            "operation_id": "explain_financial_concept", "confidence": 0.9,
+            "entities": {"concept": "RSI},"}, "target_asset": None,
+            "conversation_reference": None, "missing_inputs": [], "ambiguity_reason": None,
+        }}
+    )
+    selection, error = selector.select(
+        message="Wat betekent RSI?",
+        candidate_contracts=(FinnV2OperationRegistry().get("explain_financial_concept"),),
+        facts={}, verified_context=None,
+    )
+
+    assert error is None
+    assert selection.entities["concept"] == "RSI"
