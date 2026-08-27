@@ -54,7 +54,9 @@ def run_case(case: SelectorEvalCase) -> dict[str, Any]:
     def provider(**kwargs: Any) -> Mapping[str, Any]:
         # Eval calls receive their own scope: they never contend with a user
         # request or another testcase in the product call-slot limiter.
-        with ai_usage_context(entry_point=f"selector_eval:{case.eval_id}", user_id=f"eval:{case.eval_id}"):
+        # entry_point is enough to isolate the call-slot scope. Keep user_id
+        # absent: usage telemetry persists it as an integer foreign key.
+        with ai_usage_context(entry_point=f"selector_eval:{case.eval_id}"):
             response = openai_client.ask_gpt_structured_response(**kwargs)
         raw.update(response)
         return response
