@@ -25,7 +25,7 @@ def test_selector_eval_registry_rejects_duplicate_cross_dataset_queries(tmp_path
     duplicate = tmp_path / "finn_v2_selector_holdout.json"
     duplicate.write_text(paths[-1].read_text(encoding="utf-8"), encoding="utf-8")
     data = duplicate.read_text(encoding="utf-8").replace(
-        "Kun je RSI in gewone taal duiden?", "Wat betekent RSI?"
+        "Waar dient MACD voor bij technische analyse?", "Wat betekent RSI?"
     )
     duplicate.write_text(data, encoding="utf-8")
 
