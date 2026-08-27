@@ -72,6 +72,11 @@ class FinnV2StructuredOperationSelectorService:
                     "select the corresponding lineage operation and set conversation_reference to "
                     "previous_verified_response. Treat an overview of a user's setup, strategy, "
                     "and bot as read_active_plan, not as ambiguity. "
+                    "For a requested change, select a write contract only when the request identifies "
+                    "its required object and change details; otherwise use clarify_request. A request "
+                    "about portfolio management, investing, or trading remains financial even if no "
+                    "ticker or FINN object is named, so use unsupported_financial_operation rather "
+                    "than off_topic when no supported contract exists. "
                     "Return the strict schema only."
                 ),
             output_spec=StructuredOutputSpec(
