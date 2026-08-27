@@ -288,7 +288,7 @@ def _gap(operation_id: str, domain: str, mode: str, aliases: tuple[str, ...], re
 # encoding a list of production prompt strings in the runtime selector.
 _OPERATION_SELECTION_METADATA: Mapping[str, dict] = {
     "clarify_request": {
-        "semantic_description": "Ask one focused clarification when the user's FINN request does not identify a supported operation.",
+        "semantic_description": "Ask one focused clarification for an ambiguous request about the user's FINN trading workspace when the requested object or supported operation is not identifiable. Never classify a trading-workspace request as off-topic merely because details are missing.",
     },
     "unavailable": {
         "semantic_description": "Respond safely when the request cannot be fulfilled from an available FINN contract.",
@@ -297,7 +297,7 @@ _OPERATION_SELECTION_METADATA: Mapping[str, dict] = {
         "semantic_description": "Explain a general financial concept, indicator, or trading term without reading the user's workspace or using product tools.",
     },
     "unsupported_financial_operation": {
-        "semantic_description": "State that a financial product operation is not supported by a safe FINN contract.",
+        "semantic_description": "Safely decline a request that is clearly about investing, trading, portfolio management, brokerage, or a financial product operation but has no supported FINN contract. Do not use off_topic for financial requests.",
     },
     "off_topic": {
         "semantic_description": "Decline a request unrelated to financial education, FINN, or the user's trading workspace.",
