@@ -1,4 +1,11 @@
 from backend.services.finn_v2_request_analysis_service import FinnV2RequestAnalysisService
+from backend.services.finn_v2_request_preprocessor_service import FinnV2RequestPreprocessorService
+
+
+def test_preprocessor_treats_current_symbol_as_asset_entity():
+    facts = FinnV2RequestPreprocessorService().preprocess(message="Welk symbool heb ik momenteel geselecteerd?")
+
+    assert "asset" in facts.explicit_entities
 
 
 SERVICE = FinnV2RequestAnalysisService()

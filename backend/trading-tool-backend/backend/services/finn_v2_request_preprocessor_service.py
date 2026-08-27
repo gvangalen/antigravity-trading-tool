@@ -75,7 +75,7 @@ class FinnV2RequestPreprocessorService:
             "zwakste",
             "betrouwbaar",
         ),
-        "asset": ("asset", "instrument", "coin", "aandeel", "workspace", "markt"),
+        "asset": ("asset", "instrument", "symbool", "symbol", "coin", "aandeel", "workspace", "markt"),
     }
     _REFERENCE_MARKERS = {
         "previous_verified_conclusion": ("die conclusie", "dat antwoord", "eerder antwoord", "onderbouw", "waarop baseer", "waar baseer", "welk bewijs", "waarom concludeerde", "leg de eerdere", "evidence achter"),
