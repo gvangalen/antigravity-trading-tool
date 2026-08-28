@@ -105,6 +105,7 @@ class FinnV2StructuredOperationSelectorService:
         operation_id = str(parsed.get("operation_id") or "")
         if operation_id not in candidate_ids:
             return None, "selector_operation_outside_candidates"
+        contract = next(contract for contract in candidate_contracts if contract.operation_id == operation_id)
         confidence = parsed.get("confidence")
         if not isinstance(confidence, (int, float)) or not 0 <= float(confidence) <= 1:
             return None, "selector_confidence_invalid"
@@ -124,8 +125,12 @@ class FinnV2StructuredOperationSelectorService:
                 self._optional_text(parsed.get("target_asset"))
                 or self._optional_text(raw_entities.get("asset"))
             ),
-            conversation_reference=self._optional_text(parsed.get("conversation_reference")),
-            missing_inputs=tuple(raw_inputs),
+            conversation_reference=(
+                "previous_verified_response"
+                if contract.requires_verified_context and self._optional_text(parsed.get("conversation_reference"))
+                else self._optional_text(parsed.get("conversation_reference"))
+            ),
+            missing_inputs=self._canonical_missing_inputs(contract=contract, raw_inputs=raw_inputs, facts=facts),
             ambiguity_reason=self._optional_text(parsed.get("ambiguity_reason")),
         ), None
 
@@ -186,3 +191,12 @@ class FinnV2StructuredOperationSelectorService:
         if value is None:
             return ""
         return str(value).strip().strip(",;:)}]\"'").strip()
+
+    @staticmethod
+    def _canonical_missing_inputs(*, contract: OperationContract, raw_inputs: list[str], facts: Mapping[str, object]) -> tuple[str, ...]:
+        """Keep selector telemetry within the chosen contract's typed slots."""
+        missing = [item for item in raw_inputs if item in contract.required_inputs]
+        referenced_asset = str(facts.get("referenced_asset") or "").strip()
+        if referenced_asset:
+            missing = [item for item in missing if item not in {"asset", "symbol"}]
+        return tuple(dict.fromkeys(missing))
