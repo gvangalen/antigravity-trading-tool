@@ -179,6 +179,8 @@ class FinnV2OperationClassificationService:
             "watchlist_add": "add", "watchlist_remove": "remove",
             "create_setup": "create", "activate_bot": "activate",
             "confirm_proposal": "confirm", "execute_proposal": "execute",
+            "explain_previous_evidence": "read",
+            "reformulate_previous_response": "read",
         }
         if contract.operation_id in actions:
             return actions[contract.operation_id]
