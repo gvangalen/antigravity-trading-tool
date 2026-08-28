@@ -124,6 +124,10 @@ class FinnV2StructuredOperationSelectorService:
         )
         if target_asset and not entities.get("asset"):
             entities["asset"] = target_asset
+        if not entities.get("asset"):
+            explicit_asset = self._optional_text(facts.get("referenced_asset"))
+            if explicit_asset:
+                entities["asset"] = explicit_asset
         return FinnV2StructuredOperationSelection(
             operation_id=operation_id,
             confidence=float(confidence),
