@@ -77,7 +77,12 @@ class FinnV2OperationClassificationService:
             },
             verified_context=self._safe_conversation_state(conversation_context or {}),
         )
-        if selection is not None and selection.confidence >= 0.75:
+        safe_terminal_operations = {
+            "clarify_request", "off_topic", "unsupported_financial_operation",
+        }
+        if selection is not None and (
+            selection.confidence >= 0.75 or selection.operation_id in safe_terminal_operations
+        ):
             return self._result(selection.operation_id, facts, "high", "structured", candidates, selection=selection)
         # A malformed, unavailable, or low-confidence selector response is a
         # typed terminal outcome.  Do not choose a nearby local operation:

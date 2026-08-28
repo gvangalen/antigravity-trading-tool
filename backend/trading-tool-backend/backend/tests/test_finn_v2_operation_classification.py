@@ -142,6 +142,23 @@ def test_provider_failure_is_terminal_and_never_selects_a_local_operation():
     assert result.selector_source == "provider_unavailable"
 
 
+def test_low_confidence_safe_terminal_selection_remains_typed():
+    class Selector:
+        def select(self, **_kwargs):
+            return type("Selection", (), {
+                "operation_id": "off_topic", "confidence": 0.0,
+                "entities": {}, "target_asset": None,
+                "conversation_reference": None, "missing_inputs": (),
+            })(), None
+
+    result = FinnV2OperationClassificationService(structured_selector=Selector()).classify(
+        message="Schrijf een recept voor appeltaart."
+    )
+
+    assert result.operation_id == "off_topic"
+    assert result.selector_source == "structured"
+
+
 def test_manifest_candidates_exclude_contracts_without_selection_metadata():
     facts = CLASSIFIER.preprocessor.preprocess(message="Welke indicatoren gebruik ik?")
 
