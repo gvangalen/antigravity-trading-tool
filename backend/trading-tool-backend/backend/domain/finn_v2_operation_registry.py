@@ -389,6 +389,7 @@ _OPERATION_SELECTION_METADATA: Mapping[str, dict] = {
         "selection_focus_entities": ("plan",),
     },
     "evaluate_indicator_configuration": {
+        "semantic_description": "Evaluate a user's saved indicator configuration when they ask what is missing, weak, suitable, risky, or should improve. A request to inspect or list configured indicators without an assessment remains read_indicator_configuration.",
         "any_entities": ("indicator_configuration",),
         "required_discourse_acts": ("evaluation",),
         "selection_priority": 40,
