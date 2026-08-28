@@ -120,7 +120,10 @@ class FinnV2StructuredOperationSelectorService:
             # Normalize an occasional JSON delimiter preserved inside a
             # structured string before the entity reaches contract consumers.
             entities={str(key): self._entity_text(value) for key, value in raw_entities.items()},
-            target_asset=self._optional_text(parsed.get("target_asset")),
+            target_asset=(
+                self._optional_text(parsed.get("target_asset"))
+                or self._optional_text(raw_entities.get("asset"))
+            ),
             conversation_reference=self._optional_text(parsed.get("conversation_reference")),
             missing_inputs=tuple(raw_inputs),
             ambiguity_reason=self._optional_text(parsed.get("ambiguity_reason")),
@@ -180,4 +183,6 @@ class FinnV2StructuredOperationSelectorService:
 
     @staticmethod
     def _entity_text(value: object) -> str:
+        if value is None:
+            return ""
         return str(value).strip().strip(",;:)}]\"'").strip()

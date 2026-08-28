@@ -246,6 +246,8 @@ class FinnV2RequestPreprocessorService:
             return "read"
         if "live" in text and re.search(r"\b(activeer|activate|schakel|start|zet|maak)\b", text):
             return "activate"
+        if re.search(r"\bpas\b.*\baan\b", text):
+            return "update"
         # A requested concept/proposal is an operation request even when it is
         # phrased as a question. This recognizes the product act, not a fixed
         # sentence or a specific asset.

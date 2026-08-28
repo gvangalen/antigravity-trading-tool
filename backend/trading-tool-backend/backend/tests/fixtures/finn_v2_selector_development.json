@@ -155,7 +155,10 @@
     },
     "expected_action_polarity": "create",
     "provider_call_expected": true,
-    "expected_missing_inputs": []
+    "expected_missing_inputs": [
+      "name",
+      "setup_type"
+    ]
   },
   {
     "eval_id": "dev-watch-add",
@@ -196,7 +199,9 @@
     "expected_supported": true,
     "expected_action_polarity": "activate",
     "provider_call_expected": true,
-    "expected_missing_inputs": []
+    "expected_missing_inputs": [
+      "bot_id"
+    ]
   },
   {
     "eval_id": "dev-off-topic",
