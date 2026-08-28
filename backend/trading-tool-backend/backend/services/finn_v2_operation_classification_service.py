@@ -157,7 +157,7 @@ class FinnV2OperationClassificationService:
         contract = self.registry.get(operation_id)
         return SemanticOperationClassification(
             operation_id=operation_id,
-            action=facts.action_polarity,
+            action=self._contract_action(contract, facts.action_polarity),
             domain=contract.domain,
             discourse=facts.discourse_act,
             confidence=confidence,
@@ -171,6 +171,22 @@ class FinnV2OperationClassificationService:
             selected_conversation_reference=getattr(selection, "conversation_reference", None),
             selected_missing_inputs=tuple(getattr(selection, "missing_inputs", ()) or ()),
         )
+
+    @staticmethod
+    def _contract_action(contract: OperationContract, raw_action: str) -> str:
+        """Project a validated contract into one stable lifecycle polarity."""
+        actions = {
+            "watchlist_add": "add", "watchlist_remove": "remove",
+            "create_setup": "create", "activate_bot": "activate",
+            "confirm_proposal": "confirm", "execute_proposal": "execute",
+        }
+        if contract.operation_id in actions:
+            return actions[contract.operation_id]
+        if contract.mode == "EVALUATE":
+            return "evaluate"
+        if contract.mode in {"READ", "CAPABILITY", "UNAVAILABLE", "CLARIFICATION"}:
+            return "read" if contract.operation_id != "clarify_request" else raw_action
+        return raw_action
 
 
 class FinnV2OperationClassificationValidator:

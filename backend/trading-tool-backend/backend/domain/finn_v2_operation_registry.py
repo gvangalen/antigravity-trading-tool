@@ -379,6 +379,7 @@ _OPERATION_SELECTION_METADATA: Mapping[str, dict] = {
         "selection_focus_entities": ("plan",),
     },
     "evaluate_plan": {
+        "semantic_description": "Assess a user's complete current trading approach or plan, including broad questions about where that approach is weak, vulnerable, incomplete, risky, or inconsistent. This is supported plan evaluation, not unsupported portfolio management.",
         # Plan evaluation is deliberately distinct from evaluating a single
         # setup, strategy, bot or indicator configuration.
         "any_entities": ("plan",),

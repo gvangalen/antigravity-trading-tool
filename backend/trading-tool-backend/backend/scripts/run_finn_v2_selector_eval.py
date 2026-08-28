@@ -88,7 +88,7 @@ def run_case(case: SelectorEvalCase) -> dict[str, Any]:
         "actual": {
             "operation_id": classified.operation_id, "domain": contract.domain, "supported": contract.supported,
             "confidence": parsed.get("confidence"), "entities": entities, "context_asset": facts.workspace_context_asset,
-            "target_asset": target_asset, "action_polarity": facts.action_polarity,
+            "target_asset": target_asset, "action_polarity": classified.action,
             "conversation_reference": conversation_reference, "clarification": clarification,
             "missing_inputs": actual_missing_inputs,
             "selector_source": classified.selector_source,
@@ -104,7 +104,7 @@ def run_case(case: SelectorEvalCase) -> dict[str, Any]:
             "supported": contract.supported == case.expected_supported,
             "entities": same_entities(case.expected_entities, entities),
             "target_asset": case.expected_target_asset is None or str(target_asset or "").casefold() == case.expected_target_asset.casefold(),
-            "action_polarity": case.expected_action_polarity is None or facts.action_polarity == case.expected_action_polarity,
+            "action_polarity": case.expected_action_polarity is None or classified.action == case.expected_action_polarity,
             "conversation_reference": case.expected_conversation_reference is None or conversation_reference == case.expected_conversation_reference,
             "clarification": clarification == case.expected_clarification,
             "missing_inputs": (

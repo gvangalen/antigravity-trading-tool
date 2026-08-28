@@ -150,7 +150,10 @@
     },
     "expected_action_polarity": "create",
     "provider_call_expected": true,
-    "expected_missing_inputs": []
+    "expected_missing_inputs": [
+      "name",
+      "setup_type"
+    ]
   },
   {
     "eval_id": "reg-watch-add-1",
@@ -191,7 +194,9 @@
     "expected_supported": true,
     "expected_action_polarity": "activate",
     "provider_call_expected": true,
-    "expected_missing_inputs": []
+    "expected_missing_inputs": [
+      "bot_id"
+    ]
   },
   {
     "eval_id": "reg-offtopic-1",
@@ -267,7 +272,10 @@
     },
     "expected_action_polarity": "create",
     "expected_clarification": false,
-    "expected_missing_inputs": [],
+    "expected_missing_inputs": [
+      "name",
+      "setup_type"
+    ],
     "provider_call_expected": true
   },
   {
