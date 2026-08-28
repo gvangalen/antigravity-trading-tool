@@ -48,7 +48,7 @@ class FinnV2RequestPreprocessorService:
         ("evaluate", ("beoordeel", "evaluate", "zwak", "risico", "past", "fit", "ontbrek", "ontbreek", "vertrouwen")),
     )
     _ENTITY_TERMS = {
-        "watchlist": ("watchlist", "volglijst", "follow"),
+        "watchlist": ("watchlist", "volglijst", "follow", "gevolgde", "marktenlijst"),
         "indicator_configuration": (
             "indicator",
             "indicatorconfiguratie",
@@ -65,7 +65,7 @@ class FinnV2RequestPreprocessorService:
             "marktregime",
         ),
         "profile": ("profiel", "risicoprofiel", "tradingstijl", "risk profile", "trading style"),
-        "setup": ("setup", "set-up"),
+        "setup": ("setup", "set-up", "opzet", "positie-opzet"),
         "strategy": ("strategie", "strategy"),
         "bot": ("bot", "automation", "automatisering"),
         "plan": (
@@ -74,6 +74,7 @@ class FinnV2RequestPreprocessorService:
             "voorwaarde",
             "zwakste",
             "betrouwbaar",
+            "aanpak",
         ),
         "asset": ("asset", "instrument", "symbool", "symbol", "coin", "aandeel", "workspace", "markt"),
     }
@@ -248,6 +249,10 @@ class FinnV2RequestPreprocessorService:
             return "activate"
         if re.search(r"\bpas\b.*\baan\b", text):
             return "update"
+        if re.search(r"\bwerk\b.*\buit\b", text):
+            return "create"
+        if "niet langer" in text and any(term in text for term in ("watchlist", "volglijst", "gevolgde", "marktenlijst")):
+            return "remove"
         # A requested concept/proposal is an operation request even when it is
         # phrased as a question. This recognizes the product act, not a fixed
         # sentence or a specific asset.

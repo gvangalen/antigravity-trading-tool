@@ -118,6 +118,16 @@ def test_request_analysis_routes_complete_asset_plan_to_full_plan_contract():
     ]
 
 
+def test_request_analysis_recognizes_natural_plan_and_write_grammar():
+    plan = SERVICE.analyze(message="Waar wringt mijn huidige aanpak financieel gezien het meest?")
+    setup = SERVICE.analyze(message="Werk een nieuwe positie-opzet voor SOL uit.")
+    remove = SERVICE.analyze(message="Ik wil LINK niet langer op mijn gevolgde-marktenlijst.")
+
+    assert plan.request_plan.operation_id == "evaluate_plan"
+    assert setup.request_plan.operation_id == "create_setup"
+    assert remove.request_plan.operation_id == "watchlist_remove"
+
+
 def test_request_analysis_treats_safe_setup_concepts_as_create_proposals():
     for message in [
         "Maak een veilig concept voor een betere setup bij mijn huidige plan; nog niet opslaan.",
