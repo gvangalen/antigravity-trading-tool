@@ -89,9 +89,28 @@ def test_tool_plan_routes_setup_creation_and_watchlist_actions_through_proposal_
     assert setup_plan.tool_names == ["read_active_asset"]
     assert setup_plan.required_evidence == ["active_asset"]
     assert watchlist_plan.tool_names == ["read_active_asset", "read_watchlist"]
-    assert watchlist_plan.tool_inputs["read_active_asset"] == {"asset": "BTC"}
-    assert watchlist_plan.tool_inputs["read_watchlist"] == {"asset": "BTC"}
+    assert watchlist_plan.tool_inputs["read_active_asset"] == {"asset": "ETH"}
+    assert watchlist_plan.tool_inputs["read_watchlist"] == {"asset": "ETH"}
     assert watchlist_plan.required_evidence == ["active_asset", "watchlist"]
+
+
+def test_tool_plan_preserves_explicit_read_target_over_stale_workspace_asset():
+    analysis_service = FinnV2RequestAnalysisService()
+    analysis = analysis_service.analyze(
+        message="Welke RSI-configuratie heb ik voor BTC opgeslagen?",
+        workspace_hints={"symbol": "AAPL"},
+    )
+
+    plan = FinnV2ToolPlanService().build(
+        run_id="run-indicator-btc",
+        analysis=analysis,
+        domain_plan=FinnV2DomainRequirementService().determine(analysis),
+    )
+
+    assert analysis.request_plan.context_asset == "AAPL"
+    assert analysis.request_plan.target_asset == "BTC"
+    assert plan.tool_inputs["read_active_asset"] == {"asset": "BTC"}
+    assert plan.tool_inputs["read_indicator_configuration"] == {"asset": "BTC"}
 
 
 def test_tool_plan_collects_bot_context_for_live_action_proposals():

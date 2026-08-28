@@ -5,6 +5,7 @@ import json
 from typing import AsyncGenerator
 
 from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi.encoders import jsonable_encoder
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -32,7 +33,9 @@ def get_run_service(db: AsyncSession = Depends(get_db)) -> FinnV2RunService:
 
 
 def _sse(event_name: str, payload: dict) -> str:
-    return f"event: {event_name}\ndata: {json.dumps(payload, default=str)}\n\n"
+    # Match FastAPI's polling response encoding exactly; ``default=str``
+    # serializes datetimes with a space and caused transport-only drift.
+    return f"event: {event_name}\ndata: {json.dumps(jsonable_encoder(payload))}\n\n"
 
 
 async def _load_run_envelope(*, run_id: str, user_id: int) -> AgentRunStatusEnvelope:

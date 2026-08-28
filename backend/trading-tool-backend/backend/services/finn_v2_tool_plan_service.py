@@ -40,13 +40,14 @@ class FinnV2ToolPlanService:
     def build(self, *, run_id: str, analysis: RequestAnalysisResult, domain_plan: DomainRequirementPlan) -> ToolPlan:
         request_plan = analysis.request_plan
         operation_id = request_plan.operation_id if request_plan is not None else None
-        # Proposal targets and read context are separate contract facts. The
-        # target is carried in operation state/payload; preparing a watchlist
-        # proposal still reads the user's active workspace context.
+        # A resolved target is authoritative for every contract consumer.
+        # Workspace context remains separately persisted for explanations but
+        # can never overwrite an explicit or lineage target in a tool call.
         selector_asset = (
-            request_plan.context_asset
-            if operation_id in {"watchlist_add", "watchlist_remove"} and request_plan.context_asset
-            else analysis.explicit_asset
+            request_plan.target_asset
+            or request_plan.referenced_asset
+            or analysis.explicit_asset
+            or request_plan.context_asset
         )
         selector = ToolSelector(
             asset=selector_asset,

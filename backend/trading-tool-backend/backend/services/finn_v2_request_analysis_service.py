@@ -6,6 +6,7 @@ from typing import Dict, List, Optional
 from backend.domain.finn_v2_operation_registry import FinnV2OperationRegistry, FinnV2OperationUnavailableError
 from backend.schemas.finn_v2_orchestrator_schema import RequestAnalysisResult, RequestPlan
 from backend.services.finn_v2_operation_state_service import FinnV2OperationStateService
+from backend.services.finn_v2_target_asset_resolver import FinnV2TargetAssetResolver
 from backend.services.finn_v2_operation_classification_service import (
     FinnV2OperationClassificationService,
     FinnV2OperationClassificationValidator,
@@ -18,6 +19,7 @@ class FinnV2RequestAnalysisService:
         self.operation_state = FinnV2OperationStateService()
         self.classifier = FinnV2OperationClassificationService(self.operations)
         self.classification_validator = FinnV2OperationClassificationValidator()
+        self.target_resolver = FinnV2TargetAssetResolver()
 
     def analyze(
         self,
@@ -135,11 +137,15 @@ class FinnV2RequestAnalysisService:
                 unresolved_signals.append("insufficient_trade_context")
         # A workspace asset may enrich a setup draft, but it is never a
         # substitute for the asset explicitly requested by a write operation.
-        operation_asset = (
-            message_asset
-            if operation_id in {"watchlist_add", "watchlist_remove"}
-            else explicit_asset
+        preliminary_target = self.target_resolver.resolve(
+            explicit_target_asset=message_asset,
+            selector_target_asset=semantic.selected_target_asset,
+            verified_context=conversation_context,
+            operation_state=(conversation_context or {}).get("active_guided_operation") or (conversation_context or {}).get("operation_state"),
+            workspace_asset=context_asset,
+            allow_workspace_fallback=operation.mode not in {"CREATE_PROPOSAL", "ACTION_PROPOSAL"},
         )
+        operation_asset = preliminary_target.target_asset
         # ``concept`` is a normalized request fact, not a guided slot.  A
         # selected financial-concept contract therefore has its required input
         # before any stateful clarification logic is considered.
@@ -157,6 +163,14 @@ class FinnV2RequestAnalysisService:
         )
         if guided_state is not None:
             missing_essential_inputs = list(guided_state.missing_required_inputs)
+        target_resolution = self.target_resolver.resolve(
+            explicit_target_asset=message_asset,
+            selector_target_asset=semantic.selected_target_asset,
+            verified_context=conversation_context,
+            operation_state=guided_state.dict() if guided_state is not None else (conversation_context or {}).get("active_guided_operation") or (conversation_context or {}).get("operation_state"),
+            workspace_asset=context_asset,
+            allow_workspace_fallback=operation.mode not in {"CREATE_PROPOSAL", "ACTION_PROPOSAL"},
+        )
         request_plan = self._request_plan(
             interaction_mode=interaction_mode,
             scopes=scopes,
@@ -176,10 +190,7 @@ class FinnV2RequestAnalysisService:
             operation=operation,
             operation_state=guided_state.dict() if guided_state is not None else {},
             context_asset=context_asset,
-            target_asset=(
-                (guided_state.target_entities.get("asset") if guided_state is not None else None)
-                or message_asset
-            ) if operation_id in {"watchlist_add", "watchlist_remove"} else None,
+            target_asset=target_resolution.target_asset,
             referenced_asset=message_asset or explicit_asset,
             requested_action=semantic.action if semantic.action != "unknown" else None,
             discourse_type=semantic.discourse,

@@ -3,6 +3,7 @@ from datetime import datetime, timezone
 from types import SimpleNamespace
 
 from backend.services.finn_v2_delivery_service import FinnV2DeliveryService
+from backend.api.finn_v2_api import _sse
 
 
 def test_delivery_transport_parity_streams_same_verified_response():
@@ -40,3 +41,11 @@ def test_delivery_transport_parity_streams_same_verified_response():
 
     assert envelope.response.mode == "READ"
     assert events[0].payload["response"] == envelope.response.dict()
+
+
+def test_sse_uses_the_same_iso8601_datetime_encoding_as_polling():
+    created_at = datetime(2026, 8, 28, 10, 30, 0, tzinfo=timezone.utc)
+
+    assert '"created_at": "2026-08-28T10:30:00+00:00"' in _sse(
+        "run.completed", {"created_at": created_at}
+    )

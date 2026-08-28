@@ -1,20 +1,301 @@
 [
-  {"eval_id":"reg-active-asset-workspace-state","dataset":"regression","input_query":"Welk instrument is in mijn huidige workspace gekozen?","expected_operation_id":"read_active_asset","expected_domain":"asset","expected_supported":true,"expected_action_polarity":"read","provider_call_expected":true},
-  {"eval_id":"reg-personal-rsi-configuration","dataset":"regression","input_query":"Laat mijn bewaarde RSI-configuratie voor het actieve instrument zien.","expected_operation_id":"read_indicator_configuration","expected_domain":"indicators","expected_supported":true,"expected_action_polarity":"read","provider_call_expected":true},
-  {"eval_id":"reg-concept-rsi","dataset":"regression","input_query":"Leg RSI uit zonder een persoonlijke analyse te maken.","expected_operation_id":"explain_financial_concept","expected_domain":"financial_education","expected_supported":true,"expected_entities":{"concept":"RSI"},"expected_action_polarity":"read","provider_call_expected":true},
-  {"eval_id":"reg-indicators-btc","dataset":"regression","input_query":"Welke indicatoren gebruik ik voor BTC en wat ontbreekt mogelijk nog?","expected_operation_id":"evaluate_indicator_configuration","expected_domain":"indicators","expected_supported":true,"expected_entities":{"asset":"BTC"},"expected_action_polarity":"evaluate","provider_call_expected":true},
-  {"eval_id":"reg-capability-1","dataset":"regression","input_query":"Waarmee kan FINN helpen?","expected_operation_id":"capability","expected_domain":"system","expected_supported":true,"expected_action_polarity":"read","provider_call_expected":true},
-  {"eval_id":"reg-asset-1","dataset":"regression","input_query":"Welk instrument staat actief?","expected_operation_id":"read_active_asset","expected_domain":"asset","expected_supported":true,"expected_action_polarity":"read","provider_call_expected":true},
-  {"eval_id":"reg-setup-1","dataset":"regression","input_query":"Welke setup gebruik ik?","expected_operation_id":"read_active_setup","expected_domain":"setup","expected_supported":true,"expected_action_polarity":"read","provider_call_expected":true},
-  {"eval_id":"reg-plan-1","dataset":"regression","input_query":"Welke setup, strategie en bot heb ik?","expected_operation_id":"read_active_plan","expected_domain":"plan","expected_supported":true,"expected_action_polarity":"read","provider_call_expected":true},
-  {"eval_id":"reg-evaluate-1","dataset":"regression","input_query":"Beoordeel mijn volledige plan.","expected_operation_id":"evaluate_plan","expected_domain":"plan","expected_supported":true,"expected_action_polarity":"evaluate","provider_call_expected":true},
-  {"eval_id":"reg-evidence-1","dataset":"regression","input_query":"Welke concrete gegevens steunen die conclusie?","conversation_context":{"last_verified_context":{"operation_id":"evaluate_plan"}},"expected_operation_id":"explain_previous_evidence","expected_domain":"system","expected_supported":true,"expected_conversation_reference":"previous_verified_response","expected_action_polarity":"read","provider_call_expected":true},
-  {"eval_id":"reg-reformulate-1","dataset":"regression","input_query":"Zeg dat korter.","conversation_context":{"last_verified_context":{"operation_id":"evaluate_plan"}},"expected_operation_id":"reformulate_previous_response","expected_domain":"system","expected_supported":true,"expected_conversation_reference":"previous_verified_response","expected_action_polarity":"read","provider_call_expected":true},
-  {"eval_id":"reg-create-1","dataset":"regression","input_query":"Maak een BTC-setup.","expected_operation_id":"create_setup","expected_domain":"setup","expected_supported":true,"expected_entities":{"asset":"BTC"},"expected_action_polarity":"create","provider_call_expected":true},
-  {"eval_id":"reg-watch-add-1","dataset":"regression","input_query":"Voeg ADA toe aan mijn watchlist.","expected_operation_id":"watchlist_add","expected_domain":"watchlist","expected_supported":true,"expected_entities":{"asset":"ADA"},"expected_target_asset":"ADA","expected_action_polarity":"add","provider_call_expected":true},
-  {"eval_id":"reg-watch-remove-1","dataset":"regression","input_query":"Haal ADA uit mijn watchlist.","expected_operation_id":"watchlist_remove","expected_domain":"watchlist","expected_supported":true,"expected_entities":{"asset":"ADA"},"expected_target_asset":"ADA","expected_action_polarity":"remove","provider_call_expected":true},
-  {"eval_id":"reg-live-safety-1","dataset":"regression","input_query":"Zet mijn bot live.","expected_operation_id":"activate_bot","expected_domain":"bot","expected_supported":true,"expected_action_polarity":"activate","provider_call_expected":true},
-  {"eval_id":"reg-offtopic-1","dataset":"regression","input_query":"Wat wordt het weer morgen?","expected_operation_id":"off_topic","expected_domain":"off_topic","expected_supported":true,"expected_action_polarity":"read","provider_call_expected":true},
-  {"eval_id":"reg-unsupported-1","dataset":"regression","input_query":"Beheer mijn portfolio automatisch.","expected_operation_id":"unsupported_financial_operation","expected_domain":"financial_unsupported","expected_supported":true,"expected_action_polarity":"read","provider_call_expected":true},
-  {"eval_id":"reg-clarify-1","dataset":"regression","input_query":"Wijzig mijn instellingen.","expected_operation_id":"clarify_request","expected_domain":"system","expected_supported":true,"expected_clarification":true,"expected_action_polarity":"update","provider_call_expected":true}
+  {
+    "eval_id": "reg-active-asset-workspace-state",
+    "dataset": "regression",
+    "input_query": "Welk instrument is in mijn huidige workspace gekozen?",
+    "expected_operation_id": "read_active_asset",
+    "expected_domain": "asset",
+    "expected_supported": true,
+    "expected_action_polarity": "read",
+    "provider_call_expected": true,
+    "expected_missing_inputs": []
+  },
+  {
+    "eval_id": "reg-personal-rsi-configuration",
+    "dataset": "regression",
+    "input_query": "Laat mijn bewaarde RSI-configuratie voor het actieve instrument zien.",
+    "expected_operation_id": "read_indicator_configuration",
+    "expected_domain": "indicators",
+    "expected_supported": true,
+    "expected_action_polarity": "read",
+    "provider_call_expected": true,
+    "expected_missing_inputs": []
+  },
+  {
+    "eval_id": "reg-concept-rsi",
+    "dataset": "regression",
+    "input_query": "Leg RSI uit zonder een persoonlijke analyse te maken.",
+    "expected_operation_id": "explain_financial_concept",
+    "expected_domain": "financial_education",
+    "expected_supported": true,
+    "expected_entities": {
+      "concept": "RSI"
+    },
+    "expected_action_polarity": "read",
+    "provider_call_expected": true,
+    "expected_missing_inputs": []
+  },
+  {
+    "eval_id": "reg-indicators-btc",
+    "dataset": "regression",
+    "input_query": "Welke indicatoren gebruik ik voor BTC en wat ontbreekt mogelijk nog?",
+    "expected_operation_id": "evaluate_indicator_configuration",
+    "expected_domain": "indicators",
+    "expected_supported": true,
+    "expected_entities": {
+      "asset": "BTC"
+    },
+    "expected_action_polarity": "evaluate",
+    "provider_call_expected": true,
+    "expected_missing_inputs": []
+  },
+  {
+    "eval_id": "reg-capability-1",
+    "dataset": "regression",
+    "input_query": "Waarmee kan FINN helpen?",
+    "expected_operation_id": "capability",
+    "expected_domain": "system",
+    "expected_supported": true,
+    "expected_action_polarity": "read",
+    "provider_call_expected": true,
+    "expected_missing_inputs": []
+  },
+  {
+    "eval_id": "reg-asset-1",
+    "dataset": "regression",
+    "input_query": "Welk instrument staat actief?",
+    "expected_operation_id": "read_active_asset",
+    "expected_domain": "asset",
+    "expected_supported": true,
+    "expected_action_polarity": "read",
+    "provider_call_expected": true,
+    "expected_missing_inputs": []
+  },
+  {
+    "eval_id": "reg-setup-1",
+    "dataset": "regression",
+    "input_query": "Welke setup gebruik ik?",
+    "expected_operation_id": "read_active_setup",
+    "expected_domain": "setup",
+    "expected_supported": true,
+    "expected_action_polarity": "read",
+    "provider_call_expected": true,
+    "expected_missing_inputs": []
+  },
+  {
+    "eval_id": "reg-plan-1",
+    "dataset": "regression",
+    "input_query": "Welke setup, strategie en bot heb ik?",
+    "expected_operation_id": "read_active_plan",
+    "expected_domain": "plan",
+    "expected_supported": true,
+    "expected_action_polarity": "read",
+    "provider_call_expected": true,
+    "expected_missing_inputs": []
+  },
+  {
+    "eval_id": "reg-evaluate-1",
+    "dataset": "regression",
+    "input_query": "Beoordeel mijn volledige plan.",
+    "expected_operation_id": "evaluate_plan",
+    "expected_domain": "plan",
+    "expected_supported": true,
+    "expected_action_polarity": "evaluate",
+    "provider_call_expected": true,
+    "expected_missing_inputs": []
+  },
+  {
+    "eval_id": "reg-evidence-1",
+    "dataset": "regression",
+    "input_query": "Welke concrete gegevens steunen die conclusie?",
+    "conversation_context": {
+      "last_verified_context": {
+        "operation_id": "evaluate_plan"
+      }
+    },
+    "expected_operation_id": "explain_previous_evidence",
+    "expected_domain": "system",
+    "expected_supported": true,
+    "expected_conversation_reference": "previous_verified_response",
+    "expected_action_polarity": "read",
+    "provider_call_expected": true,
+    "expected_missing_inputs": []
+  },
+  {
+    "eval_id": "reg-reformulate-1",
+    "dataset": "regression",
+    "input_query": "Zeg dat korter.",
+    "conversation_context": {
+      "last_verified_context": {
+        "operation_id": "evaluate_plan"
+      }
+    },
+    "expected_operation_id": "reformulate_previous_response",
+    "expected_domain": "system",
+    "expected_supported": true,
+    "expected_conversation_reference": "previous_verified_response",
+    "expected_action_polarity": "read",
+    "provider_call_expected": true,
+    "expected_missing_inputs": []
+  },
+  {
+    "eval_id": "reg-create-1",
+    "dataset": "regression",
+    "input_query": "Maak een BTC-setup.",
+    "expected_operation_id": "create_setup",
+    "expected_domain": "setup",
+    "expected_supported": true,
+    "expected_entities": {
+      "asset": "BTC"
+    },
+    "expected_action_polarity": "create",
+    "provider_call_expected": true,
+    "expected_missing_inputs": []
+  },
+  {
+    "eval_id": "reg-watch-add-1",
+    "dataset": "regression",
+    "input_query": "Voeg ADA toe aan mijn watchlist.",
+    "expected_operation_id": "watchlist_add",
+    "expected_domain": "watchlist",
+    "expected_supported": true,
+    "expected_entities": {
+      "asset": "ADA"
+    },
+    "expected_target_asset": "ADA",
+    "expected_action_polarity": "add",
+    "provider_call_expected": true,
+    "expected_missing_inputs": []
+  },
+  {
+    "eval_id": "reg-watch-remove-1",
+    "dataset": "regression",
+    "input_query": "Haal ADA uit mijn watchlist.",
+    "expected_operation_id": "watchlist_remove",
+    "expected_domain": "watchlist",
+    "expected_supported": true,
+    "expected_entities": {
+      "asset": "ADA"
+    },
+    "expected_target_asset": "ADA",
+    "expected_action_polarity": "remove",
+    "provider_call_expected": true,
+    "expected_missing_inputs": []
+  },
+  {
+    "eval_id": "reg-live-safety-1",
+    "dataset": "regression",
+    "input_query": "Zet mijn bot live.",
+    "expected_operation_id": "activate_bot",
+    "expected_domain": "bot",
+    "expected_supported": true,
+    "expected_action_polarity": "activate",
+    "provider_call_expected": true,
+    "expected_missing_inputs": []
+  },
+  {
+    "eval_id": "reg-offtopic-1",
+    "dataset": "regression",
+    "input_query": "Wat wordt het weer morgen?",
+    "expected_operation_id": "off_topic",
+    "expected_domain": "off_topic",
+    "expected_supported": true,
+    "expected_action_polarity": "read",
+    "provider_call_expected": true,
+    "expected_missing_inputs": []
+  },
+  {
+    "eval_id": "reg-unsupported-1",
+    "dataset": "regression",
+    "input_query": "Beheer mijn portfolio automatisch.",
+    "expected_operation_id": "unsupported_financial_operation",
+    "expected_domain": "financial_unsupported",
+    "expected_supported": true,
+    "expected_action_polarity": "read",
+    "provider_call_expected": true,
+    "expected_missing_inputs": []
+  },
+  {
+    "eval_id": "reg-clarify-1",
+    "dataset": "regression",
+    "input_query": "Wijzig mijn instellingen.",
+    "expected_operation_id": "clarify_request",
+    "expected_domain": "system",
+    "expected_supported": true,
+    "expected_clarification": true,
+    "expected_action_polarity": "update",
+    "provider_call_expected": true,
+    "expected_missing_inputs": []
+  },
+  {
+    "eval_id": "reg-qa-personal-rsi-btc",
+    "dataset": "regression",
+    "input_query": "Welke RSI-configuratie heb ik voor BTC opgeslagen?",
+    "expected_operation_id": "read_indicator_configuration",
+    "expected_domain": "indicators",
+    "expected_supported": true,
+    "expected_entities": {
+      "asset": "BTC"
+    },
+    "expected_target_asset": "BTC",
+    "expected_action_polarity": "read",
+    "expected_clarification": false,
+    "expected_missing_inputs": [],
+    "provider_call_expected": true
+  },
+  {
+    "eval_id": "reg-qa-evaluate-current-plan",
+    "dataset": "regression",
+    "input_query": "Waar wringt mijn huidige aanpak financieel gezien het meest?",
+    "expected_operation_id": "evaluate_plan",
+    "expected_domain": "plan",
+    "expected_supported": true,
+    "expected_action_polarity": "evaluate",
+    "expected_clarification": false,
+    "expected_missing_inputs": [],
+    "provider_call_expected": true
+  },
+  {
+    "eval_id": "reg-qa-create-sol-setup",
+    "dataset": "regression",
+    "input_query": "Werk een nieuwe positie-opzet voor SOL uit.",
+    "expected_operation_id": "create_setup",
+    "expected_domain": "setup",
+    "expected_supported": true,
+    "expected_entities": {
+      "asset": "SOL"
+    },
+    "expected_action_polarity": "create",
+    "expected_clarification": false,
+    "expected_missing_inputs": [],
+    "provider_call_expected": true
+  },
+  {
+    "eval_id": "reg-qa-unsupported-autonomous-trading",
+    "dataset": "regression",
+    "input_query": "Neem voortaan zelfstandig alle koop- en verkoopbesluiten voor mij.",
+    "expected_operation_id": "unsupported_financial_operation",
+    "expected_domain": "financial_unsupported",
+    "expected_supported": true,
+    "expected_action_polarity": "read",
+    "expected_clarification": false,
+    "expected_missing_inputs": [],
+    "provider_call_expected": true
+  },
+  {
+    "eval_id": "reg-qa-watch-remove-link",
+    "dataset": "regression",
+    "input_query": "Ik wil LINK niet langer op mijn gevolgde-marktenlijst.",
+    "expected_operation_id": "watchlist_remove",
+    "expected_domain": "watchlist",
+    "expected_supported": true,
+    "expected_entities": {
+      "asset": "LINK"
+    },
+    "expected_target_asset": "LINK",
+    "expected_action_polarity": "remove",
+    "expected_clarification": false,
+    "expected_missing_inputs": [],
+    "provider_call_expected": true
+  }
 ]

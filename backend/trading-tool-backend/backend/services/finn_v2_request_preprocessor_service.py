@@ -89,6 +89,7 @@ class FinnV2RequestPreprocessorService:
         ),
         "contextual_entity": ("die setup", "deze strategie", "die bot", "dat plan", "deze asset"),
     }
+    _TIMEFRAME_VALUE = re.compile(r"\b(?:1m|5m|15m|30m|1h|4h|1d|1w|1M)\b", re.IGNORECASE)
 
     def preprocess(
         self,
@@ -144,6 +145,10 @@ class FinnV2RequestPreprocessorService:
         short_turn = len(re.findall(r"[\w-]+", normalized)) <= 10
         is_interrogative = bool(re.match(r"^(?:welke|welk|wat|waar|hoe|who|what|which|where|how)\b", normalized))
         slot_answer = asset if asset and short_turn and not is_interrogative else None
+        if slot_answer is None and short_turn and not is_interrogative:
+            timeframe = self._TIMEFRAME_VALUE.search(normalized)
+            if timeframe:
+                slot_answer = timeframe.group(0).upper()
         if (
             action == "read"
             and short_turn

@@ -23,6 +23,9 @@ class SelectorEvalCase(BaseModel):
     expected_action_polarity: str | None = None
     expected_conversation_reference: str | None = None
     expected_clarification: bool = False
+    # Every case must declare this explicitly. An empty list is meaningful;
+    # omission is a dataset contract error rather than an implicit default.
+    expected_missing_inputs: list[str] = Field(...)
     provider_call_expected: bool = True
 
 

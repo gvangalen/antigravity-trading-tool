@@ -69,22 +69,28 @@ def run_case(case: SelectorEvalCase) -> dict[str, Any]:
     latency_ms = int((monotonic() - started) * 1000)
     validation_error = FinnV2OperationClassificationValidator(registry).validation_error(classified, facts=facts, conversation_context=case.conversation_context)
     parsed = raw.get("parsed") if isinstance(raw.get("parsed"), Mapping) else {}
-    entities = parsed.get("entities") if isinstance(parsed.get("entities"), Mapping) else {}
+    # Grade the typed selector selection, not the raw provider text. The
+    # selector normalizes schema-valid delimiter artefacts before any contract
+    # consumer can observe them, so the eval trace must measure that boundary.
+    entities = dict(classified.selected_entities or {})
     classification_error = classified.reason_code if classified.selector_source == "provider_unavailable" else None
     parse_status, validation_status, category = failure_category(raw, classification_error, validation_error)
     contract = registry.get(classified.operation_id)
-    target_asset = parsed.get("target_asset")
-    conversation_reference = parsed.get("conversation_reference")
+    target_asset = classified.selected_target_asset
+    conversation_reference = classified.selected_conversation_reference
     clarification = classified.operation_id == "clarify_request"
+    actual_missing_inputs = list(classified.selected_missing_inputs)
+    expected_missing_inputs = case.expected_missing_inputs
     return {
         "eval_id": case.eval_id,
         "input_query": case.input_query,
         "expected": case.dict(exclude={"eval_id", "dataset", "input_query", "conversation_context", "provider_call_expected"}),
         "actual": {
             "operation_id": classified.operation_id, "domain": contract.domain, "supported": contract.supported,
-            "confidence": parsed.get("confidence"), "entities": entities, "context_asset": facts.referenced_asset,
+            "confidence": parsed.get("confidence"), "entities": entities, "context_asset": facts.workspace_context_asset,
             "target_asset": target_asset, "action_polarity": facts.action_polarity,
             "conversation_reference": conversation_reference, "clarification": clarification,
+            "missing_inputs": actual_missing_inputs,
             "selector_source": classified.selector_source,
         },
         "provider_status": (raw.get("provider_metadata") or {}).get("response_status"),
@@ -101,6 +107,9 @@ def run_case(case: SelectorEvalCase) -> dict[str, Any]:
             "action_polarity": case.expected_action_polarity is None or facts.action_polarity == case.expected_action_polarity,
             "conversation_reference": case.expected_conversation_reference is None or conversation_reference == case.expected_conversation_reference,
             "clarification": clarification == case.expected_clarification,
+            "missing_inputs": (
+                actual_missing_inputs == expected_missing_inputs
+            ),
         },
     }
 
@@ -156,6 +165,8 @@ def build_report(dataset: str, rows: list[dict[str, Any]]) -> dict[str, Any]:
         "entity_accuracy": rate(rows, "entities"), "targetasset_accuracy": rate(rows, "target_asset"),
         "action_polarity_accuracy": rate(rows, "action_polarity"), "conversation_reference_accuracy": rate(rows, "conversation_reference"),
         "clarification_accuracy": rate(rows, "clarification"),
+        "missing_input_accuracy": rate(rows, "missing_inputs"),
+        "missing_input_expectations_declared": 1.0,
         "off_topic_accuracy": rate(rows_for("off_topic"), "operation"),
         "unsupported_operation_accuracy": rate(rows_for("unsupported_financial_operation"), "operation"),
         "provider_failure_rate": failures("provider"), "schema_failure_rate": failures("schema"), "timeout_failure_rate": failures("timeout"),

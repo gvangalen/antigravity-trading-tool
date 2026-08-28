@@ -6,7 +6,7 @@ into a second local intent router.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Mapping, Optional
 
 from backend.domain.finn_v2_operation_registry import FinnV2OperationRegistry, OperationContract
@@ -31,6 +31,10 @@ class SemanticOperationClassification:
     supported: bool = True
     reason_code: Optional[str] = None
     unsupported_capability: Optional[str] = None
+    selected_entities: Mapping[str, str] = field(default_factory=dict)
+    selected_target_asset: Optional[str] = None
+    selected_conversation_reference: Optional[str] = None
+    selected_missing_inputs: tuple[str, ...] = ()
 
 
 class FinnV2OperationClassificationService:
@@ -58,6 +62,7 @@ class FinnV2OperationClassificationService:
             message=message, workspace_hints=workspace_hints, client_context=client_context
         )
         candidates = self._selector_manifest()
+        candidates = self._guided_candidates(facts=facts, context=conversation_context or {}, candidates=candidates)
         selection, error = self.structured_selector.select(
             message=message,
             candidate_contracts=candidates,
@@ -73,7 +78,7 @@ class FinnV2OperationClassificationService:
             verified_context=self._safe_conversation_state(conversation_context or {}),
         )
         if selection is not None and selection.confidence >= 0.75:
-            return self._result(selection.operation_id, facts, "high", "structured", candidates)
+            return self._result(selection.operation_id, facts, "high", "structured", candidates, selection=selection)
         # A malformed, unavailable, or low-confidence selector response is a
         # typed terminal outcome.  Do not choose a nearby local operation:
         # doing so would reintroduce the retired keyword/default router.
@@ -89,6 +94,34 @@ class FinnV2OperationClassificationService:
     def _selector_manifest(self) -> tuple[OperationContract, ...]:
         """Return the versioned registry manifest, not retrieved local guesses."""
         return self.registry.list()
+
+    def _guided_candidates(
+        self,
+        *,
+        facts: FinnV2PreprocessedRequest,
+        context: Mapping[str, object],
+        candidates: tuple[OperationContract, ...],
+    ) -> tuple[OperationContract, ...]:
+        """Constrain a typed slot answer without selecting an operation locally."""
+        if facts.discourse_act != "clarification_answer":
+            return candidates
+        active = context.get("active_guided_operation") or (
+            context.get("operation_state") if not context.get("conversation_state_version") else None
+        )
+        if not isinstance(active, Mapping):
+            return candidates
+        operation_id = str(active.get("operation_id") or "")
+        try:
+            contract = self.registry.require_supported(operation_id)
+        except ValueError:
+            return candidates
+        if not contract.required_inputs or not active.get("missing_required_inputs"):
+            return candidates
+        safe = tuple(
+            item for item in candidates
+            if item.operation_id in {contract.operation_id, "clarify_request", "unavailable"}
+        )
+        return safe or candidates
 
     @staticmethod
     def _safe_conversation_state(context: Mapping[str, object]) -> Mapping[str, object]:
@@ -119,6 +152,7 @@ class FinnV2OperationClassificationService:
         source: str,
         candidates: tuple[OperationContract, ...],
         unsupported_capability: Optional[str] = None,
+        selection=None,
     ) -> SemanticOperationClassification:
         contract = self.registry.get(operation_id)
         return SemanticOperationClassification(
@@ -132,6 +166,10 @@ class FinnV2OperationClassificationService:
             supported=contract.supported,
             reason_code=unsupported_capability or ("off_topic" if operation_id == "off_topic" else None),
             unsupported_capability=unsupported_capability,
+            selected_entities=dict(getattr(selection, "entities", {}) or {}),
+            selected_target_asset=getattr(selection, "target_asset", None),
+            selected_conversation_reference=getattr(selection, "conversation_reference", None),
+            selected_missing_inputs=tuple(getattr(selection, "missing_inputs", ()) or ()),
         )
 
 

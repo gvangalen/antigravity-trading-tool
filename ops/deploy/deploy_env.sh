@@ -533,13 +533,24 @@ fi
 ssh "${SSH_ARGS[@]}" "ubuntu@$SERVER_IP" "
   set -euo pipefail
   cd $REMOTE_DIR
-  printf '%s\n' '$TARGET_COMMIT' > ${DEPLOY_STATE_DIR}/LAST_GOOD_COMMIT
   printf '%s\n' '$ROLLBACK_COMMIT' > ${DEPLOY_STATE_DIR}/PREVIOUS_GOOD_COMMIT
   if [ -d /var/www/tradamind/ops/deploy ]; then
-    printf '%s\n' '$TARGET_COMMIT' | sudo tee /var/www/tradamind/ops/deploy/LAST_GOOD_COMMIT >/dev/null
     printf '%s\n' '$ROLLBACK_COMMIT' | sudo tee /var/www/tradamind/ops/deploy/PREVIOUS_GOOD_COMMIT >/dev/null
   fi
 "
+
+if [ "$(lower_bool "${QA_ACCEPTED_RELEASE:-false}")" = "true" ]; then
+  ssh "${SSH_ARGS[@]}" "ubuntu@$SERVER_IP" "
+    set -euo pipefail
+    cd $REMOTE_DIR
+    printf '%s\n' '$TARGET_COMMIT' > ${DEPLOY_STATE_DIR}/LAST_GOOD_COMMIT
+    if [ -d /var/www/tradamind/ops/deploy ]; then
+      printf '%s\n' '$TARGET_COMMIT' | sudo tee /var/www/tradamind/ops/deploy/LAST_GOOD_COMMIT >/dev/null
+    fi
+  "
+else
+  echo "ℹ️ LAST_GOOD_COMMIT unchanged: independent QA acceptance was not supplied."
+fi
 
 echo "✅ ${ENVIRONMENT} deployment complete for ${TARGET_COMMIT}."
 echo "Rollback if needed:"

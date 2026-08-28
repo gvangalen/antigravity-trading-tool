@@ -80,6 +80,10 @@ class FinnV2StructuredOperationSelectorService:
                     "A request for the current selected instrument, symbol, market, or workspace asset "
                     "is read_active_asset even if it does not name a ticker; do not ask for clarification "
                     "when FINN can read that active workspace state. "
+                    "When conversation_state contains active_guided_operation, a short answer to its "
+                    "next missing field continues that exact operation. Retain its collected values, "
+                    "target and operation_id; do not switch it to clarify_request merely because the "
+                    "short answer does not repeat the original object. "
                     "Return the strict schema only."
                 ),
             output_spec=StructuredOutputSpec(
