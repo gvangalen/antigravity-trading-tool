@@ -115,16 +115,20 @@ class FinnV2StructuredOperationSelectorService:
         raw_inputs = parsed.get("missing_inputs")
         if not isinstance(raw_inputs, list) or not all(isinstance(item, str) for item in raw_inputs):
             return None, "selector_missing_inputs_invalid"
+        entities = {str(key): self._entity_text(value) for key, value in raw_entities.items()}
+        target_asset = (
+            self._optional_text(parsed.get("target_asset"))
+            or self._optional_text(raw_entities.get("asset"))
+        )
+        if target_asset and not entities.get("asset"):
+            entities["asset"] = target_asset
         return FinnV2StructuredOperationSelection(
             operation_id=operation_id,
             confidence=float(confidence),
             # Normalize an occasional JSON delimiter preserved inside a
             # structured string before the entity reaches contract consumers.
-            entities={str(key): self._entity_text(value) for key, value in raw_entities.items()},
-            target_asset=(
-                self._optional_text(parsed.get("target_asset"))
-                or self._optional_text(raw_entities.get("asset"))
-            ),
+            entities=entities,
+            target_asset=target_asset,
             conversation_reference=(
                 "previous_verified_response"
                 if contract.requires_verified_context and self._optional_text(parsed.get("conversation_reference"))
