@@ -1190,7 +1190,11 @@ class FinnV2ReasoningService:
             if item.tool_name == "read_indicator_configuration"
             for row in (item.facts or {}).get("configured_indicators", [])
         ]
-        if not indicator_rows:
+        has_indicator_configuration = any(
+            item.tool_name == "read_indicator_configuration"
+            for item in context.evidence
+        )
+        if not has_indicator_configuration:
             return
 
         statements = [
@@ -1223,11 +1227,29 @@ class FinnV2ReasoningService:
             "minder robuust",
             "less robust",
         }
+        # An empty saved configuration is a factual observation. It does not,
+        # by itself, prove that the plan is weak or less effective. This must
+        # be checked even when there are no configured-indicator rows.
+        causal_absence_terms = {
+            "zwakte",
+            "potentiële zwakte",
+            "potential weakness",
+            "zwakte in je analyse",
+            "effectiviteit",
+            "effectief",
+            "better analysis",
+            "betere analyse",
+            "moeilijk om marktbewegingen",
+            "difficult to analyze market",
+        }
         rejected_fields = [
             {"path": path, "claim_id": claim_id}
             for path, claim_id, statement in statements
             if any(term in statement.lower() for term in indicator_terms)
-            and any(term in statement.lower() for term in unsupported_inference_terms)
+            and any(
+                term in statement.lower()
+                for term in unsupported_inference_terms.union(causal_absence_terms)
+            )
         ]
         if rejected_fields:
             configured_indicators = sorted(

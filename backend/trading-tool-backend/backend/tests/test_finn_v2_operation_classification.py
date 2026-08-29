@@ -238,6 +238,15 @@ def test_follow_up_requires_verified_context_in_the_contract_manifest():
     assert with_context.operation_id == "explain_previous_evidence"
 
 
+def test_recorded_facts_after_an_immediate_judgment_are_lineage_facts_not_off_topic():
+    facts = CLASSIFIER.preprocessor.preprocess(
+        message="Noem de vastgelegde feiten achter je zojuist gegeven oordeel."
+    )
+
+    assert facts.discourse_act == "evidence_follow_up"
+    assert "previous_verified_conclusion" in facts.conversation_reference_markers
+
+
 def test_guided_slot_answer_offers_only_its_typed_contract_and_safe_terminals():
     captured = {}
 

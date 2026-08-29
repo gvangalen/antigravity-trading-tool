@@ -807,6 +807,67 @@ def test_configuration_causality_rejects_non_bot_configuration_claims():
     assert details["forbidden_claim_relationships"] == ["configuration_or_status_implies_causality"]
 
 
+def test_indicator_inference_rejects_effectiveness_claim_from_empty_configuration():
+    service = FinnV2ReasoningService(session=object())
+    context_payload = _context().dict()
+    context_payload["evidence"][0]["tool_name"] = "read_indicator_configuration"
+    context_payload["evidence"][0]["facts"] = {
+        "configured_count": 0,
+        "configured_indicators": [],
+    }
+    context = ReasoningContextPackage.parse_obj(context_payload)
+    result = ReasoningResult.parse_obj(
+        {
+            **_model_output(),
+            "reasoning_result_id": "reasoning-empty-indicators",
+            "run_id": "run-1",
+            "user_id": 7,
+            "prompt_version": "test",
+            "reasoning_version": "test",
+            "model": "gpt-4o-mini",
+            "created_at": datetime.now(timezone.utc),
+            "direct_answer": (
+                "De indicatorconfiguratie is leeg, waardoor het moeilijk is "
+                "om marktbewegingen effectief te analyseren."
+            ),
+        }
+    )
+
+    with pytest.raises(FinnV2ReasoningContractError) as exc_info:
+        service._validate_indicator_configuration_inference(result=result, context=context)
+
+    assert exc_info.value.code == "unsupported_indicator_configuration_inference"
+
+
+def test_indicator_inference_rejects_weakness_claim_from_empty_configuration():
+    service = FinnV2ReasoningService(session=object())
+    context_payload = _context().dict()
+    context_payload["evidence"][0]["tool_name"] = "read_indicator_configuration"
+    context_payload["evidence"][0]["facts"] = {
+        "configured_count": 0,
+        "configured_indicators": [],
+    }
+    context = ReasoningContextPackage.parse_obj(context_payload)
+    result = ReasoningResult.parse_obj(
+        {
+            **_model_output(),
+            "reasoning_result_id": "reasoning-empty-indicators-weakness",
+            "run_id": "run-1",
+            "user_id": 7,
+            "prompt_version": "test",
+            "reasoning_version": "test",
+            "model": "gpt-4o-mini",
+            "created_at": datetime.now(timezone.utc),
+            "main_observation": "De indicatorconfiguratie is leeg, wat een zwakte kan zijn.",
+        }
+    )
+
+    with pytest.raises(FinnV2ReasoningContractError) as exc_info:
+        service._validate_indicator_configuration_inference(result=result, context=context)
+
+    assert exc_info.value.code == "unsupported_indicator_configuration_inference"
+
+
 def test_repeated_configuration_causality_ends_with_evidence_limitation_after_one_repair(monkeypatch):
     service = FinnV2ReasoningService(session=object())
     context_payload = _context().dict()
@@ -859,7 +920,10 @@ def test_repeated_configuration_causality_ends_with_evidence_limitation_after_on
     assert "handmatige mode" not in reasoning.direct_answer.lower()
     assert "handmatige mode" not in reasoning.main_observation.lower()
     assert reasoning.evidence_refs_used == ["E1", "E2"]
-    assert reasoning.claims == []
+    # The evidence-limited terminal remains a complete EVALUATE response:
+    # factual evidence records are retained for verifier coverage and lineage
+    # while the rejected causal relationship is absent.
+    assert [claim.evidence_refs for claim in reasoning.claims] == [["E1"], ["E2"]]
 
 
 def test_model_repairs_unsupported_market_causality(monkeypatch):

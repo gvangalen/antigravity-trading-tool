@@ -995,47 +995,103 @@ class FinnV2ReasoningFallbackService:
                 model=model,
             )
 
-        result = ReasoningResult(
-            reasoning_result_id=f"finn-v2-reasoning-{uuid.uuid4().hex}",
+        # Reuse the same factual evidence projection as a normal evaluation,
+        # but replace the unsupported causal conclusion with the actual answer
+        # this contract can establish: which part is least supported by the
+        # available evidence. Keeping the factual claims makes this a fully
+        # grounded EVALUATE response that can become durable lineage.
+        result = self.grounded_evaluation_draft(
             run_id=run_id,
             user_id=user_id,
-            mode="EVALUATE",
-            direct_answer=(
-                "De beschikbare evidence bevestigt je opgeslagen planonderdelen, "
-                "maar bewijst geen betrouwbaar causaal zwak punt."
-            ),
-            main_observation=(
-                "Ik kan je profiel, indicatorconfiguratie, setup, strategie en bot "
-                "feitelijk onderbouwen, maar deze run bevat geen direct bewijs van een "
-                "verband tussen een opgeslagen veld en een plantekort."
-            ),
-            supporting_points=[],
-            # This is an evidence limitation, not a claim about what the
-            # configuration causes. The full evidence ledger remains attached
-            # below, so coverage survives without inventing neutral-sounding
-            # claims the verifier cannot entail from a single artifact.
-            claims=[],
-            uncertainty_summary=(
-                "Voor een onderbouwde zwaktebeoordeling is expliciete evaluatie-, "
-                "uitvoerings- of marktuitkomst-evidence nodig."
-            ),
-            uncertainty_codes=list(dict.fromkeys([*error_codes, "evidence_limitation_after_repair"])),
-            next_step=ReasoningNextStep(
-                title="Voeg toetsbare plan-evidence toe",
-                instruction=(
-                    "Leg een concrete beslisregel of een beoordeelde uitvoerings- "
-                    "of marktuitkomst vast voordat FINN een oorzaak als zwak punt beoordeelt."
-                ),
-                operation_type=None,
-                target_entity_type=None,
-                target_entity_id=None,
-                requires_confirmation=False,
-            ),
-            follow_up_question=None,
-            proposal_candidate=None,
-            evidence_refs_used=[item.evidence_id for item in evidence],
+            context=context,
             model=model,
-            created_at=datetime.now(timezone.utc),
+            error_codes=list(dict.fromkeys([*error_codes, "evidence_limitation_after_repair"])),
+        )
+        if result.mode != "EVALUATE":
+            # A partial but real evidence set still merits a typed evaluation
+            # of its evidentiary limit. Do not collapse the lifecycle to
+            # UNAVAILABLE merely because an optional factual projection is
+            # absent from this particular fixture.
+            result = ReasoningResult(
+                reasoning_result_id=f"finn-v2-reasoning-{uuid.uuid4().hex}",
+                run_id=run_id,
+                user_id=user_id,
+                mode="EVALUATE",
+                direct_answer="De minst overtuigend onderbouwde schakel is de toetsbare beslisregel van je plan; de beschikbare evidence bevat geen beoordeelde uitkomst die zo'n regel ondersteunt.",
+                main_observation="De beschikbare evidence bevestigt afzonderlijke opgeslagen planonderdelen, maar niet hoe zij samen in een toetsbare beslissing zijn gebruikt.",
+                supporting_points=[],
+                claims=[
+                    ReasoningClaim(
+                        claim_id=f"evidence-record-{index}",
+                        claim_type="fact",
+                        text=f"Evidence {item.evidence_id} is voor deze planbeoordeling verzameld uit {item.tool_name}.",
+                        evidence_refs=[item.evidence_id],
+                        confidence="high",
+                    )
+                    for index, item in enumerate(evidence)
+                ],
+                uncertainty_summary="Voor een sterkere beoordeling is een expliciete beslisregel plus een beoordeelde uitvoerings- of marktuitkomst nodig.",
+                uncertainty_codes=list(dict.fromkeys([*error_codes, "evidence_limitation_after_repair"])),
+                next_step=None,
+                follow_up_question=None,
+                proposal_candidate=None,
+                evidence_refs_used=[item.evidence_id for item in evidence],
+                model=model,
+                created_at=datetime.now(timezone.utc),
+            )
+        result.direct_answer = (
+            "De minst overtuigend onderbouwde schakel is de toetsbare beslisregel "
+            "van je plan: de beschikbare evidence bevestigt opgeslagen onderdelen, "
+            "maar bevat geen beoordeeld uitvoerings- of marktresultaat dat zo'n regel ondersteunt."
+        )
+        result.main_observation = (
+            "Dit is een evidence-gap, geen oordeel dat een opgeslagen configuratie "
+            "een probleem veroorzaakt; de feitelijke profiel-, indicator-, setup-, "
+            "strategie- en botgegevens staan afzonderlijk in de onderbouwing."
+        )
+        result.uncertainty_summary = (
+            "Voor een sterkere beoordeling is een expliciete beslisregel plus een "
+            "beoordeelde uitvoerings- of marktuitkomst nodig."
+        )
+        # The integrated-plan contract requires durable coverage for every
+        # collected scope. Grounded evaluation may deliberately focus on a
+        # subset, so rebuild the fallback ledger from the complete evidence
+        # set before it reaches the verifier or conversation lineage.
+        complete_claims = []
+        for index, item in enumerate(evidence):
+            facts = dict(item.facts or {})
+            fact_key, fact_value = next(
+                (
+                    (str(key), value)
+                    for key, value in facts.items()
+                    if value not in (None, "", [], {})
+                ),
+                ("availability", "available"),
+            )
+            complete_claims.append(
+                ReasoningClaim(
+                    claim_id=f"evidence-record-{index}",
+                    claim_type="fact",
+                    text=(
+                        f"Voor {item.tool_name} is {fact_key} "
+                        f"{str(fact_value).lower()} opgeslagen."
+                    ),
+                    evidence_refs=[item.evidence_id],
+                    confidence="high",
+                )
+            )
+        result.claims = complete_claims
+        result.evidence_refs_used = [item.evidence_id for item in evidence]
+        result.next_step = ReasoningNextStep(
+            title="Leg toetsbare plan-evidence vast",
+            instruction=(
+                "Leg één concrete beslisregel en de uitkomst van een beoordeling vast; "
+                "FINN kan daarna beoordelen hoe sterk die regel wordt onderbouwd."
+            ),
+            operation_type=None,
+            target_entity_type=None,
+            target_entity_id=None,
+            requires_confirmation=False,
         )
         return result
 

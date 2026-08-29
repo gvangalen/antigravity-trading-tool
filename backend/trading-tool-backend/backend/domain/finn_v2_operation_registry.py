@@ -330,6 +330,7 @@ _OPERATION_SELECTION_METADATA: Mapping[str, dict] = {
         "selection_focus_entities": ("asset",),
     },
     "read_indicator_configuration": {
+        "semantic_description": "Read the user's saved indicator, signal, technical-analysis, market-signal, or analysis configuration for a requested or active instrument. Questions to show stored signal settings are indicator reads, even when they also mention the currently open instrument. Do not select read_active_asset unless the user asks for the instrument itself rather than its saved analysis settings.",
         "any_entities": ("indicator_configuration",),
         "required_discourse_acts": ("information_request",),
         "allowed_action_polarities": ("read",),
@@ -337,6 +338,7 @@ _OPERATION_SELECTION_METADATA: Mapping[str, dict] = {
         "selection_focus_entities": ("indicator_configuration",),
     },
     "read_active_setup": {
+        "semantic_description": "Read one current saved setup for the requested or active asset, including its setup identity and timeframe. A question about one concrete trading approach, setup, configuration of an approach, or how that approach is ready to use is a setup read, even if it does not literally say 'active setup'. Do not use the broader plan overview unless the user asks for the linked setup, strategy, and bot together.",
         "any_entities": ("setup",),
         "required_discourse_acts": ("information_request",),
         "allowed_action_polarities": ("read",),
@@ -380,7 +382,7 @@ _OPERATION_SELECTION_METADATA: Mapping[str, dict] = {
         "selection_focus_entities": ("plan",),
     },
     "evaluate_plan": {
-        "semantic_description": "Assess a user's complete current trading approach or plan, including broad questions about where that approach is weak, vulnerable, incomplete, risky, or inconsistent. This is supported plan evaluation, not unsupported portfolio management.",
+        "semantic_description": "Assess a user's complete current trading approach or plan, including broad requests to review, audit, assess, examine, or identify the least-supported, weak, vulnerable, incomplete, risky, or inconsistent link. Evaluation language remains read-only analysis, even when it asks what should improve; it is not a request to mutate a setup, strategy, bot, or configuration. This is supported plan evaluation, not unsupported portfolio management.",
         # Plan evaluation is deliberately distinct from evaluating a single
         # setup, strategy, bot or indicator configuration.
         "any_entities": ("plan",),

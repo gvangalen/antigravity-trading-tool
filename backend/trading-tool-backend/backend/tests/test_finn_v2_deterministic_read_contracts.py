@@ -194,3 +194,52 @@ def test_linked_bot_read_preserves_the_complete_registry_graph_for_delivery():
     assert {"Easset", "Esetup", "Estrat", "Ebot", "Estatus"}.issubset(reasoning.evidence_refs_used)
     assert "strategie 325" in reasoning.direct_answer
     assert "bot 186" in reasoning.direct_answer
+
+
+def test_response_projection_makes_persisted_indicator_contract_fields_visible():
+    draft = ResponseDraft(
+        draft_id="draft-projection-indicators", run_id="run-projection-indicators", user_id=406,
+        mode="READ", direct_answer="Je opgeslagen indicatorconfiguratie is beschikbaar.",
+        main_observation="Ik heb de juiste asset-scoped evidence gebruikt.",
+        evidence_set_hash="projection-hash", created_at=datetime.now(timezone.utc),
+    )
+    evidence = [
+        SimpleNamespace(tool_name="read_active_asset", facts={"symbol": "BTC"}),
+        SimpleNamespace(tool_name="read_indicator_configuration", facts={
+            "symbol": "BTC", "configured_count": 2,
+            "configured_indicators": [{"indicator": "RSI"}, {"indicator": "VWAP"}],
+        }),
+    ]
+    projected = FinnV2ResponseVerifierService._project_required_response_fields(
+        draft=draft,
+        orchestrator_result=SimpleNamespace(analysis=SimpleNamespace(request_plan=SimpleNamespace(operation_id="read_indicator_configuration"))),
+        context=SimpleNamespace(evidence=evidence),
+    )
+    assert "2 indicatorconfiguraties" in projected.direct_answer
+    assert "RSI" in projected.direct_answer and "VWAP" in projected.direct_answer
+    assert FinnV2ResponseVerifierService._covered_response_fields(
+        draft=projected, evidence=evidence,
+        required_fields=["asset", "configured_count", "indicator_names"],
+    ) == ["asset", "configured_count", "indicator_names"]
+
+
+def test_response_projection_makes_bot_and_status_visible():
+    draft = ResponseDraft(
+        draft_id="draft-projection-bot", run_id="run-projection-bot", user_id=406,
+        mode="READ", direct_answer="Ik heb je botcontext gecontroleerd.",
+        main_observation="De gekoppelde configuratie is beschikbaar.",
+        evidence_set_hash="projection-hash", created_at=datetime.now(timezone.utc),
+    )
+    evidence = [
+        SimpleNamespace(tool_name="read_linked_bot", facts={"bot_id": 170, "name": "BTC paper bot"}),
+        SimpleNamespace(tool_name="read_bot_status", facts={"bot_id": 170, "is_live": False}),
+    ]
+    projected = FinnV2ResponseVerifierService._project_required_response_fields(
+        draft=draft,
+        orchestrator_result=SimpleNamespace(analysis=SimpleNamespace(request_plan=SimpleNamespace(operation_id="read_bot_status"))),
+        context=SimpleNamespace(evidence=evidence),
+    )
+    assert "BTC paper bot (bot 170) staat niet live" in projected.direct_answer
+    assert FinnV2ResponseVerifierService._covered_response_fields(
+        draft=projected, evidence=evidence, required_fields=["bot", "bot_status"],
+    ) == ["bot", "bot_status"]

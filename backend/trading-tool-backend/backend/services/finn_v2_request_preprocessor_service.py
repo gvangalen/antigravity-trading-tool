@@ -82,7 +82,8 @@ class FinnV2RequestPreprocessorService:
         "previous_verified_conclusion": (
             "die conclusie", "dat antwoord", "eerder antwoord", "onderbouw",
             "waarop baseer", "waar baseer", "welk bewijs", "waarom concludeerde",
-            "leg de eerdere", "evidence achter",
+            "leg de eerdere", "evidence achter", "vastgelegde feiten",
+            "feiten achter", "gegeven oordeel", "zojuist gegeven oordeel",
         ),
         "contextual_implication": ("wat betekent dat", "wat houdt dat in", "welk gevolg heeft dat"),
         "reformulation": (

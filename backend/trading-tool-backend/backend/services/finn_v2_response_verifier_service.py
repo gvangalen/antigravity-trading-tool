@@ -147,6 +147,15 @@ class FinnV2ResponseVerifierService:
         )
 
         draft = self.drafts.build(reasoning_record=reasoning_record)
+        # The model owns the explanation, but the immutable operation contract
+        # owns which collected facts must be visible in the terminal response.
+        # Project only missing, evidence-backed facts before both verification
+        # and delivery so polling/SSE persist the same complete answer.
+        draft = self._project_required_response_fields(
+            draft=draft,
+            orchestrator_result=orchestrator_result,
+            context=context,
+        )
         await self._append_trace(trace_id=trace_id, run_id=run_id, user_id=user_id, event_type="response_draft_built", payload={"draft_id": draft.draft_id, "mode": draft.mode})
         verified = await self._verify_draft(
             run=run,
@@ -159,6 +168,69 @@ class FinnV2ResponseVerifierService:
             repair_attempt=0,
         )
         return verified
+
+    @staticmethod
+    def _project_required_response_fields(*, draft: ResponseDraft, orchestrator_result, context) -> ResponseDraft:
+        request_plan = getattr(orchestrator_result.analysis, "request_plan", None)
+        operation_id = getattr(request_plan, "operation_id", None)
+        if not operation_id:
+            return draft
+        try:
+            required_fields = FinnV2OperationRegistry().require_supported(operation_id).required_response_fields
+        except ValueError:
+            return draft
+        if not required_fields:
+            return draft
+
+        facts_by_tool = {
+            str(item.tool_name): dict(getattr(item, "facts", {}) or {})
+            for item in context.evidence
+        }
+        rendered = f"{draft.direct_answer}\n{draft.main_observation}".casefold()
+        additions: list[str] = []
+        indicators = facts_by_tool.get("read_indicator_configuration", {})
+        active_asset = facts_by_tool.get("read_active_asset", {})
+        if "configured_count" in required_fields or "indicator_names" in required_fields:
+            count = indicators.get("configured_count")
+            names = [
+                str(row.get("indicator"))
+                for rows in [
+                    indicators.get("configured_indicators") or [],
+                    indicators.get("technical") or [],
+                    indicators.get("market") or [],
+                    indicators.get("macro") or [],
+                ]
+                for row in rows if isinstance(row, dict) and row.get("indicator")
+            ]
+            names = list(dict.fromkeys(names))
+            if count is None:
+                count = len(names)
+            asset = str(active_asset.get("symbol") or indicators.get("symbol") or "deze asset").upper()
+            missing_count = str(count).casefold() not in rendered
+            missing_names = bool(names) and any(name.casefold() not in rendered for name in names)
+            if missing_count or missing_names:
+                additions.append(
+                    f"Voor {asset} zijn {count} indicatorconfiguraties opgeslagen: "
+                    f"{', '.join(names) if names else 'geen indicatoren'}."
+                )
+        if "bot" in required_fields or "bot_status" in required_fields:
+            bot = facts_by_tool.get("read_linked_bot", {})
+            status = facts_by_tool.get("read_bot_status", {})
+            bot_id = bot.get("bot_id") or status.get("bot_id")
+            bot_name = bot.get("name") or status.get("name")
+            is_live = status.get("is_live", bot.get("is_live"))
+            if bot_id is not None or bot_name:
+                label = f"bot {bot_id}" if bot_id is not None else str(bot_name)
+                if bot_name and bot_id is not None:
+                    label = f"{bot_name} ({label})"
+                status_text = "live" if is_live is True else "niet live" if is_live is False else "status onbekend"
+                if label.casefold() not in rendered or status_text not in rendered:
+                    additions.append(f"Je gekoppelde {label} staat {status_text}.")
+        if not additions:
+            return draft
+        updated = draft.copy(deep=True)
+        updated.direct_answer = f"{updated.direct_answer}\n\n" + " ".join(additions)
+        return ResponseDraft.parse_obj(updated.dict())
 
     async def _verify_draft(self, *, run, orchestrator_result, policy, context, validation, draft: ResponseDraft, trace_id: str, repair_attempt: int) -> VerifiedResponse:
         await self._append_trace(trace_id=trace_id, run_id=run.id, user_id=run.user_id, event_type="response_verification_started", payload={"draft_id": draft.draft_id, "repair_attempt": repair_attempt, "mode": draft.mode})
