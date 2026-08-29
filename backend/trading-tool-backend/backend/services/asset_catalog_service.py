@@ -57,6 +57,7 @@ def _asset_defaults(
     coincap_id: str | None = None,
     entitlement_tier: str = "internal",
     refresh_policy: str | None = None,
+    aliases: tuple[str, ...] = (),
     is_delayed: bool = False,
     metadata: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
@@ -64,6 +65,7 @@ def _asset_defaults(
     return {
         "symbol": normalized,
         "display_name": display_name,
+        "aliases": list(aliases),
         "asset_class": asset_class,
         "logo_url": _default_logo_url(normalized, asset_class),
         "tradingview_symbol": tradingview_symbol,
@@ -204,6 +206,23 @@ DEFAULT_ASSET_CATALOG: dict[str, dict[str, Any]] = {
         base_currency="ATOM",
         quote_currency="USDT",
         coingecko_id="cosmos",
+        refresh_policy="crypto_live_1m",
+    ),
+    "NEAR": _asset_defaults(
+        symbol="NEAR",
+        display_name="NEAR Protocol",
+        asset_class="crypto",
+        tradingview_symbol="BINANCE:NEARUSDT",
+        yahoo_symbol="NEAR-USD",
+        primary_provider="binance",
+        provider_symbol="NEARUSDT",
+        exchange="BINANCE",
+        market_region="global",
+        timezone="UTC",
+        base_currency="NEAR",
+        quote_currency="USDT",
+        coingecko_id="near",
+        aliases=("Near",),
         refresh_policy="crypto_live_1m",
     ),
     "POL": _asset_defaults(
@@ -601,7 +620,10 @@ def resolve_catalog_symbol(value: object) -> str | None:
     if not normalized:
         return None
     for symbol, asset in DEFAULT_ASSET_CATALOG.items():
-        candidates = {symbol.casefold(), str(asset.get("display_name") or "").casefold()}
+        candidates = {
+            symbol.casefold(), str(asset.get("display_name") or "").casefold(),
+            *(str(alias).casefold() for alias in asset.get("aliases") or ()),
+        }
         if normalized in candidates:
             return symbol
     return None

@@ -35,6 +35,9 @@ class SemanticOperationClassification:
     selected_entities: Mapping[str, str] = field(default_factory=dict)
     selected_target_asset: Optional[str] = None
     selected_conversation_reference: Optional[str] = None
+    required_inputs: tuple[str, ...] = ()
+    supplied_inputs: Mapping[str, object] = field(default_factory=dict)
+    derived_inputs: Mapping[str, object] = field(default_factory=dict)
     selected_missing_inputs: tuple[str, ...] = ()
 
 
@@ -146,7 +149,10 @@ class FinnV2OperationClassificationService:
     def _safe_conversation_state(context: Mapping[str, object]) -> Mapping[str, object]:
         state = {
             key: context[key]
-            for key in ("last_verified_context", "active_guided_operation", "operation_state", "last_turn_diagnostics")
+            for key in (
+                "last_verified_context", "last_degraded_context", "active_guided_operation",
+                "operation_state", "last_turn_diagnostics",
+            )
             if key in context
         }
         # Older persisted records contain only a verified conclusion. Present
@@ -177,7 +183,7 @@ class FinnV2OperationClassificationService:
         selected_entities = dict(getattr(selection, "entities", {}) or {})
         if operation_id == "explain_financial_concept" and facts.financial_concept:
             selected_entities["concept"] = facts.financial_concept
-        selected_missing_inputs = self._resolved_missing_inputs(
+        supplied_inputs, derived_inputs, selected_missing_inputs = self._resolved_inputs(
             contract=contract,
             facts=facts,
             selected_entities=selected_entities,
@@ -197,40 +203,45 @@ class FinnV2OperationClassificationService:
             selected_entities=selected_entities,
             selected_target_asset=getattr(selection, "target_asset", None),
             selected_conversation_reference=getattr(selection, "conversation_reference", None),
+            required_inputs=tuple(contract.required_inputs),
+            supplied_inputs=supplied_inputs,
+            derived_inputs=derived_inputs,
             selected_missing_inputs=selected_missing_inputs,
         )
 
     @staticmethod
-    def _resolved_missing_inputs(
+    def _resolved_inputs(
         *,
         contract: OperationContract,
         facts: FinnV2PreprocessedRequest,
         selected_entities: Mapping[str, str],
         selector_missing: tuple[str, ...],
-    ) -> tuple[str, ...]:
+    ) -> tuple[Mapping[str, object], Mapping[str, object], tuple[str, ...]]:
         if contract.operation_id == "clarify_request":
-            return ("requested_change",)
+            return {}, {}, ("requested_change",)
         if not contract.required_inputs:
-            return ()
-        explicit = FinnV2OperationStateService().explicit_inputs(
+            return {}, {}, ()
+        supplied = FinnV2OperationStateService().explicit_inputs(
             contract=contract,
             message=facts.normalized_text,
             explicit_asset=facts.referenced_asset,
         )
-        if selected_entities.get("asset"):
-            explicit.setdefault("asset", selected_entities["asset"])
-            explicit.setdefault("symbol", selected_entities["asset"])
-        for field in contract.required_inputs:
-            if selected_entities.get(field):
-                explicit.setdefault(field, selected_entities[field])
+        if facts.financial_concept:
+            supplied.setdefault("concept", facts.financial_concept)
+        # A structured selector may propose a useful display name, but that
+        # does not prove the user supplied a required setup slot. Explicit
+        # input extraction remains the only authority for user-provided
+        # fields; the canonical request asset is handled above.
         unresolved = [
             field for field in contract.required_inputs
-            if FinnV2OperationStateService._is_missing(explicit.get(field))
+            if FinnV2OperationStateService._is_missing(supplied.get(field))
         ]
         # The contract and proven inputs are authoritative. Selector telemetry
         # may narrow ambiguity but cannot mark an explicitly supplied slot as
         # missing or invent a slot outside the selected contract.
-        return tuple(field for field in unresolved if field in selector_missing or field not in explicit)
+        missing = tuple(field for field in unresolved if field in selector_missing or field not in supplied)
+        derived = {"target_asset": selected_entities["asset"]} if selected_entities.get("asset") else {}
+        return supplied, derived, missing
 
     @staticmethod
     def _contract_action(contract: OperationContract, raw_action: str) -> str:
@@ -293,12 +304,9 @@ class FinnV2OperationClassificationValidator:
             and active.get("operation_id") == contract.operation_id
         ):
             return None
-        # Manifest eligibility describes only the user's grammatical directive.
-        # The persisted lifecycle action above is always the contract enum.
-        if contract.allowed_action_polarities and facts.action_polarity not in contract.allowed_action_polarities:
-            return "operation_action_mismatch"
-        if contract.required_entities and not set(contract.required_entities).issubset(facts.explicit_entities):
-            return "operation_required_entity_missing"
+        # Selection metadata guides the model before it picks a contract. It
+        # must not be replayed against lossy lexical facts afterwards: the
+        # selected contract already owns the canonical typed polarity above.
         # `any_entities` guides the model candidate manifest. Values such as
         # setup, plan and bot are semantic subjects, not fields in the typed
         # selector entity schema, so re-checking them with local vocabulary
@@ -306,7 +314,17 @@ class FinnV2OperationClassificationValidator:
         # keyword router at the validation boundary.
         if contract.requires_verified_context:
             context = conversation_context or {}
-            if not (context.get("last_verified_context") or context.get("last_verified_conclusion")):
+            degraded = context.get("last_degraded_context")
+            has_degraded_evidence = (
+                classification.operation_id in {"explain_previous_evidence", "reformulate_previous_response"}
+                and isinstance(degraded, Mapping)
+                and bool(degraded.get("evidence_refs"))
+            )
+            if not (
+                context.get("last_verified_context")
+                or context.get("last_verified_conclusion")
+                or has_degraded_evidence
+            ):
                 return "operation_verified_context_missing"
         # An action contract that receives an explicit target must retain that
         # target; a workspace asset is context, not an action substitute.

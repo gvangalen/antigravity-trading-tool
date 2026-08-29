@@ -129,6 +129,7 @@ class FinnV2StructuredOperationSelectorService:
         target_asset = resolve_catalog_symbol(
             self._optional_text(parsed.get("target_asset"))
             or self._optional_text(raw_entities.get("asset"))
+            or self._optional_text(facts.get("referenced_asset"))
         ) or None
         if target_asset and not entities.get("asset"):
             entities["asset"] = target_asset
@@ -201,7 +202,10 @@ class FinnV2StructuredOperationSelectorService:
         raw = context or {}
         return {
             key: raw[key]
-            for key in ("last_verified_context", "active_guided_operation", "last_turn_diagnostics")
+            for key in (
+                "last_verified_context", "last_degraded_context", "active_guided_operation",
+                "last_turn_diagnostics",
+            )
             if key in raw
         }
 

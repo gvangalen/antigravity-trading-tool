@@ -271,3 +271,25 @@ def test_response_projection_makes_bot_and_status_visible():
     assert FinnV2ResponseVerifierService._covered_response_fields(
         draft=projected, evidence=evidence, required_fields=["bot", "bot_status"],
     ) == ["bot", "bot_status"]
+
+
+def test_evaluate_plan_projection_keeps_profile_and_indicator_grounding_visible():
+    draft = ResponseDraft(
+        draft_id="draft-evaluate-projection", run_id="run-evaluate-projection", user_id=406,
+        mode="EVALUATE", direct_answer="De BTC-setup is actief.",
+        main_observation="De bot staat niet live.", evidence_set_hash="projection-hash",
+        created_at=datetime.now(timezone.utc),
+    )
+    evidence = [
+        SimpleNamespace(tool_name="read_profile", facts={"trader_profile": {"risk_profile": "gematigd", "primary_timeframe": "4H"}}),
+        SimpleNamespace(tool_name="read_indicator_configuration", facts={"configured_indicators": [{"indicator": "RSI"}, {"indicator": "VWAP"}]}),
+    ]
+
+    projected = FinnV2ResponseVerifierService._project_required_response_fields(
+        draft=draft,
+        orchestrator_result=SimpleNamespace(analysis=SimpleNamespace(request_plan=SimpleNamespace(operation_id="evaluate_plan"))),
+        context=SimpleNamespace(evidence=evidence),
+    )
+
+    assert "gematigd" in projected.direct_answer
+    assert "RSI" in projected.direct_answer and "VWAP" in projected.direct_answer

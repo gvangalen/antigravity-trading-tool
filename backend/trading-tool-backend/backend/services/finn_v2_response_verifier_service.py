@@ -239,6 +239,32 @@ class FinnV2ResponseVerifierService:
                 status_text = "live" if is_live is True else "niet live" if is_live is False else "status onbekend"
                 if label.casefold() not in rendered or status_text not in rendered:
                     additions.append(f"Je gekoppelde {label} staat {status_text}.")
+        if operation_id == "evaluate_plan":
+            # The contract promises a complete personal plan evaluation. A
+            # model may safely assess only the collected facts, but it cannot
+            # omit the profile and indicator evidence that anchors that scope.
+            profile = facts_by_tool.get("read_profile", {})
+            profile_values = profile.get("trader_profile") or {}
+            profile_parts = []
+            for key in ("risk_profile", "experience_level", "primary_timeframe", "style"):
+                value = profile_values.get(key)
+                if isinstance(value, list):
+                    value = ", ".join(str(item) for item in value if str(item).strip())
+                if value not in (None, "", [], {}):
+                    profile_parts.append(str(value))
+            if profile_parts and not any(part.casefold() in rendered for part in profile_parts):
+                additions.append(f"Je opgeslagen profiel bevat: {', '.join(profile_parts)}.")
+            indicator_names = [
+                str(row.get("indicator"))
+                for rows in (
+                    indicators.get("configured_indicators") or [], indicators.get("technical") or [],
+                    indicators.get("market") or [], indicators.get("macro") or [],
+                )
+                for row in rows if isinstance(row, dict) and row.get("indicator")
+            ]
+            indicator_names = list(dict.fromkeys(indicator_names))
+            if indicator_names and not any(name.casefold() in rendered for name in indicator_names):
+                additions.append(f"De opgeslagen indicatoren zijn: {', '.join(indicator_names)}.")
         if not additions:
             return draft
         updated = draft.copy(deep=True)

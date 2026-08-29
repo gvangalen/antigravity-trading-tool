@@ -433,6 +433,23 @@ class FinnV2OrchestratorService:
                 }
             )
         else:
+            # A downgraded analysis cannot become a factual conclusion, but
+            # evidence/reformulation follow-ups may safely reference its
+            # retained provenance without receiving that conclusion.
+            if response_mode == "EVALUATE" and bool(getattr(verified_response, "evidence_refs_used", []) or []):
+                context["last_degraded_context"] = {
+                    "operation_id": operation_id,
+                    "mode": response_mode,
+                    "run_id": getattr(verified_response, "run_id", None),
+                    "evidence_refs": list(getattr(verified_response, "evidence_refs_used", []) or []),
+                    "reason_codes": list(getattr(verified_response, "uncertainty_codes", []) or []),
+                    "resolved_entities": {
+                        key: value for key, value in {
+                            "asset": resolved_asset, "setup_id": resolved_setup_id,
+                            "strategy_id": resolved_strategy_id, "bot_id": resolved_bot_id,
+                        }.items() if value is not None
+                    },
+                }
             context["last_turn_diagnostics"] = {
                 "operation_id": getattr(request_plan, "operation_id", None),
                 "mode": response_mode,

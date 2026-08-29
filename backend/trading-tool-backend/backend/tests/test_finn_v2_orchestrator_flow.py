@@ -339,6 +339,32 @@ def test_unavailable_delivery_records_diagnostics_without_overwriting_verified_c
     }
 
 
+def test_downgraded_evaluate_retains_only_evidence_lineage_for_safe_followups():
+    service = FinnV2OrchestratorService(session=object())
+    service.conversations = _FakeConversationRepo()
+    result = SimpleNamespace(
+        analysis=SimpleNamespace(
+            explicit_asset="BTC", explicit_setup_id=293, explicit_strategy_id=309,
+            explicit_bot_id=170, interaction_mode="EVALUATE",
+            request_plan=SimpleNamespace(operation_id="evaluate_plan", operation_contract_version="contract-v1", operation_state={}),
+        ),
+        tool_plan=SimpleNamespace(entity_selectors={"asset": "BTC"}),
+    )
+    response = SimpleNamespace(
+        verifier_status="downgraded", mode="EVALUATE", run_id="run-degraded",
+        evidence_refs_used=["E1", "E2"], uncertainty_codes=["response_field_incomplete"],
+    )
+
+    asyncio.run(service._update_conversation_context(
+        conversation_id="conversation-1", user_id=7, existing_context={}, result=result, verified_response=response,
+    ))
+
+    degraded = service.conversations.updated["context"]["last_degraded_context"]
+    assert degraded["evidence_refs"] == ["E1", "E2"]
+    assert degraded["resolved_entities"] == {"asset": "BTC", "setup_id": 293, "strategy_id": 309, "bot_id": 170}
+    assert "conclusion" not in degraded and "response" not in degraded
+
+
 def test_verified_proposal_preserves_financial_lineage_and_marks_guided_state_proposed():
     service = FinnV2OrchestratorService(session=object())
     service.conversations = _FakeConversationRepo()

@@ -1,7 +1,8 @@
 import pytest
 
 from backend.services.finn_v2_operation_classification_service import (
-    FinnV2OperationClassificationService,
+    FinnV2OperationClassificationService, FinnV2OperationClassificationValidator,
+    SemanticOperationClassification,
 )
 from backend.domain.finn_v2_operation_registry import ActionPolarity, FinnV2OperationRegistry
 
@@ -105,6 +106,44 @@ def test_registry_owns_the_canonical_action_polarity_for_every_qa_write_boundary
     assert registry.get("clarify_request").action_polarity is ActionPolarity.CLARIFY
 
 
+def test_validator_accepts_registry_projection_and_rejects_a_forged_polarity():
+    valid = SemanticOperationClassification(
+        operation_id="watchlist_add", action="add", domain="watchlist",
+        discourse="operation_request", confidence="high", selector_source="structured",
+    )
+    forged = SemanticOperationClassification(
+        operation_id="watchlist_add", action="create", domain="watchlist",
+        discourse="operation_request", confidence="high", selector_source="structured",
+    )
+    validator = FinnV2OperationClassificationValidator()
+
+    assert validator.validation_error(valid) is None
+    assert validator.validation_error(forged) == "operation_canonical_action_mismatch"
+
+
+def test_validator_allows_evidence_lineage_without_promoting_a_degraded_conclusion():
+    classification = SemanticOperationClassification(
+        operation_id="explain_previous_evidence", action="read", domain="lineage",
+        discourse="evidence_follow_up", confidence="high", selector_source="structured",
+    )
+    facts = CLASSIFIER.preprocessor.preprocess(message="Waar baseer je dat op?")
+    context = {"last_degraded_context": {"evidence_refs": ["E1"], "reason_codes": ["response_field_incomplete"]}}
+
+    assert FinnV2OperationClassificationValidator().validation_error(
+        classification, facts=facts, conversation_context=context,
+    ) is None
+    assert "conclusion" not in CLASSIFIER._safe_conversation_state(context)["last_degraded_context"]
+
+
+def test_typed_input_projection_does_not_treat_model_entities_as_user_supplied_slots():
+    result = CLASSIFIER.classify(message="Maak een BTC breakout-setup op 4H.")
+
+    assert result.required_inputs == ("setup_type", "timeframe", "name", "symbol")
+    assert result.supplied_inputs == {"symbol": "BTC", "setup_type": "trade", "timeframe": "4H"}
+    assert result.derived_inputs == {"target_asset": "BTC"}
+    assert result.selected_missing_inputs == ("name",)
+
+
 def test_live_order_language_uses_typed_bot_activation_polarity():
     for message in (
         "Laat mijn gekoppelde robot voortaan echte orders plaatsen.",
@@ -114,6 +153,27 @@ def test_live_order_language_uses_typed_bot_activation_polarity():
         result = CLASSIFIER.classify(message=message)
         assert result.operation_id == "activate_bot"
         assert result.action == "activate"
+
+
+def test_live_automation_enablement_is_not_a_bot_status_read():
+    facts = CLASSIFIER.preprocessor.preprocess(
+        message="Ik wil de gekoppelde automation live inschakelen."
+    )
+
+    assert facts.action_polarity == "activate"
+    assert facts.discourse_act == "operation_request"
+
+
+@pytest.mark.parametrize("message", (
+    "Waar wringt mijn huidige aanpak financieel gezien het meest?",
+    "Welke risico's maken mijn handelswijze het kwetsbaarst?",
+    "Welk verbeterpunt is in mijn bestaande tradingaanpak het belangrijkst?",
+))
+def test_natural_plan_assessment_is_an_evaluation_fact(message):
+    facts = CLASSIFIER.preprocessor.preprocess(message=message)
+
+    assert facts.action_polarity == "evaluate"
+    assert facts.discourse_act == "evaluation"
 
 
 def test_ambiguous_improvement_has_typed_clarification_input_and_clarify_polarity():

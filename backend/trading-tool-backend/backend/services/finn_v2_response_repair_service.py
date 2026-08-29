@@ -12,6 +12,7 @@ class FinnV2ResponseRepairService:
     REPAIRABLE_CODES = {
         "response_not_answering_question",
         "response_scope_incomplete",
+        "response_field_incomplete",
         "missing_uncertainty",
         "mode_purity_violation",
         "unsupported_noncritical_claim",
@@ -36,6 +37,14 @@ class FinnV2ResponseRepairService:
             updated.follow_up_question = None
         if "missing_uncertainty" in reason_codes and not updated.uncertainty_summary:
             updated.uncertainty_summary = uncertainty_summary or "Een deel van de onderliggende context is onzeker of verouderd."
+        if "response_field_incomplete" in reason_codes and updated.mode == "EVALUATE" and not updated.next_step:
+            # Coverage requires a concrete, evidence-bounded continuation.
+            # Do not fabricate a trade instruction or a causal conclusion.
+            updated.next_step = {
+                "title": "Onderbouwing aanvullen",
+                "instruction": "Controleer de genoemde onderbouwing en vul alleen de ontbrekende of verouderde gegevens aan voordat je het plan wijzigt.",
+                "requires_confirmation": False,
+            }
         if "unsupported_noncritical_claim" in reason_codes:
             updated.claims = [claim for claim in updated.claims if claim.claim_type in {"uncertainty", "recommendation"} or claim.evidence_refs]
         if "mode_purity_violation" in reason_codes and updated.mode == "READ":

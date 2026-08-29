@@ -1,3 +1,5 @@
+import pytest
+
 from backend.domain.finn_v2_operation_registry import FinnV2OperationRegistry
 from backend.services.finn_v2_structured_operation_selector_service import (
     FinnV2StructuredOperationSelectorService,
@@ -104,3 +106,26 @@ def test_selector_projects_catalog_assets_and_complete_setup_slots():
     assert selection.entities["timeframe"] == "6H"
     assert selection.entities["name"] == "Ripple Kompas"
     assert selection.missing_inputs == ("timeframe", "name")
+
+
+@pytest.mark.parametrize("asset", ("NEAR", "Cosmos", "Polygon", "UNI", "BTC"))
+def test_selector_projects_explicit_catalog_asset_when_model_target_is_null(asset):
+    selector = FinnV2StructuredOperationSelectorService(
+        provider=lambda **_kwargs: {"parsed": {
+            "operation_id": "watchlist_add", "confidence": 0.95,
+            "entities": {"concept": None, "asset": asset, "setup_id": None,
+                         "strategy_id": None, "bot_id": None, "setup_type": None,
+                         "timeframe": None, "name": None},
+            "target_asset": None, "conversation_reference": None,
+            "missing_inputs": [], "ambiguity_reason": None,
+        }}
+    )
+    selection, error = selector.select(
+        message=f"Voeg {asset} toe.",
+        candidate_contracts=(FinnV2OperationRegistry().get("watchlist_add"),),
+        facts={"referenced_asset": asset}, verified_context=None,
+    )
+
+    assert error is None
+    assert selection is not None
+    assert selection.target_asset == selection.entities["asset"]

@@ -216,7 +216,7 @@ class FinnV2RequestPreprocessorService:
         inflection_stems = {
             "indicator", "signaal", "trendindicator", "setup", "haal", "maak",
             "toevoeg", "verwijder", "activeer", "bevestig", "formuleer",
-            "herformuleer", "ontbrek", "ontbreek",
+            "herformuleer", "ontbrek", "ontbreek", "inschakel",
         }
         return any(
             re.search(rf"(?<!\w){re.escape(term)}(?!\w)", text)
@@ -259,7 +259,7 @@ class FinnV2RequestPreprocessorService:
             return "read"
         if "live" in text and re.search(r"\b(staat|is|welke|toon)\b", text):
             return "read"
-        if "live" in text and re.search(r"\b(activeer|activate|schakel|inschakel|start|zet|maak)\b", text):
+        if "live" in text and re.search(r"\b(?:activeer\w*|activate\w*|schakel\w*|inschakel\w*|start\w*|zet|maak\w*)\b", text):
             return "activate"
         if re.search(r"\b(?:echte|reële|live)\s+orders?\b", text) and re.search(
             r"\b(?:plaats\w*|uitvoer\w*|verstuur\w*|verstur\w*)\b", text
@@ -285,6 +285,13 @@ class FinnV2RequestPreprocessorService:
             return "add"
         if re.search(r"\bneem\b.+\bop\b", text):
             return "add"
+        # A current trading approach plus an assessment criterion is a
+        # read-only evaluation fact. The registry still selects its contract.
+        if re.search(r"\b(?:aanpak|handelswijze|tradingaanpak|plan)\b", text) and re.search(
+            r"\b(?:wringt|probleem|kwaliteit|risico\w*|verbeter\w*|zwak\w*|sterk\w*|onderbouw\w*)\b",
+            text,
+        ):
+            return "evaluate"
         for polarity, terms in self._ACTION_PATTERNS:
             if self._contains_any(text, terms):
                 if polarity == "execute" and self._contains_any(text, ("niet", "niets", "zonder")):

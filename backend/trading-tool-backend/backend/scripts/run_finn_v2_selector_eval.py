@@ -80,6 +80,9 @@ def run_case(case: SelectorEvalCase) -> dict[str, Any]:
     conversation_reference = classified.selected_conversation_reference
     clarification = classified.operation_id == "clarify_request"
     actual_missing_inputs = list(classified.selected_missing_inputs)
+    required_inputs = list(classified.required_inputs)
+    supplied_inputs = dict(classified.supplied_inputs)
+    derived_inputs = dict(classified.derived_inputs)
     expected_missing_inputs = case.expected_missing_inputs
     return {
         "eval_id": case.eval_id,
@@ -91,6 +94,9 @@ def run_case(case: SelectorEvalCase) -> dict[str, Any]:
             "target_asset": target_asset, "action_polarity": classified.action,
             "conversation_reference": conversation_reference, "clarification": clarification,
             "missing_inputs": actual_missing_inputs,
+            "required_inputs": required_inputs,
+            "supplied_inputs": supplied_inputs,
+            "derived_inputs": derived_inputs,
             "selector_source": classified.selector_source,
         },
         "provider_status": (raw.get("provider_metadata") or {}).get("response_status"),
