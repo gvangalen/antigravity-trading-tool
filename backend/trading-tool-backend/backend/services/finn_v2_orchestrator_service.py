@@ -22,6 +22,7 @@ from backend.services.finn_v2_request_analysis_service import FinnV2RequestAnaly
 from backend.services.finn_v2_risk_classification_service import FinnV2RiskClassificationService
 from backend.services.finn_v2_tool_execution_service import FinnV2ToolExecutionService
 from backend.services.finn_v2_tool_plan_service import FinnV2ToolPlanService
+from backend.services.ai_usage_observability_service import ai_usage_context
 from backend.services.platform_metrics import increment_execution_safety_counter, record_latency_sample
 
 
@@ -87,12 +88,20 @@ class FinnV2OrchestratorService:
                 conversation_id=conversation_id,
                 user_id=user_id,
             )
-        analysis = self.analysis.analyze(
-            message=run.message,
-            workspace_hints=getattr(run, "workspace_hints_json", {}) or {},
-            client_context=getattr(run, "client_context_json", {}) or {},
-            conversation_context=conversation_context,
-        )
+        # Selector quota is user-scoped. Without this context the OpenAI
+        # boundary groups every lifecycle run into an unscoped global bucket,
+        # allowing unrelated background/eval traffic to suppress user turns.
+        with ai_usage_context(
+            entry_point="finn_v2_selector",
+            purpose="finn_v2_selector",
+            user_id=user_id,
+        ):
+            analysis = self.analysis.analyze(
+                message=run.message,
+                workspace_hints=getattr(run, "workspace_hints_json", {}) or {},
+                client_context=getattr(run, "client_context_json", {}) or {},
+                conversation_context=conversation_context,
+            )
         domain_requirements = self.requirements.determine(analysis)
         tool_plan = self.tool_plans.build(run_id=run_id, analysis=analysis, domain_plan=domain_requirements)
 
