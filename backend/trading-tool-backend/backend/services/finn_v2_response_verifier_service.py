@@ -778,6 +778,7 @@ class FinnV2ResponseVerifierService:
             main_observation=draft.main_observation,
             supporting_points=draft.supporting_points,
             claims=draft.claims,
+            evidence_refs_used=list(draft.evidence_refs_used),
             uncertainty_summary=draft.uncertainty_summary,
             uncertainty_codes=draft.uncertainty_codes,
             next_step=draft.next_step,
