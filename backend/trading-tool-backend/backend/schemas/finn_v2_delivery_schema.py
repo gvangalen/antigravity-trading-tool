@@ -38,7 +38,13 @@ class FinnV2DeliveryEnvelope(BaseModel):
 
 
 class FinnV2StreamEvent(BaseModel):
-    event: Literal["run.started", "run.progress", "run.completed", "run.failed"]
+    # Keep this union aligned with every terminal status the delivery service
+    # can expose. A typed SSE envelope must never turn a valid rejected or
+    # unavailable run into a serialization failure.
+    event: Literal[
+        "run.started", "run.progress", "run.completed", "run.failed",
+        "run.unavailable", "run.downgraded", "run.rejected", "run.blocked", "run.canceled",
+    ]
     run_id: str
     payload: Dict[str, Any]
 

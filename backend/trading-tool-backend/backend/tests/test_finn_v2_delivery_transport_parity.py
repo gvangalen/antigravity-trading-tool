@@ -51,6 +51,21 @@ def test_sse_uses_the_same_iso8601_datetime_encoding_as_polling():
     )
 
 
+def test_rejected_terminal_run_has_a_typed_sse_event():
+    service = FinnV2DeliveryService(session=object())
+    service.runs.get_by_id_for_user = lambda **_kwargs: asyncio.sleep(
+        0, result=SimpleNamespace(id="run-rejected", conversation_id="conv-1", user_id=7, status="rejected")
+    )
+    service.verified.get_latest_for_run = lambda **_kwargs: asyncio.sleep(0, result=None)
+
+    async def _collect():
+        return [event async for event in service.stream_delivery_events(user_id=7, run_id="run-rejected")]
+
+    events = asyncio.run(_collect())
+    assert events[0].event == "run.rejected"
+    assert events[0].payload["status"] == "rejected"
+
+
 def test_terminal_indicator_and_bot_fields_survive_polling_and_sse_serialization():
     service = FinnV2DeliveryService(session=object())
     response_json = {
