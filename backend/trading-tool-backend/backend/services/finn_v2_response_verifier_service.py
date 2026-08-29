@@ -171,6 +171,19 @@ class FinnV2ResponseVerifierService:
 
     @staticmethod
     def _project_required_response_fields(*, draft: ResponseDraft, orchestrator_result, context) -> ResponseDraft:
+        # A reasoning fallback may ground every claim while leaving the
+        # response-level ledger empty. Persist the canonical union so delivery
+        # and conversation lineage retain the same verified evidence.
+        claim_refs = [
+            ref
+            for claim in draft.claims
+            for ref in claim.evidence_refs
+            if ref
+        ]
+        evidence_refs_used = list(dict.fromkeys([*draft.evidence_refs_used, *claim_refs]))
+        if evidence_refs_used != draft.evidence_refs_used:
+            draft = draft.copy(deep=True)
+            draft.evidence_refs_used = evidence_refs_used
         request_plan = getattr(orchestrator_result.analysis, "request_plan", None)
         operation_id = getattr(request_plan, "operation_id", None)
         if not operation_id:
