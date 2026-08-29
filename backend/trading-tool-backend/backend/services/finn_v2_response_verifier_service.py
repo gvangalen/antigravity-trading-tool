@@ -915,8 +915,15 @@ class FinnV2ResponseVerifierService:
         causal_language = (
             "veroorzaakt", "leidt tot", "verbeter", "zal helpen", "beperkt ",
             "verhoogt", "verlaagt", "maakt .* zwak", "maakt .* sterker",
+            r"\bomdat\b", r"vormt .* tekortkoming", r"vermindert .* ondersteuning",
         )
-        if any(re.search(pattern, haystack) for pattern in causal_language):
+        # An evidence limitation may explicitly say that a configuration does
+        # not establish causality. That is a safe disclaimer, not a claim.
+        negated_causality = re.search(
+            r"\b(?:geen|niet)\b.{0,48}\b(?:veroorzaakt|leidt tot|beperkt|vermindert)\b",
+            haystack,
+        )
+        if not negated_causality and any(re.search(pattern, haystack) for pattern in causal_language):
             causal_support = any(
                 bool((getattr(item, "facts", {}) or {}).get("causal_evidence"))
                 or bool((getattr(item, "facts", {}) or {}).get("causal_relation"))

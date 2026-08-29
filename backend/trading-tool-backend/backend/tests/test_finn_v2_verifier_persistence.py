@@ -96,6 +96,27 @@ def test_verifier_persistence_serializes_datetime_payloads():
     assert persisted.created_at == response_captured["created_at"]
 
 
+def test_verifier_rejects_indicator_configuration_as_a_causal_plan_judgment():
+    service = FinnV2ResponseVerifierService(session=object())
+    evidence = [
+        SimpleNamespace(
+            tool_name="read_indicator_configuration",
+            facts={"configured_count": 0, "configured_indicators": []},
+            asset="BTC",
+        )
+    ]
+
+    support, reason_codes, supported = service._evaluate_claim_support(
+        "De indicatorconfiguratie is een tekortkoming, omdat er geen indicatoren zijn ingesteld.",
+        evidence,
+        "evaluation",
+    )
+
+    assert support == "unsupported"
+    assert reason_codes == ["unsupported_configuration_causality"]
+    assert supported is False
+
+
 def test_verifier_reject_persists_a_typed_result_without_a_verified_response():
     service = FinnV2ResponseVerifierService(session=object())
     persisted = {}
