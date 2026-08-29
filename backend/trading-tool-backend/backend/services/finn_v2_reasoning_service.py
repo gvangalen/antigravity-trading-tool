@@ -145,7 +145,10 @@ class FinnV2ReasoningService:
         policy = FinnV2PolicyDecision.parse_obj(policy_row.decision_json) if policy_row is not None else None
 
         if orchestrator_result.outcome != "reasoning_ready":
-            result = self.fallbacks.deterministic_draft(run_id=run_id, user_id=user_id, orchestrator_result=orchestrator_result, model=self._resolved_model())
+            result = self.fallbacks.terminal_from_orchestrator(
+                run_id=run_id, user_id=user_id,
+                orchestrator_result=orchestrator_result, model=self._resolved_model()
+            )
             return await self._persist_record(
                 run_id=run_id,
                 user_id=user_id,
@@ -400,6 +403,11 @@ class FinnV2ReasoningService:
             )
         if contract.operation_id in {"off_topic", "unsupported_financial_operation", "explain_financial_concept"}:
             return self.fallbacks.safe_terminal_draft(
+                run_id=run_id, user_id=user_id, operation_id=contract.operation_id,
+                context=context, model=model,
+            )
+        if contract.operation_id == "reformulate_previous_response":
+            return self.fallbacks.lineage_draft(
                 run_id=run_id, user_id=user_id, operation_id=contract.operation_id,
                 context=context, model=model,
             )

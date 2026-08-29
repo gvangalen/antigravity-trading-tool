@@ -28,9 +28,15 @@ def finn_v2_structured_selector_test_double(monkeypatch):
     default_provider = openai_client.ask_gpt_structured_response
     original_select = FinnV2StructuredOperationSelectorService.select
 
-    def select(self, *, facts, verified_context, **kwargs):
+    def select(self, *, facts, verified_context, candidate_contracts, **kwargs):
         if self._provider is not default_provider:
-            return original_select(self, facts=facts, verified_context=verified_context, **kwargs)
+            return original_select(
+                self,
+                facts=facts,
+                verified_context=verified_context,
+                candidate_contracts=candidate_contracts,
+                **kwargs,
+            )
         entities = tuple(facts.get("entities") or ())
         normalized = str(facts.get("normalized_text") or "")
         discourse = str(facts.get("discourse_act") or "information_request")
@@ -45,10 +51,15 @@ def finn_v2_structured_selector_test_double(monkeypatch):
             facts.get("financial_concept")
             and discourse == "information_request"
             and not facts.get("referenced_asset")
-            and normalized.startswith(("wat betekent ", "wat is ", "what is ", "what does ", "leg uit", "uitleg"))
+            and any(term in normalized for term in ("beteken", "uitleg", "uitleggen", "waarvoor", "what is", "what does"))
         ):
             operation_id = "explain_financial_concept"
-        elif isinstance(guided, dict) and guided.get("missing_required_inputs") and discourse == "clarification_answer":
+        elif (
+            isinstance(guided, dict)
+            and guided.get("missing_required_inputs")
+            and str(guided.get("operation_id")) in {item.operation_id for item in candidate_contracts}
+            and len(candidate_contracts) <= 3
+        ):
             operation_id = str(guided["operation_id"])
         elif verified and discourse == "evidence_follow_up":
             operation_id = "explain_previous_evidence"
@@ -64,7 +75,21 @@ def finn_v2_structured_selector_test_double(monkeypatch):
                 has_verified_context=bool(verified),
                 normalized_text=normalized,
             )
+            allowed = {item.operation_id for item in candidate_contracts}
+            candidates = tuple(item for item in candidates if item.operation_id in allowed)
             operation_id = candidates[0].operation_id if candidates else "clarify_request"
-        return SimpleNamespace(operation_id=operation_id, confidence=0.95), None
+        asset = facts.get("referenced_asset")
+        concept = facts.get("financial_concept")
+        contract = registry.get(operation_id)
+        return SimpleNamespace(
+            operation_id=operation_id,
+            confidence=0.95,
+            entities={"asset": asset or "", "concept": concept or ""},
+            target_asset=asset if operation_id in {"watchlist_add", "watchlist_remove", "create_setup"} else None,
+            conversation_reference=(
+                "previous_verified_response" if contract.requires_verified_context else None
+            ),
+            missing_inputs=tuple(contract.required_inputs),
+        ), None
 
     monkeypatch.setattr(FinnV2StructuredOperationSelectorService, "select", select)

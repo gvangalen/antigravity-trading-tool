@@ -66,6 +66,35 @@ def test_response_coverage_does_not_treat_collected_graph_evidence_as_a_visible_
     assert covered == []
 
 
+def test_empty_indicator_configuration_is_a_complete_typed_response():
+    draft = ResponseDraft(
+        draft_id="draft-empty-indicators",
+        run_id="run-empty-indicators",
+        user_id=7,
+        mode="READ",
+        direct_answer="Voor BTC staan 0 indicatoren ingesteld: geen indicatoren.",
+        main_observation="Deze configuratie komt uit de opgeslagen BTC-regels.",
+        evidence_refs_used=["E1", "E2"],
+        evidence_set_hash="hash-empty-indicators",
+        created_at=datetime.now(timezone.utc),
+    )
+    evidence = [
+        SimpleNamespace(tool_name="read_active_asset", facts={"symbol": "BTC"}),
+        SimpleNamespace(
+            tool_name="read_indicator_configuration",
+            facts={"symbol": "BTC", "configured_count": 0, "configured_indicators": []},
+        ),
+    ]
+
+    covered = FinnV2ResponseVerifierService._covered_response_fields(
+        draft=draft,
+        evidence=evidence,
+        required_fields=["asset", "configured_count", "indicator_names"],
+    )
+
+    assert covered == ["asset", "configured_count", "indicator_names"]
+
+
 def test_scope_coverage_fails_when_a1_reduces_to_indicator_only():
     service = FinnV2ResponseVerifierService(session=object())
     draft = ResponseDraft(

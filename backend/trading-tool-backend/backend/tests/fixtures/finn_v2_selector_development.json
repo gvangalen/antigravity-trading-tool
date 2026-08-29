@@ -156,8 +156,7 @@
     "expected_action_polarity": "create",
     "provider_call_expected": true,
     "expected_missing_inputs": [
-      "name",
-      "setup_type"
+      "name"
     ]
   },
   {
@@ -235,6 +234,8 @@
     "expected_clarification": true,
     "expected_action_polarity": "update",
     "provider_call_expected": true,
-    "expected_missing_inputs": []
+    "expected_missing_inputs": [
+      "requested_change"
+    ]
   }
 ]

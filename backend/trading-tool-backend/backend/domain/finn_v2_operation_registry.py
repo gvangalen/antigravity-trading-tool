@@ -288,7 +288,8 @@ def _gap(operation_id: str, domain: str, mode: str, aliases: tuple[str, ...], re
 # encoding a list of production prompt strings in the runtime selector.
 _OPERATION_SELECTION_METADATA: Mapping[str, dict] = {
     "clarify_request": {
-        "semantic_description": "Ask one focused clarification for an ambiguous request about the user's FINN trading workspace when the requested object or supported operation is not identifiable. Never classify a trading-workspace request as off-topic merely because details are missing.",
+        "semantic_description": "Ask one focused clarification for an ambiguous request about the user's FINN trading workspace only when the requested object or supported operation itself is not identifiable. A vague request to improve, change or optimize the user's trading approach without saying what should change is ambiguous and must be clarified, not treated as an unsupported financial operation. Missing inputs for an identifiable typed operation belong to that operation's guided flow, not clarify_request. Never classify a trading-workspace request as off-topic merely because details are missing.",
+        "allowed_action_polarities": ("update",),
     },
     "unavailable": {
         "semantic_description": "Respond safely when the request cannot be fulfilled from an available FINN contract.",
@@ -297,7 +298,7 @@ _OPERATION_SELECTION_METADATA: Mapping[str, dict] = {
         "semantic_description": "Explain a general financial concept, indicator, or trading term without reading the user's workspace or using product tools.",
     },
     "unsupported_financial_operation": {
-        "semantic_description": "Safely decline a request that is clearly about investing, trading, portfolio management, brokerage, or a financial product operation but has no supported FINN contract. Do not use off_topic for financial requests.",
+        "semantic_description": "Safely decline a clearly identified investing, trading, portfolio-management, brokerage, or financial-product operation for which FINN has no supported contract, such as autonomous portfolio management. Do not use this for an underspecified request to improve or change the user's own FINN workspace; that requires clarify_request. Do not use off_topic for financial requests.",
     },
     "off_topic": {
         "semantic_description": "Decline a request unrelated to financial education, FINN, or the user's trading workspace.",
@@ -408,12 +409,14 @@ _OPERATION_SELECTION_METADATA: Mapping[str, dict] = {
         "selection_focus_entities": ("strategy",),
     },
     "evaluate_bot": {
+        "semantic_description": "Evaluate the user's linked bot or explain what the previous verified plan conclusion means for that bot. A contextual bot implication must retain the previous verified response reference and use bot evidence; it is not a request to activate or reconfigure the bot.",
         "any_entities": ("bot",),
-        "required_discourse_acts": ("evaluation",),
+        "required_discourse_acts": ("evaluation", "contextual_follow_up"),
         "selection_priority": 40,
         "selection_focus_entities": ("bot",),
     },
     "create_setup": {
+        "semantic_description": "Create a typed draft setup proposal when the user asks FINN to design, prepare or define a new trading setup, trade plan or market entry approach. Select create_setup even when that identifiable setup request is initially incomplete and report its missing typed inputs so the guided flow can ask for them. Natural descriptions may also supply an asset, trading style or setup type, timeframe and name without using the literal word setup.",
         "any_entities": ("setup",),
         "required_discourse_acts": ("operation_request",),
         "allowed_action_polarities": ("create", "add"),
@@ -432,6 +435,7 @@ _OPERATION_SELECTION_METADATA: Mapping[str, dict] = {
         "selection_priority": 80,
     },
     "activate_bot": {
+        "semantic_description": "Handle a request for a linked bot or automation to begin placing real or live orders. This is the typed high-risk live-bot safety contract, distinct from reading bot status, changing bot configuration, or unsupported autonomous portfolio decision-making.",
         "any_entities": ("bot",),
         "required_discourse_acts": ("operation_request",),
         "allowed_action_polarities": ("activate",),
@@ -459,7 +463,7 @@ _OPERATION_SELECTION_METADATA: Mapping[str, dict] = {
 
 _CONTRACTS: tuple[OperationContract, ...] = (
     OperationContract("capability", FinnV2OperationRegistry.VERSION, "system", "CAPABILITY", ("wat kun je", "what can you", "capabilities"), required_scopes=("capability",), response_strategy="deterministic_template", context_policy="minimal"),
-    OperationContract("clarify_request", FinnV2OperationRegistry.VERSION, "system", "CLARIFICATION", (), response_strategy="clarification", context_policy="minimal"),
+    OperationContract("clarify_request", FinnV2OperationRegistry.VERSION, "system", "CLARIFICATION", (), required_inputs=("requested_change",), response_strategy="clarification", context_policy="minimal"),
     OperationContract("unavailable", FinnV2OperationRegistry.VERSION, "system", "UNAVAILABLE", (), response_strategy="unavailable", context_policy="minimal"),
     OperationContract("explain_financial_concept", FinnV2OperationRegistry.VERSION, "financial_education", "READ", (), required_inputs=("concept",), model_policy="never", response_strategy="financial_concept_explanation", context_policy="minimal"),
     OperationContract("unsupported_financial_operation", FinnV2OperationRegistry.VERSION, "financial_unsupported", "UNAVAILABLE", (), model_policy="never", response_strategy="unsupported_operation", context_policy="minimal"),
@@ -477,10 +481,10 @@ _CONTRACTS: tuple[OperationContract, ...] = (
     _gap("delete_indicator_configuration", "indicators", "CREATE_PROPOSAL", ("verwijder indicator",), "delete_indicator_configuration_adapter_missing"),
     OperationContract("evaluate_indicator_configuration", FinnV2OperationRegistry.VERSION, "indicators", "EVALUATE", ("beoordeel indicator",), required_scopes=("active_asset", "indicator_configuration"), model_policy="required", response_strategy="model_reasoning", policy_class="advice"),
     _read("read_active_setup", "setup", ("active_asset", "active_setup"), ("actieve setup", "welke setup"), ("setup", "timeframe")),
-    # SetupService validates these three fields unconditionally. Timeframe and
-    # score/market-condition details are useful trusted inputs, but are not
-    # schema-required and must not be invented by FINN.
-    OperationContract("create_setup", FinnV2OperationRegistry.VERSION, "setup", "CREATE_PROPOSAL", ("maak setup", "create setup", "setup voor"), required_inputs=("name", "symbol", "setup_type"), required_scopes=("active_asset",), optional_scopes=("profile", "preferences", "indicator_configuration", "active_setup", "linked_strategy"), model_policy="optional", response_strategy="proposal_draft", policy_class="proposal", proposal_type="create_setup", confirmation_required=True, execution_adapter="create_setup", idempotency_rule="proposal_payload_hash", postcondition="setup_created_for_user_asset"),
+    # SetupService validates the persisted setup fields unconditionally.
+    # Score and market-condition details are useful trusted inputs, but must
+    # not be invented by FINN.
+    OperationContract("create_setup", FinnV2OperationRegistry.VERSION, "setup", "CREATE_PROPOSAL", ("maak setup", "create setup", "setup voor"), required_inputs=("setup_type", "timeframe", "name", "symbol"), required_scopes=("active_asset",), optional_scopes=("profile", "preferences", "indicator_configuration", "active_setup", "linked_strategy"), model_policy="optional", response_strategy="proposal_draft", policy_class="proposal", proposal_type="create_setup", confirmation_required=True, execution_adapter="create_setup", idempotency_rule="proposal_payload_hash", postcondition="setup_created_for_user_asset"),
     OperationContract("update_setup", FinnV2OperationRegistry.VERSION, "setup", "CREATE_PROPOSAL", ("wijzig setup",), required_inputs=("setup_id", "changed_fields"), required_scopes=("active_asset", "active_setup"), proposal_type="update_setup", confirmation_required=True, execution_adapter="update_setup", idempotency_rule="proposal_payload_hash", postcondition="setup_updated_for_user"),
     _gap("delete_setup", "setup", "CREATE_PROPOSAL", ("verwijder setup",), "delete_setup_execution_adapter_missing"),
     OperationContract("evaluate_setup", FinnV2OperationRegistry.VERSION, "setup", "EVALUATE", ("beoordeel setup",), required_scopes=("active_asset", "active_setup"), optional_scopes=("indicator_configuration",), model_policy="required", response_strategy="model_reasoning", policy_class="advice"),

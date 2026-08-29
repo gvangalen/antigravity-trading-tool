@@ -41,6 +41,56 @@ class FinnV2ReasoningFallbackService:
             uncertainty_summary=None, uncertainty_codes=[], evidence_refs_used=[], model=model,
             created_at=datetime.now(timezone.utc),
         )
+
+    def terminal_from_orchestrator(self, *, run_id: str, user_id: int, orchestrator_result: OrchestratorResult, model: str) -> ReasoningResult:
+        plan = orchestrator_result.analysis.request_plan
+        operation_id = plan.operation_id if plan is not None else "unavailable"
+        if operation_id == "off_topic":
+            return ReasoningResult(
+                reasoning_result_id=f"finn-v2-reasoning-{uuid.uuid4().hex}",
+                run_id=run_id,
+                user_id=user_id,
+                mode="UNAVAILABLE",
+                direct_answer="Ik help je graag met financiële planning, marktcontext, setups, strategieën en bots.",
+                main_observation="Deze vraag valt buiten FINN's financiële en productondersteuning.",
+                uncertainty_summary=None,
+                uncertainty_codes=[],
+                evidence_refs_used=[],
+                model=model,
+                created_at=datetime.now(timezone.utc),
+            )
+        return self.deterministic_draft(
+            run_id=run_id, user_id=user_id, orchestrator_result=orchestrator_result, model=model
+        )
+
+    def lineage_draft(
+        self, *, run_id: str, user_id: int, operation_id: str,
+        context: ReasoningContextPackage, model: str
+    ) -> ReasoningResult:
+        state = dict((context.request_plan or {}).get("operation_state") or {})
+        conclusion = str(state.get("previous_verified_conclusion") or "").strip()
+        response = str(state.get("previous_verified_response") or "").strip()
+        refs = list(state.get("previous_evidence_refs") or [])
+        if not conclusion and not response:
+            return self.unavailable_draft(
+                run_id=run_id, user_id=user_id, mode="UNAVAILABLE",
+                error_codes=["verified_lineage_unavailable"], model=model,
+            )
+        if operation_id == "reformulate_previous_response":
+            source = response or conclusion
+            concise = re.split(r"(?<=[.!?])\s+", source, maxsplit=1)[0].strip()
+            return ReasoningResult(
+                reasoning_result_id=f"finn-v2-reasoning-{uuid.uuid4().hex}",
+                run_id=run_id, user_id=user_id, mode="READ",
+                direct_answer=concise,
+                main_observation="Dit is een verkorte formulering van de vorige geverifieerde conclusie.",
+                uncertainty_summary=None, uncertainty_codes=[],
+                evidence_refs_used=refs, model=model, created_at=datetime.now(timezone.utc),
+            )
+        return self.unavailable_draft(
+            run_id=run_id, user_id=user_id, mode="UNAVAILABLE",
+            error_codes=["lineage_operation_requires_model"], model=model,
+        )
     @staticmethod
     def _indicator_names(facts: dict[str, Any], category: str) -> list[str]:
         rows = facts.get(category) or []

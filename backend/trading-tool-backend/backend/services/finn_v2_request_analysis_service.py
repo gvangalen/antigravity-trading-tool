@@ -163,11 +163,27 @@ class FinnV2RequestAnalysisService:
         )
         if guided_state is not None:
             missing_essential_inputs = list(guided_state.missing_required_inputs)
+        operation_state_payload = guided_state.dict() if guided_state is not None else {}
+        if (
+            guided_state is None
+            and uses_conversation_reference
+            and isinstance((conversation_context or {}).get("last_verified_context"), dict)
+        ):
+            verified = dict((conversation_context or {}).get("last_verified_context") or {})
+            operation_state_payload = {
+                "previous_verified_response_id": verified.get("verified_response_id"),
+                "previous_verified_run_id": verified.get("run_id"),
+                "previous_verified_operation_id": verified.get("operation_id"),
+                "previous_verified_conclusion": verified.get("conclusion"),
+                "previous_verified_response": verified.get("response"),
+                "previous_evidence_refs": list(verified.get("evidence_refs") or []),
+                "resolved_entities": dict(verified.get("resolved_entities") or {}),
+            }
         target_resolution = self.target_resolver.resolve(
             explicit_target_asset=message_asset,
             selector_target_asset=semantic.selected_target_asset,
             verified_context=conversation_context,
-            operation_state=guided_state.dict() if guided_state is not None else (conversation_context or {}).get("active_guided_operation") or (conversation_context or {}).get("operation_state"),
+            operation_state=operation_state_payload or (conversation_context or {}).get("active_guided_operation") or (conversation_context or {}).get("operation_state"),
             workspace_asset=context_asset,
             allow_workspace_fallback=operation.mode not in {"CREATE_PROPOSAL", "ACTION_PROPOSAL"},
         )
@@ -188,7 +204,7 @@ class FinnV2RequestAnalysisService:
             financial_concept=preprocessed.financial_concept,
             operation_id=operation_id,
             operation=operation,
-            operation_state=guided_state.dict() if guided_state is not None else {},
+            operation_state=operation_state_payload,
             context_asset=context_asset,
             target_asset=target_resolution.target_asset,
             referenced_asset=message_asset or explicit_asset,

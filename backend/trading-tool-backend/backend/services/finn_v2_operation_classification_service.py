@@ -17,6 +17,7 @@ from backend.services.finn_v2_request_preprocessor_service import (
 from backend.services.finn_v2_structured_operation_selector_service import (
     FinnV2StructuredOperationSelectorService,
 )
+from backend.services.finn_v2_operation_state_service import FinnV2OperationStateService
 
 
 @dataclass(frozen=True)
@@ -108,8 +109,6 @@ class FinnV2OperationClassificationService:
         candidates: tuple[OperationContract, ...],
     ) -> tuple[OperationContract, ...]:
         """Constrain a typed slot answer without selecting an operation locally."""
-        if facts.discourse_act != "clarification_answer":
-            return candidates
         active = context.get("active_guided_operation") or (
             context.get("operation_state") if not context.get("conversation_state_version") else None
         )
@@ -122,11 +121,26 @@ class FinnV2OperationClassificationService:
             return candidates
         if not contract.required_inputs or not active.get("missing_required_inputs"):
             return candidates
+        continues_slot_collection = self._is_guided_continuation(facts)
+        if not continues_slot_collection:
+            return candidates
         safe = tuple(
             item for item in candidates
             if item.operation_id in {contract.operation_id, "clarify_request", "unavailable"}
         )
         return safe or candidates
+
+    @staticmethod
+    def _is_guided_continuation(facts: FinnV2PreprocessedRequest) -> bool:
+        return facts.discourse_act == "clarification_answer" or (
+            facts.action_polarity == "read"
+            and facts.discourse_act not in {
+                "capability", "evaluation", "operation_request",
+                "evidence_follow_up", "reformulation",
+            }
+            and facts.domain_hint != "off_topic"
+            and set(facts.explicit_entities).issubset({"asset", "setup", "watchlist"})
+        )
 
     @staticmethod
     def _safe_conversation_state(context: Mapping[str, object]) -> Mapping[str, object]:
@@ -160,6 +174,15 @@ class FinnV2OperationClassificationService:
         selection=None,
     ) -> SemanticOperationClassification:
         contract = self.registry.get(operation_id)
+        selected_entities = dict(getattr(selection, "entities", {}) or {})
+        if operation_id == "explain_financial_concept" and facts.financial_concept:
+            selected_entities["concept"] = facts.financial_concept
+        selected_missing_inputs = self._resolved_missing_inputs(
+            contract=contract,
+            facts=facts,
+            selected_entities=selected_entities,
+            selector_missing=tuple(getattr(selection, "missing_inputs", ()) or ()),
+        )
         return SemanticOperationClassification(
             operation_id=operation_id,
             action=self._contract_action(contract, facts.action_polarity),
@@ -171,11 +194,43 @@ class FinnV2OperationClassificationService:
             supported=contract.supported,
             reason_code=unsupported_capability or ("off_topic" if operation_id == "off_topic" else None),
             unsupported_capability=unsupported_capability,
-            selected_entities=dict(getattr(selection, "entities", {}) or {}),
+            selected_entities=selected_entities,
             selected_target_asset=getattr(selection, "target_asset", None),
             selected_conversation_reference=getattr(selection, "conversation_reference", None),
-            selected_missing_inputs=tuple(getattr(selection, "missing_inputs", ()) or ()),
+            selected_missing_inputs=selected_missing_inputs,
         )
+
+    @staticmethod
+    def _resolved_missing_inputs(
+        *,
+        contract: OperationContract,
+        facts: FinnV2PreprocessedRequest,
+        selected_entities: Mapping[str, str],
+        selector_missing: tuple[str, ...],
+    ) -> tuple[str, ...]:
+        if contract.operation_id == "clarify_request":
+            return ("requested_change",)
+        if not contract.required_inputs:
+            return ()
+        explicit = FinnV2OperationStateService().explicit_inputs(
+            contract=contract,
+            message=facts.normalized_text,
+            explicit_asset=facts.referenced_asset,
+        )
+        if selected_entities.get("asset"):
+            explicit.setdefault("asset", selected_entities["asset"])
+            explicit.setdefault("symbol", selected_entities["asset"])
+        for field in contract.required_inputs:
+            if selected_entities.get(field):
+                explicit.setdefault(field, selected_entities[field])
+        unresolved = [
+            field for field in contract.required_inputs
+            if FinnV2OperationStateService._is_missing(explicit.get(field))
+        ]
+        # The contract and proven inputs are authoritative. Selector telemetry
+        # may narrow ambiguity but cannot mark an explicitly supplied slot as
+        # missing or invent a slot outside the selected contract.
+        return tuple(field for field in unresolved if field in selector_missing or field not in explicit)
 
     @staticmethod
     def _contract_action(contract: OperationContract, raw_action: str) -> str:
@@ -191,8 +246,10 @@ class FinnV2OperationClassificationService:
             return actions[contract.operation_id]
         if contract.mode == "EVALUATE":
             return "evaluate"
+        if contract.operation_id == "clarify_request":
+            return "update"
         if contract.mode in {"READ", "CAPABILITY", "UNAVAILABLE", "CLARIFICATION"}:
-            return "read" if contract.operation_id != "clarify_request" else raw_action
+            return "read"
         return raw_action
 
 
@@ -243,17 +300,20 @@ class FinnV2OperationClassificationValidator:
             context.get("operation_state") if not context.get("conversation_state_version") else None
         )
         if (
-            facts.discourse_act == "clarification_answer"
+            FinnV2OperationClassificationService._is_guided_continuation(facts)
             and isinstance(active, Mapping)
             and active.get("operation_id") == contract.operation_id
         ):
             return None
-        if contract.allowed_action_polarities and facts.action_polarity not in contract.allowed_action_polarities:
+        if contract.allowed_action_polarities and classification.action not in contract.allowed_action_polarities:
             return "operation_action_mismatch"
         if contract.required_entities and not set(contract.required_entities).issubset(facts.explicit_entities):
             return "operation_required_entity_missing"
-        if contract.any_entities and not set(contract.any_entities).intersection(facts.explicit_entities):
-            return "operation_entity_mismatch"
+        # `any_entities` guides the model candidate manifest. Values such as
+        # setup, plan and bot are semantic subjects, not fields in the typed
+        # selector entity schema, so re-checking them with local vocabulary
+        # after a schema-valid model selection would reintroduce a shadow
+        # keyword router at the validation boundary.
         if contract.requires_verified_context:
             context = conversation_context or {}
             if not (context.get("last_verified_context") or context.get("last_verified_conclusion")):

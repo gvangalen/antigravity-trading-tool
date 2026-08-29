@@ -373,17 +373,24 @@ class FinnV2OrchestratorService:
         resolved_bot_id = selectors.get("bot_id") or getattr(result.analysis, "explicit_bot_id", None) or verified_context.get("resolved_entities", {}).get("bot_id")
         operation_state = dict(getattr(request_plan, "operation_state", {}) or {})
         response_mode = getattr(verified_response, "mode", None) or result.analysis.interaction_mode
+        operation_id = getattr(request_plan, "operation_id", None)
         # A deterministic unavailable/clarification can be verifier-valid as a
         # delivery, but it is not a reusable factual conclusion for a later
         # turn.  Preserve the last usable grounded context instead.
         is_verified = (
             getattr(verified_response, "verifier_status", None) in {"passed", "repaired"}
-            and response_mode not in {"UNAVAILABLE", "CLARIFICATION"}
+            and response_mode in {"READ", "EVALUATE"}
+            and operation_id not in {
+                "off_topic", "unsupported_financial_operation",
+                "explain_financial_concept", "explain_previous_evidence",
+                "reformulate_previous_response",
+            }
+            and bool(getattr(verified_response, "evidence_refs_used", []) or [])
         )
         if is_verified:
             verified_context = {
                 "verified_response_id": getattr(verified_response, "verified_response_id", None),
-                "operation_id": getattr(request_plan, "operation_id", None),
+                "operation_id": operation_id,
                 "contract_version": getattr(request_plan, "operation_contract_version", None),
                 "mode": response_mode,
                 "conclusion": getattr(verified_response, "main_observation", None),
@@ -434,6 +441,16 @@ class FinnV2OrchestratorService:
                 "reason_codes": ["guided_operation_cancelled"],
             }
         elif operation_state:
+            proposal_id = getattr(verified_response, "proposal_id", None)
+            if proposal_id:
+                operation_state.update(
+                    {
+                        "status": "proposed",
+                        "open_proposal_id": proposal_id,
+                        "missing_required_inputs": [],
+                        "next_missing_input": None,
+                    }
+                )
             context["active_guided_operation"] = operation_state
             # New conversations have a single typed guided-operation field.
             # The legacy value is read only for historical planless contexts.

@@ -93,6 +93,48 @@ def test_target_polarity_is_not_reversed_by_workspace_context():
     assert remove.operation_id == "watchlist_remove"
 
 
+def test_live_order_language_uses_typed_bot_activation_and_activate_polarity():
+    for message in (
+        "Laat mijn gekoppelde robot voortaan echte orders plaatsen.",
+        "Zorg dat de gekoppelde automation live orders uitvoert.",
+        "Mijn bot moet reële orders gaan versturen.",
+    ):
+        result = CLASSIFIER.classify(message=message)
+        assert result.operation_id == "activate_bot"
+        assert result.action == "activate"
+
+
+def test_ambiguous_improvement_has_typed_clarification_input_and_update_polarity():
+    result = CLASSIFIER.classify(message="Maak mijn manier van handelen beter.")
+
+    assert result.operation_id == "clarify_request"
+    assert result.action == "update"
+    assert result.selected_missing_inputs == ("requested_change",)
+
+
+def test_financial_concept_entity_is_canonicalized_after_structured_selection():
+    result = CLASSIFIER.classify(
+        message="Kun je in gewone taal uitleggen waarvoor ATR wordt gebruikt?"
+    )
+
+    assert result.operation_id == "explain_financial_concept"
+    assert result.selected_entities["concept"] == "ATR"
+    assert result.selected_missing_inputs == ()
+
+
+def test_complete_setup_slots_remove_model_reported_missing_inputs():
+    result = CLASSIFIER.classify(
+        message="Werk voor DOT een breakout-opzet uit op 2H en noem hem Polkadot Uitbraak."
+    )
+
+    assert result.operation_id == "create_setup"
+    assert result.selected_target_asset == "DOT"
+    assert result.action == "create"
+    assert result.selected_missing_inputs == ()
+    assert result.selector_source == "structured"
+    assert result.reason_code is None
+
+
 def test_separable_dutch_execution_verb_selects_the_execution_contract():
     result = CLASSIFIER.classify(message="Voer dit voorstel uit.")
 

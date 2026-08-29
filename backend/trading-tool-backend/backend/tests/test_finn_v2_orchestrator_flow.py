@@ -339,6 +339,58 @@ def test_unavailable_delivery_records_diagnostics_without_overwriting_verified_c
     }
 
 
+def test_verified_proposal_preserves_financial_lineage_and_marks_guided_state_proposed():
+    service = FinnV2OrchestratorService(session=object())
+    service.conversations = _FakeConversationRepo()
+    previous = {
+        "last_verified_context": {
+            "verified_response_id": "verified-plan",
+            "operation_id": "evaluate_plan",
+            "mode": "EVALUATE",
+            "conclusion": "BTC needs a testable entry rule.",
+            "evidence_refs": ["E1"],
+            "resolved_entities": {"asset": "BTC"},
+        }
+    }
+    result = SimpleNamespace(
+        analysis=SimpleNamespace(
+            explicit_asset="BTC", explicit_setup_id=None,
+            explicit_strategy_id=None, explicit_bot_id=None,
+            interaction_mode="CREATE_PROPOSAL",
+            request_plan=SimpleNamespace(
+                operation_id="create_setup",
+                operation_contract_version="contract-v1",
+                operation_state={
+                    "operation_id": "create_setup",
+                    "contract_version": "contract-v1",
+                    "collected_inputs": {
+                        "symbol": "BTC", "setup_type": "trade",
+                        "timeframe": "4H", "name": "BTC QA",
+                    },
+                    "missing_required_inputs": [],
+                },
+                required_information_scopes=["active_asset"],
+            ),
+        ),
+        tool_plan=SimpleNamespace(entity_selectors={"asset": "BTC"}),
+    )
+    response = SimpleNamespace(
+        verifier_status="passed", mode="CREATE_PROPOSAL",
+        proposal_id="proposal-setup", uncertainty_codes=[],
+        evidence_refs_used=["Easset"],
+    )
+
+    asyncio.run(service._update_conversation_context(
+        conversation_id="conversation-1", user_id=7,
+        existing_context=previous, result=result, verified_response=response,
+    ))
+
+    context = service.conversations.updated["context"]
+    assert context["last_verified_context"] == previous["last_verified_context"]
+    assert context["active_guided_operation"]["status"] == "proposed"
+    assert context["active_guided_operation"]["open_proposal_id"] == "proposal-setup"
+
+
 def test_cancelled_guided_operation_is_removed_without_erasing_verified_context():
     service = FinnV2OrchestratorService(session=object())
     service.conversations = _FakeConversationRepo()

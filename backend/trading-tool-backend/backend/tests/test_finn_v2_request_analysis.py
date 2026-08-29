@@ -236,9 +236,17 @@ def test_guided_setup_state_collects_verified_inputs_without_premature_proposal(
 def test_guided_setup_state_accepts_natural_name_follow_up():
     first_turn = SERVICE.analyze(message="Help me een nieuwe BTC-setup als concept te maken.")
 
+    type_turn = SERVICE.analyze(
+        message="Gebruik een swing setup.",
+        conversation_context={"operation_state": first_turn.request_plan.operation_state},
+    )
+    timeframe_turn = SERVICE.analyze(
+        message="Gebruik de 4H-timeframe.",
+        conversation_context={"operation_state": type_turn.request_plan.operation_state},
+    )
     second_turn = SERVICE.analyze(
         message="Noem hem BTC Daily 4H concept.",
-        conversation_context={"operation_state": first_turn.request_plan.operation_state},
+        conversation_context={"operation_state": timeframe_turn.request_plan.operation_state},
     )
 
     state = second_turn.request_plan.operation_state
@@ -393,7 +401,82 @@ def test_guided_operation_state_retains_verified_context_without_reasking_fields
     assert state["resolved_entities"] == {"asset": "BTC", "setup_id": 309, "strategy_id": 325, "bot_id": 186}
     assert state["previous_verified_conclusion"] == "De bestaande BTC-setup gebruikt 4H voor entries."
     assert state["previous_evidence_refs"] == ["artifact-asset", "artifact-setup"]
-    assert state["missing_required_inputs"] == ["name"]
+    assert state["missing_required_inputs"] == ["timeframe", "name"]
+
+
+def test_guided_setup_collects_type_timeframe_and_name_in_one_persisted_contract():
+    first = SERVICE.analyze(message="Maak een BTC-setup.")
+    assert first.request_plan.operation_state["missing_required_inputs"] == [
+        "setup_type", "timeframe", "name"
+    ]
+    assert first.request_plan.operation_state["next_missing_input"] == "setup_type"
+
+    second = SERVICE.analyze(
+        message="Gebruik een swing setup.",
+        conversation_context={"active_guided_operation": first.request_plan.operation_state},
+    )
+    assert second.request_plan.operation_id == "create_setup"
+    assert second.request_plan.operation_state["missing_required_inputs"] == ["timeframe", "name"]
+
+    third = SERVICE.analyze(
+        message="Gebruik de 4H-timeframe.",
+        conversation_context={"active_guided_operation": second.request_plan.operation_state},
+    )
+    assert third.request_plan.operation_state["missing_required_inputs"] == ["name"]
+
+    final = SERVICE.analyze(
+        message="Noem hem BTC Contract QA.",
+        conversation_context={"active_guided_operation": third.request_plan.operation_state},
+    )
+    assert final.request_plan.operation_state["missing_required_inputs"] == []
+    assert final.request_plan.operation_state["collected_inputs"] == {
+        "symbol": "BTC",
+        "setup_type": "trade",
+        "timeframe": "4H",
+        "name": "BTC Contract QA",
+    }
+
+
+def test_complete_natural_setup_sentence_resolves_all_typed_inputs():
+    result = SERVICE.analyze(
+        message="Werk voor DOT een breakout-opzet uit op 2H en noem hem Polkadot Uitbraak."
+    )
+
+    assert result.request_plan.operation_id == "create_setup"
+    assert result.request_plan.target_asset == "DOT"
+    assert result.request_plan.operation_state["missing_required_inputs"] == []
+    assert result.request_plan.operation_state["collected_inputs"] == {
+        "symbol": "DOT",
+        "setup_type": "trade",
+        "timeframe": "2H",
+        "name": "Polkadot Uitbraak",
+    }
+
+
+def test_contextual_bot_implication_keeps_verified_lineage_payload():
+    result = SERVICE.analyze(
+        message="Wat betekent dat concreet voor mijn bot?",
+        conversation_context={
+            "conversation_state_version": "finn_v2.conversation-contracts.v1",
+            "last_verified_context": {
+                "verified_response_id": "verified-plan",
+                "run_id": "run-plan",
+                "operation_id": "evaluate_plan",
+                "conclusion": "De entryvoorwaarde is onvoldoende toetsbaar.",
+                "response": "Je plan mist een toetsbare entryvoorwaarde.",
+                "evidence_refs": ["E1", "E2"],
+                "resolved_entities": {"asset": "BTC", "bot_id": 170},
+            },
+        },
+    )
+
+    assert result.request_plan.operation_id == "evaluate_bot"
+    assert result.interaction_mode == "EVALUATE"
+    assert result.request_plan.conversation_reference == "verified-plan"
+    assert result.request_plan.operation_state["previous_verified_run_id"] == "run-plan"
+    assert result.request_plan.operation_state["previous_verified_conclusion"] == (
+        "De entryvoorwaarde is onvoldoende toetsbaar."
+    )
 
 
 def test_canonical_guided_state_reads_only_verified_conversation_lineage():

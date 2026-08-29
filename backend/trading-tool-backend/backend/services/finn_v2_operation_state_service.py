@@ -12,7 +12,7 @@ class FinnV2OperationStateService:
     """Collect only explicit or verified operation inputs, one field at a time."""
 
     CONTEXT_STATE_VERSION = "finn_v2.conversation-contracts.v1"
-    _TIMEFRAME = re.compile(r"\b(1m|5m|15m|30m|1h|4h|1d|1w|1M)\b", re.IGNORECASE)
+    _TIMEFRAME = re.compile(r"\b([1-9]\d*(?:m|h|d|w))\b", re.IGNORECASE)
 
     def resolve(
         self,
@@ -24,7 +24,7 @@ class FinnV2OperationStateService:
     ) -> FinnV2OperationState:
         existing = self._existing_state(contract, conversation_context or {})
         collected = dict(existing.collected_inputs) if existing is not None else {}
-        collected.update(self._explicit_inputs(contract=contract, message=message, explicit_asset=explicit_asset))
+        collected.update(self.explicit_inputs(contract=contract, message=message, explicit_asset=explicit_asset))
         missing = [field for field in contract.required_inputs if self._is_missing(collected.get(field))]
         context = conversation_context or {}
         verified_context = dict(context.get("last_verified_context") or {})
@@ -99,10 +99,12 @@ class FinnV2OperationStateService:
             ),
             "symbol": "Voor welke asset wil je deze setup precies voorbereiden?",
             "setup_type": "Wil je een trade- of DCA-setup voorbereiden?",
+            "timeframe": "Welk primair timeframe wil je voor deze setup gebruiken?",
             "setup_id": "Welke bestaande setup wil je aanpassen?",
             "changed_fields": "Welke concrete setupvelden wil je aanpassen?",
             "proposal_id": "Welk voorstel wil je precies bevestigen of uitvoeren?",
             "asset": "Welke asset wil je aan je watchlist toevoegen?",
+            "requested_change": "Wat wil je precies aan je manier van handelen verbeteren?",
         }
         return questions.get(field or "", "Welk ontbrekend detail wil je voor dit voorstel vastleggen?")
 
@@ -159,7 +161,7 @@ class FinnV2OperationStateService:
             return context.get("active_guided_operation")
         return context.get("active_guided_operation") or context.get("operation_state")
 
-    def _explicit_inputs(self, *, contract: OperationContract, message: str, explicit_asset: Optional[str]) -> dict[str, object]:
+    def explicit_inputs(self, *, contract: OperationContract, message: str, explicit_asset: Optional[str]) -> dict[str, object]:
         text = str(message or "").strip()
         lowered = text.casefold()
         values: dict[str, object] = {}
@@ -168,7 +170,7 @@ class FinnV2OperationStateService:
         if contract.operation_id == "create_setup":
             if "dca" in lowered:
                 values["setup_type"] = "dca"
-            elif any(token in lowered for token in ("trade", "swing", "scalp", "setup")):
+            elif any(token in lowered for token in ("trade", "swing", "scalp", "breakout", "momentum")):
                 values["setup_type"] = "trade"
             named = re.search(
                 r"(?:naam|name)\s*(?:is|:)?\s*[\"']?([\w .-]{2,80})",

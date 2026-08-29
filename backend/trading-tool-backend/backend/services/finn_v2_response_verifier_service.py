@@ -647,7 +647,10 @@ class FinnV2ResponseVerifierService:
                 return "live" in rendered or "paper" in rendered or "niet live" in rendered
             if field == "indicator_names":
                 expected = [str(value).casefold() for value in values if value not in (None, "")]
-                return bool(expected) and all(value in rendered for value in expected)
+                if expected:
+                    return all(value in rendered for value in expected)
+                configured_count = facts.get("configured_count")
+                return configured_count == 0 and "geen indicator" in rendered
             return any(str(value).casefold() in rendered for value in values if value not in (None, ""))
 
         return [field for field in required_fields if has_value(field)]

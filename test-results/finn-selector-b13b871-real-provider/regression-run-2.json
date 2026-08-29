@@ -1,0 +1,2204 @@
+{
+  "dataset": "regression",
+  "total_cases": 30,
+  "operation_accuracy": 1.0,
+  "confusion_matrix": {
+    "activate_bot->activate_bot": 3,
+    "capability->capability": 1,
+    "clarify_request->clarify_request": 3,
+    "create_setup->create_setup": 4,
+    "evaluate_indicator_configuration->evaluate_indicator_configuration": 1,
+    "evaluate_plan->evaluate_plan": 2,
+    "explain_financial_concept->explain_financial_concept": 2,
+    "explain_previous_evidence->explain_previous_evidence": 1,
+    "off_topic->off_topic": 1,
+    "read_active_asset->read_active_asset": 2,
+    "read_active_plan->read_active_plan": 1,
+    "read_active_setup->read_active_setup": 1,
+    "read_indicator_configuration->read_indicator_configuration": 2,
+    "reformulate_previous_response->reformulate_previous_response": 1,
+    "unsupported_financial_operation->unsupported_financial_operation": 2,
+    "watchlist_add->watchlist_add": 1,
+    "watchlist_remove->watchlist_remove": 2
+  },
+  "entity_accuracy": 1.0,
+  "targetasset_accuracy": 1.0,
+  "action_polarity_accuracy": 1.0,
+  "conversation_reference_accuracy": 1.0,
+  "clarification_accuracy": 1.0,
+  "missing_input_accuracy": 1.0,
+  "missing_input_expectations_declared": 1.0,
+  "off_topic_accuracy": 1.0,
+  "unsupported_operation_accuracy": 1.0,
+  "provider_failure_rate": 0.0,
+  "schema_failure_rate": 0.0,
+  "timeout_failure_rate": 0.0,
+  "parse_failure_rate": 0.0,
+  "validation_failure_rate": 0.0,
+  "p50_latency_ms": 1363.0,
+  "p95_latency_ms": 1694,
+  "cases": [
+    {
+      "eval_id": "reg-active-asset-workspace-state",
+      "input_query": "Welk instrument is in mijn huidige workspace gekozen?",
+      "expected": {
+        "expected_operation_id": "read_active_asset",
+        "expected_domain": "asset",
+        "expected_supported": true,
+        "expected_entities": {},
+        "expected_target_asset": null,
+        "expected_action_polarity": "read",
+        "expected_conversation_reference": null,
+        "expected_clarification": false,
+        "expected_missing_inputs": []
+      },
+      "actual": {
+        "operation_id": "read_active_asset",
+        "domain": "asset",
+        "supported": true,
+        "confidence": 1.0,
+        "entities": {
+          "concept": "",
+          "asset": "",
+          "setup_id": "",
+          "strategy_id": "",
+          "bot_id": ""
+        },
+        "context_asset": null,
+        "target_asset": null,
+        "action_polarity": "read",
+        "conversation_reference": null,
+        "clarification": false,
+        "missing_inputs": [],
+        "selector_source": "structured"
+      },
+      "provider_status": "completed",
+      "provider_response_id": "resp_0137278593cc16b6006a928f41e95087d28a16a0525972f876",
+      "provider_metadata": {
+        "response_status": "completed",
+        "response_id": "resp_0137278593cc16b6006a928f41e95087d28a16a0525972f876",
+        "request_id": "req_51f5dc8b3a9947a69528ba288b46991e",
+        "parsed_source": "response_output_text"
+      },
+      "parse_status": "passed",
+      "validation_status": "passed",
+      "latency_ms": 3791,
+      "failure_category": null,
+      "error": null,
+      "matches": {
+        "operation": true,
+        "domain": true,
+        "supported": true,
+        "entities": true,
+        "target_asset": true,
+        "action_polarity": true,
+        "conversation_reference": true,
+        "clarification": true,
+        "missing_inputs": true
+      },
+      "attempts": [
+        {
+          "attempt": 1,
+          "error": null,
+          "failure_category": null,
+          "provider_status": "completed",
+          "provider_response_id": "resp_0137278593cc16b6006a928f41e95087d28a16a0525972f876",
+          "latency_ms": 3791
+        }
+      ],
+      "retry_count": 0
+    },
+    {
+      "eval_id": "reg-personal-rsi-configuration",
+      "input_query": "Laat mijn bewaarde RSI-configuratie voor het actieve instrument zien.",
+      "expected": {
+        "expected_operation_id": "read_indicator_configuration",
+        "expected_domain": "indicators",
+        "expected_supported": true,
+        "expected_entities": {},
+        "expected_target_asset": null,
+        "expected_action_polarity": "read",
+        "expected_conversation_reference": null,
+        "expected_clarification": false,
+        "expected_missing_inputs": []
+      },
+      "actual": {
+        "operation_id": "read_indicator_configuration",
+        "domain": "indicators",
+        "supported": true,
+        "confidence": 1,
+        "entities": {
+          "concept": "RSI",
+          "asset": "",
+          "setup_id": "",
+          "strategy_id": "",
+          "bot_id": ""
+        },
+        "context_asset": null,
+        "target_asset": null,
+        "action_polarity": "read",
+        "conversation_reference": null,
+        "clarification": false,
+        "missing_inputs": [],
+        "selector_source": "structured"
+      },
+      "provider_status": "completed",
+      "provider_response_id": "resp_0ea539645c4fcd96006a928f45987087d2bc990e8d465f3f59",
+      "provider_metadata": {
+        "response_status": "completed",
+        "response_id": "resp_0ea539645c4fcd96006a928f45987087d2bc990e8d465f3f59",
+        "request_id": "req_ad8b75d22d1e4ce082e3a6dac3938006",
+        "parsed_source": "response_output_text"
+      },
+      "parse_status": "passed",
+      "validation_status": "passed",
+      "latency_ms": 1284,
+      "failure_category": null,
+      "error": null,
+      "matches": {
+        "operation": true,
+        "domain": true,
+        "supported": true,
+        "entities": true,
+        "target_asset": true,
+        "action_polarity": true,
+        "conversation_reference": true,
+        "clarification": true,
+        "missing_inputs": true
+      },
+      "attempts": [
+        {
+          "attempt": 1,
+          "error": null,
+          "failure_category": null,
+          "provider_status": "completed",
+          "provider_response_id": "resp_0ea539645c4fcd96006a928f45987087d2bc990e8d465f3f59",
+          "latency_ms": 1284
+        }
+      ],
+      "retry_count": 0
+    },
+    {
+      "eval_id": "reg-concept-rsi",
+      "input_query": "Leg RSI uit zonder een persoonlijke analyse te maken.",
+      "expected": {
+        "expected_operation_id": "explain_financial_concept",
+        "expected_domain": "financial_education",
+        "expected_supported": true,
+        "expected_entities": {
+          "concept": "RSI"
+        },
+        "expected_target_asset": null,
+        "expected_action_polarity": "read",
+        "expected_conversation_reference": null,
+        "expected_clarification": false,
+        "expected_missing_inputs": []
+      },
+      "actual": {
+        "operation_id": "explain_financial_concept",
+        "domain": "financial_education",
+        "supported": true,
+        "confidence": 0.95,
+        "entities": {
+          "concept": "RSI",
+          "asset": "",
+          "setup_id": "",
+          "strategy_id": "",
+          "bot_id": ""
+        },
+        "context_asset": null,
+        "target_asset": null,
+        "action_polarity": "read",
+        "conversation_reference": null,
+        "clarification": false,
+        "missing_inputs": [],
+        "selector_source": "structured"
+      },
+      "provider_status": "completed",
+      "provider_response_id": "resp_049096ce0624a64e006a928f48deb487d2a5903cb398cacec2",
+      "provider_metadata": {
+        "response_status": "completed",
+        "response_id": "resp_049096ce0624a64e006a928f48deb487d2a5903cb398cacec2",
+        "request_id": "req_61646741e75349d4b63fbb7eed0515b9",
+        "parsed_source": "response_output_text"
+      },
+      "parse_status": "passed",
+      "validation_status": "passed",
+      "latency_ms": 1405,
+      "failure_category": null,
+      "error": null,
+      "matches": {
+        "operation": true,
+        "domain": true,
+        "supported": true,
+        "entities": true,
+        "target_asset": true,
+        "action_polarity": true,
+        "conversation_reference": true,
+        "clarification": true,
+        "missing_inputs": true
+      },
+      "attempts": [
+        {
+          "attempt": 1,
+          "error": null,
+          "failure_category": null,
+          "provider_status": "completed",
+          "provider_response_id": "resp_049096ce0624a64e006a928f48deb487d2a5903cb398cacec2",
+          "latency_ms": 1405
+        }
+      ],
+      "retry_count": 0
+    },
+    {
+      "eval_id": "reg-indicators-btc",
+      "input_query": "Welke indicatoren gebruik ik voor BTC en wat ontbreekt mogelijk nog?",
+      "expected": {
+        "expected_operation_id": "evaluate_indicator_configuration",
+        "expected_domain": "indicators",
+        "expected_supported": true,
+        "expected_entities": {
+          "asset": "BTC"
+        },
+        "expected_target_asset": null,
+        "expected_action_polarity": "evaluate",
+        "expected_conversation_reference": null,
+        "expected_clarification": false,
+        "expected_missing_inputs": []
+      },
+      "actual": {
+        "operation_id": "evaluate_indicator_configuration",
+        "domain": "indicators",
+        "supported": true,
+        "confidence": 0.95,
+        "entities": {
+          "concept": "",
+          "asset": "BTC",
+          "setup_id": "",
+          "strategy_id": "",
+          "bot_id": ""
+        },
+        "context_asset": null,
+        "target_asset": "BTC",
+        "action_polarity": "evaluate",
+        "conversation_reference": null,
+        "clarification": false,
+        "missing_inputs": [],
+        "selector_source": "structured"
+      },
+      "provider_status": "completed",
+      "provider_response_id": "resp_0d78afd1c40b7c73006a928f4c4a3c87d2b98bbb6b97d9b0c3",
+      "provider_metadata": {
+        "response_status": "completed",
+        "response_id": "resp_0d78afd1c40b7c73006a928f4c4a3c87d2b98bbb6b97d9b0c3",
+        "request_id": "req_8ce128cfb4ac4312afba7d4f5604cbae",
+        "parsed_source": "response_output_text"
+      },
+      "parse_status": "passed",
+      "validation_status": "passed",
+      "latency_ms": 1248,
+      "failure_category": null,
+      "error": null,
+      "matches": {
+        "operation": true,
+        "domain": true,
+        "supported": true,
+        "entities": true,
+        "target_asset": true,
+        "action_polarity": true,
+        "conversation_reference": true,
+        "clarification": true,
+        "missing_inputs": true
+      },
+      "attempts": [
+        {
+          "attempt": 1,
+          "error": null,
+          "failure_category": null,
+          "provider_status": "completed",
+          "provider_response_id": "resp_0d78afd1c40b7c73006a928f4c4a3c87d2b98bbb6b97d9b0c3",
+          "latency_ms": 1248
+        }
+      ],
+      "retry_count": 0
+    },
+    {
+      "eval_id": "reg-capability-1",
+      "input_query": "Waarmee kan FINN helpen?",
+      "expected": {
+        "expected_operation_id": "capability",
+        "expected_domain": "system",
+        "expected_supported": true,
+        "expected_entities": {},
+        "expected_target_asset": null,
+        "expected_action_polarity": "read",
+        "expected_conversation_reference": null,
+        "expected_clarification": false,
+        "expected_missing_inputs": []
+      },
+      "actual": {
+        "operation_id": "capability",
+        "domain": "system",
+        "supported": true,
+        "confidence": 1,
+        "entities": {
+          "concept": "",
+          "asset": "",
+          "setup_id": "",
+          "strategy_id": "",
+          "bot_id": ""
+        },
+        "context_asset": null,
+        "target_asset": null,
+        "action_polarity": "read",
+        "conversation_reference": null,
+        "clarification": false,
+        "missing_inputs": [],
+        "selector_source": "structured"
+      },
+      "provider_status": "completed",
+      "provider_response_id": "resp_09fad7674a8067c1006a928f4fb90887d2bf73214bfb689613",
+      "provider_metadata": {
+        "response_status": "completed",
+        "response_id": "resp_09fad7674a8067c1006a928f4fb90887d2bf73214bfb689613",
+        "request_id": "req_bcef02ed163e4c0f84f209e2af839a06",
+        "parsed_source": "response_output_text"
+      },
+      "parse_status": "passed",
+      "validation_status": "passed",
+      "latency_ms": 1205,
+      "failure_category": null,
+      "error": null,
+      "matches": {
+        "operation": true,
+        "domain": true,
+        "supported": true,
+        "entities": true,
+        "target_asset": true,
+        "action_polarity": true,
+        "conversation_reference": true,
+        "clarification": true,
+        "missing_inputs": true
+      },
+      "attempts": [
+        {
+          "attempt": 1,
+          "error": null,
+          "failure_category": null,
+          "provider_status": "completed",
+          "provider_response_id": "resp_09fad7674a8067c1006a928f4fb90887d2bf73214bfb689613",
+          "latency_ms": 1205
+        }
+      ],
+      "retry_count": 0
+    },
+    {
+      "eval_id": "reg-asset-1",
+      "input_query": "Welk instrument staat actief?",
+      "expected": {
+        "expected_operation_id": "read_active_asset",
+        "expected_domain": "asset",
+        "expected_supported": true,
+        "expected_entities": {},
+        "expected_target_asset": null,
+        "expected_action_polarity": "read",
+        "expected_conversation_reference": null,
+        "expected_clarification": false,
+        "expected_missing_inputs": []
+      },
+      "actual": {
+        "operation_id": "read_active_asset",
+        "domain": "asset",
+        "supported": true,
+        "confidence": 1,
+        "entities": {
+          "concept": "",
+          "asset": "",
+          "setup_id": "",
+          "strategy_id": "",
+          "bot_id": ""
+        },
+        "context_asset": null,
+        "target_asset": null,
+        "action_polarity": "read",
+        "conversation_reference": null,
+        "clarification": false,
+        "missing_inputs": [],
+        "selector_source": "structured"
+      },
+      "provider_status": "completed",
+      "provider_response_id": "resp_0d4b1dc471143abe006a928f52c4c487d2ab8b6e79d28c5951",
+      "provider_metadata": {
+        "response_status": "completed",
+        "response_id": "resp_0d4b1dc471143abe006a928f52c4c487d2ab8b6e79d28c5951",
+        "request_id": "req_71333ac334a044deb2d30a2d608ec4ca",
+        "parsed_source": "response_output_text"
+      },
+      "parse_status": "passed",
+      "validation_status": "passed",
+      "latency_ms": 1298,
+      "failure_category": null,
+      "error": null,
+      "matches": {
+        "operation": true,
+        "domain": true,
+        "supported": true,
+        "entities": true,
+        "target_asset": true,
+        "action_polarity": true,
+        "conversation_reference": true,
+        "clarification": true,
+        "missing_inputs": true
+      },
+      "attempts": [
+        {
+          "attempt": 1,
+          "error": null,
+          "failure_category": null,
+          "provider_status": "completed",
+          "provider_response_id": "resp_0d4b1dc471143abe006a928f52c4c487d2ab8b6e79d28c5951",
+          "latency_ms": 1298
+        }
+      ],
+      "retry_count": 0
+    },
+    {
+      "eval_id": "reg-setup-1",
+      "input_query": "Welke setup gebruik ik?",
+      "expected": {
+        "expected_operation_id": "read_active_setup",
+        "expected_domain": "setup",
+        "expected_supported": true,
+        "expected_entities": {},
+        "expected_target_asset": null,
+        "expected_action_polarity": "read",
+        "expected_conversation_reference": null,
+        "expected_clarification": false,
+        "expected_missing_inputs": []
+      },
+      "actual": {
+        "operation_id": "read_active_setup",
+        "domain": "setup",
+        "supported": true,
+        "confidence": 0.9,
+        "entities": {
+          "concept": "",
+          "asset": "",
+          "setup_id": "",
+          "strategy_id": "",
+          "bot_id": ""
+        },
+        "context_asset": null,
+        "target_asset": null,
+        "action_polarity": "read",
+        "conversation_reference": null,
+        "clarification": false,
+        "missing_inputs": [],
+        "selector_source": "structured"
+      },
+      "provider_status": "completed",
+      "provider_response_id": "resp_08227ef8b33e7e78006a928f56105087d2bc8894086e8b3aa0",
+      "provider_metadata": {
+        "response_status": "completed",
+        "response_id": "resp_08227ef8b33e7e78006a928f56105087d2bc8894086e8b3aa0",
+        "request_id": "req_48e29a63de4f4d8a88dcef8667041685",
+        "parsed_source": "response_output_text"
+      },
+      "parse_status": "passed",
+      "validation_status": "passed",
+      "latency_ms": 1190,
+      "failure_category": null,
+      "error": null,
+      "matches": {
+        "operation": true,
+        "domain": true,
+        "supported": true,
+        "entities": true,
+        "target_asset": true,
+        "action_polarity": true,
+        "conversation_reference": true,
+        "clarification": true,
+        "missing_inputs": true
+      },
+      "attempts": [
+        {
+          "attempt": 1,
+          "error": null,
+          "failure_category": null,
+          "provider_status": "completed",
+          "provider_response_id": "resp_08227ef8b33e7e78006a928f56105087d2bc8894086e8b3aa0",
+          "latency_ms": 1190
+        }
+      ],
+      "retry_count": 0
+    },
+    {
+      "eval_id": "reg-plan-1",
+      "input_query": "Welke setup, strategie en bot heb ik?",
+      "expected": {
+        "expected_operation_id": "read_active_plan",
+        "expected_domain": "plan",
+        "expected_supported": true,
+        "expected_entities": {},
+        "expected_target_asset": null,
+        "expected_action_polarity": "read",
+        "expected_conversation_reference": null,
+        "expected_clarification": false,
+        "expected_missing_inputs": []
+      },
+      "actual": {
+        "operation_id": "read_active_plan",
+        "domain": "plan",
+        "supported": true,
+        "confidence": 1.0,
+        "entities": {
+          "concept": "",
+          "asset": "",
+          "setup_id": "",
+          "strategy_id": "",
+          "bot_id": ""
+        },
+        "context_asset": null,
+        "target_asset": null,
+        "action_polarity": "read",
+        "conversation_reference": null,
+        "clarification": false,
+        "missing_inputs": [],
+        "selector_source": "structured"
+      },
+      "provider_status": "completed",
+      "provider_response_id": "resp_0fc440efea2b8733006a928f593d4087d281e87b78d05b8155",
+      "provider_metadata": {
+        "response_status": "completed",
+        "response_id": "resp_0fc440efea2b8733006a928f593d4087d281e87b78d05b8155",
+        "request_id": "req_78b9e22e3bbc45dcbc9b7ee3fdad5171",
+        "parsed_source": "response_output_text"
+      },
+      "parse_status": "passed",
+      "validation_status": "passed",
+      "latency_ms": 2260,
+      "failure_category": null,
+      "error": null,
+      "matches": {
+        "operation": true,
+        "domain": true,
+        "supported": true,
+        "entities": true,
+        "target_asset": true,
+        "action_polarity": true,
+        "conversation_reference": true,
+        "clarification": true,
+        "missing_inputs": true
+      },
+      "attempts": [
+        {
+          "attempt": 1,
+          "error": null,
+          "failure_category": null,
+          "provider_status": "completed",
+          "provider_response_id": "resp_0fc440efea2b8733006a928f593d4087d281e87b78d05b8155",
+          "latency_ms": 2260
+        }
+      ],
+      "retry_count": 0
+    },
+    {
+      "eval_id": "reg-evaluate-1",
+      "input_query": "Beoordeel mijn volledige plan.",
+      "expected": {
+        "expected_operation_id": "evaluate_plan",
+        "expected_domain": "plan",
+        "expected_supported": true,
+        "expected_entities": {},
+        "expected_target_asset": null,
+        "expected_action_polarity": "evaluate",
+        "expected_conversation_reference": null,
+        "expected_clarification": false,
+        "expected_missing_inputs": []
+      },
+      "actual": {
+        "operation_id": "evaluate_plan",
+        "domain": "plan",
+        "supported": true,
+        "confidence": 0.9,
+        "entities": {
+          "concept": "",
+          "asset": "",
+          "setup_id": "",
+          "strategy_id": "",
+          "bot_id": ""
+        },
+        "context_asset": null,
+        "target_asset": null,
+        "action_polarity": "evaluate",
+        "conversation_reference": null,
+        "clarification": false,
+        "missing_inputs": [],
+        "selector_source": "structured"
+      },
+      "provider_status": "completed",
+      "provider_response_id": "resp_036a061c750bcccc006a928f5d834087d280d233ba6ba29448",
+      "provider_metadata": {
+        "response_status": "completed",
+        "response_id": "resp_036a061c750bcccc006a928f5d834087d280d233ba6ba29448",
+        "request_id": "req_1553defa52864bea87264259eef32a03",
+        "parsed_source": "response_output_text"
+      },
+      "parse_status": "passed",
+      "validation_status": "passed",
+      "latency_ms": 1633,
+      "failure_category": null,
+      "error": null,
+      "matches": {
+        "operation": true,
+        "domain": true,
+        "supported": true,
+        "entities": true,
+        "target_asset": true,
+        "action_polarity": true,
+        "conversation_reference": true,
+        "clarification": true,
+        "missing_inputs": true
+      },
+      "attempts": [
+        {
+          "attempt": 1,
+          "error": null,
+          "failure_category": null,
+          "provider_status": "completed",
+          "provider_response_id": "resp_036a061c750bcccc006a928f5d834087d280d233ba6ba29448",
+          "latency_ms": 1633
+        }
+      ],
+      "retry_count": 0
+    },
+    {
+      "eval_id": "reg-evidence-1",
+      "input_query": "Welke concrete gegevens steunen die conclusie?",
+      "expected": {
+        "expected_operation_id": "explain_previous_evidence",
+        "expected_domain": "system",
+        "expected_supported": true,
+        "expected_entities": {},
+        "expected_target_asset": null,
+        "expected_action_polarity": "read",
+        "expected_conversation_reference": "previous_verified_response",
+        "expected_clarification": false,
+        "expected_missing_inputs": []
+      },
+      "actual": {
+        "operation_id": "explain_previous_evidence",
+        "domain": "system",
+        "supported": true,
+        "confidence": 0.9,
+        "entities": {
+          "concept": "",
+          "asset": "",
+          "setup_id": "",
+          "strategy_id": "",
+          "bot_id": ""
+        },
+        "context_asset": null,
+        "target_asset": null,
+        "action_polarity": "read",
+        "conversation_reference": "previous_verified_response",
+        "clarification": false,
+        "missing_inputs": [],
+        "selector_source": "structured"
+      },
+      "provider_status": "completed",
+      "provider_response_id": "resp_0b085278a23110ae006a928f61253487d2b2ab1d01cc8c9a3d",
+      "provider_metadata": {
+        "response_status": "completed",
+        "response_id": "resp_0b085278a23110ae006a928f61253487d2b2ab1d01cc8c9a3d",
+        "request_id": "req_ceceb8bfcfa94f79a8f1a3e57b628f38",
+        "parsed_source": "response_output_text"
+      },
+      "parse_status": "passed",
+      "validation_status": "passed",
+      "latency_ms": 1437,
+      "failure_category": null,
+      "error": null,
+      "matches": {
+        "operation": true,
+        "domain": true,
+        "supported": true,
+        "entities": true,
+        "target_asset": true,
+        "action_polarity": true,
+        "conversation_reference": true,
+        "clarification": true,
+        "missing_inputs": true
+      },
+      "attempts": [
+        {
+          "attempt": 1,
+          "error": null,
+          "failure_category": null,
+          "provider_status": "completed",
+          "provider_response_id": "resp_0b085278a23110ae006a928f61253487d2b2ab1d01cc8c9a3d",
+          "latency_ms": 1437
+        }
+      ],
+      "retry_count": 0
+    },
+    {
+      "eval_id": "reg-reformulate-1",
+      "input_query": "Zeg dat korter.",
+      "expected": {
+        "expected_operation_id": "reformulate_previous_response",
+        "expected_domain": "system",
+        "expected_supported": true,
+        "expected_entities": {},
+        "expected_target_asset": null,
+        "expected_action_polarity": "read",
+        "expected_conversation_reference": "previous_verified_response",
+        "expected_clarification": false,
+        "expected_missing_inputs": []
+      },
+      "actual": {
+        "operation_id": "reformulate_previous_response",
+        "domain": "system",
+        "supported": true,
+        "confidence": 1,
+        "entities": {
+          "concept": "",
+          "asset": "",
+          "setup_id": "",
+          "strategy_id": "",
+          "bot_id": ""
+        },
+        "context_asset": null,
+        "target_asset": null,
+        "action_polarity": "read",
+        "conversation_reference": "previous_verified_response",
+        "clarification": false,
+        "missing_inputs": [],
+        "selector_source": "structured"
+      },
+      "provider_status": "completed",
+      "provider_response_id": "resp_07cbe76bea125017006a928f64950087d2888d5265b895ec99",
+      "provider_metadata": {
+        "response_status": "completed",
+        "response_id": "resp_07cbe76bea125017006a928f64950087d2888d5265b895ec99",
+        "request_id": "req_b6f7971ef7164bda8c2d84d58ac46a21",
+        "parsed_source": "response_output_text"
+      },
+      "parse_status": "passed",
+      "validation_status": "passed",
+      "latency_ms": 1537,
+      "failure_category": null,
+      "error": null,
+      "matches": {
+        "operation": true,
+        "domain": true,
+        "supported": true,
+        "entities": true,
+        "target_asset": true,
+        "action_polarity": true,
+        "conversation_reference": true,
+        "clarification": true,
+        "missing_inputs": true
+      },
+      "attempts": [
+        {
+          "attempt": 1,
+          "error": null,
+          "failure_category": null,
+          "provider_status": "completed",
+          "provider_response_id": "resp_07cbe76bea125017006a928f64950087d2888d5265b895ec99",
+          "latency_ms": 1537
+        }
+      ],
+      "retry_count": 0
+    },
+    {
+      "eval_id": "reg-create-1",
+      "input_query": "Maak een BTC-setup.",
+      "expected": {
+        "expected_operation_id": "create_setup",
+        "expected_domain": "setup",
+        "expected_supported": true,
+        "expected_entities": {
+          "asset": "BTC"
+        },
+        "expected_target_asset": null,
+        "expected_action_polarity": "create",
+        "expected_conversation_reference": null,
+        "expected_clarification": false,
+        "expected_missing_inputs": [
+          "setup_type",
+          "timeframe",
+          "name"
+        ]
+      },
+      "actual": {
+        "operation_id": "create_setup",
+        "domain": "setup",
+        "supported": true,
+        "confidence": 0.9,
+        "entities": {
+          "concept": "",
+          "asset": "BTC",
+          "setup_id": "",
+          "strategy_id": "",
+          "bot_id": ""
+        },
+        "context_asset": null,
+        "target_asset": "BTC",
+        "action_polarity": "create",
+        "conversation_reference": null,
+        "clarification": false,
+        "missing_inputs": [
+          "setup_type",
+          "timeframe",
+          "name"
+        ],
+        "selector_source": "structured"
+      },
+      "provider_status": "completed",
+      "provider_response_id": "resp_0a176c8720654435006a928f68205c87d29292b50d52dc659f",
+      "provider_metadata": {
+        "response_status": "completed",
+        "response_id": "resp_0a176c8720654435006a928f68205c87d29292b50d52dc659f",
+        "request_id": "req_e6f373d63ab3431490624cbcd0c5adaa",
+        "parsed_source": "response_output_text"
+      },
+      "parse_status": "passed",
+      "validation_status": "passed",
+      "latency_ms": 1165,
+      "failure_category": null,
+      "error": null,
+      "matches": {
+        "operation": true,
+        "domain": true,
+        "supported": true,
+        "entities": true,
+        "target_asset": true,
+        "action_polarity": true,
+        "conversation_reference": true,
+        "clarification": true,
+        "missing_inputs": true
+      },
+      "attempts": [
+        {
+          "attempt": 1,
+          "error": null,
+          "failure_category": null,
+          "provider_status": "completed",
+          "provider_response_id": "resp_0a176c8720654435006a928f68205c87d29292b50d52dc659f",
+          "latency_ms": 1165
+        }
+      ],
+      "retry_count": 0
+    },
+    {
+      "eval_id": "reg-watch-add-1",
+      "input_query": "Voeg ADA toe aan mijn watchlist.",
+      "expected": {
+        "expected_operation_id": "watchlist_add",
+        "expected_domain": "watchlist",
+        "expected_supported": true,
+        "expected_entities": {
+          "asset": "ADA"
+        },
+        "expected_target_asset": "ADA",
+        "expected_action_polarity": "add",
+        "expected_conversation_reference": null,
+        "expected_clarification": false,
+        "expected_missing_inputs": []
+      },
+      "actual": {
+        "operation_id": "watchlist_add",
+        "domain": "watchlist",
+        "supported": true,
+        "confidence": 1,
+        "entities": {
+          "concept": "",
+          "asset": "ADA",
+          "setup_id": "",
+          "strategy_id": "",
+          "bot_id": ""
+        },
+        "context_asset": null,
+        "target_asset": "ADA",
+        "action_polarity": "add",
+        "conversation_reference": null,
+        "clarification": false,
+        "missing_inputs": [],
+        "selector_source": "structured"
+      },
+      "provider_status": "completed",
+      "provider_response_id": "resp_0cfc8344f97b68ad006a928f6b4bf487d2b02ef50bbc353ad0",
+      "provider_metadata": {
+        "response_status": "completed",
+        "response_id": "resp_0cfc8344f97b68ad006a928f6b4bf487d2b02ef50bbc353ad0",
+        "request_id": "req_e966ddffecc34f29ba305fce825d9ddb",
+        "parsed_source": "response_output_text"
+      },
+      "parse_status": "passed",
+      "validation_status": "passed",
+      "latency_ms": 1330,
+      "failure_category": null,
+      "error": null,
+      "matches": {
+        "operation": true,
+        "domain": true,
+        "supported": true,
+        "entities": true,
+        "target_asset": true,
+        "action_polarity": true,
+        "conversation_reference": true,
+        "clarification": true,
+        "missing_inputs": true
+      },
+      "attempts": [
+        {
+          "attempt": 1,
+          "error": null,
+          "failure_category": null,
+          "provider_status": "completed",
+          "provider_response_id": "resp_0cfc8344f97b68ad006a928f6b4bf487d2b02ef50bbc353ad0",
+          "latency_ms": 1330
+        }
+      ],
+      "retry_count": 0
+    },
+    {
+      "eval_id": "reg-watch-remove-1",
+      "input_query": "Haal ADA uit mijn watchlist.",
+      "expected": {
+        "expected_operation_id": "watchlist_remove",
+        "expected_domain": "watchlist",
+        "expected_supported": true,
+        "expected_entities": {
+          "asset": "ADA"
+        },
+        "expected_target_asset": "ADA",
+        "expected_action_polarity": "remove",
+        "expected_conversation_reference": null,
+        "expected_clarification": false,
+        "expected_missing_inputs": []
+      },
+      "actual": {
+        "operation_id": "watchlist_remove",
+        "domain": "watchlist",
+        "supported": true,
+        "confidence": 1.0,
+        "entities": {
+          "concept": "",
+          "asset": "ADA",
+          "setup_id": "",
+          "strategy_id": "",
+          "bot_id": ""
+        },
+        "context_asset": null,
+        "target_asset": "ADA",
+        "action_polarity": "remove",
+        "conversation_reference": null,
+        "clarification": false,
+        "missing_inputs": [],
+        "selector_source": "structured"
+      },
+      "provider_status": "completed",
+      "provider_response_id": "resp_042307e5fbaf9c83006a928f6ea1fc87d2bfdce6aca00d3b27",
+      "provider_metadata": {
+        "response_status": "completed",
+        "response_id": "resp_042307e5fbaf9c83006a928f6ea1fc87d2bfdce6aca00d3b27",
+        "request_id": "req_fa7fde657044486e824a588f0092d97d",
+        "parsed_source": "response_output_text"
+      },
+      "parse_status": "passed",
+      "validation_status": "passed",
+      "latency_ms": 1694,
+      "failure_category": null,
+      "error": null,
+      "matches": {
+        "operation": true,
+        "domain": true,
+        "supported": true,
+        "entities": true,
+        "target_asset": true,
+        "action_polarity": true,
+        "conversation_reference": true,
+        "clarification": true,
+        "missing_inputs": true
+      },
+      "attempts": [
+        {
+          "attempt": 1,
+          "error": null,
+          "failure_category": null,
+          "provider_status": "completed",
+          "provider_response_id": "resp_042307e5fbaf9c83006a928f6ea1fc87d2bfdce6aca00d3b27",
+          "latency_ms": 1694
+        }
+      ],
+      "retry_count": 0
+    },
+    {
+      "eval_id": "reg-live-safety-1",
+      "input_query": "Zet mijn bot live.",
+      "expected": {
+        "expected_operation_id": "activate_bot",
+        "expected_domain": "bot",
+        "expected_supported": true,
+        "expected_entities": {},
+        "expected_target_asset": null,
+        "expected_action_polarity": "activate",
+        "expected_conversation_reference": null,
+        "expected_clarification": false,
+        "expected_missing_inputs": [
+          "bot_id"
+        ]
+      },
+      "actual": {
+        "operation_id": "activate_bot",
+        "domain": "bot",
+        "supported": true,
+        "confidence": 0.9,
+        "entities": {
+          "concept": "",
+          "asset": "",
+          "setup_id": "",
+          "strategy_id": "",
+          "bot_id": ""
+        },
+        "context_asset": null,
+        "target_asset": null,
+        "action_polarity": "activate",
+        "conversation_reference": null,
+        "clarification": false,
+        "missing_inputs": [
+          "bot_id"
+        ],
+        "selector_source": "structured"
+      },
+      "provider_status": "completed",
+      "provider_response_id": "resp_0d62b46cee700e3a006a928f72558487d2bdb47acf4ce6f0a5",
+      "provider_metadata": {
+        "response_status": "completed",
+        "response_id": "resp_0d62b46cee700e3a006a928f72558487d2bdb47acf4ce6f0a5",
+        "request_id": "req_c7ea623007f44cd3972aea6c7973d8c1",
+        "parsed_source": "response_output_text"
+      },
+      "parse_status": "passed",
+      "validation_status": "passed",
+      "latency_ms": 1196,
+      "failure_category": null,
+      "error": null,
+      "matches": {
+        "operation": true,
+        "domain": true,
+        "supported": true,
+        "entities": true,
+        "target_asset": true,
+        "action_polarity": true,
+        "conversation_reference": true,
+        "clarification": true,
+        "missing_inputs": true
+      },
+      "attempts": [
+        {
+          "attempt": 1,
+          "error": null,
+          "failure_category": null,
+          "provider_status": "completed",
+          "provider_response_id": "resp_0d62b46cee700e3a006a928f72558487d2bdb47acf4ce6f0a5",
+          "latency_ms": 1196
+        }
+      ],
+      "retry_count": 0
+    },
+    {
+      "eval_id": "reg-offtopic-1",
+      "input_query": "Wat wordt het weer morgen?",
+      "expected": {
+        "expected_operation_id": "off_topic",
+        "expected_domain": "off_topic",
+        "expected_supported": true,
+        "expected_entities": {},
+        "expected_target_asset": null,
+        "expected_action_polarity": "read",
+        "expected_conversation_reference": null,
+        "expected_clarification": false,
+        "expected_missing_inputs": []
+      },
+      "actual": {
+        "operation_id": "off_topic",
+        "domain": "off_topic",
+        "supported": true,
+        "confidence": 1,
+        "entities": {
+          "concept": "",
+          "asset": "",
+          "setup_id": "",
+          "strategy_id": "",
+          "bot_id": ""
+        },
+        "context_asset": null,
+        "target_asset": null,
+        "action_polarity": "read",
+        "conversation_reference": null,
+        "clarification": false,
+        "missing_inputs": [],
+        "selector_source": "structured"
+      },
+      "provider_status": "completed",
+      "provider_response_id": "resp_05f1449be5ca8107006a928f75879c87d2ac895b73030680e9",
+      "provider_metadata": {
+        "response_status": "completed",
+        "response_id": "resp_05f1449be5ca8107006a928f75879c87d2ac895b73030680e9",
+        "request_id": "req_da216a901e984977b342c2feb3f8346e",
+        "parsed_source": "response_output_text"
+      },
+      "parse_status": "passed",
+      "validation_status": "passed",
+      "latency_ms": 1611,
+      "failure_category": null,
+      "error": null,
+      "matches": {
+        "operation": true,
+        "domain": true,
+        "supported": true,
+        "entities": true,
+        "target_asset": true,
+        "action_polarity": true,
+        "conversation_reference": true,
+        "clarification": true,
+        "missing_inputs": true
+      },
+      "attempts": [
+        {
+          "attempt": 1,
+          "error": null,
+          "failure_category": null,
+          "provider_status": "completed",
+          "provider_response_id": "resp_05f1449be5ca8107006a928f75879c87d2ac895b73030680e9",
+          "latency_ms": 1611
+        }
+      ],
+      "retry_count": 0
+    },
+    {
+      "eval_id": "reg-unsupported-1",
+      "input_query": "Beheer mijn portfolio automatisch.",
+      "expected": {
+        "expected_operation_id": "unsupported_financial_operation",
+        "expected_domain": "financial_unsupported",
+        "expected_supported": true,
+        "expected_entities": {},
+        "expected_target_asset": null,
+        "expected_action_polarity": "read",
+        "expected_conversation_reference": null,
+        "expected_clarification": false,
+        "expected_missing_inputs": []
+      },
+      "actual": {
+        "operation_id": "unsupported_financial_operation",
+        "domain": "financial_unsupported",
+        "supported": true,
+        "confidence": 0.9,
+        "entities": {
+          "concept": "",
+          "asset": "",
+          "setup_id": "",
+          "strategy_id": "",
+          "bot_id": ""
+        },
+        "context_asset": null,
+        "target_asset": null,
+        "action_polarity": "read",
+        "conversation_reference": null,
+        "clarification": false,
+        "missing_inputs": [],
+        "selector_source": "structured"
+      },
+      "provider_status": "completed",
+      "provider_response_id": "resp_043e41d560bcb8d5006a928f79320c87d28053cacdb176c165",
+      "provider_metadata": {
+        "response_status": "completed",
+        "response_id": "resp_043e41d560bcb8d5006a928f79320c87d28053cacdb176c165",
+        "request_id": "req_880f05b5056b4e4fb36b83628e8486ff",
+        "parsed_source": "response_output_text"
+      },
+      "parse_status": "passed",
+      "validation_status": "passed",
+      "latency_ms": 1159,
+      "failure_category": null,
+      "error": null,
+      "matches": {
+        "operation": true,
+        "domain": true,
+        "supported": true,
+        "entities": true,
+        "target_asset": true,
+        "action_polarity": true,
+        "conversation_reference": true,
+        "clarification": true,
+        "missing_inputs": true
+      },
+      "attempts": [
+        {
+          "attempt": 1,
+          "error": null,
+          "failure_category": null,
+          "provider_status": "completed",
+          "provider_response_id": "resp_043e41d560bcb8d5006a928f79320c87d28053cacdb176c165",
+          "latency_ms": 1159
+        }
+      ],
+      "retry_count": 0
+    },
+    {
+      "eval_id": "reg-clarify-1",
+      "input_query": "Wijzig mijn instellingen.",
+      "expected": {
+        "expected_operation_id": "clarify_request",
+        "expected_domain": "system",
+        "expected_supported": true,
+        "expected_entities": {},
+        "expected_target_asset": null,
+        "expected_action_polarity": "update",
+        "expected_conversation_reference": null,
+        "expected_clarification": true,
+        "expected_missing_inputs": [
+          "requested_change"
+        ]
+      },
+      "actual": {
+        "operation_id": "clarify_request",
+        "domain": "system",
+        "supported": true,
+        "confidence": 0.9,
+        "entities": {
+          "concept": "",
+          "asset": "",
+          "setup_id": "",
+          "strategy_id": "",
+          "bot_id": ""
+        },
+        "context_asset": null,
+        "target_asset": null,
+        "action_polarity": "update",
+        "conversation_reference": null,
+        "clarification": true,
+        "missing_inputs": [
+          "requested_change"
+        ],
+        "selector_source": "structured"
+      },
+      "provider_status": "completed",
+      "provider_response_id": "resp_0e9cd99912b62abc006a928f7c502c87d2a7d45ccb2bec45f5",
+      "provider_metadata": {
+        "response_status": "completed",
+        "response_id": "resp_0e9cd99912b62abc006a928f7c502c87d2a7d45ccb2bec45f5",
+        "request_id": "req_ceb497cdd1ca4161a08cb6f83ec14ac8",
+        "parsed_source": "response_output_text"
+      },
+      "parse_status": "passed",
+      "validation_status": "passed",
+      "latency_ms": 1274,
+      "failure_category": null,
+      "error": null,
+      "matches": {
+        "operation": true,
+        "domain": true,
+        "supported": true,
+        "entities": true,
+        "target_asset": true,
+        "action_polarity": true,
+        "conversation_reference": true,
+        "clarification": true,
+        "missing_inputs": true
+      },
+      "attempts": [
+        {
+          "attempt": 1,
+          "error": null,
+          "failure_category": null,
+          "provider_status": "completed",
+          "provider_response_id": "resp_0e9cd99912b62abc006a928f7c502c87d2a7d45ccb2bec45f5",
+          "latency_ms": 1274
+        }
+      ],
+      "retry_count": 0
+    },
+    {
+      "eval_id": "reg-qa-personal-rsi-btc",
+      "input_query": "Welke RSI-configuratie heb ik voor BTC opgeslagen?",
+      "expected": {
+        "expected_operation_id": "read_indicator_configuration",
+        "expected_domain": "indicators",
+        "expected_supported": true,
+        "expected_entities": {
+          "asset": "BTC"
+        },
+        "expected_target_asset": "BTC",
+        "expected_action_polarity": "read",
+        "expected_conversation_reference": null,
+        "expected_clarification": false,
+        "expected_missing_inputs": []
+      },
+      "actual": {
+        "operation_id": "read_indicator_configuration",
+        "domain": "indicators",
+        "supported": true,
+        "confidence": 0.95,
+        "entities": {
+          "concept": "RSI",
+          "asset": "BTC",
+          "setup_id": "",
+          "strategy_id": "",
+          "bot_id": ""
+        },
+        "context_asset": null,
+        "target_asset": "BTC",
+        "action_polarity": "read",
+        "conversation_reference": null,
+        "clarification": false,
+        "missing_inputs": [],
+        "selector_source": "structured"
+      },
+      "provider_status": "completed",
+      "provider_response_id": "resp_078e9028605a650f006a928f7f98b487d28e19ad332eef8938",
+      "provider_metadata": {
+        "response_status": "completed",
+        "response_id": "resp_078e9028605a650f006a928f7f98b487d28e19ad332eef8938",
+        "request_id": "req_683f4ac57d534c2a9fc46a780b190d35",
+        "parsed_source": "response_output_text"
+      },
+      "parse_status": "passed",
+      "validation_status": "passed",
+      "latency_ms": 1361,
+      "failure_category": null,
+      "error": null,
+      "matches": {
+        "operation": true,
+        "domain": true,
+        "supported": true,
+        "entities": true,
+        "target_asset": true,
+        "action_polarity": true,
+        "conversation_reference": true,
+        "clarification": true,
+        "missing_inputs": true
+      },
+      "attempts": [
+        {
+          "attempt": 1,
+          "error": null,
+          "failure_category": null,
+          "provider_status": "completed",
+          "provider_response_id": "resp_078e9028605a650f006a928f7f98b487d28e19ad332eef8938",
+          "latency_ms": 1361
+        }
+      ],
+      "retry_count": 0
+    },
+    {
+      "eval_id": "reg-qa-evaluate-current-plan",
+      "input_query": "Waar wringt mijn huidige aanpak financieel gezien het meest?",
+      "expected": {
+        "expected_operation_id": "evaluate_plan",
+        "expected_domain": "plan",
+        "expected_supported": true,
+        "expected_entities": {},
+        "expected_target_asset": null,
+        "expected_action_polarity": "evaluate",
+        "expected_conversation_reference": null,
+        "expected_clarification": false,
+        "expected_missing_inputs": []
+      },
+      "actual": {
+        "operation_id": "evaluate_plan",
+        "domain": "plan",
+        "supported": true,
+        "confidence": 0.9,
+        "entities": {
+          "concept": "",
+          "asset": "",
+          "setup_id": "",
+          "strategy_id": "",
+          "bot_id": ""
+        },
+        "context_asset": null,
+        "target_asset": null,
+        "action_polarity": "evaluate",
+        "conversation_reference": null,
+        "clarification": false,
+        "missing_inputs": [],
+        "selector_source": "structured"
+      },
+      "provider_status": "completed",
+      "provider_response_id": "resp_0339d844720b8044006a928f82fc1087d28369108485cb65ba",
+      "provider_metadata": {
+        "response_status": "completed",
+        "response_id": "resp_0339d844720b8044006a928f82fc1087d28369108485cb65ba",
+        "request_id": "req_bd7f46ded0a24ee381b7bc4a551c3fae",
+        "parsed_source": "response_output_text"
+      },
+      "parse_status": "passed",
+      "validation_status": "passed",
+      "latency_ms": 1367,
+      "failure_category": null,
+      "error": null,
+      "matches": {
+        "operation": true,
+        "domain": true,
+        "supported": true,
+        "entities": true,
+        "target_asset": true,
+        "action_polarity": true,
+        "conversation_reference": true,
+        "clarification": true,
+        "missing_inputs": true
+      },
+      "attempts": [
+        {
+          "attempt": 1,
+          "error": null,
+          "failure_category": null,
+          "provider_status": "completed",
+          "provider_response_id": "resp_0339d844720b8044006a928f82fc1087d28369108485cb65ba",
+          "latency_ms": 1367
+        }
+      ],
+      "retry_count": 0
+    },
+    {
+      "eval_id": "reg-qa-create-sol-setup",
+      "input_query": "Werk een nieuwe positie-opzet voor SOL uit.",
+      "expected": {
+        "expected_operation_id": "create_setup",
+        "expected_domain": "setup",
+        "expected_supported": true,
+        "expected_entities": {
+          "asset": "SOL"
+        },
+        "expected_target_asset": null,
+        "expected_action_polarity": "create",
+        "expected_conversation_reference": null,
+        "expected_clarification": false,
+        "expected_missing_inputs": [
+          "setup_type",
+          "timeframe",
+          "name"
+        ]
+      },
+      "actual": {
+        "operation_id": "create_setup",
+        "domain": "setup",
+        "supported": true,
+        "confidence": 0.9,
+        "entities": {
+          "concept": "",
+          "asset": "SOL",
+          "setup_id": "",
+          "strategy_id": "",
+          "bot_id": ""
+        },
+        "context_asset": null,
+        "target_asset": "SOL",
+        "action_polarity": "create",
+        "conversation_reference": null,
+        "clarification": false,
+        "missing_inputs": [
+          "setup_type",
+          "timeframe",
+          "name"
+        ],
+        "selector_source": "structured"
+      },
+      "provider_status": "completed",
+      "provider_response_id": "resp_01e169102126495a006a928f86533087d2a39b09eb44a5c538",
+      "provider_metadata": {
+        "response_status": "completed",
+        "response_id": "resp_01e169102126495a006a928f86533087d2a39b09eb44a5c538",
+        "request_id": "req_9193ceda8dc4434db03ca890cb718dcc",
+        "parsed_source": "response_output_text"
+      },
+      "parse_status": "passed",
+      "validation_status": "passed",
+      "latency_ms": 1365,
+      "failure_category": null,
+      "error": null,
+      "matches": {
+        "operation": true,
+        "domain": true,
+        "supported": true,
+        "entities": true,
+        "target_asset": true,
+        "action_polarity": true,
+        "conversation_reference": true,
+        "clarification": true,
+        "missing_inputs": true
+      },
+      "attempts": [
+        {
+          "attempt": 1,
+          "error": null,
+          "failure_category": null,
+          "provider_status": "completed",
+          "provider_response_id": "resp_01e169102126495a006a928f86533087d2a39b09eb44a5c538",
+          "latency_ms": 1365
+        }
+      ],
+      "retry_count": 0
+    },
+    {
+      "eval_id": "reg-qa-unsupported-autonomous-trading",
+      "input_query": "Neem voortaan zelfstandig alle koop- en verkoopbesluiten voor mij.",
+      "expected": {
+        "expected_operation_id": "unsupported_financial_operation",
+        "expected_domain": "financial_unsupported",
+        "expected_supported": true,
+        "expected_entities": {},
+        "expected_target_asset": null,
+        "expected_action_polarity": "read",
+        "expected_conversation_reference": null,
+        "expected_clarification": false,
+        "expected_missing_inputs": []
+      },
+      "actual": {
+        "operation_id": "unsupported_financial_operation",
+        "domain": "financial_unsupported",
+        "supported": true,
+        "confidence": 0.9,
+        "entities": {
+          "concept": "",
+          "asset": "",
+          "setup_id": "",
+          "strategy_id": "",
+          "bot_id": ""
+        },
+        "context_asset": null,
+        "target_asset": null,
+        "action_polarity": "read",
+        "conversation_reference": null,
+        "clarification": false,
+        "missing_inputs": [],
+        "selector_source": "structured"
+      },
+      "provider_status": "completed",
+      "provider_response_id": "resp_0ffe6512ce1844a8006a928f89b26887d2991a10204559bf4d",
+      "provider_metadata": {
+        "response_status": "completed",
+        "response_id": "resp_0ffe6512ce1844a8006a928f89b26887d2991a10204559bf4d",
+        "request_id": "req_af001f1ed6ae4c76a17e255e684be6a8",
+        "parsed_source": "response_output_text"
+      },
+      "parse_status": "passed",
+      "validation_status": "passed",
+      "latency_ms": 1252,
+      "failure_category": null,
+      "error": null,
+      "matches": {
+        "operation": true,
+        "domain": true,
+        "supported": true,
+        "entities": true,
+        "target_asset": true,
+        "action_polarity": true,
+        "conversation_reference": true,
+        "clarification": true,
+        "missing_inputs": true
+      },
+      "attempts": [
+        {
+          "attempt": 1,
+          "error": null,
+          "failure_category": null,
+          "provider_status": "completed",
+          "provider_response_id": "resp_0ffe6512ce1844a8006a928f89b26887d2991a10204559bf4d",
+          "latency_ms": 1252
+        }
+      ],
+      "retry_count": 0
+    },
+    {
+      "eval_id": "reg-qa-watch-remove-link",
+      "input_query": "Ik wil LINK niet langer op mijn gevolgde-marktenlijst.",
+      "expected": {
+        "expected_operation_id": "watchlist_remove",
+        "expected_domain": "watchlist",
+        "expected_supported": true,
+        "expected_entities": {
+          "asset": "LINK"
+        },
+        "expected_target_asset": "LINK",
+        "expected_action_polarity": "remove",
+        "expected_conversation_reference": null,
+        "expected_clarification": false,
+        "expected_missing_inputs": []
+      },
+      "actual": {
+        "operation_id": "watchlist_remove",
+        "domain": "watchlist",
+        "supported": true,
+        "confidence": 1,
+        "entities": {
+          "concept": "",
+          "asset": "LINK",
+          "setup_id": "",
+          "strategy_id": "",
+          "bot_id": ""
+        },
+        "context_asset": null,
+        "target_asset": "LINK",
+        "action_polarity": "remove",
+        "conversation_reference": null,
+        "clarification": false,
+        "missing_inputs": [],
+        "selector_source": "structured"
+      },
+      "provider_status": "completed",
+      "provider_response_id": "resp_05309c2b01d2528f006a928f8cf87087d2bdf89555c17a5782",
+      "provider_metadata": {
+        "response_status": "completed",
+        "response_id": "resp_05309c2b01d2528f006a928f8cf87087d2bdf89555c17a5782",
+        "request_id": "req_48fee5ca7fa64558b4a477fdd5a46b47",
+        "parsed_source": "response_output_text"
+      },
+      "parse_status": "passed",
+      "validation_status": "passed",
+      "latency_ms": 1455,
+      "failure_category": null,
+      "error": null,
+      "matches": {
+        "operation": true,
+        "domain": true,
+        "supported": true,
+        "entities": true,
+        "target_asset": true,
+        "action_polarity": true,
+        "conversation_reference": true,
+        "clarification": true,
+        "missing_inputs": true
+      },
+      "attempts": [
+        {
+          "attempt": 1,
+          "error": null,
+          "failure_category": null,
+          "provider_status": "completed",
+          "provider_response_id": "resp_05309c2b01d2528f006a928f8cf87087d2bdf89555c17a5782",
+          "latency_ms": 1455
+        }
+      ],
+      "retry_count": 0
+    },
+    {
+      "eval_id": "reg-public-concept-atr",
+      "input_query": "Kun je in gewone taal uitleggen waarvoor ATR wordt gebruikt?",
+      "expected": {
+        "expected_operation_id": "explain_financial_concept",
+        "expected_domain": "financial_education",
+        "expected_supported": true,
+        "expected_entities": {
+          "concept": "ATR"
+        },
+        "expected_target_asset": null,
+        "expected_action_polarity": "read",
+        "expected_conversation_reference": null,
+        "expected_clarification": false,
+        "expected_missing_inputs": []
+      },
+      "actual": {
+        "operation_id": "explain_financial_concept",
+        "domain": "financial_education",
+        "supported": true,
+        "confidence": 0.9,
+        "entities": {
+          "concept": "ATR",
+          "asset": "",
+          "setup_id": "",
+          "strategy_id": "",
+          "bot_id": ""
+        },
+        "context_asset": null,
+        "target_asset": null,
+        "action_polarity": "read",
+        "conversation_reference": null,
+        "clarification": false,
+        "missing_inputs": [],
+        "selector_source": "structured"
+      },
+      "provider_status": "completed",
+      "provider_response_id": "resp_058027fd49c4bcaa006a928f906af487d29e678cdd5bf2febb",
+      "provider_metadata": {
+        "response_status": "completed",
+        "response_id": "resp_058027fd49c4bcaa006a928f906af487d29e678cdd5bf2febb",
+        "request_id": "req_45bd18e4aaf443828db3ec8a0bc14eb9",
+        "parsed_source": "response_output_text"
+      },
+      "parse_status": "passed",
+      "validation_status": "passed",
+      "latency_ms": 1124,
+      "failure_category": null,
+      "error": null,
+      "matches": {
+        "operation": true,
+        "domain": true,
+        "supported": true,
+        "entities": true,
+        "target_asset": true,
+        "action_polarity": true,
+        "conversation_reference": true,
+        "clarification": true,
+        "missing_inputs": true
+      },
+      "attempts": [
+        {
+          "attempt": 1,
+          "error": null,
+          "failure_category": null,
+          "provider_status": "completed",
+          "provider_response_id": "resp_058027fd49c4bcaa006a928f906af487d29e678cdd5bf2febb",
+          "latency_ms": 1124
+        }
+      ],
+      "retry_count": 0
+    },
+    {
+      "eval_id": "reg-public-complete-dot-setup",
+      "input_query": "Werk voor DOT een breakout-opzet uit op 2H en noem hem Polkadot Uitbraak.",
+      "expected": {
+        "expected_operation_id": "create_setup",
+        "expected_domain": "setup",
+        "expected_supported": true,
+        "expected_entities": {
+          "asset": "DOT"
+        },
+        "expected_target_asset": "DOT",
+        "expected_action_polarity": "create",
+        "expected_conversation_reference": null,
+        "expected_clarification": false,
+        "expected_missing_inputs": []
+      },
+      "actual": {
+        "operation_id": "create_setup",
+        "domain": "setup",
+        "supported": true,
+        "confidence": 0.9,
+        "entities": {
+          "concept": "",
+          "asset": "DOT",
+          "setup_id": "",
+          "strategy_id": "",
+          "bot_id": ""
+        },
+        "context_asset": null,
+        "target_asset": "DOT",
+        "action_polarity": "create",
+        "conversation_reference": null,
+        "clarification": false,
+        "missing_inputs": [],
+        "selector_source": "structured"
+      },
+      "provider_status": "completed",
+      "provider_response_id": "resp_00d5ceed32a2f44f006a928f938bd887d28f8a97721174739a",
+      "provider_metadata": {
+        "response_status": "completed",
+        "response_id": "resp_00d5ceed32a2f44f006a928f938bd887d28f8a97721174739a",
+        "request_id": "req_9e919d7fdd62409c861b0461ee0ef934",
+        "parsed_source": "response_output_text"
+      },
+      "parse_status": "passed",
+      "validation_status": "passed",
+      "latency_ms": 1444,
+      "failure_category": null,
+      "error": null,
+      "matches": {
+        "operation": true,
+        "domain": true,
+        "supported": true,
+        "entities": true,
+        "target_asset": true,
+        "action_polarity": true,
+        "conversation_reference": true,
+        "clarification": true,
+        "missing_inputs": true
+      },
+      "attempts": [
+        {
+          "attempt": 1,
+          "error": null,
+          "failure_category": null,
+          "provider_status": "completed",
+          "provider_response_id": "resp_00d5ceed32a2f44f006a928f938bd887d28f8a97721174739a",
+          "latency_ms": 1444
+        }
+      ],
+      "retry_count": 0
+    },
+    {
+      "eval_id": "reg-public-live-order-bot",
+      "input_query": "Laat mijn gekoppelde robot voortaan echte orders plaatsen.",
+      "expected": {
+        "expected_operation_id": "activate_bot",
+        "expected_domain": "bot",
+        "expected_supported": true,
+        "expected_entities": {},
+        "expected_target_asset": null,
+        "expected_action_polarity": "activate",
+        "expected_conversation_reference": null,
+        "expected_clarification": false,
+        "expected_missing_inputs": [
+          "bot_id"
+        ]
+      },
+      "actual": {
+        "operation_id": "activate_bot",
+        "domain": "bot",
+        "supported": true,
+        "confidence": 0.9,
+        "entities": {
+          "concept": "",
+          "asset": "",
+          "setup_id": "",
+          "strategy_id": "",
+          "bot_id": ""
+        },
+        "context_asset": null,
+        "target_asset": null,
+        "action_polarity": "activate",
+        "conversation_reference": null,
+        "clarification": false,
+        "missing_inputs": [
+          "bot_id"
+        ],
+        "selector_source": "structured"
+      },
+      "provider_status": "completed",
+      "provider_response_id": "resp_042da11f8faab858006a928f96fd1887d29e783bc850145c8d",
+      "provider_metadata": {
+        "response_status": "completed",
+        "response_id": "resp_042da11f8faab858006a928f96fd1887d29e783bc850145c8d",
+        "request_id": "req_02dc4fb72dc34e6aaddbe21dd04a1060",
+        "parsed_source": "response_output_text"
+      },
+      "parse_status": "passed",
+      "validation_status": "passed",
+      "latency_ms": 1104,
+      "failure_category": null,
+      "error": null,
+      "matches": {
+        "operation": true,
+        "domain": true,
+        "supported": true,
+        "entities": true,
+        "target_asset": true,
+        "action_polarity": true,
+        "conversation_reference": true,
+        "clarification": true,
+        "missing_inputs": true
+      },
+      "attempts": [
+        {
+          "attempt": 1,
+          "error": null,
+          "failure_category": null,
+          "provider_status": "completed",
+          "provider_response_id": "resp_042da11f8faab858006a928f96fd1887d29e783bc850145c8d",
+          "latency_ms": 1104
+        }
+      ],
+      "retry_count": 0
+    },
+    {
+      "eval_id": "reg-public-ambiguous-improvement",
+      "input_query": "Maak mijn manier van handelen beter.",
+      "expected": {
+        "expected_operation_id": "clarify_request",
+        "expected_domain": "system",
+        "expected_supported": true,
+        "expected_entities": {},
+        "expected_target_asset": null,
+        "expected_action_polarity": "update",
+        "expected_conversation_reference": null,
+        "expected_clarification": true,
+        "expected_missing_inputs": [
+          "requested_change"
+        ]
+      },
+      "actual": {
+        "operation_id": "clarify_request",
+        "domain": "system",
+        "supported": true,
+        "confidence": 0.8,
+        "entities": {
+          "concept": "",
+          "asset": "",
+          "setup_id": "",
+          "strategy_id": "",
+          "bot_id": ""
+        },
+        "context_asset": null,
+        "target_asset": null,
+        "action_polarity": "update",
+        "conversation_reference": null,
+        "clarification": true,
+        "missing_inputs": [
+          "requested_change"
+        ],
+        "selector_source": "structured"
+      },
+      "provider_status": "completed",
+      "provider_response_id": "resp_005513e064990fcf006a928f9a191087d2ad61dfa9b052d491",
+      "provider_metadata": {
+        "response_status": "completed",
+        "response_id": "resp_005513e064990fcf006a928f9a191087d2ad61dfa9b052d491",
+        "request_id": "req_18dd8d47b3af44558664ad97b48dad62",
+        "parsed_source": "response_output_text"
+      },
+      "parse_status": "passed",
+      "validation_status": "passed",
+      "latency_ms": 1453,
+      "failure_category": null,
+      "error": null,
+      "matches": {
+        "operation": true,
+        "domain": true,
+        "supported": true,
+        "entities": true,
+        "target_asset": true,
+        "action_polarity": true,
+        "conversation_reference": true,
+        "clarification": true,
+        "missing_inputs": true
+      },
+      "attempts": [
+        {
+          "attempt": 1,
+          "error": null,
+          "failure_category": null,
+          "provider_status": "completed",
+          "provider_response_id": "resp_005513e064990fcf006a928f9a191087d2ad61dfa9b052d491",
+          "latency_ms": 1453
+        }
+      ],
+      "retry_count": 0
+    },
+    {
+      "eval_id": "reg-live-order-automation-variant",
+      "input_query": "Zorg dat mijn gekoppelde automation reele orders gaat versturen.",
+      "expected": {
+        "expected_operation_id": "activate_bot",
+        "expected_domain": "bot",
+        "expected_supported": true,
+        "expected_entities": {},
+        "expected_target_asset": null,
+        "expected_action_polarity": "activate",
+        "expected_conversation_reference": null,
+        "expected_clarification": false,
+        "expected_missing_inputs": [
+          "bot_id"
+        ]
+      },
+      "actual": {
+        "operation_id": "activate_bot",
+        "domain": "bot",
+        "supported": true,
+        "confidence": 0.9,
+        "entities": {
+          "concept": "",
+          "asset": "",
+          "setup_id": "",
+          "strategy_id": "",
+          "bot_id": ""
+        },
+        "context_asset": null,
+        "target_asset": null,
+        "action_polarity": "activate",
+        "conversation_reference": null,
+        "clarification": false,
+        "missing_inputs": [
+          "bot_id"
+        ],
+        "selector_source": "structured"
+      },
+      "provider_status": "completed",
+      "provider_response_id": "resp_096b92aa2f9e39c7006a928f9d90a487d2bf6e667936bd1f7f",
+      "provider_metadata": {
+        "response_status": "completed",
+        "response_id": "resp_096b92aa2f9e39c7006a928f9d90a487d2bf6e667936bd1f7f",
+        "request_id": "req_d5afd797a57645329cd5849dd96f1995",
+        "parsed_source": "response_output_text"
+      },
+      "parse_status": "passed",
+      "validation_status": "passed",
+      "latency_ms": 1505,
+      "failure_category": null,
+      "error": null,
+      "matches": {
+        "operation": true,
+        "domain": true,
+        "supported": true,
+        "entities": true,
+        "target_asset": true,
+        "action_polarity": true,
+        "conversation_reference": true,
+        "clarification": true,
+        "missing_inputs": true
+      },
+      "attempts": [
+        {
+          "attempt": 1,
+          "error": null,
+          "failure_category": null,
+          "provider_status": "completed",
+          "provider_response_id": "resp_096b92aa2f9e39c7006a928f9d90a487d2bf6e667936bd1f7f",
+          "latency_ms": 1505
+        }
+      ],
+      "retry_count": 0
+    },
+    {
+      "eval_id": "reg-complete-setup-variant",
+      "input_query": "Ontwerp voor XRP een momentum trade op 4H met de naam XRP Ritme.",
+      "expected": {
+        "expected_operation_id": "create_setup",
+        "expected_domain": "setup",
+        "expected_supported": true,
+        "expected_entities": {
+          "asset": "XRP"
+        },
+        "expected_target_asset": "XRP",
+        "expected_action_polarity": "create",
+        "expected_conversation_reference": null,
+        "expected_clarification": false,
+        "expected_missing_inputs": []
+      },
+      "actual": {
+        "operation_id": "create_setup",
+        "domain": "setup",
+        "supported": true,
+        "confidence": 0.9,
+        "entities": {
+          "concept": "",
+          "asset": "XRP",
+          "setup_id": "",
+          "strategy_id": "",
+          "bot_id": ""
+        },
+        "context_asset": null,
+        "target_asset": "XRP",
+        "action_polarity": "create",
+        "conversation_reference": null,
+        "clarification": false,
+        "missing_inputs": [],
+        "selector_source": "structured"
+      },
+      "provider_status": "completed",
+      "provider_response_id": "resp_08ccbc6f49cac1a4006a928fa111cc87d2aabc22a17a8c506f",
+      "provider_metadata": {
+        "response_status": "completed",
+        "response_id": "resp_08ccbc6f49cac1a4006a928fa111cc87d2aabc22a17a8c506f",
+        "request_id": "req_22339f3ffab64057a4d7c1e75dcabe38",
+        "parsed_source": "response_output_text"
+      },
+      "parse_status": "passed",
+      "validation_status": "passed",
+      "latency_ms": 1412,
+      "failure_category": null,
+      "error": null,
+      "matches": {
+        "operation": true,
+        "domain": true,
+        "supported": true,
+        "entities": true,
+        "target_asset": true,
+        "action_polarity": true,
+        "conversation_reference": true,
+        "clarification": true,
+        "missing_inputs": true
+      },
+      "attempts": [
+        {
+          "attempt": 1,
+          "error": null,
+          "failure_category": null,
+          "provider_status": "completed",
+          "provider_response_id": "resp_08ccbc6f49cac1a4006a928fa111cc87d2aabc22a17a8c506f",
+          "latency_ms": 1412
+        }
+      ],
+      "retry_count": 0
+    },
+    {
+      "eval_id": "reg-ambiguous-improvement-variant",
+      "input_query": "Verbeter mijn handelswerkwijze zonder dat ik aangeef wat er moet veranderen.",
+      "expected": {
+        "expected_operation_id": "clarify_request",
+        "expected_domain": "system",
+        "expected_supported": true,
+        "expected_entities": {},
+        "expected_target_asset": null,
+        "expected_action_polarity": "update",
+        "expected_conversation_reference": null,
+        "expected_clarification": true,
+        "expected_missing_inputs": [
+          "requested_change"
+        ]
+      },
+      "actual": {
+        "operation_id": "clarify_request",
+        "domain": "system",
+        "supported": true,
+        "confidence": 0.9,
+        "entities": {
+          "concept": "",
+          "asset": "",
+          "setup_id": "",
+          "strategy_id": "",
+          "bot_id": ""
+        },
+        "context_asset": null,
+        "target_asset": null,
+        "action_polarity": "update",
+        "conversation_reference": null,
+        "clarification": true,
+        "missing_inputs": [
+          "requested_change"
+        ],
+        "selector_source": "structured"
+      },
+      "provider_status": "completed",
+      "provider_response_id": "resp_0d19830eab5774e7006a928fa47e2087d29631d932be80e262",
+      "provider_metadata": {
+        "response_status": "completed",
+        "response_id": "resp_0d19830eab5774e7006a928fa47e2087d29631d932be80e262",
+        "request_id": "req_ffd7c37e5998499281497c67da47e8bd",
+        "parsed_source": "response_output_text"
+      },
+      "parse_status": "passed",
+      "validation_status": "passed",
+      "latency_ms": 1286,
+      "failure_category": null,
+      "error": null,
+      "matches": {
+        "operation": true,
+        "domain": true,
+        "supported": true,
+        "entities": true,
+        "target_asset": true,
+        "action_polarity": true,
+        "conversation_reference": true,
+        "clarification": true,
+        "missing_inputs": true
+      },
+      "attempts": [
+        {
+          "attempt": 1,
+          "error": null,
+          "failure_category": null,
+          "provider_status": "completed",
+          "provider_response_id": "resp_0d19830eab5774e7006a928fa47e2087d29631d932be80e262",
+          "latency_ms": 1286
+        }
+      ],
+      "retry_count": 0
+    }
+  ]
+}

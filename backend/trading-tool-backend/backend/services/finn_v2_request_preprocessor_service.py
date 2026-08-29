@@ -67,7 +67,7 @@ class FinnV2RequestPreprocessorService:
         "profile": ("profiel", "risicoprofiel", "tradingstijl", "risk profile", "trading style"),
         "setup": ("setup", "set-up", "opzet", "positie-opzet"),
         "strategy": ("strategie", "strategy"),
-        "bot": ("bot", "automation", "automatisering"),
+        "bot": ("bot", "robot", "automation", "automatisering"),
         "plan": (
             "plan",
             "plaatje",
@@ -79,7 +79,12 @@ class FinnV2RequestPreprocessorService:
         "asset": ("asset", "instrument", "symbool", "symbol", "coin", "aandeel", "workspace", "markt"),
     }
     _REFERENCE_MARKERS = {
-        "previous_verified_conclusion": ("die conclusie", "dat antwoord", "eerder antwoord", "onderbouw", "waarop baseer", "waar baseer", "welk bewijs", "waarom concludeerde", "leg de eerdere", "evidence achter"),
+        "previous_verified_conclusion": (
+            "die conclusie", "dat antwoord", "eerder antwoord", "onderbouw",
+            "waarop baseer", "waar baseer", "welk bewijs", "waarom concludeerde",
+            "leg de eerdere", "evidence achter",
+        ),
+        "contextual_implication": ("wat betekent dat", "wat houdt dat in", "welk gevolg heeft dat"),
         "reformulation": (
             "korter",
             "herformuleer",
@@ -90,7 +95,7 @@ class FinnV2RequestPreprocessorService:
         ),
         "contextual_entity": ("die setup", "deze strategie", "die bot", "dat plan", "deze asset"),
     }
-    _TIMEFRAME_VALUE = re.compile(r"\b(?:1m|5m|15m|30m|1h|4h|1d|1w|1M)\b", re.IGNORECASE)
+    _TIMEFRAME_VALUE = re.compile(r"\b(?:[1-9]\d*(?:m|h|d|w))\b", re.IGNORECASE)
 
     def preprocess(
         self,
@@ -163,7 +168,11 @@ class FinnV2RequestPreprocessorService:
         concept = self._financial_concept(normalized)
         # Conversation acts and product verbs are meaningful FINN requests
         # even where no financial noun appears in this short turn.
-        domain_hint = "financial" if (entities or asset or concept or references or action != "read" or discourse == "capability" or any(term in normalized for term in ("trade", "beleggen", "investment", "rendement", "risk", "risico"))) else "off_topic"
+        domain_hint = "financial" if (
+            entities or asset or concept or references or slot_answer
+            or action != "read" or discourse in {"capability", "clarification_answer"}
+            or any(term in normalized for term in ("trade", "beleggen", "investment", "rendement", "risk", "risico"))
+        ) else "off_topic"
         return FinnV2PreprocessedRequest(
             normalized_text=normalized,
             language="en" if re.search(r"\b(what|which|add|remove|create|evaluate)\b", normalized) else "nl",
@@ -183,6 +192,9 @@ class FinnV2RequestPreprocessorService:
     @staticmethod
     def _financial_concept(text: str) -> Optional[str]:
         concepts = {
+            "atr": "ATR",
+            "average true range": "ATR",
+            "macd": "MACD",
             "rsi": "RSI",
             "vwap": "VWAP",
             "volume": "volume",
@@ -247,6 +259,10 @@ class FinnV2RequestPreprocessorService:
             return "read"
         if "live" in text and re.search(r"\b(activeer|activate|schakel|start|zet|maak)\b", text):
             return "activate"
+        if re.search(r"\b(?:echte|reële|live)\s+orders?\b", text) and re.search(
+            r"\b(?:plaats\w*|uitvoer\w*|verstuur\w*|verstur\w*)\b", text
+        ):
+            return "activate"
         if re.search(r"\bpas\b.*\baan\b", text):
             return "update"
         if re.search(r"\bwerk\b.*\buit\b", text):
@@ -299,6 +315,8 @@ class FinnV2RequestPreprocessorService:
             return "capability"
         if "reformulation" in references:
             return "reformulation"
+        if "contextual_implication" in references:
+            return "contextual_follow_up"
         if "previous_verified_conclusion" in references:
             return "evidence_follow_up"
         if "contextual_entity" in references:
