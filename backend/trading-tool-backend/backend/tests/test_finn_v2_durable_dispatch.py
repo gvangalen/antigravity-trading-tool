@@ -19,7 +19,10 @@ class _Session:
         return False
 
     async def execute(self, _statement):
-        return SimpleNamespace(scalars=lambda: SimpleNamespace(first=lambda: self.run))
+        return SimpleNamespace(
+            scalars=lambda: SimpleNamespace(first=lambda: self.run),
+            scalar_one=lambda: self.run.user_id,
+        )
 
     async def commit(self):
         self.commits += 1
@@ -29,6 +32,7 @@ class _Dispatches:
     claimed = True
     events = []
     recoverable = []
+    stale = []
 
     def __init__(self, _session):
         pass
@@ -56,8 +60,11 @@ class _Dispatches:
     async def list_recoverable(self, **_kwargs):
         return self.recoverable
 
-    async def mark_dispatched(self, dispatch_id):
-        self.events.append(("dispatched", dispatch_id))
+    async def mark_published(self, dispatch_id):
+        self.events.append(("published", dispatch_id))
+
+    async def expire_stale_unclaimed(self, **_kwargs):
+        return self.stale
 
 
 def _install_worker_fakes(monkeypatch, run):
@@ -71,6 +78,7 @@ def _install_worker_fakes(monkeypatch, run):
     _Dispatches.claimed = True
     _Dispatches.events = []
     _Dispatches.recoverable = []
+    _Dispatches.stale = []
     monkeypatch.setattr(task_module, "async_session_factory", _factory)
     monkeypatch.setattr(task_module, "FinnV2DispatchRepository", _Dispatches)
     return sessions
@@ -167,7 +175,66 @@ def test_stale_dispatch_recovery_reuses_persisted_task_id(monkeypatch):
 
     assert asyncio.run(task_module._recover_finn_v2_dispatches()) == 1
     assert enqueued == [{"kwargs": {"run_id": "run-5"}, "task_id": "task-5", "queue": "ai_generation"}]
-    assert ("dispatched", "dispatch-5") in _Dispatches.events
+    assert ("published", "dispatch-5") in _Dispatches.events
+
+
+def test_recovery_publish_does_not_claim_a_dispatch(monkeypatch):
+    run = SimpleNamespace(dispatch_id="dispatch-6", run_id="run-6", task_id="task-6", queue="finn_interactive")
+    _install_worker_fakes(monkeypatch, SimpleNamespace(id="unused", user_id=0, status="completed"))
+    _Dispatches.recoverable = [run]
+
+    class _Task:
+        name = "backend.celery_task.finn_v2_task.process_finn_v2_run"
+
+        @staticmethod
+        def apply_async(**_kwargs):
+            return None
+
+    monkeypatch.setattr(task_module, "process_finn_v2_run", _Task())
+    assert asyncio.run(task_module._recover_finn_v2_dispatches()) == 1
+    assert ("published", "dispatch-6") in _Dispatches.events
+    assert not any(event[0] == "claim" for event in _Dispatches.events)
+
+
+def test_recovery_is_idempotent_after_worker_crash(monkeypatch):
+    run = SimpleNamespace(id="run-7", user_id=7, status="planned", retryable=False, error_code=None)
+    _install_worker_fakes(monkeypatch, run)
+
+    async def _crash(**_kwargs):
+        raise RuntimeError("worker_crash")
+
+    monkeypatch.setattr(task_module.FinnV2RunService, "run_foundation_lifecycle_owned", _crash)
+    with pytest.raises(RuntimeError, match="worker_crash"):
+        asyncio.run(task_module._process_finn_v2_run(run_id="run-7", owner="worker-a"))
+    _Dispatches.claimed = False
+    assert asyncio.run(task_module._process_finn_v2_run(run_id="run-7", owner="worker-b")) == "run-7"
+    assert [event[0] for event in _Dispatches.events].count("claim") == 2
+
+
+def test_stale_unclaimed_dispatch_is_terminalized_once(monkeypatch):
+    run = SimpleNamespace(id="run-8", user_id=7, status="created", retryable=False, error_code=None)
+    _install_worker_fakes(monkeypatch, run)
+    _Dispatches.stale = [SimpleNamespace(dispatch_id="dispatch-8", run_id="run-8")]
+    failures = []
+
+    class _RunService:
+        def __init__(self, _session):
+            pass
+
+        async def fail_run(self, **kwargs):
+            failures.append(kwargs)
+
+    monkeypatch.setattr(task_module, "FinnV2RunService", _RunService)
+    assert asyncio.run(task_module._recover_finn_v2_dispatches()) == 0
+    assert failures == [{
+        "run_id": "run-8", "user_id": 7,
+        "error_code": "dispatch_claim_timeout",
+        "error_message": "FINN could not start this request in time. Please try again.",
+        "retryable": False, "failure_stage": "dispatch_recovery",
+    }]
+    _Dispatches.stale = []
+    assert asyncio.run(task_module._recover_finn_v2_dispatches()) == 0
+    assert len(failures) == 1
 
 
 MIGRATION = Path(__file__).resolve().parents[1] / "scripts" / "migrations" / "2026_08_22_finn_v2_dispatch_outbox.py"

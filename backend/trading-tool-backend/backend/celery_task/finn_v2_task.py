@@ -25,6 +25,7 @@ logger = logging.getLogger(__name__)
 
 DISPATCH_LEASE_SECONDS = 300
 DISPATCH_HEARTBEAT_SECONDS = 60
+DISPATCH_STALE_UNCLAIMED_SECONDS = 5 * 60
 
 
 def _run_async(coroutine):
@@ -112,6 +113,26 @@ def recover_finn_v2_dispatches() -> int:
 
 async def _recover_finn_v2_dispatches() -> int:
     async with async_session_factory() as session:
+        repository = FinnV2DispatchRepository(session)
+        expired = await repository.expire_stale_unclaimed(
+            limit=100,
+            max_age_seconds=DISPATCH_STALE_UNCLAIMED_SECONDS,
+        )
+        await session.commit()
+    # A dead-lettered visible dispatch must also terminalize its run. Terminal
+    # rows are excluded by the repository, making recovery safe to repeat.
+    for row in expired:
+        async with async_session_factory() as session:
+            user_id = (await session.execute(select(FinnV2Run.user_id).where(FinnV2Run.id == row.run_id))).scalar_one()
+            await FinnV2RunService(session).fail_run(
+                run_id=row.run_id,
+                user_id=user_id,
+                error_code="dispatch_claim_timeout",
+                error_message="FINN could not start this request in time. Please try again.",
+                retryable=False,
+                failure_stage="dispatch_recovery",
+            )
+    async with async_session_factory() as session:
         dispatches = await FinnV2DispatchRepository(session).list_recoverable(limit=100)
         rows = [(row.dispatch_id, row.run_id, row.task_id, row.queue) for row in dispatches]
     recovered = 0
@@ -119,7 +140,7 @@ async def _recover_finn_v2_dispatches() -> int:
         try:
             process_finn_v2_run.apply_async(kwargs={"run_id": run_id}, task_id=task_id, queue=queue or resolve_task_queue(process_finn_v2_run.name))
             async with async_session_factory() as session:
-                await FinnV2DispatchRepository(session).mark_dispatched(dispatch_id)
+                await FinnV2DispatchRepository(session).mark_published(dispatch_id)
                 await session.commit()
             recovered += 1
         except Exception:

@@ -11,6 +11,7 @@ from backend.infrastructure.models import FinnV2Run, FinnV2RunDispatch
 
 class FinnV2DispatchRepository:
     MAX_ATTEMPTS = 3
+    PUBLISH_RETRY_SECONDS = 30
 
     def __init__(self, session: AsyncSession):
         self.session = session
@@ -30,7 +31,7 @@ class FinnV2DispatchRepository:
             update(FinnV2RunDispatch)
             .where(
                 FinnV2RunDispatch.run_id == run_id,
-                FinnV2RunDispatch.status.in_(["pending", "dispatching", "dispatched", "retryable_failure", "claimed", "running"]),
+                FinnV2RunDispatch.status.in_(["pending", "retryable_failure", "claimed", "running"]),
                 or_(FinnV2RunDispatch.lease_expires_at.is_(None), FinnV2RunDispatch.lease_expires_at < now),
                 FinnV2RunDispatch.attempt_count < self.MAX_ATTEMPTS,
                 FinnV2RunDispatch.run_id.in_(
@@ -75,9 +76,14 @@ class FinnV2DispatchRepository:
         )
         return bool(result.rowcount)
 
-    async def mark_dispatched(self, dispatch_id: str) -> None:
+    async def mark_published(self, dispatch_id: str) -> None:
+        """Record broker handoff without claiming that a worker accepted it."""
         now = datetime.now(timezone.utc)
-        await self.session.execute(update(FinnV2RunDispatch).where(FinnV2RunDispatch.dispatch_id == dispatch_id).values(status="dispatched", dispatched_at=now, updated_at=now))
+        await self.session.execute(
+            update(FinnV2RunDispatch)
+            .where(FinnV2RunDispatch.dispatch_id == dispatch_id, FinnV2RunDispatch.status.in_(["pending", "retryable_failure"]))
+            .values(status="pending", dispatched_at=now, next_attempt_at=now + timedelta(seconds=self.PUBLISH_RETRY_SECONDS), updated_at=now)
+        )
 
     async def mark_completed(self, dispatch_id: str) -> None:
         now = datetime.now(timezone.utc)
@@ -124,12 +130,34 @@ class FinnV2DispatchRepository:
             .where(
                 or_(
                     (FinnV2RunDispatch.status.in_(["pending", "retryable_failure"]) & (FinnV2RunDispatch.next_attempt_at <= now)),
-                    (FinnV2RunDispatch.status == "dispatched") & (FinnV2RunDispatch.dispatched_at < now - timedelta(seconds=30)),
                     (FinnV2RunDispatch.status.in_(["claimed", "running"])) & (FinnV2RunDispatch.lease_expires_at < now),
                 ),
                 FinnV2RunDispatch.attempt_count < self.MAX_ATTEMPTS,
             )
-            .order_by(FinnV2RunDispatch.created_at.asc())
+            .order_by(FinnV2RunDispatch.created_at.desc())
             .limit(limit)
         )
         return list(result.scalars().all())
+
+    async def expire_stale_unclaimed(self, *, limit: int, max_age_seconds: int) -> list[FinnV2RunDispatch]:
+        """Dead-letter unclaimed delivery rows through one idempotent path."""
+        now = datetime.now(timezone.utc)
+        result = await self.session.execute(
+            select(FinnV2RunDispatch)
+            .where(
+                FinnV2RunDispatch.status.in_(["pending", "retryable_failure", "dispatching", "dispatched"]),
+                FinnV2RunDispatch.created_at < now - timedelta(seconds=max_age_seconds),
+                FinnV2RunDispatch.owner.is_(None),
+            )
+            .order_by(FinnV2RunDispatch.created_at.asc())
+            .limit(limit)
+            .with_for_update(skip_locked=True)
+        )
+        rows = list(result.scalars().all())
+        for row in rows:
+            row.status = "terminal_failure"
+            row.last_error_code = "dispatch_claim_timeout"
+            row.completed_at = now
+            row.next_attempt_at = now
+            row.updated_at = now
+        return rows

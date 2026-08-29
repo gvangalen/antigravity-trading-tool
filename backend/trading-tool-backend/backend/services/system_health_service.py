@@ -19,6 +19,7 @@ PM2_CELERY_WORKER_QUEUE_MAP = {
     "celery-worker-market-portfolio": ["market_data", "portfolio"],
     "celery-worker-scoring-execution": ["scoring", "execution_critical"],
     "celery-worker-ai-reporting": ["ai_generation"],
+    "celery-worker-finn-interactive": ["finn_interactive"],
 }
 
 FIRST_DASHBOARD_TASK_NAMES = [

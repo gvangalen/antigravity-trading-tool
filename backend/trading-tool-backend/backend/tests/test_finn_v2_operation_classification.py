@@ -87,13 +87,13 @@ def test_target_polarity_is_not_reversed_by_workspace_context():
     add = CLASSIFIER.classify(message="Voeg ADA toe aan mijn watchlist.")
     remove = CLASSIFIER.classify(message="Verwijder ADA uit mijn watchlist.")
 
-    assert add.action == "add"
+    assert add.action == "create"
     assert add.operation_id == "watchlist_add"
     assert remove.action == "remove"
     assert remove.operation_id == "watchlist_remove"
 
 
-def test_live_order_language_uses_typed_bot_activation_and_activate_polarity():
+def test_live_order_language_uses_typed_bot_activation_and_execute_polarity():
     for message in (
         "Laat mijn gekoppelde robot voortaan echte orders plaatsen.",
         "Zorg dat de gekoppelde automation live orders uitvoert.",
@@ -101,7 +101,7 @@ def test_live_order_language_uses_typed_bot_activation_and_activate_polarity():
     ):
         result = CLASSIFIER.classify(message=message)
         assert result.operation_id == "activate_bot"
-        assert result.action == "activate"
+        assert result.action == "execute"
 
 
 def test_ambiguous_improvement_has_typed_clarification_input_and_update_polarity():

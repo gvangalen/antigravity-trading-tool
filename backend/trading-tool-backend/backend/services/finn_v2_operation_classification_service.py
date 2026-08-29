@@ -236,8 +236,8 @@ class FinnV2OperationClassificationService:
     def _contract_action(contract: OperationContract, raw_action: str) -> str:
         """Project a validated contract into one stable lifecycle polarity."""
         actions = {
-            "watchlist_add": "add", "watchlist_remove": "remove",
-            "create_setup": "create", "activate_bot": "activate",
+            "watchlist_add": "create", "watchlist_remove": "remove",
+            "create_setup": "create", "activate_bot": "execute",
             "confirm_proposal": "confirm", "execute_proposal": "execute",
             "explain_previous_evidence": "read",
             "reformulate_previous_response": "read",
@@ -246,6 +246,8 @@ class FinnV2OperationClassificationService:
             return actions[contract.operation_id]
         if contract.mode == "EVALUATE":
             return "evaluate"
+        if contract.operation_id == "unsupported_financial_operation" and raw_action == "execute":
+            return "execute"
         if contract.operation_id == "clarify_request":
             return "update"
         if contract.mode in {"READ", "CAPABILITY", "UNAVAILABLE", "CLARIFICATION"}:
@@ -305,7 +307,10 @@ class FinnV2OperationClassificationValidator:
             and active.get("operation_id") == contract.operation_id
         ):
             return None
-        if contract.allowed_action_polarities and classification.action not in contract.allowed_action_polarities:
+        # Manifest eligibility describes the user's grammatical directive;
+        # the classification action is the canonical contract polarity (for
+        # example `activate` becomes the high-risk `execute` boundary).
+        if contract.allowed_action_polarities and facts.action_polarity not in contract.allowed_action_polarities:
             return "operation_action_mismatch"
         if contract.required_entities and not set(contract.required_entities).issubset(facts.explicit_entities):
             return "operation_required_entity_missing"

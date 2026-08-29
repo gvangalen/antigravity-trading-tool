@@ -18,14 +18,14 @@ case "$ENVIRONMENT" in
     BACKEND_APP="${BACKEND_APP:-backend}"
     BACKEND_PORT="${BACKEND_PORT:-8000}"
     FRONTEND_PORT="${FRONTEND_PORT:-5002}"
-    EXPECTED_PM2_APPS="${EXPECTED_PM2_APPS:-frontend backend celery-worker-default celery-worker-market-portfolio celery-worker-scoring-execution celery-worker-ai-reporting celery-beat}"
+    EXPECTED_PM2_APPS="${EXPECTED_PM2_APPS:-frontend backend celery-worker-default celery-worker-market-portfolio celery-worker-scoring-execution celery-worker-ai-reporting celery-worker-finn-interactive celery-beat}"
     ;;
   staging)
     PM2_CONFIG="ecosystem.staging.config.js"
     BACKEND_APP="${BACKEND_APP:-backend-staging}"
     BACKEND_PORT="${BACKEND_PORT:-8100}"
     FRONTEND_PORT="${FRONTEND_PORT:-5102}"
-    EXPECTED_PM2_APPS="${EXPECTED_PM2_APPS:-frontend-staging backend-staging celery-worker-default-staging celery-worker-market-portfolio-staging celery-worker-scoring-execution-staging celery-worker-ai-reporting-staging celery-beat-staging}"
+    EXPECTED_PM2_APPS="${EXPECTED_PM2_APPS:-frontend-staging backend-staging celery-worker-default-staging celery-worker-market-portfolio-staging celery-worker-scoring-execution-staging celery-worker-ai-reporting-staging celery-worker-finn-interactive-staging celery-beat-staging}"
     ;;
   *)
     echo "Unknown environment: $ENVIRONMENT" >&2
@@ -34,6 +34,7 @@ case "$ENVIRONMENT" in
 esac
 
 DEPLOY_STATE_DIR="ops/deploy/${ENVIRONMENT}"
+CANONICAL_DEPLOY_STATE_DIR="${CANONICAL_DEPLOY_STATE_DIR:-/home/ubuntu/ops/deploy}"
 CURRENT_COMMIT="$(git rev-parse --short HEAD 2>/dev/null || true)"
 
 export PATH="$NODE_BIN:$PATH"
@@ -43,11 +44,14 @@ export FRONTEND_PORT
 cd "$REMOTE_DIR"
 
 if [ -z "$ROLLBACK_COMMIT" ]; then
-  if [ ! -f "${DEPLOY_STATE_DIR}/LAST_GOOD_COMMIT" ]; then
-    echo "❌ No rollback commit provided and ${DEPLOY_STATE_DIR}/LAST_GOOD_COMMIT is missing." >&2
+  if [ -f "${CANONICAL_DEPLOY_STATE_DIR}/LAST_GOOD_COMMIT" ]; then
+    ROLLBACK_COMMIT="$(cat "${CANONICAL_DEPLOY_STATE_DIR}/LAST_GOOD_COMMIT")"
+  elif [ -f "${DEPLOY_STATE_DIR}/LAST_GOOD_COMMIT" ]; then
+    ROLLBACK_COMMIT="$(cat "${DEPLOY_STATE_DIR}/LAST_GOOD_COMMIT")"
+  else
+    echo "❌ No rollback commit provided and canonical LAST_GOOD_COMMIT is missing." >&2
     exit 1
   fi
-  ROLLBACK_COMMIT="$(cat "${DEPLOY_STATE_DIR}/LAST_GOOD_COMMIT")"
 fi
 
 echo "↩️ Rolling ${ENVIRONMENT} back to ${ROLLBACK_COMMIT}..."
@@ -177,6 +181,8 @@ echo
 curl --max-time 10 -fsSI "http://127.0.0.1:${FRONTEND_PORT}/report" | head -n 1
 
 mkdir -p "$DEPLOY_STATE_DIR"
+sudo mkdir -p "$CANONICAL_DEPLOY_STATE_DIR"
+printf "%s\n" "$ROLLBACK_COMMIT" | sudo tee "$CANONICAL_DEPLOY_STATE_DIR/LAST_GOOD_COMMIT" >/dev/null
 printf "%s\n" "$ROLLBACK_COMMIT" > "${DEPLOY_STATE_DIR}/LAST_GOOD_COMMIT"
 if [ -n "$CURRENT_COMMIT" ]; then
   printf "%s\n" "$CURRENT_COMMIT" > "${DEPLOY_STATE_DIR}/PREVIOUS_GOOD_COMMIT"

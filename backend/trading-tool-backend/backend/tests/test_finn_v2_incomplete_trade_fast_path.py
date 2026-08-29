@@ -147,8 +147,8 @@ def test_gateway_enqueues_visible_run_after_commit():
         async def get_for_run(self, _run_id):
             return SimpleNamespace(dispatch_id="dispatch-1", task_id="task-1", queue="ai_generation")
 
-        async def mark_dispatched(self, dispatch_id):
-            observed.append(("dispatched", dispatch_id))
+        async def mark_published(self, dispatch_id):
+            observed.append(("published", dispatch_id))
 
     class _Task:
         def apply_async(self, **kwargs):
@@ -173,7 +173,7 @@ def test_gateway_enqueues_visible_run_after_commit():
     assert run_id == "run-timeout-1"
     assert observed == [
         ("enqueued", {"kwargs": {"run_id": "run-timeout-1"}, "task_id": "task-1", "queue": "ai_generation"}),
-        ("dispatched", "dispatch-1"),
+        ("published", "dispatch-1"),
     ]
     monkeypatch.undo()
 
@@ -201,8 +201,8 @@ def test_gateway_request_cancellation_does_not_cancel_durable_dispatch():
         async def get_for_run(self, _run_id):
             return SimpleNamespace(dispatch_id="dispatch-1", task_id="task-1", queue="ai_generation")
 
-        async def mark_dispatched(self, dispatch_id):
-            observed.append(("dispatched", dispatch_id))
+        async def mark_published(self, dispatch_id):
+            observed.append(("published", dispatch_id))
 
     class _Task:
         def apply_async(self, **kwargs):

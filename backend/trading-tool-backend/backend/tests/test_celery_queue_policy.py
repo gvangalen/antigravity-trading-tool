@@ -67,6 +67,7 @@ def test_named_queues_include_default_and_workload_classes():
         "scoring",
         "portfolio",
         "ai_generation",
+        "finn_interactive",
         "execution_critical",
     ]
     assert LOGICAL_NAMED_QUEUES == NAMED_QUEUES
@@ -187,6 +188,7 @@ def test_staging_queue_names_are_prefixed_consistently(monkeypatch):
             "staging-scoring",
             "staging-portfolio",
             "staging-ai_generation",
+            "staging-finn_interactive",
             "staging-execution_critical",
         ]
         assert reloaded.resolve_task_queue("backend.celery_task.trading_bot_task.run_daily_trading_bot") == "staging-execution_critical"

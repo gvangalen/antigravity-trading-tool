@@ -53,8 +53,8 @@ case "$ENVIRONMENT" in
     BACKEND_PORT="${BACKEND_PORT:-8000}"
     FRONTEND_PORT="${FRONTEND_PORT:-5002}"
     CORE_PM2_APPS="${CORE_PM2_APPS:-frontend,backend}"
-    AUX_PM2_APPS="${AUX_PM2_APPS:-celery-worker-default,celery-worker-market-portfolio,celery-worker-scoring-execution,celery-worker-ai-reporting,celery-beat}"
-    EXPECTED_PM2_APPS="${EXPECTED_PM2_APPS:-frontend backend celery-worker-default celery-worker-market-portfolio celery-worker-scoring-execution celery-worker-ai-reporting celery-beat}"
+    AUX_PM2_APPS="${AUX_PM2_APPS:-celery-worker-default,celery-worker-market-portfolio,celery-worker-scoring-execution,celery-worker-ai-reporting,celery-worker-finn-interactive,celery-beat}"
+    EXPECTED_PM2_APPS="${EXPECTED_PM2_APPS:-frontend backend celery-worker-default celery-worker-market-portfolio celery-worker-scoring-execution celery-worker-ai-reporting celery-worker-finn-interactive celery-beat}"
     DEPLOY_REF="origin/${BRANCH}"
     EXTERNAL_BASE_URL="${EXTERNAL_BASE_URL:-https://tradamind.com}"
     ;;
@@ -65,8 +65,8 @@ case "$ENVIRONMENT" in
     BACKEND_PORT="${BACKEND_PORT:-8100}"
     FRONTEND_PORT="${FRONTEND_PORT:-5102}"
     CORE_PM2_APPS="${CORE_PM2_APPS:-frontend-staging,backend-staging}"
-    AUX_PM2_APPS="${AUX_PM2_APPS:-celery-worker-default-staging,celery-worker-market-portfolio-staging,celery-worker-scoring-execution-staging,celery-worker-ai-reporting-staging,celery-beat-staging}"
-    EXPECTED_PM2_APPS="${EXPECTED_PM2_APPS:-frontend-staging backend-staging celery-worker-default-staging celery-worker-market-portfolio-staging celery-worker-scoring-execution-staging celery-worker-ai-reporting-staging celery-beat-staging}"
+    AUX_PM2_APPS="${AUX_PM2_APPS:-celery-worker-default-staging,celery-worker-market-portfolio-staging,celery-worker-scoring-execution-staging,celery-worker-ai-reporting-staging,celery-worker-finn-interactive-staging,celery-beat-staging}"
+    EXPECTED_PM2_APPS="${EXPECTED_PM2_APPS:-frontend-staging backend-staging celery-worker-default-staging celery-worker-market-portfolio-staging celery-worker-scoring-execution-staging celery-worker-ai-reporting-staging celery-worker-finn-interactive-staging celery-beat-staging}"
     DEPLOY_REF="origin/${BRANCH}"
     EXTERNAL_BASE_URL="${EXTERNAL_BASE_URL:-https://staging.tradamind.com}"
     ;;
@@ -82,6 +82,7 @@ if [ -z "$SERVER_IP" ]; then
 fi
 
 DEPLOY_STATE_DIR="ops/deploy/${ENVIRONMENT}"
+CANONICAL_DEPLOY_STATE_DIR="${CANONICAL_DEPLOY_STATE_DIR:-/home/ubuntu/ops/deploy}"
 
 if [ "$DEPLOY_COMPONENT_SET" = "backend_only" ]; then
   CORE_PM2_APPS="${BACKEND_ONLY_PM2_APPS:-backend}"
@@ -107,7 +108,9 @@ BUILD_TIMESTAMP_UTC="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 REMOTE_LAST_GOOD="$(
   ssh "${SSH_ARGS[@]}" "ubuntu@$SERVER_IP" "
     cd $REMOTE_DIR 2>/dev/null || exit 0
-    if [ -f ${DEPLOY_STATE_DIR}/LAST_GOOD_COMMIT ]; then
+    if [ -f ${CANONICAL_DEPLOY_STATE_DIR}/LAST_GOOD_COMMIT ]; then
+      cat ${CANONICAL_DEPLOY_STATE_DIR}/LAST_GOOD_COMMIT
+    elif [ -f ${DEPLOY_STATE_DIR}/LAST_GOOD_COMMIT ]; then
       cat ${DEPLOY_STATE_DIR}/LAST_GOOD_COMMIT
     else
       git rev-parse --short HEAD 2>/dev/null || true
@@ -543,6 +546,8 @@ if [ "$(lower_bool "${QA_ACCEPTED_RELEASE:-false}")" = "true" ]; then
   ssh "${SSH_ARGS[@]}" "ubuntu@$SERVER_IP" "
     set -euo pipefail
     cd $REMOTE_DIR
+    sudo mkdir -p ${CANONICAL_DEPLOY_STATE_DIR}
+    printf '%s\n' '$TARGET_COMMIT' | sudo tee ${CANONICAL_DEPLOY_STATE_DIR}/LAST_GOOD_COMMIT >/dev/null
     printf '%s\n' '$TARGET_COMMIT' > ${DEPLOY_STATE_DIR}/LAST_GOOD_COMMIT
     if [ -d /var/www/tradamind/ops/deploy ]; then
       printf '%s\n' '$TARGET_COMMIT' | sudo tee /var/www/tradamind/ops/deploy/LAST_GOOD_COMMIT >/dev/null

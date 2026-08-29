@@ -20,6 +20,7 @@ LOGICAL_NAMED_QUEUES: List[str] = [
     "scoring",
     "portfolio",
     "ai_generation",
+    "finn_interactive",
     "execution_critical",
 ]
 NAMED_QUEUES: List[str] = [f"{QUEUE_NAME_PREFIX}{queue_name}" for queue_name in LOGICAL_NAMED_QUEUES]
@@ -66,8 +67,8 @@ TASK_QUEUE_ROUTES: Dict[str, str] = {
     "backend.celery_task.celery_task_generate_pdf.generate_report_pdf": "ai_generation",
     "backend.celery_task.daily_usage_reset.reset_daily_ai_quotas": "scoring",
     "backend.celery_task.finn_v2_task.process_shadow_foundation_run": "ai_generation",
-    "backend.celery_task.finn_v2_task.process_finn_v2_run": "ai_generation",
-    "backend.celery_task.finn_v2_task.recover_finn_v2_dispatches": "ai_generation",
+    "backend.celery_task.finn_v2_task.process_finn_v2_run": "finn_interactive",
+    "backend.celery_task.finn_v2_task.recover_finn_v2_dispatches": "finn_interactive",
     "backend.celery_task.finn_v2_task.cleanup_finn_v2_retention": "ai_generation",
 }
 
@@ -81,12 +82,14 @@ WORKLOAD_CLASS_BY_QUEUE = {
     "scoring": "scoring",
     "portfolio": "portfolio",
     "ai_generation": "ai_generation",
+    "finn_interactive": "finn_interactive",
     "execution_critical": "execution_critical",
 }
 
 QUEUE_RATE_LIMITS: Dict[str, str] = {
     "market_data": "20/m",
     "ai_generation": "6/m",
+    "finn_interactive": "30/m",
     "execution_critical": "30/m",
 }
 
@@ -95,6 +98,7 @@ QUEUE_BACKLOG_LIMITS: Dict[str, int] = {
     "scoring": 1500,
     "portfolio": 1500,
     "ai_generation": 800,
+    "finn_interactive": 100,
     "execution_critical": 400,
     DEFAULT_QUEUE_LOGICAL: 500,
 }

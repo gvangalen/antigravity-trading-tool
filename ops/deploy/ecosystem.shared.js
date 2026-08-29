@@ -27,6 +27,7 @@ const WORKER_CONCURRENCY = {
   marketPortfolio: 2,
   scoringExecution: 2,
   aiReporting: 1,
+  finnInteractive: 2,
 };
 
 function pickRuntimeEnv(keys) {
@@ -82,6 +83,7 @@ function createEcosystem(environmentName) {
   const marketPortfolioWorker = `celery-worker-market-portfolio${environment.suffix}`;
   const scoringExecutionWorker = `celery-worker-scoring-execution${environment.suffix}`;
   const aiReportingWorker = `celery-worker-ai-reporting${environment.suffix}`;
+  const finnInteractiveWorker = `celery-worker-finn-interactive${environment.suffix}`;
   const beatWorker = `celery-beat${environment.suffix}`;
   const queuePrefix = environment.queueNamePrefix;
 
@@ -162,6 +164,19 @@ function createEcosystem(environmentName) {
           ...SHARED_RUNTIME_ENV,
           APP_ENV: environment.appEnv,
           TRADAMIND_BUILD_SERVICE: "celery-worker-ai-reporting",
+        },
+        max_memory_restart: "350M",
+      },
+      {
+        name: finnInteractiveWorker,
+        script: CELERY_BIN,
+        args: `-A backend.celery_task.celery_app worker --loglevel=info --concurrency=${WORKER_CONCURRENCY.finnInteractive} --max-tasks-per-child=50 -Q ${queuePrefix}finn_interactive -n ${environmentName}-finn-interactive@%h`,
+        cwd: backendDir,
+        interpreter: "none",
+        env: {
+          ...SHARED_RUNTIME_ENV,
+          APP_ENV: environment.appEnv,
+          TRADAMIND_BUILD_SERVICE: "celery-worker-finn-interactive",
         },
         max_memory_restart: "350M",
       },

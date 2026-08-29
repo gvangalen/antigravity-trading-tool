@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from typing import Any, Callable, Mapping, Optional
 
 from backend.domain.finn_v2_operation_registry import OperationContract
+from backend.services.asset_catalog_service import resolve_catalog_symbol
 from backend.utils import openai_client
 from backend.utils.openai_client import StructuredOutputSpec
 
@@ -121,11 +122,16 @@ class FinnV2StructuredOperationSelectorService:
         if not isinstance(raw_inputs, list) or not all(isinstance(item, str) for item in raw_inputs):
             return None, "selector_missing_inputs_invalid"
         entities = {str(key): self._entity_text(value) for key, value in raw_entities.items()}
-        target_asset = (
+        canonical_entity_asset = resolve_catalog_symbol(entities.get("asset"))
+        if canonical_entity_asset:
+            entities["asset"] = canonical_entity_asset
+        target_asset = resolve_catalog_symbol(
             self._optional_text(parsed.get("target_asset"))
             or self._optional_text(raw_entities.get("asset"))
-        )
+        ) or None
         if target_asset and not entities.get("asset"):
+            entities["asset"] = target_asset
+        elif target_asset:
             entities["asset"] = target_asset
         if not entities.get("asset"):
             explicit_asset = self._optional_text(facts.get("referenced_asset"))
@@ -172,8 +178,11 @@ class FinnV2StructuredOperationSelectorService:
                         "setup_id": {"type": ["string", "null"]},
                         "strategy_id": {"type": ["string", "null"]},
                         "bot_id": {"type": ["string", "null"]},
+                        "setup_type": {"type": ["string", "null"]},
+                        "timeframe": {"type": ["string", "null"]},
+                        "name": {"type": ["string", "null"]},
                     },
-                    "required": ["concept", "asset", "setup_id", "strategy_id", "bot_id"],
+                    "required": ["concept", "asset", "setup_id", "strategy_id", "bot_id", "setup_type", "timeframe", "name"],
                 },
                 "target_asset": {"type": ["string", "null"]},
                 "conversation_reference": {"type": ["string", "null"]},

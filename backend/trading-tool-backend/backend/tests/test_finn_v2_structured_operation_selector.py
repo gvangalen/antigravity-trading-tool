@@ -75,3 +75,32 @@ def test_selector_normalizes_structured_entity_transport_delimiters():
 
     assert error is None
     assert selection.entities["concept"] == "RSI"
+
+
+def test_selector_projects_catalog_assets_and_complete_setup_slots():
+    selector = FinnV2StructuredOperationSelectorService(
+        provider=lambda **_kwargs: {"parsed": {
+            "operation_id": "create_setup", "confidence": 0.93,
+            "entities": {
+                "concept": None, "asset": "Polygon", "setup_id": None,
+                "strategy_id": None, "bot_id": None, "setup_type": "breakout",
+                "timeframe": "6H", "name": "Ripple Kompas",
+            },
+            "target_asset": "Polygon", "conversation_reference": None,
+            "missing_inputs": ["timeframe", "name"], "ambiguity_reason": None,
+        }}
+    )
+    selection, error = selector.select(
+        message="Maak een setup.",
+        candidate_contracts=(FinnV2OperationRegistry().get("create_setup"),),
+        facts={"referenced_asset": "POL"}, verified_context=None,
+    )
+
+    assert error is None
+    assert selection is not None
+    assert selection.target_asset == "POL"
+    assert selection.entities["asset"] == "POL"
+    assert selection.entities["setup_type"] == "breakout"
+    assert selection.entities["timeframe"] == "6H"
+    assert selection.entities["name"] == "Ripple Kompas"
+    assert selection.missing_inputs == ("timeframe", "name")

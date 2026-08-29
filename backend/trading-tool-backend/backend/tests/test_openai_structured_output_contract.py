@@ -37,8 +37,14 @@ def test_selector_responses_payload_wraps_raw_schema_exactly_once():
             "setup_id": {"type": ["string", "null"]},
             "strategy_id": {"type": ["string", "null"]},
             "bot_id": {"type": ["string", "null"]},
+            "setup_type": {"type": ["string", "null"]},
+            "timeframe": {"type": ["string", "null"]},
+            "name": {"type": ["string", "null"]},
         },
-        "required": ["concept", "asset", "setup_id", "strategy_id", "bot_id"],
+        "required": [
+            "concept", "asset", "setup_id", "strategy_id", "bot_id",
+            "setup_type", "timeframe", "name",
+        ],
     }
     assert set(payload["schema"]["required"]) == {
         "operation_id", "confidence", "entities", "target_asset",

@@ -340,8 +340,8 @@ def test_gateway_run_foundation_now_returns_same_run_id_after_visible_budget_tim
             return SimpleNamespace(task_id="task-1", queue="ai_generation", dispatch_id="dispatch-1")
         async def get_for_run(self, _run_id):
             return SimpleNamespace(task_id="task-1", queue="ai_generation", dispatch_id="dispatch-1")
-        async def mark_dispatched(self, dispatch_id):
-            observed.append(("dispatched", dispatch_id))
+        async def mark_published(self, dispatch_id):
+            observed.append(("published", dispatch_id))
     class _Task:
         def apply_async(self, **kwargs):
             observed.append(kwargs)
@@ -373,5 +373,5 @@ def test_gateway_run_foundation_now_returns_same_run_id_after_visible_budget_tim
     assert observed == [
         ("created", run_id),
         {"kwargs": {"run_id": run_id}, "task_id": "task-1", "queue": "ai_generation"},
-        ("dispatched", "dispatch-1"),
+        ("published", "dispatch-1"),
     ]

@@ -246,7 +246,7 @@ class FinnV2GatewayService:
                 ),
                 timeout=1.0,
             )
-            await self.dispatches.mark_dispatched(dispatch.dispatch_id)
+            await self.dispatches.mark_published(dispatch.dispatch_id)
             await self.session.commit()
         except Exception as exc:
             # The committed pending outbox record is recovered by Celery beat;

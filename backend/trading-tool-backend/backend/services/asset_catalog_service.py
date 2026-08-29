@@ -190,6 +190,20 @@ DEFAULT_ASSET_CATALOG: dict[str, dict[str, Any]] = {
         coincap_id="polkadot",
         refresh_policy="crypto_live_1m",
     ),
+    "POL": _asset_defaults(
+        symbol="POL", display_name="Polygon", asset_class="crypto",
+        tradingview_symbol="BINANCE:POLUSDT", yahoo_symbol="POL-USD",
+        primary_provider="binance", provider_symbol="POLUSDT", exchange="BINANCE",
+        market_region="global", timezone="UTC", base_currency="POL", quote_currency="USDT",
+        coingecko_id="polygon-ecosystem-token", refresh_policy="crypto_live_1m",
+    ),
+    "UNI": _asset_defaults(
+        symbol="UNI", display_name="Uniswap", asset_class="crypto",
+        tradingview_symbol="BINANCE:UNIUSDT", yahoo_symbol="UNI-USD",
+        primary_provider="binance", provider_symbol="UNIUSDT", exchange="BINANCE",
+        market_region="global", timezone="UTC", base_currency="UNI", quote_currency="USDT",
+        coingecko_id="uniswap", refresh_policy="crypto_live_1m",
+    ),
     "ETH": _asset_defaults(
         symbol="ETH",
         display_name="Ethereum",

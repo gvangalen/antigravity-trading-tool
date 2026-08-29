@@ -39,7 +39,7 @@ class FinnV2RequestPreprocessorService:
         # Dutch separable verbs may put the object between "voer" and
         # "uit" ("voer dit voorstel uit"). The imperative stem is still
         # an unambiguous execution act once the registry resolves its domain.
-        ("execute", ("uitvoeren", "execute", "voer")),
+        ("execute", ("uitvoeren", "execute", "voer", "verplaats", "transfer", "stort")),
         ("remove", ("verwijder", "remove", "haal", "halen", "stop met")),
         ("add", ("voeg", "add", "toevoeg", "zet op", "volg")),
         ("activate", ("activeer", "activate", "schakel", "start", "zet live", "go live")),
@@ -200,6 +200,7 @@ class FinnV2RequestPreprocessorService:
             "vwap": "VWAP",
             "volume": "volume",
             "moving average": "moving average",
+            "voortschrijdend gemiddelde": "moving average",
             "ma200": "MA200",
             "ma_200": "MA200",
             "stop loss": "stop loss",
@@ -311,6 +312,9 @@ class FinnV2RequestPreprocessorService:
                 "help me",
                 "hoe helpt",
                 "hoe kun je",
+                "ondersteuning biedt",
+                "welke ondersteuning",
+                "what support",
             )
         ):
             return "capability"
