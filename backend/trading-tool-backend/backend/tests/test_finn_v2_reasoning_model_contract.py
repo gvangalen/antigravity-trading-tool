@@ -868,6 +868,41 @@ def test_indicator_inference_rejects_weakness_claim_from_empty_configuration():
     assert exc_info.value.code == "unsupported_indicator_configuration_inference"
 
 
+def test_indicator_inference_rejects_causal_undermining_from_empty_configuration():
+    service = FinnV2ReasoningService(session=object())
+    context_payload = _context().dict()
+    context_payload["evidence"][0]["tool_name"] = "read_indicator_configuration"
+    context_payload["evidence"][0]["facts"] = {
+        "configured_count": 0,
+        "configured_indicators": [],
+    }
+    context = ReasoningContextPackage.parse_obj(context_payload)
+    result = ReasoningResult.parse_obj(
+        {
+            **_model_output(),
+            "reasoning_result_id": "reasoning-empty-indicators-undermining",
+            "run_id": "run-1",
+            "user_id": 7,
+            "prompt_version": "test",
+            "reasoning_version": "test",
+            "model": "gpt-4o-mini",
+            "created_at": datetime.now(timezone.utc),
+            "claims": [{
+                "claim_id": "claim-1",
+                "claim_type": "evaluation",
+                "text": "Er zijn geen indicatoren, hetgeen de analyse ondermijnt.",
+                "evidence_refs": ["E1"],
+                "confidence": "high",
+            }],
+        }
+    )
+
+    with pytest.raises(FinnV2ReasoningContractError) as exc_info:
+        service._validate_indicator_configuration_inference(result=result, context=context)
+
+    assert exc_info.value.code == "unsupported_indicator_configuration_inference"
+
+
 def test_repeated_configuration_causality_ends_with_evidence_limitation_after_one_repair(monkeypatch):
     service = FinnV2ReasoningService(session=object())
     context_payload = _context().dict()

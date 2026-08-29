@@ -1230,7 +1230,10 @@ class FinnV2ReasoningService:
             "without macro",
             "kan leiden tot",
             "leidt tot",
+            "omdat",
             "beperkt",
+            "ondermijn",
+            "versterk",
             "minder robuust",
             "less robust",
         }
@@ -1248,6 +1251,8 @@ class FinnV2ReasoningService:
             "betere analyse",
             "moeilijk om marktbewegingen",
             "difficult to analyze market",
+            "ondermijn",
+            "versterk",
         }
         rejected_fields = [
             {"path": path, "claim_id": claim_id}
