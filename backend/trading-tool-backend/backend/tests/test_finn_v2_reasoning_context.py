@@ -375,6 +375,7 @@ def test_reasoning_context_keeps_indicator_configuration_domains_and_counts():
     assert facts["technical_count"] == 1
     assert facts["market_count"] == 1
     assert facts["macro_count"] == 1
+    assert facts["configured_count"] == 3
     assert facts["configured_indicators"] == [
         {"indicator": "vwap", "category": "technical", "enabled": True, "priority": 1},
         {"indicator": "forward_pe", "category": "market", "enabled": True, "priority": 2},

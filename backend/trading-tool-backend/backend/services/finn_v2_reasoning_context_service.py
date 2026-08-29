@@ -214,6 +214,10 @@ class FinnV2ReasoningContextService:
                 "technical_count": summary.get("technical_count", len(technical)),
                 "market_count": summary.get("market_count", len(market)),
                 "macro_count": summary.get("macro_count", len(macro)),
+                # The response contract promises this aggregate explicitly.
+                # Preserve the adapter's canonical summary through to the
+                # verifier instead of forcing it to infer from display text.
+                "configured_count": summary.get("configured_count", len(technical) + len(market) + len(macro)),
                 "configured_indicators": configured_indicators,
                 "scope_by_category": source.get("scope_by_category") or {},
             }
