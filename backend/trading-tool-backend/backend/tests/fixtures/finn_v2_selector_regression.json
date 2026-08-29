@@ -317,7 +317,9 @@
     "expected_operation_id": "explain_financial_concept",
     "expected_domain": "financial_education",
     "expected_supported": true,
-    "expected_entities": {"concept": "ATR"},
+    "expected_entities": {
+      "concept": "ATR"
+    },
     "expected_action_polarity": "read",
     "expected_clarification": false,
     "expected_missing_inputs": [],
@@ -330,7 +332,9 @@
     "expected_operation_id": "create_setup",
     "expected_domain": "setup",
     "expected_supported": true,
-    "expected_entities": {"asset": "DOT"},
+    "expected_entities": {
+      "asset": "DOT"
+    },
     "expected_target_asset": "DOT",
     "expected_action_polarity": "create",
     "expected_clarification": false,
@@ -346,7 +350,9 @@
     "expected_supported": true,
     "expected_action_polarity": "activate",
     "expected_clarification": false,
-    "expected_missing_inputs": ["bot_id"],
+    "expected_missing_inputs": [
+      "bot_id"
+    ],
     "provider_call_expected": true
   },
   {
@@ -358,7 +364,9 @@
     "expected_supported": true,
     "expected_action_polarity": "update",
     "expected_clarification": true,
-    "expected_missing_inputs": ["requested_change"],
+    "expected_missing_inputs": [
+      "requested_change"
+    ],
     "provider_call_expected": true
   },
   {
@@ -370,7 +378,9 @@
     "expected_supported": true,
     "expected_action_polarity": "activate",
     "expected_clarification": false,
-    "expected_missing_inputs": ["bot_id"],
+    "expected_missing_inputs": [
+      "bot_id"
+    ],
     "provider_call_expected": true
   },
   {
@@ -380,7 +390,9 @@
     "expected_operation_id": "create_setup",
     "expected_domain": "setup",
     "expected_supported": true,
-    "expected_entities": {"asset": "XRP"},
+    "expected_entities": {
+      "asset": "XRP"
+    },
     "expected_target_asset": "XRP",
     "expected_action_polarity": "create",
     "expected_clarification": false,
@@ -396,7 +408,271 @@
     "expected_supported": true,
     "expected_action_polarity": "update",
     "expected_clarification": true,
-    "expected_missing_inputs": ["requested_change"],
+    "expected_missing_inputs": [
+      "requested_change"
+    ],
+    "provider_call_expected": true
+  },
+  {
+    "eval_id": "reg-public-capability",
+    "dataset": "regression",
+    "input_query": "Welke taken kun jij binnen dit handelsdashboard voor me verzorgen?",
+    "expected_operation_id": "capability",
+    "expected_domain": "system",
+    "expected_supported": true,
+    "expected_entities": {},
+    "expected_target_asset": null,
+    "expected_action_polarity": "read",
+    "expected_conversation_reference": null,
+    "expected_missing_inputs": [],
+    "expected_clarification": false,
+    "provider_call_expected": true
+  },
+  {
+    "eval_id": "reg-public-active-asset",
+    "dataset": "regression",
+    "input_query": "Op welke belegging staat deze werkruimte momenteel gericht?",
+    "expected_operation_id": "read_active_asset",
+    "expected_domain": "asset",
+    "expected_supported": true,
+    "expected_entities": {},
+    "expected_target_asset": null,
+    "expected_action_polarity": "read",
+    "expected_conversation_reference": null,
+    "expected_missing_inputs": [],
+    "expected_clarification": false,
+    "provider_call_expected": true
+  },
+  {
+    "eval_id": "reg-public-indicators",
+    "dataset": "regression",
+    "input_query": "Laat de opgeslagen signaalinstellingen van het instrument dat nu openstaat zien.",
+    "expected_operation_id": "read_indicator_configuration",
+    "expected_domain": "indicators",
+    "expected_supported": true,
+    "expected_entities": {},
+    "expected_target_asset": null,
+    "expected_action_polarity": "read",
+    "expected_conversation_reference": null,
+    "expected_missing_inputs": [],
+    "expected_clarification": false,
+    "provider_call_expected": true
+  },
+  {
+    "eval_id": "reg-public-active-setup",
+    "dataset": "regression",
+    "input_query": "Welke handelsopzet is hier actief, inclusief de gebruikte tijdschaal?",
+    "expected_operation_id": "read_active_setup",
+    "expected_domain": "setup",
+    "expected_supported": true,
+    "expected_entities": {},
+    "expected_target_asset": null,
+    "expected_action_polarity": "read",
+    "expected_conversation_reference": null,
+    "expected_missing_inputs": [],
+    "expected_clarification": false,
+    "provider_call_expected": true
+  },
+  {
+    "eval_id": "reg-public-active-plan",
+    "dataset": "regression",
+    "input_query": "Breng mijn huidige handelsopzet, methode en robotrelatie in kaart.",
+    "expected_operation_id": "read_active_plan",
+    "expected_domain": "plan",
+    "expected_supported": true,
+    "expected_entities": {},
+    "expected_target_asset": null,
+    "expected_action_polarity": "read",
+    "expected_conversation_reference": null,
+    "expected_missing_inputs": [],
+    "expected_clarification": false,
+    "provider_call_expected": true
+  },
+  {
+    "eval_id": "reg-public-evaluate-plan",
+    "dataset": "regression",
+    "input_query": "Geef een kritisch oordeel over de samenhang van mijn huidige handelsplan.",
+    "expected_operation_id": "evaluate_plan",
+    "expected_domain": "plan",
+    "expected_supported": true,
+    "expected_entities": {},
+    "expected_target_asset": null,
+    "expected_action_polarity": "evaluate",
+    "expected_conversation_reference": null,
+    "expected_missing_inputs": [],
+    "expected_clarification": false,
+    "provider_call_expected": true
+  },
+  {
+    "eval_id": "reg-public-evidence-lineage",
+    "dataset": "regression",
+    "input_query": "Noem de vastgelegde feiten achter je zojuist gegeven oordeel.",
+    "conversation_context": {
+      "last_verified_context": {
+        "operation_id": "evaluate_plan"
+      }
+    },
+    "expected_operation_id": "explain_previous_evidence",
+    "expected_domain": "system",
+    "expected_supported": true,
+    "expected_entities": {},
+    "expected_target_asset": null,
+    "expected_action_polarity": "read",
+    "expected_conversation_reference": "previous_verified_response",
+    "expected_missing_inputs": [],
+    "expected_clarification": false,
+    "provider_call_expected": true
+  },
+  {
+    "eval_id": "reg-public-reformulation",
+    "dataset": "regression",
+    "input_query": "Herschrijf je voorgaande antwoord als één bondige zin.",
+    "conversation_context": {
+      "last_verified_context": {
+        "operation_id": "evaluate_plan"
+      }
+    },
+    "expected_operation_id": "reformulate_previous_response",
+    "expected_domain": "system",
+    "expected_supported": true,
+    "expected_entities": {},
+    "expected_target_asset": null,
+    "expected_action_polarity": "read",
+    "expected_conversation_reference": "previous_verified_response",
+    "expected_missing_inputs": [],
+    "expected_clarification": false,
+    "provider_call_expected": true
+  },
+  {
+    "eval_id": "reg-public-watchlist-add",
+    "dataset": "regression",
+    "input_query": "Neem NEAR op in mijn lijst met gevolgde instrumenten.",
+    "expected_operation_id": "watchlist_add",
+    "expected_domain": "watchlist",
+    "expected_supported": true,
+    "expected_entities": {
+      "asset": "NEAR"
+    },
+    "expected_target_asset": "NEAR",
+    "expected_action_polarity": "add",
+    "expected_conversation_reference": null,
+    "expected_missing_inputs": [],
+    "expected_clarification": false,
+    "provider_call_expected": true
+  },
+  {
+    "eval_id": "reg-public-watchlist-remove",
+    "dataset": "regression",
+    "input_query": "Laat NEAR voortaan weg uit mijn lijst met gevolgde instrumenten.",
+    "expected_operation_id": "watchlist_remove",
+    "expected_domain": "watchlist",
+    "expected_supported": true,
+    "expected_entities": {
+      "asset": "NEAR"
+    },
+    "expected_target_asset": "NEAR",
+    "expected_action_polarity": "remove",
+    "expected_conversation_reference": null,
+    "expected_missing_inputs": [],
+    "expected_clarification": false,
+    "provider_call_expected": true
+  },
+  {
+    "eval_id": "reg-public-off-topic",
+    "dataset": "regression",
+    "input_query": "Welke grondsoort is geschikt voor een citroenboom?",
+    "expected_operation_id": "off_topic",
+    "expected_domain": "off_topic",
+    "expected_supported": true,
+    "expected_entities": {},
+    "expected_target_asset": null,
+    "expected_action_polarity": "read",
+    "expected_conversation_reference": null,
+    "expected_missing_inputs": [],
+    "expected_clarification": false,
+    "provider_call_expected": true
+  },
+  {
+    "eval_id": "reg-public-unsupported-autonomy",
+    "dataset": "regression",
+    "input_query": "Handel vanaf nu volledig zelfstandig namens mij zonder om bevestiging te vragen.",
+    "expected_operation_id": "unsupported_financial_operation",
+    "expected_domain": "financial_unsupported",
+    "expected_supported": true,
+    "expected_entities": {},
+    "expected_target_asset": null,
+    "expected_action_polarity": "read",
+    "expected_conversation_reference": null,
+    "expected_missing_inputs": [],
+    "expected_clarification": false,
+    "provider_call_expected": true
+  },
+  {
+    "eval_id": "reg-natural-avalanche-watchlist",
+    "dataset": "regression",
+    "input_query": "Neem Avalanche op in mijn lijst met gevolgde instrumenten.",
+    "expected_operation_id": "watchlist_add",
+    "expected_domain": "watchlist",
+    "expected_supported": true,
+    "expected_entities": {
+      "asset": "AVAX"
+    },
+    "expected_target_asset": "AVAX",
+    "expected_action_polarity": "add",
+    "expected_conversation_reference": null,
+    "expected_missing_inputs": [],
+    "expected_clarification": false,
+    "provider_call_expected": true
+  },
+  {
+    "eval_id": "reg-active-setup-not-asset",
+    "dataset": "regression",
+    "input_query": "Welke actieve handelsopzet bepaalt hier de instapperiode?",
+    "expected_operation_id": "read_active_setup",
+    "expected_domain": "setup",
+    "expected_supported": true,
+    "expected_entities": {},
+    "expected_target_asset": null,
+    "expected_action_polarity": "read",
+    "expected_conversation_reference": null,
+    "expected_missing_inputs": [],
+    "expected_clarification": false,
+    "provider_call_expected": true
+  },
+  {
+    "eval_id": "reg-elliptical-reformulation",
+    "dataset": "regression",
+    "input_query": "Maak de vorige beoordeling compacter.",
+    "conversation_context": {
+      "last_verified_context": {
+        "operation_id": "evaluate_plan",
+        "conclusion": "Een toetsbare entryregel ontbreekt."
+      }
+    },
+    "expected_operation_id": "reformulate_previous_response",
+    "expected_domain": "system",
+    "expected_supported": true,
+    "expected_entities": {},
+    "expected_target_asset": null,
+    "expected_action_polarity": "read",
+    "expected_conversation_reference": "previous_verified_response",
+    "expected_missing_inputs": [],
+    "expected_clarification": false,
+    "provider_call_expected": true
+  },
+  {
+    "eval_id": "reg-capability-workspace",
+    "dataset": "regression",
+    "input_query": "Wat kan FINN binnen mijn handelswerkruimte voor mij verzorgen?",
+    "expected_operation_id": "capability",
+    "expected_domain": "system",
+    "expected_supported": true,
+    "expected_entities": {},
+    "expected_target_asset": null,
+    "expected_action_polarity": "read",
+    "expected_conversation_reference": null,
+    "expected_missing_inputs": [],
+    "expected_clarification": false,
     "provider_call_expected": true
   }
 ]

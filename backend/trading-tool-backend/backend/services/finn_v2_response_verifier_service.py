@@ -813,7 +813,11 @@ class FinnV2ResponseVerifierService:
             source_snapshot_id=getattr(validation, "snapshot_id", ""),
             source_validation_id=validation.id,
             evidence_set_hash=validation.evidence_set_hash,
-            idempotency_key=f"{run.id[:8]}-{draft.draft_id[-8:]}",
+            idempotency_key=FinnV2ProposalService.canonical_idempotency_key(
+                operation_type=operation,
+                target=target,
+                change=change,
+            ),
             expires_at=datetime.now(timezone.utc) + timedelta(minutes=15),
         )
 

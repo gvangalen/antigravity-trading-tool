@@ -65,6 +65,15 @@ def test_request_analysis_keeps_context_target_and_reference_assets_distinct():
     assert result.request_plan.operation_state["collected_inputs"]["asset"] == "ADA"
 
 
+def test_preprocessor_canonicalizes_natural_asset_names_before_contract_selection():
+    facts = FinnV2RequestPreprocessorService().preprocess(
+        message="Voeg Avalanche toe aan mijn watchlist."
+    )
+
+    assert facts.referenced_asset == "AVAX"
+    assert facts.explicit_target_asset == "AVAX"
+
+
 def test_request_analysis_keeps_capability_discourse_when_it_mentions_plan_features():
     result = SERVICE.analyze(message="Hoi FINN, wat kun je voor mijn plan, setup en bot doen?")
 

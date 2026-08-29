@@ -21,6 +21,8 @@ from backend.services.finn_v2_json_safety import to_json_safe
 
 
 class FinnV2ProposalService:
+    _REUSABLE_STATUSES = frozenset({"draft"})
+
     def __init__(self, session: AsyncSession, flag_service: Optional[FinnV2FlagService] = None):
         self.session = session
         self.flags = flag_service or FinnV2FlagService()
@@ -63,7 +65,11 @@ class FinnV2ProposalService:
         payload_json = to_json_safe(proposal_input.dict())
         payload_hash = self._payload_hash(payload_json)
         if existing is not None:
-            if existing.payload_hash != payload_hash:
+            if (
+                existing.status not in self._REUSABLE_STATUSES
+                or self.canonical_identity(existing.payload_json)
+                != self.canonical_identity(payload_json)
+            ):
                 raise ValueError("operation_payload_invalid")
             return self._row_to_record(existing)
 
@@ -127,6 +133,35 @@ class FinnV2ProposalService:
     def _payload_hash(self, payload_json: dict) -> str:
         canonical = json.dumps(payload_json, sort_keys=True, separators=(",", ":"), default=str)
         return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+    @staticmethod
+    def canonical_identity(payload_json: dict) -> dict:
+        """Return the stable business identity without run-scoped provenance.
+
+        Evidence and source IDs must remain in the persisted payload for
+        confirmation and execution revalidation, but they must not create a
+        second draft for the same pending user change.
+        """
+        payload = dict(payload_json or {})
+        return {
+            "operation_type": payload.get("operation_type"),
+            "target": payload.get("target") or {},
+            "change": payload.get("change") or {},
+        }
+
+    @classmethod
+    def canonical_idempotency_key(cls, *, operation_type: str, target: object, change: object) -> str:
+        identity = cls.canonical_identity(
+            to_json_safe(
+                {
+                    "operation_type": operation_type,
+                    "target": target.dict() if hasattr(target, "dict") else target,
+                    "change": change.dict() if hasattr(change, "dict") else change,
+                }
+            )
+        )
+        canonical = json.dumps(identity, sort_keys=True, separators=(",", ":"), default=str)
+        return f"proposal-{hashlib.sha256(canonical.encode('utf-8')).hexdigest()}"
 
     def _row_to_record(self, row) -> FinnV2ProposalRecord:
         return FinnV2ProposalRecord(
