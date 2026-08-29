@@ -119,6 +119,21 @@ class FinnV2RequestAnalysisService:
                 operation = self.operations.require_supported(operation_id)
                 interaction_mode = operation.mode
                 unresolved_signals.append(validation_error)
+        # The model selects the operation, while the registry owns its
+        # non-negotiable state requirements. A lineage contract must receive
+        # the prior verified record even if the structured model leaves the
+        # optional reference field empty.
+        if operation.requires_verified_context:
+            uses_conversation_reference = True
+            has_verified_context = bool(
+                (conversation_context or {}).get("last_verified_context")
+                or (conversation_context or {}).get("last_verified_conclusion")
+            )
+            if not has_verified_context and "conversation_reference_without_verified_context" not in unresolved_signals:
+                unresolved_signals.append("conversation_reference_without_verified_context")
+                operation_id = "clarify_request"
+                operation = self.operations.require_supported(operation_id)
+                interaction_mode = operation.mode
         scopes = self._presentation_subject_scopes(operation, preprocessed.explicit_entities)
         integrated_plan = operation.operation_id == "evaluate_plan"
         primary_subject = self._presentation_primary_subject(operation)

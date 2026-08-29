@@ -1,5 +1,6 @@
 from backend.services.finn_v2_request_analysis_service import FinnV2RequestAnalysisService
 from backend.services.finn_v2_request_preprocessor_service import FinnV2RequestPreprocessorService
+from backend.services.finn_v2_operation_classification_service import SemanticOperationClassification
 
 
 def test_preprocessor_treats_current_symbol_as_asset_entity():
@@ -49,6 +50,38 @@ def test_request_analysis_explicit_bitcoin_overrides_stale_conversation_asset():
 
     assert result.explicit_asset == "BTC"
     assert result.request_plan.referenced_entities["asset"] == "BTC"
+
+
+def test_lineage_contract_rehydrates_verified_context_when_selector_omits_reference(monkeypatch):
+    service = FinnV2RequestAnalysisService()
+    monkeypatch.setattr(
+        service.classifier,
+        "classify",
+        lambda **_kwargs: SemanticOperationClassification(
+            operation_id="reformulate_previous_response",
+            action="read",
+            domain="system",
+            discourse="reformulation",
+            confidence="high",
+            selector_source="structured",
+        ),
+    )
+    result = service.analyze(
+        message="Kun je dat beknopter formuleren?",
+        conversation_context={
+            "last_verified_context": {
+                "verified_response_id": "verified-1",
+                "run_id": "run-1",
+                "response": "Een eerdere geverifieerde conclusie.",
+                "conclusion": "Een eerdere conclusie.",
+                "evidence_refs": ["E1"],
+            },
+        },
+    )
+
+    assert result.request_plan.operation_id == "reformulate_previous_response"
+    assert result.request_plan.conversation_reference == "verified-1"
+    assert result.request_plan.operation_state["previous_verified_run_id"] == "run-1"
 
 
 def test_request_analysis_keeps_context_target_and_reference_assets_distinct():
