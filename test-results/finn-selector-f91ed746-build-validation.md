@@ -9,6 +9,10 @@ branch was not deployed.
 - Registry validation: `validated_cases=86`.
 - `git diff --check`, `bash -n` for deploy and rollback scripts, and
   `node --check ops/deploy/ecosystem.shared.js`: passed.
+- The frontend source is unchanged from `5b041e1c`. Using the existing
+  lockfile-conformant installation, `typecheck`, `lint:i18n`, `test:i18n`
+  (7 passed), `test:commands` (5 passed), production `build`, and
+  `audit:high` (0 vulnerabilities) all passed.
 
 ## Direct real-provider boundary
 
