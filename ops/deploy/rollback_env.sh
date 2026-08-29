@@ -46,8 +46,6 @@ cd "$REMOTE_DIR"
 if [ -z "$ROLLBACK_COMMIT" ]; then
   if [ -f "${CANONICAL_DEPLOY_STATE_DIR}/LAST_GOOD_COMMIT" ]; then
     ROLLBACK_COMMIT="$(cat "${CANONICAL_DEPLOY_STATE_DIR}/LAST_GOOD_COMMIT")"
-  elif [ -f "${DEPLOY_STATE_DIR}/LAST_GOOD_COMMIT" ]; then
-    ROLLBACK_COMMIT="$(cat "${DEPLOY_STATE_DIR}/LAST_GOOD_COMMIT")"
   else
     echo "❌ No rollback commit provided and canonical LAST_GOOD_COMMIT is missing." >&2
     exit 1
@@ -181,14 +179,10 @@ echo
 curl --max-time 10 -fsSI "http://127.0.0.1:${FRONTEND_PORT}/report" | head -n 1
 
 mkdir -p "$DEPLOY_STATE_DIR"
-sudo mkdir -p "$CANONICAL_DEPLOY_STATE_DIR"
-printf "%s\n" "$ROLLBACK_COMMIT" | sudo tee "$CANONICAL_DEPLOY_STATE_DIR/LAST_GOOD_COMMIT" >/dev/null
-printf "%s\n" "$ROLLBACK_COMMIT" > "${DEPLOY_STATE_DIR}/LAST_GOOD_COMMIT"
 if [ -n "$CURRENT_COMMIT" ]; then
   printf "%s\n" "$CURRENT_COMMIT" > "${DEPLOY_STATE_DIR}/PREVIOUS_GOOD_COMMIT"
 fi
 if [ -d /var/www/tradamind/ops/deploy ]; then
-  printf "%s\n" "$ROLLBACK_COMMIT" | sudo tee /var/www/tradamind/ops/deploy/LAST_GOOD_COMMIT >/dev/null
   if [ -n "$CURRENT_COMMIT" ]; then
     printf "%s\n" "$CURRENT_COMMIT" | sudo tee /var/www/tradamind/ops/deploy/PREVIOUS_GOOD_COMMIT >/dev/null
   fi

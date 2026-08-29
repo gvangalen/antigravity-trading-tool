@@ -43,3 +43,14 @@ def test_selector_eval_registry_requires_missing_input_expectations(tmp_path):
 
     with pytest.raises(ValueError):
         load_and_validate([missing, _paths()[1], _paths()[2]])
+
+
+def test_selector_eval_registry_rejects_noncanonical_action_polarity(tmp_path):
+    paths = _paths()
+    regression = tmp_path / "finn_v2_selector_regression.json"
+    cases = json.loads(paths[1].read_text(encoding="utf-8"))
+    next(case for case in cases if case["eval_id"] == "reg-watch-add-1")["expected_action_polarity"] = "create"
+    regression.write_text(json.dumps(cases), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="canonical_action_polarity_mismatch:reg-watch-add-1"):
+        load_and_validate([paths[0], regression, paths[2]])

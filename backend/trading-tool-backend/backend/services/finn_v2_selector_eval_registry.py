@@ -7,7 +7,7 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-from backend.domain.finn_v2_operation_registry import FinnV2OperationRegistry
+from backend.domain.finn_v2_operation_registry import ActionPolarity, FinnV2OperationRegistry
 
 
 class SelectorEvalCase(BaseModel):
@@ -20,7 +20,7 @@ class SelectorEvalCase(BaseModel):
     expected_supported: bool
     expected_entities: dict = Field(default_factory=dict)
     expected_target_asset: str | None = None
-    expected_action_polarity: str | None = None
+    expected_action_polarity: ActionPolarity | None = None
     expected_conversation_reference: str | None = None
     expected_clarification: bool = False
     # Every case must declare this explicitly. An empty list is meaningful;
@@ -65,6 +65,14 @@ def load_and_validate(paths: list[Path]) -> list[SelectorEvalCase]:
             contract = registry.get(case.expected_operation_id)
             if contract.domain != case.expected_domain or contract.supported != case.expected_supported:
                 raise ValueError(f"contract_expectation_mismatch:{case.eval_id}")
+            if (
+                case.expected_action_polarity is not None
+                and case.expected_action_polarity != contract.action_polarity
+            ):
+                raise ValueError(
+                    f"canonical_action_polarity_mismatch:{case.eval_id}:"
+                    f"{case.expected_action_polarity.value}!={contract.action_polarity.value}"
+                )
             if contract.mode in {"CREATE_PROPOSAL", "ACTION_PROPOSAL"} and case.expected_supported and not contract.execution_adapter:
                 raise ValueError(f"non_executable_write_expected:{case.eval_id}")
             ids.add(case.eval_id)

@@ -223,7 +223,10 @@ class FinnV2RequestAnalysisService:
             context_asset=context_asset,
             target_asset=target_resolution.target_asset,
             referenced_asset=message_asset or explicit_asset,
-            requested_action=semantic.action if semantic.action != "unknown" else None,
+            # The request plan is the runtime projection consumed by policy
+            # and proposal services. Keep its action tied to the immutable
+            # contract rather than to a selector or preprocessor verb.
+            requested_action=operation.action_polarity.value,
             discourse_type=semantic.discourse,
             selector_source=semantic.selector_source,
             selector_confidence=semantic.confidence,

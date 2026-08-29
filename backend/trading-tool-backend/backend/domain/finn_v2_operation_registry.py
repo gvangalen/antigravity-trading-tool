@@ -7,6 +7,7 @@ services may consume a contract but must not add scopes, tools or write rules.
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
+from enum import Enum
 from typing import Mapping, Optional
 
 from backend.domain.finn_v2_contract import INFORMATION_SCOPE_ORDER
@@ -59,6 +60,33 @@ class FinnV2OperationUnavailableError(FinnV2OperationContractError):
     code = "finn_v2_operation_not_supported"
 
 
+class ActionPolarity(str, Enum):
+    """The one stable action meaning emitted by a resolved FINN contract."""
+
+    READ = "read"
+    EVALUATE = "evaluate"
+    CREATE = "create"
+    ADD = "add"
+    REMOVE = "remove"
+    ACTIVATE = "activate"
+    CONFIRM = "confirm"
+    EXECUTE = "execute"
+    CLARIFY = "clarify"
+
+
+_MODE_DEFAULT_POLARITIES = {
+    "CAPABILITY": ActionPolarity.READ,
+    "READ": ActionPolarity.READ,
+    "EVALUATE": ActionPolarity.EVALUATE,
+    "CREATE_PROPOSAL": ActionPolarity.CREATE,
+    "ACTION_PROPOSAL": ActionPolarity.CREATE,
+    "CLARIFICATION": ActionPolarity.CLARIFY,
+    "CONFIRMATION": ActionPolarity.CONFIRM,
+    "EXECUTION": ActionPolarity.EXECUTE,
+    "UNAVAILABLE": ActionPolarity.READ,
+}
+
+
 @dataclass(frozen=True)
 class OperationContract:
     operation_id: str
@@ -76,6 +104,10 @@ class OperationContract:
     required_entities: tuple[str, ...] = ()
     any_entities: tuple[str, ...] = ()
     selection_focus_entities: tuple[str, ...] = ()
+    # This is the canonical lifecycle polarity, not a list of surface verbs.
+    # The selector and validators may accept grammatical variants below, but
+    # every downstream consumer receives exactly this registry-owned value.
+    action_polarity: ActionPolarity | None = None
     allowed_action_polarities: tuple[str, ...] = ()
     selection_required_terms: tuple[str, ...] = ()
     requires_verified_context: bool = False
@@ -124,6 +156,15 @@ class OperationContract:
             "CLARIFICATION", "CONFIRMATION", "EXECUTION", "UNAVAILABLE",
         }:
             raise FinnV2OperationContractError(f"invalid_mode:{self.operation_id}:{self.mode}")
+        if self.action_polarity is None:
+            object.__setattr__(self, "action_polarity", _MODE_DEFAULT_POLARITIES[self.mode])
+        elif not isinstance(self.action_polarity, ActionPolarity):
+            try:
+                object.__setattr__(self, "action_polarity", ActionPolarity(self.action_polarity))
+            except ValueError as exc:
+                raise FinnV2OperationContractError(
+                    f"invalid_action_polarity:{self.operation_id}:{self.action_polarity}"
+                ) from exc
         if set(self.required_scopes).intersection(self.optional_scopes):
             raise FinnV2OperationContractError(f"scope_overlap:{self.operation_id}")
         if set(self.required_inputs).intersection(self.optional_inputs):
@@ -465,18 +506,18 @@ _OPERATION_SELECTION_METADATA: Mapping[str, dict] = {
 
 _CONTRACTS: tuple[OperationContract, ...] = (
     OperationContract("capability", FinnV2OperationRegistry.VERSION, "system", "CAPABILITY", ("wat kun je", "what can you", "capabilities"), required_scopes=("capability",), response_strategy="deterministic_template", context_policy="minimal"),
-    OperationContract("clarify_request", FinnV2OperationRegistry.VERSION, "system", "CLARIFICATION", (), required_inputs=("requested_change",), response_strategy="clarification", context_policy="minimal"),
+    OperationContract("clarify_request", FinnV2OperationRegistry.VERSION, "system", "CLARIFICATION", (), action_polarity=ActionPolarity.CLARIFY, required_inputs=("requested_change",), response_strategy="clarification", context_policy="minimal"),
     OperationContract("unavailable", FinnV2OperationRegistry.VERSION, "system", "UNAVAILABLE", (), response_strategy="unavailable", context_policy="minimal"),
     OperationContract("explain_financial_concept", FinnV2OperationRegistry.VERSION, "financial_education", "READ", (), required_inputs=("concept",), model_policy="never", response_strategy="financial_concept_explanation", context_policy="minimal"),
-    OperationContract("unsupported_financial_operation", FinnV2OperationRegistry.VERSION, "financial_unsupported", "UNAVAILABLE", (), model_policy="never", response_strategy="unsupported_operation", context_policy="minimal"),
+    OperationContract("unsupported_financial_operation", FinnV2OperationRegistry.VERSION, "financial_unsupported", "UNAVAILABLE", (), action_polarity=ActionPolarity.EXECUTE, model_policy="never", response_strategy="unsupported_operation", context_policy="minimal"),
     OperationContract("off_topic", FinnV2OperationRegistry.VERSION, "off_topic", "UNAVAILABLE", (), model_policy="never", response_strategy="off_topic", context_policy="minimal"),
-    OperationContract("explain_previous_evidence", FinnV2OperationRegistry.VERSION, "system", "EVALUATE", ("onderbouw", "evidence", "waarom"), required_scopes=("profile", "preferences", "active_asset", "indicator_configuration", "active_setup", "linked_strategy", "linked_bot", "bot_status"), model_policy="required", response_strategy="model_reasoning"),
+    OperationContract("explain_previous_evidence", FinnV2OperationRegistry.VERSION, "system", "EVALUATE", ("onderbouw", "evidence", "waarom"), action_polarity=ActionPolarity.READ, required_scopes=("profile", "preferences", "active_asset", "indicator_configuration", "active_setup", "linked_strategy", "linked_bot", "bot_status"), model_policy="required", response_strategy="model_reasoning"),
     OperationContract("reformulate_previous_response", FinnV2OperationRegistry.VERSION, "system", "READ", ("korter", "anders formuleren", "reformuleer"), response_strategy="deterministic_structured_summary"),
     _read("read_active_asset", "asset", ("active_asset",), ("actieve asset", "welke asset"), ("asset",)),
     _gap("select_asset", "asset", "ACTION_PROPOSAL", ("selecteer asset",), "select_asset_execution_adapter_missing"),
     _read("read_watchlist", "asset", ("active_asset", "watchlist"), ("watchlist", "volglijst")),
-    OperationContract("watchlist_add", FinnV2OperationRegistry.VERSION, "watchlist", "ACTION_PROPOSAL", ("voeg", "add", "watchlist"), required_inputs=("asset",), required_scopes=("active_asset", "watchlist"), proposal_type="watchlist_add", confirmation_required=True, execution_adapter="watchlist_add", idempotency_rule="user_asset_unique", postcondition="watchlist_contains_asset", response_strategy="proposal_draft", policy_class="proposal"),
-    OperationContract("watchlist_remove", FinnV2OperationRegistry.VERSION, "watchlist", "ACTION_PROPOSAL", ("verwijder", "remove", "watchlist"), required_inputs=("asset",), required_scopes=("active_asset", "watchlist"), proposal_type="watchlist_remove", confirmation_required=True, execution_adapter="watchlist_remove", idempotency_rule="user_asset_absent", postcondition="watchlist_excludes_asset", response_strategy="proposal_draft", policy_class="proposal"),
+    OperationContract("watchlist_add", FinnV2OperationRegistry.VERSION, "watchlist", "ACTION_PROPOSAL", ("voeg", "add", "watchlist"), action_polarity=ActionPolarity.ADD, required_inputs=("asset",), required_scopes=("active_asset", "watchlist"), proposal_type="watchlist_add", confirmation_required=True, execution_adapter="watchlist_add", idempotency_rule="user_asset_unique", postcondition="watchlist_contains_asset", response_strategy="proposal_draft", policy_class="proposal"),
+    OperationContract("watchlist_remove", FinnV2OperationRegistry.VERSION, "watchlist", "ACTION_PROPOSAL", ("verwijder", "remove", "watchlist"), action_polarity=ActionPolarity.REMOVE, required_inputs=("asset",), required_scopes=("active_asset", "watchlist"), proposal_type="watchlist_remove", confirmation_required=True, execution_adapter="watchlist_remove", idempotency_rule="user_asset_absent", postcondition="watchlist_excludes_asset", response_strategy="proposal_draft", policy_class="proposal"),
     _read("read_indicator_configuration", "indicators", ("active_asset", "indicator_configuration"), ("indicator", "rsi", "vwap", "volume"), ("asset", "configured_count", "indicator_names")),
     _gap("create_indicator_configuration", "indicators", "CREATE_PROPOSAL", ("maak indicator",), "create_indicator_configuration_adapter_missing"),
     _gap("update_indicator_configuration", "indicators", "CREATE_PROPOSAL", ("wijzig indicator",), "proposal_payload_contract_missing"),
@@ -486,7 +527,7 @@ _CONTRACTS: tuple[OperationContract, ...] = (
     # SetupService validates the persisted setup fields unconditionally.
     # Score and market-condition details are useful trusted inputs, but must
     # not be invented by FINN.
-    OperationContract("create_setup", FinnV2OperationRegistry.VERSION, "setup", "CREATE_PROPOSAL", ("maak setup", "create setup", "setup voor"), required_inputs=("setup_type", "timeframe", "name", "symbol"), required_scopes=("active_asset",), optional_scopes=("profile", "preferences", "indicator_configuration", "active_setup", "linked_strategy"), model_policy="optional", response_strategy="proposal_draft", policy_class="proposal", proposal_type="create_setup", confirmation_required=True, execution_adapter="create_setup", idempotency_rule="proposal_payload_hash", postcondition="setup_created_for_user_asset"),
+    OperationContract("create_setup", FinnV2OperationRegistry.VERSION, "setup", "CREATE_PROPOSAL", ("maak setup", "create setup", "setup voor"), action_polarity=ActionPolarity.CREATE, required_inputs=("setup_type", "timeframe", "name", "symbol"), required_scopes=("active_asset",), optional_scopes=("profile", "preferences", "indicator_configuration", "active_setup", "linked_strategy"), model_policy="optional", response_strategy="proposal_draft", policy_class="proposal", proposal_type="create_setup", confirmation_required=True, execution_adapter="create_setup", idempotency_rule="proposal_payload_hash", postcondition="setup_created_for_user_asset"),
     OperationContract("update_setup", FinnV2OperationRegistry.VERSION, "setup", "CREATE_PROPOSAL", ("wijzig setup",), required_inputs=("setup_id", "changed_fields"), required_scopes=("active_asset", "active_setup"), proposal_type="update_setup", confirmation_required=True, execution_adapter="update_setup", idempotency_rule="proposal_payload_hash", postcondition="setup_updated_for_user"),
     _gap("delete_setup", "setup", "CREATE_PROPOSAL", ("verwijder setup",), "delete_setup_execution_adapter_missing"),
     OperationContract("evaluate_setup", FinnV2OperationRegistry.VERSION, "setup", "EVALUATE", ("beoordeel setup",), required_scopes=("active_asset", "active_setup"), optional_scopes=("indicator_configuration",), model_policy="required", response_strategy="model_reasoning", policy_class="advice"),
@@ -501,8 +542,8 @@ _CONTRACTS: tuple[OperationContract, ...] = (
     _gap("update_bot", "bot", "CREATE_PROPOSAL", ("wijzig bot",), "update_bot_execution_adapter_missing"),
     _gap("delete_bot", "bot", "CREATE_PROPOSAL", ("verwijder bot",), "delete_bot_execution_adapter_missing"),
     OperationContract("evaluate_bot", FinnV2OperationRegistry.VERSION, "bot", "EVALUATE", ("beoordeel bot", "vertrouwen bot"), required_scopes=("profile", "preferences", "active_asset", "indicator_configuration", "active_setup", "linked_strategy", "linked_bot", "bot_status"), model_policy="required", response_strategy="model_reasoning", policy_class="advice"),
-    OperationContract("activate_bot", FinnV2OperationRegistry.VERSION, "bot", "ACTION_PROPOSAL", ("activeer bot",), required_inputs=("bot_id",), required_scopes=("active_asset", "market_snapshot", "active_setup", "linked_strategy", "linked_bot", "bot_status"), proposal_type="activate_live_bot", confirmation_required=True, execution_adapter="activate_live_bot", idempotency_rule="proposal_payload_hash", postcondition="live_bot_active", response_strategy="policy_denial", policy_class="high_risk_action"),
-    OperationContract("activate_paper_bot", FinnV2OperationRegistry.VERSION, "bot", "ACTION_PROPOSAL", ("activeer paper bot",), required_inputs=("bot_id",), required_scopes=("active_asset", "active_setup", "linked_strategy", "linked_bot", "bot_status"), proposal_type="activate_paper_bot", confirmation_required=True, execution_adapter="activate_paper_bot", idempotency_rule="proposal_payload_hash", postcondition="paper_bot_active", response_strategy="proposal_draft", policy_class="paper_action"),
+    OperationContract("activate_bot", FinnV2OperationRegistry.VERSION, "bot", "ACTION_PROPOSAL", ("activeer bot",), action_polarity=ActionPolarity.ACTIVATE, required_inputs=("bot_id",), required_scopes=("active_asset", "market_snapshot", "active_setup", "linked_strategy", "linked_bot", "bot_status"), proposal_type="activate_live_bot", confirmation_required=True, execution_adapter="activate_live_bot", idempotency_rule="proposal_payload_hash", postcondition="live_bot_active", response_strategy="policy_denial", policy_class="high_risk_action"),
+    OperationContract("activate_paper_bot", FinnV2OperationRegistry.VERSION, "bot", "ACTION_PROPOSAL", ("activeer paper bot",), action_polarity=ActionPolarity.ACTIVATE, required_inputs=("bot_id",), required_scopes=("active_asset", "active_setup", "linked_strategy", "linked_bot", "bot_status"), proposal_type="activate_paper_bot", confirmation_required=True, execution_adapter="activate_paper_bot", idempotency_rule="proposal_payload_hash", postcondition="paper_bot_active", response_strategy="proposal_draft", policy_class="paper_action"),
     _gap("deactivate_bot", "bot", "ACTION_PROPOSAL", ("deactiveer bot",), "deactivate_bot_execution_adapter_missing"),
     OperationContract("read_active_plan", FinnV2OperationRegistry.VERSION, "plan", "READ", ("mijn actieve plan", "setup strategie bot"), required_scopes=("active_asset", "active_setup", "linked_strategy", "linked_bot", "bot_status"), required_response_fields=("setup", "strategy", "bot", "bot_status")),
     OperationContract("evaluate_plan", FinnV2OperationRegistry.VERSION, "plan", "EVALUATE", ("belangrijkste ontbrekende", "bekijk mijn profiel", "beoordeel mijn plan"), required_scopes=("profile", "preferences", "active_asset", "indicator_configuration", "active_setup", "linked_strategy", "linked_bot", "bot_status"), model_policy="required", response_strategy="model_reasoning", policy_class="advice", required_response_fields=("observation", "evidence", "next_step")),

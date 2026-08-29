@@ -3,6 +3,7 @@ import pytest
 from backend.services.finn_v2_operation_classification_service import (
     FinnV2OperationClassificationService,
 )
+from backend.domain.finn_v2_operation_registry import ActionPolarity, FinnV2OperationRegistry
 
 
 CLASSIFIER = FinnV2OperationClassificationService()
@@ -87,13 +88,24 @@ def test_target_polarity_is_not_reversed_by_workspace_context():
     add = CLASSIFIER.classify(message="Voeg ADA toe aan mijn watchlist.")
     remove = CLASSIFIER.classify(message="Verwijder ADA uit mijn watchlist.")
 
-    assert add.action == "create"
+    assert add.action == "add"
     assert add.operation_id == "watchlist_add"
     assert remove.action == "remove"
     assert remove.operation_id == "watchlist_remove"
 
 
-def test_live_order_language_uses_typed_bot_activation_and_execute_polarity():
+def test_registry_owns_the_canonical_action_polarity_for_every_qa_write_boundary():
+    registry = FinnV2OperationRegistry()
+
+    assert registry.get("watchlist_add").action_polarity is ActionPolarity.ADD
+    assert registry.get("watchlist_remove").action_polarity is ActionPolarity.REMOVE
+    assert registry.get("create_setup").action_polarity is ActionPolarity.CREATE
+    assert registry.get("activate_bot").action_polarity is ActionPolarity.ACTIVATE
+    assert registry.get("unsupported_financial_operation").action_polarity is ActionPolarity.EXECUTE
+    assert registry.get("clarify_request").action_polarity is ActionPolarity.CLARIFY
+
+
+def test_live_order_language_uses_typed_bot_activation_polarity():
     for message in (
         "Laat mijn gekoppelde robot voortaan echte orders plaatsen.",
         "Zorg dat de gekoppelde automation live orders uitvoert.",
@@ -101,14 +113,14 @@ def test_live_order_language_uses_typed_bot_activation_and_execute_polarity():
     ):
         result = CLASSIFIER.classify(message=message)
         assert result.operation_id == "activate_bot"
-        assert result.action == "execute"
+        assert result.action == "activate"
 
 
-def test_ambiguous_improvement_has_typed_clarification_input_and_update_polarity():
+def test_ambiguous_improvement_has_typed_clarification_input_and_clarify_polarity():
     result = CLASSIFIER.classify(message="Maak mijn manier van handelen beter.")
 
     assert result.operation_id == "clarify_request"
-    assert result.action == "update"
+    assert result.action == "clarify"
     assert result.selected_missing_inputs == ("requested_change",)
 
 
@@ -225,6 +237,13 @@ def test_explicit_target_asset_never_replaces_workspace_context_asset():
     assert facts.workspace_context_asset == "BTC"
     assert facts.explicit_target_asset == "ADA"
     assert facts.referenced_asset == "ADA"
+
+
+def test_catalog_canonicalizes_cosmos_before_selector_or_proposal_boundaries():
+    facts = CLASSIFIER.preprocessor.preprocess(message="Neem Cosmos op in mijn lijst met gevolgde assets.")
+
+    assert facts.referenced_asset == "ATOM"
+    assert facts.explicit_target_asset == "ATOM"
 
 
 def test_follow_up_requires_verified_context_in_the_contract_manifest():

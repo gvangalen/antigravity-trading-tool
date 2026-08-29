@@ -55,6 +55,7 @@ class FinnV2StructuredOperationSelectorService:
                             "required_entities": contract.required_entities,
                             "required_conversation_state": contract.requires_verified_context,
                             "required_inputs": contract.required_inputs,
+                            "canonical_action_polarity": contract.action_polarity.value,
                             "positive_examples": contract.positive_examples,
                             "hard_negative_examples": contract.negative_examples,
                             "allowed_action_polarities": contract.allowed_action_polarities,

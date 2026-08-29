@@ -39,9 +39,10 @@ def test_deploy_script_gates_pm2_processes_and_has_fallback_rebuild():
     assert 'PM2_CONFIG="ecosystem.production.config.js"' in source
 
 
-def test_deploy_script_persists_last_good_and_prints_rollback_command():
+def test_deploy_script_uses_canonical_last_good_without_mutating_it():
     wrapper_source = (REPO_ROOT / "deploy_live.sh").read_text()
     source = (REPO_ROOT / "ops" / "deploy" / "deploy_env.sh").read_text()
+    acceptance_source = (REPO_ROOT / "ops" / "deploy" / "record_accepted_release.sh").read_text()
 
     assert "deploy_env.sh" in wrapper_source
     assert "REMOTE_LAST_GOOD" in source
@@ -49,10 +50,14 @@ def test_deploy_script_persists_last_good_and_prints_rollback_command():
     assert "ROLLBACK_COMMAND" in source
     assert "./ops/deploy/rollback_env.sh $ENVIRONMENT $ROLLBACK_COMMIT" in source
     assert "ops/deploy/PREVIOUS_GOOD_COMMIT" in source
-    assert "ops/deploy/LAST_GOOD_COMMIT" in source
+    assert "QA_ACCEPTED_RELEASE" not in source
+    assert "record_accepted_release.sh" in source
+    assert "LAST_GOOD_COMMIT" in acceptance_source
+    assert "mktemp" in acceptance_source
+    assert "QA_ACCEPTED_RELEASE" in acceptance_source
     assert "deployment failed for" in source
     assert "Rollback command:" in source
-    assert "git rev-parse --short HEAD~1 2>/dev/null || git rev-parse --short HEAD" in source
+    assert "Canonical LAST_GOOD_COMMIT is missing" in source
 
 
 def test_rollback_helper_resets_code_and_runs_health_smoke_without_migrations():
@@ -63,7 +68,8 @@ def test_rollback_helper_resets_code_and_runs_health_smoke_without_migrations():
     assert rollback_path.exists()
     assert "rollback_env.sh" in wrapper_source
     assert "ROLLBACK_COMMIT" in wrapper_source
-    assert "ops/deploy/LAST_GOOD_COMMIT" in source
+    assert "CANONICAL_DEPLOY_STATE_DIR}/LAST_GOOD_COMMIT" in source
+    assert 'tee "$CANONICAL_DEPLOY_STATE_DIR/LAST_GOOD_COMMIT"' not in source
     assert 'git reset --hard "$ROLLBACK_COMMIT"' in source
     assert 'pm2 startOrReload "$PM2_CONFIG" --update-env' in source
     assert "check_pm2_apps_online" in source

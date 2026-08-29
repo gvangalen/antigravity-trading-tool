@@ -234,25 +234,9 @@ class FinnV2OperationClassificationService:
 
     @staticmethod
     def _contract_action(contract: OperationContract, raw_action: str) -> str:
-        """Project a validated contract into one stable lifecycle polarity."""
-        actions = {
-            "watchlist_add": "create", "watchlist_remove": "remove",
-            "create_setup": "create", "activate_bot": "execute",
-            "confirm_proposal": "confirm", "execute_proposal": "execute",
-            "explain_previous_evidence": "read",
-            "reformulate_previous_response": "read",
-        }
-        if contract.operation_id in actions:
-            return actions[contract.operation_id]
-        if contract.mode == "EVALUATE":
-            return "evaluate"
-        if contract.operation_id == "unsupported_financial_operation" and raw_action == "execute":
-            return "execute"
-        if contract.operation_id == "clarify_request":
-            return "update"
-        if contract.mode in {"READ", "CAPABILITY", "UNAVAILABLE", "CLARIFICATION"}:
-            return "read"
-        return raw_action
+        """Project through the immutable registry, never through local verbs."""
+        del raw_action
+        return contract.action_polarity.value
 
 
 class FinnV2OperationClassificationValidator:
@@ -292,6 +276,8 @@ class FinnV2OperationClassificationValidator:
             return "operation_not_supported"
         if classification.selector_source not in {"structured", "provider_unavailable"}:
             return "selector_source_invalid"
+        if classification.action != contract.action_polarity.value:
+            return "operation_canonical_action_mismatch"
         if facts is None:
             return None
         # A structured selector may validly continue a persisted guided
@@ -307,9 +293,8 @@ class FinnV2OperationClassificationValidator:
             and active.get("operation_id") == contract.operation_id
         ):
             return None
-        # Manifest eligibility describes the user's grammatical directive;
-        # the classification action is the canonical contract polarity (for
-        # example `activate` becomes the high-risk `execute` boundary).
+        # Manifest eligibility describes only the user's grammatical directive.
+        # The persisted lifecycle action above is always the contract enum.
         if contract.allowed_action_polarities and facts.action_polarity not in contract.allowed_action_polarities:
             return "operation_action_mismatch"
         if contract.required_entities and not set(contract.required_entities).issubset(facts.explicit_entities):

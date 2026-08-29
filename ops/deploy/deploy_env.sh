@@ -107,17 +107,16 @@ TARGET_COMMIT_FULL="$(git rev-parse HEAD)"
 BUILD_TIMESTAMP_UTC="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 REMOTE_LAST_GOOD="$(
   ssh "${SSH_ARGS[@]}" "ubuntu@$SERVER_IP" "
-    cd $REMOTE_DIR 2>/dev/null || exit 0
     if [ -f ${CANONICAL_DEPLOY_STATE_DIR}/LAST_GOOD_COMMIT ]; then
       cat ${CANONICAL_DEPLOY_STATE_DIR}/LAST_GOOD_COMMIT
-    elif [ -f ${DEPLOY_STATE_DIR}/LAST_GOOD_COMMIT ]; then
-      cat ${DEPLOY_STATE_DIR}/LAST_GOOD_COMMIT
-    else
-      git rev-parse --short HEAD 2>/dev/null || true
     fi
   " 2>/dev/null | tail -n 1
 )"
-ROLLBACK_COMMIT="${REMOTE_LAST_GOOD:-$(git rev-parse --short HEAD~1 2>/dev/null || git rev-parse --short HEAD)}"
+if [ -z "$REMOTE_LAST_GOOD" ]; then
+  echo "❌ Canonical LAST_GOOD_COMMIT is missing; record an independently accepted release before deploying." >&2
+  exit 1
+fi
+ROLLBACK_COMMIT="$REMOTE_LAST_GOOD"
 ROLLBACK_COMMAND="ssh -i \"$SSH_KEY\" ubuntu@$SERVER_IP 'cd $REMOTE_DIR && ENVIRONMENT=$ENVIRONMENT bash ./ops/deploy/rollback_env.sh $ENVIRONMENT $ROLLBACK_COMMIT'"
 
 echo "🌐 2. Deploying ${ENVIRONMENT} commit ${TARGET_COMMIT}..."
@@ -542,20 +541,7 @@ ssh "${SSH_ARGS[@]}" "ubuntu@$SERVER_IP" "
   fi
 "
 
-if [ "$(lower_bool "${QA_ACCEPTED_RELEASE:-false}")" = "true" ]; then
-  ssh "${SSH_ARGS[@]}" "ubuntu@$SERVER_IP" "
-    set -euo pipefail
-    cd $REMOTE_DIR
-    sudo mkdir -p ${CANONICAL_DEPLOY_STATE_DIR}
-    printf '%s\n' '$TARGET_COMMIT' | sudo tee ${CANONICAL_DEPLOY_STATE_DIR}/LAST_GOOD_COMMIT >/dev/null
-    printf '%s\n' '$TARGET_COMMIT' > ${DEPLOY_STATE_DIR}/LAST_GOOD_COMMIT
-    if [ -d /var/www/tradamind/ops/deploy ]; then
-      printf '%s\n' '$TARGET_COMMIT' | sudo tee /var/www/tradamind/ops/deploy/LAST_GOOD_COMMIT >/dev/null
-    fi
-  "
-else
-  echo "ℹ️ LAST_GOOD_COMMIT unchanged: independent QA acceptance was not supplied."
-fi
+echo "ℹ️ LAST_GOOD_COMMIT is immutable during deployment; record it only with record_accepted_release.sh after independent QA acceptance."
 
 echo "✅ ${ENVIRONMENT} deployment complete for ${TARGET_COMMIT}."
 echo "Rollback if needed:"

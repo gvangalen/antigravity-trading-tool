@@ -28,12 +28,23 @@ DISPATCH_HEARTBEAT_SECONDS = 60
 DISPATCH_STALE_UNCLAIMED_SECONDS = 5 * 60
 
 
+async def _run_task_with_local_resources(coroutine):
+    """Keep every asyncpg transport inside the Celery task's own event loop."""
+    try:
+        return await coroutine
+    finally:
+        # ``asyncio.run`` closes its loop immediately after this coroutine.
+        # Closing the async engine beforehand prevents pooled SSL transports
+        # from being finalized later against that closed loop.
+        await engine.dispose()
+
+
 def _run_async(coroutine):
-    """Run one Celery task on a fresh loop without reusing asyncpg connections."""
-    # Celery's prefork children execute many tasks, while asyncio.run creates a
-    # loop per task. Discard pooled asyncpg connections from the prior loop.
+    """Run one Celery task with a fresh loop and task-local async resources."""
+    # A prefork worker may inherit a parent-created pool. Do not let it hand a
+    # connection from another process or previous task loop to asyncpg.
     engine.sync_engine.dispose(close=False)
-    return asyncio.run(coroutine)
+    return asyncio.run(_run_task_with_local_resources(coroutine))
 
 
 @shared_task(bind=True, name="backend.celery_task.finn_v2_task.process_finn_v2_run")

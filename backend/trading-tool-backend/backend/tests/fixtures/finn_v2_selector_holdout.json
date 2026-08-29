@@ -186,7 +186,7 @@
     "expected_operation_id": "unsupported_financial_operation",
     "expected_domain": "financial_unsupported",
     "expected_supported": true,
-    "expected_action_polarity": "read",
+    "expected_action_polarity": "execute",
     "provider_call_expected": true,
     "expected_missing_inputs": []
   },
@@ -198,7 +198,7 @@
     "expected_domain": "system",
     "expected_supported": true,
     "expected_clarification": true,
-    "expected_action_polarity": "update",
+    "expected_action_polarity": "clarify",
     "provider_call_expected": true,
     "expected_missing_inputs": []
   }

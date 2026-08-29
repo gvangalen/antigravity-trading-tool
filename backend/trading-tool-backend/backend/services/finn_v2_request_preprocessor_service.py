@@ -42,7 +42,7 @@ class FinnV2RequestPreprocessorService:
         ("execute", ("uitvoeren", "execute", "voer", "verplaats", "transfer", "stort")),
         ("remove", ("verwijder", "remove", "haal", "halen", "stop met")),
         ("add", ("voeg", "add", "toevoeg", "zet op", "volg")),
-        ("activate", ("activeer", "activate", "schakel", "start", "zet live", "go live")),
+        ("activate", ("activeer", "activate", "schakel", "inschakel", "start", "zet live", "go live")),
         ("update", ("wijzig", "update", "pas aan")),
         ("create", ("maak", "maken", "create", "ontwerp", "stel", "bereid")),
         ("evaluate", ("beoordeel", "evaluate", "zwak", "risico", "past", "fit", "ontbrek", "ontbreek", "vertrouwen")),
@@ -259,7 +259,7 @@ class FinnV2RequestPreprocessorService:
             return "read"
         if "live" in text and re.search(r"\b(staat|is|welke|toon)\b", text):
             return "read"
-        if "live" in text and re.search(r"\b(activeer|activate|schakel|start|zet|maak)\b", text):
+        if "live" in text and re.search(r"\b(activeer|activate|schakel|inschakel|start|zet|maak)\b", text):
             return "activate"
         if re.search(r"\b(?:echte|reële|live)\s+orders?\b", text) and re.search(
             r"\b(?:plaats\w*|uitvoer\w*|verstuur\w*|verstur\w*)\b", text
@@ -282,6 +282,8 @@ class FinnV2RequestPreprocessorService:
         ):
             return "create"
         if re.search(r"\bzet\b.+\bop\b", text):
+            return "add"
+        if re.search(r"\bneem\b.+\bop\b", text):
             return "add"
         for polarity, terms in self._ACTION_PATTERNS:
             if self._contains_any(text, terms):
@@ -316,6 +318,11 @@ class FinnV2RequestPreprocessorService:
                 "welke ondersteuning",
                 "what support",
             )
+        ) or (
+            # This captures a broad support question independently of the
+            # product name or a particular example wording.
+            bool(re.search(r"\b(?:hulp|ondersteuning)\b", text))
+            and bool(re.search(r"\b(?:kan|kunnen|bied\w*|helpt?)\b", text))
         ):
             return "capability"
         if "reformulation" in references:
