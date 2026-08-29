@@ -730,8 +730,15 @@ class FinnV2ReasoningService:
                         attempt=attempt,
                         validation_status="evidence_limited",
                         validation_errors=repair_validation_errors,
-                        fallback_reason=error,
-                        repair_audit=repair_contract,
+                        # The raw rejected model error remains in the repair
+                        # audit and validation errors. The delivered response
+                        # is a valid bounded evidence limitation, not a
+                        # schema-invalid terminal response.
+                        fallback_reason="evidence_limitation_after_repair",
+                        repair_audit={
+                            **repair_contract,
+                            "terminalization_reason": error,
+                        },
                     )
                     limited.reasoning_provenance["reasoning_source"] = "contract_evidence_limitation"
                     return await self._persist_record(

@@ -920,6 +920,8 @@ def test_repeated_configuration_causality_ends_with_evidence_limitation_after_on
     assert "handmatige mode" not in reasoning.direct_answer.lower()
     assert "handmatige mode" not in reasoning.main_observation.lower()
     assert reasoning.evidence_refs_used == ["E1", "E2"]
+    assert reasoning.reasoning_provenance["fallback_reason"] == "evidence_limitation_after_repair"
+    assert reasoning.reasoning_provenance["repair_contract"]["terminalization_reason"] == "schema_invalid"
     # The evidence-limited terminal remains a complete EVALUATE response:
     # factual evidence records are retained for verifier coverage and lineage
     # while the rejected causal relationship is absent.
