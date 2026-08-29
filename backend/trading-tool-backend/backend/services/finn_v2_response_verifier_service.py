@@ -914,7 +914,7 @@ class FinnV2ResponseVerifierService:
         # weakness in a user's plan.
         causal_language = (
             "veroorzaakt", "leidt tot", "verbeter", "zal helpen", "beperkt ",
-            "verhoogt", "verlaagt", "maakt .* zwak", "maakt .* sterker",
+            "verhoogt", "verlaagt", "verzwak", "versterk", "maakt .* zwak", "maakt .* sterker",
             r"\bomdat\b", r"vormt .* tekortkoming", r"vermindert .* ondersteuning",
         )
         # An evidence limitation may explicitly say that a configuration does
