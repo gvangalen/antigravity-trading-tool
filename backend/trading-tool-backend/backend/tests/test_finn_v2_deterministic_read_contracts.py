@@ -223,6 +223,34 @@ def test_response_projection_makes_persisted_indicator_contract_fields_visible()
     ) == ["asset", "configured_count", "indicator_names"]
 
 
+def test_response_projection_preserves_an_empty_indicator_contract_as_complete():
+    draft = ResponseDraft(
+        draft_id="draft-projection-empty-indicators", run_id="run-projection-empty-indicators", user_id=406,
+        mode="READ", direct_answer="Je opgeslagen indicatorconfiguratie is beschikbaar.",
+        main_observation="Ik heb de juiste asset-scoped evidence gebruikt.",
+        evidence_set_hash="projection-empty-hash", created_at=datetime.now(timezone.utc),
+    )
+    evidence = [
+        SimpleNamespace(tool_name="read_active_asset", facts={"symbol": "BTC"}),
+        SimpleNamespace(tool_name="read_indicator_configuration", facts={
+            "symbol": "BTC", "configured_count": 0, "configured_indicators": [],
+        }),
+    ]
+
+    projected = FinnV2ResponseVerifierService._project_required_response_fields(
+        draft=draft,
+        orchestrator_result=SimpleNamespace(analysis=SimpleNamespace(request_plan=SimpleNamespace(operation_id="read_indicator_configuration"))),
+        context=SimpleNamespace(evidence=evidence),
+    )
+
+    assert "0 indicatorconfiguraties" in projected.direct_answer
+    assert "geen indicatoren" in projected.direct_answer
+    assert FinnV2ResponseVerifierService._covered_response_fields(
+        draft=projected, evidence=evidence,
+        required_fields=["asset", "configured_count", "indicator_names"],
+    ) == ["asset", "configured_count", "indicator_names"]
+
+
 def test_response_projection_makes_bot_and_status_visible():
     draft = ResponseDraft(
         draft_id="draft-projection-bot", run_id="run-projection-bot", user_id=406,

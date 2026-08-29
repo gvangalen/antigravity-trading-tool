@@ -714,12 +714,18 @@ class FinnV2ResponseVerifierService:
                     *(row.get("indicator") for category in ("market", "macro", "technical") for row in facts.get(category) or [] if isinstance(row, dict)),
                 ]
             elif field == "configured_count":
-                values = [facts.get("configured_count")]
+                configured_count = facts.get("configured_count")
+                return configured_count is not None and (
+                    bool(re.search(rf"\b{re.escape(str(configured_count))}\s+indicator", rendered))
+                    or (configured_count == 0 and "geen indicator" in rendered)
+                )
             elif field == "indicator_names":
-                values = [
+                names = [
                     *(row.get("indicator") for row in facts.get("configured_indicators") or [] if isinstance(row, dict)),
                     *(row.get("indicator") for category in ("market", "macro", "technical") for row in facts.get(category) or [] if isinstance(row, dict)),
                 ]
+                expected = [str(value).casefold() for value in names if value not in (None, "")]
+                return all(value in rendered for value in expected) if expected else facts.get("configured_count") == 0 and "geen indicator" in rendered
             elif field == "setup":
                 values = [facts.get("setup_id"), facts.get("name")]
             elif field == "timeframe":
@@ -730,12 +736,6 @@ class FinnV2ResponseVerifierService:
                 values = [facts.get("bot_id"), facts.get("name")]
             elif field == "bot_status":
                 return "live" in rendered or "paper" in rendered or "niet live" in rendered
-            if field == "indicator_names":
-                expected = [str(value).casefold() for value in values if value not in (None, "")]
-                if expected:
-                    return all(value in rendered for value in expected)
-                configured_count = facts.get("configured_count")
-                return configured_count == 0 and "geen indicator" in rendered
             return any(str(value).casefold() in rendered for value in values if value not in (None, ""))
 
         return [field for field in required_fields if has_value(field)]
