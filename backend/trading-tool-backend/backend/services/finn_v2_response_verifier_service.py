@@ -36,7 +36,7 @@ from backend.schemas.finn_v2_proposal_schema import (
     WatchlistChange,
 )
 from backend.schemas.finn_v2_reasoning_context_schema import REASONING_CONTEXT_VERSION
-from backend.schemas.finn_v2_reasoning_schema import PersistedReasoningRecord, ReasoningResult
+from backend.schemas.finn_v2_reasoning_schema import PersistedReasoningRecord, ReasoningNextStep, ReasoningResult
 from backend.schemas.finn_v2_response_schema import FINN_V2_VERIFIED_RESPONSE_VERSION, ResponseDraft, VerifiedResponse
 from backend.schemas.finn_v2_verifier_schema import ClaimVerification, CoverageVerification, SemanticVerificationResult, VerifierResult
 from backend.services.finn_v2_flag_service import FinnV2FlagService
@@ -442,6 +442,20 @@ class FinnV2ResponseVerifierService:
             provenance.get("reasoning_source") == "contract_evidence_limitation"
             and provenance.get("validation_status") == "evidence_limited"
         )
+        if (
+            evidence_limited_contract_outcome
+            and normalize_interaction_mode(draft.mode) == "EVALUATE"
+            and draft.next_step is None
+        ):
+            draft = draft.copy(deep=True)
+            draft.next_step = ReasoningNextStep(
+                title="Leg toetsbare plan-evidence vast",
+                instruction=(
+                    "Leg één concrete beslisregel en de uitkomst van een beoordeling vast; "
+                    "FINN kan daarna beoordelen hoe sterk die regel wordt onderbouwd."
+                ),
+                requires_confirmation=False,
+            )
         if (
             normalize_interaction_mode(draft.mode) == "EVALUATE"
             and provenance.get("provider_called")
