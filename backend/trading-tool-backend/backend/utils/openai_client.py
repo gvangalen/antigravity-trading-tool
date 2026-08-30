@@ -419,14 +419,23 @@ def _log_openai_usage(
 ) -> None:
     context = get_ai_usage_context()
     if context:
-        log_openai_usage_from_context(
-            model=model_name,
-            prompt_tokens=prompt_tokens,
-            completion_tokens=completion_tokens,
-            response_time_ms=response_time_ms,
-            status=status,
-            rejected_reason=rejected_reason,
-        )
+        try:
+            log_openai_usage_from_context(
+                model=model_name,
+                prompt_tokens=prompt_tokens,
+                completion_tokens=completion_tokens,
+                response_time_ms=response_time_ms,
+                status=status,
+                rejected_reason=rejected_reason,
+            )
+        except Exception as exc:
+            # Usage telemetry is observability, not part of the provider
+            # contract. A lagging analytics schema must never turn a valid
+            # structured response into an unavailable FINN result.
+            logger.warning(
+                "OpenAI usage telemetry failed after provider success",
+                extra={"telemetry_error_class": type(exc).__name__},
+            )
         return
 
     cost = 0.0
@@ -438,26 +447,32 @@ def _log_openai_usage(
         cost = 0.0
 
     entry_point = _infer_unscoped_entry_point()
-    log_ai_usage_sync(
-        user_id=None,
-        model=model_name,
-        prompt_tokens=prompt_tokens,
-        completion_tokens=completion_tokens,
-        cost=cost,
-        purpose="unscoped_openai_call",
-        status=status,
-        response_time_ms=response_time_ms,
-        estimated_cost_if_full=cost,
-        rejected_reason=rejected_reason,
-        symbol="GLOBAL",
-        trace_id=None,
-        completion_status="success",
-        request_source="system",
-        app_env=get_app_env(),
-        run_kind="interactive",
-        entry_point=entry_point or infer_entry_point(purpose="unscoped_openai_call", run_kind="interactive"),
-        user_email_snapshot=None,
-    )
+    try:
+        log_ai_usage_sync(
+            user_id=None,
+            model=model_name,
+            prompt_tokens=prompt_tokens,
+            completion_tokens=completion_tokens,
+            cost=cost,
+            purpose="unscoped_openai_call",
+            status=status,
+            response_time_ms=response_time_ms,
+            estimated_cost_if_full=cost,
+            rejected_reason=rejected_reason,
+            symbol="GLOBAL",
+            trace_id=None,
+            completion_status="success",
+            request_source="system",
+            app_env=get_app_env(),
+            run_kind="interactive",
+            entry_point=entry_point or infer_entry_point(purpose="unscoped_openai_call", run_kind="interactive"),
+            user_email_snapshot=None,
+        )
+    except Exception as exc:
+        logger.warning(
+            "OpenAI usage telemetry failed after provider success",
+            extra={"telemetry_error_class": type(exc).__name__},
+        )
 
 
 def _log_openai_quota_skip(reason: str = "insufficient_quota") -> None:

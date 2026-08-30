@@ -7,6 +7,22 @@ from backend.utils import openai_client as openai_module
 from backend.utils.openai_client import StructuredOutputSpec
 
 
+def test_usage_telemetry_failure_does_not_invalidate_provider_success(monkeypatch):
+    monkeypatch.setattr(openai_module, "get_ai_usage_context", lambda: {"entry_point": "selector_eval"})
+    monkeypatch.setattr(
+        openai_module,
+        "log_openai_usage_from_context",
+        lambda **_kwargs: (_ for _ in ()).throw(RuntimeError("missing_usage_column")),
+    )
+
+    openai_module._log_openai_usage(
+        model_name="gpt-4o-mini",
+        prompt_tokens=10,
+        completion_tokens=5,
+        response_time_ms=123,
+    )
+
+
 def test_openai_quota_breaker_short_circuits_json_calls(monkeypatch):
     monkeypatch.setenv("OPENAI_CALLS_ENABLED", "true")
     monkeypatch.setattr(ai_availability_service, "_redis_client", lambda: None)
