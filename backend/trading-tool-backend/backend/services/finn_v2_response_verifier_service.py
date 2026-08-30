@@ -1146,6 +1146,17 @@ class FinnV2ResponseVerifierService:
         return scopes
 
     def _is_relevant(self, question: str, draft: ResponseDraft) -> bool:
+        # A contract-limited plan evaluation explicitly answers the requested
+        # assessment with the strongest conclusion the collected evidence can
+        # support. It must not be treated as irrelevant merely because it
+        # declines to repeat every entity token from the question.
+        if (
+            normalize_interaction_mode(draft.mode) == "EVALUATE"
+            and (draft.reasoning_provenance or {}).get("reasoning_source") == "contract_evidence_limitation"
+            and bool(draft.evidence_refs_used)
+            and draft.next_step is not None
+        ):
+            return True
         lowered = question.lower()
         answer = f"{draft.direct_answer} {draft.main_observation}".lower()
         keywords = [
