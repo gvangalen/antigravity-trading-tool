@@ -70,6 +70,37 @@ def test_finn_v2_stream_closes_session_before_terminal_sse_delivery(monkeypatch)
     assert session.entered == session.exited == 1
 
 
+def test_finn_v2_stream_preserves_the_terminal_next_step_from_polling(monkeypatch):
+    polling_envelope = {
+        "run_id": "run-next-step",
+        "status": "completed",
+        "response": {
+            "mode": "EVALUATE",
+            "next_step": {
+                "title": "Leg een beslisregel vast",
+                "instruction": "Leg eerst een toetsbare beslisregel vast.",
+                "requires_confirmation": False,
+            },
+        },
+    }
+    envelope = SimpleNamespace(status="completed", dict=lambda: polling_envelope)
+    _install_envelope_loader(monkeypatch, [envelope])
+
+    class _Request:
+        async def is_disconnected(self):
+            return False
+
+    async def exercise():
+        response = await finn_v2_api.stream_finn_v2_run(
+            run_id="run-next-step", raw_request=_Request(), current_user={"id": 7}
+        )
+        return [event async for event in response.body_iterator]
+
+    event = asyncio.run(exercise())[0]
+    assert '"next_step": {"title": "Leg een beslisregel vast"' in event
+    assert '"instruction": "Leg eerst een toetsbare beslisregel vast."' in event
+
+
 def test_finn_v2_stream_disconnects_before_opening_a_session(monkeypatch):
     session = _install_envelope_loader(monkeypatch, [])
 
