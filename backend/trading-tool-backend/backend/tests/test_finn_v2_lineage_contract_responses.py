@@ -54,6 +54,27 @@ def test_reformulation_uses_previous_verified_response_without_tools_or_provider
     assert result.evidence_refs_used == ["E1", "E2"]
 
 
+def test_reformulation_of_degraded_lineage_uses_only_released_non_conclusive_sections():
+    context = _lineage_context("reformulate_previous_response").copy(deep=True)
+    context.request_plan["operation_state"] = {
+        "previous_degraded_run_id": "run-degraded",
+        "previous_evidence_refs": ["E1"],
+        "previous_degraded_released_sections": [
+            {"kind": "verification_limitation", "text": "De beoordeling is niet geverifieerd."},
+            {"kind": "evidence_availability", "text": "Beschikbare evidence kan worden toegelicht."},
+        ],
+    }
+
+    result = FinnV2ReasoningFallbackService().lineage_draft(
+        run_id="run-follow-up", user_id=388, operation_id="reformulate_previous_response",
+        context=context, model="deterministic",
+    )
+
+    assert result.mode == "READ"
+    assert "niet geverifieerd" in result.direct_answer
+    assert "vorige geverifieerde conclusie" not in result.main_observation
+
+
 def test_off_topic_terminal_answers_off_topic_instead_of_financial_unavailable():
     plan = SimpleNamespace(operation_id="off_topic")
     orchestrator = SimpleNamespace(

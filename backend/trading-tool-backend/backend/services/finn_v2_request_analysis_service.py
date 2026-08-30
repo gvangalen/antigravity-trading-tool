@@ -67,7 +67,9 @@ class FinnV2RequestAnalysisService:
         uses_conversation_reference = bool(preprocessed.conversation_reference_markers)
         if uses_conversation_reference and not self._has_safe_lineage(
             conversation_context or {},
-            allow_degraded=preprocessed.discourse_act in {"evidence_follow_up", "reformulation"},
+            allow_degraded=preprocessed.discourse_act in {
+                "evidence_follow_up", "reformulation", "contextual_follow_up",
+            },
         ):
             unresolved_signals.append("conversation_reference_without_verified_context")
         if uses_conversation_reference:
@@ -128,7 +130,7 @@ class FinnV2RequestAnalysisService:
             has_safe_lineage = self._has_safe_lineage(
                 conversation_context or {},
                 allow_degraded=operation.operation_id in {
-                    "explain_previous_evidence", "reformulate_previous_response",
+                    "explain_previous_evidence", "reformulate_previous_response", "evaluate_bot",
                 },
             )
             if not has_safe_lineage and "conversation_reference_without_verified_context" not in unresolved_signals:
@@ -208,6 +210,8 @@ class FinnV2RequestAnalysisService:
                 "previous_degraded_run_id": degraded.get("run_id"),
                 "previous_degraded_operation_id": degraded.get("operation_id"),
                 "previous_evidence_refs": list(degraded.get("evidence_refs") or []),
+                "previous_degraded_evidence_scopes": list(degraded.get("evidence_scopes") or []),
+                "previous_degraded_released_sections": list(degraded.get("released_response_sections") or []),
                 "resolved_entities": dict(degraded.get("resolved_entities") or {}),
             }
         target_resolution = self.target_resolver.resolve(

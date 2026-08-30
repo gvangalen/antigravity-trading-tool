@@ -443,10 +443,20 @@ class FinnV2OrchestratorService:
             if response_mode == "EVALUATE" and bool(getattr(verified_response, "evidence_refs_used", []) or []):
                 context["last_degraded_context"] = {
                     "operation_id": operation_id,
+                    "user_goal": getattr(request_plan, "user_goal", None),
                     "mode": response_mode,
+                    "conversation_id": conversation_id,
                     "run_id": getattr(verified_response, "run_id", None),
                     "evidence_refs": list(getattr(verified_response, "evidence_refs_used", []) or []),
+                    "evidence_scopes": list(getattr(request_plan, "required_information_scopes", []) or []),
+                    "terminal_status": "downgraded",
+                    "verifier_status": getattr(verified_response, "verifier_status", None),
                     "reason_codes": list(getattr(verified_response, "uncertainty_codes", []) or []),
+                    "released_response_sections": [
+                        {"kind": "verification_limitation", "text": "De eerdere beoordeling is niet als geverifieerde financiële conclusie vrijgegeven."},
+                        {"kind": "evidence_availability", "text": "Beschikbare evidence kan wel worden toegelicht."},
+                    ],
+                    "financial_conclusion_verified": False,
                     "resolved_entities": {
                         key: value for key, value in {
                             "asset": resolved_asset, "setup_id": resolved_setup_id,

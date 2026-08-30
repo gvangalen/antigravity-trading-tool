@@ -362,6 +362,12 @@ def test_downgraded_evaluate_retains_only_evidence_lineage_for_safe_followups():
     degraded = service.conversations.updated["context"]["last_degraded_context"]
     assert degraded["evidence_refs"] == ["E1", "E2"]
     assert degraded["resolved_entities"] == {"asset": "BTC", "setup_id": 293, "strategy_id": 309, "bot_id": 170}
+    assert degraded["financial_conclusion_verified"] is False
+    assert degraded["terminal_status"] == "downgraded"
+    assert degraded["evidence_scopes"] == []
+    assert {section["kind"] for section in degraded["released_response_sections"]} == {
+        "verification_limitation", "evidence_availability",
+    }
     assert "conclusion" not in degraded and "response" not in degraded
 
 

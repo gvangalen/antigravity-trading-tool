@@ -29,6 +29,14 @@ class FinnV2SetupInputCatalog:
         return None
 
     @classmethod
+    def canonical_setup_type(cls, value: object) -> Optional[str]:
+        normalized = cls._comparison_text(value)
+        for canonical, aliases in cls._TYPE_ALIASES.items():
+            if normalized in aliases:
+                return canonical
+        return None
+
+    @classmethod
     def timeframe_from_text(cls, text: str) -> Optional[str]:
         match = cls._CODE_TIMEFRAME.search(str(text or ""))
         if match:
@@ -38,6 +46,27 @@ class FinnV2SetupInputCatalog:
             if any(cls._has_phrase(lowered, alias) for alias in aliases):
                 return canonical
         return None
+
+    @classmethod
+    def canonical_timeframe(cls, value: object) -> Optional[str]:
+        match = cls._CODE_TIMEFRAME.fullmatch(str(value or "").strip())
+        if match:
+            return match.group(1).upper()
+        normalized = cls._comparison_text(value)
+        for canonical, aliases in cls._TIMEFRAME_ALIASES.items():
+            if normalized in aliases:
+                return canonical
+        return None
+
+    @classmethod
+    def canonical_input(cls, field: str, value: object) -> object:
+        if field == "setup_type":
+            return cls.canonical_setup_type(value) or value
+        if field == "timeframe":
+            return cls.canonical_timeframe(value) or value
+        if field == "name":
+            return cls.display_name(value) or value
+        return value
 
     @staticmethod
     def display_name(value: object) -> Optional[str]:

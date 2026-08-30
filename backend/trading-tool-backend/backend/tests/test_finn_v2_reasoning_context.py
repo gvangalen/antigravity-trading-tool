@@ -3,7 +3,7 @@ import asyncio
 from types import SimpleNamespace
 
 from backend.schemas.finn_v2_domain_validation_schema import DomainValidationResult, EvidenceValidationResult
-from backend.schemas.finn_v2_orchestrator_schema import DomainRequirementPlan, OrchestratorResult, RequestAnalysisResult, ToolPlan
+from backend.schemas.finn_v2_orchestrator_schema import DomainRequirementPlan, OrchestratorResult, RequestAnalysisResult, RequestPlan, ToolPlan
 from backend.schemas.finn_v2_policy_schema import FinnV2PolicyDecision
 from backend.schemas.finn_v2_state_schema import FinancialStateSnapshot
 from backend.services.finn_v2_reasoning_context_service import FinnV2ReasoningContextService
@@ -99,6 +99,58 @@ def test_reasoning_context_keeps_required_domains_and_sanitizes_facts():
     assert context.required_domains == ["identity_context", "plan_context"]
     assert [item.evidence_id for item in context.evidence] == ["E1"]
     assert context.evidence[0].facts["has_profile"] is True
+
+
+def test_reasoning_context_rejects_evidence_from_another_run_user_or_asset():
+    service = FinnV2ReasoningContextService(session=object(), max_evidence_items=30, max_context_bytes=131072)
+    service.evidence_repo.list_for_run = lambda **_kwargs: asyncio.sleep(
+        0,
+        result=[
+            SimpleNamespace(
+                id="wrong-run", run_id="run-other", user_id=7, tool_name="read_active_asset",
+                entity_type="asset", entity_id=None, asset="BTC", source="internal", source_as_of=None,
+                freshness="fresh", availability="available", payload_json={"symbol": "BTC"},
+            ),
+            SimpleNamespace(
+                id="wrong-user", run_id="run-4", user_id=8, tool_name="read_active_asset",
+                entity_type="asset", entity_id=None, asset="BTC", source="internal", source_as_of=None,
+                freshness="fresh", availability="available", payload_json={"symbol": "BTC"},
+            ),
+            SimpleNamespace(
+                id="wrong-asset", run_id="run-4", user_id=7, tool_name="read_active_asset",
+                entity_type="asset", entity_id=None, asset="ETH", source="internal", source_as_of=None,
+                freshness="fresh", availability="available", payload_json={"symbol": "ETH"},
+            ),
+        ],
+    )
+    run = SimpleNamespace(id="run-4", user_id=7, message="Evalueer mijn BTC-plan", client_context_json={}, workspace_hints_json={})
+    orchestrator = OrchestratorResult(
+        orchestrator_result_id="orchestrator-4", run_id="run-4", user_id=7,
+        analysis=RequestAnalysisResult(
+            interaction_mode="EVALUATE", subject_scopes=["asset"], confidence="high", reasoning_required=True,
+            request_plan=RequestPlan(interaction_mode="EVALUATE", referenced_entities={"asset": "BTC"}),
+        ),
+        domain_requirements=DomainRequirementPlan(required_domains=["identity_context"], optional_domains=[], requirement_reason=[]),
+        tool_plan=ToolPlan(run_id="run-4", interaction_mode="EVALUATE", max_tool_calls=15),
+        snapshot_id="snapshot-4", validation_id="validation-4", outcome="reasoning_ready", created_at=datetime.now(timezone.utc),
+    )
+    snapshot = FinancialStateSnapshot(
+        snapshot_id="snapshot-4", run_id="run-4", user_id=7, revision=1, evidence_set_hash="hash", assembled_at=datetime.now(timezone.utc),
+    )
+    validation = EvidenceValidationResult(
+        validation_id="validation-4", snapshot_id="snapshot-4", run_id="run-4", user_id=7,
+        evidence_set_hash="hash", integrity_status="valid", domains=[], issues=[], validated_at=datetime.now(timezone.utc),
+    )
+    policy = FinnV2PolicyDecision(
+        policy_decision_id="policy-4", run_id="run-4", user_id=7, policy_class="advice", allowed=True,
+        proposal_allowed=False, confirmation_required=False, step_up_required=False, execution_allowed=False,
+        shadow_safe=True, created_at=datetime.now(timezone.utc),
+    )
+
+    context = asyncio.run(service.build(run=run, orchestrator_result=orchestrator, snapshot=snapshot, validation=validation, policy=policy))
+
+    assert context.evidence == []
+    assert "evidence_scope_mismatch" in context.uncertainty_codes
 
 
 def test_reasoning_context_accepts_persisted_snapshot_and_validation_rows():

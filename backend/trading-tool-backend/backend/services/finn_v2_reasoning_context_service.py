@@ -95,8 +95,13 @@ class FinnV2ReasoningContextService:
             if domain not in selected_domains:
                 continue
             artifact_asset = str(artifact.asset or "").strip().upper() or None
+            artifact_run_id = getattr(artifact, "run_id", run.id)
             artifact_owner = getattr(artifact, "user_id", run.user_id)
-            if artifact_owner != run.user_id or (expected_asset and artifact_asset and artifact_asset != expected_asset):
+            if (
+                artifact_run_id != run.id
+                or artifact_owner != run.user_id
+                or (expected_asset and artifact_asset and artifact_asset != expected_asset)
+            ):
                 provenance_issues.append("evidence_scope_mismatch")
                 continue
             facts = self._sanitize_facts(artifact.payload_json or {}, artifact.tool_name)

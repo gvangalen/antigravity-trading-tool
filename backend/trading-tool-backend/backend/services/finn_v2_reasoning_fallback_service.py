@@ -71,6 +71,22 @@ class FinnV2ReasoningFallbackService:
         conclusion = str(state.get("previous_verified_conclusion") or "").strip()
         response = str(state.get("previous_verified_response") or "").strip()
         refs = list(state.get("previous_evidence_refs") or [])
+        released = list(state.get("previous_degraded_released_sections") or [])
+        if not conclusion and not response and released:
+            safe_text = " ".join(
+                str(item.get("text") or "").strip()
+                for item in released if isinstance(item, dict)
+            ).strip()
+            if operation_id == "reformulate_previous_response" and safe_text:
+                return ReasoningResult(
+                    reasoning_result_id=f"finn-v2-reasoning-{uuid.uuid4().hex}",
+                    run_id=run_id, user_id=user_id, mode="READ",
+                    direct_answer=safe_text,
+                    main_observation="De eerdere beoordeling is niet geverifieerd als financiële conclusie.",
+                    uncertainty_summary="Ik herformuleer alleen de veilig vrijgegeven beperking en evidencebeschikbaarheid.",
+                    uncertainty_codes=["degraded_lineage"], evidence_refs_used=refs,
+                    model=model, created_at=datetime.now(timezone.utc),
+                )
         if not conclusion and not response:
             return self.unavailable_draft(
                 run_id=run_id, user_id=user_id, mode="UNAVAILABLE",

@@ -318,7 +318,9 @@ class FinnV2OperationClassificationValidator:
             context = conversation_context or {}
             degraded = context.get("last_degraded_context")
             has_degraded_evidence = (
-                classification.operation_id in {"explain_previous_evidence", "reformulate_previous_response"}
+                classification.operation_id in {
+                    "explain_previous_evidence", "reformulate_previous_response", "evaluate_bot",
+                }
                 and isinstance(degraded, Mapping)
                 and bool(degraded.get("evidence_refs"))
             )

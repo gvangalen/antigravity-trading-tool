@@ -544,6 +544,31 @@ def test_setup_catalog_supports_dutch_english_and_german_timeframe_variants():
         assert values["timeframe"] == timeframe
 
 
+def test_setup_state_canonicalizes_supplied_values_before_missing_checks_without_overwrite():
+    contract = FinnV2OperationRegistry().require_supported("create_setup")
+    state = FinnV2OperationStateService().resolve(
+        contract=contract,
+        message="Maak een setup voor SOL.", explicit_asset="SOL", conversation_context={},
+        supplied_inputs={"setup_type": "Position", "timeframe": "dagbasis", "name": "SOL Kompas"},
+        derived_inputs={"setup_type": "trade", "timeframe": None, "name": "sol kompas", "symbol": "BTC"},
+    )
+
+    assert state.collected_inputs == {
+        "symbol": "SOL", "setup_type": "position", "timeframe": "1D", "name": "SOL Kompas",
+    }
+    assert state.missing_required_inputs == []
+
+
+def test_setup_state_leaves_actually_missing_type_and_timeframe_missing():
+    contract = FinnV2OperationRegistry().require_supported("create_setup")
+    state = FinnV2OperationStateService().resolve(
+        contract=contract, message="Maak een setup voor SOL met de naam SOL Kompas.",
+        explicit_asset="SOL", conversation_context={}, supplied_inputs={"name": "SOL Kompas"},
+    )
+
+    assert state.missing_required_inputs == ["setup_type", "timeframe"]
+
+
 def test_contextual_bot_implication_keeps_verified_lineage_payload():
     result = SERVICE.analyze(
         message="Wat betekent dat concreet voor mijn bot?",
@@ -645,6 +670,31 @@ def test_degraded_evidence_lineage_keeps_provenance_without_reviving_a_conclusio
     assert state["previous_evidence_refs"] == ["E1"]
     assert "previous_verified_conclusion" not in state
     assert "previous_verified_response" not in state
+
+
+def test_concrete_bot_follow_up_can_use_degraded_scope_without_promoting_conclusion(monkeypatch):
+    service = FinnV2RequestAnalysisService()
+    monkeypatch.setattr(
+        service.classifier, "classify", lambda **_kwargs: SemanticOperationClassification(
+            operation_id="evaluate_bot", action="evaluate", domain="bot", discourse="contextual_follow_up",
+            confidence="high", selector_source="structured",
+        ),
+    )
+
+    analysis = service.analyze(
+        message="Wat betekent dat concreet voor mijn bot?",
+        conversation_context={"last_degraded_context": {
+            "operation_id": "evaluate_plan", "run_id": "run-degraded", "evidence_refs": ["E1"],
+            "evidence_scopes": ["linked_bot", "bot_status"],
+            "released_response_sections": [{"kind": "verification_limitation", "text": "Niet geverifieerd."}],
+            "resolved_entities": {"asset": "BTC", "bot_id": 170},
+        }},
+    )
+
+    assert analysis.request_plan.operation_id == "evaluate_bot"
+    assert analysis.request_plan.conversation_reference == "run-degraded"
+    assert analysis.request_plan.operation_state["resolved_entities"] == {"asset": "BTC", "bot_id": 170}
+    assert "previous_verified_conclusion" not in analysis.request_plan.operation_state
 
 
 def test_request_analysis_does_not_treat_read_questions_with_confirmed_wording_as_execution():

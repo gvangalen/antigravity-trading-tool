@@ -25,7 +25,7 @@ class FinnV2OperationStateService:
         derived_inputs: Optional[Mapping[str, object]] = None,
     ) -> FinnV2OperationState:
         existing = self._existing_state(contract, conversation_context or {})
-        collected = dict(existing.collected_inputs) if existing is not None else {}
+        collected = self._canonicalize_inputs(dict(existing.collected_inputs)) if existing is not None else {}
         # Only values proven by request parsing may be promoted to supplied
         # inputs. Typed selector values are passed separately so a later
         # projection cannot silently overwrite a user-supplied slot.
@@ -35,11 +35,11 @@ class FinnV2OperationStateService:
         # must not overwrite a typed setup name with that normalized form.
         for key, value in (supplied_inputs or {}).items():
             if key in contract.required_inputs and not self._is_missing(value):
-                explicit.setdefault(key, value)
+                explicit.setdefault(key, self._canonical_input(key, value))
         collected.update(explicit)
         for key, value in (derived_inputs or {}).items():
             if key in contract.required_inputs and key not in collected and not self._is_missing(value):
-                collected[key] = value
+                collected[key] = self._canonical_input(key, value)
         missing = [field for field in contract.required_inputs if self._is_missing(collected.get(field))]
         context = conversation_context or {}
         verified_context = dict(context.get("last_verified_context") or {})
@@ -224,3 +224,10 @@ class FinnV2OperationStateService:
     @staticmethod
     def _is_missing(value: object) -> bool:
         return value is None or (isinstance(value, str) and not value.strip())
+
+    @staticmethod
+    def _canonical_input(field: str, value: object) -> object:
+        return FinnV2SetupInputCatalog.canonical_input(field, value)
+
+    def _canonicalize_inputs(self, values: Mapping[str, object]) -> dict[str, object]:
+        return {key: self._canonical_input(key, value) for key, value in values.items()}
