@@ -229,3 +229,48 @@ def test_verifier_reject_persists_a_typed_result_without_a_verified_response():
     assert traces[-1]["event_type"] == "response_rejected"
     assert traces[-1]["payload"]["reason_codes"] == ["response_scope_incomplete"]
     assert traces[-1]["payload"]["evidence_refs"] == ["evidence-a", "evidence-b"]
+
+
+def test_verifier_uses_latest_terminal_reasoning_before_reusable_model_attempt():
+    """A safe terminal repair must win over an earlier reusable model record."""
+    service = FinnV2ResponseVerifierService(session=object())
+    latest_row = SimpleNamespace(id="reasoning-terminal")
+    expected = SimpleNamespace(id="verified-terminal")
+
+    service.runs.get_by_id_for_user = lambda **_kwargs: asyncio.sleep(0, result=SimpleNamespace(id="run-1", user_id=7))
+    service.orchestrators.get_for_run_version = lambda **_kwargs: asyncio.sleep(0, result=SimpleNamespace())
+    service._latest_reasoning_for_run = lambda **_kwargs: asyncio.sleep(0, result=latest_row)
+
+    async def _unexpected_reuse(**_kwargs):
+        raise AssertionError("a newer terminal reasoning record must not be bypassed")
+
+    service.reasoning.get_reusable_result = _unexpected_reuse
+    service._reasoning_record_from_row = lambda _row: SimpleNamespace(validation_id="validation-1", snapshot_id="snapshot-1")
+    service._orchestrator_result_from_row = lambda _row: SimpleNamespace()
+    service.validations.get_by_id_for_user = lambda **_kwargs: asyncio.sleep(0, result=SimpleNamespace())
+    service.snapshots.get_by_id_for_user = lambda **_kwargs: asyncio.sleep(0, result=SimpleNamespace())
+    service.policies.get_for_run_version = lambda **_kwargs: asyncio.sleep(
+        0,
+        result=SimpleNamespace(
+            decision_json={
+                "policy_decision_id": "policy-1",
+                "run_id": "run-1",
+                "user_id": 7,
+                "policy_class": "read",
+                "allowed": True,
+                "proposal_allowed": False,
+                "confirmation_required": False,
+                "step_up_required": False,
+                "execution_allowed": False,
+                "shadow_safe": True,
+                "created_at": datetime.now(timezone.utc).isoformat(),
+            }
+        ),
+    )
+    service.contexts.build = lambda **_kwargs: asyncio.sleep(0, result=SimpleNamespace())
+    service.drafts.build = lambda **_kwargs: SimpleNamespace(draft_id="draft-1", mode="EVALUATE")
+    service._project_required_response_fields = lambda **_kwargs: SimpleNamespace(draft_id="draft-1", mode="EVALUATE")
+    service._append_trace = lambda **_kwargs: asyncio.sleep(0)
+    service._verify_draft = lambda **_kwargs: asyncio.sleep(0, result=expected)
+
+    assert asyncio.run(service.verify_run(user_id=7, run_id="run-1", trace_id="trace-1")) is expected

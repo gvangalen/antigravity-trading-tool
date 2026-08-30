@@ -120,16 +120,19 @@ class FinnV2ResponseVerifierService:
         orchestrator_row = await self.orchestrators.get_for_run_version(run_id=run_id, user_id=user_id, orchestrator_version=ORCHESTRATOR_VERSION)
         if orchestrator_row is None:
             raise ValueError("orchestrator_not_ready")
-        reasoning_row = await self.reasoning.get_reusable_result(
-            run_id=run_id,
-            user_id=user_id,
-            context_version=REASONING_CONTEXT_VERSION,
-            evidence_set_hash=getattr(orchestrator_row, "validation_id", "") or "",
-            prompt_version="2026-08-17.block6",
-            model=self.flags.reasoning_model_override() or "unknown",
-        )
+        # A bounded repair persists a later terminal reasoning record for the
+        # same run. Verify that newest record, not an earlier reusable model
+        # attempt which may still contain the rejected conclusion.
+        reasoning_row = await self._latest_reasoning_for_run(run_id=run_id, user_id=user_id)
         if reasoning_row is None:
-            reasoning_row = await self._latest_reasoning_for_run(run_id=run_id, user_id=user_id)
+            reasoning_row = await self.reasoning.get_reusable_result(
+                run_id=run_id,
+                user_id=user_id,
+                context_version=REASONING_CONTEXT_VERSION,
+                evidence_set_hash=getattr(orchestrator_row, "validation_id", "") or "",
+                prompt_version="2026-08-17.block6",
+                model=self.flags.reasoning_model_override() or "unknown",
+            )
         if reasoning_row is None:
             raise ValueError("reasoning_not_ready")
 
