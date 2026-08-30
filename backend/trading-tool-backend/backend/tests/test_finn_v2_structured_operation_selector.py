@@ -129,3 +129,26 @@ def test_selector_projects_explicit_catalog_asset_when_model_target_is_null(asse
     assert error is None
     assert selection is not None
     assert selection.target_asset == selection.entities["asset"]
+
+
+def test_selector_exposes_safe_degraded_lineage_to_the_provider_contract():
+    captured = {}
+
+    def provider(**kwargs):
+        captured.update(kwargs)
+        return {"parsed": {
+            "operation_id": "reformulate_previous_response", "confidence": 0.9,
+            "entities": {}, "target_asset": None,
+            "conversation_reference": "previous_verified_response",
+            "missing_inputs": [], "ambiguity_reason": None,
+        }}
+
+    selection, error = FinnV2StructuredOperationSelectorService(provider=provider).select(
+        message="Leg dat eenvoudiger uit.",
+        candidate_contracts=(FinnV2OperationRegistry().get("reformulate_previous_response"),),
+        facts={}, verified_context={"last_degraded_context": {"run_id": "run-1", "evidence_refs": ["E1"]}},
+    )
+
+    assert error is None and selection is not None
+    assert "last_degraded_context" in captured["prompt"]
+    assert "safe reformulation" in captured["system_role"]
