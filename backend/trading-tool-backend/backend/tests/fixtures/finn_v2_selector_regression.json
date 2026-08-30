@@ -276,7 +276,6 @@
     "expected_action_polarity": "create",
     "expected_clarification": false,
     "expected_missing_inputs": [
-      "setup_type",
       "timeframe",
       "name"
     ],

@@ -569,6 +569,16 @@ def test_setup_state_leaves_actually_missing_type_and_timeframe_missing():
     assert state.missing_required_inputs == ["setup_type", "timeframe"]
 
 
+def test_natural_dutch_position_setup_is_a_supplied_type_not_a_missing_slot():
+    result = SERVICE.analyze(message="Werk een nieuwe positie-opzet voor SOL uit.")
+
+    assert result.request_plan.operation_id == "create_setup"
+    assert result.request_plan.operation_state["collected_inputs"] == {
+        "symbol": "SOL", "setup_type": "position",
+    }
+    assert result.request_plan.operation_state["missing_required_inputs"] == ["timeframe", "name"]
+
+
 def test_contextual_bot_implication_keeps_verified_lineage_payload():
     result = SERVICE.analyze(
         message="Wat betekent dat concreet voor mijn bot?",
