@@ -41,7 +41,10 @@ async def _run_with_fresh_asyncpg_pool(coroutine) -> None:
 async def _build_personal_context_graph() -> None:
     from backend.infrastructure.database import async_session_factory
     from backend.infrastructure.repositories.assistant_context_repository import AssistantContextRepository
+    from backend.infrastructure.repositories.technical_data_repository import TechnicalDataRepository
 
+    fixture_indicator = f"finn_qa_{uuid.uuid4().hex[:12]}"
+    user_id = None
     async with async_session_factory() as session:
         metadata = await session.execute(
             text(
@@ -65,14 +68,32 @@ async def _build_personal_context_graph() -> None:
         )
         if user_id is None:
             pytest.skip("disposable schema has no user fixture")
+        await TechnicalDataRepository(session).ensure_user_config(
+            int(user_id), fixture_indicator, category="technical", symbol="BTC", asset_class="crypto"
+        )
+        await session.commit()
         graph = await AssistantContextRepository(session).build_canonical_context_graph(
             user_id=int(user_id),
             query="Welke indicatoren gebruik ik voor mijn persoonlijke plan?",
             request_context={"symbol": "BTC"},
         )
 
-    assert graph["asset"] == "BTC"
-    assert "indicators" in graph
+    try:
+        assert graph["asset"] == "BTC"
+        assert fixture_indicator in graph["indicators"]["technical"]["configured"]
+    finally:
+        async with async_session_factory() as cleanup_session:
+            await cleanup_session.execute(
+                text(
+                    """
+                    DELETE FROM user_indicator_configs
+                    WHERE user_id = :user_id AND indicator = :indicator
+                      AND category = 'technical' AND symbol = 'BTC'
+                    """
+                ),
+                {"user_id": int(user_id), "indicator": fixture_indicator},
+            )
+            await cleanup_session.commit()
 
 
 async def _reload_degraded_lineage() -> None:

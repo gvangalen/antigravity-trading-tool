@@ -91,3 +91,36 @@ def test_terminal_indicator_and_bot_fields_survive_polling_and_sse_serialization
     assert polling.response.direct_answer == streamed["direct_answer"]
     for value in ("2 indicatorconfiguraties", "RSI", "VWAP", "bot 170", "niet live"):
         assert value in polling.response.direct_answer
+
+
+def test_terminal_next_step_survives_polling_and_sse_serialization():
+    """A terminal lifecycle hint is part of the typed delivery contract."""
+    service = FinnV2DeliveryService(session=object())
+    response_json = {
+        "verified_response_id": "vr-next-step", "run_id": "run-next-step", "user_id": 7,
+        "mode": "EVALUATE", "direct_answer": "De evidence is begrensd.",
+        "main_observation": "Leg eerst een toetsbare beslisregel vast.",
+        "supporting_points": [], "claims": [], "uncertainty_summary": "Evidence ontbreekt.",
+        "uncertainty_codes": ["evidence_limited"],
+        "next_step": {
+            "title": "Leg een beslisregel vast",
+            "instruction": "Leg eerst een toetsbare beslisregel vast.",
+            "requires_confirmation": False,
+        },
+        "follow_up_question": None, "proposal_id": None, "confirmation_required": False,
+        "verifier_status": "passed", "evidence_set_hash": "hash-next-step",
+        "verifier_result_id": "verifier-next-step", "response_version": "2026-08-17.block7",
+        "created_at": datetime.now(timezone.utc),
+    }
+    service.runs.get_by_id_for_user = lambda **_kwargs: asyncio.sleep(
+        0, result=SimpleNamespace(id="run-next-step", conversation_id="conv-next-step", user_id=7, status="completed")
+    )
+    service.verified.get_latest_for_run = lambda **_kwargs: asyncio.sleep(0, result=SimpleNamespace(response_json=response_json))
+
+    polling = asyncio.run(service.get_delivery_envelope(user_id=7, run_id="run-next-step"))
+
+    async def _collect():
+        return [event async for event in service.stream_delivery_events(user_id=7, run_id="run-next-step")]
+
+    streamed = asyncio.run(_collect())[0].payload["response"]
+    assert polling.response.next_step.dict() == streamed["next_step"]
