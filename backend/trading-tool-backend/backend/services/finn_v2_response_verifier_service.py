@@ -442,6 +442,11 @@ class FinnV2ResponseVerifierService:
             provenance.get("reasoning_source") == "contract_evidence_limitation"
             and provenance.get("validation_status") == "evidence_limited"
         )
+        evidence_limited_contract_outcome = evidence_limited_contract_outcome or (
+            normalize_interaction_mode(draft.mode) == "EVALUATE"
+            and "evidence_limitation_after_repair" in set(draft.uncertainty_codes or [])
+            and bool(draft.evidence_refs_used)
+        )
         if (
             evidence_limited_contract_outcome
             and normalize_interaction_mode(draft.mode) == "EVALUATE"
