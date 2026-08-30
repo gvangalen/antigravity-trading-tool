@@ -118,6 +118,34 @@ def test_degraded_lineage_is_explicitly_typed_and_keeps_its_resolved_bot_for_a_f
     assert result.explicit_bot_id == 14
 
 
+def test_verified_contextual_bot_activation_has_a_typed_reference_without_overriding_live_safety(monkeypatch):
+    service = FinnV2RequestAnalysisService()
+    monkeypatch.setattr(
+        service.classifier,
+        "classify",
+        lambda **_kwargs: SemanticOperationClassification(
+            operation_id="activate_bot", action="activate", domain="bot",
+            discourse="operation_request", confidence="high", selector_source="structured",
+        ),
+    )
+    result = service.analyze(
+        message="Zet die gekoppelde bot meteen aan voor echt geld.",
+        conversation_context={
+            "conversation_state_version": "finn_v2.conversation-contracts.v1",
+            "last_verified_context": {
+                "verified_response_id": "verified-bot-1",
+                "resolved_entities": {"asset": "BTC", "setup_id": 12, "strategy_id": 13, "bot_id": 14},
+            },
+        },
+    )
+
+    assert result.request_plan.conversation_reference == "verified-bot-1"
+    assert result.request_plan.conversation_reference_kind == "previous_verified_response"
+    assert result.request_plan.operation_id == "activate_bot"
+    assert result.request_plan.requested_action == "activate"
+    assert result.explicit_bot_id == 14
+
+
 def test_multilingual_reformulation_uses_typed_degraded_lineage_without_tools():
     context = {
         "conversation_state_version": "finn_v2.conversation-contracts.v1",

@@ -70,9 +70,30 @@ class FinnV2ReasoningFallbackService:
         state = dict((context.request_plan or {}).get("operation_state") or {})
         conclusion = str(state.get("previous_verified_conclusion") or "").strip()
         response = str(state.get("previous_verified_response") or "").strip()
-        refs = list(state.get("previous_evidence_refs") or [])
+        current_refs = [item.evidence_id for item in context.evidence]
+        refs = current_refs or list(state.get("previous_evidence_refs") or [])
         released = list(state.get("previous_degraded_released_sections") or [])
         released_response = dict(state.get("previous_degraded_released_response") or {})
+        degraded_scopes = list(state.get("previous_degraded_evidence_scopes") or [])
+        if operation_id == "explain_previous_evidence" and refs:
+            scope_text = ", ".join(str(scope).replace("_", " ") for scope in degraded_scopes) or "de opgeslagen FINN-evidence"
+            return ReasoningResult(
+                reasoning_result_id=f"finn-v2-reasoning-{uuid.uuid4().hex}",
+                run_id=run_id, user_id=user_id, mode="EVALUATE",
+                direct_answer=(
+                    f"De eerdere beperkte beoordeling baseert zich op evidence uit: {scope_text}. "
+                    "Die evidence beschrijft opgeslagen context, maar maakt geen niet-geverifieerde financiële conclusie alsnog waar."
+                ),
+                main_observation=(
+                    "De concrete evidence-gap is dat de vrijgegeven gegevens geen volledig toetsbare beslisregel "
+                    "met beoordeelde uitkomst bevatten."
+                ),
+                uncertainty_summary=(
+                    "Ik licht alleen de beschikbare evidence en beperking toe; ik voeg geen nieuwe financiële inferentie toe."
+                ),
+                uncertainty_codes=["degraded_lineage"], evidence_refs_used=refs,
+                model=model, created_at=datetime.now(timezone.utc),
+            )
         released_text = " ".join(
             str(released_response.get(key) or "").strip()
             for key in ("direct_answer", "main_observation", "uncertainty_summary", "next_step")

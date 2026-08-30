@@ -99,6 +99,26 @@ def test_reformulation_of_degraded_lineage_reuses_only_already_visible_safe_term
     assert result.evidence_refs_used == ["E1"]
 
 
+def test_degraded_evidence_follow_up_explains_scopes_and_gap_without_promoting_conclusion():
+    context = _lineage_context("explain_previous_evidence").copy(deep=True)
+    context.request_plan["operation_state"] = {
+        "previous_degraded_run_id": "run-degraded",
+        "previous_evidence_refs": ["E1", "E2"],
+        "previous_degraded_evidence_scopes": ["profile", "indicator_configuration", "bot_status"],
+    }
+
+    result = FinnV2ReasoningFallbackService().lineage_draft(
+        run_id="run-follow-up", user_id=388, operation_id="explain_previous_evidence",
+        context=context, model="deterministic",
+    )
+
+    assert result.mode == "EVALUATE"
+    assert "profile" in result.direct_answer
+    assert "indicator configuration" in result.direct_answer
+    assert "geen volledig toetsbare beslisregel" in result.main_observation
+    assert result.evidence_refs_used == ["E1", "E2"]
+
+
 def test_off_topic_terminal_answers_off_topic_instead_of_financial_unavailable():
     plan = SimpleNamespace(operation_id="off_topic")
     orchestrator = SimpleNamespace(

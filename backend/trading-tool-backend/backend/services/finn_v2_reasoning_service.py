@@ -406,7 +406,7 @@ class FinnV2ReasoningService:
                 run_id=run_id, user_id=user_id, operation_id=contract.operation_id,
                 context=context, model=model,
             )
-        if contract.operation_id == "reformulate_previous_response":
+        if contract.operation_id in {"explain_previous_evidence", "reformulate_previous_response"}:
             return self.fallbacks.lineage_draft(
                 run_id=run_id, user_id=user_id, operation_id=contract.operation_id,
                 context=context, model=model,
