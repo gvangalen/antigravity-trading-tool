@@ -357,7 +357,7 @@ _OPERATION_SELECTION_METADATA: Mapping[str, dict] = {
         "selection_priority": 100,
     },
     "reformulate_previous_response": {
-        "semantic_description": "Rephrase, shorten, simplify, or restyle the user's immediately previous verified FINN response without changing its meaning.",
+        "semantic_description": "Rephrase, shorten, simplify, or restyle the immediately previous FINN response without changing its meaning. When the preceding financial assessment was safely downgraded or rejected, rephrase only its explicitly released, non-conclusive content and say that no financial conclusion was verified. This is not a clarification when safe lineage is available.",
         "required_discourse_acts": ("reformulation",),
         "requires_verified_context": True,
         "selection_priority": 100,

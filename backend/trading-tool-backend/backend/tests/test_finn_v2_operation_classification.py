@@ -121,12 +121,19 @@ def test_validator_accepts_registry_projection_and_rejects_a_forged_polarity():
     assert validator.validation_error(forged) == "operation_canonical_action_mismatch"
 
 
-def test_validator_allows_evidence_lineage_without_promoting_a_degraded_conclusion():
+@pytest.mark.parametrize(
+    ("operation_id", "message", "discourse"),
+    (
+        ("explain_previous_evidence", "Waar baseer je dat op?", "evidence_follow_up"),
+        ("reformulate_previous_response", "Leg dat eenvoudiger uit.", "reformulation"),
+    ),
+)
+def test_validator_allows_safe_degraded_lineage_without_promoting_a_conclusion(operation_id, message, discourse):
     classification = SemanticOperationClassification(
-        operation_id="explain_previous_evidence", action="read", domain="lineage",
-        discourse="evidence_follow_up", confidence="high", selector_source="structured",
+        operation_id=operation_id, action="read", domain="lineage",
+        discourse=discourse, confidence="high", selector_source="structured",
     )
-    facts = CLASSIFIER.preprocessor.preprocess(message="Waar baseer je dat op?")
+    facts = CLASSIFIER.preprocessor.preprocess(message=message)
     context = {"last_degraded_context": {"evidence_refs": ["E1"], "reason_codes": ["response_field_incomplete"]}}
 
     assert FinnV2OperationClassificationValidator().validation_error(
