@@ -2,8 +2,9 @@
 from __future__ import annotations
 
 import json
+import hashlib
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -42,9 +43,55 @@ OPERATION_FAMILY = {
     "evaluate_indicator_configuration": "read_indicator_configuration",
 }
 
+MIGRATION_FILENAME = "finn_v2_selector_fixture_migrations.json"
+
+
+def _fixture_migrations(paths: list[Path]) -> dict[str, dict[str, Any]]:
+    migrations: dict[str, dict[str, Any]] = {}
+    # The governed migration belongs to the published holdout source. Looking
+    # beside development/regression fixtures would make temporary test copies
+    # accidentally load two manifests for the same sealed cases.
+    for directory in {path.parent for path in paths if path.name == "finn_v2_selector_holdout.json"}:
+        migration_path = directory / MIGRATION_FILENAME
+        if not migration_path.exists():
+            continue
+        payload = json.loads(migration_path.read_text(encoding="utf-8"))
+        if not isinstance(payload, dict) or not isinstance(payload.get("migrations"), list):
+            raise ValueError(f"fixture_migration_manifest_invalid:{migration_path}")
+        for migration in payload["migrations"]:
+            if not isinstance(migration, dict) or not isinstance(migration.get("eval_id"), str):
+                raise ValueError(f"fixture_migration_entry_invalid:{migration_path}")
+            eval_id = migration["eval_id"]
+            if eval_id in migrations:
+                raise ValueError(f"duplicate_fixture_migration:{eval_id}")
+            migrations[eval_id] = migration
+    return migrations
+
+
+def _validate_fixture_migration(*, case: SelectorEvalCase, contract: Any, migration: dict[str, Any]) -> None:
+    if migration.get("dataset") != case.dataset or migration.get("expected_operation_id") != case.expected_operation_id:
+        raise ValueError(f"fixture_migration_contract_mismatch:{case.eval_id}")
+    expected_hash = hashlib.sha256(case.input_query.encode("utf-8")).hexdigest()
+    if migration.get("input_query_sha256") != expected_hash:
+        raise ValueError(f"fixture_migration_prompt_mismatch:{case.eval_id}")
+    original = migration.get("original_expected_missing_inputs")
+    supplied = migration.get("supplied_input_fields")
+    if not isinstance(original, list) or not isinstance(supplied, list):
+        raise ValueError(f"fixture_migration_inputs_invalid:{case.eval_id}")
+    if any(field not in contract.required_inputs for field in supplied):
+        raise ValueError(f"fixture_migration_unknown_supplied_input:{case.eval_id}")
+    derived = [field for field in contract.required_inputs if field not in supplied]
+    if migration.get("derived_expected_missing_inputs") != derived:
+        raise ValueError(f"fixture_migration_not_registry_derived:{case.eval_id}")
+    if case.expected_missing_inputs != derived:
+        raise ValueError(f"fixture_migration_case_not_derived:{case.eval_id}")
+    if original == derived:
+        raise ValueError(f"fixture_migration_no_effect:{case.eval_id}")
+
 
 def load_and_validate(paths: list[Path]) -> list[SelectorEvalCase]:
     registry = FinnV2OperationRegistry()
+    migrations = _fixture_migrations(paths)
     cases: list[SelectorEvalCase] = []
     ids: set[str] = set()
     queries: set[str] = set()
@@ -75,6 +122,9 @@ def load_and_validate(paths: list[Path]) -> list[SelectorEvalCase]:
                 )
             if contract.mode in {"CREATE_PROPOSAL", "ACTION_PROPOSAL"} and case.expected_supported and not contract.execution_adapter:
                 raise ValueError(f"non_executable_write_expected:{case.eval_id}")
+            migration = migrations.pop(case.eval_id, None)
+            if migration is not None:
+                _validate_fixture_migration(case=case, contract=contract, migration=migration)
             ids.add(case.eval_id)
             queries.add(normalized)
             families_by_dataset[case.dataset].add(
@@ -95,4 +145,6 @@ def load_and_validate(paths: list[Path]) -> list[SelectorEvalCase]:
     leaked = sorted(set(holdout_queries).intersection(prompt_examples))
     if leaked:
         raise ValueError(f"holdout_prompt_leakage:{leaked}")
+    if migrations:
+        raise ValueError(f"fixture_migration_case_missing:{sorted(migrations)}")
     return cases

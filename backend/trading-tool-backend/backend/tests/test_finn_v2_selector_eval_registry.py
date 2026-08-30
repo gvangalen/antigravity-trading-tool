@@ -54,3 +54,37 @@ def test_selector_eval_registry_rejects_noncanonical_action_polarity(tmp_path):
 
     with pytest.raises(ValueError, match="canonical_action_polarity_mismatch:reg-watch-add-1"):
         load_and_validate([paths[0], regression, paths[2]])
+
+
+def test_selector_eval_registry_accepts_only_registry_derived_fixture_migrations():
+    cases = {case.eval_id: case for case in load_and_validate(_paths())}
+
+    assert cases["sealed-create-setup"].expected_missing_inputs == ["timeframe", "name"]
+    assert cases["sealed-live-bot"].expected_missing_inputs == ["bot_id"]
+    assert cases["sealed-clarify"].expected_missing_inputs == ["requested_change"]
+
+
+def test_selector_eval_registry_rejects_fixture_migration_with_non_registry_missing_inputs(tmp_path):
+    paths = _paths()
+    holdout = tmp_path / "finn_v2_selector_holdout.json"
+    holdout.write_text(paths[2].read_text(encoding="utf-8"), encoding="utf-8")
+    migration = tmp_path / "finn_v2_selector_fixture_migrations.json"
+    payload = json.loads((FIXTURES / "finn_v2_selector_fixture_migrations.json").read_text(encoding="utf-8"))
+    payload["migrations"][1]["derived_expected_missing_inputs"] = []
+    migration.write_text(json.dumps(payload), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="fixture_migration_not_registry_derived:sealed-live-bot"):
+        load_and_validate([paths[0], paths[1], holdout])
+
+
+def test_selector_eval_registry_rejects_a_migrated_fixture_when_its_original_prompt_changes(tmp_path):
+    paths = _paths()
+    holdout = tmp_path / "finn_v2_selector_holdout.json"
+    cases = json.loads(paths[2].read_text(encoding="utf-8"))
+    next(case for case in cases if case["eval_id"] == "sealed-create-setup")["input_query"] = "Een andere prompt."
+    holdout.write_text(json.dumps(cases), encoding="utf-8")
+    migration = tmp_path / "finn_v2_selector_fixture_migrations.json"
+    migration.write_text((FIXTURES / "finn_v2_selector_fixture_migrations.json").read_text(encoding="utf-8"), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="fixture_migration_prompt_mismatch:sealed-create-setup"):
+        load_and_validate([paths[0], paths[1], holdout])

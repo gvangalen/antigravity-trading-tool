@@ -19,12 +19,15 @@ class FinnV2SetupInputCatalog:
         "4H": ("4 uur", "vier uur", "four hours", "4 hours", "vier stunden", "4 stunden"),
     }
     _CODE_TIMEFRAME = re.compile(r"\b([1-9]\d*(?:m|h|d|w))\b", re.IGNORECASE)
+    _COMPOUND_SETUP_SUFFIXES = (
+        "opzet", "setup", "set-up", "strategie", "strategy", "einrichtung",
+    )
 
     @classmethod
     def setup_type_from_text(cls, text: str) -> Optional[str]:
         lowered = cls._comparison_text(text)
         for canonical, aliases in cls._TYPE_ALIASES.items():
-            if any(cls._has_phrase(lowered, alias) for alias in aliases):
+            if any(cls._has_setup_type_phrase(lowered, alias) for alias in aliases):
                 return canonical
         return None
 
@@ -83,3 +86,11 @@ class FinnV2SetupInputCatalog:
     @staticmethod
     def _has_phrase(text: str, phrase: str) -> bool:
         return re.search(r"(?<!\w)" + re.escape(phrase) + r"(?!\w)", text) is not None
+
+    @classmethod
+    def _has_setup_type_phrase(cls, text: str, phrase: str) -> bool:
+        if cls._has_phrase(text, phrase):
+            return True
+        suffixes = "|".join(re.escape(suffix) for suffix in cls._COMPOUND_SETUP_SUFFIXES)
+        pattern = r"(?<!\w)" + re.escape(phrase) + r"(?:-|\s)?(?:" + suffixes + r")(?!\w)"
+        return re.search(pattern, text) is not None

@@ -1,0 +1,32 @@
+{
+  "schema_version": "2026-08-30.registry-derived-missing-inputs.v1",
+  "migrations": [
+    {
+      "eval_id": "sealed-create-setup",
+      "dataset": "holdout",
+      "expected_operation_id": "create_setup",
+      "input_query_sha256": "1fabf9392ae8a23ec5b3ef753fc60fceac29e0f3483d47ad5f466f4f639b47f7",
+      "original_expected_missing_inputs": [],
+      "supplied_input_fields": ["symbol", "setup_type"],
+      "derived_expected_missing_inputs": ["timeframe", "name"]
+    },
+    {
+      "eval_id": "sealed-live-bot",
+      "dataset": "holdout",
+      "expected_operation_id": "activate_bot",
+      "input_query_sha256": "93622cf490286cbb407b93af918e37ad503042acb1d97c160ff3f503859adc6e",
+      "original_expected_missing_inputs": [],
+      "supplied_input_fields": [],
+      "derived_expected_missing_inputs": ["bot_id"]
+    },
+    {
+      "eval_id": "sealed-clarify",
+      "dataset": "holdout",
+      "expected_operation_id": "clarify_request",
+      "input_query_sha256": "bfe8245616581f0e08546a64d8110a1e8f8e0bf02c9f26fa958b5cb4d6774ea3",
+      "original_expected_missing_inputs": [],
+      "supplied_input_fields": [],
+      "derived_expected_missing_inputs": ["requested_change"]
+    }
+  ]
+}

@@ -579,6 +579,16 @@ def test_natural_dutch_position_setup_is_a_supplied_type_not_a_missing_slot():
     assert result.request_plan.operation_state["missing_required_inputs"] == ["timeframe", "name"]
 
 
+def test_compound_setup_type_is_canonicalized_before_missing_input_reconciliation():
+    result = SERVICE.analyze(message="Bereid een nieuwe swingopzet voor XRP voor.")
+
+    assert result.request_plan.operation_id == "create_setup"
+    assert result.request_plan.operation_state["collected_inputs"] == {
+        "symbol": "XRP", "setup_type": "trade",
+    }
+    assert result.request_plan.operation_state["missing_required_inputs"] == ["timeframe", "name"]
+
+
 def test_contextual_bot_implication_keeps_verified_lineage_payload():
     result = SERVICE.analyze(
         message="Wat betekent dat concreet voor mijn bot?",

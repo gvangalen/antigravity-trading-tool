@@ -125,7 +125,7 @@
     },
     "expected_action_polarity": "create",
     "provider_call_expected": true,
-    "expected_missing_inputs": []
+    "expected_missing_inputs": ["timeframe", "name"]
   },
   {
     "eval_id": "sealed-watch-add",
@@ -166,7 +166,7 @@
     "expected_supported": true,
     "expected_action_polarity": "activate",
     "provider_call_expected": true,
-    "expected_missing_inputs": []
+    "expected_missing_inputs": ["bot_id"]
   },
   {
     "eval_id": "sealed-off-topic",
@@ -200,6 +200,6 @@
     "expected_clarification": true,
     "expected_action_polarity": "clarify",
     "provider_call_expected": true,
-    "expected_missing_inputs": []
+    "expected_missing_inputs": ["requested_change"]
   }
 ]

@@ -18,3 +18,16 @@ findings for production release `9c3fb3b005674ff6b9a9cbf5467198ca1b0bc738`.
 
 No deployment, sealed-holdout execution, business write, or
 `record_accepted_release.sh` invocation is part of this repair branch.
+
+## Governed Published Fixture Migration
+
+The original prompts and operation labels are immutable. Their SHA-256 values,
+the former values, supplied input fields, and registry-derived missing fields
+are recorded in `finn_v2_selector_fixture_migrations.json`; the eval registry
+rejects a prompt change, a non-registry field, or an unrecorded migration.
+
+| Published case | Former expectation | Canonical supplied inputs | Registry-derived expectation |
+| --- | --- | --- | --- |
+| `sealed-create-setup` | `[]` | `symbol`, `setup_type` | `timeframe`, `name` |
+| `sealed-live-bot` | `[]` | none | `bot_id` |
+| `sealed-clarify` | `[]` | none | `requested_change` |
