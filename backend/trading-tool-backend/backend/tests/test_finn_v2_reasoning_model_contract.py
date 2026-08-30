@@ -957,11 +957,11 @@ def test_repeated_configuration_causality_ends_with_evidence_limitation_after_on
     assert reasoning.evidence_refs_used == ["E1", "E2"]
     assert reasoning.reasoning_provenance["fallback_reason"] == "evidence_limitation_after_repair"
     assert reasoning.reasoning_provenance["repair_contract"]["terminalization_reason"] == "schema_invalid"
-    # The evidence-limited terminal remains a complete EVALUATE response:
-    # factual evidence records are retained for verifier coverage and lineage
-    # while the rejected causal relationship is absent.
-    assert [claim.evidence_refs for claim in reasoning.claims] == [["E1"], ["E2"], ["E1", "E2"]]
-    assert reasoning.claims[-1].claim_type == "uncertainty"
+    # The complete evidence ledger remains on the response, but no generic
+    # prose claim is synthesized from structured facts. Such a claim cannot
+    # be deterministically entailed for every fact shape.
+    assert reasoning.claims == []
+    assert reasoning.next_step is not None
 
 
 def test_model_repairs_unsupported_market_causality(monkeypatch):

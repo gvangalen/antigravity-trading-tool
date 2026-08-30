@@ -1069,46 +1069,12 @@ class FinnV2ReasoningFallbackService:
             "Voor een sterkere beoordeling is een expliciete beslisregel plus een "
             "beoordeelde uitvoerings- of marktuitkomst nodig."
         )
-        # The integrated-plan contract requires durable coverage for every
-        # collected scope. Grounded evaluation may deliberately focus on a
-        # subset, so rebuild the fallback ledger from the complete evidence
-        # set before it reaches the verifier or conversation lineage.
-        complete_claims = []
-        for index, item in enumerate(evidence):
-            facts = dict(item.facts or {})
-            fact_key, fact_value = next(
-                (
-                    (str(key), value)
-                    for key, value in facts.items()
-                    if value not in (None, "", [], {})
-                ),
-                ("availability", "available"),
-            )
-            complete_claims.append(
-                ReasoningClaim(
-                    claim_id=f"evidence-record-{index}",
-                    claim_type="fact",
-                    text=(
-                        f"Voor {item.tool_name} is {fact_key} "
-                        f"{str(fact_value).lower()} opgeslagen."
-                    ),
-                    evidence_refs=[item.evidence_id],
-                    confidence="high",
-                )
-            )
-        result.claims = complete_claims
-        result.claims.append(
-            ReasoningClaim(
-                claim_id="evidence-limitation",
-                claim_type="uncertainty",
-                text=(
-                    "De opgeslagen gegevens tonen planonderdelen, maar bevatten "
-                    "geen beoordeelde uitkomst voor een toetsbare beslisregel."
-                ),
-                evidence_refs=[item.evidence_id for item in evidence],
-                confidence="high",
-            )
-        )
+        # The integrated-plan contract requires the complete ledger, but a
+        # fact value can be structured (for example a profile map). Rendering
+        # it as a generic sentence would create a claim that cannot be
+        # deterministically entailed. The explicit ledger and the bounded
+        # evidence-gap response are therefore the canonical safe projection.
+        result.claims = []
         result.evidence_refs_used = [item.evidence_id for item in evidence]
         result.next_step = ReasoningNextStep(
             title="Leg toetsbare plan-evidence vast",
