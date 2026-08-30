@@ -4,7 +4,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any, Dict, List
 
-from backend.schemas.finn_v2_reasoning_schema import PersistedReasoningRecord
+from backend.schemas.finn_v2_reasoning_schema import PersistedReasoningRecord, ReasoningNextStep
 from backend.schemas.finn_v2_response_schema import ResponseClaim, ResponseDraft
 from backend.domain.finn_v2_contract import normalize_interaction_mode
 
@@ -14,6 +14,19 @@ class FinnV2ResponseDraftService:
         if reasoning_record.result is None:
             raise ValueError("reasoning_result_missing")
         result = reasoning_record.result
+        next_step = result.next_step
+        if (
+            next_step is None
+            and (result.reasoning_provenance or {}).get("reasoning_source") == "contract_evidence_limitation"
+        ):
+            next_step = ReasoningNextStep(
+                title="Leg toetsbare plan-evidence vast",
+                instruction=(
+                    "Leg één concrete beslisregel en de uitkomst van een beoordeling vast; "
+                    "FINN kan daarna beoordelen hoe sterk die regel wordt onderbouwd."
+                ),
+                requires_confirmation=False,
+            )
         return ResponseDraft(
             draft_id=f"finn-v2-draft-{uuid.uuid4().hex}",
             run_id=result.run_id,
@@ -26,7 +39,7 @@ class FinnV2ResponseDraftService:
             evidence_refs_used=list(result.evidence_refs_used),
             uncertainty_summary=result.uncertainty_summary,
             uncertainty_codes=list(result.uncertainty_codes),
-            next_step=result.next_step,
+            next_step=next_step,
             follow_up_question=result.follow_up_question,
             proposal_candidate=result.proposal_candidate,
             reasoning_result_id=reasoning_record.reasoning_result_id,
