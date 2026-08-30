@@ -32,8 +32,15 @@ async def _run_regression() -> None:
 
     run_id = f"finn-v2-pg-regression-{uuid.uuid4().hex}"
     async with async_session_factory() as setup_session:
+        fixture_user_id = os.getenv("FINN_V2_PG_TEST_USER_ID")
         source = await setup_session.execute(
-            text("SELECT id, user_id FROM finn_v2_conversations ORDER BY created_at LIMIT 1")
+            text(
+                "SELECT id, user_id FROM finn_v2_conversations "
+                "WHERE user_id = :user_id ORDER BY created_at LIMIT 1"
+            )
+            if fixture_user_id
+            else text("SELECT id, user_id FROM finn_v2_conversations ORDER BY created_at LIMIT 1"),
+            {"user_id": int(fixture_user_id)} if fixture_user_id else {},
         )
         conversation = source.mappings().first()
         if conversation is None:

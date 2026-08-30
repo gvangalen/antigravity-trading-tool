@@ -41,7 +41,13 @@ async def _build_personal_context_graph() -> None:
         )
         assert metadata.one() == ("jsonb", "NO", "'{}'::jsonb")
 
-        user_id = await session.scalar(text("SELECT id FROM users ORDER BY id LIMIT 1"))
+        fixture_user_id = os.getenv("FINN_V2_PG_TEST_USER_ID")
+        user_id = await session.scalar(
+            text("SELECT id FROM users WHERE id = :user_id")
+            if fixture_user_id
+            else text("SELECT id FROM users ORDER BY id LIMIT 1"),
+            {"user_id": int(fixture_user_id)} if fixture_user_id else {},
+        )
         if user_id is None:
             pytest.skip("disposable schema has no user fixture")
         graph = await AssistantContextRepository(session).build_canonical_context_graph(
