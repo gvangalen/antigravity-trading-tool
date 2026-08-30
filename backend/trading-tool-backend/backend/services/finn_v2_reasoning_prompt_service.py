@@ -142,7 +142,10 @@ class FinnV2ReasoningPromptService:
         if self._is_integrated_plan_evaluation(context):
             scope_refs = self._integrated_plan_scope_refs(context)
             evaluation_contract = (
-                "This is an integrated personal plan evaluation. State exactly one observation and one next step. "
+                "This is an integrated personal plan evaluation. Give one direct conclusion and one concrete next step. "
+                "Use at least two evidence-backed supporting points: one established strength or factual anchor and one "
+                "evidence-bounded limitation or explicitly unproven weakness. Include at least one fact or inference claim "
+                "and one evaluation or uncertainty claim, with evidence refs for each. "
                 "Ground them in the user's saved profile, configured indicators, setup, strategy and bot, including concrete "
                 "identifiers or timeframes when present. Do not replace saved grounding values with generic labels. "
                 "Include the supplied uncertainty summary when the context has uncertainty codes. Put all evidence IDs used by "

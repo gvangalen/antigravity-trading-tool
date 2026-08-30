@@ -9,11 +9,23 @@ from backend.schemas.finn_v2_domain_validation_schema import (
 from backend.services.finn_v2_domain_requirement_service import FinnV2DomainRequirementService
 from backend.services.finn_v2_orchestrator_outcome_service import FinnV2OrchestratorOutcomeService
 from backend.services.finn_v2_request_analysis_service import FinnV2RequestAnalysisService
+from backend.services.finn_v2_operation_classification_service import SemanticOperationClassification
 from backend.services.finn_v2_tool_plan_service import FinnV2ToolPlanService
 
 
-def _build_inputs(message: str):
-    analysis = FinnV2RequestAnalysisService().analyze(message=message)
+def _build_inputs(message: str, *, operation_id: str | None = None, conversation_context=None):
+    service = FinnV2RequestAnalysisService()
+    if operation_id:
+        contract = service.operations.require_supported(operation_id)
+        service.classifier.classify = lambda **_kwargs: SemanticOperationClassification(
+            operation_id=operation_id,
+            action=contract.action_polarity.value,
+            domain=contract.domain,
+            discourse="information_request",
+            confidence="high",
+            selector_source="structured",
+        )
+    analysis = service.analyze(message=message, conversation_context=conversation_context)
     domain_requirements = FinnV2DomainRequirementService().determine(analysis)
     tool_plan = FinnV2ToolPlanService().build(run_id="run-1", analysis=analysis, domain_plan=domain_requirements)
     return analysis, domain_requirements, tool_plan
@@ -65,7 +77,11 @@ def test_orchestrator_outcome_is_reasoning_ready_for_degraded_non_blocking_domai
 
 
 def test_orchestrator_outcome_picks_single_clarification_candidate_by_priority():
-    analysis, domain_requirements, tool_plan = _build_inputs("Welke bot is aan deze strategie gekoppeld?")
+    analysis, domain_requirements, tool_plan = _build_inputs(
+        "Welke bot is aan deze strategie gekoppeld?",
+        operation_id="read_linked_bot",
+        conversation_context={"last_verified_context": {"verified_response_id": "verified-1", "evidence_refs": ["E1"]}},
+    )
     validation = EvidenceValidationResult(
         validation_id="validation-2",
         snapshot_id="snapshot-2",

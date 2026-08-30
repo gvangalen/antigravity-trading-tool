@@ -21,10 +21,25 @@ class FinnV2OperationStateService:
         message: str,
         explicit_asset: Optional[str],
         conversation_context: Optional[Mapping[str, object]],
+        supplied_inputs: Optional[Mapping[str, object]] = None,
+        derived_inputs: Optional[Mapping[str, object]] = None,
     ) -> FinnV2OperationState:
         existing = self._existing_state(contract, conversation_context or {})
         collected = dict(existing.collected_inputs) if existing is not None else {}
-        collected.update(self.explicit_inputs(contract=contract, message=message, explicit_asset=explicit_asset))
+        # Only values proven by request parsing may be promoted to supplied
+        # inputs. Typed selector values are passed separately so a later
+        # projection cannot silently overwrite a user-supplied slot.
+        explicit = self.explicit_inputs(contract=contract, message=message, explicit_asset=explicit_asset)
+        # Keep the literal spelling of a user-provided value. The semantic
+        # projection may normalize an equivalent value for matching, but it
+        # must not overwrite a typed setup name with that normalized form.
+        for key, value in (supplied_inputs or {}).items():
+            if key in contract.required_inputs and not self._is_missing(value):
+                explicit.setdefault(key, value)
+        collected.update(explicit)
+        for key, value in (derived_inputs or {}).items():
+            if key in contract.required_inputs and key not in collected and not self._is_missing(value):
+                collected[key] = value
         missing = [field for field in contract.required_inputs if self._is_missing(collected.get(field))]
         context = conversation_context or {}
         verified_context = dict(context.get("last_verified_context") or {})
@@ -173,7 +188,7 @@ class FinnV2OperationStateService:
             elif any(token in lowered for token in ("trade", "swing", "scalp", "breakout", "momentum")):
                 values["setup_type"] = "trade"
             named = re.search(
-                r"(?:naam|name)\s*(?:is|:)?\s*[\"']?([\w .-]{2,80})",
+                r"(?:naam|name|titel|title)\s*(?:is|:|=)?\s*[\"']?([\w .-]{2,80})",
                 text,
                 re.IGNORECASE,
             )
@@ -182,6 +197,12 @@ class FinnV2OperationStateService:
                 # a name, so accept the common natural-language follow-up too.
                 named = re.search(
                     r"\b(?:noem\s+(?:hem|haar)|ik\s+noem\s+(?:hem|haar)|hij\s+heet|het\s+heet)\s+[\"']?([\w .-]{2,80})",
+                    text,
+                    re.IGNORECASE,
+                )
+            if named is None:
+                named = re.search(
+                    r"\b(?:genaamd|called)\s+[\"']?([\w .-]{2,80})",
                     text,
                     re.IGNORECASE,
                 )

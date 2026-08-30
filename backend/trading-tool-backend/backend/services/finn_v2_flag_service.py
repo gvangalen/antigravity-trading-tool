@@ -53,6 +53,10 @@ class FinnV2FlagService:
     def shadow_enqueue_timeout_ms(self) -> int:
         return self._env_int("FINN_V2_SHADOW_ENQUEUE_TIMEOUT_MS", 100)
 
+    def direct_dispatch_timeout_ms(self) -> int:
+        """Bound synchronous broker handoff without penalizing cold pools."""
+        return max(500, min(10_000, self._env_int("FINN_V2_DIRECT_DISPATCH_TIMEOUT_MS", 5_000)))
+
     def message_retention_days(self) -> int:
         return self._env_int("FINN_V2_MESSAGE_RETENTION_DAYS", 30)
 

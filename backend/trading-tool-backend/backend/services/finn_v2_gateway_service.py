@@ -7,6 +7,7 @@ import os
 import uuid
 from dataclasses import asdict, is_dataclass
 from datetime import date, datetime, time, timezone
+from time import monotonic
 from typing import Any, Dict, Optional
 
 from fastapi import HTTPException
@@ -235,6 +236,7 @@ class FinnV2GatewayService:
             from backend.celery_task.finn_v2_task import process_finn_v2_run
 
             dispatch = await self.dispatches.get_for_run(run_id)
+            publish_started = monotonic()
             # Celery's broker client is synchronous. It must never hold the
             # request event loop after the run and outbox record are durable.
             await asyncio.wait_for(
@@ -244,15 +246,33 @@ class FinnV2GatewayService:
                     task_id=dispatch.task_id,
                     queue=dispatch.queue,
                 ),
-                timeout=1.0,
+                timeout=self.flags.direct_dispatch_timeout_ms() / 1000.0,
             )
             await self.dispatches.mark_published(dispatch.dispatch_id)
             await self.session.commit()
+            logger.info(
+                "FINN V2 dispatch published directly",
+                extra={
+                    "run_id": run_id,
+                    "dispatch_id": dispatch.dispatch_id,
+                    "queue": dispatch.queue,
+                    "publish_latency_ms": int((monotonic() - publish_started) * 1000),
+                },
+            )
         except Exception as exc:
             # The committed pending outbox record is recovered by Celery beat;
             # never run lifecycle work in this request process.
-            await self.session.rollback()
-            logger.warning("FINN V2 dispatch enqueue deferred to recovery", extra={"run_id": run_id, "error": str(exc)})
+            rollback = getattr(self.session, "rollback", None)
+            if rollback is not None:
+                await rollback()
+            logger.warning(
+                "FINN V2 dispatch enqueue deferred to recovery",
+                extra={
+                    "run_id": run_id,
+                    "dispatch_error_class": type(exc).__name__,
+                    "dispatch_error": str(exc),
+                },
+            )
         return run_id
 
     async def apply_retention_now(self) -> Dict[str, int]:

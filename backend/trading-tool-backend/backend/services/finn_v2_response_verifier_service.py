@@ -580,6 +580,13 @@ class FinnV2ResponseVerifierService:
         if not coverage.response_coverage_ok:
             reason_codes.append("response_field_incomplete")
 
+        evaluate_plan_content_ok = self._evaluate_plan_content_ok(
+            operation_id=operation_id,
+            draft=draft,
+        )
+        if not evaluate_plan_content_ok:
+            reason_codes.append("evaluate_plan_content_incomplete")
+
         relevance_ok = self._is_relevant(run.message, draft)
         if not relevance_ok:
             reason_codes.append("response_not_answering_question")
@@ -637,6 +644,7 @@ class FinnV2ResponseVerifierService:
                 evidence_ok,
                 coverage.coverage_ok,
                 coverage.response_coverage_ok,
+                evaluate_plan_content_ok,
                 relevance_ok,
                 personalization_ok,
                 mode_purity_ok,
@@ -683,6 +691,25 @@ class FinnV2ResponseVerifierService:
             created_at=datetime.now(timezone.utc),
         )
         return verifier
+
+    @staticmethod
+    def _evaluate_plan_content_ok(*, operation_id: Optional[str], draft: ResponseDraft) -> bool:
+        """Require a complete evidence-backed assessment, not a scope recital."""
+        if operation_id != "evaluate_plan" or normalize_interaction_mode(draft.mode) != "EVALUATE":
+            return True
+        evidence_points = [point for point in draft.supporting_points if point.evidence_refs]
+        claim_types = {claim.claim_type for claim in draft.claims if claim.evidence_refs}
+        has_observation = bool(str(draft.main_observation or "").strip())
+        has_next_step = draft.next_step is not None and bool(str(draft.next_step.instruction or "").strip())
+        has_grounded_strength = bool(claim_types.intersection({"fact", "inference"}))
+        has_grounded_limitation = bool(claim_types.intersection({"evaluation", "uncertainty"}))
+        return bool(
+            has_observation
+            and has_next_step
+            and len(evidence_points) >= 2
+            and has_grounded_strength
+            and has_grounded_limitation
+        )
 
     @staticmethod
     def _covered_response_fields(*, draft: ResponseDraft, evidence: list, required_fields: list[str]) -> list[str]:

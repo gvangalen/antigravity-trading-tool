@@ -1,5 +1,6 @@
 from backend.services.finn_v2_domain_requirement_service import FinnV2DomainRequirementService
 from backend.services.finn_v2_request_analysis_service import FinnV2RequestAnalysisService
+from backend.services.finn_v2_operation_classification_service import SemanticOperationClassification
 from backend.services.finn_v2_tool_plan_service import FinnV2ToolPlanService
 
 
@@ -39,14 +40,28 @@ def test_tool_plan_keeps_strategy_and_bot_requests_grounded_without_indicator_ga
     analysis_service = FinnV2RequestAnalysisService()
     domain_service = FinnV2DomainRequirementService()
 
-    strategy_analysis = analysis_service.analyze(message="Welke strategie is aan mijn actieve setup gekoppeld?")
+    def select(operation_id):
+        contract = analysis_service.operations.require_supported(operation_id)
+        return lambda **_kwargs: SemanticOperationClassification(
+            operation_id=operation_id,
+            action=contract.action_polarity.value,
+            domain=contract.domain,
+            discourse="information_request",
+            confidence="high",
+            selector_source="structured",
+        )
+
+    analysis_service.classifier.classify = select("read_linked_strategy")
+    context = {"last_verified_context": {"verified_response_id": "verified-1", "evidence_refs": ["E1"]}}
+    strategy_analysis = analysis_service.analyze(message="Welke strategie is aan mijn actieve setup gekoppeld?", conversation_context=context)
     strategy_plan = FinnV2ToolPlanService().build(
         run_id="run-strategy",
         analysis=strategy_analysis,
         domain_plan=domain_service.determine(strategy_analysis),
     )
 
-    bot_analysis = analysis_service.analyze(message="Welke bot is aan deze strategie gekoppeld en staat die live?")
+    analysis_service.classifier.classify = select("read_linked_bot")
+    bot_analysis = analysis_service.analyze(message="Welke bot is aan deze strategie gekoppeld en staat die live?", conversation_context=context)
     bot_plan = FinnV2ToolPlanService().build(
         run_id="run-bot",
         analysis=bot_analysis,

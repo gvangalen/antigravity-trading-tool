@@ -65,10 +65,10 @@ class FinnV2RequestAnalysisService:
         # avoids turning ordinary Dutch pronouns into stale conversation
         # selectors later in the pipeline.
         uses_conversation_reference = bool(preprocessed.conversation_reference_markers)
-        if uses_conversation_reference and not (
-            (conversation_context or {}).get("last_verified_context")
-            or (conversation_context or {}).get("last_verified_conclusion")
-        ) and preprocessed.discourse_act in {"evidence_follow_up", "reformulation"}:
+        if uses_conversation_reference and not self._has_safe_lineage(
+            conversation_context or {},
+            allow_degraded=preprocessed.discourse_act in {"evidence_follow_up", "reformulation"},
+        ):
             unresolved_signals.append("conversation_reference_without_verified_context")
         if uses_conversation_reference:
             context = conversation_context or {}
@@ -125,11 +125,13 @@ class FinnV2RequestAnalysisService:
         # optional reference field empty.
         if operation.requires_verified_context:
             uses_conversation_reference = True
-            has_verified_context = bool(
-                (conversation_context or {}).get("last_verified_context")
-                or (conversation_context or {}).get("last_verified_conclusion")
+            has_safe_lineage = self._has_safe_lineage(
+                conversation_context or {},
+                allow_degraded=operation.operation_id in {
+                    "explain_previous_evidence", "reformulate_previous_response",
+                },
             )
-            if not has_verified_context and "conversation_reference_without_verified_context" not in unresolved_signals:
+            if not has_safe_lineage and "conversation_reference_without_verified_context" not in unresolved_signals:
                 unresolved_signals.append("conversation_reference_without_verified_context")
                 operation_id = "clarify_request"
                 operation = self.operations.require_supported(operation_id)
@@ -174,6 +176,8 @@ class FinnV2RequestAnalysisService:
                 message=text,
                 explicit_asset=operation_asset,
                 conversation_context=conversation_context,
+                supplied_inputs=semantic.supplied_inputs,
+                derived_inputs=semantic.derived_inputs,
             ) if operation.required_inputs and not concept_input_is_present else None
         )
         if guided_state is not None:
@@ -193,6 +197,18 @@ class FinnV2RequestAnalysisService:
                 "previous_verified_response": verified.get("response"),
                 "previous_evidence_refs": list(verified.get("evidence_refs") or []),
                 "resolved_entities": dict(verified.get("resolved_entities") or {}),
+            }
+        elif guided_state is None and uses_conversation_reference and self._has_safe_lineage(
+            conversation_context or {}, allow_degraded=True
+        ):
+            # Degraded lineage retains provenance only. It never revives an
+            # unverified conclusion or response text for a follow-up.
+            degraded = dict((conversation_context or {}).get("last_degraded_context") or {})
+            operation_state_payload = {
+                "previous_degraded_run_id": degraded.get("run_id"),
+                "previous_degraded_operation_id": degraded.get("operation_id"),
+                "previous_evidence_refs": list(degraded.get("evidence_refs") or []),
+                "resolved_entities": dict(degraded.get("resolved_entities") or {}),
             }
         target_resolution = self.target_resolver.resolve(
             explicit_target_asset=message_asset,
@@ -296,9 +312,11 @@ class FinnV2RequestAnalysisService:
         reference = None
         if uses_conversation_reference:
             verified_context = dict(conversation_context.get("last_verified_context") or {})
+            degraded_context = dict(conversation_context.get("last_degraded_context") or {})
             is_canonical_context = bool(conversation_context.get("conversation_state_version"))
             reference = str(
                 verified_context.get("verified_response_id")
+                or degraded_context.get("run_id")
                 or (None if is_canonical_context else conversation_context.get("last_verified_response_id"))
                 or (None if is_canonical_context else conversation_context.get("last_user_goal"))
                 or "previous_verified_response"
@@ -345,6 +363,17 @@ class FinnV2RequestAnalysisService:
         )
 
     @staticmethod
+    def _has_safe_lineage(context: Dict[str, object], *, allow_degraded: bool) -> bool:
+        if context.get("last_verified_context") or context.get("last_verified_conclusion"):
+            return True
+        degraded = context.get("last_degraded_context")
+        return bool(
+            allow_degraded
+            and isinstance(degraded, dict)
+            and degraded.get("evidence_refs")
+        )
+
+    @staticmethod
     def _user_goal(interaction_mode: str, primary_subject: Optional[str], normalized: str, integrated_plan: bool) -> str:
         if interaction_mode == "EVALUATE" and integrated_plan:
             return "evaluate_complete_plan"
@@ -385,13 +414,27 @@ class FinnV2RequestAnalysisService:
                 labels.append(label)
         if operation.operation_id == "evaluate_plan" and not labels:
             labels = ["profile", "indicators", "setup", "strategy", "bot"]
+        # Linked read contracts expose the intervening plan graph in legacy
+        # diagnostics. This is a projection of the selected contract only.
+        linked_graph_labels = {
+            "read_linked_strategy": ("setup", "strategy"),
+            "read_linked_bot": ("setup", "strategy", "bot") if "strategy" in explicit_entities else (),
+        }
+        for label in linked_graph_labels.get(operation.operation_id, ()):
+            if label not in labels:
+                labels.append(label)
         domain_label = {
             "setup": "setup", "strategy": "strategy", "bot": "bot",
             "watchlist": "watchlist", "plan": "setup", "indicators": "indicators", "system": "unknown",
         }.get(operation.domain)
         if domain_label and domain_label not in labels:
             labels.append(domain_label)
-        return labels or ["unknown"]
+        diagnostic_order = {
+            "profile": 0, "indicators": 1, "setup": 2, "strategy": 3,
+            "bot": 4, "watchlist": 5, "asset": 6, "capability": 7,
+            "unknown": 8,
+        }
+        return sorted(labels, key=lambda label: diagnostic_order.get(label, 99)) or ["unknown"]
 
     @staticmethod
     def _presentation_primary_subject(operation) -> Optional[str]:

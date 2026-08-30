@@ -1,6 +1,7 @@
 from backend.services.finn_v2_request_analysis_service import FinnV2RequestAnalysisService
 from backend.services.finn_v2_request_preprocessor_service import FinnV2RequestPreprocessorService
 from backend.services.finn_v2_operation_classification_service import SemanticOperationClassification
+from backend.domain.finn_v2_operation_registry import FinnV2OperationRegistry
 
 
 def test_preprocessor_treats_current_symbol_as_asset_entity():
@@ -115,11 +116,31 @@ def test_request_analysis_keeps_capability_discourse_when_it_mentions_plan_featu
     assert result.request_plan.required_information_scopes == ["capability"]
 
 
-def test_request_analysis_handles_setup_strategy_and_bot_facts():
-    setup_result = SERVICE.analyze(message="Welke setup gebruik ik voor BTC?")
-    strategy_result = SERVICE.analyze(message="Welke strategie is aan mijn actieve setup gekoppeld?")
-    bot_result = SERVICE.analyze(message="Welke bot is aan deze strategie gekoppeld?")
-    status_result = SERVICE.analyze(message="Staat mijn gekoppelde bot live?")
+def test_request_analysis_handles_setup_strategy_and_bot_facts(monkeypatch):
+    service = FinnV2RequestAnalysisService()
+    selected = {
+        "Welke setup gebruik ik voor BTC?": "read_active_setup",
+        "Welke strategie is aan mijn actieve setup gekoppeld?": "read_linked_strategy",
+        "Welke bot is aan deze strategie gekoppeld?": "read_linked_bot",
+        "Staat mijn gekoppelde bot live?": "read_bot_status",
+    }
+    monkeypatch.setattr(
+        service.classifier,
+        "classify",
+        lambda *, message, **_kwargs: SemanticOperationClassification(
+            operation_id=selected[message],
+            action="read",
+            domain=FinnV2OperationRegistry().require_supported(selected[message]).domain,
+            discourse="information_request",
+            confidence="high",
+            selector_source="structured",
+        ),
+    )
+    context = {"last_verified_context": {"verified_response_id": "verified-plan", "evidence_refs": ["E1"]}}
+    setup_result = service.analyze(message="Welke setup gebruik ik voor BTC?", conversation_context=context)
+    strategy_result = service.analyze(message="Welke strategie is aan mijn actieve setup gekoppeld?", conversation_context=context)
+    bot_result = service.analyze(message="Welke bot is aan deze strategie gekoppeld?", conversation_context=context)
+    status_result = service.analyze(message="Staat mijn gekoppelde bot live?", conversation_context=context)
 
     assert setup_result.interaction_mode == "READ"
     assert setup_result.subject_scopes == ["setup"]
@@ -561,6 +582,41 @@ def test_follow_up_references_the_previous_verified_response_not_a_text_label():
 
     assert analysis.request_plan.operation_id == "explain_previous_evidence"
     assert analysis.request_plan.conversation_reference == "verified-btc-plan-1"
+
+
+def test_degraded_evidence_lineage_keeps_provenance_without_reviving_a_conclusion(monkeypatch):
+    service = FinnV2RequestAnalysisService()
+    monkeypatch.setattr(
+        service.classifier,
+        "classify",
+        lambda **_kwargs: SemanticOperationClassification(
+            operation_id="explain_previous_evidence",
+            action="read",
+            domain="lineage",
+            discourse="evidence_follow_up",
+            confidence="high",
+            selector_source="structured",
+        ),
+    )
+
+    analysis = service.analyze(
+        message="Waar baseer je dat op?",
+        conversation_context={
+            "last_degraded_context": {
+                "operation_id": "evaluate_plan",
+                "run_id": "run-degraded-1",
+                "evidence_refs": ["E1"],
+                "resolved_entities": {"asset": "BTC", "setup_id": 295},
+            },
+        },
+    )
+
+    state = analysis.request_plan.operation_state
+    assert analysis.request_plan.operation_id == "explain_previous_evidence"
+    assert analysis.request_plan.conversation_reference == "run-degraded-1"
+    assert state["previous_evidence_refs"] == ["E1"]
+    assert "previous_verified_conclusion" not in state
+    assert "previous_verified_response" not in state
 
 
 def test_request_analysis_does_not_treat_read_questions_with_confirmed_wording_as_execution():

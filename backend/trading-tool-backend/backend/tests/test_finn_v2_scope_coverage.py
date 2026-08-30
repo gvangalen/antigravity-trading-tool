@@ -2,13 +2,39 @@ from datetime import datetime, timezone
 from types import SimpleNamespace
 
 from backend.schemas.finn_v2_orchestrator_schema import RequestPlan
-from backend.schemas.finn_v2_reasoning_schema import ProposalCandidate, ReasoningNextStep
+from backend.schemas.finn_v2_reasoning_schema import ProposalCandidate, ReasoningNextStep, ReasoningSupportingPoint
 from backend.schemas.finn_v2_response_schema import ResponseClaim, ResponseDraft
 from backend.domain.finn_v2_operation_registry import FinnV2OperationRegistry
 from backend.services.finn_v2_response_verifier_service import FinnV2ResponseVerifierService
 
 
 CONTRACT_VERSION = FinnV2OperationRegistry.VERSION
+
+
+def test_integrated_plan_verifier_requires_a_grounded_strength_and_limitation():
+    draft = ResponseDraft(
+        draft_id="draft-plan-quality",
+        run_id="run-plan-quality",
+        user_id=7,
+        mode="EVALUATE",
+        direct_answer="Het plan heeft een bruikbare basis, maar de beschikbare gegevens bewijzen nog geen complete zwakteanalyse.",
+        main_observation="De setup en indicatoren vormen een feitelijke basis; de ontbrekende relatie tussen die gegevens is onzeker.",
+        supporting_points=[
+            ReasoningSupportingPoint(title="Feitelijke basis", explanation="De opgeslagen setup is aanwezig.", evidence_refs=["E1"]),
+            ReasoningSupportingPoint(title="Begrensde onzekerheid", explanation="De evidence bewijst geen causaal zwak punt.", evidence_refs=["E2"]),
+        ],
+        claims=[
+            ResponseClaim(claim_id="fact", claim_type="fact", text="Setup 295 is opgeslagen.", evidence_refs=["E1"], confidence="high"),
+            ResponseClaim(claim_id="limit", claim_type="uncertainty", text="Een causaal zwak punt is niet bewezen.", evidence_refs=["E2"], confidence="medium"),
+        ],
+        next_step=ReasoningNextStep(title="Verifieer de regel", instruction="Leg de ontbrekende beslisregel vast voordat je die beoordeelt.", requires_confirmation=False),
+        evidence_set_hash="hash-plan-quality",
+        created_at=datetime.now(timezone.utc),
+    )
+
+    assert FinnV2ResponseVerifierService._evaluate_plan_content_ok(operation_id="evaluate_plan", draft=draft) is True
+    draft.supporting_points = draft.supporting_points[:1]
+    assert FinnV2ResponseVerifierService._evaluate_plan_content_ok(operation_id="evaluate_plan", draft=draft) is False
 
 
 def test_response_coverage_requires_the_contractual_setup_strategy_bot_graph():
