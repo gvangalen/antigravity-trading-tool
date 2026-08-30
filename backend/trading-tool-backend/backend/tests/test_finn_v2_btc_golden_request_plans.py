@@ -70,9 +70,7 @@ def test_request_plan_preserves_a_follow_up_reference_without_reusing_unverified
     assert analysis.explicit_strategy_id == 325
     assert analysis.explicit_bot_id == 186
     assert analysis.interaction_mode == "EVALUATE"
-    assert analysis.request_plan.required_information_scopes == [
-        "profile", "preferences", "active_asset", "indicator_configuration", "active_setup", "linked_strategy", "linked_bot", "bot_status",
-    ]
+    assert analysis.request_plan.required_information_scopes == []
 
 
 def test_request_plan_requires_a_clarification_when_a_reference_has_no_verified_turn():

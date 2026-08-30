@@ -454,7 +454,12 @@ class FinnV2OrchestratorService:
             # retained provenance without receiving that conclusion.
             if (
                 response_mode == "EVALUATE"
-                and operation_id not in {"off_topic", "unsupported_financial_operation"}
+                and operation_id not in {
+                    "off_topic", "unsupported_financial_operation",
+                    # Follow-ups consume existing lineage; a limited
+                    # follow-up must never replace its durable source record.
+                    "explain_previous_evidence", "reformulate_previous_response",
+                }
             ):
                 context["last_degraded_context"] = {
                     "context_version": "finn_v2.degraded-lineage.v1",

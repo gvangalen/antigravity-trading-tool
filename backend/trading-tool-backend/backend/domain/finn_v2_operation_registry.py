@@ -511,7 +511,10 @@ _CONTRACTS: tuple[OperationContract, ...] = (
     OperationContract("explain_financial_concept", FinnV2OperationRegistry.VERSION, "financial_education", "READ", (), required_inputs=("concept",), model_policy="never", response_strategy="financial_concept_explanation", context_policy="minimal"),
     OperationContract("unsupported_financial_operation", FinnV2OperationRegistry.VERSION, "financial_unsupported", "UNAVAILABLE", (), action_polarity=ActionPolarity.EXECUTE, model_policy="never", response_strategy="unsupported_operation", context_policy="minimal"),
     OperationContract("off_topic", FinnV2OperationRegistry.VERSION, "off_topic", "UNAVAILABLE", (), model_policy="never", response_strategy="off_topic", context_policy="minimal"),
-    OperationContract("explain_previous_evidence", FinnV2OperationRegistry.VERSION, "system", "EVALUATE", ("onderbouw", "evidence", "waarom"), action_polarity=ActionPolarity.READ, required_scopes=("profile", "preferences", "active_asset", "indicator_configuration", "active_setup", "linked_strategy", "linked_bot", "bot_status"), model_policy="required", response_strategy="model_reasoning"),
+    # This contract explains evidence already released by a prior terminal
+    # response. Recollecting a full plan graph here can overwrite the lineage
+    # it is meant to explain and is neither necessary nor safer.
+    OperationContract("explain_previous_evidence", FinnV2OperationRegistry.VERSION, "system", "EVALUATE", ("onderbouw", "evidence", "waarom"), action_polarity=ActionPolarity.READ, model_policy="never", response_strategy="deterministic_structured_summary", context_policy="minimal"),
     OperationContract("reformulate_previous_response", FinnV2OperationRegistry.VERSION, "system", "READ", ("korter", "anders formuleren", "reformuleer"), response_strategy="deterministic_structured_summary"),
     _read("read_active_asset", "asset", ("active_asset",), ("actieve asset", "welke asset"), ("asset",)),
     _gap("select_asset", "asset", "ACTION_PROPOSAL", ("selecteer asset",), "select_asset_execution_adapter_missing"),
