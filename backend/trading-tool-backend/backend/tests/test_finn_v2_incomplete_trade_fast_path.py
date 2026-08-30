@@ -228,3 +228,50 @@ def test_gateway_request_cancellation_does_not_cancel_durable_dispatch():
     assert observed[0][0] == "enqueued"
     assert observed[0][1]["kwargs"] == {"run_id": "run-cancel-1"}
     monkeypatch.undo()
+
+
+def test_gateway_marks_only_acknowledged_direct_publish_as_published(monkeypatch):
+    from backend.services.finn_v2_gateway_service import FinnV2GatewayService
+
+    class _Session:
+        add = object()
+
+        def __init__(self):
+            self.rolled_back = False
+
+        async def commit(self):
+            return None
+
+        async def rollback(self):
+            self.rolled_back = True
+
+    session = _Session()
+    service = FinnV2GatewayService(session=session)
+    service.flags.direct_dispatch_timeout_ms = lambda: 500
+    service.create_run = lambda **_kwargs: asyncio.sleep(0, result=SimpleNamespace(id="run-publish-timeout", status="created"))
+    published = []
+
+    class _Dispatches:
+        async def get_for_run(self, _run_id):
+            return SimpleNamespace(dispatch_id="dispatch-timeout", task_id="task-timeout", queue="finn_interactive")
+
+        async def mark_published(self, dispatch_id):
+            published.append(dispatch_id)
+
+    class _Task:
+        def apply_async(self, **_kwargs):
+            import time
+            time.sleep(0.75)
+
+    import backend.celery_task.finn_v2_task as task_module
+    service.dispatches = _Dispatches()
+    monkeypatch.setattr(task_module, "process_finn_v2_run", _Task())
+
+    run_id = asyncio.run(service.run_foundation_now(
+        user_id=7, request_payload={"message": "Wat betekent RSI?", "transport": "chat"},
+        request_path="/api/assistant/chat", request_id="req-publish-timeout", trace_id="trace-publish-timeout",
+    ))
+
+    assert run_id == "run-publish-timeout"
+    assert published == []
+    assert session.rolled_back is True
