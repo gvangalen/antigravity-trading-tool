@@ -1,5 +1,8 @@
 import ast
 import importlib
+import subprocess
+import sys
+from pathlib import Path
 
 from backend.celery_task.queue_policy import (
     ALLOWED_DEFAULT_TASKS,
@@ -17,6 +20,23 @@ from backend.celery_task.queue_policy import (
     resolve_workload_class,
     unmapped_task_names,
 )
+
+
+def test_queue_policy_import_does_not_bootstrap_celery_worker():
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            "import sys; import backend.celery_task.queue_policy; "
+            "assert 'backend.celery_task.celery_app' not in sys.modules",
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+        cwd=Path(__file__).resolve().parents[2],
+    )
+
+    assert result.returncode == 0, result.stderr
 
 
 def test_pm2_config_splits_named_queue_workers():
