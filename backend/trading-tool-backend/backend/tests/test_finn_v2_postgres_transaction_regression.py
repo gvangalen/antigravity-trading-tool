@@ -23,7 +23,17 @@ pytestmark = pytest.mark.skipif(
 
 
 def test_tool_failure_does_not_rollback_committed_collecting_transition():
-    asyncio.run(_run_regression())
+    asyncio.run(_run_with_fresh_asyncpg_pool(_run_regression()))
+
+
+async def _run_with_fresh_asyncpg_pool(coroutine) -> None:
+    """Mirror the FINN worker boundary before its asyncio loop closes."""
+    from backend.infrastructure.database import engine
+
+    try:
+        await coroutine
+    finally:
+        await engine.dispose()
 
 
 async def _run_regression() -> None:

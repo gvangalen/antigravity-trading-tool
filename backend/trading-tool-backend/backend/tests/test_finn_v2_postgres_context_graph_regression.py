@@ -20,7 +20,17 @@ pytestmark = pytest.mark.skipif(
 
 
 def test_canonical_context_graph_reads_migrated_indicator_configuration_without_undefined_column():
-    asyncio.run(_build_personal_context_graph())
+    asyncio.run(_run_with_fresh_asyncpg_pool(_build_personal_context_graph()))
+
+
+async def _run_with_fresh_asyncpg_pool(coroutine) -> None:
+    """Do not leave asyncpg transports attached to this test's closed loop."""
+    from backend.infrastructure.database import engine
+
+    try:
+        await coroutine
+    finally:
+        await engine.dispose()
 
 
 async def _build_personal_context_graph() -> None:
