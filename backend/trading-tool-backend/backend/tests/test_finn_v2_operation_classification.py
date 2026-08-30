@@ -280,6 +280,26 @@ def test_low_confidence_safe_terminal_selection_remains_typed():
     assert result.selector_source == "structured"
 
 
+def test_low_confidence_lineage_selection_requires_safe_persisted_context():
+    class Selector:
+        def select(self, **_kwargs):
+            return type("Selection", (), {
+                "operation_id": "explain_previous_evidence", "confidence": 0.6,
+                "entities": {}, "target_asset": None,
+                "conversation_reference": "previous_verified_response", "missing_inputs": (),
+            })(), None
+
+    classifier = FinnV2OperationClassificationService(structured_selector=Selector())
+    without_context = classifier.classify(message="Waarop baseer je die conclusie?")
+    with_context = classifier.classify(
+        message="Waarop baseer je die conclusie?",
+        conversation_context={"last_verified_context": {"verified_response_id": "verified-1"}},
+    )
+
+    assert without_context.operation_id == "unavailable"
+    assert with_context.operation_id == "explain_previous_evidence"
+
+
 def test_manifest_candidates_exclude_contracts_without_selection_metadata():
     facts = CLASSIFIER.preprocessor.preprocess(message="Welke indicatoren gebruik ik?")
 

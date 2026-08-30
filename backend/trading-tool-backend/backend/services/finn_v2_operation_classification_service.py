@@ -84,8 +84,26 @@ class FinnV2OperationClassificationService:
         safe_terminal_operations = {
             "clarify_request", "off_topic", "unsupported_financial_operation",
         }
+        # A context-bound lineage request has an independently persisted safe
+        # source record. Do not discard a schema-valid model selection merely
+        # because it is less certain than a fresh action request; the
+        # downstream registry validator still requires that source record.
+        lineage_operations = {
+            "explain_previous_evidence", "reformulate_previous_response", "evaluate_bot",
+        }
+        has_safe_lineage = bool(
+            (conversation_context or {}).get("last_verified_context")
+            or (conversation_context or {}).get("last_verified_conclusion")
+            or (conversation_context or {}).get("last_degraded_context")
+        )
         if selection is not None and (
-            selection.confidence >= 0.75 or selection.operation_id in safe_terminal_operations
+            selection.confidence >= 0.75
+            or selection.operation_id in safe_terminal_operations
+            or (
+                selection.operation_id in lineage_operations
+                and has_safe_lineage
+                and selection.confidence >= 0.5
+            )
         ):
             return self._result(selection.operation_id, facts, "high", "structured", candidates, selection=selection)
         # A malformed, unavailable, or low-confidence selector response is a
