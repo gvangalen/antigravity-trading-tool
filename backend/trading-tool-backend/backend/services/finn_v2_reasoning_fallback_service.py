@@ -1097,6 +1097,18 @@ class FinnV2ReasoningFallbackService:
                 )
             )
         result.claims = complete_claims
+        result.claims.append(
+            ReasoningClaim(
+                claim_id="evidence-limitation",
+                claim_type="uncertainty",
+                text=(
+                    "De opgeslagen gegevens tonen planonderdelen, maar bevatten "
+                    "geen beoordeelde uitkomst voor een toetsbare beslisregel."
+                ),
+                evidence_refs=[item.evidence_id for item in evidence],
+                confidence="high",
+            )
+        )
         result.evidence_refs_used = [item.evidence_id for item in evidence]
         result.next_step = ReasoningNextStep(
             title="Leg toetsbare plan-evidence vast",

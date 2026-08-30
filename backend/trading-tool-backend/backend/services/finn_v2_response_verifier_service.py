@@ -721,6 +721,12 @@ class FinnV2ResponseVerifierService:
         if operation_id != "evaluate_plan" or normalize_interaction_mode(draft.mode) != "EVALUATE":
             return True
         evidence_points = [point for point in draft.supporting_points if point.evidence_refs]
+        # Contract-limited repairs deliberately rebuild their evidence ledger
+        # as claims, rather than narrative supporting points. Both shapes are
+        # typed and evidence-bound, so do not reject a safe bounded evaluation
+        # merely for choosing the non-narrative projection.
+        if (draft.reasoning_provenance or {}).get("reasoning_source") == "contract_evidence_limitation":
+            evidence_points.extend(claim for claim in draft.claims if claim.evidence_refs)
         claim_types = {claim.claim_type for claim in draft.claims if claim.evidence_refs}
         has_observation = bool(str(draft.main_observation or "").strip())
         has_next_step = draft.next_step is not None and bool(str(draft.next_step.instruction or "").strip())

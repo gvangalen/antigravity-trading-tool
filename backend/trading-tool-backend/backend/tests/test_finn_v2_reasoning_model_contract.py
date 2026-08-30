@@ -960,7 +960,8 @@ def test_repeated_configuration_causality_ends_with_evidence_limitation_after_on
     # The evidence-limited terminal remains a complete EVALUATE response:
     # factual evidence records are retained for verifier coverage and lineage
     # while the rejected causal relationship is absent.
-    assert [claim.evidence_refs for claim in reasoning.claims] == [["E1"], ["E2"]]
+    assert [claim.evidence_refs for claim in reasoning.claims] == [["E1"], ["E2"], ["E1", "E2"]]
+    assert reasoning.claims[-1].claim_type == "uncertainty"
 
 
 def test_model_repairs_unsupported_market_causality(monkeypatch):
