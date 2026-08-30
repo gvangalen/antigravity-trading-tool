@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+from types import SimpleNamespace
 from time import monotonic
 from typing import Awaitable, Callable, Optional
 
@@ -105,6 +106,7 @@ class FinnV2OrchestratorService:
         domain_requirements = self.requirements.determine(analysis)
         tool_plan = self.tool_plans.build(run_id=run_id, analysis=analysis, domain_plan=domain_requirements)
 
+        result = None
         try:
             await self.tools.execute_tool_plan(run_id=run_id, user_id=user_id, tool_plan=tool_plan)
             snapshot, validation = await self.tools.run_state_pipeline(run_id=run_id, user_id=user_id)
@@ -232,6 +234,14 @@ class FinnV2OrchestratorService:
             )
             return result
         except FinnV2VerifierRejected as rejection:
+            if conversation_id and result is not None:
+                await self._update_conversation_context(
+                    conversation_id=conversation_id,
+                    user_id=user_id,
+                    existing_context=conversation_context,
+                    result=result,
+                    verified_response=self._rejected_response_lineage(rejection=rejection, run_id=run_id),
+                )
             await self._append_trace(
                 run_id=run_id,
                 user_id=user_id,
@@ -389,8 +399,10 @@ class FinnV2OrchestratorService:
         # turn.  Preserve the last usable grounded context instead.
         provenance = dict(getattr(verified_response, "reasoning_provenance", {}) or {})
         requires_lineage_proof = had_canonical_state
+        is_contract_limited = provenance.get("reasoning_source") == "contract_evidence_limitation"
         is_verified = (
             getattr(verified_response, "verifier_status", None) in {"passed", "repaired"}
+            and not is_contract_limited
             and response_mode in {"READ", "EVALUATE"}
             and operation_id not in {
                 "off_topic", "unsupported_financial_operation",
@@ -440,8 +452,12 @@ class FinnV2OrchestratorService:
             # A downgraded analysis cannot become a factual conclusion, but
             # evidence/reformulation follow-ups may safely reference its
             # retained provenance without receiving that conclusion.
-            if response_mode == "EVALUATE" and bool(getattr(verified_response, "evidence_refs_used", []) or []):
+            if (
+                response_mode == "EVALUATE"
+                and operation_id not in {"off_topic", "unsupported_financial_operation"}
+            ):
                 context["last_degraded_context"] = {
+                    "context_version": "finn_v2.degraded-lineage.v1",
                     "operation_id": operation_id,
                     "user_goal": getattr(request_plan, "user_goal", None),
                     "mode": response_mode,
@@ -449,7 +465,10 @@ class FinnV2OrchestratorService:
                     "run_id": getattr(verified_response, "run_id", None),
                     "evidence_refs": list(getattr(verified_response, "evidence_refs_used", []) or []),
                     "evidence_scopes": list(getattr(request_plan, "required_information_scopes", []) or []),
-                    "terminal_status": "downgraded",
+                    "terminal_status": self._degraded_terminal_status(
+                        verified_response=verified_response,
+                        is_contract_limited=is_contract_limited,
+                    ),
                     "verifier_status": getattr(verified_response, "verifier_status", None),
                     "reason_codes": list(getattr(verified_response, "uncertainty_codes", []) or []),
                     "released_response_sections": [
@@ -499,6 +518,29 @@ class FinnV2OrchestratorService:
             conversation_id=conversation_id,
             user_id=user_id,
             context={key: value for key, value in context.items() if value is not None},
+        )
+
+    @staticmethod
+    def _degraded_terminal_status(*, verified_response, is_contract_limited: bool) -> str:
+        if is_contract_limited:
+            return "contract_limited"
+        if getattr(verified_response, "verifier_status", None) == "rejected":
+            return "rejected"
+        if getattr(verified_response, "mode", None) == "UNAVAILABLE":
+            return "unavailable"
+        return "downgraded"
+
+    @staticmethod
+    def _rejected_response_lineage(*, rejection: FinnV2VerifierRejected, run_id: str):
+        """Project a reject into the common safe terminal lineage boundary."""
+        draft = rejection.draft
+        return SimpleNamespace(
+            verifier_status="rejected",
+            mode=normalize_interaction_mode(draft.mode),
+            run_id=run_id,
+            evidence_refs_used=sorted(set(draft.evidence_refs_used or [])),
+            uncertainty_codes=list(rejection.verifier.reason_codes or []),
+            reasoning_provenance=dict(draft.reasoning_provenance or {}),
         )
 
     def consume_phase_outcome(self) -> LifecyclePhaseOutcome:

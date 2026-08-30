@@ -371,6 +371,35 @@ def test_downgraded_evaluate_retains_only_evidence_lineage_for_safe_followups():
     assert "conclusion" not in degraded and "response" not in degraded
 
 
+def test_contract_limited_evaluate_is_durable_safe_lineage_not_verified_context():
+    service = FinnV2OrchestratorService(session=object())
+    service.conversations = _FakeConversationRepo()
+    result = SimpleNamespace(
+        analysis=SimpleNamespace(
+            explicit_asset="BTC", explicit_setup_id=293, explicit_strategy_id=309,
+            explicit_bot_id=170, interaction_mode="EVALUATE",
+            request_plan=SimpleNamespace(operation_id="evaluate_plan", operation_contract_version="contract-v1", operation_state={}),
+        ),
+        tool_plan=SimpleNamespace(entity_selectors={"asset": "BTC"}),
+    )
+    response = SimpleNamespace(
+        verifier_status="repaired", mode="EVALUATE", run_id="run-limited",
+        evidence_refs_used=["E1", "E2"], uncertainty_codes=["evidence_limitation_after_repair"],
+        reasoning_provenance={"reasoning_source": "contract_evidence_limitation"},
+    )
+
+    asyncio.run(service._update_conversation_context(
+        conversation_id="conversation-1", user_id=7, existing_context={}, result=result, verified_response=response,
+    ))
+
+    context = service.conversations.updated["context"]
+    assert context["last_verified_context"] == {}
+    assert context["last_degraded_context"]["context_version"] == "finn_v2.degraded-lineage.v1"
+    assert context["last_degraded_context"]["terminal_status"] == "contract_limited"
+    assert context["last_degraded_context"]["evidence_refs"] == ["E1", "E2"]
+    assert "conclusion" not in context["last_degraded_context"]
+
+
 def test_canonical_context_does_not_promote_generic_bot_text_without_lineage_proof():
     service = FinnV2OrchestratorService(session=object())
     service.conversations = _FakeConversationRepo()
@@ -596,11 +625,13 @@ def test_orchestrator_terminalizes_a_persisted_verifier_reject_without_a_second_
         message="Bekijk mijn plan.",
         workspace_hints_json={},
         client_context_json={},
+        conversation_id="conversation-rejected-1",
     )
     service = FinnV2OrchestratorService(session=object())
     service.runs = _FakeRunRepo(run)
     service.traces = _FakeTraceRepo()
     service.results = _FakeResultRepo()
+    service.conversations = _FakeConversationRepo()
     service.flags.is_tool_registry_enabled = lambda: True
     service.flags.is_state_assembly_enabled = lambda: True
     service.flags.should_run_block5_shadow = lambda _user_id: False
@@ -663,10 +694,21 @@ def test_orchestrator_terminalizes_a_persisted_verifier_reject_without_a_second_
     assert service.consume_phase_outcome().terminal_status == "rejected"
     assert service.consume_phase_outcome().verifier_action == "reject"
     assert [event["event_type"] for event in service.traces.events][-1] == "orchestrator_rejected"
+    degraded = service.conversations.updated["context"]["last_degraded_context"]
+    assert degraded["terminal_status"] == "rejected"
+    assert degraded["evidence_refs"] == ["E1"]
+    assert "conclusion" not in degraded
 
 
 def _raise_reject(verifier):
-    raise FinnV2VerifierRejected(verifier)
+    raise FinnV2VerifierRejected(
+        verifier,
+        draft=SimpleNamespace(
+            mode="EVALUATE",
+            evidence_refs_used=["E1"],
+            reasoning_provenance={"reasoning_source": "verifier_rejection"},
+        ),
+    )
 
 
 def test_orchestrator_commits_before_cross_session_phase_transition():

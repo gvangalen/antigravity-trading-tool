@@ -56,8 +56,11 @@ class FinnV2VerifierRejected(RuntimeError):
 
     error_code = "verifier_rejected"
 
-    def __init__(self, verifier: VerifierResult):
+    def __init__(self, verifier: VerifierResult, *, draft: ResponseDraft):
         self.verifier = verifier
+        # The orchestrator keeps only typed provenance from a rejected draft.
+        # Carrying it here avoids a second terminalization path.
+        self.draft = draft
         super().__init__(self.error_code)
 
 
@@ -335,7 +338,7 @@ class FinnV2ResponseVerifierService:
                     },
                 )
                 increment_execution_safety_counter(f"finn_v2_verifier_results_total:{draft.mode}:reject")
-                raise FinnV2VerifierRejected(verifier)
+                raise FinnV2VerifierRejected(verifier, draft=draft)
             if verifier.action.startswith("downgrade_"):
                 await self._append_trace(trace_id=trace_id, run_id=run.id, user_id=run.user_id, event_type="response_downgraded", payload={"draft_id": draft.draft_id, "action": verifier.action})
                 verifier = self._deterministic_verify(
