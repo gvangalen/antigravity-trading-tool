@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import re
+import unicodedata
 from typing import Optional
 
 
@@ -14,9 +15,11 @@ class FinnV2SetupInputCatalog:
         "trade": ("trade", "trading", "swing", "scalp", "breakout", "momentum", "intraday"),
     }
     _TIMEFRAME_ALIASES = {
-        "1D": ("dagbasis", "daily", "daily basis", "day basis", "tagesbasis", "täglich", "taeglich"),
-        "1H": ("uurbasis", "hourly", "hour basis", "stundenbasis", "stündlich", "stuendlich"),
+        "1D": ("dagbasis", "daily", "daily basis", "day basis", "tagesbasis", "taglich", "taeglich"),
+        "1H": ("uurbasis", "hourly", "hour basis", "stundenbasis", "stundlich", "stuendlich"),
         "4H": ("4 uur", "vier uur", "four hours", "4 hours", "vier stunden", "4 stunden"),
+        "12H": ("12 uur", "twaalf uur", "twelve hours", "12 hours", "zwolf stunden", "12 stunden"),
+        "1W": ("weekbasis", "weekly", "week basis", "wochenbasis", "wochentlich", "woechentlich"),
     }
     _CODE_TIMEFRAME = re.compile(r"\b([1-9]\d*(?:m|h|d|w))\b", re.IGNORECASE)
     _COMPOUND_SETUP_SUFFIXES = (
@@ -45,10 +48,12 @@ class FinnV2SetupInputCatalog:
         if match:
             return match.group(1).upper()
         lowered = cls._comparison_text(text)
+        matches: set[str] = set()
         for canonical, aliases in cls._TIMEFRAME_ALIASES.items():
             if any(cls._has_phrase(lowered, alias) for alias in aliases):
-                return canonical
-        return None
+                matches.add(canonical)
+        matches.update(cls._compound_timeframes(lowered))
+        return next(iter(matches)) if len(matches) == 1 else None
 
     @classmethod
     def canonical_timeframe(cls, value: object) -> Optional[str]:
@@ -59,7 +64,7 @@ class FinnV2SetupInputCatalog:
         for canonical, aliases in cls._TIMEFRAME_ALIASES.items():
             if normalized in aliases:
                 return canonical
-        return None
+        return cls.timeframe_from_text(str(value or ""))
 
     @classmethod
     def canonical_input(cls, field: str, value: object) -> object:
@@ -81,7 +86,23 @@ class FinnV2SetupInputCatalog:
 
     @staticmethod
     def _comparison_text(value: object) -> str:
-        return re.sub(r"\s+", " ", str(value or "").casefold()).strip()
+        text = unicodedata.normalize("NFKD", str(value or ""))
+        text = "".join(character for character in text if not unicodedata.combining(character))
+        return re.sub(r"\s+", " ", text.casefold()).strip()
+
+    @classmethod
+    def _compound_timeframes(cls, text: str) -> set[str]:
+        patterns = {
+            "1H": r"(?:(?:1|een|one)[\s-]?(?:uur|hour|stund(?:e|en))(?:s)?|(?:uur|hour|stund(?:e|en))(?:s)?[\s-]?(?:grafiek|chart))",
+            "4H": r"(?:4|vier|four)[\s-]?(?:uur|hour|stund(?:e|en))(?:s)?(?:[\s-]?(?:grafiek|chart))?",
+            "12H": r"(?:12|twaalf|twelve|zwolf)[\s-]?(?:uur|hour|stund(?:e|en))(?:s)?(?:[\s-]?(?:grafiek|chart))?",
+            "1D": r"(?:(?:1|een|one)[\s-]?)?(?:dag|day|tag)(?:en)?(?:[\s-]?(?:grafiek|chart))?",
+            "1W": r"(?:(?:1|een|one)[\s-]?)?(?:week|woche)(?:n)?(?:[\s-]?(?:grafiek|chart))?",
+        }
+        return {
+            canonical for canonical, pattern in patterns.items()
+            if re.search(r"(?<![\w-])" + pattern + r"(?!\w)", text)
+        }
 
     @staticmethod
     def _has_phrase(text: str, phrase: str) -> bool:

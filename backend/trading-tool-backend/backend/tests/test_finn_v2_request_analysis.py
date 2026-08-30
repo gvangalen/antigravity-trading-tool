@@ -2,6 +2,7 @@ from backend.services.finn_v2_request_analysis_service import FinnV2RequestAnaly
 from backend.services.finn_v2_request_preprocessor_service import FinnV2RequestPreprocessorService
 from backend.services.finn_v2_operation_classification_service import SemanticOperationClassification
 from backend.domain.finn_v2_operation_registry import FinnV2OperationRegistry
+from backend.domain.finn_v2_setup_input_catalog import FinnV2SetupInputCatalog
 from backend.services.finn_v2_operation_state_service import FinnV2OperationStateService
 
 
@@ -587,6 +588,28 @@ def test_compound_setup_type_is_canonicalized_before_missing_input_reconciliatio
         "symbol": "XRP", "setup_type": "trade",
     }
     assert result.request_plan.operation_state["missing_required_inputs"] == ["timeframe", "name"]
+
+
+def test_timeframe_catalog_canonicalizes_compositional_dutch_english_and_german_forms():
+    cases = {
+        "uurgrafiek": "1H", "four-hour chart": "4H", "vieruursgrafiek": "4H",
+        "4-Stunden-Chart": "4H", "twaalfuursgrafiek": "12H", "one-day chart": "1D",
+        "weekgrafiek": "1W",
+    }
+    for value, expected in cases.items():
+        assert FinnV2SetupInputCatalog.timeframe_from_text(value) == expected
+        assert FinnV2SetupInputCatalog.canonical_timeframe(value) == expected
+    assert FinnV2SetupInputCatalog.timeframe_from_text("vier uur en daggrafiek") is None
+
+
+def test_complete_avax_compound_timeframe_setup_preserves_supplied_values():
+    result = SERVICE.analyze(
+        message="Bereid voor Avalanche een swingopzet voor op de vieruursgrafiek en noem hem AVAX Rustige Instap."
+    )
+    assert result.request_plan.operation_state["collected_inputs"] == {
+        "symbol": "AVAX", "setup_type": "trade", "timeframe": "4H", "name": "AVAX Rustige Instap",
+    }
+    assert result.request_plan.operation_state["missing_required_inputs"] == []
 
 
 def test_contextual_bot_implication_keeps_verified_lineage_payload():
