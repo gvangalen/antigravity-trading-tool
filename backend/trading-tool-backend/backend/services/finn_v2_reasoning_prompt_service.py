@@ -340,18 +340,29 @@ class FinnV2ReasoningPromptService:
     def _integrated_plan_scope_refs(cls, context: ReasoningContextPackage) -> dict[str, list[str]]:
         """Make the model's required evidence coverage explicit for integrated plan reviews."""
         scope_tools = cls._integrated_plan_scope_tools(context)
+        required_scopes = (context.request_plan or {}).get("required_information_scopes") or []
+        if not required_scopes:
+            return {
+                scope: [item.evidence_id for item in context.evidence if item.tool_name in tools]
+                for scope, tools in scope_tools.items()
+            }
         return {
-            scope: [item.evidence_id for item in context.evidence if item.tool_name in tools]
-            for scope, tools in scope_tools.items()
+            scope: [item.evidence_id for item in context.evidence if item.information_scope and item.information_scope.value == scope]
+            for scope in scope_tools
         }
 
     @classmethod
     def _integrated_plan_grounding_values(cls, context: ReasoningContextPackage) -> dict[str, list[str]]:
         scope_tools = cls._integrated_plan_scope_tools(context)
+        required_scopes = (context.request_plan or {}).get("required_information_scopes") or []
         values: dict[str, set[str]] = {scope: set() for scope in scope_tools}
         for item in context.evidence:
             for scope, tools in scope_tools.items():
-                if item.tool_name not in tools:
+                matches_scope = (
+                    item.tool_name in tools if not required_scopes else
+                    bool(item.information_scope and item.information_scope.value == scope)
+                )
+                if not matches_scope:
                     continue
                 if item.entity_id:
                     values[scope].add(str(item.entity_id))

@@ -64,6 +64,21 @@ def test_integrated_plan_reasoning_requires_evidence_from_each_required_scope():
         service._validate_refs(result, context)
 
 
+def test_integrated_plan_recognizes_preferences_alias_as_the_canonical_scope():
+    service = FinnV2ReasoningService(session=object())
+    context = ReasoningContextPackage(
+        run_id="run-preferences", user_id=7, user_message="Beoordeel mijn BTC-plan", locale="nl-NL", interaction_mode="EVALUATE",
+        orchestrator_result_id="o", snapshot_id="s", validation_id="v", policy_decision_id="p", evidence_set_hash="hash",
+        request_plan={"required_information_scopes": ["preferences"]},
+        evidence=[ReasoningEvidenceItem(evidence_id="Eprefs", artifact_id="prefs", tool_name="read_user_preferences", information_scope="trading_preferences", domain="identity_context", entity_type="preferences", source="internal", freshness="fresh", confidence="high", facts={"risk_profile": "balanced"})],
+        policy=ReasoningPolicyContext(policy_class="advice", allowed=True, proposal_allowed=False, confirmation_required=False, step_up_required=False, execution_allowed=False),
+    )
+    result = ReasoningResult(reasoning_result_id="r", run_id="run-preferences", user_id=7, mode="EVALUATE", direct_answer="Je voorkeur is balanced.", main_observation="De voorkeur is beschikbaar.", evidence_refs_used=["Eprefs"], model="gpt-test", created_at=datetime.now(timezone.utc))
+
+    service._validate_refs(result, context)
+    assert context.evidence[0].information_scope.value == "preferences"
+
+
 def test_integrated_plan_reasoning_accepts_complete_scope_coverage_without_metadata_claims():
     service = FinnV2ReasoningService(session=object())
     context = ReasoningContextPackage(

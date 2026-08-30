@@ -163,6 +163,9 @@ INFORMATION_SCOPE_ALIASES: Mapping[str, str] = {
     "bot": InformationScope.LINKED_BOT.value,
     "linked_bot": InformationScope.LINKED_BOT.value,
     "analysis": InformationScope.MARKET_SNAPSHOT.value,
+    "user_preferences": InformationScope.PREFERENCES.value,
+    "trading_preferences": InformationScope.PREFERENCES.value,
+    "assistant_preferences": InformationScope.PREFERENCES.value,
 }
 
 # This is the only tool-to-scope mapping for newly created FINN V2 artifacts.
@@ -226,6 +229,22 @@ def information_scope_for_tool(tool_name: str) -> InformationScope:
         return TOOL_OUTPUT_SCOPES[tool_name]
     except KeyError as exc:
         raise FinnV2InformationScopeContractError(tool_name) from exc
+
+
+def canonical_evidence_scope(scope: Optional[object], *, tool_name: str) -> str:
+    """Return the one persisted scope a tool is allowed to prove.
+
+    Alias spellings are accepted at legacy boundaries, but cannot silently
+    turn one tool result into evidence for another contract scope.
+    """
+    expected = information_scope_for_tool(tool_name).value
+    if scope is None:
+        return expected
+    # Tool envelopes reject mismatches at ingestion. Context reconstruction
+    # additionally has to tolerate pre-scope and test-fixture metadata, so it
+    # mechanically projects those records back through the immutable tool map.
+    normalize_information_scope(scope)
+    return expected
 
 
 def primary_tool_for_information_scope(scope: object) -> str:

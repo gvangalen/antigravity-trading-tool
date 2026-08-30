@@ -227,10 +227,10 @@ class StrategyService:
             raise HTTPException(403, "Setup niet van gebruiker of beantwoordt niet")
 
         setup_type = (setup_row.get("setup_type") or "").lower()
-        if setup_type not in ["dca", "trade"]:
+        if setup_type not in ["dca", "trade", "position"]:
             raise HTTPException(400, "Ongeldig setup_type")
 
-        if setup_type == "trade":
+        if setup_type in {"trade", "position"}:
             self._validate_trade_strategy(raw_data)
 
         exists = await self.repository.check_strategy_exists(payload.setup_id, user_id)
@@ -330,7 +330,7 @@ class StrategyService:
             raise HTTPException(404, "Niet gevonden")
 
         setup_type = (existing.get("existing_setup_type") or "").lower()
-        if setup_type == "trade":
+        if setup_type in {"trade", "position"}:
             self._validate_trade_strategy(raw_data)
 
         updated_count = await self.repository.update_strategy(strategy_id, user_id, raw_data, setup_type, raw_data)
@@ -441,7 +441,7 @@ class StrategyService:
         
         for row in rows:
             setup_type = (row.get("setup_type") or "").lower()
-            if setup_type == "trade":
+            if setup_type in {"trade", "position"}:
                 continue
 
             freq = (row.get("dca_frequency") or "").lower()

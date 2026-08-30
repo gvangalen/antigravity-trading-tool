@@ -374,6 +374,7 @@ class FinnV2OrchestratorService:
         context = dict(existing_context or {})
         from backend.services.finn_v2_operation_state_service import FinnV2OperationStateService
 
+        had_canonical_state = context.get("conversation_state_version") == FinnV2OperationStateService.CONTEXT_STATE_VERSION
         context["conversation_state_version"] = FinnV2OperationStateService.CONTEXT_STATE_VERSION
         verified_context = dict(context.get("last_verified_context") or {})
         resolved_asset = selectors.get("asset") or getattr(result.analysis, "explicit_asset", None) or verified_context.get("resolved_entities", {}).get("asset")
@@ -386,6 +387,8 @@ class FinnV2OrchestratorService:
         # A deterministic unavailable/clarification can be verifier-valid as a
         # delivery, but it is not a reusable factual conclusion for a later
         # turn.  Preserve the last usable grounded context instead.
+        provenance = dict(getattr(verified_response, "reasoning_provenance", {}) or {})
+        requires_lineage_proof = had_canonical_state
         is_verified = (
             getattr(verified_response, "verifier_status", None) in {"passed", "repaired"}
             and response_mode in {"READ", "EVALUATE"}
@@ -395,6 +398,7 @@ class FinnV2OrchestratorService:
                 "reformulate_previous_response",
             }
             and bool(getattr(verified_response, "evidence_refs_used", []) or [])
+            and (not requires_lineage_proof or provenance.get("lineage_eligible") is True)
         )
         if is_verified:
             verified_context = {

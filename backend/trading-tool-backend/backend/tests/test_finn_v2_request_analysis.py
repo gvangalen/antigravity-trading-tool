@@ -2,6 +2,7 @@ from backend.services.finn_v2_request_analysis_service import FinnV2RequestAnaly
 from backend.services.finn_v2_request_preprocessor_service import FinnV2RequestPreprocessorService
 from backend.services.finn_v2_operation_classification_service import SemanticOperationClassification
 from backend.domain.finn_v2_operation_registry import FinnV2OperationRegistry
+from backend.services.finn_v2_operation_state_service import FinnV2OperationStateService
 
 
 def test_preprocessor_treats_current_symbol_as_asset_entity():
@@ -514,6 +515,33 @@ def test_complete_natural_setup_sentence_resolves_all_typed_inputs():
         "timeframe": "2H",
         "name": "Polkadot Uitbraak",
     }
+
+
+def test_setup_catalog_canonicalizes_natural_slots_without_losing_user_display_name():
+    result = SERVICE.analyze(
+        message="Zet voor Solana een position setup klaar op dagbasis met de naam SOL Kompas."
+    )
+
+    assert result.request_plan.operation_id == "create_setup"
+    assert result.request_plan.target_asset == "SOL"
+    assert result.request_plan.operation_state["missing_required_inputs"] == []
+    assert result.request_plan.operation_state["collected_inputs"] == {
+        "symbol": "SOL", "setup_type": "position", "timeframe": "1D", "name": "SOL Kompas",
+    }
+
+
+def test_setup_catalog_supports_dutch_english_and_german_timeframe_variants():
+    cases = (
+        ("Maak een swing setup voor SOL op 4 uur met de naam SOL Swing.", "trade", "4H"),
+        ("Create an intraday setup for SOL on an hourly basis named SOL Hourly.", "trade", "1H"),
+        ("Erstelle ein Position Setup für SOL auf Tagesbasis namens SOL Tagesplan.", "position", "1D"),
+    )
+    contract = FinnV2OperationRegistry().require_supported("create_setup")
+    state_service = FinnV2OperationStateService()
+    for message, setup_type, timeframe in cases:
+        values = state_service.explicit_inputs(contract=contract, message=message, explicit_asset="SOL")
+        assert values["setup_type"] == setup_type
+        assert values["timeframe"] == timeframe
 
 
 def test_contextual_bot_implication_keeps_verified_lineage_payload():

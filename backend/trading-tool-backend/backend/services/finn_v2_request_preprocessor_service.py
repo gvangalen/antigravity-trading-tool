@@ -16,6 +16,7 @@ from backend.services.asset_catalog_service import resolve_catalog_symbol
 
 @dataclass(frozen=True)
 class FinnV2PreprocessedRequest:
+    original_text: str
     normalized_text: str
     language: str
     action_polarity: str
@@ -175,6 +176,7 @@ class FinnV2RequestPreprocessorService:
             or any(term in normalized for term in ("trade", "beleggen", "investment", "rendement", "risk", "risico"))
         ) else "off_topic"
         return FinnV2PreprocessedRequest(
+            original_text=original,
             normalized_text=normalized,
             language="en" if re.search(r"\b(what|which|add|remove|create|evaluate)\b", normalized) else "nl",
             action_polarity=action,

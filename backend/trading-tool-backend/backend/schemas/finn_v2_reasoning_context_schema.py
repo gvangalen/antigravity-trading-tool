@@ -5,7 +5,7 @@ from typing import Any, Dict, List, Literal, Optional
 
 from pydantic import BaseModel, Field, constr, validator
 
-from backend.domain.finn_v2_contract import InformationScope, normalize_interaction_mode
+from backend.domain.finn_v2_contract import InformationScope, canonical_evidence_scope, normalize_interaction_mode
 
 
 REASONING_CONTEXT_VERSION = "2026-08-17.block6"
@@ -25,6 +25,10 @@ class ReasoningEvidenceItem(BaseModel):
     freshness: str
     confidence: str
     facts: Dict[str, Any] = Field(default_factory=dict)
+
+    @validator("information_scope", pre=True, always=True)
+    def _canonical_scope(cls, value, values):
+        return canonical_evidence_scope(value, tool_name=str(values.get("tool_name") or ""))
 
     class Config:
         extra = "forbid"

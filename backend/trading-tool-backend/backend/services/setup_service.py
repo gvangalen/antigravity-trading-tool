@@ -192,8 +192,8 @@ class SetupService:
         # 2. Setup type validation
         setup_type = raw_payload.get("setup_type")
         if not is_update or "setup_type" in raw_payload:
-            if not setup_type or not isinstance(setup_type, str) or setup_type.lower() not in ["dca", "trade"]:
-                raise HTTPException(400, "Ongeldig setup_type. Moet 'dca' of 'trade' zijn.")
+            if not setup_type or not isinstance(setup_type, str) or setup_type.lower() not in ["dca", "trade", "position"]:
+                raise HTTPException(400, "Ongeldig setup_type. Moet 'dca', 'trade' of 'position' zijn.")
             setup_type = setup_type.lower()
 
         # 3. DCA validations
@@ -367,7 +367,7 @@ class SetupService:
             updates["tags"] = tags
 
         # Cleanup DCA fields if setup type is changed to Trade
-        if updates.get("setup_type") == "trade":
+        if updates.get("setup_type") in {"trade", "position"}:
             updates["dca_frequency"] = None
             updates["dca_day"] = None
             updates["dca_month_day"] = None

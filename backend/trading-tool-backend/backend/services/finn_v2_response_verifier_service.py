@@ -365,6 +365,11 @@ class FinnV2ResponseVerifierService:
             verifier=verifier,
             proposal_id=proposal_id,
             confirmation_required=bool(policy.confirmation_required and normalize_interaction_mode(draft.mode) in {"CREATE_PROPOSAL", "ACTION_PROPOSAL"}),
+            lineage_eligible=self._lineage_eligible(
+                draft=draft,
+                verifier=verifier,
+                request_plan=getattr(orchestrator_result.analysis, "request_plan", None),
+            ),
         )
         await self._append_trace(trace_id=trace_id, run_id=run.id, user_id=run.user_id, event_type="response_verification_completed", payload={"verifier_result_id": verifier.verifier_result_id, "action": verifier.action, "passed": verifier.passed, "reason_codes": verifier.reason_codes})
         await self._append_trace(trace_id=trace_id, run_id=run.id, user_id=run.user_id, event_type="verified_response_persisted", payload={"verified_response_id": persisted.verified_response_id, "mode": persisted.mode, "verifier_status": persisted.verifier_status})
@@ -378,6 +383,21 @@ class FinnV2ResponseVerifierService:
         )
         await self._append_trace(trace_id=trace_id, run_id=run.id, user_id=run.user_id, event_type="delivery_envelope_built", payload={"run_id": run.id, "delivery_source": envelope.delivery_source})
         return persisted
+
+    @staticmethod
+    def _lineage_eligible(*, draft: ResponseDraft, verifier: VerifierResult, request_plan) -> bool:
+        """A delivery may be useful without being reusable financial lineage."""
+        if not verifier.passed or not verifier.coverage.coverage_ok or not verifier.coverage.response_coverage_ok:
+            return False
+        operation_id = getattr(request_plan, "operation_id", None)
+        if operation_id in {"off_topic", "unavailable", "explain_previous_evidence", "reformulate_previous_response"}:
+            return False
+        rendered = " ".join((draft.direct_answer, draft.main_observation)).casefold()
+        if any(marker in rendered for marker in ("niet beschikbaar", "onvoldoende context", "verificatie faalde", "plancontext is beschikbaar")):
+            return False
+        if operation_id == "evaluate_bot" and "bot" not in rendered:
+            return False
+        return bool(draft.evidence_refs_used)
 
     def _deterministic_verify(self, *, run, orchestrator_result, policy, context, validation, draft: ResponseDraft, repair_attempt: int, force_action: Optional[str] = None) -> VerifierResult:
         reason_codes: list[str] = []
@@ -816,7 +836,7 @@ class FinnV2ResponseVerifierService:
             }
         )
 
-    async def _persist_verified_response(self, *, run, draft: ResponseDraft, verifier: VerifierResult, proposal_id: Optional[str], confirmation_required: bool) -> VerifiedResponse:
+    async def _persist_verified_response(self, *, run, draft: ResponseDraft, verifier: VerifierResult, proposal_id: Optional[str], confirmation_required: bool, lineage_eligible: bool = False) -> VerifiedResponse:
         canonical_mode = normalize_interaction_mode(draft.mode)
         verifier_status = "repaired" if verifier.action == "deliver" and verifier.reason_codes else "passed"
         if canonical_mode in {"READ", "CAPABILITY", "CLARIFICATION", "UNAVAILABLE"} and verifier.reason_codes:
@@ -841,7 +861,7 @@ class FinnV2ResponseVerifierService:
             verifier_status=verifier_status,
             evidence_set_hash=draft.evidence_set_hash,
             verifier_result_id=verifier_row.id,
-            reasoning_provenance=dict(draft.reasoning_provenance),
+            reasoning_provenance={**dict(draft.reasoning_provenance), "lineage_eligible": lineage_eligible},
             response_version=FINN_V2_VERIFIED_RESPONSE_VERSION,
             created_at=datetime.now(timezone.utc),
         )

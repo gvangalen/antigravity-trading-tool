@@ -223,7 +223,9 @@ class FinnV2OperationClassificationService:
             return {}, {}, ()
         supplied = FinnV2OperationStateService().explicit_inputs(
             contract=contract,
-            message=facts.normalized_text,
+            # Input collection must retain display values such as a setup
+            # name. ``normalized_text`` is for semantic comparison only.
+            message=facts.original_text,
             explicit_asset=facts.referenced_asset,
         )
         if facts.financial_concept:

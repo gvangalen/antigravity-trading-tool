@@ -18,7 +18,7 @@ from backend.infrastructure.repositories.finn_v2_run_repository import FinnV2Run
 from backend.infrastructure.repositories.finn_v2_state_repository import FinnV2StateRepository
 from backend.infrastructure.repositories.finn_v2_trace_repository import FinnV2TraceRepository
 from backend.infrastructure.repositories.finn_v2_validation_repository import FinnV2ValidationRepository
-from backend.domain.finn_v2_contract import normalize_interaction_mode
+from backend.domain.finn_v2_contract import normalize_information_scope, normalize_interaction_mode
 from backend.domain.finn_v2_operation_registry import FinnV2OperationRegistry
 from backend.schemas.finn_v2_orchestrator_schema import ORCHESTRATOR_VERSION, OrchestratorResult
 from backend.schemas.finn_v2_policy_schema import POLICY_VERSION, FinnV2PolicyDecision
@@ -1395,13 +1395,7 @@ class FinnV2ReasoningService:
             required_scopes = {"profile", "indicators", "setup", "strategy", "bot"}
         if context.interaction_mode != "EVALUATE":
             return
-        scope_tools = {
-            "profile": {"read_profile"}, "preferences": {"read_user_preferences"},
-            "active_asset": {"read_active_asset"}, "indicator_configuration": {"read_indicator_configuration"},
-            "market_snapshot": {"read_market_snapshot"}, "watchlist": {"read_watchlist"},
-            "active_setup": {"read_active_setup"}, "linked_strategy": {"read_linked_strategy"},
-            "linked_bot": {"read_linked_bot"}, "bot_status": {"read_bot_status"},
-        }
+        scope_tools = {}
         if legacy_scope_names:
             # Historical planless contexts only had a subject list. Preserve
             # their former integrated-plan guard instead of applying new
@@ -1419,7 +1413,15 @@ class FinnV2ReasoningService:
             scope
             for scope in required_scopes
             for tools in [scope_tools.get(scope, set())]
-            if not any(item.evidence_id in referenced and item.tool_name in tools for item in context.evidence)
+            if not any(
+                item.evidence_id in referenced
+                and (
+                    item.tool_name in tools if legacy_scope_names else
+                    getattr(item, "information_scope", None) is not None
+                    and normalize_information_scope(item.information_scope) == scope
+                )
+                for item in context.evidence
+            )
         ]
         if missing_scopes:
             raise FinnV2ReasoningContractError(

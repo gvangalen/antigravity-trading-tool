@@ -5,6 +5,7 @@ import re
 from typing import Mapping, Optional
 
 from backend.domain.finn_v2_operation_registry import OperationContract
+from backend.domain.finn_v2_setup_input_catalog import FinnV2SetupInputCatalog
 from backend.schemas.finn_v2_orchestrator_schema import FinnV2OperationState
 
 
@@ -12,7 +13,6 @@ class FinnV2OperationStateService:
     """Collect only explicit or verified operation inputs, one field at a time."""
 
     CONTEXT_STATE_VERSION = "finn_v2.conversation-contracts.v1"
-    _TIMEFRAME = re.compile(r"\b([1-9]\d*(?:m|h|d|w))\b", re.IGNORECASE)
 
     def resolve(
         self,
@@ -185,8 +185,10 @@ class FinnV2OperationStateService:
         if contract.operation_id == "create_setup":
             if "dca" in lowered:
                 values["setup_type"] = "dca"
-            elif any(token in lowered for token in ("trade", "swing", "scalp", "breakout", "momentum")):
-                values["setup_type"] = "trade"
+            else:
+                setup_type = FinnV2SetupInputCatalog.setup_type_from_text(text)
+                if setup_type:
+                    values["setup_type"] = setup_type
             named = re.search(
                 r"(?:naam|name|titel|title)\s*(?:is|:|=)?\s*[\"']?([\w .-]{2,80})",
                 text,
@@ -207,10 +209,12 @@ class FinnV2OperationStateService:
                     re.IGNORECASE,
                 )
             if named:
-                values["name"] = named.group(1).strip(" .")
-            timeframe = self._TIMEFRAME.search(text)
+                name = FinnV2SetupInputCatalog.display_name(named.group(1).strip(" ."))
+                if name:
+                    values["name"] = name
+            timeframe = FinnV2SetupInputCatalog.timeframe_from_text(text)
             if timeframe:
-                values["timeframe"] = timeframe.group(1).upper()
+                values["timeframe"] = timeframe
             if any(token in lowered for token in ("daily trend", "dagtrend", "uptrend", "downtrend")):
                 values["market_condition"] = "trend_defined"
         elif contract.operation_id in {"watchlist_add", "watchlist_remove"} and explicit_asset:

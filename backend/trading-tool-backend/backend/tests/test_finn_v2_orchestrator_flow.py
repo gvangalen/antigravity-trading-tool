@@ -365,6 +365,33 @@ def test_downgraded_evaluate_retains_only_evidence_lineage_for_safe_followups():
     assert "conclusion" not in degraded and "response" not in degraded
 
 
+def test_canonical_context_does_not_promote_generic_bot_text_without_lineage_proof():
+    service = FinnV2OrchestratorService(session=object())
+    service.conversations = _FakeConversationRepo()
+    existing = {
+        "conversation_state_version": "finn_v2.conversation-contracts.v1",
+        "last_verified_context": {"verified_response_id": "verified-prior", "resolved_entities": {"asset": "BTC"}},
+    }
+    result = SimpleNamespace(
+        analysis=SimpleNamespace(
+            explicit_asset="BTC", explicit_setup_id=None, explicit_strategy_id=None, explicit_bot_id=170,
+            interaction_mode="EVALUATE", request_plan=SimpleNamespace(operation_id="evaluate_bot", operation_contract_version="v1", operation_state={}),
+        ),
+        tool_plan=SimpleNamespace(entity_selectors={"asset": "BTC", "bot_id": 170}),
+    )
+    response = SimpleNamespace(
+        verifier_status="passed", mode="EVALUATE", run_id="run-generic", evidence_refs_used=["E1"],
+        main_observation="Plancontext is beschikbaar.", direct_answer="Plancontext is beschikbaar.",
+        reasoning_provenance={"lineage_eligible": False}, uncertainty_codes=[],
+    )
+
+    asyncio.run(service._update_conversation_context(
+        conversation_id="conversation-1", user_id=7, existing_context=existing, result=result, verified_response=response,
+    ))
+
+    assert service.conversations.updated["context"]["last_verified_context"] == existing["last_verified_context"]
+
+
 def test_verified_proposal_preserves_financial_lineage_and_marks_guided_state_proposed():
     service = FinnV2OrchestratorService(session=object())
     service.conversations = _FakeConversationRepo()
