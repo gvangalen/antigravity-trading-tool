@@ -208,7 +208,7 @@ class FinnV2RequestAnalysisService:
         if (
             guided_state is None
             and uses_conversation_reference
-            and isinstance((conversation_context or {}).get("last_verified_context"), dict)
+            and bool((conversation_context or {}).get("last_verified_context"))
         ):
             verified = dict((conversation_context or {}).get("last_verified_context") or {})
             operation_state_payload = {

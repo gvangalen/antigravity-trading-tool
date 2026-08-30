@@ -169,6 +169,23 @@ def test_multilingual_reformulation_uses_typed_degraded_lineage_without_tools():
         assert result.request_plan.required_information_scopes == []
 
 
+def test_empty_verified_container_does_not_mask_degraded_reformulation_content():
+    result = SERVICE.analyze(
+        message="Vertel hetzelfde oordeel opnieuw in twee eenvoudige zinnen.",
+        conversation_context={
+            "conversation_state_version": "finn_v2.conversation-contracts.v1",
+            "last_verified_context": {},
+            "last_degraded_context": {
+                "run_id": "degraded-run-empty-verified",
+                "evidence_refs": ["E1"],
+                "released_response": {"direct_answer": "De beoordeling bleef begrensd."},
+            },
+        },
+    )
+
+    assert result.request_plan.operation_state["previous_degraded_released_response"]["direct_answer"] == "De beoordeling bleef begrensd."
+
+
 def test_standalone_nonfinancial_reformulation_stays_off_topic_without_lineage():
     result = SERVICE.analyze(message="Vertel een eenvoudig verhaal opnieuw in twee zinnen.")
 
