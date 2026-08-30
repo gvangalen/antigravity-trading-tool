@@ -189,25 +189,18 @@ class FinnV2OperationStateService:
                 setup_type = FinnV2SetupInputCatalog.setup_type_from_text(text)
                 if setup_type:
                     values["setup_type"] = setup_type
+            # Keep multi-word locale introducers ahead of their shorter
+            # components. Word boundaries prevent ``name`` matching inside
+            # German ``namens`` or an unrelated user-supplied word.
             named = re.search(
-                r"(?:naam|name|titel|title)\s*(?:is|:|=)?\s*[\"']?([\w .-]{2,80})",
+                r"\b(?:mit\s+dem\s+namen|met\s+de\s+naam|namens|genannt|"
+                r"genaamd|named|called|call\s+it|nenne\s+(?:ihn|sie|es)|"
+                r"noem\s+(?:hem|haar)|ik\s+noem\s+(?:hem|haar)|"
+                r"hij\s+heet|het\s+heet|naam|name|titel|title)\b"
+                r"\s*(?:is|:|=)?\s*[\"']?([\w .-]{2,80})",
                 text,
                 re.IGNORECASE,
             )
-            if named is None:
-                # A pending guided operation has already asked specifically for
-                # a name, so accept the common natural-language follow-up too.
-                named = re.search(
-                    r"\b(?:noem\s+(?:hem|haar)|ik\s+noem\s+(?:hem|haar)|hij\s+heet|het\s+heet)\s+[\"']?([\w .-]{2,80})",
-                    text,
-                    re.IGNORECASE,
-                )
-            if named is None:
-                named = re.search(
-                    r"\b(?:genaamd|called)\s+[\"']?([\w .-]{2,80})",
-                    text,
-                    re.IGNORECASE,
-                )
             if named:
                 name = FinnV2SetupInputCatalog.display_name(named.group(1).strip(" ."))
                 if name:

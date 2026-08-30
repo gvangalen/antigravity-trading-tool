@@ -132,3 +132,49 @@ def test_rejected_run_keeps_verifier_reasoning_provenance_in_its_terminal_envelo
     assert transition["next_status"] == "rejected"
     assert transition["response_json"]["uncertainty"] == ["response_scope_incomplete"]
     assert transition["response_json"]["reasoning_provenance"]["parse_status"] == "schema_invalid"
+
+
+def test_completed_run_projects_the_verified_next_step_into_the_polling_and_sse_payload():
+    service = FinnV2RunService(session=object())
+    transition = {}
+    service.delivery.get_delivery_artifacts = lambda **_kwargs: asyncio.sleep(
+        0,
+        result={
+            "delivery_envelope": {"status": "completed"},
+            "verified_response": {
+                "mode": "EVALUATE",
+                "direct_answer": "De evidence is begrensd.",
+                "main_observation": "Een concrete volgende stap is nodig.",
+                "next_step": {
+                    "title": "Leg een beslisregel vast",
+                    "instruction": "Leg eerst een toetsbare beslisregel vast.",
+                    "requires_confirmation": False,
+                },
+                "verifier_status": "passed",
+                "uncertainty_codes": ["evidence_limited"],
+            },
+            "policy_result": {"allowed": True},
+            "orchestrator_result": {},
+            "verifier_result": {},
+            "reasoning_result": {},
+        },
+    )
+
+    async def _transition_run(*_args, **kwargs):
+        transition.update(kwargs)
+
+    service.transition_run = _transition_run
+    asyncio.run(
+        service.complete_run(
+            run_id="run-next-step-1",
+            user_id=7,
+            phase_outcome=LifecyclePhaseOutcome(
+                terminal_status="completed",
+                interaction_mode="EVALUATE",
+                orchestrator_result_id="orchestrator-next-step-1",
+                verifier_action="deliver",
+            ),
+        )
+    )
+
+    assert transition["response_json"]["next_step"]["instruction"] == "Leg eerst een toetsbare beslisregel vast."

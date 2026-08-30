@@ -43,6 +43,7 @@ def finn_v2_structured_selector_test_double(monkeypatch):
         action = str(facts.get("action_polarity") or "unknown")
         state = verified_context or {}
         verified = state.get("last_verified_context") if isinstance(state, dict) else None
+        degraded = state.get("last_degraded_context") if isinstance(state, dict) else None
         guided = state.get("active_guided_operation") if isinstance(state, dict) else None
         guided = guided or (state.get("operation_state") if isinstance(state, dict) else None)
         if str(facts.get("domain_hint") or "") == "off_topic":
@@ -61,9 +62,9 @@ def finn_v2_structured_selector_test_double(monkeypatch):
             and len(candidate_contracts) <= 3
         ):
             operation_id = str(guided["operation_id"])
-        elif verified and discourse == "evidence_follow_up":
+        elif (verified or degraded) and discourse == "evidence_follow_up":
             operation_id = "explain_previous_evidence"
-        elif verified and discourse == "reformulation":
+        elif (verified or degraded) and discourse == "reformulation":
             operation_id = "reformulate_previous_response"
         elif "beste trade" in normalized or "best trade" in normalized:
             operation_id = "unavailable"
@@ -72,7 +73,7 @@ def finn_v2_structured_selector_test_double(monkeypatch):
                 entities=entities,
                 action_polarity=action,
                 discourse_act="information_request" if discourse == "contextual_follow_up" and not verified else discourse,
-                has_verified_context=bool(verified),
+                has_verified_context=bool(verified or degraded),
                 normalized_text=normalized,
             )
             allowed = {item.operation_id for item in candidate_contracts}

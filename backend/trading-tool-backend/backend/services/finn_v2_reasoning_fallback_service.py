@@ -72,6 +72,22 @@ class FinnV2ReasoningFallbackService:
         response = str(state.get("previous_verified_response") or "").strip()
         refs = list(state.get("previous_evidence_refs") or [])
         released = list(state.get("previous_degraded_released_sections") or [])
+        released_response = dict(state.get("previous_degraded_released_response") or {})
+        released_text = " ".join(
+            str(released_response.get(key) or "").strip()
+            for key in ("direct_answer", "main_observation", "uncertainty_summary", "next_step")
+        ).strip()
+        if operation_id == "reformulate_previous_response" and released_text:
+            concise = re.split(r"(?<=[.!?])\s+", released_text, maxsplit=1)[0].strip()
+            return ReasoningResult(
+                reasoning_result_id=f"finn-v2-reasoning-{uuid.uuid4().hex}",
+                run_id=run_id, user_id=user_id, mode="READ",
+                direct_answer=concise,
+                main_observation="Dit herhaalt alleen de eerder veilig vrijgegeven, begrensde beoordeling.",
+                uncertainty_summary="De eerdere financiële conclusie was niet geverifieerd; ik voeg geen nieuwe conclusie toe.",
+                uncertainty_codes=["degraded_lineage"], evidence_refs_used=refs,
+                model=model, created_at=datetime.now(timezone.utc),
+            )
         if not conclusion and not response and released:
             safe_text = " ".join(
                 str(item.get("text") or "").strip()

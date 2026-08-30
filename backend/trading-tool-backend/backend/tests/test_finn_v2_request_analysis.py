@@ -87,6 +87,67 @@ def test_lineage_contract_rehydrates_verified_context_when_selector_omits_refere
     assert result.request_plan.operation_state["previous_verified_run_id"] == "run-1"
 
 
+def test_degraded_lineage_is_explicitly_typed_and_keeps_its_resolved_bot_for_a_follow_up(monkeypatch):
+    service = FinnV2RequestAnalysisService()
+    monkeypatch.setattr(
+        service.classifier,
+        "classify",
+        lambda **_kwargs: SemanticOperationClassification(
+            operation_id="read_bot_status",
+            action="read",
+            domain="bot",
+            discourse="contextual_follow_up",
+            confidence="high",
+            selector_source="structured",
+        ),
+    )
+    result = service.analyze(
+        message="Wat is de status van die gekoppelde bot?",
+        conversation_context={
+            "conversation_state_version": "finn_v2.conversation-contracts.v1",
+            "last_degraded_context": {
+                "run_id": "degraded-run-1",
+                "evidence_refs": ["E1"],
+                "resolved_entities": {"asset": "BTC", "setup_id": 12, "strategy_id": 13, "bot_id": 14},
+            },
+        },
+    )
+
+    assert result.request_plan.conversation_reference == "degraded-run-1"
+    assert result.request_plan.conversation_reference_kind == "previous_degraded_response"
+    assert result.explicit_bot_id == 14
+
+
+def test_multilingual_reformulation_uses_typed_degraded_lineage_without_tools():
+    context = {
+        "conversation_state_version": "finn_v2.conversation-contracts.v1",
+        "last_degraded_context": {
+            "run_id": "degraded-run-2",
+            "evidence_refs": ["E1"],
+            "released_response": {"direct_answer": "De conclusie is begrensd."},
+        },
+    }
+    for message in (
+        "Vertel hetzelfde oordeel opnieuw in twee eenvoudige zinnen.",
+        "Zeg hetzelfde eenvoudiger.",
+        "Explain that conclusion more simply.",
+        "Restate your previous assessment.",
+        "Formuliere diese Einschätzung einfacher.",
+    ):
+        result = SERVICE.analyze(message=message, conversation_context=context)
+        assert result.request_plan.operation_id == "reformulate_previous_response"
+        assert result.request_plan.conversation_reference == "degraded-run-2"
+        assert result.request_plan.conversation_reference_kind == "previous_degraded_response"
+        assert result.request_plan.required_information_scopes == []
+
+
+def test_standalone_nonfinancial_reformulation_stays_off_topic_without_lineage():
+    result = SERVICE.analyze(message="Vertel een eenvoudig verhaal opnieuw in twee zinnen.")
+
+    assert result.request_plan.operation_id == "off_topic"
+    assert result.request_plan.conversation_reference is None
+
+
 def test_request_analysis_keeps_context_target_and_reference_assets_distinct():
     result = SERVICE.analyze(
         message="Voeg Cardano toe aan mijn watchlist.",
@@ -543,6 +604,45 @@ def test_setup_catalog_supports_dutch_english_and_german_timeframe_variants():
         values = state_service.explicit_inputs(contract=contract, message=message, explicit_asset="SOL")
         assert values["setup_type"] == setup_type
         assert values["timeframe"] == timeframe
+
+
+def test_german_namens_preserves_the_complete_display_name_without_matching_name_inside_it():
+    contract = FinnV2OperationRegistry().require_supported("create_setup")
+    values = FinnV2OperationStateService().explicit_inputs(
+        contract=contract,
+        message="Erstelle voor Polkadot ein Momentum-Setup im Vierstundenchart namens DOT Ruhiger Impuls.",
+        explicit_asset="DOT",
+    )
+
+    assert values["name"] == "DOT Ruhiger Impuls"
+
+
+def test_setup_name_introducers_preserve_user_presentation_across_locales():
+    contract = FinnV2OperationRegistry().require_supported("create_setup")
+    state = FinnV2OperationStateService()
+    cases = (
+        ("Erstelle ein Setup für DOT genannt DOT Ruhiger Impuls.", "DOT Ruhiger Impuls"),
+        ("Erstelle ein Setup für DOT mit dem Namen DOT Ruhiger Impuls.", "DOT Ruhiger Impuls"),
+        ("Erstelle ein Setup für DOT, nenne ihn DOT Ruhiger Impuls.", "DOT Ruhiger Impuls"),
+        ("Create a setup for DOT named DOT Calm Entry.", "DOT Calm Entry"),
+        ("Create a setup for DOT and call it DOT Calm Entry.", "DOT Calm Entry"),
+        ("Maak een setup voor DOT met de naam DOT Rustige Instap.", "DOT Rustige Instap"),
+        ("Maak een setup voor DOT en noem hem DOT Rustige Instap.", "DOT Rustige Instap"),
+        ("Maak een setup voor DOT met de naam Name Guard 42.", "Name Guard 42"),
+    )
+    for message, expected_name in cases:
+        assert state.explicit_inputs(contract=contract, message=message, explicit_asset="DOT")["name"] == expected_name
+
+
+def test_unrelated_name_substrings_are_not_setup_name_introducers():
+    contract = FinnV2OperationRegistry().require_supported("create_setup")
+    state = FinnV2OperationStateService()
+    for message in (
+        "Maak een setup voor DOT; mijn username is trader42.",
+        "Maak een setup voor DOT met een namenswaardige score.",
+        "Maak een setup voor DOT; zijn surname is niet relevant.",
+    ):
+        assert "name" not in state.explicit_inputs(contract=contract, message=message, explicit_asset="DOT")
 
 
 def test_setup_state_canonicalizes_supplied_values_before_missing_checks_without_overwrite():

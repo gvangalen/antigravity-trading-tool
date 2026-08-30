@@ -67,6 +67,11 @@ class RequestPlan(BaseModel):
     optional_information_scopes: List[str] = Field(default_factory=list)
     requested_operation: Optional[str] = None
     conversation_reference: Optional[str] = None
+    # The id identifies the record; this enum explains what kind of safe
+    # lineage it is. Consumers must not infer that from an opaque id.
+    conversation_reference_kind: Optional[Literal[
+        "previous_verified_response", "previous_degraded_response",
+    ]] = None
     referenced_entities: Dict[str, object] = Field(default_factory=dict)
     context_asset: Optional[str] = None
     target_asset: Optional[str] = None

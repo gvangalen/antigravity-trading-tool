@@ -85,6 +85,7 @@ class FinnV2RequestPreprocessorService:
             "waarop baseer", "waar baseer", "welk bewijs", "waarom concludeerde",
             "leg de eerdere", "evidence achter", "vastgelegde feiten",
             "feiten achter", "gegeven oordeel", "zojuist gegeven oordeel",
+            "vorige oordeel", "previous judgment", "previous verdict",
         ),
         "contextual_implication": ("wat betekent dat", "wat houdt dat in", "welk gevolg heeft dat"),
         "reformulation": (
@@ -93,9 +94,16 @@ class FinnV2RequestPreprocessorService:
             "anders formuleren",
             "andere woorden",
             "compacter",
-            "conclusie anders",
+            "conclusie anders", "hetzelfde oordeel opnieuw", "zelfde oordeel opnieuw",
+            "zeg hetzelfde eenvoudiger", "say the same judgment again", "same verdict again",
+            "restate your previous assessment", "explain that conclusion more simply",
+            "gleiches urteil noch einmal", "gleiches urteil erneut", "formuliere diese einschätzung einfacher",
         ),
-        "contextual_entity": ("die setup", "deze strategie", "die bot", "dat plan", "deze asset"),
+        "contextual_entity": (
+            "die setup", "die strategie", "die bot", "die gekoppelde bot",
+            "that setup", "that strategy", "that bot",
+            "dat plan", "deze asset",
+        ),
     }
     _TIMEFRAME_VALUE = re.compile(r"\b(?:[1-9]\d*(?:m|h|d|w))\b", re.IGNORECASE)
 

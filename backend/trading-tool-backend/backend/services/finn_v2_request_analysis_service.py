@@ -64,7 +64,16 @@ class FinnV2RequestAnalysisService:
         # Only the preprocessor may mark a conversation reference.  This
         # avoids turning ordinary Dutch pronouns into stale conversation
         # selectors later in the pipeline.
-        uses_conversation_reference = bool(preprocessed.conversation_reference_markers)
+        reference_markers = set(preprocessed.conversation_reference_markers)
+        has_existing_safe_lineage = self._has_safe_lineage(conversation_context or {}, allow_degraded=True)
+        # A relational noun such as "gekoppelde bot" can describe the object
+        # of a new request. It becomes a prior-turn reference only when a
+        # durable lineage actually exists. Evidence and reformulation acts,
+        # on the other hand, remain explicit lineage requests and must safely
+        # clarify when no prior response is available.
+        uses_conversation_reference = bool(reference_markers - {"contextual_entity"}) or (
+            "contextual_entity" in reference_markers and has_existing_safe_lineage
+        )
         if uses_conversation_reference and not self._has_safe_lineage(
             conversation_context or {},
             allow_degraded=preprocessed.discourse_act in {
@@ -74,10 +83,21 @@ class FinnV2RequestAnalysisService:
             unresolved_signals.append("conversation_reference_without_verified_context")
         if uses_conversation_reference:
             context = conversation_context or {}
-            explicit_asset = explicit_asset or self._context_asset(context.get("resolved_asset"))
-            explicit_setup_id = explicit_setup_id or self._context_entity_id(context.get("resolved_setup_id"))
-            explicit_strategy_id = explicit_strategy_id or self._context_entity_id(context.get("resolved_strategy_id"))
-            explicit_bot_id = explicit_bot_id or self._context_entity_id(context.get("resolved_bot_id"))
+            verified_entities = dict((context.get("last_verified_context") or {}).get("resolved_entities") or {})
+            degraded_entities = dict((context.get("last_degraded_context") or {}).get("resolved_entities") or {})
+            lineage_entities = verified_entities or degraded_entities
+            explicit_asset = explicit_asset or self._context_asset(
+                lineage_entities.get("asset") or context.get("resolved_asset")
+            )
+            explicit_setup_id = explicit_setup_id or self._context_entity_id(
+                lineage_entities.get("setup_id") or context.get("resolved_setup_id")
+            )
+            explicit_strategy_id = explicit_strategy_id or self._context_entity_id(
+                lineage_entities.get("strategy_id") or context.get("resolved_strategy_id")
+            )
+            explicit_bot_id = explicit_bot_id or self._context_entity_id(
+                lineage_entities.get("bot_id") or context.get("resolved_bot_id")
+            )
         requested_entities = self._requested_entities(
             explicit_asset=explicit_asset,
             explicit_setup_id=explicit_setup_id,
@@ -212,6 +232,7 @@ class FinnV2RequestAnalysisService:
                 "previous_evidence_refs": list(degraded.get("evidence_refs") or []),
                 "previous_degraded_evidence_scopes": list(degraded.get("evidence_scopes") or []),
                 "previous_degraded_released_sections": list(degraded.get("released_response_sections") or []),
+                "previous_degraded_released_response": dict(degraded.get("released_response") or {}),
                 "resolved_entities": dict(degraded.get("resolved_entities") or {}),
             }
         target_resolution = self.target_resolver.resolve(
@@ -314,17 +335,23 @@ class FinnV2RequestAnalysisService:
         unsupported_capability: Optional[str],
     ) -> RequestPlan:
         reference = None
+        reference_kind = None
         if uses_conversation_reference:
             verified_context = dict(conversation_context.get("last_verified_context") or {})
             degraded_context = dict(conversation_context.get("last_degraded_context") or {})
             is_canonical_context = bool(conversation_context.get("conversation_state_version"))
-            reference = str(
-                verified_context.get("verified_response_id")
-                or degraded_context.get("run_id")
-                or (None if is_canonical_context else conversation_context.get("last_verified_response_id"))
-                or (None if is_canonical_context else conversation_context.get("last_user_goal"))
-                or "previous_verified_response"
-            )
+            if verified_context.get("verified_response_id"):
+                reference = str(verified_context["verified_response_id"])
+                reference_kind = "previous_verified_response"
+            elif degraded_context.get("run_id"):
+                reference = str(degraded_context["run_id"])
+                reference_kind = "previous_degraded_response"
+            elif not is_canonical_context and conversation_context.get("last_verified_response_id"):
+                reference = str(conversation_context["last_verified_response_id"])
+                reference_kind = "previous_verified_response"
+            elif not is_canonical_context and conversation_context.get("last_user_goal"):
+                reference = str(conversation_context["last_user_goal"])
+                reference_kind = "previous_verified_response"
         score = {"high": 0.9, "medium": 0.7, "low": 0.4, "none": 0.0}[confidence]
         return RequestPlan(
             user_goal=self._user_goal(interaction_mode, primary_subject, normalized, integrated_plan),
@@ -337,6 +364,7 @@ class FinnV2RequestAnalysisService:
             optional_information_scopes=list(getattr(operation, "optional_scopes", ())),
             requested_operation=operation_id if interaction_mode in {"CREATE_PROPOSAL", "ACTION_PROPOSAL", "CONFIRMATION", "EXECUTION"} else None,
             conversation_reference=reference,
+            conversation_reference_kind=reference_kind,
             referenced_entities={
                 key: value
                 for key, value in {

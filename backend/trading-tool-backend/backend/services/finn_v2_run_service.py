@@ -175,6 +175,7 @@ class FinnV2RunService:
                 "uncertainty": verified.get("uncertainty_codes") or [],
                 "proposal_id": verified.get("proposal_id"),
                 "confirmation_required": bool(verified.get("confirmation_required")),
+                "next_step": verified.get("next_step"),
                 "reasoning_provenance": verified.get("reasoning_provenance") or {},
             }
         await self.persist_transition(
@@ -225,6 +226,7 @@ class FinnV2RunService:
             "uncertainty": reason_codes or [str(delivery_envelope.get("status") or terminal_status)],
             "proposal_id": None,
             "confirmation_required": False,
+            "next_step": None,
             "reasoning_provenance": reasoning_result.get("reasoning_provenance") or {},
         }
 

@@ -75,6 +75,30 @@ def test_reformulation_of_degraded_lineage_uses_only_released_non_conclusive_sec
     assert "vorige geverifieerde conclusie" not in result.main_observation
 
 
+def test_reformulation_of_degraded_lineage_reuses_only_already_visible_safe_terminal_content():
+    context = _lineage_context("reformulate_previous_response").copy(deep=True)
+    context.request_plan["operation_state"] = {
+        "previous_degraded_run_id": "run-degraded",
+        "previous_evidence_refs": ["E1"],
+        "previous_degraded_released_response": {
+            "direct_answer": "De beschikbare evidence ondersteunt geen geverifieerde financiële conclusie.",
+            "main_observation": "De indicatorconfiguratie ontbreekt.",
+            "uncertainty_summary": "Ik vul geen ontbrekende feiten in.",
+            "next_step": "Leg de indicatorconfiguratie vast.",
+        },
+    }
+
+    result = FinnV2ReasoningFallbackService().lineage_draft(
+        run_id="run-follow-up", user_id=388, operation_id="reformulate_previous_response",
+        context=context, model="deterministic",
+    )
+
+    assert result.mode == "READ"
+    assert result.direct_answer == "De beschikbare evidence ondersteunt geen geverifieerde financiële conclusie."
+    assert "niet geverifieerd" in result.uncertainty_summary
+    assert result.evidence_refs_used == ["E1"]
+
+
 def test_off_topic_terminal_answers_off_topic_instead_of_financial_unavailable():
     plan = SimpleNamespace(operation_id="off_topic")
     orchestrator = SimpleNamespace(

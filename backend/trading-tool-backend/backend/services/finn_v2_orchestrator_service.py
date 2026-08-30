@@ -475,6 +475,14 @@ class FinnV2OrchestratorService:
                         {"kind": "verification_limitation", "text": "De eerdere beoordeling is niet als geverifieerde financiële conclusie vrijgegeven."},
                         {"kind": "evidence_availability", "text": "Beschikbare evidence kan wel worden toegelicht."},
                     ],
+                    # Only fields already delivered to the user are eligible
+                    # for a later safe reformulation.
+                    "released_response": {
+                        "direct_answer": getattr(verified_response, "direct_answer", None),
+                        "main_observation": getattr(verified_response, "main_observation", None),
+                        "uncertainty_summary": getattr(verified_response, "uncertainty_summary", None),
+                        "next_step": getattr(getattr(verified_response, "next_step", None), "instruction", None),
+                    },
                     "financial_conclusion_verified": False,
                     "resolved_entities": {
                         key: value for key, value in {

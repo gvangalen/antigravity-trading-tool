@@ -123,6 +123,8 @@ class VerifiedResponse(BaseModel):
     uncertainty: List[str] = Field(default_factory=list)
     proposal_id: Optional[str] = None
     confirmation_required: bool = False
+    # Shared terminal projection for polling and SSE.
+    next_step: Optional[Dict[str, Any]] = None
     reasoning_provenance: Dict[str, Any] = Field(default_factory=dict)
 
 
