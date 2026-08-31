@@ -611,6 +611,28 @@ def test_guided_setup_collects_type_timeframe_and_name_in_one_persisted_contract
     }
 
 
+def test_guided_setup_keeps_canonical_state_for_natural_timeframe_and_name_answers():
+    first = SERVICE.analyze(message="Maak een BTC-setup.")
+    second = SERVICE.analyze(
+        message="Kies een swing setup.",
+        conversation_context={"active_guided_operation": first.request_plan.operation_state},
+    )
+    third = SERVICE.analyze(
+        message="Neem de vieruursgrafiek.",
+        conversation_context={"active_guided_operation": second.request_plan.operation_state},
+    )
+    final = SERVICE.analyze(
+        message="Noem het BTC Rustige Pullback.",
+        conversation_context={"active_guided_operation": third.request_plan.operation_state},
+    )
+
+    assert final.request_plan.operation_id == "create_setup"
+    assert final.request_plan.operation_state["missing_required_inputs"] == []
+    assert final.request_plan.operation_state["collected_inputs"] == {
+        "symbol": "BTC", "setup_type": "trade", "timeframe": "4H", "name": "BTC Rustige Pullback",
+    }
+
+
 def test_complete_natural_setup_sentence_resolves_all_typed_inputs():
     result = SERVICE.analyze(
         message="Werk voor DOT een breakout-opzet uit op 2H en noem hem Polkadot Uitbraak."

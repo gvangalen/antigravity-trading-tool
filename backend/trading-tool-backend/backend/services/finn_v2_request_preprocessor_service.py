@@ -12,6 +12,7 @@ from dataclasses import dataclass
 from typing import Mapping, Optional
 
 from backend.services.asset_catalog_service import resolve_catalog_symbol
+from backend.domain.finn_v2_setup_input_catalog import FinnV2SetupInputCatalog
 
 
 @dataclass(frozen=True)
@@ -85,7 +86,7 @@ class FinnV2RequestPreprocessorService:
             "waarop baseer", "waar baseer", "welk bewijs", "waarom concludeerde",
             "leg de eerdere", "evidence achter", "vastgelegde feiten",
             "feiten achter", "gegeven oordeel", "zojuist gegeven oordeel",
-            "vorige oordeel", "previous judgment", "previous verdict",
+            "vorige oordeel", "eerdere oordeel", "vorige beoordeling", "previous judgment", "previous verdict",
         ),
         "contextual_implication": ("wat betekent dat", "wat houdt dat in", "welk gevolg heeft dat"),
         "reformulation": (
@@ -162,16 +163,16 @@ class FinnV2RequestPreprocessorService:
         is_interrogative = bool(re.match(r"^(?:welke|welk|wat|waar|hoe|who|what|which|where|how)\b", normalized))
         slot_answer = asset if asset and short_turn and not is_interrogative else None
         if slot_answer is None and short_turn and not is_interrogative:
-            timeframe = self._TIMEFRAME_VALUE.search(normalized)
+            timeframe = FinnV2SetupInputCatalog.timeframe_from_text(original)
             if timeframe:
-                slot_answer = timeframe.group(0).upper()
+                slot_answer = timeframe
         if (
             action == "read"
             and short_turn
             and (not entities or set(entities).issubset({"asset"}))
             and (
                 slot_answer is not None
-                or re.search(r"\b(?:naam|name|noem\s+(?:hem|haar)|ik\s+noem|hij\s+heet|het\s+heet)\b", normalized)
+                or re.search(r"\b(?:naam|name|noem\s+(?:hem|haar|het|deze|dit)|ik\s+noem|hij\s+heet|het\s+heet)\b", normalized)
             )
         ):
             discourse = "clarification_answer"
@@ -277,6 +278,12 @@ class FinnV2RequestPreprocessorService:
             return "activate"
         if re.search(r"\bpas\b.*\baan\b", text):
             return "update"
+        # Confirmation qualifies a proposal lifecycle; it never changes the
+        # mutation the user is asking FINN to prepare.
+        if any(term in text for term in ("watchlist", "volglijst", "marktenlijst")) and self._contains_any(
+            text, ("verwijder", "remove", "haal", "verdwijn", "delete", "drop")
+        ):
+            return "remove"
         if re.search(r"\bwerk\b.*\buit\b", text):
             return "create"
         if "niet langer" in text and any(term in text for term in ("watchlist", "volglijst", "gevolgde", "marktenlijst")):

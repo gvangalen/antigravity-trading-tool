@@ -354,14 +354,14 @@ _OPERATION_SELECTION_METADATA: Mapping[str, dict] = {
         "semantic_description": "Decline a request unrelated to financial education, FINN, or the user's trading workspace.",
     },
     "capability": {
-        "semantic_description": "Explain FINN's supported reads, analyses, proposals and safe actions.",
+        "semantic_description": "Explain FINN's supported reads, analyses, proposals and safe actions. Select capability whenever the user asks what assistance FINN can provide for any part of their trading workspace, including a plan, setup, strategy, indicators, or bot; naming that subject does not request its current stored state.",
         "positive_examples": ("Wat kan FINN doen?", "Welke analyses ondersteun je?"),
         "negative_examples": ("Onderbouw die conclusie.", "Beoordeel mijn plan."),
         "required_discourse_acts": ("capability",),
         "selection_priority": 100,
     },
     "explain_previous_evidence": {
-        "semantic_description": "Explain the factual basis, consequence, boundary, or required implication of a previous verified or degraded FINN assessment. Select this when the user asks what a prior assessment changes, supports, requires, or means for a linked setup, strategy, or bot. Mentioning a bot does not make this a fresh bot evaluation unless the user asks for a new assessment of that bot.",
+        "semantic_description": "Explain the factual basis, consequence, boundary, or required implication of a previous verified or degraded FINN assessment. Select this when the user asks which stored facts support an earlier conclusion, or what a prior assessment changes, supports, requires, or means for a linked setup, strategy, or bot. Mentioning a bot does not make this a fresh bot evaluation unless the user asks for a new assessment of that bot.",
         "required_discourse_acts": ("evidence_follow_up",),
         "requires_verified_context": True,
         "selection_priority": 100,
@@ -483,6 +483,7 @@ _OPERATION_SELECTION_METADATA: Mapping[str, dict] = {
         "selection_priority": 80,
     },
     "watchlist_remove": {
+        "semantic_description": "Prepare removal of an identified asset from a watchlist. A request to confirm first still describes the removal operation; confirmation is required later and must not replace the selected mutation contract.",
         "any_entities": ("watchlist",),
         "required_discourse_acts": ("operation_request",),
         "allowed_action_polarities": ("remove",),

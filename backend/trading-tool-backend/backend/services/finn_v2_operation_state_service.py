@@ -195,7 +195,7 @@ class FinnV2OperationStateService:
             named = re.search(
                 r"\b(?:mit\s+dem\s+namen|unter\s+dem\s+namen|met\s+de\s+naam|namens|genannt|"
                 r"genaamd|named|called|call\s+it|nenne\s+(?:ihn|sie|es)|"
-                r"noem\s+(?:hem|haar)|ik\s+noem\s+(?:hem|haar)|"
+                r"noem\s+(?:hem|haar|het|deze|dit)|ik\s+noem\s+(?:hem|haar|het|deze|dit)|"
                 r"hij\s+heet|het\s+heet|naam|name|titel|title)\b"
                 r"\s*(?:is|:|=)?\s*[\"']?([\w .-]{2,80})",
                 text,

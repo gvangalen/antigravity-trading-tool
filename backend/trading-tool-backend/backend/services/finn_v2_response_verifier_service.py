@@ -1217,9 +1217,11 @@ class FinnV2ResponseVerifierService:
             return True
         if (
             normalize_interaction_mode(draft.mode) == "EVALUATE"
-            and (draft.reasoning_provenance or {}).get("reasoning_source") == "lineage_evidence"
             and (draft.reasoning_provenance or {}).get("operation_id") == "explain_previous_evidence"
         ):
+            # Deterministic contract assembly may wrap a lineage draft and
+            # replace its source label. The immutable selected operation is
+            # retained and is the authoritative relevance contract.
             return True
         lowered = question.lower()
         answer = f"{draft.direct_answer} {draft.main_observation}".lower()

@@ -31,6 +31,15 @@ def test_lineage_evidence_response_remains_relevant_after_an_off_topic_turn():
         "Onderbouw nu weer je eerdere BTC-conclusie met de opgeslagen evidence.", draft
     ) is True
 
+    wrapped = draft.copy(deep=True)
+    wrapped.reasoning_provenance = {
+        "reasoning_source": "deterministic_contract",
+        "operation_id": "explain_previous_evidence",
+    }
+    assert FinnV2ResponseVerifierService(session=object())._is_relevant(
+        "Licht de eerder opgeslagen onderbouwing toe.", wrapped
+    ) is True
+
 
 def test_integrated_plan_verifier_requires_a_grounded_strength_and_limitation():
     draft = ResponseDraft(
