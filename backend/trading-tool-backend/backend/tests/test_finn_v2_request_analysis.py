@@ -15,6 +15,16 @@ def test_preprocessor_treats_current_symbol_as_asset_entity():
     assert "asset" in facts.explicit_entities
 
 
+def test_preprocessor_normalizes_natural_rsi_name_and_reformulation_stem():
+    preprocessor = FinnV2RequestPreprocessorService()
+
+    concept = preprocessor.preprocess(message="Wat meet een relatieve sterkte index?")
+    reformulation = preprocessor.preprocess(message="Herschrijf het vorige oordeel beknopt.")
+
+    assert concept.financial_concept == "RSI"
+    assert reformulation.discourse_act == "reformulation"
+
+
 SERVICE = FinnV2RequestAnalysisService()
 
 

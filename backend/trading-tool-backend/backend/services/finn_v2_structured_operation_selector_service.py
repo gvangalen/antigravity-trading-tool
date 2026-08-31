@@ -263,19 +263,21 @@ class FinnV2StructuredOperationSelectorService:
         context: Optional[Mapping[str, object]],
     ) -> bool:
         """Accept only registry-declared, verifiable lineage references."""
-        if not raw_reference:
-            return False
         if contract.requires_verified_context:
-            return True
+            return bool(raw_reference)
         if not contract.contextual_reference_inputs:
             return False
         verified = dict((context or {}).get("last_verified_context") or {})
         resolved = dict(verified.get("resolved_entities") or {})
-        return any(
+        matches_verified_entity = any(
             str(entities.get(field) or "") == str(resolved.get(field) or "")
             and bool(resolved.get(field))
             for field in contract.contextual_reference_inputs
         )
+        # The provider's nullable reference field is telemetry. A contextual
+        # action remains safely linked when it selected exactly the persisted
+        # registry-declared entity, even if that nullable field is omitted.
+        return matches_verified_entity
 
     @staticmethod
     def _canonical_missing_inputs(*, contract: OperationContract, raw_inputs: list[str], facts: Mapping[str, object]) -> tuple[str, ...]:

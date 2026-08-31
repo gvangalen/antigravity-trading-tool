@@ -92,6 +92,7 @@ class FinnV2RequestPreprocessorService:
         "reformulation": (
             "korter",
             "herformuleer",
+            "herschrijf",
             "anders formuleren",
             "andere woorden",
             "compacter",
@@ -208,6 +209,9 @@ class FinnV2RequestPreprocessorService:
             "average true range": "ATR",
             "macd": "MACD",
             "rsi": "RSI",
+            "relative strength index": "RSI",
+            "relatieve sterkte index": "RSI",
+            "relatieve-sterkte-index": "RSI",
             "vwap": "VWAP",
             "volume": "volume",
             "moving average": "moving average",
@@ -227,7 +231,7 @@ class FinnV2RequestPreprocessorService:
         inflection_stems = {
             "indicator", "signaal", "trendindicator", "setup", "haal", "maak",
             "toevoeg", "verwijder", "activeer", "bevestig", "formuleer",
-            "herformuleer", "ontbrek", "ontbreek", "inschakel",
+            "herformuleer", "herschrijf", "ontbrek", "ontbreek", "inschakel",
         }
         return any(
             re.search(rf"(?<!\w){re.escape(term)}(?!\w)", text)

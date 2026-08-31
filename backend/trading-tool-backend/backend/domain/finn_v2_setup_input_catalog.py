@@ -40,7 +40,10 @@ class FinnV2SetupInputCatalog:
         for canonical, aliases in cls._TYPE_ALIASES.items():
             if normalized in aliases:
                 return canonical
-        return None
+        # Selector telemetry can contain a descriptive phrase rather than a
+        # bare enum. Use the same unambiguous catalog as user-supplied slots
+        # so the response projection and collected inputs stay aligned.
+        return cls.setup_type_from_text(str(value or ""))
 
     @classmethod
     def timeframe_from_text(cls, text: str) -> Optional[str]:

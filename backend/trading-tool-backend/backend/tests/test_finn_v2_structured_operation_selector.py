@@ -153,6 +153,49 @@ def test_selector_projects_contextual_action_reference_only_for_matching_registr
     assert selection.conversation_reference == "previous_verified_response"
 
 
+def test_selector_projects_matching_contextual_reference_when_provider_omits_telemetry():
+    selector = FinnV2StructuredOperationSelectorService(
+        provider=lambda **_kwargs: {"parsed": {
+            "operation_id": "activate_bot", "confidence": 0.95,
+            "entities": {"concept": None, "asset": None, "setup_id": None,
+                         "strategy_id": None, "bot_id": "170", "setup_type": None,
+                         "timeframe": None, "name": None},
+            "target_asset": None, "conversation_reference": None,
+            "missing_inputs": [], "ambiguity_reason": None,
+        }}
+    )
+    selection, error = selector.select(
+        message="Laat die gekoppelde bot live handelen.",
+        candidate_contracts=(FinnV2OperationRegistry().get("activate_bot"),), facts={},
+        verified_context={"last_verified_context": {"resolved_entities": {"bot_id": 170}}},
+    )
+
+    assert error is None
+    assert selection is not None
+    assert selection.conversation_reference == "previous_verified_response"
+
+
+def test_selector_canonicalizes_descriptive_setup_type_phrases():
+    selector = FinnV2StructuredOperationSelectorService(
+        provider=lambda **_kwargs: {"parsed": {
+            "operation_id": "create_setup", "confidence": 0.95,
+            "entities": {"concept": None, "asset": "ETH", "setup_id": None,
+                         "strategy_id": None, "bot_id": None, "setup_type": "weekly breakout",
+                         "timeframe": "1W", "name": "Rustige Doorbraak"},
+            "target_asset": "ETH", "conversation_reference": None,
+            "missing_inputs": [], "ambiguity_reason": None,
+        }}
+    )
+    selection, error = selector.select(
+        message="Werk een setup uit.",
+        candidate_contracts=(FinnV2OperationRegistry().get("create_setup"),), facts={}, verified_context=None,
+    )
+
+    assert error is None
+    assert selection is not None
+    assert selection.entities["setup_type"] == "trade"
+
+
 @pytest.mark.parametrize("asset", ("NEAR", "Cosmos", "Polygon", "UNI", "BTC"))
 def test_selector_projects_explicit_catalog_asset_when_model_target_is_null(asset):
     selector = FinnV2StructuredOperationSelectorService(
