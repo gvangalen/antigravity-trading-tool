@@ -152,3 +152,33 @@ def test_selector_exposes_safe_degraded_lineage_to_the_provider_contract():
     assert error is None and selection is not None
     assert "last_degraded_context" in captured["prompt"]
     assert "safe reformulation" in captured["system_role"]
+
+
+def test_selector_manifest_keeps_capability_and_concrete_bot_reads_distinct():
+    captured = {}
+
+    def provider(**kwargs):
+        captured.update(kwargs)
+        return {"parsed": {
+            "operation_id": "capability", "confidence": 0.9, "entities": {},
+            "target_asset": None, "conversation_reference": "untrusted-reference",
+            "missing_inputs": [], "ambiguity_reason": None,
+        }}
+
+    selection, error = FinnV2StructuredOperationSelectorService(provider=provider).select(
+        message="Welke veilige hulp kan FINN in mijn plan bieden?",
+        candidate_contracts=(
+            FinnV2OperationRegistry().get("capability"),
+            FinnV2OperationRegistry().get("read_active_plan"),
+            FinnV2OperationRegistry().get("read_linked_bot"),
+            FinnV2OperationRegistry().get("evaluate_bot"),
+        ),
+        facts={"discourse_act": "capability"},
+        verified_context={"last_verified_context": {"verified_response_id": "prior"}},
+    )
+
+    assert error is None and selection is not None
+    assert selection.conversation_reference is None
+    assert "capability discourse" in captured["system_role"]
+    assert "concrete bot question" in captured["system_role"]
+    assert "last_safe_terminal_context" in captured["system_role"]

@@ -757,6 +757,17 @@ def test_complete_avax_compound_timeframe_setup_preserves_supplied_values():
     assert result.request_plan.operation_state["missing_required_inputs"] == []
 
 
+def test_dutch_swingtrade_setup_preserves_its_explicit_name_and_canonical_type():
+    result = SERVICE.analyze(
+        message="Maak een swingtrade setup voor BTC op 4H met de naam Nederlandse Doorbraak."
+    )
+
+    assert result.request_plan.operation_state["collected_inputs"] == {
+        "symbol": "BTC", "setup_type": "trade", "timeframe": "4H", "name": "Nederlandse Doorbraak",
+    }
+    assert result.request_plan.operation_state["missing_required_inputs"] == []
+
+
 def test_contextual_bot_implication_keeps_verified_lineage_payload():
     result = SERVICE.analyze(
         message="Wat betekent dat concreet voor mijn bot?",
@@ -858,6 +869,37 @@ def test_degraded_evidence_lineage_keeps_provenance_without_reviving_a_conclusio
     assert state["previous_evidence_refs"] == ["E1"]
     assert "previous_verified_conclusion" not in state
     assert "previous_verified_response" not in state
+
+
+def test_off_topic_boundary_follow_up_keeps_only_a_safe_terminal_reference(monkeypatch):
+    service = FinnV2RequestAnalysisService()
+    monkeypatch.setattr(
+        service.classifier,
+        "classify",
+        lambda **_kwargs: SemanticOperationClassification(
+            operation_id="explain_previous_evidence", action="read", domain="system",
+            discourse="evidence_follow_up", confidence="high", selector_source="structured",
+        ),
+    )
+
+    analysis = service.analyze(
+        message="Waarom viel die vorige vraag buiten FINN?",
+        conversation_context={
+            "last_safe_terminal_context": {
+                "operation_id": "off_topic", "run_id": "run-off-topic",
+                "terminal_reason": "outside_finn_scope",
+            },
+        },
+    )
+
+    assert analysis.request_plan.operation_id == "explain_previous_evidence"
+    assert analysis.request_plan.conversation_reference == "run-off-topic"
+    assert analysis.request_plan.conversation_reference_kind == "previous_safe_terminal"
+    assert analysis.request_plan.operation_state == {
+        "previous_safe_terminal_run_id": "run-off-topic",
+        "previous_safe_terminal_operation_id": "off_topic",
+        "previous_safe_terminal_reason": "outside_finn_scope",
+    }
 
 
 def test_concrete_bot_follow_up_can_use_degraded_scope_without_promoting_conclusion(monkeypatch):

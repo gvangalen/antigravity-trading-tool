@@ -75,6 +75,23 @@ class FinnV2ReasoningFallbackService:
         released = list(state.get("previous_degraded_released_sections") or [])
         released_response = dict(state.get("previous_degraded_released_response") or {})
         degraded_scopes = list(state.get("previous_degraded_evidence_scopes") or [])
+        terminal_reason = str(state.get("previous_safe_terminal_reason") or "").strip()
+        if operation_id == "explain_previous_evidence" and terminal_reason == "outside_finn_scope":
+            return ReasoningResult(
+                reasoning_result_id=f"finn-v2-reasoning-{uuid.uuid4().hex}",
+                run_id=run_id, user_id=user_id, mode="EVALUATE",
+                direct_answer=(
+                    "De vorige vraag viel buiten FINN omdat zij geen financiële uitleg, "
+                    "FINN-functionaliteit of handelswerkruimte betrof."
+                ),
+                main_observation=(
+                    "Ik kan de grens toelichten, maar maak daarvan geen financiële conclusie "
+                    "en voer geen actie uit."
+                ),
+                uncertainty_summary=None, uncertainty_codes=[], evidence_refs_used=[],
+                reasoning_provenance={"reasoning_source": "safe_terminal_boundary"},
+                model=model, created_at=datetime.now(timezone.utc),
+            )
         if operation_id == "explain_previous_evidence" and refs:
             scope_text = ", ".join(str(scope).replace("_", " ") for scope in degraded_scopes) or "de opgeslagen FINN-evidence"
             return ReasoningResult(

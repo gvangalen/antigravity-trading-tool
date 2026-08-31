@@ -339,6 +339,36 @@ def test_unavailable_delivery_records_diagnostics_without_overwriting_verified_c
     }
 
 
+def test_off_topic_terminal_persists_only_a_safe_boundary_reference():
+    service = FinnV2OrchestratorService(session=object())
+    service.conversations = _FakeConversationRepo()
+    result = SimpleNamespace(
+        analysis=SimpleNamespace(
+            explicit_asset=None, explicit_setup_id=None, explicit_strategy_id=None,
+            explicit_bot_id=None, interaction_mode="UNAVAILABLE",
+            request_plan=SimpleNamespace(operation_id="off_topic", operation_contract_version="contract-v1", operation_state={}),
+        ),
+        tool_plan=SimpleNamespace(entity_selectors={}),
+    )
+    response = SimpleNamespace(
+        verifier_status="passed", mode="UNAVAILABLE", run_id="run-off-topic",
+        uncertainty_codes=[], reasoning_provenance={}, evidence_refs_used=[],
+    )
+
+    asyncio.run(service._update_conversation_context(
+        conversation_id="conversation-1", user_id=7, existing_context={}, result=result, verified_response=response,
+    ))
+
+    assert service.conversations.updated["context"]["last_safe_terminal_context"] == {
+        "context_version": "finn_v2.safe-terminal-boundary.v1",
+        "operation_id": "off_topic",
+        "mode": "UNAVAILABLE",
+        "run_id": "run-off-topic",
+        "terminal_reason": "outside_finn_scope",
+    }
+    assert service.conversations.updated["context"]["last_verified_context"] == {}
+
+
 def test_downgraded_evaluate_retains_only_evidence_lineage_for_safe_followups():
     service = FinnV2OrchestratorService(session=object())
     service.conversations = _FakeConversationRepo()

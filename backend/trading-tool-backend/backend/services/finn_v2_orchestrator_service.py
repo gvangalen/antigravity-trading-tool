@@ -496,6 +496,18 @@ class FinnV2OrchestratorService:
                         }.items() if value is not None
                     },
                 }
+            if operation_id in {"off_topic", "unsupported_financial_operation"}:
+                context["last_safe_terminal_context"] = {
+                    "context_version": "finn_v2.safe-terminal-boundary.v1",
+                    "operation_id": operation_id,
+                    "mode": response_mode,
+                    "run_id": getattr(verified_response, "run_id", None),
+                    "terminal_reason": (
+                        "outside_finn_scope"
+                        if operation_id == "off_topic"
+                        else "unsupported_financial_operation"
+                    ),
+                }
             context["last_turn_diagnostics"] = {
                 "operation_id": getattr(request_plan, "operation_id", None),
                 "mode": response_mode,

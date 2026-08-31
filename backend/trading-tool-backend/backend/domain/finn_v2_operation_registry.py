@@ -394,6 +394,7 @@ _OPERATION_SELECTION_METADATA: Mapping[str, dict] = {
         "selection_focus_entities": ("strategy",),
     },
     "read_linked_bot": {
+        "semantic_description": "Read the linked bot's concrete identity, configuration, linkage, or current non-evaluative details. This remains a read when it follows an earlier answer or refers naturally to that bot; previous context alone never turns a concrete bot question into an evaluation.",
         "any_entities": ("bot",),
         "required_discourse_acts": ("information_request",),
         "allowed_action_polarities": ("read",),
@@ -452,7 +453,7 @@ _OPERATION_SELECTION_METADATA: Mapping[str, dict] = {
         "selection_focus_entities": ("strategy",),
     },
     "evaluate_bot": {
-        "semantic_description": "Evaluate the user's linked bot or explain what the previous verified plan conclusion means for that bot. A contextual bot implication must retain the previous verified response reference and use bot evidence; it is not a request to activate or reconfigure the bot.",
+        "semantic_description": "Assess the user's linked bot, or explain the consequence of a previous verified plan assessment for that bot. Select this only when the user asks for an assessment, risk, suitability, or implication. A concrete identity, configuration, linkage, or status question remains a bot READ even with prior context. A contextual implication must retain the previous verified response reference and use bot evidence; it is not a request to activate or reconfigure the bot.",
         "any_entities": ("bot",),
         "required_discourse_acts": ("evaluation", "contextual_follow_up"),
         "selection_priority": 40,

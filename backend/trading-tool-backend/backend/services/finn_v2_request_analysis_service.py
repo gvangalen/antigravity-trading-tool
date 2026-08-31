@@ -65,7 +65,11 @@ class FinnV2RequestAnalysisService:
         # avoids turning ordinary Dutch pronouns into stale conversation
         # selectors later in the pipeline.
         reference_markers = set(preprocessed.conversation_reference_markers)
-        has_existing_safe_lineage = self._has_safe_lineage(conversation_context or {}, allow_degraded=True)
+        has_existing_safe_lineage = self._has_safe_lineage(
+            conversation_context or {},
+            allow_degraded=True,
+            allow_safe_terminal=preprocessed.discourse_act == "evidence_follow_up",
+        )
         # A relational noun such as "gekoppelde bot" can describe the object
         # of a new request. It becomes a prior-turn reference only when a
         # durable lineage actually exists. Evidence and reformulation acts,
@@ -79,6 +83,7 @@ class FinnV2RequestAnalysisService:
             allow_degraded=preprocessed.discourse_act in {
                 "evidence_follow_up", "reformulation", "contextual_follow_up",
             },
+            allow_safe_terminal=preprocessed.discourse_act == "evidence_follow_up",
         ):
             unresolved_signals.append("conversation_reference_without_verified_context")
         if uses_conversation_reference:
@@ -152,6 +157,7 @@ class FinnV2RequestAnalysisService:
                 allow_degraded=operation.operation_id in {
                     "explain_previous_evidence", "reformulate_previous_response", "evaluate_bot",
                 },
+                allow_safe_terminal=operation.operation_id == "explain_previous_evidence",
             )
             if not has_safe_lineage and "conversation_reference_without_verified_context" not in unresolved_signals:
                 unresolved_signals.append("conversation_reference_without_verified_context")
@@ -221,20 +227,28 @@ class FinnV2RequestAnalysisService:
                 "resolved_entities": dict(verified.get("resolved_entities") or {}),
             }
         elif guided_state is None and uses_conversation_reference and self._has_safe_lineage(
-            conversation_context or {}, allow_degraded=True
+            conversation_context or {}, allow_degraded=True, allow_safe_terminal=True
         ):
             # Degraded lineage retains provenance only. It never revives an
             # unverified conclusion or response text for a follow-up.
             degraded = dict((conversation_context or {}).get("last_degraded_context") or {})
-            operation_state_payload = {
-                "previous_degraded_run_id": degraded.get("run_id"),
-                "previous_degraded_operation_id": degraded.get("operation_id"),
-                "previous_evidence_refs": list(degraded.get("evidence_refs") or []),
-                "previous_degraded_evidence_scopes": list(degraded.get("evidence_scopes") or []),
-                "previous_degraded_released_sections": list(degraded.get("released_response_sections") or []),
-                "previous_degraded_released_response": dict(degraded.get("released_response") or {}),
-                "resolved_entities": dict(degraded.get("resolved_entities") or {}),
-            }
+            terminal = dict((conversation_context or {}).get("last_safe_terminal_context") or {})
+            if degraded:
+                operation_state_payload = {
+                    "previous_degraded_run_id": degraded.get("run_id"),
+                    "previous_degraded_operation_id": degraded.get("operation_id"),
+                    "previous_evidence_refs": list(degraded.get("evidence_refs") or []),
+                    "previous_degraded_evidence_scopes": list(degraded.get("evidence_scopes") or []),
+                    "previous_degraded_released_sections": list(degraded.get("released_response_sections") or []),
+                    "previous_degraded_released_response": dict(degraded.get("released_response") or {}),
+                    "resolved_entities": dict(degraded.get("resolved_entities") or {}),
+                }
+            else:
+                operation_state_payload = {
+                    "previous_safe_terminal_run_id": terminal.get("run_id"),
+                    "previous_safe_terminal_operation_id": terminal.get("operation_id"),
+                    "previous_safe_terminal_reason": terminal.get("terminal_reason"),
+                }
         target_resolution = self.target_resolver.resolve(
             explicit_target_asset=message_asset,
             selector_target_asset=semantic.selected_target_asset,
@@ -346,6 +360,9 @@ class FinnV2RequestAnalysisService:
             elif degraded_context.get("run_id"):
                 reference = str(degraded_context["run_id"])
                 reference_kind = "previous_degraded_response"
+            elif dict(conversation_context.get("last_safe_terminal_context") or {}).get("run_id"):
+                reference = str(conversation_context["last_safe_terminal_context"]["run_id"])
+                reference_kind = "previous_safe_terminal"
             elif not is_canonical_context and conversation_context.get("last_verified_response_id"):
                 reference = str(conversation_context["last_verified_response_id"])
                 reference_kind = "previous_verified_response"
@@ -395,14 +412,23 @@ class FinnV2RequestAnalysisService:
         )
 
     @staticmethod
-    def _has_safe_lineage(context: Dict[str, object], *, allow_degraded: bool) -> bool:
+    def _has_safe_lineage(
+        context: Dict[str, object], *, allow_degraded: bool, allow_safe_terminal: bool = False
+    ) -> bool:
         if context.get("last_verified_context") or context.get("last_verified_conclusion"):
             return True
         degraded = context.get("last_degraded_context")
-        return bool(
+        if bool(
             allow_degraded
             and isinstance(degraded, dict)
             and degraded.get("evidence_refs")
+        ):
+            return True
+        terminal = context.get("last_safe_terminal_context")
+        return bool(
+            allow_safe_terminal
+            and isinstance(terminal, dict)
+            and terminal.get("terminal_reason")
         )
 
     @staticmethod

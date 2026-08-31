@@ -12,7 +12,7 @@ class FinnV2SetupInputCatalog:
     _TYPE_ALIASES = {
         "dca": ("dca", "dollar cost averaging", "periodiek bijkopen", "sparplan"),
         "position": ("position", "positie", "positioneel", "positionssetup", "position setup"),
-        "trade": ("trade", "trading", "swing", "scalp", "breakout", "momentum", "intraday"),
+        "trade": ("trade", "trading", "swing", "swingtrade", "swing trading", "scalp", "breakout", "momentum", "intraday"),
     }
     _TIMEFRAME_ALIASES = {
         "1D": ("dagbasis", "daily", "daily basis", "day basis", "tagesbasis", "taglich", "taeglich"),

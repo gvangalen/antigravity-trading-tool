@@ -1210,6 +1210,11 @@ class FinnV2ResponseVerifierService:
             and draft.next_step is not None
         ):
             return True
+        if (
+            normalize_interaction_mode(draft.mode) == "EVALUATE"
+            and (draft.reasoning_provenance or {}).get("reasoning_source") == "safe_terminal_boundary"
+        ):
+            return True
         lowered = question.lower()
         answer = f"{draft.direct_answer} {draft.main_observation}".lower()
         keywords = [

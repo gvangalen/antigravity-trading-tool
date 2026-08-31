@@ -66,6 +66,11 @@ class FinnV2StructuredOperationSelectorService:
                 system_role=(
                     "Select exactly one FINN operation from the supplied immutable manifest. "
                     "Do not select modes, tools, scopes, policies, or execution. "
+                    "Treat the supplied facts as typed constraints. A capability discourse is always the "
+                    "capability contract, even when the question names a plan, setup, strategy, bot, or "
+                    "prior conversation. A concrete bot question about identity, configuration, linkage, "
+                    "or status is a READ contract; select evaluate_bot only for an actual assessment or "
+                    "an implication of a previous assessment. "
                     "Use clarify_request for ambiguity, unsupported_financial_operation for "
                     "understood but unsupported finance or trading-product requests, and off_topic "
                     "only for requests unrelated to finance, FINN, or a trading workspace. "
@@ -75,6 +80,9 @@ class FinnV2StructuredOperationSelectorService:
                     "previous_verified_response. A degraded context permits only evidence explanation or safe reformulation, "
                     "never promotion of an unverified financial conclusion. Treat an overview of a user's setup, strategy, "
                     "and bot as read_active_plan, not as ambiguity. "
+                    "When conversation_state has last_safe_terminal_context and the user asks why the immediately "
+                    "previous request was outside FINN's supported boundary, select explain_previous_evidence. "
+                    "That contract may explain only the recorded boundary reason and must not create financial lineage. "
                     "For a requested change, select a write contract only when the request identifies "
                     "its required FINN object. A create contract with an identified object may be selected "
                     "even when its remaining required slots are absent; list those slots in missing_inputs. "
@@ -150,7 +158,7 @@ class FinnV2StructuredOperationSelectorService:
             conversation_reference=(
                 "previous_verified_response"
                 if contract.requires_verified_context and self._optional_text(parsed.get("conversation_reference"))
-                else self._optional_text(parsed.get("conversation_reference"))
+                else None
             ),
             missing_inputs=self._canonical_missing_inputs(contract=contract, raw_inputs=raw_inputs, facts=facts),
             ambiguity_reason=self._optional_text(parsed.get("ambiguity_reason")),
@@ -205,7 +213,7 @@ class FinnV2StructuredOperationSelectorService:
             key: raw[key]
             for key in (
                 "last_verified_context", "last_degraded_context", "active_guided_operation",
-                "last_turn_diagnostics",
+                "last_safe_terminal_context", "last_turn_diagnostics",
             )
             if key in raw
         }

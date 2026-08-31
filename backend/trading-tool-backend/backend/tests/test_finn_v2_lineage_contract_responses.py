@@ -137,3 +137,20 @@ def test_off_topic_terminal_answers_off_topic_instead_of_financial_unavailable()
     assert result.mode == "UNAVAILABLE"
     assert "buiten FINN" in result.main_observation
     assert "trade aanwijzen" not in result.direct_answer
+
+
+def test_safe_terminal_boundary_explains_an_immediately_previous_off_topic_result():
+    context = _lineage_context("explain_previous_evidence").copy(deep=True)
+    context.request_plan["operation_state"] = {
+        "previous_safe_terminal_run_id": "run-off-topic",
+        "previous_safe_terminal_reason": "outside_finn_scope",
+    }
+
+    result = FinnV2ReasoningFallbackService().lineage_draft(
+        run_id="run-follow-up", user_id=388, operation_id="explain_previous_evidence",
+        context=context, model="deterministic",
+    )
+
+    assert result.mode == "EVALUATE"
+    assert "buiten FINN" in result.direct_answer
+    assert "financiële conclusie" not in result.direct_answer
