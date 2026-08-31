@@ -60,6 +60,10 @@ class _Dispatches:
     async def list_recoverable(self, **_kwargs):
         return self.recoverable
 
+    async def reserve_recovery(self, **kwargs):
+        self.events.append(("reserve_recovery", kwargs))
+        return True
+
     async def mark_published(self, dispatch_id):
         self.events.append(("published", dispatch_id))
 
@@ -194,6 +198,31 @@ def test_recovery_publish_does_not_claim_a_dispatch(monkeypatch):
     assert asyncio.run(task_module._recover_finn_v2_dispatches()) == 1
     assert ("published", "dispatch-6") in _Dispatches.events
     assert not any(event[0] == "claim" for event in _Dispatches.events)
+
+
+def test_recovery_does_not_republish_a_dispatch_reserved_by_another_worker(monkeypatch):
+    run = SimpleNamespace(dispatch_id="dispatch-6b", run_id="run-6b", task_id="task-6b", queue="finn_interactive")
+    _install_worker_fakes(monkeypatch, SimpleNamespace(id="unused", user_id=0, status="completed"))
+    _Dispatches.recoverable = [run]
+    enqueued = []
+
+    async def _not_reserved(self, **kwargs):
+        self.events.append(("reserve_recovery", kwargs))
+        return False
+
+    class _Task:
+        name = "backend.celery_task.finn_v2_task.process_finn_v2_run"
+
+        @staticmethod
+        def apply_async(**kwargs):
+            enqueued.append(kwargs)
+
+    monkeypatch.setattr(_Dispatches, "reserve_recovery", _not_reserved)
+    monkeypatch.setattr(task_module, "process_finn_v2_run", _Task())
+
+    assert asyncio.run(task_module._recover_finn_v2_dispatches()) == 0
+    assert enqueued == []
+    assert not any(event[0] == "published" for event in _Dispatches.events)
 
 
 def test_recovery_is_idempotent_after_worker_crash(monkeypatch):

@@ -89,7 +89,10 @@ class FinnV2ReasoningFallbackService:
                     "en voer geen actie uit."
                 ),
                 uncertainty_summary=None, uncertainty_codes=[], evidence_refs_used=[],
-                reasoning_provenance={"reasoning_source": "safe_terminal_boundary"},
+                reasoning_provenance={
+                    "reasoning_source": "safe_terminal_boundary",
+                    "operation_id": operation_id,
+                },
                 model=model, created_at=datetime.now(timezone.utc),
             )
         if operation_id == "explain_previous_evidence" and refs:
@@ -109,6 +112,7 @@ class FinnV2ReasoningFallbackService:
                     "Ik licht alleen de beschikbare evidence en beperking toe; ik voeg geen nieuwe financiële inferentie toe."
                 ),
                 uncertainty_codes=["degraded_lineage"], evidence_refs_used=refs,
+                reasoning_provenance={"reasoning_source": "lineage_evidence", "operation_id": operation_id},
                 model=model, created_at=datetime.now(timezone.utc),
             )
         released_text = " ".join(
@@ -123,6 +127,7 @@ class FinnV2ReasoningFallbackService:
                 direct_answer=concise,
                 main_observation="Dit herhaalt alleen de eerder veilig vrijgegeven, begrensde beoordeling.",
                 uncertainty_summary="De eerdere financiële conclusie was niet geverifieerd; ik voeg geen nieuwe conclusie toe.",
+                reasoning_provenance={"reasoning_source": "lineage_reformulation", "operation_id": operation_id},
                 uncertainty_codes=["degraded_lineage"], evidence_refs_used=refs,
                 model=model, created_at=datetime.now(timezone.utc),
             )
@@ -138,6 +143,7 @@ class FinnV2ReasoningFallbackService:
                     direct_answer=safe_text,
                     main_observation="De eerdere beoordeling is niet geverifieerd als financiële conclusie.",
                     uncertainty_summary="Ik herformuleer alleen de veilig vrijgegeven beperking en evidencebeschikbaarheid.",
+                    reasoning_provenance={"reasoning_source": "lineage_reformulation", "operation_id": operation_id},
                     uncertainty_codes=["degraded_lineage"], evidence_refs_used=refs,
                     model=model, created_at=datetime.now(timezone.utc),
                 )

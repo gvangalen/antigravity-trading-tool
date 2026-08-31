@@ -11,6 +11,27 @@ from backend.services.finn_v2_response_verifier_service import FinnV2ResponseVer
 CONTRACT_VERSION = FinnV2OperationRegistry.VERSION
 
 
+def test_lineage_evidence_response_remains_relevant_after_an_off_topic_turn():
+    draft = ResponseDraft(
+        draft_id="draft-lineage-evidence",
+        run_id="run-lineage-evidence",
+        user_id=7,
+        mode="EVALUATE",
+        direct_answer="De eerdere beperkte beoordeling baseert zich uitsluitend op opgeslagen FINN-evidence.",
+        main_observation="Die evidence bevestigt geen nieuwe financiële conclusie.",
+        evidence_set_hash="hash-lineage-evidence",
+        reasoning_provenance={
+            "reasoning_source": "lineage_evidence",
+            "operation_id": "explain_previous_evidence",
+        },
+        created_at=datetime.now(timezone.utc),
+    )
+
+    assert FinnV2ResponseVerifierService(session=object())._is_relevant(
+        "Onderbouw nu weer je eerdere BTC-conclusie met de opgeslagen evidence.", draft
+    ) is True
+
+
 def test_integrated_plan_verifier_requires_a_grounded_strength_and_limitation():
     draft = ResponseDraft(
         draft_id="draft-plan-quality",

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import uuid
 from typing import Any, Dict
 
 from celery import shared_task
@@ -26,6 +27,7 @@ logger = logging.getLogger(__name__)
 DISPATCH_LEASE_SECONDS = 300
 DISPATCH_HEARTBEAT_SECONDS = 60
 DISPATCH_STALE_UNCLAIMED_SECONDS = 5 * 60
+RECOVERY_RESERVATION_SECONDS = 60
 
 
 async def _run_task_with_local_resources(coroutine):
@@ -149,10 +151,24 @@ async def _recover_finn_v2_dispatches() -> int:
     recovered = 0
     for dispatch_id, run_id, task_id, queue in rows:
         try:
-            process_finn_v2_run.apply_async(kwargs={"run_id": run_id}, task_id=task_id, queue=queue or resolve_task_queue(process_finn_v2_run.name))
+            reservation_owner = f"recovery:{uuid.uuid4().hex}"
+            async with async_session_factory() as session:
+                reserved = await FinnV2DispatchRepository(session).reserve_recovery(
+                    dispatch_id=dispatch_id,
+                    owner=reservation_owner,
+                    lease_seconds=RECOVERY_RESERVATION_SECONDS,
+                )
+                await session.commit()
+            if not reserved:
+                continue
+            # The reservation blocks overlapping recovery workers.  Restore
+            # pending just before broker handoff so a promptly delivered task
+            # can claim normally; its retry deadline prevents a second
+            # recovery from racing the handoff window.
             async with async_session_factory() as session:
                 await FinnV2DispatchRepository(session).mark_published(dispatch_id)
                 await session.commit()
+            process_finn_v2_run.apply_async(kwargs={"run_id": run_id}, task_id=task_id, queue=queue or resolve_task_queue(process_finn_v2_run.name))
             recovered += 1
         except Exception:
             logger.exception("FINN V2 durable dispatch recovery enqueue failed", extra={"dispatch_id": dispatch_id, "run_id": run_id})

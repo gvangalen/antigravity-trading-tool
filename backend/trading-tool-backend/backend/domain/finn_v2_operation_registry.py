@@ -111,6 +111,10 @@ class OperationContract:
     allowed_action_polarities: tuple[str, ...] = ()
     selection_required_terms: tuple[str, ...] = ()
     requires_verified_context: bool = False
+    # Some high-risk actions may reuse one typed identifier from verified
+    # lineage. This is deliberately narrower than a general conversation
+    # reference: only registry-declared inputs may be projected this way.
+    contextual_reference_inputs: tuple[str, ...] = ()
     ambiguity_rule: str = "clarify"
     selection_priority: int = 0
     required_inputs: tuple[str, ...] = ()
@@ -169,6 +173,11 @@ class OperationContract:
             raise FinnV2OperationContractError(f"scope_overlap:{self.operation_id}")
         if set(self.required_inputs).intersection(self.optional_inputs):
             raise FinnV2OperationContractError(f"input_overlap:{self.operation_id}")
+        undeclared_contextual_inputs = set(self.contextual_reference_inputs).difference(self.required_inputs)
+        if undeclared_contextual_inputs:
+            raise FinnV2OperationContractError(
+                f"contextual_input_not_required:{self.operation_id}:{sorted(undeclared_contextual_inputs)}"
+            )
         unknown = set(self.required_scopes + self.optional_scopes).difference(INFORMATION_SCOPE_ORDER)
         if unknown:
             raise FinnV2OperationContractError(f"unknown_scope:{self.operation_id}:{sorted(unknown)}")
@@ -352,12 +361,13 @@ _OPERATION_SELECTION_METADATA: Mapping[str, dict] = {
         "selection_priority": 100,
     },
     "explain_previous_evidence": {
+        "semantic_description": "Explain the factual basis, consequence, boundary, or required implication of a previous verified or degraded FINN assessment. Select this when the user asks what a prior assessment changes, supports, requires, or means for a linked setup, strategy, or bot. Mentioning a bot does not make this a fresh bot evaluation unless the user asks for a new assessment of that bot.",
         "required_discourse_acts": ("evidence_follow_up",),
         "requires_verified_context": True,
         "selection_priority": 100,
     },
     "reformulate_previous_response": {
-        "semantic_description": "Rephrase, shorten, simplify, or restyle the immediately previous FINN response without changing its meaning. When the preceding financial assessment was safely downgraded or rejected, rephrase only its explicitly released, non-conclusive content and say that no financial conclusion was verified. This is not a clarification when safe lineage is available.",
+        "semantic_description": "Rephrase, repeat, shorten, simplify, or restyle the immediately previous FINN response without changing its meaning. This includes a request to repeat a bounded, safe, or released outcome. When the preceding financial assessment was safely downgraded or rejected, rephrase only its explicitly released, non-conclusive content and say that no financial conclusion was verified. This is not a clarification or an evidence explanation when safe lineage is available.",
         "required_discourse_acts": ("reformulation",),
         "requires_verified_context": True,
         "selection_priority": 100,
@@ -546,7 +556,7 @@ _CONTRACTS: tuple[OperationContract, ...] = (
     _gap("update_bot", "bot", "CREATE_PROPOSAL", ("wijzig bot",), "update_bot_execution_adapter_missing"),
     _gap("delete_bot", "bot", "CREATE_PROPOSAL", ("verwijder bot",), "delete_bot_execution_adapter_missing"),
     OperationContract("evaluate_bot", FinnV2OperationRegistry.VERSION, "bot", "EVALUATE", ("beoordeel bot", "vertrouwen bot"), required_scopes=("profile", "preferences", "active_asset", "indicator_configuration", "active_setup", "linked_strategy", "linked_bot", "bot_status"), model_policy="required", response_strategy="model_reasoning", policy_class="advice"),
-    OperationContract("activate_bot", FinnV2OperationRegistry.VERSION, "bot", "ACTION_PROPOSAL", ("activeer bot",), action_polarity=ActionPolarity.ACTIVATE, required_inputs=("bot_id",), required_scopes=("active_asset", "market_snapshot", "active_setup", "linked_strategy", "linked_bot", "bot_status"), proposal_type="activate_live_bot", confirmation_required=True, execution_adapter="activate_live_bot", idempotency_rule="proposal_payload_hash", postcondition="live_bot_active", response_strategy="policy_denial", policy_class="high_risk_action"),
+    OperationContract("activate_bot", FinnV2OperationRegistry.VERSION, "bot", "ACTION_PROPOSAL", ("activeer bot",), action_polarity=ActionPolarity.ACTIVATE, required_inputs=("bot_id",), contextual_reference_inputs=("bot_id",), required_scopes=("active_asset", "market_snapshot", "active_setup", "linked_strategy", "linked_bot", "bot_status"), proposal_type="activate_live_bot", confirmation_required=True, execution_adapter="activate_live_bot", idempotency_rule="proposal_payload_hash", postcondition="live_bot_active", response_strategy="policy_denial", policy_class="high_risk_action"),
     OperationContract("activate_paper_bot", FinnV2OperationRegistry.VERSION, "bot", "ACTION_PROPOSAL", ("activeer paper bot",), action_polarity=ActionPolarity.ACTIVATE, required_inputs=("bot_id",), required_scopes=("active_asset", "active_setup", "linked_strategy", "linked_bot", "bot_status"), proposal_type="activate_paper_bot", confirmation_required=True, execution_adapter="activate_paper_bot", idempotency_rule="proposal_payload_hash", postcondition="paper_bot_active", response_strategy="proposal_draft", policy_class="paper_action"),
     _gap("deactivate_bot", "bot", "ACTION_PROPOSAL", ("deactiveer bot",), "deactivate_bot_execution_adapter_missing"),
     OperationContract("read_active_plan", FinnV2OperationRegistry.VERSION, "plan", "READ", ("mijn actieve plan", "setup strategie bot"), required_scopes=("active_asset", "active_setup", "linked_strategy", "linked_bot", "bot_status"), required_response_fields=("setup", "strategy", "bot", "bot_status")),

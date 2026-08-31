@@ -193,7 +193,7 @@ class FinnV2OperationStateService:
             # components. Word boundaries prevent ``name`` matching inside
             # German ``namens`` or an unrelated user-supplied word.
             named = re.search(
-                r"\b(?:mit\s+dem\s+namen|met\s+de\s+naam|namens|genannt|"
+                r"\b(?:mit\s+dem\s+namen|unter\s+dem\s+namen|met\s+de\s+naam|namens|genannt|"
                 r"genaamd|named|called|call\s+it|nenne\s+(?:ihn|sie|es)|"
                 r"noem\s+(?:hem|haar)|ik\s+noem\s+(?:hem|haar)|"
                 r"hij\s+heet|het\s+heet|naam|name|titel|title)\b"

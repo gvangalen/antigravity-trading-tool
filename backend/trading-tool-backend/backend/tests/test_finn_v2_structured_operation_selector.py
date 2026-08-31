@@ -102,10 +102,55 @@ def test_selector_projects_catalog_assets_and_complete_setup_slots():
     assert selection is not None
     assert selection.target_asset == "POL"
     assert selection.entities["asset"] == "POL"
-    assert selection.entities["setup_type"] == "breakout"
+    assert selection.entities["setup_type"] == "trade"
     assert selection.entities["timeframe"] == "6H"
     assert selection.entities["name"] == "Ripple Kompas"
     assert selection.missing_inputs == ("timeframe", "name")
+
+
+def test_selector_projects_natural_setup_entities_through_the_canonical_catalog():
+    selector = FinnV2StructuredOperationSelectorService(
+        provider=lambda **_kwargs: {"parsed": {
+            "operation_id": "create_setup", "confidence": 0.93,
+            "entities": {"concept": None, "asset": "Solana", "setup_id": None,
+                         "strategy_id": None, "bot_id": None, "setup_type": "swingtrade",
+                         "timeframe": "vieruursgrafiek", "name": "SOL Beheerste Uitbraak"},
+            "target_asset": "Solana", "conversation_reference": None,
+            "missing_inputs": [], "ambiguity_reason": None,
+        }}
+    )
+    selection, error = selector.select(
+        message="Werk een swingtrade voor Solana uit op de vier-uursgrafiek.",
+        candidate_contracts=(FinnV2OperationRegistry().get("create_setup"),),
+        facts={"referenced_asset": "SOL"}, verified_context=None,
+    )
+
+    assert error is None
+    assert selection.entities["setup_type"] == "trade"
+    assert selection.entities["timeframe"] == "4H"
+    assert selection.entities["asset"] == "SOL"
+
+
+def test_selector_projects_contextual_action_reference_only_for_matching_registry_input():
+    selector = FinnV2StructuredOperationSelectorService(
+        provider=lambda **_kwargs: {"parsed": {
+            "operation_id": "activate_bot", "confidence": 0.95,
+            "entities": {"concept": None, "asset": None, "setup_id": None,
+                         "strategy_id": None, "bot_id": "170", "setup_type": None,
+                         "timeframe": None, "name": None},
+            "target_asset": None, "conversation_reference": "previous_verified_response",
+            "missing_inputs": [], "ambiguity_reason": None,
+        }}
+    )
+    registry = FinnV2OperationRegistry()
+    selection, error = selector.select(
+        message="Laat die bot live handelen.",
+        candidate_contracts=(registry.get("activate_bot"),), facts={},
+        verified_context={"last_verified_context": {"resolved_entities": {"bot_id": 170}}},
+    )
+
+    assert error is None
+    assert selection.conversation_reference == "previous_verified_response"
 
 
 @pytest.mark.parametrize("asset", ("NEAR", "Cosmos", "Polygon", "UNI", "BTC"))

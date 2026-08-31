@@ -1,6 +1,9 @@
 from backend.services.finn_v2_request_analysis_service import FinnV2RequestAnalysisService
 from backend.services.finn_v2_request_preprocessor_service import FinnV2RequestPreprocessorService
-from backend.services.finn_v2_operation_classification_service import SemanticOperationClassification
+from backend.services.finn_v2_operation_classification_service import (
+    FinnV2OperationClassificationService,
+    SemanticOperationClassification,
+)
 from backend.domain.finn_v2_operation_registry import FinnV2OperationRegistry
 from backend.domain.finn_v2_setup_input_catalog import FinnV2SetupInputCatalog
 from backend.services.finn_v2_operation_state_service import FinnV2OperationStateService
@@ -668,6 +671,7 @@ def test_setup_name_introducers_preserve_user_presentation_across_locales():
     cases = (
         ("Erstelle ein Setup für DOT genannt DOT Ruhiger Impuls.", "DOT Ruhiger Impuls"),
         ("Erstelle ein Setup für DOT mit dem Namen DOT Ruhiger Impuls.", "DOT Ruhiger Impuls"),
+        ("Erstelle ein Setup für DOT unter dem Namen DOT Ruhiger Impuls.", "DOT Ruhiger Impuls"),
         ("Erstelle ein Setup für DOT, nenne ihn DOT Ruhiger Impuls.", "DOT Ruhiger Impuls"),
         ("Create a setup for DOT named DOT Calm Entry.", "DOT Calm Entry"),
         ("Create a setup for DOT and call it DOT Calm Entry.", "DOT Calm Entry"),
@@ -792,6 +796,31 @@ def test_contextual_bot_implication_keeps_verified_lineage_payload():
     assert result.request_plan.operation_state["previous_verified_conclusion"] == (
         "De entryvoorwaarde is onvoldoende toetsbaar."
     )
+
+
+def test_contextual_bot_activation_reuses_only_a_matching_verified_bot_id():
+    from backend.services.finn_v2_structured_operation_selector_service import FinnV2StructuredOperationSelection
+
+    class _Selector:
+        def select(self, **_kwargs):
+            return FinnV2StructuredOperationSelection(
+                operation_id="activate_bot", confidence=0.95,
+                entities={"bot_id": "170"}, target_asset=None,
+                conversation_reference="previous_verified_response", missing_inputs=(), ambiguity_reason=None,
+            ), None
+
+    service = FinnV2OperationClassificationService(structured_selector=_Selector())
+    result = service.classify(
+        message="Laat die bot met echt geld live handelen.",
+        conversation_context={"last_verified_context": {
+            "verified_response_id": "verified-plan",
+            "resolved_entities": {"bot_id": 170},
+        }},
+    )
+
+    assert result.selected_conversation_reference == "previous_verified_response"
+    assert result.supplied_inputs == {"bot_id": 170}
+    assert result.selected_missing_inputs == ()
 
 
 def test_canonical_guided_state_reads_only_verified_conversation_lineage():

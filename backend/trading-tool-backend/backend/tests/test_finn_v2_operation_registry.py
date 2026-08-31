@@ -64,6 +64,18 @@ def test_contract_rejects_an_input_that_is_both_required_and_optional():
         )
 
 
+def test_contract_rejects_a_contextual_input_that_is_not_a_required_input():
+    with pytest.raises(ValueError, match="contextual_input_not_required"):
+        OperationContract(
+            operation_id="bad_contextual_input",
+            version="test",
+            domain="test",
+            mode="READ",
+            aliases=(),
+            contextual_reference_inputs=("bot_id",),
+        )
+
+
 def test_contract_rejects_unknown_required_response_field():
     with pytest.raises(ValueError, match="unknown_response_field"):
         OperationContract(

@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from typing import Any, Callable, Mapping, Optional
 
 from backend.domain.finn_v2_operation_registry import OperationContract
+from backend.domain.finn_v2_setup_input_catalog import FinnV2SetupInputCatalog
 from backend.services.asset_catalog_service import resolve_catalog_symbol
 from backend.utils import openai_client
 from backend.utils.openai_client import StructuredOutputSpec
@@ -80,6 +81,9 @@ class FinnV2StructuredOperationSelectorService:
                     "previous_verified_response. A degraded context permits only evidence explanation or safe reformulation, "
                     "never promotion of an unverified financial conclusion. Treat an overview of a user's setup, strategy, "
                     "and bot as read_active_plan, not as ambiguity. "
+                    "A question about what a prior assessment changes, supports, or requires is an evidence "
+                    "explanation, even if it mentions a linked bot. A request to repeat, restate, shorten, "
+                    "or keep within previously released safe content is a reformulation, not evidence explanation. "
                     "When conversation_state has last_safe_terminal_context and the user asks why the immediately "
                     "previous request was outside FINN's supported boundary, select explain_previous_evidence. "
                     "That contract may explain only the recorded boundary reason and must not create financial lineage. "
@@ -132,6 +136,7 @@ class FinnV2StructuredOperationSelectorService:
         if not isinstance(raw_inputs, list) or not all(isinstance(item, str) for item in raw_inputs):
             return None, "selector_missing_inputs_invalid"
         entities = {str(key): self._entity_text(value) for key, value in raw_entities.items()}
+        self._canonicalize_entities(entities)
         canonical_entity_asset = resolve_catalog_symbol(entities.get("asset"))
         if canonical_entity_asset:
             entities["asset"] = canonical_entity_asset
@@ -157,7 +162,12 @@ class FinnV2StructuredOperationSelectorService:
             target_asset=target_asset,
             conversation_reference=(
                 "previous_verified_response"
-                if contract.requires_verified_context and self._optional_text(parsed.get("conversation_reference"))
+                if self._may_project_conversation_reference(
+                    contract=contract,
+                    raw_reference=self._optional_text(parsed.get("conversation_reference")),
+                    entities=entities,
+                    context=verified_context,
+                )
                 else None
             ),
             missing_inputs=self._canonical_missing_inputs(contract=contract, raw_inputs=raw_inputs, facts=facts),
@@ -227,6 +237,45 @@ class FinnV2StructuredOperationSelectorService:
         if value is None:
             return ""
         return str(value).strip().strip(",;:)}]\"'").strip()
+
+    @staticmethod
+    def _canonicalize_entities(entities: dict[str, str]) -> None:
+        """Project selector telemetry through the same typed setup catalog as inputs."""
+        if entities.get("setup_type"):
+            entities["setup_type"] = str(
+                FinnV2SetupInputCatalog.canonical_setup_type(entities["setup_type"])
+                or entities["setup_type"]
+            )
+        if entities.get("timeframe"):
+            entities["timeframe"] = str(
+                FinnV2SetupInputCatalog.canonical_timeframe(entities["timeframe"])
+                or entities["timeframe"]
+            )
+        if entities.get("name"):
+            entities["name"] = FinnV2SetupInputCatalog.display_name(entities["name"]) or ""
+
+    @staticmethod
+    def _may_project_conversation_reference(
+        *,
+        contract: OperationContract,
+        raw_reference: Optional[str],
+        entities: Mapping[str, str],
+        context: Optional[Mapping[str, object]],
+    ) -> bool:
+        """Accept only registry-declared, verifiable lineage references."""
+        if not raw_reference:
+            return False
+        if contract.requires_verified_context:
+            return True
+        if not contract.contextual_reference_inputs:
+            return False
+        verified = dict((context or {}).get("last_verified_context") or {})
+        resolved = dict(verified.get("resolved_entities") or {})
+        return any(
+            str(entities.get(field) or "") == str(resolved.get(field) or "")
+            and bool(resolved.get(field))
+            for field in contract.contextual_reference_inputs
+        )
 
     @staticmethod
     def _canonical_missing_inputs(*, contract: OperationContract, raw_inputs: list[str], facts: Mapping[str, object]) -> tuple[str, ...]:

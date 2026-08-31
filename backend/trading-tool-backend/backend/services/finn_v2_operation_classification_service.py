@@ -110,7 +110,10 @@ class FinnV2OperationClassificationService:
                 and selection.confidence >= 0.5
             )
         ):
-            return self._result(selection.operation_id, facts, "high", "structured", candidates, selection=selection)
+            return self._result(
+                selection.operation_id, facts, "high", "structured", candidates,
+                selection=selection, conversation_context=conversation_context,
+            )
         # A malformed, unavailable, or low-confidence selector response is a
         # typed terminal outcome.  Do not choose a nearby local operation:
         # doing so would reintroduce the retired keyword/default router.
@@ -121,6 +124,7 @@ class FinnV2OperationClassificationService:
             "provider_unavailable",
             candidates,
             unsupported_capability=error or "selector_confidence_insufficient",
+            conversation_context=conversation_context,
         )
 
     def _selector_manifest(self) -> tuple[OperationContract, ...]:
@@ -201,6 +205,7 @@ class FinnV2OperationClassificationService:
         candidates: tuple[OperationContract, ...],
         unsupported_capability: Optional[str] = None,
         selection=None,
+        conversation_context: Optional[Mapping[str, object]] = None,
     ) -> SemanticOperationClassification:
         contract = self.registry.get(operation_id)
         selected_entities = dict(getattr(selection, "entities", {}) or {})
@@ -211,6 +216,7 @@ class FinnV2OperationClassificationService:
             facts=facts,
             selected_entities=selected_entities,
             selector_missing=tuple(getattr(selection, "missing_inputs", ()) or ()),
+            conversation_context=conversation_context,
         )
         return SemanticOperationClassification(
             operation_id=operation_id,
@@ -239,6 +245,7 @@ class FinnV2OperationClassificationService:
         facts: FinnV2PreprocessedRequest,
         selected_entities: Mapping[str, str],
         selector_missing: tuple[str, ...],
+        conversation_context: Optional[Mapping[str, object]],
     ) -> tuple[Mapping[str, object], Mapping[str, object], tuple[str, ...]]:
         if contract.operation_id == "clarify_request":
             return {}, {}, ("requested_change",)
@@ -253,6 +260,15 @@ class FinnV2OperationClassificationService:
         )
         if facts.financial_concept:
             supplied.setdefault("concept", facts.financial_concept)
+        # A contextual action can use only an identifier already persisted in
+        # verified lineage and only when the structured selector returned the
+        # same typed identifier. Model text alone never supplies a write slot.
+        verified = dict((conversation_context or {}).get("last_verified_context") or {})
+        resolved = dict(verified.get("resolved_entities") or {})
+        for field in contract.contextual_reference_inputs:
+            value = resolved.get(field)
+            if value is not None and str(selected_entities.get(field) or "") == str(value):
+                supplied.setdefault(field, value)
         # A structured selector may propose a useful display name, but that
         # does not prove the user supplied a required setup slot. Explicit
         # input extraction remains the only authority for user-provided
