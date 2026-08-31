@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import re
 from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -626,6 +627,29 @@ def resolve_catalog_symbol(value: object) -> str | None:
         }
         if normalized in candidates:
             return symbol
+    return None
+
+
+def resolve_catalog_symbol_in_text(value: object) -> str | None:
+    """Resolve one catalog asset from a natural-language token or compound.
+
+    Natural-language compounds such as ``bitcoinindicatoren`` still contain
+    an explicit catalog display name.  This helper deliberately accepts only
+    a leading display name or alias (never a short ticker prefix), preventing
+    arbitrary identifiers from being mistaken for assets.
+    """
+    normalized = str(value or "").strip().casefold()
+    if not normalized:
+        return None
+    exact = resolve_catalog_symbol(normalized)
+    if exact:
+        return exact
+    for symbol, asset in DEFAULT_ASSET_CATALOG.items():
+        names = (str(asset.get("display_name") or ""), *(str(alias) for alias in asset.get("aliases") or ()))
+        for name in names:
+            candidate = name.casefold().strip()
+            if len(candidate) >= 4 and re.match(rf"^{re.escape(candidate)}[a-z]+$", normalized):
+                return symbol
     return None
 
 

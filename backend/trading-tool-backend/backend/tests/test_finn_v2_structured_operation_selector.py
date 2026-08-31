@@ -196,6 +196,28 @@ def test_selector_canonicalizes_descriptive_setup_type_phrases():
     assert selection.entities["setup_type"] == "trade"
 
 
+def test_selector_projects_create_setup_slots_from_explicit_typed_input_not_raw_telemetry():
+    selector = FinnV2StructuredOperationSelectorService(
+        provider=lambda **_kwargs: {"parsed": {
+            "operation_id": "create_setup", "confidence": 0.95,
+            "entities": {"concept": "DCA", "asset": "ETH", "setup_id": None,
+                         "strategy_id": None, "bot_id": None, "setup_type": "investment",
+                         "timeframe": "1D", "name": "ETH Spreiding"},
+            "target_asset": "ETH", "conversation_reference": None,
+            "missing_inputs": [], "ambiguity_reason": None,
+        }}
+    )
+    selection, error = selector.select(
+        message="Prepare an ETH DCA setup for daily entries.",
+        candidate_contracts=(FinnV2OperationRegistry().get("create_setup"),), facts={}, verified_context=None,
+    )
+
+    assert error is None
+    assert selection is not None
+    assert selection.entities["setup_type"] == "dca"
+    assert selection.entities["concept"] == ""
+
+
 @pytest.mark.parametrize("asset", ("NEAR", "Cosmos", "Polygon", "UNI", "BTC"))
 def test_selector_projects_explicit_catalog_asset_when_model_target_is_null(asset):
     selector = FinnV2StructuredOperationSelectorService(

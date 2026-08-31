@@ -379,6 +379,33 @@ def test_guided_slot_answer_offers_only_its_typed_contract_and_safe_terminals():
     }
 
 
+def test_short_setup_type_answer_keeps_the_active_contract_in_the_selector_manifest():
+    captured = {}
+
+    class Selector:
+        def select(self, **kwargs):
+            captured.update(kwargs)
+            return type("Selection", (), {"operation_id": "create_setup", "confidence": 0.95})(), None
+
+    classifier = FinnV2OperationClassificationService(structured_selector=Selector())
+    result = classifier.classify(
+        message="Kies voor de categorie trade.",
+        conversation_context={
+            "conversation_state_version": "finn_v2.conversation-contracts.v1",
+            "active_guided_operation": {
+                "operation_id": "create_setup",
+                "contract_version": "2026-08-23.operation-contracts.v1",
+                "missing_required_inputs": ["setup_type", "timeframe", "name"],
+            },
+        },
+    )
+
+    assert result.operation_id == "create_setup"
+    assert {contract.operation_id for contract in captured["candidate_contracts"]} == {
+        "create_setup", "clarify_request", "unavailable",
+    }
+
+
 @pytest.mark.parametrize(
     "message",
     (

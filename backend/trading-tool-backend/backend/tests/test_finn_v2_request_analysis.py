@@ -25,6 +25,36 @@ def test_preprocessor_normalizes_natural_rsi_name_and_reformulation_stem():
     assert reformulation.discourse_act == "reformulation"
 
 
+def test_preprocessor_extracts_catalog_assets_and_guided_slot_values_from_natural_compounds():
+    preprocessor = FinnV2RequestPreprocessorService()
+
+    indicator_read = preprocessor.preprocess(message="Toon mijn ethereuminstellingen.")
+    guided_type = preprocessor.preprocess(message="Selecteer als categorie een trade.")
+
+    assert indicator_read.referenced_asset == "ETH"
+    assert guided_type.possible_slot_answer == "trade"
+    assert guided_type.discourse_act == "clarification_answer"
+    assert guided_type.domain_hint == "financial"
+
+
+def test_compound_catalog_asset_reaches_the_read_target_projection(monkeypatch):
+    service = FinnV2RequestAnalysisService()
+    monkeypatch.setattr(
+        service.classifier,
+        "classify",
+        lambda **_kwargs: SemanticOperationClassification(
+            operation_id="read_indicator_configuration", action="read", domain="indicators",
+            discourse="information_request", confidence="high", selector_source="structured",
+        ),
+    )
+
+    result = service.analyze(message="Som mijn opgeslagen ethereumindicatoren op.")
+
+    assert result.explicit_asset == "ETH"
+    assert result.request_plan.referenced_asset == "ETH"
+    assert result.request_plan.target_asset == "ETH"
+
+
 SERVICE = FinnV2RequestAnalysisService()
 
 
@@ -641,6 +671,19 @@ def test_guided_setup_keeps_canonical_state_for_natural_timeframe_and_name_answe
     assert final.request_plan.operation_state["collected_inputs"] == {
         "symbol": "BTC", "setup_type": "trade", "timeframe": "4H", "name": "BTC Rustige Pullback",
     }
+
+
+def test_guided_setup_accepts_a_short_natural_setup_type_reply():
+    first = SERVICE.analyze(message="Maak een BTC-setup.")
+
+    second = SERVICE.analyze(
+        message="Selecteer als categorie een trade.",
+        conversation_context={"active_guided_operation": first.request_plan.operation_state},
+    )
+
+    assert second.request_plan.operation_id == "create_setup"
+    assert second.request_plan.operation_state["collected_inputs"]["setup_type"] == "trade"
+    assert second.request_plan.operation_state["missing_required_inputs"] == ["timeframe", "name"]
 
 
 def test_complete_natural_setup_sentence_resolves_all_typed_inputs():

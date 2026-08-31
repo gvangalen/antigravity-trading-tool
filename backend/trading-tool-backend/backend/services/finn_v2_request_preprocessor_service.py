@@ -11,7 +11,7 @@ import re
 from dataclasses import dataclass
 from typing import Mapping, Optional
 
-from backend.services.asset_catalog_service import resolve_catalog_symbol
+from backend.services.asset_catalog_service import resolve_catalog_symbol, resolve_catalog_symbol_in_text
 from backend.domain.finn_v2_setup_input_catalog import FinnV2SetupInputCatalog
 
 
@@ -167,6 +167,10 @@ class FinnV2RequestPreprocessorService:
             timeframe = FinnV2SetupInputCatalog.timeframe_from_text(original)
             if timeframe:
                 slot_answer = timeframe
+        if slot_answer is None and short_turn and not is_interrogative:
+            setup_type = FinnV2SetupInputCatalog.setup_type_from_text(original)
+            if setup_type:
+                slot_answer = setup_type
         if (
             action == "read"
             and short_turn
@@ -372,7 +376,7 @@ class FinnV2RequestPreprocessorService:
     @staticmethod
     def _asset_from_text(original: str) -> Optional[str]:
         for token in re.findall(r"[A-Za-z0-9]+", original):
-            resolved = resolve_catalog_symbol(token)
+            resolved = resolve_catalog_symbol_in_text(token)
             if resolved:
                 return resolved
         return None

@@ -137,6 +137,7 @@ class FinnV2StructuredOperationSelectorService:
             return None, "selector_missing_inputs_invalid"
         entities = {str(key): self._entity_text(value) for key, value in raw_entities.items()}
         self._canonicalize_entities(entities)
+        self._project_contract_entities(contract=contract, message=message, entities=entities)
         canonical_entity_asset = resolve_catalog_symbol(entities.get("asset"))
         if canonical_entity_asset:
             entities["asset"] = canonical_entity_asset
@@ -253,6 +254,20 @@ class FinnV2StructuredOperationSelectorService:
             )
         if entities.get("name"):
             entities["name"] = FinnV2SetupInputCatalog.display_name(entities["name"]) or ""
+
+    @staticmethod
+    def _project_contract_entities(
+        *, contract: OperationContract, message: str, entities: dict[str, str]
+    ) -> None:
+        """Keep selector telemetry aligned with the selected typed contract."""
+        if contract.operation_id != "create_setup":
+            return
+        setup_type = FinnV2SetupInputCatalog.setup_type_from_text(message)
+        if setup_type:
+            entities["setup_type"] = setup_type
+        # A DCA setup is a typed setup variant, not an educational concept in
+        # the create-setup response projection.
+        entities["concept"] = ""
 
     @staticmethod
     def _may_project_conversation_reference(
