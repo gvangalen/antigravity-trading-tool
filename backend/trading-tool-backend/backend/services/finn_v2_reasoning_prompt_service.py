@@ -124,18 +124,23 @@ class FinnV2ReasoningPromptService:
                 for claim in repair_contract.rejected_claims
                 for ref in claim.evidence_refs
             }
+            repair_evidence = [
+                item for item in context.evidence
+                if not relevant_refs or item.evidence_id in relevant_refs
+            ]
             relevant_evidence = [
                 {
                     "evidence_id": item.evidence_id,
+                    "entity_id": item.entity_id,
                     "information_scope": item.information_scope,
                     "tool_name": item.tool_name,
                     "facts": item.facts,
                 }
-                for item in context.evidence
-                if item.evidence_id in relevant_refs
+                for item in repair_evidence
             ]
             return (
-                "Perform exactly one bounded structured repair. Do not answer the full question again. "
+                "Your previous response was rejected by the evidence contract. Perform exactly one bounded structured repair. "
+                "Do not answer the full question again. "
                 "Change only the rejected fields; remove, narrow, or replace unsupported claims using only the "
                 "allowed evidence below. Never infer causality, risk, weakness, effectiveness, or an outcome from "
                 "configuration, status, absence, or freshness unless an evidence fact explicitly proves that relation. "
