@@ -78,6 +78,11 @@ class FinnV2RequestPreprocessorService:
             "betrouwbaar",
             "aanpak",
         ),
+        # Portfolio is a financial object even where FINN deliberately has no
+        # executable portfolio-management contract. Preserve that fact so the
+        # resolver can return the safe unsupported contract rather than
+        # treating a financial request as off-topic.
+        "portfolio": ("portfolio", "portefeuille"),
         "asset": ("asset", "instrument", "symbool", "symbol", "coin", "aandeel", "workspace", "markt"),
     }
     _REFERENCE_MARKERS = {

@@ -15,6 +15,15 @@ def test_preprocessor_treats_current_symbol_as_asset_entity():
     assert "asset" in facts.explicit_entities
 
 
+def test_preprocessor_marks_portfolio_as_a_financial_object_without_selecting_an_operation():
+    facts = FinnV2RequestPreprocessorService().preprocess(
+        message="Kun je mijn portefeuille automatisch beheren?"
+    )
+
+    assert "portfolio" in facts.explicit_entities
+    assert facts.domain_hint == "financial"
+
+
 def test_preprocessor_normalizes_natural_rsi_name_and_reformulation_stem():
     preprocessor = FinnV2RequestPreprocessorService()
 
