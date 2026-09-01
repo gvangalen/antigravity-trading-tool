@@ -59,13 +59,19 @@ class FinnV2OperationResolverService:
             context=conversation_context,
             requested_scopes=requested_scopes,
         )
+        if (
+            bool((request_facts or {}).get("ambiguous_reference"))
+            and not self._has_eligible_lineage(conversation_context)
+            and not self._has_pending_operation(conversation_context)
+        ):
+            operation_id = "clarify_request"
         # This is a contract invariant, not an alternate intent router: a
         # financial-unsupported contract requires a financial request fact.
         # The provider still extracts meaning; the registry rejects an
         # incompatible financial execution label for an off-topic frame.
         if (
             operation_id == "unsupported_financial_operation"
-            and str((request_facts or {}).get("domain_hint") or "") == "off_topic"
+            and not bool((request_facts or {}).get("financial_execution_intent"))
             and object_name not in {"portfolio", "trade", "order", "investment", "brokerage"}
             and not self._has_pending_operation(conversation_context)
         ):
@@ -76,6 +82,7 @@ class FinnV2OperationResolverService:
         if (
             operation_id == "off_topic"
             and str((request_facts or {}).get("action_polarity") or "") == "execute"
+            and bool((request_facts or {}).get("financial_execution_intent"))
         ):
             operation_id = "unsupported_financial_operation"
         if operation_id not in candidate_ids:

@@ -31,6 +31,8 @@ class FinnV2PreprocessedRequest:
     possible_slot_answer: Optional[str]
     domain_hint: str = "unknown"
     financial_concept: Optional[str] = None
+    financial_execution_intent: bool = False
+    ambiguous_reference: bool = False
 
 
 class FinnV2RequestPreprocessorService:
@@ -123,6 +125,13 @@ class FinnV2RequestPreprocessorService:
             r"signal(?:settings|configuration)?|technical(?:settings|configuration)?)",
             re.IGNORECASE,
         ),
+        # Dutch trading setup compounds are valid financial nouns, while
+        # unrelated words such as ``kamerplant`` must never inherit ``plan``.
+        "setup": re.compile(
+            r"\b(?:swing|trade|position|dca|handels|positie)[-_]?(?:setup|opzet)\b"
+            r"|\b(?:setup|opzet)concept\b",
+            re.IGNORECASE,
+        ),
     }
 
     def preprocess(
@@ -171,6 +180,10 @@ class FinnV2RequestPreprocessorService:
             if self._contains_any(normalized, terms)
         )
         action = self._action_polarity(normalized)
+        financial_execution_intent = self._is_explicit_financial_execution_intent(normalized)
+        ambiguous_reference = self._has_unbound_deictic_reference(normalized, entities)
+        if financial_execution_intent:
+            action = "execute"
         if action == "add" and re.search(r"\bvolg(?:en)?\b", normalized) and "watchlist" not in entities:
             entities = (*entities, "watchlist")
         discourse = self._discourse_act(normalized, entities, references, action)
@@ -220,6 +233,8 @@ class FinnV2RequestPreprocessorService:
             possible_slot_answer=slot_answer,
             domain_hint=domain_hint,
             financial_concept=concept,
+            financial_execution_intent=financial_execution_intent,
+            ambiguous_reference=ambiguous_reference,
         )
 
     @staticmethod
@@ -271,7 +286,7 @@ class FinnV2RequestPreprocessorService:
             positions = [
                 match.start()
                 for term in terms
-                for match in re.finditer(rf"(?<!\\w){re.escape(term)}(?!\\w)", text)
+                for match in re.finditer(rf"(?<!\w){re.escape(term)}(?!\w)", text)
             ]
             if positions:
                 matches.append((min(positions), entity))
@@ -288,7 +303,7 @@ class FinnV2RequestPreprocessorService:
         positions = [
             match.start()
             for term in terms
-            for match in re.finditer(rf"(?<!\\w){re.escape(term)}(?!\\w)", text)
+            for match in re.finditer(rf"(?<!\w){re.escape(term)}(?!\w)", text)
         ]
         return min(positions) if positions else None
 
@@ -312,7 +327,7 @@ class FinnV2RequestPreprocessorService:
         # safety fact.  This remains independent from the eventual contract
         # selection and prevents an unrecognised provider frame from treating
         # a consequential request as unrelated conversation.
-        if self._is_autonomous_market_decision_delegation(text):
+        if self._is_explicit_financial_execution_intent(text):
             return "execute"
         # Confirmation qualifies a proposal lifecycle; it never changes the
         # mutation the user is asking FINN to prepare.
@@ -353,17 +368,22 @@ class FinnV2RequestPreprocessorService:
         return "read"
 
     @staticmethod
-    def _is_autonomous_market_decision_delegation(text: str) -> bool:
-        autonomy = r"\b(?:autonoom|autonome|autonomous|zelfstandig)\b"
-        # Dutch compounds such as ``verkoopbesluiten`` carry the same
-        # delegation semantics as a separate "koopbesluit" phrase.
-        decision = r"\b(?:\w*besluit\w*|decision\w*)\b"
-        market_act = r"\b(?:koop\w*|verkoop\w*|buy\w*|sell\w*|trade\w*|handel\w*|orders?)\b"
-        return bool(
-            re.search(autonomy, text)
-            and re.search(decision, text)
-            and re.search(market_act, text)
+    def _is_explicit_financial_execution_intent(text: str) -> bool:
+        """Recognise a consequential financial delegation, not an operation."""
+        finance_object = (
+            r"\b(?:portfolio|portefeuille|beleggingsrekening|investment\s+account|"
+            r"broker(?:rekening|account)?|trading\s+account|wallet|orders?|transacties?|"
+            r"transactions?|trades?)\b"
         )
+        autonomy = r"\b(?:autonoom|autonome|autonomous|zelfstandig)\b"
+        decision = r"\b(?:\w*besluit\w*|beslissing\w*|decision\w*|beheer\w*|manage\w*)\b"
+        return bool(re.search(finance_object, text) and re.search(autonomy, text) and re.search(decision, text))
+
+    @staticmethod
+    def _has_unbound_deictic_reference(text: str, entities: tuple[str, ...]) -> bool:
+        if entities or len(re.findall(r"[\w-]+", text)) > 8:
+            return False
+        return bool(re.search(r"\b(?:hetzelfde|dezelfde|dit|dat|ermee|daarmee|it|that|same)\b", text))
 
     @classmethod
     def _discourse_act(cls, text: str, entities: tuple[str, ...], references: tuple[str, ...], action: str) -> str:

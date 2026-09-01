@@ -111,7 +111,29 @@ def test_unbound_execution_fact_cannot_be_erased_as_off_topic():
     resolved = FinnV2OperationResolverService(registry).resolve(
         selection=_selection("off_topic", {"goal": "off_topic", "object": None}),
         candidates=registry.list(), conversation_context={},
-        request_facts={"action_polarity": "execute"},
+        request_facts={"action_polarity": "execute", "financial_execution_intent": True},
     )
 
     assert resolved.operation_id == "unsupported_financial_operation"
+
+
+def test_non_financial_execution_fact_cannot_be_coerced_to_unsupported_financial_operation():
+    registry = FinnV2OperationRegistry()
+    resolved = FinnV2OperationResolverService(registry).resolve(
+        selection=_selection("off_topic", {"goal": "off_topic", "object": None}),
+        candidates=registry.list(), conversation_context={},
+        request_facts={"action_polarity": "execute", "financial_execution_intent": False},
+    )
+
+    assert resolved.operation_id == "off_topic"
+
+
+def test_unbound_deictic_reference_requires_clarification_not_execution():
+    registry = FinnV2OperationRegistry()
+    resolved = FinnV2OperationResolverService(registry).resolve(
+        selection=_selection("unsupported_financial_operation", {"goal": "unsupported", "object": None}),
+        candidates=registry.list(), conversation_context={},
+        request_facts={"ambiguous_reference": True},
+    )
+
+    assert resolved.operation_id == "clarify_request"

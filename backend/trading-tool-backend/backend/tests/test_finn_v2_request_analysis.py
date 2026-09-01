@@ -25,11 +25,32 @@ def test_preprocessor_marks_portfolio_as_a_financial_object_without_selecting_an
 
 def test_preprocessor_marks_autonomous_market_decision_delegation_as_execution():
     facts = FinnV2RequestPreprocessorService().preprocess(
-        message="Neem voortaan zelfstandig alle koop- en verkoopbesluiten voor mij."
+        message="Neem voortaan zelfstandig alle koop- en verkoopbesluiten voor mijn portefeuille."
     )
 
     assert facts.action_polarity == "execute"
     assert facts.domain_hint == "financial"
+    assert facts.financial_execution_intent is True
+
+
+def test_preprocessor_keeps_non_financial_word_boundaries_out_of_plan_entities():
+    facts = FinnV2RequestPreprocessorService().preprocess(message="Hoe verzorg ik een kamerplant binnenshuis?")
+
+    assert facts.explicit_entities == ()
+    assert facts.domain_hint == "off_topic"
+
+
+def test_preprocessor_requires_a_financial_object_for_autonomous_delegation():
+    facts = FinnV2RequestPreprocessorService().preprocess(message="Laat een autonome assistent mijn huishoudtaken beheren.")
+
+    assert facts.financial_execution_intent is False
+    assert facts.action_polarity == "read"
+
+
+def test_preprocessor_marks_short_unbound_deictic_reference_as_ambiguous():
+    facts = FinnV2RequestPreprocessorService().preprocess(message="Doe hetzelfde ermee.")
+
+    assert facts.ambiguous_reference is True
 
 
 def test_preprocessor_normalizes_natural_rsi_name_and_reformulation_stem():

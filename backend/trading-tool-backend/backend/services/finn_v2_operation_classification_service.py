@@ -90,7 +90,12 @@ class FinnV2OperationClassificationService:
                 selection=selection,
                 candidates=candidates,
                 conversation_context=conversation_context or {},
-                request_facts={"domain_hint": facts.domain_hint, "action_polarity": facts.action_polarity},
+                request_facts={
+                    "domain_hint": facts.domain_hint,
+                    "action_polarity": facts.action_polarity,
+                    "financial_execution_intent": facts.financial_execution_intent,
+                    "ambiguous_reference": facts.ambiguous_reference,
+                },
             )
         safe_terminal_operations = {
             "clarify_request", "off_topic", "unsupported_financial_operation",
