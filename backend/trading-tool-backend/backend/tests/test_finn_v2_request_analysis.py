@@ -25,6 +25,14 @@ def test_preprocessor_normalizes_natural_rsi_name_and_reformulation_stem():
     assert reformulation.discourse_act == "reformulation"
 
 
+def test_preprocessor_marks_semantic_simplification_as_reformulation():
+    facts = FinnV2RequestPreprocessorService().preprocess(
+        message="Maak de begrensde uitleg eenvoudiger zonder nieuwe claims."
+    )
+
+    assert facts.discourse_act == "reformulation"
+
+
 def test_preprocessor_extracts_catalog_assets_and_guided_slot_values_from_natural_compounds():
     preprocessor = FinnV2RequestPreprocessorService()
 
@@ -65,6 +73,8 @@ def test_compound_catalog_asset_reaches_the_read_target_projection(monkeypatch):
     assert result.explicit_asset == "ETH"
     assert result.request_plan.referenced_asset == "ETH"
     assert result.request_plan.target_asset == "ETH"
+    assert result.interaction_mode == "READ"
+    assert result.request_plan.required_information_scopes == ["active_asset", "indicator_configuration"]
 
 
 SERVICE = FinnV2RequestAnalysisService()

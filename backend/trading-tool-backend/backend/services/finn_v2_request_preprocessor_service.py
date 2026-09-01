@@ -90,7 +90,7 @@ class FinnV2RequestPreprocessorService:
         ),
         "contextual_implication": ("wat betekent dat", "wat houdt dat in", "welk gevolg heeft dat"),
         "reformulation": (
-            "korter",
+            "korter", "eenvoudiger", "simpler", "more simply",
             "herformuleer",
             "herschrijf",
             "anders formuleren",

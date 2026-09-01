@@ -61,6 +61,30 @@ def test_selector_provider_timeout_has_a_safe_operational_floor(monkeypatch):
     assert FinnV2StructuredOperationSelectorService._timeout_seconds() == 15
 
 
+def test_selector_prompt_preserves_indicator_read_fact_as_a_contract_constraint():
+    captured = {}
+
+    def provider(**kwargs):
+        captured.update(kwargs)
+        return {"parsed": {
+            "operation_id": "read_indicator_configuration", "confidence": 0.9,
+            "entities": {"asset": "BTC"}, "target_asset": "BTC",
+            "conversation_reference": None, "missing_inputs": [], "ambiguity_reason": None,
+        }}
+
+    registry = FinnV2OperationRegistry()
+    selection, error = FinnV2StructuredOperationSelectorService(provider=provider).select(
+        message="Welke opgeslagen analyse-instellingen heb ik voor Bitcoin?",
+        candidate_contracts=(registry.get("read_indicator_configuration"), registry.get("read_active_asset")),
+        facts={"entities": ("indicator_configuration",), "action_polarity": "read", "discourse_act": "information_request"},
+        verified_context=None,
+    )
+
+    assert error is None and selection is not None
+    assert selection.operation_id == "read_indicator_configuration"
+    assert "facts.entities includes indicator_configuration" in captured["system_role"]
+
+
 def test_selector_normalizes_structured_entity_transport_delimiters():
     selector = FinnV2StructuredOperationSelectorService(
         provider=lambda **_kwargs: {"parsed": {

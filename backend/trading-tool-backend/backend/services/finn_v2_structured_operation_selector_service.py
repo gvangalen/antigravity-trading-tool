@@ -97,6 +97,8 @@ class FinnV2StructuredOperationSelectorService:
                     "than off_topic. Requests for autonomous buy, sell, investment, portfolio, or "
                     "trading decisions are financial unsupported operations, never off_topic. "
                     "when no supported contract exists. "
+                    "When facts.entities includes indicator_configuration and the request is a read, "
+                    "select read_indicator_configuration unless facts.discourse_act is evaluation. "
                     "A request for the current selected instrument, symbol, market, or workspace asset "
                     "is read_active_asset even if it does not name a ticker; do not ask for clarification "
                     "when FINN can read that active workspace state. "

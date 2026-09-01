@@ -250,6 +250,34 @@ def test_model_first_selector_receives_read_candidates():
     assert {"read_active_setup", "read_linked_strategy", "clarify_request", "off_topic"}.issubset(offered)
 
 
+def test_model_first_selector_receives_safe_terminal_lineage_context():
+    captured = {}
+
+    class Selector:
+        def select(self, **kwargs):
+            captured.update(kwargs)
+            return type("Selection", (), {
+                "operation_id": "explain_previous_evidence", "confidence": 0.9,
+                "entities": {}, "target_asset": None, "conversation_reference": None,
+                "missing_inputs": (), "ambiguity_reason": None,
+            })(), None
+
+    classifier = FinnV2OperationClassificationService(structured_selector=Selector())
+    context = {
+        "last_safe_terminal_context": {
+            "operation_id": "off_topic", "run_id": "run-off-topic",
+            "terminal_reason": "outside_finn_scope",
+        },
+    }
+
+    result = classifier.classify(
+        message="Waarom paste mijn vorige vraag niet binnen FINN?", conversation_context=context
+    )
+
+    assert result.operation_id == "explain_previous_evidence"
+    assert captured["verified_context"]["last_safe_terminal_context"] == context["last_safe_terminal_context"]
+
+
 def test_provider_failure_is_terminal_and_never_selects_a_local_operation():
     class ExplodingSelector:
         def select(self, **_kwargs):

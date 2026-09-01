@@ -178,7 +178,7 @@ class FinnV2OperationClassificationService:
             key: context[key]
             for key in (
                 "last_verified_context", "last_degraded_context", "active_guided_operation",
-                "operation_state", "last_turn_diagnostics",
+                "operation_state", "last_safe_terminal_context", "last_turn_diagnostics",
             )
             if key in context
         }

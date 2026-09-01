@@ -220,7 +220,8 @@ class FinnV2OperationStateService:
     def _trim_setup_name_clause(value: str) -> str:
         """Exclude trailing non-persistence instructions from a display name."""
         return re.split(
-            r"\s+(?:en|and|aber|but)\s+(?:sla\s+(?:niets|het)?\s*op|save\s+(?:nothing|it)|"
+            r"\s+(?:(?:en|and|aber|but)\s+)?(?:sla\s+(?:niets|het)?\s*op|"
+            r"save\s+(?:nothing|it)|without\s+(?:saving|persisting)\s+(?:it|anything)|"
             r"speicher\s+(?:nichts|es))\b",
             value,
             maxsplit=1,
