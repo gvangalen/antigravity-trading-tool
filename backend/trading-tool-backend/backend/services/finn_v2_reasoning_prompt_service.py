@@ -118,6 +118,34 @@ class FinnV2ReasoningPromptService:
             response=previous_response or {},
             repair_contract=repair_contract,
         )
+        if repair_attempt:
+            relevant_refs = {
+                ref
+                for claim in repair_contract.rejected_claims
+                for ref in claim.evidence_refs
+            }
+            relevant_evidence = [
+                {
+                    "evidence_id": item.evidence_id,
+                    "information_scope": item.information_scope,
+                    "tool_name": item.tool_name,
+                    "facts": item.facts,
+                }
+                for item in context.evidence
+                if item.evidence_id in relevant_refs
+            ]
+            return (
+                "Perform exactly one bounded structured repair. Do not answer the full question again. "
+                "Change only the rejected fields; remove, narrow, or replace unsupported claims using only the "
+                "allowed evidence below. Never infer causality, risk, weakness, effectiveness, or an outcome from "
+                "configuration, status, absence, or freshness unless an evidence fact explicitly proves that relation. "
+                "Artifact freshness labels describe only evidence-source recency; never report them as an entity status "
+                "or use them to infer delay, performance impact, or a plan weakness. "
+                "Return every required schema field.\n"
+                f"Typed repair contract: {json.dumps(repair_contract.dict(), ensure_ascii=True, separators=(',', ':'))}\n"
+                f"Allowed evidence: {json.dumps(relevant_evidence, ensure_ascii=True, separators=(',', ':'))}\n"
+                f"Rejected response shape: {json.dumps(sanitized_previous_response, ensure_ascii=True, separators=(',', ':'))}"
+            )
         repair_instruction = (
             "Your previous response was rejected by the evidence contract. Perform exactly one bounded repair. "
             "Only change rejected fields or replace them with evidence-supported content. A saved configuration or "

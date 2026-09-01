@@ -425,7 +425,8 @@ def test_model_repair_treats_stale_artifact_freshness_as_an_evidence_limitation(
 
     assert result["status"] == "ready"
     assert persisted["result"].reasoning_provenance["reasoning_source"] == "model_repair"
-    assert "Artifact freshness labels" in prompts[1]
+    assert "Perform exactly one bounded structured repair" in prompts[1]
+    assert "Allowed evidence" in prompts[1]
     assert "never report them as an entity status" in prompts[1]
 
 
@@ -628,7 +629,7 @@ def test_model_repairs_unsupported_populated_strategy_field_absence(monkeypatch)
     assert "stop loss" in prompts[1]
     assert '"stop_loss":"92"' in prompts[1]
     assert '"targets":["112","125"]' in prompts[1]
-    assert "Previous rejected structured response" in prompts[1]
+    assert "Rejected response shape" in prompts[1]
     assert "targets ontbreken" in prompts[1]
 
 
