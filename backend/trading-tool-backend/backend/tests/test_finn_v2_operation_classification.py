@@ -307,6 +307,28 @@ def test_consequence_follow_up_reaches_the_model_with_typed_lineage_facts():
     assert captured["facts"]["discourse_act"] == "contextual_follow_up"
 
 
+def test_typed_guided_slot_answer_reuses_pending_contract_without_provider():
+    class Selector:
+        def select(self, **kwargs):
+            raise AssertionError("typed pending slot must not call the provider")
+
+    classifier = FinnV2OperationClassificationService(structured_selector=Selector())
+    result = classifier.classify(
+        message="4H.",
+        conversation_context={
+            "conversation_state_version": "finn_v2.conversation-contracts.v1",
+            "active_guided_operation": {
+                "operation_id": "create_setup",
+                "missing_required_inputs": ["timeframe"],
+            },
+        },
+    )
+
+    assert result.operation_id == "create_setup"
+    assert result.selector_source == "guided_state"
+    assert result.supplied_inputs["timeframe"] == "4H"
+
+
 def test_typed_graph_scopes_resolve_to_a_complete_linked_bot_read_contract():
     class Selector:
         def select(self, **_kwargs):

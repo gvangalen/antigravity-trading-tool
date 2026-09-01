@@ -70,6 +70,19 @@ class FinnV2OperationClassificationService:
             message=message, workspace_hints=workspace_hints, client_context=client_context
         )
         candidates = self._selector_manifest()
+        guided_contract = self._guided_continuation_contract(facts=facts, context=conversation_context or {})
+        if guided_contract is not None:
+            # A typed answer to the one pending registry slot is not a new
+            # free-text operation. Reuse the persisted contract directly and
+            # avoid an otherwise redundant provider call on short turns.
+            return self._result(
+                guided_contract.operation_id,
+                facts,
+                "high",
+                "guided_state",
+                (guided_contract,),
+                conversation_context=conversation_context,
+            )
         candidates = self._guided_candidates(facts=facts, context=conversation_context or {}, candidates=candidates)
         selection, error = self.structured_selector.select(
             message=message,
@@ -175,6 +188,28 @@ class FinnV2OperationClassificationService:
             if item.operation_id in {contract.operation_id, "clarify_request", "unavailable"}
         )
         return safe or candidates
+
+    def _guided_continuation_contract(
+        self, *, facts: FinnV2PreprocessedRequest, context: Mapping[str, object],
+    ) -> OperationContract | None:
+        active = context.get("active_guided_operation") or (
+            context.get("operation_state") if not context.get("conversation_state_version") else None
+        )
+        if not isinstance(active, Mapping) or not active.get("missing_required_inputs"):
+            return None
+        # Only a bare typed slot value bypasses semantic selection. Natural
+        # language guided turns still need the model to distinguish a new
+        # request from a continuation.
+        if (
+            facts.discourse_act != "clarification_answer"
+            or facts.possible_slot_answer is None
+            or len(facts.normalized_text.rstrip(".").split()) != 1
+        ):
+            return None
+        try:
+            return self.registry.require_supported(str(active.get("operation_id") or ""))
+        except ValueError:
+            return None
 
     @staticmethod
     def _is_guided_continuation(facts: FinnV2PreprocessedRequest) -> bool:
