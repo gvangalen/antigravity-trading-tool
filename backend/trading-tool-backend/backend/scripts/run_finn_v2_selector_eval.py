@@ -40,7 +40,24 @@ def provenance_for(*, dataset: str, paths: list[Path], registry: FinnV2Operation
     registry_hash = hashlib.sha256(
         json.dumps(manifest, default=str, sort_keys=True, separators=(",", ":")).encode("utf-8")
     ).hexdigest()
-    return {"dataset_sha256": dataset_hash, "registry_sha256": registry_hash, "registry_version": registry.VERSION}
+    services = Path(__file__).resolve().parents[1] / "services"
+    boundary_files = (
+        services / "finn_v2_structured_operation_selector_service.py",
+        services / "finn_v2_operation_resolver_service.py",
+        services / "finn_v2_operation_classification_service.py",
+    )
+    boundary_hash = hashlib.sha256(
+        b"".join(path.read_bytes() for path in boundary_files)
+    ).hexdigest()
+    runtime = openai_client.get_openai_runtime_status()
+    return {
+        "dataset_sha256": dataset_hash,
+        "registry_sha256": registry_hash,
+        "registry_version": registry.VERSION,
+        "selector_boundary_sha256": boundary_hash,
+        "provider_model": str(runtime.get("model") or "unknown"),
+        "provider_configured": str(bool(runtime.get("configured"))).lower(),
+    }
 
 
 def same_entities(expected: Mapping[str, object], actual: Mapping[str, object]) -> bool:

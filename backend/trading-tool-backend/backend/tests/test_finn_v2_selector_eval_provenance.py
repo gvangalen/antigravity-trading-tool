@@ -11,4 +11,7 @@ def test_selector_eval_provenance_binds_report_to_the_selected_dataset_and_regis
 
     assert len(provenance["dataset_sha256"]) == 64
     assert len(provenance["registry_sha256"]) == 64
+    assert len(provenance["selector_boundary_sha256"]) == 64
+    assert provenance["provider_model"]
+    assert provenance["provider_configured"] in {"true", "false"}
     assert provenance["registry_version"] == FinnV2OperationRegistry.VERSION
