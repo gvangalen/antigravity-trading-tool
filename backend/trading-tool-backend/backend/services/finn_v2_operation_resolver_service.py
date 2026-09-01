@@ -66,6 +66,7 @@ class FinnV2OperationResolverService:
         if (
             operation_id == "unsupported_financial_operation"
             and str((request_facts or {}).get("domain_hint") or "") == "off_topic"
+            and object_name not in {"portfolio", "trade", "order", "investment", "brokerage"}
             and not self._has_pending_operation(conversation_context)
         ):
             operation_id = "off_topic"

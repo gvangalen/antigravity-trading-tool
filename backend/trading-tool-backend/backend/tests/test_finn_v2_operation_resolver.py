@@ -92,3 +92,15 @@ def test_non_financial_frame_cannot_resolve_to_unsupported_execute_intent():
     )
 
     assert resolved.operation_id == "off_topic"
+
+
+def test_explicit_financial_unsupported_frame_remains_safely_unsupported():
+    registry = FinnV2OperationRegistry()
+    resolved = FinnV2OperationResolverService(registry).resolve(
+        selection=_selection("unsupported_financial_operation", {"goal": "unsupported", "object": "portfolio"}),
+        candidates=registry.list(),
+        conversation_context={},
+        request_facts={"domain_hint": "off_topic"},
+    )
+
+    assert resolved.operation_id == "unsupported_financial_operation"
