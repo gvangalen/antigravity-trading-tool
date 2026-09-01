@@ -56,3 +56,39 @@ def test_semantic_frame_resolves_a_broad_assessment_to_plan_not_setup():
     )
 
     assert resolved.operation_id == "evaluate_plan"
+
+
+def test_semantic_frame_resolves_a_complete_linked_graph_to_the_linked_bot_contract():
+    registry = FinnV2OperationRegistry()
+    resolved = FinnV2OperationResolverService(registry).resolve(
+        selection=_selection("read_active_setup", {
+            "goal": "read", "object": "setup", "requested_scopes": ("setup", "strategy", "bot"),
+        }),
+        candidates=registry.list(),
+        conversation_context={},
+    )
+
+    assert resolved.operation_id == "read_linked_bot"
+
+
+def test_unbound_execute_frame_fails_to_clarification_not_an_execution_contract():
+    registry = FinnV2OperationRegistry()
+    resolved = FinnV2OperationResolverService(registry).resolve(
+        selection=_selection("unsupported_financial_operation", {"goal": "execute", "object": None}),
+        candidates=registry.list(),
+        conversation_context={},
+    )
+
+    assert resolved.operation_id == "clarify_request"
+
+
+def test_non_financial_frame_cannot_resolve_to_unsupported_execute_intent():
+    registry = FinnV2OperationRegistry()
+    resolved = FinnV2OperationResolverService(registry).resolve(
+        selection=_selection("unsupported_financial_operation", {"goal": "unsupported", "object": "other"}),
+        candidates=registry.list(),
+        conversation_context={},
+        request_facts={"domain_hint": "off_topic"},
+    )
+
+    assert resolved.operation_id == "off_topic"

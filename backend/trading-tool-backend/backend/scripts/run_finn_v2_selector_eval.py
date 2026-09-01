@@ -7,6 +7,7 @@ guard because each case spends a real provider call.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import time
@@ -29,6 +30,17 @@ DATASETS = ("development", "regression", "holdout")
 def fixture_paths() -> list[Path]:
     root = Path(__file__).resolve().parents[2] / "backend" / "tests" / "fixtures"
     return [root / f"finn_v2_selector_{dataset}.json" for dataset in DATASETS]
+
+
+def provenance_for(*, dataset: str, paths: list[Path], registry: FinnV2OperationRegistry) -> dict[str, str]:
+    """Bind each report to immutable case and registry inputs."""
+    dataset_path = next(path for path in paths if path.stem.endswith(f"_{dataset}"))
+    dataset_hash = hashlib.sha256(dataset_path.read_bytes()).hexdigest()
+    manifest = [contract.__dict__ for contract in registry.list()]
+    registry_hash = hashlib.sha256(
+        json.dumps(manifest, default=str, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    ).hexdigest()
+    return {"dataset_sha256": dataset_hash, "registry_sha256": registry_hash, "registry_version": registry.VERSION}
 
 
 def same_entities(expected: Mapping[str, object], actual: Mapping[str, object]) -> bool:
@@ -160,13 +172,14 @@ def percentile(values: list[int], fraction: float) -> float:
     return values[min(len(values) - 1, int((len(values) - 1) * fraction))] if values else 0.0
 
 
-def build_report(dataset: str, rows: list[dict[str, Any]]) -> dict[str, Any]:
+def build_report(dataset: str, rows: list[dict[str, Any]], *, provenance: Mapping[str, str] | None = None) -> dict[str, Any]:
     confusion = Counter((r["expected"]["expected_operation_id"], r["actual"]["operation_id"]) for r in rows)
     latencies = sorted(row["latency_ms"] for row in rows)
     rows_for = lambda operation: [row for row in rows if row["expected"]["expected_operation_id"] == operation]
     failures = lambda category: sum(row["failure_category"] == category for row in rows) / len(rows) if rows else 0.0
     return {
         "dataset": dataset, "total_cases": len(rows), "operation_accuracy": rate(rows, "operation"),
+        "provenance": dict(provenance or {}),
         "confusion_matrix": {f"{expected}->{actual}": count for (expected, actual), count in sorted(confusion.items())},
         "entity_accuracy": rate(rows, "entities"), "targetasset_accuracy": rate(rows, "target_asset"),
         "action_polarity_accuracy": rate(rows, "action_polarity"), "conversation_reference_accuracy": rate(rows, "conversation_reference"),
@@ -192,7 +205,9 @@ def main() -> None:
     args = parser.parse_args()
     if os.getenv("FINN_V2_REAL_SELECTOR_EVAL") != "1":
         raise SystemExit("FINN_V2_REAL_SELECTOR_EVAL=1 is required to spend provider calls")
-    cases = [case for case in load_and_validate(fixture_paths()) if case.dataset == args.dataset]
+    paths = fixture_paths()
+    registry = FinnV2OperationRegistry()
+    cases = [case for case in load_and_validate(paths) if case.dataset == args.dataset]
     rows: list[dict[str, Any]] = []
     for case in cases:
         if rows:
@@ -203,7 +218,7 @@ def main() -> None:
             backoff_seconds=max(0.0, args.rate_limit_backoff_seconds),
         )
         rows.append(row)
-    report = build_report(args.dataset, rows)
+    report = build_report(args.dataset, rows, provenance=provenance_for(dataset=args.dataset, paths=paths, registry=registry))
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(report, indent=2, ensure_ascii=True) + "\n", encoding="utf-8")
     print(json.dumps(report, indent=2, ensure_ascii=True))

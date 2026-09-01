@@ -37,6 +37,7 @@ class FinnV2OperationResolverService:
         selection: FinnV2StructuredOperationSelection,
         candidates: tuple[OperationContract, ...],
         conversation_context: Mapping[str, object],
+        request_facts: Mapping[str, object] | None = None,
     ) -> FinnV2StructuredOperationSelection:
         frame = getattr(selection, "semantic_frame", None)
         if not isinstance(frame, Mapping) or not frame:
@@ -45,13 +46,29 @@ class FinnV2OperationResolverService:
         goal = self._normalized(frame.get("goal"))
         object_name = self._normalized(frame.get("object"))
         reference_kind = self._normalized(frame.get("reference_kind"))
+        requested_scopes = {
+            self._normalized(item)
+            for item in frame.get("requested_scopes", ())
+            if isinstance(item, str)
+        }
         operation_id = self._operation_from_frame(
             goal=goal,
             object_name=object_name,
             reference_kind=reference_kind,
             current=selection.operation_id,
             context=conversation_context,
+            requested_scopes=requested_scopes,
         )
+        # This is a contract invariant, not an alternate intent router: a
+        # financial-unsupported contract requires a financial request fact.
+        # The provider still extracts meaning; the registry rejects an
+        # incompatible financial execution label for an off-topic frame.
+        if (
+            operation_id == "unsupported_financial_operation"
+            and str((request_facts or {}).get("domain_hint") or "") == "off_topic"
+            and not self._has_pending_operation(conversation_context)
+        ):
+            operation_id = "off_topic"
         if operation_id not in candidate_ids:
             return selection
         reference = selection.conversation_reference
@@ -69,16 +86,25 @@ class FinnV2OperationResolverService:
         reference_kind: str,
         current: str,
         context: Mapping[str, object],
+        requested_scopes: set[str],
     ) -> str:
         if reference_kind and self._has_eligible_lineage(context):
             if goal in {"reformulate", "summarize"}:
                 return "reformulate_previous_response"
             if goal in {"explain", "consequence", "clarify"}:
                 return "explain_previous_evidence"
+        # A multi-node graph read is represented by the existing linked-bot
+        # graph contract, whose immutable scopes include setup and strategy.
+        # This consumes model-extracted scopes, not source text.
+        if goal == "read" and {"setup", "strategy", "bot"}.issubset(requested_scopes):
+            return "read_linked_bot"
         if goal in {"clarify", "clarification"}:
             return "clarify_request"
         if goal in {"unsupported", "execute"} and object_name in {"portfolio", "trade", "order"}:
             return "unsupported_financial_operation"
+        # An unbound action cannot safely become an execution intent.
+        if goal in {"unsupported", "execute"} and not object_name:
+            return "clarify_request"
         if goal in {"off_topic", "unknown"} and not self._has_pending_operation(context):
             return "off_topic"
         return self._GOAL_OBJECT_OPERATIONS.get((goal, object_name), self._GOAL_OBJECT_OPERATIONS.get((goal, None), current))

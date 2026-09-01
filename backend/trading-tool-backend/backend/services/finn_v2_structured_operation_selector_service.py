@@ -110,7 +110,9 @@ class FinnV2StructuredOperationSelectorService:
                     "target and operation_id; do not switch it to clarify_request merely because the "
                     "short answer does not repeat the original object. "
                     "The semantic frame records meaning, not implementation: goal, object, explicit setup values, "
-                    "persistence intent and an antecedent kind. Do not put a setup type in concept or a timeframe in setup_type. "
+                    "persistence intent, all explicitly requested information scopes, and an antecedent kind. When a request "
+                    "names linked setup, strategy and bot information, put each in requested_scopes so the registry can select "
+                    "the complete graph read. Do not put a setup type in concept or a timeframe in setup_type. "
                     "A named value is supplied, never missing. A request not to save or write remains a create request with proposal_only persistence. "
                     "Return the strict schema only."
                 ),
@@ -157,6 +159,9 @@ class FinnV2StructuredOperationSelectorService:
             or self._optional_text(entities.get("asset"))
             or self._optional_text(facts.get("referenced_asset"))
         ) or None
+        # The canonical entity projection can resolve an asset after raw
+        # provider values are read. Keep that typed target for all consumers.
+        target_asset = target_asset or resolve_catalog_symbol(entities.get("asset"))
         if target_asset and not entities.get("asset"):
             entities["asset"] = target_asset
         elif target_asset:
@@ -238,11 +243,12 @@ class FinnV2StructuredOperationSelectorService:
                         "new_data_required": {"type": ["boolean", "null"]},
                         "ambiguities": {"type": "array", "items": {"type": "string"}},
                         "supplied_inputs": {"type": "array", "items": {"type": "string"}},
+                        "requested_scopes": {"type": "array", "items": {"type": "string"}},
                     },
                     "required": [
                         "goal", "object", "target_asset", "setup_type", "timeframe", "name",
                         "action_polarity", "persistence_intent", "reference_kind", "new_data_required",
-                        "ambiguities", "supplied_inputs",
+                        "ambiguities", "supplied_inputs", "requested_scopes",
                     ],
                 },
             },
@@ -289,7 +295,7 @@ class FinnV2StructuredOperationSelectorService:
                 frame[field] = item
         if isinstance(value.get("new_data_required"), bool):
             frame["new_data_required"] = value["new_data_required"]
-        for field in ("ambiguities", "supplied_inputs"):
+        for field in ("ambiguities", "supplied_inputs", "requested_scopes"):
             items = value.get(field)
             if isinstance(items, list) and all(isinstance(item, str) for item in items):
                 frame[field] = tuple(item for item in items if item)

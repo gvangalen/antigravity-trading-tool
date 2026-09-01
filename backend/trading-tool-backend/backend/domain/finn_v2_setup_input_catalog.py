@@ -12,7 +12,10 @@ class FinnV2SetupInputCatalog:
     _TYPE_ALIASES = {
         "dca": ("dca", "dollar cost averaging", "periodiek bijkopen", "sparplan"),
         "position": ("position", "positie", "positioneel", "positionssetup", "position setup"),
-        "trade": ("trade", "trading", "swing", "swingtrade", "swing trading", "scalp", "breakout", "momentum", "intraday"),
+        # A swing setup is a distinct product value. Collapsing it into
+        # ``trade`` loses user intent before proposal construction.
+        "swing": ("swing", "swingtrade", "swing trading"),
+        "trade": ("trade", "trading", "scalp", "breakout", "momentum", "intraday"),
     }
     _TIMEFRAME_ALIASES = {
         "1D": ("dagbasis", "daily", "daily basis", "day basis", "tagesbasis", "taglich", "taeglich"),

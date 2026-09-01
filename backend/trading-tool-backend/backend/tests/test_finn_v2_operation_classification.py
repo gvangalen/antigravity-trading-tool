@@ -5,6 +5,7 @@ from backend.services.finn_v2_operation_classification_service import (
     SemanticOperationClassification,
 )
 from backend.domain.finn_v2_operation_registry import ActionPolarity, FinnV2OperationRegistry
+from backend.services.finn_v2_structured_operation_selector_service import FinnV2StructuredOperationSelection
 
 
 CLASSIFIER = FinnV2OperationClassificationService()
@@ -304,6 +305,23 @@ def test_consequence_follow_up_reaches_the_model_with_typed_lineage_facts():
 
     assert result.operation_id == "explain_previous_evidence"
     assert captured["facts"]["discourse_act"] == "contextual_follow_up"
+
+
+def test_typed_graph_scopes_resolve_to_a_complete_linked_bot_read_contract():
+    class Selector:
+        def select(self, **_kwargs):
+            return FinnV2StructuredOperationSelection(
+                operation_id="read_active_setup", confidence=0.9, entities={}, target_asset=None,
+                conversation_reference=None, missing_inputs=(), ambiguity_reason=None,
+                semantic_frame={"goal": "read", "object": "setup", "requested_scopes": ("setup", "strategy", "bot")},
+            ), None
+
+    result = FinnV2OperationClassificationService(structured_selector=Selector()).classify(
+        message="Welke gekoppelde onderdelen horen bij mijn huidige aanpak?"
+    )
+
+    assert result.operation_id == "read_linked_bot"
+    assert result.action == "read"
 
 
 def test_provider_failure_is_terminal_and_never_selects_a_local_operation():

@@ -164,6 +164,24 @@ def test_selector_projects_typed_semantic_frame_slots_into_canonical_entities():
     assert selection.entities["name"] == "Patient Builder"
 
 
+def test_selector_keeps_a_canonical_entity_asset_as_the_target_asset():
+    selector = FinnV2StructuredOperationSelectorService(
+        provider=lambda **_kwargs: {"parsed": {
+            "operation_id": "watchlist_remove", "confidence": 0.93,
+            "entities": {"asset": "Dogecoin"}, "target_asset": None,
+            "conversation_reference": None, "missing_inputs": [], "ambiguity_reason": None,
+        }}
+    )
+    selection, error = selector.select(
+        message="Haal Dogecoin uit mijn watchlist.",
+        candidate_contracts=(FinnV2OperationRegistry().get("watchlist_remove"),), facts={}, verified_context=None,
+    )
+
+    assert error is None
+    assert selection.entities["asset"] == "DOGE"
+    assert selection.target_asset == "DOGE"
+
+
 def test_selector_projects_natural_setup_entities_through_the_canonical_catalog():
     selector = FinnV2StructuredOperationSelectorService(
         provider=lambda **_kwargs: {"parsed": {
@@ -182,7 +200,7 @@ def test_selector_projects_natural_setup_entities_through_the_canonical_catalog(
     )
 
     assert error is None
-    assert selection.entities["setup_type"] == "trade"
+    assert selection.entities["setup_type"] == "swing"
     assert selection.entities["timeframe"] == "4H"
     assert selection.entities["asset"] == "SOL"
 

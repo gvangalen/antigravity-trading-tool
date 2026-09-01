@@ -459,7 +459,7 @@ def test_guided_setup_state_collects_verified_inputs_without_premature_proposal(
     assert first_turn.request_plan.operation_id == "create_setup"
     assert first_turn.request_plan.operation_state["collected_inputs"] == {
         "symbol": "BTC",
-        "setup_type": "trade",
+        "setup_type": "swing",
         "timeframe": "4H",
         "market_condition": "trend_defined",
     }
@@ -675,7 +675,7 @@ def test_guided_setup_collects_type_timeframe_and_name_in_one_persisted_contract
     assert final.request_plan.operation_state["missing_required_inputs"] == []
     assert final.request_plan.operation_state["collected_inputs"] == {
         "symbol": "BTC",
-        "setup_type": "trade",
+        "setup_type": "swing",
         "timeframe": "4H",
         "name": "BTC Contract QA",
     }
@@ -699,7 +699,7 @@ def test_guided_setup_keeps_canonical_state_for_natural_timeframe_and_name_answe
     assert final.request_plan.operation_id == "create_setup"
     assert final.request_plan.operation_state["missing_required_inputs"] == []
     assert final.request_plan.operation_state["collected_inputs"] == {
-        "symbol": "BTC", "setup_type": "trade", "timeframe": "4H", "name": "BTC Rustige Pullback",
+        "symbol": "BTC", "setup_type": "swing", "timeframe": "4H", "name": "BTC Rustige Pullback",
     }
 
 
@@ -759,7 +759,7 @@ def test_setup_catalog_canonicalizes_natural_slots_without_losing_user_display_n
 
 def test_setup_catalog_supports_dutch_english_and_german_timeframe_variants():
     cases = (
-        ("Maak een swing setup voor SOL op 4 uur met de naam SOL Swing.", "trade", "4H"),
+        ("Maak een swing setup voor SOL op 4 uur met de naam SOL Swing.", "swing", "4H"),
         ("Create an intraday setup for SOL on an hourly basis named SOL Hourly.", "trade", "1H"),
         ("Erstelle ein Position Setup für SOL auf Tagesbasis namens SOL Tagesplan.", "position", "1D"),
     )
@@ -851,7 +851,7 @@ def test_compound_setup_type_is_canonicalized_before_missing_input_reconciliatio
 
     assert result.request_plan.operation_id == "create_setup"
     assert result.request_plan.operation_state["collected_inputs"] == {
-        "symbol": "XRP", "setup_type": "trade",
+        "symbol": "XRP", "setup_type": "swing",
     }
     assert result.request_plan.operation_state["missing_required_inputs"] == ["timeframe", "name"]
 
@@ -873,7 +873,7 @@ def test_complete_avax_compound_timeframe_setup_preserves_supplied_values():
         message="Bereid voor Avalanche een swingopzet voor op de vieruursgrafiek en noem hem AVAX Rustige Instap."
     )
     assert result.request_plan.operation_state["collected_inputs"] == {
-        "symbol": "AVAX", "setup_type": "trade", "timeframe": "4H", "name": "AVAX Rustige Instap",
+        "symbol": "AVAX", "setup_type": "swing", "timeframe": "4H", "name": "AVAX Rustige Instap",
     }
     assert result.request_plan.operation_state["missing_required_inputs"] == []
 
@@ -884,7 +884,7 @@ def test_dutch_swingtrade_setup_preserves_its_explicit_name_and_canonical_type()
     )
 
     assert result.request_plan.operation_state["collected_inputs"] == {
-        "symbol": "BTC", "setup_type": "trade", "timeframe": "4H", "name": "Nederlandse Doorbraak",
+        "symbol": "BTC", "setup_type": "swing", "timeframe": "4H", "name": "Nederlandse Doorbraak",
     }
     assert result.request_plan.operation_state["missing_required_inputs"] == []
 
