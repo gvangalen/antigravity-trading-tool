@@ -255,6 +255,7 @@ DEFAULT_ASSET_CATALOG: dict[str, dict[str, Any]] = {
         quote_currency="USDT",
         coingecko_id="ethereum",
         coincap_id="ethereum",
+        aliases=("Ether",),
         refresh_policy="crypto_live_1m",
     ),
     "SOL": _asset_defaults(

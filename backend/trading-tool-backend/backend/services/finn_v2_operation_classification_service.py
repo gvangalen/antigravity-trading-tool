@@ -258,7 +258,7 @@ class FinnV2OperationClassificationService:
             message=facts.original_text,
             explicit_asset=facts.referenced_asset,
         )
-        if facts.financial_concept:
+        if facts.financial_concept and "concept" in contract.required_inputs:
             supplied.setdefault("concept", facts.financial_concept)
         # A contextual action can use only an identifier already persisted in
         # verified lineage and only when the structured selector returned the

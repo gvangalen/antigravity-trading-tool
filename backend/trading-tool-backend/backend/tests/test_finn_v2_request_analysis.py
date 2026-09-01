@@ -37,6 +37,18 @@ def test_preprocessor_extracts_catalog_assets_and_guided_slot_values_from_natura
     assert guided_type.domain_hint == "financial"
 
 
+def test_preprocessor_marks_compound_indicator_configuration_as_an_explicit_entity():
+    preprocessor = FinnV2RequestPreprocessorService()
+
+    btc = preprocessor.preprocess(message="Toon mijn bitcoinindicatorinstellingen.")
+    eth = preprocessor.preprocess(message="Lees mijn ethereumindicatorconfiguratie.")
+
+    assert btc.referenced_asset == "BTC"
+    assert eth.referenced_asset == "ETH"
+    assert "indicator_configuration" in btc.explicit_entities
+    assert "indicator_configuration" in eth.explicit_entities
+
+
 def test_compound_catalog_asset_reaches_the_read_target_projection(monkeypatch):
     service = FinnV2RequestAnalysisService()
     monkeypatch.setattr(
@@ -684,6 +696,18 @@ def test_guided_setup_accepts_a_short_natural_setup_type_reply():
     assert second.request_plan.operation_id == "create_setup"
     assert second.request_plan.operation_state["collected_inputs"]["setup_type"] == "trade"
     assert second.request_plan.operation_state["missing_required_inputs"] == ["timeframe", "name"]
+
+
+def test_setup_name_does_not_include_a_trailing_non_persistence_clause():
+    contract = FinnV2OperationRegistry().require_supported("create_setup")
+
+    values = FinnV2OperationStateService().explicit_inputs(
+        contract=contract,
+        message="Maak een BTC-setup en noem hem Geduldige Hervatting en sla niets op.",
+        explicit_asset="BTC",
+    )
+
+    assert values["name"] == "Geduldige Hervatting"
 
 
 def test_complete_natural_setup_sentence_resolves_all_typed_inputs():

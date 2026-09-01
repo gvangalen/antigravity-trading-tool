@@ -108,6 +108,17 @@ class FinnV2RequestPreprocessorService:
         ),
     }
     _TIMEFRAME_VALUE = re.compile(r"\b(?:[1-9]\d*(?:m|h|d|w))\b", re.IGNORECASE)
+    _COMPOUND_ENTITY_PATTERNS = {
+        # Dutch and English compound nouns can join an explicit asset name to
+        # an indicator subject without whitespace. These are request facts,
+        # not an operation decision; the structured selector still owns the
+        # contract selection.
+        "indicator_configuration": re.compile(
+            r"(?:indicator(?:en)?(?:configuratie|instellingen|settings)?|"
+            r"signal(?:settings|configuration)?|technical(?:settings|configuration)?)",
+            re.IGNORECASE,
+        ),
+    }
 
     def preprocess(
         self,
@@ -259,6 +270,12 @@ class FinnV2RequestPreprocessorService:
             ]
             if positions:
                 matches.append((min(positions), entity))
+        for entity, pattern in cls._COMPOUND_ENTITY_PATTERNS.items():
+            if entity in {item for _, item in matches}:
+                continue
+            compound_match = pattern.search(text)
+            if compound_match and any(character.isalpha() for character in text[:compound_match.start()]):
+                matches.append((compound_match.start(), entity))
         return {entity: position for position, entity in sorted(matches)}
 
     @staticmethod

@@ -202,7 +202,9 @@ class FinnV2OperationStateService:
                 re.IGNORECASE,
             )
             if named:
-                name = FinnV2SetupInputCatalog.display_name(named.group(1).strip(" ."))
+                name = FinnV2SetupInputCatalog.display_name(
+                    self._trim_setup_name_clause(named.group(1).strip(" ."))
+                )
                 if name:
                     values["name"] = name
             timeframe = FinnV2SetupInputCatalog.timeframe_from_text(text)
@@ -213,6 +215,17 @@ class FinnV2OperationStateService:
         elif contract.operation_id in {"watchlist_add", "watchlist_remove"} and explicit_asset:
             values["asset"] = explicit_asset
         return values
+
+    @staticmethod
+    def _trim_setup_name_clause(value: str) -> str:
+        """Exclude trailing non-persistence instructions from a display name."""
+        return re.split(
+            r"\s+(?:en|and|aber|but)\s+(?:sla\s+(?:niets|het)?\s*op|save\s+(?:nothing|it)|"
+            r"speicher\s+(?:nichts|es))\b",
+            value,
+            maxsplit=1,
+            flags=re.IGNORECASE,
+        )[0].strip(" .")
 
     @staticmethod
     def _is_missing(value: object) -> bool:

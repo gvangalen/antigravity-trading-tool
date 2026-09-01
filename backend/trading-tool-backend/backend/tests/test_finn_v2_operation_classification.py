@@ -333,6 +333,14 @@ def test_catalog_canonicalizes_cosmos_before_selector_or_proposal_boundaries():
     assert facts.explicit_target_asset == "ATOM"
 
 
+def test_catalog_canonicalizes_ether_for_an_explicit_unsupported_execution_target():
+    facts = CLASSIFIER.preprocessor.preprocess(
+        message="Verkoop één ether met een echte marktorder."
+    )
+
+    assert facts.referenced_asset == "ETH"
+
+
 def test_follow_up_requires_verified_context_in_the_contract_manifest():
     no_context = CLASSIFIER.classify(message="Onderbouw die conclusie.")
     with_context = CLASSIFIER.classify(
