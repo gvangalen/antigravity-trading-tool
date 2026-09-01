@@ -76,6 +76,65 @@ Stop and report when any of the following is true:
 - the task would require a role to exceed its default modification rights
 - there is an unresolved high-risk ambiguity involving auth, secrets, execution safety, or production behavior
 
+## Build Agent Contract
+
+The following rules bound Build-to-QA handoffs for every explicit build
+assignment. They do not grant Build independent acceptance authority.
+
+- Build may make at most one QA handoff for an explicit build assignment.
+- Build may hand off to QA only after its required tests, CI, deployment, and
+  production-SHA verification have completed successfully.
+- After the handoff, Build may perform at most one status check of the QA
+  task. It must not poll, wait, or remain active indefinitely for QA.
+- After that status check, Build must finish its own task with
+  `WAITING_FOR_INDEPENDENT_QA` until the user provides a new explicit
+  instruction.
+- Build must not start a new build or repair round from a QA result. For a
+  `NOT ACCEPTED` result, it may record only the verdict and report reference.
+- A new explicit user instruction is required before Build changes code after
+  either QA verdict. An `ACCEPTED` verdict must not trigger a second QA run.
+- Build must not accept its own release, alter QA thresholds, update a rollback
+  marker, or create a Build-to-QA ping-pong chain.
+
+## QA Agent Contract
+
+The following rules preserve independence and bound each QA assignment.
+
+- QA may run at most one independent QA run for each supplied production SHA.
+- QA must return only its verdict and fault batch; it must not instruct Build
+  to repair findings or begin a new build round.
+- QA ends its task after either `ACCEPTED` or `NOT ACCEPTED`. It must not run
+  QA again for the same SHA, or accept a new production SHA in the same run,
+  without a new explicit user instruction.
+- QA must not wait indefinitely for processes, workers, threads, runtime calls,
+  or another agent.
+- Every individual provider, runtime, or harness case has a hard timeout. A
+  nonterminal case at that boundary is recorded as a lifecycle failure.
+- A case may have at most one bounded retry, and only for an evidenced
+  infrastructure failure. Content failures have no retry.
+- A definitive hard acceptance-gate failure cannot become green later in the
+  same QA run. QA may then perform only pre-agreed, safe diagnostics for at
+  most 30 additional minutes.
+- A complete independent production QA run has a 120-minute wall-clock limit,
+  unless the explicit QA assignment sets another total limit. On expiry QA
+  stops and reports the run as incomplete or `NOT ACCEPTED`, based on the
+  evidence collected.
+- Where the assignment supplies no stricter case limit, an interactive runtime
+  case has a five-minute hard timeout. Waiting for another agent never extends
+  a case or run timeout.
+
+## Build To QA Cycle
+
+Every transition from `NOT ACCEPTED` to a new build round requires a new
+explicit user instruction. Every transition from a new build to QA permits one
+controlled handoff only. Agents must never repeat the cycle autonomously:
+
+`user -> Build -> one QA handoff -> verdict -> stop`
+
+The following autonomous loop is prohibited:
+
+`Build -> QA -> Build -> QA -> ...`
+
 ## Repository Reality Notes
 
 These current constraints are verified from the repository and should be treated as real until changed in code:
