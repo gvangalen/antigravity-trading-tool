@@ -375,9 +375,16 @@ class FinnV2RequestPreprocessorService:
             r"broker(?:rekening|account)?|trading\s+account|wallet|orders?|transacties?|"
             r"transactions?|trades?)\b"
         )
+        market_action = r"\b(?:koop\w*|verkoop\w*|buy\w*|sell\w*|trade\w*|handel\w*|orders?)\b"
         autonomy = r"\b(?:autonoom|autonome|autonomous|zelfstandig)\b"
         decision = r"\b(?:\w*besluit\w*|beslissing\w*|decision\w*|beheer\w*|manage\w*)\b"
-        return bool(re.search(finance_object, text) and re.search(autonomy, text) and re.search(decision, text))
+        return bool(
+            re.search(autonomy, text)
+            and (
+                (re.search(finance_object, text) and re.search(decision, text))
+                or re.search(market_action, text)
+            )
+        )
 
     @staticmethod
     def _has_unbound_deictic_reference(text: str, entities: tuple[str, ...]) -> bool:

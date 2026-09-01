@@ -47,6 +47,15 @@ def test_preprocessor_requires_a_financial_object_for_autonomous_delegation():
     assert facts.action_polarity == "read"
 
 
+def test_preprocessor_marks_autonomous_market_action_without_account_as_execution():
+    facts = FinnV2RequestPreprocessorService().preprocess(
+        message="Laat de assistent zelfstandig koop- en verkoopbesluiten nemen."
+    )
+
+    assert facts.financial_execution_intent is True
+    assert facts.action_polarity == "execute"
+
+
 def test_preprocessor_marks_short_unbound_deictic_reference_as_ambiguous():
     facts = FinnV2RequestPreprocessorService().preprocess(message="Doe hetzelfde ermee.")
 
