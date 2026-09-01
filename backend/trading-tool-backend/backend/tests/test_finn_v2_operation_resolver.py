@@ -104,3 +104,14 @@ def test_explicit_financial_unsupported_frame_remains_safely_unsupported():
     )
 
     assert resolved.operation_id == "unsupported_financial_operation"
+
+
+def test_unbound_execution_fact_cannot_be_erased_as_off_topic():
+    registry = FinnV2OperationRegistry()
+    resolved = FinnV2OperationResolverService(registry).resolve(
+        selection=_selection("off_topic", {"goal": "off_topic", "object": None}),
+        candidates=registry.list(), conversation_context={},
+        request_facts={"action_polarity": "execute"},
+    )
+
+    assert resolved.operation_id == "unsupported_financial_operation"

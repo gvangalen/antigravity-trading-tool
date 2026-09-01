@@ -70,6 +70,14 @@ class FinnV2OperationResolverService:
             and not self._has_pending_operation(conversation_context)
         ):
             operation_id = "off_topic"
+        # An explicit execution act is financially consequential even when
+        # the provider cannot name its object. It must fail closed through the
+        # unsupported contract, never be erased as off-topic.
+        if (
+            operation_id == "off_topic"
+            and str((request_facts or {}).get("action_polarity") or "") == "execute"
+        ):
+            operation_id = "unsupported_financial_operation"
         if operation_id not in candidate_ids:
             return selection
         reference = selection.conversation_reference
