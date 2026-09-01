@@ -14,6 +14,7 @@ from backend.schemas.finn_v2_reasoning_context_schema import (
     REASONING_CONTEXT_VERSION,
     ReasoningContextPackage,
     ReasoningDomainStatus,
+    ReasoningEvidenceBoundary,
     ReasoningEvidenceItem,
     ReasoningPolicyContext,
 )
@@ -170,6 +171,32 @@ class FinnV2ReasoningContextService:
             allowed_operation_types=[policy.operation_type] if policy.operation_type else [],
             request_plan=request_plan,
             uncertainty_codes=list(dict.fromkeys([*orchestrator_result.uncertainty_codes, *provenance_issues])),
+            evidence_boundary=self._evidence_boundary(evidence),
+        )
+
+    @staticmethod
+    def _evidence_boundary(evidence: list[ReasoningEvidenceItem]) -> ReasoningEvidenceBoundary:
+        """Describe evidence limits without converting an absence into a risk claim."""
+        facts: list[str] = []
+        absences: list[str] = []
+        unknowns: list[str] = []
+        forbidden: list[str] = []
+        for item in evidence:
+            if item.tool_name != "read_indicator_configuration":
+                continue
+            count = item.facts.get("configured_count")
+            if count == 0:
+                asset = item.facts.get("symbol") or item.asset or "the requested asset"
+                absences.append(f"The canonical indicator source has zero records for {asset}.")
+                unknowns.append("Whether a non-canonical source has indicator records is unknown.")
+                forbidden.append("Zero configured indicators implies a plan weakness, risk, insufficiency, or causal effect.")
+            elif isinstance(count, int):
+                facts.append(f"The canonical indicator source reports {count} configured indicators.")
+        return ReasoningEvidenceBoundary(
+            verified_facts=facts,
+            verified_absences=absences,
+            unknowns=unknowns,
+            forbidden_inferences=forbidden,
         )
 
     def input_hash(self, context: ReasoningContextPackage, *, prompt_version: str, model: str) -> str:

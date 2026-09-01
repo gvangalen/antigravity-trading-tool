@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import re
-from typing import Dict, List, Optional
+from typing import Dict, List, Mapping, Optional
 
 from backend.domain.finn_v2_operation_registry import FinnV2OperationRegistry, FinnV2OperationUnavailableError
 from backend.schemas.finn_v2_orchestrator_schema import RequestAnalysisResult, RequestPlan
@@ -290,6 +290,7 @@ class FinnV2RequestAnalysisService:
             selection_supported=semantic.supported,
             selection_reason_code=semantic.reason_code,
             unsupported_capability=semantic.unsupported_capability,
+            semantic_frame=semantic.semantic_frame,
         )
 
         return RequestAnalysisResult(
@@ -347,6 +348,7 @@ class FinnV2RequestAnalysisService:
         selection_supported: Optional[bool],
         selection_reason_code: Optional[str],
         unsupported_capability: Optional[str],
+        semantic_frame: Mapping[str, object],
     ) -> RequestPlan:
         reference = None
         reference_kind = None
@@ -407,6 +409,7 @@ class FinnV2RequestAnalysisService:
             selection_supported=selection_supported,
             selection_reason_code=selection_reason_code,
             unsupported_capability=unsupported_capability,
+            semantic_frame=dict(semantic_frame),
             clarification_required=bool(missing_essential_inputs) or interaction_mode == "CLARIFICATION",
             confidence_score=score,
         )

@@ -1,0 +1,99 @@
+"""Resolve a provider semantic frame through the immutable operation registry."""
+from __future__ import annotations
+
+from dataclasses import replace
+from typing import Mapping, Optional
+
+from backend.domain.finn_v2_operation_registry import FinnV2OperationRegistry, OperationContract
+from backend.services.finn_v2_structured_operation_selector_service import FinnV2StructuredOperationSelection
+
+
+class FinnV2OperationResolverService:
+    """A contract resolver, not a second free-text intent classifier."""
+
+    _GOAL_OBJECT_OPERATIONS = {
+        ("capability", None): "capability",
+        ("create", "setup"): "create_setup",
+        ("add", "watchlist"): "watchlist_add",
+        ("remove", "watchlist"): "watchlist_remove",
+        ("activate", "bot"): "activate_bot",
+        ("evaluate", "plan"): "evaluate_plan",
+        ("evaluate", "setup"): "evaluate_setup",
+        ("evaluate", "strategy"): "evaluate_strategy",
+        ("evaluate", "bot"): "evaluate_bot",
+        ("read", "plan"): "read_active_plan",
+        ("read", "setup"): "read_active_setup",
+        ("read", "bot"): "read_linked_bot",
+        ("read", "indicator"): "read_indicator_configuration",
+        ("explain", "financial_concept"): "explain_financial_concept",
+    }
+
+    def __init__(self, registry: Optional[FinnV2OperationRegistry] = None):
+        self.registry = registry or FinnV2OperationRegistry()
+
+    def resolve(
+        self,
+        *,
+        selection: FinnV2StructuredOperationSelection,
+        candidates: tuple[OperationContract, ...],
+        conversation_context: Mapping[str, object],
+    ) -> FinnV2StructuredOperationSelection:
+        frame = getattr(selection, "semantic_frame", None)
+        if not isinstance(frame, Mapping) or not frame:
+            return selection
+        candidate_ids = {contract.operation_id for contract in candidates}
+        goal = self._normalized(frame.get("goal"))
+        object_name = self._normalized(frame.get("object"))
+        reference_kind = self._normalized(frame.get("reference_kind"))
+        operation_id = self._operation_from_frame(
+            goal=goal,
+            object_name=object_name,
+            reference_kind=reference_kind,
+            current=selection.operation_id,
+            context=conversation_context,
+        )
+        if operation_id not in candidate_ids:
+            return selection
+        reference = selection.conversation_reference
+        if self._has_eligible_lineage(conversation_context) and reference_kind in {
+            "previous_verified_response", "previous_response", "previous_evidence", "previous_conclusion",
+        }:
+            reference = "previous_verified_response"
+        return replace(selection, operation_id=operation_id, conversation_reference=reference)
+
+    def _operation_from_frame(
+        self,
+        *,
+        goal: str,
+        object_name: str,
+        reference_kind: str,
+        current: str,
+        context: Mapping[str, object],
+    ) -> str:
+        if reference_kind and self._has_eligible_lineage(context):
+            if goal in {"reformulate", "summarize"}:
+                return "reformulate_previous_response"
+            if goal in {"explain", "consequence", "clarify"}:
+                return "explain_previous_evidence"
+        if goal in {"clarify", "clarification"}:
+            return "clarify_request"
+        if goal in {"unsupported", "execute"} and object_name in {"portfolio", "trade", "order"}:
+            return "unsupported_financial_operation"
+        if goal in {"off_topic", "unknown"} and not self._has_pending_operation(context):
+            return "off_topic"
+        return self._GOAL_OBJECT_OPERATIONS.get((goal, object_name), self._GOAL_OBJECT_OPERATIONS.get((goal, None), current))
+
+    @staticmethod
+    def _normalized(value: object) -> str:
+        return str(value or "").strip().casefold().replace(" ", "_")
+
+    @staticmethod
+    def _has_eligible_lineage(context: Mapping[str, object]) -> bool:
+        verified = context.get("last_verified_context")
+        degraded = context.get("last_degraded_context")
+        return bool(verified or (isinstance(degraded, Mapping) and degraded.get("evidence_refs")))
+
+    @staticmethod
+    def _has_pending_operation(context: Mapping[str, object]) -> bool:
+        active = context.get("active_guided_operation")
+        return isinstance(active, Mapping) and bool(active.get("next_missing_input"))

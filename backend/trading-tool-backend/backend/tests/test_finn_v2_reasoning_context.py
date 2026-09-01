@@ -6,7 +6,25 @@ from backend.schemas.finn_v2_domain_validation_schema import DomainValidationRes
 from backend.schemas.finn_v2_orchestrator_schema import DomainRequirementPlan, OrchestratorResult, RequestAnalysisResult, RequestPlan, ToolPlan
 from backend.schemas.finn_v2_policy_schema import FinnV2PolicyDecision
 from backend.schemas.finn_v2_state_schema import FinancialStateSnapshot
+from backend.schemas.finn_v2_reasoning_context_schema import ReasoningEvidenceItem
 from backend.services.finn_v2_reasoning_context_service import FinnV2ReasoningContextService
+
+
+def test_reasoning_context_marks_empty_canonical_indicator_evidence_as_absence_not_risk():
+    boundary = FinnV2ReasoningContextService._evidence_boundary([
+        ReasoningEvidenceItem(
+            evidence_id="E1", artifact_id="artifact-1", tool_name="read_indicator_configuration",
+            domain="market_context", entity_type="indicator_configuration", asset="BTC",
+            source="canonical", freshness="fresh", confidence="high",
+            facts={"symbol": "BTC", "configured_count": 0},
+        ),
+    ])
+
+    assert boundary.verified_absences == ["The canonical indicator source has zero records for BTC."]
+    assert boundary.unknowns == ["Whether a non-canonical source has indicator records is unknown."]
+    assert boundary.forbidden_inferences == [
+        "Zero configured indicators implies a plan weakness, risk, insufficiency, or causal effect."
+    ]
 
 
 def test_reasoning_context_keeps_required_domains_and_sanitizes_facts():

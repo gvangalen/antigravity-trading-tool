@@ -62,11 +62,13 @@ def test_finn_v2_stream_closes_session_before_terminal_sse_delivery(monkeypatch)
             current_user={"id": 7},
         )
         events = [event async for event in response.body_iterator]
-        return events
+        return events, response.headers
 
-    events = asyncio.run(exercise())
+    events, headers = asyncio.run(exercise())
 
     assert events == ['event: run.completed\ndata: {"run_id": "run-1", "status": "completed"}\n\n']
+    assert headers["x-accel-buffering"] == "no"
+    assert headers["cache-control"] == "no-cache, no-transform"
     assert session.entered == session.exited == 1
 
 

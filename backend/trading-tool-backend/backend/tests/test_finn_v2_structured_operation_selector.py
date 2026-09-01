@@ -132,6 +132,38 @@ def test_selector_projects_catalog_assets_and_complete_setup_slots():
     assert selection.missing_inputs == ("timeframe", "name")
 
 
+def test_selector_projects_typed_semantic_frame_slots_into_canonical_entities():
+    selector = FinnV2StructuredOperationSelectorService(
+        provider=lambda **_kwargs: {"parsed": {
+            "operation_id": "create_setup", "confidence": 0.93,
+            "entities": {"concept": None, "asset": None, "setup_id": None,
+                         "strategy_id": None, "bot_id": None, "setup_type": None,
+                         "timeframe": None, "name": None},
+            "target_asset": None, "conversation_reference": None,
+            "missing_inputs": [], "ambiguity_reason": None,
+            "semantic_frame": {
+                "goal": "create", "object": "setup", "target_asset": "Ethereum",
+                "setup_type": "DCA", "timeframe": "daily", "name": "Patient Builder",
+                "action_polarity": "create", "persistence_intent": "proposal_only",
+                "reference_kind": None, "new_data_required": False,
+                "ambiguities": [], "supplied_inputs": ["target_asset", "setup_type", "timeframe", "name"],
+            },
+        }}
+    )
+    selection, error = selector.select(
+        message="Prepare an ETH setup.",
+        candidate_contracts=(FinnV2OperationRegistry().get("create_setup"),), facts={}, verified_context=None,
+    )
+
+    assert error is None
+    assert selection is not None
+    assert selection.target_asset == "ETH"
+    assert selection.entities["asset"] == "ETH"
+    assert selection.entities["setup_type"] == "dca"
+    assert selection.entities["timeframe"] == "1D"
+    assert selection.entities["name"] == "Patient Builder"
+
+
 def test_selector_projects_natural_setup_entities_through_the_canonical_catalog():
     selector = FinnV2StructuredOperationSelectorService(
         provider=lambda **_kwargs: {"parsed": {

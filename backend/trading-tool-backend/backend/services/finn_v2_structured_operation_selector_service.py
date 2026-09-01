@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Callable, Mapping, Optional
 
 from backend.domain.finn_v2_operation_registry import OperationContract
@@ -21,6 +21,9 @@ class FinnV2StructuredOperationSelection:
     conversation_reference: Optional[str]
     missing_inputs: tuple[str, ...]
     ambiguity_reason: Optional[str]
+    # The provider interprets language into this typed frame.  The operation
+    # is resolved separately against the immutable registry.
+    semantic_frame: Mapping[str, object] = field(default_factory=dict)
 
 
 class FinnV2StructuredOperationSelectorService:
@@ -65,7 +68,7 @@ class FinnV2StructuredOperationSelectorService:
                     ],
                 }),
                 system_role=(
-                    "Select exactly one FINN operation from the supplied immutable manifest. "
+                    "First extract a typed semantic frame, then select exactly one FINN operation from the supplied immutable manifest. "
                     "Do not select modes, tools, scopes, policies, or execution. "
                     "Treat the supplied facts as typed constraints. A capability discourse is always the "
                     "capability contract, even when the question names a plan, setup, strategy, bot, or "
@@ -106,6 +109,9 @@ class FinnV2StructuredOperationSelectorService:
                     "next missing field continues that exact operation. Retain its collected values, "
                     "target and operation_id; do not switch it to clarify_request merely because the "
                     "short answer does not repeat the original object. "
+                    "The semantic frame records meaning, not implementation: goal, object, explicit setup values, "
+                    "persistence intent and an antecedent kind. Do not put a setup type in concept or a timeframe in setup_type. "
+                    "A named value is supplied, never missing. A request not to save or write remains a create request with proposal_only persistence. "
                     "Return the strict schema only."
                 ),
             output_spec=StructuredOutputSpec(
@@ -137,7 +143,9 @@ class FinnV2StructuredOperationSelectorService:
         raw_inputs = parsed.get("missing_inputs")
         if not isinstance(raw_inputs, list) or not all(isinstance(item, str) for item in raw_inputs):
             return None, "selector_missing_inputs_invalid"
+        semantic_frame = self._semantic_frame(parsed.get("semantic_frame"))
         entities = {str(key): self._entity_text(value) for key, value in raw_entities.items()}
+        self._project_frame_entities(entities=entities, frame=semantic_frame)
         self._canonicalize_entities(entities)
         self._project_contract_entities(contract=contract, message=message, entities=entities)
         canonical_entity_asset = resolve_catalog_symbol(entities.get("asset"))
@@ -146,6 +154,7 @@ class FinnV2StructuredOperationSelectorService:
         target_asset = resolve_catalog_symbol(
             self._optional_text(parsed.get("target_asset"))
             or self._optional_text(raw_entities.get("asset"))
+            or self._optional_text(entities.get("asset"))
             or self._optional_text(facts.get("referenced_asset"))
         ) or None
         if target_asset and not entities.get("asset"):
@@ -175,6 +184,7 @@ class FinnV2StructuredOperationSelectorService:
             ),
             missing_inputs=self._canonical_missing_inputs(contract=contract, raw_inputs=raw_inputs, facts=facts),
             ambiguity_reason=self._optional_text(parsed.get("ambiguity_reason")),
+            semantic_frame=semantic_frame,
         ), None
 
     @staticmethod
@@ -212,10 +222,33 @@ class FinnV2StructuredOperationSelectorService:
                 "conversation_reference": {"type": ["string", "null"]},
                 "missing_inputs": {"type": "array", "items": {"type": "string"}},
                 "ambiguity_reason": {"type": ["string", "null"]},
+                "semantic_frame": {
+                    "type": ["object", "null"],
+                    "additionalProperties": False,
+                    "properties": {
+                        "goal": {"type": ["string", "null"]},
+                        "object": {"type": ["string", "null"]},
+                        "target_asset": {"type": ["string", "null"]},
+                        "setup_type": {"type": ["string", "null"]},
+                        "timeframe": {"type": ["string", "null"]},
+                        "name": {"type": ["string", "null"]},
+                        "action_polarity": {"type": ["string", "null"]},
+                        "persistence_intent": {"type": ["string", "null"]},
+                        "reference_kind": {"type": ["string", "null"]},
+                        "new_data_required": {"type": ["boolean", "null"]},
+                        "ambiguities": {"type": "array", "items": {"type": "string"}},
+                        "supplied_inputs": {"type": "array", "items": {"type": "string"}},
+                    },
+                    "required": [
+                        "goal", "object", "target_asset", "setup_type", "timeframe", "name",
+                        "action_polarity", "persistence_intent", "reference_kind", "new_data_required",
+                        "ambiguities", "supplied_inputs",
+                    ],
+                },
             },
             "required": [
                 "operation_id", "confidence", "entities", "target_asset",
-                "conversation_reference", "missing_inputs", "ambiguity_reason",
+                "conversation_reference", "missing_inputs", "ambiguity_reason", "semantic_frame",
             ],
         }
 
@@ -240,6 +273,38 @@ class FinnV2StructuredOperationSelectorService:
         if value is None:
             return ""
         return str(value).strip().strip(",;:)}]\"'").strip()
+
+    @classmethod
+    def _semantic_frame(cls, value: object) -> Mapping[str, object]:
+        """Keep the provider's semantic facts typed and presentation-safe."""
+        if not isinstance(value, Mapping):
+            return {}
+        frame: dict[str, object] = {}
+        for field in (
+            "goal", "object", "target_asset", "setup_type", "timeframe", "name",
+            "action_polarity", "persistence_intent", "reference_kind",
+        ):
+            item = cls._optional_text(value.get(field))
+            if item:
+                frame[field] = item
+        if isinstance(value.get("new_data_required"), bool):
+            frame["new_data_required"] = value["new_data_required"]
+        for field in ("ambiguities", "supplied_inputs"):
+            items = value.get(field)
+            if isinstance(items, list) and all(isinstance(item, str) for item in items):
+                frame[field] = tuple(item for item in items if item)
+        return frame
+
+    @staticmethod
+    def _project_frame_entities(*, entities: dict[str, str], frame: Mapping[str, object]) -> None:
+        """One projection prevents raw frame slots and response entities drifting."""
+        for frame_field, entity_field in (
+            ("target_asset", "asset"), ("setup_type", "setup_type"),
+            ("timeframe", "timeframe"), ("name", "name"),
+        ):
+            value = frame.get(frame_field)
+            if isinstance(value, str) and value.strip() and not entities.get(entity_field):
+                entities[entity_field] = value.strip()
 
     @staticmethod
     def _canonicalize_entities(entities: dict[str, str]) -> None:

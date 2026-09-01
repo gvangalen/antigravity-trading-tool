@@ -23,6 +23,14 @@ from backend.utils.auth_utils import get_current_user
 
 router = APIRouter()
 
+# Prevent proxy buffering from hiding the terminal event or keeping a closed
+# generator observable as an open client stream.
+_SSE_HEADERS = {
+    "Cache-Control": "no-cache, no-transform",
+    "Connection": "keep-alive",
+    "X-Accel-Buffering": "no",
+}
+
 
 def get_gateway_service(db: AsyncSession = Depends(get_db)) -> FinnV2GatewayService:
     return FinnV2GatewayService(db)
@@ -109,4 +117,6 @@ async def stream_finn_v2_run(
                 return
             await asyncio.sleep(0.1)
 
-    return StreamingResponse(event_generator(), media_type="text/event-stream")
+    return StreamingResponse(
+        event_generator(), media_type="text/event-stream", headers=_SSE_HEADERS,
+    )

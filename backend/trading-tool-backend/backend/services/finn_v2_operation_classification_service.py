@@ -18,6 +18,7 @@ from backend.services.finn_v2_structured_operation_selector_service import (
     FinnV2StructuredOperationSelectorService,
 )
 from backend.services.finn_v2_operation_state_service import FinnV2OperationStateService
+from backend.services.finn_v2_operation_resolver_service import FinnV2OperationResolverService
 
 
 @dataclass(frozen=True)
@@ -39,6 +40,7 @@ class SemanticOperationClassification:
     supplied_inputs: Mapping[str, object] = field(default_factory=dict)
     derived_inputs: Mapping[str, object] = field(default_factory=dict)
     selected_missing_inputs: tuple[str, ...] = ()
+    semantic_frame: Mapping[str, object] = field(default_factory=dict)
 
 
 class FinnV2OperationClassificationService:
@@ -49,10 +51,12 @@ class FinnV2OperationClassificationService:
         registry: Optional[FinnV2OperationRegistry] = None,
         preprocessor: Optional[FinnV2RequestPreprocessorService] = None,
         structured_selector: Optional[FinnV2StructuredOperationSelectorService] = None,
+        resolver: Optional[FinnV2OperationResolverService] = None,
     ):
         self.registry = registry or FinnV2OperationRegistry()
         self.preprocessor = preprocessor or FinnV2RequestPreprocessorService()
         self.structured_selector = structured_selector or FinnV2StructuredOperationSelectorService()
+        self.resolver = resolver or FinnV2OperationResolverService(self.registry)
 
     def classify(
         self,
@@ -81,6 +85,12 @@ class FinnV2OperationClassificationService:
             },
             verified_context=self._safe_conversation_state(conversation_context or {}),
         )
+        if selection is not None:
+            selection = self.resolver.resolve(
+                selection=selection,
+                candidates=candidates,
+                conversation_context=conversation_context or {},
+            )
         safe_terminal_operations = {
             "clarify_request", "off_topic", "unsupported_financial_operation",
         }
@@ -236,6 +246,7 @@ class FinnV2OperationClassificationService:
             supplied_inputs=supplied_inputs,
             derived_inputs=derived_inputs,
             selected_missing_inputs=selected_missing_inputs,
+            semantic_frame=dict(getattr(selection, "semantic_frame", {}) or {}),
         )
 
     @staticmethod

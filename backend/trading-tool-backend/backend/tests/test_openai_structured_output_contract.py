@@ -48,8 +48,9 @@ def test_selector_responses_payload_wraps_raw_schema_exactly_once():
     }
     assert set(payload["schema"]["required"]) == {
         "operation_id", "confidence", "entities", "target_asset",
-        "conversation_reference", "missing_inputs", "ambiguity_reason",
+        "conversation_reference", "missing_inputs", "ambiguity_reason", "semantic_frame",
     }
+    assert payload["schema"]["properties"]["semantic_frame"]["additionalProperties"] is False
     assert "schema" not in payload["schema"]
 
 

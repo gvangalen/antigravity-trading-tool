@@ -60,6 +60,18 @@ class ReasoningPolicyContext(BaseModel):
         extra = "forbid"
 
 
+class ReasoningEvidenceBoundary(BaseModel):
+    """Explicit limits on conclusions the supplied evidence can support."""
+
+    verified_facts: List[str] = Field(default_factory=list)
+    verified_absences: List[str] = Field(default_factory=list)
+    unknowns: List[str] = Field(default_factory=list)
+    forbidden_inferences: List[str] = Field(default_factory=list)
+
+    class Config:
+        extra = "forbid"
+
+
 class ReasoningContextPackage(BaseModel):
     run_id: str
     user_id: int
@@ -91,6 +103,7 @@ class ReasoningContextPackage(BaseModel):
     allowed_operation_types: List[str] = Field(default_factory=list)
     uncertainty_codes: List[str] = Field(default_factory=list)
     request_plan: Dict[str, Any] = Field(default_factory=dict)
+    evidence_boundary: ReasoningEvidenceBoundary = Field(default_factory=ReasoningEvidenceBoundary)
 
     @validator("evidence")
     def _validate_unique_evidence_ids(cls, value: List[ReasoningEvidenceItem]) -> List[ReasoningEvidenceItem]:

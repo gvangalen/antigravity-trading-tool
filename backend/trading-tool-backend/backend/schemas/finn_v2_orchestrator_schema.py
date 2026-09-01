@@ -87,6 +87,10 @@ class RequestPlan(BaseModel):
     selection_supported: Optional[bool] = None
     selection_reason_code: Optional[str] = None
     unsupported_capability: Optional[str] = None
+    # Provider-interpreted meaning, projected through the registry resolver.
+    # This is provenance only; downstream services consume the resolved
+    # operation contract and must never route from this payload.
+    semantic_frame: Dict[str, object] = Field(default_factory=dict)
     missing_information: List[str] = Field(default_factory=list)
     # This is persisted in the existing conversation context as JSON.  Keeping
     # the shape here prevents guided operations from falling back to untyped
