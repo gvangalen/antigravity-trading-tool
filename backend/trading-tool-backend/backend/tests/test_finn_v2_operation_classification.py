@@ -278,6 +278,34 @@ def test_model_first_selector_receives_safe_terminal_lineage_context():
     assert captured["verified_context"]["last_safe_terminal_context"] == context["last_safe_terminal_context"]
 
 
+def test_consequence_follow_up_reaches_the_model_with_typed_lineage_facts():
+    captured = {}
+
+    class Selector:
+        def select(self, **kwargs):
+            captured.update(kwargs)
+            return type("Selection", (), {
+                "operation_id": "explain_previous_evidence", "confidence": 0.9,
+                "entities": {}, "target_asset": None,
+                "conversation_reference": "previous_verified_response",
+                "missing_inputs": (), "ambiguity_reason": None,
+            })(), None
+
+    classifier = FinnV2OperationClassificationService(structured_selector=Selector())
+    result = classifier.classify(
+        message="Welke controle volgt daaruit voor mijn bot?",
+        conversation_context={
+            "last_verified_context": {
+                "verified_response_id": "verified-1", "run_id": "run-1",
+                "evidence_refs": ["E1"],
+            },
+        },
+    )
+
+    assert result.operation_id == "explain_previous_evidence"
+    assert captured["facts"]["discourse_act"] == "contextual_follow_up"
+
+
 def test_provider_failure_is_terminal_and_never_selects_a_local_operation():
     class ExplodingSelector:
         def select(self, **_kwargs):

@@ -33,6 +33,14 @@ def test_preprocessor_marks_semantic_simplification_as_reformulation():
     assert facts.discourse_act == "reformulation"
 
 
+def test_preprocessor_keeps_consequence_questions_as_contextual_follow_ups():
+    facts = FinnV2RequestPreprocessorService().preprocess(
+        message="Welke controle volgt daaruit voor mijn automatisering?"
+    )
+
+    assert facts.discourse_act == "contextual_follow_up"
+
+
 def test_preprocessor_extracts_catalog_assets_and_guided_slot_values_from_natural_compounds():
     preprocessor = FinnV2RequestPreprocessorService()
 

@@ -76,6 +76,15 @@ def test_scheduled_call_slots_are_limited_per_scope(monkeypatch):
     assert ai_availability_service.acquire_ai_call_slot("setup:7:ETH", scheduled=True) is True
 
 
+def test_call_slot_honors_a_typed_boundary_override(monkeypatch):
+    monkeypatch.setattr(ai_availability_service, "_redis_client", lambda: None)
+    ai_availability_service.reset_ai_availability_for_tests()
+
+    assert ai_availability_service.acquire_ai_call_slot("selector:7:GLOBAL", limit_override=2) is True
+    assert ai_availability_service.acquire_ai_call_slot("selector:7:GLOBAL", limit_override=2) is True
+    assert ai_availability_service.acquire_ai_call_slot("selector:7:GLOBAL", limit_override=2) is False
+
+
 def test_embeddings_are_disabled_in_no_budget_mode(monkeypatch):
     class _Embeddings:
         def create(self, **kwargs):

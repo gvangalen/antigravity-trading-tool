@@ -537,8 +537,20 @@ def _call_scope() -> tuple[str, bool]:
 
 
 def _rate_limit_allows_call() -> bool:
+    context = dict(get_ai_usage_context() or {})
     scope, scheduled = _call_scope()
-    allowed = acquire_ai_call_slot(scope, scheduled=scheduled)
+    limit_override = None
+    if context.get("entry_point") == "finn_v2_selector":
+        # Every interactive turn must pass the model-first selector before a
+        # contract can choose tools or a deterministic response. Keep that
+        # small paid call bounded separately from broader reasoning calls so
+        # a busy conversation cannot strand later user turns in UNAVAILABLE.
+        generic_limit = max(1, int(os.getenv("OPENAI_MAX_CALLS_PER_SCOPE_WINDOW", "20")))
+        limit_override = max(
+            generic_limit,
+            int(os.getenv("OPENAI_MAX_SELECTOR_CALLS_PER_SCOPE_WINDOW", "60")),
+        )
+    allowed = acquire_ai_call_slot(scope, scheduled=scheduled, limit_override=limit_override)
     if not allowed:
         _log_openai_quota_skip("ai_rate_limited")
     return allowed

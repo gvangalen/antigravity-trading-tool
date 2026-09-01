@@ -376,6 +376,20 @@ class FinnV2RequestPreprocessorService:
             return "capability"
         if "reformulation" in references:
             return "reformulation"
+        # A question about the consequence that follows from a prior result
+        # remains contextual even when it introduces a concrete FINN object.
+        # The selector decides which lineage contract applies; this only keeps
+        # the grammatical reference available to that model boundary.
+        if re.search(
+            r"\b(?:welk(?:e)?|wat)\b(?:\s+\w+){0,4}\s+"
+            r"(?:volgt|vloeit\s+voort|komt\s+voort)\s+(?:daaruit|daar\s+uit)\b",
+            text,
+        ) or re.search(
+            r"\b(?:which|what)\b(?:\s+\w+){0,4}\s+"
+            r"(?:follows|flows)\s+(?:from\s+that|therefrom)\b",
+            text,
+        ):
+            return "contextual_follow_up"
         if "contextual_implication" in references:
             return "contextual_follow_up"
         if "previous_verified_conclusion" in references:

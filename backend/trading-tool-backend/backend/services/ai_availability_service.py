@@ -146,11 +146,18 @@ def should_emit_block_event(scope: str, reason: str) -> bool:
     return True
 
 
-def acquire_ai_call_slot(scope: str, *, scheduled: bool = False) -> bool:
+def acquire_ai_call_slot(
+    scope: str, *, scheduled: bool = False, limit_override: int | None = None
+) -> bool:
     """Bound model calls per user/agent scope before any paid request is sent."""
     window = max(60, int(os.getenv("OPENAI_CALL_WINDOW_SECONDS", "3600")))
     default_limit = "1" if scheduled else "20"
-    limit = max(1, int(os.getenv("OPENAI_MAX_CALLS_PER_SCOPE_WINDOW", default_limit)))
+    limit = max(
+        1,
+        int(limit_override)
+        if limit_override is not None
+        else int(os.getenv("OPENAI_MAX_CALLS_PER_SCOPE_WINDOW", default_limit)),
+    )
     bucket = int(time.time()) // window
     normalized_scope = (scope or "unscoped").replace(" ", "_")[:180]
     key = f"tradamind:ai:openai:call-slot:{bucket}:{normalized_scope}"
