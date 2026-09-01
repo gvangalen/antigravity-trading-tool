@@ -21,6 +21,14 @@ def test_preprocessor_marks_portfolio_as_a_financial_object_without_selecting_an
     )
 
     assert "portfolio" in facts.explicit_entities
+
+
+def test_preprocessor_marks_autonomous_market_decision_delegation_as_execution():
+    facts = FinnV2RequestPreprocessorService().preprocess(
+        message="Neem voortaan zelfstandig alle koop- en verkoopbesluiten voor mij."
+    )
+
+    assert facts.action_polarity == "execute"
     assert facts.domain_hint == "financial"
 
 

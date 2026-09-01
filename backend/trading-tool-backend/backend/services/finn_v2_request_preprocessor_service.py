@@ -308,6 +308,12 @@ class FinnV2RequestPreprocessorService:
             return "activate"
         if re.search(r"\bpas\b.*\baan\b", text):
             return "update"
+        # Delegating autonomous buy/sell decisions is a financial execution
+        # safety fact.  This remains independent from the eventual contract
+        # selection and prevents an unrecognised provider frame from treating
+        # a consequential request as unrelated conversation.
+        if self._is_autonomous_market_decision_delegation(text):
+            return "execute"
         # Confirmation qualifies a proposal lifecycle; it never changes the
         # mutation the user is asking FINN to prepare.
         if any(term in text for term in ("watchlist", "volglijst", "marktenlijst")) and self._contains_any(
@@ -345,6 +351,19 @@ class FinnV2RequestPreprocessorService:
                     continue
                 return polarity
         return "read"
+
+    @staticmethod
+    def _is_autonomous_market_decision_delegation(text: str) -> bool:
+        autonomy = r"\b(?:autonoom|autonome|autonomous|zelfstandig)\b"
+        # Dutch compounds such as ``verkoopbesluiten`` carry the same
+        # delegation semantics as a separate "koopbesluit" phrase.
+        decision = r"\b(?:\w*besluit\w*|decision\w*)\b"
+        market_act = r"\b(?:koop\w*|verkoop\w*|buy\w*|sell\w*|trade\w*|handel\w*|orders?)\b"
+        return bool(
+            re.search(autonomy, text)
+            and re.search(decision, text)
+            and re.search(market_act, text)
+        )
 
     @classmethod
     def _discourse_act(cls, text: str, entities: tuple[str, ...], references: tuple[str, ...], action: str) -> str:
