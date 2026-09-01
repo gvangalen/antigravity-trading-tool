@@ -2,6 +2,7 @@ from types import SimpleNamespace
 
 from backend.schemas.finn_v2_reasoning_context_schema import (
     ReasoningContextPackage,
+    ReasoningEvidenceItem,
     ReasoningPolicyContext,
 )
 from backend.services.finn_v2_reasoning_fallback_service import FinnV2ReasoningFallbackService
@@ -117,6 +118,35 @@ def test_degraded_evidence_follow_up_explains_scopes_and_gap_without_promoting_c
     assert "indicator configuration" in result.direct_answer
     assert "geen volledig toetsbare beslisregel" in result.main_observation
     assert result.evidence_refs_used == ["E1", "E2"]
+
+
+def test_bot_consequence_renders_a_concrete_evidence_bounded_check():
+    context = _lineage_context("explain_previous_evidence").copy(deep=True)
+    context.request_plan["semantic_frame"] = {"goal": "consequence", "object": "bot"}
+    context.evidence = [
+        ReasoningEvidenceItem(
+            evidence_id="Ebot",
+            artifact_id="artifact-bot",
+            tool_name="read_bot_status",
+            domain="automation_context",
+            entity_type="bot_status",
+            entity_id="170",
+            source="bot_repository",
+            freshness="fresh",
+            confidence="high",
+            facts={"is_live": False},
+        )
+    ]
+
+    result = FinnV2ReasoningFallbackService().lineage_draft(
+        run_id="run-follow-up", user_id=388, operation_id="explain_previous_evidence",
+        context=context, model="deterministic",
+    )
+
+    assert "bot 170" in result.direct_answer
+    assert "niet live" in result.direct_answer
+    assert "rechtvaardigt geen botwijziging" in result.main_observation
+    assert result.evidence_refs_used == ["Ebot"]
 
 
 def test_off_topic_terminal_answers_off_topic_instead_of_financial_unavailable():

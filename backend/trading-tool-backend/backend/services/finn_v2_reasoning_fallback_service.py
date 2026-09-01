@@ -76,6 +76,12 @@ class FinnV2ReasoningFallbackService:
         released_response = dict(state.get("previous_degraded_released_response") or {})
         degraded_scopes = list(state.get("previous_degraded_evidence_scopes") or [])
         terminal_reason = str(state.get("previous_safe_terminal_reason") or "").strip()
+        semantic_frame = dict((context.request_plan or {}).get("semantic_frame") or {})
+        is_bot_consequence = (
+            operation_id == "explain_previous_evidence"
+            and str(semantic_frame.get("goal") or "").strip().casefold() == "consequence"
+            and str(semantic_frame.get("object") or "").strip().casefold() == "bot"
+        )
         if operation_id == "explain_previous_evidence" and terminal_reason == "outside_finn_scope":
             return ReasoningResult(
                 reasoning_result_id=f"finn-v2-reasoning-{uuid.uuid4().hex}",
@@ -94,6 +100,14 @@ class FinnV2ReasoningFallbackService:
                     "operation_id": operation_id,
                 },
                 model=model, created_at=datetime.now(timezone.utc),
+            )
+        if is_bot_consequence:
+            return self._bot_consequence_draft(
+                run_id=run_id,
+                user_id=user_id,
+                context=context,
+                refs=refs,
+                model=model,
             )
         if operation_id == "explain_previous_evidence" and refs:
             scope_text = ", ".join(str(scope).replace("_", " ") for scope in degraded_scopes) or "de opgeslagen FINN-evidence"
@@ -166,6 +180,52 @@ class FinnV2ReasoningFallbackService:
         return self.unavailable_draft(
             run_id=run_id, user_id=user_id, mode="UNAVAILABLE",
             error_codes=["lineage_operation_requires_model"], model=model,
+        )
+
+    @staticmethod
+    def _bot_consequence_draft(
+        *, run_id: str, user_id: int, context: ReasoningContextPackage, refs: list[str], model: str,
+    ) -> ReasoningResult:
+        """Render a read-only, evidence-bounded bot check from typed lineage."""
+        bot = next(
+            (
+                item for item in context.evidence
+                if item.tool_name in {"read_linked_bot", "read_bot_status"}
+            ),
+            None,
+        )
+        if bot is None:
+            answer = (
+                "Concrete botcontrole: verifieer eerst de geregistreerde status van de gekoppelde bot; "
+                "de eerdere planconclusie bevat geen geverifieerde botstatus."
+            )
+            observation = (
+                "De eerdere conclusie bewijst geen effect op de bot en rechtvaardigt geen wijziging, activatie of uitvoering."
+            )
+        else:
+            facts = dict(bot.facts or {})
+            bot_id = str(bot.entity_id or facts.get("id") or "de gekoppelde bot")
+            if "is_live" in facts:
+                state = "live" if bool(facts["is_live"]) else "niet live"
+                answer = f"Concrete botcontrole: bevestig dat bot {bot_id} geregistreerd {state} staat."
+            else:
+                answer = f"Concrete botcontrole: controleer de geregistreerde status van bot {bot_id}."
+            observation = (
+                "De eerdere conclusie bewijst geen oorzakelijk effect op deze bot en rechtvaardigt geen botwijziging of uitvoering."
+            )
+        return ReasoningResult(
+            reasoning_result_id=f"finn-v2-reasoning-{uuid.uuid4().hex}",
+            run_id=run_id,
+            user_id=user_id,
+            mode="EVALUATE",
+            direct_answer=answer,
+            main_observation=observation,
+            uncertainty_summary="De controle beschrijft alleen verifieerbare botgegevens; prestaties en causaliteit blijven onbekend.",
+            uncertainty_codes=["evidence_bounded_consequence"],
+            evidence_refs_used=refs,
+            reasoning_provenance={"reasoning_source": "lineage_consequence", "operation_id": "explain_previous_evidence"},
+            model=model,
+            created_at=datetime.now(timezone.utc),
         )
     @staticmethod
     def _indicator_names(facts: dict[str, Any], category: str) -> list[str]:
