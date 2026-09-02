@@ -69,7 +69,11 @@ class FinnV2OperationResolverService:
             for item in (request_facts or {}).get("explicit_entities", ())
             if isinstance(item, str)
         }
-        if goal == "read" and {"setup", "strategy", "bot"}.issubset(explicit_entities):
+        if (
+            selection.operation_id in {"read_active_setup", "read_active_plan", "read_linked_bot"}
+            and str((request_facts or {}).get("action_polarity") or "") == "read"
+            and {"setup", "strategy", "bot"}.issubset(explicit_entities)
+        ):
             operation_id = "read_linked_bot"
         # The provider still extracts the subject from free text.  Once it
         # has identified a plan, however, a deterministic assessment fact

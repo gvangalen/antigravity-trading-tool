@@ -101,7 +101,7 @@ def test_explicit_graph_entities_complete_an_underprojected_read_frame():
         selection=_selection("read_active_setup", {"goal": "read", "object": "setup"}),
         candidates=registry.list(),
         conversation_context={},
-        request_facts={"explicit_entities": ("setup", "strategy", "bot")},
+        request_facts={"action_polarity": "read", "explicit_entities": ("setup", "strategy", "bot")},
     )
 
     assert resolved.operation_id == "read_linked_bot"
