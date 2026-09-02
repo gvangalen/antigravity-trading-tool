@@ -94,6 +94,7 @@ jobs:
         env:
           SERVER_IP: ${{ steps.deploy-inputs.outputs.server_ip }}
           SSH_KEY: ${{ runner.temp }}/tradamind-deploy-key
+          DEPLOY_GIT_TOKEN: ${{ github.token }}
           SKIP_GIT_PUSH: "true"
         run: |
           set -euo pipefail

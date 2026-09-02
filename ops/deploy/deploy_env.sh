@@ -18,6 +18,7 @@ STRICT_DEEP_HEALTH="${STRICT_DEEP_HEALTH:-false}"
 STRICT_EXTERNAL_SMOKE="${STRICT_EXTERNAL_SMOKE:-false}"
 DEPLOY_COMPONENT_SET="${DEPLOY_COMPONENT_SET:-full}"
 AUTO_ROLLBACK_ON_FAILURE="${AUTO_ROLLBACK_ON_FAILURE:-true}"
+DEPLOY_GIT_TOKEN="${DEPLOY_GIT_TOKEN:-}"
 MIGRATION_COMMAND_TIMEOUT_SECONDS="${MIGRATION_COMMAND_TIMEOUT_SECONDS:-180}"
 # A Celery worker is reported online by PM2 before its task registry is ready.
 # Production cold starts have taken just over a minute, so keep the real
@@ -122,8 +123,9 @@ ROLLBACK_COMMAND="ssh -i \"$SSH_KEY\" ubuntu@$SERVER_IP 'cd $REMOTE_DIR && ENVIR
 echo "🌐 2. Deploying ${ENVIRONMENT} commit ${TARGET_COMMIT}..."
 echo "🧭 Previous known-good commit: ${ROLLBACK_COMMIT}"
 
-if ! ssh "${SSH_ARGS[@]}" "ubuntu@$SERVER_IP" "
+if ! printf '%s\n' "$DEPLOY_GIT_TOKEN" | ssh "${SSH_ARGS[@]}" "ubuntu@$SERVER_IP" "
   set -euo pipefail
+  IFS= read -r DEPLOY_GIT_TOKEN || true
   export PATH=$NODE_BIN:\$PATH
   export APP_ENV=$ENVIRONMENT
   export BACKEND_PORT=$BACKEND_PORT
@@ -155,7 +157,14 @@ if ! ssh "${SSH_ARGS[@]}" "ubuntu@$SERVER_IP" "
   sync_git_ref() {
     for attempt in \$(seq 1 5); do
       rm -f .git/index.lock .git/refs/remotes/origin/$BRANCH.lock .git/refs/remotes/origin/$BRANCH
-      if git fetch origin $BRANCH; then
+      if [ -n \"\$DEPLOY_GIT_TOKEN\" ]; then
+        GIT_CONFIG_COUNT=1 \\
+          GIT_CONFIG_KEY_0='http.https://github.com/.extraheader' \\
+          GIT_CONFIG_VALUE_0=\"AUTHORIZATION: basic \$(printf 'x-access-token:%s' \"\$DEPLOY_GIT_TOKEN\" | base64 | tr -d '\\n')\" \\
+          git fetch origin $BRANCH
+      else
+        git fetch origin $BRANCH
+      fi; then
         return 0
       fi
       echo \"⏳ Waiting for git lock to clear (attempt \$attempt/5)...\" >&2
