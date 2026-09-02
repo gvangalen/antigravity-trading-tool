@@ -16,6 +16,18 @@ jobs:
       RAW_SERVER_IP: ${{ secrets.HOST || secrets.SERVER_IP || vars.HOST || vars.SERVER_IP }}
       RAW_DEPLOY_KEY: ${{ secrets.SSH_PRIVATE_KEY || secrets.DEPLOY_SSH_KEY }}
     steps:
+      - name: Checkout immutable candidate source
+        uses: actions/checkout@v5.1.0
+        with:
+          ref: ${{ env.CANDIDATE_SHA }}
+          fetch-depth: 0
+
+      - name: Package candidate commit for the disposable server worktree
+        shell: bash
+        run: |
+          set -euo pipefail
+          git bundle create "$RUNNER_TEMP/finn-selector-candidate.bundle" "$CANDIDATE_SHA"
+
       - name: Prepare ephemeral host access
         shell: bash
         run: |
@@ -24,6 +36,15 @@ jobs:
           test -n "${RAW_DEPLOY_KEY:-}"
           printf '%s\n' "$RAW_DEPLOY_KEY" > "$RUNNER_TEMP/deploy-key"
           chmod 600 "$RUNNER_TEMP/deploy-key"
+
+      - name: Transfer immutable candidate bundle
+        shell: bash
+        run: |
+          set -euo pipefail
+          /usr/bin/scp -i "$RUNNER_TEMP/deploy-key" \
+            -o StrictHostKeyChecking=no \
+            "$RUNNER_TEMP/finn-selector-candidate.bundle" \
+            "ubuntu@$RAW_SERVER_IP:/tmp/finn-selector-candidate-${GITHUB_RUN_ID}.bundle"
 
       - name: Run candidate development and regression selector datasets serially
         shell: bash
@@ -41,13 +62,14 @@ jobs:
 
           cleanup() {
             git -C "$remote_dir" worktree remove --force "$worktree_dir" >/dev/null 2>&1 || true
+            rm -f "/tmp/finn-selector-candidate-${RUN_ID}.bundle"
           }
           trap cleanup EXIT
 
           set -o allexport
           source "$HOME/.secrets/trading.env"
           set +o allexport
-          git -C "$remote_dir" fetch origin "$CANDIDATE_SHA" >/dev/null
+          git -C "$remote_dir" fetch "/tmp/finn-selector-candidate-${RUN_ID}.bundle" "$CANDIDATE_SHA" >/dev/null
           git -C "$remote_dir" worktree add --detach "$worktree_dir" "$CANDIDATE_SHA" >/dev/null
           cd "$worktree_dir/backend/trading-tool-backend"
           mkdir -p "$result_dir"
