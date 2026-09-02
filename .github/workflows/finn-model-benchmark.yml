@@ -1,4 +1,4 @@
-name: FINN Selector Model Benchmark (Temporary)
+name: FINN Selector Candidate Evaluation (Temporary)
 
 on:
   push:
@@ -12,7 +12,7 @@ jobs:
     permissions:
       contents: read
     env:
-      BASELINE_SHA: 4b2619eda8ac316650e6731654798e02a352d183
+      CANDIDATE_SHA: dc0447f08ab14a836bb26e32ba5af928c2d142aa
       RAW_SERVER_IP: ${{ secrets.HOST || secrets.SERVER_IP || vars.HOST || vars.SERVER_IP }}
       RAW_DEPLOY_KEY: ${{ secrets.SSH_PRIVATE_KEY || secrets.DEPLOY_SSH_KEY }}
     steps:
@@ -25,20 +25,19 @@ jobs:
           printf '%s\n' "$RAW_DEPLOY_KEY" > "$RUNNER_TEMP/deploy-key"
           chmod 600 "$RUNNER_TEMP/deploy-key"
 
-      - name: Run exact-baseline selector datasets serially
+      - name: Run candidate development and regression selector datasets serially
         shell: bash
         run: |
           set -euo pipefail
-          for MODEL in gpt-4o-mini gpt-5.6-terra gpt-5.6-sol; do
-            /usr/bin/ssh -i "$RUNNER_TEMP/deploy-key" \
-              -o StrictHostKeyChecking=no \
-              -o ConnectTimeout=20 \
-              "ubuntu@$RAW_SERVER_IP" \
-              "BASELINE_SHA='$BASELINE_SHA' MODEL='$MODEL' RUN_ID='${GITHUB_RUN_ID}' bash -s" <<'REMOTE'
+          /usr/bin/ssh -i "$RUNNER_TEMP/deploy-key" \
+            -o StrictHostKeyChecking=no \
+            -o ConnectTimeout=20 \
+            "ubuntu@$RAW_SERVER_IP" \
+            "CANDIDATE_SHA='$CANDIDATE_SHA' RUN_ID='${GITHUB_RUN_ID}' bash -s" <<'REMOTE'
           set -euo pipefail
           remote_dir=/home/ubuntu/antigravity-trading-tool
-          worktree_dir="/tmp/finn-model-canary-${RUN_ID}"
-          result_dir="/tmp/finn-model-benchmark-${RUN_ID}"
+          worktree_dir="/tmp/finn-selector-candidate-${RUN_ID}"
+          result_dir="/tmp/finn-selector-candidate-${RUN_ID}"
 
           cleanup() {
             git -C "$remote_dir" worktree remove --force "$worktree_dir" >/dev/null 2>&1 || true
@@ -48,34 +47,34 @@ jobs:
           set -o allexport
           source "$HOME/.secrets/trading.env"
           set +o allexport
-          git -C "$remote_dir" worktree add --detach "$worktree_dir" "$BASELINE_SHA" >/dev/null
+          git -C "$remote_dir" fetch origin "$CANDIDATE_SHA" >/dev/null
+          git -C "$remote_dir" worktree add --detach "$worktree_dir" "$CANDIDATE_SHA" >/dev/null
           cd "$worktree_dir/backend/trading-tool-backend"
           mkdir -p "$result_dir"
 
           for dataset in development regression; do
-            OPENAI_MODEL="$MODEL" FINN_V2_REAL_SELECTOR_EVAL=1 PYTHONPATH=. \
+            OPENAI_MODEL="gpt-4o-mini" FINN_V2_REAL_SELECTOR_EVAL=1 PYTHONPATH=. \
               python3 backend/scripts/run_finn_v2_selector_eval.py "$dataset" \
                 --min-interval-seconds 2 \
-                --output "$result_dir/${MODEL}-${dataset}.json"
+                --output "$result_dir/gpt-4o-mini-${dataset}.json"
           done
           REMOTE
-          done
 
       - name: Collect raw redacted selector projections
         if: always()
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p "$RUNNER_TEMP/finn-model-benchmark"
+          mkdir -p "$RUNNER_TEMP/finn-selector-candidate"
           /usr/bin/scp -i "$RUNNER_TEMP/deploy-key" \
             -o StrictHostKeyChecking=no \
-            "ubuntu@$RAW_SERVER_IP:/tmp/finn-model-benchmark-${GITHUB_RUN_ID}/*" \
-            "$RUNNER_TEMP/finn-model-benchmark/"
+            "ubuntu@$RAW_SERVER_IP:/tmp/finn-selector-candidate-${GITHUB_RUN_ID}/*" \
+            "$RUNNER_TEMP/finn-selector-candidate/"
 
       - name: Upload benchmark projections
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: finn-selector-model-benchmark-${{ github.run_id }}
-          path: ${{ runner.temp }}/finn-model-benchmark
+          name: finn-selector-candidate-${{ github.run_id }}
+          path: ${{ runner.temp }}/finn-selector-candidate
           if-no-files-found: error
