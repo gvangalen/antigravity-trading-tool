@@ -157,14 +157,17 @@ if ! printf '%s\n' "$DEPLOY_GIT_TOKEN" | ssh "${SSH_ARGS[@]}" "ubuntu@$SERVER_IP
   sync_git_ref() {
     for attempt in \$(seq 1 5); do
       rm -f .git/index.lock .git/refs/remotes/origin/$BRANCH.lock .git/refs/remotes/origin/$BRANCH
-      if [ -n \"\$DEPLOY_GIT_TOKEN\" ]; then
-        GIT_CONFIG_COUNT=1 \\
-          GIT_CONFIG_KEY_0='http.https://github.com/.extraheader' \\
-          GIT_CONFIG_VALUE_0=\"AUTHORIZATION: basic \$(printf 'x-access-token:%s' \"\$DEPLOY_GIT_TOKEN\" | base64 | tr -d '\\n')\" \\
+      fetch_origin() {
+        if [ -n \"\$DEPLOY_GIT_TOKEN\" ]; then
+          GIT_CONFIG_COUNT=1 \\
+            GIT_CONFIG_KEY_0='http.https://github.com/.extraheader' \\
+            GIT_CONFIG_VALUE_0=\"AUTHORIZATION: basic \$(printf 'x-access-token:%s' \"\$DEPLOY_GIT_TOKEN\" | base64 | tr -d '\\n')\" \\
+            git fetch origin $BRANCH
+        else
           git fetch origin $BRANCH
-      else
-        git fetch origin $BRANCH
-      fi; then
+        fi
+      }
+      if fetch_origin; then
         return 0
       fi
       echo \"⏳ Waiting for git lock to clear (attempt \$attempt/5)...\" >&2
