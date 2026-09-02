@@ -33,6 +33,7 @@ class FinnV2PreprocessedRequest:
     financial_concept: Optional[str] = None
     financial_execution_intent: bool = False
     ambiguous_reference: bool = False
+    explicit_plan_subject: bool = False
 
 
 class FinnV2RequestPreprocessorService:
@@ -254,6 +255,7 @@ class FinnV2RequestPreprocessorService:
             financial_concept=concept,
             financial_execution_intent=financial_execution_intent,
             ambiguous_reference=ambiguous_reference,
+            explicit_plan_subject=explicit_plan,
         )
 
     @staticmethod

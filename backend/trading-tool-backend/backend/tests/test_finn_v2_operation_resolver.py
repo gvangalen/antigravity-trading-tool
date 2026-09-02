@@ -107,6 +107,22 @@ def test_explicit_graph_entities_complete_an_underprojected_read_frame():
     assert resolved.operation_id == "read_linked_bot"
 
 
+def test_explicit_plan_subject_keeps_the_complete_plan_read_contract():
+    registry = FinnV2OperationRegistry()
+    resolved = FinnV2OperationResolverService(registry).resolve(
+        selection=_selection("read_active_plan", {"goal": "read", "object": "plan"}),
+        candidates=registry.list(),
+        conversation_context={},
+        request_facts={
+            "action_polarity": "read",
+            "explicit_plan_subject": True,
+            "explicit_entities": ("plan", "setup", "strategy", "bot"),
+        },
+    )
+
+    assert resolved.operation_id == "read_active_plan"
+
+
 def test_unbound_execute_frame_fails_to_clarification_not_an_execution_contract():
     registry = FinnV2OperationRegistry()
     resolved = FinnV2OperationResolverService(registry).resolve(

@@ -449,6 +449,18 @@ def test_explicit_target_asset_never_replaces_workspace_context_asset():
     assert facts.referenced_asset == "ADA"
 
 
+def test_preprocessor_distinguishes_an_explicit_plan_from_an_inferred_graph_subject():
+    explicit_plan = CLASSIFIER.preprocessor.preprocess(
+        message="Show my active plan with its setup, strategy, and bot."
+    )
+    graph_only = CLASSIFIER.preprocessor.preprocess(
+        message="Which strategy and bot are linked to my active setup?"
+    )
+
+    assert explicit_plan.explicit_plan_subject is True
+    assert graph_only.explicit_plan_subject is False
+
+
 def test_catalog_canonicalizes_cosmos_before_selector_or_proposal_boundaries():
     facts = CLASSIFIER.preprocessor.preprocess(message="Neem Cosmos op in mijn lijst met gevolgde assets.")
 
