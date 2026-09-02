@@ -26,7 +26,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          git bundle create "$RUNNER_TEMP/finn-selector-candidate.bundle" "$CANDIDATE_SHA" ^origin/main
+          git bundle create "$RUNNER_TEMP/finn-selector-candidate.bundle" HEAD~1..HEAD
 
       - name: Prepare ephemeral host access
         shell: bash
@@ -62,6 +62,7 @@ jobs:
 
           cleanup() {
             git -C "$remote_dir" worktree remove --force "$worktree_dir" >/dev/null 2>&1 || true
+            git -C "$remote_dir" update-ref -d "refs/finn-selector-candidate/${RUN_ID}" >/dev/null 2>&1 || true
             rm -f "/tmp/finn-selector-candidate-${RUN_ID}.bundle"
           }
           trap cleanup EXIT
@@ -69,8 +70,10 @@ jobs:
           set -o allexport
           source "$HOME/.secrets/trading.env"
           set +o allexport
-          git -C "$remote_dir" fetch "/tmp/finn-selector-candidate-${RUN_ID}.bundle" "$CANDIDATE_SHA" >/dev/null
-          git -C "$remote_dir" worktree add --detach "$worktree_dir" "$CANDIDATE_SHA" >/dev/null
+          candidate_ref="refs/finn-selector-candidate/${RUN_ID}"
+          git -C "$remote_dir" fetch "/tmp/finn-selector-candidate-${RUN_ID}.bundle" "HEAD:${candidate_ref}" >/dev/null
+          test "$(git -C "$remote_dir" rev-parse "$candidate_ref")" = "$CANDIDATE_SHA"
+          git -C "$remote_dir" worktree add --detach "$worktree_dir" "$candidate_ref" >/dev/null
           cd "$worktree_dir/backend/trading-tool-backend"
           mkdir -p "$result_dir"
 
