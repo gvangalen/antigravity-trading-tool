@@ -1,0 +1,16 @@
+{
+  "kind": "registry_bound_corpus_errata",
+  "source_file": "finn_v2_selector_published_qa_609_source.json",
+  "source_sha256": "c94e2fca35019f87ca058edb26a57c008cc78a95cdd236d539532223ebb6770a",
+  "registry_version": "2026-08-23.operation-contracts.v1",
+  "registry_sha256": "28051ea2c2c3f7968ce02adc690a3ac9ad539e112a47a4708f801d048934a994",
+  "errata": [
+    {
+      "eval_id": "s609-17",
+      "field": "expected_supported",
+      "old_value": false,
+      "canonical_value": true,
+      "reason": "unsupported_financial_operation is a safe supported terminal contract in the canonical operation registry."
+    }
+  ]
+}

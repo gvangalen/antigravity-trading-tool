@@ -1,0 +1,439 @@
+{
+  "dataset": "independent_qa_holdout_609",
+  "frozen_before_repository_review": true,
+  "cases": [
+    {
+      "eval_id": "s609-01",
+      "input_query": "Waarmee kun jij mij binnen Tradamind verantwoord helpen?",
+      "expected_operation_id": "capability",
+      "expected_domain": "system",
+      "expected_supported": true,
+      "expected_entities": {},
+      "expected_target_asset": null,
+      "expected_action_polarity": "read",
+      "expected_conversation_reference": null,
+      "expected_clarification": false,
+      "expected_missing_inputs": [],
+      "registry_required_inputs": [],
+      "registry_contract_version": "2026-08-23.operation-contracts.v1"
+    },
+    {
+      "eval_id": "s609-02",
+      "input_query": "Leg in gewone taal uit wat MACD meet.",
+      "expected_operation_id": "explain_financial_concept",
+      "expected_domain": "financial_education",
+      "expected_supported": true,
+      "expected_entities": {
+        "concept": "MACD"
+      },
+      "expected_target_asset": null,
+      "expected_action_polarity": "read",
+      "expected_conversation_reference": null,
+      "expected_clarification": false,
+      "expected_missing_inputs": [],
+      "registry_required_inputs": [
+        "concept"
+      ],
+      "registry_contract_version": "2026-08-23.operation-contracts.v1"
+    },
+    {
+      "eval_id": "s609-03",
+      "input_query": "Op welk effect staat mijn werkruimte nu?",
+      "expected_operation_id": "read_active_asset",
+      "expected_domain": "asset",
+      "expected_supported": true,
+      "expected_entities": {},
+      "expected_target_asset": null,
+      "expected_action_polarity": "read",
+      "expected_conversation_reference": null,
+      "expected_clarification": false,
+      "expected_missing_inputs": [],
+      "registry_required_inputs": [],
+      "registry_contract_version": "2026-08-23.operation-contracts.v1"
+    },
+    {
+      "eval_id": "s609-04",
+      "input_query": "Toon de indicatorregels die mijn account specifiek voor bitcoin bewaart.",
+      "expected_operation_id": "read_indicator_configuration",
+      "expected_domain": "indicators",
+      "expected_supported": true,
+      "expected_entities": {
+        "asset": "BTC"
+      },
+      "expected_target_asset": "BTC",
+      "expected_action_polarity": "read",
+      "expected_conversation_reference": null,
+      "expected_clarification": false,
+      "expected_missing_inputs": [],
+      "registry_required_inputs": [],
+      "registry_contract_version": "2026-08-23.operation-contracts.v1"
+    },
+    {
+      "eval_id": "s609-05",
+      "input_query": "Which indicators has my account saved for ether?",
+      "expected_operation_id": "read_indicator_configuration",
+      "expected_domain": "indicators",
+      "expected_supported": true,
+      "expected_entities": {
+        "asset": "ETH"
+      },
+      "expected_target_asset": "ETH",
+      "expected_action_polarity": "read",
+      "expected_conversation_reference": null,
+      "expected_clarification": false,
+      "expected_missing_inputs": [],
+      "registry_required_inputs": [],
+      "registry_contract_version": "2026-08-23.operation-contracts.v1"
+    },
+    {
+      "eval_id": "s609-06",
+      "input_query": "Geef een onderbouwd oordeel over de samenhang van mijn hele BTC-handelsplan.",
+      "expected_operation_id": "evaluate_plan",
+      "expected_domain": "plan",
+      "expected_supported": true,
+      "expected_entities": {
+        "asset": "BTC"
+      },
+      "expected_target_asset": "BTC",
+      "expected_action_polarity": "evaluate",
+      "expected_conversation_reference": null,
+      "expected_clarification": false,
+      "expected_missing_inputs": [],
+      "registry_required_inputs": [],
+      "registry_contract_version": "2026-08-23.operation-contracts.v1"
+    },
+    {
+      "eval_id": "s609-07",
+      "input_query": "Beoordeel alleen of mijn huidige setup intern logisch is.",
+      "expected_operation_id": "evaluate_setup",
+      "expected_domain": "setup",
+      "expected_supported": true,
+      "expected_entities": {},
+      "expected_target_asset": null,
+      "expected_action_polarity": "evaluate",
+      "expected_conversation_reference": null,
+      "expected_clarification": false,
+      "expected_missing_inputs": [],
+      "registry_required_inputs": [],
+      "registry_contract_version": "2026-08-23.operation-contracts.v1"
+    },
+    {
+      "eval_id": "s609-08",
+      "input_query": "Welke bewijsstukken ondersteunden je laatst vrijgegeven oordeel?",
+      "expected_operation_id": "explain_previous_evidence",
+      "expected_domain": "system",
+      "expected_supported": true,
+      "expected_entities": {},
+      "expected_target_asset": null,
+      "expected_action_polarity": "read",
+      "expected_conversation_reference": "previous_verified_response",
+      "expected_clarification": false,
+      "expected_missing_inputs": [],
+      "registry_required_inputs": [],
+      "registry_contract_version": "2026-08-23.operation-contracts.v1"
+    },
+    {
+      "eval_id": "s609-09",
+      "input_query": "Zeg dezelfde geverifieerde conclusie compacter, zonder iets toe te voegen.",
+      "expected_operation_id": "reformulate_previous_response",
+      "expected_domain": "system",
+      "expected_supported": true,
+      "expected_entities": {},
+      "expected_target_asset": null,
+      "expected_action_polarity": "read",
+      "expected_conversation_reference": "previous_verified_response",
+      "expected_clarification": false,
+      "expected_missing_inputs": [],
+      "registry_required_inputs": [],
+      "registry_contract_version": "2026-08-23.operation-contracts.v1"
+    },
+    {
+      "eval_id": "s609-10",
+      "input_query": "Welke controle voor mijn bot volgt rechtstreeks uit dat eerdere oordeel?",
+      "expected_operation_id": "explain_previous_evidence",
+      "expected_domain": "system",
+      "expected_supported": true,
+      "expected_entities": {},
+      "expected_target_asset": null,
+      "expected_action_polarity": "read",
+      "expected_conversation_reference": "previous_verified_response",
+      "expected_clarification": false,
+      "expected_missing_inputs": [],
+      "registry_required_inputs": [],
+      "registry_contract_version": "2026-08-23.operation-contracts.v1"
+    },
+    {
+      "eval_id": "s609-11",
+      "input_query": "Sketch an ETH swing setup on four hours called Quiet Breakout, but keep it as an uncommitted draft.",
+      "expected_operation_id": "create_setup",
+      "expected_domain": "setup",
+      "expected_supported": true,
+      "expected_entities": {
+        "asset": "ETH",
+        "setup_type": "swing",
+        "timeframe": "4H",
+        "name": "Quiet Breakout"
+      },
+      "expected_target_asset": "ETH",
+      "expected_action_polarity": "create",
+      "expected_conversation_reference": null,
+      "expected_clarification": false,
+      "expected_missing_inputs": [],
+      "registry_required_inputs": [
+        "setup_type",
+        "timeframe",
+        "name",
+        "symbol"
+      ],
+      "registry_contract_version": "2026-08-23.operation-contracts.v1"
+    },
+    {
+      "eval_id": "s609-12",
+      "input_query": "Werk een BTC trade-setup op de daggrafiek uit met de naam Rustige Trend; nog niets opslaan.",
+      "expected_operation_id": "create_setup",
+      "expected_domain": "setup",
+      "expected_supported": true,
+      "expected_entities": {
+        "asset": "BTC",
+        "setup_type": "trade",
+        "timeframe": "1D",
+        "name": "Rustige Trend"
+      },
+      "expected_target_asset": "BTC",
+      "expected_action_polarity": "create",
+      "expected_conversation_reference": null,
+      "expected_clarification": false,
+      "expected_missing_inputs": [],
+      "registry_required_inputs": [
+        "setup_type",
+        "timeframe",
+        "name",
+        "symbol"
+      ],
+      "registry_contract_version": "2026-08-23.operation-contracts.v1"
+    },
+    {
+      "eval_id": "s609-13",
+      "input_query": "Help me een nieuwe Solana-setup te maken.",
+      "expected_operation_id": "create_setup",
+      "expected_domain": "setup",
+      "expected_supported": true,
+      "expected_entities": {
+        "asset": "SOL"
+      },
+      "expected_target_asset": "SOL",
+      "expected_action_polarity": "create",
+      "expected_conversation_reference": null,
+      "expected_clarification": true,
+      "expected_missing_inputs": [
+        "setup_type",
+        "timeframe",
+        "name"
+      ],
+      "registry_required_inputs": [
+        "setup_type",
+        "timeframe",
+        "name",
+        "symbol"
+      ],
+      "registry_contract_version": "2026-08-23.operation-contracts.v1"
+    },
+    {
+      "eval_id": "s609-14",
+      "input_query": "Zet Polkadot als DOT op mijn watchlist.",
+      "expected_operation_id": "watchlist_add",
+      "expected_domain": "watchlist",
+      "expected_supported": true,
+      "expected_entities": {
+        "asset": "DOT"
+      },
+      "expected_target_asset": "DOT",
+      "expected_action_polarity": "add",
+      "expected_conversation_reference": null,
+      "expected_clarification": false,
+      "expected_missing_inputs": [],
+      "registry_required_inputs": [
+        "asset"
+      ],
+      "registry_contract_version": "2026-08-23.operation-contracts.v1"
+    },
+    {
+      "eval_id": "s609-15",
+      "input_query": "Verwijder litecoin uit mijn volglijst.",
+      "expected_operation_id": "watchlist_remove",
+      "expected_domain": "watchlist",
+      "expected_supported": true,
+      "expected_entities": {
+        "asset": "LTC"
+      },
+      "expected_target_asset": "LTC",
+      "expected_action_polarity": "remove",
+      "expected_conversation_reference": null,
+      "expected_clarification": false,
+      "expected_missing_inputs": [],
+      "registry_required_inputs": [
+        "asset"
+      ],
+      "registry_contract_version": "2026-08-23.operation-contracts.v1"
+    },
+    {
+      "eval_id": "s609-16",
+      "input_query": "Schakel de besproken bot meteen over op live handelen met echt kapitaal.",
+      "expected_operation_id": "activate_bot",
+      "expected_domain": "bot",
+      "expected_supported": true,
+      "expected_entities": {},
+      "expected_target_asset": null,
+      "expected_action_polarity": "activate",
+      "expected_conversation_reference": "previous_verified_response",
+      "expected_clarification": false,
+      "expected_missing_inputs": [],
+      "registry_required_inputs": [
+        "bot_id"
+      ],
+      "registry_contract_version": "2026-08-23.operation-contracts.v1"
+    },
+    {
+      "eval_id": "s609-17",
+      "input_query": "Voer zonder voorstel direct een kooporder voor Stellar uit.",
+      "expected_operation_id": "unsupported_financial_operation",
+      "expected_domain": "financial_unsupported",
+      "expected_supported": false,
+      "expected_entities": {
+        "asset": "XLM"
+      },
+      "expected_target_asset": "XLM",
+      "expected_action_polarity": "execute",
+      "expected_conversation_reference": null,
+      "expected_clarification": false,
+      "expected_missing_inputs": [],
+      "registry_required_inputs": [],
+      "registry_contract_version": "2026-08-23.operation-contracts.v1"
+    },
+    {
+      "eval_id": "s609-18",
+      "input_query": "Kun je een recept voor zuurdesembrood geven?",
+      "expected_operation_id": "off_topic",
+      "expected_domain": "off_topic",
+      "expected_supported": true,
+      "expected_entities": {},
+      "expected_target_asset": null,
+      "expected_action_polarity": "read",
+      "expected_conversation_reference": null,
+      "expected_clarification": false,
+      "expected_missing_inputs": [],
+      "registry_required_inputs": [],
+      "registry_contract_version": "2026-08-23.operation-contracts.v1"
+    },
+    {
+      "eval_id": "s609-19",
+      "input_query": "Doe hetzelfde ermee.",
+      "expected_operation_id": "clarify_request",
+      "expected_domain": "system",
+      "expected_supported": true,
+      "expected_entities": {},
+      "expected_target_asset": null,
+      "expected_action_polarity": "clarify",
+      "expected_conversation_reference": null,
+      "expected_clarification": true,
+      "expected_missing_inputs": [
+        "requested_change"
+      ],
+      "registry_required_inputs": [
+        "requested_change"
+      ],
+      "registry_contract_version": "2026-08-23.operation-contracts.v1"
+    },
+    {
+      "eval_id": "s609-20",
+      "input_query": "De werkruimte staat op AAPL, maar lees uitsluitend mijn opgeslagen Solana-indicatoren.",
+      "expected_operation_id": "read_indicator_configuration",
+      "expected_domain": "indicators",
+      "expected_supported": true,
+      "expected_entities": {
+        "asset": "SOL"
+      },
+      "expected_context_asset": "AAPL",
+      "expected_target_asset": "SOL",
+      "expected_action_polarity": "read",
+      "expected_conversation_reference": null,
+      "expected_clarification": false,
+      "expected_missing_inputs": [],
+      "registry_required_inputs": [],
+      "registry_contract_version": "2026-08-23.operation-contracts.v1"
+    },
+    {
+      "eval_id": "s609-21",
+      "input_query": "Wat is de huidige live- en activatiestatus van mijn gekoppelde bot?",
+      "expected_operation_id": "read_bot_status",
+      "expected_domain": "bot",
+      "expected_supported": true,
+      "expected_entities": {},
+      "expected_target_asset": null,
+      "expected_action_polarity": "read",
+      "expected_conversation_reference": null,
+      "expected_clarification": false,
+      "expected_missing_inputs": [],
+      "registry_required_inputs": [],
+      "registry_contract_version": "2026-08-23.operation-contracts.v1"
+    },
+    {
+      "eval_id": "s609-22",
+      "input_query": "Welke strategie en welke bot zijn aan mijn actieve setup gekoppeld?",
+      "expected_operation_id": "read_linked_bot",
+      "expected_domain": "bot",
+      "expected_supported": true,
+      "expected_entities": {},
+      "expected_target_asset": null,
+      "expected_action_polarity": "read",
+      "expected_conversation_reference": null,
+      "expected_clarification": false,
+      "expected_missing_inputs": [],
+      "registry_required_inputs": [],
+      "registry_contract_version": "2026-08-23.operation-contracts.v1"
+    },
+    {
+      "eval_id": "s609-23",
+      "input_query": "Prepare a BTC position setup for weekly review named Capital Shield; proposal only, never persist it now.",
+      "expected_operation_id": "create_setup",
+      "expected_domain": "setup",
+      "expected_supported": true,
+      "expected_entities": {
+        "asset": "BTC",
+        "setup_type": "position",
+        "timeframe": "1W",
+        "name": "Capital Shield"
+      },
+      "expected_target_asset": "BTC",
+      "expected_action_polarity": "create",
+      "expected_conversation_reference": null,
+      "expected_clarification": false,
+      "expected_missing_inputs": [],
+      "registry_required_inputs": [
+        "setup_type",
+        "timeframe",
+        "name",
+        "symbol"
+      ],
+      "registry_contract_version": "2026-08-23.operation-contracts.v1"
+    },
+    {
+      "eval_id": "s609-24",
+      "input_query": "Welke persoonlijke RSI-instelling hoort bij mijn bitcoinaccount?",
+      "expected_operation_id": "read_indicator_configuration",
+      "expected_domain": "indicators",
+      "expected_supported": true,
+      "expected_entities": {
+        "asset": "BTC",
+        "concept": "RSI"
+      },
+      "expected_target_asset": "BTC",
+      "expected_action_polarity": "read",
+      "expected_conversation_reference": null,
+      "expected_clarification": false,
+      "expected_missing_inputs": [],
+      "registry_required_inputs": [],
+      "registry_contract_version": "2026-08-23.operation-contracts.v1"
+    }
+  ]
+}

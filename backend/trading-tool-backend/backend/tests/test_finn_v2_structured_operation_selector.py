@@ -85,6 +85,34 @@ def test_selector_prompt_preserves_indicator_read_fact_as_a_contract_constraint(
     assert "facts.entities includes indicator_configuration" in captured["system_role"]
 
 
+def test_selector_prompt_distinguishes_plan_diagnosis_from_change_clarification():
+    captured = {}
+
+    def provider(**kwargs):
+        captured.update(kwargs)
+        return {"parsed": {
+            "operation_id": "evaluate_plan", "confidence": 0.9,
+            "entities": {"concept": None, "asset": None, "setup_id": None, "strategy_id": None,
+                         "bot_id": None, "setup_type": None, "timeframe": None, "name": None},
+            "target_asset": None, "conversation_reference": None, "missing_inputs": [], "ambiguity_reason": None,
+            "semantic_frame": {"goal": "evaluate", "object": "plan", "target_asset": None,
+                               "setup_type": None, "timeframe": None, "name": None, "action_polarity": "evaluate",
+                               "persistence_intent": None, "reference_kind": None, "new_data_required": False,
+                               "ambiguities": [], "supplied_inputs": [], "requested_scopes": []},
+        }}
+
+    registry = FinnV2OperationRegistry()
+    selection, error = FinnV2StructuredOperationSelectorService(provider=provider).select(
+        message="Diagnose the resilience of my trading approach.",
+        candidate_contracts=(registry.get("evaluate_plan"), registry.get("clarify_request")),
+        facts={"entities": ("plan",), "discourse_act": "evaluation"}, verified_context=None,
+    )
+
+    assert error is None and selection is not None
+    assert selection.operation_id == "evaluate_plan"
+    assert "diagnoses the robustness, fragility, quality, risk" in captured["system_role"]
+
+
 def test_selector_normalizes_structured_entity_transport_delimiters():
     selector = FinnV2StructuredOperationSelectorService(
         provider=lambda **_kwargs: {"parsed": {

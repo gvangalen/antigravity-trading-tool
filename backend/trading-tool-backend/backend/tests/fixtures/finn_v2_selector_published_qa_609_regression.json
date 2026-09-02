@@ -1,0 +1,8 @@
+{
+  "kind": "published_frozen_regression",
+  "source_file": "finn_v2_selector_published_qa_609_source.json",
+  "source_sha256": "c94e2fca35019f87ca058edb26a57c008cc78a95cdd236d539532223ebb6770a",
+  "errata_file": "finn_v2_selector_published_qa_609_errata.json",
+  "source_dataset": "independent_qa_holdout_609",
+  "publication_reason": "Independent QA publication makes this source a permanent regression corpus; its prompts and typed expectations remain immutable."
+}

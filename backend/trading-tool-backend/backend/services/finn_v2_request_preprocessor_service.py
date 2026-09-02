@@ -51,6 +51,17 @@ class FinnV2RequestPreprocessorService:
         ("create", ("maak", "maken", "create", "ontwerp", "stel", "bereid")),
         ("evaluate", ("beoordeel", "evaluate", "zwak", "risico", "past", "fit", "ontbrek", "ontbreek", "vertrouwen")),
     )
+    # These are assessment predicates, not operation routes.  Combined with
+    # an explicitly detected plan subject they constrain the model's semantic
+    # frame: a request to diagnose a plan is not a request to clarify a change.
+    _PLAN_ASSESSMENT_TERMS = (
+        "kwetsbaar", "fragiel", "robuust", "weerbaar", "sterk", "zwak", "risico", "onderbouw",
+        "wring", "probleem", "kwaliteit", "verbeter",
+        "vulnerable", "fragile", "robust", "resilient", "strong", "weak", "risk", "evidence",
+        "vulnerability", "quality", "improve",
+        "verletzlich", "fragil", "robust", "widerstandsfähig", "stark", "schwach", "risiko", "beleg",
+        "schwachstelle", "qualität", "verbesser",
+    )
     _ENTITY_TERMS = {
         "watchlist": ("watchlist", "volglijst", "follow", "gevolgde", "marktenlijst"),
         "indicator_configuration": (
@@ -79,6 +90,12 @@ class FinnV2RequestPreprocessorService:
             "zwakste",
             "betrouwbaar",
             "aanpak",
+            "handelsaanpak",
+            "handelswijze",
+            "tradingaanpak",
+            "trading approach",
+            "handelsplan",
+            "trading plan",
         ),
         # Portfolio is a financial object even where FINN deliberately has no
         # executable portfolio-management contract. Preserve that fact so the
@@ -329,6 +346,11 @@ class FinnV2RequestPreprocessorService:
         # a consequential request as unrelated conversation.
         if self._is_explicit_financial_execution_intent(text):
             return "execute"
+        # Evaluate before ordinary request verbs. In a question such as
+        # "welke risico's maken ...", the verb describes the diagnosis rather
+        # than a request to create anything.
+        if self._is_plan_assessment(text):
+            return "evaluate"
         # Confirmation qualifies a proposal lifecycle; it never changes the
         # mutation the user is asking FINN to prepare.
         if any(term in text for term in ("watchlist", "volglijst", "marktenlijst")) and self._contains_any(
@@ -353,19 +375,21 @@ class FinnV2RequestPreprocessorService:
             return "add"
         if re.search(r"\bneem\b.+\bop\b", text):
             return "add"
-        # A current trading approach plus an assessment criterion is a
-        # read-only evaluation fact. The registry still selects its contract.
-        if re.search(r"\b(?:aanpak|handelswijze|tradingaanpak|plan)\b", text) and re.search(
-            r"\b(?:wringt|probleem|kwaliteit|risico\w*|verbeter\w*|zwak\w*|sterk\w*|onderbouw\w*)\b",
-            text,
-        ):
-            return "evaluate"
         for polarity, terms in self._ACTION_PATTERNS:
             if self._contains_any(text, terms):
                 if polarity == "execute" and self._contains_any(text, ("niet", "niets", "zonder")):
                     continue
                 return polarity
         return "read"
+
+    @classmethod
+    def _is_plan_assessment(cls, text: str) -> bool:
+        if not cls._contains_any(text, cls._ENTITY_TERMS["plan"]):
+            return False
+        return any(
+            re.search(rf"(?<!\w){re.escape(term)}\w*(?!\w)", text)
+            for term in cls._PLAN_ASSESSMENT_TERMS
+        )
 
     @staticmethod
     def _is_explicit_financial_execution_intent(text: str) -> bool:

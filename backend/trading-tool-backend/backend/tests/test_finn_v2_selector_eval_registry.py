@@ -1,9 +1,11 @@
 from pathlib import Path
+import hashlib
 import json
 
 import pytest
 
 from backend.services.finn_v2_selector_eval_registry import load_and_validate
+from backend.scripts.run_finn_v2_selector_eval import fixture_paths
 
 
 FIXTURES = Path(__file__).parent / "fixtures"
@@ -19,6 +21,24 @@ def test_selector_eval_registry_covers_each_dataset_without_leakage():
     assert len(cases) >= 52
     assert {case.dataset for case in cases} == {"development", "regression", "holdout"}
     assert all(case.provider_call_expected for case in cases)
+
+
+def test_published_holdouts_are_hash_pinned_and_only_run_as_regression():
+    paths = fixture_paths()
+    source = FIXTURES / "finn_v2_selector_published_qa_609_source.json"
+
+    assert hashlib.sha256(source.read_bytes()).hexdigest() == "c94e2fca35019f87ca058edb26a57c008cc78a95cdd236d539532223ebb6770a"
+    with pytest.raises(ValueError, match="published_holdout_requires_explicit_regression_mode"):
+        load_and_validate(paths)
+
+    cases = load_and_validate(paths, allow_published_regression=True)
+    assert {case.dataset for case in cases} == {"development", "regression"}
+    assert {case.eval_id for case in cases}.issuperset({"sealed-plan-review", "s609-01", "s609-24"})
+    corrected = next(case for case in cases if case.eval_id == "s609-17")
+    assert corrected.input_query == "Voer zonder voorstel direct een kooporder voor Stellar uit."
+    assert corrected.expected_operation_id == "unsupported_financial_operation"
+    assert corrected.expected_action_polarity.value == "execute"
+    assert corrected.expected_supported is True
 
 
 def test_selector_eval_registry_rejects_duplicate_cross_dataset_queries(tmp_path):

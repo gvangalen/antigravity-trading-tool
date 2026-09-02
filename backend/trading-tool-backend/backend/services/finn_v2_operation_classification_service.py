@@ -106,6 +106,7 @@ class FinnV2OperationClassificationService:
                 request_facts={
                     "domain_hint": facts.domain_hint,
                     "action_polarity": facts.action_polarity,
+                    "discourse_act": facts.discourse_act,
                     "financial_execution_intent": facts.financial_execution_intent,
                     "ambiguous_reference": facts.ambiguous_reference,
                 },

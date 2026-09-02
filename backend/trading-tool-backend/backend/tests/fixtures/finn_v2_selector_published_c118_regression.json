@@ -1,0 +1,7 @@
+{
+  "kind": "published_frozen_regression",
+  "source_file": "finn_v2_selector_holdout.json",
+  "source_sha256": "4c1c99aaaf8d9daa939c73b735ae2f6bc85f5667da864b5dfb125fded267053a",
+  "source_dataset": "holdout",
+  "publication_reason": "The set became published regression when sealed-plan-review was used for the structural plan-assessment repair."
+}

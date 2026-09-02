@@ -184,6 +184,33 @@ def test_natural_plan_assessment_is_an_evaluation_fact(message):
     assert facts.discourse_act == "evaluation"
 
 
+@pytest.mark.parametrize("message", (
+    "Waar is mijn handelsaanpak het kwetsbaarst?",
+    "Which part of my trading approach is least resilient?",
+    "An welcher Stelle ist mein Handelsplan am fragilsten?",
+    "Mijn plan is sterk, maar waar zit het resterende risico?",
+    "Welk onderdeel van mijn aanpak heeft het zwakste bewijs?",
+))
+def test_plan_assessment_predicates_constrain_the_semantic_frame_without_routing(message):
+    facts = CLASSIFIER.preprocessor.preprocess(message=message)
+
+    assert facts.primary_entity == "plan"
+    assert facts.action_polarity == "evaluate"
+    assert facts.discourse_act == "evaluation"
+
+
+@pytest.mark.parametrize("message", (
+    "Waar staat mijn handelsaanpak opgeslagen?",
+    "Is mijn trading approach gekoppeld aan een bot?",
+    "Wo finde ich meinen Handelsplan?",
+))
+def test_non_diagnostic_plan_questions_remain_read_facts(message):
+    facts = CLASSIFIER.preprocessor.preprocess(message=message)
+
+    assert facts.action_polarity == "read"
+    assert facts.discourse_act == "information_request"
+
+
 def test_ambiguous_improvement_has_typed_clarification_input_and_clarify_polarity():
     result = CLASSIFIER.classify(message="Maak mijn manier van handelen beter.")
 

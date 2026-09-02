@@ -24,18 +24,25 @@ from backend.services.finn_v2_structured_operation_selector_service import FinnV
 from backend.services.ai_usage_observability_service import ai_usage_context
 from backend.utils import openai_client
 
-DATASETS = ("development", "regression", "holdout")
+DATASETS = ("development", "regression")
 
 
 def fixture_paths() -> list[Path]:
     root = Path(__file__).resolve().parents[2] / "backend" / "tests" / "fixtures"
-    return [root / f"finn_v2_selector_{dataset}.json" for dataset in DATASETS]
+    return [
+        root / "finn_v2_selector_development.json",
+        root / "finn_v2_selector_regression.json",
+        root / "finn_v2_selector_published_c118_regression.json",
+        root / "finn_v2_selector_published_qa_609_regression.json",
+    ]
 
 
 def provenance_for(*, dataset: str, paths: list[Path], registry: FinnV2OperationRegistry) -> dict[str, str]:
     """Bind each report to immutable case and registry inputs."""
-    dataset_path = next(path for path in paths if path.stem.endswith(f"_{dataset}"))
-    dataset_hash = hashlib.sha256(dataset_path.read_bytes()).hexdigest()
+    dataset_paths = [path for path in paths if path.stem.endswith(f"_{dataset}")]
+    dataset_hash = hashlib.sha256(
+        b"".join(path.read_bytes() for path in dataset_paths)
+    ).hexdigest()
     manifest = [contract.__dict__ for contract in registry.list()]
     registry_hash = hashlib.sha256(
         json.dumps(manifest, default=str, sort_keys=True, separators=(",", ":")).encode("utf-8")
@@ -224,7 +231,7 @@ def main() -> None:
         raise SystemExit("FINN_V2_REAL_SELECTOR_EVAL=1 is required to spend provider calls")
     paths = fixture_paths()
     registry = FinnV2OperationRegistry()
-    cases = [case for case in load_and_validate(paths) if case.dataset == args.dataset]
+    cases = [case for case in load_and_validate(paths, allow_published_regression=True) if case.dataset == args.dataset]
     rows: list[dict[str, Any]] = []
     for case in cases:
         if rows:

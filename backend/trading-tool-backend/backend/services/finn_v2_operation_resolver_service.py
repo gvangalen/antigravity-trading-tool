@@ -59,6 +59,16 @@ class FinnV2OperationResolverService:
             context=conversation_context,
             requested_scopes=requested_scopes,
         )
+        # The provider still extracts the subject from free text.  Once it
+        # has identified a plan, however, a deterministic assessment fact
+        # makes ``clarify`` semantically incompatible: the user requested a
+        # diagnosis, not an unspecified change.
+        if (
+            goal in {"clarify", "clarification"}
+            and object_name == "plan"
+            and str((request_facts or {}).get("discourse_act") or "") == "evaluation"
+        ):
+            operation_id = "evaluate_plan"
         if (
             bool((request_facts or {}).get("ambiguous_reference"))
             and not self._has_eligible_lineage(conversation_context)

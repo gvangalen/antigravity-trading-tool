@@ -58,6 +58,30 @@ def test_semantic_frame_resolves_a_broad_assessment_to_plan_not_setup():
     assert resolved.operation_id == "evaluate_plan"
 
 
+def test_plan_assessment_fact_rejects_a_contradictory_clarification_frame():
+    registry = FinnV2OperationRegistry()
+    resolved = FinnV2OperationResolverService(registry).resolve(
+        selection=_selection("clarify_request", {"goal": "clarify", "object": "plan"}),
+        candidates=registry.list(),
+        conversation_context={},
+        request_facts={"discourse_act": "evaluation"},
+    )
+
+    assert resolved.operation_id == "evaluate_plan"
+
+
+def test_non_evaluative_plan_clarification_remains_a_clarification():
+    registry = FinnV2OperationRegistry()
+    resolved = FinnV2OperationResolverService(registry).resolve(
+        selection=_selection("clarify_request", {"goal": "clarify", "object": "plan"}),
+        candidates=registry.list(),
+        conversation_context={},
+        request_facts={"discourse_act": "information_request"},
+    )
+
+    assert resolved.operation_id == "clarify_request"
+
+
 def test_semantic_frame_resolves_a_complete_linked_graph_to_the_linked_bot_contract():
     registry = FinnV2OperationRegistry()
     resolved = FinnV2OperationResolverService(registry).resolve(
