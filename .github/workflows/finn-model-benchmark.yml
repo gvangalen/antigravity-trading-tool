@@ -1,4 +1,4 @@
-name: FINN Model Benchmark (Temporary)
+name: FINN Selector Model Benchmark (Temporary)
 
 on:
   push:
@@ -6,9 +6,9 @@ on:
       - codex/finn-model-benchmark
 
 jobs:
-  structured-selector-canary:
+  selector-benchmark:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 45
     permissions:
       contents: read
     env:
@@ -25,7 +25,7 @@ jobs:
           printf '%s\n' "$RAW_DEPLOY_KEY" > "$RUNNER_TEMP/deploy-key"
           chmod 600 "$RUNNER_TEMP/deploy-key"
 
-      - name: Run exact-baseline structured selector canaries serially
+      - name: Run exact-baseline selector datasets serially
         shell: bash
         run: |
           set -euo pipefail
@@ -38,6 +38,7 @@ jobs:
           set -euo pipefail
           remote_dir=/home/ubuntu/antigravity-trading-tool
           worktree_dir="/tmp/finn-model-canary-${RUN_ID}"
+          result_dir="/tmp/finn-model-benchmark-${RUN_ID}"
 
           cleanup() {
             git -C "$remote_dir" worktree remove --force "$worktree_dir" >/dev/null 2>&1 || true
@@ -49,8 +50,32 @@ jobs:
           set +o allexport
           git -C "$remote_dir" worktree add --detach "$worktree_dir" "$BASELINE_SHA" >/dev/null
           cd "$worktree_dir/backend/trading-tool-backend"
+          mkdir -p "$result_dir"
 
-          OPENAI_MODEL="$MODEL" FINN_V2_REAL_PROVIDER_CANARY=1 \
-            PYTHONPATH=. python3 backend/scripts/run_finn_v2_selector_canary.py
+          for dataset in development regression; do
+            OPENAI_MODEL="$MODEL" FINN_V2_REAL_SELECTOR_EVAL=1 PYTHONPATH=. \
+              python3 backend/scripts/run_finn_v2_selector_eval.py "$dataset" \
+                --min-interval-seconds 2 \
+                --output "$result_dir/${MODEL}-${dataset}.json"
+          done
           REMOTE
           done
+
+      - name: Collect raw redacted selector projections
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/finn-model-benchmark"
+          /usr/bin/scp -i "$RUNNER_TEMP/deploy-key" \
+            -o StrictHostKeyChecking=no \
+            "ubuntu@$RAW_SERVER_IP:/tmp/finn-model-benchmark-${GITHUB_RUN_ID}/*" \
+            "$RUNNER_TEMP/finn-model-benchmark/"
+
+      - name: Upload benchmark projections
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: finn-selector-model-benchmark-${{ github.run_id }}
+          path: ${{ runner.temp }}/finn-model-benchmark
+          if-no-files-found: error
