@@ -1,0 +1,67 @@
+name: FINN Model Benchmark (Temporary)
+
+on:
+  workflow_dispatch:
+    inputs:
+      model:
+        description: Exact OpenAI model ID for one non-mutating selector canary.
+        required: true
+        type: string
+
+jobs:
+  structured-selector-canary:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    env:
+      BASELINE_SHA: 4b2619eda8ac316650e6731654798e02a352d183
+      MODEL: ${{ inputs.model }}
+      RAW_SERVER_IP: ${{ secrets.HOST || secrets.SERVER_IP || vars.HOST || vars.SERVER_IP }}
+      RAW_DEPLOY_KEY: ${{ secrets.SSH_PRIVATE_KEY || secrets.DEPLOY_SSH_KEY }}
+    steps:
+      - name: Reject unapproved model IDs
+        shell: bash
+        run: |
+          set -euo pipefail
+          case "$MODEL" in
+            gpt-4o-mini|gpt-5.6-terra|gpt-5.6-sol) ;;
+            *) echo "Unsupported benchmark model: $MODEL" >&2; exit 2 ;;
+          esac
+
+      - name: Prepare ephemeral host access
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "${RAW_SERVER_IP:-}"
+          test -n "${RAW_DEPLOY_KEY:-}"
+          printf '%s\n' "$RAW_DEPLOY_KEY" > "$RUNNER_TEMP/deploy-key"
+          chmod 600 "$RUNNER_TEMP/deploy-key"
+
+      - name: Run exact-baseline structured selector canary
+        shell: bash
+        run: |
+          set -euo pipefail
+          /usr/bin/ssh -i "$RUNNER_TEMP/deploy-key" \
+            -o StrictHostKeyChecking=no \
+            -o ConnectTimeout=20 \
+            "ubuntu@$RAW_SERVER_IP" \
+            "BASELINE_SHA='$BASELINE_SHA' MODEL='$MODEL' RUN_ID='${GITHUB_RUN_ID}' bash -s" <<'REMOTE'
+          set -euo pipefail
+          remote_dir=/home/ubuntu/antigravity-trading-tool
+          worktree_dir="/tmp/finn-model-canary-${RUN_ID}"
+
+          cleanup() {
+            git -C "$remote_dir" worktree remove --force "$worktree_dir" >/dev/null 2>&1 || true
+          }
+          trap cleanup EXIT
+
+          set -o allexport
+          source "$HOME/.secrets/trading.env"
+          set +o allexport
+          git -C "$remote_dir" worktree add --detach "$worktree_dir" "$BASELINE_SHA" >/dev/null
+          cd "$worktree_dir/backend/trading-tool-backend"
+
+          OPENAI_MODEL="$MODEL" FINN_V2_REAL_PROVIDER_CANARY=1 \
+            python3 backend/scripts/run_finn_v2_selector_canary.py
+          REMOTE
