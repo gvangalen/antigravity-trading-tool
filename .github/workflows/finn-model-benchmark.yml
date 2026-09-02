@@ -26,7 +26,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          git bundle create "$RUNNER_TEMP/finn-selector-candidate.bundle" "$CANDIDATE_SHA"
+          git bundle create "$RUNNER_TEMP/finn-selector-candidate.bundle" "$CANDIDATE_SHA" ^origin/main
 
       - name: Prepare ephemeral host access
         shell: bash
