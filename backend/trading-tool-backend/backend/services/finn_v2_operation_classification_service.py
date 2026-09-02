@@ -270,6 +270,14 @@ class FinnV2OperationClassificationService:
             selector_missing=tuple(getattr(selection, "missing_inputs", ()) or ()),
             conversation_context=conversation_context,
         )
+        # The typed input collector is authoritative for user-supplied setup
+        # slots. Preserve those values in the public semantic projection when
+        # a schema-valid selector omitted a redundant entity field.
+        for field in ("setup_type", "timeframe", "name"):
+            if not selected_entities.get(field) and supplied_inputs.get(field):
+                selected_entities[field] = str(supplied_inputs[field])
+        if not selected_entities.get("asset") and supplied_inputs.get("symbol"):
+            selected_entities["asset"] = str(supplied_inputs["symbol"])
         return SemanticOperationClassification(
             operation_id=operation_id,
             action=self._contract_action(contract, facts.action_polarity),

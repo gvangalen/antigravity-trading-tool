@@ -71,6 +71,11 @@ def same_entities(expected: Mapping[str, object], actual: Mapping[str, object]) 
     return all(str(actual.get(key) or "").casefold() == str(value).casefold() for key, value in expected.items())
 
 
+def clarification_required(operation_id: str, missing_inputs: Sequence[str]) -> bool:
+    """Project the contract outcome, rather than only the selector label."""
+    return operation_id == "clarify_request" or bool(missing_inputs)
+
+
 def failure_category(raw: Mapping[str, Any], classification_error: str | None, validation_error: str | None) -> tuple[str, str, str | None]:
     error = str(raw.get("error") or classification_error or "")
     if error:
@@ -115,8 +120,8 @@ def run_case(case: SelectorEvalCase) -> dict[str, Any]:
     contract = registry.get(classified.operation_id)
     target_asset = classified.selected_target_asset
     conversation_reference = classified.selected_conversation_reference
-    clarification = classified.operation_id == "clarify_request"
     actual_missing_inputs = list(classified.selected_missing_inputs)
+    clarification = clarification_required(classified.operation_id, actual_missing_inputs)
     required_inputs = list(classified.required_inputs)
     supplied_inputs = dict(classified.supplied_inputs)
     derived_inputs = dict(classified.derived_inputs)

@@ -152,6 +152,23 @@ def test_typed_input_projection_does_not_treat_model_entities_as_user_supplied_s
     assert result.selected_missing_inputs == ("name",)
 
 
+def test_typed_setup_slots_fill_a_lossy_structured_entity_projection():
+    class Selector:
+        def select(self, **_kwargs):
+            return FinnV2StructuredOperationSelection(
+                operation_id="create_setup", confidence=0.9, entities={"asset": "BTC", "setup_type": "position"},
+                target_asset="BTC", conversation_reference=None, missing_inputs=(), ambiguity_reason=None,
+                semantic_frame={},
+            ), None
+
+    result = FinnV2OperationClassificationService(structured_selector=Selector()).classify(
+        message="Prepare a BTC position setup for weekly review named Capital Shield; proposal only.",
+    )
+
+    assert result.selected_entities["timeframe"] == "1W"
+    assert result.selected_entities["name"] == "Capital Shield"
+
+
 def test_live_order_language_uses_typed_bot_activation_polarity():
     for message in (
         "Laat mijn gekoppelde robot voortaan echte orders plaatsen.",

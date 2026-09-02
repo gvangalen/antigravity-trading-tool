@@ -1,4 +1,4 @@
-from backend.scripts.run_finn_v2_selector_eval import _canonical_eval_conversation_context
+from backend.scripts.run_finn_v2_selector_eval import _canonical_eval_conversation_context, clarification_required
 from backend.services.finn_v2_selector_eval_registry import SelectorEvalCase
 
 
@@ -18,3 +18,8 @@ def test_lineage_eval_case_receives_a_canonical_non_sensitive_precondition():
 
     assert context["last_verified_context"]["verified_response_id"] == "previous_verified_response"
     assert context["last_verified_context"]["resolved_entities"]["bot_id"] == 170
+
+
+def test_eval_runner_projects_missing_contract_inputs_as_a_clarification():
+    assert clarification_required("create_setup", ["timeframe", "name"]) is True
+    assert clarification_required("read_active_plan", []) is False
