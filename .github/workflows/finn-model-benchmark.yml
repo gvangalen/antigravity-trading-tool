@@ -51,6 +51,6 @@ jobs:
           cd "$worktree_dir/backend/trading-tool-backend"
 
           OPENAI_MODEL="$MODEL" FINN_V2_REAL_PROVIDER_CANARY=1 \
-            python3 backend/scripts/run_finn_v2_selector_canary.py
+            PYTHONPATH=. python3 backend/scripts/run_finn_v2_selector_canary.py
           REMOTE
           done
