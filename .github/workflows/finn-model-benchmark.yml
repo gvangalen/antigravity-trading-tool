@@ -12,7 +12,7 @@ jobs:
     permissions:
       contents: read
     env:
-      CANDIDATE_SHA: dc0447f08ab14a836bb26e32ba5af928c2d142aa
+      CANDIDATE_SHA: aecb329e365b11d7203909f1e4158961821a5276
       RAW_SERVER_IP: ${{ secrets.HOST || secrets.SERVER_IP || vars.HOST || vars.SERVER_IP }}
       RAW_DEPLOY_KEY: ${{ secrets.SSH_PRIVATE_KEY || secrets.DEPLOY_SSH_KEY }}
     steps:
@@ -58,7 +58,7 @@ jobs:
           set -euo pipefail
           remote_dir=/home/ubuntu/antigravity-trading-tool
           worktree_dir="/tmp/finn-selector-candidate-${RUN_ID}"
-          result_dir="/tmp/finn-selector-candidate-${RUN_ID}"
+          result_dir="/tmp/finn-selector-candidate-results-${RUN_ID}"
 
           cleanup() {
             git -C "$remote_dir" worktree remove --force "$worktree_dir" >/dev/null 2>&1 || true
@@ -93,7 +93,7 @@ jobs:
           mkdir -p "$RUNNER_TEMP/finn-selector-candidate"
           /usr/bin/scp -i "$RUNNER_TEMP/deploy-key" \
             -o StrictHostKeyChecking=no \
-            "ubuntu@$RAW_SERVER_IP:/tmp/finn-selector-candidate-${GITHUB_RUN_ID}/*" \
+            "ubuntu@$RAW_SERVER_IP:/tmp/finn-selector-candidate-results-${GITHUB_RUN_ID}/*" \
             "$RUNNER_TEMP/finn-selector-candidate/"
 
       - name: Upload benchmark projections
