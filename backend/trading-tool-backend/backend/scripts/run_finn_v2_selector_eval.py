@@ -98,12 +98,13 @@ def run_case(case: SelectorEvalCase) -> dict[str, Any]:
         return response
 
     registry = FinnV2OperationRegistry()
+    conversation_context = _canonical_eval_conversation_context(case)
     classifier = FinnV2OperationClassificationService(registry=registry, structured_selector=FinnV2StructuredOperationSelectorService(provider=provider))
     facts = classifier.preprocessor.preprocess(message=case.input_query)
     started = monotonic()
-    classified = classifier.classify(message=case.input_query, conversation_context=case.conversation_context)
+    classified = classifier.classify(message=case.input_query, conversation_context=conversation_context)
     latency_ms = int((monotonic() - started) * 1000)
-    validation_error = FinnV2OperationClassificationValidator(registry).validation_error(classified, facts=facts, conversation_context=case.conversation_context)
+    validation_error = FinnV2OperationClassificationValidator(registry).validation_error(classified, facts=facts, conversation_context=conversation_context)
     parsed = raw.get("parsed") if isinstance(raw.get("parsed"), Mapping) else {}
     # Grade the typed selector selection, not the raw provider text. The
     # selector normalizes schema-valid delimiter artefacts before any contract
@@ -154,6 +155,35 @@ def run_case(case: SelectorEvalCase) -> dict[str, Any]:
             ),
         },
     }
+
+
+def _canonical_eval_conversation_context(case: SelectorEvalCase) -> dict[str, Any]:
+    """Supply the canonical synthetic lineage required by typed eval cases.
+
+    Published selector corpora describe their expected conversation reference
+    but intentionally contain no user records.  A fixed, non-sensitive
+    lineage fixture makes that precondition explicit for every such case
+    instead of letting the runner grade a context-bound contract without its
+    required context.
+    """
+    context = dict(case.conversation_context or {})
+    if (
+        case.expected_conversation_reference == "previous_verified_response"
+        and not context.get("last_verified_context")
+        and not context.get("last_verified_conclusion")
+    ):
+        context["last_verified_context"] = {
+            "verified_response_id": "previous_verified_response",
+            "run_id": "selector-eval-lineage",
+            "operation_id": "evaluate_plan",
+            "conclusion": "Previously verified FINN conclusion.",
+            "response": "Previously verified FINN response.",
+            "evidence_refs": ["E1"],
+            "resolved_entities": {
+                "asset": "BTC", "setup_id": 293, "strategy_id": 309, "bot_id": 170,
+            },
+        }
+    return context
 
 
 def retry_delay(row: Mapping[str, Any], *, attempt: int, base_seconds: float) -> float | None:

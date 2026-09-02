@@ -109,6 +109,7 @@ class FinnV2OperationClassificationService:
                     "discourse_act": facts.discourse_act,
                     "financial_execution_intent": facts.financial_execution_intent,
                     "ambiguous_reference": facts.ambiguous_reference,
+                    "explicit_entities": facts.explicit_entities,
                 },
             )
         safe_terminal_operations = {

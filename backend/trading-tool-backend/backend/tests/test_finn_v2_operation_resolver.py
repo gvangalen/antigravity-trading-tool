@@ -95,6 +95,18 @@ def test_semantic_frame_resolves_a_complete_linked_graph_to_the_linked_bot_contr
     assert resolved.operation_id == "read_linked_bot"
 
 
+def test_explicit_graph_entities_complete_an_underprojected_read_frame():
+    registry = FinnV2OperationRegistry()
+    resolved = FinnV2OperationResolverService(registry).resolve(
+        selection=_selection("read_active_setup", {"goal": "read", "object": "setup"}),
+        candidates=registry.list(),
+        conversation_context={},
+        request_facts={"explicit_entities": ("setup", "strategy", "bot")},
+    )
+
+    assert resolved.operation_id == "read_linked_bot"
+
+
 def test_unbound_execute_frame_fails_to_clarification_not_an_execution_contract():
     registry = FinnV2OperationRegistry()
     resolved = FinnV2OperationResolverService(registry).resolve(

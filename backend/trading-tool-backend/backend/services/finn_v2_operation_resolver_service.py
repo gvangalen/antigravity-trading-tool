@@ -59,6 +59,18 @@ class FinnV2OperationResolverService:
             context=conversation_context,
             requested_scopes=requested_scopes,
         )
+        # The preprocessor's typed entity ledger records an explicitly named
+        # graph even when a provider frame under-projects one of its scopes.
+        # A setup, strategy and bot requested together can only be served by
+        # the complete linked-bot read contract; returning just the setup
+        # would silently omit requested information.
+        explicit_entities = {
+            self._normalized(item)
+            for item in (request_facts or {}).get("explicit_entities", ())
+            if isinstance(item, str)
+        }
+        if goal == "read" and {"setup", "strategy", "bot"}.issubset(explicit_entities):
+            operation_id = "read_linked_bot"
         # The provider still extracts the subject from free text.  Once it
         # has identified a plan, however, a deterministic assessment fact
         # makes ``clarify`` semantically incompatible: the user requested a
