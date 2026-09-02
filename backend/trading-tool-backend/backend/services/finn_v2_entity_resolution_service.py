@@ -11,6 +11,7 @@ from backend.infrastructure.repositories.setup_repository import SetupRepository
 from backend.infrastructure.repositories.strategy_repository import StrategyRepository
 from backend.infrastructure.repositories.user_repository import UserRepository
 from backend.services.asset_catalog_service import AssetCatalogService
+from backend.services.finn_v2_active_plan_resolver import FinnV2ActivePlanResolver
 
 
 class FinnV2EntityResolutionService:
@@ -23,6 +24,7 @@ class FinnV2EntityResolutionService:
         self.bots = BotRepository(session)
         self.assets = AssetCatalogService(session)
         self.asset_repo = AssetCatalogRepository(session)
+        self.active_plans = FinnV2ActivePlanResolver()
 
     async def resolve_asset(
         self,
@@ -105,18 +107,14 @@ class FinnV2EntityResolutionService:
                 return {"setup": dict(row), "resolution_source": "explicit_setup_id"}
             raise LookupError("entity_not_found")
 
-        active_setup = await self.setups.get_active_setup(user_id)
-        if active_setup and (asset is None or self._matches_symbol(active_setup.get("symbol"), asset)):
-            return {"setup": dict(active_setup), "resolution_source": "active_setup"}
-
-        candidates = [
-            dict(row)
-            for row in await self.setups.get_user_setups(user_id)
-            if asset is None or self._matches_symbol(row.get("symbol"), asset)
-        ]
-        if len(candidates) == 1:
-            return {"setup": candidates[0], "resolution_source": "single_asset_setup" if asset else "single_user_setup"}
-        if len(candidates) > 1:
+        resolution = self.active_plans.resolve(
+            asset=asset,
+            active_setup=await self.setups.get_active_setup(user_id),
+            candidates=await self.setups.get_user_setups(user_id),
+        )
+        if resolution.setup is not None:
+            return {"setup": resolution.setup, "resolution_source": resolution.source}
+        if resolution.source == "setup_ambiguous":
             raise LookupError("setup_ambiguous")
         raise LookupError("setup_not_resolved")
 

@@ -100,7 +100,9 @@ def test_public_contract_trace_exposes_registry_policy_without_provider_payloads
     )
 
     assert trace == {
+        "initial_operation_id": None,
         "operation_id": "read_active_asset",
+        "operation_change_reason": None,
         "contract_version": "2026-08-23.operation-contracts.v1",
         "requested_mode": "READ",
         "delivered_mode": "READ",
@@ -111,12 +113,16 @@ def test_public_contract_trace_exposes_registry_policy_without_provider_payloads
         "candidate_operation_ids": [],
         "context_asset": "BTC",
         "target_asset": None,
+        "target_asset_source": None,
         "referenced_asset": "BTC",
         "active_operation_status": "completed",
+        "active_flow_operation_id": None,
+        "clarification_state_transition": None,
         "missing_input_field": None,
         "proposal_id": None,
         "model_policy": "never",
         "reasoning_source": "deterministic_read",
+        "terminal_limitation_reason": None,
         "verifier_status": "passed",
         "required_scopes": ["active_asset"],
         "covered_scopes": ["active_asset"],

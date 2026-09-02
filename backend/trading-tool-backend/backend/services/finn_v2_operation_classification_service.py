@@ -198,14 +198,12 @@ class FinnV2OperationClassificationService:
         )
         if not isinstance(active, Mapping) or not active.get("missing_required_inputs"):
             return None
-        # Only a bare typed slot value bypasses semantic selection. Natural
-        # language guided turns still need the model to distinguish a new
-        # request from a continuation.
-        if (
-            facts.discourse_act != "clarification_answer"
-            or facts.possible_slot_answer is None
-            or len(facts.normalized_text.rstrip(".").split()) != 1
-        ):
+        # A persisted guided flow already identifies the operation and its
+        # missing slot. Any explicit clarification answer belongs to that
+        # contract, whether the value is one token or a natural sentence.
+        # New requests retain their own discourse acts and therefore still
+        # pass through structured selection.
+        if facts.discourse_act != "clarification_answer":
             return None
         try:
             return self.registry.require_supported(str(active.get("operation_id") or ""))
@@ -379,7 +377,7 @@ class FinnV2OperationClassificationValidator:
             contract = self.registry.require_supported(classification.operation_id)
         except ValueError:
             return "operation_not_supported"
-        if classification.selector_source not in {"structured", "provider_unavailable"}:
+        if classification.selector_source not in {"structured", "provider_unavailable", "guided_state"}:
             return "selector_source_invalid"
         if classification.action != contract.action_polarity.value:
             return "operation_canonical_action_mismatch"
@@ -393,7 +391,7 @@ class FinnV2OperationClassificationValidator:
             context.get("operation_state") if not context.get("conversation_state_version") else None
         )
         if (
-            FinnV2OperationClassificationService._is_guided_continuation(facts)
+            classification.selector_source == "guided_state"
             and isinstance(active, Mapping)
             and active.get("operation_id") == contract.operation_id
         ):

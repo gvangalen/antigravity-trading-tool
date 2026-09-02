@@ -464,6 +464,14 @@ def test_catalog_canonicalizes_ether_for_an_explicit_unsupported_execution_targe
     assert facts.referenced_asset == "ETH"
 
 
+def test_contrastive_current_turn_asset_wins_over_a_mentioned_workspace_asset():
+    facts = CLASSIFIER.preprocessor.preprocess(
+        message="The workspace mentions Apple, but show the saved Ethereum indicators instead."
+    )
+
+    assert facts.referenced_asset == "ETH"
+
+
 def test_follow_up_requires_verified_context_in_the_contract_manifest():
     no_context = CLASSIFIER.classify(message="Onderbouw die conclusie.")
     with_context = CLASSIFIER.classify(
@@ -485,12 +493,9 @@ def test_recorded_facts_after_an_immediate_judgment_are_lineage_facts_not_off_to
 
 
 def test_guided_slot_answer_offers_only_its_typed_contract_and_safe_terminals():
-    captured = {}
-
     class Selector:
-        def select(self, **kwargs):
-            captured.update(kwargs)
-            return type("Selection", (), {"operation_id": "create_setup", "confidence": 0.95})(), None
+        def select(self, **_kwargs):
+            raise AssertionError("guided slot answers must not call the selector")
 
     classifier = FinnV2OperationClassificationService(structured_selector=Selector())
     result = classifier.classify(
@@ -505,18 +510,13 @@ def test_guided_slot_answer_offers_only_its_typed_contract_and_safe_terminals():
     )
 
     assert result.operation_id == "create_setup"
-    assert {contract.operation_id for contract in captured["candidate_contracts"]} == {
-        "create_setup", "clarify_request", "unavailable",
-    }
+    assert result.selector_source == "guided_state"
 
 
 def test_short_setup_type_answer_keeps_the_active_contract_in_the_selector_manifest():
-    captured = {}
-
     class Selector:
-        def select(self, **kwargs):
-            captured.update(kwargs)
-            return type("Selection", (), {"operation_id": "create_setup", "confidence": 0.95})(), None
+        def select(self, **_kwargs):
+            raise AssertionError("guided slot answers must not call the selector")
 
     classifier = FinnV2OperationClassificationService(structured_selector=Selector())
     result = classifier.classify(
@@ -532,9 +532,28 @@ def test_short_setup_type_answer_keeps_the_active_contract_in_the_selector_manif
     )
 
     assert result.operation_id == "create_setup"
-    assert {contract.operation_id for contract in captured["candidate_contracts"]} == {
-        "create_setup", "clarify_request", "unavailable",
-    }
+    assert result.selector_source == "guided_state"
+
+
+def test_natural_guided_slot_answer_keeps_the_persisted_contract_without_provider():
+    class Selector:
+        def select(self, **_kwargs):
+            raise AssertionError("a guided clarification answer must not reroute through the provider")
+
+    result = FinnV2OperationClassificationService(structured_selector=Selector()).classify(
+        message="Gebruik als timeframe de vieruursgrafiek.",
+        conversation_context={
+            "conversation_state_version": "finn_v2.conversation-contracts.v1",
+            "active_guided_operation": {
+                "operation_id": "create_setup",
+                "contract_version": "2026-08-23.operation-contracts.v1",
+                "missing_required_inputs": ["timeframe", "name"],
+            },
+        },
+    )
+
+    assert result.operation_id == "create_setup"
+    assert result.selector_source == "guided_state"
 
 
 @pytest.mark.parametrize(

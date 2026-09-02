@@ -28,11 +28,13 @@ class FinnV2TargetAssetResolver:
     ) -> FinnV2TargetAssetResolution:
         # Current user input always wins. Provider extraction may supplement a
         # natural request but can never overwrite an explicit catalog symbol.
+        # A persisted guided target is the user's already-confirmed intent, so
+        # a fresh model projection cannot silently replace it mid-flow.
         for source, value in (
             ("explicit_message", explicit_target_asset),
-            ("selector_message", selector_target_asset),
-            ("verified_lineage", self._lineage_asset(verified_context)),
             ("persisted_operation", self._state_asset(operation_state)),
+            ("verified_lineage", self._lineage_asset(verified_context)),
+            ("selector_message", selector_target_asset),
             ("workspace_context", workspace_asset if allow_workspace_fallback else None),
         ):
             asset = self._asset(value)

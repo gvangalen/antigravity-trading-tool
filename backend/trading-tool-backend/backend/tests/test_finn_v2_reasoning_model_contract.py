@@ -257,6 +257,7 @@ def test_model_repairs_unsupported_configuration_causality(monkeypatch):
     assert "unsupported_configuration_causality" in prompts[1]
     assert '"forbidden_claim_relationships":["configuration_or_status_implies_causality"]' in prompts[1]
     assert '"path":"claims[0]"' in prompts[1]
+    assert "does not establish the outcome" in prompts[1]
     repair_trace = next(trace for trace in traces if trace["event_type"] == "reasoning_retry")
     assert repair_trace["error_details"]["primary_structured_reasoning"]["claims"][0]["claim_id"] == "C1"
     assert repair_trace["error_details"]["repair_contract"]["rejected_claims"] == [
@@ -547,6 +548,43 @@ def test_configuration_causality_allows_an_evidence_freshness_limitation():
     )
     result_payload["direct_answer"] = "De bot staat niet live; de bron voor de statusgegevens is niet vers."
     result_payload["main_observation"] = "De beschikbare evidence bewijst daarom geen oorzakelijk zwak punt."
+
+    service._validate_configuration_causality(
+        result=ReasoningResult.parse_obj(result_payload),
+        context=ReasoningContextPackage.parse_obj(context_payload),
+    )
+
+
+def test_configuration_causality_allows_an_explicit_non_inference_about_saved_status():
+    service = FinnV2ReasoningService(session=object())
+    context_payload = _context().dict()
+    context_payload["evidence"].append(
+        {
+            "evidence_id": "E2",
+            "artifact_id": "artifact-2",
+            "tool_name": "read_linked_bot",
+            "domain": "automation_context",
+            "entity_type": "bot",
+            "entity_id": "186",
+            "asset": "BTC",
+            "source": "bot_repository",
+            "freshness": "fresh",
+            "confidence": "high",
+            "facts": {"mode": "manual", "is_live": False},
+        }
+    )
+    result_payload = _model_output()
+    result_payload.update(
+        {
+            "reasoning_result_id": "reasoning-1",
+            "run_id": "run-1",
+            "user_id": 7,
+            "model": "gpt-4o-mini",
+            "created_at": datetime.now(timezone.utc),
+        }
+    )
+    result_payload["direct_answer"] = "De bot staat opgeslagen als handmatig en niet live; dat bewijst geen effect op prestaties."
+    result_payload["main_observation"] = "De beschikbare configuratie toont niet welk onderdeel van het plan het zwakst is."
 
     service._validate_configuration_causality(
         result=ReasoningResult.parse_obj(result_payload),

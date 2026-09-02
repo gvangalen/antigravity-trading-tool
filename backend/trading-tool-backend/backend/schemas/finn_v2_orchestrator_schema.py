@@ -54,7 +54,9 @@ class RequestPlan(BaseModel):
     """Canonical persisted intent and information contract for a FINN request."""
 
     user_goal: str = "unknown"
+    initial_operation_id: Optional[str] = None
     operation_id: Optional[str] = None
+    operation_change_reason: Optional[str] = None
     operation_contract_version: Optional[str] = None
     skip_canonical_context_graph: bool = False
     interaction_mode: Literal[
@@ -75,6 +77,7 @@ class RequestPlan(BaseModel):
     referenced_entities: Dict[str, object] = Field(default_factory=dict)
     context_asset: Optional[str] = None
     target_asset: Optional[str] = None
+    target_asset_source: Optional[str] = None
     # A current prompt may refer to an asset without changing the workspace
     # context or being the target of an action. Keep all three roles explicit.
     referenced_asset: Optional[str] = None
@@ -96,6 +99,8 @@ class RequestPlan(BaseModel):
     # the shape here prevents guided operations from falling back to untyped
     # prompt-local slots on later turns.
     operation_state: Dict[str, object] = Field(default_factory=dict)
+    active_flow_operation_id: Optional[str] = None
+    clarification_state_transition: Optional[str] = None
     clarification_required: bool = False
     confidence_score: float = Field(default=0.0, ge=0.0, le=1.0)
 

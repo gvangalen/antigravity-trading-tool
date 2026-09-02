@@ -197,7 +197,9 @@ class FinnV2RequestPreprocessorService:
             if self._contains_any(normalized, terms)
         )
         action = self._action_polarity(normalized)
-        financial_execution_intent = self._is_explicit_financial_execution_intent(normalized)
+        financial_execution_intent = self._is_explicit_financial_execution_intent(normalized) or bool(
+            asset and re.search(r"\b(?:koop\w*|verkoop\w*|buy\w*|sell\w*|place\w*|plaats\w*|submit\w*)\b", normalized)
+        )
         ambiguous_reference = self._has_unbound_deictic_reference(normalized, entities)
         if financial_execution_intent:
             action = "execute"
@@ -481,11 +483,31 @@ class FinnV2RequestPreprocessorService:
 
     @staticmethod
     def _asset_from_text(original: str) -> Optional[str]:
-        for token in re.findall(r"[A-Za-z0-9]+", original):
-            resolved = resolve_catalog_symbol_in_text(token)
-            if resolved:
-                return resolved
-        return None
+        matches = [
+            (match.start(), resolved)
+            for match in re.finditer(r"[A-Za-z0-9]+", original)
+            if (resolved := resolve_catalog_symbol_in_text(match.group(0)))
+        ]
+        if not matches:
+            return None
+        if len(matches) == 1:
+            return matches[0][1]
+
+        # A contrast clause distinguishes a mentioned context from the target
+        # the user is actually asking FINN to handle. The rule is deliberately
+        # syntax-level and catalog-backed; it does not depend on any symbol or
+        # individual prompt wording. Without contrast we retain first mention
+        # so comparison requests are not silently rewritten into a target.
+        normalized = original.casefold()
+        contrast = re.search(
+            r"\b(?:maar|but|instead|rather|hoewel|although|despite|doch|sondern)\b",
+            normalized,
+        )
+        if contrast:
+            after_contrast = [asset for position, asset in matches if position > contrast.start()]
+            if after_contrast:
+                return after_contrast[-1]
+        return matches[0][1]
 
     @staticmethod
     def _asset_from_context(

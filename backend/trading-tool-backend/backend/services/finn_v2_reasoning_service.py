@@ -1155,6 +1155,7 @@ class FinnV2ReasoningService:
             configuration_causality = (
                 any(term in lowered for term in configuration_terms)
                 and any(term in lowered for term in causal_terms)
+                and not FinnV2ReasoningService._is_epistemic_non_inference(lowered)
             )
             # Artifact freshness describes the recency of a read, not the state
             # or effectiveness of the configured entity itself.
@@ -1262,6 +1263,7 @@ class FinnV2ReasoningService:
                 term in statement.lower()
                 for term in unsupported_inference_terms.union(causal_absence_terms)
             )
+            and not FinnV2ReasoningService._is_epistemic_non_inference(statement.lower())
         ]
         if rejected_fields:
             configured_indicators = sorted(
@@ -1283,6 +1285,27 @@ class FinnV2ReasoningService:
                     ],
                 },
             )
+
+    @staticmethod
+    def _is_epistemic_non_inference(statement: str) -> bool:
+        """Allow evidence-boundary statements that explicitly deny an inference.
+
+        A configuration fact may be quoted while explaining that the available
+        evidence does *not* prove an effect. That is the safe alternative to a
+        causal conclusion, not a causal conclusion with different wording.
+        """
+        return bool(
+            re.search(
+                r"(?:\b(?:bewijst|toont|laat\s+zien|onderbouwt|bevestigt|"
+                r"proves|shows|establishes|supports|demonstrates|indicates)\b"
+                r"[^.]{0,48}\b(?:geen|niet|no|not)\b|"
+                r"\b(?:geen|no)\s+(?:bewijs|evidence)\b|"
+                r"\b(?:does\s+not|doesn't|cannot|can't|kan\s+niet|"
+                r"niet\s+aantonen|niet\s+vaststellen)\s+"
+                r"(?:bewijzen|aantonen|onderbouwen|establish|prove|show|support|demonstrate)\b)",
+                statement,
+            )
+        )
 
     @staticmethod
     def _validate_stored_field_absence(*, result: ReasoningResult, context) -> None:

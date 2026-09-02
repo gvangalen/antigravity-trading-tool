@@ -114,6 +114,14 @@ class FinnV2RequestAnalysisService:
         # front door.  The legacy analyzer remains below only to reconstruct
         # historical planless records, never to choose a new contract.
         operation_id = semantic.operation_id
+        initial_operation_id = operation_id
+        operation_change_reason = None
+        active_flow = (conversation_context or {}).get("active_guided_operation")
+        active_flow_operation_id = (
+            str(active_flow.get("operation_id"))
+            if isinstance(active_flow, Mapping) and active_flow.get("operation_id")
+            else None
+        )
         pending_operation_id = self.operation_state.pending_operation_id(conversation_context or {})
         cancelled_guided_state = None
         if pending_operation_id and self.operation_state.is_cancel_intent(text):
@@ -122,8 +130,10 @@ class FinnV2RequestAnalysisService:
                 conversation_context=conversation_context,
             )
             operation_id = "clarify_request"
+            operation_change_reason = "guided_operation_cancelled"
         if uses_conversation_reference and "conversation_reference_without_verified_context" in unresolved_signals:
             operation_id = "clarify_request"
+            operation_change_reason = "lineage_not_available"
         try:
             operation = self.operations.require_supported(operation_id)
         except FinnV2OperationUnavailableError as exc:
@@ -133,6 +143,7 @@ class FinnV2RequestAnalysisService:
             operation = self.operations.require_supported(operation_id)
             interaction_mode = "UNAVAILABLE"
             unresolved_signals.append(str(exc))
+            operation_change_reason = "registry_contract_unavailable"
         else:
             # The registry owns the persisted mode for every new request.
             interaction_mode = operation.mode
@@ -146,6 +157,7 @@ class FinnV2RequestAnalysisService:
                 operation = self.operations.require_supported(operation_id)
                 interaction_mode = operation.mode
                 unresolved_signals.append(validation_error)
+                operation_change_reason = f"classification_validation:{validation_error}"
         # The model selects the operation, while the registry owns its
         # non-negotiable state requirements. A lineage contract must receive
         # the prior verified record even if the structured model leaves the
@@ -164,6 +176,7 @@ class FinnV2RequestAnalysisService:
                 operation_id = "clarify_request"
                 operation = self.operations.require_supported(operation_id)
                 interaction_mode = operation.mode
+                operation_change_reason = "lineage_contract_without_context"
         scopes = self._presentation_subject_scopes(operation, preprocessed.explicit_entities)
         integrated_plan = operation.operation_id == "evaluate_plan"
         primary_subject = self._presentation_primary_subject(operation)
@@ -211,6 +224,11 @@ class FinnV2RequestAnalysisService:
         if guided_state is not None:
             missing_essential_inputs = list(guided_state.missing_required_inputs)
         operation_state_payload = guided_state.dict() if guided_state is not None else {}
+        clarification_state_transition = None
+        if guided_state is not None:
+            clarification_state_transition = "continued" if semantic.selector_source == "guided_state" else "started_or_updated"
+        elif cancelled_guided_state is not None:
+            clarification_state_transition = "cancelled"
         if (
             guided_state is None
             and uses_conversation_reference
@@ -272,11 +290,16 @@ class FinnV2RequestAnalysisService:
             explicit_strategy_id=explicit_strategy_id,
             explicit_bot_id=explicit_bot_id,
             financial_concept=preprocessed.financial_concept,
+            initial_operation_id=initial_operation_id,
             operation_id=operation_id,
+            operation_change_reason=operation_change_reason or (
+                "registry_contract_resolution" if operation_id != initial_operation_id else None
+            ),
             operation=operation,
             operation_state=operation_state_payload,
             context_asset=context_asset,
             target_asset=target_resolution.target_asset,
+            target_asset_source=target_resolution.source,
             referenced_asset=message_asset or explicit_asset,
             # The request plan is the runtime projection consumed by policy
             # and proposal services. Keep its action tied to the immutable
@@ -291,6 +314,8 @@ class FinnV2RequestAnalysisService:
             selection_reason_code=semantic.reason_code,
             unsupported_capability=semantic.unsupported_capability,
             semantic_frame=semantic.semantic_frame,
+            active_flow_operation_id=active_flow_operation_id,
+            clarification_state_transition=clarification_state_transition,
         )
 
         return RequestAnalysisResult(
@@ -333,11 +358,14 @@ class FinnV2RequestAnalysisService:
         explicit_strategy_id: Optional[int],
         explicit_bot_id: Optional[int],
         financial_concept: Optional[str],
+        initial_operation_id: str,
         operation_id: str,
+        operation_change_reason: Optional[str],
         operation,
         operation_state: Dict[str, object],
         context_asset: Optional[str],
         target_asset: Optional[str],
+        target_asset_source: Optional[str],
         referenced_asset: Optional[str],
         requested_action: Optional[str],
         discourse_type: str,
@@ -349,6 +377,8 @@ class FinnV2RequestAnalysisService:
         selection_reason_code: Optional[str],
         unsupported_capability: Optional[str],
         semantic_frame: Mapping[str, object],
+        active_flow_operation_id: Optional[str],
+        clarification_state_transition: Optional[str],
     ) -> RequestPlan:
         reference = None
         reference_kind = None
@@ -374,7 +404,9 @@ class FinnV2RequestAnalysisService:
         score = {"high": 0.9, "medium": 0.7, "low": 0.4, "none": 0.0}[confidence]
         return RequestPlan(
             user_goal=self._user_goal(interaction_mode, primary_subject, normalized, integrated_plan),
+            initial_operation_id=initial_operation_id,
             operation_id=operation_id,
+            operation_change_reason=operation_change_reason,
             operation_contract_version=getattr(operation, "version", None),
             skip_canonical_context_graph=getattr(operation, "context_policy", None) == "minimal",
             interaction_mode=interaction_mode,
@@ -399,6 +431,7 @@ class FinnV2RequestAnalysisService:
             operation_state=operation_state,
             context_asset=context_asset,
             target_asset=target_asset,
+            target_asset_source=target_asset_source,
             referenced_asset=referenced_asset,
             requested_action=requested_action,
             discourse_type=discourse_type,
@@ -410,6 +443,8 @@ class FinnV2RequestAnalysisService:
             selection_reason_code=selection_reason_code,
             unsupported_capability=unsupported_capability,
             semantic_frame=dict(semantic_frame),
+            active_flow_operation_id=active_flow_operation_id,
+            clarification_state_transition=clarification_state_transition,
             clarification_required=bool(missing_essential_inputs) or interaction_mode == "CLARIFICATION",
             confidence_score=score,
         )

@@ -8,6 +8,7 @@ from sqlalchemy import select, text
 # Import model types and repositories to reuse their well-tested database query logic sequentially
 from backend.infrastructure.models import AiCategoryInsight
 from backend.infrastructure.repositories.user_repository import UserRepository
+from backend.services.finn_v2_active_plan_resolver import FinnV2ActivePlanResolver
 from backend.infrastructure.repositories.conversation_state_repository import ConversationStateRepository
 from backend.infrastructure.repositories.bot_repository import BotRepository
 from backend.infrastructure.repositories.market_data_repository import MarketDataRepository
@@ -149,23 +150,15 @@ class AssistantContextRepository:
                 setup_confidence = "high"
                 setup_source = "explicit_setup_id"
         if not setup_record:
-            active_setup = await self.setup_repo.get_active_setup(user_id)
-            if active_setup and (
-                not resolved_symbol
-                or str(active_setup.get("symbol") or "").upper() == str(resolved_symbol or "").upper()
-            ):
-                setup_record = dict(active_setup)
+            active_resolution = FinnV2ActivePlanResolver().resolve(
+                asset=resolved_symbol,
+                active_setup=await self.setup_repo.get_active_setup(user_id),
+                candidates=active_setups,
+            )
+            if active_resolution.setup is not None:
+                setup_record = active_resolution.setup
                 setup_confidence = "medium"
-                setup_source = "active_setup"
-        if not setup_record and resolved_symbol:
-            matching_setups = [
-                dict(item) for item in active_setups
-                if str(item.get("symbol") or "").upper() == resolved_symbol
-            ]
-            if len(matching_setups) == 1:
-                setup_record = matching_setups[0]
-                setup_confidence = "medium"
-                setup_source = "asset_matched_setup"
+                setup_source = active_resolution.source
 
         explicit_strategy_id = self._coerce_int(request_context.get("strategy_id"))
         strategy_record = None

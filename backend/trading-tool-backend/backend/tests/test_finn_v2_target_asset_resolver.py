@@ -21,3 +21,27 @@ def test_persisted_guided_target_wins_over_workspace_context():
 
     assert result.target_asset == "ADA"
     assert result.source == "persisted_operation"
+
+
+def test_persisted_guided_target_wins_over_previous_conversation_asset():
+    result = FinnV2TargetAssetResolver().resolve(
+        verified_context={"last_verified_context": {"target_asset": "BTC"}},
+        operation_state={"collected_inputs": {"symbol": "SOL"}},
+        workspace_asset="AAPL",
+    )
+
+    assert result.target_asset == "SOL"
+    assert result.source == "persisted_operation"
+
+
+def test_persisted_guided_target_cannot_be_overwritten_by_selector_projection():
+    result = FinnV2TargetAssetResolver().resolve(
+        explicit_target_asset=None,
+        selector_target_asset="ETH",
+        verified_context={"last_verified_context": {"target_asset": "BTC"}},
+        operation_state={"target_entities": {"asset": "SOL"}},
+        workspace_asset="AAPL",
+    )
+
+    assert result.target_asset == "SOL"
+    assert result.source == "persisted_operation"

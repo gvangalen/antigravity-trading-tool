@@ -60,3 +60,21 @@ def test_entity_resolution_can_resolve_setup_without_explicit_asset():
     assert active["resolution_source"] == "active_setup"
     assert single["setup"]["id"] == 294
     assert single["resolution_source"] == "single_user_setup"
+
+
+def test_entity_resolution_selects_the_asset_specific_active_setup_before_other_candidates():
+    service = FinnV2EntityResolutionService(session=object())
+    service.setups = _FakeSetupRepo()
+
+    service.setups.get_active_setup = lambda _user_id: asyncio.sleep(0, result={"setup_id": 293, "symbol": "BTC"})
+    service.setups.get_user_setups = lambda _user_id: asyncio.sleep(0, result=[
+        {"id": 294, "symbol": "ETH", "is_active": True},
+        {"id": 295, "symbol": "ETH"},
+    ])
+
+    resolved = asyncio.run(service.resolve_setup(user_id=388, selector={}, asset="ETH"))
+
+    assert resolved == {
+        "setup": {"id": 294, "symbol": "ETH", "is_active": True},
+        "resolution_source": "asset_active_setup",
+    }

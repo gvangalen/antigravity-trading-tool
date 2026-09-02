@@ -197,7 +197,9 @@ class FinnV2DeliveryService:
             # rejected earlier if their resolved contract is missing.
             model_policy = None
         return {
+            "initial_operation_id": plan.get("initial_operation_id"),
             "operation_id": operation_id,
+            "operation_change_reason": plan.get("operation_change_reason"),
             "contract_version": plan.get("operation_contract_version"),
             "requested_mode": plan.get("interaction_mode"),
             "delivered_mode": getattr(response, "mode", None),
@@ -208,12 +210,16 @@ class FinnV2DeliveryService:
             "candidate_operation_ids": plan.get("candidate_operation_ids", []),
             "context_asset": plan.get("context_asset"),
             "target_asset": plan.get("target_asset"),
+            "target_asset_source": plan.get("target_asset_source"),
             "referenced_asset": plan.get("referenced_asset"),
             "active_operation_status": (plan.get("operation_state") or {}).get("status"),
+            "active_flow_operation_id": plan.get("active_flow_operation_id"),
+            "clarification_state_transition": plan.get("clarification_state_transition"),
             "missing_input_field": (plan.get("operation_state") or {}).get("next_missing_input"),
             "proposal_id": getattr(response, "proposal_id", None),
             "model_policy": model_policy,
-            "reasoning_source": (getattr(response, "reasoning_provenance", {}) or {}).get("source"),
+            "reasoning_source": (getattr(response, "reasoning_provenance", {}) or {}).get("reasoning_source") or (getattr(response, "reasoning_provenance", {}) or {}).get("source"),
+            "terminal_limitation_reason": (getattr(response, "reasoning_provenance", {}) or {}).get("fallback_reason"),
             "verifier_status": getattr(response, "verifier_status", None),
             "required_scopes": verifier_payload.get("coverage", {}).get("required_scopes", []),
             "covered_scopes": verifier_payload.get("coverage", {}).get("covered_scopes", []),

@@ -56,6 +56,14 @@ def test_preprocessor_marks_autonomous_market_action_without_account_as_executio
     assert facts.action_polarity == "execute"
 
 
+def test_preprocessor_marks_a_direct_order_for_a_catalog_asset_as_financial_execution():
+    facts = FinnV2RequestPreprocessorService().preprocess(message="Plaats een kooporder voor Dogecoin.")
+
+    assert facts.referenced_asset == "DOGE"
+    assert facts.action_polarity == "execute"
+    assert facts.financial_execution_intent is True
+
+
 def test_preprocessor_marks_short_unbound_deictic_reference_as_ambiguous():
     facts = FinnV2RequestPreprocessorService().preprocess(message="Doe hetzelfde ermee.")
 
