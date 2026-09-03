@@ -51,6 +51,7 @@ sudo sh -c '
   target="$1/LAST_GOOD_COMMIT"
   temporary="$(mktemp "$1/.LAST_GOOD_COMMIT.XXXXXX")"
   printf "%s\n" "$2" > "$temporary"
+  chmod 644 "$temporary"
   mv -f "$temporary" "$target"
 ' sh "$CANONICAL_DEPLOY_STATE_DIR" "$RESOLVED_COMMIT"
 

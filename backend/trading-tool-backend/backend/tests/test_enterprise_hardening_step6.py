@@ -55,6 +55,7 @@ def test_deploy_script_atomically_records_the_validated_canonical_last_good_comm
     assert "record_accepted_release.sh" in source
     assert "LAST_GOOD_COMMIT" in acceptance_source
     assert "mktemp" in acceptance_source
+    assert 'chmod 644 "$temporary"' in acceptance_source
     assert "RELEASE_MARKER_REASON" in acceptance_source
     assert "DEPLOYMENT_VALIDATED_RELEASE" in acceptance_source
     assert "CHECKOUT_MARKER" in acceptance_source
