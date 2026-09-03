@@ -66,6 +66,7 @@ class FinnV2OperationStateService:
         return FinnV2OperationState(
             operation_id=contract.operation_id,
             contract_version=contract.version,
+            state_revision=(existing.state_revision + 1) if existing is not None else 1,
             collected_inputs=collected,
             resolved_entities=resolved_entities,
             target_entities=target_entities,
