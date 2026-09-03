@@ -58,6 +58,30 @@ def test_semantic_frame_resolves_a_broad_assessment_to_plan_not_setup():
     assert resolved.operation_id == "evaluate_plan"
 
 
+def test_aggregate_plan_assessment_overrides_a_conflicting_node_projection():
+    registry = FinnV2OperationRegistry()
+    resolved = FinnV2OperationResolverService(registry).resolve(
+        selection=_selection("evaluate_setup", {"goal": "evaluate", "object": "setup"}),
+        candidates=registry.list(),
+        conversation_context={},
+        request_facts={"discourse_act": "evaluation", "primary_entity": "plan"},
+    )
+
+    assert resolved.operation_id == "evaluate_plan"
+
+
+def test_specific_setup_assessment_is_not_broadened_to_an_aggregate_plan():
+    registry = FinnV2OperationRegistry()
+    resolved = FinnV2OperationResolverService(registry).resolve(
+        selection=_selection("evaluate_setup", {"goal": "evaluate", "object": "setup"}),
+        candidates=registry.list(),
+        conversation_context={},
+        request_facts={"discourse_act": "evaluation", "primary_entity": "setup"},
+    )
+
+    assert resolved.operation_id == "evaluate_setup"
+
+
 def test_plan_assessment_fact_rejects_a_contradictory_clarification_frame():
     registry = FinnV2OperationRegistry()
     resolved = FinnV2OperationResolverService(registry).resolve(

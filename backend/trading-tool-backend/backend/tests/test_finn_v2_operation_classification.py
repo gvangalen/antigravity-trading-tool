@@ -259,6 +259,30 @@ def test_complete_setup_slots_remove_model_reported_missing_inputs():
     assert result.reason_code is None
 
 
+@pytest.mark.parametrize(
+    "message",
+    (
+        "Help me een nieuwe Solana-setup te maken.",
+        "Could you help me prepare a new Solana setup?",
+        "Hilf mir, ein neues Solana-Setup zu erstellen.",
+    ),
+)
+def test_guided_setup_request_preserves_creation_contract_and_requires_slot_collection(message):
+    result = CLASSIFIER.classify(message=message)
+
+    assert result.operation_id == "create_setup"
+    assert result.selected_missing_inputs == ("setup_type", "timeframe", "name")
+    assert result.clarification_required is True
+
+
+def test_direct_incomplete_setup_request_does_not_misrepresent_a_guided_exchange():
+    result = CLASSIFIER.classify(message="Maak een Solana-setup.")
+
+    assert result.operation_id == "create_setup"
+    assert result.selected_missing_inputs == ("setup_type", "timeframe", "name")
+    assert result.clarification_required is False
+
+
 def test_separable_dutch_execution_verb_selects_the_execution_contract():
     result = CLASSIFIER.classify(message="Voer dit voorstel uit.")
 

@@ -40,6 +40,7 @@ class SemanticOperationClassification:
     supplied_inputs: Mapping[str, object] = field(default_factory=dict)
     derived_inputs: Mapping[str, object] = field(default_factory=dict)
     selected_missing_inputs: tuple[str, ...] = ()
+    clarification_required: bool = False
     semantic_frame: Mapping[str, object] = field(default_factory=dict)
 
 
@@ -111,6 +112,7 @@ class FinnV2OperationClassificationService:
                     "ambiguous_reference": facts.ambiguous_reference,
                     "explicit_entities": facts.explicit_entities,
                     "explicit_plan_subject": facts.explicit_plan_subject,
+                    "primary_entity": facts.primary_entity,
                 },
             )
         safe_terminal_operations = {
@@ -296,6 +298,14 @@ class FinnV2OperationClassificationService:
             supplied_inputs=supplied_inputs,
             derived_inputs=derived_inputs,
             selected_missing_inputs=selected_missing_inputs,
+            clarification_required=(
+                operation_id == "clarify_request"
+                or (
+                    facts.guidance_requested
+                    and bool(selected_missing_inputs)
+                    and contract.mode in {"CREATE_PROPOSAL", "ACTION_PROPOSAL"}
+                )
+            ),
             semantic_frame=dict(getattr(selection, "semantic_frame", {}) or {}),
         )
 

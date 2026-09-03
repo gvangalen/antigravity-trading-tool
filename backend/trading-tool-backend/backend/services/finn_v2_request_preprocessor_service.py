@@ -34,6 +34,7 @@ class FinnV2PreprocessedRequest:
     financial_execution_intent: bool = False
     ambiguous_reference: bool = False
     explicit_plan_subject: bool = False
+    guidance_requested: bool = False
 
 
 class FinnV2RequestPreprocessorService:
@@ -49,7 +50,10 @@ class FinnV2RequestPreprocessorService:
         ("add", ("voeg", "add", "toevoeg", "zet op", "volg")),
         ("activate", ("activeer", "activate", "schakel", "inschakel", "start", "zet live", "go live")),
         ("update", ("wijzig", "update", "pas aan")),
-        ("create", ("maak", "maken", "create", "ontwerp", "stel", "bereid")),
+        ("create", (
+            "maak", "maken", "create", "prepare", "preparing", "ontwerp", "stel", "bereid",
+            "erstell", "anleg",
+        )),
         ("evaluate", ("beoordeel", "evaluate", "zwak", "risico", "past", "fit", "ontbrek", "ontbreek", "vertrouwen")),
     )
     # These are assessment predicates, not operation routes.  Combined with
@@ -207,6 +211,10 @@ class FinnV2RequestPreprocessorService:
         if action == "add" and re.search(r"\bvolg(?:en)?\b", normalized) and "watchlist" not in entities:
             entities = (*entities, "watchlist")
         discourse = self._discourse_act(normalized, entities, references, action)
+        # Asking FINN to help prepare an object establishes a guided
+        # interaction boundary. It does not choose an operation; it only lets
+        # the selected contract expose its missing inputs as a clarification.
+        guidance_requested = self._requests_guidance(normalized)
         # A bare explicit asset is useful only as a possible guided slot answer.
         # The conversation resolver decides whether it fills an open field.
         short_turn = len(re.findall(r"[\w-]+", normalized)) <= 10
@@ -256,6 +264,7 @@ class FinnV2RequestPreprocessorService:
             financial_execution_intent=financial_execution_intent,
             ambiguous_reference=ambiguous_reference,
             explicit_plan_subject=explicit_plan,
+            guidance_requested=guidance_requested,
         )
 
     @staticmethod
@@ -287,7 +296,7 @@ class FinnV2RequestPreprocessorService:
         inflection_stems = {
             "indicator", "signaal", "trendindicator", "setup", "haal", "maak",
             "toevoeg", "verwijder", "activeer", "bevestig", "formuleer",
-            "herformuleer", "herschrijf", "ontbrek", "ontbreek", "inschakel",
+            "herformuleer", "herschrijf", "ontbrek", "ontbreek", "inschakel", "erstell", "anleg",
         }
         return any(
             re.search(rf"(?<!\w){re.escape(term)}(?!\w)", text)
@@ -413,6 +422,17 @@ class FinnV2RequestPreprocessorService:
                 or re.search(market_action, text)
             )
         )
+
+    @staticmethod
+    def _requests_guidance(text: str) -> bool:
+        """Recognize a collaboration act without assigning a FINN operation."""
+        return bool(re.search(
+            r"\b(?:help(?:\s+me)?|could\s+you\s+help(?:\s+me)?|"
+            r"can\s+you\s+help(?:\s+me)?|kun\s+je\s+(?:mij|me)\s+helpen|"
+            r"help\s+(?:mij|me)|ik\s+heb\s+hulp\s+nodig|"
+            r"hilf\s+mir|kannst\s+du\s+mir\s+helfen|unterst[üu]tz(?:e)?\s+mich)\b",
+            text,
+        ))
 
     @staticmethod
     def _has_unbound_deictic_reference(text: str, entities: tuple[str, ...]) -> bool:

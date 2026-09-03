@@ -92,6 +92,16 @@ class FinnV2OperationResolverService:
             and str((request_facts or {}).get("discourse_act") or "") == "evaluation"
         ):
             operation_id = "evaluate_plan"
+        # A typed aggregate-plan subject remains broader than a provider's
+        # narrower graph-node label. This preserves the registry's complete
+        # plan-assessment contract while leaving setup assessments, whose
+        # primary subject is ``setup``, untouched.
+        if (
+            goal == "evaluate"
+            and str((request_facts or {}).get("discourse_act") or "") == "evaluation"
+            and str((request_facts or {}).get("primary_entity") or "") == "plan"
+        ):
+            operation_id = "evaluate_plan"
         if (
             bool((request_facts or {}).get("ambiguous_reference"))
             and not self._has_eligible_lineage(conversation_context)

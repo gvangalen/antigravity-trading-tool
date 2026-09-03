@@ -316,6 +316,7 @@ class FinnV2RequestAnalysisService:
             semantic_frame=semantic.semantic_frame,
             active_flow_operation_id=active_flow_operation_id,
             clarification_state_transition=clarification_state_transition,
+            semantic_clarification_required=semantic.clarification_required,
         )
 
         return RequestAnalysisResult(
@@ -379,6 +380,7 @@ class FinnV2RequestAnalysisService:
         semantic_frame: Mapping[str, object],
         active_flow_operation_id: Optional[str],
         clarification_state_transition: Optional[str],
+        semantic_clarification_required: bool,
     ) -> RequestPlan:
         reference = None
         reference_kind = None
@@ -445,7 +447,11 @@ class FinnV2RequestAnalysisService:
             semantic_frame=dict(semantic_frame),
             active_flow_operation_id=active_flow_operation_id,
             clarification_state_transition=clarification_state_transition,
-            clarification_required=bool(missing_essential_inputs) or interaction_mode == "CLARIFICATION",
+            clarification_required=(
+                bool(missing_essential_inputs)
+                or interaction_mode == "CLARIFICATION"
+                or semantic_clarification_required
+            ),
             confidence_score=score,
         )
 

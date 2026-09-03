@@ -117,8 +117,11 @@ def run_case(case: SelectorEvalCase) -> dict[str, Any]:
     conversation_reference = classified.selected_conversation_reference
     actual_missing_inputs = list(classified.selected_missing_inputs)
     # A selected operation can legitimately expose missing inputs without
-    # becoming the separate ``clarify_request`` operation.
-    clarification = classified.operation_id == "clarify_request"
+    # becoming the separate ``clarify_request`` operation. An explicit
+    # guided request is the exception: its selected mutation contract must
+    # surface the typed slot collection response while retaining that
+    # operation.
+    clarification = classified.clarification_required
     required_inputs = list(classified.required_inputs)
     supplied_inputs = dict(classified.supplied_inputs)
     derived_inputs = dict(classified.derived_inputs)
