@@ -108,7 +108,10 @@ class FinnV2RequestPreprocessorService:
         # resolver can return the safe unsupported contract rather than
         # treating a financial request as off-topic.
         "portfolio": ("portfolio", "portefeuille"),
-        "asset": ("asset", "instrument", "symbool", "symbol", "coin", "aandeel", "workspace", "markt"),
+        "asset": (
+            "asset", "instrument", "symbool", "symbol", "coin", "aandeel", "effect",
+            "security", "share", "equity", "wertpapier", "aktie", "workspace", "markt",
+        ),
     }
     _REFERENCE_MARKERS = {
         "previous_verified_conclusion": (

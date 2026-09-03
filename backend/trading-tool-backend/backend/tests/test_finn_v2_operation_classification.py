@@ -521,6 +521,16 @@ def test_preprocessor_distinguishes_an_explicit_plan_from_an_inferred_graph_subj
     assert graph_only.linked_graph_relationship is True
 
 
+def test_preprocessor_recognizes_current_asset_subjects_across_supported_languages():
+    for message in (
+        "Op welk effect staat mijn werkruimte nu?",
+        "Which security is selected in my workspace?",
+        "Welches Wertpapier ist aktuell ausgewahlt?",
+    ):
+        facts = CLASSIFIER.preprocessor.preprocess(message=message)
+        assert "asset" in facts.explicit_entities
+
+
 def test_preprocessor_keeps_a_complete_graph_overview_distinct_from_a_link_relationship():
     overview = CLASSIFIER.preprocessor.preprocess(
         message="Welke setup, strategie en bot heb ik?"
