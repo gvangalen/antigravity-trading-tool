@@ -518,6 +518,19 @@ def test_preprocessor_distinguishes_an_explicit_plan_from_an_inferred_graph_subj
 
     assert explicit_plan.explicit_plan_subject is True
     assert graph_only.explicit_plan_subject is False
+    assert graph_only.linked_graph_relationship is True
+
+
+def test_preprocessor_keeps_a_complete_graph_overview_distinct_from_a_link_relationship():
+    overview = CLASSIFIER.preprocessor.preprocess(
+        message="Welke setup, strategie en bot heb ik?"
+    )
+    german_relationship = CLASSIFIER.preprocessor.preprocess(
+        message="Welche Strategie und welcher Bot sind mit meinem aktiven Setup verbunden?"
+    )
+
+    assert overview.linked_graph_relationship is False
+    assert german_relationship.linked_graph_relationship is True
 
 
 def test_catalog_canonicalizes_cosmos_before_selector_or_proposal_boundaries():

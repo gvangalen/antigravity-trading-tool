@@ -113,6 +113,7 @@ class FinnV2OperationClassificationService:
                     "ambiguous_reference": facts.ambiguous_reference,
                     "explicit_entities": facts.explicit_entities,
                     "explicit_plan_subject": facts.explicit_plan_subject,
+                    "linked_graph_relationship": facts.linked_graph_relationship,
                     "primary_entity": facts.primary_entity,
                 },
             )

@@ -81,6 +81,7 @@ class FinnV2OperationResolverService:
         if (
             str((request_facts or {}).get("action_polarity") or "") == "read"
             and not bool((request_facts or {}).get("explicit_plan_subject"))
+            and bool((request_facts or {}).get("linked_graph_relationship"))
             and {"setup", "strategy", "bot"}.issubset(explicit_entities)
         ):
             operation_id = "read_linked_bot"

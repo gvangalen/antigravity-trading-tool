@@ -119,19 +119,39 @@ def test_semantic_frame_resolves_a_complete_linked_graph_to_the_linked_bot_contr
     assert resolved.operation_id == "read_linked_bot"
 
 
-def test_explicit_graph_entities_complete_an_underprojected_read_frame():
+def test_linked_graph_relationship_completes_an_underprojected_read_frame():
     registry = FinnV2OperationRegistry()
     resolved = FinnV2OperationResolverService(registry).resolve(
         selection=_selection("read_active_setup", {"goal": "read", "object": "setup"}),
         candidates=registry.list(),
         conversation_context={},
-        request_facts={"action_polarity": "read", "explicit_entities": ("setup", "strategy", "bot")},
+        request_facts={
+            "action_polarity": "read",
+            "explicit_entities": ("setup", "strategy", "bot"),
+            "linked_graph_relationship": True,
+        },
     )
 
     assert resolved.operation_id == "read_linked_bot"
 
 
-def test_explicit_graph_entities_override_an_aggregate_plan_projection():
+def test_linked_graph_relationship_overrides_an_aggregate_plan_projection():
+    registry = FinnV2OperationRegistry()
+    resolved = FinnV2OperationResolverService(registry).resolve(
+        selection=_selection("read_active_plan", {"goal": "read", "object": "plan"}),
+        candidates=registry.list(),
+        conversation_context={},
+        request_facts={
+            "action_polarity": "read",
+            "explicit_entities": ("setup", "strategy", "bot"),
+            "linked_graph_relationship": True,
+        },
+    )
+
+    assert resolved.operation_id == "read_linked_bot"
+
+
+def test_complete_plan_overview_remains_a_plan_read_without_a_relationship_fact():
     registry = FinnV2OperationRegistry()
     resolved = FinnV2OperationResolverService(registry).resolve(
         selection=_selection("read_active_plan", {"goal": "read", "object": "plan"}),
@@ -140,7 +160,7 @@ def test_explicit_graph_entities_override_an_aggregate_plan_projection():
         request_facts={"action_polarity": "read", "explicit_entities": ("setup", "strategy", "bot")},
     )
 
-    assert resolved.operation_id == "read_linked_bot"
+    assert resolved.operation_id == "read_active_plan"
 
 
 def test_explicit_plan_subject_keeps_the_complete_plan_read_contract():

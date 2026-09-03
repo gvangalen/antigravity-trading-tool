@@ -34,6 +34,7 @@ class FinnV2PreprocessedRequest:
     financial_execution_intent: bool = False
     ambiguous_reference: bool = False
     explicit_plan_subject: bool = False
+    linked_graph_relationship: bool = False
     guidance_requested: bool = False
 
 
@@ -178,6 +179,13 @@ class FinnV2RequestPreprocessorService:
         plan_components = {"indicator_configuration", "setup", "strategy", "bot"}
         relational_components = plan_components.intersection(entities)
         relational_graph = "bot" in relational_components and bool({"setup", "strategy"}.intersection(relational_components))
+        # A graph overview and a relationship question need different read
+        # contracts. This is a typed grammatical fact; it does not select an
+        # operation or inspect a particular asset, setup, or bot.
+        linked_graph_relationship = relational_graph and bool(re.search(
+            r"\b(?:gekoppel\w*|verbond\w*|verbund\w*|linked|connect\w*|associated|zugeordnet)\b",
+            normalized,
+        ))
         explicit_plan = bool(re.search(r"\b(?:mijn\s+)?(?:actieve\s+)?plan\b|\bactive\s+plan\b", normalized))
         # Two linked plan entities are a graph request, not two isolated reads.
         # This remains a fact about the request's explicit nouns; the registry
@@ -264,6 +272,7 @@ class FinnV2RequestPreprocessorService:
             financial_execution_intent=financial_execution_intent,
             ambiguous_reference=ambiguous_reference,
             explicit_plan_subject=explicit_plan,
+            linked_graph_relationship=linked_graph_relationship,
             guidance_requested=guidance_requested,
         )
 
