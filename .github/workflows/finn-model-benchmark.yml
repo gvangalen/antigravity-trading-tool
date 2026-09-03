@@ -12,7 +12,7 @@ jobs:
     permissions:
       contents: read
     env:
-      CANDIDATE_SHA: 337e936a5906ebd2d3174efbdc0520ce695b4b4f
+      CANDIDATE_SHA: dd25cdcecaa8cf84a5906b22546b85c0213aa5fe
       RAW_SERVER_IP: ${{ secrets.HOST || secrets.SERVER_IP || vars.HOST || vars.SERVER_IP }}
       RAW_DEPLOY_KEY: ${{ secrets.SSH_PRIVATE_KEY || secrets.DEPLOY_SSH_KEY }}
     steps:
