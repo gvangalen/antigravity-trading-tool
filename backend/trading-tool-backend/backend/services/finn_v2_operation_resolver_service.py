@@ -51,7 +51,10 @@ class FinnV2OperationResolverService:
             for item in frame.get("requested_scopes", ())
             if isinstance(item, str)
         }
-        explicit_active_plan = self._normalized((selection.entities or {}).get("concept")) == "active_plan"
+        explicit_active_plan = (
+            self._normalized((selection.entities or {}).get("concept")) == "active_plan"
+            or bool((request_facts or {}).get("explicit_plan_subject"))
+        )
         operation_id = self._operation_from_frame(
             goal=goal,
             object_name=object_name,

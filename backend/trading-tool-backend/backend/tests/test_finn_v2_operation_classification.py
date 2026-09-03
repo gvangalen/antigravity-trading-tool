@@ -283,6 +283,24 @@ def test_direct_incomplete_setup_request_does_not_misrepresent_a_guided_exchange
     assert result.clarification_required is False
 
 
+def test_explicit_message_asset_overrides_conflicting_selector_asset_projection():
+    class Selector:
+        def select(self, **_kwargs):
+            return FinnV2StructuredOperationSelection(
+                operation_id="read_indicator_configuration", confidence=0.95,
+                entities={"asset": "AAPL"}, target_asset="AAPL", conversation_reference=None,
+                missing_inputs=(), ambiguity_reason=None,
+                semantic_frame={"goal": "read", "object": "indicator"},
+            ), None
+
+    result = FinnV2OperationClassificationService(structured_selector=Selector()).classify(
+        message="De werkruimte staat op AAPL, maar lees uitsluitend mijn opgeslagen Solana-indicatoren."
+    )
+
+    assert result.selected_target_asset == "SOL"
+    assert result.selected_entities["asset"] == "SOL"
+
+
 def test_separable_dutch_execution_verb_selects_the_execution_contract():
     result = CLASSIFIER.classify(message="Voer dit voorstel uit.")
 

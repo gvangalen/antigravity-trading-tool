@@ -19,6 +19,7 @@ from backend.services.finn_v2_structured_operation_selector_service import (
 )
 from backend.services.finn_v2_operation_state_service import FinnV2OperationStateService
 from backend.services.finn_v2_operation_resolver_service import FinnV2OperationResolverService
+from backend.services.finn_v2_target_asset_resolver import FinnV2TargetAssetResolver
 
 
 @dataclass(frozen=True)
@@ -263,6 +264,18 @@ class FinnV2OperationClassificationService:
     ) -> SemanticOperationClassification:
         contract = self.registry.get(operation_id)
         selected_entities = dict(getattr(selection, "entities", {}) or {})
+        target_resolution = FinnV2TargetAssetResolver().resolve(
+            explicit_target_asset=facts.referenced_asset,
+            selector_target_asset=getattr(selection, "target_asset", None),
+            verified_context=conversation_context,
+            allow_workspace_fallback=False,
+        )
+        # The target resolver applies the product-wide precedence contract to
+        # this early semantic projection as well as to runtime request plans.
+        # No downstream consumer may receive a selector asset that conflicts
+        # with the current user's explicit catalog-backed target.
+        if target_resolution.target_asset:
+            selected_entities["asset"] = target_resolution.target_asset
         if operation_id == "explain_financial_concept" and facts.financial_concept:
             selected_entities["concept"] = facts.financial_concept
         supplied_inputs, derived_inputs, selected_missing_inputs = self._resolved_inputs(
@@ -292,7 +305,7 @@ class FinnV2OperationClassificationService:
             reason_code=unsupported_capability or ("off_topic" if operation_id == "off_topic" else None),
             unsupported_capability=unsupported_capability,
             selected_entities=selected_entities,
-            selected_target_asset=getattr(selection, "target_asset", None),
+            selected_target_asset=target_resolution.target_asset,
             selected_conversation_reference=getattr(selection, "conversation_reference", None),
             required_inputs=tuple(contract.required_inputs),
             supplied_inputs=supplied_inputs,
