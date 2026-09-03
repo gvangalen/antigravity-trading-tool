@@ -54,4 +54,14 @@ sudo sh -c '
   mv -f "$temporary" "$target"
 ' sh "$CANONICAL_DEPLOY_STATE_DIR" "$RESOLVED_COMMIT"
 
+# The checkout path is a compatibility/read-only projection for deploy and QA
+# tooling. Point it at the canonical marker instead of maintaining a second
+# value that can silently drift from the atomically-written host state.
+CHECKOUT_MARKER_DIR="$REMOTE_DIR/ops/deploy/production"
+CHECKOUT_MARKER="$CHECKOUT_MARKER_DIR/LAST_GOOD_COMMIT"
+CHECKOUT_MARKER_TEMP="$CHECKOUT_MARKER_DIR/.LAST_GOOD_COMMIT.$$"
+mkdir -p "$CHECKOUT_MARKER_DIR"
+ln -s "$CANONICAL_DEPLOY_STATE_DIR/LAST_GOOD_COMMIT" "$CHECKOUT_MARKER_TEMP"
+mv -f "$CHECKOUT_MARKER_TEMP" "$CHECKOUT_MARKER"
+
 echo "✅ Production release marker recorded (${RELEASE_MARKER_REASON}): ${RESOLVED_COMMIT}"

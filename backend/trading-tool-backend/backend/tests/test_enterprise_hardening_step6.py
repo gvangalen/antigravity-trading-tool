@@ -56,6 +56,9 @@ def test_deploy_script_atomically_records_the_validated_canonical_last_good_comm
     assert "mktemp" in acceptance_source
     assert "RELEASE_MARKER_REASON" in acceptance_source
     assert "DEPLOYMENT_VALIDATED_RELEASE" in acceptance_source
+    assert "CHECKOUT_MARKER" in acceptance_source
+    assert 'ln -s "$CANONICAL_DEPLOY_STATE_DIR/LAST_GOOD_COMMIT"' in acceptance_source
+    assert 'mv -f "$CHECKOUT_MARKER_TEMP" "$CHECKOUT_MARKER"' in acceptance_source
     assert "deployment failed for" in source
     assert "Rollback command:" in source
     assert "Canonical LAST_GOOD_COMMIT is missing" in source
