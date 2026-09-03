@@ -12,7 +12,7 @@ jobs:
     permissions:
       contents: read
     env:
-      CANDIDATE_SHA: bfdb17a7d40a6a63c0d6c5eb0386ea69d4678fef
+      CANDIDATE_SHA: 1c914ec10107c4f1768e81da730b5fc3abdeaf25
       RAW_SERVER_IP: ${{ secrets.HOST || secrets.SERVER_IP || vars.HOST || vars.SERVER_IP }}
       RAW_DEPLOY_KEY: ${{ secrets.SSH_PRIVATE_KEY || secrets.DEPLOY_SSH_KEY }}
     steps:
@@ -80,7 +80,7 @@ jobs:
           cd "$worktree_dir/backend/trading-tool-backend"
           mkdir -p "$result_dir"
 
-          for dataset in development regression; do
+          for dataset in development regression holdout; do
             OPENAI_MODEL="gpt-4o-mini" FINN_V2_REAL_SELECTOR_EVAL=1 PYTHONPATH=. \
               python3 backend/scripts/run_finn_v2_selector_eval.py "$dataset" \
                 --min-interval-seconds 2 \
