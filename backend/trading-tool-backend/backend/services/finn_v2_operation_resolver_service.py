@@ -70,7 +70,7 @@ class FinnV2OperationResolverService:
             if isinstance(item, str)
         }
         if (
-            selection.operation_id in {"read_active_setup", "read_active_plan", "read_linked_bot"}
+            selection.operation_id in {"read_active_setup", "read_linked_bot"}
             and str((request_facts or {}).get("action_polarity") or "") == "read"
             and not bool((request_facts or {}).get("explicit_plan_subject"))
             and {"setup", "strategy", "bot"}.issubset(explicit_entities)
