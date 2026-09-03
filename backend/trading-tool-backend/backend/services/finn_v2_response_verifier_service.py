@@ -322,7 +322,18 @@ class FinnV2ResponseVerifierService:
             elif verifier.action == "downgrade_to_clarification":
                 draft = self.downgrades.downgrade_to_clarification(draft=draft, orchestrator_result=orchestrator_result)
             elif verifier.action == "downgrade_to_unavailable":
-                draft = self.downgrades.downgrade_to_unavailable(draft=draft, reason=verifier.reason_codes[0] if verifier.reason_codes else None)
+                request_plan = getattr(orchestrator_result.analysis, "request_plan", None)
+                operation_id = getattr(request_plan, "operation_id", None)
+                if operation_id == "evaluate_plan" and bool(draft.evidence_refs_used):
+                    draft = self.downgrades.downgrade_to_contract_limited_evaluate(
+                        draft=draft,
+                        reason=verifier.reason_codes[0] if verifier.reason_codes else None,
+                    )
+                else:
+                    draft = self.downgrades.downgrade_to_unavailable(
+                        draft=draft,
+                        reason=verifier.reason_codes[0] if verifier.reason_codes else None,
+                    )
             elif verifier.action == "reject":
                 verifier_row = await self._persist_verifier_result(run=run, draft=draft, verifier=verifier)
                 await self._append_trace(

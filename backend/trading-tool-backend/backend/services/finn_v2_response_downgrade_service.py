@@ -77,3 +77,49 @@ class FinnV2ResponseDowngradeService:
             evidence_set_hash=draft.evidence_set_hash,
             created_at=datetime.now(timezone.utc),
         )
+
+    def downgrade_to_contract_limited_evaluate(self, *, draft: ResponseDraft, reason: Optional[str]) -> ResponseDraft:
+        """Keep an evidence-backed evaluation visible after bounded repair.
+
+        This is not a financial conclusion. It explains the available evidence
+        boundary and gives one concrete safe next step, rather than erasing a
+        valid EVALUATE intent into a generic unavailable response.
+        """
+        provenance = dict(draft.reasoning_provenance or {})
+        provenance.update(
+            {
+                "reasoning_source": "contract_evidence_limitation",
+                "validation_status": "evidence_limited",
+                "terminal_limitation_reason": reason or "response_verification_limited",
+            }
+        )
+        return ResponseDraft(
+            draft_id=f"finn-v2-draft-{uuid.uuid4().hex}",
+            run_id=draft.run_id,
+            user_id=draft.user_id,
+            mode="EVALUATE",
+            direct_answer=(
+                "Ik kan de beschikbare plancontext wel begrensd samenvatten, maar niet als volledige "
+                "financiele beoordeling vrijgeven omdat de responseverificatie niet alle vereiste velden kon bevestigen."
+            ),
+            main_observation=(
+                "Ik behoud de oorspronkelijke evaluatievraag en trek geen extra causale of handelsconclusie uit "
+                "onvolledige presentatie-evidence."
+            ),
+            supporting_points=[],
+            claims=[],
+            evidence_refs_used=list(draft.evidence_refs_used),
+            uncertainty_summary="De beschikbare evidence is begrensd tot de geverifieerde context van deze run.",
+            uncertainty_codes=list(dict.fromkeys([*draft.uncertainty_codes, "evidence_limitation_after_repair"])),
+            next_step={
+                "title": "Vul plancontext aan",
+                "instruction": "Selecteer of lever de ontbrekende plancontext aan; FINN kan daarna dezelfde evaluatie opnieuw begrensd controleren.",
+                "requires_confirmation": False,
+            },
+            follow_up_question=None,
+            proposal_candidate=None,
+            reasoning_result_id=draft.reasoning_result_id,
+            evidence_set_hash=draft.evidence_set_hash,
+            reasoning_provenance=provenance,
+            created_at=datetime.now(timezone.utc),
+        )

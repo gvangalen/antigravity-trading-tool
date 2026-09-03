@@ -27,6 +27,10 @@ class FinnV2ReasoningFallbackService:
             answer = f"{capability} wordt nog niet veilig door FINN ondersteund. Ik kan hiervoor geen actie uitvoeren."
             observation = "De gevraagde financiële bewerking is herkend, maar heeft geen toegestane uitvoeringsadapter."
             mode = "UNAVAILABLE"
+        elif operation_id == "activate_bot":
+            answer = "Ik herken dit als een verzoek om een bot te activeren, maar FINN kan een live-bot niet impliciet activeren."
+            observation = "De activatie blijft geblokkeerd totdat de bestaande voorstel- en bevestigingsgrens expliciet is doorlopen."
+            mode = "UNAVAILABLE"
         else:
             concept = plan.get("referenced_entities", {}).get("concept") or "dit financiële begrip"
             answer = f"{concept} is een algemeen financieel analysebegrip. FINN kan het uitleggen, maar trekt zonder jouw bewijs geen persoonlijke conclusie."
@@ -45,22 +49,23 @@ class FinnV2ReasoningFallbackService:
     def terminal_from_orchestrator(self, *, run_id: str, user_id: int, orchestrator_result: OrchestratorResult, model: str) -> ReasoningResult:
         plan = orchestrator_result.analysis.request_plan
         operation_id = plan.operation_id if plan is not None else "unavailable"
-        if operation_id in {"off_topic", "unsupported_financial_operation"}:
+        if operation_id in {"off_topic", "unsupported_financial_operation", "activate_bot"}:
+            if operation_id == "off_topic":
+                answer = "Ik help je graag met financiële planning, marktcontext, setups, strategieën en bots."
+                observation = "Deze vraag valt buiten FINN's financiële en productondersteuning."
+            elif operation_id == "activate_bot":
+                answer = "Een live-botactivatie is herkend, maar wordt niet zonder expliciet voorstel en bevestiging uitgevoerd."
+                observation = "FINN houdt de activatie geblokkeerd; er ontstaat geen voorstel, write of uitvoering uit deze terminale response."
+            else:
+                answer = "Autonome koop- en verkoopbeslissingen zonder bevestiging worden niet veilig door FINN ondersteund."
+                observation = "FINN voert geen autonome financiële beslissingen uit en houdt de voorstel- en bevestigingsgrens aan."
             return ReasoningResult(
                 reasoning_result_id=f"finn-v2-reasoning-{uuid.uuid4().hex}",
                 run_id=run_id,
                 user_id=user_id,
                 mode="UNAVAILABLE",
-                direct_answer=(
-                    "Ik help je graag met financiële planning, marktcontext, setups, strategieën en bots."
-                    if operation_id == "off_topic"
-                    else "Autonome koop- en verkoopbeslissingen zonder bevestiging worden niet veilig door FINN ondersteund."
-                ),
-                main_observation=(
-                    "Deze vraag valt buiten FINN's financiële en productondersteuning."
-                    if operation_id == "off_topic"
-                    else "FINN voert geen autonome financiële beslissingen uit en houdt de voorstel- en bevestigingsgrens aan."
-                ),
+                direct_answer=answer,
+                main_observation=observation,
                 uncertainty_summary=None,
                 uncertainty_codes=[],
                 evidence_refs_used=[],

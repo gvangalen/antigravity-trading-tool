@@ -259,6 +259,14 @@ class FinnV2OperationRegistry:
         self.get(initial_operation_id)
         self.get(final_operation_id)
         if initial_operation_id == final_operation_id:
+            # A selector can already choose clarification while the runtime
+            # independently records why lineage cannot be reused. That is a
+            # typed validation outcome, not a hidden operation replacement.
+            if reason in {
+                OperationChangeReason.LINEAGE_NOT_AVAILABLE.value,
+                OperationChangeReason.LINEAGE_CONTRACT_WITHOUT_CONTEXT.value,
+            } and final_operation_id == "clarify_request":
+                return final_operation_id, reason
             if reason not in {None, OperationChangeReason.REGISTRY_CONTRACT_RESOLUTION.value}:
                 raise FinnV2OperationContractError(f"spurious_operation_change_reason:{reason}")
             return final_operation_id, None
