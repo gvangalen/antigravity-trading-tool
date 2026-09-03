@@ -169,6 +169,36 @@ def test_off_topic_terminal_answers_off_topic_instead_of_financial_unavailable()
     assert "trade aanwijzen" not in result.direct_answer
 
 
+def test_unsupported_terminal_answers_the_selected_safety_boundary():
+    plan = SimpleNamespace(operation_id="unsupported_financial_operation")
+    orchestrator = SimpleNamespace(
+        analysis=SimpleNamespace(request_plan=plan, explicit_asset=None),
+        selected_clarification=None, unavailable_codes=["financial_domain_unavailable"],
+        uncertainty_codes=[], outcome="unavailable",
+    )
+
+    result = FinnV2ReasoningFallbackService().terminal_from_orchestrator(
+        run_id="run-autonomy", user_id=388, orchestrator_result=orchestrator, model="deterministic",
+    )
+
+    assert result.mode == "UNAVAILABLE"
+    assert "zonder bevestiging" in result.direct_answer
+    assert "autonome financiële beslissingen" in result.main_observation
+
+
+def test_empty_plan_evaluation_is_bounded_and_keeps_evaluate_mode():
+    result = FinnV2ReasoningFallbackService().evidence_limited_evaluation_draft(
+        run_id="run-empty-plan", user_id=388,
+        context=_lineage_context("evaluate_plan"), model="deterministic",
+        error_codes=["evidence_limitation_after_repair"],
+    )
+
+    assert result.mode == "EVALUATE"
+    assert "geen opgeslagen setup" in result.direct_answer
+    assert result.next_step is not None
+    assert result.evidence_refs_used == []
+
+
 def test_safe_terminal_boundary_explains_an_immediately_previous_off_topic_result():
     context = _lineage_context("explain_previous_evidence").copy(deep=True)
     context.request_plan["operation_state"] = {

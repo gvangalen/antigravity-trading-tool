@@ -485,7 +485,17 @@ class FinnV2RunService:
         verified = artifacts.get("verified_response") or {}
         delivery = artifacts.get("delivery_envelope") or {}
         policy = artifacts.get("policy_result") or {}
+        request_plan = dict(orchestrator.get("tool_plan") or {}).get("request_plan") or {}
+        reasoning_provenance = dict(reasoning_result.get("reasoning_provenance") or {})
+        reasoning_provenance.setdefault("operation_id", request_plan.get("operation_id"))
         return {
+            "contract": {
+                "initial_operation_id": request_plan.get("initial_operation_id") or request_plan.get("operation_id"),
+                "final_operation_id": request_plan.get("operation_id"),
+                "operation_change_reason": request_plan.get("operation_change_reason"),
+                "target_asset_source": request_plan.get("target_asset_source"),
+                "conversation_reference": request_plan.get("conversation_reference"),
+            },
             "requested_mode": orchestrator.get("interaction_mode"),
             "delivery": {
                 "status": delivery.get("status"),
@@ -515,7 +525,7 @@ class FinnV2RunService:
                 "model": reasoning.get("model"),
                 "latency_ms": reasoning.get("latency_ms"),
                 "error_codes": reasoning.get("error_codes") or [],
-                "provenance": reasoning_result.get("reasoning_provenance") or {},
+                "provenance": reasoning_provenance,
             },
             "verifier": {
                 "verifier_result_id": verifier.get("verifier_result_id"),

@@ -453,7 +453,13 @@ class FinnV2OrchestratorService:
             # evidence/reformulation follow-ups may safely reference its
             # retained provenance without receiving that conclusion.
             if (
-                response_mode == "EVALUATE"
+                (
+                    response_mode == "EVALUATE"
+                    or (
+                        getattr(request_plan, "operation_id", None) == "evaluate_plan"
+                        and getattr(verified_response, "verifier_status", None) == "downgraded"
+                    )
+                )
                 and operation_id not in {
                     "off_topic", "unsupported_financial_operation",
                     # Follow-ups consume existing lineage; a limited

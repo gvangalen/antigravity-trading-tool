@@ -45,14 +45,22 @@ class FinnV2ReasoningFallbackService:
     def terminal_from_orchestrator(self, *, run_id: str, user_id: int, orchestrator_result: OrchestratorResult, model: str) -> ReasoningResult:
         plan = orchestrator_result.analysis.request_plan
         operation_id = plan.operation_id if plan is not None else "unavailable"
-        if operation_id == "off_topic":
+        if operation_id in {"off_topic", "unsupported_financial_operation"}:
             return ReasoningResult(
                 reasoning_result_id=f"finn-v2-reasoning-{uuid.uuid4().hex}",
                 run_id=run_id,
                 user_id=user_id,
                 mode="UNAVAILABLE",
-                direct_answer="Ik help je graag met financiële planning, marktcontext, setups, strategieën en bots.",
-                main_observation="Deze vraag valt buiten FINN's financiële en productondersteuning.",
+                direct_answer=(
+                    "Ik help je graag met financiële planning, marktcontext, setups, strategieën en bots."
+                    if operation_id == "off_topic"
+                    else "Autonome koop- en verkoopbeslissingen zonder bevestiging worden niet veilig door FINN ondersteund."
+                ),
+                main_observation=(
+                    "Deze vraag valt buiten FINN's financiële en productondersteuning."
+                    if operation_id == "off_topic"
+                    else "FINN voert geen autonome financiële beslissingen uit en houdt de voorstel- en bevestigingsgrens aan."
+                ),
                 uncertainty_summary=None,
                 uncertainty_codes=[],
                 evidence_refs_used=[],
@@ -1123,12 +1131,23 @@ class FinnV2ReasoningFallbackService:
         """
         evidence = list(context.evidence)
         if not evidence:
-            return self.unavailable_draft(
+            return ReasoningResult(
+                reasoning_result_id=f"finn-v2-reasoning-{uuid.uuid4().hex}",
                 run_id=run_id,
                 user_id=user_id,
-                mode="UNAVAILABLE",
-                error_codes=error_codes or ["evidence_limitation_after_repair"],
+                mode="EVALUATE",
+                direct_answer="Ik kan je huidige plan nog niet beoordelen, omdat er geen opgeslagen setup, strategie of beoordeelbare plancontext beschikbaar is.",
+                main_observation="Ik vul geen planonderdelen of bewijs in die niet in je werkruimte zijn vastgelegd.",
+                uncertainty_summary="Selecteer of leg eerst een setup en de gekoppelde strategie vast.",
+                uncertainty_codes=error_codes or ["plan_context_unavailable"],
+                next_step=ReasoningNextStep(
+                    title="Leg plancontext vast",
+                    instruction="Selecteer een actieve setup met gekoppelde strategie, of maak eerst een setupvoorstel om te beoordelen.",
+                    requires_confirmation=False,
+                ),
+                evidence_refs_used=[],
                 model=model,
+                created_at=datetime.now(timezone.utc),
             )
 
         # Reuse the same factual evidence projection as a normal evaluation,

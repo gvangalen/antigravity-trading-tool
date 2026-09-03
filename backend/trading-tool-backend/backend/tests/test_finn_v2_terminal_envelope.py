@@ -29,6 +29,13 @@ def test_terminal_envelope_uses_compact_persisted_projection_without_rerunning_i
             "outcome": "reasoning_ready",
             "snapshot_id": "snapshot-1",
             "validation_id": "validation-1",
+            "tool_plan": {"request_plan": {
+                "initial_operation_id": "evaluate_plan",
+                "operation_id": "evaluate_plan",
+                "operation_change_reason": None,
+                "target_asset_source": "explicit_message",
+                "conversation_reference": None,
+            }},
         },
         "policy_result": {"allowed": True, "policy_class": "advice"},
         "validation_result": {"validation_id": "validation-1", "integrity_status": "valid"},
@@ -92,6 +99,13 @@ def test_terminal_envelope_uses_compact_persisted_projection_without_rerunning_i
     assert envelope.mode == "EVALUATE"
     assert envelope.response.reasoning_provenance["provider_status"] == "completed"
     assert envelope.runtime_trace["requested_mode"] == "EVALUATE"
+    assert envelope.runtime_trace["contract"] == {
+        "initial_operation_id": "evaluate_plan",
+        "final_operation_id": "evaluate_plan",
+        "operation_change_reason": None,
+        "target_asset_source": "explicit_message",
+        "conversation_reference": None,
+    }
     assert envelope.runtime_trace["verifier"]["coverage"]["coverage_ok"] is True
     assert envelope.runtime_trace["tool_calls"] == artifacts["tool_calls"]
     assert envelope.runtime_trace["evidence_references"] == artifacts["evidence_references"]
