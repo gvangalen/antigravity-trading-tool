@@ -26,7 +26,10 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          git bundle create "$RUNNER_TEMP/finn-selector-candidate.bundle" HEAD~1..HEAD
+          # The candidate can contain multiple commits not yet present on the
+          # production host. Bundle its complete delta from the known main
+          # base, rather than only its tip commit.
+          git bundle create "$RUNNER_TEMP/finn-selector-candidate.bundle" origin/main..HEAD
 
       - name: Prepare ephemeral host access
         shell: bash
