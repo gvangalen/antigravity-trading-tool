@@ -51,6 +51,7 @@ class FinnV2OperationResolverService:
             for item in frame.get("requested_scopes", ())
             if isinstance(item, str)
         }
+        explicit_active_plan = self._normalized((selection.entities or {}).get("concept")) == "active_plan"
         operation_id = self._operation_from_frame(
             goal=goal,
             object_name=object_name,
@@ -59,6 +60,11 @@ class FinnV2OperationResolverService:
             context=conversation_context,
             requested_scopes=requested_scopes,
         )
+        # An explicit typed active-plan reference is the aggregate plan
+        # contract. It must not be narrowed merely because the same turn also
+        # names graph components.
+        if goal == "read" and explicit_active_plan:
+            operation_id = "read_active_plan"
         # The preprocessor's typed entity ledger records an explicitly named
         # graph even when a provider frame under-projects one of its scopes.
         # A setup, strategy and bot requested together can only be served by
