@@ -153,6 +153,11 @@ class FinnV2OperationResolverService:
         if reference_kind and self._has_eligible_lineage(context):
             if goal in {"reformulate", "summarize"}:
                 return "reformulate_previous_response"
+            # A consequence requested for a concrete bot is a bounded bot
+            # assessment. It is not an evidence-only explanation because the
+            # contract must load and present the linked bot's current state.
+            if goal == "consequence" and object_name == "bot":
+                return "evaluate_bot"
             if goal in {"explain", "consequence", "clarify"}:
                 return "explain_previous_evidence"
         # A multi-node graph read is represented by the existing linked-bot
@@ -164,6 +169,11 @@ class FinnV2OperationResolverService:
             return "clarify_request"
         if goal in {"unsupported", "execute"} and object_name in {"portfolio", "trade", "order"}:
             return "unsupported_financial_operation"
+        # A request to make a FINN bot live remains an activation intent even
+        # when phrased as an immediate execution. Policy, not selection, owns
+        # the subsequent block and keeps the original safety intent visible.
+        if goal in {"activate", "execute"} and object_name == "bot":
+            return "activate_bot"
         # An unbound action cannot safely become an execution intent.
         if goal in {"unsupported", "execute"} and not object_name:
             return "clarify_request"

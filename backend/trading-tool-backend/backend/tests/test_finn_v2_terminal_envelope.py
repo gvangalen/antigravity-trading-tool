@@ -194,3 +194,29 @@ def test_completed_run_projects_the_verified_next_step_into_the_polling_and_sse_
 
     assert transition["response_json"]["next_step"]["instruction"] == "Leg eerst een toetsbare beslisregel vast."
     assert transition["response_json"]["_runtime_trace"]["delivery"]["status"] == "completed"
+    assert transition["response_json"]["_runtime_contract"]["contract_version"] == "2026-09-03.runtime-contract.v1"
+    assert transition["response_json"]["_runtime_contract"]["public_projection_hash"]
+
+
+def test_terminal_projection_is_the_same_contract_for_polling_and_sse_consumers():
+    service = FinnV2RunService(session=object())
+    artifacts = {
+        "delivery_envelope": {"status": "blocked"},
+        "verified_response": None,
+        "orchestrator_result": {"interaction_mode": "ACTION_PROPOSAL", "tool_plan": {"request_plan": {
+            "initial_operation_id": "activate_bot",
+            "operation_id": "activate_bot",
+            "target_asset": "BTC",
+            "target_asset_source": "explicit_message",
+            "conversation_reference": None,
+        }}},
+        "policy_result": {"allowed": False, "policy_class": "live_bot", "blocking_codes": ["live_bot_activation_blocked"]},
+        "validation_result": {},
+        "reasoning_result": {},
+        "verifier_result": {},
+    }
+    projection = service._terminal_runtime_trace(artifacts)
+
+    assert projection["contract"]["initial_operation_id"] == "activate_bot"
+    assert projection["contract"]["final_operation_id"] == "activate_bot"
+    assert projection["contract"]["target_asset_source"] == "explicit_message"

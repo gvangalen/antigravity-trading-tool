@@ -74,6 +74,17 @@ class ActionPolarity(str, Enum):
     CLARIFY = "clarify"
 
 
+class OperationChangeReason(str, Enum):
+    """Fail-closed reasons for a runtime operation transition."""
+
+    GUIDED_OPERATION_CANCELLED = "guided_operation_cancelled"
+    LINEAGE_NOT_AVAILABLE = "lineage_not_available"
+    REGISTRY_CONTRACT_UNAVAILABLE = "registry_contract_unavailable"
+    CLASSIFICATION_VALIDATION = "classification_validation"
+    LINEAGE_CONTRACT_WITHOUT_CONTEXT = "lineage_contract_without_context"
+    REGISTRY_CONTRACT_RESOLUTION = "registry_contract_resolution"
+
+
 _MODE_DEFAULT_POLARITIES = {
     "CAPABILITY": ActionPolarity.READ,
     "READ": ActionPolarity.READ,
@@ -231,6 +242,42 @@ class FinnV2OperationRegistry:
 
     def list(self) -> tuple[OperationContract, ...]:
         return tuple(self._contracts.values())
+
+    def resolve_transition(
+        self,
+        *,
+        initial_operation_id: str,
+        final_operation_id: str,
+        reason: Optional[str],
+    ) -> tuple[str, Optional[str]]:
+        """Validate the one allowed initial-to-final runtime transition.
+
+        Selection is immutable provenance. Runtime safety may narrow it only
+        through these registry-owned transitions; callers cannot invent a
+        fallback operation or an untyped explanation.
+        """
+        self.get(initial_operation_id)
+        self.get(final_operation_id)
+        if initial_operation_id == final_operation_id:
+            if reason not in {None, OperationChangeReason.REGISTRY_CONTRACT_RESOLUTION.value}:
+                raise FinnV2OperationContractError(f"spurious_operation_change_reason:{reason}")
+            return final_operation_id, None
+        try:
+            typed_reason = OperationChangeReason(str(reason or "").split(":", 1)[0])
+        except ValueError as exc:
+            raise FinnV2OperationContractError(f"unknown_operation_change_reason:{reason}") from exc
+        allowed_targets = {
+            OperationChangeReason.GUIDED_OPERATION_CANCELLED: {"clarify_request"},
+            OperationChangeReason.LINEAGE_NOT_AVAILABLE: {"clarify_request"},
+            OperationChangeReason.CLASSIFICATION_VALIDATION: {"clarify_request"},
+            OperationChangeReason.LINEAGE_CONTRACT_WITHOUT_CONTEXT: {"clarify_request"},
+            OperationChangeReason.REGISTRY_CONTRACT_UNAVAILABLE: {"unavailable"},
+        }
+        if final_operation_id not in allowed_targets.get(typed_reason, set()):
+            raise FinnV2OperationContractError(
+                f"operation_transition_not_allowed:{initial_operation_id}:{final_operation_id}:{typed_reason.value}"
+            )
+        return final_operation_id, typed_reason.value
 
     def candidate_operations(
         self,

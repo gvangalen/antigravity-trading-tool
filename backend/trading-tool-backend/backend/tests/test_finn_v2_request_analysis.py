@@ -709,6 +709,7 @@ def test_guided_setup_collects_type_timeframe_and_name_in_one_persisted_contract
         "setup_type", "timeframe", "name"
     ]
     assert first.request_plan.operation_state["next_missing_input"] == "setup_type"
+    assert first.request_plan.operation_state["state_revision"] == 1
 
     second = SERVICE.analyze(
         message="Gebruik een swing setup.",
@@ -716,18 +717,21 @@ def test_guided_setup_collects_type_timeframe_and_name_in_one_persisted_contract
     )
     assert second.request_plan.operation_id == "create_setup"
     assert second.request_plan.operation_state["missing_required_inputs"] == ["timeframe", "name"]
+    assert second.request_plan.operation_state["state_revision"] == 2
 
     third = SERVICE.analyze(
         message="Gebruik de 4H-timeframe.",
         conversation_context={"active_guided_operation": second.request_plan.operation_state},
     )
     assert third.request_plan.operation_state["missing_required_inputs"] == ["name"]
+    assert third.request_plan.operation_state["state_revision"] == 3
 
     final = SERVICE.analyze(
         message="Noem hem BTC Contract QA.",
         conversation_context={"active_guided_operation": third.request_plan.operation_state},
     )
     assert final.request_plan.operation_state["missing_required_inputs"] == []
+    assert final.request_plan.operation_state["state_revision"] == 4
     assert final.request_plan.operation_state["collected_inputs"] == {
         "symbol": "BTC",
         "setup_type": "swing",

@@ -33,7 +33,7 @@ def test_semantic_frame_resolves_a_complete_proposal_only_setup_without_rewritin
     assert resolved.semantic_frame["persistence_intent"] == "proposal_only"
 
 
-def test_semantic_frame_resolves_a_consequence_to_verified_evidence_not_a_bot_read():
+def test_semantic_frame_resolves_a_bot_consequence_to_a_bounded_bot_evaluation():
     registry = FinnV2OperationRegistry()
     resolved = FinnV2OperationResolverService(registry).resolve(
         selection=_selection("read_linked_bot", {
@@ -43,8 +43,19 @@ def test_semantic_frame_resolves_a_consequence_to_verified_evidence_not_a_bot_re
         conversation_context={"last_verified_context": {"verified_response_id": "response-1", "evidence_refs": ["E1"]}},
     )
 
-    assert resolved.operation_id == "explain_previous_evidence"
+    assert resolved.operation_id == "evaluate_bot"
     assert resolved.conversation_reference == "previous_verified_response"
+
+
+def test_semantic_frame_keeps_live_bot_execution_as_typed_activation_for_policy():
+    registry = FinnV2OperationRegistry()
+    resolved = FinnV2OperationResolverService(registry).resolve(
+        selection=_selection("off_topic", {"goal": "execute", "object": "bot"}),
+        candidates=registry.list(),
+        conversation_context={},
+    )
+
+    assert resolved.operation_id == "activate_bot"
 
 
 def test_semantic_frame_resolves_a_broad_assessment_to_plan_not_setup():

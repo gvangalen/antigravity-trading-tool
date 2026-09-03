@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 from datetime import datetime, timedelta, timezone
 import asyncio
+from types import SimpleNamespace
 from typing import Any, Dict, Optional
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -15,6 +16,7 @@ from backend.domain.finn_v2_contract import (
     normalize_interaction_mode,
     validate_run_transition,
 )
+from backend.domain.finn_v2_runtime_contract import build_terminal_runtime_contract
 from backend.infrastructure.repositories.finn_v2_conversation_repository import FinnV2ConversationRepository
 from backend.infrastructure.repositories.finn_v2_run_repository import FinnV2RunRepository
 from backend.infrastructure.repositories.finn_v2_trace_repository import FinnV2TraceRepository
@@ -178,7 +180,23 @@ class FinnV2RunService:
                 "next_step": verified.get("next_step"),
                 "reasoning_provenance": verified.get("reasoning_provenance") or {},
             }
-        response_json["_runtime_trace"] = self._terminal_runtime_trace(artifacts)
+        runtime_contract = build_terminal_runtime_contract(
+            run=SimpleNamespace(id=run_id, user_id=user_id, conversation_id=None, trace_id=None),
+            artifacts=artifacts,
+            terminal_status=next_status,
+            final_mode=phase_outcome.interaction_mode or response_json["mode"],
+            terminal_response_type=(
+                "clarification" if next_status == "clarification_required"
+                else "safe_terminal" if next_status in {"unavailable", "downgraded", "rejected"}
+                else "verified_response"
+            ),
+        )
+        response_json["_runtime_contract"] = runtime_contract.dict()
+        response_json["_runtime_trace"] = self._terminal_runtime_trace(
+            artifacts,
+            runtime_contract=runtime_contract.public_projection(),
+            projection_hash=runtime_contract.public_projection_hash,
+        )
         await self.persist_transition(
             run_id,
             user_id,
@@ -475,7 +493,13 @@ class FinnV2RunService:
             runtime_trace=runtime_trace,
         )
 
-    def _terminal_runtime_trace(self, artifacts: Dict[str, Any]) -> Dict[str, Any]:
+    def _terminal_runtime_trace(
+        self,
+        artifacts: Dict[str, Any],
+        *,
+        runtime_contract: Optional[Dict[str, Any]] = None,
+        projection_hash: Optional[str] = None,
+    ) -> Dict[str, Any]:
         """Project persisted records for polling/SSE without exposing evidence data."""
         orchestrator = artifacts.get("orchestrator_result") or {}
         reasoning = artifacts.get("reasoning_result") or {}
@@ -488,14 +512,24 @@ class FinnV2RunService:
         request_plan = dict(orchestrator.get("tool_plan") or {}).get("request_plan") or {}
         reasoning_provenance = dict(reasoning_result.get("reasoning_provenance") or {})
         reasoning_provenance.setdefault("operation_id", request_plan.get("operation_id"))
+        projection = dict(runtime_contract or {})
+        contract = projection or {
+            "initial_operation_id": request_plan.get("initial_operation_id") or request_plan.get("operation_id"),
+            "final_operation_id": request_plan.get("operation_id"),
+            "operation_change_reason": request_plan.get("operation_change_reason"),
+            "target_source": request_plan.get("target_asset_source"),
+            "conversation_reference": request_plan.get("conversation_reference"),
+        }
         return {
             "contract": {
-                "initial_operation_id": request_plan.get("initial_operation_id") or request_plan.get("operation_id"),
-                "final_operation_id": request_plan.get("operation_id"),
-                "operation_change_reason": request_plan.get("operation_change_reason"),
-                "target_asset_source": request_plan.get("target_asset_source"),
-                "conversation_reference": request_plan.get("conversation_reference"),
+                "initial_operation_id": contract.get("initial_operation_id"),
+                "final_operation_id": contract.get("final_operation_id"),
+                "operation_change_reason": contract.get("operation_change_reason"),
+                "target_asset_source": contract.get("target_source") or request_plan.get("target_asset_source"),
+                "conversation_reference": contract.get("conversation_reference"),
             },
+            "terminal_projection": projection or None,
+            "terminal_projection_hash": projection_hash,
             "requested_mode": orchestrator.get("interaction_mode"),
             "delivery": {
                 "status": delivery.get("status"),

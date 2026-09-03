@@ -1,0 +1,45 @@
+{
+  "artifact_version": "finn-v1-runtime-stabilization-baseline.v1",
+  "baseline_sha": "1329efe20a7c709fe83193695f98f176a1f48b1e",
+  "qa_report": {
+    "path": "/private/tmp/finn-1329efe-final-qa-report.md",
+    "sha256": "acf804a64be7a29840ace989abf244ef1dc634365b5c72c51dcabd6dbf2d82ca"
+  },
+  "corpus_sources": [
+    "backend/tests/fixtures/finn_v2_golden_dataset.json",
+    "backend/tests/fixtures/finn_v2_selector_regression.json",
+    "backend/tests/fixtures/finn_v2_selector_published_c118_regression.json",
+    "backend/tests/fixtures/finn_v2_selector_published_qa_609_regression.json",
+    "backend/tests/fixtures/finn_v2_selector_holdout.json",
+    "/private/tmp/finn-1329efe-sealed-holdout.json"
+  ],
+  "sealed_holdout": {
+    "case_count": 20,
+    "artifact_sha256": "b66c9256fb7ed0bb1acee00067d65b5984e82397175e7bfbf44789af0fe620d7",
+    "operation_accuracy_registry_adjusted": {"passed": 17, "total": 20},
+    "target_asset_accuracy": {"passed": 19, "total": 20},
+    "polarity_accuracy": {"passed": 18, "total": 20},
+    "conversation_reference_accuracy": {"passed": 19, "total": 20},
+    "provider_failures": 0,
+    "p95_latency_ms": 4401
+  },
+  "runtime": {
+    "run_count": 9,
+    "polling_sse_identical": {"passed": 9, "total": 9},
+    "single_dispatch": {"passed": 9, "total": 9},
+    "unauthorized_writes": 0,
+    "http_500": 0,
+    "v1_fallback": 0,
+    "p95_latency_ms": 27700
+  },
+  "known_failure_classes": [
+    "lineage_reformulation_projection",
+    "lineage_bot_consequence_projection",
+    "typed_activate_bot_projection",
+    "canonical_target_projection",
+    "evaluate_terminal_decision",
+    "guided_state_terminal_decision",
+    "terminal_latency"
+  ],
+  "note": "This artifact records provenance and baseline measurements only. It is not loaded by FINN runtime selection, resolution, policy, or delivery."
+}

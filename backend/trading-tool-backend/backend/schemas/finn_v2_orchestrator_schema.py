@@ -122,6 +122,9 @@ class FinnV2OperationState(BaseModel):
 
     operation_id: str
     contract_version: str
+    # Monotonic per flow. Consumers can reject a stale clarification instead
+    # of merging it into a newer guided operation.
+    state_revision: int = Field(default=1, ge=1)
     collected_inputs: Dict[str, object] = Field(default_factory=dict)
     resolved_entities: Dict[str, object] = Field(default_factory=dict)
     # Targets are deliberately separate from the workspace-scoped entities.

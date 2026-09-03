@@ -177,6 +177,16 @@ class FinnV2RequestAnalysisService:
                 operation = self.operations.require_supported(operation_id)
                 interaction_mode = operation.mode
                 operation_change_reason = "lineage_contract_without_context"
+        # This is the only boundary where initial selector intent may become a
+        # different final operation. The registry validates both the target
+        # and a typed reason before planning, policy, or delivery see it.
+        operation_id, operation_change_reason = self.operations.resolve_transition(
+            initial_operation_id=initial_operation_id,
+            final_operation_id=operation_id,
+            reason=operation_change_reason,
+        )
+        operation = self.operations.require_supported(operation_id)
+        interaction_mode = operation.mode
         scopes = self._presentation_subject_scopes(operation, preprocessed.explicit_entities)
         integrated_plan = operation.operation_id == "evaluate_plan"
         primary_subject = self._presentation_primary_subject(operation)
@@ -292,9 +302,7 @@ class FinnV2RequestAnalysisService:
             financial_concept=preprocessed.financial_concept,
             initial_operation_id=initial_operation_id,
             operation_id=operation_id,
-            operation_change_reason=operation_change_reason or (
-                "registry_contract_resolution" if operation_id != initial_operation_id else None
-            ),
+            operation_change_reason=operation_change_reason,
             operation=operation,
             operation_state=operation_state_payload,
             context_asset=context_asset,
