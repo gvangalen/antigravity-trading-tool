@@ -24,11 +24,20 @@ from backend.services.finn_v2_structured_operation_selector_service import FinnV
 from backend.services.ai_usage_observability_service import ai_usage_context
 from backend.utils import openai_client
 
-DATASETS = ("development", "regression")
+DATASETS = ("development", "regression", "holdout")
 
 
-def fixture_paths() -> list[Path]:
+def fixture_paths(*, dataset: str | None = None) -> list[Path]:
     root = Path(__file__).resolve().parents[2] / "backend" / "tests" / "fixtures"
+    # Published holdouts are regression-only and remain deliberately
+    # disjoint from the still-sealed holdout corpus. A real holdout run loads
+    # the canonical three-lane registry without those published projections.
+    if dataset == "holdout":
+        return [
+            root / "finn_v2_selector_development.json",
+            root / "finn_v2_selector_regression.json",
+            root / "finn_v2_selector_holdout.json",
+        ]
     return [
         root / "finn_v2_selector_development.json",
         root / "finn_v2_selector_regression.json",
@@ -264,7 +273,7 @@ def main() -> None:
     args = parser.parse_args()
     if os.getenv("FINN_V2_REAL_SELECTOR_EVAL") != "1":
         raise SystemExit("FINN_V2_REAL_SELECTOR_EVAL=1 is required to spend provider calls")
-    paths = fixture_paths()
+    paths = fixture_paths(dataset=args.dataset)
     registry = FinnV2OperationRegistry()
     cases = [case for case in load_and_validate(paths, allow_published_regression=True) if case.dataset == args.dataset]
     rows: list[dict[str, Any]] = []
