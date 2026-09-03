@@ -160,11 +160,11 @@ class FinnV2OperationResolverService:
                 return "evaluate_bot"
             if goal in {"explain", "consequence", "clarify"}:
                 return "explain_previous_evidence"
-        # A multi-node graph read is represented by the existing linked-bot
-        # graph contract, whose immutable scopes include setup and strategy.
-        # This consumes model-extracted scopes, not source text.
+        # A multi-node overview is a plan read.  The plan contract owns the
+        # complete setup/strategy/bot graph; a linked-bot read is reserved for
+        # an explicit relationship or bot-centric subject.
         if goal == "read" and {"setup", "strategy", "bot"}.issubset(requested_scopes):
-            return "read_linked_bot"
+            return "read_active_plan"
         if goal in {"clarify", "clarification"}:
             return "clarify_request"
         if goal in {"unsupported", "execute"} and object_name in {"portfolio", "trade", "order"}:

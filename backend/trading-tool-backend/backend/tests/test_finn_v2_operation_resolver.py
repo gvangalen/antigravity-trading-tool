@@ -117,7 +117,7 @@ def test_non_evaluative_plan_clarification_remains_a_clarification():
     assert resolved.operation_id == "clarify_request"
 
 
-def test_semantic_frame_resolves_a_complete_linked_graph_to_the_linked_bot_contract():
+def test_semantic_frame_resolves_a_complete_graph_overview_to_the_plan_contract():
     registry = FinnV2OperationRegistry()
     resolved = FinnV2OperationResolverService(registry).resolve(
         selection=_selection("read_active_setup", {
@@ -127,7 +127,7 @@ def test_semantic_frame_resolves_a_complete_linked_graph_to_the_linked_bot_contr
         conversation_context={},
     )
 
-    assert resolved.operation_id == "read_linked_bot"
+    assert resolved.operation_id == "read_active_plan"
 
 
 def test_linked_graph_relationship_completes_an_underprojected_read_frame():

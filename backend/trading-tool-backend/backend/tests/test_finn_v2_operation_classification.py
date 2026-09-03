@@ -415,7 +415,7 @@ def test_typed_guided_slot_answer_reuses_pending_contract_without_provider():
     assert result.supplied_inputs["timeframe"] == "4H"
 
 
-def test_typed_graph_scopes_resolve_to_a_complete_linked_bot_read_contract():
+def test_typed_graph_scopes_resolve_to_a_complete_plan_read_contract():
     class Selector:
         def select(self, **_kwargs):
             return FinnV2StructuredOperationSelection(
@@ -428,7 +428,7 @@ def test_typed_graph_scopes_resolve_to_a_complete_linked_bot_read_contract():
         message="Welke gekoppelde onderdelen horen bij mijn huidige aanpak?"
     )
 
-    assert result.operation_id == "read_linked_bot"
+    assert result.operation_id == "read_active_plan"
     assert result.action == "read"
 
 
