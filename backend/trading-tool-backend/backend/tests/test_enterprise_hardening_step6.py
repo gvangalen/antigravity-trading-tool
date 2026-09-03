@@ -39,7 +39,7 @@ def test_deploy_script_gates_pm2_processes_and_has_fallback_rebuild():
     assert 'PM2_CONFIG="ecosystem.production.config.js"' in source
 
 
-def test_deploy_script_uses_canonical_last_good_without_mutating_it():
+def test_deploy_script_atomically_records_the_validated_canonical_last_good_commit():
     wrapper_source = (REPO_ROOT / "deploy_live.sh").read_text()
     source = (REPO_ROOT / "ops" / "deploy" / "deploy_env.sh").read_text()
     acceptance_source = (REPO_ROOT / "ops" / "deploy" / "record_accepted_release.sh").read_text()
@@ -50,11 +50,12 @@ def test_deploy_script_uses_canonical_last_good_without_mutating_it():
     assert "ROLLBACK_COMMAND" in source
     assert "./ops/deploy/rollback_env.sh $ENVIRONMENT $ROLLBACK_COMMIT" in source
     assert "ops/deploy/PREVIOUS_GOOD_COMMIT" in source
-    assert "QA_ACCEPTED_RELEASE" not in source
+    assert "RELEASE_MARKER_REASON=deployed DEPLOYMENT_VALIDATED_RELEASE=true" in source
     assert "record_accepted_release.sh" in source
     assert "LAST_GOOD_COMMIT" in acceptance_source
     assert "mktemp" in acceptance_source
-    assert "QA_ACCEPTED_RELEASE" in acceptance_source
+    assert "RELEASE_MARKER_REASON" in acceptance_source
+    assert "DEPLOYMENT_VALIDATED_RELEASE" in acceptance_source
     assert "deployment failed for" in source
     assert "Rollback command:" in source
     assert "Canonical LAST_GOOD_COMMIT is missing" in source

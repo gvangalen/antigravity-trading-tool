@@ -178,6 +178,7 @@ class FinnV2RunService:
                 "next_step": verified.get("next_step"),
                 "reasoning_provenance": verified.get("reasoning_provenance") or {},
             }
+        response_json["_runtime_trace"] = self._terminal_runtime_trace(artifacts)
         await self.persist_transition(
             run_id,
             user_id,
@@ -424,7 +425,10 @@ class FinnV2RunService:
 
     async def envelope_from_run(self, run) -> AgentRunStatusEnvelope:
         response_payload = dict(run.response_json or {})
-        runtime_trace: Dict[str, Any] = {}
+        # Terminal delivery metadata is projected once when the run completes.
+        # Polling and SSE can then serve the same envelope without reopening the
+        # full verifier/evidence chain for every client poll.
+        runtime_trace: Dict[str, Any] = dict(response_payload.pop("_runtime_trace", {}) or {})
         try:
             if response_payload:
                 response_payload["mode"] = normalize_interaction_mode(response_payload.get("mode"))
@@ -443,14 +447,15 @@ class FinnV2RunService:
             }
             envelope_mode = "UNAVAILABLE"
         else:
-            if is_terminal_status(run.status):
-                artifacts = await self.delivery.get_delivery_artifacts(user_id=run.user_id, run_id=run.id)
-                verified = artifacts.get("verified_response") or {}
-                reasoning = artifacts.get("reasoning_result") or {}
-                reasoning_provenance = verified.get("reasoning_provenance") or (reasoning.get("result") or {}).get("reasoning_provenance")
-                if reasoning_provenance and not response_payload.get("reasoning_provenance"):
-                    response_payload["reasoning_provenance"] = reasoning_provenance
-                runtime_trace = self._terminal_runtime_trace(artifacts)
+            if is_terminal_status(run.status) and not runtime_trace:
+                # Historical runs predate the compact terminal projection. Keep
+                # them readable without turning high-frequency polling into a
+                # fan-out of artifact queries.
+                runtime_trace = {
+                    "delivery": {"status": run.status, "response_source": "v2_runtime"},
+                    "policy": {"allowed": (run.policy_json or {}).get("allowed")},
+                    "terminal_projection": "legacy_compact",
+                }
         response = VerifiedResponse(**response_payload) if response_payload else None
         policy = PolicyDecision(**run.policy_json) if run.policy_json else None
         return AgentRunStatusEnvelope(

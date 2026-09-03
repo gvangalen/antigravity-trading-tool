@@ -6,7 +6,7 @@ from backend.services.finn_v2_run_service import FinnV2RunService
 from backend.schemas.finn_v2_orchestrator_schema import LifecyclePhaseOutcome
 
 
-def test_terminal_envelope_hydrates_persisted_v2_chain_without_rerunning_it():
+def test_terminal_envelope_uses_compact_persisted_projection_without_rerunning_it():
     service = FinnV2RunService(session=object())
     calls = []
     artifacts = {
@@ -74,7 +74,8 @@ def test_terminal_envelope_hydrates_persisted_v2_chain_without_rerunning_it():
             "uncertainty": [],
             "proposal_id": None,
             "confirmation_required": False,
-            "reasoning_provenance": {},
+                "reasoning_provenance": artifacts["verified_response"]["reasoning_provenance"],
+            "_runtime_trace": service._terminal_runtime_trace(artifacts),
         },
         policy_json={"allowed": True, "policy_class": "advice"},
         created_at=now,
@@ -87,7 +88,7 @@ def test_terminal_envelope_hydrates_persisted_v2_chain_without_rerunning_it():
 
     envelope = asyncio.run(service.envelope_from_run(run))
 
-    assert calls == [{"user_id": 7, "run_id": "run-1"}]
+    assert calls == []
     assert envelope.mode == "EVALUATE"
     assert envelope.response.reasoning_provenance["provider_status"] == "completed"
     assert envelope.runtime_trace["requested_mode"] == "EVALUATE"
@@ -178,3 +179,4 @@ def test_completed_run_projects_the_verified_next_step_into_the_polling_and_sse_
     )
 
     assert transition["response_json"]["next_step"]["instruction"] == "Leg eerst een toetsbare beslisregel vast."
+    assert transition["response_json"]["_runtime_trace"]["delivery"]["status"] == "completed"

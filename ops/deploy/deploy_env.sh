@@ -553,7 +553,14 @@ ssh "${SSH_ARGS[@]}" "ubuntu@$SERVER_IP" "
   fi
 "
 
-echo "ℹ️ LAST_GOOD_COMMIT is immutable during deployment; record it only with record_accepted_release.sh after independent QA acceptance."
+ssh "${SSH_ARGS[@]}" "ubuntu@$SERVER_IP" "
+  set -euo pipefail
+  cd $REMOTE_DIR
+  RELEASE_MARKER_REASON=deployed DEPLOYMENT_VALIDATED_RELEASE=true \\
+    bash ./ops/deploy/record_accepted_release.sh production $TARGET_COMMIT_FULL
+"
+
+echo "✅ LAST_GOOD_COMMIT atomically recorded for validated deployment ${TARGET_COMMIT_FULL}."
 
 echo "✅ ${ENVIRONMENT} deployment complete for ${TARGET_COMMIT}."
 echo "Rollback if needed:"
