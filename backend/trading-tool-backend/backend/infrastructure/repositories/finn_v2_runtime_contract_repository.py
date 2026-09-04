@@ -1,0 +1,98 @@
+from __future__ import annotations
+
+from copy import deepcopy
+from datetime import datetime, timezone
+from typing import Any, Dict, Optional
+
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from backend.domain.finn_v2_runtime_contract import (
+    RUNTIME_CONTRACT_VERSION,
+    RuntimeContractConflictError,
+    new_runtime_contract_state,
+    record_initial_intent,
+    terminal_projection,
+)
+from backend.infrastructure.models import FinnV2RuntimeContract
+from backend.infrastructure.repositories.finn_v2_repository_transaction_mixin import FinnV2RepositoryTransactionMixin
+
+
+class FinnV2RuntimeContractRepository(FinnV2RepositoryTransactionMixin):
+    def __init__(self, session: AsyncSession):
+        self.session = session
+
+    async def create_for_run(self, *, run) -> FinnV2RuntimeContract:
+        existing = await self.get_for_run(run_id=run.id, for_update=True)
+        if existing is not None:
+            return existing
+        contract_id = f"finn-v2-contract-{run.id}"
+        row = FinnV2RuntimeContract(
+            contract_id=contract_id,
+            run_id=run.id,
+            conversation_id=run.conversation_id,
+            trace_id=run.trace_id,
+            user_id=run.user_id,
+            contract_version=RUNTIME_CONTRACT_VERSION,
+            revision=0,
+            state_json=new_runtime_contract_state(run=run, contract_id=contract_id),
+        )
+        self.session.add(row)
+        await self._flush_with_rollback(operation="create_runtime_contract", entity_type="FinnV2RuntimeContract", run_id=run.id)
+        return row
+
+    async def get_for_run(self, *, run_id: str, for_update: bool = False) -> Optional[FinnV2RuntimeContract]:
+        statement = select(FinnV2RuntimeContract).where(FinnV2RuntimeContract.run_id == run_id)
+        if for_update:
+            statement = statement.with_for_update()
+        result = await self.session.execute(statement)
+        return result.scalars().first()
+
+    async def record_initial_intent(self, *, run_id: str, operation_id: str, requested_mode: str) -> FinnV2RuntimeContract:
+        row = await self._required_for_update(run_id)
+        next_state = record_initial_intent(row.state_json or {}, operation_id=operation_id, requested_mode=requested_mode)
+        return await self._write_revision(row=row, state=next_state)
+
+    async def materialize_terminal(
+        self,
+        *,
+        run_id: str,
+        status: str,
+        mode: Optional[str],
+        response: Optional[Dict[str, Any]],
+        error_code: Optional[str] = None,
+    ) -> FinnV2RuntimeContract:
+        row = await self._required_for_update(run_id)
+        state = deepcopy(row.state_json or {})
+        state["final_operation_id"] = state.get("final_operation_id") or state.get("initial_operation_id")
+        state["final_mode"] = mode or state.get("final_mode") or state.get("requested_mode")
+        state["terminal_status"] = status
+        state["terminal_response_type"] = "failure" if status == "failed" else "response"
+        state.setdefault("transition_log", []).append({"type": "terminal", "status": status})
+        projection = terminal_projection(state, status=status, mode=mode, response=response, error_code=error_code)
+        row = await self._write_revision(row=row, state=state)
+        row.terminal_projection_json = projection
+        await self._flush_with_rollback(operation="materialize_runtime_terminal", entity_type="FinnV2RuntimeContract", run_id=run_id)
+        return row
+
+    async def record_lifecycle_status(self, *, run_id: str, status: str, mode: Optional[str]) -> FinnV2RuntimeContract:
+        row = await self._required_for_update(run_id)
+        state = deepcopy(row.state_json or {})
+        state["current_status"] = status
+        if mode:
+            state["current_mode"] = mode
+        state.setdefault("transition_log", []).append({"type": "lifecycle", "status": status})
+        return await self._write_revision(row=row, state=state)
+
+    async def _required_for_update(self, run_id: str) -> FinnV2RuntimeContract:
+        row = await self.get_for_run(run_id=run_id, for_update=True)
+        if row is None:
+            raise LookupError("finn_v2_runtime_contract_missing")
+        return row
+
+    async def _write_revision(self, *, row: FinnV2RuntimeContract, state: Dict[str, Any]) -> FinnV2RuntimeContract:
+        row.state_json = state
+        row.revision = int(row.revision or 0) + 1
+        row.updated_at = datetime.now(timezone.utc)
+        await self._flush_with_rollback(operation="update_runtime_contract", entity_type="FinnV2RuntimeContract", run_id=row.run_id)
+        return row

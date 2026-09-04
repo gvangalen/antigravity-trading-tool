@@ -69,6 +69,7 @@ def test_incomplete_trade_route_avoids_provider_and_returns_unavailable():
     service.runs = _FakeRunRepo(run)
     service.traces = _FakeTraceRepo()
     service.results = _FakeResultRepo()
+    service.runtime_contracts = SimpleNamespace(record_initial_intent=lambda **_kwargs: asyncio.sleep(0))
     service.flags.is_tool_registry_enabled = lambda: True
     service.flags.is_state_assembly_enabled = lambda: True
 

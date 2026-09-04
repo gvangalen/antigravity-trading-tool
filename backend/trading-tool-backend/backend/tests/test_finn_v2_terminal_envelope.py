@@ -64,6 +64,7 @@ def test_terminal_envelope_uses_compact_persisted_projection_without_rerunning_i
         return artifacts
 
     service.delivery.get_delivery_artifacts = get_artifacts
+    service.runtime_contracts = SimpleNamespace(get_for_run=lambda **_kwargs: asyncio.sleep(0, result=None))
     now = datetime.now(timezone.utc)
     run = SimpleNamespace(
         id="run-1",
@@ -131,6 +132,9 @@ def test_rejected_run_keeps_verifier_reasoning_provenance_in_its_terminal_envelo
         transition.update(kwargs)
 
     service.transition_run = _transition_run
+    service.runtime_contracts = SimpleNamespace(
+        materialize_terminal=lambda **kwargs: asyncio.sleep(0, result=SimpleNamespace(terminal_projection_json={"run_id": kwargs["run_id"]}))
+    )
     asyncio.run(
         service.complete_run(
             run_id="run-rejected-1",

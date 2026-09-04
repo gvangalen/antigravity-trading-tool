@@ -507,6 +507,24 @@ class FinnV2Run(Base):
     canceled_at = Column(DateTime(timezone=True), nullable=True)
 
 
+class FinnV2RuntimeContract(Base):
+    """One authoritative, revisioned runtime record for each new FINN V2 run."""
+
+    __tablename__ = "finn_v2_runtime_contracts"
+
+    contract_id = Column(String, primary_key=True)
+    run_id = Column(String, ForeignKey("finn_v2_runs.id", ondelete="CASCADE"), nullable=False, unique=True, index=True)
+    conversation_id = Column(String, ForeignKey("finn_v2_conversations.id", ondelete="CASCADE"), nullable=False, index=True)
+    trace_id = Column(String, nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    contract_version = Column(String, nullable=False)
+    revision = Column(Integer, nullable=False, default=0, server_default=text("0"))
+    state_json = Column(JSONB, nullable=False, default=dict, server_default=text("'{}'::jsonb"))
+    terminal_projection_json = Column(JSONB, nullable=True)
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=text("NOW()"))
+    updated_at = Column(DateTime(timezone=True), nullable=False, server_default=text("NOW()"))
+
+
 class FinnV2RunTrace(Base):
     __tablename__ = "finn_v2_run_traces"
 

@@ -88,6 +88,25 @@ class _FakeConversationRepo:
         }
 
 
+class _FakeRuntimeContracts:
+    def __init__(self):
+        self.calls = []
+
+    async def create_for_run(self, *, run):
+        self.calls.append(("create", run.id))
+        return SimpleNamespace(contract_id=f"contract-{run.id}")
+
+    async def record_lifecycle_status(self, *, run_id, status, mode):
+        self.calls.append(("lifecycle", run_id, status, mode))
+
+    async def materialize_terminal(self, **kwargs):
+        self.calls.append(("terminal", kwargs["run_id"], kwargs["status"]))
+        return SimpleNamespace(terminal_projection_json={"run_id": kwargs["run_id"], "terminal_status": kwargs["status"]})
+
+    async def get_for_run(self, *, run_id):
+        return None
+
+
 @pytest.mark.parametrize(
     ("current_status", "next_status"),
     [
@@ -177,6 +196,7 @@ def test_create_run_commits_before_lifecycle_can_rollback():
     service.runs.session = session
     service.traces = _FakeTraceRepo()
     service.conversations = _FakeConversationRepo()
+    service.runtime_contracts = _FakeRuntimeContracts()
 
     run = asyncio.run(
         service.create_run(
@@ -219,6 +239,7 @@ def test_visible_run_executes_orchestrator_without_shadow_gate():
     service = FinnV2RunService(_FakeSession())
     service.runs = _FakeRunRepo(run)
     service.traces = _FakeTraceRepo()
+    service.runtime_contracts = _FakeRuntimeContracts()
 
     calls = {"shadow_chain": 0, "placeholder": 0, "orchestrator": 0}
 
@@ -270,6 +291,7 @@ def test_fail_run_rolls_back_inactive_session_before_transition(monkeypatch):
     service = FinnV2RunService(session)
     service.runs = _FakeRunRepo(run)
     service.traces = _FakeTraceRepo()
+    service.runtime_contracts = _FakeRuntimeContracts()
 
     asyncio.run(
         service.fail_run(
