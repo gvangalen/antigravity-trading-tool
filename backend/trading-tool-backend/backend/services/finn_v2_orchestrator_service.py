@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.infrastructure.repositories.finn_v2_orchestrator_repository import FinnV2OrchestratorRepository
 from backend.infrastructure.repositories.finn_v2_conversation_repository import FinnV2ConversationRepository
 from backend.infrastructure.repositories.finn_v2_run_repository import FinnV2RunRepository
+from backend.infrastructure.repositories.finn_v2_runtime_contract_repository import FinnV2RuntimeContractRepository
 from backend.infrastructure.repositories.finn_v2_trace_repository import FinnV2TraceRepository
 from backend.domain.finn_v2_contract import normalize_interaction_mode
 from backend.schemas.finn_v2_orchestrator_schema import LifecyclePhaseOutcome, ORCHESTRATOR_VERSION
@@ -42,6 +43,7 @@ class FinnV2OrchestratorService:
         self.session = session
         self.flags = flag_service or FinnV2FlagService()
         self.runs = FinnV2RunRepository(session)
+        self.runtime_contracts = FinnV2RuntimeContractRepository(session)
         self.traces = FinnV2TraceRepository(session)
         self.results = FinnV2OrchestratorRepository(session)
         self.conversations = FinnV2ConversationRepository(session)
@@ -103,6 +105,47 @@ class FinnV2OrchestratorService:
                 client_context=getattr(run, "client_context_json", {}) or {},
                 conversation_context=conversation_context,
             )
+        request_plan = getattr(analysis, "request_plan", None)
+        await self.runtime_contracts.record_initial_intent(
+            run_id=run_id,
+            operation_id=(getattr(request_plan, "initial_operation_id", None) or getattr(request_plan, "operation_id", None) or analysis.output_contract or analysis.interaction_mode.lower()),
+            requested_mode=analysis.interaction_mode,
+        )
+        # The analysis boundary is the last place that can derive a target
+        # from the current turn and its allowed context. Persist it before
+        # tool planning so later phases cannot replace it with a stale
+        # RequestPlan or workspace field.
+        runtime_contract = await self.runtime_contracts.record_selection(
+            run_id=run_id,
+            canonical_target=getattr(request_plan, "target_asset", None),
+            target_source=getattr(request_plan, "target_asset_source", None),
+            original_target_text=getattr(request_plan, "referenced_asset", None),
+            target_type="asset" if getattr(request_plan, "target_asset", None) else None,
+            conversation_reference=getattr(request_plan, "conversation_reference", None),
+            conversation_reference_kind=getattr(request_plan, "conversation_reference_kind", None),
+            selector_provenance={
+                "source": getattr(request_plan, "selector_source", None),
+                "confidence": getattr(request_plan, "selector_confidence", None),
+                "candidate_operation_ids": list(getattr(request_plan, "candidate_operation_ids", []) or []),
+            },
+        )
+        # New runs use a contract-derived RequestPlan view. This preserves
+        # ancillary registry metadata while making the authoritative operation,
+        # mode, target and lineage values impossible to replace downstream.
+        execution_view = FinnV2RuntimeContractRepository.execution_view(runtime_contract)
+        request_plan = request_plan.copy(
+            update={
+                "initial_operation_id": execution_view["initial_operation_id"],
+                "operation_id": execution_view["operation_id"],
+                "interaction_mode": execution_view["interaction_mode"],
+                "target_asset": execution_view["target_asset"],
+                "target_asset_source": execution_view["target_asset_source"],
+                "referenced_asset": execution_view["referenced_asset"],
+                "conversation_reference": execution_view["conversation_reference"],
+                "conversation_reference_kind": execution_view["conversation_reference_kind"],
+            }
+        )
+        analysis = analysis.copy(update={"request_plan": request_plan, "interaction_mode": execution_view["interaction_mode"]})
         domain_requirements = self.requirements.determine(analysis)
         tool_plan = self.tool_plans.build(run_id=run_id, analysis=analysis, domain_plan=domain_requirements)
 

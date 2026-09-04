@@ -11,6 +11,7 @@ from backend.infrastructure.repositories.finn_v2_evidence_repository import Finn
 from backend.infrastructure.repositories.finn_v2_policy_repository import FinnV2PolicyRepository
 from backend.infrastructure.repositories.finn_v2_reasoning_repository import FinnV2ReasoningRepository
 from backend.infrastructure.repositories.finn_v2_run_repository import FinnV2RunRepository
+from backend.infrastructure.repositories.finn_v2_runtime_contract_repository import FinnV2RuntimeContractRepository
 from backend.infrastructure.repositories.finn_v2_state_repository import FinnV2StateRepository
 from backend.infrastructure.repositories.finn_v2_tool_call_repository import FinnV2ToolCallRepository
 from backend.infrastructure.repositories.finn_v2_validation_repository import FinnV2ValidationRepository
@@ -27,6 +28,7 @@ class FinnV2DeliveryService:
     def __init__(self, session: AsyncSession):
         self.session = session
         self.runs = FinnV2RunRepository(session)
+        self.runtime_contracts = FinnV2RuntimeContractRepository(session)
         self.orchestrators = FinnV2OrchestratorRepository(session)
         self.policies = FinnV2PolicyRepository(session)
         self.reasoning = FinnV2ReasoningRepository(session)
@@ -41,6 +43,35 @@ class FinnV2DeliveryService:
         run = await self.runs.get_by_id_for_user(run_id=run_id, user_id=user_id)
         if run is None:
             raise LookupError("FINN V2 run not found")
+        # Contract-bound terminal runs have exactly one public read model. Do
+        # not reconstruct a competing response from verified-response rows.
+        runtime_contract = None
+        if hasattr(self.session, "execute"):
+            runtime_contract = await self.runtime_contracts.get_for_run(run_id=run_id)
+        projection = getattr(runtime_contract, "terminal_projection_json", None) if runtime_contract is not None else None
+        if projection:
+            payload = dict(projection.get("response") or {})
+            try:
+                response = self._verified_response_from_payload(payload) if payload else None
+            except FinnV2ModeContractError as exc:
+                return FinnV2DeliveryEnvelope(
+                    run_id=run.id,
+                    conversation_id=run.conversation_id,
+                    status="failed",
+                    error_code=exc.code,
+                    error_message="FINN V2 response mode contract is invalid.",
+                )
+            return FinnV2DeliveryEnvelope(
+                run_id=run.id,
+                conversation_id=run.conversation_id,
+                status=str(projection.get("terminal_status") or run.status),
+                response=response,
+                proposal_id=response.proposal_id if response is not None else None,
+                confirmation_required=bool(response.confirmation_required) if response is not None else False,
+                error_code=projection.get("error_code") or getattr(run, "error_code", None),
+                error_message=getattr(run, "error_message", None),
+                delivery_source="runtime_contract_projection",
+            )
         row = await self.verified.get_latest_for_run(run_id=run_id, user_id=user_id)
         try:
             response = self._verified_response_from_payload(row.response_json) if row is not None else None

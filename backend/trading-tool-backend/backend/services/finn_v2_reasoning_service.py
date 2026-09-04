@@ -15,6 +15,7 @@ from backend.infrastructure.repositories.finn_v2_orchestrator_repository import 
 from backend.infrastructure.repositories.finn_v2_policy_repository import FinnV2PolicyRepository
 from backend.infrastructure.repositories.finn_v2_reasoning_repository import FinnV2ReasoningRepository
 from backend.infrastructure.repositories.finn_v2_run_repository import FinnV2RunRepository
+from backend.infrastructure.repositories.finn_v2_runtime_contract_repository import FinnV2RuntimeContractRepository
 from backend.infrastructure.repositories.finn_v2_state_repository import FinnV2StateRepository
 from backend.infrastructure.repositories.finn_v2_trace_repository import FinnV2TraceRepository
 from backend.infrastructure.repositories.finn_v2_validation_repository import FinnV2ValidationRepository
@@ -70,6 +71,7 @@ class FinnV2ReasoningService:
         self.session = session
         self.flags = flag_service or FinnV2FlagService()
         self.runs = FinnV2RunRepository(session)
+        self.runtime_contracts = FinnV2RuntimeContractRepository(session)
         self.orchestrators = FinnV2OrchestratorRepository(session)
         self.policies = FinnV2PolicyRepository(session)
         self.snapshots = FinnV2StateRepository(session)
@@ -91,11 +93,36 @@ class FinnV2ReasoningService:
         if run is None:
             raise LookupError("FINN V2 run not found")
 
+        # Existing unit-only service fixtures use a bare sentinel instead of
+        # an AsyncSession. Production sessions always expose ``execute`` and
+        # therefore must load their contract; this branch cannot activate in
+        # the worker/API runtime.
+        runtime_contract = None
+        if hasattr(self.session, "execute"):
+            runtime_contract = await self.runtime_contracts.get_for_run(run_id=run_id)
+
         orchestrator_row = await self.orchestrators.get_for_run_version(run_id=run_id, user_id=user_id, orchestrator_version=ORCHESTRATOR_VERSION)
         if orchestrator_row is None:
             raise ValueError("orchestrator_not_ready")
         persisted_tool_plan = dict(orchestrator_row.tool_plan_json or {})
         persisted_request_plan = persisted_tool_plan.get("request_plan") or {}
+        if runtime_contract is not None:
+            # Contract-bound runs cannot regain authority from the mutable
+            # orchestration snapshot. Retain only ancillary contract metadata
+            # from the plan and overwrite all execution decisions here.
+            execution_view = FinnV2RuntimeContractRepository.execution_view(runtime_contract)
+            persisted_request_plan = {
+                **persisted_request_plan,
+                "initial_operation_id": execution_view["initial_operation_id"],
+                "operation_id": execution_view["operation_id"],
+                "interaction_mode": execution_view["interaction_mode"],
+                "target_asset": execution_view["target_asset"],
+                "target_asset_source": execution_view["target_asset_source"],
+                "referenced_asset": execution_view["referenced_asset"],
+                "conversation_reference": execution_view["conversation_reference"],
+                "conversation_reference_kind": execution_view["conversation_reference_kind"],
+            }
+            persisted_tool_plan["request_plan"] = persisted_request_plan
         selectors = persisted_tool_plan.get("entity_selectors") or {}
         orchestrator_result = OrchestratorResult.parse_obj(
             {
@@ -103,7 +130,9 @@ class FinnV2ReasoningService:
                 "run_id": orchestrator_row.run_id,
                 "user_id": orchestrator_row.user_id,
                 "analysis": {
-                    "interaction_mode": normalize_interaction_mode(orchestrator_row.interaction_mode),
+                    "interaction_mode": normalize_interaction_mode(
+                        persisted_request_plan.get("interaction_mode") or orchestrator_row.interaction_mode
+                    ),
                     "subject_scopes": orchestrator_row.subject_scopes_json,
                     "explicit_asset": selectors.get("asset"),
                     "explicit_setup_id": selectors.get("setup_id"),

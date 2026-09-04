@@ -69,7 +69,34 @@ def test_incomplete_trade_route_avoids_provider_and_returns_unavailable():
     service.runs = _FakeRunRepo(run)
     service.traces = _FakeTraceRepo()
     service.results = _FakeResultRepo()
-    service.runtime_contracts = SimpleNamespace(record_initial_intent=lambda **_kwargs: asyncio.sleep(0))
+    selected_intent = {}
+
+    def _record_initial_intent(**kwargs):
+        selected_intent.update(kwargs)
+        return asyncio.sleep(0)
+
+    def _record_selection(**_kwargs):
+        return asyncio.sleep(
+            0,
+            result=SimpleNamespace(
+                contract_id="contract-fast-1",
+                revision=2,
+                state_json={
+                    "initial_operation_id": selected_intent["operation_id"],
+                    "requested_mode": selected_intent["requested_mode"],
+                    "canonical_target": None,
+                    "target_source": None,
+                    "original_target_text": None,
+                    "conversation_reference": None,
+                    "conversation_reference_kind": None,
+                },
+            ),
+        )
+
+    service.runtime_contracts = SimpleNamespace(
+        record_initial_intent=_record_initial_intent,
+        record_selection=_record_selection,
+    )
     service.flags.is_tool_registry_enabled = lambda: True
     service.flags.is_state_assembly_enabled = lambda: True
 

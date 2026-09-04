@@ -12,6 +12,7 @@ from backend.domain.finn_v2_runtime_contract import (
     RuntimeContractConflictError,
     new_runtime_contract_state,
     record_initial_intent,
+    record_selection,
     terminal_projection,
 )
 from backend.infrastructure.models import FinnV2RuntimeContract
@@ -48,6 +49,28 @@ class FinnV2RuntimeContractRepository(FinnV2RepositoryTransactionMixin):
         result = await self.session.execute(statement)
         return result.scalars().first()
 
+    @staticmethod
+    def execution_view(row: FinnV2RuntimeContract) -> Dict[str, Any]:
+        """Return the authoritative execution fields for a new contract run.
+
+        Orchestration artifacts retain tool/evidence detail, but consumers must
+        take operation, mode, target and lineage identity from this view.
+        """
+        state = dict(row.state_json or {})
+        return {
+            "contract_id": row.contract_id,
+            "contract_revision": int(row.revision or 0),
+            "initial_operation_id": state.get("initial_operation_id"),
+            "operation_id": state.get("final_operation_id") or state.get("initial_operation_id"),
+            "interaction_mode": state.get("final_mode") or state.get("requested_mode"),
+            "target_asset": state.get("canonical_target"),
+            "target_asset_source": state.get("target_source"),
+            "referenced_asset": state.get("original_target_text"),
+            "conversation_reference": state.get("conversation_reference"),
+            "conversation_reference_kind": state.get("conversation_reference_kind"),
+            "selector_provenance": dict(state.get("selector_provenance") or {}),
+        }
+
     async def record_initial_intent(self, *, run_id: str, operation_id: str, requested_mode: str) -> FinnV2RuntimeContract:
         row = await self._required_for_update(run_id)
         current_state = row.state_json or {}
@@ -57,6 +80,34 @@ class FinnV2RuntimeContractRepository(FinnV2RepositoryTransactionMixin):
             record_initial_intent(current_state, operation_id=operation_id, requested_mode=requested_mode)
             return row
         next_state = record_initial_intent(current_state, operation_id=operation_id, requested_mode=requested_mode)
+        return await self._write_revision(row=row, state=next_state)
+
+    async def record_selection(
+        self,
+        *,
+        run_id: str,
+        canonical_target: Optional[str],
+        target_source: Optional[str],
+        original_target_text: Optional[str],
+        target_type: Optional[str],
+        conversation_reference: Optional[str],
+        conversation_reference_kind: Optional[str],
+        selector_provenance: Optional[Dict[str, Any]] = None,
+    ) -> FinnV2RuntimeContract:
+        """Persist the target selection before tool planning or policy reads it."""
+        row = await self._required_for_update(run_id)
+        next_state = record_selection(
+            deepcopy(row.state_json or {}),
+            canonical_target=canonical_target,
+            target_source=target_source,
+            original_target_text=original_target_text,
+            target_type=target_type,
+            conversation_reference=conversation_reference,
+            conversation_reference_kind=conversation_reference_kind,
+            selector_provenance=selector_provenance,
+        )
+        if next_state == (row.state_json or {}):
+            return row
         return await self._write_revision(row=row, state=next_state)
 
     async def materialize_terminal(

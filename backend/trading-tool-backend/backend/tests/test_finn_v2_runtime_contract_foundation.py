@@ -13,6 +13,7 @@ from backend.domain.finn_v2_runtime_contract import (
     RuntimeContractImmutableFieldError,
     new_runtime_contract_state,
     record_initial_intent,
+    record_selection,
     terminal_projection,
 )
 from backend.services.finn_v2_run_service import FinnV2RunService
@@ -76,6 +77,44 @@ def test_terminal_projection_uses_the_same_immutable_contract_identity():
     assert projection["initial_operation_id"] == "evaluate_plan"
     assert projection["terminal_status"] == "failed"
     assert projection["terminal_response_type"] == "failure"
+
+
+def test_explicit_canonical_target_cannot_be_replaced_after_selection():
+    state = record_initial_intent(
+        new_runtime_contract_state(run=_run(), contract_id="contract-run-contract-1"),
+        operation_id="evaluate_plan",
+        requested_mode="EVALUATE",
+    )
+    selected = record_selection(
+        state,
+        canonical_target="ETH",
+        target_source="explicit_current_turn",
+        original_target_text="Ethereum",
+        target_type="asset",
+        conversation_reference=None,
+        conversation_reference_kind=None,
+    )
+
+    assert selected["canonical_target"] == "ETH"
+    assert record_selection(
+        selected,
+        canonical_target="ETH",
+        target_source="explicit_current_turn",
+        original_target_text="Ethereum",
+        target_type="asset",
+        conversation_reference=None,
+        conversation_reference_kind=None,
+    )["canonical_target"] == "ETH"
+    with pytest.raises(RuntimeContractImmutableFieldError):
+        record_selection(
+            selected,
+            canonical_target="AAPL",
+            target_source="workspace_context",
+            original_target_text="Apple",
+            target_type="asset",
+            conversation_reference=None,
+            conversation_reference_kind=None,
+        )
 
 
 def test_complete_run_never_creates_or_reconstructs_a_runtime_contract():
@@ -205,6 +244,7 @@ def test_worker_dispatch_keeps_the_created_contract_attached_to_the_same_run(mon
         @classmethod
         async def run_foundation_lifecycle_owned(cls, *, run_id, user_id):
             assert created_contracts[run_id] == "contract-run-worker-1"
+            run.status = "completed"
             calls.append(("lifecycle", run_id, user_id))
 
     monkeypatch.setattr(finn_v2_task, "async_session_factory", lambda: _Context())

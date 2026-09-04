@@ -11,6 +11,7 @@ from backend.infrastructure.repositories.finn_v2_orchestrator_repository import 
 from backend.infrastructure.repositories.finn_v2_policy_repository import FinnV2PolicyRepository
 from backend.infrastructure.repositories.finn_v2_reasoning_repository import FinnV2ReasoningRepository
 from backend.infrastructure.repositories.finn_v2_run_repository import FinnV2RunRepository
+from backend.infrastructure.repositories.finn_v2_runtime_contract_repository import FinnV2RuntimeContractRepository
 from backend.infrastructure.repositories.finn_v2_state_repository import FinnV2StateRepository
 from backend.infrastructure.repositories.finn_v2_trace_repository import FinnV2TraceRepository
 from backend.infrastructure.repositories.finn_v2_validation_repository import FinnV2ValidationRepository
@@ -97,6 +98,7 @@ class FinnV2ResponseVerifierService:
         self.flags = flag_service or FinnV2FlagService()
         self.capabilities = FinnV2CapabilityRegistryService()
         self.runs = FinnV2RunRepository(session)
+        self.runtime_contracts = FinnV2RuntimeContractRepository(session)
         self.orchestrators = FinnV2OrchestratorRepository(session)
         self.policies = FinnV2PolicyRepository(session)
         self.reasoning = FinnV2ReasoningRepository(session)
@@ -138,6 +140,27 @@ class FinnV2ResponseVerifierService:
 
         reasoning_record = self._reasoning_record_from_row(reasoning_row)
         orchestrator_result = self._orchestrator_result_from_row(orchestrator_row)
+        runtime_contract = None
+        if hasattr(self.session, "execute"):
+            runtime_contract = await self.runtime_contracts.get_for_run(run_id=run_id)
+        if runtime_contract is not None:
+            execution_view = FinnV2RuntimeContractRepository.execution_view(runtime_contract)
+            request_plan = orchestrator_result.analysis.request_plan.copy(
+                update={
+                    "initial_operation_id": execution_view["initial_operation_id"],
+                    "operation_id": execution_view["operation_id"],
+                    "interaction_mode": execution_view["interaction_mode"],
+                    "target_asset": execution_view["target_asset"],
+                    "target_asset_source": execution_view["target_asset_source"],
+                    "referenced_asset": execution_view["referenced_asset"],
+                    "conversation_reference": execution_view["conversation_reference"],
+                    "conversation_reference_kind": execution_view["conversation_reference_kind"],
+                }
+            )
+            analysis = orchestrator_result.analysis.copy(
+                update={"request_plan": request_plan, "interaction_mode": execution_view["interaction_mode"]}
+            )
+            orchestrator_result = orchestrator_result.copy(update={"analysis": analysis})
         validation = await self.validations.get_by_id_for_user(validation_id=reasoning_record.validation_id, user_id=user_id)
         snapshot = await self.snapshots.get_by_id_for_user(snapshot_id=reasoning_record.snapshot_id, user_id=user_id)
         policy_row = await self.policies.get_for_run_version(run_id=run_id, user_id=user_id, policy_version=POLICY_VERSION)

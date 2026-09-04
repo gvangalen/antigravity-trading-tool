@@ -49,6 +49,7 @@ def test_terminal_envelope_reconstructs_historical_fact_as_read():
         retryable=False,
     )
     service.delivery.get_delivery_artifacts = lambda **_kwargs: asyncio.sleep(0, result={})
+    service.runtime_contracts = SimpleNamespace(get_for_run=lambda **_kwargs: asyncio.sleep(0, result=None))
 
     envelope = asyncio.run(service.envelope_from_run(run))
 
@@ -76,6 +77,7 @@ def test_terminal_envelope_returns_typed_failure_for_unknown_historical_mode():
         retryable=False,
     )
     service.delivery.get_delivery_artifacts = lambda **_kwargs: asyncio.sleep(0, result={})
+    service.runtime_contracts = SimpleNamespace(get_for_run=lambda **_kwargs: asyncio.sleep(0, result=None))
 
     envelope = asyncio.run(service.envelope_from_run(run))
 

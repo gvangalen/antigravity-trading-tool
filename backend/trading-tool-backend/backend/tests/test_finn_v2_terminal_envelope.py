@@ -2,8 +2,34 @@ import asyncio
 from datetime import datetime, timezone
 from types import SimpleNamespace
 
+import pytest
+
 from backend.services.finn_v2_run_service import FinnV2RunService
 from backend.schemas.finn_v2_orchestrator_schema import LifecyclePhaseOutcome
+
+
+@pytest.fixture(autouse=True)
+def _contract_boundary_for_unit_terminal_flows(monkeypatch):
+    """Persisted-contract behavior has dedicated tests; legacy unit fixtures do not use a DB."""
+    original_init = FinnV2RunService.__init__
+
+    def _init(self, *args, **kwargs):
+        original_init(self, *args, **kwargs)
+        self.runtime_contracts = SimpleNamespace(
+            get_for_run=lambda **_kwargs: asyncio.sleep(0, result=None),
+            materialize_terminal=lambda **kwargs: asyncio.sleep(
+                0,
+                result=SimpleNamespace(
+                    terminal_projection_json={
+                        "run_id": kwargs["run_id"],
+                        "terminal_status": kwargs["status"],
+                        "response": dict(kwargs["response"]),
+                    }
+                ),
+            ),
+        )
+
+    monkeypatch.setattr(FinnV2RunService, "__init__", _init)
 
 
 def test_terminal_envelope_uses_compact_persisted_projection_without_rerunning_it():
@@ -197,9 +223,9 @@ def test_completed_run_projects_the_verified_next_step_into_the_polling_and_sse_
     )
 
     assert transition["response_json"]["next_step"]["instruction"] == "Leg eerst een toetsbare beslisregel vast."
-    assert transition["response_json"]["_runtime_trace"]["delivery"]["status"] == "completed"
-    assert transition["response_json"]["_runtime_contract"]["contract_version"] == "2026-09-03.runtime-contract.v1"
-    assert transition["response_json"]["_runtime_contract"]["public_projection_hash"]
+    projection = transition["response_json"]["_runtime_contract_projection"]
+    assert projection["terminal_status"] == "completed"
+    assert projection["response"]["next_step"]["instruction"] == "Leg eerst een toetsbare beslisregel vast."
 
 
 def test_terminal_projection_is_the_same_contract_for_polling_and_sse_consumers():

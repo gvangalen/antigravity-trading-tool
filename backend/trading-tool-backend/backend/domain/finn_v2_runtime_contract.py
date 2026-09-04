@@ -1,8 +1,8 @@
 """Versioned, run-bound FINN V2 runtime contract.
 
-The contract is intentionally built once at the terminal persistence boundary.
-It records immutable selector intent separately from the final safe response so
-transport clients never need to reconstruct an operation from artifacts.
+New runs create this contract before any selector, resolver, tool, or reasoning
+phase. Terminal delivery is a projection of persisted contract state, never a
+second reconstruction from orchestration artifacts.
 """
 from __future__ import annotations
 
@@ -15,6 +15,18 @@ from pydantic import BaseModel, Field
 
 FINN_RUNTIME_CONTRACT_VERSION = "2026-09-03.runtime-contract.v1"
 FINN_PUBLIC_PROJECTION_VERSION = "2026-09-03.terminal-projection.v1"
+# Persistent contracts use the same semantic version as the public projection,
+# but retain a separate name for the repository boundary.
+RUNTIME_CONTRACT_VERSION = "2026-09-04.runtime-contract.v1"
+PENDING_STATUS = "pending"
+
+
+class RuntimeContractConflictError(RuntimeError):
+    pass
+
+
+class RuntimeContractImmutableFieldError(ValueError):
+    pass
 
 
 class FinnRuntimeContract(BaseModel):
@@ -162,3 +174,106 @@ def build_terminal_runtime_contract(
     )
     return contract.with_projection_hash()
 
+
+def new_runtime_contract_state(*, run: Any, contract_id: str) -> Dict[str, Any]:
+    """Create authoritative persisted state before selector execution."""
+    return {
+        "contract_id": contract_id,
+        "contract_version": RUNTIME_CONTRACT_VERSION,
+        "identity": {
+            "run_id": run.id,
+            "conversation_id": run.conversation_id,
+            "trace_id": run.trace_id,
+            "user_id": run.user_id,
+        },
+        "immutable_intent": {"message": run.message},
+        "initial_operation_id": None,
+        "requested_mode": None,
+        "canonical_target": None,
+        "target_type": None,
+        "target_source": None,
+        "original_target_text": None,
+        "conversation_reference": None,
+        "conversation_reference_kind": None,
+        "selector_provenance": {},
+        "final_operation_id": None,
+        "final_mode": None,
+        "operation_change_reason": None,
+        "terminal_status": PENDING_STATUS,
+        "terminal_response_type": None,
+        "transition_log": [],
+    }
+
+
+def record_initial_intent(state: Dict[str, Any], *, operation_id: str, requested_mode: str) -> Dict[str, Any]:
+    """Write the selector decision exactly once; idempotent replay is harmless."""
+    state = dict(state)
+    existing_operation = state.get("initial_operation_id")
+    existing_mode = state.get("requested_mode")
+    if existing_operation is not None and (existing_operation != operation_id or existing_mode != requested_mode):
+        raise RuntimeContractImmutableFieldError("runtime_contract_initial_intent_is_immutable")
+    state["initial_operation_id"] = operation_id
+    state["requested_mode"] = requested_mode
+    return state
+
+
+def record_selection(
+    state: Dict[str, Any],
+    *,
+    canonical_target: Optional[str],
+    target_source: Optional[str],
+    original_target_text: Optional[str],
+    target_type: Optional[str],
+    conversation_reference: Optional[str],
+    conversation_reference_kind: Optional[str],
+    selector_provenance: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    """Persist the canonical target and selector provenance before tools run."""
+    state = dict(state)
+    for field, value in {
+        "canonical_target": canonical_target,
+        "target_source": target_source,
+        "original_target_text": original_target_text,
+        "target_type": target_type,
+    }.items():
+        existing = state.get(field)
+        if existing is not None and existing != value:
+            raise RuntimeContractImmutableFieldError(f"runtime_contract_{field}_is_immutable")
+        if existing is None:
+            state[field] = value
+    state["conversation_reference"] = conversation_reference
+    state["conversation_reference_kind"] = conversation_reference_kind
+    state["selector_provenance"] = dict(selector_provenance or {})
+    return state
+
+
+def terminal_projection(
+    state: Dict[str, Any],
+    *,
+    status: str,
+    mode: Optional[str],
+    response: Optional[Dict[str, Any]],
+    error_code: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Return the sole public terminal read model for a persisted contract."""
+    identity = dict(state.get("identity") or {})
+    return {
+        "version": FINN_PUBLIC_PROJECTION_VERSION,
+        "projection_version": RUNTIME_CONTRACT_VERSION,
+        "contract_id": state.get("contract_id"),
+        "run_id": identity.get("run_id"),
+        "conversation_id": identity.get("conversation_id"),
+        "trace_id": identity.get("trace_id"),
+        "initial_operation_id": state.get("initial_operation_id"),
+        "final_operation_id": state.get("final_operation_id") or state.get("initial_operation_id"),
+        "requested_mode": state.get("requested_mode"),
+        "final_mode": mode or state.get("final_mode") or state.get("requested_mode"),
+        "operation_change_reason": state.get("operation_change_reason"),
+        "canonical_target": state.get("canonical_target"),
+        "target_source": state.get("target_source"),
+        "conversation_reference": state.get("conversation_reference"),
+        "terminal_status": status,
+        "terminal_response_type": state.get("terminal_response_type") or ("failure" if status == "failed" else "response"),
+        "error_code": error_code,
+        "response": dict(response or {}),
+    }

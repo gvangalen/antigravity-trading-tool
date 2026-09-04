@@ -19,6 +19,7 @@ from backend.domain.finn_v2_contract import (
 from backend.domain.finn_v2_runtime_contract import build_terminal_runtime_contract
 from backend.infrastructure.repositories.finn_v2_conversation_repository import FinnV2ConversationRepository
 from backend.infrastructure.repositories.finn_v2_run_repository import FinnV2RunRepository
+from backend.infrastructure.repositories.finn_v2_runtime_contract_repository import FinnV2RuntimeContractRepository
 from backend.infrastructure.repositories.finn_v2_trace_repository import FinnV2TraceRepository
 from backend.infrastructure.database import async_session_factory
 from backend.services.finn_v2_delivery_service import FinnV2DeliveryService
@@ -36,6 +37,7 @@ class FinnV2RunService:
         self.session = session
         self.conversations = FinnV2ConversationRepository(session)
         self.runs = FinnV2RunRepository(session)
+        self.runtime_contracts = FinnV2RuntimeContractRepository(session)
         self.traces = FinnV2TraceRepository(session)
         self.tools = FinnV2ToolExecutionService(session)
         self.delivery = FinnV2DeliveryService(session)
@@ -44,6 +46,7 @@ class FinnV2RunService:
     async def create_run(self, payload: Dict[str, Any], *, commit: bool = True):
         try:
             run = await self.runs.create(**payload)
+            contract = await self.runtime_contracts.create_for_run(run=run)
             await self.conversations.set_last_run(
                 conversation_id=run.conversation_id,
                 user_id=run.user_id,
@@ -54,7 +57,7 @@ class FinnV2RunService:
                 user_id=run.user_id,
                 trace_id=run.trace_id,
                 event_type="run_created",
-                payload_json=self._trace_payload(run, status="created", response_source=None),
+                payload_json={**self._trace_payload(run, status="created", response_source=None), "contract_id": contract.contract_id},
             )
             if commit:
                 await self.runs._commit_with_rollback(
@@ -89,6 +92,9 @@ class FinnV2RunService:
         completed_at = now if is_terminal_status(next_status) and next_status != "canceled" else None
         canceled_at = now if next_status == "canceled" else None
         async with self.session.begin_nested():
+            await self.runtime_contracts.record_lifecycle_status(
+                run_id=run_id, status=next_status, mode=interaction_mode
+            )
             await self.runs.update_status(
                 run=run,
                 status=next_status,
@@ -180,23 +186,13 @@ class FinnV2RunService:
                 "next_step": verified.get("next_step"),
                 "reasoning_provenance": verified.get("reasoning_provenance") or {},
             }
-        runtime_contract = build_terminal_runtime_contract(
-            run=SimpleNamespace(id=run_id, user_id=user_id, conversation_id=None, trace_id=None),
-            artifacts=artifacts,
-            terminal_status=next_status,
-            final_mode=phase_outcome.interaction_mode or response_json["mode"],
-            terminal_response_type=(
-                "clarification" if next_status == "clarification_required"
-                else "safe_terminal" if next_status in {"unavailable", "downgraded", "rejected"}
-                else "verified_response"
-            ),
+        contract = await self.runtime_contracts.materialize_terminal(
+            run_id=run_id,
+            status=next_status,
+            mode=phase_outcome.interaction_mode or response_json["mode"],
+            response=response_json,
         )
-        response_json["_runtime_contract"] = runtime_contract.dict()
-        response_json["_runtime_trace"] = self._terminal_runtime_trace(
-            artifacts,
-            runtime_contract=runtime_contract.public_projection(),
-            projection_hash=runtime_contract.public_projection_hash,
-        )
+        response_json["_runtime_contract_projection"] = contract.terminal_projection_json
         await self.persist_transition(
             run_id,
             user_id,
@@ -268,6 +264,15 @@ class FinnV2RunService:
                 primary_exception=primary_exception,
             )
         try:
+            response_json = self._terminal_placeholder_response(
+                interaction_mode="UNAVAILABLE",
+                terminal_status="failed",
+                orchestrator={}, verifier={}, reasoning={}, delivery_envelope={},
+            )
+            contract = await self.runtime_contracts.materialize_terminal(
+                run_id=run_id, status="failed", mode="UNAVAILABLE", response=response_json, error_code=error_code
+            )
+            response_json["_runtime_contract_projection"] = contract.terminal_projection_json
             await self.persist_transition(
                 run_id,
                 user_id,
@@ -275,6 +280,7 @@ class FinnV2RunService:
                 error_code=error_code,
                 error_message=error_message,
                 retryable=retryable,
+                response_json=response_json,
                 response_source="foundation_placeholder",
             )
         except Exception as cleanup_exc:
@@ -298,10 +304,18 @@ class FinnV2RunService:
         run = await self.runs.get_by_id_for_user(run_id=run_id, user_id=user_id)
         if run is None:
             raise LookupError("FINN V2 run not found")
+        response_json = self._terminal_placeholder_response(
+            interaction_mode="UNAVAILABLE", terminal_status="unavailable", orchestrator={}, verifier={}, reasoning={}, delivery_envelope={}
+        )
+        contract = await self.runtime_contracts.materialize_terminal(
+            run_id=run_id, status="canceled", mode="UNAVAILABLE", response=response_json, error_code="run_canceled"
+        )
+        response_json["_runtime_contract_projection"] = contract.terminal_projection_json
         await self.persist_transition(
             run_id,
             user_id,
             next_status="canceled",
+            response_json=response_json,
             response_source="foundation_placeholder",
         )
 
@@ -447,6 +461,23 @@ class FinnV2RunService:
         # Polling and SSE can then serve the same envelope without reopening the
         # full verifier/evidence chain for every client poll.
         runtime_trace: Dict[str, Any] = dict(response_payload.pop("_runtime_trace", {}) or {})
+        if is_terminal_status(run.status):
+            contract = await self.runtime_contracts.get_for_run(run_id=run.id)
+            if contract is not None:
+                projection = dict(contract.terminal_projection_json or {})
+                if projection:
+                    response_payload = dict(projection.get("response") or response_payload)
+                    runtime_trace = projection
+                else:
+                    runtime_trace = {
+                        "projection_version": getattr(contract, "contract_version", "unknown"),
+                        "contract_id": contract.contract_id,
+                        "run_id": run.id,
+                        "conversation_id": run.conversation_id,
+                        "terminal_status": run.status,
+                        "terminal_response_type": "failure",
+                        "error_code": "runtime_contract_terminal_projection_missing",
+                    }
         try:
             if response_payload:
                 response_payload["mode"] = normalize_interaction_mode(response_payload.get("mode"))

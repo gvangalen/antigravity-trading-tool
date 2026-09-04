@@ -31,7 +31,7 @@ class FinnV2DeliveryEnvelope(BaseModel):
     confirmation_required: bool = False
     error_code: Optional[str] = None
     error_message: Optional[str] = None
-    delivery_source: Literal["finn_v2_verified"] = "finn_v2_verified"
+    delivery_source: Literal["finn_v2_verified", "runtime_contract_projection"] = "finn_v2_verified"
 
     class Config:
         extra = "forbid"

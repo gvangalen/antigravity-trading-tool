@@ -2,11 +2,51 @@ import asyncio
 from datetime import datetime, timezone
 from types import SimpleNamespace
 
+import pytest
+
 from backend.schemas.finn_v2_domain_validation_schema import EvidenceValidationResult
 from backend.schemas.finn_v2_orchestrator_schema import OrchestratorResult
 from backend.services.finn_v2_orchestrator_service import FinnV2OrchestratorService
 from backend.services.finn_v2_response_verifier_service import FinnV2VerifierRejected
 from backend.schemas.finn_v2_verifier_schema import CoverageVerification, VerifierResult
+
+
+@pytest.fixture(autouse=True)
+def _contract_boundary_for_unit_orchestrators(monkeypatch):
+    """These unit flows intentionally avoid a database; production does not."""
+    original_init = FinnV2OrchestratorService.__init__
+    selected_intent = {}
+
+    def _record_initial_intent(**kwargs):
+        selected_intent.update(kwargs)
+        return asyncio.sleep(0)
+
+    def _record_selection(**kwargs):
+        return asyncio.sleep(
+            0,
+            result=SimpleNamespace(
+                    contract_id="contract-unit",
+                    revision=2,
+                    state_json={
+                        "initial_operation_id": selected_intent["operation_id"],
+                        "requested_mode": selected_intent["requested_mode"],
+                    "canonical_target": kwargs.get("canonical_target"),
+                    "target_source": kwargs.get("target_source"),
+                    "original_target_text": kwargs.get("original_target_text"),
+                    "conversation_reference": kwargs.get("conversation_reference"),
+                    "conversation_reference_kind": kwargs.get("conversation_reference_kind"),
+                },
+            ),
+        )
+
+    def _init(self, *args, **kwargs):
+        original_init(self, *args, **kwargs)
+        self.runtime_contracts = SimpleNamespace(
+            record_initial_intent=_record_initial_intent,
+            record_selection=_record_selection,
+        )
+
+    monkeypatch.setattr(FinnV2OrchestratorService, "__init__", _init)
 
 
 class _FakeRunRepo:
