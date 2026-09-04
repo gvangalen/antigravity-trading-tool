@@ -165,13 +165,16 @@ if ! printf '%s\n' "$DEPLOY_GIT_TOKEN" | ssh "${SSH_ARGS[@]}" "ubuntu@$SERVER_IP
       --outcome \"\$outcome\" \\
       --exit-code \"\$exit_code\"
   }
-  record_deploy_failure() {
+  record_deploy_exit() {
     local exit_code=\$?
-    trap - ERR
-    record_deploy_status \"\$DEPLOY_STEP_ID\" failure \"\$exit_code\" || true
+    trap - EXIT ERR
+    if [ \"\$exit_code\" -ne 0 ]; then
+      record_deploy_status \"\$DEPLOY_STEP_ID\" failure \"\$exit_code\" || true
+    fi
     exit \"\$exit_code\"
   }
-  trap record_deploy_failure ERR
+  # EXIT also observes the explicit `exit 1` paths used by older deploy gates.
+  trap record_deploy_exit EXIT
   ENV_FILE="\$HOME/.secrets/trading.env"
   if [ -f "\$ENV_FILE" ]; then
     set -o allexport
@@ -510,7 +513,7 @@ PY
     DEPLOY_STEP_ID='frontend_smoke'
     curl --max-time 10 -fsSI http://127.0.0.1:$FRONTEND_PORT/report | head -n 1
   fi
-  trap - ERR
+  trap - EXIT ERR
 "; then
   echo "❌ ${ENVIRONMENT} deployment failed for ${TARGET_COMMIT}." >&2
   if [ "$(lower_bool "${AUTO_ROLLBACK_ON_FAILURE}")" = "true" ]; then
