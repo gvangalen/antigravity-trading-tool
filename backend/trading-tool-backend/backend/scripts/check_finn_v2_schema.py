@@ -169,14 +169,14 @@ def _constraint_exists(cursor: Any, required: RequiredConstraint) -> bool:
     cursor.execute(
         """
         SELECT 1
-        FROM information_schema.table_constraints AS constraint
+        FROM information_schema.table_constraints AS table_constraint
         JOIN information_schema.key_column_usage AS key_column
-          ON constraint.constraint_schema = key_column.constraint_schema
-         AND constraint.constraint_name = key_column.constraint_name
-         AND constraint.table_name = key_column.table_name
-        WHERE constraint.table_schema = current_schema()
-          AND constraint.table_name = %s
-          AND constraint.constraint_type = %s
+          ON table_constraint.constraint_schema = key_column.constraint_schema
+         AND table_constraint.constraint_name = key_column.constraint_name
+         AND table_constraint.table_name = key_column.table_name
+        WHERE table_constraint.table_schema = current_schema()
+          AND table_constraint.table_name = %s
+          AND table_constraint.constraint_type = %s
           AND key_column.column_name = %s
         LIMIT 1
         """,

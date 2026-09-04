@@ -78,6 +78,14 @@ def test_schema_health_accepts_the_conversation_context_contract():
 
     assert any("SELECT context_json FROM finn_v2_conversations" in statement for statement, _ in connection.cursor_instance.executed)
     assert any("SELECT operation_id, operation_contract_version FROM finn_v2_tool_calls" in statement for statement, _ in connection.cursor_instance.executed)
+    constraint_queries = [
+        statement
+        for statement, _ in connection.cursor_instance.executed
+        if "information_schema.table_constraints" in statement
+    ]
+    assert constraint_queries
+    assert all(" AS constraint" not in statement for statement in constraint_queries)
+    assert all(" AS table_constraint" in statement for statement in constraint_queries)
 
 
 @pytest.mark.parametrize(
