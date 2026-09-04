@@ -168,6 +168,9 @@ if ! printf '%s\n' "$DEPLOY_GIT_TOKEN" | ssh "${SSH_ARGS[@]}" "ubuntu@$SERVER_IP
   record_deploy_exit() {
     local exit_code=\$?
     trap - EXIT ERR
+    if declare -F cleanup_previous_frontend_static >/dev/null; then
+      cleanup_previous_frontend_static || true
+    fi
     if [ \"\$exit_code\" -ne 0 ]; then
       record_deploy_status \"\$DEPLOY_STEP_ID\" failure \"\$exit_code\" || true
     fi
@@ -192,7 +195,6 @@ if ! printf '%s\n' "$DEPLOY_GIT_TOKEN" | ssh "${SSH_ARGS[@]}" "ubuntu@$SERVER_IP
   cleanup_previous_frontend_static() {
     rm -rf \"\$PREVIOUS_FRONTEND_STATIC\"
   }
-  trap cleanup_previous_frontend_static EXIT
   if [ -d frontend/trading-tool-frontend/out/_next/static ]; then
     cp -R frontend/trading-tool-frontend/out/_next/static/. \"\$PREVIOUS_FRONTEND_STATIC/\" 2>/dev/null || true
   fi
@@ -513,6 +515,7 @@ PY
     DEPLOY_STEP_ID='frontend_smoke'
     curl --max-time 10 -fsSI http://127.0.0.1:$FRONTEND_PORT/report | head -n 1
   fi
+  cleanup_previous_frontend_static
   trap - EXIT ERR
 "; then
   echo "❌ ${ENVIRONMENT} deployment failed for ${TARGET_COMMIT}." >&2

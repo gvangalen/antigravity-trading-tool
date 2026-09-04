@@ -74,6 +74,8 @@ def test_deploy_script_uses_fixed_step_ids_and_preserves_rollback() -> None:
     assert "DEPLOY_STEP_ID" in source
     assert "trap record_deploy_exit EXIT" in source
     assert 'if [ \\"\\$exit_code\\" -ne 0 ]; then' in source
+    assert "cleanup_previous_frontend_static || true" in source
+    assert "trap cleanup_previous_frontend_static EXIT" not in source
     assert "./ops/deploy/rollback_env.sh $ENVIRONMENT $ROLLBACK_COMMIT" in source
     for step in (
         "remote_preflight",
