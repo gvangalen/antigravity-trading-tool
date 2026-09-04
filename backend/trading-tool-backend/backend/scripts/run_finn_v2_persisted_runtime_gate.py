@@ -26,7 +26,7 @@ async def run_gate(*, user_id: int, message: str, timeout_seconds: float) -> dic
         gateway = FinnV2GatewayService(session)
         run_id = await gateway.run_foundation_now(
             user_id=user_id,
-            request_payload=AgentRunRequest(message=message, transport="http").dict(),
+            request_payload=AgentRunRequest(message=message, transport="chat").dict(),
             request_path="/internal/finn-v2-runtime-gate",
             request_id=f"runtime-gate-{time.time_ns()}",
             trace_id=f"runtime-gate-{time.time_ns()}",
