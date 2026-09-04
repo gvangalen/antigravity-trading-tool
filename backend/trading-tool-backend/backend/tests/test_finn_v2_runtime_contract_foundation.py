@@ -51,6 +51,16 @@ def test_runtime_contract_identity_is_present_before_selector_and_intent_is_writ
         record_initial_intent(selected, operation_id="read_plan", requested_mode="READ")
 
 
+def test_run_creation_exposes_only_safe_contract_identity_before_worker_execution():
+    source = (ROOT / "api" / "finn_v2_api.py").read_text(encoding="utf-8")
+    create_source = source.split("async def create_finn_v2_run(", 1)[1].split("@router.get", 1)[0]
+
+    assert "FinnV2RuntimeContractRepository(db).get_for_run(run_id=run_id)" in create_source
+    assert '"contract_id": runtime_contract.contract_id' in create_source
+    assert '"revision": runtime_contract.revision' in create_source
+    assert "runtime_contract_missing_after_run_creation" in create_source
+
+
 def test_runtime_repository_rejects_identity_mutation_and_replayed_initial_intent_is_not_a_transition():
     source = (ROOT / "infrastructure" / "repositories" / "finn_v2_runtime_contract_repository.py").read_text(encoding="utf-8")
     assert "must not create another state transition or revision" in source

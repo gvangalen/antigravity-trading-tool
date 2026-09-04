@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.domain.finn_v2_contract import is_terminal_status
 from backend.infrastructure.database import async_session_factory, get_db
+from backend.infrastructure.repositories.finn_v2_runtime_contract_repository import FinnV2RuntimeContractRepository
 from backend.schemas.finn_v2_schema import (
     AgentRunCancelResponse,
     AgentRunRequest,
@@ -71,7 +72,23 @@ async def create_finn_v2_run(
         trace_id=getattr(raw_request.state, "trace_id", None),
     )
     run = await gateway.get_run(run_id=run_id, user_id=int(current_user["id"]))
-    return await run_service.envelope_from_run(run)
+    envelope = await run_service.envelope_from_run(run)
+    # The creation response is the sole nonterminal transport that needs this
+    # metadata. Bounded polling therefore does not add a contract query for
+    # every progress update.
+    runtime_contract = await FinnV2RuntimeContractRepository(db).get_for_run(run_id=run_id)
+    if runtime_contract is None:
+        raise HTTPException(status_code=500, detail="runtime_contract_missing_after_run_creation")
+    envelope.runtime_trace = {
+        "contract": {
+            "contract_id": runtime_contract.contract_id,
+            "contract_version": runtime_contract.contract_version,
+            "revision": runtime_contract.revision,
+            "run_id": run.id,
+            "conversation_id": run.conversation_id,
+        }
+    }
+    return envelope
 
 
 @router.get("/assistant/v2/runs/{run_id}", response_model=AgentRunStatusEnvelope)
