@@ -89,3 +89,15 @@ def test_deploy_script_uses_fixed_step_ids_and_preserves_rollback() -> None:
         "release_complete",
     ):
         assert step in source
+
+
+def test_release_marker_remote_steps_are_independently_guarded() -> None:
+    source = DEPLOY_SCRIPT.read_text(encoding="utf-8")
+    marker_start = source.index('DEPLOY_STEP_ID="release_marker"')
+    marker_end = source.index('record_remote_deploy_status "release_complete"', marker_start)
+    marker_block = source[marker_start:marker_end]
+
+    # Each SSH boundary must have its own if-body; otherwise Bash treats the
+    # second SSH invocation as part of the first conditional command list.
+    assert marker_block.count('if ! ssh "${SSH_ARGS[@]}" "ubuntu@$SERVER_IP"') == 2
+    assert marker_block.count('record_remote_deploy_status "$DEPLOY_STEP_ID" failure 1 || true') == 2

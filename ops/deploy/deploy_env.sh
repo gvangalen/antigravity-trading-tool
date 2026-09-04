@@ -614,9 +614,12 @@ if ! ssh "${SSH_ARGS[@]}" "ubuntu@$SERVER_IP" "
   if [ -d /var/www/tradamind/ops/deploy ]; then
     printf '%s\n' '$ROLLBACK_COMMIT' | sudo tee /var/www/tradamind/ops/deploy/PREVIOUS_GOOD_COMMIT >/dev/null
   fi
-"
+"; then
+  record_remote_deploy_status "$DEPLOY_STEP_ID" failure 1 || true
+  exit 1
+fi
 
-ssh "${SSH_ARGS[@]}" "ubuntu@$SERVER_IP" "
+if ! ssh "${SSH_ARGS[@]}" "ubuntu@$SERVER_IP" "
   set -euo pipefail
   cd $REMOTE_DIR
   RELEASE_MARKER_REASON=deployed DEPLOYMENT_VALIDATED_RELEASE=true \\
