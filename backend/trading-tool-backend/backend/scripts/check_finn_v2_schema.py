@@ -22,7 +22,31 @@ class RequiredColumn:
     default_fragment: Optional[str] = None
 
 
+@dataclass(frozen=True)
+class RequiredConstraint:
+    table_name: str
+    constraint_type: str
+    column_name: str
+
+
+@dataclass(frozen=True)
+class RequiredIndex:
+    table_name: str
+    index_name: str
+
+
 REQUIRED_FINN_V2_COLUMNS = (
+    RequiredColumn("finn_v2_runtime_contracts", "contract_id", "text", False),
+    RequiredColumn("finn_v2_runtime_contracts", "run_id", "text", False),
+    RequiredColumn("finn_v2_runtime_contracts", "conversation_id", "text", False),
+    RequiredColumn("finn_v2_runtime_contracts", "trace_id", "text", False),
+    RequiredColumn("finn_v2_runtime_contracts", "user_id", "int4", False),
+    RequiredColumn("finn_v2_runtime_contracts", "contract_version", "text", False),
+    RequiredColumn("finn_v2_runtime_contracts", "revision", "int4", False, "0"),
+    RequiredColumn("finn_v2_runtime_contracts", "state_json", "jsonb", False, "'{}'::jsonb"),
+    RequiredColumn("finn_v2_runtime_contracts", "terminal_projection_json", "jsonb", True),
+    RequiredColumn("finn_v2_runtime_contracts", "created_at", "timestamptz", False, "now()"),
+    RequiredColumn("finn_v2_runtime_contracts", "updated_at", "timestamptz", False, "now()"),
     RequiredColumn(
         table_name="finn_v2_evidence_artifacts",
         column_name="information_scope",
@@ -108,6 +132,20 @@ REQUIRED_FINN_V2_COLUMNS = (
     ),
 )
 
+REQUIRED_FINN_V2_CONSTRAINTS = (
+    RequiredConstraint("finn_v2_runtime_contracts", "PRIMARY KEY", "contract_id"),
+    RequiredConstraint("finn_v2_runtime_contracts", "UNIQUE", "run_id"),
+    RequiredConstraint("finn_v2_runtime_contracts", "FOREIGN KEY", "run_id"),
+    RequiredConstraint("finn_v2_runtime_contracts", "FOREIGN KEY", "conversation_id"),
+    RequiredConstraint("finn_v2_runtime_contracts", "FOREIGN KEY", "user_id"),
+)
+
+REQUIRED_FINN_V2_INDEXES = (
+    RequiredIndex("finn_v2_runtime_contracts", "idx_finn_v2_runtime_contract_conversation"),
+    RequiredIndex("finn_v2_runtime_contracts", "idx_finn_v2_runtime_contract_trace"),
+    RequiredIndex("finn_v2_runtime_contracts", "idx_finn_v2_runtime_contract_user"),
+)
+
 
 class FinnV2SchemaHealthError(RuntimeError):
     """Raised when active FINN V2 code cannot safely run against the database."""
@@ -125,6 +163,40 @@ def _column_metadata(cursor: Any, required: RequiredColumn) -> Optional[tuple[st
         (required.table_name, required.column_name),
     )
     return cursor.fetchone()
+
+
+def _constraint_exists(cursor: Any, required: RequiredConstraint) -> bool:
+    cursor.execute(
+        """
+        SELECT 1
+        FROM information_schema.table_constraints AS constraint
+        JOIN information_schema.key_column_usage AS key_column
+          ON constraint.constraint_schema = key_column.constraint_schema
+         AND constraint.constraint_name = key_column.constraint_name
+         AND constraint.table_name = key_column.table_name
+        WHERE constraint.table_schema = current_schema()
+          AND constraint.table_name = %s
+          AND constraint.constraint_type = %s
+          AND key_column.column_name = %s
+        LIMIT 1
+        """,
+        (required.table_name, required.constraint_type, required.column_name),
+    )
+    return cursor.fetchone() is not None
+
+
+def _index_exists(cursor: Any, required: RequiredIndex) -> bool:
+    cursor.execute(
+        """
+        SELECT 1
+        FROM pg_indexes
+        WHERE schemaname = current_schema()
+          AND tablename = %s
+          AND indexname = %s
+        """,
+        (required.table_name, required.index_name),
+    )
+    return cursor.fetchone() is not None
 
 
 def assert_finn_v2_schema(connection: Any) -> None:
@@ -151,8 +223,25 @@ def assert_finn_v2_schema(connection: Any) -> None:
                     f"finn_v2_schema_invalid_default:{required.table_name}.{required.column_name}"
                 )
 
+        for required in REQUIRED_FINN_V2_CONSTRAINTS:
+            if not _constraint_exists(cursor, required):
+                raise FinnV2SchemaHealthError(
+                    f"finn_v2_schema_missing_constraint:{required.table_name}:{required.constraint_type}:{required.column_name}"
+                )
+
+        for required in REQUIRED_FINN_V2_INDEXES:
+            if not _index_exists(cursor, required):
+                raise FinnV2SchemaHealthError(
+                    f"finn_v2_schema_missing_index:{required.table_name}.{required.index_name}"
+                )
+
         # This read catches permissions or a malformed relation before PM2 starts.
         cursor.execute("SELECT context_json FROM finn_v2_conversations LIMIT 1")
+        cursor.fetchone()
+        cursor.execute(
+            "SELECT contract_id, run_id, conversation_id, trace_id, user_id, revision "
+            "FROM finn_v2_runtime_contracts LIMIT 1"
+        )
         cursor.fetchone()
         cursor.execute("SELECT information_scope FROM finn_v2_evidence_artifacts LIMIT 1")
         cursor.fetchone()
