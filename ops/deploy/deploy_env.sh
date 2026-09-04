@@ -85,6 +85,7 @@ fi
 DEPLOY_STATE_DIR="ops/deploy/${ENVIRONMENT}"
 CANONICAL_DEPLOY_STATE_DIR="${CANONICAL_DEPLOY_STATE_DIR:-/home/ubuntu/ops/deploy}"
 DEPLOY_STATUS_FILE="${CANONICAL_DEPLOY_STATE_DIR}/${ENVIRONMENT}_last_deploy_status.json"
+DEPLOY_STATUS_WRITER_B64="$(base64 < ops/deploy/write_deploy_status.py | tr -d '\n')"
 
 if [ "$DEPLOY_COMPONENT_SET" = "backend_only" ]; then
   CORE_PM2_APPS="${BACKEND_ONLY_PM2_APPS:-backend}"
@@ -130,8 +131,7 @@ record_remote_deploy_status() {
   local exit_code="$3"
   ssh "${SSH_ARGS[@]}" "ubuntu@$SERVER_IP" "
     set -euo pipefail
-    cd $REMOTE_DIR
-    sudo python3 ops/deploy/write_deploy_status.py \\
+    printf '%s' '$DEPLOY_STATUS_WRITER_B64' | base64 -d | sudo python3 - \\
       --status-file $DEPLOY_STATUS_FILE \\
       --release-sha $TARGET_COMMIT_FULL \\
       --step-id $step_id \\
@@ -152,13 +152,13 @@ if ! printf '%s\n' "$DEPLOY_GIT_TOKEN" | ssh "${SSH_ARGS[@]}" "ubuntu@$SERVER_IP
   export TRADAMIND_BUILD_TIME=$BUILD_TIMESTAMP_UTC
   cd $REMOTE_DIR
   DEPLOY_STATUS_FILE='$DEPLOY_STATUS_FILE'
-  DEPLOY_STATUS_WRITER='ops/deploy/write_deploy_status.py'
+  DEPLOY_STATUS_WRITER_B64='$DEPLOY_STATUS_WRITER_B64'
   DEPLOY_STEP_ID='remote_preflight'
   record_deploy_status() {
     local step_id=\"\$1\"
     local outcome=\"\$2\"
     local exit_code=\"\$3\"
-    sudo python3 \"\$DEPLOY_STATUS_WRITER\" \\
+    printf '%s' \"\$DEPLOY_STATUS_WRITER_B64\" | base64 -d | sudo python3 - \\
       --status-file \"\$DEPLOY_STATUS_FILE\" \\
       --release-sha '$TARGET_COMMIT_FULL' \\
       --step-id \"\$step_id\" \\

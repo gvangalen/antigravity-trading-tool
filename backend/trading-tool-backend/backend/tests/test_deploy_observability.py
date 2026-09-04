@@ -71,6 +71,8 @@ def test_deploy_script_uses_fixed_step_ids_and_preserves_rollback() -> None:
     source = DEPLOY_SCRIPT.read_text(encoding="utf-8")
 
     assert "write_deploy_status.py" in source
+    assert "DEPLOY_STATUS_WRITER_B64" in source
+    assert "base64 -d | sudo python3 -" in source
     assert "DEPLOY_STEP_ID" in source
     assert "trap record_deploy_exit EXIT" in source
     assert 'if [ \\"\\$exit_code\\" -ne 0 ]; then' in source
