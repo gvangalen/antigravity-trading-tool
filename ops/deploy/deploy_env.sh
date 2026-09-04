@@ -84,6 +84,7 @@ fi
 
 DEPLOY_STATE_DIR="ops/deploy/${ENVIRONMENT}"
 CANONICAL_DEPLOY_STATE_DIR="${CANONICAL_DEPLOY_STATE_DIR:-/home/ubuntu/ops/deploy}"
+DEPLOY_STATUS_FILE="${CANONICAL_DEPLOY_STATE_DIR}/${ENVIRONMENT}_last_deploy_status.json"
 
 if [ "$DEPLOY_COMPONENT_SET" = "backend_only" ]; then
   CORE_PM2_APPS="${BACKEND_ONLY_PM2_APPS:-backend}"
@@ -123,8 +124,24 @@ ROLLBACK_COMMAND="ssh -i \"$SSH_KEY\" ubuntu@$SERVER_IP 'cd $REMOTE_DIR && ENVIR
 echo "🌐 2. Deploying ${ENVIRONMENT} commit ${TARGET_COMMIT}..."
 echo "🧭 Previous known-good commit: ${ROLLBACK_COMMIT}"
 
+record_remote_deploy_status() {
+  local step_id="$1"
+  local outcome="$2"
+  local exit_code="$3"
+  ssh "${SSH_ARGS[@]}" "ubuntu@$SERVER_IP" "
+    set -euo pipefail
+    cd $REMOTE_DIR
+    sudo python3 ops/deploy/write_deploy_status.py \\
+      --status-file $DEPLOY_STATUS_FILE \\
+      --release-sha $TARGET_COMMIT_FULL \\
+      --step-id $step_id \\
+      --outcome $outcome \\
+      --exit-code $exit_code
+  "
+}
+
 if ! printf '%s\n' "$DEPLOY_GIT_TOKEN" | ssh "${SSH_ARGS[@]}" "ubuntu@$SERVER_IP" "
-  set -euo pipefail
+  set -Eeuo pipefail
   IFS= read -r DEPLOY_GIT_TOKEN || true
   export PATH=$NODE_BIN:\$PATH
   export APP_ENV=$ENVIRONMENT
@@ -134,6 +151,27 @@ if ! printf '%s\n' "$DEPLOY_GIT_TOKEN" | ssh "${SSH_ARGS[@]}" "ubuntu@$SERVER_IP
   export TRADAMIND_BUILD_COMMIT_SHA=$TARGET_COMMIT_FULL
   export TRADAMIND_BUILD_TIME=$BUILD_TIMESTAMP_UTC
   cd $REMOTE_DIR
+  DEPLOY_STATUS_FILE='$DEPLOY_STATUS_FILE'
+  DEPLOY_STATUS_WRITER='ops/deploy/write_deploy_status.py'
+  DEPLOY_STEP_ID='remote_preflight'
+  record_deploy_status() {
+    local step_id=\"\$1\"
+    local outcome=\"\$2\"
+    local exit_code=\"\$3\"
+    sudo python3 \"\$DEPLOY_STATUS_WRITER\" \\
+      --status-file \"\$DEPLOY_STATUS_FILE\" \\
+      --release-sha '$TARGET_COMMIT_FULL' \\
+      --step-id \"\$step_id\" \\
+      --outcome \"\$outcome\" \\
+      --exit-code \"\$exit_code\"
+  }
+  record_deploy_failure() {
+    local exit_code=\$?
+    trap - ERR
+    record_deploy_status \"\$DEPLOY_STEP_ID\" failure \"\$exit_code\" || true
+    exit \"\$exit_code\"
+  }
+  trap record_deploy_failure ERR
   ENV_FILE="\$HOME/.secrets/trading.env"
   if [ -f "\$ENV_FILE" ]; then
     set -o allexport
@@ -144,6 +182,7 @@ if ! printf '%s\n' "$DEPLOY_GIT_TOKEN" | ssh "${SSH_ARGS[@]}" "ubuntu@$SERVER_IP
     echo \"❌ TWELVE_DATA_API_KEY ontbreekt in runtime env (\$ENV_FILE).\" >&2
     exit 1
   fi
+  DEPLOY_STEP_ID='git_sync'
   mkdir -p $DEPLOY_STATE_DIR
   printf '%s\n' '$ROLLBACK_COMMIT' > ${DEPLOY_STATE_DIR}/PREVIOUS_GOOD_COMMIT
   PREVIOUS_FRONTEND_STATIC=\"\$(mktemp -d /tmp/tradamind-static-backup.XXXXXX)\"
@@ -182,6 +221,7 @@ if ! printf '%s\n' "$DEPLOY_GIT_TOKEN" | ssh "${SSH_ARGS[@]}" "ubuntu@$SERVER_IP
     cp -Rn \"\$PREVIOUS_FRONTEND_STATIC/.\" frontend/trading-tool-frontend/out/_next/static/
     echo \"✅ Previous static chunks retained for browsers opened before this deploy.\"
   fi
+  DEPLOY_STEP_ID='runtime_dependencies'
   bash ./ops/deploy/bootstrap_runtime_dependencies.sh
 
   cd backend/trading-tool-backend
@@ -191,9 +231,11 @@ if ! printf '%s\n' "$DEPLOY_GIT_TOKEN" | ssh "${SSH_ARGS[@]}" "ubuntu@$SERVER_IP
     timeout --foreground \"\${MIGRATION_COMMAND_TIMEOUT_SECONDS}s\" \\
       python3 backend/scripts/run_sql_migration.py \"\$migration\"
   }
+  DEPLOY_STEP_ID='migration_plan'
   echo \"🧭 Validating canonical FINN V2 migration plan before schema changes...\"
   python3 -m backend.scripts.validate_finn_v2_migration_plan \\
     --deploy-script ../../ops/deploy/deploy_env.sh
+  DEPLOY_STEP_ID='migrations'
   run_migration backend/scripts/migrations/2026_05_18_manual_order_idempotency.py
   run_migration backend/scripts/migrations/2026_05_24_platform_hardening_phase1.py
   run_migration backend/scripts/migrations/2026_05_24_runtime_ddl_to_migrations.py
@@ -226,10 +268,12 @@ if ! printf '%s\n' "$DEPLOY_GIT_TOKEN" | ssh "${SSH_ARGS[@]}" "ubuntu@$SERVER_IP
   run_migration backend/scripts/migrations/2026_08_25_canonical_user_indicator_configs.py
   run_migration backend/scripts/migrations/2026_08_25_finn_v2_indicator_config_reconciliation.py
   run_migration backend/scripts/migrations/2026_09_04_finn_v2_runtime_contract_foundation.py
+  DEPLOY_STEP_ID='schema_health'
   echo \"🩺 Checking FINN V2 schema contract before process startup...\"
   timeout --foreground "\${MIGRATION_COMMAND_TIMEOUT_SECONDS}s" \
     python3 -m backend.scripts.check_finn_v2_schema
 
+  DEPLOY_STEP_ID='frontend_export'
   cd ../../frontend/trading-tool-frontend
   rm -rf .next
   git clean -fd out/_next/static
@@ -363,12 +407,15 @@ PY
       for_each_pm2_app \"$CORE_PM2_APPS\" pm2_delete_app
       for_each_pm2_app \"$AUX_PM2_APPS\" pm2_delete_app
     fi
+    DEPLOY_STEP_ID='pm2_core'
     for_each_pm2_app \"$CORE_PM2_APPS\" pm2_start_app
+    DEPLOY_STEP_ID='backend_stabilization'
     if ! stabilize_backend_app; then
       echo \"❌ Backend did not become healthy during phased core startup.\" >&2
       exit 1
     fi
     if [ -n \"$AUX_PM2_APPS\" ]; then
+      DEPLOY_STEP_ID='pm2_auxiliary'
       for_each_pm2_app \"$AUX_PM2_APPS\" pm2_start_app
     fi
     check_pm2_apps_online
@@ -410,6 +457,7 @@ PY
   fi
   curl --max-time 10 -fsS -H 'Host: 127.0.0.1' http://127.0.0.1:$BACKEND_PORT/api/health
   echo
+  DEPLOY_STEP_ID='deep_health'
   deep_health_ready=false
   for attempt in \$(seq 1 \"$DEEP_HEALTH_ATTEMPTS\"); do
     if curl --max-time 45 -fsS -H 'Host: 127.0.0.1' http://127.0.0.1:$BACKEND_PORT/api/system/health >/tmp/tradamind_deep_health.json; then
@@ -459,8 +507,10 @@ PY
     exit 1
   fi
   if [ \"$DEPLOY_COMPONENT_SET\" != \"backend_only\" ]; then
+    DEPLOY_STEP_ID='frontend_smoke'
     curl --max-time 10 -fsSI http://127.0.0.1:$FRONTEND_PORT/report | head -n 1
   fi
+  trap - ERR
 "; then
   echo "❌ ${ENVIRONMENT} deployment failed for ${TARGET_COMMIT}." >&2
   if [ "$(lower_bool "${AUTO_ROLLBACK_ON_FAILURE}")" = "true" ]; then
@@ -527,6 +577,7 @@ check_external() {
 }
 
 external_smoke_failed=false
+DEPLOY_STEP_ID="external_smoke"
 if ! check_external "${EXTERNAL_BASE_URL}/api/health" "200" "external api health" 20 GET \
   || ! check_external "${EXTERNAL_BASE_URL}/api/system/health" "401" "external deep health gate" 20 GET \
   || ! check_external "${EXTERNAL_BASE_URL}/report" "200,302,307,308" "external report" 20 HEAD; then
@@ -541,6 +592,7 @@ if [ "$external_smoke_failed" = "true" ]; then
       ssh "${SSH_ARGS[@]}" "ubuntu@$SERVER_IP" \
         "cd $REMOTE_DIR && ENVIRONMENT=$ENVIRONMENT bash ./ops/deploy/rollback_env.sh $ENVIRONMENT $ROLLBACK_COMMIT" || true
     fi
+    record_remote_deploy_status "$DEPLOY_STEP_ID" failure 1 || true
     echo "Rollback command:" >&2
     echo "  ${ROLLBACK_COMMAND}" >&2
     exit 1
@@ -548,7 +600,8 @@ if [ "$external_smoke_failed" = "true" ]; then
   echo "⚠️ External smoke failed for ${TARGET_COMMIT}, but rollout continues because STRICT_EXTERNAL_SMOKE=false." >&2
 fi
 
-ssh "${SSH_ARGS[@]}" "ubuntu@$SERVER_IP" "
+DEPLOY_STEP_ID="release_marker"
+if ! ssh "${SSH_ARGS[@]}" "ubuntu@$SERVER_IP" "
   set -euo pipefail
   cd $REMOTE_DIR
   printf '%s\n' '$ROLLBACK_COMMIT' > ${DEPLOY_STATE_DIR}/PREVIOUS_GOOD_COMMIT
@@ -562,7 +615,12 @@ ssh "${SSH_ARGS[@]}" "ubuntu@$SERVER_IP" "
   cd $REMOTE_DIR
   RELEASE_MARKER_REASON=deployed DEPLOYMENT_VALIDATED_RELEASE=true \\
     bash ./ops/deploy/record_accepted_release.sh production $TARGET_COMMIT_FULL
-"
+"; then
+  record_remote_deploy_status "$DEPLOY_STEP_ID" failure 1 || true
+  exit 1
+fi
+
+record_remote_deploy_status "release_complete" success 0
 
 echo "✅ LAST_GOOD_COMMIT atomically recorded for validated deployment ${TARGET_COMMIT_FULL}."
 
