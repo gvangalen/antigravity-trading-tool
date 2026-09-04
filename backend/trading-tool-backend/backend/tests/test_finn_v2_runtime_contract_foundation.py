@@ -9,6 +9,7 @@ import pytest
 
 from backend.domain.finn_v2_runtime_contract import (
     RUNTIME_CONTRACT_VERSION,
+    RuntimeContractConflictError,
     RuntimeContractImmutableFieldError,
     new_runtime_contract_state,
     record_initial_intent,
@@ -47,6 +48,13 @@ def test_runtime_contract_identity_is_present_before_selector_and_intent_is_writ
     assert replay["initial_operation_id"] == "evaluate_plan"
     with pytest.raises(RuntimeContractImmutableFieldError):
         record_initial_intent(selected, operation_id="read_plan", requested_mode="READ")
+
+
+def test_runtime_repository_rejects_identity_mutation_and_replayed_initial_intent_is_not_a_transition():
+    source = (ROOT / "infrastructure" / "repositories" / "finn_v2_runtime_contract_repository.py").read_text(encoding="utf-8")
+    assert "must not create another state transition or revision" in source
+    assert "runtime_contract_identity_is_immutable" in source
+    assert "if current_state.get(\"initial_operation_id\") is not None:" in source
 
 
 def test_terminal_projection_uses_the_same_immutable_contract_identity():
@@ -113,6 +121,27 @@ def test_new_contract_terminal_envelope_reads_persisted_projection_without_artif
 
     assert envelope.runtime_trace == projection
     assert envelope.response.content == "Een geverifieerd antwoord."
+
+
+def test_new_contract_without_persisted_terminal_projection_never_falls_back_to_legacy_compact():
+    now = datetime.now(timezone.utc)
+    run = SimpleNamespace(
+        id="run-missing-projection", user_id=7, conversation_id="conversation-1", status="failed", interaction_mode=None,
+        visibility="visible", response_json={}, policy_json=None, created_at=now, updated_at=now, completed_at=now,
+        error_code="failure", error_message="failure", retryable=False,
+    )
+    service = FinnV2RunService(session=object())
+    service.runtime_contracts = SimpleNamespace(
+        get_for_run=lambda **_kwargs: asyncio.sleep(
+            0, result=SimpleNamespace(contract_id="contract-missing", contract_version=RUNTIME_CONTRACT_VERSION, terminal_projection_json=None)
+        )
+    )
+    service.delivery.get_delivery_artifacts = lambda **_kwargs: (_ for _ in ()).throw(AssertionError("must not read legacy artifacts"))
+
+    envelope = asyncio.run(service.envelope_from_run(run))
+
+    assert envelope.runtime_trace["error_code"] == "runtime_contract_terminal_projection_missing"
+    assert envelope.runtime_trace.get("terminal_projection") != "legacy_compact"
 
 
 def test_new_contract_migration_has_one_contract_per_run_and_revision_guard():

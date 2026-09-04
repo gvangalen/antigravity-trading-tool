@@ -50,7 +50,13 @@ class FinnV2RuntimeContractRepository(FinnV2RepositoryTransactionMixin):
 
     async def record_initial_intent(self, *, run_id: str, operation_id: str, requested_mode: str) -> FinnV2RuntimeContract:
         row = await self._required_for_update(run_id)
-        next_state = record_initial_intent(row.state_json or {}, operation_id=operation_id, requested_mode=requested_mode)
+        current_state = row.state_json or {}
+        if current_state.get("initial_operation_id") is not None:
+            # Retries may observe the same immutable selector decision, but they
+            # must not create another state transition or revision.
+            record_initial_intent(current_state, operation_id=operation_id, requested_mode=requested_mode)
+            return row
+        next_state = record_initial_intent(current_state, operation_id=operation_id, requested_mode=requested_mode)
         return await self._write_revision(row=row, state=next_state)
 
     async def materialize_terminal(
@@ -91,6 +97,15 @@ class FinnV2RuntimeContractRepository(FinnV2RepositoryTransactionMixin):
         return row
 
     async def _write_revision(self, *, row: FinnV2RuntimeContract, state: Dict[str, Any]) -> FinnV2RuntimeContract:
+        identity = state.get("identity") or {}
+        expected_identity = {
+            "run_id": row.run_id,
+            "conversation_id": row.conversation_id,
+            "trace_id": row.trace_id,
+            "user_id": row.user_id,
+        }
+        if identity != expected_identity or state.get("contract_id") != row.contract_id or state.get("contract_version") != row.contract_version:
+            raise RuntimeContractConflictError("runtime_contract_identity_is_immutable")
         row.state_json = state
         row.revision = int(row.revision or 0) + 1
         row.updated_at = datetime.now(timezone.utc)
