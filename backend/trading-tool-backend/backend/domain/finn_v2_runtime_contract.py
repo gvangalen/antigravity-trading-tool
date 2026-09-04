@@ -196,6 +196,8 @@ def new_runtime_contract_state(*, run: Any, contract_id: str) -> Dict[str, Any]:
         "conversation_reference": None,
         "conversation_reference_kind": None,
         "selector_provenance": {},
+        "lineage_state": {},
+        "guided_state": {},
         "final_operation_id": None,
         "final_mode": None,
         "operation_change_reason": None,
@@ -244,6 +246,16 @@ def record_selection(
     state["conversation_reference"] = conversation_reference
     state["conversation_reference_kind"] = conversation_reference_kind
     state["selector_provenance"] = dict(selector_provenance or {})
+    return state
+
+
+def record_conversation_state(
+    state: Dict[str, Any], *, lineage_state: Dict[str, Any], guided_state: Dict[str, Any]
+) -> Dict[str, Any]:
+    """Persist typed, safe continuation state for the next contract run."""
+    state = dict(state)
+    state["lineage_state"] = dict(lineage_state or {})
+    state["guided_state"] = dict(guided_state or {})
     return state
 
 

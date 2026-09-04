@@ -4,7 +4,7 @@ from copy import deepcopy
 from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 
-from sqlalchemy import select
+from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.domain.finn_v2_runtime_contract import (
@@ -12,6 +12,7 @@ from backend.domain.finn_v2_runtime_contract import (
     RuntimeContractConflictError,
     new_runtime_contract_state,
     record_initial_intent,
+    record_conversation_state,
     record_selection,
     terminal_projection,
 )
@@ -47,6 +48,20 @@ class FinnV2RuntimeContractRepository(FinnV2RepositoryTransactionMixin):
         if for_update:
             statement = statement.with_for_update()
         result = await self.session.execute(statement)
+        return result.scalars().first()
+
+    async def get_latest_for_conversation(
+        self, *, conversation_id: str, user_id: int
+    ) -> Optional[FinnV2RuntimeContract]:
+        result = await self.session.execute(
+            select(FinnV2RuntimeContract)
+            .where(
+                FinnV2RuntimeContract.conversation_id == conversation_id,
+                FinnV2RuntimeContract.user_id == user_id,
+            )
+            .order_by(desc(FinnV2RuntimeContract.updated_at))
+            .limit(1)
+        )
         return result.scalars().first()
 
     @staticmethod
@@ -108,6 +123,17 @@ class FinnV2RuntimeContractRepository(FinnV2RepositoryTransactionMixin):
         )
         if next_state == (row.state_json or {}):
             return row
+        return await self._write_revision(row=row, state=next_state)
+
+    async def record_conversation_state(
+        self, *, run_id: str, lineage_state: Dict[str, Any], guided_state: Dict[str, Any]
+    ) -> FinnV2RuntimeContract:
+        row = await self._required_for_update(run_id)
+        next_state = record_conversation_state(
+            deepcopy(row.state_json or {}),
+            lineage_state=lineage_state,
+            guided_state=guided_state,
+        )
         return await self._write_revision(row=row, state=next_state)
 
     async def materialize_terminal(

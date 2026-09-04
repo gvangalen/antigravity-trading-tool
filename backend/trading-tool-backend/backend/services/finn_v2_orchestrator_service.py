@@ -91,6 +91,19 @@ class FinnV2OrchestratorService:
                 conversation_id=conversation_id,
                 user_id=user_id,
             )
+            if hasattr(self.session, "execute"):
+                previous_contract = await self.runtime_contracts.get_latest_for_conversation(
+                    conversation_id=conversation_id,
+                    user_id=user_id,
+                )
+                if previous_contract is not None and previous_contract.run_id != run_id:
+                    previous_state = dict(previous_contract.state_json or {})
+                    # New runs hydrate continuation inputs from the previous
+                    # persisted contract, not from a mutable JSON projection.
+                    conversation_context.update(dict(previous_state.get("lineage_state") or {}))
+                    guided_state = dict(previous_state.get("guided_state") or {})
+                    if guided_state:
+                        conversation_context["active_guided_operation"] = guided_state
         # Selector quota is user-scoped. Without this context the OpenAI
         # boundary groups every lifecycle run into an unscoped global bucket,
         # allowing unrelated background/eval traffic to suppress user turns.
@@ -593,6 +606,23 @@ class FinnV2OrchestratorService:
             user_id=user_id,
             context={key: value for key, value in context.items() if value is not None},
         )
+        if hasattr(self.session, "execute"):
+            # context_json is retained as a backward-compatible projection;
+            # the next new run reads these continuation records from this
+            # run's persisted contract instead.
+            await self.runtime_contracts.record_conversation_state(
+                run_id=result.run_id,
+                lineage_state={
+                    key: context[key]
+                    for key in (
+                        "last_verified_context",
+                        "last_degraded_context",
+                        "last_safe_terminal_context",
+                    )
+                    if key in context
+                },
+                guided_state=dict(context.get("active_guided_operation") or {}),
+            )
 
     @staticmethod
     def _degraded_terminal_status(*, verified_response, is_contract_limited: bool) -> str:
