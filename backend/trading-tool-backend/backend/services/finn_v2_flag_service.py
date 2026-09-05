@@ -138,6 +138,10 @@ class FinnV2FlagService:
     def reasoning_timeout_seconds(self) -> int:
         return self._env_int("FINN_V2_REASONING_TIMEOUT_SECONDS", 45)
 
+    def lifecycle_deadline_seconds(self) -> int:
+        """Bound worker ownership before a visible request exceeds its SLA."""
+        return max(5, min(15, self._env_int("FINN_V2_LIFECYCLE_DEADLINE_SECONDS", 14)))
+
     def visible_request_timeout_seconds(self) -> int:
         return max(1, min(20, self._env_int("FINN_V2_VISIBLE_REQUEST_TIMEOUT_SECONDS", 20)))
 

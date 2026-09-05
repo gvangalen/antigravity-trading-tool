@@ -16,3 +16,24 @@ def test_non_financial_move_request_remains_outside_the_financial_execution_boun
     )
 
     assert facts.financial_execution_intent is False
+
+
+def test_catalog_asset_compound_plan_and_german_indicator_are_typed_request_facts():
+    plan = FinnV2RequestPreprocessorService().preprocess(
+        message="Beoordeel mijn goudplan op risico."
+    )
+    indicators = FinnV2RequestPreprocessorService().preprocess(
+        message="Welche Indikatoren sind für meine Solana-Konfiguration gespeichert?"
+    )
+
+    assert plan.referenced_asset == "XAU"
+    assert plan.primary_entity == "plan"
+    assert "plan" in plan.explicit_entities
+    assert "indicator_configuration" in indicators.explicit_entities
+    assert indicators.referenced_asset == "SOL"
+
+
+def test_bare_causal_question_is_a_lineage_marker_not_an_off_topic_fact():
+    facts = FinnV2RequestPreprocessorService().preprocess(message="Warum?")
+
+    assert "previous_verified_conclusion" in facts.conversation_reference_markers

@@ -294,8 +294,12 @@ class FinnV2ReasoningService:
         request_plan_payload = getattr(context, "request_plan", None) or {}
         operation_state = dict(request_plan_payload.get("operation_state") or {})
         missing_required_inputs = list(operation_state.get("missing_required_inputs") or [])
-        deterministic_proposal = self._uses_deterministic_contract_response(contract)
-        if contract is not None and (contract.model_policy == "never" or deterministic_proposal):
+        deterministic_response = self._uses_deterministic_contract_response(contract) or (
+            contract is not None
+            and contract.operation_id == "evaluate_bot"
+            and str(request_plan_payload.get("discourse_type") or "") == "contextual_follow_up"
+        )
+        if contract is not None and (contract.model_policy == "never" or deterministic_response):
             result = self._deterministic_contract_draft(
                 contract=contract,
                 run_id=run_id,
@@ -439,6 +443,17 @@ class FinnV2ReasoningService:
             return self.fallbacks.lineage_draft(
                 run_id=run_id, user_id=user_id, operation_id=contract.operation_id,
                 context=context, model=model,
+            )
+        if (
+            contract.operation_id == "evaluate_bot"
+            and str((context.request_plan or {}).get("discourse_type") or "")
+            == "contextual_follow_up"
+        ):
+            return self.fallbacks.bot_consequence_draft(
+                run_id=run_id,
+                user_id=user_id,
+                context=context,
+                model=model,
             )
         return self.fallbacks.grounded_read_draft(
             run_id=run_id,

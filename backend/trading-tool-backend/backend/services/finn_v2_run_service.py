@@ -25,6 +25,7 @@ from backend.infrastructure.database import async_session_factory
 from backend.services.finn_v2_delivery_service import FinnV2DeliveryService
 from backend.services.finn_v2_orchestrator_service import FinnV2OrchestratorService
 from backend.services.finn_v2_tool_execution_service import FinnV2ToolExecutionService
+from backend.services.finn_v2_flag_service import FinnV2FlagService
 from backend.schemas.finn_v2_schema import AgentRunStatusEnvelope, PolicyDecision, VerifiedResponse
 from backend.schemas.finn_v2_orchestrator_schema import LifecyclePhaseOutcome
 
@@ -381,7 +382,7 @@ class FinnV2RunService:
         The coordinator only exchanges immutable ids and a typed phase outcome
         between sessions. ORM instances must never survive a rollback boundary.
         """
-        try:
+        async def _run_owned_lifecycle() -> None:
             for status in ("queued", "collecting", "planned"):
                 async with async_session_factory() as session:
                     await cls(session).persist_transition(
@@ -420,6 +421,30 @@ class FinnV2RunService:
                     run_id=run_id,
                     user_id=user_id,
                     phase_outcome=phase_outcome,
+                )
+
+        try:
+            # Worker ownership, not a later polling/SSE request, guarantees a
+            # terminal projection.  Provider and verifier calls remain
+            # individually bounded; this is the final end-to-end deadline.
+            await asyncio.wait_for(
+                _run_owned_lifecycle(),
+                timeout=FinnV2FlagService().lifecycle_deadline_seconds(),
+            )
+        except asyncio.TimeoutError as exc:
+            logger.warning(
+                "FINN V2 owned lifecycle reached terminal deadline",
+                extra={"run_id": run_id, "user_id": user_id},
+            )
+            async with async_session_factory() as session:
+                await cls(session).fail_run(
+                    run_id=run_id,
+                    user_id=user_id,
+                    error_code="lifecycle_deadline_exceeded",
+                    error_message="FINN kon deze aanvraag niet binnen de veilige verwerkingstijd afronden.",
+                    retryable=False,
+                    failure_stage="run_foundation_lifecycle_deadline",
+                    primary_exception=exc,
                 )
         except asyncio.CancelledError:
             raise

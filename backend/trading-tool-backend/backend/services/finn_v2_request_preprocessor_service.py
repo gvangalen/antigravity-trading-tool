@@ -72,6 +72,10 @@ class FinnV2RequestPreprocessorService:
         "watchlist": ("watchlist", "volglijst", "follow", "gevolgde", "marktenlijst"),
         "indicator_configuration": (
             "indicator",
+            "indikator",
+            "indikatoren",
+            "indikatoreinstellung",
+            "indikatoreinstellungen",
             "indicatorconfiguratie",
             "technische configuratie",
             "technical configuration",
@@ -193,7 +197,14 @@ class FinnV2RequestPreprocessorService:
         # Two linked plan entities are a graph request, not two isolated reads.
         # This remains a fact about the request's explicit nouns; the registry
         # remains responsible for selecting the graph contract and its tools.
-        if (relational_graph or explicit_plan) and "plan" not in entities:
+        # A catalog-backed asset followed by a plan noun is an aggregate plan
+        # subject even when the language writes the compound as one word.
+        # This is grammar plus catalog evidence, not an asset-specific route.
+        compound_plan_subject = bool(
+            asset
+            and re.search(r"(?:plan|strategie|strategy)\b", normalized)
+        )
+        if (relational_graph or explicit_plan or compound_plan_subject) and "plan" not in entities:
             entities = (*entities, "plan")
         # "mijn strategie ... mijn plan" commonly refers to one component
         # inside a plan. Keep ``plan`` as an aggregate entity only when it is
@@ -203,7 +214,7 @@ class FinnV2RequestPreprocessorService:
         # The aggregate plan is the semantic subject when the user explicitly
         # names several plan components. Otherwise preserve the first entity
         # mentioned in natural language for registry candidate ranking.
-        primary_entity = "plan" if "plan" in entities and (relational_graph or explicit_plan) else next(
+        primary_entity = "plan" if "plan" in entities and (relational_graph or explicit_plan or compound_plan_subject) else next(
             (entity for entity in entities if entity != "plan"),
             "plan" if "plan" in entities else None,
         )
@@ -212,6 +223,11 @@ class FinnV2RequestPreprocessorService:
             for marker, terms in self._REFERENCE_MARKERS.items()
             if self._contains_any(normalized, terms)
         )
+        # A bare causal question is only a follow-up when the resolver later
+        # finds persisted lineage.  Without that authority it becomes a
+        # targeted clarification rather than an unrelated request.
+        if re.fullmatch(r"(?:waarom|why|wieso|weshalb|warum)[?!\.\s]*", normalized):
+            references = (*references, "previous_verified_conclusion")
         action = self._action_polarity(normalized)
         financial_execution_intent = self._is_explicit_financial_execution_intent(normalized) or bool(
             asset and re.search(r"\b(?:koop\w*|verkoop\w*|buy\w*|sell\w*|place\w*|plaats\w*|submit\w*)\b", normalized)

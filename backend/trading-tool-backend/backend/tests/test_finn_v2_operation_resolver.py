@@ -69,6 +69,18 @@ def test_semantic_frame_resolves_a_broad_assessment_to_plan_not_setup():
     assert resolved.operation_id == "evaluate_plan"
 
 
+def test_capability_discourse_rejects_an_incompatible_nearby_plan_read():
+    registry = FinnV2OperationRegistry()
+    resolved = FinnV2OperationResolverService(registry).resolve(
+        selection=_selection("read_active_plan", {"goal": "read", "object": "plan"}),
+        candidates=registry.list(),
+        conversation_context={},
+        request_facts={"discourse_act": "capability"},
+    )
+
+    assert resolved.operation_id == "capability"
+
+
 def test_aggregate_plan_assessment_overrides_a_conflicting_node_projection():
     registry = FinnV2OperationRegistry()
     resolved = FinnV2OperationResolverService(registry).resolve(

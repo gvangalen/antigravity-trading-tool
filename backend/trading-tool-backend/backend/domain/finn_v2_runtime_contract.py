@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from hashlib import sha256
 import json
+from datetime import datetime
 from typing import Any, Dict, Literal, Optional
 
 from pydantic import BaseModel, Field
@@ -269,6 +270,23 @@ def terminal_projection(
 ) -> Dict[str, Any]:
     """Return the sole public terminal read model for a persisted contract."""
     identity = dict(state.get("identity") or {})
+    timings_ms: Dict[str, int] = {}
+    timestamps = dict(state.get("phase_timestamps") or {})
+    try:
+        created_at = datetime.fromisoformat(str(timestamps["created_at"]).replace("Z", "+00:00"))
+        terminal_at = datetime.fromisoformat(str(timestamps["terminal_at"]).replace("Z", "+00:00"))
+        timings_ms["total"] = max(0, int((terminal_at - created_at).total_seconds() * 1000))
+        previous_at = created_at
+        for phase in ("queued", "collecting", "planned", "reasoning", "verifying"):
+            if phase not in timestamps:
+                continue
+            current_at = datetime.fromisoformat(str(timestamps[phase]).replace("Z", "+00:00"))
+            timings_ms[f"until_{phase}"] = max(0, int((current_at - previous_at).total_seconds() * 1000))
+            previous_at = current_at
+        timings_ms["terminal_persist"] = max(0, int((terminal_at - previous_at).total_seconds() * 1000))
+    except (KeyError, TypeError, ValueError):
+        # Historical projections remain readable without invented timings.
+        timings_ms = {}
     return {
         "version": FINN_PUBLIC_PROJECTION_VERSION,
         "projection_version": RUNTIME_CONTRACT_VERSION,
@@ -286,6 +304,7 @@ def terminal_projection(
         "conversation_reference": state.get("conversation_reference"),
         "terminal_status": status,
         "terminal_response_type": state.get("terminal_response_type") or ("failure" if status == "failed" else "response"),
+        "timings_ms": timings_ms,
         "error_code": error_code,
         "response": dict(response or {}),
     }

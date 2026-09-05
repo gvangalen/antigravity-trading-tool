@@ -4,6 +4,7 @@ import pytest
 
 from backend.domain.finn_v2_operation_registry import FinnV2OperationContractError, FinnV2OperationRegistry
 from backend.domain.finn_v2_runtime_contract import build_terminal_runtime_contract
+from backend.domain.finn_v2_runtime_contract import terminal_projection
 
 
 def _artifacts():
@@ -61,3 +62,22 @@ def test_registry_allows_only_typed_safe_operation_transitions():
             final_operation_id="off_topic",
             reason="lineage_contract_without_context",
         )
+
+
+def test_terminal_projection_exposes_safe_phase_timings_when_persisted():
+    projection = terminal_projection(
+        {
+            "identity": {"run_id": "run-1", "conversation_id": "conversation-1"},
+            "phase_timestamps": {
+                "created_at": "2026-09-05T10:00:00+00:00",
+                "queued": "2026-09-05T10:00:00.100000+00:00",
+                "collecting": "2026-09-05T10:00:00.300000+00:00",
+                "terminal_at": "2026-09-05T10:00:01+00:00",
+            },
+        },
+        status="completed",
+        mode="READ",
+        response={},
+    )
+
+    assert projection["timings_ms"] == {"total": 1000, "until_queued": 100, "until_collecting": 200, "terminal_persist": 700}

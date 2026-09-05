@@ -63,6 +63,11 @@ class FinnV2OperationResolverService:
             context=conversation_context,
             requested_scopes=requested_scopes,
         )
+        # Capability is a typed discourse fact, not a nearby plan read. The
+        # selector still interprets the user's language, but a contract that
+        # contradicts this explicit request act cannot be executed safely.
+        if str((request_facts or {}).get("discourse_act") or "") == "capability":
+            operation_id = "capability"
         # An explicit typed active-plan reference is the aggregate plan
         # contract. It must not be narrowed merely because the same turn also
         # names graph components.

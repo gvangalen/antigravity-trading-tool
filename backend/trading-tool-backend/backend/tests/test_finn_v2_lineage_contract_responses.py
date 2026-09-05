@@ -149,6 +149,34 @@ def test_bot_consequence_renders_a_concrete_evidence_bounded_check():
     assert result.evidence_refs_used == ["Ebot"]
 
 
+def test_contextual_bot_evaluation_keeps_its_operation_and_uses_bot_evidence_only():
+    context = _lineage_context("evaluate_bot").copy(deep=True)
+    context.request_plan["discourse_type"] = "contextual_follow_up"
+    context.evidence = [
+        ReasoningEvidenceItem(
+            evidence_id="Ebotctx",
+            artifact_id="artifact-bot-contextual",
+            tool_name="read_bot_status",
+            domain="automation_context",
+            entity_type="bot_status",
+            entity_id="171",
+            source="bot_repository",
+            freshness="fresh",
+            confidence="high",
+            facts={"is_live": False},
+        )
+    ]
+
+    result = FinnV2ReasoningFallbackService().bot_consequence_draft(
+        run_id="run-bot-contextual", user_id=388, context=context, model="deterministic"
+    )
+
+    assert result.mode == "EVALUATE"
+    assert result.reasoning_provenance["operation_id"] == "evaluate_bot"
+    assert "bot 171" in result.direct_answer
+    assert result.evidence_refs_used == ["Ebotctx"]
+
+
 def test_off_topic_terminal_answers_off_topic_instead_of_financial_unavailable():
     plan = SimpleNamespace(operation_id="off_topic")
     orchestrator = SimpleNamespace(

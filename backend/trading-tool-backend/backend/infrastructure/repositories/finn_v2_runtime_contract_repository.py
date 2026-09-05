@@ -151,6 +151,10 @@ class FinnV2RuntimeContractRepository(FinnV2RepositoryTransactionMixin):
         state["final_mode"] = mode or state.get("final_mode") or state.get("requested_mode")
         state["terminal_status"] = status
         state["terminal_response_type"] = "failure" if status == "failed" else "response"
+        timestamps = dict(state.get("phase_timestamps") or {})
+        timestamps.setdefault("created_at", row.created_at.astimezone(timezone.utc).isoformat())
+        timestamps["terminal_at"] = datetime.now(timezone.utc).isoformat()
+        state["phase_timestamps"] = timestamps
         state.setdefault("transition_log", []).append({"type": "terminal", "status": status})
         projection = terminal_projection(state, status=status, mode=mode, response=response, error_code=error_code)
         row = await self._write_revision(row=row, state=state)
@@ -162,6 +166,10 @@ class FinnV2RuntimeContractRepository(FinnV2RepositoryTransactionMixin):
         row = await self._required_for_update(run_id)
         state = deepcopy(row.state_json or {})
         state["current_status"] = status
+        timestamps = dict(state.get("phase_timestamps") or {})
+        timestamps.setdefault("created_at", row.created_at.astimezone(timezone.utc).isoformat())
+        timestamps.setdefault(status, datetime.now(timezone.utc).isoformat())
+        state["phase_timestamps"] = timestamps
         if mode:
             state["current_mode"] = mode
         state.setdefault("transition_log", []).append({"type": "lifecycle", "status": status})

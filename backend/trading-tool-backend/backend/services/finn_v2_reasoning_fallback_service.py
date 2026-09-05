@@ -121,6 +121,7 @@ class FinnV2ReasoningFallbackService:
                 context=context,
                 refs=refs,
                 model=model,
+                operation_id=operation_id,
             )
         if operation_id == "explain_previous_evidence" and refs:
             scope_text = ", ".join(str(scope).replace("_", " ") for scope in degraded_scopes) or "de opgeslagen FINN-evidence"
@@ -198,6 +199,7 @@ class FinnV2ReasoningFallbackService:
     @staticmethod
     def _bot_consequence_draft(
         *, run_id: str, user_id: int, context: ReasoningContextPackage, refs: list[str], model: str,
+        operation_id: str,
     ) -> ReasoningResult:
         """Render a read-only, evidence-bounded bot check from typed lineage."""
         bot = next(
@@ -236,9 +238,26 @@ class FinnV2ReasoningFallbackService:
             uncertainty_summary="De controle beschrijft alleen verifieerbare botgegevens; prestaties en causaliteit blijven onbekend.",
             uncertainty_codes=["evidence_bounded_consequence"],
             evidence_refs_used=refs,
-            reasoning_provenance={"reasoning_source": "lineage_consequence", "operation_id": "explain_previous_evidence"},
+            reasoning_provenance={"reasoning_source": "lineage_consequence", "operation_id": operation_id},
             model=model,
             created_at=datetime.now(timezone.utc),
+        )
+
+    def bot_consequence_draft(
+        self, *, run_id: str, user_id: int, context: ReasoningContextPackage, model: str,
+    ) -> ReasoningResult:
+        """Render a contextual bot evaluation from its contract-scoped evidence."""
+        state = dict((context.request_plan or {}).get("operation_state") or {})
+        refs = [item.evidence_id for item in context.evidence] or list(
+            state.get("previous_evidence_refs") or []
+        )
+        return self._bot_consequence_draft(
+            run_id=run_id,
+            user_id=user_id,
+            context=context,
+            refs=refs,
+            model=model,
+            operation_id="evaluate_bot",
         )
     @staticmethod
     def _indicator_names(facts: dict[str, Any], category: str) -> list[str]:
@@ -734,14 +753,21 @@ class FinnV2ReasoningFallbackService:
                 }
         if missing:
             from backend.services.finn_v2_operation_state_service import FinnV2OperationStateService
-            question = FinnV2OperationStateService.clarification_question(operation_state.get("next_missing_input") or missing[0])
+            next_field = operation_state.get("next_missing_input") or missing[0]
+            question = FinnV2OperationStateService.clarification_question(
+                next_field,
+                collected_inputs=operation_state.get("collected_inputs") or {},
+            )
             return ReasoningResult(
                 reasoning_result_id=f"finn-v2-reasoning-{uuid.uuid4().hex}",
                 run_id=run_id,
                 user_id=user_id,
                 mode="CLARIFICATION",
-                direct_answer="Ik kan de setup nog niet veilig voorstellen zonder één ontbrekend kernveld.",
-                main_observation="Er ontbreekt nog precies één noodzakelijke detailkeuze voordat ik een setupvoorstel kan opbouwen.",
+                direct_answer=question,
+                main_observation=(
+                    f"Het eerstvolgende ontbrekende verplichte veld is {next_field}. "
+                    "Ik vul geen setupvelden in op basis van aannames."
+                ),
                 supporting_points=[],
                 claims=[],
                 uncertainty_summary="Zonder dat detail zou ik setupvelden moeten invullen op basis van aannames.",

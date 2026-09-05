@@ -209,6 +209,15 @@ def test_owned_worker_lifecycle_passes_only_run_identity_between_sessions():
     assert "create_for_run" not in owned
 
 
+def test_owned_worker_lifecycle_has_a_terminal_deadline_independent_of_delivery():
+    source = (ROOT / "services" / "finn_v2_run_service.py").read_text(encoding="utf-8")
+    owned = source.split("async def run_foundation_lifecycle_owned", 1)[1].split("    def _is_visible_run", 1)[0]
+
+    assert "asyncio.wait_for(" in owned
+    assert "lifecycle_deadline_seconds()" in owned
+    assert 'error_code="lifecycle_deadline_exceeded"' in owned
+
+
 def test_worker_dispatch_keeps_the_created_contract_attached_to_the_same_run(monkeypatch):
     """Exercise the production worker entrypoint without replacing it by complete_run."""
     from backend.celery_task import finn_v2_task
