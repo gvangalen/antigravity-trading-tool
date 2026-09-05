@@ -253,12 +253,12 @@ def test_selected_capability_uses_the_post_selector_registry_fast_path():
 
 
 def test_selector_provider_budget_leaves_time_for_the_persisted_selection(monkeypatch):
-    monkeypatch.setenv("FINN_V2_SELECTOR_PHASE_DEADLINE_SECONDS", "20")
+    monkeypatch.setenv("FINN_V2_SELECTOR_PHASE_DEADLINE_SECONDS", "25")
     monkeypatch.setenv("FINN_V2_TERMINAL_PERSISTENCE_RESERVE_SECONDS", "2")
     flags = FinnV2FlagService()
     selector = (ROOT / "services" / "finn_v2_structured_operation_selector_service.py").read_text(encoding="utf-8")
 
-    assert flags.selector_provider_timeout_seconds() == 18
+    assert flags.selector_provider_timeout_seconds() == 23
     assert "timeout_seconds=selector_timeout_seconds" in (
         ROOT / "services" / "finn_v2_operation_classification_service.py"
     ).read_text(encoding="utf-8")
