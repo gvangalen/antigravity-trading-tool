@@ -218,6 +218,18 @@ def test_owned_worker_lifecycle_has_a_terminal_deadline_independent_of_delivery(
     assert 'error_code="lifecycle_deadline_exceeded"' in owned
 
 
+def test_selector_persistence_precedes_post_selection_execution_and_has_a_separate_budget():
+    orchestrator = (ROOT / "services" / "finn_v2_orchestrator_service.py").read_text(encoding="utf-8")
+    lifecycle = (ROOT / "services" / "finn_v2_run_service.py").read_text(encoding="utf-8")
+
+    assert "asyncio.to_thread" in orchestrator
+    assert "selector_phase_deadline_seconds" in orchestrator
+    assert orchestrator.index("record_selection(") < orchestrator.index("execute_tool_plan(")
+    assert orchestrator.index("selection_persisted()") < orchestrator.index("execute_tool_plan(")
+    assert "selection_ready.wait()" in lifecycle
+    assert "terminal_persistence_reserve_seconds" in lifecycle
+
+
 def test_worker_dispatch_keeps_the_created_contract_attached_to_the_same_run(monkeypatch):
     """Exercise the production worker entrypoint without replacing it by complete_run."""
     from backend.celery_task import finn_v2_task

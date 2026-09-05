@@ -39,6 +39,7 @@ class FinnV2OrchestratorService:
         flag_service: Optional[FinnV2FlagService] = None,
         complete_placeholder: Optional[Callable[..., Awaitable[None]]] = None,
         phase_transition: Optional[Callable[..., Awaitable[None]]] = None,
+        selection_persisted: Optional[Callable[[], Awaitable[None]]] = None,
     ):
         self.session = session
         self.flags = flag_service or FinnV2FlagService()
@@ -58,6 +59,7 @@ class FinnV2OrchestratorService:
         self.verifier = FinnV2ResponseVerifierService(session, flag_service=self.flags)
         self.complete_placeholder = complete_placeholder
         self.phase_transition = phase_transition
+        self.selection_persisted = selection_persisted
         self.phase_outcome: Optional[LifecyclePhaseOutcome] = None
 
     async def execute_run(
@@ -112,11 +114,15 @@ class FinnV2OrchestratorService:
             purpose="finn_v2_selector",
             user_id=user_id,
         ):
-            analysis = self.analysis.analyze(
-                message=run.message,
-                workspace_hints=getattr(run, "workspace_hints_json", {}) or {},
-                client_context=getattr(run, "client_context_json", {}) or {},
-                conversation_context=conversation_context,
+            analysis = await asyncio.wait_for(
+                asyncio.to_thread(
+                    self.analysis.analyze,
+                    message=run.message,
+                    workspace_hints=getattr(run, "workspace_hints_json", {}) or {},
+                    client_context=getattr(run, "client_context_json", {}) or {},
+                    conversation_context=conversation_context,
+                ),
+                timeout=self.flags.selector_phase_deadline_seconds(),
             )
         request_plan = getattr(analysis, "request_plan", None)
         await self.runtime_contracts.record_initial_intent(
@@ -142,6 +148,9 @@ class FinnV2OrchestratorService:
                 "candidate_operation_ids": list(getattr(request_plan, "candidate_operation_ids", []) or []),
             },
         )
+        await self._commit_persistence_boundary(stage="selector_persisted")
+        if self.selection_persisted is not None:
+            await self.selection_persisted()
         # New runs use a contract-derived RequestPlan view. This preserves
         # ancillary registry metadata while making the authoritative operation,
         # mode, target and lineage values impossible to replace downstream.

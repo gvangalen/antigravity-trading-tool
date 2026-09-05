@@ -142,6 +142,12 @@ class FinnV2FlagService:
         """Bound worker ownership before a visible request exceeds its SLA."""
         return max(5, min(15, self._env_int("FINN_V2_LIFECYCLE_DEADLINE_SECONDS", 14)))
 
+    def selector_phase_deadline_seconds(self) -> int:
+        return max(5, min(15, self._env_int("FINN_V2_SELECTOR_PHASE_DEADLINE_SECONDS", 12)))
+
+    def terminal_persistence_reserve_seconds(self) -> int:
+        return max(1, min(5, self._env_int("FINN_V2_TERMINAL_PERSISTENCE_RESERVE_SECONDS", 2)))
+
     def visible_request_timeout_seconds(self) -> int:
         return max(1, min(20, self._env_int("FINN_V2_VISIBLE_REQUEST_TIMEOUT_SECONDS", 20)))
 

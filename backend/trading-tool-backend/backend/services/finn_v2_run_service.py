@@ -382,6 +382,8 @@ class FinnV2RunService:
         The coordinator only exchanges immutable ids and a typed phase outcome
         between sessions. ORM instances must never survive a rollback boundary.
         """
+        selection_ready = asyncio.Event()
+
         async def _run_owned_lifecycle() -> None:
             for status in ("queued", "collecting", "planned"):
                 async with async_session_factory() as session:
@@ -405,7 +407,14 @@ class FinnV2RunService:
                         await cls(transition_session).persist_transition(**kwargs)
 
                 if visible or service.tools.flags.should_run_block4_shadow(user_id):
-                    orchestrator = FinnV2OrchestratorService(session, phase_transition=transition_phase)
+                    async def selection_persisted() -> None:
+                        selection_ready.set()
+
+                    orchestrator = FinnV2OrchestratorService(
+                        session,
+                        phase_transition=transition_phase,
+                        selection_persisted=selection_persisted,
+                    )
                     await orchestrator.execute_run(run_id=run_id, user_id=user_id, trace_id=trace_id)
                     phase_outcome = orchestrator.consume_phase_outcome()
                 else:
@@ -424,12 +433,16 @@ class FinnV2RunService:
                 )
 
         try:
-            # Worker ownership, not a later polling/SSE request, guarantees a
-            # terminal projection.  Provider and verifier calls remain
-            # individually bounded; this is the final end-to-end deadline.
+            # Selector and post-selection work have separate budgets.  The
+            # terminal reserve is included only after the persisted selector
+            # transition, so a slow but valid selector cannot cancel that
+            # transition before its immutable intent reaches the contract.
+            flags = FinnV2FlagService()
+            lifecycle = asyncio.create_task(_run_owned_lifecycle())
+            await asyncio.wait_for(selection_ready.wait(), timeout=flags.selector_phase_deadline_seconds())
             await asyncio.wait_for(
-                _run_owned_lifecycle(),
-                timeout=FinnV2FlagService().lifecycle_deadline_seconds(),
+                lifecycle,
+                timeout=flags.lifecycle_deadline_seconds() + flags.terminal_persistence_reserve_seconds(),
             )
         except asyncio.TimeoutError as exc:
             logger.warning(
