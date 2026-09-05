@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+from contextlib import suppress
 from datetime import datetime, timedelta, timezone
 import asyncio
 from types import SimpleNamespace
@@ -220,7 +221,16 @@ class FinnV2RunService:
         content = placeholder.get("content") or "FINN V2 kon geen verified response afronden."
         mode = interaction_mode or "UNAVAILABLE"
         verifier_status = "not_run"
-        if terminal_status == "clarification_required":
+        if normalize_interaction_mode(interaction_mode) == "CAPABILITY" and terminal_status == "completed":
+            # The selector has already chosen and persisted this read-only
+            # registry contract; it needs no tools or second provider call.
+            content = (
+                "Ik kan je helpen om je tradingcontext te begrijpen, ontbrekende informatie zichtbaar te maken "
+                "en veilige vervolgstappen voor te bereiden."
+            )
+            mode = "CAPABILITY"
+            verifier_status = "registry_grounded"
+        elif terminal_status == "clarification_required":
             clarification = orchestrator.get("selected_clarification") or {}
             content = str(clarification.get("question") or "FINN heeft eerst een verduidelijking nodig.").strip()
             mode = "CLARIFICATION"
@@ -264,6 +274,8 @@ class FinnV2RunService:
                 failure_stage=failure_stage,
                 primary_exception=primary_exception,
             )
+        lifecycle: Optional[asyncio.Task[None]] = None
+        selection_waiter: Optional[asyncio.Task[bool]] = None
         try:
             response_json = self._terminal_placeholder_response(
                 interaction_mode="UNAVAILABLE",
@@ -418,6 +430,9 @@ class FinnV2RunService:
                     await orchestrator.execute_run(run_id=run_id, user_id=user_id, trace_id=trace_id)
                     phase_outcome = orchestrator.consume_phase_outcome()
                 else:
+                    # Shadow-only runs have no selector boundary, so they do
+                    # not participate in the visible-run selector watchdog.
+                    selection_ready.set()
                     await service.tools.execute_shadow_tool_chain(run_id=run_id, user_id=user_id)
                     phase_outcome = LifecyclePhaseOutcome(
                         terminal_status="completed",
@@ -439,12 +454,28 @@ class FinnV2RunService:
             # transition before its immutable intent reaches the contract.
             flags = FinnV2FlagService()
             lifecycle = asyncio.create_task(_run_owned_lifecycle())
-            await asyncio.wait_for(selection_ready.wait(), timeout=flags.selector_phase_deadline_seconds())
+            selection_waiter = asyncio.create_task(selection_ready.wait())
+            done, _ = await asyncio.wait(
+                {lifecycle, selection_waiter},
+                timeout=flags.selector_phase_deadline_seconds(),
+                return_when=asyncio.FIRST_COMPLETED,
+            )
+            if lifecycle in done:
+                # Surface pre-selection failures directly instead of waiting
+                # until the selector watchdog expires.
+                await lifecycle
+            if selection_waiter not in done:
+                raise asyncio.TimeoutError()
+            await selection_waiter
             await asyncio.wait_for(
                 lifecycle,
                 timeout=flags.lifecycle_deadline_seconds() + flags.terminal_persistence_reserve_seconds(),
             )
         except asyncio.TimeoutError as exc:
+            if lifecycle is not None and not lifecycle.done():
+                lifecycle.cancel()
+                with suppress(asyncio.CancelledError):
+                    await lifecycle
             logger.warning(
                 "FINN V2 owned lifecycle reached terminal deadline",
                 extra={"run_id": run_id, "user_id": user_id},
@@ -460,8 +491,16 @@ class FinnV2RunService:
                     primary_exception=exc,
                 )
         except asyncio.CancelledError:
+            if lifecycle is not None and not lifecycle.done():
+                lifecycle.cancel()
+                with suppress(asyncio.CancelledError):
+                    await lifecycle
             raise
         except Exception as exc:
+            if lifecycle is not None and not lifecycle.done():
+                lifecycle.cancel()
+                with suppress(asyncio.CancelledError):
+                    await lifecycle
             logger.exception(
                 "FINN V2 owned lifecycle primary failure",
                 extra={"run_id": run_id, "user_id": user_id, "primary_exception": str(exc)},
@@ -476,6 +515,11 @@ class FinnV2RunService:
                     failure_stage="run_foundation_lifecycle_owned",
                     primary_exception=exc,
                 )
+        finally:
+            if selection_waiter is not None and not selection_waiter.done():
+                selection_waiter.cancel()
+                with suppress(asyncio.CancelledError):
+                    await selection_waiter
 
     def _is_visible_run(self, run) -> bool:
         return getattr(run, "visibility", None) == "visible" or getattr(run, "feature_mode", None) == "visible_readonly"

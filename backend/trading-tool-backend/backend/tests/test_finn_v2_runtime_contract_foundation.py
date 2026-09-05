@@ -230,6 +230,27 @@ def test_selector_persistence_precedes_post_selection_execution_and_has_a_separa
     assert "terminal_persistence_reserve_seconds" in lifecycle
 
 
+def test_selected_capability_uses_the_post_selector_registry_fast_path():
+    orchestrator = (ROOT / "services" / "finn_v2_orchestrator_service.py").read_text(encoding="utf-8")
+    run_service = FinnV2RunService(session=object())
+
+    assert 'execution_view["initial_operation_id"] == "capability"' in orchestrator
+    assert orchestrator.index("capability_fast_path_completed") < orchestrator.index("execute_tool_plan(")
+
+    response = run_service._terminal_placeholder_response(
+        interaction_mode="CAPABILITY",
+        terminal_status="completed",
+        orchestrator={},
+        verifier={},
+        reasoning={},
+        delivery_envelope={},
+    )
+
+    assert response["mode"] == "CAPABILITY"
+    assert response["verifier_status"] == "registry_grounded"
+    assert "tradingcontext" in response["content"]
+
+
 def test_worker_dispatch_keeps_the_created_contract_attached_to_the_same_run(monkeypatch):
     """Exercise the production worker entrypoint without replacing it by complete_run."""
     from backend.celery_task import finn_v2_task

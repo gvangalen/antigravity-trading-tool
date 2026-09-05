@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import logging
 from types import SimpleNamespace
 from time import monotonic
@@ -168,6 +169,24 @@ class FinnV2OrchestratorService:
             }
         )
         analysis = analysis.copy(update={"request_plan": request_plan, "interaction_mode": execution_view["interaction_mode"]})
+        if execution_view["initial_operation_id"] == "capability":
+            # This is a post-selector execution path, not a keyword router.
+            # The persisted structured selection is a deterministic, read-only
+            # registry contract and therefore does not require tools, a second
+            # provider call, or verifier work to be terminally useful.
+            await self._append_trace(
+                run_id=run_id,
+                user_id=user_id,
+                trace_id=trace_id,
+                event_type="capability_fast_path_completed",
+                payload_json={"run_id": run_id, "user_id": user_id, "contract_id": runtime_contract.contract_id},
+            )
+            self.phase_outcome = LifecyclePhaseOutcome(
+                terminal_status="completed",
+                interaction_mode="CAPABILITY",
+                orchestrator_result_id="capability-registry-fast-path",
+            )
+            return None
         domain_requirements = self.requirements.determine(analysis)
         tool_plan = self.tool_plans.build(run_id=run_id, analysis=analysis, domain_plan=domain_requirements)
 
