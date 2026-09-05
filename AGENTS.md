@@ -66,6 +66,24 @@ Conflict rule:
 5. Run only the validation that is actually defined and available.
 6. Report findings, gaps, and mismatches in the role's required output format.
 
+## FINN Release Read Routes
+
+For FINN work, these documents are mandatory in addition to the applicable
+role document. A loose task may narrow implementation scope, but may not
+silently replace this release process.
+
+- Build reads `docs/agents/build.md`, `docs/agents/FINN_RELEASE_PROCESS.md`,
+  `docs/agents/FINN_RELEASE_STATUS.md`, and the explicitly active goal before
+  making FINN changes.
+- QA reads `docs/agents/qa.md`, `docs/agents/FINN_RELEASE_PROCESS.md`,
+  `docs/agents/FINN_RELEASE_STATUS.md`, and the explicit QA goal before a
+  production QA run.
+- Security and Architecture retain their existing read-only responsibilities
+  unless the user explicitly grants implementation authority.
+- Only the goal explicitly identified by the current user task is active.
+  Historical goals, handoffs, and reports may supply context but cannot define
+  current FINN release or QA status.
+
 ## Stop And Escalate
 
 Stop and report when any of the following is true:
@@ -76,64 +94,27 @@ Stop and report when any of the following is true:
 - the task would require a role to exceed its default modification rights
 - there is an unresolved high-risk ambiguity involving auth, secrets, execution safety, or production behavior
 
-## Build Agent Contract
+## FINN Role Boundaries
 
-The following rules bound Build-to-QA handoffs for every explicit build
-assignment. They do not grant Build independent acceptance authority.
+`docs/agents/FINN_RELEASE_PROCESS.md` is the sole detailed FINN release flow;
+`docs/agents/FINN_RELEASE_STATUS.md` is the sole current FINN release and QA
+status source.
 
-- Build may make at most one QA handoff for an explicit build assignment.
-- Build may hand off to QA only after its required tests, CI, deployment, and
-  production-SHA verification have completed successfully.
-- After the handoff, Build may perform at most one status check of the QA
-  task. It must not poll, wait, or remain active indefinitely for QA.
-- After that status check, Build must finish its own task with
-  `WAITING_FOR_INDEPENDENT_QA` until the user provides a new explicit
-  instruction.
-- Build must not start a new build or repair round from a QA result. For a
-  `NOT ACCEPTED` result, it may record only the verdict and report reference.
-- A new explicit user instruction is required before Build changes code after
-  either QA verdict. An `ACCEPTED` verdict must not trigger a second QA run.
-- Build must not accept its own release, alter QA thresholds, update a rollback
-  marker, or create a Build-to-QA ping-pong chain.
-
-## QA Agent Contract
-
-The following rules preserve independence and bound each QA assignment.
-
-- QA may run at most one independent QA run for each supplied production SHA.
-- QA must return only its verdict and fault batch; it must not instruct Build
-  to repair findings or begin a new build round.
-- QA ends its task after either `ACCEPTED` or `NOT ACCEPTED`. It must not run
-  QA again for the same SHA, or accept a new production SHA in the same run,
-  without a new explicit user instruction.
-- QA must not wait indefinitely for processes, workers, threads, runtime calls,
-  or another agent.
-- Every individual provider, runtime, or harness case has a hard timeout. A
-  nonterminal case at that boundary is recorded as a lifecycle failure.
-- A case may have at most one bounded retry, and only for an evidenced
-  infrastructure failure. Content failures have no retry.
-- A definitive hard acceptance-gate failure cannot become green later in the
-  same QA run. QA may then perform only pre-agreed, safe diagnostics for at
-  most 30 additional minutes.
-- A complete independent production QA run has a 120-minute wall-clock limit,
-  unless the explicit QA assignment sets another total limit. On expiry QA
-  stops and reports the run as incomplete or `NOT ACCEPTED`, based on the
-  evidence collected.
-- Where the assignment supplies no stricter case limit, an interactive runtime
-  case has a five-minute hard timeout. Waiting for another agent never extends
-  a case or run timeout.
-
-## Build To QA Cycle
-
-Every transition from `NOT ACCEPTED` to a new build round requires a new
-explicit user instruction. Every transition from a new build to QA permits one
-controlled handoff only. Agents must never repeat the cycle autonomously:
-
-`user -> Build -> one QA handoff -> verdict -> stop`
-
-The following autonomous loop is prohibited:
-
-`Build -> QA -> Build -> QA -> ...`
+- Build completes one coherent local repair batch, verifies it, manages the
+  candidate, CI, deployment, and bounded live smoke, and records only measured
+  evidence in the status file. It must not start, instruct, contact, poll, or
+  otherwise coordinate a QA agent.
+- QA is an independent, read-only final gate for the exact live SHA in the
+  status file. QA completes the prescribed matrix even when individual content
+  cases fail, subject only to each case's hard timeout and the run's wall-clock
+  limit. It records one evidence-backed verdict and does not repair code,
+  deploy, or direct another agent.
+- The user alone initiates QA after the status file reaches
+  `READY_FOR_INDEPENDENT_QA`. A QA verdict never starts another Build or QA
+  cycle automatically.
+- Neither role may call a release green, live, or accepted without the
+  corresponding measured evidence recorded in the status file. Build cannot
+  accept its own release, lower QA thresholds, or alter rollback markers.
 
 ## Repository Reality Notes
 

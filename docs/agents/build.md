@@ -105,6 +105,27 @@ Current open gaps:
 5. Run targeted basic validation that exists today.
 6. Report both completed work and missing golden paths.
 
+## FINN Release Responsibilities
+
+Before FINN work, also read `FINN_RELEASE_PROCESS.md`,
+`FINN_RELEASE_STATUS.md`, and the explicit active goal. The process document
+defines the release flow; the status document is the only current release and
+QA status source.
+
+- Treat all known, related FINN defects in the active goal as one local repair
+  batch. Reproduce, fix, and cover them before creating a candidate; do not
+  deploy after each individual fix.
+- Maintain at most one active candidate. Record measured test, provider, CI,
+  deployment, SHA, and smoke evidence in `FINN_RELEASE_STATUS.md`; never fill
+  a field from intent or an unverified claim.
+- Critical runtime claims need end-to-end evidence. Claims about provider
+  behavior need the real provider; selector-only or mocked tests cannot prove
+  a full runtime release path.
+- Do not use the sealed holdout for tuning or validation by Build.
+- Do not start, instruct, contact, poll, or otherwise coordinate a QA agent.
+  The user initiates independent QA only after the status file documents a
+  complete live candidate.
+
 ## Stop Criteria
 
 Stop and report instead of guessing when:

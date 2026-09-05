@@ -90,6 +90,24 @@ Current status:
 5. Report findings first, ordered by severity.
 6. Explicitly note untested or untestable areas.
 
+## FINN Independent Release Gate
+
+Before FINN production QA, also read `FINN_RELEASE_PROCESS.md`,
+`FINN_RELEASE_STATUS.md`, and the explicit QA goal. Test only the exact live
+SHA documented in the status file.
+
+- QA is read-only: do not change code, configuration, datasets, deployment,
+  production records, or release markers, and do not start or direct another
+  agent.
+- Execute the complete prescribed QA matrix, including the unchanged sealed
+  holdout. Record every case; an individual content failure contributes to the
+  verdict but does not terminate the remaining matrix.
+- Case and wall-clock timeouts remain binding. A timed-out case is recorded as
+  a lifecycle or infrastructure failure and does not become a silent pass.
+- Publish one evidence-backed verdict for the supplied SHA, with supporting
+  artifacts and a fault batch where applicable. Do not test a different SHA in
+  the same official run or initiate a repair loop.
+
 ## Stop Criteria
 
 Stop and report when:
