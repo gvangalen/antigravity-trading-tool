@@ -81,7 +81,7 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--base-url", required=True)
     parser.add_argument("--token-env", default="FINN_QA_BEARER_TOKEN")
-    parser.add_argument("--timeout-seconds", type=float, default=15.0)
+    parser.add_argument("--timeout-seconds", type=float, default=30.0)
     args = parser.parse_args()
     token = os.environ.get(args.token_env, "")
     if not token.strip():

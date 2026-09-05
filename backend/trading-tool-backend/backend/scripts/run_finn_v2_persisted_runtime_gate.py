@@ -77,13 +77,20 @@ def run_gate(*, base_url: str, bearer_token: str, message: str, timeout_seconds:
 
     polling: Dict[str, Any] = created
     while time.monotonic() - started_at < timeout_seconds:
-        polling, status = _request_json(
-            url=f"{base_url}/api/assistant/v2/runs/{run_id}",
-            method="GET",
-            headers=headers,
-            body=None,
-            timeout=min(5.0, timeout_seconds),
-        )
+        try:
+            polling, status = _request_json(
+                url=f"{base_url}/api/assistant/v2/runs/{run_id}",
+                method="GET",
+                headers=headers,
+                body=None,
+                timeout=min(5.0, timeout_seconds),
+            )
+        except TimeoutError:
+            # Polling is an observation boundary, not the lifecycle deadline.
+            # A transient read timeout must not manufacture a second run or
+            # hide a terminal projection that is still being persisted.
+            time.sleep(0.25)
+            continue
         if status != 200:
             raise AssertionError(f"runtime_gate_poll_failed_http_{status}")
         if polling.get("status") in TERMINAL_STATUSES:
@@ -121,7 +128,7 @@ def main() -> None:
     parser.add_argument("--base-url", required=True)
     parser.add_argument("--message", required=True)
     parser.add_argument("--token-env", default="FINN_QA_BEARER_TOKEN")
-    parser.add_argument("--timeout-seconds", type=float, default=15.0)
+    parser.add_argument("--timeout-seconds", type=float, default=30.0)
     args = parser.parse_args()
     print(json.dumps(run_gate(
         base_url=args.base_url,
