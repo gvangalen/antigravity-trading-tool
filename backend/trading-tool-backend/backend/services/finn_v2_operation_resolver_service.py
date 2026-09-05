@@ -162,6 +162,18 @@ class FinnV2OperationResolverService:
             and bool((request_facts or {}).get("financial_execution_intent"))
         ):
             operation_id = "unsupported_financial_operation"
+        # A typed financial/workspace fact is a boundary constraint: an
+        # off-topic model label cannot erase it.  The registry provides the
+        # only safe terminal contracts for an unbound change, an active-asset
+        # read, or an execution intent respectively.
+        if operation_id == "off_topic" and str((request_facts or {}).get("domain_hint") or "") == "financial":
+            action = str((request_facts or {}).get("action_polarity") or "")
+            if action == "execute":
+                operation_id = "unsupported_financial_operation"
+            elif action == "update":
+                operation_id = "clarify_request"
+            elif action == "read" and explicit_entities == {"asset"}:
+                operation_id = "read_active_asset"
         if operation_id not in candidate_ids:
             return selection
         reference = selection.conversation_reference

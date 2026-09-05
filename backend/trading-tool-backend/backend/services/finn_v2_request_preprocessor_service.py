@@ -50,7 +50,7 @@ class FinnV2RequestPreprocessorService:
         ("remove", ("verwijder", "remove", "haal", "halen", "stop met")),
         ("add", ("voeg", "add", "toevoeg", "zet op", "volg")),
         ("activate", ("activeer", "activate", "schakel", "inschakel", "start", "zet live", "go live")),
-        ("update", ("wijzig", "update", "pas aan")),
+        ("update", ("wijzig", "update", "pas aan", "verbeter", "improve", "optimise", "optimize")),
         ("create", (
             "maak", "maken", "create", "prepare", "preparing", "ontwerp", "stel", "bereid",
             "erstell", "anleg",
@@ -90,7 +90,7 @@ class FinnV2RequestPreprocessorService:
             "marktregime",
         ),
         "profile": ("profiel", "risicoprofiel", "tradingstijl", "risk profile", "trading style"),
-        "setup": ("setup", "set-up", "opzet", "positie-opzet"),
+        "setup": ("setup", "set-up", "opzet", "positie-opzet", "handelsaanpak", "trading approach"),
         "strategy": ("strategie", "strategy"),
         "bot": ("bot", "robot", "automation", "automatisering"),
         "plan": (
@@ -100,10 +100,8 @@ class FinnV2RequestPreprocessorService:
             "zwakste",
             "betrouwbaar",
             "aanpak",
-            "handelsaanpak",
             "handelswijze",
             "tradingaanpak",
-            "trading approach",
             "handelsplan",
             "trading plan",
         ),
@@ -114,7 +112,8 @@ class FinnV2RequestPreprocessorService:
         "portfolio": ("portfolio", "portefeuille"),
         "asset": (
             "asset", "instrument", "symbool", "symbol", "coin", "aandeel", "effect",
-            "security", "share", "equity", "wertpapier", "aktie", "workspace", "markt",
+            "security", "share", "equity", "wertpapier", "aktie", "workspace", "werkruimte",
+            "markt", "belegging", "investment",
         ),
     }
     _REFERENCE_MARKERS = {

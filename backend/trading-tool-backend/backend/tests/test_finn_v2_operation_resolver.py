@@ -262,6 +262,34 @@ def test_unbound_execution_fact_cannot_be_erased_as_off_topic():
     assert resolved.operation_id == "unsupported_financial_operation"
 
 
+def test_financial_workspace_change_without_an_object_requires_clarification_not_off_topic():
+    registry = FinnV2OperationRegistry()
+    resolved = FinnV2OperationResolverService(registry).resolve(
+        selection=_selection("off_topic", {"goal": "off_topic", "object": None}),
+        candidates=registry.list(),
+        conversation_context={},
+        request_facts={"domain_hint": "financial", "action_polarity": "update"},
+    )
+
+    assert resolved.operation_id == "clarify_request"
+
+
+def test_active_asset_fact_cannot_be_erased_as_off_topic():
+    registry = FinnV2OperationRegistry()
+    resolved = FinnV2OperationResolverService(registry).resolve(
+        selection=_selection("off_topic", {"goal": "off_topic", "object": None}),
+        candidates=registry.list(),
+        conversation_context={},
+        request_facts={
+            "domain_hint": "financial",
+            "action_polarity": "read",
+            "explicit_entities": ("asset",),
+        },
+    )
+
+    assert resolved.operation_id == "read_active_asset"
+
+
 def test_indicator_read_fact_rejects_a_conflicting_financial_concept_projection():
     registry = FinnV2OperationRegistry()
     resolved = FinnV2OperationResolverService(registry).resolve(
