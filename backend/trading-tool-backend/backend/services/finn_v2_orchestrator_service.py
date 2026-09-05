@@ -40,6 +40,7 @@ class FinnV2OrchestratorService:
         flag_service: Optional[FinnV2FlagService] = None,
         complete_placeholder: Optional[Callable[..., Awaitable[None]]] = None,
         phase_transition: Optional[Callable[..., Awaitable[None]]] = None,
+        selector_started: Optional[Callable[[], Awaitable[None]]] = None,
         selection_persisted: Optional[Callable[[], Awaitable[None]]] = None,
     ):
         self.session = session
@@ -60,6 +61,7 @@ class FinnV2OrchestratorService:
         self.verifier = FinnV2ResponseVerifierService(session, flag_service=self.flags)
         self.complete_placeholder = complete_placeholder
         self.phase_transition = phase_transition
+        self.selector_started = selector_started
         self.selection_persisted = selection_persisted
         self.phase_outcome: Optional[LifecyclePhaseOutcome] = None
 
@@ -115,6 +117,11 @@ class FinnV2OrchestratorService:
             purpose="finn_v2_selector",
             user_id=user_id,
         ):
+            # Context hydration has its own pre-selection lifecycle budget.
+            # Start the provider watchdog only when the structured selector
+            # itself is about to issue its bounded call.
+            if self.selector_started:
+                await self.selector_started()
             analysis = await asyncio.wait_for(
                 asyncio.to_thread(
                     self.analysis.analyze,

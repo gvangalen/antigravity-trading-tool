@@ -409,6 +409,7 @@ class FinnV2RunService:
         The coordinator only exchanges immutable ids and a typed phase outcome
         between sessions. ORM instances must never survive a rollback boundary.
         """
+        selector_started = asyncio.Event()
         selection_ready = asyncio.Event()
 
         async def _run_owned_lifecycle() -> None:
@@ -437,9 +438,13 @@ class FinnV2RunService:
                     async def selection_persisted() -> None:
                         selection_ready.set()
 
+                    async def selector_phase_started() -> None:
+                        selector_started.set()
+
                     orchestrator = FinnV2OrchestratorService(
                         session,
                         phase_transition=transition_phase,
+                        selector_started=selector_phase_started,
                         selection_persisted=selection_persisted,
                     )
                     await orchestrator.execute_run(run_id=run_id, user_id=user_id, trace_id=trace_id)
@@ -463,25 +468,30 @@ class FinnV2RunService:
                 )
 
         try:
-            # Selector and post-selection work have separate budgets.  The
+            # Context hydration, selector, and post-selection work have
+            # separate budgets.  The provider watchdog begins only after
+            # context hydration has completed and the selector is about to
+            # issue its bounded call.
             # terminal reserve is included only after the persisted selector
             # transition, so a slow but valid selector cannot cancel that
             # transition before its immutable intent reaches the contract.
             flags = FinnV2FlagService()
             lifecycle = asyncio.create_task(_run_owned_lifecycle())
+            selector_started_waiter = asyncio.create_task(selector_started.wait())
             selection_waiter = asyncio.create_task(selection_ready.wait())
             done, _ = await asyncio.wait(
-                {lifecycle, selection_waiter},
-                timeout=flags.selector_phase_deadline_seconds(),
+                {lifecycle, selector_started_waiter},
+                timeout=flags.lifecycle_deadline_seconds(),
                 return_when=asyncio.FIRST_COMPLETED,
             )
             if lifecycle in done:
                 # Surface pre-selection failures directly instead of waiting
                 # until the selector watchdog expires.
                 await lifecycle
-            if selection_waiter not in done:
+            if selector_started_waiter not in done:
                 raise asyncio.TimeoutError()
-            await selection_waiter
+            await selector_started_waiter
+            await asyncio.wait_for(selection_waiter, timeout=flags.selector_phase_deadline_seconds())
             await asyncio.wait_for(
                 lifecycle,
                 timeout=flags.lifecycle_deadline_seconds() + flags.terminal_persistence_reserve_seconds(),

@@ -228,6 +228,10 @@ def test_selector_persistence_precedes_post_selection_execution_and_has_a_separa
     assert orchestrator.index("record_selection(") < orchestrator.index("execute_tool_plan(")
     assert orchestrator.index("selection_persisted()") < orchestrator.index("execute_tool_plan(")
     assert "selection_ready.wait()" in lifecycle
+    assert "selector_started.wait()" in lifecycle
+    assert lifecycle.index("selector_started.wait()") < lifecycle.index("selection_ready.wait()")
+    assert "selector_phase_started" in lifecycle
+    assert "selector_started()" in orchestrator
     assert "terminal_persistence_reserve_seconds" in lifecycle
 
 
