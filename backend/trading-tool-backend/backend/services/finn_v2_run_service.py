@@ -499,7 +499,7 @@ class FinnV2RunService:
         except asyncio.TimeoutError as exc:
             if lifecycle is not None and not lifecycle.done():
                 lifecycle.cancel()
-                with suppress(asyncio.CancelledError):
+                with suppress(asyncio.CancelledError, asyncio.TimeoutError):
                     await lifecycle
             logger.warning(
                 "FINN V2 owned lifecycle reached terminal deadline",
@@ -524,13 +524,13 @@ class FinnV2RunService:
         except asyncio.CancelledError:
             if lifecycle is not None and not lifecycle.done():
                 lifecycle.cancel()
-                with suppress(asyncio.CancelledError):
+                with suppress(asyncio.CancelledError, asyncio.TimeoutError):
                     await lifecycle
             raise
         except Exception as exc:
             if lifecycle is not None and not lifecycle.done():
                 lifecycle.cancel()
-                with suppress(asyncio.CancelledError):
+                with suppress(asyncio.CancelledError, asyncio.TimeoutError):
                     await lifecycle
             logger.exception(
                 "FINN V2 owned lifecycle primary failure",
@@ -549,7 +549,7 @@ class FinnV2RunService:
         finally:
             if selection_waiter is not None and not selection_waiter.done():
                 selection_waiter.cancel()
-                with suppress(asyncio.CancelledError):
+                with suppress(asyncio.CancelledError, asyncio.TimeoutError):
                     await selection_waiter
 
     def _is_visible_run(self, run) -> bool:

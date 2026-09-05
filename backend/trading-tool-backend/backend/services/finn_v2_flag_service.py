@@ -146,7 +146,7 @@ class FinnV2FlagService:
         # The measured structured Responses call can validly take just over
         # ten seconds. Keep its own bounded phase below the overall runtime,
         # while reserving terminal persistence before post-selection work.
-        return max(5, min(25, self._env_int("FINN_V2_SELECTOR_PHASE_DEADLINE_SECONDS", 25)))
+        return max(5, min(40, self._env_int("FINN_V2_SELECTOR_PHASE_DEADLINE_SECONDS", 35)))
 
     def selector_provider_timeout_seconds(self) -> int:
         """Reserve time to persist a successful structured selection."""

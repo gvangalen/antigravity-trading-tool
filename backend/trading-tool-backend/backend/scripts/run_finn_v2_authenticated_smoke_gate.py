@@ -92,7 +92,9 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--base-url", required=True)
     parser.add_argument("--token-env", default="FINN_QA_BEARER_TOKEN")
-    parser.add_argument("--timeout-seconds", type=float, default=60.0)
+    # This is an observer window only. It never changes the server-side
+    # lifecycle budget and must outlive queue plus provider phase bounds.
+    parser.add_argument("--timeout-seconds", type=float, default=90.0)
     args = parser.parse_args()
     token = os.environ.get(args.token_env, "")
     if not token.strip():
