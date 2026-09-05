@@ -33,7 +33,15 @@ def _request_json(*, url: str, method: str, headers: Dict[str, str], body: Dict[
         with urllib.request.urlopen(request, timeout=timeout) as response:
             return json.loads(response.read().decode("utf-8")), int(response.status)
     except urllib.error.HTTPError as exc:
-        return json.loads(exc.read().decode("utf-8") or "{}"), int(exc.code)
+        raw_body = exc.read().decode("utf-8", errors="replace").strip()
+        try:
+            payload = json.loads(raw_body) if raw_body else {}
+        except json.JSONDecodeError:
+            # Reverse proxies may return a transient HTML or empty error body
+            # while a terminal contract is still being delivered. Preserve the
+            # status code so the polling loop can make the bounded decision.
+            payload = {}
+        return payload if isinstance(payload, dict) else {}, int(exc.code)
 
 
 def _terminal_sse(*, url: str, headers: Dict[str, str], timeout: float) -> Dict[str, Any]:
@@ -89,6 +97,11 @@ def run_gate(*, base_url: str, bearer_token: str, message: str, timeout_seconds:
             # Polling is an observation boundary, not the lifecycle deadline.
             # A transient read timeout must not manufacture a second run or
             # hide a terminal projection that is still being persisted.
+            time.sleep(0.25)
+            continue
+        if status in {502, 503, 504}:
+            # Transport observation is retried within this one run's bounded
+            # window. It must never cause a second run to be created.
             time.sleep(0.25)
             continue
         if status != 200:

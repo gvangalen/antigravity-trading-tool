@@ -16,3 +16,5 @@ def test_persisted_runtime_gate_uses_public_gateway_polling_and_sse_only():
     assert "runtime_gate_contract_missing_at_run_creation" in source
     assert "runtime_gate_polling_sse_envelope_mismatch" in source
     assert "runtime_gate_legacy_compact_for_new_run" in source
+    assert "status in {502, 503, 504}" in source
+    assert "json.JSONDecodeError" in source
