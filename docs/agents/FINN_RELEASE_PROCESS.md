@@ -19,11 +19,14 @@ QA-exclusive sealed holdout.
 
 ### QA
 
-QA is read-only and independently tests only the live SHA recorded in
+QA owns independent test execution and QA test material. Its active QA goal
+defines the concrete scope, dataset, environment, matrix, and acceptance
+criteria. Production QA is read-only and tests only the live SHA recorded in
 `FINN_RELEASE_STATUS.md`. The sealed holdout is QA-exclusive and QA uses it
-unchanged only for the prescribed matrix. QA completes the entire matrix even
-after individual content failures and records a single evidence-backed verdict.
-QA does not modify product state, deploy, or direct another agent.
+unchanged only when its active QA goal explicitly requires it. QA completes the
+entire agreed matrix even after individual content failures and records a
+single evidence-backed verdict for that scope. QA does not modify product
+state, deploy, or direct another agent.
 
 ### Security and Architecture
 
@@ -66,12 +69,14 @@ dispatch cardinality, safety, and latency.
 
 ## Independent Production QA
 
-Only the user starts the existing QA agent after the status file documents
-`READY_FOR_INDEPENDENT_QA` with evidence. QA reads the role instructions, this
-process, the status file, and its explicit QA goal; then tests exactly the
-recorded live SHA and completes its whole matrix. Individual case failures are
-recorded and do not stop later cases. Timeouts remain failures under the QA
-contract.
+Only the user determines or authorizes an independent QA assignment. For
+production QA, the user starts the existing QA agent after the status file
+documents `READY_FOR_INDEPENDENT_QA` with evidence. QA reads the role
+instructions, this process, the status file, and its explicit QA goal; then
+tests the recorded live SHA and completes the matrix defined by that goal.
+Individual case failures are recorded and do not stop later cases. A sealed
+32-case matrix is mandatory only when the active QA goal explicitly requires
+it. Timeouts remain failures under the QA contract.
 
 QA publishes `ACCEPTED` or `NOT_ACCEPTED` once, with artifacts and hashes. The
 verdict does not start Build, deployment, or another QA run automatically.

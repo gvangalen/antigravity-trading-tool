@@ -13,7 +13,7 @@ pattern, role, recency, or any other heuristic.
 The production secret environment must define two distinct numeric identifiers:
 
 - `FINN_BUILD_SMOKE_USER_ID` for the Build-only authenticated smoke;
-- `FINN_QA_USER_ID` for independent QA and its QA-exclusive sealed holdout.
+- `FINN_QA_USER_ID` for independent QA cases defined by the active QA goal.
 
 Both values are server-only and must not be committed, printed, copied to a
 workstation, or included in test artifacts. The bindings must never resolve to
@@ -65,6 +65,6 @@ procedure. Never delete or alter records to hide a failed validation.
 
 Operations owns the server-side fixture bindings. Build may use only
 `FINN_BUILD_SMOKE_USER_ID` for generic non-sealed smoke cases; QA may use only
-`FINN_QA_USER_ID` for independent QA. Neither binding grants Build access to
-the QA fixture or QA-exclusive sealed holdout. Both use the bounded procedure
-in `finn-authenticated-runtime-gate.md`.
+`FINN_QA_USER_ID` for goal-defined independent QA. Neither binding grants
+Build access to the QA fixture or QA-exclusive sealed holdout. Both use the
+bounded procedure in `finn-authenticated-runtime-gate.md`.

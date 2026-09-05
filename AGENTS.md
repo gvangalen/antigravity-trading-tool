@@ -106,12 +106,16 @@ status source.
   Build smoke fixture and generic non-sealed cases. It must not start,
   instruct, contact, poll, or otherwise coordinate a QA agent, access the QA
   fixture, or read the QA-exclusive sealed holdout.
-- QA is an independent, read-only final gate for the exact live SHA in the
-  status file. QA completes the prescribed matrix even when individual content
-  cases fail, subject only to each case's hard timeout and the run's wall-clock
-  limit. The sealed holdout is QA-exclusive and QA may use it only unchanged.
-  QA records one evidence-backed verdict and does not repair code, deploy, or
-  direct another agent.
+- QA owns independent test execution and QA test material. Its active QA goal
+  defines the concrete scope, dataset, environment, matrix, and acceptance
+  criteria. Production QA tests only the exact live SHA in the status file;
+  targeted QA, smoke-QA, regression-QA, UI-QA, safety-QA, and full release
+  acceptance may use different goal-defined scopes. QA completes the entire
+  agreed matrix despite individual content failures, subject only to each
+  case's hard timeout and the run's wall-clock limit. The sealed holdout is
+  QA-exclusive and is used unchanged only when the active QA goal explicitly
+  requires it. QA records one evidence-backed verdict for the agreed scope and
+  does not repair code, deploy, or direct another agent.
 - The user alone initiates QA after the status file reaches
   `READY_FOR_INDEPENDENT_QA`. A QA verdict never starts another Build or QA
   cycle automatically.
