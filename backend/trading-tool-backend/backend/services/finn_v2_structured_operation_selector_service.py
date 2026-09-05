@@ -40,6 +40,7 @@ class FinnV2StructuredOperationSelectorService:
         candidate_contracts: tuple[OperationContract, ...],
         facts: Mapping[str, object],
         verified_context: Optional[Mapping[str, object]],
+        timeout_seconds: Optional[int] = None,
     ) -> tuple[Optional[FinnV2StructuredOperationSelection], Optional[str]]:
         candidate_ids = tuple(contract.operation_id for contract in candidate_contracts)
         if not candidate_ids:
@@ -112,7 +113,7 @@ class FinnV2StructuredOperationSelectorService:
                 name="finn_v2_operation_selection",
                 schema=self._schema(candidate_ids),
             ),
-                timeout_seconds=self._timeout_seconds(),
+                timeout_seconds=self._timeout_seconds(timeout_seconds),
                 client_max_retries=0,
             )
         except Exception as exc:
@@ -185,8 +186,10 @@ class FinnV2StructuredOperationSelectorService:
         ), None
 
     @staticmethod
-    def _timeout_seconds() -> int:
+    def _timeout_seconds(phase_budget_seconds: Optional[int] = None) -> int:
         """Keep the provider deadline above normal Responses API latency."""
+        if phase_budget_seconds is not None:
+            return max(3, int(phase_budget_seconds))
         return max(15, int(os.getenv("FINN_V2_SELECTOR_TIMEOUT_SECONDS", "30")))
 
     @staticmethod

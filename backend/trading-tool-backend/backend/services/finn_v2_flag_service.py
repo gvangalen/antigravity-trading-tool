@@ -145,6 +145,10 @@ class FinnV2FlagService:
     def selector_phase_deadline_seconds(self) -> int:
         return max(5, min(15, self._env_int("FINN_V2_SELECTOR_PHASE_DEADLINE_SECONDS", 12)))
 
+    def selector_provider_timeout_seconds(self) -> int:
+        """Reserve time to persist a successful structured selection."""
+        return max(3, self.selector_phase_deadline_seconds() - self.terminal_persistence_reserve_seconds())
+
     def terminal_persistence_reserve_seconds(self) -> int:
         return max(1, min(5, self._env_int("FINN_V2_TERMINAL_PERSISTENCE_RESERVE_SECONDS", 2)))
 

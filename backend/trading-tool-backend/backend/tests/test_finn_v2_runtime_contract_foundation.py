@@ -17,6 +17,7 @@ from backend.domain.finn_v2_runtime_contract import (
     terminal_projection,
 )
 from backend.services.finn_v2_run_service import FinnV2RunService
+from backend.services.finn_v2_flag_service import FinnV2FlagService
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -249,6 +250,22 @@ def test_selected_capability_uses_the_post_selector_registry_fast_path():
     assert response["mode"] == "CAPABILITY"
     assert response["verifier_status"] == "registry_grounded"
     assert "tradingcontext" in response["content"]
+
+
+def test_selector_provider_budget_leaves_time_for_the_persisted_selection(monkeypatch):
+    monkeypatch.setenv("FINN_V2_SELECTOR_PHASE_DEADLINE_SECONDS", "12")
+    monkeypatch.setenv("FINN_V2_TERMINAL_PERSISTENCE_RESERVE_SECONDS", "2")
+    flags = FinnV2FlagService()
+    selector = (ROOT / "services" / "finn_v2_structured_operation_selector_service.py").read_text(encoding="utf-8")
+
+    assert flags.selector_provider_timeout_seconds() == 10
+    assert "timeout_seconds=selector_timeout_seconds" in (
+        ROOT / "services" / "finn_v2_operation_classification_service.py"
+    ).read_text(encoding="utf-8")
+    assert "selector_timeout_seconds=self.flags.selector_provider_timeout_seconds()" in (
+        ROOT / "services" / "finn_v2_orchestrator_service.py"
+    ).read_text(encoding="utf-8")
+    assert "phase_budget_seconds" in selector
 
 
 def test_worker_dispatch_keeps_the_created_contract_attached_to_the_same_run(monkeypatch):

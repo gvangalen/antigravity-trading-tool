@@ -122,6 +122,7 @@ class FinnV2OrchestratorService:
                     workspace_hints=getattr(run, "workspace_hints_json", {}) or {},
                     client_context=getattr(run, "client_context_json", {}) or {},
                     conversation_context=conversation_context,
+                    selector_timeout_seconds=self.flags.selector_provider_timeout_seconds(),
                 ),
                 timeout=self.flags.selector_phase_deadline_seconds(),
             )

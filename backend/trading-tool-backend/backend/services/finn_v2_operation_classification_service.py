@@ -67,6 +67,7 @@ class FinnV2OperationClassificationService:
         conversation_context: Optional[Mapping[str, object]] = None,
         workspace_hints: Optional[Mapping[str, object]] = None,
         client_context: Optional[Mapping[str, object]] = None,
+        selector_timeout_seconds: Optional[int] = None,
     ) -> SemanticOperationClassification:
         facts = self.preprocessor.preprocess(
             message=message, workspace_hints=workspace_hints, client_context=client_context
@@ -99,6 +100,7 @@ class FinnV2OperationClassificationService:
                 "financial_concept": facts.financial_concept,
             },
             verified_context=self._safe_conversation_state(conversation_context or {}),
+            timeout_seconds=selector_timeout_seconds,
         )
         if selection is not None:
             selection = self.resolver.resolve(
