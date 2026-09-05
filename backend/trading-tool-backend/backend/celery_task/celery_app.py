@@ -1,7 +1,7 @@
 import os
 import sys
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from dotenv import load_dotenv
 from celery import Celery
 from celery.schedules import crontab
@@ -102,7 +102,7 @@ def reset_sqlalchemy_pools_after_fork(**kwargs):
 celery_app.conf.beat_schedule = {
     "recover_finn_v2_dispatches": build_task_schedule_entry(
         "backend.celery_task.finn_v2_task.recover_finn_v2_dispatches",
-        crontab(minute="*/1"),
+        timedelta(seconds=5),
     ),
 
     # =====================================================

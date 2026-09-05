@@ -184,7 +184,7 @@ def test_check_celery_includes_rate_limit_summary(monkeypatch):
     monkeypatch.setattr(
         SystemHealthService,
         "_celery_active_queues",
-        staticmethod(lambda: {"worker-a": [{"name": "market_data"}]}),
+        staticmethod(lambda: {"worker-a": [{"name": "market_data"}, {"name": "finn_interactive"}]}),
     )
     monkeypatch.setattr(
         SystemHealthService,
@@ -226,7 +226,7 @@ def test_check_celery_falls_back_to_active_queues_and_stats_when_ping_is_empty(m
         staticmethod(
             lambda: {
                 "worker-a": [{"name": "market_data"}],
-                "worker-b": [{"name": "execution_critical"}],
+                "worker-b": [{"name": "execution_critical"}, {"name": "finn_interactive"}],
             }
         ),
     )
@@ -247,7 +247,23 @@ def test_check_celery_falls_back_to_active_queues_and_stats_when_ping_is_empty(m
     assert result["workers_by_queue"]["execution_critical"] == ["worker-b"]
 
 
-def test_check_celery_falls_back_to_pm2_snapshot_when_inspect_is_empty(monkeypatch):
+def test_check_celery_requires_a_live_finn_interactive_queue(monkeypatch):
+    monkeypatch.setattr(SystemHealthService, "_celery_ping", staticmethod(lambda: {"worker-a": {"ok": "pong"}}))
+    monkeypatch.setattr(
+        SystemHealthService,
+        "_celery_active_queues",
+        staticmethod(lambda: {"worker-a": [{"name": "celery"}]}),
+    )
+    monkeypatch.setattr(SystemHealthService, "_celery_stats", staticmethod(lambda: {"worker-a": {}}))
+    monkeypatch.setattr(SystemHealthService, "_celery_registered", staticmethod(lambda: {"worker-a": []}))
+
+    result = asyncio.run(SystemHealthService._check_celery())
+
+    assert result["status"] == "down"
+    assert result["missing_queue"] == "finn_interactive"
+
+
+def test_check_celery_rejects_pm2_snapshot_when_inspect_is_empty(monkeypatch):
     monkeypatch.setattr(SystemHealthService, "_celery_ping", staticmethod(lambda: None))
     monkeypatch.setattr(SystemHealthService, "_celery_active_queues", staticmethod(lambda: None))
     monkeypatch.setattr(SystemHealthService, "_celery_stats", staticmethod(lambda: None))
@@ -270,12 +286,10 @@ def test_check_celery_falls_back_to_pm2_snapshot_when_inspect_is_empty(monkeypat
 
     result = asyncio.run(SystemHealthService._check_celery())
 
-    assert result["status"] == "ok"
-    assert result["worker_count"] == 2
-    assert result["workers"] == ["celery-worker-default", "celery-worker-scoring-execution"]
-    assert result["worker_discovery_sources"] == ["pm2"]
-    assert result["worker_mapping_source"] == "pm2_process_list_static_queue_map"
-    assert result["workers_by_queue"]["celery"] == ["celery-worker-default"]
+    assert result["status"] == "down"
+    assert result["worker_count"] == 0
+    assert result["control_plane_ready"] is False
+    assert result["pm2_workers"] == ["celery-worker-default", "celery-worker-scoring-execution"]
 
 
 def test_queue_sample_summary_reports_legacy_breakdown():

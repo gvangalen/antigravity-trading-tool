@@ -377,27 +377,37 @@ class SystemHealthService:
             workers_by_queue = SystemHealthService._workers_by_queue(active_queues or {})
             worker_mapping_source = "celery_active_queues_inspect"
 
-            if not workers:
+            if not workers or not active_queues:
                 pm2_snapshot = await asyncio.to_thread(SystemHealthService._pm2_celery_workers_snapshot)
-                workers = pm2_snapshot.get("workers", []) if isinstance(pm2_snapshot, dict) else []
-                workers_by_queue = (
-                    pm2_snapshot.get("workers_by_queue", {})
-                    if isinstance(pm2_snapshot, dict)
-                    else {}
+                # PM2 only proves that a process was spawned. A worker must
+                # answer Celery's queue inspection before deploy can call it
+                # healthy; otherwise Redis may accept an unclaimable task.
+                return _component(
+                    "down",
+                    worker_count=len(workers),
+                    workers=workers,
+                    workers_by_queue=workers_by_queue,
+                    worker_mapping_source=worker_mapping_source,
+                    control_plane_ready=False,
+                    pm2_workers=(pm2_snapshot or {}).get("workers", []),
                 )
-                worker_mapping_source = (
-                    pm2_snapshot.get("worker_mapping_source")
-                    if isinstance(pm2_snapshot, dict)
-                    else worker_mapping_source
-                ) or worker_mapping_source
-            if not workers:
-                return _component("unknown", worker_count=0, workers=[], workers_by_queue={})
+            if not workers_by_queue.get("finn_interactive"):
+                return _component(
+                    "down",
+                    worker_count=len(workers),
+                    workers=workers,
+                    workers_by_queue=workers_by_queue,
+                    worker_mapping_source=worker_mapping_source,
+                    control_plane_ready=True,
+                    missing_queue="finn_interactive",
+                )
             return _component(
                 "ok",
                 worker_count=len(workers),
                 workers=workers,
                 workers_by_queue=workers_by_queue,
                 worker_mapping_source=worker_mapping_source,
+                control_plane_ready=True,
                 worker_discovery_sources=SystemHealthService._worker_discovery_sources(
                     ping_result=ping_result or {},
                     active_queues=active_queues or {},

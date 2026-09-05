@@ -68,7 +68,8 @@ TASK_QUEUE_ROUTES: Dict[str, str] = {
     "backend.celery_task.daily_usage_reset.reset_daily_ai_quotas": "scoring",
     "backend.celery_task.finn_v2_task.process_shadow_foundation_run": "ai_generation",
     "backend.celery_task.finn_v2_task.process_finn_v2_run": "finn_interactive",
-    "backend.celery_task.finn_v2_task.recover_finn_v2_dispatches": "finn_interactive",
+    # Recovery must not share the interactive worker's failure domain.
+    "backend.celery_task.finn_v2_task.recover_finn_v2_dispatches": DEFAULT_QUEUE_LOGICAL,
     "backend.celery_task.finn_v2_task.cleanup_finn_v2_retention": "ai_generation",
 }
 

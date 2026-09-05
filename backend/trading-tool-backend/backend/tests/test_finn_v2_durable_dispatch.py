@@ -101,6 +101,16 @@ def test_worker_claims_once_and_completes_terminal_run(monkeypatch):
     assert [event[0] for event in _Dispatches.events] == ["claim", "heartbeat", "completed"]
 
 
+def test_interactive_task_acknowledges_only_after_worker_lifecycle_completes():
+    assert task_module.process_finn_v2_run.acks_late is True
+    assert task_module.process_finn_v2_run.reject_on_worker_lost is True
+    assert task_module.process_finn_v2_run.track_started is True
+
+
+def test_unclaimed_dispatch_deadline_is_bounded_for_interactive_runs():
+    assert task_module.DISPATCH_STALE_UNCLAIMED_SECONDS <= 10
+
+
 def test_duplicate_worker_delivery_does_not_start_second_lifecycle(monkeypatch):
     run = SimpleNamespace(id="run-2", user_id=7, status="planned", retryable=False, error_code=None)
     _install_worker_fakes(monkeypatch, run)

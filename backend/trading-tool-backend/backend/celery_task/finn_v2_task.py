@@ -26,7 +26,9 @@ logger = logging.getLogger(__name__)
 
 DISPATCH_LEASE_SECONDS = 300
 DISPATCH_HEARTBEAT_SECONDS = 60
-DISPATCH_STALE_UNCLAIMED_SECONDS = 5 * 60
+# An interactive FINN request must not wait minutes behind an unavailable
+# worker. Recovery is scheduled independently every five seconds.
+DISPATCH_STALE_UNCLAIMED_SECONDS = 8
 RECOVERY_RESERVATION_SECONDS = 60
 
 
@@ -49,7 +51,13 @@ def _run_async(coroutine):
     return asyncio.run(_run_task_with_local_resources(coroutine))
 
 
-@shared_task(bind=True, name="backend.celery_task.finn_v2_task.process_finn_v2_run")
+@shared_task(
+    bind=True,
+    name="backend.celery_task.finn_v2_task.process_finn_v2_run",
+    acks_late=True,
+    reject_on_worker_lost=True,
+    track_started=True,
+)
 def process_finn_v2_run(self, *, run_id: str) -> str:
     return _run_async(_process_finn_v2_run(run_id=run_id, owner=str(self.request.id or "celery")))
 
