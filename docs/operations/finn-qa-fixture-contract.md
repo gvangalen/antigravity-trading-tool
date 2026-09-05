@@ -34,10 +34,11 @@ Do not infer a replacement from the users table.
 
 ## Token Handling
 
-The existing `backend/scripts/qa_issue_finn_token.py` helper is the only
-approved bearer-token issuer for these gates. Invoke it on the production host
-with the user ID appropriate to the caller inside one non-logging shell
-process.
+The existing
+`backend/trading-tool-backend/backend/scripts/qa_issue_finn_token.py` helper
+is the only approved bearer-token issuer for these gates. Invoke it on the
+production host with the user ID appropriate to the caller inside one
+non-logging shell process.
 
 - Disable shell tracing before sourcing secrets or issuing a token.
 - Capture the helper output internally and pass only `access_token` to the

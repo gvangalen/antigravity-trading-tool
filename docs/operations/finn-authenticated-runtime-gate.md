@@ -18,7 +18,8 @@ SHA being considered for QA.
 2. The caller uses the dedicated fixture binding defined by
    [FINN QA Fixture Contract](finn-qa-fixture-contract.md):
    `FINN_BUILD_SMOKE_USER_ID` for Build smoke or `FINN_QA_USER_ID` for QA.
-3. The token helper and runtime-gate scripts are present in the deployed tree.
+3. The token helper and runtime-gate scripts are present in the deployed tree
+   under `backend/trading-tool-backend/backend/scripts/`.
 4. The fixture snapshot confirms that its bot is non-live and no test requires
    a confirmation or execution.
 

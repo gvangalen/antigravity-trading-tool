@@ -45,9 +45,11 @@ async def _run_task_with_local_resources(coroutine):
 
 def _run_async(coroutine):
     """Run one Celery task with a fresh loop and task-local async resources."""
-    # A prefork worker may inherit a parent-created pool. Do not let it hand a
-    # connection from another process or previous task loop to asyncpg.
-    engine.sync_engine.dispose(close=False)
+    # ``worker_process_init`` clears inherited pools once per prefork child.
+    # Repeating a synchronous pool disposal immediately before every task can
+    # delay the worker's first dispatch claim long enough for recovery to
+    # terminalize an otherwise delivered interactive run.  The async engine is
+    # still disposed at the task boundary below, before this fresh loop closes.
     return asyncio.run(_run_task_with_local_resources(coroutine))
 
 

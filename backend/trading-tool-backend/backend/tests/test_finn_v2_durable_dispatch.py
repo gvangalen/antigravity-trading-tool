@@ -263,13 +263,7 @@ def test_recovery_is_idempotent_after_worker_crash(monkeypatch):
 def test_worker_task_boundary_disposes_async_resources_before_its_loop_closes(monkeypatch):
     events = []
 
-    class _SyncEngine:
-        def dispose(self, *, close):
-            events.append(("sync_dispose", close))
-
     class _Engine:
-        sync_engine = _SyncEngine()
-
         async def dispose(self):
             events.append(("async_dispose", None))
 
@@ -280,7 +274,7 @@ def test_worker_task_boundary_disposes_async_resources_before_its_loop_closes(mo
     monkeypatch.setattr(task_module, "engine", _Engine())
 
     assert task_module._run_async(_job()) == "done"
-    assert events == [("sync_dispose", False), ("job", None), ("async_dispose", None)]
+    assert events == [("job", None), ("async_dispose", None)]
 
 
 def test_stale_unclaimed_dispatch_is_terminalized_once(monkeypatch):

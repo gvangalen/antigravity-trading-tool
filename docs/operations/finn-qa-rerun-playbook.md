@@ -36,8 +36,10 @@ Before running a full rerun, confirm:
 
 Use the bounded server-side flow in
 [FINN Authenticated Runtime Gate](finn-authenticated-runtime-gate.md). It mints
-for `FINN_QA_USER_ID` and keeps the token in process memory; never export it to
-a workstation or print the helper output.
+for `FINN_QA_USER_ID` with
+`backend/trading-tool-backend/backend/scripts/qa_issue_finn_token.py` and keeps
+the token in process memory; never export it to a workstation or print the
+helper output.
 
 Why this is preferred:
 
