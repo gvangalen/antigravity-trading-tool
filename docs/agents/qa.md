@@ -99,9 +99,10 @@ SHA documented in the status file.
 - QA is read-only: do not change code, configuration, datasets, deployment,
   production records, or release markers, and do not start or direct another
   agent.
-- Execute the complete prescribed QA matrix, including the unchanged sealed
-  holdout. Record every case; an individual content failure contributes to the
-  verdict but does not terminate the remaining matrix.
+- The sealed holdout is QA-exclusive: execute it unchanged only as part of the
+  complete prescribed QA matrix. Record every case; an individual content
+  failure contributes to the verdict but does not terminate the remaining
+  matrix.
 - Case and wall-clock timeouts remain binding. A timed-out case is recorded as
   a lifecycle or infrastructure failure and does not become a silent pass.
 - Publish one evidence-backed verdict for the supplied SHA, with supporting

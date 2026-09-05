@@ -15,8 +15,9 @@ SHA being considered for QA.
 
 1. `origin/main`, production checkout, public backend health, and frontend
    build information identify the same release SHA.
-2. The approved fixture is bound by `FINN_QA_USER_ID` according to
-   [FINN QA Fixture Contract](finn-qa-fixture-contract.md).
+2. The caller uses the dedicated fixture binding defined by
+   [FINN QA Fixture Contract](finn-qa-fixture-contract.md):
+   `FINN_BUILD_SMOKE_USER_ID` for Build smoke or `FINN_QA_USER_ID` for QA.
 3. The token helper and runtime-gate scripts are present in the deployed tree.
 4. The fixture snapshot confirms that its bot is non-live and no test requires
    a confirmation or execution.
@@ -35,15 +36,17 @@ or its output.
 set -euo pipefail
 set +x
 # Source the server secret environment here.
-# Read FINN_QA_USER_ID only from that environment.
-# Mint with qa_issue_finn_token.py --user-id "$FINN_QA_USER_ID".
+# Read only the caller's fixture ID from that environment.
+# Mint with qa_issue_finn_token.py --user-id "$FINN_BUILD_SMOKE_USER_ID"
+# for Build smoke, or --user-id "$FINN_QA_USER_ID" for QA.
 # Pass the captured token only to run_finn_v2_authenticated_smoke_gate.py.
 # Unset the token before the shell exits.
 ```
 
-Use `https://tradamind.com` for the transport path. The server-local process
-may perform the required read-only persistence assertions using the existing
-`run_finn_v2_authenticated_smoke_gate.py` wrapper.
+Use `https://tradamind.com` for the transport path. Build uses only generic
+non-sealed smoke cases and may perform read-only persistence assertions with
+the existing `run_finn_v2_authenticated_smoke_gate.py` wrapper. The sealed
+holdout is QA-exclusive and unavailable to Build.
 
 ## Required Evidence
 

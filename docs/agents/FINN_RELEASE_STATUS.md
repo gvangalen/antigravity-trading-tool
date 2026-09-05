@@ -8,20 +8,21 @@ short; link artifacts rather than copying reports or chat history.
 | Field | Value |
 | --- | --- |
 | Phase | `LIVE_SMOKE_RUNNING` |
-| Active goal | FINN V2 repair batch; authenticated live smoke fixture binding |
+| Active goal | FINN V2 repair batch; authenticated Build smoke fixture binding |
 | Candidate branch | `main` |
 | Candidate SHA | `61571ed7ccbb0d48b6cee79446114090ca2ad829` |
 | Production SHA | `61571ed7ccbb0d48b6cee79446114090ca2ad829` |
 | Release owner | Build |
-| Last updated | `2026-09-05 14:05 UTC` |
+| Last updated | `2026-09-05 14:13 UTC` |
 
 ## Current Batch
 
 - Goal: terminal lifecycle, lineage, guided setup, selector, and latency
   repair validation.
-- Known operational blocker: the canonical server-side QA fixture binding is
-  not yet configured; no account may be selected by heuristic.
-- Out of scope: sealed-holdout tuning, official QA, product model changes.
+- Known operational blocker: the canonical server-side Build smoke fixture
+  binding is not yet configured; no account may be selected by heuristic.
+- Out of scope: QA-exclusive sealed holdout, official QA, product model
+  changes.
 
 ## Evidence
 
@@ -33,14 +34,14 @@ short; link artifacts rather than copying reports or chat history.
 | CI | `PASS` | Run `33965640410`, exact candidate SHA. |
 | Deployment | `PASS` | Auto Deploy `33965733731`, exact candidate SHA. |
 | SHA identity | `PASS` | `origin/main`, production checkout, public backend, frontend, and deploy status reported `61571ed7`. |
-| Authenticated live smoke | `NOT_MEASURABLE` | Blocked before run creation: no canonical `FINN_QA_USER_ID`; documented legacy fixture is absent. |
+| Authenticated live smoke | `NOT_MEASURABLE` | Blocked before run creation: no canonical `FINN_BUILD_SMOKE_USER_ID`. |
 | Independent production QA | `NOT_STARTED` | User-controlled; prohibited until the live smoke is measurable and passes. |
 
 ## Live Smoke
 
 - Tested SHA: `not run`.
 - Run IDs, terminalization, polling/SSE, dispatch/attempt, safety, latency:
-  `not measurable` until the canonical fixture binding exists.
+  `not measurable` until the canonical Build smoke fixture binding exists.
 
 ## Independent QA
 
@@ -50,9 +51,9 @@ short; link artifacts rather than copying reports or chat history.
 
 ## Next Owner Action
 
-Operations configures and verifies the server-side `FINN_QA_USER_ID` binding
-under the QA fixture contract. Build then runs the bounded authenticated live
-smoke; only a measured passing smoke can move this status to
+Operations configures and verifies the server-side `FINN_BUILD_SMOKE_USER_ID`
+binding under the smoke-fixture contract. Build then runs the bounded
+authenticated live smoke; only a measured passing smoke can move this status to
 `READY_FOR_INDEPENDENT_QA`.
 
 ## Allowed Phases

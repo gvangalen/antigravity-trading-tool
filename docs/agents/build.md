@@ -121,7 +121,12 @@ QA status source.
 - Critical runtime claims need end-to-end evidence. Claims about provider
   behavior need the real provider; selector-only or mocked tests cannot prove
   a full runtime release path.
-- Do not use the sealed holdout for tuning or validation by Build.
+- The sealed holdout is QA-exclusive. Build must not read, copy, score, tune
+  against, or submit it through any fixture, runner, provider, or live route.
+- The authenticated Build smoke uses only the server-side
+  `FINN_BUILD_SMOKE_USER_ID` binding and generic non-sealed smoke cases. Its
+  token remains in the server-side smoke process and never grants access to
+  the QA fixture or sealed holdout.
 - Do not start, instruct, contact, poll, or otherwise coordinate a QA agent.
   The user initiates independent QA only after the status file documents a
   complete live candidate.

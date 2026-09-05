@@ -102,13 +102,16 @@ status source.
 
 - Build completes one coherent local repair batch, verifies it, manages the
   candidate, CI, deployment, and bounded live smoke, and records only measured
-  evidence in the status file. It must not start, instruct, contact, poll, or
-  otherwise coordinate a QA agent.
+  evidence in the status file. Its authenticated smoke uses only the canonical
+  Build smoke fixture and generic non-sealed cases. It must not start,
+  instruct, contact, poll, or otherwise coordinate a QA agent, access the QA
+  fixture, or read the QA-exclusive sealed holdout.
 - QA is an independent, read-only final gate for the exact live SHA in the
   status file. QA completes the prescribed matrix even when individual content
   cases fail, subject only to each case's hard timeout and the run's wall-clock
-  limit. It records one evidence-backed verdict and does not repair code,
-  deploy, or direct another agent.
+  limit. The sealed holdout is QA-exclusive and QA may use it only unchanged.
+  QA records one evidence-backed verdict and does not repair code, deploy, or
+  direct another agent.
 - The user alone initiates QA after the status file reaches
   `READY_FOR_INDEPENDENT_QA`. A QA verdict never starts another Build or QA
   cycle automatically.

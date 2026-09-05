@@ -14,15 +14,16 @@ Build implements one complete repair batch, reproduces known defects locally,
 adds regressions, validates the relevant chain, creates one release candidate,
 runs CI, deploys, and performs the bounded authenticated live smoke. Build
 updates `FINN_RELEASE_STATUS.md` only with measured evidence. Build does not
-start, instruct, or contact QA.
+start, instruct, or contact QA, access the QA fixture, or access the
+QA-exclusive sealed holdout.
 
 ### QA
 
 QA is read-only and independently tests only the live SHA recorded in
-`FINN_RELEASE_STATUS.md`. QA uses the sealed holdout unchanged, completes the
-entire prescribed matrix even after individual content failures, and records a
-single evidence-backed verdict. QA does not modify product state, deploy, or
-direct another agent.
+`FINN_RELEASE_STATUS.md`. The sealed holdout is QA-exclusive and QA uses it
+unchanged only for the prescribed matrix. QA completes the entire matrix even
+after individual content failures and records a single evidence-backed verdict.
+QA does not modify product state, deploy, or direct another agent.
 
 ### Security and Architecture
 
@@ -51,13 +52,17 @@ Build handles all defects in the active goal as one coherent batch:
 
 Known red regressions, lower thresholds, weaker assertions, removed cases, or
 new skips never constitute a green Build gate. Full runtime claims require
-end-to-end evidence; provider claims use the real provider. Build never uses
-the sealed holdout for tuning or validation.
+end-to-end evidence; provider claims use the real provider. The sealed holdout
+is QA-exclusive and Build must not read, copy, score, tune against, or submit
+it through any local or live route.
 
-The live smoke is Build validation, not independent QA. It uses no sealed QA
-case and covers the current batch's critical paths plus run creation,
-read-only capability, EVALUATE, a conversation follow-up, terminalization,
-polling/SSE parity, dispatch cardinality, safety, and latency.
+The live smoke is Build validation, not independent QA. It authenticates only
+with the dedicated server-side `FINN_BUILD_SMOKE_USER_ID` fixture, never the
+QA fixture. Its token remains in the smoke process, has normal non-admin FINN
+permissions, and is used only for generic non-sealed smoke cases. It covers
+the current batch's critical paths plus run creation, read-only capability,
+EVALUATE, a conversation follow-up, terminalization, polling/SSE parity,
+dispatch cardinality, safety, and latency.
 
 ## Independent Production QA
 
