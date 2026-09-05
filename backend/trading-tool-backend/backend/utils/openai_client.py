@@ -125,8 +125,6 @@ def build_structured_response_request(
         "text": {"format": {"type": "json_schema", "name": output_spec.name, "schema": output_spec.schema, "strict": output_spec.strict}},
         "max_output_tokens": max_output_tokens,
     }
-    if timeout_seconds is not None:
-        request["timeout"] = timeout_seconds
     return request
 
 
@@ -675,7 +673,15 @@ def ask_gpt_structured_response(
     active_model = str(model_override or model)
     started = start_timer()
     try:
-        active_client = client.with_options(max_retries=client_max_retries) if client_max_retries is not None else client
+        client_options: Dict[str, Any] = {}
+        if client_max_retries is not None:
+            client_options["max_retries"] = client_max_retries
+        if timeout_seconds is not None:
+            # This must be a transport option, not a Responses API payload
+            # field.  Putting it in request JSON left the blocking SDK call
+            # unbounded and prevented the lifecycle from enforcing its phase.
+            client_options["timeout"] = max(1, float(timeout_seconds))
+        active_client = client.with_options(**client_options) if client_options else client
         request_kwargs = build_structured_response_request(
             model_name=active_model,
             prompt=prompt,

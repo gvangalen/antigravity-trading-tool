@@ -54,6 +54,19 @@ def test_selector_responses_payload_wraps_raw_schema_exactly_once():
     assert "schema" not in payload["schema"]
 
 
+def test_transport_timeout_is_not_sent_as_a_responses_payload_field():
+    request = openai_client.build_structured_response_request(
+        model_name="gpt-test",
+        prompt="x",
+        system_role="x",
+        output_spec=StructuredOutputSpec("test", {"type": "object", "properties": {}, "required": [], "additionalProperties": False}),
+        max_output_tokens=10,
+        timeout_seconds=10,
+    )
+
+    assert "timeout" not in request
+
+
 def test_wrapped_schema_is_rejected_before_network_or_rate_limit(monkeypatch):
     called = False
 
