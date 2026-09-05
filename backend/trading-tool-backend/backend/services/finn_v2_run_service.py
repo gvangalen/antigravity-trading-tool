@@ -175,7 +175,7 @@ class FinnV2RunService:
             )
         else:
             response_json = {
-                "mode": verified.get("mode") or interaction_mode or "UNAVAILABLE",
+                "mode": verified.get("mode") or phase_outcome.interaction_mode or "UNAVAILABLE",
                 "content": content,
                 "response_source": "v2_runtime",
                 "verifier_status": verified.get("verifier_status") or "passed",

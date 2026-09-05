@@ -470,6 +470,23 @@ def test_contract_limited_evaluate_is_durable_safe_lineage_not_verified_context(
     assert "conclusion" not in context["last_degraded_context"]
 
 
+def test_repaired_verifier_response_has_a_completed_lifecycle_outcome():
+    service = FinnV2OrchestratorService(session=object())
+    result = SimpleNamespace(
+        outcome="reasoning_ready",
+        analysis=SimpleNamespace(interaction_mode="EVALUATE"),
+        orchestrator_result_id="orchestrator-repaired",
+    )
+
+    outcome = service._build_phase_outcome(
+        result=result,
+        verified_response=SimpleNamespace(verifier_status="repaired", mode="EVALUATE"),
+    )
+
+    assert outcome.terminal_status == "completed"
+    assert outcome.interaction_mode == "EVALUATE"
+
+
 def test_canonical_context_does_not_promote_generic_bot_text_without_lineage_proof():
     service = FinnV2OrchestratorService(session=object())
     service.conversations = _FakeConversationRepo()

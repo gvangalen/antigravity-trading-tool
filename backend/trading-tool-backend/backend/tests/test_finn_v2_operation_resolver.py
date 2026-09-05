@@ -250,6 +250,38 @@ def test_unbound_execution_fact_cannot_be_erased_as_off_topic():
     assert resolved.operation_id == "unsupported_financial_operation"
 
 
+def test_indicator_read_fact_rejects_a_conflicting_financial_concept_projection():
+    registry = FinnV2OperationRegistry()
+    resolved = FinnV2OperationResolverService(registry).resolve(
+        selection=_selection("explain_financial_concept", {"goal": "explain", "object": "financial_concept"}),
+        candidates=registry.list(),
+        conversation_context={},
+        request_facts={
+            "action_polarity": "read",
+            "explicit_entities": ("indicator_configuration",),
+            "financial_concept": None,
+        },
+    )
+
+    assert resolved.operation_id == "read_indicator_configuration"
+
+
+def test_lineage_bound_bot_assessment_overrides_an_evidence_only_frame():
+    registry = FinnV2OperationRegistry()
+    resolved = FinnV2OperationResolverService(registry).resolve(
+        selection=_selection("explain_previous_evidence", {"goal": "explain", "object": "plan"}),
+        candidates=registry.list(),
+        conversation_context={"last_verified_context": {"verified_response_id": "response-1", "evidence_refs": ["E1"]}},
+        request_facts={
+            "explicit_entities": ("bot", "strategy"),
+            "discourse_act": "evaluation",
+            "explicit_plan_subject": False,
+        },
+    )
+
+    assert resolved.operation_id == "evaluate_bot"
+
+
 def test_non_financial_execution_fact_cannot_be_coerced_to_unsupported_financial_operation():
     registry = FinnV2OperationRegistry()
     resolved = FinnV2OperationResolverService(registry).resolve(

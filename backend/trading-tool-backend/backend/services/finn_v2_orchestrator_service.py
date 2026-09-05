@@ -676,7 +676,10 @@ class FinnV2OrchestratorService:
         verifier_status = getattr(verified_response, "verifier_status", None)
         if verifier_status == "downgraded":
             terminal_status = "downgraded"
-        elif verifier_status == "passed":
+        elif verifier_status in {"passed", "repaired"}:
+            # A repaired response has passed the same terminal verifier after
+            # one bounded structural repair. It is a valid delivered result,
+            # not an orchestration failure.
             terminal_status = "completed"
         else:
             raise RuntimeError("orchestrator_phase_outcome_invalid_verifier_status")

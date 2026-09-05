@@ -625,6 +625,7 @@ DEFAULT_ASSET_CATALOG: dict[str, dict[str, Any]] = {
         timezone="America/New_York",
         base_currency=None,
         quote_currency="USD",
+        aliases=("Apple",),
         refresh_policy="securities_live_5m",
     ),
     "MSFT": _asset_defaults(
@@ -640,6 +641,7 @@ DEFAULT_ASSET_CATALOG: dict[str, dict[str, Any]] = {
         timezone="America/New_York",
         base_currency=None,
         quote_currency="USD",
+        aliases=("Microsoft",),
         refresh_policy="securities_live_5m",
     ),
 }

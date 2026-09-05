@@ -111,6 +111,32 @@ class FinnV2OperationResolverService:
             and not self._has_pending_operation(conversation_context)
         ):
             operation_id = "clarify_request"
+        # A request to inspect a stored indicator configuration has a typed
+        # product object. A general financial-concept explanation is only
+        # compatible when the request actually names a concept such as RSI.
+        # This protects all catalog assets without introducing asset aliases
+        # or prompt-local routing.
+        if (
+            str((request_facts or {}).get("action_polarity") or "") == "read"
+            and "indicator_configuration" in explicit_entities
+            and not bool((request_facts or {}).get("financial_concept"))
+        ):
+            operation_id = "read_indicator_configuration"
+        # A lineage-bound question about the consequence or assessment of a
+        # bot needs the bot evaluation contract. It cannot be reduced to an
+        # evidence-only explanation because the contract owns bot state reads.
+        if (
+            "bot" in explicit_entities
+            and self._has_eligible_lineage(conversation_context)
+            and (
+                goal == "consequence"
+                or str((request_facts or {}).get("discourse_act") or "") in {
+                    "contextual_follow_up", "evaluation",
+                }
+            )
+            and not bool((request_facts or {}).get("explicit_plan_subject"))
+        ):
+            operation_id = "evaluate_bot"
         # This is a contract invariant, not an alternate intent router: a
         # financial-unsupported contract requires a financial request fact.
         # The provider still extracts meaning; the registry rejects an

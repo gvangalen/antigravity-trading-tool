@@ -422,17 +422,21 @@ class FinnV2RequestPreprocessorService:
         finance_object = (
             r"\b(?:portfolio|portefeuille|beleggingsrekening|investment\s+account|"
             r"broker(?:rekening|account)?|trading\s+account|wallet|orders?|transacties?|"
-            r"transactions?|trades?)\b"
+            r"transactions?|trades?|savings?|spaargeld|vermogen|funds?|kapitaal|coin(?:s)?)\b"
         )
-        market_action = r"\b(?:koop\w*|verkoop\w*|buy\w*|sell\w*|trade\w*|handel\w*|orders?)\b"
+        market_action = (
+            r"\b(?:koop\w*|verkoop\w*|buy\w*|sell\w*|trade\w*|handel\w*|"
+            r"orders?|move|transfer|verplaats\w*|stort\w*)\b"
+        )
         autonomy = r"\b(?:autonoom|autonome|autonomous|zelfstandig)\b"
-        decision = r"\b(?:\w*besluit\w*|beslissing\w*|decision\w*|beheer\w*|manage\w*)\b"
+        decision = r"\b(?:\w*besluit\w*|beslissing\w*|decision\w*|beheer\w*|manage\w*|whichever|welke\s+dan\s+ook)\b"
         return bool(
-            re.search(autonomy, text)
-            and (
-                (re.search(finance_object, text) and re.search(decision, text))
-                or re.search(market_action, text)
-            )
+            # Autonomous market delegation is consequential even when the
+            # user omits a specific account or portfolio noun.
+            (re.search(autonomy, text) and re.search(market_action, text))
+            # A financial object plus an action and delegated selection is
+            # likewise a financial execution request, not off-topic.
+            or (re.search(finance_object, text) and re.search(market_action, text) and re.search(decision, text))
         )
 
     @staticmethod

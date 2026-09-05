@@ -228,6 +228,46 @@ def test_completed_run_projects_the_verified_next_step_into_the_polling_and_sse_
     assert projection["response"]["next_step"]["instruction"] == "Leg eerst een toetsbare beslisregel vast."
 
 
+def test_completed_run_uses_the_typed_lifecycle_mode_when_delivery_omits_mode():
+    service = FinnV2RunService(session=object())
+    transition = {}
+    service.delivery.get_delivery_artifacts = lambda **_kwargs: asyncio.sleep(
+        0,
+        result={
+            "delivery_envelope": {"status": "completed"},
+            "verified_response": {
+                "direct_answer": "De opgeslagen gegevens zijn gecontroleerd.",
+                "main_observation": "Een vervolgstap is beschikbaar.",
+                "verifier_status": "repaired",
+            },
+            "policy_result": {"allowed": True},
+            "orchestrator_result": {},
+            "verifier_result": {},
+            "reasoning_result": {},
+        },
+    )
+
+    async def _transition_run(*_args, **kwargs):
+        transition.update(kwargs)
+
+    service.transition_run = _transition_run
+    asyncio.run(
+        service.complete_run(
+            run_id="run-mode-fallback-1",
+            user_id=7,
+            phase_outcome=LifecyclePhaseOutcome(
+                terminal_status="completed",
+                interaction_mode="EVALUATE",
+                orchestrator_result_id="orchestrator-mode-fallback-1",
+                verifier_action="deliver",
+            ),
+        )
+    )
+
+    assert transition["next_status"] == "completed"
+    assert transition["response_json"]["mode"] == "EVALUATE"
+
+
 def test_terminal_projection_is_the_same_contract_for_polling_and_sse_consumers():
     service = FinnV2RunService(session=object())
     artifacts = {

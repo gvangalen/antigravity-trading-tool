@@ -115,6 +115,7 @@ class FinnV2OperationClassificationService:
                     "explicit_plan_subject": facts.explicit_plan_subject,
                     "linked_graph_relationship": facts.linked_graph_relationship,
                     "primary_entity": facts.primary_entity,
+                    "financial_concept": facts.financial_concept,
                 },
             )
         safe_terminal_operations = {

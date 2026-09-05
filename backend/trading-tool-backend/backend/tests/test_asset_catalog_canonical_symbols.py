@@ -10,3 +10,8 @@ def test_gold_resolves_to_the_canonical_xau_symbol_across_supported_languages():
     assert resolve_catalog_symbol("goud") == "XAU"
     assert resolve_catalog_symbol("Gold") == "XAU"
     assert resolve_catalog_symbol("or") == "XAU"
+
+
+def test_stock_display_aliases_resolve_to_the_canonical_catalog_symbols():
+    assert resolve_catalog_symbol("Apple") == "AAPL"
+    assert resolve_catalog_symbol("Microsoft") == "MSFT"
