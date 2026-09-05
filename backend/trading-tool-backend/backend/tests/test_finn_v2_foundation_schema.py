@@ -84,3 +84,14 @@ def test_verified_response_defaults_are_safe_placeholders():
     assert response.evidence == []
     assert response.uncertainty == []
     assert response.confirmation_required is False
+
+
+def test_verified_response_accepts_registry_grounded_capability_terminal():
+    response = VerifiedResponse(
+        mode="CAPABILITY",
+        content="FINN kan je helpen.",
+        response_source="v2_runtime",
+        verifier_status="registry_grounded",
+    )
+
+    assert response.verifier_status == "registry_grounded"

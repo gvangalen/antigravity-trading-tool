@@ -50,6 +50,7 @@ PolicyClass = Literal[
 
 VerifierStatus = Literal[
     "not_run",
+    "registry_grounded",
     "passed",
     "failed",
     "downgraded",
