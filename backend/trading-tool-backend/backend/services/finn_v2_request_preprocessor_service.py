@@ -205,6 +205,16 @@ class FinnV2RequestPreprocessorService:
             asset
             and re.search(r"(?:plan|strategie|strategy)\b", normalized)
         )
+        # A concrete, stored approach for an explicitly named instrument is
+        # a setup-shaped object. Broad diagnosis of an approach remains a
+        # plan subject, so the concrete/configured modifier is required.
+        concrete_setup_subject = bool(
+            asset
+            and re.search(r"\b(?:concrete|specifieke|configured|ready|klaarstaande|prepared)\b", normalized)
+            and re.search(r"(?:handelsaanpak|trading approach)\b", normalized)
+        )
+        if concrete_setup_subject:
+            entities = tuple("setup" if entity == "plan" else entity for entity in entities)
         if (relational_graph or explicit_plan or compound_plan_subject) and "plan" not in entities:
             entities = (*entities, "plan")
         # "mijn strategie ... mijn plan" commonly refers to one component

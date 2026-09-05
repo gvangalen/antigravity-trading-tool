@@ -37,3 +37,14 @@ def test_bare_causal_question_is_a_lineage_marker_not_an_off_topic_fact():
     facts = FinnV2RequestPreprocessorService().preprocess(message="Warum?")
 
     assert "previous_verified_conclusion" in facts.conversation_reference_markers
+
+
+def test_concrete_asset_bound_approach_is_a_setup_but_broad_diagnosis_remains_a_plan():
+    service = FinnV2RequestPreprocessorService()
+    setup = service.preprocess(message="Show the concrete trading approach prepared for Ethereum.")
+    plan = service.preprocess(message="Which part of my trading approach is most resilient?")
+
+    assert setup.referenced_asset == "ETH"
+    assert setup.primary_entity == "setup"
+    assert "setup" in setup.explicit_entities
+    assert plan.primary_entity == "plan"
