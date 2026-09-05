@@ -61,6 +61,7 @@ async def create_finn_v2_run(
     request: AgentRunRequest,
     raw_request: Request,
     current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
     gateway: FinnV2GatewayService = Depends(get_gateway_service),
     run_service: FinnV2RunService = Depends(get_run_service),
 ):

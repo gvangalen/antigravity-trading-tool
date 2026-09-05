@@ -55,6 +55,7 @@ def test_run_creation_exposes_only_safe_contract_identity_before_worker_executio
     source = (ROOT / "api" / "finn_v2_api.py").read_text(encoding="utf-8")
     create_source = source.split("async def create_finn_v2_run(", 1)[1].split("@router.get", 1)[0]
 
+    assert "db: AsyncSession = Depends(get_db)" in create_source
     assert "FinnV2RuntimeContractRepository(db).get_for_run(run_id=run_id)" in create_source
     assert '"contract_id": runtime_contract.contract_id' in create_source
     assert '"revision": runtime_contract.revision' in create_source
