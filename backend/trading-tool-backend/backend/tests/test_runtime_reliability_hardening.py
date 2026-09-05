@@ -22,6 +22,7 @@ def test_deploy_env_supports_backend_only_auto_rollback_and_previous_markers():
     assert 'DEPLOY_COMPONENT_SET="${DEPLOY_COMPONENT_SET:-full}"' in source
     assert 'AUTO_ROLLBACK_ON_FAILURE="${AUTO_ROLLBACK_ON_FAILURE:-true}"' in source
     assert 'MIGRATION_COMMAND_TIMEOUT_SECONDS="${MIGRATION_COMMAND_TIMEOUT_SECONDS:-180}"' in source
+    assert 'REMOTE_DEPLOY_COMMAND_TIMEOUT_SECONDS="${REMOTE_DEPLOY_COMMAND_TIMEOUT_SECONDS:-900}"' in source
     assert 'DEEP_HEALTH_ATTEMPTS="${DEEP_HEALTH_ATTEMPTS:-30}"' in source
     assert 'DEEP_HEALTH_RETRY_DELAY_SECONDS="${DEEP_HEALTH_RETRY_DELAY_SECONDS:-10}"' in source
     assert 'BACKEND_INITIAL_LISTEN_ATTEMPTS="${BACKEND_INITIAL_LISTEN_ATTEMPTS:-180}"' in source
@@ -35,6 +36,7 @@ def test_deploy_env_supports_backend_only_auto_rollback_and_previous_markers():
     assert "./ops/deploy/rollback_env.sh $ENVIRONMENT $ROLLBACK_COMMIT" in source
     assert "external_smoke_failed=false" in source
     assert source.count("curl --connect-timeout 5 --max-time 20") == 2
+    assert 'timeout --foreground "${REMOTE_DEPLOY_COMMAND_TIMEOUT_SECONDS}s" ssh' in source
     assert 'if [ "$(lower_bool "${STRICT_EXTERNAL_SMOKE}")" = "true" ]; then' in source
     assert "External smoke failed" in source
     assert "rollout continues because STRICT_EXTERNAL_SMOKE=false" in source

@@ -20,6 +20,7 @@ DEPLOY_COMPONENT_SET="${DEPLOY_COMPONENT_SET:-full}"
 AUTO_ROLLBACK_ON_FAILURE="${AUTO_ROLLBACK_ON_FAILURE:-true}"
 DEPLOY_GIT_TOKEN="${DEPLOY_GIT_TOKEN:-}"
 MIGRATION_COMMAND_TIMEOUT_SECONDS="${MIGRATION_COMMAND_TIMEOUT_SECONDS:-180}"
+REMOTE_DEPLOY_COMMAND_TIMEOUT_SECONDS="${REMOTE_DEPLOY_COMMAND_TIMEOUT_SECONDS:-900}"
 # A Celery worker is reported online by PM2 before its task registry is ready.
 # Production cold starts have taken just over a minute, so keep the real
 # deep-health gate but give all workers enough time to finish initializing.
@@ -140,7 +141,7 @@ record_remote_deploy_status() {
   "
 }
 
-if ! printf '%s\n' "$DEPLOY_GIT_TOKEN" | ssh "${SSH_ARGS[@]}" "ubuntu@$SERVER_IP" "
+if ! printf '%s\n' "$DEPLOY_GIT_TOKEN" | timeout --foreground "${REMOTE_DEPLOY_COMMAND_TIMEOUT_SECONDS}s" ssh "${SSH_ARGS[@]}" "ubuntu@$SERVER_IP" "
   set -Eeuo pipefail
   IFS= read -r DEPLOY_GIT_TOKEN || true
   export PATH=$NODE_BIN:\$PATH
