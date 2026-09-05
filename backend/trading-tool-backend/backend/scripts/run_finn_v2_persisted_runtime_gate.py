@@ -128,7 +128,10 @@ def main() -> None:
     parser.add_argument("--base-url", required=True)
     parser.add_argument("--message", required=True)
     parser.add_argument("--token-env", default="FINN_QA_BEARER_TOKEN")
-    parser.add_argument("--timeout-seconds", type=float, default=30.0)
+    # This is only the external observation window. Queue wait and the
+    # independently bounded selector phase are both part of end-to-end
+    # measurement and must not be mistaken for a lifecycle deadline.
+    parser.add_argument("--timeout-seconds", type=float, default=60.0)
     args = parser.parse_args()
     print(json.dumps(run_gate(
         base_url=args.base_url,
