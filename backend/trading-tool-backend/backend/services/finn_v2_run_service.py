@@ -313,6 +313,21 @@ class FinnV2RunService:
             )
             raise
 
+    async def terminalize_unavailable(self, *, run_id: str, user_id: int, error_code: str) -> None:
+        response_json = self._terminal_placeholder_response(
+            interaction_mode="UNAVAILABLE",
+            terminal_status="unavailable",
+            orchestrator={}, verifier={}, reasoning={}, delivery_envelope={},
+        )
+        contract = await self.runtime_contracts.materialize_terminal(
+            run_id=run_id, status="unavailable", mode="UNAVAILABLE", response=response_json, error_code=error_code
+        )
+        response_json["_runtime_contract_projection"] = contract.terminal_projection_json
+        await self.persist_transition(
+            run_id, user_id, next_status="unavailable", interaction_mode="UNAVAILABLE",
+            error_code=error_code, response_json=response_json, response_source="v2_runtime",
+        )
+
     async def cancel_run(self, *, run_id: str, user_id: int):
         run = await self.runs.get_by_id_for_user(run_id=run_id, user_id=user_id)
         if run is None:
@@ -481,15 +496,21 @@ class FinnV2RunService:
                 extra={"run_id": run_id, "user_id": user_id},
             )
             async with async_session_factory() as session:
-                await cls(session).fail_run(
-                    run_id=run_id,
-                    user_id=user_id,
-                    error_code="lifecycle_deadline_exceeded",
-                    error_message="FINN kon deze aanvraag niet binnen de veilige verwerkingstijd afronden.",
-                    retryable=False,
-                    failure_stage="run_foundation_lifecycle_deadline",
-                    primary_exception=exc,
-                )
+                service = cls(session)
+                if selection_waiter is not None and not selection_waiter.done():
+                    await service.terminalize_unavailable(
+                        run_id=run_id, user_id=user_id, error_code="selector_phase_timeout"
+                    )
+                else:
+                    await service.fail_run(
+                        run_id=run_id,
+                        user_id=user_id,
+                        error_code="lifecycle_deadline_exceeded",
+                        error_message="FINN kon deze aanvraag niet binnen de veilige verwerkingstijd afronden.",
+                        retryable=False,
+                        failure_stage="run_foundation_lifecycle_deadline",
+                        primary_exception=exc,
+                    )
         except asyncio.CancelledError:
             if lifecycle is not None and not lifecycle.done():
                 lifecycle.cancel()
