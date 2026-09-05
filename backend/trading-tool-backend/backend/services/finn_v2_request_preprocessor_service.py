@@ -447,20 +447,28 @@ class FinnV2RequestPreprocessorService:
     def _is_explicit_financial_execution_intent(text: str) -> bool:
         """Recognise a consequential financial delegation, not an operation."""
         finance_object = (
-            r"\b(?:portfolio|portefeuille|beleggingsrekening|investment\s+account|"
-            r"broker(?:rekening|account)?|trading\s+account|wallet|orders?|transacties?|"
+            r"\b(?:portfolio|portefeuille|beleggingsrekening|beleggingsaccount|investment\s+account|"
+            r"anlagekonto|broker(?:rekening|account)?|trading\s+account|wallet|orders?|transacties?|"
             r"transactions?|trades?|savings?|spaargeld|vermogen|funds?|kapitaal|coin(?:s)?)\b"
         )
         market_action = (
             r"\b(?:koop\w*|verkoop\w*|buy\w*|sell\w*|trade\w*|handel\w*|"
             r"orders?|move|transfer|verplaats\w*|stort\w*)\b"
         )
-        autonomy = r"\b(?:autonoom|autonome|autonomous|zelfstandig)\b"
-        decision = r"\b(?:\w*besluit\w*|beslissing\w*|decision\w*|beheer\w*|manage\w*|whichever|welke\s+dan\s+ook)\b"
+        autonomy = r"\b(?:autonoom\w*|autonom\w*|zelfstandig)\b"
+        decision = (
+            r"\b(?:\w*besluit\w*|beslissing\w*|decision\w*|entscheidung\w*|"
+            r"beheer\w*|manage\w*|verwalte\w*|whichever|welke\s+dan\s+ook)\b"
+        )
         return bool(
             # Autonomous market delegation is consequential even when the
             # user omits a specific account or portfolio noun.
             (re.search(autonomy, text) and re.search(market_action, text))
+            # Delegating the decision authority for a financial account is
+            # equally consequential even before the user names a particular
+            # buy or sell action. It must remain inside FINN's typed safe
+            # financial boundary rather than being treated as unrelated chat.
+            or (re.search(finance_object, text) and re.search(autonomy, text) and re.search(decision, text))
             # A financial object plus an action and delegated selection is
             # likewise a financial execution request, not off-topic.
             or (re.search(finance_object, text) and re.search(market_action, text) and re.search(decision, text))

@@ -10,6 +10,25 @@ def test_autonomous_financial_delegation_is_a_financial_execution_fact():
     assert facts.action_polarity == "execute"
 
 
+def test_autonomous_financial_decision_authority_is_an_execution_fact_without_trade_verb():
+    service = FinnV2RequestPreprocessorService()
+
+    dutch = service.preprocess(
+        message="Mag de assistent zelfstandig beslissingen nemen voor mijn beleggingsaccount?"
+    )
+    english = service.preprocess(
+        message="Let the assistant autonomously manage decisions for my investment account."
+    )
+    german = service.preprocess(
+        message="Darf der Assistent autonome Entscheidungen fuer mein Anlagekonto treffen?"
+    )
+
+    for facts in (dutch, english, german):
+        assert facts.financial_execution_intent is True
+        assert facts.action_polarity == "execute"
+        assert facts.domain_hint == "financial"
+
+
 def test_non_financial_move_request_remains_outside_the_financial_execution_boundary():
     facts = FinnV2RequestPreprocessorService().preprocess(
         message="Move my calendar appointment to tomorrow."
