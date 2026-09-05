@@ -23,6 +23,9 @@ def _contract(*, projection=None):
             "run_id": "finn-v2-run-smoke-1",
             "terminal_status": "completed",
             "terminal_response_type": "response",
+            "initial_operation_id": "capability",
+            "final_operation_id": "capability",
+            "final_mode": "CAPABILITY",
         },
     )
 
@@ -43,13 +46,14 @@ def test_authenticated_smoke_requires_contract_typed_projection_and_one_dispatch
 
 
 @pytest.mark.parametrize(
-    ("persisted", "error_code"),
+        ("persisted", "error_code"),
     [
         ({"contract": None, "dispatches": []}, "runtime_contract_missing"),
         ({"contract": _contract(projection={}), "dispatches": []}, "typed_terminal_projection_missing"),
         ({"contract": _contract(), "dispatches": []}, "dispatch_count_0"),
         ({"contract": _contract(), "dispatches": [SimpleNamespace(dispatch_id="a", attempt_count=1), SimpleNamespace(dispatch_id="b", attempt_count=1)]}, "dispatch_count_2"),
         ({"contract": _contract(), "dispatches": [SimpleNamespace(dispatch_id="a", attempt_count=2)]}, "dispatch_attempt_count_exceeded"),
+        ({"contract": _contract(projection={"run_id": "finn-v2-run-smoke-1", "terminal_status": "unavailable", "terminal_response_type": "unavailable"}), "dispatches": [SimpleNamespace(dispatch_id="a", attempt_count=1)]}, "capability_not_completed"),
     ],
 )
 def test_authenticated_smoke_fails_closed_on_incomplete_persistence(persisted, error_code):

@@ -50,6 +50,17 @@ def _assert_persisted_smoke(*, run_result: Dict[str, Any], persisted: Dict[str, 
         raise AssertionError("authenticated_smoke_typed_terminal_projection_missing")
     if not projection.get("terminal_status") or not projection.get("terminal_response_type"):
         raise AssertionError("authenticated_smoke_terminal_projection_untyped")
+    # This smoke exercises the normal capability path. A typed unavailable or
+    # failed projection is safe, but it is not evidence that the live path can
+    # complete the requested read-only operation.
+    if run_result.get("status") != "completed" or projection.get("terminal_status") != "completed":
+        raise AssertionError("authenticated_smoke_capability_not_completed")
+    if projection.get("initial_operation_id") != "capability":
+        raise AssertionError("authenticated_smoke_initial_operation_not_capability")
+    if projection.get("final_operation_id") != "capability":
+        raise AssertionError("authenticated_smoke_final_operation_not_capability")
+    if projection.get("final_mode") != "CAPABILITY":
+        raise AssertionError("authenticated_smoke_final_mode_not_capability")
     if len(dispatches) != 1:
         raise AssertionError(f"authenticated_smoke_dispatch_count_{len(dispatches)}")
     dispatch = dispatches[0]
