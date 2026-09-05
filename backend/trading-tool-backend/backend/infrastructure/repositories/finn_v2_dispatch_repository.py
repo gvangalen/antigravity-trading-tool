@@ -203,8 +203,12 @@ class FinnV2DispatchRepository:
         result = await self.session.execute(
             select(FinnV2RunDispatch)
             .where(
-                FinnV2RunDispatch.status.in_(["pending", "retryable_failure", "dispatching", "dispatched"]),
-                FinnV2RunDispatch.created_at < now - timedelta(seconds=max_age_seconds),
+                FinnV2RunDispatch.status.in_(["pending", "retryable_failure"]),
+                # Creation only makes the durable outbox visible. The gateway
+                # can still be handing the row to Celery, so the interactive
+                # claim deadline begins at the recorded broker handoff.
+                FinnV2RunDispatch.dispatched_at.is_not(None),
+                FinnV2RunDispatch.dispatched_at < now - timedelta(seconds=max_age_seconds),
                 FinnV2RunDispatch.owner.is_(None),
             )
             .order_by(FinnV2RunDispatch.created_at.asc())

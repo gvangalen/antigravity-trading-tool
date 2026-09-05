@@ -1,10 +1,12 @@
 import asyncio
+import inspect
 from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
 
 import backend.celery_task.finn_v2_task as task_module
+from backend.infrastructure.repositories.finn_v2_dispatch_repository import FinnV2DispatchRepository
 
 
 class _Session:
@@ -109,6 +111,14 @@ def test_interactive_task_acknowledges_only_after_worker_lifecycle_completes():
 
 def test_unclaimed_dispatch_deadline_is_bounded_for_interactive_runs():
     assert task_module.DISPATCH_STALE_UNCLAIMED_SECONDS <= 10
+
+
+def test_unclaimed_dispatch_deadline_starts_after_broker_handoff():
+    source = inspect.getsource(FinnV2DispatchRepository.expire_stale_unclaimed)
+
+    assert "dispatched_at.is_not(None)" in source
+    assert "dispatched_at < now - timedelta(seconds=max_age_seconds)" in source
+    assert "created_at < now - timedelta(seconds=max_age_seconds)" not in source
 
 
 def test_duplicate_worker_delivery_does_not_start_second_lifecycle(monkeypatch):
