@@ -31,7 +31,7 @@ DISPATCH_HEARTBEAT_SECONDS = 60
 # The claim watchdog starts only after broker handoff.  Eight seconds races a
 # normal ~7.6s interactive claim with worker scheduling and falsely
 # dead-letters a message before its single permitted worker attempt.
-DISPATCH_STALE_UNCLAIMED_SECONDS = 15
+DISPATCH_STALE_UNCLAIMED_SECONDS = 20
 RECOVERY_RESERVATION_SECONDS = 60
 
 

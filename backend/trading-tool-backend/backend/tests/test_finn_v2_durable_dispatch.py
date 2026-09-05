@@ -110,7 +110,7 @@ def test_interactive_task_acknowledges_only_after_worker_lifecycle_completes():
 
 
 def test_unclaimed_dispatch_deadline_is_bounded_for_interactive_runs():
-    assert task_module.DISPATCH_STALE_UNCLAIMED_SECONDS == 15
+    assert task_module.DISPATCH_STALE_UNCLAIMED_SECONDS == 20
 
 
 def test_unclaimed_dispatch_deadline_starts_after_broker_handoff():

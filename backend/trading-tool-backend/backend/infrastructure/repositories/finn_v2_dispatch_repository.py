@@ -11,7 +11,10 @@ from backend.infrastructure.models import FinnV2Run, FinnV2RunDispatch
 
 class FinnV2DispatchRepository:
     MAX_ATTEMPTS = 3
-    PUBLISH_RETRY_SECONDS = 30
+    # Beat runs every five seconds. Retry the durable broker handoff before
+    # the interactive claim watchdog can dead-letter a message that was
+    # accepted by the outbox but not by a worker.
+    PUBLISH_RETRY_SECONDS = 5
 
     def __init__(self, session: AsyncSession):
         self.session = session
