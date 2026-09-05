@@ -3,6 +3,7 @@ import json
 import os
 import time
 from datetime import date, datetime, timezone
+from functools import lru_cache
 from typing import Any, Dict, Optional
 
 from sqlalchemy import text
@@ -26,6 +27,14 @@ FIRST_DASHBOARD_TASK_NAMES = [
     "backend.celery_task.onboarding_task.enqueue_first_dashboard_briefing",
     "backend.celery_task.onboarding_task.generate_first_dashboard_briefing",
 ]
+
+
+@lru_cache(maxsize=1)
+def _health_celery_app():
+    """Load the Celery app once before issuing control-plane inspections."""
+    from backend.celery_task.celery_app import celery_app
+
+    return celery_app
 
 
 def _utcnow() -> datetime:
@@ -80,7 +89,10 @@ class SystemHealthService:
     """Best-effort deep health checks for ops dashboards and deploy gates."""
 
     _last_queue_depths_snapshot: Optional[Dict[str, Any]] = None
-    _celery_inspect_timeout_seconds: float = 2.5
+    # The worker control commands themselves use a three second deadline.
+    # This budget also covers the one-time Celery app import on a fresh API
+    # process, so a healthy just-started control plane is not reported down.
+    _celery_inspect_timeout_seconds: float = 15.0
 
     @classmethod
     async def deep_health(cls) -> Dict[str, Any]:
@@ -442,30 +454,22 @@ class SystemHealthService:
 
     @staticmethod
     def _celery_ping() -> Optional[Dict[str, Any]]:
-        from backend.celery_task.celery_app import celery_app
-
-        inspector = celery_app.control.inspect(timeout=3.0)
+        inspector = _health_celery_app().control.inspect(timeout=3.0)
         return inspector.ping()
 
     @staticmethod
     def _celery_active_queues() -> Optional[Dict[str, Any]]:
-        from backend.celery_task.celery_app import celery_app
-
-        inspector = celery_app.control.inspect(timeout=3.0)
+        inspector = _health_celery_app().control.inspect(timeout=3.0)
         return inspector.active_queues()
 
     @staticmethod
     def _celery_stats() -> Optional[Dict[str, Any]]:
-        from backend.celery_task.celery_app import celery_app
-
-        inspector = celery_app.control.inspect(timeout=3.0)
+        inspector = _health_celery_app().control.inspect(timeout=3.0)
         return inspector.stats()
 
     @staticmethod
     def _celery_registered() -> Optional[Dict[str, Any]]:
-        from backend.celery_task.celery_app import celery_app
-
-        inspector = celery_app.control.inspect(timeout=3.0)
+        inspector = _health_celery_app().control.inspect(timeout=3.0)
         return inspector.registered()
 
     @staticmethod

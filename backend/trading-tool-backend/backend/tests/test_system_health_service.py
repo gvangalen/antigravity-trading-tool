@@ -179,6 +179,13 @@ def test_workers_by_queue_maps_active_queue_names():
     assert result["execution_critical"] == []
 
 
+def test_celery_health_budget_exceeds_control_command_deadline():
+    # A fresh API process can need to import the Celery app before it can
+    # inspect a worker. Its outer health budget must not be shorter than the
+    # inspector's own control-command deadline.
+    assert SystemHealthService._celery_inspect_timeout_seconds > 3.0
+
+
 def test_check_celery_includes_rate_limit_summary(monkeypatch):
     monkeypatch.setattr(SystemHealthService, "_celery_ping", staticmethod(lambda: {"worker-a": {"ok": "pong"}}))
     monkeypatch.setattr(
