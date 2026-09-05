@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import os
+import re
 from dataclasses import dataclass, field
 from typing import Any, Callable, Mapping, Optional
 
@@ -49,23 +50,11 @@ class FinnV2StructuredOperationSelectorService:
                     "message": message,
                     "facts": dict(facts),
                     "conversation_state": self._safe_context(verified_context),
-                    "operation_manifest": [
-                        {
-                            "operation_id": contract.operation_id,
-                            "semantic_description": contract.semantic_description,
-                            "domain": contract.domain,
-                            "supported": contract.supported,
-                            "executable": bool(contract.execution_adapter),
-                            "required_entities": contract.required_entities,
-                            "required_conversation_state": contract.requires_verified_context,
-                            "required_inputs": contract.required_inputs,
-                            "canonical_action_polarity": contract.action_polarity.value,
-                            "positive_examples": contract.positive_examples,
-                            "hard_negative_examples": contract.negative_examples,
-                            "allowed_action_polarities": contract.allowed_action_polarities,
-                        }
-                        for contract in candidate_contracts
-                    ],
+                    # The provider needs semantic contract identity, not the
+                    # full runtime registry. Sending tool and policy metadata
+                    # here made every free-text turn pay for thousands of
+                    # irrelevant tokens before the worker could proceed.
+                    "operation_manifest": self._selector_manifest(candidate_contracts),
                 }),
                 system_role=(
                     "First extract a typed semantic frame, then select exactly one FINN operation from the supplied immutable manifest. "
@@ -199,6 +188,39 @@ class FinnV2StructuredOperationSelectorService:
     def _timeout_seconds() -> int:
         """Keep the provider deadline above normal Responses API latency."""
         return max(15, int(os.getenv("FINN_V2_SELECTOR_TIMEOUT_SECONDS", "30")))
+
+    @staticmethod
+    def _selector_manifest(candidate_contracts: tuple[OperationContract, ...]) -> list[dict[str, object]]:
+        """Project registry contracts into the minimal model-facing schema.
+
+        This is deliberately a projection, never a second registry or a
+        candidate filter: every offered contract remains selectable and the
+        immutable registry still validates the returned operation.
+        """
+        return [
+            {
+                "operation_id": contract.operation_id,
+                "description": FinnV2StructuredOperationSelectorService._selector_summary(
+                    contract.semantic_description
+                ),
+                "domain": contract.domain,
+                "supported": contract.supported,
+                "required_entities": list(contract.required_entities),
+                "required_inputs": list(contract.required_inputs),
+                "requires_verified_context": contract.requires_verified_context,
+                "canonical_action_polarity": contract.action_polarity.value,
+            }
+            for contract in candidate_contracts
+        ]
+
+    @staticmethod
+    def _selector_summary(description: str, *, maximum_characters: int = 160) -> str:
+        """Keep the first complete registry statement for model selection."""
+        sentence = re.split(r"(?<=[.!?])\s+", str(description or ""), maxsplit=1)[0].strip()
+        if len(sentence) <= maximum_characters:
+            return sentence
+        truncated = sentence[:maximum_characters].rsplit(" ", 1)[0].rstrip(" ,;:")
+        return f"{truncated}."
 
     @staticmethod
     def _schema(candidate_ids: tuple[str, ...]) -> dict[str, object]:

@@ -61,6 +61,35 @@ def test_selector_provider_timeout_has_a_safe_operational_floor(monkeypatch):
     assert FinnV2StructuredOperationSelectorService._timeout_seconds() == 15
 
 
+def test_selector_manifest_is_a_compact_projection_of_every_offered_contract():
+    registry = FinnV2OperationRegistry()
+    offered = registry.list()
+
+    manifest = FinnV2StructuredOperationSelectorService._selector_manifest(offered)
+
+    assert [entry["operation_id"] for entry in manifest] == [contract.operation_id for contract in offered]
+    assert set(manifest[0]) == {
+        "operation_id", "description", "domain", "supported", "required_entities",
+        "required_inputs", "requires_verified_context", "canonical_action_polarity",
+    }
+    assert all(len(str(entry["description"])) <= 161 for entry in manifest)
+    assert all("positive_examples" not in entry for entry in manifest)
+    assert all("execution_adapter" not in entry for entry in manifest)
+
+
+def test_selector_manifest_preserves_registry_semantics_without_runtime_metadata():
+    registry = FinnV2OperationRegistry()
+    contract = registry.get("activate_bot")
+
+    entry = FinnV2StructuredOperationSelectorService._selector_manifest((contract,))[0]
+
+    assert entry["operation_id"] == "activate_bot"
+    assert entry["domain"] == contract.domain
+    assert entry["supported"] is contract.supported
+    assert entry["required_inputs"] == list(contract.required_inputs)
+    assert entry["canonical_action_polarity"] == "activate"
+
+
 def test_selector_prompt_preserves_indicator_read_fact_as_a_contract_constraint():
     captured = {}
 
