@@ -28,6 +28,11 @@ FIRST_DASHBOARD_TASK_NAMES = [
     "backend.celery_task.onboarding_task.generate_first_dashboard_briefing",
 ]
 
+# Celery broadcasts inspection replies over the broker. Keep one bounded
+# response window that accommodates a warming worker without masking a down
+# control plane behind PM2 process state.
+CELERY_CONTROL_RESPONSE_TIMEOUT_SECONDS = 8.0
+
 
 @lru_cache(maxsize=1)
 def _health_celery_app():
@@ -89,7 +94,7 @@ class SystemHealthService:
     """Best-effort deep health checks for ops dashboards and deploy gates."""
 
     _last_queue_depths_snapshot: Optional[Dict[str, Any]] = None
-    # The worker control commands themselves use a three second deadline.
+    # The worker control commands use the bounded response window above.
     # This budget also covers the one-time Celery app import on a fresh API
     # process, so a healthy just-started control plane is not reported down.
     _celery_inspect_timeout_seconds: float = 15.0
@@ -454,22 +459,30 @@ class SystemHealthService:
 
     @staticmethod
     def _celery_ping() -> Optional[Dict[str, Any]]:
-        inspector = _health_celery_app().control.inspect(timeout=3.0)
+        inspector = _health_celery_app().control.inspect(
+            timeout=CELERY_CONTROL_RESPONSE_TIMEOUT_SECONDS
+        )
         return inspector.ping()
 
     @staticmethod
     def _celery_active_queues() -> Optional[Dict[str, Any]]:
-        inspector = _health_celery_app().control.inspect(timeout=3.0)
+        inspector = _health_celery_app().control.inspect(
+            timeout=CELERY_CONTROL_RESPONSE_TIMEOUT_SECONDS
+        )
         return inspector.active_queues()
 
     @staticmethod
     def _celery_stats() -> Optional[Dict[str, Any]]:
-        inspector = _health_celery_app().control.inspect(timeout=3.0)
+        inspector = _health_celery_app().control.inspect(
+            timeout=CELERY_CONTROL_RESPONSE_TIMEOUT_SECONDS
+        )
         return inspector.stats()
 
     @staticmethod
     def _celery_registered() -> Optional[Dict[str, Any]]:
-        inspector = _health_celery_app().control.inspect(timeout=3.0)
+        inspector = _health_celery_app().control.inspect(
+            timeout=CELERY_CONTROL_RESPONSE_TIMEOUT_SECONDS
+        )
         return inspector.registered()
 
     @staticmethod

@@ -2,6 +2,7 @@ import asyncio
 from datetime import date, datetime, timedelta, timezone
 
 from backend.services.system_health_service import (
+    CELERY_CONTROL_RESPONSE_TIMEOUT_SECONDS,
     SystemHealthService,
     _age_seconds,
     _as_utc,
@@ -183,7 +184,7 @@ def test_celery_health_budget_exceeds_control_command_deadline():
     # A fresh API process can need to import the Celery app before it can
     # inspect a worker. Its outer health budget must not be shorter than the
     # inspector's own control-command deadline.
-    assert SystemHealthService._celery_inspect_timeout_seconds > 3.0
+    assert SystemHealthService._celery_inspect_timeout_seconds > CELERY_CONTROL_RESPONSE_TIMEOUT_SECONDS
 
 
 def test_check_celery_includes_rate_limit_summary(monkeypatch):
