@@ -544,9 +544,9 @@ check_external() {
 
     local status
     if [ "$method" = "HEAD" ]; then
-      status="$(curl -sS -I -D "$header_dump" -o /dev/null -w '%{http_code}' "$url" || true)"
+      status="$(curl --connect-timeout 5 --max-time 20 -sS -I -D "$header_dump" -o /dev/null -w '%{http_code}' "$url" || true)"
     else
-      status="$(curl -sS -D "$header_dump" -o "$body_dump" -w '%{http_code}' "$url" || true)"
+      status="$(curl --connect-timeout 5 --max-time 20 -sS -D "$header_dump" -o "$body_dump" -w '%{http_code}' "$url" || true)"
     fi
 
     IFS=',' read -ra expected_statuses <<< "$expected_csv"

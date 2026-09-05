@@ -34,6 +34,7 @@ def test_deploy_env_supports_backend_only_auto_rollback_and_previous_markers():
     assert 'if [ "$(lower_bool "${AUTO_ROLLBACK_ON_FAILURE}")" = "true" ]; then' in source
     assert "./ops/deploy/rollback_env.sh $ENVIRONMENT $ROLLBACK_COMMIT" in source
     assert "external_smoke_failed=false" in source
+    assert source.count("curl --connect-timeout 5 --max-time 20") == 2
     assert 'if [ "$(lower_bool "${STRICT_EXTERNAL_SMOKE}")" = "true" ]; then' in source
     assert "External smoke failed" in source
     assert "rollout continues because STRICT_EXTERNAL_SMOKE=false" in source
