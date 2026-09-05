@@ -69,7 +69,9 @@ If internal is green but external is not:
 
 ## 3. Auth Preflight
 
-Use a fresh QA bearer token whenever possible.
+Use the canonical fixture and a fresh QA bearer token whenever possible. See
+[FINN QA Fixture Contract](finn-qa-fixture-contract.md) and
+[FINN Authenticated Runtime Gate](finn-authenticated-runtime-gate.md).
 
 Required checks:
 
@@ -79,9 +81,9 @@ Required checks:
 
 Preferred auth route:
 
-```bash
-PYTHONPATH=. python3 backend/scripts/qa_issue_finn_token.py --email henk@example.com
-```
+Issue a token only server-side, with the configured `FINN_QA_USER_ID`, through
+the canonical fixture contract. Do not put the token or fixture identity in a
+terminal transcript or artifact.
 
 Fallback route:
 

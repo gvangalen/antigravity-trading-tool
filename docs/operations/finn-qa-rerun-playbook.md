@@ -25,7 +25,8 @@ Before running a full rerun, confirm:
    - `/api/health` -> `200`
    - `/api/system/health` -> `401`
    - `/report` -> `200`
-2. you have a real QA user
+2. the canonical QA fixture is configured according to
+   [FINN QA Fixture Contract](finn-qa-fixture-contract.md)
 3. you use a fresh token or fresh cookie-login
 4. you avoid reusing an old browser assistant session unless that is the thing you are explicitly testing
 
@@ -33,30 +34,16 @@ Before running a full rerun, confirm:
 
 ### Preferred: issue a QA bearer token
 
-From `backend/trading-tool-backend`:
-
-```bash
-PYTHONPATH=. python3 backend/scripts/qa_issue_finn_token.py --email henk@example.com
-```
-
-This prints:
-
-- user metadata
-- `access_token`
-- `authorization_header`
-- expiry
-
-Export it for replay:
-
-```bash
-export FINN_QA_BEARER_TOKEN="<token>"
-```
+Use the bounded server-side flow in
+[FINN Authenticated Runtime Gate](finn-authenticated-runtime-gate.md). It mints
+for `FINN_QA_USER_ID` and keeps the token in process memory; never export it to
+a workstation or print the helper output.
 
 Why this is preferred:
 
 - no dependence on flaky interactive login
 - no cookie/browser uncertainty
-- ideal for deterministic FINN replay runs
+- deterministic identity and token handling for FINN replay runs
 
 ### Fallback: cookie-based login
 

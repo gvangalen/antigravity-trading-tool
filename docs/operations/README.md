@@ -22,6 +22,8 @@ Use these first when the question is operational, architectural, release-related
 - [platform-hardening-status.md](/Users/gvangalen/Documents/antigravity-trading-tool/docs/operations/platform-hardening-status.md)
 - [platform-security-architecture-retest-checklist.md](/Users/gvangalen/Documents/antigravity-trading-tool/docs/operations/platform-security-architecture-retest-checklist.md)
 - [staging-production-cutover-checklist.md](/Users/gvangalen/Documents/antigravity-trading-tool/docs/operations/staging-production-cutover-checklist.md)
+- [finn-qa-fixture-contract.md](/Users/gvangalen/Documents/antigravity-trading-tool/docs/operations/finn-qa-fixture-contract.md)
+- [finn-authenticated-runtime-gate.md](/Users/gvangalen/Documents/antigravity-trading-tool/docs/operations/finn-authenticated-runtime-gate.md)
 
 ## Active Reference Material
 
