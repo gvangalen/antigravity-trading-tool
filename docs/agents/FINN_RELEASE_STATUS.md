@@ -10,8 +10,8 @@ short; link artifacts rather than copying reports or chat history.
 | Phase | `BUILDING` |
 | Active goal | FINN V2 end-to-end authenticated latency repair |
 | Candidate branch | `codex/finn-runtime-contract-authority-foundation` |
-| Candidate SHA | `59311eb4b80b442ad67ed5791fca40a35ac5f917` |
-| Production SHA | `59311eb4b80b442ad67ed5791fca40a35ac5f917` |
+| Candidate SHA | `5031290738778601cdda5e67f34427ec275c1074` |
+| Production SHA | `inconsistent; release blocked` |
 | Release owner | Build |
 | Last updated | `2026-09-06` |
 
@@ -34,10 +34,10 @@ short; link artifacts rather than copying reports or chat history.
 | Gate | Status | Evidence |
 | --- | --- | --- |
 | Focused regressions | `PASS` | `29 passed` across runtime contract, smoke, provider, and persisted runtime gate tests. |
-| Full relevant suite | `PASS` | `1688 passed, 3 skipped` on `59311eb4`. |
-| CI | `PASS` | Run `33983528129`, exact candidate SHA. |
-| Deployment | `PASS` | Auto Deploy `33983632392`, exact candidate SHA. |
-| SHA identity | `PASS` | `github/main`, production checkout, public backend, and frontend reported `59311eb4`. |
+| Full relevant suite | `PASS` | `1690 passed, 3 skipped` on `50312907`. |
+| CI | `PASS` | Run `34020896976`, exact candidate SHA. |
+| Deployment | `FAIL` | Auto Deploy `34020982985` failed after its bounded retry cycle. |
+| SHA identity | `FAIL` | Public backend/frontend reported `50312907`, while the production checkout had rolled back to `a1b2f771`; release identity is inconsistent. |
 | Authenticated live smoke | `FAIL` | The generic capability run completed safely, but its external observation was `38.495 s`, exceeding the `15 s` maximum. |
 | Independent production QA | `NOT_STARTED` | User-controlled; Build did not start or contact QA. |
 
@@ -62,9 +62,12 @@ short; link artifacts rather than copying reports or chat history.
 
 ## Next Owner Action
 
-The active Build batch must pass the measured latency, terminalization, and
-transport gates on a newly deployed candidate. QA must not start before this
-status contains green, measured evidence for that candidate.
+The active Build batch is blocked on deployment orchestration: its two bounded
+attempts exited from `backend_stabilization` after the API started, while the
+running process markers and checkout diverged. Restore one atomic deployment
+state, then pass the measured latency, terminalization, and transport gates on
+that candidate. QA must not start before this status contains green, measured
+evidence for one consistent candidate.
 
 ## Allowed Phases
 
