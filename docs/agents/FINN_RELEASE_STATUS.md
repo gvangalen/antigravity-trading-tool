@@ -10,7 +10,7 @@ short; link artifacts rather than copying reports or chat history.
 | Phase | `BUILDING` |
 | Active goal | FINN V2 end-to-end authenticated latency repair |
 | Candidate branch | `codex/finn-runtime-contract-authority-foundation` |
-| Candidate SHA | `5413d6e0b963993bb92498029f51271206a171a6` |
+| Candidate SHA | `e672291b1e30ac09910c6b7a87a3b52f050a6d7d` |
 | Production SHA | `inconsistent; release blocked` |
 | Release owner | Build |
 | Last updated | `2026-09-06` |
