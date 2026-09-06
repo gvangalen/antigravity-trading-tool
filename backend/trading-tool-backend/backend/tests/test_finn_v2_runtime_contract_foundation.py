@@ -70,6 +70,63 @@ def test_runtime_repository_rejects_identity_mutation_and_replayed_initial_inten
     assert "if current_state.get(\"initial_operation_id\") is not None:" in source
 
 
+def test_follow_up_parent_contract_lookup_excludes_the_current_run():
+    """A newly created child contract must never hide its conversation parent."""
+    repository = (ROOT / "infrastructure" / "repositories" / "finn_v2_runtime_contract_repository.py").read_text(encoding="utf-8")
+    orchestrator = (ROOT / "services" / "finn_v2_orchestrator_service.py").read_text(encoding="utf-8")
+
+    assert "exclude_run_id" in repository
+    assert "exclude_run_id=run_id" in orchestrator
+
+
+def test_continuation_context_uses_the_persisted_parent_contract_state():
+    """A short follow-up must receive released lineage and its active flow."""
+    from backend.services.finn_v2_orchestrator_service import FinnV2OrchestratorService
+
+    expected_lineage = {
+        "last_verified_context": {
+            "operation_id": "evaluate_plan",
+            "resolved_entities": {"asset": "ETH"},
+            "response": "De planbeoordeling is vrijgegeven.",
+            "evidence_refs": ["evidence-plan-1"],
+        }
+    }
+    expected_flow = {
+        "flow_id": "flow-setup-1",
+        "operation_id": "create_setup",
+        "target_asset": "ETH",
+        "missing_required_inputs": ["timeframe"],
+    }
+
+    class _Conversations:
+        async def get_context(self, **_kwargs):
+            return {"legacy_projection": True, "last_verified_context": {"asset": "STALE"}}
+
+    class _Contracts:
+        async def get_latest_for_conversation(self, **kwargs):
+            assert kwargs["exclude_run_id"] == "child-run"
+            return SimpleNamespace(
+                run_id="parent-run",
+                state_json={"lineage_state": expected_lineage, "guided_state": expected_flow},
+            )
+
+    service = object.__new__(FinnV2OrchestratorService)
+    service.conversations = _Conversations()
+    service.runtime_contracts = _Contracts()
+
+    context = asyncio.run(
+        service._load_continuation_context(
+            conversation_id="conversation-1",
+            user_id=7,
+            run_id="child-run",
+        )
+    )
+
+    assert context["legacy_projection"] is True
+    assert context["last_verified_context"] == expected_lineage["last_verified_context"]
+    assert context["active_guided_operation"] == expected_flow
+
+
 def test_terminal_projection_uses_the_same_immutable_contract_identity():
     state = record_initial_intent(
         new_runtime_contract_state(run=_run(), contract_id="contract-run-contract-1"),

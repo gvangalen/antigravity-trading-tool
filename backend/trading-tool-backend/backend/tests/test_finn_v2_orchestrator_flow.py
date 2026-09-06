@@ -566,6 +566,57 @@ def test_verified_proposal_preserves_financial_lineage_and_marks_guided_state_pr
     assert context["active_guided_operation"]["open_proposal_id"] == "proposal-setup"
 
 
+def test_durable_lineage_uses_the_contract_target_instead_of_a_late_tool_selector():
+    service = FinnV2OrchestratorService(session=object())
+    service.conversations = _FakeConversationRepo()
+    service.runtime_contracts = SimpleNamespace(
+        get_for_run=lambda **_kwargs: asyncio.sleep(
+            0,
+            result=SimpleNamespace(
+                contract_id="contract-eth",
+                revision=2,
+                state_json={
+                    "initial_operation_id": "evaluate_plan",
+                    "requested_mode": "EVALUATE",
+                    "canonical_target": "ETH",
+                    "target_source": "explicit_current_turn",
+                },
+            ),
+        )
+    )
+    result = SimpleNamespace(
+        run_id="run-contract-target",
+        analysis=SimpleNamespace(
+            explicit_asset="AAPL", explicit_setup_id=None,
+            explicit_strategy_id=None, explicit_bot_id=None,
+            interaction_mode="EVALUATE",
+            request_plan=SimpleNamespace(
+                operation_id="evaluate_plan", operation_contract_version="contract-v1",
+                operation_state={}, required_information_scopes=["active_plan"], primary_domains=["workspace"],
+            ),
+        ),
+        tool_plan=SimpleNamespace(entity_selectors={"asset": "AAPL"}),
+    )
+    response = SimpleNamespace(
+        verifier_status="passed", mode="EVALUATE", run_id=result.run_id,
+        verified_response_id="verified-contract-target", evidence_refs_used=["E1"],
+        main_observation="ETH plan is available.", direct_answer="ETH plan is available.",
+        reasoning_provenance={}, uncertainty_codes=[], proposal_id=None,
+    )
+
+    asyncio.run(
+        service._update_conversation_context(
+            conversation_id="conversation-contract-target",
+            user_id=7,
+            existing_context={},
+            result=result,
+            verified_response=response,
+        )
+    )
+
+    assert service.conversations.updated["context"]["last_verified_context"]["resolved_entities"]["asset"] == "ETH"
+
+
 def test_cancelled_guided_operation_is_removed_without_erasing_verified_context():
     service = FinnV2OrchestratorService(session=object())
     service.conversations = _FakeConversationRepo()

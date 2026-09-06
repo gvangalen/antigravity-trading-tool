@@ -51,14 +51,20 @@ class FinnV2RuntimeContractRepository(FinnV2RepositoryTransactionMixin):
         return result.scalars().first()
 
     async def get_latest_for_conversation(
-        self, *, conversation_id: str, user_id: int
+        self, *, conversation_id: str, user_id: int, exclude_run_id: Optional[str] = None
     ) -> Optional[FinnV2RuntimeContract]:
+        conditions = [
+            FinnV2RuntimeContract.conversation_id == conversation_id,
+            FinnV2RuntimeContract.user_id == user_id,
+        ]
+        if exclude_run_id:
+            # A child contract is persisted before orchestration starts. It is
+            # therefore always the newest row and must not hide the parent
+            # lineage/guided state needed for this continuation turn.
+            conditions.append(FinnV2RuntimeContract.run_id != exclude_run_id)
         result = await self.session.execute(
             select(FinnV2RuntimeContract)
-            .where(
-                FinnV2RuntimeContract.conversation_id == conversation_id,
-                FinnV2RuntimeContract.user_id == user_id,
-            )
+            .where(*conditions)
             .order_by(desc(FinnV2RuntimeContract.updated_at))
             .limit(1)
         )

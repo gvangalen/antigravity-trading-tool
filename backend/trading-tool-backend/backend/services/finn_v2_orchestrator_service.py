@@ -90,25 +90,11 @@ class FinnV2OrchestratorService:
         )
 
         conversation_id = getattr(run, "conversation_id", None)
-        conversation_context = {}
-        if conversation_id:
-            conversation_context = await self.conversations.get_context(
-                conversation_id=conversation_id,
-                user_id=user_id,
-            )
-            if hasattr(self.session, "execute"):
-                previous_contract = await self.runtime_contracts.get_latest_for_conversation(
-                    conversation_id=conversation_id,
-                    user_id=user_id,
-                )
-                if previous_contract is not None and previous_contract.run_id != run_id:
-                    previous_state = dict(previous_contract.state_json or {})
-                    # New runs hydrate continuation inputs from the previous
-                    # persisted contract, not from a mutable JSON projection.
-                    conversation_context.update(dict(previous_state.get("lineage_state") or {}))
-                    guided_state = dict(previous_state.get("guided_state") or {})
-                    if guided_state:
-                        conversation_context["active_guided_operation"] = guided_state
+        conversation_context = await self._load_continuation_context(
+            conversation_id=conversation_id,
+            user_id=user_id,
+            run_id=run_id,
+        )
         await self._record_phase_timestamp(run_id=run_id, phase="context_loaded")
         # Selector quota is user-scoped. Without this context the OpenAI
         # boundary groups every lifecycle run into an unscoped global bucket,
@@ -446,6 +432,50 @@ class FinnV2OrchestratorService:
         if recorder is not None:
             await recorder(run_id=run_id, phase=phase)
 
+    async def _load_continuation_context(
+        self,
+        *,
+        conversation_id: Optional[str],
+        user_id: int,
+        run_id: str,
+    ) -> dict:
+        """Load the parent contract state before selector classification.
+
+        The new child contract already exists when the worker starts.  It must
+        be excluded from the lookup or it would mask the last released
+        lineage and active guided flow for this continuation turn.
+        """
+        if not conversation_id:
+            return {}
+        context = dict(
+            await self.conversations.get_context(
+                conversation_id=conversation_id,
+                user_id=user_id,
+            )
+            or {}
+        )
+        get_latest = getattr(self.runtime_contracts, "get_latest_for_conversation", None)
+        if not callable(get_latest):
+            # Historical unit doubles do not implement contract continuation.
+            # Production repositories always do; this retains compatibility
+            # without creating a legacy production source of truth.
+            return context
+        previous_contract = await get_latest(
+            conversation_id=conversation_id,
+            user_id=user_id,
+            exclude_run_id=run_id,
+        )
+        if previous_contract is None:
+            return context
+        previous_state = dict(previous_contract.state_json or {})
+        # Contract state is authoritative for new runs; context_json remains
+        # only a compatible delivery projection for historical consumers.
+        context.update(dict(previous_state.get("lineage_state") or {}))
+        guided_state = dict(previous_state.get("guided_state") or {})
+        if guided_state:
+            context["active_guided_operation"] = guided_state
+        return context
+
     async def _persist_result(self, result) -> None:
         existing = await self.results.get_for_run_version(
             run_id=result.run_id,
@@ -490,16 +520,28 @@ class FinnV2OrchestratorService:
         context = dict(existing_context or {})
         from backend.services.finn_v2_operation_state_service import FinnV2OperationStateService
 
+        contract_view = await self._contract_execution_view(
+            run_id=getattr(result, "run_id", None) or getattr(verified_response, "run_id", "")
+        )
         had_canonical_state = context.get("conversation_state_version") == FinnV2OperationStateService.CONTEXT_STATE_VERSION
         context["conversation_state_version"] = FinnV2OperationStateService.CONTEXT_STATE_VERSION
         verified_context = dict(context.get("last_verified_context") or {})
-        resolved_asset = selectors.get("asset") or getattr(result.analysis, "explicit_asset", None) or verified_context.get("resolved_entities", {}).get("asset")
+        # The immutable contract target has already won the explicit-turn,
+        # guided-flow, lineage and workspace precedence decision. Never let a
+        # later tool selector or workspace projection replace it in durable
+        # continuation state.
+        resolved_asset = (
+            contract_view.get("target_asset")
+            or selectors.get("asset")
+            or getattr(result.analysis, "explicit_asset", None)
+            or verified_context.get("resolved_entities", {}).get("asset")
+        )
         resolved_setup_id = selectors.get("setup_id") or getattr(result.analysis, "explicit_setup_id", None) or verified_context.get("resolved_entities", {}).get("setup_id")
         resolved_strategy_id = selectors.get("strategy_id") or getattr(result.analysis, "explicit_strategy_id", None) or verified_context.get("resolved_entities", {}).get("strategy_id")
         resolved_bot_id = selectors.get("bot_id") or getattr(result.analysis, "explicit_bot_id", None) or verified_context.get("resolved_entities", {}).get("bot_id")
         operation_state = dict(getattr(request_plan, "operation_state", {}) or {})
         response_mode = getattr(verified_response, "mode", None) or result.analysis.interaction_mode
-        operation_id = getattr(request_plan, "operation_id", None)
+        operation_id = contract_view.get("operation_id") or getattr(request_plan, "operation_id", None)
         # A deterministic unavailable/clarification can be verifier-valid as a
         # delivery, but it is not a reusable factual conclusion for a later
         # turn.  Preserve the last usable grounded context instead.
@@ -673,6 +715,16 @@ class FinnV2OrchestratorService:
                 },
                 guided_state=dict(context.get("active_guided_operation") or {}),
             )
+
+    async def _contract_execution_view(self, *, run_id: str) -> dict:
+        """Return authoritative selection fields when a persisted contract exists."""
+        get_for_run = getattr(self.runtime_contracts, "get_for_run", None)
+        if not callable(get_for_run):
+            return {}
+        row = await get_for_run(run_id=run_id)
+        if row is None:
+            return {}
+        return FinnV2RuntimeContractRepository.execution_view(row)
 
     @staticmethod
     def _degraded_terminal_status(*, verified_response, is_contract_limited: bool) -> str:
