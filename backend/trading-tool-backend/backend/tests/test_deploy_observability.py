@@ -122,6 +122,9 @@ def test_release_identity_is_written_before_pm2_and_loaded_by_every_process() ->
     ecosystem_source = (REPO_ROOT / "ops" / "deploy" / "ecosystem.shared.js").read_text(encoding="utf-8")
 
     assert 'metadata_path="ops/deploy/.release_metadata.env"' in deploy_source
+    assert 'local temporary_path="\\${metadata_path}.tmp.\\$\\$"' in deploy_source
+    assert '> \\"\\$temporary_path\\"' in deploy_source
+    assert 'mv -f \\"\\$temporary_path\\" \\"\\$metadata_path\\"' in deploy_source
     assert deploy_source.index("write_release_metadata") < deploy_source.index("pm2_start_app()")
     assert 'metadata_path="ops/deploy/.release_metadata.env"' in rollback_source
     assert "function loadReleaseMetadata()" in ecosystem_source
