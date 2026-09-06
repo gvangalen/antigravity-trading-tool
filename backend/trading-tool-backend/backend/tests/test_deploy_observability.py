@@ -115,7 +115,7 @@ def test_deploy_script_uses_fixed_step_ids_and_preserves_rollback() -> None:
     assert '\\"\\$DEPLOY_STEP_ID\\"' in source
     assert '\\"\\$temporary_phase_path\\"' in source
     assert 'Unable to persist local deploy phase' in source
-    assert 'worker_log_path="\\$HOME/.pm2/logs/celery-worker-finn-interactive-out.log"' in source
+    assert 'worker_log_path=/home/ubuntu/.pm2/logs/celery-worker-finn-interactive-out.log' in source
     assert 'tail -n +\\$((start_line + 1))' in source
     assert "grep -Fq 'finn_interactive'" in source
     assert "grep -Fq ' ready.'" in source

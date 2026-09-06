@@ -482,11 +482,9 @@ PY
   wait_for_interactive_worker_ready() {
     local log_path="\$1"
     local start_line="\$2"
-    local worker_output
     for attempt in \$(seq 1 \"\$INTERACTIVE_WORKER_READY_ATTEMPTS\"); do
-      worker_output=\"\$(tail -n +\$((start_line + 1)) \\\"\$log_path\\\" 2>/dev/null || true)\"
-      if printf '%s' \\\"\$worker_output\\\" | grep -Fq 'finn_interactive' \\
-        && printf '%s' \\\"\$worker_output\\\" | grep -Fq ' ready.'; then
+      if tail -n +\$((start_line + 1)) \$log_path 2>/dev/null | grep -Fq 'finn_interactive' \\
+        && tail -n +\$((start_line + 1)) \$log_path 2>/dev/null | grep -Fq ' ready.'; then
         echo \"✅ FINN interactive worker is registered for finn_interactive.\"
         return 0
       fi
@@ -498,17 +496,17 @@ PY
   }
 
   start_interactive_worker_first() {
-    local worker_log_path="\$HOME/.pm2/logs/celery-worker-finn-interactive-out.log"
+    local worker_log_path=/home/ubuntu/.pm2/logs/celery-worker-finn-interactive-out.log
     local worker_log_start_line=0
     if [[ ",\$AUX_PM2_APPS," != *,celery-worker-finn-interactive,* ]]; then
       return 0
     fi
     if [ -f "\$worker_log_path" ]; then
-      worker_log_start_line=\"\$(wc -l < \\\"\$worker_log_path\\\")\"
+      worker_log_start_line=\$(wc -l < \$worker_log_path)
     fi
     DEPLOY_STEP_ID='pm2_finn_interactive'
     pm2_start_app 'celery-worker-finn-interactive'
-    wait_for_interactive_worker_ready \\\"\$worker_log_path\\\" \\\"\$worker_log_start_line\\\"
+    wait_for_interactive_worker_ready \$worker_log_path \$worker_log_start_line
   }
 
   start_remaining_auxiliary_apps() {
