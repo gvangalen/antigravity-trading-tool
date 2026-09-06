@@ -96,3 +96,31 @@ def test_warmup_database_probe_is_read_only(monkeypatch):
 
     assert asyncio.run(finn_tasks._warm_finn_v2_interactive_worker()) == "ready"
     assert statements == ["SELECT 1"]
+
+
+def test_interactive_task_lazily_keeps_one_loop_and_pool_between_warmup_and_run(monkeypatch):
+    events = []
+
+    class Engine:
+        async def dispose(self):
+            events.append("dispose")
+
+    async def job():
+        events.append("job")
+        return "done"
+
+    previous_loop = finn_tasks._interactive_worker_loop
+    finn_tasks._interactive_worker_loop = None
+    monkeypatch.setenv("TRADAMIND_BUILD_SERVICE", "celery-worker-finn-interactive")
+    monkeypatch.setattr(finn_tasks, "engine", Engine())
+    try:
+        assert finn_tasks._run_async(job()) == "done"
+        first_loop = finn_tasks._interactive_worker_loop
+        assert first_loop is not None and not first_loop.is_closed()
+        assert finn_tasks._run_async(job()) == "done"
+        assert finn_tasks._interactive_worker_loop is first_loop
+        assert events == ["job", "job"]
+    finally:
+        if finn_tasks._interactive_worker_loop is not None:
+            finn_tasks._interactive_worker_loop.close()
+        finn_tasks._interactive_worker_loop = previous_loop

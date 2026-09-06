@@ -50,25 +50,41 @@ async def _run_task_with_local_resources(coroutine):
             await engine.dispose()
 
 
+def _ensure_interactive_worker_loop() -> asyncio.AbstractEventLoop | None:
+    """Return the durable loop for the dedicated interactive worker.
+
+    Celery's prefork signal normally constructs this loop.  The task boundary
+    also creates it lazily because task-module import order is not a lifecycle
+    guarantee: without this fallback a warmup can close the pool and make the
+    first user dispatch race the claim watchdog.
+    """
+    global _interactive_worker_loop
+    if os.getenv("TRADAMIND_BUILD_SERVICE") != "celery-worker-finn-interactive":
+        return None
+    if _interactive_worker_loop is None or _interactive_worker_loop.is_closed():
+        _interactive_worker_loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(_interactive_worker_loop)
+        logger.info("FINN interactive worker event loop initialized")
+    return _interactive_worker_loop
+
+
 def _run_async(coroutine):
-    """Run one Celery task with a fresh loop and task-local async resources."""
+    """Run one Celery task on its worker-owned async resource boundary."""
     # ``worker_process_init`` clears inherited pools once per prefork child.
     # Repeating a synchronous pool disposal immediately before every task can
     # delay the worker's first dispatch claim long enough for recovery to
     # terminalize an otherwise delivered interactive run.  The async engine is
     # still disposed at the task boundary below, before this fresh loop closes.
-    if _interactive_worker_loop is not None:
-        return _interactive_worker_loop.run_until_complete(_run_task_with_local_resources(coroutine))
+    loop = _ensure_interactive_worker_loop()
+    if loop is not None:
+        return loop.run_until_complete(_run_task_with_local_resources(coroutine))
     return asyncio.run(_run_task_with_local_resources(coroutine))
 
 
 @worker_process_init.connect
 def initialize_interactive_worker_loop(**_kwargs):
     """Keep asyncpg and HTTP transports on one valid interactive-worker loop."""
-    global _interactive_worker_loop
-    if os.getenv("TRADAMIND_BUILD_SERVICE") == "celery-worker-finn-interactive":
-        _interactive_worker_loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(_interactive_worker_loop)
+    _ensure_interactive_worker_loop()
 
 
 @worker_process_shutdown.connect
