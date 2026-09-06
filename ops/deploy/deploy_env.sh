@@ -179,12 +179,16 @@ if ! printf '%s\n' "$DEPLOY_GIT_TOKEN" | timeout --foreground "${REMOTE_DEPLOY_C
   advance_deploy_step() {
     DEPLOY_STEP_ID=\"\$1\"
     local phase_path="$DEPLOY_STATE_DIR/last_deploy_phase.json"
-    local temporary_phase_path="${phase_path}.tmp.$$"
-    mkdir -p "$DEPLOY_STATE_DIR"
-    printf '{"release_sha":"%s","step_id":"%s","timestamp_utc":"%s"}\n' \
-      '$TARGET_COMMIT_FULL' "$DEPLOY_STEP_ID" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-      > "$temporary_phase_path"
-    mv -f "$temporary_phase_path" "$phase_path"
+    local temporary_phase_path="\${phase_path}.tmp.\$\$"
+    if ! {
+      mkdir -p "$DEPLOY_STATE_DIR"
+      printf '{"release_sha":"%s","step_id":"%s","timestamp_utc":"%s"}\n' \
+        '$TARGET_COMMIT_FULL' \"\$DEPLOY_STEP_ID\" \"\$(date -u +%Y-%m-%dT%H:%M:%SZ)\" \
+        > \"\$temporary_phase_path\"
+      mv -f \"\$temporary_phase_path\" \"\$phase_path\"
+    }; then
+      echo "⚠️ Unable to persist local deploy phase \$DEPLOY_STEP_ID." >&2
+    fi
     # Diagnostics must never block a release. The EXIT trap still records a
     # normal failure when the status writer is available.
     record_deploy_status \"\$DEPLOY_STEP_ID\" running 0 || \

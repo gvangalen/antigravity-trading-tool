@@ -12,6 +12,7 @@ dump.sql
 
 # Deployment-owned build identity, written atomically on the target host.
 ops/deploy/.release_metadata.env
+ops/deploy/*/last_deploy_phase.json
 
 # Celery Beat runtime state
 celerybeat-schedule
