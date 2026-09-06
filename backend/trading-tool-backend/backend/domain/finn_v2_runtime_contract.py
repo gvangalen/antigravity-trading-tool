@@ -197,6 +197,11 @@ def new_runtime_contract_state(*, run: Any, contract_id: str) -> Dict[str, Any]:
         "conversation_reference": None,
         "conversation_reference_kind": None,
         "selector_provenance": {},
+        # The registry remains the only schema authority. The contract stores
+        # only its resolved identity and user-supplied values for this run.
+        "action_contract": {},
+        "supplied_inputs": {},
+        "missing_inputs": [],
         "lineage_state": {},
         "guided_state": {},
         "final_operation_id": None,
@@ -230,8 +235,9 @@ def record_selection(
     conversation_reference: Optional[str],
     conversation_reference_kind: Optional[str],
     selector_provenance: Optional[Dict[str, Any]] = None,
+    supplied_inputs: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
-    """Persist the canonical target and selector provenance before tools run."""
+    """Persist selection plus contract-derived inputs before tools run."""
     state = dict(state)
     for field, value in {
         "canonical_target": canonical_target,
@@ -247,6 +253,30 @@ def record_selection(
     state["conversation_reference"] = conversation_reference
     state["conversation_reference_kind"] = conversation_reference_kind
     state["selector_provenance"] = dict(selector_provenance or {})
+    operation_id = str(state.get("initial_operation_id") or "")
+    if not operation_id:
+        raise RuntimeContractImmutableFieldError("runtime_contract_initial_intent_missing")
+    # Do not duplicate action schemas in runtime state. The registry defines
+    # required fields; the runtime records only values supplied for this run
+    # and the deterministic difference the next turn must fill.
+    from backend.domain.finn_v2_operation_registry import FinnV2OperationRegistry
+
+    action_contract = FinnV2OperationRegistry().get(operation_id)
+    supplied = {
+        field: value
+        for field, value in dict(supplied_inputs or {}).items()
+        if field in action_contract.required_inputs
+        and value is not None
+        and (not isinstance(value, str) or bool(value.strip()))
+    }
+    state["action_contract"] = {
+        "operation_id": action_contract.operation_id,
+        "version": action_contract.version,
+    }
+    state["supplied_inputs"] = supplied
+    state["missing_inputs"] = [
+        field for field in action_contract.required_inputs if field not in supplied
+    ]
     return state
 
 

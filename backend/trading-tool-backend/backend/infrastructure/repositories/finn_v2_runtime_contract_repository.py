@@ -90,6 +90,9 @@ class FinnV2RuntimeContractRepository(FinnV2RepositoryTransactionMixin):
             "conversation_reference": state.get("conversation_reference"),
             "conversation_reference_kind": state.get("conversation_reference_kind"),
             "selector_provenance": dict(state.get("selector_provenance") or {}),
+            "action_contract": dict(state.get("action_contract") or {}),
+            "supplied_inputs": dict(state.get("supplied_inputs") or {}),
+            "missing_inputs": list(state.get("missing_inputs") or []),
         }
 
     async def record_initial_intent(self, *, run_id: str, operation_id: str, requested_mode: str) -> FinnV2RuntimeContract:
@@ -114,6 +117,7 @@ class FinnV2RuntimeContractRepository(FinnV2RepositoryTransactionMixin):
         conversation_reference: Optional[str],
         conversation_reference_kind: Optional[str],
         selector_provenance: Optional[Dict[str, Any]] = None,
+        supplied_inputs: Optional[Dict[str, Any]] = None,
     ) -> FinnV2RuntimeContract:
         """Persist the target selection before tool planning or policy reads it."""
         row = await self._required_for_update(run_id)
@@ -126,6 +130,7 @@ class FinnV2RuntimeContractRepository(FinnV2RepositoryTransactionMixin):
             conversation_reference=conversation_reference,
             conversation_reference_kind=conversation_reference_kind,
             selector_provenance=selector_provenance,
+            supplied_inputs=supplied_inputs,
         )
         if next_state == (row.state_json or {}):
             return row

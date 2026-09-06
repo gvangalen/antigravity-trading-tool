@@ -146,6 +146,10 @@ class FinnV2OrchestratorService:
                 "confidence": getattr(request_plan, "selector_confidence", None),
                 "candidate_operation_ids": list(getattr(request_plan, "candidate_operation_ids", []) or []),
             },
+            supplied_inputs={
+                **dict(getattr(request_plan, "referenced_entities", {}) or {}),
+                **dict(getattr(request_plan, "operation_state", {}).get("collected_inputs", {}) or {}),
+            },
         )
         await self._commit_persistence_boundary(stage="selector_persisted")
         await self._record_phase_timestamp(run_id=run_id, phase="selection_persisted")
@@ -166,6 +170,7 @@ class FinnV2OrchestratorService:
                 "referenced_asset": execution_view["referenced_asset"],
                 "conversation_reference": execution_view["conversation_reference"],
                 "conversation_reference_kind": execution_view["conversation_reference_kind"],
+                "missing_information": execution_view["missing_inputs"],
             }
         )
         analysis = analysis.copy(update={"request_plan": request_plan, "interaction_mode": execution_view["interaction_mode"]})

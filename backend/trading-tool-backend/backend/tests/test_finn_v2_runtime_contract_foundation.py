@@ -16,6 +16,7 @@ from backend.domain.finn_v2_runtime_contract import (
     record_selection,
     terminal_projection,
 )
+from backend.domain.finn_v2_operation_registry import FinnV2OperationRegistry
 from backend.services.finn_v2_run_service import FinnV2RunService
 from backend.services.finn_v2_flag_service import FinnV2FlagService
 
@@ -229,6 +230,33 @@ def test_explicit_canonical_target_cannot_be_replaced_after_selection():
             conversation_reference=None,
             conversation_reference_kind=None,
         )
+
+
+def test_runtime_contract_derives_guided_inputs_from_the_canonical_action_contract():
+    state = record_initial_intent(
+        new_runtime_contract_state(run=_run(), contract_id="contract-run-contract-1"),
+        operation_id="create_setup",
+        requested_mode="CREATE_PROPOSAL",
+    )
+
+    selected = record_selection(
+        state,
+        canonical_target="ETH",
+        target_source="explicit_current_turn",
+        original_target_text="Ethereum",
+        target_type="asset",
+        conversation_reference=None,
+        conversation_reference_kind=None,
+        # Extra fields must not become a parallel action schema in state.
+        supplied_inputs={"symbol": "ETH", "timeframe": "4h", "unknown": "discard"},
+    )
+
+    assert selected["action_contract"] == {
+        "operation_id": "create_setup",
+        "version": FinnV2OperationRegistry.VERSION,
+    }
+    assert selected["supplied_inputs"] == {"symbol": "ETH", "timeframe": "4h"}
+    assert selected["missing_inputs"] == ["setup_type", "name"]
 
 
 def test_complete_run_never_creates_or_reconstructs_a_runtime_contract():

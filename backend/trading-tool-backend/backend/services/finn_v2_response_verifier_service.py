@@ -155,6 +155,7 @@ class FinnV2ResponseVerifierService:
                     "referenced_asset": execution_view["referenced_asset"],
                     "conversation_reference": execution_view["conversation_reference"],
                     "conversation_reference_kind": execution_view["conversation_reference_kind"],
+                    "missing_information": execution_view["missing_inputs"],
                 }
             )
             analysis = orchestrator_result.analysis.copy(

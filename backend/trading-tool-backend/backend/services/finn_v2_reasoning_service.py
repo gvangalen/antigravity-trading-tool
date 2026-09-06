@@ -121,6 +121,7 @@ class FinnV2ReasoningService:
                 "referenced_asset": execution_view["referenced_asset"],
                 "conversation_reference": execution_view["conversation_reference"],
                 "conversation_reference_kind": execution_view["conversation_reference_kind"],
+                "missing_information": execution_view["missing_inputs"],
             }
             persisted_tool_plan["request_plan"] = persisted_request_plan
         selectors = persisted_tool_plan.get("entity_selectors") or {}
