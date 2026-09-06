@@ -10,7 +10,7 @@ short; link artifacts rather than copying reports or chat history.
 | Phase | `BUILDING` |
 | Active goal | FINN V2 content and state repair batch |
 | Candidate branch | `codex/finn-runtime-contract-authority-foundation` |
-| Candidate SHA | `e871f5e0e2077799f8e866915e3ecf42b2dc7775` |
+| Candidate SHA | `f9b5d9f6d8656e365a20af3728ae4a4e459c4c7d` |
 | Production SHA | `dbd5d50438ae199549cb52ead942d09b475fda44` |
 | Release owner | Build |
 | Last updated | `2026-09-06` |
@@ -33,14 +33,15 @@ short; link artifacts rather than copying reports or chat history.
 
 | Gate | Status | Evidence |
 | --- | --- | --- |
-| Focused regressions | `PASS` | `130 passed` across orchestrator, runtime-contract, classifier, resolver, and proposal coverage. |
-| Full relevant suite | `PASS` | `1708 passed, 3 skipped` on the current candidate worktree (product code `e871f5e0`). |
-| Real-provider selector canary | `PASS` | Isolated candidate worktree: structured response `completed`, parsed, `explain_financial_concept`, concept `RSI`. |
-| Real-provider development selector set | `PASS` | `18/18`; all scored dimensions 100%; zero provider/schema/parse/validation/timeout failures; p95 `3.848 s`. |
-| Real-provider regression selector set | `PASS` | `102/102`; all scored dimensions 100%; zero provider/schema/parse/validation/timeout failures; p95 `3.366 s`. |
-| CI | `PASS` | Run `34045566111`, exact candidate SHA. |
-| Deployment | `PASS` | Auto Deploy `34045675870`, exact candidate SHA. |
-| SHA identity | `PASS` | Production checkout, release marker, public backend, and frontend all reported `dbd5d50438ae199549cb52ead942d09b475fda44`. |
+| Focused runtime/content regressions | `PASS` | `272 passed` across lineage, guided state, operation selection, executor, verifier, and terminal transport coverage. |
+| Registry and selector-contract validation | `PASS` | Registry validator: `96` cases; contract/selector tests: `56 passed`. |
+| Full relevant suite | `PASS` | `1708 passed, 3 skipped` on `f9b5d9f6`. |
+| Real-provider selector canary | `PASS` | Isolated product-code worktree `e871f5e0`: structured response `completed`, parsed, `explain_financial_concept`, concept `RSI`. `f9b5d9f6` adds test/status evidence only. |
+| Real-provider development selector set | `PASS` | Isolated product-code worktree `e871f5e0`: `18/18`; all scored dimensions 100%; zero provider/schema/parse/validation/timeout failures; p95 `3.848 s`. |
+| Real-provider regression selector set | `PASS` | Isolated product-code worktree `e871f5e0`: `102/102`; all scored dimensions 100%; zero provider/schema/parse/validation/timeout failures; p95 `3.366 s`. |
+| CI | `NOT_RUN` | No CI has been requested for candidate `f9b5d9f6`; the recorded green CI belongs to production SHA `dbd5d504`. |
+| Deployment | `NOT_RUN` | This content batch explicitly forbids deployment. |
+| SHA identity | `PASS` | The currently live release remains `dbd5d50438ae199549cb52ead942d09b475fda44`; no candidate identity claim is made. |
 | Authenticated functional Build smoke | `PASS` | Run `finn-v2-run-650a9df244ba48cf89f76c3e9a447818` completed `capability` with exactly one dispatch and one attempt; typed terminal projection matched the selected operation. |
 | Latency observation | `RECORDED` | One functional smoke took about `29 s` from persisted creation to terminal persistence. A separate warm performance matrix is required after the content candidate is locally green. |
 | Independent production QA | `NOT_STARTED` | User-controlled; Build did not start or contact QA. |
@@ -69,6 +70,9 @@ short; link artifacts rather than copying reports or chat history.
   runtime contract instead of selecting the just-created child contract. Its
   durable lineage also uses the immutable contract target rather than a late
   tool or workspace projection.
+- The candidate remains a local Build artifact. It has no current CI,
+  deployment, live smoke, or independent-QA evidence and must not be treated
+  as release-ready from its local results alone.
 - Build must still run the separate warm runtime performance matrix and the
   non-sealed authenticated runtime coverage before any deployment or QA handoff.
 - Independent QA remains `NOT_STARTED` and is not authorized by this status.
