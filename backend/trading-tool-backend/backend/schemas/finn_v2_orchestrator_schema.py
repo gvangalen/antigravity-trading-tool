@@ -72,7 +72,7 @@ class RequestPlan(BaseModel):
     # The id identifies the record; this enum explains what kind of safe
     # lineage it is. Consumers must not infer that from an opaque id.
     conversation_reference_kind: Optional[Literal[
-        "previous_verified_response", "previous_degraded_response", "previous_safe_terminal",
+        "previous_verified_response", "previous_released_response", "previous_degraded_response", "previous_safe_terminal",
     ]] = None
     referenced_entities: Dict[str, object] = Field(default_factory=dict)
     context_asset: Optional[str] = None

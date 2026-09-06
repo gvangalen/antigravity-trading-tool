@@ -560,6 +560,33 @@ class FinnV2OrchestratorService:
             and bool(getattr(verified_response, "evidence_refs_used", []) or [])
             and (not requires_lineage_proof or provenance.get("lineage_eligible") is True)
         )
+        is_released = (
+            getattr(verified_response, "verifier_status", None) in {"passed", "repaired"}
+            and response_mode in {"READ", "EVALUATE"}
+            and operation_id not in {"off_topic", "unsupported_financial_operation"}
+            and bool(getattr(verified_response, "direct_answer", None))
+        )
+        if is_released:
+            # A released response is safe to restyle on a later turn even
+            # when it intentionally has no evidence ledger, such as a
+            # deterministic financial-concept explanation. It is distinct
+            # from verified evidence lineage and cannot authorize evidence
+            # explanation or an action.
+            context["last_released_context"] = {
+                "context_version": "finn_v2.released-lineage.v1",
+                "operation_id": operation_id,
+                "mode": response_mode,
+                "run_id": getattr(verified_response, "run_id", None),
+                "response": getattr(verified_response, "direct_answer", None),
+                "conclusion": getattr(verified_response, "main_observation", None),
+                "evidence_refs": list(getattr(verified_response, "evidence_refs_used", []) or []),
+                "resolved_entities": {
+                    key: value for key, value in {
+                        "asset": resolved_asset, "setup_id": resolved_setup_id,
+                        "strategy_id": resolved_strategy_id, "bot_id": resolved_bot_id,
+                    }.items() if value is not None
+                },
+            }
         if is_verified:
             verified_context = {
                 "verified_response_id": getattr(verified_response, "verified_response_id", None),
@@ -708,6 +735,7 @@ class FinnV2OrchestratorService:
                     key: context[key]
                     for key in (
                         "last_verified_context",
+                        "last_released_context",
                         "last_degraded_context",
                         "last_safe_terminal_context",
                     )

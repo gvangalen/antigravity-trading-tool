@@ -81,8 +81,16 @@ class FinnV2ReasoningFallbackService:
         context: ReasoningContextPackage, model: str
     ) -> ReasoningResult:
         state = dict((context.request_plan or {}).get("operation_state") or {})
-        conclusion = str(state.get("previous_verified_conclusion") or "").strip()
-        response = str(state.get("previous_verified_response") or "").strip()
+        conclusion = str(
+            state.get("previous_verified_conclusion")
+            or state.get("previous_released_conclusion")
+            or ""
+        ).strip()
+        response = str(
+            state.get("previous_verified_response")
+            or state.get("previous_released_response")
+            or ""
+        ).strip()
         current_refs = [item.evidence_id for item in context.evidence]
         refs = current_refs or list(state.get("previous_evidence_refs") or [])
         released = list(state.get("previous_degraded_released_sections") or [])
@@ -187,7 +195,7 @@ class FinnV2ReasoningFallbackService:
                 reasoning_result_id=f"finn-v2-reasoning-{uuid.uuid4().hex}",
                 run_id=run_id, user_id=user_id, mode="READ",
                 direct_answer=concise,
-                main_observation="Dit is een verkorte formulering van de vorige geverifieerde conclusie.",
+                main_observation="Dit is een verkorte formulering van de vorige veilig vrijgegeven reactie.",
                 uncertainty_summary=None, uncertainty_codes=[],
                 evidence_refs_used=refs, model=model, created_at=datetime.now(timezone.utc),
             )

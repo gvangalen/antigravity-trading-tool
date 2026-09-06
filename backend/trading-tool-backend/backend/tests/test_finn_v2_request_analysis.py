@@ -88,6 +88,53 @@ def test_preprocessor_marks_semantic_simplification_as_reformulation():
     assert facts.discourse_act == "reformulation"
 
 
+def test_preprocessor_marks_dutch_prepare_inflections_as_a_create_fact():
+    facts = FinnV2RequestPreprocessorService().preprocess(
+        message="Ik wil een ETH-swingsetup voorbereiden."
+    )
+
+    assert facts.action_polarity == "create"
+    assert facts.discourse_act == "operation_request"
+
+
+def test_reformulation_reuses_typed_released_lineage_without_promoting_it_to_evidence(monkeypatch):
+    service = FinnV2RequestAnalysisService()
+    monkeypatch.setattr(
+        service.classifier,
+        "classify",
+        lambda **_kwargs: SemanticOperationClassification(
+            operation_id="reformulate_previous_response",
+            action="read",
+            domain="system",
+            discourse="reformulation",
+            confidence="high",
+            selector_source="structured",
+        ),
+    )
+    context = {
+        "conversation_state_version": "finn_v2.conversation-contracts.v1",
+        "last_released_context": {
+            "run_id": "released-concept-run",
+            "operation_id": "explain_financial_concept",
+            "mode": "READ",
+            "response": "MACD vergelijkt twee voortschrijdende gemiddelden.",
+            "conclusion": "Dit is algemene educatie.",
+            "evidence_refs": [],
+        },
+    }
+
+    result = service.analyze(
+        message="Kun je dat korter en eenvoudiger uitleggen?",
+        conversation_context=context,
+    )
+
+    assert result.request_plan.operation_id == "reformulate_previous_response"
+    assert result.request_plan.conversation_reference == "released-concept-run"
+    assert result.request_plan.conversation_reference_kind == "previous_released_response"
+    assert result.request_plan.operation_state["previous_released_response"].startswith("MACD")
+    assert result.request_plan.operation_state["previous_evidence_refs"] == []
+
+
 def test_preprocessor_keeps_consequence_questions_as_contextual_follow_ups():
     facts = FinnV2RequestPreprocessorService().preprocess(
         message="Welke controle volgt daaruit voor mijn automatisering?"

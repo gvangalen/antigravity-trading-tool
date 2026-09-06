@@ -379,6 +379,61 @@ def test_unavailable_delivery_records_diagnostics_without_overwriting_verified_c
     }
 
 
+def test_released_concept_response_persists_typed_reformulation_lineage():
+    service = FinnV2OrchestratorService(session=object())
+    service.conversations = _FakeConversationRepo()
+
+    async def _contract_view(**_kwargs):
+        return {"target_asset": None, "operation_id": "explain_financial_concept"}
+
+    service._contract_execution_view = _contract_view
+    result = SimpleNamespace(
+        run_id="concept-run-1",
+        analysis=SimpleNamespace(
+            explicit_asset=None,
+            explicit_setup_id=None,
+            explicit_strategy_id=None,
+            explicit_bot_id=None,
+            interaction_mode="READ",
+            request_plan=SimpleNamespace(
+                operation_id="explain_financial_concept",
+                operation_contract_version="2026-08-23.operation-contracts.v1",
+                operation_state={},
+                user_goal="read_context",
+                primary_domains=[],
+                required_information_scopes=[],
+            ),
+        ),
+        tool_plan=SimpleNamespace(entity_selectors={}),
+    )
+    response = SimpleNamespace(
+        run_id="concept-run-1",
+        verifier_status="passed",
+        mode="READ",
+        direct_answer="MACD vergelijkt twee voortschrijdende gemiddelden.",
+        main_observation="Dit is algemene educatie.",
+        evidence_refs_used=[],
+        proposal_id=None,
+        uncertainty_codes=[],
+    )
+
+    asyncio.run(
+        service._update_conversation_context(
+            conversation_id="conversation-1",
+            user_id=7,
+            existing_context={},
+            result=result,
+            verified_response=response,
+        )
+    )
+
+    released = service.conversations.updated["context"]["last_released_context"]
+    assert released["run_id"] == "concept-run-1"
+    assert released["operation_id"] == "explain_financial_concept"
+    assert released["response"].startswith("MACD")
+    assert released["evidence_refs"] == []
+
+
 def test_off_topic_terminal_persists_only_a_safe_boundary_reference():
     service = FinnV2OrchestratorService(session=object())
     service.conversations = _FakeConversationRepo()

@@ -134,6 +134,7 @@ class FinnV2OperationClassificationService:
         }
         has_safe_lineage = bool(
             (conversation_context or {}).get("last_verified_context")
+            or (conversation_context or {}).get("last_released_context")
             or (conversation_context or {}).get("last_verified_conclusion")
             or (conversation_context or {}).get("last_degraded_context")
         )
@@ -240,6 +241,7 @@ class FinnV2OperationClassificationService:
             for key in (
                 "last_verified_context", "last_degraded_context", "active_guided_operation",
                 "operation_state", "last_safe_terminal_context", "last_turn_diagnostics",
+                "last_released_context",
             )
             if key in context
         }
@@ -458,11 +460,17 @@ class FinnV2OperationClassificationValidator:
                 and isinstance(context.get("last_safe_terminal_context"), Mapping)
                 and bool(context["last_safe_terminal_context"].get("terminal_reason"))
             )
+            has_released_response = (
+                classification.operation_id == "reformulate_previous_response"
+                and isinstance(context.get("last_released_context"), Mapping)
+                and bool(context["last_released_context"].get("run_id"))
+            )
             if not (
                 context.get("last_verified_context")
                 or context.get("last_verified_conclusion")
                 or has_degraded_evidence
                 or has_safe_terminal_boundary
+                or has_released_response
             ):
                 return "operation_verified_context_missing"
         # An action contract that receives an explicit target must retain that

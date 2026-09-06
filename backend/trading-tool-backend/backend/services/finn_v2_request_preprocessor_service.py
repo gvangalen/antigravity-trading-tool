@@ -53,7 +53,7 @@ class FinnV2RequestPreprocessorService:
         ("update", ("wijzig", "update", "pas aan", "verbeter", "improve", "optimise", "optimize")),
         ("create", (
             "maak", "maken", "create", "prepare", "preparing", "ontwerp", "stel", "bereid",
-            "erstell", "anleg",
+            "voorbereid", "erstell", "anleg",
         )),
         ("evaluate", ("beoordeel", "evaluate", "zwak", "risico", "past", "fit", "ontbrek", "ontbreek", "vertrouwen")),
     )
@@ -333,7 +333,7 @@ class FinnV2RequestPreprocessorService:
     def _contains_any(cls, text: str, terms: tuple[str, ...]) -> bool:
         words = re.findall(r"[\w-]+", text)
         inflection_stems = {
-            "indicator", "signaal", "trendindicator", "setup", "haal", "maak",
+            "indicator", "signaal", "trendindicator", "setup", "haal", "maak", "voorbereid",
             "toevoeg", "verwijder", "activeer", "bevestig", "formuleer",
             "herformuleer", "herschrijf", "ontbrek", "ontbreek", "inschakel", "erstell", "anleg",
         }

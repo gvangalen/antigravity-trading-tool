@@ -73,6 +73,7 @@ class FinnV2RequestAnalysisService:
             conversation_context or {},
             allow_degraded=True,
             allow_safe_terminal=preprocessed.discourse_act == "evidence_follow_up",
+            allow_released=preprocessed.discourse_act == "reformulation",
         )
         # A relational noun such as "gekoppelde bot" can describe the object
         # of a new request. It becomes a prior-turn reference only when a
@@ -88,13 +89,15 @@ class FinnV2RequestAnalysisService:
                 "evidence_follow_up", "reformulation", "contextual_follow_up",
             },
             allow_safe_terminal=preprocessed.discourse_act == "evidence_follow_up",
+            allow_released=preprocessed.discourse_act == "reformulation",
         ):
             unresolved_signals.append("conversation_reference_without_verified_context")
         if uses_conversation_reference:
             context = conversation_context or {}
             verified_entities = dict((context.get("last_verified_context") or {}).get("resolved_entities") or {})
             degraded_entities = dict((context.get("last_degraded_context") or {}).get("resolved_entities") or {})
-            lineage_entities = verified_entities or degraded_entities
+            released_entities = dict((context.get("last_released_context") or {}).get("resolved_entities") or {})
+            lineage_entities = verified_entities or degraded_entities or released_entities
             explicit_asset = explicit_asset or self._context_asset(
                 lineage_entities.get("asset") or context.get("resolved_asset")
             )
@@ -174,6 +177,7 @@ class FinnV2RequestAnalysisService:
                     "explain_previous_evidence", "reformulate_previous_response", "evaluate_bot",
                 },
                 allow_safe_terminal=operation.operation_id == "explain_previous_evidence",
+                allow_released=operation.operation_id == "reformulate_previous_response",
             )
             if not has_safe_lineage and "conversation_reference_without_verified_context" not in unresolved_signals:
                 unresolved_signals.append("conversation_reference_without_verified_context")
@@ -257,6 +261,21 @@ class FinnV2RequestAnalysisService:
                 "previous_verified_response": verified.get("response"),
                 "previous_evidence_refs": list(verified.get("evidence_refs") or []),
                 "resolved_entities": dict(verified.get("resolved_entities") or {}),
+            }
+        elif (
+            guided_state is None
+            and uses_conversation_reference
+            and preprocessed.discourse_act == "reformulation"
+            and bool((conversation_context or {}).get("last_released_context"))
+        ):
+            released = dict((conversation_context or {}).get("last_released_context") or {})
+            operation_state_payload = {
+                "previous_released_run_id": released.get("run_id"),
+                "previous_released_operation_id": released.get("operation_id"),
+                "previous_released_conclusion": released.get("conclusion"),
+                "previous_released_response": released.get("response"),
+                "previous_evidence_refs": list(released.get("evidence_refs") or []),
+                "resolved_entities": dict(released.get("resolved_entities") or {}),
             }
         elif guided_state is None and uses_conversation_reference and self._has_safe_lineage(
             conversation_context or {}, allow_degraded=True, allow_safe_terminal=True
@@ -399,10 +418,14 @@ class FinnV2RequestAnalysisService:
         if uses_conversation_reference:
             verified_context = dict(conversation_context.get("last_verified_context") or {})
             degraded_context = dict(conversation_context.get("last_degraded_context") or {})
+            released_context = dict(conversation_context.get("last_released_context") or {})
             is_canonical_context = bool(conversation_context.get("conversation_state_version"))
             if verified_context.get("verified_response_id"):
                 reference = str(verified_context["verified_response_id"])
                 reference_kind = "previous_verified_response"
+            elif released_context.get("run_id"):
+                reference = str(released_context["run_id"])
+                reference_kind = "previous_released_response"
             elif degraded_context.get("run_id"):
                 reference = str(degraded_context["run_id"])
                 reference_kind = "previous_degraded_response"
@@ -469,9 +492,13 @@ class FinnV2RequestAnalysisService:
 
     @staticmethod
     def _has_safe_lineage(
-        context: Dict[str, object], *, allow_degraded: bool, allow_safe_terminal: bool = False
+        context: Dict[str, object], *, allow_degraded: bool, allow_safe_terminal: bool = False,
+        allow_released: bool = False,
     ) -> bool:
         if context.get("last_verified_context") or context.get("last_verified_conclusion"):
+            return True
+        released = context.get("last_released_context")
+        if allow_released and isinstance(released, dict) and released.get("run_id"):
             return True
         degraded = context.get("last_degraded_context")
         if bool(
