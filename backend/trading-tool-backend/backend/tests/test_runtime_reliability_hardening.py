@@ -80,7 +80,7 @@ def test_deploy_env_supports_backend_only_auto_rollback_and_previous_markers():
     assert source.index("DEPLOY_STEP_ID='memory_headroom'") < source.index("DEPLOY_STEP_ID='pm2_core'")
     assert "/api/system/health" in source
     assert 'worker_log_path=/home/ubuntu/.pm2/logs/celery-worker-finn-interactive-error.log' in source
-    assert "grep -Fq 'finn_interactive'" in source
+    assert "grep -Fq 'production-finn-interactive'" in source
     assert source.index("start_interactive_worker_first") < source.index("start_remaining_auxiliary_apps")
 
 

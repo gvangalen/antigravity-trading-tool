@@ -483,15 +483,15 @@ PY
     local log_path="\$1"
     local start_line="\$2"
     for attempt in \$(seq 1 \"\$INTERACTIVE_WORKER_READY_ATTEMPTS\"); do
-      if tail -n +\$((start_line + 1)) \$log_path 2>/dev/null | grep -Fq 'finn_interactive' \\
+      if tail -n +\$((start_line + 1)) \$log_path 2>/dev/null | grep -Fq 'production-finn-interactive' \\
         && tail -n +\$((start_line + 1)) \$log_path 2>/dev/null | grep -Fq ' ready.'; then
-        echo \"✅ FINN interactive worker is registered for finn_interactive.\"
+        echo \"✅ FINN interactive worker is ready for finn_interactive.\"
         return 0
       fi
       echo \"⏳ Waiting for FINN interactive worker registration (attempt \$attempt/\$INTERACTIVE_WORKER_READY_ATTEMPTS)...\" >&2
       sleep \"\$INTERACTIVE_WORKER_READY_RETRY_DELAY_SECONDS\"
     done
-    echo \"❌ FINN interactive worker never registered for finn_interactive.\" >&2
+    echo \"❌ FINN interactive worker never became ready for finn_interactive.\" >&2
     return 1
   }
 
