@@ -81,3 +81,37 @@ def test_terminal_projection_exposes_safe_phase_timings_when_persisted():
     )
 
     assert projection["timings_ms"] == {"total": 1000, "until_queued": 100, "until_collecting": 200, "terminal_persist": 700}
+
+
+def test_terminal_projection_keeps_dispatch_selector_and_fast_path_boundaries():
+    projection = terminal_projection(
+        {
+            "identity": {"run_id": "run-1"},
+            "phase_timestamps": {
+                "created_at": "2026-09-05T10:00:00+00:00",
+                "dispatch_published": "2026-09-05T10:00:00.100000+00:00",
+                "dispatch_claimed": "2026-09-05T10:00:00.300000+00:00",
+                "context_loaded": "2026-09-05T10:00:00.500000+00:00",
+                "selector_started": "2026-09-05T10:00:00.600000+00:00",
+                "selector_completed": "2026-09-05T10:00:01.000000+00:00",
+                "selection_persisted": "2026-09-05T10:00:01.050000+00:00",
+                "fast_path_completed": "2026-09-05T10:00:01.060000+00:00",
+                "terminal_at": "2026-09-05T10:00:01.100000+00:00",
+            },
+        },
+        status="completed",
+        mode="CAPABILITY",
+        response={},
+    )
+
+    assert projection["timings_ms"] == {
+        "total": 1100,
+        "until_dispatch_published": 100,
+        "until_dispatch_claimed": 200,
+        "until_context_loaded": 200,
+        "until_selector_started": 100,
+        "until_selector_completed": 400,
+        "until_selection_persisted": 50,
+        "until_fast_path_completed": 10,
+        "terminal_persist": 40,
+    }

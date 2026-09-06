@@ -277,7 +277,11 @@ def terminal_projection(
         terminal_at = datetime.fromisoformat(str(timestamps["terminal_at"]).replace("Z", "+00:00"))
         timings_ms["total"] = max(0, int((terminal_at - created_at).total_seconds() * 1000))
         previous_at = created_at
-        for phase in ("queued", "collecting", "planned", "reasoning", "verifying"):
+        for phase in (
+            "dispatch_published", "dispatch_claimed", "queued", "collecting",
+            "planned", "context_loaded", "selector_started", "selector_completed",
+            "selection_persisted", "fast_path_completed", "reasoning", "verifying",
+        ):
             if phase not in timestamps:
                 continue
             current_at = datetime.fromisoformat(str(timestamps[phase]).replace("Z", "+00:00"))

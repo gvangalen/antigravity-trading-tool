@@ -315,6 +315,12 @@ def test_worker_dispatch_keeps_the_created_contract_attached_to_the_same_run(mon
             raise AssertionError("worker must not fail")
 
     class _RunService:
+        def __init__(self, _session):
+            self.runtime_contracts = SimpleNamespace(record_phase_timestamp=self._record_phase_timestamp)
+
+        async def _record_phase_timestamp(self, *, run_id, phase):
+            calls.append(("phase", run_id, phase))
+
         @classmethod
         async def run_foundation_lifecycle_owned(cls, *, run_id, user_id):
             assert created_contracts[run_id] == "contract-run-worker-1"
@@ -326,4 +332,9 @@ def test_worker_dispatch_keeps_the_created_contract_attached_to_the_same_run(mon
     monkeypatch.setattr(finn_v2_task, "FinnV2RunService", _RunService)
 
     assert asyncio.run(finn_v2_task._process_finn_v2_run(run_id=run.id, owner="worker-1")) == run.id
-    assert calls == ["heartbeat", ("lifecycle", run.id, 7), ("completed", "dispatch-worker-1")]
+    assert calls == [
+        ("phase", run.id, "dispatch_claimed"),
+        "heartbeat",
+        ("lifecycle", run.id, 7),
+        ("completed", "dispatch-worker-1"),
+    ]

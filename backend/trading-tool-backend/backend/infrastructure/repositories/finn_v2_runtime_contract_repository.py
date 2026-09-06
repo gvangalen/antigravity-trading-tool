@@ -175,6 +175,16 @@ class FinnV2RuntimeContractRepository(FinnV2RepositoryTransactionMixin):
         state.setdefault("transition_log", []).append({"type": "lifecycle", "status": status})
         return await self._write_revision(row=row, state=state)
 
+    async def record_phase_timestamp(self, *, run_id: str, phase: str) -> FinnV2RuntimeContract:
+        """Persist a safe lifecycle boundary once, without altering intent."""
+        row = await self._required_for_update(run_id)
+        state = deepcopy(row.state_json or {})
+        timestamps = dict(state.get("phase_timestamps") or {})
+        timestamps.setdefault("created_at", row.created_at.astimezone(timezone.utc).isoformat())
+        timestamps.setdefault(phase, datetime.now(timezone.utc).isoformat())
+        state["phase_timestamps"] = timestamps
+        return await self._write_revision(row=row, state=state)
+
     async def _required_for_update(self, run_id: str) -> FinnV2RuntimeContract:
         row = await self.get_for_run(run_id=run_id, for_update=True)
         if row is None:

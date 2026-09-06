@@ -8,6 +8,7 @@ remain part of the observed path. It never confirms or executes an action.
 from __future__ import annotations
 
 import argparse
+from concurrent.futures import ThreadPoolExecutor
 import json
 import os
 import time
@@ -83,40 +84,41 @@ def run_gate(*, base_url: str, bearer_token: str, message: str, timeout_seconds:
     if not run_id or contract.get("run_id") != run_id or not contract.get("contract_id"):
         raise AssertionError("runtime_gate_contract_missing_at_run_creation")
 
-    polling: Dict[str, Any] = created
-    while time.monotonic() - started_at < timeout_seconds:
-        try:
-            polling, status = _request_json(
-                url=f"{base_url}/api/assistant/v2/runs/{run_id}",
-                method="GET",
-                headers=headers,
-                body=None,
-                timeout=min(5.0, timeout_seconds),
-            )
-        except TimeoutError:
-            # Polling is an observation boundary, not the lifecycle deadline.
-            # A transient read timeout must not manufacture a second run or
-            # hide a terminal projection that is still being persisted.
-            time.sleep(0.25)
-            continue
-        if status in {502, 503, 504}:
-            # Transport observation is retried within this one run's bounded
-            # window. It must never cause a second run to be created.
-            time.sleep(0.25)
-            continue
-        if status != 200:
-            raise AssertionError(f"runtime_gate_poll_failed_http_{status}")
-        if polling.get("status") in TERMINAL_STATUSES:
-            break
-        time.sleep(0.25)
-    else:
-        raise TimeoutError("runtime_gate_timeout")
-
-    sse = _terminal_sse(
-        url=f"{base_url}/api/assistant/v2/runs/{run_id}/stream",
-        headers=headers,
-        timeout=min(5.0, timeout_seconds),
-    )
+    # Subscribe before polling. SSE is the primary visible terminal delivery;
+    # bounded polling observes the same persisted projection as a fallback.
+    with ThreadPoolExecutor(max_workers=1, thread_name_prefix="finn-v2-sse") as executor:
+        sse_future = executor.submit(
+            _terminal_sse,
+            url=f"{base_url}/api/assistant/v2/runs/{run_id}/stream",
+            headers=headers,
+            timeout=timeout_seconds,
+        )
+        polling: Dict[str, Any] = created
+        polling_terminal_at = None
+        while time.monotonic() - started_at < timeout_seconds:
+            try:
+                polling, status = _request_json(
+                    url=f"{base_url}/api/assistant/v2/runs/{run_id}",
+                    method="GET",
+                    headers=headers,
+                    body=None,
+                    timeout=min(5.0, timeout_seconds),
+                )
+            except TimeoutError:
+                time.sleep(0.1)
+                continue
+            if status in {502, 503, 504}:
+                time.sleep(0.1)
+                continue
+            if status != 200:
+                raise AssertionError(f"runtime_gate_poll_failed_http_{status}")
+            if polling.get("status") in TERMINAL_STATUSES:
+                polling_terminal_at = time.monotonic()
+                break
+            time.sleep(0.1)
+        else:
+            raise TimeoutError("runtime_gate_timeout")
+        sse = sse_future.result(timeout=max(0.1, timeout_seconds - (time.monotonic() - started_at)))
     if sse != polling:
         raise AssertionError("runtime_gate_polling_sse_envelope_mismatch")
     projection = dict(polling.get("runtime_trace") or {})
@@ -132,6 +134,8 @@ def run_gate(*, base_url: str, bearer_token: str, message: str, timeout_seconds:
         "final_operation_id": projection.get("final_operation_id"),
         "canonical_target": projection.get("canonical_target"),
         "elapsed_ms": round((time.monotonic() - started_at) * 1000, 2),
+        "polling_terminal_elapsed_ms": round(((polling_terminal_at or time.monotonic()) - started_at) * 1000, 2),
+        "delivery_transport": "sse_primary_polling_fallback",
         "polling_sse_contract_projection": True,
     }
 

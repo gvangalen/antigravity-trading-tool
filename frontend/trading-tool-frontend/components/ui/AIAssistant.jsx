@@ -2,7 +2,7 @@
 
 import React, { Suspense, useState, useEffect, useLayoutEffect, useRef } from "react";
 import { usePathname, useSearchParams, useRouter } from "next/navigation";
-import { assistantChat, executeAssistantAction, fetchAssistantInsight, getAssistantPreferences, getAssistantSessionDetail, getAssistantSessions, updateAssistantPreferences, assistantChatStream, executePendingAction, fetchFinnState, fetchFinnMissionControl, fetchFinnV2Run } from "@/lib/api/ai";
+import { assistantChat, executeAssistantAction, fetchAssistantInsight, getAssistantPreferences, getAssistantSessionDetail, getAssistantSessions, updateAssistantPreferences, assistantChatStream, executePendingAction, fetchFinnState, fetchFinnMissionControl, fetchFinnV2Run, waitForFinnV2TerminalSse } from "@/lib/api/ai";
 import { Send, Zap, Brain, Shield, BarChart3, Loader2, X, MessageSquare, Target, Activity, FileText, Bot, ChevronDown, ListChecks, Terminal, Sparkles, CheckCircle2, Plus, Search, SlidersHorizontal } from "lucide-react";
 import useIntelligenceEvents from "@/hooks/useIntelligenceEvents";
 import { useOnboarding } from "@/hooks/useOnboarding";
@@ -4355,9 +4355,55 @@ function AIAssistantContent({
   }
 
   async function pollPendingFinnV2Run(runId, streamId) {
-    const terminalStatuses = new Set(["completed", "blocked", "failed", "canceled"]);
+    const terminalStatuses = new Set(["completed", "blocked", "failed", "canceled", "unavailable", "downgraded", "rejected", "clarification_required"]);
+    const sseController = new AbortController();
+    let sseTerminal = null;
+    let sseFinished = false;
+    void waitForFinnV2TerminalSse(runId, { signal: sseController.signal })
+      .then((run) => { sseTerminal = run; })
+      .catch((error) => {
+        if (error?.name !== "AbortError") console.warn("FINN V2 SSE fallback naar polling:", error);
+      })
+      .finally(() => { sseFinished = true; });
+    const completeTerminal = (run) => {
+      const verified = run?.response;
+      const terminalText = verified?.content || "Ik kan deze FINN V2-run nu niet veilig afronden.";
+      setMessages((prev) => prev.map((message) => (
+        message.streamId === streamId
+          ? {
+              ...message,
+              text: terminalText,
+              intent: String(run?.mode || "unavailable").toLowerCase(),
+              flow: run?.status === "completed" ? "finn_v2_visible" : "finn_v2_visible_terminal_failed",
+              state: {
+                ...(message.state || {}),
+                current_flow: run?.status === "completed" ? "finn_v2_visible" : "finn_v2_visible_terminal_failed",
+                run_id: runId,
+                run_status: run?.status,
+              },
+              reasoning: null,
+              canConfirm: Boolean(verified?.confirmation_required && verified?.proposal_id),
+              actions: verified?.proposal_id ? [{
+                type: "v2_proposal",
+                proposal_id: verified.proposal_id,
+                requires_confirmation: Boolean(verified.confirmation_required),
+                mode: verified.mode,
+              }] : [],
+              isComplete: true,
+            }
+          : message
+      )));
+      activeStreamIdRef.current = null;
+    };
     for (let attempt = 0; attempt < 60; attempt += 1) {
-      if (activeStreamIdRef.current !== streamId) return;
+      if (activeStreamIdRef.current !== streamId) {
+        sseController.abort();
+        return;
+      }
+      if (sseTerminal) {
+        completeTerminal(sseTerminal);
+        return;
+      }
       try {
         const run = await fetchFinnV2Run(runId);
         if (!terminalStatuses.has(String(run?.status || "").toLowerCase())) {
@@ -4366,35 +4412,8 @@ function AIAssistantContent({
           continue;
         }
 
-        const verified = run?.response;
-        const terminalText = verified?.content
-          || "Ik kan deze FINN V2-run nu niet veilig afronden."
-        setMessages((prev) => prev.map((message) => (
-          message.streamId === streamId
-            ? {
-                ...message,
-                text: terminalText,
-                intent: String(run?.mode || "unavailable").toLowerCase(),
-                flow: run?.status === "completed" ? "finn_v2_visible" : "finn_v2_visible_terminal_failed",
-                state: {
-                  ...(message.state || {}),
-                  current_flow: run?.status === "completed" ? "finn_v2_visible" : "finn_v2_visible_terminal_failed",
-                  run_id: runId,
-                  run_status: run?.status,
-                },
-                reasoning: null,
-                canConfirm: Boolean(verified?.confirmation_required && verified?.proposal_id),
-                actions: verified?.proposal_id ? [{
-                  type: "v2_proposal",
-                  proposal_id: verified.proposal_id,
-                  requires_confirmation: Boolean(verified.confirmation_required),
-                  mode: verified.mode,
-                }] : [],
-                isComplete: true,
-              }
-            : message
-        )));
-        activeStreamIdRef.current = null;
+        completeTerminal(run);
+        sseController.abort();
         return;
       } catch (error) {
         if (attempt === 59) {
@@ -4402,9 +4421,13 @@ function AIAssistantContent({
         }
       }
       // Keep pending delivery responsive without continuously hammering the run endpoint.
-      const delayMs = Math.min(1000 + attempt * 250, 3000);
+      if (sseFinished && !sseTerminal && attempt === 59) {
+        console.warn("FINN V2 SSE sloot zonder terminale projectie; polling bleef de fallback.");
+      }
+      const delayMs = Math.min(250 + attempt * 50, 1000);
       await new Promise((resolve) => window.setTimeout(resolve, delayMs));
     }
+    sseController.abort();
   }
 
   async function handleChat(directQuery, isSilent = false, overrideContext = null) {

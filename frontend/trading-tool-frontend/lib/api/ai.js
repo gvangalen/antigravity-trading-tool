@@ -78,6 +78,40 @@ export const fetchFinnV2Run = (runId) => {
   });
 };
 
+export const waitForFinnV2TerminalSse = async (runId, { signal } = {}) => {
+  const response = await fetch(`${API_BASE_URL}/api/assistant/v2/runs/${encodeURIComponent(runId)}/stream`, {
+    method: 'GET',
+    credentials: 'include',
+    headers: {
+      ...Object.fromEntries(buildAuthHeaders(undefined, 'GET').entries()),
+      Accept: 'text/event-stream',
+    },
+    signal,
+  });
+  if (!response.ok || !response.body) {
+    throw new Error(`finn_v2_sse_failed_${response.status}`);
+  }
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const events = buffer.split('\n\n');
+    buffer = events.pop() || '';
+    for (const event of events) {
+      const data = event.split('\n').find((line) => line.startsWith('data: '));
+      if (!data) continue;
+      const envelope = JSON.parse(data.slice(6));
+      if (['completed', 'blocked', 'failed', 'canceled', 'unavailable', 'downgraded', 'rejected', 'clarification_required'].includes(String(envelope?.status || '').toLowerCase())) {
+        return envelope;
+      }
+    }
+  }
+  throw new Error('finn_v2_sse_closed_before_terminal');
+};
+
 // ========================================
 // ⚙️ 5. AI Assistant Preferences
 // ========================================

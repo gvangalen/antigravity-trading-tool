@@ -249,6 +249,11 @@ class FinnV2GatewayService:
                 timeout=self.flags.direct_dispatch_timeout_ms() / 1000.0,
             )
             await self.dispatches.mark_published(dispatch.dispatch_id)
+            timing_recorder = getattr(
+                getattr(self.run_service, "runtime_contracts", None), "record_phase_timestamp", None
+            )
+            if timing_recorder is not None:
+                await timing_recorder(run_id=run_id, phase="dispatch_published")
             await self.session.commit()
             logger.info(
                 "FINN V2 dispatch published directly",

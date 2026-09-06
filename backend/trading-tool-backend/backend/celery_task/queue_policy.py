@@ -90,7 +90,10 @@ WORKLOAD_CLASS_BY_QUEUE = {
 QUEUE_RATE_LIMITS: Dict[str, str] = {
     "market_data": "20/m",
     "ai_generation": "6/m",
-    "finn_interactive": "30/m",
+    # FINN interactive has dedicated fair workers. A task-level rate limit
+    # delays an already admitted user turn even while a worker slot is free,
+    # which violates the visible lifecycle budget. Admission/backlog limits
+    # remain enforced at the gateway and queue boundaries.
     "execution_critical": "30/m",
 }
 

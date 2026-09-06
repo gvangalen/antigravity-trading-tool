@@ -109,6 +109,7 @@ class FinnV2OrchestratorService:
                     guided_state = dict(previous_state.get("guided_state") or {})
                     if guided_state:
                         conversation_context["active_guided_operation"] = guided_state
+        await self._record_phase_timestamp(run_id=run_id, phase="context_loaded")
         # Selector quota is user-scoped. Without this context the OpenAI
         # boundary groups every lifecycle run into an unscoped global bucket,
         # allowing unrelated background/eval traffic to suppress user turns.
@@ -122,6 +123,7 @@ class FinnV2OrchestratorService:
             # itself is about to issue its bounded call.
             if self.selector_started:
                 await self.selector_started()
+            await self._record_phase_timestamp(run_id=run_id, phase="selector_started")
             analysis = await asyncio.wait_for(
                 asyncio.to_thread(
                     self.analysis.analyze,
@@ -133,6 +135,7 @@ class FinnV2OrchestratorService:
                 ),
                 timeout=self.flags.selector_phase_deadline_seconds(),
             )
+        await self._record_phase_timestamp(run_id=run_id, phase="selector_completed")
         request_plan = getattr(analysis, "request_plan", None)
         await self.runtime_contracts.record_initial_intent(
             run_id=run_id,
@@ -158,6 +161,8 @@ class FinnV2OrchestratorService:
             },
         )
         await self._commit_persistence_boundary(stage="selector_persisted")
+        await self._record_phase_timestamp(run_id=run_id, phase="selection_persisted")
+        await self._commit_persistence_boundary(stage="selection_timing_persisted")
         if self.selection_persisted is not None:
             await self.selection_persisted()
         # New runs use a contract-derived RequestPlan view. This preserves
@@ -189,6 +194,8 @@ class FinnV2OrchestratorService:
                 event_type="capability_fast_path_completed",
                 payload_json={"run_id": run_id, "user_id": user_id, "contract_id": runtime_contract.contract_id},
             )
+            await self._record_phase_timestamp(run_id=run_id, phase="fast_path_completed")
+            await self._commit_persistence_boundary(stage="capability_fast_path_timing_persisted")
             self.phase_outcome = LifecyclePhaseOutcome(
                 terminal_status="completed",
                 interaction_mode="CAPABILITY",
@@ -431,6 +438,12 @@ class FinnV2OrchestratorService:
                     },
                 )
             raise
+
+    async def _record_phase_timestamp(self, *, run_id: str, phase: str) -> None:
+        """Record production timing while keeping existing unit doubles minimal."""
+        recorder = getattr(self.runtime_contracts, "record_phase_timestamp", None)
+        if recorder is not None:
+            await recorder(run_id=run_id, phase=phase)
 
     async def _persist_result(self, result) -> None:
         existing = await self.results.get_for_run_version(

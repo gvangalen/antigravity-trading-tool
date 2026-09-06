@@ -87,6 +87,14 @@ def _install_worker_fakes(monkeypatch, run):
     _Dispatches.stale = []
     monkeypatch.setattr(task_module, "async_session_factory", _factory)
     monkeypatch.setattr(task_module, "FinnV2DispatchRepository", _Dispatches)
+
+    async def _record_phase_timestamp(*, run_id, phase):
+        _Dispatches.events.append(("phase", run_id, phase))
+
+    def _run_service_init(self, _session):
+        self.runtime_contracts = SimpleNamespace(record_phase_timestamp=_record_phase_timestamp)
+
+    monkeypatch.setattr(task_module.FinnV2RunService, "__init__", _run_service_init)
     return sessions
 
 
@@ -100,7 +108,7 @@ def test_worker_claims_once_and_completes_terminal_run(monkeypatch):
     monkeypatch.setattr(task_module.FinnV2RunService, "run_foundation_lifecycle_owned", _lifecycle)
 
     assert asyncio.run(task_module._process_finn_v2_run(run_id="run-1", owner="worker-1")) == "run-1"
-    assert [event[0] for event in _Dispatches.events] == ["claim", "heartbeat", "completed"]
+    assert [event[0] for event in _Dispatches.events] == ["claim", "phase", "heartbeat", "completed"]
 
 
 def test_interactive_task_acknowledges_only_after_worker_lifecycle_completes():

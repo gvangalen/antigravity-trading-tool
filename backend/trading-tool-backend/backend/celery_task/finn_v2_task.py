@@ -79,6 +79,11 @@ async def _process_finn_v2_run(*, run_id: str, owner: str) -> str:
         await session.commit()
         dispatch_id = dispatch.dispatch_id
         user_id = run.user_id
+    async with async_session_factory() as session:
+        await FinnV2RunService(session).runtime_contracts.record_phase_timestamp(
+            run_id=run_id, phase="dispatch_claimed"
+        )
+        await session.commit()
     stop_heartbeat = asyncio.Event()
 
     async def _heartbeat_loop() -> None:
