@@ -23,11 +23,15 @@ const ENVIRONMENTS = {
 };
 
 const WORKER_CONCURRENCY = {
-  default: 2,
-  marketPortfolio: 2,
-  scoringExecution: 2,
+  // The production host has 1 GB RAM. Five prefork workers at concurrency 2
+  // cold-start into swap, delaying the user-facing FINN queue for minutes.
+  // One child per isolated queue keeps every workload serviceable without
+  // turning a deployment into a memory-contention event.
+  default: 1,
+  marketPortfolio: 1,
+  scoringExecution: 1,
   aiReporting: 1,
-  finnInteractive: 2,
+  finnInteractive: 1,
 };
 
 function pickRuntimeEnv(keys) {

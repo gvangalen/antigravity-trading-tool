@@ -50,6 +50,10 @@ def test_pm2_config_splits_named_queue_workers():
     assert "celery-worker-market-portfolio" in source
     assert "celery-worker-scoring-execution" in source
     assert "celery-worker-ai-reporting" in source
+    assert "default: 1" in source
+    assert "marketPortfolio: 1" in source
+    assert "scoringExecution: 1" in source
+    assert "finnInteractive: 1" in source
     assert "--concurrency=${WORKER_CONCURRENCY.default} -Q ${queuePrefix}celery -n ${environmentName}-default@%h" in source
     assert "--concurrency=${WORKER_CONCURRENCY.marketPortfolio} -Q ${queuePrefix}market_data,${queuePrefix}portfolio -n ${environmentName}-market-portfolio@%h" in source
     assert "--concurrency=${WORKER_CONCURRENCY.scoringExecution} -Q ${queuePrefix}scoring,${queuePrefix}execution_critical -n ${environmentName}-scoring-execution@%h" in source
@@ -63,10 +67,11 @@ def test_worker_concurrency_is_centralized_in_shared_ecosystem_config():
     source = shared_ecosystem.read_text()
 
     assert "const WORKER_CONCURRENCY = {" in source
-    assert "default: 2" in source
-    assert "marketPortfolio: 2" in source
-    assert "scoringExecution: 2" in source
+    assert "default: 1" in source
+    assert "marketPortfolio: 1" in source
+    assert "scoringExecution: 1" in source
     assert "aiReporting: 1" in source
+    assert "finnInteractive: 1" in source
 
 
 def test_all_named_queues_are_assigned_to_pm2_workers():
