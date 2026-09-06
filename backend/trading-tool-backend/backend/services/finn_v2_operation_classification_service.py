@@ -88,6 +88,7 @@ class FinnV2OperationClassificationService:
                 conversation_context=conversation_context,
             )
         candidates = self._guided_candidates(facts=facts, context=conversation_context or {}, candidates=candidates)
+        candidates = self._lineage_candidates(facts=facts, context=conversation_context or {}, candidates=candidates)
         selection, error = self.structured_selector.select(
             message=message,
             candidate_contracts=candidates,
@@ -201,6 +202,25 @@ class FinnV2OperationClassificationService:
             if item.operation_id in {contract.operation_id, "clarify_request", "unavailable"}
         )
         return safe or candidates
+
+    def _lineage_candidates(
+        self,
+        *,
+        facts: FinnV2PreprocessedRequest,
+        context: Mapping[str, object],
+        candidates: tuple[OperationContract, ...],
+    ) -> tuple[OperationContract, ...]:
+        """Keep a typed released-response follow-up within its safe contract family."""
+        released = context.get("last_released_context")
+        if (
+            facts.discourse_act != "reformulation"
+            or not isinstance(released, Mapping)
+            or not released.get("run_id")
+        ):
+            return candidates
+        allowed = {"reformulate_previous_response", "clarify_request", "unavailable"}
+        constrained = tuple(item for item in candidates if item.operation_id in allowed)
+        return constrained or candidates
 
     def _guided_continuation_contract(
         self, *, facts: FinnV2PreprocessedRequest, context: Mapping[str, object],

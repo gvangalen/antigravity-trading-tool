@@ -482,6 +482,29 @@ def test_low_confidence_lineage_selection_requires_safe_persisted_context():
     assert with_context.operation_id == "explain_previous_evidence"
 
 
+def test_released_lineage_reformulation_constrains_the_structured_contract_manifest():
+    captured = {}
+
+    class Selector:
+        def select(self, **kwargs):
+            captured.update(kwargs)
+            return type("Selection", (), {
+                "operation_id": "reformulate_previous_response", "confidence": 0.9,
+                "entities": {}, "target_asset": None,
+                "conversation_reference": "previous_released_response", "missing_inputs": (),
+            })(), None
+
+    result = FinnV2OperationClassificationService(structured_selector=Selector()).classify(
+        message="Kun je dat korter en eenvoudiger uitleggen?",
+        conversation_context={"last_released_context": {"run_id": "run-1", "response": "Veilige uitleg."}},
+    )
+
+    assert result.operation_id == "reformulate_previous_response"
+    assert {contract.operation_id for contract in captured["candidate_contracts"]} == {
+        "reformulate_previous_response", "clarify_request", "unavailable",
+    }
+
+
 def test_manifest_candidates_exclude_contracts_without_selection_metadata():
     facts = CLASSIFIER.preprocessor.preprocess(message="Welke indicatoren gebruik ik?")
 
