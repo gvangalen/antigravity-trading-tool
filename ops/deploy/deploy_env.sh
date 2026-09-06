@@ -14,7 +14,7 @@ SSH_KEY="${SSH_KEY:-$HOME/Documents/market_dashboard/Oracle_Keys/ssh-key-2025-05
 SERVER_IP="${SERVER_IP:-}"
 REMOTE_DIR="${REMOTE_DIR:-/home/ubuntu/antigravity-trading-tool}"
 NODE_BIN="${NODE_BIN:-/home/ubuntu/.nvm/versions/node/v20.19.5/bin}"
-STRICT_DEEP_HEALTH="${STRICT_DEEP_HEALTH:-false}"
+STRICT_DEEP_HEALTH="${STRICT_DEEP_HEALTH:-true}"
 STRICT_EXTERNAL_SMOKE="${STRICT_EXTERNAL_SMOKE:-false}"
 DEPLOY_COMPONENT_SET="${DEPLOY_COMPONENT_SET:-full}"
 AUTO_ROLLBACK_ON_FAILURE="${AUTO_ROLLBACK_ON_FAILURE:-true}"
@@ -28,6 +28,11 @@ REMOTE_DEPLOY_COMMAND_TIMEOUT_SECONDS="${REMOTE_DEPLOY_COMMAND_TIMEOUT_SECONDS:-
 # deploy gate alive until the last worker can register with Redis/health.
 DEEP_HEALTH_ATTEMPTS="${DEEP_HEALTH_ATTEMPTS:-30}"
 DEEP_HEALTH_RETRY_DELAY_SECONDS="${DEEP_HEALTH_RETRY_DELAY_SECONDS:-10}"
+# The interactive queue is user-facing. Its worker must register before the
+# memory-heavy background workers are started, otherwise a cold deploy can
+# report PM2-online while Redis holds unclaimable FINN work.
+INTERACTIVE_WORKER_READY_ATTEMPTS="${INTERACTIVE_WORKER_READY_ATTEMPTS:-45}"
+INTERACTIVE_WORKER_READY_RETRY_DELAY_SECONDS="${INTERACTIVE_WORKER_READY_RETRY_DELAY_SECONDS:-2}"
 # A production cold start can take more than two minutes while routers and
 # worker-facing dependencies initialize. Do not tear down a healthy startup
 # before it has had a chance to bind and answer the lightweight health check.
@@ -390,6 +395,58 @@ PY
     pm2 start $PM2_CONFIG --only \"\$app\" --update-env
   }
 
+ wait_for_interactive_worker_ready() {
+    local health_payload
+    for attempt in \$(seq 1 \"\$INTERACTIVE_WORKER_READY_ATTEMPTS\"); do
+      health_payload=\"\$(curl --max-time 10 -fsS -H 'Host: 127.0.0.1' \\
+        http://127.0.0.1:\$BACKEND_PORT/api/system/health 2>/dev/null || true)\"
+      if printf '%s' \"\$health_payload\" | python3 - <<'PY'
+import json
+import sys
+
+raw = sys.stdin.read()
+try:
+    payload = json.loads(raw)
+except json.JSONDecodeError:
+    raise SystemExit(1)
+
+celery = (payload.get('components') or {}).get('celery') or {}
+queues = celery.get('workers_by_queue') or {}
+if celery.get('status') == 'ok' and queues.get('finn_interactive'):
+    raise SystemExit(0)
+raise SystemExit(1)
+PY
+      then
+        echo \"✅ FINN interactive worker is registered for finn_interactive.\"
+        return 0
+      fi
+      echo \"⏳ Waiting for FINN interactive worker registration (attempt \$attempt/\$INTERACTIVE_WORKER_READY_ATTEMPTS)...\" >&2
+      sleep \"\$INTERACTIVE_WORKER_READY_RETRY_DELAY_SECONDS\"
+    done
+    echo \"❌ FINN interactive worker never registered for finn_interactive.\" >&2
+    return 1
+  }
+
+  start_interactive_worker_first() {
+    if [[ ",\$AUX_PM2_APPS," != *,celery-worker-finn-interactive,* ]]; then
+      return 0
+    fi
+    DEPLOY_STEP_ID='pm2_finn_interactive'
+    pm2_start_app 'celery-worker-finn-interactive'
+    wait_for_interactive_worker_ready
+  }
+
+  start_remaining_auxiliary_apps() {
+    local app
+    IFS=',' read -ra pm2_apps <<< \"\$AUX_PM2_APPS\"
+    for app in \"\${pm2_apps[@]}\"; do
+      app=\"\$(printf '%s' \"\$app\" | xargs)\"
+      if [ -n \"\$app\" ] && [ \"\$app\" != 'celery-worker-finn-interactive' ]; then
+        pm2_start_app \"\$app\"
+      fi
+    done
+  }
+
   restart_backend_app() {
     echo \"⚠️ Restarting backend app ${BACKEND_APP} to recover startup/bind drift.\" >&2
     for_each_pm2_app \"$BACKEND_APP\" pm2_delete_app
@@ -421,8 +478,9 @@ PY
       exit 1
     fi
     if [ -n \"$AUX_PM2_APPS\" ]; then
+      start_interactive_worker_first
       DEPLOY_STEP_ID='pm2_auxiliary'
-      for_each_pm2_app \"$AUX_PM2_APPS\" pm2_start_app
+      start_remaining_auxiliary_apps
     fi
     check_pm2_apps_online
   }

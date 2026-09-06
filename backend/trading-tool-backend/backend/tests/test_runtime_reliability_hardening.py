@@ -25,6 +25,8 @@ def test_deploy_env_supports_backend_only_auto_rollback_and_previous_markers():
     assert 'REMOTE_DEPLOY_COMMAND_TIMEOUT_SECONDS="${REMOTE_DEPLOY_COMMAND_TIMEOUT_SECONDS:-900}"' in source
     assert 'DEEP_HEALTH_ATTEMPTS="${DEEP_HEALTH_ATTEMPTS:-30}"' in source
     assert 'DEEP_HEALTH_RETRY_DELAY_SECONDS="${DEEP_HEALTH_RETRY_DELAY_SECONDS:-10}"' in source
+    assert 'STRICT_DEEP_HEALTH="${STRICT_DEEP_HEALTH:-true}"' in source
+    assert 'INTERACTIVE_WORKER_READY_ATTEMPTS="${INTERACTIVE_WORKER_READY_ATTEMPTS:-45}"' in source
     assert 'BACKEND_INITIAL_LISTEN_ATTEMPTS="${BACKEND_INITIAL_LISTEN_ATTEMPTS:-180}"' in source
     assert 'BACKEND_INITIAL_HEALTH_ATTEMPTS="${BACKEND_INITIAL_HEALTH_ATTEMPTS:-90}"' in source
     assert 'BACKEND_RECOVERY_LISTEN_ATTEMPTS="${BACKEND_RECOVERY_LISTEN_ATTEMPTS:-180}"' in source
@@ -67,6 +69,10 @@ def test_deploy_env_supports_backend_only_auto_rollback_and_previous_markers():
     assert source.index("2026_08_23_finn_v2_artifact_operation_contract.py") < source.index("python3 -m backend.scripts.check_finn_v2_schema")
     assert source.index("2026_08_25_finn_v2_indicator_config_reconciliation.py") < source.index("python3 -m backend.scripts.check_finn_v2_schema")
     assert source.index("python3 -m backend.scripts.check_finn_v2_schema") < source.index("pm2_start_app()")
+    assert "wait_for_interactive_worker_ready()" in source
+    assert "/api/system/health" in source
+    assert "queues.get('finn_interactive')" in source
+    assert source.index("start_interactive_worker_first") < source.index("start_remaining_auxiliary_apps")
 
 
 def test_auto_deploy_serializes_production_and_retries_once_after_a_failed_attempt():

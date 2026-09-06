@@ -102,12 +102,19 @@ class SystemHealthService:
     @classmethod
     async def deep_health(cls) -> Dict[str, Any]:
         started = time.perf_counter()
+        database, broker, celery, market_snapshot, scores = await asyncio.gather(
+            cls._check_database(),
+            cls._check_broker(),
+            cls._check_celery(),
+            cls._check_latest_market_snapshot(),
+            cls._check_latest_score(),
+        )
         components = {
-            "database": await cls._check_database(),
-            "broker": await cls._check_broker(),
-            "celery": await cls._check_celery(),
-            "market_snapshot": await cls._check_latest_market_snapshot(),
-            "scores": await cls._check_latest_score(),
+            "database": database,
+            "broker": broker,
+            "celery": celery,
+            "market_snapshot": market_snapshot,
+            "scores": scores,
         }
         cls._attach_queue_runtime_metadata(components)
         overall = cls._overall_status(components)
@@ -376,13 +383,11 @@ class SystemHealthService:
     @staticmethod
     async def _check_celery() -> Dict[str, Any]:
         try:
-            ping_result = await SystemHealthService._safe_celery_inspect(SystemHealthService._celery_ping)
-            active_queues = await SystemHealthService._safe_celery_inspect(
-                SystemHealthService._celery_active_queues
-            )
-            stats_result = await SystemHealthService._safe_celery_inspect(SystemHealthService._celery_stats)
-            registered_result = await SystemHealthService._safe_celery_inspect(
-                SystemHealthService._celery_registered
+            ping_result, active_queues, stats_result, registered_result = await asyncio.gather(
+                SystemHealthService._safe_celery_inspect(SystemHealthService._celery_ping),
+                SystemHealthService._safe_celery_inspect(SystemHealthService._celery_active_queues),
+                SystemHealthService._safe_celery_inspect(SystemHealthService._celery_stats),
+                SystemHealthService._safe_celery_inspect(SystemHealthService._celery_registered),
             )
 
             workers = SystemHealthService._visible_workers(

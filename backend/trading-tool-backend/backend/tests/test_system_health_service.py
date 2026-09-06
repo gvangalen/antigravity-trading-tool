@@ -169,6 +169,28 @@ def test_deep_health_returns_component_statuses(monkeypatch):
     assert response["duration_ms"] >= 0
 
 
+def test_deep_health_runs_independent_component_checks_concurrently(monkeypatch):
+    observed = []
+
+    async def check(name):
+        observed.append((name, "started"))
+        await asyncio.sleep(0)
+        observed.append((name, "completed"))
+        return {"status": "ok"}
+
+    monkeypatch.setattr(SystemHealthService, "_check_database", staticmethod(lambda: check("database")))
+    monkeypatch.setattr(SystemHealthService, "_check_broker", staticmethod(lambda: check("broker")))
+    monkeypatch.setattr(SystemHealthService, "_check_celery", staticmethod(lambda: check("celery")))
+    monkeypatch.setattr(SystemHealthService, "_check_latest_market_snapshot", staticmethod(lambda: check("market")))
+    monkeypatch.setattr(SystemHealthService, "_check_latest_score", staticmethod(lambda: check("scores")))
+
+    asyncio.run(SystemHealthService.deep_health())
+
+    assert [name for name, state in observed if state == "started"] == [
+        "database", "broker", "celery", "market", "scores",
+    ]
+
+
 def test_workers_by_queue_maps_active_queue_names():
     result = SystemHealthService._workers_by_queue({
         "worker-a": [{"name": "market_data"}, {"name": "scoring"}],
