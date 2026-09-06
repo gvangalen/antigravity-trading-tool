@@ -363,7 +363,7 @@ def test_gateway_run_foundation_now_returns_same_run_id_after_visible_budget_tim
         async def get_for_run(self, _run_id):
             return SimpleNamespace(task_id="task-1", queue="ai_generation", dispatch_id="dispatch-1")
         async def begin_handoff(self, **kwargs):
-            observed.append(("handoff", kwargs["dispatch_id"]))
+            observed.append(("handoff", kwargs["dispatch_id"], kwargs["lease_seconds"]))
             return True
         async def mark_published(self, dispatch_id):
             observed.append(("published", dispatch_id))
@@ -397,7 +397,7 @@ def test_gateway_run_foundation_now_returns_same_run_id_after_visible_budget_tim
     assert session.commit_calls == 3
     assert observed == [
         ("created", run_id),
-        ("handoff", "dispatch-1"),
+        ("handoff", "dispatch-1", gateway_module.DISPATCH_HANDOFF_LEASE_SECONDS),
         {"kwargs": {"run_id": run_id}, "task_id": "task-1", "queue": "ai_generation"},
         ("published", "dispatch-1"),
     ]

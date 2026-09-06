@@ -232,9 +232,18 @@ class FinnV2DispatchRepository:
                 FinnV2RunDispatch.status.in_(["pending", "retryable_failure", "dispatching"]),
                 # Creation only makes the durable outbox visible. The gateway
                 # can still be handing the row to Celery, so the interactive
-                # claim deadline begins at the recorded broker handoff.
+                # claim deadline begins at the recorded broker handoff. A
+                # ``dispatching`` row has an owner and a lease while the
+                # broker accepts or schedules its one permitted delivery;
+                # recovery must never terminalize that live reservation just
+                # because its published timestamp is older than the generic
+                # watchdog age.
                 FinnV2RunDispatch.dispatched_at.is_not(None),
                 FinnV2RunDispatch.dispatched_at < now - timedelta(seconds=max_age_seconds),
+                or_(
+                    FinnV2RunDispatch.lease_expires_at.is_(None),
+                    FinnV2RunDispatch.lease_expires_at < now,
+                ),
             )
             .order_by(FinnV2RunDispatch.created_at.asc())
             .limit(limit)

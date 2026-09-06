@@ -126,6 +126,10 @@ def test_unclaimed_dispatch_deadline_starts_after_broker_handoff():
 
     assert "dispatched_at.is_not(None)" in source
     assert "dispatched_at < now - timedelta(seconds=max_age_seconds)" in source
+    # A direct broker handoff is reserved before publishing. Its lease is the
+    # single-delivery ownership boundary, so recovery cannot race a received
+    # task before the worker has a chance to make its atomic claim.
+    assert "FinnV2RunDispatch.lease_expires_at < now" in source
     assert "created_at < now - timedelta(seconds=max_age_seconds)" not in source
 
 

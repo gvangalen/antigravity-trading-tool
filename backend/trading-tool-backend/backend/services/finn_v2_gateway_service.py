@@ -30,6 +30,10 @@ logger = logging.getLogger(__name__)
 run_rate_limiter = InMemoryRateLimiter(requests_limit=20, window_seconds=60)
 
 SECRET_FIELD_MARKERS = ("token", "cookie", "secret", "api_key", "apikey", "credential", "authorization", "csrf")
+# This is ownership of one broker handoff, not a user-visible lifecycle
+# budget. Recovery may retry only after the broker has had this bounded window
+# to schedule the sole Celery delivery and its worker can atomically claim it.
+DISPATCH_HANDOFF_LEASE_SECONDS = 60
 
 
 class FinnV2GatewayService:
@@ -240,7 +244,7 @@ class FinnV2GatewayService:
             handoff_started = await self.dispatches.begin_handoff(
                 dispatch_id=dispatch.dispatch_id,
                 owner=handoff_owner,
-                lease_seconds=20,
+                lease_seconds=DISPATCH_HANDOFF_LEASE_SECONDS,
             )
             if not handoff_started:
                 logger.warning("FINN V2 dispatch handoff was already reserved", extra={"run_id": run_id})
