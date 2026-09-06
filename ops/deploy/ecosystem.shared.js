@@ -1,4 +1,5 @@
 const path = require("path");
+const fs = require("fs");
 
 const BASE_REMOTE_DIR = process.env.REMOTE_DIR || "/home/ubuntu/antigravity-trading-tool";
 const NODE_INTERPRETER =
@@ -43,6 +44,21 @@ function pickRuntimeEnv(keys) {
   }, {});
 }
 
+function loadReleaseMetadata() {
+  const metadataPath = path.join(BASE_REMOTE_DIR, "ops", "deploy", ".release_metadata.env");
+  try {
+    return fs.readFileSync(metadataPath, "utf8").split("\n").reduce((metadata, line) => {
+      const match = /^(TRADAMIND_BUILD_COMMIT_SHA|TRADAMIND_BUILD_TIME)=([^\n]+)$/.exec(line);
+      if (match) {
+        metadata[match[1]] = match[2];
+      }
+      return metadata;
+    }, {});
+  } catch (error) {
+    return {};
+  }
+}
+
 const SHARED_RUNTIME_ENV = pickRuntimeEnv([
   "TWELVE_DATA_API_KEY",
   "OPENAI_API_KEY",
@@ -71,6 +87,7 @@ const SHARED_RUNTIME_ENV = pickRuntimeEnv([
   "TRADAMIND_BUILD_COMMIT_SHA",
   "TRADAMIND_BUILD_TIME",
 ]);
+const RELEASE_METADATA_ENV = loadReleaseMetadata();
 
 function createEcosystem(environmentName) {
   const environment = ENVIRONMENTS[environmentName];
@@ -100,6 +117,7 @@ function createEcosystem(environmentName) {
         interpreter: NODE_INTERPRETER,
         env: {
           ...SHARED_RUNTIME_ENV,
+          ...RELEASE_METADATA_ENV,
           NODE_ENV: "production",
           PORT: environment.frontendPort,
           APP_ENV: environment.appEnv,
@@ -114,6 +132,7 @@ function createEcosystem(environmentName) {
         cwd: backendDir,
         env: {
           ...SHARED_RUNTIME_ENV,
+          ...RELEASE_METADATA_ENV,
           APP_ENV: environment.appEnv,
           TRADAMIND_BUILD_SERVICE: "backend",
         },
@@ -127,6 +146,7 @@ function createEcosystem(environmentName) {
         interpreter: "none",
         env: {
           ...SHARED_RUNTIME_ENV,
+          ...RELEASE_METADATA_ENV,
           APP_ENV: environment.appEnv,
           TRADAMIND_BUILD_SERVICE: "celery-worker-default",
         },
@@ -140,6 +160,7 @@ function createEcosystem(environmentName) {
         interpreter: "none",
         env: {
           ...SHARED_RUNTIME_ENV,
+          ...RELEASE_METADATA_ENV,
           APP_ENV: environment.appEnv,
           TRADAMIND_BUILD_SERVICE: "celery-worker-market-portfolio",
         },
@@ -153,6 +174,7 @@ function createEcosystem(environmentName) {
         interpreter: "none",
         env: {
           ...SHARED_RUNTIME_ENV,
+          ...RELEASE_METADATA_ENV,
           APP_ENV: environment.appEnv,
           TRADAMIND_BUILD_SERVICE: "celery-worker-scoring-execution",
         },
@@ -166,6 +188,7 @@ function createEcosystem(environmentName) {
         interpreter: "none",
         env: {
           ...SHARED_RUNTIME_ENV,
+          ...RELEASE_METADATA_ENV,
           APP_ENV: environment.appEnv,
           TRADAMIND_BUILD_SERVICE: "celery-worker-ai-reporting",
         },
@@ -179,6 +202,7 @@ function createEcosystem(environmentName) {
         interpreter: "none",
         env: {
           ...SHARED_RUNTIME_ENV,
+          ...RELEASE_METADATA_ENV,
           APP_ENV: environment.appEnv,
           TRADAMIND_BUILD_SERVICE: "celery-worker-finn-interactive",
         },
@@ -192,6 +216,7 @@ function createEcosystem(environmentName) {
         interpreter: "none",
         env: {
           ...SHARED_RUNTIME_ENV,
+          ...RELEASE_METADATA_ENV,
           APP_ENV: environment.appEnv,
           TRADAMIND_BUILD_SERVICE: "celery-beat",
         },

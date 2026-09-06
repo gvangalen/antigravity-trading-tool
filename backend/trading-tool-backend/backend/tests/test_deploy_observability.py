@@ -83,12 +83,26 @@ def test_deploy_script_uses_fixed_step_ids_and_preserves_rollback() -> None:
         "remote_preflight",
         "migration_plan",
         "schema_health",
+        "memory_headroom",
         "pm2_core",
         "deep_health",
         "release_marker",
         "release_complete",
     ):
         assert step in source
+
+
+def test_release_identity_is_written_before_pm2_and_loaded_by_every_process() -> None:
+    deploy_source = DEPLOY_SCRIPT.read_text(encoding="utf-8")
+    rollback_source = (REPO_ROOT / "ops" / "deploy" / "rollback_env.sh").read_text(encoding="utf-8")
+    ecosystem_source = (REPO_ROOT / "ops" / "deploy" / "ecosystem.shared.js").read_text(encoding="utf-8")
+
+    assert 'metadata_path="ops/deploy/.release_metadata.env"' in deploy_source
+    assert deploy_source.index("write_release_metadata") < deploy_source.index("pm2_start_app()")
+    assert 'metadata_path="ops/deploy/.release_metadata.env"' in rollback_source
+    assert "function loadReleaseMetadata()" in ecosystem_source
+    assert "const RELEASE_METADATA_ENV = loadReleaseMetadata();" in ecosystem_source
+    assert ecosystem_source.count("...RELEASE_METADATA_ENV,") == 8
 
 
 def test_release_marker_remote_steps_are_independently_guarded() -> None:

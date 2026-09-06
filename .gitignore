@@ -10,6 +10,9 @@ __pycache__/
 *.sql
 dump.sql
 
+# Deployment-owned build identity, written atomically on the target host.
+ops/deploy/.release_metadata.env
+
 # Celery Beat runtime state
 celerybeat-schedule
 celerybeat-schedule.*

@@ -237,6 +237,15 @@ if ! printf '%s\n' "$DEPLOY_GIT_TOKEN" | timeout --foreground "${REMOTE_DEPLOY_C
   }
   sync_git_ref
   git reset --hard $DEPLOY_REF
+  write_release_metadata() {
+    local metadata_path="ops/deploy/.release_metadata.env"
+    local temporary_path="${metadata_path}.tmp.$$"
+    umask 077
+    printf 'TRADAMIND_BUILD_COMMIT_SHA=%s\nTRADAMIND_BUILD_TIME=%s\n' \
+      '$TARGET_COMMIT_FULL' '$BUILD_TIMESTAMP_UTC' > "$temporary_path"
+    mv -f "$temporary_path" "$metadata_path"
+  }
+  write_release_metadata
   mkdir -p frontend/trading-tool-frontend/out/_next/static
   if [ -n \"\$(find \"\$PREVIOUS_FRONTEND_STATIC\" -mindepth 1 -maxdepth 1 -print -quit 2>/dev/null)\" ]; then
     cp -Rn \"\$PREVIOUS_FRONTEND_STATIC/.\" frontend/trading-tool-frontend/out/_next/static/

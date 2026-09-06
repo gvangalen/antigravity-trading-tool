@@ -62,6 +62,15 @@ for attempt in $(seq 1 5); do
   sleep 2
 done
 git reset --hard "$ROLLBACK_COMMIT"
+write_release_metadata() {
+  local metadata_path="ops/deploy/.release_metadata.env"
+  local temporary_path="${metadata_path}.tmp.$$"
+  umask 077
+  printf 'TRADAMIND_BUILD_COMMIT_SHA=%s\nTRADAMIND_BUILD_TIME=%s\n' \
+    "$(git rev-parse HEAD)" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$temporary_path"
+  mv -f "$temporary_path" "$metadata_path"
+}
+write_release_metadata
 
 cd frontend/trading-tool-frontend
 rm -rf .next
