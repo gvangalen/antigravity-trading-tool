@@ -121,8 +121,10 @@ TARGET_COMMIT_FULL="$(git rev-parse HEAD)"
 BUILD_TIMESTAMP_UTC="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 REMOTE_LAST_GOOD="$(
   ssh "${SSH_ARGS[@]}" "ubuntu@$SERVER_IP" "
-    if sudo test -f ${CANONICAL_DEPLOY_STATE_DIR}/LAST_GOOD_COMMIT; then
-      sudo cat ${CANONICAL_DEPLOY_STATE_DIR}/LAST_GOOD_COMMIT
+    if test -r ${REMOTE_DIR}/${DEPLOY_STATE_DIR}/LAST_GOOD_COMMIT; then
+      cat ${REMOTE_DIR}/${DEPLOY_STATE_DIR}/LAST_GOOD_COMMIT
+    elif sudo -n test -f ${CANONICAL_DEPLOY_STATE_DIR}/LAST_GOOD_COMMIT; then
+      sudo -n cat ${CANONICAL_DEPLOY_STATE_DIR}/LAST_GOOD_COMMIT
     fi
   " 2>/dev/null | tail -n 1
 )"

@@ -84,6 +84,8 @@ def test_deploy_script_uses_fixed_step_ids_and_preserves_rollback() -> None:
     assert "DEPLOY_STATUS_WRITER_B64" in source
     assert "base64 -d | sudo -n python3 -" in source
     assert "base64 -d | sudo python3 -" not in source
+    assert "test -r ${REMOTE_DIR}/${DEPLOY_STATE_DIR}/LAST_GOOD_COMMIT" in source
+    assert "sudo -n test -f ${CANONICAL_DEPLOY_STATE_DIR}/LAST_GOOD_COMMIT" in source
     assert "DEPLOY_STEP_ID" in source
     assert "trap record_deploy_exit EXIT" in source
     assert "advance_deploy_step()" in source
