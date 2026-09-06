@@ -90,6 +90,9 @@ def test_deploy_script_uses_fixed_step_ids_and_preserves_rollback() -> None:
         "CORE_PM2_APPS",
         "AUX_PM2_APPS",
         "EXPECTED_PM2_APPS",
+    ):
+        assert f"export {variable}='${variable}'" in source
+    for variable in (
         "DEEP_HEALTH_ATTEMPTS",
         "DEEP_HEALTH_RETRY_DELAY_SECONDS",
         "INTERACTIVE_WORKER_READY_ATTEMPTS",
