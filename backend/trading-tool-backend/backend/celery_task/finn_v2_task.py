@@ -2,10 +2,12 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 import uuid
 from typing import Any, Dict
 
 from celery import shared_task
+from celery.signals import worker_process_init, worker_process_shutdown
 from sqlalchemy import select, text
 
 from backend.services.finn_v2_gateway_service import (
@@ -23,6 +25,7 @@ from backend.celery_task.queue_policy import resolve_task_queue
 
 
 logger = logging.getLogger(__name__)
+_interactive_worker_loop: asyncio.AbstractEventLoop | None = None
 
 DISPATCH_LEASE_SECONDS = 300
 DISPATCH_HEARTBEAT_SECONDS = 60
@@ -43,7 +46,8 @@ async def _run_task_with_local_resources(coroutine):
         # ``asyncio.run`` closes its loop immediately after this coroutine.
         # Closing the async engine beforehand prevents pooled SSL transports
         # from being finalized later against that closed loop.
-        await engine.dispose()
+        if _interactive_worker_loop is None:
+            await engine.dispose()
 
 
 def _run_async(coroutine):
@@ -53,7 +57,28 @@ def _run_async(coroutine):
     # delay the worker's first dispatch claim long enough for recovery to
     # terminalize an otherwise delivered interactive run.  The async engine is
     # still disposed at the task boundary below, before this fresh loop closes.
+    if _interactive_worker_loop is not None:
+        return _interactive_worker_loop.run_until_complete(_run_task_with_local_resources(coroutine))
     return asyncio.run(_run_task_with_local_resources(coroutine))
+
+
+@worker_process_init.connect
+def initialize_interactive_worker_loop(**_kwargs):
+    """Keep asyncpg and HTTP transports on one valid interactive-worker loop."""
+    global _interactive_worker_loop
+    if os.getenv("TRADAMIND_BUILD_SERVICE") == "celery-worker-finn-interactive":
+        _interactive_worker_loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(_interactive_worker_loop)
+
+
+@worker_process_shutdown.connect
+def close_interactive_worker_loop(**_kwargs):
+    global _interactive_worker_loop
+    if _interactive_worker_loop is None:
+        return
+    _interactive_worker_loop.run_until_complete(engine.dispose())
+    _interactive_worker_loop.close()
+    _interactive_worker_loop = None
 
 
 @shared_task(
