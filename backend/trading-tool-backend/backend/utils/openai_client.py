@@ -58,6 +58,27 @@ if api_key:
     except Exception as e:
         logger.error(f"❌ Fout bij initialiseren OpenAI Client: {e}")
 
+
+def reset_openai_client_after_fork() -> bool:
+    """Give a prefork worker its own HTTP transports before it serves FINN."""
+    global client
+    if not api_key:
+        client = None
+        return False
+    previous_client = client
+    try:
+        client = OpenAI(api_key=api_key)
+    except Exception:
+        logger.warning("OpenAI client reset after worker fork failed", exc_info=True)
+        client = None
+        return False
+    if previous_client is not None:
+        try:
+            previous_client.close()
+        except Exception:
+            logger.debug("Inherited OpenAI client close skipped after worker fork", exc_info=True)
+    return True
+
 # ============================================================
 # 🔥 AI DEFAULTS
 # ============================================================
@@ -799,7 +820,32 @@ def ask_gpt_structured_response(
             }
         if "timeout" in str(e).lower():
             return {"error": "timeout"}
-        return {"error": "provider_error"}
+    return {"error": "provider_error"}
+
+
+def warm_openai_structured_runtime(*, timeout_seconds: int = 10) -> bool:
+    """Prime the same Responses JSON-schema transport used by FINN selection.
+
+    This is a process-readiness probe only: it contains no user input, does
+    not choose an operation, and its response is never persisted or reused.
+    """
+    response = ask_gpt_structured_response(
+        prompt="ready",
+        system_role="Return the required readiness schema.",
+        output_spec=StructuredOutputSpec(
+            name="finn_runtime_readiness",
+            schema={
+                "type": "object",
+                "additionalProperties": False,
+                "properties": {"ready": {"type": "boolean"}},
+                "required": ["ready"],
+            },
+        ),
+        timeout_seconds=max(3, min(15, int(timeout_seconds))),
+        max_output_tokens=16,
+        client_max_retries=0,
+    )
+    return bool(isinstance(response.get("parsed"), dict) and response["parsed"].get("ready") is True)
 
 
 def _is_provider_schema_contract_error(message: str) -> bool:

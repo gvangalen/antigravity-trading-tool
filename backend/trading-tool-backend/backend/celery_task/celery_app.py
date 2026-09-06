@@ -97,6 +97,30 @@ def reset_sqlalchemy_pools_after_fork(**kwargs):
         logger.warning("⚠️ Failed to reset SQLAlchemy pools after Celery worker fork", exc_info=True)
 
 
+@worker_process_init.connect
+def reset_and_warm_finn_provider_after_fork(**kwargs):
+    """Finish the interactive worker's network warmup before user tasks run."""
+    if os.getenv("TRADAMIND_BUILD_SERVICE") != "celery-worker-finn-interactive":
+        return
+    try:
+        from backend.utils.openai_client import (
+            reset_openai_client_after_fork,
+            warm_openai_structured_runtime,
+        )
+
+        if not reset_openai_client_after_fork():
+            logger.warning("FINN interactive provider warmup skipped: client unavailable")
+            return
+        if warm_openai_structured_runtime(timeout_seconds=10):
+            logger.info("FINN interactive structured provider warmed after worker fork")
+        else:
+            logger.warning("FINN interactive structured provider warmup did not complete")
+    except Exception:
+        # The worker remains available for its typed provider-failure path;
+        # warmup must not hide or alter a user request's lifecycle outcome.
+        logger.warning("FINN interactive provider warmup failed", exc_info=True)
+
+
 @worker_ready.connect
 def warm_finn_interactive_worker_after_ready(sender=None, **kwargs):
     """Warm the isolated interactive worker without involving user data or AI."""
