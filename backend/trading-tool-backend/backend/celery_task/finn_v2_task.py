@@ -194,14 +194,10 @@ async def _recover_finn_v2_dispatches() -> int:
                 await session.commit()
             if not reserved:
                 continue
-            # The reservation blocks overlapping recovery workers.  Restore
-            # pending just before broker handoff so a promptly delivered task
-            # can claim normally; its retry deadline prevents a second
-            # recovery from racing the handoff window.
+            process_finn_v2_run.apply_async(kwargs={"run_id": run_id}, task_id=task_id, queue=queue or resolve_task_queue(process_finn_v2_run.name))
             async with async_session_factory() as session:
                 await FinnV2DispatchRepository(session).mark_published(dispatch_id)
                 await session.commit()
-            process_finn_v2_run.apply_async(kwargs={"run_id": run_id}, task_id=task_id, queue=queue or resolve_task_queue(process_finn_v2_run.name))
             recovered += 1
         except Exception:
             logger.exception("FINN V2 durable dispatch recovery enqueue failed", extra={"dispatch_id": dispatch_id, "run_id": run_id})

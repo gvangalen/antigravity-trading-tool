@@ -129,6 +129,19 @@ def test_unclaimed_dispatch_deadline_starts_after_broker_handoff():
     assert "created_at < now - timedelta(seconds=max_age_seconds)" not in source
 
 
+def test_recovery_never_republishes_a_reserved_broker_handoff():
+    source = inspect.getsource(FinnV2DispatchRepository.list_recoverable)
+
+    assert 'status.in_(["pending", "retryable_failure"])' in source
+    assert '"dispatching"' not in source
+
+
+def test_worker_claim_accepts_the_reserved_broker_handoff_once():
+    source = inspect.getsource(FinnV2DispatchRepository.claim)
+
+    assert 'FinnV2RunDispatch.status == "dispatching"' in source
+
+
 def test_duplicate_worker_delivery_does_not_start_second_lifecycle(monkeypatch):
     run = SimpleNamespace(id="run-2", user_id=7, status="planned", retryable=False, error_code=None)
     _install_worker_fakes(monkeypatch, run)

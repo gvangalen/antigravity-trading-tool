@@ -236,6 +236,16 @@ class FinnV2GatewayService:
             from backend.celery_task.finn_v2_task import process_finn_v2_run
 
             dispatch = await self.dispatches.get_for_run(run_id)
+            handoff_owner = f"gateway:{uuid.uuid4().hex}"
+            handoff_started = await self.dispatches.begin_handoff(
+                dispatch_id=dispatch.dispatch_id,
+                owner=handoff_owner,
+                lease_seconds=20,
+            )
+            if not handoff_started:
+                logger.warning("FINN V2 dispatch handoff was already reserved", extra={"run_id": run_id})
+                return run_id
+            await self.session.commit()
             publish_started = monotonic()
             # Celery's broker client is synchronous. It must never hold the
             # request event loop after the run and outbox record are durable.

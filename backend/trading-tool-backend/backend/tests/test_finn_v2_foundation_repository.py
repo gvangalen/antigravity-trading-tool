@@ -362,6 +362,9 @@ def test_gateway_run_foundation_now_returns_same_run_id_after_visible_budget_tim
             return SimpleNamespace(task_id="task-1", queue="ai_generation", dispatch_id="dispatch-1")
         async def get_for_run(self, _run_id):
             return SimpleNamespace(task_id="task-1", queue="ai_generation", dispatch_id="dispatch-1")
+        async def begin_handoff(self, **kwargs):
+            observed.append(("handoff", kwargs["dispatch_id"]))
+            return True
         async def mark_published(self, dispatch_id):
             observed.append(("published", dispatch_id))
     class _Task:
@@ -391,9 +394,10 @@ def test_gateway_run_foundation_now_returns_same_run_id_after_visible_budget_tim
     run_id = asyncio.run(_exercise())
 
     assert run_id.startswith("finn-v2-run-")
-    assert session.commit_calls == 2
+    assert session.commit_calls == 3
     assert observed == [
         ("created", run_id),
+        ("handoff", "dispatch-1"),
         {"kwargs": {"run_id": run_id}, "task_id": "task-1", "queue": "ai_generation"},
         ("published", "dispatch-1"),
     ]

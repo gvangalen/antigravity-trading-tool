@@ -175,6 +175,9 @@ def test_gateway_enqueues_visible_run_after_commit():
         async def get_for_run(self, _run_id):
             return SimpleNamespace(dispatch_id="dispatch-1", task_id="task-1", queue="ai_generation")
 
+        async def begin_handoff(self, **_kwargs):
+            return True
+
         async def mark_published(self, dispatch_id):
             observed.append(("published", dispatch_id))
 
@@ -228,6 +231,9 @@ def test_gateway_request_cancellation_does_not_cancel_durable_dispatch():
     class _Dispatches:
         async def get_for_run(self, _run_id):
             return SimpleNamespace(dispatch_id="dispatch-1", task_id="task-1", queue="ai_generation")
+
+        async def begin_handoff(self, **_kwargs):
+            return True
 
         async def mark_published(self, dispatch_id):
             observed.append(("published", dispatch_id))

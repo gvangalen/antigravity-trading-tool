@@ -35,6 +35,9 @@ class FinnV2DispatchRepository:
             .where(
                 FinnV2RunDispatch.run_id == run_id,
                 or_(
+                    # A durable handoff is reserved before the synchronous
+                    # broker publish begins. The worker is its sole consumer.
+                    FinnV2RunDispatch.status == "dispatching",
                     (
                         FinnV2RunDispatch.status.in_(["pending", "retryable_failure"])
                         & FinnV2RunDispatch.lease_expires_at.is_(None)
@@ -75,6 +78,30 @@ class FinnV2DispatchRepository:
         )
         return result.scalars().first()
 
+    async def begin_handoff(self, *, dispatch_id: str, owner: str, lease_seconds: int) -> bool:
+        """Reserve a broker handoff before publishing its Celery message.
+
+        Recovery must never republish a row while a direct publish is still
+        connecting to the broker. A received task atomically moves this state
+        to ``claimed`` before any user processing begins.
+        """
+        now = datetime.now(timezone.utc)
+        result = await self.session.execute(
+            update(FinnV2RunDispatch)
+            .where(
+                FinnV2RunDispatch.dispatch_id == dispatch_id,
+                FinnV2RunDispatch.status.in_(["pending", "retryable_failure"]),
+            )
+            .values(
+                status="dispatching",
+                owner=owner,
+                dispatched_at=now,
+                lease_expires_at=now + timedelta(seconds=lease_seconds),
+                updated_at=now,
+            )
+        )
+        return bool(result.rowcount)
+
     async def heartbeat(self, *, dispatch_id: str, owner: str, lease_seconds: int) -> bool:
         now = datetime.now(timezone.utc)
         result = await self.session.execute(
@@ -89,20 +116,16 @@ class FinnV2DispatchRepository:
         return bool(result.rowcount)
 
     async def mark_published(self, dispatch_id: str) -> None:
-        """Record broker handoff without claiming that a worker accepted it."""
+        """Record broker handoff without reopening it to concurrent recovery."""
         now = datetime.now(timezone.utc)
         await self.session.execute(
             update(FinnV2RunDispatch)
             .where(
                 FinnV2RunDispatch.dispatch_id == dispatch_id,
-                FinnV2RunDispatch.status.in_(["pending", "retryable_failure", "dispatching"]),
+                FinnV2RunDispatch.status == "dispatching",
             )
             .values(
-                status="pending",
-                owner=None,
-                lease_expires_at=None,
                 dispatched_at=now,
-                next_attempt_at=now + timedelta(seconds=self.PUBLISH_RETRY_SECONDS),
                 updated_at=now,
             )
         )
@@ -206,13 +229,12 @@ class FinnV2DispatchRepository:
         result = await self.session.execute(
             select(FinnV2RunDispatch)
             .where(
-                FinnV2RunDispatch.status.in_(["pending", "retryable_failure"]),
+                FinnV2RunDispatch.status.in_(["pending", "retryable_failure", "dispatching"]),
                 # Creation only makes the durable outbox visible. The gateway
                 # can still be handing the row to Celery, so the interactive
                 # claim deadline begins at the recorded broker handoff.
                 FinnV2RunDispatch.dispatched_at.is_not(None),
                 FinnV2RunDispatch.dispatched_at < now - timedelta(seconds=max_age_seconds),
-                FinnV2RunDispatch.owner.is_(None),
             )
             .order_by(FinnV2RunDispatch.created_at.asc())
             .limit(limit)
