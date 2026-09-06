@@ -33,6 +33,11 @@ DEEP_HEALTH_RETRY_DELAY_SECONDS="${DEEP_HEALTH_RETRY_DELAY_SECONDS:-10}"
 # report PM2-online while Redis holds unclaimable FINN work.
 INTERACTIVE_WORKER_READY_ATTEMPTS="${INTERACTIVE_WORKER_READY_ATTEMPTS:-45}"
 INTERACTIVE_WORKER_READY_RETRY_DELAY_SECONDS="${INTERACTIVE_WORKER_READY_RETRY_DELAY_SECONDS:-2}"
+# PM2 can report a worker deleted before its prefork children have released
+# their RSS. Wait for bounded memory headroom before importing FastAPI again
+# so a replacement backend does not immediately thrash in swap.
+MIN_DEPLOY_AVAILABLE_MEMORY_KB="${MIN_DEPLOY_AVAILABLE_MEMORY_KB:-196608}"
+DEPLOY_MEMORY_HEADROOM_ATTEMPTS="${DEPLOY_MEMORY_HEADROOM_ATTEMPTS:-45}"
 # A production cold start can take more than two minutes while routers and
 # worker-facing dependencies initialize. Do not tear down a healthy startup
 # before it has had a chance to bind and answer the lightweight health check.
@@ -412,6 +417,20 @@ PY
     pm2 start $PM2_CONFIG --only \"\$app\" --update-env
   }
 
+  wait_for_deploy_memory_headroom() {
+    local available_kb
+    for attempt in \$(seq 1 \"\$DEPLOY_MEMORY_HEADROOM_ATTEMPTS\"); do
+      available_kb=\"\$(awk '/^MemAvailable:/ { print \$2; exit }' /proc/meminfo)\"
+      if [ \"\${available_kb:-0}\" -ge \"\$MIN_DEPLOY_AVAILABLE_MEMORY_KB\" ]; then
+        return 0
+      fi
+      echo \"⏳ Waiting for deployment memory headroom (available \${available_kb:-0} KiB; attempt \$attempt/\$DEPLOY_MEMORY_HEADROOM_ATTEMPTS)...\" >&2
+      sleep 2
+    done
+    echo \"❌ Insufficient memory headroom for a safe backend startup.\" >&2
+    return 1
+  }
+
  wait_for_interactive_worker_ready() {
     local health_payload
     for attempt in \$(seq 1 \"\$INTERACTIVE_WORKER_READY_ATTEMPTS\"); do
@@ -488,6 +507,10 @@ PY
     else
       for_each_pm2_app \"$CORE_PM2_APPS\" pm2_delete_app
       for_each_pm2_app \"$AUX_PM2_APPS\" pm2_delete_app
+    fi
+    DEPLOY_STEP_ID='memory_headroom'
+    if ! wait_for_deploy_memory_headroom; then
+      exit 1
     fi
     DEPLOY_STEP_ID='pm2_core'
     for_each_pm2_app \"$CORE_PM2_APPS\" pm2_start_app

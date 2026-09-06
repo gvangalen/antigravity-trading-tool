@@ -27,6 +27,8 @@ def test_deploy_env_supports_backend_only_auto_rollback_and_previous_markers():
     assert 'DEEP_HEALTH_RETRY_DELAY_SECONDS="${DEEP_HEALTH_RETRY_DELAY_SECONDS:-10}"' in source
     assert 'STRICT_DEEP_HEALTH="${STRICT_DEEP_HEALTH:-true}"' in source
     assert 'INTERACTIVE_WORKER_READY_ATTEMPTS="${INTERACTIVE_WORKER_READY_ATTEMPTS:-45}"' in source
+    assert 'MIN_DEPLOY_AVAILABLE_MEMORY_KB="${MIN_DEPLOY_AVAILABLE_MEMORY_KB:-196608}"' in source
+    assert 'DEPLOY_MEMORY_HEADROOM_ATTEMPTS="${DEPLOY_MEMORY_HEADROOM_ATTEMPTS:-45}"' in source
     assert 'BACKEND_INITIAL_LISTEN_ATTEMPTS="${BACKEND_INITIAL_LISTEN_ATTEMPTS:-180}"' in source
     assert 'BACKEND_INITIAL_HEALTH_ATTEMPTS="${BACKEND_INITIAL_HEALTH_ATTEMPTS:-90}"' in source
     assert 'BACKEND_RECOVERY_LISTEN_ATTEMPTS="${BACKEND_RECOVERY_LISTEN_ATTEMPTS:-180}"' in source
@@ -71,6 +73,9 @@ def test_deploy_env_supports_backend_only_auto_rollback_and_previous_markers():
     assert source.index("2026_08_25_finn_v2_indicator_config_reconciliation.py") < source.index("python3 -m backend.scripts.check_finn_v2_schema")
     assert source.index("python3 -m backend.scripts.check_finn_v2_schema") < source.index("pm2_start_app()")
     assert "wait_for_interactive_worker_ready()" in source
+    assert "wait_for_deploy_memory_headroom()" in source
+    assert source.index("wait_for_deploy_memory_headroom()") < source.index("DEPLOY_STEP_ID='memory_headroom'")
+    assert source.index("DEPLOY_STEP_ID='memory_headroom'") < source.index("DEPLOY_STEP_ID='pm2_core'")
     assert "/api/system/health" in source
     assert "queues.get('finn_interactive')" in source
     assert source.index("start_interactive_worker_first") < source.index("start_remaining_auxiliary_apps")
