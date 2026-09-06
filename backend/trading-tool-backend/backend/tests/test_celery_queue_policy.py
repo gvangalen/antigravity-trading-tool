@@ -102,6 +102,7 @@ def test_task_queue_resolution_is_deterministic():
     assert resolve_task_queue("backend.celery_task.market_task.fetch_market_data") == "market_data"
     assert resolve_task_queue("backend.celery_task.store_daily_scores_task.run_rule_based_daily_scores") == "scoring"
     assert resolve_task_queue("backend.celery_task.trading_bot_task.run_daily_trading_bot") == "execution_critical"
+    assert resolve_task_queue("backend.celery_task.finn_v2_task.warm_finn_v2_interactive_worker") == "finn_interactive"
     assert resolve_task_queue("unknown.task") == "celery"
 
 

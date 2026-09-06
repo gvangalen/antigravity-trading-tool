@@ -206,6 +206,24 @@ async def fail_fast_database_config():
     await validate_database_connection()
     logger.info("✅ Database connection validated before serving auth/Finn routes.")
 
+
+@app.on_event("startup")
+async def warm_finn_dispatch_broker():
+    """Prime the broker producer pool before the first visible FINN request."""
+    def _warm() -> None:
+        from backend.celery_task.finn_v2_task import process_finn_v2_run
+
+        with process_finn_v2_run.app.connection_for_write() as connection:
+            connection.ensure_connection(max_retries=0)
+
+    try:
+        await asyncio.wait_for(asyncio.to_thread(_warm), timeout=3.0)
+        logger.info("✅ FINN dispatch broker warmed before serving requests.")
+    except Exception:
+        # A transient broker warmup issue must not make the whole API
+        # unavailable; the visible gateway retains its bounded typed path.
+        logger.warning("⚠️ FINN dispatch broker warmup failed", exc_info=True)
+
 # ------------------------------------------------------------
 # 📂 Static files
 # ------------------------------------------------------------

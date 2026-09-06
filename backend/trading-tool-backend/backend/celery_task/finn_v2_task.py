@@ -6,7 +6,7 @@ import uuid
 from typing import Any, Dict
 
 from celery import shared_task
-from sqlalchemy import select
+from sqlalchemy import select, text
 
 from backend.services.finn_v2_gateway_service import (
     run_retention_cleanup_job,
@@ -65,6 +65,21 @@ def _run_async(coroutine):
 )
 def process_finn_v2_run(self, *, run_id: str) -> str:
     return _run_async(_process_finn_v2_run(run_id=run_id, owner=str(self.request.id or "celery")))
+
+
+@shared_task(
+    name="backend.celery_task.finn_v2_task.warm_finn_v2_interactive_worker",
+    ignore_result=True,
+)
+def warm_finn_v2_interactive_worker() -> str:
+    """Exercise one task-local event loop before the first visible FINN run."""
+    return _run_async(_warm_finn_v2_interactive_worker())
+
+
+async def _warm_finn_v2_interactive_worker() -> str:
+    async with async_session_factory() as session:
+        await session.execute(text("SELECT 1"))
+    return "ready"
 
 
 async def _process_finn_v2_run(*, run_id: str, owner: str) -> str:

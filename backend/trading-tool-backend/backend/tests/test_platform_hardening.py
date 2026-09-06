@@ -272,6 +272,15 @@ def test_main_startup_is_schema_read_only():
     assert "ADD CONSTRAINT" not in source
 
 
+def test_main_warms_finn_broker_outside_the_visible_request_path():
+    main_path = Path(__file__).resolve().parents[1] / "main.py"
+    source = main_path.read_text()
+
+    assert "async def warm_finn_dispatch_broker" in source
+    assert "connection_for_write()" in source
+    assert "FINN dispatch broker warmed before serving requests" in source
+
+
 def test_deploy_script_has_no_user_specific_business_actions():
     deploy_path = Path(__file__).resolve().parents[4] / "deploy_live.sh"
     deploy_source = deploy_path.read_text()

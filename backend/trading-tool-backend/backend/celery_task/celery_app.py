@@ -5,7 +5,7 @@ from datetime import datetime, timedelta, timezone
 from dotenv import load_dotenv
 from celery import Celery
 from celery.schedules import crontab
-from celery.signals import before_task_publish, worker_process_init
+from celery.signals import before_task_publish, worker_process_init, worker_ready
 from kombu import Queue
 
 # =========================================================
@@ -95,6 +95,23 @@ def reset_sqlalchemy_pools_after_fork(**kwargs):
         logger.info("♻️ SQLAlchemy pools reset after Celery worker fork")
     except Exception:
         logger.warning("⚠️ Failed to reset SQLAlchemy pools after Celery worker fork", exc_info=True)
+
+
+@worker_ready.connect
+def warm_finn_interactive_worker_after_ready(sender=None, **kwargs):
+    """Warm the isolated interactive worker without involving user data or AI."""
+    if os.getenv("TRADAMIND_BUILD_SERVICE") != "celery-worker-finn-interactive":
+        return
+    try:
+        app = getattr(sender, "app", None) or celery_app
+        app.send_task(
+            "backend.celery_task.finn_v2_task.warm_finn_v2_interactive_worker"
+        )
+        logger.info("FINN interactive worker warmup queued after worker_ready")
+    except Exception:
+        # Readiness remains governed by the worker's broker handshake and
+        # deep health; a best-effort warmup must never make it unavailable.
+        logger.warning("FINN interactive worker warmup enqueue failed", exc_info=True)
 
 # =========================================================
 # 🚀 CELERY BEAT SCHEDULE (GEOPTIMALISEERD)
