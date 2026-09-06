@@ -82,6 +82,8 @@ def test_deploy_script_uses_fixed_step_ids_and_preserves_rollback() -> None:
 
     assert "write_deploy_status.py" in source
     assert "DEPLOY_STATUS_WRITER_B64" in source
+    assert "export MIN_DEPLOY_AVAILABLE_MEMORY_KB=$MIN_DEPLOY_AVAILABLE_MEMORY_KB" in source
+    assert "export DEPLOY_MEMORY_HEADROOM_ATTEMPTS=$DEPLOY_MEMORY_HEADROOM_ATTEMPTS" in source
     assert "base64 -d | sudo -n python3 -" in source
     assert "base64 -d | sudo python3 -" not in source
     assert "test -r ${REMOTE_DIR}/${DEPLOY_STATE_DIR}/LAST_GOOD_COMMIT" in source
