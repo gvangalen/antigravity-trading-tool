@@ -84,6 +84,18 @@ def test_deploy_script_uses_fixed_step_ids_and_preserves_rollback() -> None:
     assert "DEPLOY_STATUS_WRITER_B64" in source
     assert "export MIN_DEPLOY_AVAILABLE_MEMORY_KB=$MIN_DEPLOY_AVAILABLE_MEMORY_KB" in source
     assert "export DEPLOY_MEMORY_HEADROOM_ATTEMPTS=$DEPLOY_MEMORY_HEADROOM_ATTEMPTS" in source
+    for variable in (
+        "PM2_DEPLOY_MODE",
+        "BACKEND_APP",
+        "CORE_PM2_APPS",
+        "AUX_PM2_APPS",
+        "EXPECTED_PM2_APPS",
+        "DEEP_HEALTH_ATTEMPTS",
+        "DEEP_HEALTH_RETRY_DELAY_SECONDS",
+        "INTERACTIVE_WORKER_READY_ATTEMPTS",
+        "INTERACTIVE_WORKER_READY_RETRY_DELAY_SECONDS",
+    ):
+        assert f"export {variable}=${variable}" in source
     assert "base64 -d | sudo -n python3 -" in source
     assert "base64 -d | sudo python3 -" not in source
     assert "test -r ${REMOTE_DIR}/${DEPLOY_STATE_DIR}/LAST_GOOD_COMMIT" in source
