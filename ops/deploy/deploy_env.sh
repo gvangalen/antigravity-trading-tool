@@ -496,7 +496,8 @@ PY
   }
 
   start_interactive_worker_first() {
-    local worker_log_path=/home/ubuntu/.pm2/logs/celery-worker-finn-interactive-out.log
+    # Celery writes its startup handshake and ready signal to PM2's stderr log.
+    local worker_log_path=/home/ubuntu/.pm2/logs/celery-worker-finn-interactive-error.log
     local worker_log_start_line=0
     if [[ ",\$AUX_PM2_APPS," != *,celery-worker-finn-interactive,* ]]; then
       return 0
