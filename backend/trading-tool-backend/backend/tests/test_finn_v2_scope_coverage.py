@@ -41,6 +41,35 @@ def test_lineage_evidence_response_remains_relevant_after_an_off_topic_turn():
     ) is True
 
 
+def test_financial_concept_relevance_uses_the_contract_input_not_a_presentation_label():
+    service = FinnV2ResponseVerifierService(session=object())
+    draft = ResponseDraft(
+        draft_id="draft-financial-concept",
+        run_id="run-financial-concept",
+        user_id=7,
+        mode="READ",
+        direct_answer="RSI is een algemeen financieel analysebegrip.",
+        main_observation="FINN kan het uitleggen zonder persoonlijke conclusie.",
+        evidence_set_hash="hash-financial-concept",
+        reasoning_provenance={
+            "reasoning_source": "deterministic_contract",
+            "operation_id": "explain_financial_concept",
+        },
+        created_at=datetime.now(timezone.utc),
+    )
+
+    assert service._is_relevant(
+        "Wat betekent de RSI-indicator in technische analyse?", draft
+    ) is True
+
+    unrelated = draft.copy(deep=True)
+    unrelated.direct_answer = "FINN kan je profiel tonen."
+    unrelated.main_observation = "Dat gebruikt alleen accountcontext."
+    assert service._is_relevant(
+        "Wat betekent de RSI-indicator in technische analyse?", unrelated
+    ) is False
+
+
 def test_integrated_plan_verifier_requires_a_grounded_strength_and_limitation():
     draft = ResponseDraft(
         draft_id="draft-plan-quality",

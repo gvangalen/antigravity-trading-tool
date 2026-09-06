@@ -1259,6 +1259,28 @@ class FinnV2ResponseVerifierService:
             return True
         lowered = question.lower()
         answer = f"{draft.direct_answer} {draft.main_observation}".lower()
+        provenance = draft.reasoning_provenance or {}
+        if (
+            normalize_interaction_mode(draft.mode) == "READ"
+            and provenance.get("reasoning_source") == "deterministic_contract"
+            and provenance.get("operation_id") == "explain_financial_concept"
+        ):
+            # Financial-concept explanations are generated from the selected
+            # contract input, not from a required presentation keyword. Keep
+            # the check semantic by requiring a meaningful query term in the
+            # answer, rather than coupling it to a label such as "indicator".
+            stop_words = {
+                "a", "an", "and", "de", "den", "der", "des", "die", "dit", "een", "en",
+                "het", "in", "is", "of", "the", "to", "van", "voor", "wat", "what", "wie",
+                "why", "waarom", "welke", "welk", "wordt", "betekent", "means",
+                "meaning", "financial", "financieel", "technisch", "technical", "analyse", "analysis",
+                "indicator", "indicatoren", "concept", "begrip", "about", "over",
+            }
+            concept_terms = {
+                term for term in re.findall(r"[a-z0-9]+", lowered)
+                if len(term) > 1 and term not in stop_words
+            }
+            return bool(concept_terms.intersection(set(re.findall(r"[a-z0-9]+", answer))))
         keywords = [
             token
             for token in [
