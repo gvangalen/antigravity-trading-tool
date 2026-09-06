@@ -54,6 +54,8 @@ def test_deploy_env_supports_backend_only_auto_rollback_and_previous_markers():
     assert "--noproxy '*' --connect-timeout 2 --max-time 5" in source
     assert "TRADAMIND_BUILD_COMMIT_SHA" in source
     assert "actual == expected" in source
+    assert source.index('source "\\$ENV_FILE"') < source.rindex("export TRADAMIND_BUILD_COMMIT_SHA=$TARGET_COMMIT_FULL")
+    assert source.index('source "\\$ENV_FILE"') < source.rindex("export TRADAMIND_BUILD_TIME=$BUILD_TIMESTAMP_UTC")
     assert 'deep_health_ready=false' in source
     assert 'for attempt in \\$(seq 1 \\"$DEEP_HEALTH_ATTEMPTS\\"); do' in source
     assert 'Deep health not ready yet' in source

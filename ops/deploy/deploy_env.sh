@@ -195,6 +195,11 @@ if ! printf '%s\n' "$DEPLOY_GIT_TOKEN" | timeout --foreground "${REMOTE_DEPLOY_C
     source "\$ENV_FILE"
     set +o allexport
   fi
+  # Release identity is deployment-owned metadata. Restore it after loading
+  # long-lived runtime secrets so a stale environment value cannot make a
+  # healthy candidate fail its own SHA-bound readiness check.
+  export TRADAMIND_BUILD_COMMIT_SHA=$TARGET_COMMIT_FULL
+  export TRADAMIND_BUILD_TIME=$BUILD_TIMESTAMP_UTC
   if [ -z "\${TWELVE_DATA_API_KEY:-}" ]; then
     echo \"❌ TWELVE_DATA_API_KEY ontbreekt in runtime env (\$ENV_FILE).\" >&2
     exit 1
