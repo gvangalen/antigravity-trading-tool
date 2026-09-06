@@ -395,6 +395,30 @@ def test_selector_exposes_safe_degraded_lineage_to_the_provider_contract():
     assert "safe reformulation" in captured["system_role"]
 
 
+def test_selector_exposes_released_lineage_for_safe_reformulation():
+    captured = {}
+
+    def provider(**kwargs):
+        captured.update(kwargs)
+        return {"parsed": {
+            "operation_id": "reformulate_previous_response", "confidence": 0.9,
+            "entities": {}, "target_asset": None,
+            "conversation_reference": "previous_released_response",
+            "missing_inputs": [], "ambiguity_reason": None,
+        }}
+
+    selection, error = FinnV2StructuredOperationSelectorService(provider=provider).select(
+        message="Maak dat korter en eenvoudiger.",
+        candidate_contracts=(FinnV2OperationRegistry().get("reformulate_previous_response"),),
+        facts={},
+        verified_context={"last_released_context": {"run_id": "run-1", "response": "RSI is een momentumindicator."}},
+    )
+
+    assert error is None and selection is not None
+    assert "last_released_context" in captured["prompt"]
+    assert "Released lineage permits reformulation only" in captured["system_role"]
+
+
 def test_selector_manifest_keeps_capability_and_concrete_bot_reads_distinct():
     captured = {}
 

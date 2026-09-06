@@ -75,6 +75,10 @@ class FinnV2StructuredOperationSelectorService:
                     "previous_verified_response. A degraded context permits only evidence explanation or safe reformulation, "
                     "never promotion of an unverified financial conclusion. Treat an overview of a user's setup, strategy, "
                     "and bot as read_active_plan, not as ambiguity. "
+                    "When conversation_state has last_released_context and the user asks to repeat, restate, shorten, "
+                    "simplify, or restyle the immediately released safe response, select reformulate_previous_response. "
+                    "Released lineage permits reformulation only; it never authorizes an evidence explanation, action, "
+                    "or new financial conclusion. "
                     "A question about what a prior assessment changes, supports, or requires is an evidence "
                     "explanation, even if it mentions a linked bot. A request to repeat, restate, shorten, "
                     "or keep within previously released safe content is a reformulation, not evidence explanation. "
@@ -294,7 +298,7 @@ class FinnV2StructuredOperationSelectorService:
         return {
             key: raw[key]
             for key in (
-                "last_verified_context", "last_degraded_context", "active_guided_operation",
+                "last_verified_context", "last_degraded_context", "last_released_context", "active_guided_operation",
                 "last_safe_terminal_context", "last_turn_diagnostics",
             )
             if key in raw
