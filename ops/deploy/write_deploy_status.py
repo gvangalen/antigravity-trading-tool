@@ -41,7 +41,7 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--status-file", required=True)
     parser.add_argument("--release-sha", required=True)
     parser.add_argument("--step-id", required=True, choices=sorted(CANONICAL_DEPLOY_STEPS))
-    parser.add_argument("--outcome", required=True, choices=("success", "failure"))
+    parser.add_argument("--outcome", required=True, choices=("running", "success", "failure"))
     parser.add_argument("--exit-code", required=True, type=int)
     return parser.parse_args()
 
@@ -86,8 +86,10 @@ def main() -> int:
         raise SystemExit("release SHA must be a full lowercase commit SHA")
     if not 0 <= args.exit_code <= 255:
         raise SystemExit("exit code must be between 0 and 255")
-    if (args.outcome == "success") != (args.exit_code == 0):
-        raise SystemExit("success requires exit code 0 and failure requires a nonzero exit code")
+    if args.outcome in {"running", "success"} and args.exit_code != 0:
+        raise SystemExit("running and success require exit code 0")
+    if args.outcome == "failure" and args.exit_code == 0:
+        raise SystemExit("failure requires a nonzero exit code")
 
     path = Path(args.status_file)
     record = {

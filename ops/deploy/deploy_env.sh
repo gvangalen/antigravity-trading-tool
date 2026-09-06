@@ -176,6 +176,10 @@ if ! printf '%s\n' "$DEPLOY_GIT_TOKEN" | timeout --foreground "${REMOTE_DEPLOY_C
       --outcome \"\$outcome\" \\
       --exit-code \"\$exit_code\"
   }
+  advance_deploy_step() {
+    DEPLOY_STEP_ID=\"\$1\"
+    record_deploy_status \"\$DEPLOY_STEP_ID\" running 0
+  }
   record_deploy_exit() {
     local exit_code=\$?
     trap - EXIT ERR
@@ -189,6 +193,7 @@ if ! printf '%s\n' "$DEPLOY_GIT_TOKEN" | timeout --foreground "${REMOTE_DEPLOY_C
   }
   # EXIT also observes the explicit `exit 1` paths used by older deploy gates.
   trap record_deploy_exit EXIT
+  advance_deploy_step \"\$DEPLOY_STEP_ID\"
   ENV_FILE="\$HOME/.secrets/trading.env"
   if [ -f "\$ENV_FILE" ]; then
     set -o allexport
@@ -204,7 +209,7 @@ if ! printf '%s\n' "$DEPLOY_GIT_TOKEN" | timeout --foreground "${REMOTE_DEPLOY_C
     echo \"❌ TWELVE_DATA_API_KEY ontbreekt in runtime env (\$ENV_FILE).\" >&2
     exit 1
   fi
-  DEPLOY_STEP_ID='git_sync'
+  advance_deploy_step 'git_sync'
   mkdir -p $DEPLOY_STATE_DIR
   printf '%s\n' '$ROLLBACK_COMMIT' > ${DEPLOY_STATE_DIR}/PREVIOUS_GOOD_COMMIT
   PREVIOUS_FRONTEND_STATIC=\"\$(mktemp -d /tmp/tradamind-static-backup.XXXXXX)\"
@@ -251,7 +256,7 @@ if ! printf '%s\n' "$DEPLOY_GIT_TOKEN" | timeout --foreground "${REMOTE_DEPLOY_C
     cp -Rn \"\$PREVIOUS_FRONTEND_STATIC/.\" frontend/trading-tool-frontend/out/_next/static/
     echo \"✅ Previous static chunks retained for browsers opened before this deploy.\"
   fi
-  DEPLOY_STEP_ID='runtime_dependencies'
+  advance_deploy_step 'runtime_dependencies'
   bash ./ops/deploy/bootstrap_runtime_dependencies.sh
 
   cd backend/trading-tool-backend
@@ -261,11 +266,11 @@ if ! printf '%s\n' "$DEPLOY_GIT_TOKEN" | timeout --foreground "${REMOTE_DEPLOY_C
     timeout --foreground \"\${MIGRATION_COMMAND_TIMEOUT_SECONDS}s\" \\
       python3 backend/scripts/run_sql_migration.py \"\$migration\"
   }
-  DEPLOY_STEP_ID='migration_plan'
+  advance_deploy_step 'migration_plan'
   echo \"🧭 Validating canonical FINN V2 migration plan before schema changes...\"
   python3 -m backend.scripts.validate_finn_v2_migration_plan \\
     --deploy-script ../../ops/deploy/deploy_env.sh
-  DEPLOY_STEP_ID='migrations'
+  advance_deploy_step 'migrations'
   run_migration backend/scripts/migrations/2026_05_18_manual_order_idempotency.py
   run_migration backend/scripts/migrations/2026_05_24_platform_hardening_phase1.py
   run_migration backend/scripts/migrations/2026_05_24_runtime_ddl_to_migrations.py
@@ -298,7 +303,7 @@ if ! printf '%s\n' "$DEPLOY_GIT_TOKEN" | timeout --foreground "${REMOTE_DEPLOY_C
   run_migration backend/scripts/migrations/2026_08_25_canonical_user_indicator_configs.py
   run_migration backend/scripts/migrations/2026_08_25_finn_v2_indicator_config_reconciliation.py
   run_migration backend/scripts/migrations/2026_09_04_finn_v2_runtime_contract_foundation.py
-  DEPLOY_STEP_ID='schema_health'
+  advance_deploy_step 'schema_health'
   echo \"🩺 Checking FINN V2 schema contract before process startup...\"
   timeout --foreground "\${MIGRATION_COMMAND_TIMEOUT_SECONDS}s" \
     python3 -m backend.scripts.check_finn_v2_schema

@@ -67,6 +67,16 @@ def test_success_status_preserves_the_previous_failure_for_diagnostics(tmp_path:
     assert payload["last_failure"]["step_id"] == "deep_health"
 
 
+def test_running_status_identifies_the_last_safe_deploy_checkpoint(tmp_path: Path) -> None:
+    status_file = tmp_path / "production_last_deploy_status.json"
+
+    _write_status(status_file, step="runtime_dependencies", outcome="running", exit_code=0)
+
+    payload = json.loads(status_file.read_text(encoding="utf-8"))
+    assert payload["current"]["outcome"] == "running"
+    assert payload["current"]["step_id"] == "runtime_dependencies"
+
+
 def test_deploy_script_uses_fixed_step_ids_and_preserves_rollback() -> None:
     source = DEPLOY_SCRIPT.read_text(encoding="utf-8")
 
@@ -75,6 +85,8 @@ def test_deploy_script_uses_fixed_step_ids_and_preserves_rollback() -> None:
     assert "base64 -d | sudo python3 -" in source
     assert "DEPLOY_STEP_ID" in source
     assert "trap record_deploy_exit EXIT" in source
+    assert "advance_deploy_step()" in source
+    assert r'record_deploy_status \"\$DEPLOY_STEP_ID\" running 0' in source
     assert 'if [ \\"\\$exit_code\\" -ne 0 ]; then' in source
     assert "cleanup_previous_frontend_static || true" in source
     assert "trap cleanup_previous_frontend_static EXIT" not in source
