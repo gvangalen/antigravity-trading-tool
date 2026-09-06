@@ -353,7 +353,9 @@ PY
   wait_for_backend_health() {
     local attempts=\"\${1:-120}\"
     for i in \$(seq 1 \"\$attempts\"); do
-      if curl --max-time 5 -fsS -H 'Host: 127.0.0.1' http://127.0.0.1:$BACKEND_PORT/api/health >/tmp/tradamind_health.json 2>/dev/null; then
+      if curl --noproxy '*' --connect-timeout 2 --max-time 5 -fsS \\
+        -H 'Host: 127.0.0.1' http://127.0.0.1:$BACKEND_PORT/api/health \\
+        >/tmp/tradamind_health.json 2>/dev/null; then
         return 0
       fi
       sleep 2
@@ -454,11 +456,13 @@ PY
   }
 
   stabilize_backend_app() {
-    if wait_for_backend_listen "$BACKEND_INITIAL_LISTEN_ATTEMPTS" && wait_for_backend_health "$BACKEND_INITIAL_HEALTH_ATTEMPTS"; then
+    # The authenticated health endpoint is the readiness authority. A raw
+    # socket probe can observe a retiring predecessor during PM2 handover and
+    # trigger a rollback after the new backend is already serving 200.
+    if wait_for_backend_health "$BACKEND_INITIAL_HEALTH_ATTEMPTS"; then
       return 0
     fi
     restart_backend_app
-    wait_for_backend_listen "$BACKEND_RECOVERY_LISTEN_ATTEMPTS"
     wait_for_backend_health "$BACKEND_RECOVERY_HEALTH_ATTEMPTS"
   }
 
