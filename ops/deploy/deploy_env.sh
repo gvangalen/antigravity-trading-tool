@@ -355,7 +355,22 @@ PY
     for i in \$(seq 1 \"\$attempts\"); do
       if curl --noproxy '*' --connect-timeout 2 --max-time 5 -fsS \\
         -H 'Host: 127.0.0.1' http://127.0.0.1:$BACKEND_PORT/api/health \\
-        >/tmp/tradamind_health.json 2>/dev/null; then
+        >/tmp/tradamind_health.json 2>/dev/null \\
+        && python3 - <<'PY'
+import json
+import os
+import sys
+
+with open('/tmp/tradamind_health.json', 'r', encoding='utf-8') as handle:
+    payload = json.load(handle)
+
+expected = os.environ.get('TRADAMIND_BUILD_COMMIT_SHA', '')
+actual = ((payload.get('build') or {}).get('commit_sha') or '')
+if payload.get('status') == 'ok' and expected and actual == expected:
+    raise SystemExit(0)
+raise SystemExit(1)
+PY
+      then
         return 0
       fi
       sleep 2
