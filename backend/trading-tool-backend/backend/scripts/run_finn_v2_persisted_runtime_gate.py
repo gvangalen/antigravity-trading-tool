@@ -21,6 +21,7 @@ TERMINAL_STATUSES = {
     "completed", "clarification_required", "unavailable", "downgraded",
     "rejected", "blocked", "failed", "canceled",
 }
+POLL_REQUEST_TIMEOUT_SECONDS = 0.5
 
 
 def _request_json(*, url: str, method: str, headers: Dict[str, str], body: Dict[str, Any] | None, timeout: float) -> Tuple[Dict[str, Any], int]:
@@ -102,7 +103,10 @@ def run_gate(*, base_url: str, bearer_token: str, message: str, timeout_seconds:
                     method="GET",
                     headers=headers,
                     body=None,
-                    timeout=min(5.0, timeout_seconds),
+                    # SSE is the primary terminal transport. A fallback poll
+                    # must never hold the observer for multiple seconds when
+                    # a proxy is flushing that terminal event.
+                    timeout=min(POLL_REQUEST_TIMEOUT_SECONDS, timeout_seconds),
                 )
             except TimeoutError:
                 time.sleep(0.1)

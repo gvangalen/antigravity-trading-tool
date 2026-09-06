@@ -19,5 +19,6 @@ def test_persisted_runtime_gate_uses_public_gateway_polling_and_sse_only():
     assert "status in {502, 503, 504}" in source
     assert "json.JSONDecodeError" in source
     assert "ThreadPoolExecutor" in source
+    assert "POLL_REQUEST_TIMEOUT_SECONDS = 0.5" in source
     assert "sse_future = executor.submit" in source
     assert source.index("sse_future = executor.submit") < source.index("while time.monotonic() - started_at")
