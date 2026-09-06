@@ -68,6 +68,7 @@ class FinnV2OperationClassificationService:
         workspace_hints: Optional[Mapping[str, object]] = None,
         client_context: Optional[Mapping[str, object]] = None,
         selector_timeout_seconds: Optional[int] = None,
+        selector_max_output_tokens: Optional[int] = None,
     ) -> SemanticOperationClassification:
         facts = self.preprocessor.preprocess(
             message=message, workspace_hints=workspace_hints, client_context=client_context
@@ -101,6 +102,7 @@ class FinnV2OperationClassificationService:
             },
             verified_context=self._safe_conversation_state(conversation_context or {}),
             timeout_seconds=selector_timeout_seconds,
+            max_output_tokens=selector_max_output_tokens,
         )
         if selection is not None:
             selection = self.resolver.resolve(

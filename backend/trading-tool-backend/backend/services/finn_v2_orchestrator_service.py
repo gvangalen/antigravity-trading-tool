@@ -132,6 +132,7 @@ class FinnV2OrchestratorService:
                     client_context=getattr(run, "client_context_json", {}) or {},
                     conversation_context=conversation_context,
                     selector_timeout_seconds=self.flags.selector_provider_timeout_seconds(),
+                    selector_max_output_tokens=self.flags.selector_max_output_tokens(),
                 ),
                 timeout=self.flags.selector_phase_deadline_seconds(),
             )

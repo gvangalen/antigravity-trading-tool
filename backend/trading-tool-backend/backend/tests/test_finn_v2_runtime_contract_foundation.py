@@ -263,10 +263,14 @@ def test_selector_provider_budget_leaves_time_for_the_persisted_selection(monkey
     selector = (ROOT / "services" / "finn_v2_structured_operation_selector_service.py").read_text(encoding="utf-8")
 
     assert flags.selector_provider_timeout_seconds() == 33
+    assert flags.selector_max_output_tokens() == 240
     assert "timeout_seconds=selector_timeout_seconds" in (
         ROOT / "services" / "finn_v2_operation_classification_service.py"
     ).read_text(encoding="utf-8")
     assert "selector_timeout_seconds=self.flags.selector_provider_timeout_seconds()" in (
+        ROOT / "services" / "finn_v2_orchestrator_service.py"
+    ).read_text(encoding="utf-8")
+    assert "selector_max_output_tokens=self.flags.selector_max_output_tokens()" in (
         ROOT / "services" / "finn_v2_orchestrator_service.py"
     ).read_text(encoding="utf-8")
     assert "phase_budget_seconds" in selector

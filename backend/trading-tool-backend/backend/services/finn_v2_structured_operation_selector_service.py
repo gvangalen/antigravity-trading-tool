@@ -41,6 +41,7 @@ class FinnV2StructuredOperationSelectorService:
         facts: Mapping[str, object],
         verified_context: Optional[Mapping[str, object]],
         timeout_seconds: Optional[int] = None,
+        max_output_tokens: Optional[int] = None,
     ) -> tuple[Optional[FinnV2StructuredOperationSelection], Optional[str]]:
         candidate_ids = tuple(contract.operation_id for contract in candidate_contracts)
         if not candidate_ids:
@@ -114,6 +115,7 @@ class FinnV2StructuredOperationSelectorService:
                 schema=self._schema(candidate_ids),
             ),
                 timeout_seconds=self._timeout_seconds(timeout_seconds),
+                max_output_tokens=max(160, min(300, int(max_output_tokens or 240))),
                 client_max_retries=0,
             )
         except Exception as exc:

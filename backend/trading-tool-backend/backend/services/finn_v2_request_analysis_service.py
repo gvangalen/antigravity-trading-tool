@@ -29,6 +29,7 @@ class FinnV2RequestAnalysisService:
         client_context: Optional[Dict[str, object]] = None,
         conversation_context: Optional[Dict[str, object]] = None,
         selector_timeout_seconds: Optional[int] = None,
+        selector_max_output_tokens: Optional[int] = None,
     ) -> RequestAnalysisResult:
         text = str(message or "").strip()
         normalized = self._normalize_text(text)
@@ -38,6 +39,7 @@ class FinnV2RequestAnalysisService:
             workspace_hints=workspace_hints,
             client_context=client_context,
             selector_timeout_seconds=selector_timeout_seconds,
+            selector_max_output_tokens=selector_max_output_tokens,
         )
         preprocessed = self.classifier.preprocessor.preprocess(
             message=text,

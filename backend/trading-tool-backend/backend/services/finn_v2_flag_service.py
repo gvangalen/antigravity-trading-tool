@@ -152,6 +152,10 @@ class FinnV2FlagService:
         """Reserve time to persist a successful structured selection."""
         return max(3, self.selector_phase_deadline_seconds() - self.terminal_persistence_reserve_seconds())
 
+    def selector_max_output_tokens(self) -> int:
+        """Keep the strict semantic frame compact; reasoning has its own budget."""
+        return max(160, min(300, self._env_int("FINN_V2_SELECTOR_MAX_OUTPUT_TOKENS", 240)))
+
     def terminal_persistence_reserve_seconds(self) -> int:
         return max(1, min(5, self._env_int("FINN_V2_TERMINAL_PERSISTENCE_RESERVE_SECONDS", 2)))
 
