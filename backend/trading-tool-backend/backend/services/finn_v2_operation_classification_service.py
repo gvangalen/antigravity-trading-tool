@@ -218,7 +218,10 @@ class FinnV2OperationClassificationService:
             or not released.get("run_id")
         ):
             return candidates
-        allowed = {"reformulate_previous_response", "clarify_request", "unavailable"}
+        # A typed reformulation marker with a persisted released response has
+        # an unambiguous antecedent. Clarification would discard that safe
+        # lineage instead of applying the registry's reformulation contract.
+        allowed = {"reformulate_previous_response", "unavailable"}
         constrained = tuple(item for item in candidates if item.operation_id in allowed)
         return constrained or candidates
 

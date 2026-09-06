@@ -501,7 +501,7 @@ def test_released_lineage_reformulation_constrains_the_structured_contract_manif
 
     assert result.operation_id == "reformulate_previous_response"
     assert {contract.operation_id for contract in captured["candidate_contracts"]} == {
-        "reformulate_previous_response", "clarify_request", "unavailable",
+        "reformulate_previous_response", "unavailable",
     }
 
 
