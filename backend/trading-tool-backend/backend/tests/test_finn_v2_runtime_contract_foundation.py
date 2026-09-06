@@ -127,6 +127,51 @@ def test_continuation_context_uses_the_persisted_parent_contract_state():
     assert context["active_guided_operation"] == expected_flow
 
 
+def test_persisted_parent_contract_content_reaches_the_structured_selector_input():
+    """The selector receives released lineage content, not merely a parent id."""
+    from backend.services.finn_v2_operation_classification_service import FinnV2OperationClassificationService
+    from backend.services.finn_v2_structured_operation_selector_service import FinnV2StructuredOperationSelection
+
+    captured = {}
+
+    class _Selector:
+        def select(self, **kwargs):
+            captured.update(kwargs)
+            return FinnV2StructuredOperationSelection(
+                operation_id="explain_previous_evidence",
+                confidence=0.9,
+                entities={},
+                target_asset=None,
+                conversation_reference="previous_verified_response",
+                missing_inputs=(),
+                ambiguity_reason=None,
+                semantic_frame={"goal": "explain", "object": "evidence", "reference_kind": "previous_verified_response"},
+            ), None
+
+    context = {
+        "last_verified_context": {
+            "verified_response_id": "verified-parent-1",
+            "operation_id": "evaluate_plan",
+            "resolved_entities": {"asset": "ETH"},
+            "response": "De vrijgegeven planbeoordeling.",
+            "evidence_refs": ["evidence-parent-1"],
+        },
+        "active_guided_operation": {
+            "operation_id": "create_setup",
+            "missing_required_inputs": ["name"],
+        },
+    }
+
+    result = FinnV2OperationClassificationService(structured_selector=_Selector()).classify(
+        message="Kun je de onderbouwing van die beoordeling toelichten?",
+        conversation_context=context,
+    )
+
+    assert result.operation_id == "explain_previous_evidence"
+    assert captured["verified_context"]["last_verified_context"] == context["last_verified_context"]
+    assert captured["verified_context"]["active_guided_operation"] == context["active_guided_operation"]
+
+
 def test_terminal_projection_uses_the_same_immutable_contract_identity():
     state = record_initial_intent(
         new_runtime_contract_state(run=_run(), contract_id="contract-run-contract-1"),
