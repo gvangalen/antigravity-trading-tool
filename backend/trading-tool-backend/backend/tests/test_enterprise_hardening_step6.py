@@ -46,7 +46,8 @@ def test_deploy_script_atomically_records_the_validated_canonical_last_good_comm
 
     assert "deploy_env.sh" in wrapper_source
     assert "REMOTE_LAST_GOOD" in source
-    assert "sudo cat ${CANONICAL_DEPLOY_STATE_DIR}/LAST_GOOD_COMMIT" in source
+    assert "test -r ${REMOTE_DIR}/${DEPLOY_STATE_DIR}/LAST_GOOD_COMMIT" in source
+    assert "sudo -n cat ${CANONICAL_DEPLOY_STATE_DIR}/LAST_GOOD_COMMIT" in source
     assert "ROLLBACK_COMMIT" in source
     assert "ROLLBACK_COMMAND" in source
     assert "./ops/deploy/rollback_env.sh $ENVIRONMENT $ROLLBACK_COMMIT" in source
