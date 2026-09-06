@@ -174,6 +174,8 @@ if ! printf '%s\n' "$DEPLOY_GIT_TOKEN" | timeout --foreground "${REMOTE_DEPLOY_C
   export INTERACTIVE_WORKER_READY_RETRY_DELAY_SECONDS=$INTERACTIVE_WORKER_READY_RETRY_DELAY_SECONDS
   export TRADAMIND_BUILD_COMMIT_SHA=$TARGET_COMMIT_FULL
   export TRADAMIND_BUILD_TIME=$BUILD_TIMESTAMP_UTC
+  export INTERACTIVE_WORKER_READY_ATTEMPTS=$INTERACTIVE_WORKER_READY_ATTEMPTS
+  export INTERACTIVE_WORKER_READY_RETRY_DELAY_SECONDS=$INTERACTIVE_WORKER_READY_RETRY_DELAY_SECONDS
   cd $REMOTE_DIR
   DEPLOY_STATUS_FILE='$DEPLOY_STATUS_FILE'
   DEPLOY_STATUS_WRITER_B64='$DEPLOY_STATUS_WRITER_B64'
@@ -478,27 +480,9 @@ PY
   }
 
  wait_for_interactive_worker_ready() {
-    local health_payload
     for attempt in \$(seq 1 \"\$INTERACTIVE_WORKER_READY_ATTEMPTS\"); do
-      health_payload=\"\$(curl --max-time 10 -fsS -H 'Host: 127.0.0.1' \\
-        http://127.0.0.1:\$BACKEND_PORT/api/system/health 2>/dev/null || true)\"
-      if printf '%s' \"\$health_payload\" | python3 - <<'PY'
-import json
-import sys
-
-raw = sys.stdin.read()
-try:
-    payload = json.loads(raw)
-except json.JSONDecodeError:
-    raise SystemExit(1)
-
-celery = (payload.get('components') or {}).get('celery') or {}
-queues = celery.get('workers_by_queue') or {}
-if queues.get('finn_interactive'):
-    raise SystemExit(0)
-raise SystemExit(1)
-PY
-      then
+      if python3 -m celery -A backend.celery_task.celery_app inspect active_queues \\
+        --timeout 5 2>/dev/null | grep -Fq 'finn_interactive'; then
         echo \"✅ FINN interactive worker is registered for finn_interactive.\"
         return 0
       fi
