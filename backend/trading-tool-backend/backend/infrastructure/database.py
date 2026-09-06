@@ -26,7 +26,13 @@ engine = create_async_engine(
     echo=False,  # Set op True in de toekomst om de rauwe SQL queries te debuggen
     future=True,
     pool_size=10,       # Maximaal aantal verbindingen in de pool gelijktijdig
-    max_overflow=20     # Extra verbindingen toegestaan bovenop de pool_size 
+    max_overflow=20,    # Extra verbindingen toegestaan bovenop de pool_size
+    # Production PostgreSQL can silently expire an idle TCP connection.  The
+    # interactive worker must replace it before its first claim, not spend the
+    # visible lifecycle budget waiting for the first query to time out.
+    pool_pre_ping=True,
+    pool_recycle=60,
+    pool_timeout=3,
 )
 
 # Maak een factory aan voor asynchrone sessies
