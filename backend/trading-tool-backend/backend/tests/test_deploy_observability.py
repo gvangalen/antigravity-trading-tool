@@ -87,6 +87,8 @@ def test_deploy_script_uses_fixed_step_ids_and_preserves_rollback() -> None:
     assert "trap record_deploy_exit EXIT" in source
     assert "advance_deploy_step()" in source
     assert r'record_deploy_status \"\$DEPLOY_STEP_ID\" running 0' in source
+    assert "Diagnostics must never block a release." in source
+    assert "Unable to persist deploy checkpoint" in source
     assert 'if [ \\"\\$exit_code\\" -ne 0 ]; then' in source
     assert "cleanup_previous_frontend_static || true" in source
     assert "trap cleanup_previous_frontend_static EXIT" not in source

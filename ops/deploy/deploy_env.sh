@@ -178,7 +178,10 @@ if ! printf '%s\n' "$DEPLOY_GIT_TOKEN" | timeout --foreground "${REMOTE_DEPLOY_C
   }
   advance_deploy_step() {
     DEPLOY_STEP_ID=\"\$1\"
-    record_deploy_status \"\$DEPLOY_STEP_ID\" running 0
+    # Diagnostics must never block a release. The EXIT trap still records a
+    # normal failure when the status writer is available.
+    record_deploy_status \"\$DEPLOY_STEP_ID\" running 0 || \
+      echo \"⚠️ Unable to persist deploy checkpoint \$DEPLOY_STEP_ID.\" >&2
   }
   record_deploy_exit() {
     local exit_code=\$?
