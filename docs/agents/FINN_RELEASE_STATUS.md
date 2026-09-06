@@ -10,7 +10,7 @@ short; link artifacts rather than copying reports or chat history.
 | Phase | `BUILDING` |
 | Active goal | FINN V2 content and state repair batch |
 | Candidate branch | `codex/finn-runtime-contract-authority-foundation` |
-| Candidate SHA | `f9b5d9f6d8656e365a20af3728ae4a4e459c4c7d` |
+| Candidate SHA | `e871f5e0e2077799f8e866915e3ecf42b2dc7775` (runtime content); branch evidence head: `b6be8ab9e80cc1f47bc0140aef1c03a2684dc78d` |
 | Production SHA | `dbd5d50438ae199549cb52ead942d09b475fda44` |
 | Release owner | Build |
 | Last updated | `2026-09-06` |
@@ -35,11 +35,11 @@ short; link artifacts rather than copying reports or chat history.
 | --- | --- | --- |
 | Focused runtime/content regressions | `PASS` | `272 passed` across lineage, guided state, operation selection, executor, verifier, and terminal transport coverage. |
 | Registry and selector-contract validation | `PASS` | Registry validator: `96` cases; contract/selector tests: `56 passed`. |
-| Full relevant suite | `PASS` | `1708 passed, 3 skipped` on `f9b5d9f6`. |
+| Full relevant suite | `PASS` | `1708 passed, 3 skipped` on branch evidence head `f9b5d9f6`; the runtime content diff is `e871f5e0`. |
 | Real-provider selector canary | `PASS` | Isolated product-code worktree `e871f5e0`: structured response `completed`, parsed, `explain_financial_concept`, concept `RSI`. `f9b5d9f6` adds test/status evidence only. |
 | Real-provider development selector set | `PASS` | Isolated product-code worktree `e871f5e0`: `18/18`; all scored dimensions 100%; zero provider/schema/parse/validation/timeout failures; p95 `3.848 s`. |
 | Real-provider regression selector set | `PASS` | Isolated product-code worktree `e871f5e0`: `102/102`; all scored dimensions 100%; zero provider/schema/parse/validation/timeout failures; p95 `3.366 s`. |
-| CI | `NOT_RUN` | No CI has been requested for candidate `f9b5d9f6`; the recorded green CI belongs to production SHA `dbd5d504`. |
+| CI | `NOT_RUN` | No CI has been requested for runtime candidate `e871f5e0`; the recorded green CI belongs to production SHA `dbd5d504`. |
 | Deployment | `NOT_RUN` | This content batch explicitly forbids deployment. |
 | SHA identity | `PASS` | The currently live release remains `dbd5d50438ae199549cb52ead942d09b475fda44`; no candidate identity claim is made. |
 | Authenticated functional Build smoke | `PASS` | Run `finn-v2-run-650a9df244ba48cf89f76c3e9a447818` completed `capability` with exactly one dispatch and one attempt; typed terminal projection matched the selected operation. |
