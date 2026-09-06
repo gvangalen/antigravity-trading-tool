@@ -142,7 +142,7 @@ record_remote_deploy_status() {
   local exit_code="$3"
   ssh "${SSH_ARGS[@]}" "ubuntu@$SERVER_IP" "
     set -euo pipefail
-    printf '%s' '$DEPLOY_STATUS_WRITER_B64' | base64 -d | sudo python3 - \\
+    printf '%s' '$DEPLOY_STATUS_WRITER_B64' | base64 -d | sudo -n python3 - \\
       --status-file $DEPLOY_STATUS_FILE \\
       --release-sha $TARGET_COMMIT_FULL \\
       --step-id $step_id \\
@@ -169,7 +169,7 @@ if ! printf '%s\n' "$DEPLOY_GIT_TOKEN" | timeout --foreground "${REMOTE_DEPLOY_C
     local step_id=\"\$1\"
     local outcome=\"\$2\"
     local exit_code=\"\$3\"
-    printf '%s' \"\$DEPLOY_STATUS_WRITER_B64\" | base64 -d | sudo python3 - \\
+    printf '%s' \"\$DEPLOY_STATUS_WRITER_B64\" | base64 -d | sudo -n python3 - \\
       --status-file \"\$DEPLOY_STATUS_FILE\" \\
       --release-sha '$TARGET_COMMIT_FULL' \\
       --step-id \"\$step_id\" \\
