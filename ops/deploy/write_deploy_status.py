@@ -24,6 +24,7 @@ CANONICAL_DEPLOY_STEPS = frozenset(
         "frontend_export",
         "memory_headroom",
         "pm2_core",
+        "pm2_finn_interactive",
         "backend_stabilization",
         "pm2_auxiliary",
         "deep_health",

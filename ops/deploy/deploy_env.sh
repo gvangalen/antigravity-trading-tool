@@ -494,7 +494,7 @@ except json.JSONDecodeError:
 
 celery = (payload.get('components') or {}).get('celery') or {}
 queues = celery.get('workers_by_queue') or {}
-if celery.get('status') == 'ok' and queues.get('finn_interactive'):
+if queues.get('finn_interactive'):
     raise SystemExit(0)
 raise SystemExit(1)
 PY
