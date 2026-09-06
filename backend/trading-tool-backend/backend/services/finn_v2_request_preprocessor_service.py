@@ -282,7 +282,9 @@ class FinnV2RequestPreprocessorService:
         domain_hint = "financial" if (
             entities or asset or concept or references or slot_answer
             or action != "read" or discourse in {"capability", "clarification_answer"}
-            or any(term in normalized for term in ("trade", "beleggen", "investment", "rendement", "risk", "risico"))
+            or any(term in normalized for term in (
+                "finn", "trade", "beleggen", "investment", "rendement", "risk", "risico",
+            ))
         ) else "off_topic"
         return FinnV2PreprocessedRequest(
             original_text=original,
@@ -496,9 +498,12 @@ class FinnV2RequestPreprocessorService:
         # A direct capability question is a new request even when it happens
         # to mention plan domains or an earlier conversation. It must not be
         # reinterpreted as a request to explain previous evidence.
-        if action == "read" and any(
-            phrase in text
-            for phrase in (
+        support_terms = r"\b(?:hulp|ondersteuning|hilfe|unterst[üu]tzung|help|support)\b"
+        availability_terms = r"\b(?:beschikbaar|available|verf[üu]gbar)\b"
+        if action == "read" and (
+            any(
+                phrase in text
+                for phrase in (
                 "wat kan",
                 "wat kun je",
                 "welke analyses",
@@ -516,12 +521,20 @@ class FinnV2RequestPreprocessorService:
                 "ondersteuning biedt",
                 "welke ondersteuning",
                 "what support",
+                )
             )
-        ) or (
+            or (
             # This captures a broad support question independently of the
             # product name or a particular example wording.
-            bool(re.search(r"\b(?:hulp|ondersteuning)\b", text))
-            and bool(re.search(r"\b(?:kan|kunnen|bied\w*|helpt?)\b", text))
+            bool(re.search(support_terms, text))
+            and bool(re.search(r"\b(?:kan|kunnen|bied\w*|helpt?|can|kann|könn\w*)\b", text))
+            )
+            or (
+            # Availability phrasing asks what FINN can provide, even though it
+            # need not contain a modal verb in every supported language.
+            bool(re.search(support_terms, text))
+            and bool(re.search(availability_terms, text))
+            )
         ):
             return "capability"
         if "reformulation" in references:

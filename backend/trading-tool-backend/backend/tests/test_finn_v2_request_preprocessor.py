@@ -58,6 +58,20 @@ def test_bare_causal_question_is_a_lineage_marker_not_an_off_topic_fact():
     assert "previous_verified_conclusion" in facts.conversation_reference_markers
 
 
+def test_product_capability_availability_questions_remain_financial_in_all_supported_languages():
+    service = FinnV2RequestPreprocessorService()
+
+    for message in (
+        "Welke FINN-hulp is beschikbaar voor setups en analyses?",
+        "What support is available from FINN for setups and analysis?",
+        "Welche FINN-Hilfe ist für Setups und Analysen verfügbar?",
+    ):
+        facts = service.preprocess(message=message)
+
+        assert facts.discourse_act == "capability"
+        assert facts.domain_hint == "financial"
+
+
 def test_concrete_asset_bound_approach_is_a_setup_but_broad_diagnosis_remains_a_plan():
     service = FinnV2RequestPreprocessorService()
     setup = service.preprocess(message="Show the concrete trading approach prepared for Ethereum.")
