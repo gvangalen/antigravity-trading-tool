@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+from types import SimpleNamespace
 
 from backend.schemas.finn_v2_verifier_schema import CoverageVerification, VerifierResult
 from backend.services.finn_v2_response_verifier_service import FinnV2ResponseVerifierService
@@ -100,3 +101,18 @@ def test_contract_proposal_drafts_do_not_require_a_second_semantic_provider_call
     assert service._is_deterministic_contract_response(operation_id="create_setup") is True
     assert service._is_deterministic_contract_response(operation_id="select_asset") is True
     assert service._is_deterministic_contract_response(operation_id="evaluate_plan") is False
+
+
+def test_asset_selection_relevance_compares_catalog_symbols_not_alias_spelling():
+    service = FinnV2ResponseVerifierService(session=object())
+    draft = SimpleNamespace(
+        mode="ACTION_PROPOSAL",
+        direct_answer="Ik kan SOL als je actieve asset instellen na je bevestiging.",
+        main_observation="De actieve asset verandert pas na expliciete confirmation.",
+        proposal_candidate=None,
+        reasoning_provenance={"operation_id": "select_asset"},
+        evidence_refs_used=[],
+        next_step=None,
+    )
+
+    assert service._is_relevant("Selecteer Solana als mijn actieve asset.", draft) is True

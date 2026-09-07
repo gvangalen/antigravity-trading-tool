@@ -1322,14 +1322,23 @@ class FinnV2ResponseVerifierService:
             return True
         lowered = question.lower()
         answer = f"{draft.direct_answer} {draft.main_observation}".lower()
+        provenance = draft.reasoning_provenance or {}
         candidate = draft.proposal_candidate
+        if provenance.get("operation_id") == "select_asset":
+            # The registry contract stores the requested asset canonically.
+            # A deterministic proposal may publish that symbol instead of the
+            # user's natural-language alias, so relevance is target equality,
+            # not a literal-token comparison.
+            requested_asset = resolve_catalog_symbol_mention(question)
+            answered_asset = resolve_catalog_symbol_mention(answer)
+            if requested_asset and requested_asset == answered_asset:
+                return True
         if candidate is not None and candidate.asset:
             # The user may name an asset while the contract publishes its
             # catalog symbol. Compare their canonical forms, not wording.
             requested_asset = resolve_catalog_symbol_mention(question)
             if requested_asset and requested_asset == str(candidate.asset).upper():
                 return True
-        provenance = draft.reasoning_provenance or {}
         if (
             normalize_interaction_mode(draft.mode) == "READ"
             and provenance.get("reasoning_source") == "deterministic_contract"
