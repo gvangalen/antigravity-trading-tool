@@ -10,7 +10,7 @@ short; link artifacts rather than copying reports or chat history.
 | Phase | `BUILDING` |
 | Active goal | FINN V2 V1 action-contract completion batch |
 | Candidate branch | `codex/finn-runtime-contract-authority-foundation` |
-| Candidate SHA | `1bbab6bc15830cbb615e49006381e40996959153` (local action-contract candidate) |
+| Candidate SHA | `a780e65d5e94b56910c3f295446c23137dd37385` (local action-contract candidate) |
 | Production SHA | `dbd5d50438ae199549cb52ead942d09b475fda44` |
 | Release owner | Build |
 | Last updated | `2026-09-07` |
@@ -30,6 +30,9 @@ short; link artifacts rather than copying reports or chat history.
 - The latest authenticated Build smoke functionally completed through the
   public V2 lifecycle. Its latency is recorded separately and is not treated
   as a statistical performance conclusion from a single run.
+- Proposal publication, confirmation and execution now append safe lifecycle
+  provenance to the originating runtime contract and refresh its one persisted
+  terminal projection; they do not introduce action fields or token material.
 - Out of scope: QA-exclusive sealed holdout, official QA, product model
   changes.
 
@@ -37,13 +40,13 @@ short; link artifacts rather than copying reports or chat history.
 
 | Gate | Status | Evidence |
 | --- | --- | --- |
-| Focused action-contract regressions | `PASS` | `75 passed` across registry, resolver, request preprocessing, runtime contract and portfolio adapter coverage on `1bbab6bc`. |
+| Focused action-contract regressions | `PASS` | `103 passed` across registry, runtime contract, proposal, confirmation, execution, adapter, source and portfolio coverage on `a780e65d`. |
 | Non-sealed selector registry | `PASS` | `120` development, regression and published-regression cases validated against the current registry; no sealed QA holdout was loaded. |
 | Local FINN V2 schema health | `PASS` | Canonical local PostgreSQL migration sequence applied twice; `python3 -m backend.scripts.check_finn_v2_schema` passed on `1bbab6bc`. |
-| Full canonical backend suite | `PASS` | `1740 passed, 3 skipped` from repository root on `1bbab6bc`. |
-| Frontend contract checks | `PASS` | `npm run typecheck`, `npm run test:commands` (`5 passed`), `npm run test:i18n` (`7 passed`) and `npm run build` passed on `1bbab6bc`. |
-| Real-provider validation | `NOT_RUN` | The local checkout has no configured provider credential or isolated server-eval procedure. No provider claim is made for `1bbab6bc`. |
-| CI | `NOT_RUN` | No CI has been requested for action-contract candidate `1bbab6bc`; the recorded green CI belongs to production SHA `dbd5d504`. |
+| Full canonical backend suite | `PASS` | `1741 passed, 3 skipped` from repository root on `a780e65d`. |
+| Frontend contract checks | `PASS` | `npm run typecheck`, `npm run test:commands` (`5 passed`), `npm run test:i18n` (`7 passed`) and `npm run build` passed on `a780e65d`. |
+| Real-provider validation | `NOT_RUN` | The local checkout has no configured provider credential or isolated server-eval procedure. No provider claim is made for `a780e65d`. |
+| CI | `NOT_RUN` | No CI has been requested for action-contract candidate `a780e65d`; the recorded green CI belongs to production SHA `dbd5d504`. |
 | Deployment | `NOT_RUN` | This content batch explicitly forbids deployment. |
 | SHA identity | `PASS` | The currently live release remains `dbd5d50438ae199549cb52ead942d09b475fda44`; no candidate identity claim is made. |
 | Authenticated functional Build smoke | `PASS` | Run `finn-v2-run-650a9df244ba48cf89f76c3e9a447818` completed `capability` with exactly one dispatch and one attempt; typed terminal projection matched the selected operation. |
