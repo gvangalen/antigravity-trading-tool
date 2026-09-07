@@ -96,7 +96,22 @@ Before FINN QA, also read `FINN_RELEASE_PROCESS.md`,
 `FINN_RELEASE_STATUS.md`, and the explicit QA goal. QA owns independent test
 execution and QA test material; the active QA goal defines the concrete scope,
 dataset, environment, matrix, and acceptance criteria. Production QA tests
-only the exact live SHA documented in the status file.
+only the exact live application SHA documented in the status file.
+
+### FINN Release Identity Preflight
+
+- Determine the GitHub release remote from `git remote -v`. A remote named
+  `origin` can be a local shared checkout and is not release evidence merely
+  because of its name.
+- Compare the status file's `Live application SHA` with public backend and
+  frontend build markers and, where available, the production checkout.
+- A checkout used only to read a newer metadata/status revision may differ
+  from the live application SHA. It is not a product candidate and must not
+  replace the status file's target SHA. QA verifies that its diff from the
+  live application SHA is confined to approved governance/status files before
+  using it as release metadata.
+- A functional-code diff, an unverified GitHub remote, or a public marker
+  mismatch remains a release-identity failure.
 
 - QA is read-only: do not change code, configuration, datasets, deployment,
   production records, or release markers, and do not start or direct another

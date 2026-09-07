@@ -35,10 +35,16 @@ authority. They do not take over Build or QA responsibility.
 
 ## One Active Release
 
-Only one FINN candidate may be active. Its branch, candidate SHA, production
-SHA, phase, evidence, and QA outcome live only in `FINN_RELEASE_STATUS.md`.
+Only one FINN candidate may be active. Its branch, live application SHA,
+phase, evidence, and QA outcome live only in `FINN_RELEASE_STATUS.md`.
 Do not replace a candidate while official QA is running, and do not add new
 technical changes to the candidate under QA.
+
+The status document can receive a later metadata-only revision after a live
+deployment. That revision is not a second application candidate. QA always
+targets the status file's `Live application SHA`, verifies it against the
+public build markers, and uses the GitHub remote identified by its URL rather
+than assuming a local remote named `origin` is authoritative.
 
 ## Build and Release
 
@@ -73,7 +79,8 @@ Only the user determines or authorizes an independent QA assignment. For
 production QA, the user starts the existing QA agent after the status file
 documents `READY_FOR_INDEPENDENT_QA` with evidence. QA reads the role
 instructions, this process, the status file, and its explicit QA goal; then
-tests the recorded live SHA and completes the matrix defined by that goal.
+tests the recorded live application SHA and completes the matrix defined by
+that goal.
 Individual case failures are recorded and do not stop later cases. A sealed
 32-case matrix is mandatory only when the active QA goal explicitly requires
 it. Timeouts remain failures under the QA contract.

@@ -7,20 +7,25 @@ short; link artifacts rather than copying reports or chat history.
 
 | Field | Value |
 | --- | --- |
-| Phase | `BUILDING` |
+| Phase | `READY_FOR_INDEPENDENT_QA` |
 | Active goal | FINN V2 full action-contract completion batch |
 | Candidate branch | `codex/finn-runtime-contract-authority-foundation` |
-| Candidate SHA | `3d1e97e81dcf4010c4c23ca5c4f2d4caac483e47` (local full action-contract candidate) |
-| Production SHA | `dbd5d50438ae199549cb52ead942d09b475fda44` |
+| Live application SHA | `5735c004fa6d0545ae852b2a795386ae647c48f0` |
+| Release ancestry | `github/main` and `github/codex/finn-runtime-contract-authority-foundation` both resolve to the live application SHA |
 | Release owner | Build |
 | Last updated | `2026-09-07` |
+
+The live application SHA is the only FINN production test target. A later
+metadata-only checkout used to read this status document is not a second
+release candidate. QA must identify the GitHub remote by URL; a local remote
+named `origin` is not release evidence.
 
 ## Current Batch
 
 - Goal: complete the existing FINN V2 action contracts and route action
   inputs, proposals, confirmation, execution and result projections through
   the canonical operation registry.
-- The latest local candidate persists every registry-approved final operation
+- The deployed candidate persists every registry-approved final operation
   transition before contract-derived input collection, tools, policy or
   reasoning consume it. Portfolio reads and evaluations support the declared,
   owner-scoped optional asset filter.
@@ -40,27 +45,24 @@ short; link artifacts rather than copying reports or chat history.
 
 | Gate | Status | Evidence |
 | --- | --- | --- |
-| Focused action-contract regressions | `PASS` | `104 passed` across registry, runtime contract, guided state, proposal, confirmation, execution, adapter, source and portfolio coverage on `3d1e97e8`. |
+| Focused action-contract regressions | `PASS` | `104 passed` across registry, runtime contract, guided state, proposal, confirmation, execution, adapter, source and portfolio coverage. |
 | Non-sealed selector registry | `PASS` | `120` development, regression and published-regression cases validated against the current registry; no sealed QA holdout was loaded. |
 | Local FINN V2 schema health | `PASS` | Canonical local PostgreSQL migration sequence applied twice; `python3 -m backend.scripts.check_finn_v2_schema` passed on `1bbab6bc`. |
-| Full canonical backend suite | `PASS` | `1748 passed, 3 skipped` from repository root on `3d1e97e8`. |
-| Frontend contract checks | `PASS` | `npm run typecheck`, `npm run test:commands` (`5 passed`), `npm run test:i18n` (`7 passed`) and `npm run build` passed on `3d1e97e8`. |
-| Real-provider validation | `NOT_RUN` | The local checkout has no configured provider credential or isolated server-eval procedure. No provider claim is made for `d314a0d1`. |
-| CI | `NOT_RUN` | No CI has been requested for action-contract candidate `3d1e97e8`; the recorded green CI belongs to production SHA `dbd5d504`. |
-| Deployment | `NOT_RUN` | No deployment has been requested for action-contract candidate `3d1e97e8`. |
-| SHA identity | `PASS` | The currently live release remains `dbd5d50438ae199549cb52ead942d09b475fda44`; no candidate identity claim is made. |
-| Authenticated functional Build smoke | `PASS` | Run `finn-v2-run-650a9df244ba48cf89f76c3e9a447818` completed `capability` with exactly one dispatch and one attempt; typed terminal projection matched the selected operation. |
-| Latency observation | `RECORDED` | One functional smoke took about `29 s` from persisted creation to terminal persistence. A separate warm performance matrix is required after the content candidate is locally green. |
+| Full canonical backend suite | `PASS` | `1749 passed, 3 skipped` from repository root on the action-contract and migration candidate. |
+| Frontend contract checks | `PASS` | `npm run typecheck`, `npm run test:commands` (`5 passed`), `npm run test:i18n` (`7 passed`) and `npm run build` passed. |
+| CI | `PASS` | GitHub Actions run `34118073894` succeeded for the live application SHA. |
+| Deployment | `PASS` | Auto Deploy run `34118232654` succeeded for the live application SHA. |
+| SHA identity | `PASS` | Production checkout, backend `/api/health`, frontend `/build-info.json`, `github/main`, candidate branch and canonical release marker all resolved to the live application SHA. |
+| Authenticated functional Build smoke | `PASS` | Run `finn-v2-run-3a7697e21f084448aef1ff662fe79a41` completed `capability` with one dispatch and one attempt; the persisted typed terminal projection had initial/final operation `capability`, no tools and no proposal. |
+| Latency observation | `RECORDED` | The functional smoke is not a statistical performance benchmark. |
 | Independent production QA | `NOT_STARTED` | User-controlled; Build did not start or contact QA. |
 
 ## Functional Build Smoke
 
-- Tested SHA: `dbd5d50438ae199549cb52ead942d09b475fda44`.
-- Run: `finn-v2-run-650a9df244ba48cf89f76c3e9a447818`.
+- Tested SHA: `5735c004fa6d0545ae852b2a795386ae647c48f0`.
+- Run: `finn-v2-run-3a7697e21f084448aef1ff662fe79a41`.
 - Terminal status: `completed`; initial/final operation: `capability`;
   canonical target: none.
-- Dispatch claim: `2026-09-06T16:37:03Z`; terminal persistence:
-  `2026-09-06T16:37:14Z`; created-to-terminal duration approximately `29 s`.
 - Exactly one dispatch and one attempt. The terminal projection was typed; no
   proposal, execution, pending action, or bot activation was created.
 - This is a functional smoke, not a p95 or maximum latency benchmark.
@@ -82,12 +84,8 @@ short; link artifacts rather than copying reports or chat history.
   use existing V2 proposal or read boundaries. New write adapters are disabled
   by default and retain proposal, confirmation, idempotency and owner-scope
   checks. Legacy `generate_strategy` remains unavailable to new V2 runs.
-- The candidate remains a local Build artifact. It has no current CI,
-  real-provider, deployment, live smoke, or independent-QA evidence and must
-  not be treated as release-ready from its local results alone.
-- Build must still run the separate warm runtime performance matrix and the
-  non-sealed authenticated runtime coverage before any deployment or QA handoff.
-- Independent QA remains `NOT_STARTED` and is not authorized by this status.
+- The action-contract candidate and its production migration repair are live.
+  Independent QA is authorized by this status, but is not started by Build.
 
 ## Allowed Phases
 

@@ -108,7 +108,11 @@ status source.
   fixture, or read the QA-exclusive sealed holdout.
 - QA owns independent test execution and QA test material. Its active QA goal
   defines the concrete scope, dataset, environment, matrix, and acceptance
-  criteria. Production QA tests only the exact live SHA in the status file;
+  criteria. Production QA tests only the exact live application SHA in the
+  status file. A local remote named `origin` is not presumed to be GitHub:
+  QA verifies the configured GitHub remote URL and uses that remote only for
+  release ancestry. A metadata-only status revision may have a different
+  checkout SHA; it is never an application-release target;
   targeted QA, smoke-QA, regression-QA, UI-QA, safety-QA, and full release
   acceptance may use different goal-defined scopes. QA completes the entire
   agreed matrix despite individual content failures, subject only to each
