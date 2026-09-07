@@ -187,7 +187,7 @@ def safe_projection(envelope: Dict[str, Any]) -> Dict[str, Any]:
     allowed = {
         "contract_id", "contract_revision", "initial_operation_id", "final_operation_id",
         "operation_change_reason", "canonical_target", "target_source", "target_type",
-        "conversation_reference", "conversation_reference_kind", "dispatch_id", "attempt_count",
+        "conversation_reference", "conversation_reference_kind", "dispatch_id", "dispatch_count", "attempt_count",
         "projection_version", "projection_hash", "terminal_response_type", "terminal_status",
         "requested_mode", "final_mode", "supplied_inputs", "missing_inputs", "proposal_lifecycle",
         "error_code", "terminal_reason", "timings_ms",

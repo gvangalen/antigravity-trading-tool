@@ -126,7 +126,7 @@ class FinnV2GatewayService:
             commit=False,
         )
         if hasattr(self.session, "add"):
-            await self.dispatches.create(
+            dispatch = await self.dispatches.create(
                 dispatch_id=f"finn-v2-dispatch-{uuid.uuid4().hex}",
                 run_id=run.id,
                 task_id=f"finn-v2-task-{uuid.uuid4().hex}",
@@ -135,6 +135,15 @@ class FinnV2GatewayService:
                 status="pending",
                 attempt_count=0,
             )
+            runtime_contracts = getattr(self.run_service, "runtime_contracts", None)
+            record_dispatch = getattr(runtime_contracts, "record_dispatch_metadata", None)
+            if record_dispatch is not None:
+                await record_dispatch(
+                    run_id=run.id,
+                    dispatch_id=dispatch.dispatch_id,
+                    attempt_count=dispatch.attempt_count,
+                    status=dispatch.status,
+                )
         logger.info(
             "FINN V2 run created",
             extra={

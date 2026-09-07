@@ -175,6 +175,7 @@ def test_safe_projection_excludes_response_content_and_preserves_contract_metada
         "runtime_trace": {
             "contract_id": "contract-1", "contract_revision": 4,
             "initial_operation_id": "capability", "final_operation_id": "capability",
+            "dispatch_id": "dispatch-1", "dispatch_count": 1, "attempt_count": 1,
             "supplied_inputs": {"asset": "BTC"}, "missing_inputs": [],
             "private": "omit",
         },
@@ -183,6 +184,7 @@ def test_safe_projection_excludes_response_content_and_preserves_contract_metada
     assert projection["runtime_trace"]["contract_id"] == "contract-1"
     assert projection["runtime_trace"]["contract_revision"] == 4
     assert projection["runtime_trace"]["supplied_inputs"] == {"asset": "BTC"}
+    assert projection["runtime_trace"]["dispatch_count"] == 1
     assert "private response" not in json.dumps(projection)
     assert "private" not in projection["runtime_trace"]
 

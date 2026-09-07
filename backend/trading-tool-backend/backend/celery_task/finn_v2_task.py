@@ -136,9 +136,16 @@ async def _process_finn_v2_run(*, run_id: str, owner: str) -> str:
         dispatch_id = dispatch.dispatch_id
         user_id = run.user_id
     async with async_session_factory() as session:
-        await FinnV2RunService(session).runtime_contracts.record_phase_timestamp(
-            run_id=run_id, phase="dispatch_claimed"
-        )
+        runtime_contracts = FinnV2RunService(session).runtime_contracts
+        await runtime_contracts.record_phase_timestamp(run_id=run_id, phase="dispatch_claimed")
+        record_dispatch = getattr(runtime_contracts, "record_dispatch_metadata", None)
+        if record_dispatch is not None:
+            await record_dispatch(
+                run_id=run_id,
+                dispatch_id=dispatch_id,
+                attempt_count=dispatch.attempt_count,
+                status=dispatch.status,
+            )
         await session.commit()
     stop_heartbeat = asyncio.Event()
 

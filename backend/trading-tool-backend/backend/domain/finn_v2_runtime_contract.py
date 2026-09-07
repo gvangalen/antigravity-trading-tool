@@ -222,6 +222,7 @@ def new_runtime_contract_state(*, run: Any, contract_id: str) -> Dict[str, Any]:
         # registry-approved action contract. It deliberately contains no
         # action fields, confirmation token, or execution payload.
         "proposal_lifecycle": {},
+        "dispatch": {},
         "terminal_response": {},
         "transition_log": [],
     }
@@ -468,6 +469,9 @@ def terminal_projection(
         "terminal_status": status,
         "terminal_response_type": state.get("terminal_response_type") or ("failure" if status == "failed" else "response"),
         "proposal_lifecycle": dict(state.get("proposal_lifecycle") or {}),
+        "dispatch_id": (state.get("dispatch") or {}).get("dispatch_id"),
+        "dispatch_count": (state.get("dispatch") or {}).get("dispatch_count"),
+        "attempt_count": (state.get("dispatch") or {}).get("attempt_count"),
         "timings_ms": timings_ms,
         "error_code": error_code,
         "terminal_reason": state.get("terminal_reason") or error_code,

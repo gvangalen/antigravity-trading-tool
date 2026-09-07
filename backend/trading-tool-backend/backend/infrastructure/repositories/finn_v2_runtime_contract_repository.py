@@ -170,6 +170,31 @@ class FinnV2RuntimeContractRepository(FinnV2RepositoryTransactionMixin):
         )
         return await self._write_revision(row=row, state=next_state)
 
+    async def record_dispatch_metadata(
+        self,
+        *,
+        run_id: str,
+        dispatch_id: str,
+        attempt_count: int,
+        status: str,
+    ) -> FinnV2RuntimeContract:
+        """Mirror safe outbox cardinality without making the contract a scheduler."""
+        row = await self._required_for_update(run_id)
+        state = deepcopy(row.state_json or {})
+        dispatch = dict(state.get("dispatch") or {})
+        existing_id = dispatch.get("dispatch_id")
+        if existing_id is not None and existing_id != dispatch_id:
+            raise RuntimeContractImmutableFieldError("runtime_contract_dispatch_id_is_immutable")
+        if int(attempt_count) < int(dispatch.get("attempt_count") or 0):
+            raise RuntimeContractConflictError("runtime_contract_dispatch_attempt_count_regressed")
+        state["dispatch"] = {
+            "dispatch_id": dispatch_id,
+            "dispatch_count": 1,
+            "attempt_count": int(attempt_count),
+            "status": status,
+        }
+        return await self._write_revision(row=row, state=state)
+
     async def record_proposal_lifecycle(
         self,
         *,

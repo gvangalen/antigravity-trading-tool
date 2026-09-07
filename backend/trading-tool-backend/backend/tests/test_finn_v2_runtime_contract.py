@@ -139,3 +139,19 @@ def test_terminal_projection_exposes_typed_contract_input_and_reason_metadata():
     assert projection["supplied_inputs"] == {"asset": "BTC"}
     assert projection["missing_inputs"] == ["timeframe"]
     assert projection["terminal_reason"] == "missing_required_input"
+
+
+def test_terminal_projection_exposes_one_outbox_dispatch_and_attempt_count():
+    projection = terminal_projection(
+        {
+            "identity": {"run_id": "run-1"},
+            "dispatch": {
+                "dispatch_id": "dispatch-1", "dispatch_count": 1,
+                "attempt_count": 1, "status": "completed",
+            },
+        },
+        status="completed", mode="READ", response={},
+    )
+
+    assert projection["dispatch_id"] == "dispatch-1"
+    assert projection["dispatch_count"] == projection["attempt_count"] == 1
