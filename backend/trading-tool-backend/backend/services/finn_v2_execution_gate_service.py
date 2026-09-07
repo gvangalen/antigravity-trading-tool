@@ -18,6 +18,28 @@ from backend.schemas.finn_v2_policy_schema import ELIGIBILITY_VERSION, Execution
 from backend.services.finn_v2_flag_service import FinnV2FlagService
 
 
+# Kept here so every execution caller, including the protected QA fixture
+# runner, applies the same non-financial operation boundary.
+SAFE_FIXTURE_EXECUTION_OPERATION_TYPES = frozenset({
+    "select_asset",
+    "create_indicator_configuration",
+    "update_indicator_configuration",
+    "delete_indicator_configuration",
+    "create_setup",
+    "update_setup",
+    "delete_setup",
+    "create_strategy",
+    "update_strategy",
+    "delete_strategy",
+    "create_bot",
+    "update_bot",
+    "delete_bot",
+    "deactivate_bot",
+    "watchlist_add",
+    "watchlist_remove",
+})
+
+
 class FinnV2ExecutionGateService:
     def __init__(self, session: AsyncSession, flag_service: Optional[FinnV2FlagService] = None):
         self.session = session
@@ -54,24 +76,7 @@ class FinnV2ExecutionGateService:
             )
 
         proposal_confirmed = bool(confirmation and confirmation.confirmed and proposal.status == "confirmed")
-        allowlisted_safe_operation = proposal.operation_type in {
-            "select_asset",
-            "create_indicator_configuration",
-            "update_indicator_configuration",
-            "delete_indicator_configuration",
-            "create_setup",
-            "update_setup",
-            "delete_setup",
-            "create_strategy",
-            "update_strategy",
-            "delete_strategy",
-            "create_bot",
-            "update_bot",
-            "delete_bot",
-            "deactivate_bot",
-            "watchlist_add",
-            "watchlist_remove",
-        }
+        allowlisted_safe_operation = proposal.operation_type in SAFE_FIXTURE_EXECUTION_OPERATION_TYPES
         payload_hash_valid = self._payload_hash(proposal.payload_json) == proposal.payload_hash
         evidence_hash_valid = bool(snapshot and validation and snapshot.evidence_set_hash == proposal.evidence_set_hash and validation.evidence_set_hash == proposal.evidence_set_hash)
         freshness_valid = True

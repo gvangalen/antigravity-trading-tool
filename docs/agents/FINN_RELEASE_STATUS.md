@@ -8,22 +8,24 @@ short; link artifacts rather than copying reports or chat history.
 | Field | Value |
 | --- | --- |
 | Phase | `BUILDING` |
-| Active goal | Protected FINN production-QA runner |
-| Candidate branch | `codex/finn-production-qa-runner-v2` |
+| Active goal | Protected FINN production-QA matrix runner |
+| Candidate branch | `codex/finn-production-qa-matrix-runner` |
 | Candidate SHA | `pending commit` |
-| Production SHA | `5735c004fa6d0545ae852b2a795386ae647c48f0` |
+| Production SHA | `3c53513c8bcd9d2a6211eb65c1ce4c1e374fddf0` |
 | Release owner | Build |
 | Last updated | `2026-09-07` |
 
 ## QA Runner
 
-- QA runner readiness: `IMPLEMENTED_NOT_YET_DEPLOYED`
-- authenticated QA preflight: `NOT_RUN`
+- QA runner readiness: `MATRIX_INTAKE_IMPLEMENTED_NOT_YET_DEPLOYED`
+- authenticated QA preflight: `PASS` — workflow `34149205266` on production SHA
+  `3c53513c8bcd9d2a6211eb65c1ce4c1e374fddf0`; authentication only, no content cases
 - official QA status: `NOT_STARTED`
 
 The protected GitHub Actions runner is the canonical authenticated production
-QA executor. Its first validation uses only the `auth_preflight` profile and
-does not start an official QA matrix.
+QA executor. The candidate adds encrypted QA-owned manifest intake and an
+explicit safe-fixture action boundary. Neither has been deployed or used for
+an official QA matrix.
 
 ## Historical Action-Contract Evidence
 

@@ -12,6 +12,7 @@ import pytest
 REPO_ROOT = Path(__file__).resolve().parents[4]
 SCRIPT_PATH = REPO_ROOT / "backend" / "trading-tool-backend" / "backend" / "scripts" / "run_finn_production_qa.py"
 WORKFLOW_PATH = REPO_ROOT / ".github" / "workflows" / "finn-production-qa.yml"
+CRYPTO_SCRIPT_PATH = REPO_ROOT / "ops" / "qa" / "finn_qa_manifest_bundle.py"
 
 
 def _module():
@@ -31,6 +32,8 @@ def test_workflow_is_manual_protected_and_serialized():
     assert "actions/upload-artifact@" in workflow
     assert "QA_SSH_KNOWN_HOSTS" in workflow
     assert "StrictHostKeyChecking=yes" in workflow
+    assert "manifest_key" in workflow
+    assert "manifest_bundle" in workflow
 
 
 def test_workflow_never_exports_fixture_or_bearer_token():
@@ -55,15 +58,53 @@ def test_redaction_removes_credentials_and_fixture_identity():
     assert "secret" not in json.dumps(report)
 
 
-def test_manifest_rejects_writes_and_path_escape(tmp_path):
+def test_manifest_rejects_unsafe_fixture_actions_and_path_escape(monkeypatch, tmp_path):
     module = _module()
     manifest_dir = tmp_path / "manifests"
     manifest_dir.mkdir(parents=True)
-    (manifest_dir / "unsafe.json").write_text(json.dumps({"cases": [{"case_id": "one", "message": "buy", "execution": True}]}), encoding="utf-8")
-    with pytest.raises(ValueError, match="manifest_not_read_only"):
-        list(module.load_read_only_manifest(manifest_root=manifest_dir, manifest_id="unsafe"))
+    (manifest_dir / "unsafe.json").write_text(json.dumps({"cases": [{"case_id": "one", "message": "buy", "expected_operation_id": "manual_order", "fixture_action": "safe_execution"}]}), encoding="utf-8")
+    monkeypatch.setenv("FINN_QA_ALLOW_FIXTURE_ACTIONS", "1")
+    monkeypatch.setenv("FINN_QA_ALLOW_FIXTURE_EXECUTION", "1")
+    with pytest.raises(ValueError, match="fixture_action_operation_blocked"):
+        list(module.load_manifest(manifest_root=manifest_dir, manifest_id="unsafe"))
     with pytest.raises(ValueError, match="manifest_id_invalid"):
         module.manifest_path(manifest_root=manifest_dir, manifest_id="../escape")
+
+
+def test_manifest_allows_explicitly_authorized_safe_fixture_execution(monkeypatch, tmp_path):
+    module = _module()
+    manifest_dir = tmp_path / "manifests"
+    manifest_dir.mkdir(parents=True)
+    (manifest_dir / "safe.json").write_text(json.dumps({"cases": [{"case_id": "one", "message": "add BTC", "expected_operation_id": "watchlist_add", "fixture_action": "safe_execution", "idempotency_replay": True}]}), encoding="utf-8")
+    monkeypatch.setenv("FINN_QA_ALLOW_FIXTURE_ACTIONS", "1")
+    monkeypatch.setenv("FINN_QA_ALLOW_FIXTURE_EXECUTION", "1")
+    assert list(module.load_manifest(manifest_root=manifest_dir, manifest_id="safe"))[0]["fixture_action"] == "safe_execution"
+
+
+def test_encrypted_manifest_is_only_staged_after_server_side_decryption(tmp_path):
+    module = _module()
+    private_key = tmp_path / "secrets" / "manifest.key"
+    manifest = tmp_path / "sealed.json"
+    manifest.write_text(json.dumps({"cases": [{"case_id": "one", "message": "Wat betekent RSI?"}]}), encoding="utf-8")
+    public_key = module.manifest_public_key(crypto_script=CRYPTO_SCRIPT_PATH, private_key_path=private_key)
+    bundle = tmp_path / "manifest.bundle"
+    import subprocess
+    subprocess.run(
+        ["python3", str(CRYPTO_SCRIPT_PATH), "encrypt", "--public-key", public_key, "--manifest", str(manifest)],
+        check=True,
+        stdout=bundle.open("w", encoding="utf-8"),
+    )
+    root = tmp_path / "qa-manifests"
+    staged = module.stage_manifest_bundle(
+        crypto_script=CRYPTO_SCRIPT_PATH,
+        private_key_path=private_key,
+        bundle_path=bundle,
+        manifest_root=root,
+        manifest_id="qa-scope",
+    )
+    assert staged == root / "qa-scope.json"
+    assert json.loads(staged.read_text(encoding="utf-8"))["cases"][0]["case_id"] == "one"
+    assert oct(staged.stat().st_mode & 0o777) == "0o600"
 
 
 def test_auth_preflight_does_not_persist_auth_payload(monkeypatch):

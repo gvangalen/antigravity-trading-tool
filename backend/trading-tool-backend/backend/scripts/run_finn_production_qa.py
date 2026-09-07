@@ -26,6 +26,7 @@ from typing import Any, Dict, Iterable, Optional, Tuple
 
 ALLOWED_PROFILES = {
     "auth_preflight",
+    "manifest_key",
     "targeted_regression",
     "runtime_acceptance",
     "full_release_acceptance",
@@ -34,6 +35,7 @@ ALLOWED_PROFILES = {
 }
 SENSITIVE_KEYS = {"access_token", "authorization", "authorization_header", "cookie", "email", "password", "private_key", "secret", "token", "user_id"}
 TERMINAL_STATUSES = {"completed", "failed", "canceled", "unavailable", "downgraded", "rejected", "blocked"}
+FIXTURE_ACTION_MODES = {"read_only", "proposal", "confirmation", "safe_execution"}
 
 
 def redact(value: Any) -> Any:
@@ -194,7 +196,8 @@ def manifest_path(*, manifest_root: Path, manifest_id: str) -> Path:
     return path
 
 
-def load_read_only_manifest(*, manifest_root: Path, manifest_id: str) -> Iterable[Dict[str, Any]]:
+def load_manifest(*, manifest_root: Path, manifest_id: str) -> Iterable[Dict[str, Any]]:
+    """Validate QA-owned scope without exposing its cases outside the host."""
     payload = json.loads(manifest_path(manifest_root=manifest_root, manifest_id=manifest_id).read_text(encoding="utf-8"))
     cases = payload.get("cases") if isinstance(payload, dict) else None
     if not isinstance(cases, list) or not cases:
@@ -202,12 +205,121 @@ def load_read_only_manifest(*, manifest_root: Path, manifest_id: str) -> Iterabl
     for case in cases:
         if not isinstance(case, dict) or not isinstance(case.get("case_id"), str) or not isinstance(case.get("message"), str):
             raise ValueError("manifest_case_invalid")
-        if case.get("allow_fixture_write") is True or case.get("confirmation") is True or case.get("execution") is True:
-            raise ValueError("manifest_not_read_only")
+        action_mode = case.get("fixture_action", "read_only")
+        if action_mode not in FIXTURE_ACTION_MODES:
+            raise ValueError("manifest_fixture_action_invalid")
+        if action_mode != "read_only":
+            if os.environ.get("FINN_QA_ALLOW_FIXTURE_ACTIONS") != "1":
+                raise ValueError("fixture_actions_not_authorized")
+            if not isinstance(case.get("expected_operation_id"), str):
+                raise ValueError("fixture_action_operation_required")
+            from backend.services.finn_v2_execution_gate_service import SAFE_FIXTURE_EXECUTION_OPERATION_TYPES
+            if case["expected_operation_id"] not in SAFE_FIXTURE_EXECUTION_OPERATION_TYPES:
+                raise ValueError("fixture_action_operation_blocked")
+        if action_mode == "safe_execution":
+            if os.environ.get("FINN_QA_ALLOW_FIXTURE_EXECUTION") != "1":
+                raise ValueError("fixture_execution_not_authorized")
     return cases
 
 
-def run_read_only_cases(*, base_url: str, token: str, cases: Iterable[Dict[str, Any]]) -> list[Dict[str, Any]]:
+def manifest_public_key(*, crypto_script: Path, private_key_path: Path) -> str:
+    """Return only the public half of the server-side manifest keypair."""
+    result = subprocess.run(
+        [sys.executable, str(crypto_script), "public-key", "--private-key-path", str(private_key_path)],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    public_key = result.stdout.strip()
+    if result.returncode != 0 or not re.fullmatch(r"[A-Za-z0-9_-]{40,100}", public_key):
+        raise RuntimeError("manifest_key_unavailable")
+    return public_key
+
+
+def stage_manifest_bundle(*, crypto_script: Path, private_key_path: Path, bundle_path: Path, manifest_root: Path, manifest_id: str) -> Path:
+    """Decrypt an externally supplied QA bundle only on the protected host."""
+    destination = manifest_root / f"{manifest_id}.json"
+    manifest_root.mkdir(mode=0o700, parents=True, exist_ok=True)
+    manifest_root.chmod(0o700)
+    if not bundle_path.is_file() or bundle_path.stat().st_size > 96_000:
+        raise ValueError("manifest_bundle_invalid")
+    temporary = destination.with_name(destination.name + f".{uuid.uuid4().hex}.tmp")
+    result = subprocess.run(
+        [
+            sys.executable, str(crypto_script), "decrypt", "--private-key-path", str(private_key_path),
+            "--bundle-path", str(bundle_path), "--output", str(temporary),
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        temporary.unlink(missing_ok=True)
+        raise ValueError("manifest_bundle_invalid")
+    try:
+        # Validate before atomically publishing the new QA-owned manifest.
+        json.loads(temporary.read_text(encoding="utf-8"))
+        temporary.replace(destination)
+        destination.chmod(0o600)
+    except Exception as error:
+        temporary.unlink(missing_ok=True)
+        raise ValueError("manifest_bundle_invalid") from error
+    return destination
+
+
+def _proposal_id(envelope: Dict[str, Any]) -> Optional[str]:
+    response = envelope.get("response") if isinstance(envelope.get("response"), dict) else {}
+    candidate = response.get("proposal_id") or envelope.get("proposal_id")
+    return candidate if isinstance(candidate, str) and candidate else None
+
+
+def _run_fixture_action(*, base_url: str, token: str, case: Dict[str, Any], terminal: Dict[str, Any]) -> Dict[str, Any]:
+    """Exercise only an explicitly enabled non-financial QA fixture action."""
+    action_mode = case.get("fixture_action", "read_only")
+    result: Dict[str, Any] = {"mode": action_mode, "publish_status": None, "confirm_status": None, "execute_status": None, "idempotency_replay_status": None}
+    if action_mode == "read_only":
+        return result
+    proposal_id = _proposal_id(terminal)
+    if not proposal_id:
+        result["error_category"] = "proposal_missing"
+        return result
+    status, published, _latency, error = request_json(url=f"{base_url}/api/assistant/v2/proposals/{proposal_id}/publish", method="POST", token=token, payload={})
+    result["publish_status"] = status
+    if status != 200 or error:
+        result["error_category"] = error or "proposal_publish_failed"
+        return result
+    if action_mode == "proposal":
+        return result
+    confirmation_token = published.get("confirmation_token") if isinstance(published.get("confirmation_token"), str) else None
+    payload_hash = published.get("payload_hash") if isinstance(published.get("payload_hash"), str) else None
+    if not confirmation_token or not payload_hash:
+        result["error_category"] = "confirmation_material_missing"
+        return result
+    confirm_payload = {"confirmation_token": confirmation_token, "expected_payload_hash": payload_hash}
+    status, _confirmed, _latency, error = request_json(url=f"{base_url}/api/assistant/v2/proposals/{proposal_id}/confirm", method="POST", token=token, payload=confirm_payload)
+    result["confirm_status"] = status
+    confirmation_token = None
+    if status != 200 or error:
+        result["error_category"] = error or "proposal_confirm_failed"
+        return result
+    if action_mode == "confirmation":
+        return result
+    idempotency_key = f"qa-execute-{uuid.uuid4().hex}"
+    execute_payload = {"idempotency_key": idempotency_key, "expected_payload_hash": payload_hash}
+    status, _executed, _latency, error = request_json(url=f"{base_url}/api/assistant/v2/proposals/{proposal_id}/execute", method="POST", token=token, payload=execute_payload)
+    result["execute_status"] = status
+    if status != 200 or error:
+        result["error_category"] = error or "proposal_execute_failed"
+        return result
+    if case.get("idempotency_replay") is True:
+        replay_status, _replayed, _latency, replay_error = request_json(url=f"{base_url}/api/assistant/v2/proposals/{proposal_id}/execute", method="POST", token=token, payload=execute_payload)
+        result["idempotency_replay_status"] = replay_status
+        if replay_status != 200 or replay_error:
+            result["error_category"] = replay_error or "idempotency_replay_failed"
+    return result
+
+
+def run_cases(*, base_url: str, token: str, cases: Iterable[Dict[str, Any]]) -> list[Dict[str, Any]]:
     results = []
     for case in cases:
         request_payload = {"message": case["message"], "conversation_id": case.get("conversation_id"), "workspace_hints": case.get("workspace_hints") or {}, "client_context": case.get("client_context") or {}, "idempotency_key": f"qa-{uuid.uuid4().hex}", "transport": "chat"}
@@ -239,6 +351,7 @@ def run_read_only_cases(*, base_url: str, token: str, cases: Iterable[Dict[str, 
         if sse_error:
             result["error_category"] = sse_error
         result["operation_matches"] = case.get("expected_operation_id") is None or actual == case["expected_operation_id"]
+        result["fixture_action"] = _run_fixture_action(base_url=base_url, token=token, case=case, terminal=terminal)
         results.append(result)
     return results
 
@@ -253,6 +366,9 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--checkout", required=True)
     parser.add_argument("--release-marker", required=True)
     parser.add_argument("--manifest-root", default="/home/ubuntu/ops/finn-qa-manifests")
+    parser.add_argument("--manifest-bundle-path")
+    parser.add_argument("--manifest-private-key-path", default="/home/ubuntu/.secrets/finn-qa-manifest.key")
+    parser.add_argument("--manifest-crypto-script")
     parser.add_argument("--report-path", required=True)
     parser.add_argument("--workflow-run-id", default="local")
     return parser.parse_args()
@@ -265,13 +381,20 @@ def main() -> int:
     if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]{0,80}", args.run_label):
         raise SystemExit("run_label is invalid")
     report_path = Path(args.report_path)
-    report: Dict[str, Any] = {"schema_version": 1, "workflow": "finn-production-qa", "workflow_run_id": args.workflow_run_id, "profile": args.profile, "run_label": args.run_label, "manifest_id": args.manifest_id, "manifest_sha256": None, "release_identity": {}, "auth_preflight": {}, "cases": [], "safety": {"read_only_profile": True, "confirmation_calls": 0, "execution_calls": 0, "live_trading_calls": 0}, "outcome": "failed", "error_category": None}
+    report: Dict[str, Any] = {"schema_version": 1, "workflow": "finn-production-qa", "workflow_run_id": args.workflow_run_id, "profile": args.profile, "run_label": args.run_label, "manifest_id": args.manifest_id, "manifest_sha256": None, "manifest_public_key": None, "release_identity": {}, "auth_preflight": {}, "cases": [], "safety": {"read_only_profile": True, "confirmation_calls": 0, "execution_calls": 0, "live_trading_calls": 0, "live_bot_activation_calls": 0}, "outcome": "failed", "error_category": None}
     token: Optional[str] = None
     try:
         checkout = Path(args.checkout).resolve()
         report["release_identity"] = release_identity(release_sha=args.release_sha, checkout=checkout, release_marker=Path(args.release_marker), base_url=args.base_url.rstrip("/"))
         if not report["release_identity"]["matches"]:
             report["error_category"] = "release_mismatch"
+        elif args.profile == "manifest_key":
+            crypto_script = Path(args.manifest_crypto_script or checkout / "ops" / "qa" / "finn_qa_manifest_bundle.py")
+            report["manifest_public_key"] = manifest_public_key(
+                crypto_script=crypto_script,
+                private_key_path=Path(args.manifest_private_key_path),
+            )
+            report["outcome"] = "passed"
         else:
             token = issue_fixture_token(issuer=checkout / "backend" / "trading-tool-backend" / "backend" / "scripts" / "qa_issue_finn_token.py")
             report["auth_preflight"] = authenticated_preflight(base_url=args.base_url.rstrip("/"), token=token)
@@ -283,9 +406,22 @@ def main() -> int:
                 if args.manifest_id == "none":
                     raise ValueError("manifest_required")
                 manifest_root = Path(args.manifest_root)
+                if args.manifest_bundle_path:
+                    crypto_script = Path(args.manifest_crypto_script or checkout / "ops" / "qa" / "finn_qa_manifest_bundle.py")
+                    stage_manifest_bundle(
+                        crypto_script=crypto_script,
+                        private_key_path=Path(args.manifest_private_key_path),
+                        bundle_path=Path(args.manifest_bundle_path),
+                        manifest_root=manifest_root,
+                        manifest_id=args.manifest_id,
+                    )
                 report["manifest_sha256"] = sha256_file(manifest_path(manifest_root=manifest_root, manifest_id=args.manifest_id))
-                report["cases"] = run_read_only_cases(base_url=args.base_url.rstrip("/"), token=token, cases=load_read_only_manifest(manifest_root=manifest_root, manifest_id=args.manifest_id))
-                report["outcome"] = "passed" if all(item.get("create_http_status") == 200 and item.get("terminal", {}).get("status") in TERMINAL_STATUSES and item.get("polling_sse_equal") and item.get("operation_matches") for item in report["cases"]) else "failed"
+                cases = list(load_manifest(manifest_root=manifest_root, manifest_id=args.manifest_id))
+                report["cases"] = run_cases(base_url=args.base_url.rstrip("/"), token=token, cases=cases)
+                report["safety"]["read_only_profile"] = all(case.get("fixture_action", "read_only") == "read_only" for case in cases)
+                report["safety"]["confirmation_calls"] = sum(1 for item in report["cases"] if item["fixture_action"].get("confirm_status") is not None)
+                report["safety"]["execution_calls"] = sum(1 for item in report["cases"] if item["fixture_action"].get("execute_status") is not None)
+                report["outcome"] = "passed" if all(item.get("create_http_status") == 200 and item.get("terminal", {}).get("status") in TERMINAL_STATUSES and item.get("polling_sse_equal") and item.get("operation_matches") and not item["fixture_action"].get("error_category") for item in report["cases"]) else "failed"
     except (RuntimeError, ValueError) as error:
         report["error_category"] = str(error)
     except Exception:

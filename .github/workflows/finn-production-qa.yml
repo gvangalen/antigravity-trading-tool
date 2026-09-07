@@ -14,6 +14,7 @@ on:
         type: choice
         options:
           - auth_preflight
+          - manifest_key
           - targeted_regression
           - runtime_acceptance
           - full_release_acceptance
@@ -27,6 +28,11 @@ on:
       run_label:
         description: Traceable label without user or fixture data
         required: true
+        type: string
+      manifest_bundle:
+        description: Encrypted QA-owned manifest bundle; leave empty to use an already staged manifest
+        required: false
+        default: ''
         type: string
 
 permissions:
@@ -60,12 +66,14 @@ jobs:
           QA_PROFILE: ${{ inputs.qa_profile }}
           MANIFEST_ID: ${{ inputs.manifest_id }}
           RUN_LABEL: ${{ inputs.run_label }}
+          MANIFEST_BUNDLE: ${{ inputs.manifest_bundle }}
         run: |
           set -euo pipefail
           [[ "$RELEASE_SHA" =~ ^[0-9a-f]{40}$ ]]
-          [[ "$QA_PROFILE" =~ ^(auth_preflight|targeted_regression|runtime_acceptance|full_release_acceptance|safety|latency)$ ]]
+          [[ "$QA_PROFILE" =~ ^(auth_preflight|manifest_key|targeted_regression|runtime_acceptance|full_release_acceptance|safety|latency)$ ]]
           [[ "$MANIFEST_ID" =~ ^[a-z0-9][a-z0-9._-]{0,80}$ ]]
           [[ "$RUN_LABEL" =~ ^[A-Za-z0-9][A-Za-z0-9._-]{0,80}$ ]]
+          [ "${#MANIFEST_BUNDLE}" -le 65535 ]
           git fetch origin main --quiet
           git merge-base --is-ancestor "$RELEASE_SHA" origin/main
           test "$(git rev-parse HEAD)" = "$RELEASE_SHA"
@@ -98,6 +106,7 @@ jobs:
           QA_PROFILE: ${{ inputs.qa_profile }}
           MANIFEST_ID: ${{ inputs.manifest_id }}
           RUN_LABEL: ${{ inputs.run_label }}
+          MANIFEST_BUNDLE: ${{ inputs.manifest_bundle }}
           QA_HOST: ${{ steps.connection.outputs.host }}
           QA_REMOTE_DIR: ${{ steps.connection.outputs.remote_dir }}
         run: |
@@ -105,7 +114,15 @@ jobs:
           set +x
           report_name="finn-production-qa-${GITHUB_RUN_ID}.json"
           remote_report="/tmp/${report_name}"
-          remote_command=$(printf 'bash -s -- %q %q %q %q %q %q %q' "$RELEASE_SHA" "$QA_PROFILE" "$MANIFEST_ID" "$RUN_LABEL" "$QA_REMOTE_DIR" "$remote_report" "$GITHUB_RUN_ID")
+          remote_bundle="/tmp/finn-production-qa-manifest-${GITHUB_RUN_ID}.bundle"
+          if [ -n "${MANIFEST_BUNDLE:-}" ]; then
+            printf '%s' "$MANIFEST_BUNDLE" > "$RUNNER_TEMP/finn-production-qa-manifest.bundle"
+            chmod 600 "$RUNNER_TEMP/finn-production-qa-manifest.bundle"
+            scp -i "$RUNNER_TEMP/finn-production-qa-key" -o UserKnownHostsFile="$RUNNER_TEMP/finn-production-qa-known-hosts" -o BatchMode=yes -o StrictHostKeyChecking=yes "$RUNNER_TEMP/finn-production-qa-manifest.bundle" "ubuntu@${QA_HOST}:${remote_bundle}"
+          else
+            remote_bundle=""
+          fi
+          remote_command=$(printf 'bash -s -- %q %q %q %q %q %q %q %q' "$RELEASE_SHA" "$QA_PROFILE" "$MANIFEST_ID" "$RUN_LABEL" "$QA_REMOTE_DIR" "$remote_report" "$GITHUB_RUN_ID" "$remote_bundle")
           set +e
           ssh -i "$RUNNER_TEMP/finn-production-qa-key" -o UserKnownHostsFile="$RUNNER_TEMP/finn-production-qa-known-hosts" -o BatchMode=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=15 "ubuntu@${QA_HOST}" "$remote_command" <<'REMOTE'
           set -euo pipefail
@@ -117,13 +134,13 @@ jobs:
           remote_dir="$5"
           report_path="$6"
           workflow_run_id="$7"
+          manifest_bundle_path="$8"
           cd "$remote_dir"
           test "$(git rev-parse HEAD)" = "$release_sha"
           set -a
           source "$HOME/.secrets/trading.env"
           set +a
-          PYTHONPATH=backend/trading-tool-backend \
-            python3 backend/trading-tool-backend/backend/scripts/run_finn_production_qa.py \
+          runner_args=(
               --release-sha "$release_sha" \
               --profile "$qa_profile" \
               --manifest-id "$manifest_id" \
@@ -132,7 +149,13 @@ jobs:
               --release-marker "$remote_dir/ops/deploy/production/LAST_GOOD_COMMIT" \
               --manifest-root "${FINN_QA_MANIFEST_ROOT:-$HOME/ops/finn-qa-manifests}" \
               --workflow-run-id "$workflow_run_id" \
-              --report-path "$report_path" >/dev/null
+              --report-path "$report_path"
+          )
+          if [ -n "$manifest_bundle_path" ]; then
+            runner_args+=(--manifest-bundle-path "$manifest_bundle_path")
+          fi
+          PYTHONPATH=backend/trading-tool-backend \
+            python3 backend/trading-tool-backend/backend/scripts/run_finn_production_qa.py "${runner_args[@]}" >/dev/null
           REMOTE
           remote_status=$?
           set -e
@@ -141,7 +164,7 @@ jobs:
             printf '{"schema_version":1,"outcome":"failed","error_category":"ssh","profile":"%s"}\n' "$QA_PROFILE" > "qa-artifacts/${report_name}"
           fi
           sha256sum "qa-artifacts/${report_name}" > "qa-artifacts/${report_name}.sha256"
-          ssh -i "$RUNNER_TEMP/finn-production-qa-key" -o UserKnownHostsFile="$RUNNER_TEMP/finn-production-qa-known-hosts" -o BatchMode=yes -o StrictHostKeyChecking=yes "ubuntu@${QA_HOST}" "rm -f '$remote_report'" || true
+          ssh -i "$RUNNER_TEMP/finn-production-qa-key" -o UserKnownHostsFile="$RUNNER_TEMP/finn-production-qa-known-hosts" -o BatchMode=yes -o StrictHostKeyChecking=yes "ubuntu@${QA_HOST}" "rm -f '$remote_report' '$remote_bundle'" || true
           test "$remote_status" -eq 0
 
       - name: Upload sanitized QA report

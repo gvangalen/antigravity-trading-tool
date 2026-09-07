@@ -21,9 +21,10 @@ The manual workflow `.github/workflows/finn-production-qa.yml` requires:
 | Input | Meaning |
 | --- | --- |
 | `release_sha` | Full, already-live SHA. It must be an ancestor of `main`. |
-| `qa_profile` | `auth_preflight`, `targeted_regression`, `runtime_acceptance`, `full_release_acceptance`, `safety`, or `latency`. |
+| `qa_profile` | `auth_preflight`, `manifest_key`, `targeted_regression`, `runtime_acceptance`, `full_release_acceptance`, `safety`, or `latency`. |
 | `manifest_id` | Approved QA-owned manifest identifier. `auth_preflight` uses `none`. |
 | `run_label` | Safe trace label; no user, fixture, or credential data. |
+| `manifest_bundle` | Optional encrypted QA-owned manifest. It is decrypted only on the protected host. |
 
 The profile defines only the execution class. The active QA goal remains the
 authority for scope, acceptance criteria, and whether a sealed QA manifest is
@@ -43,9 +44,15 @@ allowed. The workflow never silently substitutes a sealed 32-case matrix.
   backward-compatible fallback, never a fallback for host verification.
 - Every non-preflight manifest is resolved by ID from the protected,
   QA-owned server manifest root (`FINN_QA_MANIFEST_ROOT`, defaulting to
-  `/home/ubuntu/ops/finn-qa-manifests`). Build never reads that material. The
-  runner rejects a manifest that requests confirmation, execution, or fixture
-  writes.
+  `/home/ubuntu/ops/finn-qa-manifests`). Build never reads that material.
+  QA can additionally stage an encrypted manifest bundle for one run; its
+  plaintext exists only in the protected host directory with mode `0600`.
+- `manifest_key` publishes only the server's manifest-encryption public key in
+  a sanitized artifact. The private key remains in the server secret directory.
+  The runner never accepts plaintext manifests through workflow inputs.
+- Runtime cases remain read-only unless a later QA-goal and server-side policy
+  explicitly authorize fixture writes. Live trading and live-bot activation
+  are never allowed by this runner.
 - Reports contain only sanitized metadata: release identity, profile, case ID,
   run ID, operation/target metadata, lifecycle, timing, dispatch/attempt
   metadata, and safe safety counters. Headers, response contents, fixture
@@ -65,6 +72,23 @@ separately reported as `ssh` by the workflow artifact.
 `auth_preflight` stops there. It is the only profile used to validate this
 operational provision; it does not submit a FINN content case.
 
+## QA-Owned Manifest Intake
+
+QA first runs `manifest_key` and reads the public key from its sanitized
+artifact. QA encrypts its locally held, goal-approved manifest without placing
+the plaintext in the repository or an artifact:
+
+```bash
+python3 ops/qa/finn_qa_manifest_bundle.py encrypt \
+  --public-key <PUBLIC_KEY_FROM_ARTIFACT> \
+  --manifest <QA_OWNED_MANIFEST.json> > /tmp/finn-qa.bundle
+```
+
+The protected workflow receives only this encrypted bundle. It decrypts and
+validates it on production, stores it under the QA-owned manifest root, and
+reports only its SHA-256. Build never reads the plaintext or the sealed
+holdout.
+
 ## Start A User-Authorized QA Run
 
 After the user has authorized the active QA goal, a QA agent can start and
@@ -75,6 +99,23 @@ follow the protected runner without SSH:
   <FULL_LIVE_SHA> auth_preflight none qa-preflight-<label>
 ```
 
-For an approved read-only manifest, replace the profile and manifest ID. Read
-the sanitized artifact from the resulting workflow run and issue one verdict
-for exactly that approved scope.
+For an approved QA-owned manifest, replace the profile and manifest ID and add
+the encrypted bundle path as the fifth argument. Read the sanitized artifact
+from the resulting workflow run and issue one verdict for exactly that approved
+scope.
+
+## Fixture Action Boundary
+
+Each manifest case has `fixture_action`, defaulting to `read_only`. The only
+other accepted values are `proposal`, `confirmation`, and `safe_execution`.
+They are executable only when the protected host has explicitly set
+`FINN_QA_ALLOW_FIXTURE_ACTIONS=1`; `safe_execution` additionally requires
+`FINN_QA_ALLOW_FIXTURE_EXECUTION=1`.
+
+Every non-read-only case must name an `expected_operation_id` in the existing
+`SAFE_FIXTURE_EXECUTION_OPERATION_TYPES` execution-gate allowlist. The runner
+therefore rejects `manual_order`, `portfolio_rebalance`, `activate_live_bot`,
+and every other operation outside the existing safe fixture boundary before a
+proposal route is called. Confirmation tokens remain process-local and are
+never written to the report. An optional `idempotency_replay: true` is allowed
+only for a `safe_execution` case and reuses the same idempotency key once.
