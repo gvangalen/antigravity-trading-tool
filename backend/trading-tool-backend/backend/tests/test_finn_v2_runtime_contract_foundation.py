@@ -12,6 +12,7 @@ from backend.domain.finn_v2_runtime_contract import (
     RuntimeContractConflictError,
     RuntimeContractImmutableFieldError,
     new_runtime_contract_state,
+    record_final_operation,
     record_initial_intent,
     record_selection,
     terminal_projection,
@@ -285,6 +286,46 @@ def test_runtime_contract_uses_create_strategy_contract_for_optional_and_missing
     assert selected["missing_inputs"] == ["execution_mode", "base_amount"]
 
 
+def test_final_operation_transition_is_registry_validated_and_drives_execution_inputs():
+    state = record_initial_intent(
+        new_runtime_contract_state(run=_run(), contract_id="contract-run-contract-1"),
+        operation_id="evaluate_plan",
+        requested_mode="EVALUATE",
+    )
+
+    transitioned = record_final_operation(
+        state,
+        operation_id="clarify_request",
+        mode="CLARIFICATION",
+        reason="classification_validation",
+    )
+    selected = record_selection(
+        transitioned,
+        canonical_target=None,
+        target_source=None,
+        original_target_text=None,
+        target_type=None,
+        conversation_reference=None,
+        conversation_reference_kind=None,
+    )
+
+    assert selected["initial_operation_id"] == "evaluate_plan"
+    assert selected["final_operation_id"] == "clarify_request"
+    assert selected["operation_change_reason"] == "classification_validation"
+    assert selected["action_contract"] == {
+        "operation_id": "clarify_request",
+        "version": FinnV2OperationRegistry.VERSION,
+    }
+    assert selected["missing_inputs"] == ["requested_change"]
+    with pytest.raises(RuntimeContractImmutableFieldError):
+        record_final_operation(
+            selected,
+            operation_id="unavailable",
+            mode="UNAVAILABLE",
+            reason="registry_contract_unavailable",
+        )
+
+
 def test_complete_run_never_creates_or_reconstructs_a_runtime_contract():
     source = (ROOT / "services" / "finn_v2_run_service.py").read_text(encoding="utf-8")
     complete_run_source = source.split("    async def complete_run(", 1)[1].split("    def _terminal_placeholder_response", 1)[0]
@@ -389,6 +430,14 @@ def test_selector_persistence_precedes_post_selection_execution_and_has_a_separa
     assert "selector_phase_started" in lifecycle
     assert "selector_started()" in orchestrator
     assert "terminal_persistence_reserve_seconds" in lifecycle
+
+
+def test_orchestrator_persists_final_operation_before_contract_derived_selection():
+    orchestrator = (ROOT / "services" / "finn_v2_orchestrator_service.py").read_text(encoding="utf-8")
+
+    assert orchestrator.index("record_initial_intent(") < orchestrator.index("record_final_operation(")
+    assert orchestrator.index("record_final_operation(") < orchestrator.index("record_selection(")
+    assert orchestrator.index("record_selection(") < orchestrator.index("execute_tool_plan(")
 
 
 def test_selected_capability_uses_the_post_selector_registry_fast_path():

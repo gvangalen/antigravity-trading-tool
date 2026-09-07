@@ -27,7 +27,7 @@ The selector chooses only a registered operation ID. The V2 resolver, tools,
 policy, verifier, proposal service, confirmation service, execution adapter,
 polling and SSE consume that resolved contract. A final operation differs from
 the initial operation only through a registry-validated transition with an
-explicit reason.
+explicit reason, persisted before input collection or tool planning.
 
 ## Implemented V1 Operations
 
@@ -41,8 +41,8 @@ explicit reason.
 | `watchlist_remove` | `ACTION_PROPOSAL`, remove | `asset` | Active asset and watchlist evidence | V2 proposal, confirmation and owner-scoped remove adapter |
 | `read_scores` | `READ`, read | Active asset from the canonical resolver when available | Existing `ScoreRepository` snapshot via `ScoreToolAdapter` as `AssetScoresData`, including source and as-of information | Read-only; no score recomputation, proposal or write |
 | `explain_score` | `EVALUATE`, evaluate | Active or referenced score context | Stored score evidence with optional profile, preferences, setup, strategy and indicator context | Read-only evidence-grounded explanation; no new score, proposal or write |
-| `read_portfolio` | `READ`, read | Server-issued authenticated user only | Existing owner-scoped `BotRepository.get_portfolio_intelligence_context` through `PortfolioToolAdapter` as `PortfolioData` | Read-only; no rebalance, order or proposal |
-| `evaluate_portfolio` | `EVALUATE`, evaluate | Server-issued authenticated user only | Portfolio, profile and preferences; optional plan, market and indicator evidence | Advice-only verified or limited response; no rebalance, order, proposal or write |
+| `read_portfolio` | `READ`, read | Server-issued authenticated user; optional canonical asset filter | Existing owner-scoped `BotRepository.get_portfolio_intelligence_context` through `PortfolioToolAdapter` as `PortfolioData` | Read-only; no rebalance, order or proposal |
+| `evaluate_portfolio` | `EVALUATE`, evaluate | Server-issued authenticated user; optional canonical asset filter | Portfolio, profile and preferences; optional plan, market and indicator evidence | Advice-only verified or limited response; no rebalance, order, proposal or write |
 | `evaluate_plan` | `EVALUATE`, evaluate | Contract-scoped plan context | Profile, preferences, asset, indicators, setup, strategy and bot evidence | Advice-only response |
 | `evaluate_setup` | `EVALUATE`, evaluate | Contract-scoped setup context | Active setup, asset and optional indicator evidence | Advice-only response |
 | `read_indicator_configuration` | `READ`, read | Canonical active/referenced asset | User indicator configuration | Read-only response |
@@ -85,6 +85,16 @@ server-issued confirmation token is held only during that browser request.
 `ux_watchlists_user_symbol`; `ON CONFLICT (user_id, symbol) DO NOTHING` makes a
 replayed confirmation return the same logical result instead of inserting a
 second row.
+
+## Runtime Transition Rule
+
+The selector intent is immutable. If contract validation must safely narrow it,
+`FinnV2RuntimeContractRepository.record_final_operation` validates the change
+against `FinnV2OperationRegistry.resolve_transition` and persists the final
+operation, mode and reason before the contract-derived execution view is made.
+Input collection then uses that final contract's required and optional inputs.
+No later tool, policy, verifier or transport consumer can substitute a
+different operation through a mutable `RequestPlan` field.
 
 ## Intentional V1 Gaps
 

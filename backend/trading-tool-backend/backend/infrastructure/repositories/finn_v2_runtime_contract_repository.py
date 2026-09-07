@@ -11,6 +11,7 @@ from backend.domain.finn_v2_runtime_contract import (
     RUNTIME_CONTRACT_VERSION,
     RuntimeContractConflictError,
     new_runtime_contract_state,
+    record_final_operation,
     record_initial_intent,
     record_conversation_state,
     record_selection,
@@ -104,6 +105,26 @@ class FinnV2RuntimeContractRepository(FinnV2RepositoryTransactionMixin):
             record_initial_intent(current_state, operation_id=operation_id, requested_mode=requested_mode)
             return row
         next_state = record_initial_intent(current_state, operation_id=operation_id, requested_mode=requested_mode)
+        return await self._write_revision(row=row, state=next_state)
+
+    async def record_final_operation(
+        self,
+        *,
+        run_id: str,
+        operation_id: str,
+        mode: str,
+        reason: Optional[str],
+    ) -> FinnV2RuntimeContract:
+        """Make the registry-approved execution operation durable before tools."""
+        row = await self._required_for_update(run_id)
+        next_state = record_final_operation(
+            deepcopy(row.state_json or {}),
+            operation_id=operation_id,
+            mode=mode,
+            reason=reason,
+        )
+        if next_state == (row.state_json or {}):
+            return row
         return await self._write_revision(row=row, state=next_state)
 
     async def record_selection(

@@ -21,6 +21,10 @@ def _contract_boundary_for_unit_orchestrators(monkeypatch):
         selected_intent.update(kwargs)
         return asyncio.sleep(0)
 
+    def _record_final_operation(**kwargs):
+        selected_intent.update({"final_operation_id": kwargs["operation_id"], "final_mode": kwargs["mode"]})
+        return asyncio.sleep(0)
+
     def _record_selection(**kwargs):
         return asyncio.sleep(
             0,
@@ -28,8 +32,10 @@ def _contract_boundary_for_unit_orchestrators(monkeypatch):
                     contract_id="contract-unit",
                     revision=2,
                     state_json={
-                        "initial_operation_id": selected_intent["operation_id"],
-                        "requested_mode": selected_intent["requested_mode"],
+                    "initial_operation_id": selected_intent["operation_id"],
+                    "requested_mode": selected_intent["requested_mode"],
+                    "final_operation_id": selected_intent["final_operation_id"],
+                    "final_mode": selected_intent["final_mode"],
                     "canonical_target": kwargs.get("canonical_target"),
                     "target_source": kwargs.get("target_source"),
                     "original_target_text": kwargs.get("original_target_text"),
@@ -43,6 +49,7 @@ def _contract_boundary_for_unit_orchestrators(monkeypatch):
         original_init(self, *args, **kwargs)
         self.runtime_contracts = SimpleNamespace(
             record_initial_intent=_record_initial_intent,
+            record_final_operation=_record_final_operation,
             record_selection=_record_selection,
         )
 

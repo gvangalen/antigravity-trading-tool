@@ -129,6 +129,16 @@ class FinnV2OrchestratorService:
             operation_id=(getattr(request_plan, "initial_operation_id", None) or getattr(request_plan, "operation_id", None) or analysis.output_contract or analysis.interaction_mode.lower()),
             requested_mode=analysis.interaction_mode,
         )
+        # Persist the registry-approved final operation before any input,
+        # scope, tool, policy or reasoning consumer reads the execution view.
+        # A RequestPlan remains a derived transport value, never a mutable
+        # second authority for an operation transition.
+        await self.runtime_contracts.record_final_operation(
+            run_id=run_id,
+            operation_id=getattr(request_plan, "operation_id", None) or analysis.output_contract or analysis.interaction_mode.lower(),
+            mode=analysis.interaction_mode,
+            reason=getattr(request_plan, "operation_change_reason", None),
+        )
         # The analysis boundary is the last place that can derive a target
         # from the current turn and its allowed context. Persist it before
         # tool planning so later phases cannot replace it with a stale

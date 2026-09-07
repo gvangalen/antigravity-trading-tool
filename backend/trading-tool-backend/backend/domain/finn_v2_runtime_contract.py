@@ -225,6 +225,58 @@ def record_initial_intent(state: Dict[str, Any], *, operation_id: str, requested
     return state
 
 
+def record_final_operation(
+    state: Dict[str, Any],
+    *,
+    operation_id: str,
+    mode: str,
+    reason: Optional[str],
+) -> Dict[str, Any]:
+    """Persist the one registry-approved transition before execution begins.
+
+    The selector's initial operation is immutable provenance. A resolver may
+    narrow it only through the registry transition matrix, and every
+    downstream reader then consumes this persisted final operation rather
+    than an incidental RequestPlan field.
+    """
+    state = dict(state)
+    initial_operation_id = str(state.get("initial_operation_id") or "")
+    requested_mode = str(state.get("requested_mode") or "")
+    if not initial_operation_id or not requested_mode:
+        raise RuntimeContractImmutableFieldError("runtime_contract_initial_intent_missing")
+
+    from backend.domain.finn_v2_operation_registry import FinnV2OperationRegistry
+
+    registry = FinnV2OperationRegistry()
+    resolved_operation_id, resolved_reason = registry.resolve_transition(
+        initial_operation_id=initial_operation_id,
+        final_operation_id=operation_id,
+        reason=reason,
+    )
+    contract = registry.require_supported(resolved_operation_id)
+    if contract.mode != mode:
+        raise RuntimeContractImmutableFieldError("runtime_contract_final_mode_contract_mismatch")
+
+    existing_operation_id = state.get("final_operation_id")
+    existing_mode = state.get("final_mode")
+    existing_reason = state.get("operation_change_reason")
+    proposed = (resolved_operation_id, mode, resolved_reason)
+    existing = (existing_operation_id, existing_mode, existing_reason)
+    if existing_operation_id is not None and existing != proposed:
+        raise RuntimeContractImmutableFieldError("runtime_contract_final_operation_is_immutable")
+    if existing_operation_id is None:
+        state["final_operation_id"] = resolved_operation_id
+        state["final_mode"] = mode
+        state["operation_change_reason"] = resolved_reason
+        state.setdefault("transition_log", []).append({
+            "type": "operation_transition",
+            "initial_operation_id": initial_operation_id,
+            "final_operation_id": resolved_operation_id,
+            "reason": resolved_reason,
+        })
+    return state
+
+
 def record_selection(
     state: Dict[str, Any],
     *,
@@ -253,7 +305,7 @@ def record_selection(
     state["conversation_reference"] = conversation_reference
     state["conversation_reference_kind"] = conversation_reference_kind
     state["selector_provenance"] = dict(selector_provenance or {})
-    operation_id = str(state.get("initial_operation_id") or "")
+    operation_id = str(state.get("final_operation_id") or state.get("initial_operation_id") or "")
     if not operation_id:
         raise RuntimeContractImmutableFieldError("runtime_contract_initial_intent_missing")
     # Do not duplicate action schemas in runtime state. The registry defines

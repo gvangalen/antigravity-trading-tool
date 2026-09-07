@@ -94,3 +94,21 @@ def test_stored_scores_are_a_neutral_semantic_entity_in_all_supported_languages(
         facts = service.preprocess(message=message)
         assert "scores" in facts.explicit_entities
         assert facts.referenced_asset == "ETH"
+
+
+def test_portfolio_and_strategy_generation_are_typed_entities_in_all_supported_languages():
+    service = FinnV2RequestPreprocessorService()
+
+    portfolio_messages = (
+        "Laat mijn portefeuille voor Solana zien.",
+        "Assess my Solana portfolio allocation.",
+        "Bewerte mein Solana-Portfolio.",
+    )
+    for message in portfolio_messages:
+        facts = service.preprocess(message=message)
+        assert "portfolio" in facts.explicit_entities
+        assert facts.referenced_asset == "SOL"
+
+    strategy = service.preprocess(message="Erstelle eine Strategie für dieses Setup.")
+    assert "strategy" in strategy.explicit_entities
+    assert strategy.action_polarity == "create"

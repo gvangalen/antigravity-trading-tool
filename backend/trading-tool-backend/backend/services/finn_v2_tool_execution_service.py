@@ -553,7 +553,10 @@ class FinnV2ToolExecutionService:
             asset_state = await self._ensure_asset(user_id=user_id, selector=selector, run=run, shared_state=shared_state)
             return await self.watchlist_adapter.execute(user_id=user_id, asset=asset_state["asset"])
         if tool_name == "read_portfolio":
-            return await self.portfolio_adapter.execute(user_id=user_id)
+            # ``asset`` is an optional slot on the resolved portfolio
+            # contract. It originates from the persisted contract-derived
+            # selector view, never a client-supplied user identity.
+            return await self.portfolio_adapter.execute(user_id=user_id, asset=selector.get("asset"))
         if tool_name == "read_latest_report":
             asset_state = await self._ensure_asset(user_id=user_id, selector=selector, run=run, shared_state=shared_state)
             return await self.report_adapter.execute(user_id=user_id, asset=asset_state["asset"], selector=selector)

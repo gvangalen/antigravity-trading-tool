@@ -75,6 +75,10 @@ def test_incomplete_trade_route_avoids_provider_and_returns_unavailable():
         selected_intent.update(kwargs)
         return asyncio.sleep(0)
 
+    def _record_final_operation(**kwargs):
+        selected_intent.update({"final_operation_id": kwargs["operation_id"], "final_mode": kwargs["mode"]})
+        return asyncio.sleep(0)
+
     def _record_selection(**_kwargs):
         return asyncio.sleep(
             0,
@@ -82,8 +86,10 @@ def test_incomplete_trade_route_avoids_provider_and_returns_unavailable():
                 contract_id="contract-fast-1",
                 revision=2,
                 state_json={
-                    "initial_operation_id": selected_intent["operation_id"],
-                    "requested_mode": selected_intent["requested_mode"],
+                        "initial_operation_id": selected_intent["operation_id"],
+                        "requested_mode": selected_intent["requested_mode"],
+                        "final_operation_id": selected_intent["final_operation_id"],
+                        "final_mode": selected_intent["final_mode"],
                     "canonical_target": None,
                     "target_source": None,
                     "original_target_text": None,
@@ -95,6 +101,7 @@ def test_incomplete_trade_route_avoids_provider_and_returns_unavailable():
 
     service.runtime_contracts = SimpleNamespace(
         record_initial_intent=_record_initial_intent,
+        record_final_operation=_record_final_operation,
         record_selection=_record_selection,
     )
     service.flags.is_tool_registry_enabled = lambda: True

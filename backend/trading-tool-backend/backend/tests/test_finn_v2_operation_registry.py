@@ -81,6 +81,8 @@ def test_scores_and_portfolio_contracts_use_their_canonical_scopes():
     assert registry.require_supported("evaluate_portfolio").required_scopes == (
         "portfolio", "profile", "preferences"
     )
+    assert registry.require_supported("read_portfolio").optional_inputs == ("asset",)
+    assert registry.require_supported("evaluate_portfolio").optional_inputs == ("asset",)
 
 
 def test_write_contract_requires_confirmable_proposal():
