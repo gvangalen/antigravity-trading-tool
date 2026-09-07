@@ -8,18 +8,18 @@ short; link artifacts rather than copying reports or chat history.
 | Field | Value |
 | --- | --- |
 | Phase | `BUILDING` |
-| Active goal | FINN V2 content and state repair batch |
+| Active goal | FINN V2 V1 action-contract completion batch |
 | Candidate branch | `codex/finn-runtime-contract-authority-foundation` |
-| Candidate SHA | `e871f5e0e2077799f8e866915e3ecf42b2dc7775` (runtime content); branch evidence head: `b6be8ab9e80cc1f47bc0140aef1c03a2684dc78d` |
+| Candidate SHA | `c19e3572301bb9606d33f3cb5a463cfbafea0179` (local action-contract candidate) |
 | Production SHA | `dbd5d50438ae199549cb52ead942d09b475fda44` |
 | Release owner | Build |
-| Last updated | `2026-09-06` |
+| Last updated | `2026-09-07` |
 
 ## Current Batch
 
-- Goal: repair conversation/evidence lineage, persisted contract context for
-  model reasoning, guided setup continuation, operation selection, compound
-  `EVALUATE`, and bot consequence as one local content batch.
+- Goal: complete the existing FINN V2 V1 action contracts and route action
+  inputs, proposals, confirmation, execution and result projections through
+  the canonical operation registry.
 - The canonical server-side Build smoke fixture is configured as a dedicated,
   non-admin fixture, separate from the unconfigured QA binding. Its identity
   is kept only in the server secret environment.
@@ -33,13 +33,12 @@ short; link artifacts rather than copying reports or chat history.
 
 | Gate | Status | Evidence |
 | --- | --- | --- |
-| Focused runtime/content regressions | `PASS` | `272 passed` across lineage, guided state, operation selection, executor, verifier, and terminal transport coverage. |
-| Registry and selector-contract validation | `PASS` | Registry validator: `96` cases; contract/selector tests: `56 passed`. |
-| Full relevant suite | `PASS` | `1708 passed, 3 skipped` on branch evidence head `f9b5d9f6`; the runtime content diff is `e871f5e0`. |
-| Real-provider selector canary | `PASS` | Isolated product-code worktree `e871f5e0`: structured response `completed`, parsed, `explain_financial_concept`, concept `RSI`. `f9b5d9f6` adds test/status evidence only. |
-| Real-provider development selector set | `PASS` | Isolated product-code worktree `e871f5e0`: `18/18`; all scored dimensions 100%; zero provider/schema/parse/validation/timeout failures; p95 `3.848 s`. |
-| Real-provider regression selector set | `PASS` | Isolated product-code worktree `e871f5e0`: `102/102`; all scored dimensions 100%; zero provider/schema/parse/validation/timeout failures; p95 `3.366 s`. |
-| CI | `NOT_RUN` | No CI has been requested for runtime candidate `e871f5e0`; the recorded green CI belongs to production SHA `dbd5d504`. |
+| Focused action-contract regressions | `PASS` | `44 passed` across registry, runtime contract, operation state, proposal lifecycle and action-adapter coverage on `c19e3572`. |
+| Local FINN V2 schema health | `PASS` | Canonical local PostgreSQL migration sequence applied twice; `python3 -m backend.scripts.check_finn_v2_schema` passed on `c19e3572`. |
+| Full canonical backend suite | `PASS` | `1732 passed, 3 skipped` from repository root on `c19e3572`. |
+| Frontend contract checks | `PASS` | `npm run typecheck`, `npm run test:commands` (`5 passed`) and `npm run test:i18n` (`7 passed`) on `c19e3572`. |
+| Real-provider validation | `NOT_RUN` | The local checkout has no configured provider credential. No provider claim is made for `c19e3572`; server-side isolated validation remains required. |
+| CI | `NOT_RUN` | No CI has been requested for action-contract candidate `c19e3572`; the recorded green CI belongs to production SHA `dbd5d504`. |
 | Deployment | `NOT_RUN` | This content batch explicitly forbids deployment. |
 | SHA identity | `PASS` | The currently live release remains `dbd5d50438ae199549cb52ead942d09b475fda44`; no candidate identity claim is made. |
 | Authenticated functional Build smoke | `PASS` | Run `finn-v2-run-650a9df244ba48cf89f76c3e9a447818` completed `capability` with exactly one dispatch and one attempt; typed terminal projection matched the selected operation. |
@@ -64,15 +63,18 @@ short; link artifacts rather than copying reports or chat history.
 - Holdout manifest/hash, report, report hash: `not started`.
 - Verdict: `NOT_STARTED`.
 
-## Content Validation And Performance
+## Action-Contract Validation And Performance
 
-- The candidate persists continuation lineage and guided state from the prior
-  runtime contract instead of selecting the just-created child contract. Its
-  durable lineage also uses the immutable contract target rather than a late
-  tool or workspace projection.
+- The candidate preserves the existing operation registry as the only action
+  authority. Runtime supplied inputs are recorded against that contract and
+  `missing_inputs` are derived from its required inputs; no parallel guided
+  field schema was introduced.
+- `create_strategy`, setup/strategy updates, watchlist changes, score and
+  portfolio reads/evaluations now use existing V2 proposal or read boundaries.
+  Legacy `generate_strategy` remains unavailable to new V2 runs.
 - The candidate remains a local Build artifact. It has no current CI,
-  deployment, live smoke, or independent-QA evidence and must not be treated
-  as release-ready from its local results alone.
+  real-provider, deployment, live smoke, or independent-QA evidence and must
+  not be treated as release-ready from its local results alone.
 - Build must still run the separate warm runtime performance matrix and the
   non-sealed authenticated runtime coverage before any deployment or QA handoff.
 - Independent QA remains `NOT_STARTED` and is not authorized by this status.
