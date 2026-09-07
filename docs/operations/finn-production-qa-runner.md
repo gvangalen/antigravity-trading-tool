@@ -143,3 +143,7 @@ the required confirmation idempotency key. A case mismatch is reported as QA
 evidence while the runner exits normally so the complete matrix artifact is
 uploaded; malformed runner configuration and pre-case infrastructure failures
 still fail the workflow.
+
+The report also separates case failures into `product`, `infrastructure`, and
+`runner` totals. Transport failures cannot be counted as selector or action
+contract failures.

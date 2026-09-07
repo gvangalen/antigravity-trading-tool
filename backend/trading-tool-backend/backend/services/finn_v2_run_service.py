@@ -188,11 +188,18 @@ class FinnV2RunService:
                 "next_step": verified.get("next_step"),
                 "reasoning_provenance": verified.get("reasoning_provenance") or {},
             }
+        terminal_reason = self._terminal_reason(
+            terminal_status=next_status,
+            orchestrator=orchestrator,
+            verifier=verifier,
+            reasoning=reasoning,
+        )
         contract = await self.runtime_contracts.materialize_terminal(
             run_id=run_id,
             status=next_status,
             mode=phase_outcome.interaction_mode or response_json["mode"],
             response=response_json,
+            error_code=terminal_reason,
         )
         response_json["_runtime_contract_projection"] = contract.terminal_projection_json
         await self.persist_transition(
@@ -204,6 +211,34 @@ class FinnV2RunService:
             response_json=response_json,
             response_source="v2_runtime",
         )
+
+    @staticmethod
+    def _terminal_reason(
+        *,
+        terminal_status: str,
+        orchestrator: Dict[str, Any],
+        verifier: Dict[str, Any],
+        reasoning: Dict[str, Any],
+    ) -> Optional[str]:
+        """Publish one safe typed cause for a limited terminal response.
+
+        The complete error/evidence detail remains in private artifacts.  The
+        terminal contract only needs a stable code that distinguishes an
+        expected limitation from an internal lifecycle failure.
+        """
+        if terminal_status not in {"unavailable", "downgraded", "rejected", "failed"}:
+            return None
+        for source, key in (
+            (verifier, "reason_codes"),
+            (orchestrator, "unavailable_codes"),
+            (reasoning, "uncertainty_codes"),
+        ):
+            codes = source.get(key) if isinstance(source, dict) else None
+            if isinstance(codes, list):
+                for code in codes:
+                    if isinstance(code, str) and code:
+                        return code
+        return f"terminal_{terminal_status}"
 
     def _terminal_placeholder_response(
         self,

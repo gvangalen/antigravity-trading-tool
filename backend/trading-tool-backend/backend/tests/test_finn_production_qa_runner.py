@@ -257,3 +257,15 @@ def test_case_content_failure_is_reported_without_runner_failure(monkeypatch, tm
     payload = json.loads(report.read_text(encoding="utf-8"))
     assert payload["outcome"] == "failed"
     assert payload["error_category"] is None
+
+
+def test_case_failure_categories_do_not_count_transport_as_selector_failures():
+    module = _module()
+    cases = [
+        {"error_category": "clienttimeout", "fixture_action": {}},
+        {"create_http_status": 200, "terminal": {"status": "completed"}, "polling_sse_equal": True, "operation_matches": False, "fixture_action": {}},
+        {"create_http_status": 200, "terminal": {"status": "completed"}, "polling_sse_equal": True, "operation_matches": True, "fixture_action": {"error_category": "proposal_missing"}},
+    ]
+
+    assert [module.classify_case_failure(case) for case in cases] == ["infrastructure", "product", "product"]
+    assert module.failure_summary(cases) == {"product": 2, "runner": 0, "infrastructure": 1}

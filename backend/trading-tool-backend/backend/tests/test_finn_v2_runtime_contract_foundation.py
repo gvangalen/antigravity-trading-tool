@@ -516,6 +516,23 @@ def test_selected_capability_uses_the_post_selector_registry_fast_path():
     assert "tradingcontext" in response["content"]
 
 
+def test_limited_terminal_responses_publish_a_safe_typed_reason():
+    service = FinnV2RunService(session=object())
+
+    assert service._terminal_reason(
+        terminal_status="downgraded",
+        orchestrator={"unavailable_codes": ["active_setup_not_available"]},
+        verifier={"reason_codes": ["evidence_scope_incomplete"]},
+        reasoning={},
+    ) == "evidence_scope_incomplete"
+    assert service._terminal_reason(
+        terminal_status="unavailable", orchestrator={}, verifier={}, reasoning={}
+    ) == "terminal_unavailable"
+    assert service._terminal_reason(
+        terminal_status="completed", orchestrator={}, verifier={}, reasoning={}
+    ) is None
+
+
 def test_selector_provider_budget_leaves_time_for_the_persisted_selection(monkeypatch):
     monkeypatch.setenv("FINN_V2_SELECTOR_PHASE_DEADLINE_SECONDS", "35")
     monkeypatch.setenv("FINN_V2_TERMINAL_PERSISTENCE_RESERVE_SECONDS", "2")

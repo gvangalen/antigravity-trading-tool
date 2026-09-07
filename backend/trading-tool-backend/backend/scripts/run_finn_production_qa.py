@@ -36,6 +36,7 @@ ALLOWED_PROFILES = {
 SENSITIVE_KEYS = {"access_token", "authorization", "authorization_header", "cookie", "email", "password", "private_key", "secret", "token", "user_id"}
 TERMINAL_STATUSES = {"completed", "failed", "canceled", "unavailable", "downgraded", "rejected", "blocked"}
 FIXTURE_ACTION_MODES = {"read_only", "proposal", "confirmation", "safe_execution"}
+INFRASTRUCTURE_ERROR_CATEGORIES = {"dns", "connect", "tls", "clienttimeout", "client", "ssh"}
 
 
 def redact(value: Any) -> Any:
@@ -299,6 +300,35 @@ def _logical_conversation_key(case: Dict[str, Any]) -> Optional[str]:
     return value if isinstance(value, str) and value else None
 
 
+def classify_case_failure(case_result: Dict[str, Any]) -> Optional[str]:
+    """Keep runner, transport, and observed FINN behavior separately scored."""
+    category = case_result.get("error_category")
+    if isinstance(category, str) and category in INFRASTRUCTURE_ERROR_CATEGORIES:
+        return "infrastructure"
+    if isinstance(category, str) and category in {"runner_internal", "manifest_case_invalid"}:
+        return "runner"
+    action_error = (case_result.get("fixture_action") or {}).get("error_category")
+    if action_error:
+        return "product"
+    if case_result.get("create_http_status") != 200:
+        return "product" if category == "server_http_response" else "infrastructure"
+    terminal = case_result.get("terminal") or {}
+    if terminal.get("status") not in TERMINAL_STATUSES or not case_result.get("polling_sse_equal"):
+        return "product"
+    if case_result.get("operation_matches") is False:
+        return "product"
+    return None
+
+
+def failure_summary(cases: Iterable[Dict[str, Any]]) -> Dict[str, int]:
+    summary = {"product": 0, "runner": 0, "infrastructure": 0}
+    for item in cases:
+        kind = classify_case_failure(item)
+        if kind:
+            summary[kind] += 1
+    return summary
+
+
 def _run_fixture_action(*, base_url: str, token: str, case: Dict[str, Any], terminal: Dict[str, Any]) -> Dict[str, Any]:
     """Exercise only an explicitly enabled non-financial QA fixture action."""
     action_mode = case.get("fixture_action", "read_only")
@@ -424,6 +454,7 @@ def run_cases(*, base_url: str, token: str, cases: Iterable[Dict[str, Any]]) -> 
             result["error_category"] = sse_error or poll_error or "terminal_timeout"
         result["operation_matches"] = case.get("expected_operation_id") is None or actual == case["expected_operation_id"]
         result["fixture_action"] = _run_fixture_action(base_url=base_url, token=token, case=case, terminal=terminal)
+        result["failure_classification"] = classify_case_failure(result)
         results.append(result)
     return results
 
@@ -453,7 +484,7 @@ def main() -> int:
     if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]{0,80}", args.run_label):
         raise SystemExit("run_label is invalid")
     report_path = Path(args.report_path)
-    report: Dict[str, Any] = {"schema_version": 1, "workflow": "finn-production-qa", "workflow_run_id": args.workflow_run_id, "profile": args.profile, "run_label": args.run_label, "manifest_id": args.manifest_id, "manifest_sha256": None, "manifest_public_key": None, "release_identity": {}, "auth_preflight": {}, "cases": [], "safety": {"read_only_profile": True, "confirmation_calls": 0, "execution_calls": 0, "live_trading_calls": 0, "live_bot_activation_calls": 0}, "outcome": "failed", "error_category": None}
+    report: Dict[str, Any] = {"schema_version": 1, "workflow": "finn-production-qa", "workflow_run_id": args.workflow_run_id, "profile": args.profile, "run_label": args.run_label, "manifest_id": args.manifest_id, "manifest_sha256": None, "manifest_public_key": None, "release_identity": {}, "auth_preflight": {}, "cases": [], "failure_summary": {"product": 0, "runner": 0, "infrastructure": 0}, "safety": {"read_only_profile": True, "confirmation_calls": 0, "execution_calls": 0, "live_trading_calls": 0, "live_bot_activation_calls": 0}, "outcome": "failed", "error_category": None}
     token: Optional[str] = None
     try:
         checkout = Path(args.checkout).resolve()
@@ -490,6 +521,7 @@ def main() -> int:
                 report["manifest_sha256"] = sha256_file(manifest_path(manifest_root=manifest_root, manifest_id=args.manifest_id))
                 cases = list(load_manifest(manifest_root=manifest_root, manifest_id=args.manifest_id))
                 report["cases"] = run_cases(base_url=args.base_url.rstrip("/"), token=token, cases=cases)
+                report["failure_summary"] = failure_summary(report["cases"])
                 report["safety"]["read_only_profile"] = all(case.get("fixture_action", "read_only") == "read_only" for case in cases)
                 report["safety"]["confirmation_calls"] = sum(1 for item in report["cases"] if item.get("fixture_action", {}).get("confirm_status") is not None)
                 report["safety"]["execution_calls"] = sum(1 for item in report["cases"] if item.get("fixture_action", {}).get("execute_status") is not None)
