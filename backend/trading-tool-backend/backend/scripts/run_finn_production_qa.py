@@ -240,6 +240,11 @@ def load_manifest(*, manifest_root: Path, manifest_id: str) -> Iterable[Dict[str
         if action_mode == "safe_execution":
             if os.environ.get("FINN_QA_ALLOW_FIXTURE_EXECUTION") != "1":
                 raise ValueError("fixture_execution_not_authorized")
+        expected_missing = case.get("expected_missing_inputs")
+        if expected_missing is not None and (
+            not isinstance(expected_missing, list) or not all(isinstance(item, str) and item for item in expected_missing)
+        ):
+            raise ValueError("manifest_expected_missing_inputs_invalid")
     return cases
 
 
@@ -334,12 +339,23 @@ def _run_fixture_action(*, base_url: str, token: str, case: Dict[str, Any], term
     action_mode = case.get("fixture_action", "read_only")
     result: Dict[str, Any] = {
         "mode": action_mode, "proposal": {}, "publish_status": None, "confirm_status": None,
-        "execute_status": None, "idempotency_replay_status": None,
+        "execute_status": None, "idempotency_replay_status": None, "outcome": "not_applicable",
     }
     if action_mode == "read_only":
         return result
     proposal_id = _proposal_id(terminal)
     if not proposal_id:
+        trace = terminal.get("runtime_trace") if isinstance(terminal.get("runtime_trace"), dict) else {}
+        missing_inputs = trace.get("missing_inputs") if isinstance(trace.get("missing_inputs"), list) else []
+        if missing_inputs:
+            result["outcome"] = "missing_inputs"
+            result["missing_inputs"] = list(missing_inputs)
+            expected_missing = case.get("expected_missing_inputs")
+            if expected_missing is not None and set(expected_missing) == set(missing_inputs):
+                return result
+            result["error_category"] = "missing_inputs_unexpected"
+            return result
+        result["outcome"] = "proposal_missing"
         result["error_category"] = "proposal_missing"
         return result
     proposal_status, proposal, _latency, proposal_error = request_json(
@@ -354,6 +370,10 @@ def _run_fixture_action(*, base_url: str, token: str, case: Dict[str, Any], term
                     "requires_step_up_auth", "payload_hash", "confirmation_required")
         if key in proposal
     }
+    trace = terminal.get("runtime_trace") if isinstance(terminal.get("runtime_trace"), dict) else {}
+    if "contract_revision" in trace:
+        result["proposal"]["contract_revision"] = trace["contract_revision"]
+    result["outcome"] = "proposal_created"
     status, published, _latency, error = request_json(url=f"{base_url}/api/assistant/v2/proposals/{proposal_id}/publish", method="POST", token=token, payload={})
     result["publish_status"] = status
     if status != 200 or error:
@@ -378,6 +398,7 @@ def _run_fixture_action(*, base_url: str, token: str, case: Dict[str, Any], term
         result["error_category"] = error or "proposal_confirm_failed"
         return result
     if action_mode == "confirmation":
+        result["outcome"] = "confirmed"
         return result
     idempotency_key = f"qa-execute-{uuid.uuid4().hex}"
     execute_payload = {"idempotency_key": idempotency_key, "expected_payload_hash": payload_hash}
@@ -391,6 +412,8 @@ def _run_fixture_action(*, base_url: str, token: str, case: Dict[str, Any], term
         result["idempotency_replay_status"] = replay_status
         if replay_status != 200 or replay_error:
             result["error_category"] = replay_error or "idempotency_replay_failed"
+    if not result.get("error_category"):
+        result["outcome"] = "executed"
     return result
 
 

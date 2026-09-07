@@ -233,12 +233,28 @@ def test_fixture_confirmation_includes_required_idempotency_key(monkeypatch):
     result = module._run_fixture_action(
         base_url="https://example.test", token="token",
         case={"fixture_action": "confirmation"},
-        terminal={"response": {"proposal_id": "proposal-1"}},
+        terminal={"response": {"proposal_id": "proposal-1"}, "runtime_trace": {"contract_revision": 3}},
     )
     confirm_call = calls[2]
     assert result["confirm_status"] == 200
+    assert result["proposal"]["contract_revision"] == 3
     assert confirm_call["payload"]["idempotency_key"].startswith("qa-confirm-")
     assert "secret" not in json.dumps(result)
+
+
+def test_incomplete_action_is_a_typed_contract_outcome_not_proposal_missing():
+    module = _module()
+    result = module._run_fixture_action(
+        base_url="https://example.test", token="token",
+        case={"fixture_action": "proposal", "expected_missing_inputs": ["name", "timeframe"]},
+        terminal={"runtime_trace": {"missing_inputs": ["timeframe", "name"]}},
+    )
+
+    assert result == {
+        "mode": "proposal", "proposal": {}, "publish_status": None, "confirm_status": None,
+        "execute_status": None, "idempotency_replay_status": None, "outcome": "missing_inputs",
+        "missing_inputs": ["timeframe", "name"],
+    }
 
 
 def test_case_content_failure_is_reported_without_runner_failure(monkeypatch, tmp_path):

@@ -147,3 +147,9 @@ still fail the workflow.
 The report also separates case failures into `product`, `infrastructure`, and
 `runner` totals. Transport failures cannot be counted as selector or action
 contract failures.
+
+For a proposal/action case, `expected_missing_inputs` may list the canonical
+required fields that are intentionally absent on that turn. A matching typed
+`missing_inputs` response is a valid guided-flow outcome, not
+`proposal_missing`; a later case using the same conversation key can supply
+the missing values and require the resulting proposal lifecycle.
