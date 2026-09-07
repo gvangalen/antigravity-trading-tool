@@ -21,8 +21,11 @@ QA-exclusive sealed holdout.
 
 QA owns independent test execution and QA test material. Its active QA goal
 defines the concrete scope, dataset, environment, matrix, and acceptance
-criteria. Production QA is read-only and tests only the live SHA recorded in
-`FINN_RELEASE_STATUS.md`. The sealed holdout is QA-exclusive and QA uses it
+criteria. Production QA is read-only and tests only the explicit live SHA in
+its active QA goal. QA preflight verifies that SHA against the production
+checkout, release marker, public backend health, and frontend build-info. A
+committed status document cannot be the identity authority for its own
+deployment SHA because changing it creates a new SHA. The sealed holdout is QA-exclusive and QA uses it
 unchanged only when its active QA goal explicitly requires it. QA completes the
 entire agreed matrix even after individual content failures and records a
 single evidence-backed verdict for that scope. QA does not modify product
@@ -73,7 +76,7 @@ Only the user determines or authorizes an independent QA assignment. For
 production QA, the user starts the existing QA agent after the status file
 documents `READY_FOR_INDEPENDENT_QA` with evidence. QA reads the role
 instructions, this process, the status file, and its explicit QA goal; then
-tests the recorded live SHA and completes the matrix defined by that goal.
+tests the goal's live SHA and completes the matrix defined by that goal.
 Individual case failures are recorded and do not stop later cases. A sealed
 32-case matrix is mandatory only when the active QA goal explicitly requires
 it. Timeouts remain failures under the QA contract.

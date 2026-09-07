@@ -96,7 +96,10 @@ Before FINN QA, also read `FINN_RELEASE_PROCESS.md`,
 `FINN_RELEASE_STATUS.md`, and the explicit QA goal. QA owns independent test
 execution and QA test material; the active QA goal defines the concrete scope,
 dataset, environment, matrix, and acceptance criteria. Production QA tests
-only the exact live SHA documented in the status file.
+only the exact SHA in its active goal after it matches the production checkout,
+release marker, public backend health, and frontend build-info. The status
+document records phase and evidence; it is not the self-referential authority
+for the SHA of the commit that contains it.
 
 - QA is read-only: do not change code, configuration, datasets, deployment,
   production records, or release markers, and do not start or direct another
