@@ -8,16 +8,16 @@ short; link artifacts rather than copying reports or chat history.
 | Field | Value |
 | --- | --- |
 | Phase | `BUILDING` |
-| Active goal | FINN V2 V1 action-contract completion batch |
+| Active goal | FINN V2 full action-contract completion batch |
 | Candidate branch | `codex/finn-runtime-contract-authority-foundation` |
-| Candidate SHA | `d314a0d1b48d78ad55692b1b494e443e5433717d` (local action-contract candidate) |
+| Candidate SHA | `3d1e97e81dcf4010c4c23ca5c4f2d4caac483e47` (local full action-contract candidate) |
 | Production SHA | `dbd5d50438ae199549cb52ead942d09b475fda44` |
 | Release owner | Build |
 | Last updated | `2026-09-07` |
 
 ## Current Batch
 
-- Goal: complete the existing FINN V2 V1 action contracts and route action
+- Goal: complete the existing FINN V2 action contracts and route action
   inputs, proposals, confirmation, execution and result projections through
   the canonical operation registry.
 - The latest local candidate persists every registry-approved final operation
@@ -34,20 +34,20 @@ short; link artifacts rather than copying reports or chat history.
   provenance to the originating runtime contract and refresh its one persisted
   terminal projection; they do not introduce action fields or token material.
 - Out of scope: QA-exclusive sealed holdout, official QA, product model
-  changes.
+  changes and direct broker/exchange execution.
 
 ## Evidence
 
 | Gate | Status | Evidence |
 | --- | --- | --- |
-| Focused action-contract regressions | `PASS` | `104 passed` across registry, runtime contract, proposal, confirmation, execution, adapter, source and portfolio coverage on `d314a0d1`. |
+| Focused action-contract regressions | `PASS` | `104 passed` across registry, runtime contract, guided state, proposal, confirmation, execution, adapter, source and portfolio coverage on `3d1e97e8`. |
 | Non-sealed selector registry | `PASS` | `120` development, regression and published-regression cases validated against the current registry; no sealed QA holdout was loaded. |
 | Local FINN V2 schema health | `PASS` | Canonical local PostgreSQL migration sequence applied twice; `python3 -m backend.scripts.check_finn_v2_schema` passed on `1bbab6bc`. |
-| Full canonical backend suite | `PASS` | `1742 passed, 3 skipped` from repository root on `d314a0d1`. |
-| Frontend contract checks | `PASS` | `npm run typecheck`, `npm run test:commands` (`5 passed`), `npm run test:i18n` (`7 passed`) and `npm run build` passed on `d314a0d1`. |
+| Full canonical backend suite | `PASS` | `1748 passed, 3 skipped` from repository root on `3d1e97e8`. |
+| Frontend contract checks | `PASS` | `npm run typecheck`, `npm run test:commands` (`5 passed`), `npm run test:i18n` (`7 passed`) and `npm run build` passed on `3d1e97e8`. |
 | Real-provider validation | `NOT_RUN` | The local checkout has no configured provider credential or isolated server-eval procedure. No provider claim is made for `d314a0d1`. |
-| CI | `NOT_RUN` | No CI has been requested for action-contract candidate `d314a0d1`; the recorded green CI belongs to production SHA `dbd5d504`. |
-| Deployment | `NOT_RUN` | This content batch explicitly forbids deployment. |
+| CI | `NOT_RUN` | No CI has been requested for action-contract candidate `3d1e97e8`; the recorded green CI belongs to production SHA `dbd5d504`. |
+| Deployment | `NOT_RUN` | No deployment has been requested for action-contract candidate `3d1e97e8`. |
 | SHA identity | `PASS` | The currently live release remains `dbd5d50438ae199549cb52ead942d09b475fda44`; no candidate identity claim is made. |
 | Authenticated functional Build smoke | `PASS` | Run `finn-v2-run-650a9df244ba48cf89f76c3e9a447818` completed `capability` with exactly one dispatch and one attempt; typed terminal projection matched the selected operation. |
 | Latency observation | `RECORDED` | One functional smoke took about `29 s` from persisted creation to terminal persistence. A separate warm performance matrix is required after the content candidate is locally green. |
@@ -77,9 +77,11 @@ short; link artifacts rather than copying reports or chat history.
   authority. Runtime supplied inputs are recorded against that contract and
   `missing_inputs` are derived from its required inputs; no parallel guided
   field schema was introduced.
-- `create_strategy`, setup/strategy updates, watchlist changes, score and
-  portfolio reads/evaluations now use existing V2 proposal or read boundaries.
-  Legacy `generate_strategy` remains unavailable to new V2 runs.
+- Asset selection, indicator configuration CRUD, setup/strategy deletion,
+  non-live bot CRUD/deactivation, report reads and review-history reads now
+  use existing V2 proposal or read boundaries. New write adapters are disabled
+  by default and retain proposal, confirmation, idempotency and owner-scope
+  checks. Legacy `generate_strategy` remains unavailable to new V2 runs.
 - The candidate remains a local Build artifact. It has no current CI,
   real-provider, deployment, live smoke, or independent-QA evidence and must
   not be treated as release-ready from its local results alone.
