@@ -11,6 +11,23 @@ from backend.services.finn_v2_response_verifier_service import FinnV2VerifierRej
 from backend.schemas.finn_v2_verifier_schema import CoverageVerification, VerifierResult
 
 
+def test_contract_operation_state_view_uses_only_persisted_action_inputs():
+    state = FinnV2OrchestratorService._contract_operation_state_view({
+        "operation_id": "select_asset",
+        "action_contract": {"version": "2026-08-23.operation-contracts.v1"},
+        "supplied_inputs": {"asset": "SOL"},
+        "missing_inputs": [],
+    })
+
+    assert state == {
+        "operation_id": "select_asset",
+        "contract_version": "2026-08-23.operation-contracts.v1",
+        "collected_inputs": {"asset": "SOL"},
+        "missing_required_inputs": [],
+        "next_missing_input": None,
+    }
+
+
 @pytest.fixture(autouse=True)
 def _contract_boundary_for_unit_orchestrators(monkeypatch):
     """These unit flows intentionally avoid a database; production does not."""

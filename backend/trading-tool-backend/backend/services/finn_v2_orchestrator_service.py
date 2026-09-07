@@ -65,6 +65,19 @@ class FinnV2OrchestratorService:
         self.selection_persisted = selection_persisted
         self.phase_outcome: Optional[LifecyclePhaseOutcome] = None
 
+    @staticmethod
+    def _contract_operation_state_view(execution_view: dict) -> dict:
+        """Derive action state only from the persisted runtime contract."""
+        missing_inputs = list(execution_view.get("missing_inputs") or [])
+        action_contract = dict(execution_view.get("action_contract") or {})
+        return {
+            "operation_id": execution_view.get("operation_id"),
+            "contract_version": action_contract.get("version"),
+            "collected_inputs": dict(execution_view.get("supplied_inputs") or {}),
+            "missing_required_inputs": missing_inputs,
+            "next_missing_input": missing_inputs[0] if missing_inputs else None,
+        }
+
     async def execute_run(
         self,
         *,
@@ -181,6 +194,7 @@ class FinnV2OrchestratorService:
                 "conversation_reference": execution_view["conversation_reference"],
                 "conversation_reference_kind": execution_view["conversation_reference_kind"],
                 "missing_information": execution_view["missing_inputs"],
+                "operation_state": self._contract_operation_state_view(execution_view),
             }
         )
         analysis = analysis.copy(update={"request_plan": request_plan, "interaction_mode": execution_view["interaction_mode"]})

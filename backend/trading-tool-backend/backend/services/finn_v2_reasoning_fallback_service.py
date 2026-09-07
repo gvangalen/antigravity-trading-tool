@@ -738,7 +738,11 @@ class FinnV2ReasoningFallbackService:
             )
 
         if operation_id == "select_asset" and context.policy.operation_type == "select_asset":
-            selected_asset = str((operation_state.get("collected_inputs") or {}).get("asset") or "").upper()
+            selected_asset = str(
+                (operation_state.get("collected_inputs") or {}).get("asset")
+                or (context.request_plan or {}).get("target_asset")
+                or ""
+            ).upper()
             if not selected_asset:
                 from backend.services.finn_v2_operation_state_service import FinnV2OperationStateService
                 question = FinnV2OperationStateService.clarification_question("asset")

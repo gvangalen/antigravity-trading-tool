@@ -200,8 +200,9 @@ def test_deterministic_asset_selection_proposal_uses_registry_input_without_prov
         ),
         request_plan={
             "operation_id": "select_asset",
+            "target_asset": "SOL",
             "operation_state": {
-                "collected_inputs": {"asset": "SOL"},
+                "collected_inputs": {},
                 "missing_required_inputs": [],
             },
         },
