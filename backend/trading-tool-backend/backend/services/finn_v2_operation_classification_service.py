@@ -59,6 +59,7 @@ class FinnV2OperationClassificationService:
         self.preprocessor = preprocessor or FinnV2RequestPreprocessorService()
         self.structured_selector = structured_selector or FinnV2StructuredOperationSelectorService()
         self.resolver = resolver or FinnV2OperationResolverService(self.registry)
+        self.operation_state = FinnV2OperationStateService()
 
     def classify(
         self,
@@ -233,17 +234,27 @@ class FinnV2OperationClassificationService:
         )
         if not isinstance(active, Mapping) or not active.get("missing_required_inputs"):
             return None
-        # A persisted guided flow already identifies the operation and its
-        # missing slot. Any explicit clarification answer belongs to that
-        # contract, whether the value is one token or a natural sentence.
-        # New requests retain their own discourse acts and therefore still
-        # pass through structured selection.
-        if facts.discourse_act != "clarification_answer":
-            return None
         try:
-            return self.registry.require_supported(str(active.get("operation_id") or ""))
+            contract = self.registry.require_supported(str(active.get("operation_id") or ""))
         except ValueError:
             return None
+        # A persisted guided flow already identifies the operation and its
+        # missing slot. A reply belongs to that contract when it is either a
+        # short clarification answer or supplies one of the contract's still
+        # missing typed fields. This keeps natural multi-field replies (for
+        # example a name plus timeframe) in the flow without turning generic
+        # information requests into a local operation router.
+        supplied = self.operation_state.explicit_inputs(
+            contract=contract,
+            message=facts.original_text,
+            explicit_asset=facts.referenced_asset,
+        )
+        fills_pending_slot = bool(
+            set(supplied).intersection(set(active.get("missing_required_inputs") or ()))
+        )
+        if facts.discourse_act != "clarification_answer" and not fills_pending_slot:
+            return None
+        return contract
 
     @staticmethod
     def _is_guided_continuation(facts: FinnV2PreprocessedRequest) -> bool:

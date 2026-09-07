@@ -673,6 +673,29 @@ def test_natural_guided_slot_answer_keeps_the_persisted_contract_without_provide
     assert result.selector_source == "guided_state"
 
 
+def test_multi_field_guided_reply_reuses_the_action_contract_without_provider():
+    class Selector:
+        def select(self, **_kwargs):
+            raise AssertionError("typed fields for a pending flow must not restart selection")
+
+    result = FinnV2OperationClassificationService(structured_selector=Selector()).classify(
+        message="De naam is rustige swing en het timeframe is 4 uur.",
+        conversation_context={
+            "conversation_state_version": "finn_v2.conversation-contracts.v1",
+            "active_guided_operation": {
+                "operation_id": "create_setup",
+                "contract_version": "2026-08-23.operation-contracts.v1",
+                "missing_required_inputs": ["timeframe", "name"],
+            },
+        },
+    )
+
+    assert result.operation_id == "create_setup"
+    assert result.selector_source == "guided_state"
+    assert result.supplied_inputs["timeframe"] == "4H"
+    assert result.supplied_inputs["name"] == "rustige swing"
+
+
 @pytest.mark.parametrize(
     "message",
     (

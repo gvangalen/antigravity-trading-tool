@@ -772,6 +772,11 @@ class FinnV2ReasoningFallbackService:
                     created_at=datetime.now(timezone.utc),
                 )
 
+            # The current active-asset record proves the owned workspace
+            # context in which this explicit replacement is proposed. It is
+            # required by the proposal verifier even though the new symbol is
+            # supplied by the user and remains immutable in the contract.
+            evidence_refs = [active_asset.evidence_id] if active_asset else []
             return ReasoningResult(
                 reasoning_result_id=f"finn-v2-reasoning-{uuid.uuid4().hex}",
                 run_id=run_id,
@@ -802,12 +807,12 @@ class FinnV2ReasoningFallbackService:
                         "generation_source": "deterministic_validated",
                         "asset": selected_asset,
                     },
-                    evidence_refs=[],
+                    evidence_refs=evidence_refs,
                     impact_summary=f"{selected_asset} wordt je actieve asset na bevestiging.",
                     risk_summary="Er wordt geen assetselectie uitgevoerd zonder expliciete confirmation.",
                     confirmation_required=True,
                 ),
-                evidence_refs_used=[],
+                evidence_refs_used=evidence_refs,
                 model=model,
                 created_at=datetime.now(timezone.utc),
             )

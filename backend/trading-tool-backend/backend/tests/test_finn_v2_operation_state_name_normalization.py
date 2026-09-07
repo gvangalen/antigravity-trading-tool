@@ -20,6 +20,12 @@ def test_setup_name_drops_direct_english_do_not_write_instruction():
     ) == "Patient Builder"
 
 
+def test_setup_name_drops_following_timeframe_clause():
+    assert FinnV2OperationStateService._trim_setup_name_clause(
+        "Rustige swing en het timeframe is 4 uur"
+    ) == "Rustige swing"
+
+
 def test_strategy_inputs_are_collected_against_the_registry_contract():
     state = FinnV2OperationStateService()
     contract = FinnV2OperationRegistry().require_supported("create_strategy")

@@ -295,6 +295,7 @@ class FinnV2OperationStateService:
         """Exclude trailing non-persistence instructions from a display name."""
         return re.split(
             r"\s+(?:(?:en|and|aber|but)\s+)?(?:sla\s+(?:niets|het)?\s*op|"
+            r"(?:en|and|und)\s+(?:het\s+|the\s+|dem\s+)?(?:timeframe|tijdframe|time\s*frame)\b.*|"
             r"(?:do\s+not|don't)\s+(?:save|write|persist)(?:\s+(?:it|the\s+setup|anything))?(?:\s+yet)?|"
             r"save\s+(?:nothing|it)|without\s+(?:saving|writing|persisting)\s+(?:it|anything)(?:\s+yet)?|"
             r"speicher\s+(?:nichts|es))\b",

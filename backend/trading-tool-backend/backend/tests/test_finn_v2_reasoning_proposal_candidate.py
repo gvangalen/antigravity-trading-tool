@@ -189,6 +189,21 @@ def test_deterministic_asset_selection_proposal_uses_registry_input_without_prov
         validation_id="v-select-asset",
         policy_decision_id="p-select-asset",
         evidence_set_hash="select-asset-hash",
+        evidence=[
+            ReasoningEvidenceItem(
+                evidence_id="Eactive",
+                artifact_id="asset-select-asset",
+                tool_name="read_active_asset",
+                information_scope="active_asset",
+                domain="identity_context",
+                entity_type="asset",
+                asset="BTC",
+                source="workspace",
+                freshness="fresh",
+                confidence="high",
+                facts={"symbol": "BTC"},
+            )
+        ],
         policy=ReasoningPolicyContext(
             policy_class="proposal",
             allowed=True,
@@ -221,6 +236,7 @@ def test_deterministic_asset_selection_proposal_uses_registry_input_without_prov
     assert result.proposal_candidate.operation_type == "select_asset"
     assert result.proposal_candidate.asset == "SOL"
     assert result.proposal_candidate.proposed_changes["asset"] == "SOL"
+    assert result.proposal_candidate.evidence_refs == ["Eactive"]
 
 
 def test_deterministic_proposals_find_active_asset_by_contract_scope_not_tool_name():
