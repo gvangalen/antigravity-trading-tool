@@ -10,7 +10,7 @@ short; link artifacts rather than copying reports or chat history.
 | Phase | `BUILDING` |
 | Active goal | FINN V2 V1 action-contract completion batch |
 | Candidate branch | `codex/finn-runtime-contract-authority-foundation` |
-| Candidate SHA | `c19e3572301bb9606d33f3cb5a463cfbafea0179` (local action-contract candidate) |
+| Candidate SHA | `1bbab6bc15830cbb615e49006381e40996959153` (local action-contract candidate) |
 | Production SHA | `dbd5d50438ae199549cb52ead942d09b475fda44` |
 | Release owner | Build |
 | Last updated | `2026-09-07` |
@@ -20,6 +20,10 @@ short; link artifacts rather than copying reports or chat history.
 - Goal: complete the existing FINN V2 V1 action contracts and route action
   inputs, proposals, confirmation, execution and result projections through
   the canonical operation registry.
+- The latest local candidate persists every registry-approved final operation
+  transition before contract-derived input collection, tools, policy or
+  reasoning consume it. Portfolio reads and evaluations support the declared,
+  owner-scoped optional asset filter.
 - The canonical server-side Build smoke fixture is configured as a dedicated,
   non-admin fixture, separate from the unconfigured QA binding. Its identity
   is kept only in the server secret environment.
@@ -33,12 +37,12 @@ short; link artifacts rather than copying reports or chat history.
 
 | Gate | Status | Evidence |
 | --- | --- | --- |
-| Focused action-contract regressions | `PASS` | `44 passed` across registry, runtime contract, operation state, proposal lifecycle and action-adapter coverage on `c19e3572`. |
-| Local FINN V2 schema health | `PASS` | Canonical local PostgreSQL migration sequence applied twice; `python3 -m backend.scripts.check_finn_v2_schema` passed on `c19e3572`. |
-| Full canonical backend suite | `PASS` | `1732 passed, 3 skipped` from repository root on `c19e3572`. |
-| Frontend contract checks | `PASS` | `npm run typecheck`, `npm run test:commands` (`5 passed`) and `npm run test:i18n` (`7 passed`) on `c19e3572`. |
-| Real-provider validation | `NOT_RUN` | The local checkout has no configured provider credential. No provider claim is made for `c19e3572`; server-side isolated validation remains required. |
-| CI | `NOT_RUN` | No CI has been requested for action-contract candidate `c19e3572`; the recorded green CI belongs to production SHA `dbd5d504`. |
+| Focused action-contract regressions | `PASS` | `75 passed` across registry, resolver, request preprocessing, runtime contract and portfolio adapter coverage on `1bbab6bc`. |
+| Local FINN V2 schema health | `PASS` | Canonical local PostgreSQL migration sequence applied twice; `python3 -m backend.scripts.check_finn_v2_schema` passed on `1bbab6bc`. |
+| Full canonical backend suite | `PASS` | `1740 passed, 3 skipped` from repository root on `1bbab6bc`. |
+| Frontend contract checks | `PASS` | `npm run typecheck`, `npm run test:commands` (`5 passed`), `npm run test:i18n` (`7 passed`) and `npm run build` passed on `1bbab6bc`. |
+| Real-provider validation | `NOT_RUN` | The local checkout has no configured provider credential or isolated server-eval procedure. No provider claim is made for `1bbab6bc`. |
+| CI | `NOT_RUN` | No CI has been requested for action-contract candidate `1bbab6bc`; the recorded green CI belongs to production SHA `dbd5d504`. |
 | Deployment | `NOT_RUN` | This content batch explicitly forbids deployment. |
 | SHA identity | `PASS` | The currently live release remains `dbd5d50438ae199549cb52ead942d09b475fda44`; no candidate identity claim is made. |
 | Authenticated functional Build smoke | `PASS` | Run `finn-v2-run-650a9df244ba48cf89f76c3e9a447818` completed `capability` with exactly one dispatch and one attempt; typed terminal projection matched the selected operation. |
