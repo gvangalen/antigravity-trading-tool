@@ -35,6 +35,26 @@ def test_action_contract_completion_drops_the_legacy_scope_check_before_backfill
     assert drop_constraint < normalize_legacy_rows < recreate_constraint
 
 
+def test_production_deploy_runs_scope_repair_after_the_legacy_scope_migration():
+    deploy_source = (ROOT.parents[2] / "ops" / "deploy" / "deploy_env.sh").read_text(encoding="utf-8")
+
+    legacy_scope_migration = deploy_source.index("2026_08_23_finn_v2_evidence_information_scope.py")
+    scope_repair_migration = deploy_source.index("2026_09_07_finn_v2_action_contract_completion.py")
+
+    runtime_contract_foundation = deploy_source.index("2026_09_04_finn_v2_runtime_contract_foundation.py")
+
+    assert legacy_scope_migration < runtime_contract_foundation < scope_repair_migration
+
+
+def test_legacy_scope_migration_accepts_canonical_values_from_a_previous_partial_attempt():
+    source = (ROOT / "scripts" / "migrations" / "2026_08_23_finn_v2_evidence_information_scope.py").read_text(
+        encoding="utf-8"
+    )
+
+    for scope in ("scores", "portfolio", "latest_report", "review_history"):
+        assert f"'{scope}'" in source
+
+
 def test_watchlist_model_declares_the_same_database_idempotency_constraint():
     constraints = [constraint for constraint in Watchlist.__table__.constraints if isinstance(constraint, UniqueConstraint)]
 
