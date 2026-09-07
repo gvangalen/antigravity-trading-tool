@@ -4,7 +4,7 @@ from types import SimpleNamespace
 import asyncio
 
 from backend.schemas.finn_v2_policy_schema import FinnV2PolicyDecision
-from backend.schemas.finn_v2_proposal_schema import ManualOrderChange, ProposalTarget, ValidatedProposalInput
+from backend.schemas.finn_v2_proposal_schema import ManualOrderChange, ProposalTarget, SetupChange, StrategyChange, ValidatedProposalInput
 from backend.services.finn_v2_proposal_service import FinnV2ProposalService
 
 
@@ -59,3 +59,51 @@ def test_proposal_creation_requires_typed_payload_and_starts_in_draft():
     assert record.operation_type == "manual_order"
     assert captured["payload_json"]["expires_at"].endswith("+00:00")
     assert captured["payload_json"]["change"]["quantity"] == "1"
+
+
+def test_update_setup_proposal_uses_existing_domain_fields_and_persists_before_snapshot():
+    service = FinnV2ProposalService(session=object())
+    proposal_input = ValidatedProposalInput(
+        operation_type="update_setup",
+        target=ProposalTarget(target_type="setup", target_id="12", asset="ETH"),
+        change=SetupChange(setup_id=12, changed_fields={"timeframe": "4h", "name": "ETH swing"}),
+        impact_summary="impact",
+        risk_summary="risk",
+        source_run_id="run-1",
+        source_snapshot_id="snapshot-1",
+        source_validation_id="validation-1",
+        evidence_set_hash="hash",
+        idempotency_key="s" * 16,
+        expires_at=datetime.now(timezone.utc) + timedelta(minutes=5),
+    )
+    service.resolver.resolve_setup = lambda **_kwargs: asyncio.sleep(
+        0, result={"setup": {"id": 12, "timeframe": "1d", "name": "Existing setup"}}
+    )
+
+    hydrated = asyncio.run(service._hydrate_domain_change(user_id=7, proposal_input=proposal_input))
+
+    assert hydrated.change.before == {"timeframe": "1d", "name": "Existing setup"}
+
+
+def test_update_strategy_proposal_rejects_fields_outside_existing_strategy_service_contract():
+    service = FinnV2ProposalService(session=object())
+    proposal_input = ValidatedProposalInput(
+        operation_type="update_strategy",
+        target=ProposalTarget(target_type="strategy", target_id="22"),
+        change=StrategyChange(strategy_id=22, changed_fields={"arbitrary_untyped_value": "no"}),
+        impact_summary="impact",
+        risk_summary="risk",
+        source_run_id="run-1",
+        source_snapshot_id="snapshot-1",
+        source_validation_id="validation-1",
+        evidence_set_hash="hash",
+        idempotency_key="t" * 16,
+        expires_at=datetime.now(timezone.utc) + timedelta(minutes=5),
+    )
+
+    try:
+        asyncio.run(service._hydrate_domain_change(user_id=7, proposal_input=proposal_input))
+    except ValueError as exc:
+        assert str(exc) == "invalid_strategy_change_fields"
+    else:
+        raise AssertionError("untyped strategy fields must be rejected before proposal persistence")

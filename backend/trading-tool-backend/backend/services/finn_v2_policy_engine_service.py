@@ -22,6 +22,7 @@ class FinnV2PolicyEngineService:
     _ACTION_MATRIX = {
         "update_indicator_configuration": ("proposal", ["identity_context", "market_context"]),
         "create_setup": ("proposal", ["identity_context"]),
+        "create_strategy": ("proposal", ["identity_context", "plan_context"]),
         "update_setup": ("proposal", ["plan_context"]),
         "update_strategy": ("proposal", ["plan_context"]),
         "watchlist_add": ("proposal", ["identity_context"]),

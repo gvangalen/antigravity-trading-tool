@@ -81,3 +81,16 @@ def test_concrete_asset_bound_approach_is_a_setup_but_broad_diagnosis_remains_a_
     assert setup.primary_entity == "setup"
     assert "setup" in setup.explicit_entities
     assert plan.primary_entity == "plan"
+
+
+def test_stored_scores_are_a_neutral_semantic_entity_in_all_supported_languages():
+    service = FinnV2RequestPreprocessorService()
+
+    for message in (
+        "Laat mijn opgeslagen scores voor Ethereum zien.",
+        "Explain the stored score for Ethereum.",
+        "Erkläre die gespeicherte Bewertung für Ethereum.",
+    ):
+        facts = service.preprocess(message=message)
+        assert "scores" in facts.explicit_entities
+        assert facts.referenced_asset == "ETH"

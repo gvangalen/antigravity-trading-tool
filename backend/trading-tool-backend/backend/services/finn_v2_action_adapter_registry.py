@@ -33,6 +33,7 @@ class FinnV2ActionAdapterRegistry:
         mapping = {
             "update_indicator_configuration": self._update_indicator_configuration,
             "create_setup": self._create_setup,
+            "create_strategy": self._create_strategy,
             "update_setup": self._update_setup,
             "update_strategy": self._update_strategy,
             "watchlist_add": self._watchlist_add,
@@ -94,6 +95,22 @@ class FinnV2ActionAdapterRegistry:
         setup_payload = SetupCreateSchema.parse_obj(raw_payload)
         return await self.setups.save_setup(setup_payload, raw_payload, user_id)
 
+    async def _create_strategy(self, user_id: int, payload: dict) -> dict:
+        """Persist the confirmed V2 strategy draft through StrategyService.
+
+        The service owns the existing schema, setup ownership validation and
+        one-strategy-per-setup domain invariant. FINN only submits a confirmed
+        contract payload; it never invokes the legacy asynchronous generator.
+        """
+        if not self.flags.execute_strategy_changes_enabled():
+            raise ValueError("execution_adapter_unavailable")
+        change = payload["change"]
+        raw_payload = StrategyService.normalize_strategy_payload(
+            dict(change.get("strategy_fields") or {})
+        )
+        strategy_payload = StrategyCreateSchema.parse_obj(raw_payload)
+        return await self.strategies.save_strategy(strategy_payload, raw_payload, user_id)
+
     async def _update_strategy(self, user_id: int, payload: dict) -> dict:
         if not self.flags.execute_strategy_changes_enabled():
             raise ValueError("execution_adapter_unavailable")
@@ -111,23 +128,13 @@ class FinnV2ActionAdapterRegistry:
             text(
                 """
                 INSERT INTO watchlists (user_id, symbol, created_at)
-                SELECT
-                    CAST(:insert_user_id AS INTEGER),
-                    CAST(:insert_symbol AS VARCHAR),
-                    NOW()
-                WHERE NOT EXISTS (
-                    SELECT 1
-                    FROM watchlists
-                    WHERE user_id = CAST(:lookup_user_id AS INTEGER)
-                      AND symbol = CAST(:lookup_symbol AS VARCHAR)
-                )
+                VALUES (CAST(:user_id AS INTEGER), CAST(:symbol AS VARCHAR), NOW())
+                ON CONFLICT (user_id, symbol) DO NOTHING
                 """
             ),
             {
-                "insert_user_id": user_id,
-                "insert_symbol": asset,
-                "lookup_user_id": user_id,
-                "lookup_symbol": asset,
+                "user_id": user_id,
+                "symbol": asset,
             },
         )
         return {"ok": True, "asset": asset, "operation": "watchlist_add"}

@@ -53,6 +53,19 @@ def test_asset_scoped_source_rejects_an_incomplete_cache_identity():
         )
 
 
+def test_scores_and_portfolio_have_distinct_canonical_sources():
+    registry = FinnV2InformationSourceRegistry()
+
+    scores = registry.get("scores")
+    portfolio = registry.get("portfolio")
+
+    assert scores.canonical_repository == "ScoreRepository"
+    assert scores.required_asset_fields == ("symbol",)
+    assert portfolio.canonical_table == "bot_portfolios,bot_configs,setups,strategies"
+    assert portfolio.canonical_repository == "BotRepository"
+    assert portfolio.required_asset_fields == ()
+
+
 def test_legacy_indicator_rules_are_not_runtime_user_selection_sources():
     legacy_sources = FinnV2InformationSourceRegistry().legacy_sources()
 

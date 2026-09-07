@@ -316,10 +316,10 @@ class FinnV2OperationClassificationService:
             selector_missing=tuple(getattr(selection, "missing_inputs", ()) or ()),
             conversation_context=conversation_context,
         )
-        # The typed input collector is authoritative for user-supplied setup
-        # slots. Preserve those values in the public semantic projection when
-        # a schema-valid selector omitted a redundant entity field.
-        for field in ("setup_type", "timeframe", "name"):
+        # The typed input collector is authoritative for every registry slot.
+        # Preserve its values in the semantic projection only where the
+        # structured selector omitted a corresponding safe entity field.
+        for field in contract.required_inputs + contract.optional_inputs:
             if not selected_entities.get(field) and supplied_inputs.get(field):
                 selected_entities[field] = str(supplied_inputs[field])
         if not selected_entities.get("asset") and supplied_inputs.get("symbol"):
@@ -375,6 +375,15 @@ class FinnV2OperationClassificationService:
         )
         if facts.financial_concept and "concept" in contract.required_inputs:
             supplied.setdefault("concept", facts.financial_concept)
+        # Identifiers are not free-text write payloads: when the structured
+        # selector identifies one, the later canonical resolver still checks
+        # ownership before it can reach proposal construction or execution.
+        for field in ("setup_id", "strategy_id", "bot_id"):
+            if field in contract.required_inputs and selected_entities.get(field):
+                try:
+                    supplied.setdefault(field, int(str(selected_entities[field])))
+                except (TypeError, ValueError):
+                    pass
         # A contextual action can use only an identifier already persisted in
         # verified lineage and only when the structured selector returned the
         # same typed identifier. Model text alone never supplies a write slot.

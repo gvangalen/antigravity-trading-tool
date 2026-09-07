@@ -78,6 +78,46 @@ export const fetchFinnV2Run = (runId) => {
   });
 };
 
+// A V2 proposal is visible before this function is called. One explicit UI
+// confirmation then uses only the V2 publish/confirm/execute contract, never
+// the legacy assistant-action mutation endpoint.
+export const confirmAndExecuteFinnV2Proposal = async (proposalId) => {
+  const normalizedProposalId = String(proposalId || '').trim();
+  if (!normalizedProposalId) {
+    throw new Error('Deze FINN V2-proposal mist een server-issued proposal_id.');
+  }
+
+  const publication = await fetchAuth(
+    `/api/assistant/v2/proposals/${encodeURIComponent(normalizedProposalId)}/publish`,
+    { method: 'POST', body: JSON.stringify({}) },
+  );
+  const idempotencyKey = `v2-ui-${normalizedProposalId}`;
+  const confirmation = await fetchAuth(
+    `/api/assistant/v2/proposals/${encodeURIComponent(normalizedProposalId)}/confirm`,
+    {
+      method: 'POST',
+      body: JSON.stringify({
+        idempotency_key: idempotencyKey,
+        confirmation_token: publication.confirmation_token,
+        expected_payload_hash: publication.payload_hash,
+      }),
+    },
+  );
+  const execution = await fetchAuth(
+    `/api/assistant/v2/proposals/${encodeURIComponent(normalizedProposalId)}/execute`,
+    {
+      method: 'POST',
+      body: JSON.stringify({
+        idempotency_key: idempotencyKey,
+        confirmation_token: publication.confirmation_token,
+        expected_payload_hash: publication.payload_hash,
+      }),
+    },
+  );
+
+  return { publication, confirmation, execution };
+};
+
 export const waitForFinnV2TerminalSse = async (runId, { signal } = {}) => {
   const response = await fetch(`${API_BASE_URL}/api/assistant/v2/runs/${encodeURIComponent(runId)}/stream`, {
     method: 'GET',

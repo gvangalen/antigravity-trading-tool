@@ -1,6 +1,7 @@
 """Typed guided-operation state backed by the canonical conversation JSON."""
 from __future__ import annotations
 
+import json
 import re
 from typing import Mapping, Optional
 
@@ -33,12 +34,13 @@ class FinnV2OperationStateService:
         # Keep the literal spelling of a user-provided value. The semantic
         # projection may normalize an equivalent value for matching, but it
         # must not overwrite a typed setup name with that normalized form.
+        accepted_inputs = set(contract.required_inputs).union(contract.optional_inputs)
         for key, value in (supplied_inputs or {}).items():
-            if key in contract.required_inputs and not self._is_missing(value):
+            if key in accepted_inputs and not self._is_missing(value):
                 explicit.setdefault(key, self._canonical_input(key, value))
         collected.update(explicit)
         for key, value in (derived_inputs or {}).items():
-            if key in contract.required_inputs and key not in collected and not self._is_missing(value):
+            if key in accepted_inputs and key not in collected and not self._is_missing(value):
                 collected[key] = self._canonical_input(key, value)
         missing = [field for field in contract.required_inputs if self._is_missing(collected.get(field))]
         context = conversation_context or {}
@@ -118,6 +120,9 @@ class FinnV2OperationStateService:
             "timeframe": "Welk primair timeframe wil je voor deze setup gebruiken?",
             "setup_id": "Welke bestaande setup wil je aanpassen?",
             "changed_fields": "Welke concrete setupvelden wil je aanpassen?",
+            "strategy_id": "Welke bestaande strategie wil je aanpassen?",
+            "execution_mode": "Wil je een fixed of custom uitvoeringsmodus gebruiken?",
+            "base_amount": "Welke basisinleg wil je voor deze strategie gebruiken?",
             "proposal_id": "Welk voorstel wil je precies bevestigen of uitvoeren?",
             "asset": "Welke asset wil je aan je watchlist toevoegen?",
             "requested_change": "Wat wil je precies aan je manier van handelen verbeteren?",
@@ -215,7 +220,59 @@ class FinnV2OperationStateService:
                 values["market_condition"] = "trend_defined"
         elif contract.operation_id in {"watchlist_add", "watchlist_remove"} and explicit_asset:
             values["asset"] = explicit_asset
+        elif contract.operation_id == "create_strategy":
+            setup_match = re.search(r"\bsetup(?:\s*(?:id|nummer|number))?\s*#?\s*(\d+)\b", text, re.IGNORECASE)
+            if setup_match:
+                values["setup_id"] = int(setup_match.group(1))
+            mode_match = re.search(r"\b(fixed|custom)\b", lowered)
+            if mode_match:
+                values["execution_mode"] = mode_match.group(1)
+            amount_match = re.search(
+                r"\b(?:base\s*amount|bedrag|inleg|amount)\s*(?:is|:|=)?\s*(?:€|eur|\$)?\s*(\d+(?:[.,]\d+)?)",
+                lowered,
+            )
+            if amount_match:
+                values["base_amount"] = float(amount_match.group(1).replace(",", "."))
+            named = re.search(r"\b(?:naam|name|named|called)\s*(?:is|:|=)?\s*[\"']?([\w .-]{2,80})", text, re.IGNORECASE)
+            if named:
+                values["name"] = named.group(1).strip(" .\"'")
+        elif contract.operation_id in {"update_setup", "update_strategy"}:
+            entity = "setup" if contract.operation_id == "update_setup" else "strategy"
+            identifier = re.search(
+                rf"\b{entity}(?:\s*(?:id|nummer|number))?\s*#?\s*(\d+)\b",
+                text,
+                re.IGNORECASE,
+            )
+            if identifier:
+                values[f"{entity}_id"] = int(identifier.group(1))
+            changes = self._structured_changed_fields(text)
+            if changes:
+                values["changed_fields"] = changes
         return values
+
+    @staticmethod
+    def _structured_changed_fields(text: str) -> dict[str, object]:
+        """Collect an explicit typed update object without inventing fields.
+
+        The action contract exposes one ``changed_fields`` slot. Its accepted
+        field names and value validation stay with SetupService or
+        StrategyService; this collector merely accepts a user-provided JSON
+        object for that typed slot and never turns ordinary prose into a write
+        payload.
+        """
+        start = text.find("{")
+        end = text.rfind("}")
+        if start < 0 or end <= start:
+            return {}
+        try:
+            raw = json.loads(text[start : end + 1])
+        except (TypeError, ValueError):
+            return {}
+        if not isinstance(raw, dict) or not raw:
+            return {}
+        if not all(isinstance(key, str) and key.strip() for key in raw):
+            return {}
+        return dict(raw)
 
     @staticmethod
     def _trim_setup_name_clause(value: str) -> str:

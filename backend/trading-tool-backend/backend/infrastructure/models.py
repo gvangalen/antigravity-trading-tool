@@ -383,6 +383,9 @@ class Watchlist(Base):
     ⭐ Assets die de engine dagelijks moet scannen voor de user.
     """
     __tablename__ = 'watchlists'
+    __table_args__ = (
+        UniqueConstraint("user_id", "symbol", name="ux_watchlists_user_symbol"),
+    )
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     user_id = Column(Integer, ForeignKey('users.id', ondelete='CASCADE'), nullable=False)

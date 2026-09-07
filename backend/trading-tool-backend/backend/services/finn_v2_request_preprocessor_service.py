@@ -92,6 +92,10 @@ class FinnV2RequestPreprocessorService:
         "profile": ("profiel", "risicoprofiel", "tradingstijl", "risk profile", "trading style"),
         "setup": ("setup", "set-up", "opzet", "positie-opzet"),
         "strategy": ("strategie", "strategy"),
+        "scores": (
+            "score", "scores", "scorecard", "scorekaart", "score overview",
+            "score overzicht", "bewertung", "bewertungen", "punktzahl",
+        ),
         "bot": ("bot", "robot", "automation", "automatisering"),
         "plan": (
             "plan",
@@ -107,10 +111,9 @@ class FinnV2RequestPreprocessorService:
             "handelsplan",
             "trading plan",
         ),
-        # Portfolio is a financial object even where FINN deliberately has no
-        # executable portfolio-management contract. Preserve that fact so the
-        # resolver can return the safe unsupported contract rather than
-        # treating a financial request as off-topic.
+        # Portfolio remains a financial object. Its registered operations are
+        # read-only or evidence-grounded evaluation; execution stays outside
+        # the V1 action contract.
         "portfolio": ("portfolio", "portefeuille"),
         "asset": (
             "asset", "instrument", "symbool", "symbol", "coin", "aandeel", "effect",

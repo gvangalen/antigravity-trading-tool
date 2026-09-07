@@ -39,6 +39,8 @@ def test_published_holdouts_are_hash_pinned_and_only_run_as_regression():
     assert corrected.expected_operation_id == "unsupported_financial_operation"
     assert corrected.expected_action_polarity.value == "execute"
     assert corrected.expected_supported is True
+    errata = json.loads((FIXTURES / "finn_v2_selector_published_qa_609_errata.json").read_text(encoding="utf-8"))
+    assert len(errata["operation_contract_sha256"]) == 64
 
 
 def test_selector_eval_registry_rejects_duplicate_cross_dataset_queries(tmp_path):

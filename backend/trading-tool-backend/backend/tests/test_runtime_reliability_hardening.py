@@ -66,6 +66,7 @@ def test_deploy_env_supports_backend_only_auto_rollback_and_previous_markers():
     assert "2026_08_23_finn_v2_conversation_context.py" in source
     assert "2026_08_23_finn_v2_evidence_information_scope.py" in source
     assert "2026_08_23_finn_v2_artifact_operation_contract.py" in source
+    assert "2026_09_07_finn_v2_action_contract_completion.py" in source
     assert "python3 -m backend.scripts.check_finn_v2_schema" in source
     assert source.index("2026_08_22_finn_v2_remove_legacy_fact_mode.py") < source.index("2026_08_23_finn_v2_conversation_context.py")
     assert source.index("2026_08_23_finn_v2_conversation_context.py") < source.index("python3 -m backend.scripts.check_finn_v2_schema")
@@ -73,6 +74,8 @@ def test_deploy_env_supports_backend_only_auto_rollback_and_previous_markers():
     assert source.index("2026_08_23_finn_v2_evidence_information_scope.py") < source.index("python3 -m backend.scripts.check_finn_v2_schema")
     assert source.index("2026_08_23_finn_v2_artifact_operation_contract.py") < source.index("python3 -m backend.scripts.check_finn_v2_schema")
     assert source.index("2026_08_25_finn_v2_indicator_config_reconciliation.py") < source.index("python3 -m backend.scripts.check_finn_v2_schema")
+    assert source.index("2026_09_04_finn_v2_runtime_contract_foundation.py") < source.index("2026_09_07_finn_v2_action_contract_completion.py")
+    assert source.index("2026_09_07_finn_v2_action_contract_completion.py") < source.index("python3 -m backend.scripts.check_finn_v2_schema")
     assert source.index("python3 -m backend.scripts.check_finn_v2_schema") < source.index("pm2_start_app()")
     assert "wait_for_interactive_worker_ready()" in source
     assert "wait_for_deploy_memory_headroom()" in source

@@ -51,6 +51,7 @@ class IndicatorConfigurationChange(BaseModel):
 class SetupChange(BaseModel):
     setup_id: int
     changed_fields: Dict[str, Any]
+    before: Optional[Dict[str, Any]] = None
 
     class Config:
         extra = "forbid"
@@ -63,9 +64,19 @@ class SetupCreateChange(BaseModel):
         extra = "forbid"
 
 
+class StrategyCreateChange(BaseModel):
+    """Draft fields for a strategy that has not been persisted yet."""
+
+    strategy_fields: Dict[str, Any]
+
+    class Config:
+        extra = "forbid"
+
+
 class StrategyChange(BaseModel):
     strategy_id: int
     changed_fields: Dict[str, Any]
+    before: Optional[Dict[str, Any]] = None
 
     class Config:
         extra = "forbid"
@@ -144,6 +155,7 @@ class ManualOrderChange(BaseModel):
 ProposalChangeUnion = Union[
     IndicatorConfigurationChange,
     SetupCreateChange,
+    StrategyCreateChange,
     SetupChange,
     StrategyChange,
     WatchlistChange,
@@ -174,6 +186,7 @@ class ValidatedProposalInput(BaseModel):
         expected = {
             "update_indicator_configuration": IndicatorConfigurationChange,
             "create_setup": SetupCreateChange,
+            "create_strategy": StrategyCreateChange,
             "update_setup": SetupChange,
             "update_strategy": StrategyChange,
             "watchlist_add": WatchlistChange,

@@ -106,7 +106,11 @@ _SOURCES: tuple[InformationSource, ...] = (
     InformationSource("linked_bot", "bot_configs", "BotRepository", SourceClassification.CANONICAL_PRODUCT_STATE, required_asset_fields=("symbol",), cache_namespace="linked_bot:v1"),
     InformationSource("bot_status", "bot_configs", "BotRepository", SourceClassification.DERIVED_VIEW, required_asset_fields=("symbol",), cache_namespace="bot_status:v1"),
     InformationSource("watchlist", "watchlists", "WatchlistRepository", SourceClassification.CANONICAL_PRODUCT_STATE, cache_namespace="watchlist:v1"),
-    InformationSource("portfolio", "portfolio_items", "PortfolioRepository", SourceClassification.CANONICAL_PRODUCT_STATE, required_asset_fields=("symbol",), cache_namespace="portfolio:v1"),
+    InformationSource("scores", "daily_scores,ai_category_insights", "ScoreRepository", SourceClassification.CANONICAL_PRODUCT_STATE, required_asset_fields=("symbol",), cache_namespace="scores:v1", allowed_reader_paths=("ScoreRepository.fetch_daily_scores", "ScoreRepository.get_master_score", "ScoreToolAdapter")),
+    # Portfolio state is derived from the user-owned bot portfolio ledger and
+    # its linked plan entities. There is no separate PortfolioRepository in
+    # this deployment, so advertising one here would create a false authority.
+    InformationSource("portfolio", "bot_portfolios,bot_configs,setups,strategies", "BotRepository", SourceClassification.CANONICAL_PRODUCT_STATE, cache_namespace="portfolio:v1", allowed_reader_paths=("BotRepository.get_portfolio_intelligence_context", "PortfolioToolAdapter")),
     InformationSource("onboarding_status", "onboarding_steps", "OnboardingRepository", SourceClassification.DERIVED_VIEW, cache_namespace="onboarding_status:v1"),
     InformationSource("conversation_operation_state", "finn_v2_conversations.context_json", "FinnV2ConversationRepository", SourceClassification.CANONICAL_PRODUCT_STATE, cache_namespace="conversation_operation_state:v1"),
     InformationSource("market_snapshot", "market_data", "MarketDataRepository", SourceClassification.DERIVED_VIEW, required_asset_fields=("symbol",), cache_namespace="market_snapshot:v1"),

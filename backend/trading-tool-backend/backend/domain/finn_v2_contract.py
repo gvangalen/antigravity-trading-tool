@@ -147,6 +147,8 @@ class InformationScope(str, Enum):
     LINKED_STRATEGY = "linked_strategy"
     LINKED_BOT = "linked_bot"
     BOT_STATUS = "bot_status"
+    SCORES = "scores"
+    PORTFOLIO = "portfolio"
 
 
 INFORMATION_SCOPE_ORDER: Tuple[str, ...] = tuple(scope.value for scope in InformationScope)
@@ -174,7 +176,7 @@ TOOL_OUTPUT_SCOPES: Mapping[str, InformationScope] = {
     "read_user_preferences": InformationScope.PREFERENCES,
     "read_active_asset": InformationScope.ACTIVE_ASSET,
     "read_indicator_configuration": InformationScope.INDICATOR_CONFIGURATION,
-    "read_asset_scores": InformationScope.MARKET_SNAPSHOT,
+    "read_asset_scores": InformationScope.SCORES,
     "read_market_snapshot": InformationScope.MARKET_SNAPSHOT,
     "read_macro_snapshot": InformationScope.MARKET_SNAPSHOT,
     "read_technical_snapshot": InformationScope.MARKET_SNAPSHOT,
@@ -183,7 +185,7 @@ TOOL_OUTPUT_SCOPES: Mapping[str, InformationScope] = {
     "read_linked_bot": InformationScope.LINKED_BOT,
     "read_bot_status": InformationScope.BOT_STATUS,
     "read_watchlist": InformationScope.WATCHLIST,
-    "read_portfolio": InformationScope.PROFILE,
+    "read_portfolio": InformationScope.PORTFOLIO,
     "read_latest_report": InformationScope.MARKET_SNAPSHOT,
     "read_review_history": InformationScope.PROFILE,
 }
@@ -198,6 +200,8 @@ PRIMARY_TOOL_BY_INFORMATION_SCOPE: Mapping[InformationScope, str] = {
     InformationScope.LINKED_STRATEGY: "read_linked_strategy",
     InformationScope.LINKED_BOT: "read_linked_bot",
     InformationScope.BOT_STATUS: "read_bot_status",
+    InformationScope.SCORES: "read_asset_scores",
+    InformationScope.PORTFOLIO: "read_portfolio",
 }
 
 

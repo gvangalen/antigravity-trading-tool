@@ -19,7 +19,7 @@ class FinnV2DomainRequirementService:
     }
     _SCOPE_DOMAINS = {
         "profile": "identity_context", "preferences": "identity_context", "active_asset": "identity_context",
-        "watchlist": "identity_context", "indicator_configuration": "market_context", "market_snapshot": "market_context",
+        "watchlist": "identity_context", "indicator_configuration": "market_context", "scores": "market_context", "market_snapshot": "market_context",
         "active_setup": "plan_context", "linked_strategy": "plan_context", "linked_bot": "automation_context",
         "bot_status": "automation_context",
     }
@@ -73,7 +73,7 @@ class FinnV2DomainRequirementService:
 
         information_domain_map = {
             "profile": "identity_context", "preferences": "identity_context", "active_asset": "identity_context",
-            "watchlist": "identity_context", "indicator_configuration": "market_context", "market_snapshot": "market_context", "active_setup": "plan_context",
+            "watchlist": "identity_context", "indicator_configuration": "market_context", "scores": "market_context", "market_snapshot": "market_context", "active_setup": "plan_context",
             "linked_strategy": "plan_context", "linked_bot": "automation_context", "bot_status": "automation_context",
         }
         if analysis.request_plan is not None:
@@ -120,5 +120,5 @@ class FinnV2DomainRequirementService:
 
     @staticmethod
     def _dedupe_domains(domains: list[str]) -> list[str]:
-        order = ["identity_context", "market_context", "plan_context", "automation_context"]
+        order = ["identity_context", "market_context", "plan_context", "automation_context", "portfolio_context", "report_context", "review_context"]
         return [domain for domain in order if domain in domains]

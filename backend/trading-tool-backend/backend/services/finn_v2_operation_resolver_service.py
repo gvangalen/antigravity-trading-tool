@@ -14,6 +14,7 @@ class FinnV2OperationResolverService:
     _GOAL_OBJECT_OPERATIONS = {
         ("capability", None): "capability",
         ("create", "setup"): "create_setup",
+        ("create", "strategy"): "create_strategy",
         ("add", "watchlist"): "watchlist_add",
         ("remove", "watchlist"): "watchlist_remove",
         ("activate", "bot"): "activate_bot",
@@ -21,10 +22,16 @@ class FinnV2OperationResolverService:
         ("evaluate", "setup"): "evaluate_setup",
         ("evaluate", "strategy"): "evaluate_strategy",
         ("evaluate", "bot"): "evaluate_bot",
+        ("evaluate", "portfolio"): "evaluate_portfolio",
         ("read", "plan"): "read_active_plan",
         ("read", "setup"): "read_active_setup",
         ("read", "bot"): "read_linked_bot",
         ("read", "indicator"): "read_indicator_configuration",
+        ("read", "scores"): "read_scores",
+        ("read", "score"): "read_scores",
+        ("read", "portfolio"): "read_portfolio",
+        ("explain", "score"): "explain_score",
+        ("explain", "scores"): "explain_score",
         ("explain", "financial_concept"): "explain_financial_concept",
     }
 

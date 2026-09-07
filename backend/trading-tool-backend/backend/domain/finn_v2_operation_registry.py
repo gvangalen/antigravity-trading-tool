@@ -20,13 +20,14 @@ _SCOPE_TOOL_BINDINGS = {
     "preferences": "read_user_preferences",
     "active_asset": "read_active_asset",
     "watchlist": "read_watchlist",
+    "scores": "read_asset_scores",
+    "portfolio": "read_portfolio",
     "indicator_configuration": "read_indicator_configuration",
     "market_snapshot": "read_market_snapshot",
     "active_setup": "read_active_setup",
     "linked_strategy": "read_linked_strategy",
     "linked_bot": "read_linked_bot",
     "bot_status": "read_bot_status",
-    "portfolio": "read_portfolio",
     "latest_report": "read_latest_report",
     "review_history": "read_review_history",
 }
@@ -66,6 +67,7 @@ class ActionPolarity(str, Enum):
     READ = "read"
     EVALUATE = "evaluate"
     CREATE = "create"
+    UPDATE = "update"
     ADD = "add"
     REMOVE = "remove"
     ACTIVATE = "activate"
@@ -531,6 +533,62 @@ _OPERATION_SELECTION_METADATA: Mapping[str, dict] = {
         "allowed_action_polarities": ("create", "add"),
         "selection_priority": 80,
     },
+    "update_setup": {
+        "semantic_description": "Prepare a typed, confirmable update to one existing setup. The user must identify or safely resolve the setup and state at least one allowed changed field; an update never creates a new setup.",
+        "any_entities": ("setup",),
+        "required_discourse_acts": ("operation_request",),
+        "allowed_action_polarities": ("update",),
+        "selection_priority": 82,
+        "selection_focus_entities": ("setup",),
+    },
+    "create_strategy": {
+        "semantic_description": "Prepare a typed, confirmable strategy draft for an identified existing setup. Generation is internal to this single create_strategy contract and never persists before confirmation.",
+        "any_entities": ("strategy",),
+        "required_discourse_acts": ("operation_request",),
+        "allowed_action_polarities": ("create",),
+        "selection_priority": 82,
+        "selection_focus_entities": ("strategy",),
+    },
+    "update_strategy": {
+        "semantic_description": "Prepare a typed, confirmable update to an existing linked strategy. It must retain the selected strategy identity and cannot create a new strategy.",
+        "any_entities": ("strategy",),
+        "required_discourse_acts": ("operation_request",),
+        "allowed_action_polarities": ("update",),
+        "selection_priority": 82,
+        "selection_focus_entities": ("strategy",),
+    },
+    "read_scores": {
+        "semantic_description": "Read the latest stored score snapshot and its available components for the requested or active asset. This does not recompute a score.",
+        "any_entities": ("scores",),
+        "required_discourse_acts": ("information_request",),
+        "allowed_action_polarities": ("read",),
+        "selection_priority": 42,
+        "selection_focus_entities": ("scores",),
+    },
+    "explain_score": {
+        "semantic_description": "Explain an existing stored score through its recorded score components and allowed personal context. Do not invent a new score or recommend a trade.",
+        "any_entities": ("scores",),
+        "required_discourse_acts": ("evaluation", "contextual_follow_up"),
+        "allowed_action_polarities": ("evaluate", "read"),
+        "selection_priority": 43,
+        "selection_focus_entities": ("scores",),
+    },
+    "read_portfolio": {
+        "semantic_description": "Read the authenticated user's stored portfolio positions and available values without proposing a rebalance or order.",
+        "any_entities": ("portfolio",),
+        "required_discourse_acts": ("information_request",),
+        "allowed_action_polarities": ("read",),
+        "selection_priority": 42,
+        "selection_focus_entities": ("portfolio",),
+    },
+    "evaluate_portfolio": {
+        "semantic_description": "Evaluate the authenticated user's stored portfolio using available profile, preferences, plan and portfolio evidence. It is advice-only and never creates a rebalance or order.",
+        "any_entities": ("portfolio",),
+        "required_discourse_acts": ("evaluation",),
+        "allowed_action_polarities": ("evaluate",),
+        "selection_priority": 43,
+        "selection_focus_entities": ("portfolio",),
+    },
     "watchlist_add": {
         "any_entities": ("watchlist",),
         "required_discourse_acts": ("operation_request",),
@@ -598,12 +656,12 @@ _CONTRACTS: tuple[OperationContract, ...] = (
     # Score and market-condition details are useful trusted inputs, but must
     # not be invented by FINN.
     OperationContract("create_setup", FinnV2OperationRegistry.VERSION, "setup", "CREATE_PROPOSAL", ("maak setup", "create setup", "setup voor"), action_polarity=ActionPolarity.CREATE, required_inputs=("setup_type", "timeframe", "name", "symbol"), required_scopes=("active_asset",), optional_scopes=("profile", "preferences", "indicator_configuration", "active_setup", "linked_strategy"), model_policy="optional", response_strategy="proposal_draft", policy_class="proposal", proposal_type="create_setup", confirmation_required=True, execution_adapter="create_setup", idempotency_rule="proposal_payload_hash", postcondition="setup_created_for_user_asset"),
-    OperationContract("update_setup", FinnV2OperationRegistry.VERSION, "setup", "CREATE_PROPOSAL", ("wijzig setup",), required_inputs=("setup_id", "changed_fields"), required_scopes=("active_asset", "active_setup"), proposal_type="update_setup", confirmation_required=True, execution_adapter="update_setup", idempotency_rule="proposal_payload_hash", postcondition="setup_updated_for_user"),
+    OperationContract("update_setup", FinnV2OperationRegistry.VERSION, "setup", "CREATE_PROPOSAL", ("wijzig setup", "update setup", "setup andern"), action_polarity=ActionPolarity.UPDATE, required_inputs=("setup_id", "changed_fields"), required_scopes=("active_asset", "active_setup"), proposal_type="update_setup", confirmation_required=True, execution_adapter="update_setup", idempotency_rule="proposal_payload_hash", postcondition="setup_updated_for_user"),
     _gap("delete_setup", "setup", "CREATE_PROPOSAL", ("verwijder setup",), "delete_setup_execution_adapter_missing"),
     OperationContract("evaluate_setup", FinnV2OperationRegistry.VERSION, "setup", "EVALUATE", ("beoordeel setup",), required_scopes=("active_asset", "active_setup"), optional_scopes=("indicator_configuration",), model_policy="required", response_strategy="model_reasoning", policy_class="advice"),
     _read("read_linked_strategy", "strategy", ("active_asset", "active_setup", "linked_strategy"), ("welke strategie", "strategie"), ("setup", "strategy")),
-    _gap("create_strategy", "strategy", "CREATE_PROPOSAL", ("maak strategie",), "create_strategy_execution_adapter_missing"),
-    OperationContract("update_strategy", FinnV2OperationRegistry.VERSION, "strategy", "CREATE_PROPOSAL", ("wijzig strategie",), required_inputs=("strategy_id", "changed_fields"), required_scopes=("active_asset", "active_setup", "linked_strategy"), proposal_type="update_strategy", confirmation_required=True, execution_adapter="update_strategy", idempotency_rule="proposal_payload_hash", postcondition="strategy_updated_for_user"),
+    OperationContract("create_strategy", FinnV2OperationRegistry.VERSION, "strategy", "CREATE_PROPOSAL", ("maak strategie", "create strategy", "erstelle strategie"), action_polarity=ActionPolarity.CREATE, required_inputs=("setup_id", "execution_mode", "base_amount"), optional_inputs=("name",), required_scopes=("active_asset", "active_setup"), optional_scopes=("profile", "preferences", "indicator_configuration", "linked_strategy", "market_snapshot"), model_policy="required", response_strategy="proposal_draft", policy_class="proposal", proposal_type="create_strategy", confirmation_required=True, execution_adapter="create_strategy", idempotency_rule="proposal_payload_hash", postcondition="strategy_created_once_for_user_setup"),
+    OperationContract("update_strategy", FinnV2OperationRegistry.VERSION, "strategy", "CREATE_PROPOSAL", ("wijzig strategie", "update strategy", "strategie andern"), action_polarity=ActionPolarity.UPDATE, required_inputs=("strategy_id", "changed_fields"), required_scopes=("active_asset", "active_setup", "linked_strategy"), proposal_type="update_strategy", confirmation_required=True, execution_adapter="update_strategy", idempotency_rule="proposal_payload_hash", postcondition="strategy_updated_for_user"),
     _gap("delete_strategy", "strategy", "CREATE_PROPOSAL", ("verwijder strategie",), "delete_strategy_execution_adapter_missing"),
     OperationContract("evaluate_strategy", FinnV2OperationRegistry.VERSION, "strategy", "EVALUATE", ("beoordeel strategie", "strategie past"), required_scopes=("profile", "preferences", "active_asset", "active_setup", "linked_strategy"), model_policy="required", response_strategy="model_reasoning", policy_class="advice"),
     _read("read_linked_bot", "bot", ("active_asset", "active_setup", "linked_strategy", "linked_bot", "bot_status"), ("welke bot", "gekoppelde bot"), ("setup", "strategy", "bot", "bot_status")),
@@ -617,8 +675,10 @@ _CONTRACTS: tuple[OperationContract, ...] = (
     _gap("deactivate_bot", "bot", "ACTION_PROPOSAL", ("deactiveer bot",), "deactivate_bot_execution_adapter_missing"),
     OperationContract("read_active_plan", FinnV2OperationRegistry.VERSION, "plan", "READ", ("mijn actieve plan", "setup strategie bot"), required_scopes=("active_asset", "active_setup", "linked_strategy", "linked_bot", "bot_status"), required_response_fields=("setup", "strategy", "bot", "bot_status")),
     OperationContract("evaluate_plan", FinnV2OperationRegistry.VERSION, "plan", "EVALUATE", ("belangrijkste ontbrekende", "bekijk mijn profiel", "beoordeel mijn plan"), required_scopes=("profile", "preferences", "active_asset", "indicator_configuration", "active_setup", "linked_strategy", "linked_bot", "bot_status"), model_policy="required", response_strategy="model_reasoning", policy_class="advice", required_response_fields=("observation", "evidence", "next_step")),
-    _gap("read_portfolio", "portfolio", "READ", ("portfolio", "portefeuille"), "portfolio_contract_not_yet_grounded"),
-    _gap("evaluate_portfolio", "portfolio", "EVALUATE", ("beoordeel portfolio",), "portfolio_contract_not_yet_grounded"),
+    OperationContract("read_scores", FinnV2OperationRegistry.VERSION, "scores", "READ", ("mijn scores", "read scores", "meine scores"), required_scopes=("active_asset", "scores"), response_strategy="deterministic_structured_summary", required_response_fields=("asset",)),
+    OperationContract("explain_score", FinnV2OperationRegistry.VERSION, "scores", "EVALUATE", ("leg score uit", "explain score", "erklare score"), required_scopes=("active_asset", "scores"), optional_scopes=("profile", "preferences", "active_setup", "linked_strategy", "indicator_configuration"), model_policy="required", response_strategy="model_reasoning", policy_class="advice"),
+    OperationContract("read_portfolio", FinnV2OperationRegistry.VERSION, "portfolio", "READ", ("portfolio", "portefeuille", "portfolio anzeigen"), required_scopes=("portfolio",), response_strategy="deterministic_structured_summary"),
+    OperationContract("evaluate_portfolio", FinnV2OperationRegistry.VERSION, "portfolio", "EVALUATE", ("beoordeel portfolio", "evaluate portfolio", "portfolio bewerten"), required_scopes=("portfolio", "profile", "preferences"), optional_scopes=("active_asset", "active_setup", "linked_strategy", "market_snapshot", "indicator_configuration"), model_policy="required", response_strategy="model_reasoning", policy_class="advice"),
     _gap("read_latest_report", "reports", "READ", ("laatste rapport",), "report_contract_not_yet_grounded"),
     _gap("read_review_history", "reviews", "READ", ("review geschiedenis",), "review_contract_not_yet_grounded"),
     _gap("evaluate_review_history", "reviews", "EVALUATE", ("beoordeel review",), "review_contract_not_yet_grounded"),

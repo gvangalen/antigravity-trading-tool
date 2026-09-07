@@ -82,6 +82,15 @@ def sync_analyze_strategy(strategy_id: int, user_id: int, strategy_join_row: dic
     )
 
 class StrategyService:
+    # Existing strategy persistence is permissive JSONB, so retain the one
+    # canonical allowlist at the domain boundary rather than letting a FINN
+    # proposal pass arbitrary JSON through to storage.
+    UPDATE_ALLOWED_FIELDS = frozenset({
+        "name", "execution_mode", "base_amount", "decision_curve",
+        "decision_curve_name", "decision_curve_id", "entry", "entry_type",
+        "trade_execution_mode", "targets", "stop_loss", "explanation",
+        "ai_explanation", "risk_profile", "automation", "tags", "favorite",
+    })
     def __init__(self, db_session: AsyncSession):
         self.session = db_session
         self.repository = StrategyRepository(db_session)
@@ -315,25 +324,38 @@ class StrategyService:
 
     async def update_strategy(self, strategy_id: int, raw_data: dict, user_id: int):
         raw_data = self.normalize_strategy_payload(raw_data)
-        execution_mode = (raw_data.get("execution_mode") or "").lower()
-        if execution_mode not in ["fixed", "custom"]:
-            raise HTTPException(400, "Ongeldige execution_mode")
-
-        if not raw_data.get("base_amount"):
-            raise HTTPException(400, "base_amount is verplicht")
-
-        if execution_mode == "custom" and not raw_data.get("decision_curve"):
-            raise HTTPException(400, "decision_curve verplicht")
+        unknown_fields = set(raw_data).difference(self.UPDATE_ALLOWED_FIELDS)
+        if unknown_fields:
+            raise HTTPException(400, f"Niet-toegestane strategievelden: {', '.join(sorted(unknown_fields))}")
 
         existing = await self.repository.get_raw_strategy_with_setup(strategy_id, user_id)
         if not existing:
             raise HTTPException(404, "Niet gevonden")
+        existing_data = self.normalize_strategy_payload(existing.get("data") if isinstance(existing.get("data"), dict) else json.loads(existing.get("data") or "{}"))
+        merged_data = {
+            **existing_data,
+            **{
+                key: existing.get(key)
+                for key in ("name", "execution_mode", "base_amount", "entry", "targets", "stop_loss", "explanation", "risk_profile", "decision_curve_id")
+                if existing.get(key) is not None
+            },
+            **raw_data,
+        }
+        execution_mode = (merged_data.get("execution_mode") or "").lower()
+        if execution_mode not in ["fixed", "custom"]:
+            raise HTTPException(400, "Ongeldige execution_mode")
+
+        if not merged_data.get("base_amount"):
+            raise HTTPException(400, "base_amount is verplicht")
+
+        if execution_mode == "custom" and not merged_data.get("decision_curve"):
+            raise HTTPException(400, "decision_curve verplicht")
 
         setup_type = (existing.get("existing_setup_type") or "").lower()
         if setup_type in {"trade", "position"}:
-            self._validate_trade_strategy(raw_data)
+            self._validate_trade_strategy(merged_data)
 
-        updated_count = await self.repository.update_strategy(strategy_id, user_id, raw_data, setup_type, raw_data)
+        updated_count = await self.repository.update_strategy(strategy_id, user_id, merged_data, setup_type, merged_data)
         if updated_count == 0:
             raise HTTPException(403, "Update gefaald")
             

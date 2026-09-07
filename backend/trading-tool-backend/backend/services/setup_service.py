@@ -42,6 +42,16 @@ def sync_generate_setup_explanation(setup_id: int, user_id: int) -> str:
     return generate_setup_explanation(setup_id, user_id)
 
 class SetupService:
+    # The domain service, not FINN, owns which persisted setup fields can be
+    # changed. V2 adapters pass a typed proposal through this same boundary.
+    UPDATE_ALLOWED_FIELDS = frozenset({
+        "name", "symbol", "timeframe", "setup_type", "dca_frequency",
+        "dca_day", "dca_month_day", "account_type", "min_investment",
+        "trend", "score_logic", "favorite", "description", "action",
+        "category", "min_macro_score", "max_macro_score",
+        "min_technical_score", "max_technical_score", "min_market_score",
+        "max_market_score", "explanation", "tags",
+    })
     def __init__(self, db_session: AsyncSession):
         self.session = db_session
         self.repository = SetupRepository(db_session)
@@ -331,6 +341,10 @@ class SetupService:
         if not row:
             raise HTTPException(403, "Geen toegang tot setup")
 
+        unknown_fields = set(raw_payload).difference(self.UPDATE_ALLOWED_FIELDS)
+        if unknown_fields:
+            raise HTTPException(400, f"Niet-toegestane setupvelden: {', '.join(sorted(unknown_fields))}")
+
         # Merge raw_payload with existing row to perform cross-field validations (e.g. min/max scores)
         merged_payload = dict(row)
         for k, v in raw_payload.items():
@@ -346,17 +360,7 @@ class SetupService:
             raw_payload["symbol"] = str(raw_payload["symbol"]).strip().upper()
 
         updates = {}
-        allowed_fields = [
-            "name", "symbol", "timeframe", "setup_type",
-            "dca_frequency", "dca_day", "dca_month_day",
-            "account_type", "min_investment", "trend", "score_logic",
-            "favorite", "description", "action", "category",
-            "min_macro_score", "max_macro_score",
-            "min_technical_score", "max_technical_score",
-            "min_market_score", "max_market_score", "explanation"
-        ]
-
-        for field in allowed_fields:
+        for field in self.UPDATE_ALLOWED_FIELDS.difference({"tags"}):
             if field in raw_payload:
                 updates[field] = raw_payload[field]
 

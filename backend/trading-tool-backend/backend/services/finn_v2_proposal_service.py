@@ -18,6 +18,8 @@ from backend.schemas.finn_v2_proposal_schema import FinnV2ProposalRecord, Valida
 from backend.services.finn_v2_entity_resolution_service import FinnV2EntityResolutionService
 from backend.services.finn_v2_flag_service import FinnV2FlagService
 from backend.services.finn_v2_json_safety import to_json_safe
+from backend.services.setup_service import SetupService
+from backend.services.strategy_service import StrategyService
 
 
 class FinnV2ProposalService:
@@ -57,6 +59,11 @@ class FinnV2ProposalService:
         max_expiry = datetime.now(timezone.utc).timestamp() + self.flags.proposal_ttl_seconds()
         if proposal_input.expires_at.timestamp() > max_expiry:
             raise ValueError("proposal_expired")
+
+        proposal_input = await self._hydrate_domain_change(
+            user_id=user_id,
+            proposal_input=proposal_input,
+        )
 
         existing = await self.proposals.get_by_idempotency_key_for_user(
             idempotency_key=proposal_input.idempotency_key,
@@ -108,6 +115,60 @@ class FinnV2ProposalService:
             expires_at=proposal_input.expires_at,
         )
         return self._row_to_record(row)
+
+    async def _hydrate_domain_change(
+        self,
+        *,
+        user_id: int,
+        proposal_input: ValidatedProposalInput,
+    ) -> ValidatedProposalInput:
+        """Validate and snapshot update fields at the owning domain boundary.
+
+        FINN receives only the existing action contract's ``changed_fields``
+        slot. The persisted services remain the single allowlist authority;
+        this proposal-time check prevents an untyped payload from waiting for
+        confirmation before it is rejected.
+        """
+        operation = proposal_input.operation_type
+        change = proposal_input.change
+        if operation == "update_setup":
+            unknown = set(change.changed_fields).difference(SetupService.UPDATE_ALLOWED_FIELDS)
+            if unknown or not change.changed_fields:
+                raise ValueError("invalid_setup_change_fields")
+            resolved = await self.resolver.resolve_setup(
+                user_id=user_id,
+                selector={"setup_id": change.setup_id},
+                asset=proposal_input.target.asset,
+            )
+            before = self._snapshot_changed_fields(resolved["setup"], change.changed_fields)
+            return proposal_input.copy(update={"change": change.copy(update={"before": before})})
+        if operation == "update_strategy":
+            unknown = set(change.changed_fields).difference(StrategyService.UPDATE_ALLOWED_FIELDS)
+            if unknown or not change.changed_fields:
+                raise ValueError("invalid_strategy_change_fields")
+            resolved = await self.resolver.resolve_strategy(
+                user_id=user_id,
+                selector={"strategy_id": change.strategy_id},
+                setup=None,
+            )
+            before = self._snapshot_changed_fields(resolved["strategy"], change.changed_fields)
+            return proposal_input.copy(update={"change": change.copy(update={"before": before})})
+        return proposal_input
+
+    @staticmethod
+    def _snapshot_changed_fields(row: object, changed_fields: dict) -> dict:
+        source = dict(row or {})
+        nested = source.get("data")
+        if isinstance(nested, str):
+            try:
+                nested = json.loads(nested)
+            except (TypeError, ValueError):
+                nested = {}
+        nested = dict(nested or {}) if isinstance(nested, dict) else {}
+        return {
+            field: source[field] if field in source else nested.get(field)
+            for field in changed_fields
+        }
 
     async def _validate_target_user_scope(self, *, user_id: int, proposal_input: ValidatedProposalInput) -> None:
         target = proposal_input.target

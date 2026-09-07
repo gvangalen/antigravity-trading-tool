@@ -69,6 +69,25 @@ def test_semantic_frame_resolves_a_broad_assessment_to_plan_not_setup():
     assert resolved.operation_id == "evaluate_plan"
 
 
+def test_semantic_frame_resolves_stored_scores_through_the_registered_score_contracts():
+    registry = FinnV2OperationRegistry()
+    resolver = FinnV2OperationResolverService(registry)
+
+    read = resolver.resolve(
+        selection=_selection("clarify_request", {"goal": "read", "object": "score"}),
+        candidates=registry.list(),
+        conversation_context={},
+    )
+    explain = resolver.resolve(
+        selection=_selection("clarify_request", {"goal": "explain", "object": "scores"}),
+        candidates=registry.list(),
+        conversation_context={},
+    )
+
+    assert read.operation_id == "read_scores"
+    assert explain.operation_id == "explain_score"
+
+
 def test_capability_discourse_rejects_an_incompatible_nearby_plan_read():
     registry = FinnV2OperationRegistry()
     resolved = FinnV2OperationResolverService(registry).resolve(

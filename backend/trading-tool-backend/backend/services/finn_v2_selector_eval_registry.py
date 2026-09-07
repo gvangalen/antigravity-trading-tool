@@ -149,6 +149,14 @@ def _registry_hash() -> str:
     ).hexdigest()
 
 
+def _operation_contract_hash(contract: object) -> str:
+    """Bind a corpus erratum to its operation instead of unrelated registry entries."""
+    payload = getattr(contract, "__dict__", contract)
+    return hashlib.sha256(
+        json.dumps(payload, default=str, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    ).hexdigest()
+
+
 def _load_errata(*, payload: Mapping[str, Any], path: Path, source_bytes: bytes) -> dict[str, tuple[str, object, object]]:
     """Apply only registry-bound corpus errata to a regression projection."""
     errata_file = payload.get("errata_file")
@@ -164,10 +172,7 @@ def _load_errata(*, payload: Mapping[str, Any], path: Path, source_bytes: bytes)
     if errata_payload.get("source_file") != payload.get("source_file") or errata_payload.get("source_sha256") != source_hash:
         raise ValueError(f"corpus_errata_provenance_mismatch:{errata_path}")
     registry = FinnV2OperationRegistry()
-    if (
-        errata_payload.get("registry_version") != registry.VERSION
-        or errata_payload.get("registry_sha256") != _registry_hash()
-    ):
+    if errata_payload.get("registry_version") != registry.VERSION:
         raise ValueError(f"corpus_errata_registry_mismatch:{errata_path}")
     entries = errata_payload.get("errata")
     if not isinstance(entries, list):
@@ -185,6 +190,8 @@ def _load_errata(*, payload: Mapping[str, Any], path: Path, source_bytes: bytes)
         if not isinstance(old_value, bool) or not isinstance(canonical_value, bool):
             raise ValueError(f"corpus_errata_value_invalid:{eval_id}")
         contract = registry.get(_source_operation_id(path.parent / str(payload["source_file"]), eval_id))
+        if errata_payload.get("operation_contract_sha256") != _operation_contract_hash(contract):
+            raise ValueError(f"corpus_errata_registry_mismatch:{errata_path}")
         if canonical_value != contract.supported:
             raise ValueError(f"corpus_errata_not_registry_derived:{eval_id}")
         corrections[eval_id] = (field, old_value, canonical_value)

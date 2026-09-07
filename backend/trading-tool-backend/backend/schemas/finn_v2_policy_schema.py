@@ -20,6 +20,7 @@ PolicyClass = Literal[
 ]
 OperationType = Literal[
     "create_setup",
+    "create_strategy",
     "update_indicator_configuration",
     "update_setup",
     "update_strategy",

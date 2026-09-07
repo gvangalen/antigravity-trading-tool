@@ -18,7 +18,7 @@ derive a second scope, source, asset, or owner selector.
 | linked_bot | `bot_configs` | `BotRepository` | user + symbol | canonical product state |
 | bot_status | `bot_configs` | `BotRepository` | user + symbol | derived view |
 | watchlist | `watchlists` | `WatchlistRepository` | user | canonical product state |
-| portfolio | `portfolio_items` | `PortfolioRepository` | user + symbol | canonical product state |
+| portfolio | `bot_portfolios`, `bot_configs`, `setups`, `strategies` | `BotRepository.get_portfolio_intelligence_context` | authenticated user | canonical product state |
 | onboarding_status | `onboarding_steps` | `OnboardingRepository` | user | derived view |
 | conversation_operation_state | `finn_v2_conversations.context_json` | `FinnV2ConversationRepository` | user + conversation | canonical product state |
 

@@ -31,6 +31,7 @@ from backend.schemas.finn_v2_proposal_schema import (
     ProposalTarget,
     SetupCreateChange,
     SetupChange,
+    StrategyCreateChange,
     StrategyChange,
     TradePlanChange,
     ValidatedProposalInput,
@@ -73,6 +74,7 @@ class FinnV2ResponseVerifierService:
         "watchlist": "identity_context",
         "market_snapshot": "market_context",
         "indicator_configuration": "market_context",
+        "scores": "market_context",
         "active_setup": "plan_context",
         "linked_strategy": "plan_context",
         "linked_bot": "automation_context",
@@ -1015,9 +1017,19 @@ class FinnV2ResponseVerifierService:
         candidate = draft.proposal_candidate
         if candidate is None:
             return None
-        target = ProposalTarget(target_type=candidate.target_type, target_id=candidate.target_id, asset=candidate.asset)
         changes = candidate.proposed_changes or {}
         operation = candidate.operation_type
+        # The strategy draft is created *for an existing setup*. The action
+        # contract owns that relationship, so do not let a model-provided
+        # strategy target bypass the existing setup ownership resolver.
+        if operation == "create_strategy":
+            target = ProposalTarget(
+                target_type="setup",
+                target_id=str(candidate.target_id or changes.get("setup_id") or "") or None,
+                asset=candidate.asset,
+            )
+        else:
+            target = ProposalTarget(target_type=candidate.target_type, target_id=candidate.target_id, asset=candidate.asset)
         if operation == "update_indicator_configuration":
             change = IndicatorConfigurationChange(
                 indicator_id=str(changes.get("indicator_id") or changes.get("indicator") or "indicator"),
@@ -1028,6 +1040,10 @@ class FinnV2ResponseVerifierService:
         elif operation == "create_setup":
             change = SetupCreateChange(
                 setup_fields=dict(changes.get("setup_fields") or changes.get("changed_fields") or changes),
+            )
+        elif operation == "create_strategy":
+            change = StrategyCreateChange(
+                strategy_fields=dict(changes.get("strategy_fields") or changes.get("changed_fields") or changes),
             )
         elif operation == "update_setup":
             change = SetupChange(setup_id=int(candidate.target_id or changes.get("setup_id") or 0), changed_fields=dict(changes.get("changed_fields") or changes))
@@ -1215,8 +1231,10 @@ class FinnV2ResponseVerifierService:
             scopes.add("active_asset")
         if tool_name == "read_indicator_configuration":
             scopes.add("indicator_configuration")
-        if tool_name in {"read_market_snapshot", "read_macro_snapshot", "read_technical_snapshot", "read_asset_scores"}:
+        if tool_name in {"read_market_snapshot", "read_macro_snapshot", "read_technical_snapshot"}:
             scopes.add("market_snapshot")
+        if tool_name == "read_asset_scores":
+            scopes.add("scores")
         if tool_name == "read_active_setup" or entity_type == "setup":
             scopes.add("active_setup")
         if tool_name == "read_linked_strategy" or entity_type == "strategy":

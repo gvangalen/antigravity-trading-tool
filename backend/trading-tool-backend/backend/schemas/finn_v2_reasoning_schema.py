@@ -31,6 +31,7 @@ class ReasoningConfidence(str, Enum):
 class ProposalOperationType(str, Enum):
     UPDATE_INDICATOR_CONFIGURATION = "update_indicator_configuration"
     CREATE_SETUP = "create_setup"
+    CREATE_STRATEGY = "create_strategy"
     UPDATE_SETUP = "update_setup"
     UPDATE_STRATEGY = "update_strategy"
     WATCHLIST_ADD = "watchlist_add"

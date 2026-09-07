@@ -2,7 +2,7 @@
 
 import React, { Suspense, useState, useEffect, useLayoutEffect, useRef } from "react";
 import { usePathname, useSearchParams, useRouter } from "next/navigation";
-import { assistantChat, executeAssistantAction, fetchAssistantInsight, getAssistantPreferences, getAssistantSessionDetail, getAssistantSessions, updateAssistantPreferences, assistantChatStream, executePendingAction, fetchFinnState, fetchFinnMissionControl, fetchFinnV2Run, waitForFinnV2TerminalSse } from "@/lib/api/ai";
+import { assistantChat, confirmAndExecuteFinnV2Proposal, executeAssistantAction, fetchAssistantInsight, getAssistantPreferences, getAssistantSessionDetail, getAssistantSessions, updateAssistantPreferences, assistantChatStream, executePendingAction, fetchFinnState, fetchFinnMissionControl, fetchFinnV2Run, waitForFinnV2TerminalSse } from "@/lib/api/ai";
 import { Send, Zap, Brain, Shield, BarChart3, Loader2, X, MessageSquare, Target, Activity, FileText, Bot, ChevronDown, ListChecks, Terminal, Sparkles, CheckCircle2, Plus, Search, SlidersHorizontal } from "lucide-react";
 import useIntelligenceEvents from "@/hooks/useIntelligenceEvents";
 import { useOnboarding } from "@/hooks/useOnboarding";
@@ -4758,6 +4758,19 @@ function AIAssistantContent({
     setExecutingAction(true);
 
     try {
+      if (action.type === "v2_proposal") {
+        const result = await confirmAndExecuteFinnV2Proposal(action.proposal_id);
+        const execution = result?.execution || {};
+        setMessages((prev) => [...prev, {
+          role: "assistant",
+          text: execution.status === "already_executed"
+            ? "Dit bevestigde FINN V2-voorstel was al uitgevoerd."
+            : "Je bevestigde FINN V2-voorstel is veilig uitgevoerd.",
+          intent: "finn_v2_proposal_execution",
+          isComplete: true,
+        }]);
+        return;
+      }
       const res = await executeAssistantAction(action);
       if (action.type === "refresh_daily_scores") {
         if (!res?.ok || !res?.verified?.daily_scores) {

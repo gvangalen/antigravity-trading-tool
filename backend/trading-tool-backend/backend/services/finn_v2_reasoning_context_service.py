@@ -49,6 +49,7 @@ class FinnV2ReasoningContextService:
         "watchlist": "identity_context",
         "indicator_configuration": "market_context",
         "asset_scores": "market_context",
+        "scores": "market_context",
         "market_snapshot": "market_context",
         "macro_snapshot": "market_context",
         "technical_snapshot": "market_context",

@@ -262,10 +262,11 @@ def record_selection(
     from backend.domain.finn_v2_operation_registry import FinnV2OperationRegistry
 
     action_contract = FinnV2OperationRegistry().get(operation_id)
+    accepted_inputs = set(action_contract.required_inputs + action_contract.optional_inputs)
     supplied = {
         field: value
         for field, value in dict(supplied_inputs or {}).items()
-        if field in action_contract.required_inputs
+        if field in accepted_inputs
         and value is not None
         and (not isinstance(value, str) or bool(value.strip()))
     }

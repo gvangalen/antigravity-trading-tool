@@ -33,11 +33,54 @@ def test_indicator_read_contract_requires_a_visible_count_and_all_indicator_name
     assert contract.required_response_fields == ("asset", "configured_count", "indicator_names")
 
 
-def test_unimplemented_operations_are_capability_gaps_not_executable():
+def test_completed_v1_strategy_contract_is_a_confirmable_v2_operation():
     registry = FinnV2OperationRegistry()
 
-    with pytest.raises(FinnV2OperationUnavailableError, match="create_strategy_execution_adapter_missing"):
-        registry.require_supported("create_strategy")
+    contract = registry.require_supported("create_strategy")
+
+    assert contract.mode == "CREATE_PROPOSAL"
+    assert contract.required_inputs == ("setup_id", "execution_mode", "base_amount")
+    assert contract.execution_adapter == "create_strategy"
+    assert contract.confirmation_required is True
+
+
+def test_audited_v1_flows_resolve_only_through_the_canonical_registry():
+    """Keep the runtime from reviving a parallel legacy action definition."""
+    registry = FinnV2OperationRegistry()
+
+    expected = {
+        "create_setup": ("CREATE_PROPOSAL", ("setup_type", "timeframe", "name", "symbol")),
+        "evaluate_plan": ("EVALUATE", ()),
+        "evaluate_setup": ("EVALUATE", ()),
+        "read_indicator_configuration": ("READ", ()),
+        "evaluate_bot": ("EVALUATE", ()),
+        "create_strategy": ("CREATE_PROPOSAL", ("setup_id", "execution_mode", "base_amount")),
+    }
+
+    for operation_id, (mode, required_inputs) in expected.items():
+        contract = registry.require_supported(operation_id)
+        assert contract.mode == mode
+        assert contract.required_inputs == required_inputs
+
+    # ``generate_strategy`` belongs to the legacy generation surface. New V2
+    # flows must resolve the single confirmable ``create_strategy`` contract.
+    with pytest.raises(FinnV2OperationUnavailableError, match="unknown_operation:generate_strategy"):
+        registry.get("generate_strategy")
+
+
+def test_scores_and_portfolio_contracts_use_their_canonical_scopes():
+    registry = FinnV2OperationRegistry()
+
+    assert registry.require_supported("read_scores").tool_names == (
+        "read_active_asset", "read_asset_scores"
+    )
+    assert registry.require_supported("explain_score").required_scopes == (
+        "active_asset", "scores"
+    )
+    assert registry.require_supported("read_portfolio").tool_names == ("read_portfolio",)
+    assert registry.require_supported("evaluate_portfolio").required_scopes == (
+        "portfolio", "profile", "preferences"
+    )
 
 
 def test_write_contract_requires_confirmable_proposal():

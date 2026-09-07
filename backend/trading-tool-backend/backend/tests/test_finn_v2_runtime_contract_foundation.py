@@ -259,6 +259,32 @@ def test_runtime_contract_derives_guided_inputs_from_the_canonical_action_contra
     assert selected["missing_inputs"] == ["setup_type", "name"]
 
 
+def test_runtime_contract_uses_create_strategy_contract_for_optional_and_missing_inputs():
+    state = record_initial_intent(
+        new_runtime_contract_state(run=_run(), contract_id="contract-run-contract-1"),
+        operation_id="create_strategy",
+        requested_mode="CREATE_PROPOSAL",
+    )
+
+    selected = record_selection(
+        state,
+        canonical_target="ETH",
+        target_source="explicit_current_turn",
+        original_target_text="Ethereum",
+        target_type="asset",
+        conversation_reference=None,
+        conversation_reference_kind=None,
+        supplied_inputs={"setup_id": 41, "name": "ETH swing", "untrusted": "discard"},
+    )
+
+    assert selected["action_contract"] == {
+        "operation_id": "create_strategy",
+        "version": FinnV2OperationRegistry.VERSION,
+    }
+    assert selected["supplied_inputs"] == {"setup_id": 41, "name": "ETH swing"}
+    assert selected["missing_inputs"] == ["execution_mode", "base_amount"]
+
+
 def test_complete_run_never_creates_or_reconstructs_a_runtime_contract():
     source = (ROOT / "services" / "finn_v2_run_service.py").read_text(encoding="utf-8")
     complete_run_source = source.split("    async def complete_run(", 1)[1].split("    def _terminal_placeholder_response", 1)[0]

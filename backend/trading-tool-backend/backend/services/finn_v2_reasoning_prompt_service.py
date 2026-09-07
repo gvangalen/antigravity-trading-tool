@@ -62,6 +62,8 @@ class FinnV2ReasoningPromptService:
         "preferences": {"read_user_preferences"},
         "active_asset": {"read_active_asset"},
         "indicator_configuration": {"read_indicator_configuration"},
+        "scores": {"read_asset_scores"},
+        "portfolio": {"read_portfolio"},
         "active_setup": {"read_active_setup"},
         "linked_strategy": {"read_linked_strategy"},
         "linked_bot": {"read_linked_bot"},
