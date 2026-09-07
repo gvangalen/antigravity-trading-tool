@@ -247,8 +247,34 @@ def issue_fixture_token(*, issuer: Path) -> str:
 
 
 def authenticated_preflight(*, base_url: str, token: str) -> Dict[str, Any]:
-    status, _payload, latency, error_category = request_json(url=f"{base_url}/api/auth/me", token=token)
-    return {"http_status": status, "latency_ms": round(latency, 2), "error_category": error_category, "fixture_authenticated": status == 200}
+    """Authenticate the fixture without treating one transient read timeout as final.
+
+    This is deliberately limited to the idempotent ``GET /api/auth/me`` preflight.
+    Run creation, confirmation, and execution are never retried here because their
+    side effects require their own idempotency contracts.
+    """
+    attempts = 0
+    total_latency = 0.0
+    status = 599
+    error_category: Optional[str] = None
+    for attempt in range(2):
+        attempts += 1
+        status, _payload, latency, error_category = request_json(
+            url=f"{base_url}/api/auth/me", token=token, timeout_seconds=10.0
+        )
+        total_latency += latency
+        if status == 200 or error_category not in {"clienttimeout", "connect", "tls", "dns"}:
+            break
+        # A short bounded pause lets an already-restarting public worker recover.
+        if attempt == 0:
+            time.sleep(0.25)
+    return {
+        "http_status": status,
+        "latency_ms": round(total_latency, 2),
+        "error_category": error_category,
+        "fixture_authenticated": status == 200,
+        "attempt_count": attempts,
+    }
 
 
 def safe_projection(envelope: Dict[str, Any]) -> Dict[str, Any]:

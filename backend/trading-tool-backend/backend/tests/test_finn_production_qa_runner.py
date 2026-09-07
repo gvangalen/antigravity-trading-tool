@@ -146,7 +146,21 @@ def test_auth_preflight_does_not_persist_auth_payload(monkeypatch):
     module = _module()
     monkeypatch.setattr(module, "request_json", lambda **_kwargs: (200, {"email": "fixture@example.test", "id": 99}, 12.0, None))
     result = module.authenticated_preflight(base_url="https://example.test", token="never-persist")
-    assert result == {"http_status": 200, "latency_ms": 12.0, "error_category": None, "fixture_authenticated": True}
+    assert result == {"http_status": 200, "latency_ms": 12.0, "error_category": None, "fixture_authenticated": True, "attempt_count": 1}
+
+
+def test_auth_preflight_retries_only_a_transient_read_failure(monkeypatch):
+    module = _module()
+    responses = iter([
+        (599, {}, 10_000.0, "clienttimeout"),
+        (200, {"id": 99}, 15.0, None),
+    ])
+    monkeypatch.setattr(module, "request_json", lambda **_kwargs: next(responses))
+    monkeypatch.setattr(module.time, "sleep", lambda _seconds: None)
+
+    result = module.authenticated_preflight(base_url="https://example.test", token="never-persist")
+
+    assert result == {"http_status": 200, "latency_ms": 10015.0, "error_category": None, "fixture_authenticated": True, "attempt_count": 2}
 
 
 def test_missing_fixture_binding_fails_without_invoking_the_issuer(monkeypatch, tmp_path):
