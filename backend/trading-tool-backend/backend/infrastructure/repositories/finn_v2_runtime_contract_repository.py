@@ -255,6 +255,10 @@ class FinnV2RuntimeContractRepository(FinnV2RepositoryTransactionMixin):
         state["terminal_status"] = status
         state["terminal_response_type"] = "failure" if status == "failed" else "response"
         state["terminal_response"] = dict(response or {})
+        # The terminal projection is materialized before the write below, so
+        # reserve that next revision explicitly. Polling/SSE then expose the
+        # same revision that is persisted with this terminal state.
+        state["contract_revision"] = int(row.revision or 0) + 1
         timestamps = dict(state.get("phase_timestamps") or {})
         timestamps.setdefault("created_at", row.created_at.astimezone(timezone.utc).isoformat())
         timestamps["terminal_at"] = datetime.now(timezone.utc).isoformat()
