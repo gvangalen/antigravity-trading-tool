@@ -180,10 +180,30 @@ def authenticated_preflight(*, base_url: str, token: str) -> Dict[str, Any]:
 
 
 def safe_projection(envelope: Dict[str, Any]) -> Dict[str, Any]:
+    """Keep contract provenance while never persisting response or fixture data."""
     trace = envelope.get("runtime_trace") if isinstance(envelope.get("runtime_trace"), dict) else {}
     response = envelope.get("response") if isinstance(envelope.get("response"), dict) else {}
-    allowed = {"initial_operation_id", "final_operation_id", "operation_change_reason", "canonical_target", "target_source", "conversation_reference", "dispatch_id", "attempt_count", "projection_version", "projection_hash", "terminal_response_type"}
-    return {"run_id": envelope.get("run_id"), "status": envelope.get("status"), "mode": envelope.get("mode"), "response_mode": response.get("mode"), "runtime_trace": {key: trace.get(key) for key in allowed if key in trace}}
+    allowed = {
+        "contract_id", "contract_revision", "initial_operation_id", "final_operation_id",
+        "operation_change_reason", "canonical_target", "target_source", "target_type",
+        "conversation_reference", "conversation_reference_kind", "dispatch_id", "attempt_count",
+        "projection_version", "projection_hash", "terminal_response_type", "terminal_status",
+        "requested_mode", "final_mode", "supplied_inputs", "missing_inputs", "proposal_lifecycle",
+        "error_code", "terminal_reason", "timings_ms",
+    }
+    safe_response = {
+        key: response.get(key)
+        for key in ("mode", "proposal_id", "confirmation_required", "verifier_status")
+        if key in response
+    }
+    return {
+        "run_id": envelope.get("run_id"),
+        "conversation_id": envelope.get("conversation_id"),
+        "status": envelope.get("status"),
+        "mode": envelope.get("mode"),
+        "response": safe_response,
+        "runtime_trace": {key: trace.get(key) for key in allowed if key in trace},
+    }
 
 
 def manifest_path(*, manifest_root: Path, manifest_id: str) -> Path:
@@ -273,16 +293,37 @@ def _proposal_id(envelope: Dict[str, Any]) -> Optional[str]:
     return candidate if isinstance(candidate, str) and candidate else None
 
 
+def _logical_conversation_key(case: Dict[str, Any]) -> Optional[str]:
+    """Treat manifest IDs as local aliases, never as production conversation IDs."""
+    value = case.get("conversation_key", case.get("conversation_id"))
+    return value if isinstance(value, str) and value else None
+
+
 def _run_fixture_action(*, base_url: str, token: str, case: Dict[str, Any], terminal: Dict[str, Any]) -> Dict[str, Any]:
     """Exercise only an explicitly enabled non-financial QA fixture action."""
     action_mode = case.get("fixture_action", "read_only")
-    result: Dict[str, Any] = {"mode": action_mode, "publish_status": None, "confirm_status": None, "execute_status": None, "idempotency_replay_status": None}
+    result: Dict[str, Any] = {
+        "mode": action_mode, "proposal": {}, "publish_status": None, "confirm_status": None,
+        "execute_status": None, "idempotency_replay_status": None,
+    }
     if action_mode == "read_only":
         return result
     proposal_id = _proposal_id(terminal)
     if not proposal_id:
         result["error_category"] = "proposal_missing"
         return result
+    proposal_status, proposal, _latency, proposal_error = request_json(
+        url=f"{base_url}/api/assistant/v2/proposals/{proposal_id}", token=token
+    )
+    if proposal_status != 200 or proposal_error:
+        result["error_category"] = proposal_error or "proposal_read_failed"
+        return result
+    result["proposal"] = {
+        key: proposal.get(key)
+        for key in ("proposal_id", "status", "operation_type", "proposal_version", "contract_revision",
+                    "requires_step_up_auth", "payload_hash", "confirmation_required")
+        if key in proposal
+    }
     status, published, _latency, error = request_json(url=f"{base_url}/api/assistant/v2/proposals/{proposal_id}/publish", method="POST", token=token, payload={})
     result["publish_status"] = status
     if status != 200 or error:
@@ -295,7 +336,11 @@ def _run_fixture_action(*, base_url: str, token: str, case: Dict[str, Any], term
     if not confirmation_token or not payload_hash:
         result["error_category"] = "confirmation_material_missing"
         return result
-    confirm_payload = {"confirmation_token": confirmation_token, "expected_payload_hash": payload_hash}
+    confirm_payload = {
+        "idempotency_key": f"qa-confirm-{uuid.uuid4().hex}",
+        "confirmation_token": confirmation_token,
+        "expected_payload_hash": payload_hash,
+    }
     status, _confirmed, _latency, error = request_json(url=f"{base_url}/api/assistant/v2/proposals/{proposal_id}/confirm", method="POST", token=token, payload=confirm_payload)
     result["confirm_status"] = status
     confirmation_token = None
@@ -321,22 +366,44 @@ def _run_fixture_action(*, base_url: str, token: str, case: Dict[str, Any], term
 
 def run_cases(*, base_url: str, token: str, cases: Iterable[Dict[str, Any]]) -> list[Dict[str, Any]]:
     results = []
+    conversations: Dict[str, str] = {}
     for case in cases:
-        request_payload = {"message": case["message"], "conversation_id": case.get("conversation_id"), "workspace_hints": case.get("workspace_hints") or {}, "client_context": case.get("client_context") or {}, "idempotency_key": f"qa-{uuid.uuid4().hex}", "transport": "chat"}
+        conversation_key = _logical_conversation_key(case)
+        request_payload = {
+            "message": case["message"],
+            "workspace_hints": case.get("workspace_hints") or {},
+            "client_context": case.get("client_context") or {},
+            "idempotency_key": f"qa-{uuid.uuid4().hex}",
+            "transport": "chat",
+        }
+        if conversation_key in conversations:
+            request_payload["conversation_id"] = conversations[conversation_key]
         status, created, latency, error_category = request_json(url=f"{base_url}/api/assistant/v2/runs", method="POST", token=token, payload=request_payload, timeout_seconds=20.0)
         run_id = created.get("run_id") if isinstance(created.get("run_id"), str) else None
-        result: Dict[str, Any] = {"case_id": case["case_id"], "create_http_status": status, "run_id": run_id, "create_latency_ms": round(latency, 2), "error_category": error_category}
+        conversation_id = created.get("conversation_id") if isinstance(created.get("conversation_id"), str) else None
+        if conversation_key and conversation_id:
+            conversations[conversation_key] = conversation_id
+        result: Dict[str, Any] = {
+            "case_id": case["case_id"], "conversation_key": conversation_key,
+            "create_http_status": status, "run_id": run_id, "conversation_id": conversation_id,
+            "create_latency_ms": round(latency, 2), "error_category": error_category,
+            "fixture_action": {"mode": case.get("fixture_action", "read_only")},
+        }
         if status != 200 or not run_id:
             results.append(result)
             continue
         terminal = created
         deadline = time.monotonic() + 30.0
+        poll_error: Optional[str] = None
         while time.monotonic() < deadline:
             time.sleep(0.25)
-            _, terminal, _, poll_error = request_json(url=f"{base_url}/api/assistant/v2/runs/{run_id}", token=token)
+            _, polled, _, poll_error = request_json(
+                url=f"{base_url}/api/assistant/v2/runs/{run_id}", token=token, timeout_seconds=5.0
+            )
             if poll_error:
-                result["error_category"] = poll_error
-                break
+                # A transient poll timeout must not erase a terminal SSE envelope.
+                continue
+            terminal = polled
             if terminal.get("status") in TERMINAL_STATUSES:
                 break
         projection = safe_projection(terminal)
@@ -344,12 +411,17 @@ def run_cases(*, base_url: str, token: str, cases: Iterable[Dict[str, Any]]) -> 
             url=f"{base_url}/api/assistant/v2/runs/{run_id}/stream", token=token
         )
         sse_projection = safe_projection(sse_envelope) if sse_envelope else {}
+        if terminal.get("status") not in TERMINAL_STATUSES and sse_envelope:
+            terminal = sse_envelope
+            projection = safe_projection(terminal)
         actual = projection["runtime_trace"].get("final_operation_id") or projection["runtime_trace"].get("initial_operation_id")
         result["terminal"] = projection
         result["sse_terminal"] = sse_projection
         result["polling_sse_equal"] = bool(sse_projection) and projection == sse_projection
-        if sse_error:
-            result["error_category"] = sse_error
+        result["poll_error"] = poll_error
+        result["sse_error"] = sse_error
+        if terminal.get("status") not in TERMINAL_STATUSES:
+            result["error_category"] = sse_error or poll_error or "terminal_timeout"
         result["operation_matches"] = case.get("expected_operation_id") is None or actual == case["expected_operation_id"]
         result["fixture_action"] = _run_fixture_action(base_url=base_url, token=token, case=case, terminal=terminal)
         results.append(result)
@@ -419,8 +491,8 @@ def main() -> int:
                 cases = list(load_manifest(manifest_root=manifest_root, manifest_id=args.manifest_id))
                 report["cases"] = run_cases(base_url=args.base_url.rstrip("/"), token=token, cases=cases)
                 report["safety"]["read_only_profile"] = all(case.get("fixture_action", "read_only") == "read_only" for case in cases)
-                report["safety"]["confirmation_calls"] = sum(1 for item in report["cases"] if item["fixture_action"].get("confirm_status") is not None)
-                report["safety"]["execution_calls"] = sum(1 for item in report["cases"] if item["fixture_action"].get("execute_status") is not None)
+                report["safety"]["confirmation_calls"] = sum(1 for item in report["cases"] if item.get("fixture_action", {}).get("confirm_status") is not None)
+                report["safety"]["execution_calls"] = sum(1 for item in report["cases"] if item.get("fixture_action", {}).get("execute_status") is not None)
                 report["outcome"] = "passed" if all(item.get("create_http_status") == 200 and item.get("terminal", {}).get("status") in TERMINAL_STATUSES and item.get("polling_sse_equal") and item.get("operation_matches") and not item["fixture_action"].get("error_category") for item in report["cases"]) else "failed"
     except (RuntimeError, ValueError) as error:
         report["error_category"] = str(error)
@@ -430,7 +502,11 @@ def main() -> int:
         token = None
         report_path.parent.mkdir(parents=True, exist_ok=True)
         report_path.write_text(json.dumps(redact(report), sort_keys=True, indent=2) + "\n", encoding="utf-8")
-    return 0 if report["outcome"] == "passed" else 1
+    # Content failures are QA evidence, not a runner failure. The workflow must
+    # upload the complete report instead of stopping before the matrix result.
+    if report["outcome"] == "passed" or report["cases"]:
+        return 0
+    return 1
 
 
 if __name__ == "__main__":

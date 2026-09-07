@@ -125,3 +125,21 @@ and every other operation outside the existing safe fixture boundary before a
 proposal route is called. Confirmation tokens remain process-local and are
 never written to the report. An optional `idempotency_replay: true` is allowed
 only for a `safe_execution` case and reuses the same idempotency key once.
+
+## Runtime Matrix Semantics
+
+`conversation_id` in a manifest is a QA-local conversation key, never a
+production identifier. The first turn for a key omits `conversation_id`; the
+gateway creates the conversation and the runner retains only the returned
+identifier in memory for later turns with that same key. This makes parent and
+child runs exercise persisted lineage and guided state without inventing IDs.
+
+For every terminal turn the sanitized artifact retains contract ID and
+revision, initial/final operation, target and lineage references, supplied and
+missing inputs, typed terminal reason, proposal lifecycle and safe timings.
+It never retains response content, evidence bodies, confirmation tokens, or
+fixture identity. Proposal cases first read the proposal metadata and then use
+the required confirmation idempotency key. A case mismatch is reported as QA
+evidence while the runner exits normally so the complete matrix artifact is
+uploaded; malformed runner configuration and pre-case infrastructure failures
+still fail the workflow.

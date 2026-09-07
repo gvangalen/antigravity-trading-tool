@@ -172,8 +172,88 @@ def test_safe_projection_excludes_response_content_and_preserves_contract_metada
     projection = module.safe_projection({
         "run_id": "run-1", "status": "completed", "mode": "READ",
         "response": {"mode": "READ", "content": "private response"},
-        "runtime_trace": {"initial_operation_id": "capability", "final_operation_id": "capability", "private": "omit"},
+        "runtime_trace": {
+            "contract_id": "contract-1", "contract_revision": 4,
+            "initial_operation_id": "capability", "final_operation_id": "capability",
+            "supplied_inputs": {"asset": "BTC"}, "missing_inputs": [],
+            "private": "omit",
+        },
     })
     assert projection["runtime_trace"]["initial_operation_id"] == "capability"
+    assert projection["runtime_trace"]["contract_id"] == "contract-1"
+    assert projection["runtime_trace"]["contract_revision"] == 4
+    assert projection["runtime_trace"]["supplied_inputs"] == {"asset": "BTC"}
     assert "private response" not in json.dumps(projection)
     assert "private" not in projection["runtime_trace"]
+
+
+def test_runner_uses_gateway_created_conversation_for_follow_up(monkeypatch):
+    module = _module()
+    calls = []
+    responses = iter([
+        (200, {"run_id": "run-parent", "conversation_id": "conversation-live", "status": "pending"}, 1.0, None),
+        (200, {"run_id": "run-parent", "conversation_id": "conversation-live", "status": "completed", "mode": "READ", "response": {}, "runtime_trace": {"initial_operation_id": "capability"}}, 1.0, None),
+        (200, {"run_id": "run-child", "conversation_id": "conversation-live", "status": "pending"}, 1.0, None),
+        (200, {"run_id": "run-child", "conversation_id": "conversation-live", "status": "completed", "mode": "READ", "response": {}, "runtime_trace": {"initial_operation_id": "explain_previous_evidence"}}, 1.0, None),
+    ])
+
+    def request(**kwargs):
+        calls.append(kwargs)
+        return next(responses)
+
+    monkeypatch.setattr(module, "request_json", request)
+    monkeypatch.setattr(module, "request_sse_terminal", lambda **kwargs: (
+        {"run_id": "run-parent" if "run-parent" in kwargs["url"] else "run-child", "conversation_id": "conversation-live", "status": "completed", "mode": "READ", "response": {}, "runtime_trace": {"initial_operation_id": "capability" if "run-parent" in kwargs["url"] else "explain_previous_evidence"}},
+        None,
+    ))
+    monkeypatch.setattr(module.time, "sleep", lambda _seconds: None)
+
+    result = module.run_cases(base_url="https://example.test", token="token", cases=[
+        {"case_id": "parent", "message": "Wat kan je?", "conversation_id": "logical-flow", "expected_operation_id": "capability"},
+        {"case_id": "child", "message": "Waarom?", "conversation_id": "logical-flow", "expected_operation_id": "explain_previous_evidence"},
+    ])
+
+    create_calls = [call for call in calls if call.get("method") == "POST"]
+    assert "conversation_id" not in create_calls[0]["payload"]
+    assert create_calls[1]["payload"]["conversation_id"] == "conversation-live"
+    assert result[1]["conversation_id"] == "conversation-live"
+
+
+def test_fixture_confirmation_includes_required_idempotency_key(monkeypatch):
+    module = _module()
+    calls = []
+    responses = iter([
+        (200, {"proposal_id": "proposal-1", "status": "pending", "proposal_version": "v1", "payload_hash": "hash", "confirmation_required": True}, 1.0, None),
+        (200, {"confirmation_token": "secret", "payload_hash": "hash"}, 1.0, None),
+        (200, {}, 1.0, None),
+    ])
+    monkeypatch.setattr(module, "request_json", lambda **kwargs: (calls.append(kwargs) or next(responses)))
+    result = module._run_fixture_action(
+        base_url="https://example.test", token="token",
+        case={"fixture_action": "confirmation"},
+        terminal={"response": {"proposal_id": "proposal-1"}},
+    )
+    confirm_call = calls[2]
+    assert result["confirm_status"] == 200
+    assert confirm_call["payload"]["idempotency_key"].startswith("qa-confirm-")
+    assert "secret" not in json.dumps(result)
+
+
+def test_case_content_failure_is_reported_without_runner_failure(monkeypatch, tmp_path):
+    module = _module()
+    monkeypatch.setattr(module, "release_identity", lambda **_kwargs: {"matches": True})
+    monkeypatch.setattr(module, "issue_fixture_token", lambda **_kwargs: "token")
+    monkeypatch.setattr(module, "authenticated_preflight", lambda **_kwargs: {"fixture_authenticated": True})
+    monkeypatch.setattr(module, "sha256_file", lambda _path: "a" * 64)
+    monkeypatch.setattr(module, "manifest_path", lambda **_kwargs: tmp_path / "manifest.json")
+    monkeypatch.setattr(module, "load_manifest", lambda **_kwargs: [{"case_id": "case", "message": "x"}])
+    monkeypatch.setattr(module, "run_cases", lambda **_kwargs: [{"case_id": "case", "create_http_status": 200, "terminal": {"status": "completed"}, "polling_sse_equal": True, "operation_matches": False, "fixture_action": {"mode": "read_only"}}])
+    report = tmp_path / "report.json"
+    monkeypatch.setattr(module, "parse_args", lambda: type("Args", (), {
+        "release_sha": "a" * 40, "profile": "targeted_regression", "manifest_id": "scope", "run_label": "run", "base_url": "https://example.test", "checkout": str(tmp_path), "release_marker": str(tmp_path / "marker"), "manifest_root": str(tmp_path), "manifest_bundle_path": None, "manifest_private_key_path": str(tmp_path / "key"), "manifest_crypto_script": None, "report_path": str(report), "workflow_run_id": "local",
+    })())
+
+    assert module.main() == 0
+    payload = json.loads(report.read_text(encoding="utf-8"))
+    assert payload["outcome"] == "failed"
+    assert payload["error_category"] is None

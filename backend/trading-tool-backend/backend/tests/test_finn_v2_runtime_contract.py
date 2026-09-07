@@ -115,3 +115,27 @@ def test_terminal_projection_keeps_dispatch_selector_and_fast_path_boundaries():
         "until_fast_path_completed": 10,
         "terminal_persist": 40,
     }
+
+
+def test_terminal_projection_exposes_typed_contract_input_and_reason_metadata():
+    projection = terminal_projection(
+        {
+            "contract_id": "contract-1",
+            "contract_revision": 7,
+            "identity": {"run_id": "run-1", "conversation_id": "conversation-1"},
+            "initial_operation_id": "create_setup",
+            "final_operation_id": "clarify_request",
+            "conversation_reference_kind": "verified_response",
+            "supplied_inputs": {"asset": "BTC"},
+            "missing_inputs": ["timeframe"],
+            "terminal_reason": "missing_required_input",
+        },
+        status="downgraded",
+        mode="CLARIFY",
+        response={},
+    )
+
+    assert projection["contract_revision"] == 7
+    assert projection["supplied_inputs"] == {"asset": "BTC"}
+    assert projection["missing_inputs"] == ["timeframe"]
+    assert projection["terminal_reason"] == "missing_required_input"

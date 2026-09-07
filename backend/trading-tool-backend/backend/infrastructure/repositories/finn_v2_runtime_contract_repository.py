@@ -280,8 +280,10 @@ class FinnV2RuntimeContractRepository(FinnV2RepositoryTransactionMixin):
         }
         if identity != expected_identity or state.get("contract_id") != row.contract_id or state.get("contract_version") != row.contract_version:
             raise RuntimeContractConflictError("runtime_contract_identity_is_immutable")
+        next_revision = int(row.revision or 0) + 1
+        state["contract_revision"] = next_revision
         row.state_json = state
-        row.revision = int(row.revision or 0) + 1
+        row.revision = next_revision
         row.updated_at = datetime.now(timezone.utc)
         await self._flush_with_rollback(operation="update_runtime_contract", entity_type="FinnV2RuntimeContract", run_id=row.run_id)
         return row

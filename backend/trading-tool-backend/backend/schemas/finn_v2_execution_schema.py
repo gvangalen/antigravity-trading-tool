@@ -27,6 +27,8 @@ class FinnV2ProposalSummary(BaseModel):
     evidence_set_hash: str
     requires_step_up_auth: bool
     expires_at: datetime
+    proposal_version: str
+    confirmation_required: bool = True
 
 
 class FinnV2ExecuteProposalRequest(BaseModel):
@@ -48,4 +50,3 @@ class ExecutionResult(BaseModel):
     error_codes: List[str] = Field(default_factory=list)
     started_at: datetime
     completed_at: Optional[datetime] = None
-

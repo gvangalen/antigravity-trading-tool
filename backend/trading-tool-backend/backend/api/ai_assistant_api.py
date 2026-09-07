@@ -3127,6 +3127,7 @@ async def assistant_v2_get_proposal(
 ):
     from backend.infrastructure.repositories.finn_v2_proposal_repository import FinnV2ProposalRepository
     from backend.schemas.finn_v2_execution_schema import FinnV2ProposalSummary
+    from backend.schemas.finn_v2_proposal_schema import PROPOSAL_VERSION
 
     proposal = await FinnV2ProposalRepository(db).get_by_id_for_user(proposal_id=proposal_id, user_id=current_user["id"])
     if proposal is None:
@@ -3142,6 +3143,8 @@ async def assistant_v2_get_proposal(
         evidence_set_hash=proposal.evidence_set_hash,
         requires_step_up_auth=proposal.requires_step_up_auth,
         expires_at=proposal.expires_at,
+        proposal_version=PROPOSAL_VERSION,
+        confirmation_required=True,
     )
 
 
