@@ -52,6 +52,29 @@ explicit reason, persisted before input collection or tool planning.
 generation consumers remain isolated for compatibility; new FINN V2 runs use
 only `create_strategy` and the V2 proposal-confirmation-execution chain.
 
+## Runtime Attachment Audit
+
+The following audit records the existing registry definition used by each
+repaired runtime flow. It is an attachment map, not a second action schema.
+The runtime must resolve exactly one listed operation contract before it
+collects inputs, plans tools, proposes a change, confirms it, or executes it.
+
+| Requested runtime flow | Canonical registry operation | Contract-derived inputs and boundary |
+| --- | --- | --- |
+| Create a setup | `create_setup` | Required `setup_type`, `timeframe`, `name`, `symbol`; V2 proposal, explicit confirmation and `create_setup` adapter. |
+| Generate a strategy | `create_strategy` | Required `setup_id`, `execution_mode`, `base_amount`; optional `name`; V2 proposal, explicit confirmation and `create_strategy` adapter. `generate_strategy` itself is legacy-only and intentionally unavailable to new V2 runs. |
+| Evaluate a plan | `evaluate_plan` | No write inputs; registry-required plan scopes and the model/verifier response contract determine the evidence-grounded read-only result. |
+| Evaluate a setup | `evaluate_setup` | No write inputs; registry-required `active_asset` and `active_setup` scopes determine the evidence-grounded read-only result. |
+| Read indicator configuration | `read_indicator_configuration` | No write inputs; canonical asset plus `indicator_configuration` scope determine the read-only result. |
+| Evaluate a bot | `evaluate_bot` | No write inputs; registry-required bot graph scopes determine the evidence-grounded read-only result. It never implies activation. |
+
+For every row, the runtime retains only the resolved contract identity and
+typed supplied values. It derives `missing_inputs` from that contract's
+`required_inputs`, stores the typed proposal/result/evidence projection, and
+continues confirmation and execution only through the same contract's policy,
+adapter and result path. No guided-state field list, selector validator or
+conversation resolver defines a parallel action schema.
+
 ## Sources, Ownership and Freshness
 
 Source scopes are declared in the registry and resolved by
