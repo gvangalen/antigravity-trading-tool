@@ -166,3 +166,32 @@ def test_orchestrator_outcome_marks_required_invalid_domain_unavailable():
 
     assert result.outcome == "unavailable"
     assert "conflict_asset_setup" in result.unavailable_codes
+
+
+def test_active_setup_without_a_resolvable_setup_is_a_typed_clarification_not_failure():
+    analysis, domain_requirements, tool_plan = _build_inputs(
+        "Welke setup gebruik ik?", operation_id="read_active_setup"
+    )
+    validation = EvidenceValidationResult(
+        validation_id="validation-active-setup", snapshot_id="snapshot-active-setup",
+        run_id="run-1", user_id=7, evidence_set_hash="hash", integrity_status="degraded",
+        domains=[
+            DomainValidationResult(domain="identity_context", status="available", confidence="high"),
+            DomainValidationResult(
+                domain="plan_context", status="unavailable", confidence="none",
+                issues=[EvidenceIssue(
+                    code="setup_not_resolved", severity="warning", domain="plan_context", message="missing setup"
+                )],
+            ),
+        ],
+        issues=[], validated_at=datetime.now(timezone.utc),
+    )
+
+    result = FinnV2OrchestratorOutcomeService().evaluate(
+        run_id="run-1", user_id=7, analysis=analysis, domain_requirements=domain_requirements,
+        tool_plan=tool_plan, snapshot_id="snapshot-active-setup", validation=validation,
+    )
+
+    assert result.outcome == "clarification_required"
+    assert result.selected_clarification is not None
+    assert result.selected_clarification.code == "missing_setup"

@@ -80,6 +80,26 @@ def test_tool_plan_keeps_strategy_and_bot_requests_grounded_without_indicator_ga
     assert "read_indicator_configuration" not in bot_plan.tool_names
 
 
+def test_compound_plan_read_keeps_every_linked_graph_component_in_one_contract():
+    analysis_service = FinnV2RequestAnalysisService()
+    contract = analysis_service.operations.require_supported("read_active_plan")
+    analysis_service.classifier.classify = lambda **_kwargs: SemanticOperationClassification(
+        operation_id="read_active_plan", action=contract.action_polarity.value,
+        domain=contract.domain, discourse="information_request", confidence="high", selector_source="structured",
+    )
+    analysis = analysis_service.analyze(message="Toon mijn setup, strategie en gekoppelde bot met status.")
+    plan = FinnV2ToolPlanService().build(
+        run_id="run-compound-plan", analysis=analysis,
+        domain_plan=FinnV2DomainRequirementService().determine(analysis),
+    )
+
+    assert analysis.request_plan.operation_id == "read_active_plan"
+    assert plan.tool_names == [
+        "read_active_asset", "read_active_setup", "read_linked_strategy",
+        "read_linked_bot", "read_bot_status",
+    ]
+
+
 def test_tool_plan_routes_setup_creation_and_watchlist_actions_through_proposal_inputs():
     analysis_service = FinnV2RequestAnalysisService()
     domain_service = FinnV2DomainRequirementService()
