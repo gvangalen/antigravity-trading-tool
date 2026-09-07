@@ -6,16 +6,27 @@ The unique index is then the authoritative concurrency guard; adapters use
 """
 
 SQL = """
+-- The prior migration added a narrower check before the V1 contract scopes
+-- existed. Release databases can therefore contain legacy aliases that need
+-- normalizing. Remove that old check before rewriting those rows, then add
+-- the complete canonical allowlist atomically in this migration transaction.
+ALTER TABLE finn_v2_evidence_artifacts
+    DROP CONSTRAINT IF EXISTS ck_finn_v2_evidence_information_scope;
+
 UPDATE finn_v2_evidence_artifacts
 SET information_scope = CASE tool_name
     WHEN 'read_asset_scores' THEN 'scores'
     WHEN 'read_portfolio' THEN 'portfolio'
+    WHEN 'read_latest_report' THEN 'latest_report'
+    WHEN 'read_review_history' THEN 'review_history'
     ELSE information_scope
 END
-WHERE tool_name IN ('read_asset_scores', 'read_portfolio');
-
-ALTER TABLE finn_v2_evidence_artifacts
-    DROP CONSTRAINT IF EXISTS ck_finn_v2_evidence_information_scope;
+WHERE tool_name IN (
+    'read_asset_scores',
+    'read_portfolio',
+    'read_latest_report',
+    'read_review_history'
+);
 
 ALTER TABLE finn_v2_evidence_artifacts
     ADD CONSTRAINT ck_finn_v2_evidence_information_scope
@@ -23,7 +34,7 @@ ALTER TABLE finn_v2_evidence_artifacts
         'capability', 'profile', 'preferences', 'active_asset',
         'indicator_configuration', 'market_snapshot', 'watchlist',
         'active_setup', 'linked_strategy', 'linked_bot', 'bot_status',
-        'scores', 'portfolio'
+        'scores', 'portfolio', 'latest_report', 'review_history'
     ));
 
 DELETE FROM watchlists duplicate
