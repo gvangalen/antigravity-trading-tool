@@ -61,6 +61,23 @@ def test_internal_runtime_diagnostic_never_exports_raw_exception_text():
     assert module.classify_internal_issue("unrecognized internal message") == "internal_unclassified"
 
 
+def test_runtime_diagnostic_reuses_one_private_event_loop(monkeypatch):
+    module = _module()
+    module._DIAGNOSTIC_LOOP = None
+    calls = []
+
+    async def diagnostic(run_id):
+        calls.append(run_id)
+        return {"run_error_code": None, "orchestrator_issue_categories": []}
+
+    monkeypatch.setattr(module, "_load_runtime_diagnostic", diagnostic)
+    assert module.runtime_diagnostic("run-one")["orchestrator_issue_categories"] == []
+    first_loop = module._DIAGNOSTIC_LOOP
+    assert module.runtime_diagnostic("run-two")["orchestrator_issue_categories"] == []
+    assert module._DIAGNOSTIC_LOOP is first_loop
+    assert calls == ["run-one", "run-two"]
+
+
 def test_redaction_removes_credentials_and_fixture_identity():
     module = _module()
     report = module.redact({"access_token": "secret", "user_id": 7, "run_id": "safe", "nested": {"email": "x@example.test"}})

@@ -38,6 +38,7 @@ SENSITIVE_KEYS = {"access_token", "authorization", "authorization_header", "cook
 TERMINAL_STATUSES = {"completed", "failed", "canceled", "unavailable", "downgraded", "rejected", "blocked"}
 FIXTURE_ACTION_MODES = {"read_only", "proposal", "confirmation", "safe_execution"}
 INFRASTRUCTURE_ERROR_CATEGORIES = {"dns", "connect", "tls", "clienttimeout", "client", "ssh"}
+_DIAGNOSTIC_LOOP: Optional[asyncio.AbstractEventLoop] = None
 
 
 def classify_internal_issue(value: object) -> str:
@@ -97,8 +98,14 @@ async def _load_runtime_diagnostic(run_id: str) -> Dict[str, Any]:
 
 def runtime_diagnostic(run_id: str) -> Dict[str, Any]:
     """Keep diagnostic read failures separate from the product result."""
+    global _DIAGNOSTIC_LOOP
     try:
-        return asyncio.run(_load_runtime_diagnostic(run_id))
+        # SQLAlchemy's async pool belongs to an event loop. Reusing one loop
+        # for this short-lived runner avoids cross-loop transport failures on
+        # later cases without touching the production application's loop.
+        if _DIAGNOSTIC_LOOP is None:
+            _DIAGNOSTIC_LOOP = asyncio.new_event_loop()
+        return _DIAGNOSTIC_LOOP.run_until_complete(_load_runtime_diagnostic(run_id))
     except Exception:
         return {"diagnostic_status": "unavailable"}
 
