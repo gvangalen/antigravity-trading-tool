@@ -655,7 +655,14 @@ class FinnV2ReasoningFallbackService:
         error_codes: list[str],
     ) -> ReasoningResult:
         evidence_by_tool = {item.tool_name: item for item in context.evidence}
-        active_asset = evidence_by_tool.get("read_active_asset")
+        active_asset = evidence_by_tool.get("read_active_asset") or next(
+            (
+                item
+                for item in context.evidence
+                if getattr(item, "information_scope", None) == "active_asset"
+            ),
+            None,
+        )
         asset = active_asset.facts.get("symbol") if active_asset else None
         request_plan = context.request_plan or {}
         operation_id = request_plan.get("operation_id")

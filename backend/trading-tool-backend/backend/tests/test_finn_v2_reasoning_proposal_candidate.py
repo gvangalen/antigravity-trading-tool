@@ -223,6 +223,70 @@ def test_deterministic_asset_selection_proposal_uses_registry_input_without_prov
     assert result.proposal_candidate.proposed_changes["asset"] == "SOL"
 
 
+def test_deterministic_proposals_find_active_asset_by_contract_scope_not_tool_name():
+    service = FinnV2ReasoningService(session=object())
+    evidence = ReasoningEvidenceItem(
+        evidence_id="Eident",
+        artifact_id="asset-contract-scope",
+        tool_name="read_active_asset",
+        information_scope="active_asset",
+        domain="identity_context",
+        entity_type="asset",
+        asset="BTC",
+        source="workspace",
+        freshness="fresh",
+        confidence="high",
+        facts={"symbol": "BTC"},
+    )
+    # The persisted scope is canonical; the delivery label is not an authority.
+    evidence.tool_name = "identity_context_projection"
+    context = ReasoningContextPackage(
+        run_id="run-contract-scope",
+        user_id=406,
+        user_message="Maak een BTC-swing setup met timeframe 4H en naam Contract scope.",
+        locale="nl-NL",
+        interaction_mode="CREATE_PROPOSAL",
+        orchestrator_result_id="o-contract-scope",
+        snapshot_id="s-contract-scope",
+        validation_id="v-contract-scope",
+        policy_decision_id="p-contract-scope",
+        evidence_set_hash="contract-scope-hash",
+        evidence=[evidence],
+        policy=ReasoningPolicyContext(
+            policy_class="proposal",
+            allowed=True,
+            proposal_allowed=True,
+            confirmation_required=True,
+            step_up_required=False,
+            execution_allowed=False,
+            operation_type="create_setup",
+        ),
+        request_plan={
+            "operation_id": "create_setup",
+            "operation_state": {
+                "collected_inputs": {
+                    "name": "Contract scope",
+                    "symbol": "BTC",
+                    "setup_type": "swing",
+                    "timeframe": "4H",
+                },
+                "missing_required_inputs": [],
+            },
+        },
+    )
+
+    result = service._deterministic_contract_draft(
+        contract=FinnV2OperationRegistry().require_supported("create_setup"),
+        run_id=context.run_id,
+        user_id=context.user_id,
+        context=context,
+        model="deterministic",
+    )
+
+    assert result.proposal_candidate is not None
+    assert result.proposal_candidate.evidence_refs == ["Eident"]
+
+
 def test_complete_proposal_contracts_remain_deterministic():
     service = FinnV2ReasoningService(session=object())
     contract = FinnV2OperationRegistry().require_supported("create_setup")

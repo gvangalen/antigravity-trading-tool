@@ -70,6 +70,32 @@ def test_financial_concept_relevance_uses_the_contract_input_not_a_presentation_
     ) is False
 
 
+def test_asset_selection_relevance_uses_the_shared_catalog_symbol():
+    draft = ResponseDraft(
+        draft_id="draft-select-solana",
+        run_id="run-select-solana",
+        user_id=7,
+        mode="ACTION_PROPOSAL",
+        direct_answer="Ik kan SOL als je actieve asset instellen na je bevestiging.",
+        main_observation="Er is nog niets uitgevoerd.",
+        proposal_candidate=ProposalCandidate(
+            operation_type="select_asset",
+            target_type="asset",
+            asset="SOL",
+            proposed_changes={"asset": "SOL"},
+            impact_summary="SOL wordt geselecteerd na bevestiging.",
+            risk_summary="Er verandert niets zonder bevestiging.",
+            confirmation_required=True,
+        ),
+        evidence_set_hash="hash-select-solana",
+        created_at=datetime.now(timezone.utc),
+    )
+
+    assert FinnV2ResponseVerifierService(session=object())._is_relevant(
+        "Selecteer Solana als mijn actieve asset.", draft
+    ) is True
+
+
 def test_integrated_plan_verifier_requires_a_grounded_strength_and_limitation():
     draft = ResponseDraft(
         draft_id="draft-plan-quality",

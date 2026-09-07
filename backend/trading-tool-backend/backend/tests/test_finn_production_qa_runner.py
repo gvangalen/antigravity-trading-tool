@@ -54,6 +54,13 @@ def test_transport_errors_have_typed_599_categories():
     assert module.classify_transport_error(ssl.SSLError()) == "tls"
 
 
+def test_internal_runtime_diagnostic_never_exports_raw_exception_text():
+    module = _module()
+    assert module.classify_internal_issue('duplicate key value violates unique constraint "secret_name"') == "database_unique_constraint"
+    assert module.classify_internal_issue("ValidationError: private details") == "validation"
+    assert module.classify_internal_issue("unrecognized internal message") == "internal_unclassified"
+
+
 def test_redaction_removes_credentials_and_fixture_identity():
     module = _module()
     report = module.redact({"access_token": "secret", "user_id": 7, "run_id": "safe", "nested": {"email": "x@example.test"}})

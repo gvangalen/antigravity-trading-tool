@@ -49,6 +49,7 @@ from backend.schemas.finn_v2_response_schema import FINN_V2_VERIFIED_RESPONSE_VE
 from backend.schemas.finn_v2_verifier_schema import ClaimVerification, CoverageVerification, SemanticVerificationResult, VerifierResult
 from backend.services.finn_v2_flag_service import FinnV2FlagService
 from backend.services.finn_v2_capability_registry_service import FinnV2CapabilityRegistryService
+from backend.services.asset_catalog_service import resolve_catalog_symbol_in_text
 from backend.services.finn_v2_json_safety import to_json_safe
 from backend.services.finn_v2_proposal_service import FinnV2ProposalService
 from backend.services.finn_v2_reasoning_context_service import FinnV2ReasoningContextService
@@ -1300,6 +1301,13 @@ class FinnV2ResponseVerifierService:
             return True
         lowered = question.lower()
         answer = f"{draft.direct_answer} {draft.main_observation}".lower()
+        candidate = draft.proposal_candidate
+        if candidate is not None and candidate.asset:
+            # The user may name an asset while the contract publishes its
+            # catalog symbol. Compare their canonical forms, not wording.
+            requested_asset = resolve_catalog_symbol_in_text(question)
+            if requested_asset and requested_asset == str(candidate.asset).upper():
+                return True
         provenance = draft.reasoning_provenance or {}
         if (
             normalize_interaction_mode(draft.mode) == "READ"

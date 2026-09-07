@@ -8,6 +8,7 @@ It never prints the fixture token and writes only a redacted report.
 from __future__ import annotations
 
 import argparse
+import asyncio
 import hashlib
 import json
 import os
@@ -37,6 +38,69 @@ SENSITIVE_KEYS = {"access_token", "authorization", "authorization_header", "cook
 TERMINAL_STATUSES = {"completed", "failed", "canceled", "unavailable", "downgraded", "rejected", "blocked"}
 FIXTURE_ACTION_MODES = {"read_only", "proposal", "confirmation", "safe_execution"}
 INFRASTRUCTURE_ERROR_CATEGORIES = {"dns", "connect", "tls", "clienttimeout", "client", "ssh"}
+
+
+def classify_internal_issue(value: object) -> str:
+    """Expose a stable error class without exporting database or exception text."""
+    text = str(value or "").lower()
+    if "unique" in text or "duplicate" in text:
+        return "database_unique_constraint"
+    if "foreign key" in text:
+        return "database_foreign_key"
+    if "not null" in text:
+        return "database_not_null"
+    if "undefinedcolumn" in text or "does not exist" in text or "column" in text:
+        return "database_schema"
+    if "timeout" in text or "deadline" in text:
+        return "timeout"
+    if "validation" in text or "pydantic" in text:
+        return "validation"
+    if "orchestrator_result_exists" in text:
+        return "orchestrator_result_exists"
+    if "reasoning_dependencies_missing" in text:
+        return "reasoning_dependencies_missing"
+    return "internal_unclassified"
+
+
+async def _load_runtime_diagnostic(run_id: str) -> Dict[str, Any]:
+    """Read only typed failure categories for a QA-created run on this host."""
+    from sqlalchemy import select
+
+    from backend.infrastructure.database import async_session_factory
+    from backend.infrastructure.models import FinnV2Run, FinnV2RunTrace
+
+    async with async_session_factory() as session:
+        run = (
+            await session.execute(select(FinnV2Run).where(FinnV2Run.id == run_id).limit(1))
+        ).scalars().first()
+        traces = (
+            await session.execute(
+                select(FinnV2RunTrace)
+                .where(
+                    FinnV2RunTrace.run_id == run_id,
+                    FinnV2RunTrace.event_type == "orchestrator_failed",
+                )
+                .order_by(FinnV2RunTrace.event_order.desc())
+                .limit(1)
+            )
+        ).scalars().first()
+
+    issues = []
+    if traces is not None:
+        payload = traces.payload_json if isinstance(traces.payload_json, dict) else {}
+        issues = list(payload.get("issue_codes") or [])
+    return {
+        "run_error_code": getattr(run, "error_code", None),
+        "orchestrator_issue_categories": sorted({classify_internal_issue(issue) for issue in issues}),
+    }
+
+
+def runtime_diagnostic(run_id: str) -> Dict[str, Any]:
+    """Keep diagnostic read failures separate from the product result."""
+    try:
+        return asyncio.run(_load_runtime_diagnostic(run_id))
+    except Exception:
+        return {"diagnostic_status": "unavailable"}
 
 
 def redact(value: Any) -> Any:
@@ -470,6 +534,8 @@ def run_cases(*, base_url: str, token: str, cases: Iterable[Dict[str, Any]]) -> 
         actual = projection["runtime_trace"].get("final_operation_id") or projection["runtime_trace"].get("initial_operation_id")
         result["terminal"] = projection
         result["sse_terminal"] = sse_projection
+        if terminal.get("status") in {"failed", "downgraded", "rejected", "blocked"}:
+            result["runtime_diagnostic"] = runtime_diagnostic(run_id)
         result["polling_sse_equal"] = bool(sse_projection) and projection == sse_projection
         result["poll_error"] = poll_error
         result["sse_error"] = sse_error
