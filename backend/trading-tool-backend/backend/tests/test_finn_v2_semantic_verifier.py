@@ -92,3 +92,11 @@ def test_flag_defaults_normalize_legacy_mode_aliases():
 
     assert service.flags.semantic_verifier_required_modes() == {"EVALUATE", "CREATE_PROPOSAL", "ACTION_PROPOSAL"}
     assert service.flags.canary_allowed_modes() == {"READ", "EVALUATE"}
+
+
+def test_contract_proposal_drafts_do_not_require_a_second_semantic_provider_call():
+    service = FinnV2ResponseVerifierService(session=object())
+
+    assert service._is_deterministic_contract_response(operation_id="create_setup") is True
+    assert service._is_deterministic_contract_response(operation_id="select_asset") is True
+    assert service._is_deterministic_contract_response(operation_id="evaluate_plan") is False

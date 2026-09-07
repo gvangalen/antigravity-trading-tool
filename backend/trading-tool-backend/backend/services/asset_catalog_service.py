@@ -689,6 +689,28 @@ def resolve_catalog_symbol_in_text(value: object) -> str | None:
     return None
 
 
+def resolve_catalog_symbol_mention(value: object) -> str | None:
+    """Resolve exactly one explicit catalog asset mention within a sentence.
+
+    This is deliberately separate from ``resolve_catalog_symbol_in_text``:
+    callers that already established an asset-bearing user request need a
+    whole-token mention anywhere in that request, not only at its beginning.
+    Ambiguous text remains unresolved rather than guessing a target.
+    """
+    normalized = str(value or "").casefold()
+    if not normalized:
+        return None
+    matches: set[str] = set()
+    for symbol, asset in DEFAULT_ASSET_CATALOG.items():
+        names = (symbol, str(asset.get("display_name") or ""), *(str(alias) for alias in asset.get("aliases") or ()))
+        for name in names:
+            candidate = name.casefold().strip()
+            if candidate and re.search(rf"(?<![a-z0-9]){re.escape(candidate)}(?![a-z0-9])", normalized):
+                matches.add(symbol)
+                break
+    return next(iter(matches)) if len(matches) == 1 else None
+
+
 class AssetCatalogService:
     def __init__(self, session: AsyncSession):
         self.session = session

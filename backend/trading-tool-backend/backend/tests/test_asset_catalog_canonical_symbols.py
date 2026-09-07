@@ -1,4 +1,4 @@
-from backend.services.asset_catalog_service import resolve_catalog_symbol, resolve_catalog_symbol_in_text
+from backend.services.asset_catalog_service import resolve_catalog_symbol, resolve_catalog_symbol_in_text, resolve_catalog_symbol_mention
 
 
 def test_stellar_resolves_to_the_canonical_xlm_symbol():
@@ -15,3 +15,8 @@ def test_gold_resolves_to_the_canonical_xau_symbol_across_supported_languages():
 def test_stock_display_aliases_resolve_to_the_canonical_catalog_symbols():
     assert resolve_catalog_symbol("Apple") == "AAPL"
     assert resolve_catalog_symbol("Microsoft") == "MSFT"
+
+
+def test_catalog_resolves_one_explicit_asset_mention_anywhere_in_a_request():
+    assert resolve_catalog_symbol_mention("Selecteer Solana als mijn actieve asset.") == "SOL"
+    assert resolve_catalog_symbol_mention("Vergelijk Bitcoin met Ethereum.") is None

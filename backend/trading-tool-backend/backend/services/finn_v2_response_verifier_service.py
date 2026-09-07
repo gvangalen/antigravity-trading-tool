@@ -49,7 +49,7 @@ from backend.schemas.finn_v2_response_schema import FINN_V2_VERIFIED_RESPONSE_VE
 from backend.schemas.finn_v2_verifier_schema import ClaimVerification, CoverageVerification, SemanticVerificationResult, VerifierResult
 from backend.services.finn_v2_flag_service import FinnV2FlagService
 from backend.services.finn_v2_capability_registry_service import FinnV2CapabilityRegistryService
-from backend.services.asset_catalog_service import resolve_catalog_symbol_in_text
+from backend.services.asset_catalog_service import resolve_catalog_symbol_mention
 from backend.services.finn_v2_json_safety import to_json_safe
 from backend.services.finn_v2_proposal_service import FinnV2ProposalService
 from backend.services.finn_v2_reasoning_context_service import FinnV2ReasoningContextService
@@ -149,6 +149,7 @@ class FinnV2ResponseVerifierService:
 
         reasoning_record = self._reasoning_record_from_row(reasoning_row)
         orchestrator_result = self._orchestrator_result_from_row(orchestrator_row)
+        request_plan = getattr(getattr(orchestrator_result, "analysis", None), "request_plan", None)
         runtime_contract = None
         if hasattr(self.session, "execute"):
             runtime_contract = await self.runtime_contracts.get_for_run(run_id=run_id)
@@ -205,6 +206,9 @@ class FinnV2ResponseVerifierService:
             draft=draft,
             trace_id=trace_id,
             repair_attempt=0,
+            deterministic_contract_response=self._is_deterministic_contract_response(
+                operation_id=getattr(request_plan, "operation_id", None)
+            ),
         )
         return verified
 
@@ -310,7 +314,19 @@ class FinnV2ResponseVerifierService:
         updated.direct_answer = f"{updated.direct_answer}\n\n" + " ".join(additions)
         return ResponseDraft.parse_obj(updated.dict())
 
-    async def _verify_draft(self, *, run, orchestrator_result, policy, context, validation, draft: ResponseDraft, trace_id: str, repair_attempt: int) -> VerifiedResponse:
+    async def _verify_draft(
+        self,
+        *,
+        run,
+        orchestrator_result,
+        policy,
+        context,
+        validation,
+        draft: ResponseDraft,
+        trace_id: str,
+        repair_attempt: int,
+        deterministic_contract_response: bool = False,
+    ) -> VerifiedResponse:
         await self._append_trace(trace_id=trace_id, run_id=run.id, user_id=run.user_id, event_type="response_verification_started", payload={"draft_id": draft.draft_id, "repair_attempt": repair_attempt, "mode": draft.mode})
         verifier = self._deterministic_verify(
             run=run,
@@ -322,7 +338,11 @@ class FinnV2ResponseVerifierService:
             repair_attempt=repair_attempt,
         )
         semantic_result = SemanticVerificationResult(available=False, passes=True)
-        if verifier.passed and self._should_run_semantic(mode=draft.mode):
+        # Proposal drafts are generated from a validated action contract and
+        # deterministic evidence.  Running a second model verifier here adds
+        # latency without adding authority: policy and deterministic verifier
+        # checks still gate every proposal, confirmation and execution.
+        if verifier.passed and not deterministic_contract_response and self._should_run_semantic(mode=draft.mode):
             await self._append_trace(trace_id=trace_id, run_id=run.id, user_id=run.user_id, event_type="semantic_verification_started", payload={"draft_id": draft.draft_id, "mode": draft.mode})
             semantic_result = self.semantic.verify(
                 mode=draft.mode,
@@ -347,6 +367,7 @@ class FinnV2ResponseVerifierService:
                 draft=repaired,
                 trace_id=trace_id,
                 repair_attempt=repair_attempt + 1,
+                deterministic_contract_response=deterministic_contract_response,
             )
 
         if not verifier.passed:
@@ -1305,7 +1326,7 @@ class FinnV2ResponseVerifierService:
         if candidate is not None and candidate.asset:
             # The user may name an asset while the contract publishes its
             # catalog symbol. Compare their canonical forms, not wording.
-            requested_asset = resolve_catalog_symbol_in_text(question)
+            requested_asset = resolve_catalog_symbol_mention(question)
             if requested_asset and requested_asset == str(candidate.asset).upper():
                 return True
         provenance = draft.reasoning_provenance or {}
@@ -1608,6 +1629,17 @@ class FinnV2ResponseVerifierService:
 
     def _should_run_semantic(self, *, mode: str) -> bool:
         return self.flags.is_semantic_verifier_enabled() or mode in self.flags.semantic_verifier_required_modes()
+
+    @staticmethod
+    def _is_deterministic_contract_response(*, operation_id: Optional[str]) -> bool:
+        """Keep contract-authored proposal drafts off the semantic model path."""
+        if not operation_id:
+            return False
+        try:
+            contract = FinnV2OperationRegistry().require_supported(operation_id)
+        except ValueError:
+            return False
+        return contract.response_strategy == "proposal_draft" or contract.model_policy == "never"
 
     def _all_refs(self, draft: ResponseDraft) -> set[str]:
         # The model's top-level references are part of the structured contract.
