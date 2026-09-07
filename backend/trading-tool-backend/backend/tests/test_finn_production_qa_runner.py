@@ -125,7 +125,7 @@ def test_encrypted_manifest_is_only_staged_after_server_side_decryption(tmp_path
     bundle = tmp_path / "manifest.bundle"
     import subprocess
     subprocess.run(
-        ["python3", str(CRYPTO_SCRIPT_PATH), "encrypt", "--public-key", public_key, "--manifest", str(manifest)],
+        ["python3", str(CRYPTO_SCRIPT_PATH), "encrypt", f"--public-key={public_key}", "--manifest", str(manifest)],
         check=True,
         stdout=bundle.open("w", encoding="utf-8"),
     )
