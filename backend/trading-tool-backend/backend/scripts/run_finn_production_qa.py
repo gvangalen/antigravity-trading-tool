@@ -125,13 +125,28 @@ def _read(path: Path) -> Optional[str]:
         return None
 
 
+def published_build_sha(payload: Dict[str, Any]) -> Optional[str]:
+    """Read the canonical build SHA from either supported public envelope."""
+    build = payload.get("build")
+    nested = build if isinstance(build, dict) else {}
+    value = (
+        payload.get("commit_sha")
+        or payload.get("build_commit")
+        or payload.get("sha")
+        or nested.get("commit_sha")
+        or nested.get("build_commit")
+        or nested.get("sha")
+    )
+    return value if isinstance(value, str) and re.fullmatch(r"[0-9a-f]{40}", value) else None
+
+
 def release_identity(*, release_sha: str, checkout: Path, release_marker: Path, base_url: str) -> Dict[str, Any]:
     head = subprocess.run(["git", "-C", str(checkout), "rev-parse", "HEAD"], check=False, capture_output=True, text=True).stdout.strip() or None
     marker = _read(release_marker)
     health_status, health, health_latency, health_error = request_json(url=f"{base_url}/api/health")
     frontend_status, frontend, frontend_latency, frontend_error = request_json(url=f"{base_url}/build-info.json")
-    backend_sha = health.get("commit_sha") or health.get("build_commit") or health.get("sha")
-    frontend_sha = frontend.get("commit_sha") or frontend.get("build_commit") or frontend.get("sha")
+    backend_sha = published_build_sha(health)
+    frontend_sha = published_build_sha(frontend)
     return {
         "expected_sha": release_sha, "checkout_sha": head, "release_marker_sha": marker,
         "public_backend": {"http_status": health_status, "sha": backend_sha, "latency_ms": round(health_latency, 2), "error_category": health_error},

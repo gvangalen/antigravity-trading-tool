@@ -94,6 +94,27 @@ def test_release_identity_marks_any_sha_mismatch(monkeypatch, tmp_path):
     assert result["matches"] is False
 
 
+def test_release_identity_accepts_nested_backend_build_sha(monkeypatch, tmp_path):
+    module = _module()
+
+    class Completed:
+        stdout = "a" * 40
+
+    responses = iter([
+        (200, {"status": "ok", "build": {"commit_sha": "a" * 40}}, 1.0, None),
+        (200, {"service": "frontend", "commit_sha": "a" * 40}, 1.0, None),
+    ])
+    monkeypatch.setattr(module.subprocess, "run", lambda *_args, **_kwargs: Completed())
+    monkeypatch.setattr(module, "request_json", lambda **_kwargs: next(responses))
+    marker = tmp_path / "LAST_GOOD_COMMIT"
+    marker.write_text("a" * 40, encoding="utf-8")
+
+    result = module.release_identity(release_sha="a" * 40, checkout=tmp_path, release_marker=marker, base_url="https://example.test")
+
+    assert result["public_backend"]["sha"] == "a" * 40
+    assert result["matches"] is True
+
+
 def test_safe_projection_excludes_response_content_and_preserves_contract_metadata():
     module = _module()
     projection = module.safe_projection({
