@@ -186,8 +186,24 @@ class FinnV2OperationStateService:
         text = str(message or "").strip()
         lowered = text.casefold()
         values: dict[str, object] = {}
-        if explicit_asset and "symbol" in contract.required_inputs:
-            values["symbol"] = explicit_asset
+        accepted_inputs = set(contract.required_inputs).union(contract.optional_inputs)
+        if explicit_asset:
+            for field in {"asset", "symbol"}.intersection(accepted_inputs):
+                values[field] = explicit_asset
+        # A structured selector or a caller may provide a compact typed object
+        # in a follow-up. Promote only fields already declared by this contract;
+        # no operation-specific field list is maintained here.
+        structured = self._structured_changed_fields(text)
+        for field in accepted_inputs:
+            if field in structured and not self._is_missing(structured[field]):
+                values[field] = self._canonical_input(field, structured[field])
+        for field in contract.required_inputs:
+            if not field.endswith("_id") or field in values:
+                continue
+            label = re.escape(field[:-3]).replace("_", r"\s*")
+            identifier = re.search(rf"\b{label}(?:\s*(?:id|nummer|number))?\s*#?\s*(\d+)\b", text, re.IGNORECASE)
+            if identifier:
+                values[field] = int(identifier.group(1))
         if contract.operation_id == "create_setup":
             if "dca" in lowered:
                 values["setup_type"] = "dca"

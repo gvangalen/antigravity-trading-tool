@@ -111,6 +111,8 @@ _SOURCES: tuple[InformationSource, ...] = (
     # its linked plan entities. There is no separate PortfolioRepository in
     # this deployment, so advertising one here would create a false authority.
     InformationSource("portfolio", "bot_portfolios,bot_configs,setups,strategies", "BotRepository", SourceClassification.CANONICAL_PRODUCT_STATE, cache_namespace="portfolio:v1", allowed_reader_paths=("BotRepository.get_portfolio_intelligence_context", "PortfolioToolAdapter")),
+    InformationSource("latest_report", "daily_reports", "ReportRepository", SourceClassification.CANONICAL_PRODUCT_STATE, cache_namespace="latest_report:v1", allowed_reader_paths=("ReportRepository.get_latest_report", "ReportToolAdapter")),
+    InformationSource("review_history", "ai_reflections", "AgentRepository", SourceClassification.CANONICAL_PRODUCT_STATE, cache_namespace="review_history:v1", allowed_reader_paths=("AgentRepository.get_reflections_by_category", "ReviewToolAdapter")),
     InformationSource("onboarding_status", "onboarding_steps", "OnboardingRepository", SourceClassification.DERIVED_VIEW, cache_namespace="onboarding_status:v1"),
     InformationSource("conversation_operation_state", "finn_v2_conversations.context_json", "FinnV2ConversationRepository", SourceClassification.CANONICAL_PRODUCT_STATE, cache_namespace="conversation_operation_state:v1"),
     InformationSource("market_snapshot", "market_data", "MarketDataRepository", SourceClassification.DERIVED_VIEW, required_asset_fields=("symbol",), cache_namespace="market_snapshot:v1"),

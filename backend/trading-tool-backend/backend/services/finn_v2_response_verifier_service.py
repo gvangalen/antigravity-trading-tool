@@ -24,15 +24,21 @@ from backend.schemas.finn_v2_orchestrator_schema import ORCHESTRATOR_VERSION, Or
 from backend.schemas.finn_v2_orchestrator_schema import normalize_information_scopes
 from backend.schemas.finn_v2_policy_schema import POLICY_VERSION, FinnV2PolicyDecision
 from backend.schemas.finn_v2_proposal_schema import (
+    AssetSelectionChange,
     BotActivationChange,
+    BotChange,
+    BotCreateChange,
+    BotDeleteChange,
     IndicatorConfigurationChange,
     ManualOrderChange,
     PortfolioRebalanceChange,
     ProposalTarget,
     SetupCreateChange,
     SetupChange,
+    SetupDeleteChange,
     StrategyCreateChange,
     StrategyChange,
+    StrategyDeleteChange,
     TradePlanChange,
     ValidatedProposalInput,
     WatchlistChange,
@@ -1030,10 +1036,13 @@ class FinnV2ResponseVerifierService:
             )
         else:
             target = ProposalTarget(target_type=candidate.target_type, target_id=candidate.target_id, asset=candidate.asset)
-        if operation == "update_indicator_configuration":
+        if operation == "select_asset":
+            target = ProposalTarget(target_type="asset", asset=candidate.asset or changes.get("asset"))
+            change = AssetSelectionChange(asset=str(changes.get("asset") or candidate.asset or ""))
+        elif operation in {"create_indicator_configuration", "update_indicator_configuration", "delete_indicator_configuration"}:
             change = IndicatorConfigurationChange(
                 indicator_id=str(changes.get("indicator_id") or changes.get("indicator") or "indicator"),
-                operation=str(changes.get("operation") or "update"),
+                operation=("add" if operation == "create_indicator_configuration" else "remove" if operation == "delete_indicator_configuration" else "update"),
                 before=changes.get("before"),
                 after=changes.get("after"),
             )
@@ -1047,8 +1056,21 @@ class FinnV2ResponseVerifierService:
             )
         elif operation == "update_setup":
             change = SetupChange(setup_id=int(candidate.target_id or changes.get("setup_id") or 0), changed_fields=dict(changes.get("changed_fields") or changes))
+        elif operation == "delete_setup":
+            change = SetupDeleteChange(setup_id=int(candidate.target_id or changes.get("setup_id") or 0))
         elif operation == "update_strategy":
             change = StrategyChange(strategy_id=int(candidate.target_id or changes.get("strategy_id") or 0), changed_fields=dict(changes.get("changed_fields") or changes))
+        elif operation == "delete_strategy":
+            change = StrategyDeleteChange(strategy_id=int(candidate.target_id or changes.get("strategy_id") or 0))
+        elif operation == "create_bot":
+            change = BotCreateChange(bot_fields=dict(changes.get("bot_fields") or changes.get("changed_fields") or changes))
+        elif operation in {"update_bot", "deactivate_bot"}:
+            fields = dict(changes.get("changed_fields") or changes)
+            if operation == "deactivate_bot":
+                fields = {"is_active": False, "is_live": False}
+            change = BotChange(bot_id=int(candidate.target_id or changes.get("bot_id") or 0), changed_fields=fields)
+        elif operation == "delete_bot":
+            change = BotDeleteChange(bot_id=int(candidate.target_id or changes.get("bot_id") or 0))
         elif operation in {"watchlist_add", "watchlist_remove"}:
             change = WatchlistChange(
                 asset=str(changes.get("asset") or candidate.asset or "").upper(),

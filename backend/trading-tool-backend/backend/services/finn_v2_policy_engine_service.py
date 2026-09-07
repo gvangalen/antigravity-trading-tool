@@ -20,11 +20,20 @@ from backend.services.finn_v2_risk_classification_service import FinnV2RiskClass
 
 class FinnV2PolicyEngineService:
     _ACTION_MATRIX = {
+        "select_asset": ("proposal", ["identity_context"]),
+        "create_indicator_configuration": ("proposal", ["identity_context", "market_context"]),
         "update_indicator_configuration": ("proposal", ["identity_context", "market_context"]),
+        "delete_indicator_configuration": ("proposal", ["identity_context", "market_context"]),
         "create_setup": ("proposal", ["identity_context"]),
         "create_strategy": ("proposal", ["identity_context", "plan_context"]),
         "update_setup": ("proposal", ["plan_context"]),
+        "delete_setup": ("proposal", ["plan_context"]),
         "update_strategy": ("proposal", ["plan_context"]),
+        "delete_strategy": ("proposal", ["plan_context"]),
+        "create_bot": ("paper_action", ["identity_context", "plan_context"]),
+        "update_bot": ("paper_action", ["plan_context", "automation_context"]),
+        "delete_bot": ("paper_action", ["plan_context", "automation_context"]),
+        "deactivate_bot": ("paper_action", ["plan_context", "automation_context"]),
         "watchlist_add": ("proposal", ["identity_context"]),
         "watchlist_remove": ("proposal", ["identity_context"]),
         "save_trade_plan": ("proposal", ["identity_context", "plan_context"]),

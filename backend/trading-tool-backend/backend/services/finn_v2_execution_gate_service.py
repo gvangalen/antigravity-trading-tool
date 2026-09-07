@@ -54,7 +54,24 @@ class FinnV2ExecutionGateService:
             )
 
         proposal_confirmed = bool(confirmation and confirmation.confirmed and proposal.status == "confirmed")
-        allowlisted_safe_operation = proposal.operation_type in {"watchlist_add", "watchlist_remove"}
+        allowlisted_safe_operation = proposal.operation_type in {
+            "select_asset",
+            "create_indicator_configuration",
+            "update_indicator_configuration",
+            "delete_indicator_configuration",
+            "create_setup",
+            "update_setup",
+            "delete_setup",
+            "create_strategy",
+            "update_strategy",
+            "delete_strategy",
+            "create_bot",
+            "update_bot",
+            "delete_bot",
+            "deactivate_bot",
+            "watchlist_add",
+            "watchlist_remove",
+        }
         payload_hash_valid = self._payload_hash(proposal.payload_json) == proposal.payload_hash
         evidence_hash_valid = bool(snapshot and validation and snapshot.evidence_set_hash == proposal.evidence_set_hash and validation.evidence_set_hash == proposal.evidence_set_hash)
         freshness_valid = True
@@ -81,6 +98,16 @@ class FinnV2ExecutionGateService:
             blocking_codes.append("feature_disabled")
         if proposal.operation_type in {"watchlist_add", "watchlist_remove"} and not self.flags.execute_watchlist_changes_enabled():
             blocking_codes.append("watchlist_action_disabled")
+        if proposal.operation_type == "select_asset" and not self.flags.execute_asset_selection_enabled():
+            blocking_codes.append("asset_selection_disabled")
+        if proposal.operation_type in {"create_indicator_configuration", "update_indicator_configuration", "delete_indicator_configuration"} and not self.flags.execute_indicator_changes_enabled():
+            blocking_codes.append("indicator_action_disabled")
+        if proposal.operation_type in {"create_setup", "update_setup", "delete_setup"} and not self.flags.execute_setup_changes_enabled():
+            blocking_codes.append("setup_action_disabled")
+        if proposal.operation_type in {"create_strategy", "update_strategy", "delete_strategy"} and not self.flags.execute_strategy_changes_enabled():
+            blocking_codes.append("strategy_action_disabled")
+        if proposal.operation_type in {"create_bot", "update_bot", "delete_bot", "deactivate_bot"} and not self.flags.execute_bot_changes_enabled():
+            blocking_codes.append("bot_action_disabled")
         if proposal.operation_type == "activate_live_bot" and not self.flags.is_live_actions_enabled():
             blocking_codes.append("live_action_disabled")
         if proposal.operation_type in {"manual_order", "portfolio_rebalance"}:

@@ -4,6 +4,8 @@ from decimal import Decimal
 import pytest
 
 from backend.schemas.finn_v2_proposal_schema import (
+    AssetSelectionChange,
+    BotDeleteChange,
     ManualOrderChange,
     ProposalTarget,
     StrategyCreateChange,
@@ -66,3 +68,31 @@ def test_create_strategy_uses_one_typed_draft_payload_before_confirmation():
 
     assert payload.operation_type == "create_strategy"
     assert payload.change.strategy_fields["setup_id"] == 91
+
+
+def test_contract_extensions_use_typed_proposal_changes():
+    base = {
+        "impact_summary": "summary",
+        "risk_summary": "risk",
+        "source_run_id": "run-1",
+        "source_snapshot_id": "snapshot-1",
+        "source_validation_id": "validation-1",
+        "evidence_set_hash": "hash",
+        "idempotency_key": "d" * 16,
+        "expires_at": datetime.now(timezone.utc) + timedelta(minutes=5),
+    }
+    asset_selection = ValidatedProposalInput(
+        operation_type="select_asset",
+        target=ProposalTarget(target_type="asset", asset="eth"),
+        change=AssetSelectionChange(asset="eth"),
+        **base,
+    )
+    bot_deletion = ValidatedProposalInput(
+        operation_type="delete_bot",
+        target=ProposalTarget(target_type="bot", target_id="17"),
+        change=BotDeleteChange(bot_id=17),
+        **{**base, "idempotency_key": "e" * 16},
+    )
+
+    assert asset_selection.target.asset == "ETH"
+    assert bot_deletion.change.bot_id == 17

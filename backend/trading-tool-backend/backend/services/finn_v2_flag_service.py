@@ -308,6 +308,9 @@ class FinnV2FlagService:
     def execute_indicator_changes_enabled(self) -> bool:
         return self._env_bool("FINN_V2_EXECUTE_INDICATOR_CHANGES", False)
 
+    def execute_asset_selection_enabled(self) -> bool:
+        return self._env_bool("FINN_V2_EXECUTE_ASSET_SELECTION", False)
+
     def execute_setup_changes_enabled(self) -> bool:
         return self._env_bool("FINN_V2_EXECUTE_SETUP_CHANGES", False)
 
@@ -325,6 +328,10 @@ class FinnV2FlagService:
 
     def execute_live_bot_activation_enabled(self) -> bool:
         return self._env_bool("FINN_V2_EXECUTE_LIVE_BOT_ACTIVATION", False)
+
+    def execute_bot_changes_enabled(self) -> bool:
+        """Keep non-live bot mutations explicitly disabled until enabled."""
+        return self._env_bool("FINN_V2_EXECUTE_BOT_CHANGES", False)
 
     def _is_safe_readonly_config(self) -> bool:
         if not self.is_write_blocked():

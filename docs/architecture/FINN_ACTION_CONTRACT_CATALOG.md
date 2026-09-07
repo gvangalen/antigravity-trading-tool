@@ -39,6 +39,7 @@ explicit reason, persisted before input collection or tool planning.
 | `update_strategy` | `CREATE_PROPOSAL`, update | `strategy_id`, `changed_fields` | Owner-scoped linked strategy and typed before/after change | V2 proposal, confirmation, `StrategyService.update_strategy`; partial updates merge into the existing strategy and cannot create one |
 | `watchlist_add` | `ACTION_PROPOSAL`, add | `asset` | Active asset and watchlist evidence | V2 proposal, confirmation and conflict-safe adapter; database uniqueness is `(user_id, symbol)` |
 | `watchlist_remove` | `ACTION_PROPOSAL`, remove | `asset` | Active asset and watchlist evidence | V2 proposal, confirmation and owner-scoped remove adapter |
+| `select_asset` | `ACTION_PROPOSAL`, update | `asset` | Canonical asset and authenticated preference scope | V2 proposal, confirmation and `UserRepository.update_ai_preferences`; disabled by default |
 | `read_scores` | `READ`, read | Active asset from the canonical resolver when available | Existing `ScoreRepository` snapshot via `ScoreToolAdapter` as `AssetScoresData`, including source and as-of information | Read-only; no score recomputation, proposal or write |
 | `explain_score` | `EVALUATE`, evaluate | Active or referenced score context | Stored score evidence with optional profile, preferences, setup, strategy and indicator context | Read-only evidence-grounded explanation; no new score, proposal or write |
 | `read_portfolio` | `READ`, read | Server-issued authenticated user; optional canonical asset filter | Existing owner-scoped `BotRepository.get_portfolio_intelligence_context` through `PortfolioToolAdapter` as `PortfolioData` | Read-only; no rebalance, order or proposal |
@@ -47,6 +48,18 @@ explicit reason, persisted before input collection or tool planning.
 | `evaluate_setup` | `EVALUATE`, evaluate | Contract-scoped setup context | Active setup, asset and optional indicator evidence | Advice-only response |
 | `read_indicator_configuration` | `READ`, read | Canonical active/referenced asset | User indicator configuration | Read-only response |
 | `evaluate_bot` | `EVALUATE`, evaluate | Contract-scoped bot graph | Profile, preferences, setup, strategy, bot and status evidence | Advice-only response; a bot-consequence question does not activate a bot |
+| `create_indicator_configuration` | `CREATE_PROPOSAL`, create | `asset`, `category`, `indicator` | Canonical user indicator configuration | V2 proposal, confirmation and existing `IndicatorConfigService`; disabled by default |
+| `update_indicator_configuration` | `CREATE_PROPOSAL`, update | `asset`, `category`, `indicator`, `changed_fields` | Canonical user indicator configuration | V2 proposal, confirmation and existing `IndicatorConfigService`; disabled by default |
+| `delete_indicator_configuration` | `CREATE_PROPOSAL`, delete | `asset`, `category`, `indicator` | Canonical user indicator configuration | V2 proposal, confirmation and scoped configuration reset; disabled by default |
+| `delete_setup` | `CREATE_PROPOSAL`, delete | `setup_id` | Owner-scoped active setup | V2 proposal, confirmation and `SetupService.delete_setup`; disabled by default |
+| `delete_strategy` | `CREATE_PROPOSAL`, delete | `strategy_id` | Owner-scoped linked strategy | V2 proposal, confirmation and `StrategyService.delete_strategy`; disabled by default |
+| `create_bot` | `CREATE_PROPOSAL`, create | `strategy_id`, `name` | Owner-scoped setup and strategy graph | V2 proposal, confirmation and non-live `BotService.create_bot_config`; disabled by default |
+| `update_bot` | `CREATE_PROPOSAL`, update | `bot_id`, `changed_fields` | Owner-scoped linked bot | V2 proposal, confirmation and non-live `BotService.update_bot_config`; disabled by default |
+| `delete_bot` | `CREATE_PROPOSAL`, delete | `bot_id` | Owner-scoped linked bot | V2 proposal, confirmation and `BotService.delete_bot_config`; disabled by default |
+| `deactivate_bot` | `ACTION_PROPOSAL`, update | `bot_id` | Owner-scoped linked bot and status | V2 proposal, confirmation and a non-live inactive update; disabled by default |
+| `read_latest_report` | `READ`, read | Canonical active/referenced asset | Owner-scoped `daily_reports` metadata through `ReportToolAdapter` | Read-only; no report generation |
+| `read_review_history` | `READ`, read | Canonical active/referenced asset | Owner-scoped `ai_reflections` through `ReviewToolAdapter` | Read-only; no reflection generation |
+| `evaluate_review_history` | `EVALUATE`, evaluate | Canonical active/referenced asset | Released review-history evidence | Advice-only response; no reflection generation |
 
 `generate_strategy` is not a public FINN V2 operation. Existing legacy strategy
 generation consumers remain isolated for compatibility; new FINN V2 runs use
@@ -130,11 +143,9 @@ different operation through a mutable `RequestPlan` field.
 
 The following remain unavailable and are not substituted by a generic action:
 
-- generic setup, strategy or plan reads;
-- indicator CRUD beyond existing supported contracts;
-- bot CRUD, deactivation and implicit live activation;
+- generic setup, strategy or plan reads beyond the existing context-bound reads;
 - portfolio rebalance, manual orders and broker/exchange execution;
-- review-history operations;
+- implicit live activation or creation of a live bot;
 - a copied personal-trading database contract;
 - new transport or SSE infrastructure.
 

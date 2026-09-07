@@ -29,11 +29,20 @@ class ReasoningConfidence(str, Enum):
 
 
 class ProposalOperationType(str, Enum):
+    SELECT_ASSET = "select_asset"
+    CREATE_INDICATOR_CONFIGURATION = "create_indicator_configuration"
     UPDATE_INDICATOR_CONFIGURATION = "update_indicator_configuration"
+    DELETE_INDICATOR_CONFIGURATION = "delete_indicator_configuration"
     CREATE_SETUP = "create_setup"
     CREATE_STRATEGY = "create_strategy"
     UPDATE_SETUP = "update_setup"
+    DELETE_SETUP = "delete_setup"
     UPDATE_STRATEGY = "update_strategy"
+    DELETE_STRATEGY = "delete_strategy"
+    CREATE_BOT = "create_bot"
+    UPDATE_BOT = "update_bot"
+    DELETE_BOT = "delete_bot"
+    DEACTIVATE_BOT = "deactivate_bot"
     WATCHLIST_ADD = "watchlist_add"
     WATCHLIST_REMOVE = "watchlist_remove"
     SAVE_TRADE_PLAN = "save_trade_plan"

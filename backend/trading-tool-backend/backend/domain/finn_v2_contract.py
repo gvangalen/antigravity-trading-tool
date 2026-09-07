@@ -149,6 +149,8 @@ class InformationScope(str, Enum):
     BOT_STATUS = "bot_status"
     SCORES = "scores"
     PORTFOLIO = "portfolio"
+    LATEST_REPORT = "latest_report"
+    REVIEW_HISTORY = "review_history"
 
 
 INFORMATION_SCOPE_ORDER: Tuple[str, ...] = tuple(scope.value for scope in InformationScope)
@@ -186,8 +188,8 @@ TOOL_OUTPUT_SCOPES: Mapping[str, InformationScope] = {
     "read_bot_status": InformationScope.BOT_STATUS,
     "read_watchlist": InformationScope.WATCHLIST,
     "read_portfolio": InformationScope.PORTFOLIO,
-    "read_latest_report": InformationScope.MARKET_SNAPSHOT,
-    "read_review_history": InformationScope.PROFILE,
+    "read_latest_report": InformationScope.LATEST_REPORT,
+    "read_review_history": InformationScope.REVIEW_HISTORY,
 }
 PRIMARY_TOOL_BY_INFORMATION_SCOPE: Mapping[InformationScope, str] = {
     InformationScope.PROFILE: "read_profile",

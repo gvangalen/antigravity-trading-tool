@@ -21,7 +21,7 @@ class FinnV2DomainRequirementService:
         "profile": "identity_context", "preferences": "identity_context", "active_asset": "identity_context",
         "watchlist": "identity_context", "indicator_configuration": "market_context", "scores": "market_context", "market_snapshot": "market_context",
         "active_setup": "plan_context", "linked_strategy": "plan_context", "linked_bot": "automation_context",
-        "bot_status": "automation_context",
+        "bot_status": "automation_context", "latest_report": "report_context", "review_history": "review_context",
     }
 
     def __init__(self) -> None:
@@ -74,7 +74,7 @@ class FinnV2DomainRequirementService:
         information_domain_map = {
             "profile": "identity_context", "preferences": "identity_context", "active_asset": "identity_context",
             "watchlist": "identity_context", "indicator_configuration": "market_context", "scores": "market_context", "market_snapshot": "market_context", "active_setup": "plan_context",
-            "linked_strategy": "plan_context", "linked_bot": "automation_context", "bot_status": "automation_context",
+            "linked_strategy": "plan_context", "linked_bot": "automation_context", "bot_status": "automation_context", "latest_report": "report_context", "review_history": "review_context",
         }
         if analysis.request_plan is not None:
             for scope in analysis.request_plan.required_information_scopes:

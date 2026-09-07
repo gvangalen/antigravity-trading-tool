@@ -8,7 +8,8 @@ from typing import Any, Awaitable, Callable, Optional
 from sqlalchemy import text
 
 from backend.infrastructure.repositories.indicator_config_repository import IndicatorConfigRepository
-from backend.schemas.bot_schema import BotConfigUpdateSchema, TradePlanUpsertSchema
+from backend.infrastructure.repositories.user_repository import UserRepository
+from backend.schemas.bot_schema import BotConfigCreateSchema, BotConfigUpdateSchema, TradePlanUpsertSchema
 from backend.schemas.trading_schema import SetupCreateSchema, StrategyCreateSchema
 from backend.services.bot_service import BotService
 from backend.services.indicator_config_service import IndicatorConfigService
@@ -25,17 +26,27 @@ class FinnV2ActionAdapterRegistry:
         self.session = session
         self.flags = flag_service or FinnV2FlagService()
         self.indicators = IndicatorConfigService(IndicatorConfigRepository(session))
+        self.users = UserRepository(session)
         self.setups = SetupService(session)
         self.strategies = StrategyService(session)
         self.bots = BotService(session)
 
     def get(self, operation_type: str) -> Optional[AdapterFn]:
         mapping = {
+            "select_asset": self._select_asset,
+            "create_indicator_configuration": self._create_indicator_configuration,
             "update_indicator_configuration": self._update_indicator_configuration,
+            "delete_indicator_configuration": self._delete_indicator_configuration,
             "create_setup": self._create_setup,
             "create_strategy": self._create_strategy,
             "update_setup": self._update_setup,
+            "delete_setup": self._delete_setup,
             "update_strategy": self._update_strategy,
+            "delete_strategy": self._delete_strategy,
+            "create_bot": self._create_bot,
+            "update_bot": self._update_bot,
+            "delete_bot": self._delete_bot,
+            "deactivate_bot": self._deactivate_bot,
             "watchlist_add": self._watchlist_add,
             "watchlist_remove": self._watchlist_remove,
             "save_trade_plan": self._save_trade_plan,
@@ -44,11 +55,28 @@ class FinnV2ActionAdapterRegistry:
         }
         return mapping.get(operation_type)
 
+    async def _select_asset(self, user_id: int, payload: dict) -> dict:
+        if not self.flags.execute_asset_selection_enabled():
+            raise ValueError("execution_adapter_unavailable")
+        asset = str(payload["change"].get("asset") or payload.get("target", {}).get("asset") or "").strip().upper()
+        if not asset:
+            raise ValueError("asset_required")
+        user = await self.users.update_ai_preferences(user_id, {"selected_asset": asset})
+        if user is None:
+            raise LookupError("user_not_found")
+        return {"ok": True, "asset": asset, "operation": "select_asset"}
+
+    async def _create_indicator_configuration(self, user_id: int, payload: dict) -> dict:
+        return await self._apply_indicator_configuration(user_id, payload, default_operation="add")
+
     async def postcondition_hash(self, operation_type: str, *, user_id: int, payload: dict) -> str:
         canonical = json.dumps({"operation_type": operation_type, "payload": payload}, sort_keys=True, default=str)
         return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
     async def _update_indicator_configuration(self, user_id: int, payload: dict) -> dict:
+        return await self._apply_indicator_configuration(user_id, payload, default_operation="update")
+
+    async def _apply_indicator_configuration(self, user_id: int, payload: dict, *, default_operation: str) -> dict:
         if not self.flags.execute_indicator_changes_enabled():
             raise ValueError("execution_adapter_unavailable")
         change = payload["change"]
@@ -79,13 +107,31 @@ class FinnV2ActionAdapterRegistry:
                 score_mode=str(after.get("score_mode") or "standard"),
                 weight=float(after.get("weight") or 1.0),
             )
-        return {"ok": True}
+        return {"ok": True, "operation": f"{default_operation}_indicator_configuration", "asset": symbol}
+
+    async def _delete_indicator_configuration(self, user_id: int, payload: dict) -> dict:
+        if not self.flags.execute_indicator_changes_enabled():
+            raise ValueError("execution_adapter_unavailable")
+        change = payload["change"]
+        after = change.get("after") or {}
+        symbol = str(change.get("asset") or payload.get("target", {}).get("asset") or "").strip().upper()
+        category = str(after.get("category") or change.get("category") or "technical").strip()
+        indicator = str(after.get("indicator_id") or change.get("indicator_id") or "").strip()
+        if not symbol or not indicator:
+            raise ValueError("indicator_scope_required")
+        await self.indicators.reset_indicator_rules(category=category, indicator=indicator, user_id=user_id, symbol=symbol)
+        return {"ok": True, "operation": "delete_indicator_configuration", "asset": symbol}
 
     async def _update_setup(self, user_id: int, payload: dict) -> dict:
         if not self.flags.execute_setup_changes_enabled():
             raise ValueError("execution_adapter_unavailable")
         change = payload["change"]
         return await self.setups.update_setup(int(change["setup_id"]), dict(change.get("changed_fields") or {}), user_id)
+
+    async def _delete_setup(self, user_id: int, payload: dict) -> dict:
+        if not self.flags.execute_setup_changes_enabled():
+            raise ValueError("execution_adapter_unavailable")
+        return await self.setups.delete_setup(int(payload["change"]["setup_id"]), user_id)
 
     async def _create_setup(self, user_id: int, payload: dict) -> dict:
         if not self.flags.execute_setup_changes_enabled():
@@ -116,6 +162,42 @@ class FinnV2ActionAdapterRegistry:
             raise ValueError("execution_adapter_unavailable")
         change = payload["change"]
         return await self.strategies.update_strategy(int(change["strategy_id"]), dict(change.get("changed_fields") or {}), user_id)
+
+    async def _delete_strategy(self, user_id: int, payload: dict) -> dict:
+        if not self.flags.execute_strategy_changes_enabled():
+            raise ValueError("execution_adapter_unavailable")
+        return await self.strategies.delete_strategy(int(payload["change"]["strategy_id"]), user_id)
+
+    async def _create_bot(self, user_id: int, payload: dict) -> dict:
+        if not self.flags.execute_bot_changes_enabled():
+            raise ValueError("execution_adapter_unavailable")
+        fields = dict(payload["change"].get("bot_fields") or {})
+        # Live trading remains exclusively behind its own high-risk activation contract.
+        if bool(fields.get("is_live")):
+            raise ValueError("live_bot_creation_not_allowed")
+        fields["is_live"] = False
+        return await self.bots.create_bot_config(BotConfigCreateSchema.parse_obj(fields), user_id)
+
+    async def _update_bot(self, user_id: int, payload: dict) -> dict:
+        if not self.flags.execute_bot_changes_enabled():
+            raise ValueError("execution_adapter_unavailable")
+        change = payload["change"]
+        fields = dict(change.get("changed_fields") or {})
+        if bool(fields.get("is_live")):
+            raise ValueError("live_bot_update_not_allowed")
+        return await self.bots.update_bot_config(int(change["bot_id"]), BotConfigUpdateSchema.parse_obj(fields), user_id)
+
+    async def _delete_bot(self, user_id: int, payload: dict) -> dict:
+        if not self.flags.execute_bot_changes_enabled():
+            raise ValueError("execution_adapter_unavailable")
+        return await self.bots.delete_bot_config(int(payload["change"]["bot_id"]), user_id)
+
+    async def _deactivate_bot(self, user_id: int, payload: dict) -> dict:
+        if not self.flags.execute_bot_changes_enabled():
+            raise ValueError("execution_adapter_unavailable")
+        bot_id = int(payload["change"]["bot_id"])
+        update = BotConfigUpdateSchema.parse_obj({"is_active": False, "is_live": False})
+        return await self.bots.update_bot_config(bot_id, update, user_id)
 
     async def _watchlist_add(self, user_id: int, payload: dict) -> dict:
         if not self.flags.execute_watchlist_changes_enabled():

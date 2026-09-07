@@ -1,5 +1,7 @@
 import asyncio
 
+import pytest
+
 from backend.domain.finn_v2_operation_registry import FinnV2OperationRegistry
 from backend.services.finn_v2_action_adapter_registry import FinnV2ActionAdapterRegistry
 
@@ -64,10 +66,20 @@ def test_supported_v1_write_contracts_resolve_to_exactly_one_registered_adapter(
     contracts = FinnV2OperationRegistry()
 
     for operation_id in (
+        "select_asset",
+        "create_indicator_configuration",
+        "update_indicator_configuration",
+        "delete_indicator_configuration",
         "create_setup",
         "update_setup",
+        "delete_setup",
         "create_strategy",
         "update_strategy",
+        "delete_strategy",
+        "create_bot",
+        "update_bot",
+        "delete_bot",
+        "deactivate_bot",
         "watchlist_add",
         "watchlist_remove",
     ):
@@ -75,3 +87,53 @@ def test_supported_v1_write_contracts_resolve_to_exactly_one_registered_adapter(
         assert contract.confirmation_required is True
         assert contract.execution_adapter == operation_id
         assert adapters.get(contract.execution_adapter) is not None
+
+
+def test_new_mutation_adapters_are_fail_closed_until_their_specific_flag_is_enabled():
+    registry = FinnV2ActionAdapterRegistry(session=object())
+
+    assert registry.flags.execute_asset_selection_enabled() is False
+    assert registry.flags.execute_indicator_changes_enabled() is False
+    assert registry.flags.execute_bot_changes_enabled() is False
+
+
+def test_bot_creation_uses_existing_service_and_refuses_implicit_live_mode():
+    class _Bots:
+        async def create_bot_config(self, payload, user_id):
+            return {"ok": True, "user_id": user_id, "is_live": payload.is_live, "strategy_id": payload.strategy_id}
+
+    registry = FinnV2ActionAdapterRegistry(session=object())
+    registry.flags.execute_bot_changes_enabled = lambda: True
+    registry.bots = _Bots()
+
+    result = asyncio.run(
+        registry._create_bot(
+            390,
+            {"change": {"bot_fields": {"name": "Paper", "strategy_id": 12, "mode": "manual"}}},
+        )
+    )
+
+    assert result == {"ok": True, "user_id": 390, "is_live": False, "strategy_id": 12}
+    with pytest.raises(ValueError, match="live_bot_creation_not_allowed"):
+        asyncio.run(
+            registry._create_bot(
+                390,
+                {"change": {"bot_fields": {"name": "Unsafe", "strategy_id": 12, "is_live": True}}},
+            )
+        )
+
+
+def test_asset_selection_uses_the_owner_scoped_preferences_repository():
+    class _Users:
+        async def update_ai_preferences(self, user_id, preferences):
+            assert user_id == 390
+            assert preferences == {"selected_asset": "ETH"}
+            return object()
+
+    registry = FinnV2ActionAdapterRegistry(session=object())
+    registry.flags.execute_asset_selection_enabled = lambda: True
+    registry.users = _Users()
+
+    result = asyncio.run(registry._select_asset(390, {"change": {"asset": "eth"}}))
+
+    assert result == {"ok": True, "asset": "ETH", "operation": "select_asset"}

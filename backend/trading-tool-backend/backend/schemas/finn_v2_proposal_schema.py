@@ -16,6 +16,7 @@ ProposalStatus = Literal["draft", "pending_confirmation", "confirmed", "invalida
 class ProposalTarget(BaseModel):
     target_type: Literal[
         "indicator_configuration",
+        "asset",
         "setup",
         "strategy",
         "watchlist",
@@ -48,10 +49,31 @@ class IndicatorConfigurationChange(BaseModel):
         extra = "forbid"
 
 
+class AssetSelectionChange(BaseModel):
+    asset: str
+
+    @validator("asset")
+    def _normalize_asset(cls, value: str) -> str:
+        normalized = str(value).strip().upper()
+        if not normalized:
+            raise ValueError("asset_required")
+        return normalized
+
+    class Config:
+        extra = "forbid"
+
+
 class SetupChange(BaseModel):
     setup_id: int
     changed_fields: Dict[str, Any]
     before: Optional[Dict[str, Any]] = None
+
+    class Config:
+        extra = "forbid"
+
+
+class SetupDeleteChange(BaseModel):
+    setup_id: int
 
     class Config:
         extra = "forbid"
@@ -77,6 +99,13 @@ class StrategyChange(BaseModel):
     strategy_id: int
     changed_fields: Dict[str, Any]
     before: Optional[Dict[str, Any]] = None
+
+    class Config:
+        extra = "forbid"
+
+
+class StrategyDeleteChange(BaseModel):
+    strategy_id: int
 
     class Config:
         extra = "forbid"
@@ -109,6 +138,29 @@ class BotActivationChange(BaseModel):
     bot_id: int
     requested_mode: Literal["paper", "live"]
     current_is_live: bool
+
+    class Config:
+        extra = "forbid"
+
+
+class BotCreateChange(BaseModel):
+    bot_fields: Dict[str, Any]
+
+    class Config:
+        extra = "forbid"
+
+
+class BotChange(BaseModel):
+    bot_id: int
+    changed_fields: Dict[str, Any]
+    before: Optional[Dict[str, Any]] = None
+
+    class Config:
+        extra = "forbid"
+
+
+class BotDeleteChange(BaseModel):
+    bot_id: int
 
     class Config:
         extra = "forbid"
@@ -153,14 +205,20 @@ class ManualOrderChange(BaseModel):
 
 
 ProposalChangeUnion = Union[
+    AssetSelectionChange,
     IndicatorConfigurationChange,
     SetupCreateChange,
     StrategyCreateChange,
     SetupChange,
+    SetupDeleteChange,
     StrategyChange,
+    StrategyDeleteChange,
     WatchlistChange,
     TradePlanChange,
     BotActivationChange,
+    BotCreateChange,
+    BotChange,
+    BotDeleteChange,
     PortfolioRebalanceChange,
     ManualOrderChange,
 ]
@@ -184,11 +242,20 @@ class ValidatedProposalInput(BaseModel):
         operation = values.get("operation_type")
         change = values.get("change")
         expected = {
+            "select_asset": AssetSelectionChange,
+            "create_indicator_configuration": IndicatorConfigurationChange,
             "update_indicator_configuration": IndicatorConfigurationChange,
+            "delete_indicator_configuration": IndicatorConfigurationChange,
             "create_setup": SetupCreateChange,
             "create_strategy": StrategyCreateChange,
             "update_setup": SetupChange,
+            "delete_setup": SetupDeleteChange,
             "update_strategy": StrategyChange,
+            "delete_strategy": StrategyDeleteChange,
+            "create_bot": BotCreateChange,
+            "update_bot": BotChange,
+            "delete_bot": BotDeleteChange,
+            "deactivate_bot": BotChange,
             "watchlist_add": WatchlistChange,
             "watchlist_remove": WatchlistChange,
             "save_trade_plan": TradePlanChange,

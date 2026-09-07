@@ -178,3 +178,26 @@ def test_workflow_contracts_are_not_business_execution_adapters():
     assert confirmation.proposal_type == "confirmation"
     assert execution.execution_adapter is None
     assert execution.proposal_type == "execution"
+
+
+def test_completed_contract_extensions_have_a_single_confirmed_write_boundary():
+    registry = FinnV2OperationRegistry()
+    operations = {
+        "select_asset": ("asset",),
+        "create_indicator_configuration": ("asset", "category", "indicator"),
+        "update_indicator_configuration": ("asset", "category", "indicator", "changed_fields"),
+        "delete_indicator_configuration": ("asset", "category", "indicator"),
+        "delete_setup": ("setup_id",),
+        "delete_strategy": ("strategy_id",),
+        "create_bot": ("strategy_id", "name"),
+        "update_bot": ("bot_id", "changed_fields"),
+        "delete_bot": ("bot_id",),
+        "deactivate_bot": ("bot_id",),
+    }
+
+    for operation_id, required_inputs in operations.items():
+        contract = registry.require_supported(operation_id)
+        assert contract.required_inputs == required_inputs
+        assert contract.proposal_type == operation_id
+        assert contract.execution_adapter == operation_id
+        assert contract.confirmation_required is True

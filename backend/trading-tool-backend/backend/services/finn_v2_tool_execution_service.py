@@ -82,7 +82,7 @@ class FinnV2ToolExecutionService:
         self.watchlist_adapter = WatchlistToolAdapter(session)
         self.portfolio_adapter = PortfolioToolAdapter(session)
         self.report_adapter = ReportToolAdapter(session)
-        self.review_adapter = ReviewToolAdapter()
+        self.review_adapter = ReviewToolAdapter(session)
 
     async def execute_shadow_tool_chain(self, *, run_id: str, user_id: int) -> List[ToolExecutionResult]:
         if not self.flags.is_tool_shadow_execution_enabled():
@@ -561,7 +561,7 @@ class FinnV2ToolExecutionService:
             asset_state = await self._ensure_asset(user_id=user_id, selector=selector, run=run, shared_state=shared_state)
             return await self.report_adapter.execute(user_id=user_id, asset=asset_state["asset"], selector=selector)
         if tool_name == "read_review_history":
-            return await self.review_adapter.execute()
+            return await self.review_adapter.execute(user_id=user_id, selector=selector)
         raise LookupError("tool_unknown")
 
     async def _ensure_asset(self, *, user_id: int, selector: Dict[str, Any], run, shared_state: Dict[str, Any]) -> Dict[str, Any]:

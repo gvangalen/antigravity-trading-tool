@@ -942,6 +942,25 @@ def test_setup_state_leaves_actually_missing_type_and_timeframe_missing():
     assert state.missing_required_inputs == ["setup_type", "timeframe"]
 
 
+def test_contract_state_collects_registry_declared_asset_and_identifier_slots_generically():
+    registry = FinnV2OperationRegistry()
+    service = FinnV2OperationStateService()
+
+    asset = service.explicit_inputs(
+        contract=registry.require_supported("select_asset"),
+        message="Selecteer ETH als mijn vaste asset.",
+        explicit_asset="ETH",
+    )
+    bot = service.explicit_inputs(
+        contract=registry.require_supported("deactivate_bot"),
+        message="Deactiveer bot 17.",
+        explicit_asset=None,
+    )
+
+    assert asset == {"asset": "ETH"}
+    assert bot == {"bot_id": 17}
+
+
 def test_natural_dutch_position_setup_is_a_supplied_type_not_a_missing_slot():
     result = SERVICE.analyze(message="Werk een nieuwe positie-opzet voor SOL uit.")
 
