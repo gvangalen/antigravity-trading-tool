@@ -1,5 +1,6 @@
 import asyncio
 
+from backend.domain.finn_v2_operation_registry import FinnV2OperationRegistry
 from backend.services.finn_v2_action_adapter_registry import FinnV2ActionAdapterRegistry
 
 
@@ -55,3 +56,22 @@ def test_create_strategy_adapter_delegates_to_existing_strategy_service():
 
     assert result["setup_id"] == 12
     assert result["user_id"] == 390
+
+
+def test_supported_v1_write_contracts_resolve_to_exactly_one_registered_adapter():
+    """Action fields stay in the registry; adapters only execute that contract."""
+    adapters = FinnV2ActionAdapterRegistry(session=object())
+    contracts = FinnV2OperationRegistry()
+
+    for operation_id in (
+        "create_setup",
+        "update_setup",
+        "create_strategy",
+        "update_strategy",
+        "watchlist_add",
+        "watchlist_remove",
+    ):
+        contract = contracts.require_supported(operation_id)
+        assert contract.confirmation_required is True
+        assert contract.execution_adapter == operation_id
+        assert adapters.get(contract.execution_adapter) is not None
