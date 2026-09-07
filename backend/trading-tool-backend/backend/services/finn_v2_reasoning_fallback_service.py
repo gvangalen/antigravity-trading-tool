@@ -737,6 +737,70 @@ class FinnV2ReasoningFallbackService:
                 created_at=datetime.now(timezone.utc),
             )
 
+        if operation_id == "select_asset" and context.policy.operation_type == "select_asset":
+            selected_asset = str((operation_state.get("collected_inputs") or {}).get("asset") or "").upper()
+            if not selected_asset:
+                from backend.services.finn_v2_operation_state_service import FinnV2OperationStateService
+                question = FinnV2OperationStateService.clarification_question("asset")
+                return ReasoningResult(
+                    reasoning_result_id=f"finn-v2-reasoning-{uuid.uuid4().hex}",
+                    run_id=run_id,
+                    user_id=user_id,
+                    mode="CLARIFICATION",
+                    direct_answer=question,
+                    main_observation="Er ontbreekt nog een doelasset voor het selectievoorstel.",
+                    supporting_points=[],
+                    claims=[],
+                    uncertainty_summary="Ik verander geen actieve asset zonder een expliciete doelasset.",
+                    uncertainty_codes=list(error_codes),
+                    next_step=None,
+                    follow_up_question=question,
+                    proposal_candidate=None,
+                    evidence_refs_used=[],
+                    model=model,
+                    created_at=datetime.now(timezone.utc),
+                )
+
+            return ReasoningResult(
+                reasoning_result_id=f"finn-v2-reasoning-{uuid.uuid4().hex}",
+                run_id=run_id,
+                user_id=user_id,
+                mode="ACTION_PROPOSAL",
+                direct_answer=f"Ik kan {selected_asset} als je actieve asset instellen na je bevestiging.",
+                main_observation="De actieve asset verandert pas na expliciete confirmation; er is nog niets uitgevoerd.",
+                supporting_points=[],
+                claims=[],
+                uncertainty_summary="Bevestiging blijft vereist voordat je actieve asset wordt gewijzigd.",
+                uncertainty_codes=list(error_codes),
+                next_step=ReasoningNextStep(
+                    title="Bevestig de assetselectie",
+                    instruction=f"Bevestig dat je {selected_asset} als actieve asset wilt gebruiken.",
+                    operation_type="select_asset",
+                    target_entity_type="asset",
+                    target_entity_id=selected_asset,
+                    requires_confirmation=True,
+                ),
+                follow_up_question=None,
+                proposal_candidate=ProposalCandidate(
+                    operation_type="select_asset",
+                    target_type="asset",
+                    target_id=None,
+                    asset=selected_asset,
+                    proposed_changes={
+                        "proposal_status": "draft",
+                        "generation_source": "deterministic_validated",
+                        "asset": selected_asset,
+                    },
+                    evidence_refs=[],
+                    impact_summary=f"{selected_asset} wordt je actieve asset na bevestiging.",
+                    risk_summary="Er wordt geen assetselectie uitgevoerd zonder expliciete confirmation.",
+                    confirmation_required=True,
+                ),
+                evidence_refs_used=[],
+                model=model,
+                created_at=datetime.now(timezone.utc),
+            )
+
         if operation_id and operation_id != "create_setup":
             return self.unavailable_draft(
                 run_id=run_id,

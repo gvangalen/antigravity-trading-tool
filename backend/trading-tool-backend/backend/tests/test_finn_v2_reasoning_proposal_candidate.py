@@ -176,6 +176,52 @@ def test_deterministic_setup_proposal_uses_completed_typed_state_without_write()
     assert "4H" in result.direct_answer
 
 
+def test_deterministic_asset_selection_proposal_uses_registry_input_without_provider():
+    service = FinnV2ReasoningService(session=object())
+    context = ReasoningContextPackage(
+        run_id="run-select-asset",
+        user_id=406,
+        user_message="Selecteer Solana als mijn actieve asset.",
+        locale="nl-NL",
+        interaction_mode="ACTION_PROPOSAL",
+        orchestrator_result_id="o-select-asset",
+        snapshot_id="s-select-asset",
+        validation_id="v-select-asset",
+        policy_decision_id="p-select-asset",
+        evidence_set_hash="select-asset-hash",
+        policy=ReasoningPolicyContext(
+            policy_class="proposal",
+            allowed=True,
+            proposal_allowed=True,
+            confirmation_required=True,
+            step_up_required=False,
+            execution_allowed=False,
+            operation_type="select_asset",
+        ),
+        request_plan={
+            "operation_id": "select_asset",
+            "operation_state": {
+                "collected_inputs": {"asset": "SOL"},
+                "missing_required_inputs": [],
+            },
+        },
+    )
+
+    result = service._deterministic_contract_draft(
+        contract=FinnV2OperationRegistry().require_supported("select_asset"),
+        run_id=context.run_id,
+        user_id=context.user_id,
+        context=context,
+        model="deterministic",
+    )
+
+    assert result.mode == "ACTION_PROPOSAL"
+    assert result.proposal_candidate is not None
+    assert result.proposal_candidate.operation_type == "select_asset"
+    assert result.proposal_candidate.asset == "SOL"
+    assert result.proposal_candidate.proposed_changes["asset"] == "SOL"
+
+
 def test_complete_proposal_contracts_remain_deterministic():
     service = FinnV2ReasoningService(session=object())
     contract = FinnV2OperationRegistry().require_supported("create_setup")
