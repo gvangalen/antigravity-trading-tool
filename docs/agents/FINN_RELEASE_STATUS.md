@@ -38,6 +38,7 @@ short; link artifacts rather than copying reports or chat history.
 | Gate | Status | Evidence |
 | --- | --- | --- |
 | Focused action-contract regressions | `PASS` | `75 passed` across registry, resolver, request preprocessing, runtime contract and portfolio adapter coverage on `1bbab6bc`. |
+| Non-sealed selector registry | `PASS` | `120` development, regression and published-regression cases validated against the current registry; no sealed QA holdout was loaded. |
 | Local FINN V2 schema health | `PASS` | Canonical local PostgreSQL migration sequence applied twice; `python3 -m backend.scripts.check_finn_v2_schema` passed on `1bbab6bc`. |
 | Full canonical backend suite | `PASS` | `1740 passed, 3 skipped` from repository root on `1bbab6bc`. |
 | Frontend contract checks | `PASS` | `npm run typecheck`, `npm run test:commands` (`5 passed`), `npm run test:i18n` (`7 passed`) and `npm run build` passed on `1bbab6bc`. |
