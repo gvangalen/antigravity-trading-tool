@@ -34,6 +34,9 @@ def test_workflow_is_manual_protected_and_serialized():
     assert "StrictHostKeyChecking=yes" in workflow
     assert "manifest_key" in workflow
     assert "manifest_bundle" in workflow
+    assert "allow_fixture_actions" in workflow
+    assert "allow_safe_fixture_execution" in workflow
+    assert "Safe fixture execution requires fixture-action authorization." in workflow
 
 
 def test_workflow_never_exports_fixture_or_bearer_token():
@@ -79,6 +82,14 @@ def test_manifest_allows_explicitly_authorized_safe_fixture_execution(monkeypatc
     monkeypatch.setenv("FINN_QA_ALLOW_FIXTURE_ACTIONS", "1")
     monkeypatch.setenv("FINN_QA_ALLOW_FIXTURE_EXECUTION", "1")
     assert list(module.load_manifest(manifest_root=manifest_dir, manifest_id="safe"))[0]["fixture_action"] == "safe_execution"
+
+
+def test_workflow_scopes_fixture_authorization_to_the_runner_subprocess():
+    workflow = WORKFLOW_PATH.read_text(encoding="utf-8")
+    assert "export FINN_QA_ALLOW_FIXTURE_ACTIONS=0" in workflow
+    assert "export FINN_QA_ALLOW_FIXTURE_EXECUTION=0" in workflow
+    assert "allow_fixture_actions=\"$9\"" in workflow
+    assert "allow_safe_fixture_execution=\"${10}\"" in workflow
 
 
 def test_encrypted_manifest_is_only_staged_after_server_side_decryption(tmp_path):

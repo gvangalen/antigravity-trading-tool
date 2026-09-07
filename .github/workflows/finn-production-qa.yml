@@ -34,6 +34,16 @@ on:
         required: false
         default: ''
         type: string
+      allow_fixture_actions:
+        description: Permit QA-fixture proposals and confirmations for this protected run
+        required: true
+        default: false
+        type: boolean
+      allow_safe_fixture_execution:
+        description: Permit allowlisted non-financial QA-fixture execution for this protected run
+        required: true
+        default: false
+        type: boolean
 
 permissions:
   contents: read
@@ -67,6 +77,8 @@ jobs:
           MANIFEST_ID: ${{ inputs.manifest_id }}
           RUN_LABEL: ${{ inputs.run_label }}
           MANIFEST_BUNDLE: ${{ inputs.manifest_bundle }}
+          ALLOW_FIXTURE_ACTIONS: ${{ inputs.allow_fixture_actions }}
+          ALLOW_SAFE_FIXTURE_EXECUTION: ${{ inputs.allow_safe_fixture_execution }}
         run: |
           set -euo pipefail
           [[ "$RELEASE_SHA" =~ ^[0-9a-f]{40}$ ]]
@@ -74,6 +86,16 @@ jobs:
           [[ "$MANIFEST_ID" =~ ^[a-z0-9][a-z0-9._-]{0,80}$ ]]
           [[ "$RUN_LABEL" =~ ^[A-Za-z0-9][A-Za-z0-9._-]{0,80}$ ]]
           [ "${#MANIFEST_BUNDLE}" -le 65535 ]
+          [[ "$ALLOW_FIXTURE_ACTIONS" =~ ^(true|false)$ ]]
+          [[ "$ALLOW_SAFE_FIXTURE_EXECUTION" =~ ^(true|false)$ ]]
+          if [ "$ALLOW_SAFE_FIXTURE_EXECUTION" = "true" ] && [ "$ALLOW_FIXTURE_ACTIONS" != "true" ]; then
+            echo "Safe fixture execution requires fixture-action authorization." >&2
+            exit 1
+          fi
+          if [[ "$QA_PROFILE" =~ ^(auth_preflight|manifest_key)$ ]] && { [ "$ALLOW_FIXTURE_ACTIONS" = "true" ] || [ "$ALLOW_SAFE_FIXTURE_EXECUTION" = "true" ]; }; then
+            echo "Fixture actions are invalid for a non-case QA profile." >&2
+            exit 1
+          fi
           git fetch origin main --quiet
           git merge-base --is-ancestor "$RELEASE_SHA" origin/main
           test "$(git rev-parse HEAD)" = "$RELEASE_SHA"
@@ -107,6 +129,8 @@ jobs:
           MANIFEST_ID: ${{ inputs.manifest_id }}
           RUN_LABEL: ${{ inputs.run_label }}
           MANIFEST_BUNDLE: ${{ inputs.manifest_bundle }}
+          ALLOW_FIXTURE_ACTIONS: ${{ inputs.allow_fixture_actions }}
+          ALLOW_SAFE_FIXTURE_EXECUTION: ${{ inputs.allow_safe_fixture_execution }}
           QA_HOST: ${{ steps.connection.outputs.host }}
           QA_REMOTE_DIR: ${{ steps.connection.outputs.remote_dir }}
         run: |
@@ -122,7 +146,7 @@ jobs:
           else
             remote_bundle=""
           fi
-          remote_command=$(printf 'bash -s -- %q %q %q %q %q %q %q %q' "$RELEASE_SHA" "$QA_PROFILE" "$MANIFEST_ID" "$RUN_LABEL" "$QA_REMOTE_DIR" "$remote_report" "$GITHUB_RUN_ID" "$remote_bundle")
+          remote_command=$(printf 'bash -s -- %q %q %q %q %q %q %q %q %q %q' "$RELEASE_SHA" "$QA_PROFILE" "$MANIFEST_ID" "$RUN_LABEL" "$QA_REMOTE_DIR" "$remote_report" "$GITHUB_RUN_ID" "$remote_bundle" "$ALLOW_FIXTURE_ACTIONS" "$ALLOW_SAFE_FIXTURE_EXECUTION")
           set +e
           ssh -i "$RUNNER_TEMP/finn-production-qa-key" -o UserKnownHostsFile="$RUNNER_TEMP/finn-production-qa-known-hosts" -o BatchMode=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=15 "ubuntu@${QA_HOST}" "$remote_command" <<'REMOTE'
           set -euo pipefail
@@ -135,11 +159,22 @@ jobs:
           report_path="$6"
           workflow_run_id="$7"
           manifest_bundle_path="$8"
+          allow_fixture_actions="$9"
+          allow_safe_fixture_execution="${10}"
           cd "$remote_dir"
           test "$(git rev-parse HEAD)" = "$release_sha"
           set -a
           source "$HOME/.secrets/trading.env"
           set +a
+          # These are scoped to this QA subprocess, never the application processes.
+          export FINN_QA_ALLOW_FIXTURE_ACTIONS=0
+          export FINN_QA_ALLOW_FIXTURE_EXECUTION=0
+          if [ "$allow_fixture_actions" = "true" ]; then
+            export FINN_QA_ALLOW_FIXTURE_ACTIONS=1
+          fi
+          if [ "$allow_safe_fixture_execution" = "true" ]; then
+            export FINN_QA_ALLOW_FIXTURE_EXECUTION=1
+          fi
           runner_args=(
               --release-sha "$release_sha" \
               --profile "$qa_profile" \

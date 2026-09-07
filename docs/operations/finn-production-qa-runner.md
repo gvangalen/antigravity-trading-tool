@@ -25,6 +25,8 @@ The manual workflow `.github/workflows/finn-production-qa.yml` requires:
 | `manifest_id` | Approved QA-owned manifest identifier. `auth_preflight` uses `none`. |
 | `run_label` | Safe trace label; no user, fixture, or credential data. |
 | `manifest_bundle` | Optional encrypted QA-owned manifest. It is decrypted only on the protected host. |
+| `allow_fixture_actions` | Explicit per-run permission for allowlisted QA-fixture proposals and confirmations; defaults to `false`. |
+| `allow_safe_fixture_execution` | Explicit per-run permission for the existing non-financial fixture-execution allowlist; defaults to `false` and requires `allow_fixture_actions=true`. |
 
 The profile defines only the execution class. The active QA goal remains the
 authority for scope, acceptance criteria, and whether a sealed QA manifest is
@@ -50,9 +52,11 @@ allowed. The workflow never silently substitutes a sealed 32-case matrix.
 - `manifest_key` publishes only the server's manifest-encryption public key in
   a sanitized artifact. The private key remains in the server secret directory.
   The runner never accepts plaintext manifests through workflow inputs.
-- Runtime cases remain read-only unless a later QA-goal and server-side policy
-  explicitly authorize fixture writes. Live trading and live-bot activation
-  are never allowed by this runner.
+- Runtime cases remain read-only unless the active QA goal explicitly authorizes
+  them and the protected workflow run sets the relevant per-run authorization
+  input. Those values are exported only to the runner subprocess; they do not
+  change production application configuration. Live trading and live-bot
+  activation are never allowed by this runner.
 - Reports contain only sanitized metadata: release identity, profile, case ID,
   run ID, operation/target metadata, lifecycle, timing, dispatch/attempt
   metadata, and safe safety counters. Headers, response contents, fixture
@@ -108,9 +112,11 @@ scope.
 
 Each manifest case has `fixture_action`, defaulting to `read_only`. The only
 other accepted values are `proposal`, `confirmation`, and `safe_execution`.
-They are executable only when the protected host has explicitly set
-`FINN_QA_ALLOW_FIXTURE_ACTIONS=1`; `safe_execution` additionally requires
-`FINN_QA_ALLOW_FIXTURE_EXECUTION=1`.
+They are executable only when the active QA goal authorizes them and the
+protected workflow dispatch sets `allow_fixture_actions=true`;
+`safe_execution` additionally requires
+`allow_safe_fixture_execution=true`. The values are process-scoped runner
+policy, not persistent production configuration.
 
 Every non-read-only case must name an `expected_operation_id` in the existing
 `SAFE_FIXTURE_EXECUTION_OPERATION_TYPES` execution-gate allowlist. The runner
