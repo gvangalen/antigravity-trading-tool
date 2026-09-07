@@ -67,5 +67,6 @@ procedure. Never delete or alter records to hide a failed validation.
 Operations owns the server-side fixture bindings. Build may use only
 `FINN_BUILD_SMOKE_USER_ID` for generic non-sealed smoke cases; QA may use only
 `FINN_QA_USER_ID` for goal-defined independent QA. Neither binding grants
-Build access to the QA fixture or QA-exclusive sealed holdout. Both use the
-bounded procedure in `finn-authenticated-runtime-gate.md`.
+Build access to the QA fixture or QA-exclusive sealed holdout. QA uses the
+protected [FINN Production QA Runner](finn-production-qa-runner.md), so the
+fixture identity and bearer token never leave the server-side process.

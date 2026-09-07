@@ -8,14 +8,27 @@ short; link artifacts rather than copying reports or chat history.
 | Field | Value |
 | --- | --- |
 | Phase | `BUILDING` |
-| Active goal | FINN V2 full action-contract completion batch |
-| Candidate branch | `codex/finn-runtime-contract-authority-foundation` |
-| Candidate SHA | `3d1e97e81dcf4010c4c23ca5c4f2d4caac483e47` (local full action-contract candidate) |
-| Production SHA | `dbd5d50438ae199549cb52ead942d09b475fda44` |
+| Active goal | Protected FINN production-QA runner |
+| Candidate branch | `codex/finn-production-qa-runner-v2` |
+| Candidate SHA | `pending commit` |
+| Production SHA | `5735c004fa6d0545ae852b2a795386ae647c48f0` |
 | Release owner | Build |
 | Last updated | `2026-09-07` |
 
-## Current Batch
+## QA Runner
+
+- QA runner readiness: `IMPLEMENTED_NOT_YET_DEPLOYED`
+- authenticated QA preflight: `NOT_RUN`
+- official QA status: `NOT_STARTED`
+
+The protected GitHub Actions runner is the canonical authenticated production
+QA executor. Its first validation uses only the `auth_preflight` profile and
+does not start an official QA matrix.
+
+## Historical Action-Contract Evidence
+
+The following batch evidence predates the protected runner and is retained only
+as history; it is not current release or QA proof.
 
 - Goal: complete the existing FINN V2 action contracts and route action
   inputs, proposals, confirmation, execution and result projections through

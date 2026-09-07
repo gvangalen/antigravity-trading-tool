@@ -24,6 +24,7 @@ Use these first when the question is operational, architectural, release-related
 - [staging-production-cutover-checklist.md](/Users/gvangalen/Documents/antigravity-trading-tool/docs/operations/staging-production-cutover-checklist.md)
 - [finn-qa-fixture-contract.md](/Users/gvangalen/Documents/antigravity-trading-tool/docs/operations/finn-qa-fixture-contract.md)
 - [finn-authenticated-runtime-gate.md](/Users/gvangalen/Documents/antigravity-trading-tool/docs/operations/finn-authenticated-runtime-gate.md)
+- [finn-production-qa-runner.md](/Users/gvangalen/Documents/antigravity-trading-tool/docs/operations/finn-production-qa-runner.md)
 
 ## Active Reference Material
 

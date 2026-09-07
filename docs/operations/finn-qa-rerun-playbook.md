@@ -41,6 +41,10 @@ for `FINN_QA_USER_ID` with
 the token in process memory; never export it to a workstation or print the
 helper output.
 
+The protected [FINN Production QA Runner](finn-production-qa-runner.md) invokes
+`qa_issue_finn_token.py` on the production host. QA agents must not invoke the
+helper from a chat or local workstation.
+
 Why this is preferred:
 
 - no dependence on flaky interactive login

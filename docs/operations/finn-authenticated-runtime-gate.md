@@ -26,6 +26,13 @@ SHA being considered for QA.
 Any failed precondition blocks the gate. It is an operational failure, not a
 reason to select another user or weaken the test.
 
+## Canonical Invocation
+
+Authenticated production QA is executed through the protected
+[FINN Production QA Runner](finn-production-qa-runner.md), not from a QA chat,
+browser session, or workstation SSH shell. The runner invokes the server-side
+procedure below only inside its restricted production process.
+
 ## Safe Server-Side Invocation
 
 Run the issuer and gate in one server-side shell process. The token must remain
@@ -45,9 +52,8 @@ set +x
 ```
 
 Use `https://tradamind.com` for the transport path. Build uses only generic
-non-sealed smoke cases and may perform read-only persistence assertions with
-the existing `run_finn_v2_authenticated_smoke_gate.py` wrapper. The sealed
-holdout is QA-exclusive and unavailable to Build.
+non-sealed smoke cases. The protected runner returns only a sanitized report
+artifact; the sealed holdout remains QA-exclusive and unavailable to Build.
 
 ## Required Evidence
 

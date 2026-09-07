@@ -130,6 +130,9 @@ QA status source.
 - Do not start, instruct, contact, poll, or otherwise coordinate a QA agent.
   The user initiates independent QA only after the status file documents a
   complete live candidate.
+- Build may implement and validate the protected FINN production-QA runner,
+  but cannot start an official runner workflow. Official QA scope and
+  invocation remain user-authorized and QA-owned.
 
 ## Stop Criteria
 

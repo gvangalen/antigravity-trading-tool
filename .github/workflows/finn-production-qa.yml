@@ -1,0 +1,154 @@
+name: FINN Production QA
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_sha:
+        description: Full, already-live release SHA to validate
+        required: true
+        type: string
+      qa_profile:
+        description: QA scope selected by the user-approved QA goal
+        required: true
+        default: auth_preflight
+        type: choice
+        options:
+          - auth_preflight
+          - targeted_regression
+          - runtime_acceptance
+          - full_release_acceptance
+          - safety
+          - latency
+      manifest_id:
+        description: Approved, non-secret manifest identifier; use none for auth_preflight
+        required: true
+        default: none
+        type: string
+      run_label:
+        description: Traceable label without user or fixture data
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: finn-production-qa-${{ inputs.release_sha }}-${{ inputs.qa_profile }}
+  cancel-in-progress: false
+
+jobs:
+  production-qa:
+    if: github.repository == 'gvangalen/antigravity-trading-tool'
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 20
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout requested trusted release
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          ref: ${{ inputs.release_sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Validate release and profile inputs
+        shell: bash
+        env:
+          RELEASE_SHA: ${{ inputs.release_sha }}
+          QA_PROFILE: ${{ inputs.qa_profile }}
+          MANIFEST_ID: ${{ inputs.manifest_id }}
+          RUN_LABEL: ${{ inputs.run_label }}
+        run: |
+          set -euo pipefail
+          [[ "$RELEASE_SHA" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$QA_PROFILE" =~ ^(auth_preflight|targeted_regression|runtime_acceptance|full_release_acceptance|safety|latency)$ ]]
+          [[ "$MANIFEST_ID" =~ ^[a-z0-9][a-z0-9._-]{0,80}$ ]]
+          [[ "$RUN_LABEL" =~ ^[A-Za-z0-9][A-Za-z0-9._-]{0,80}$ ]]
+          git fetch origin main --quiet
+          git merge-base --is-ancestor "$RELEASE_SHA" origin/main
+          test "$(git rev-parse HEAD)" = "$RELEASE_SHA"
+
+      - name: Resolve protected QA connection
+        id: connection
+        shell: bash
+        env:
+          QA_HOST: ${{ secrets.QA_SSH_HOST || secrets.HOST || secrets.SERVER_IP }}
+          QA_KEY: ${{ secrets.QA_SSH_PRIVATE_KEY || secrets.SSH_PRIVATE_KEY || secrets.DEPLOY_SSH_KEY }}
+          QA_KNOWN_HOSTS: ${{ secrets.QA_SSH_KNOWN_HOSTS }}
+          QA_REMOTE_DIR: ${{ vars.QA_REMOTE_DIR || '/home/ubuntu/antigravity-trading-tool' }}
+        run: |
+          set -euo pipefail
+          if [ -z "${QA_HOST:-}" ] || [ -z "${QA_KEY:-}" ] || [ -z "${QA_KNOWN_HOSTS:-}" ]; then
+            echo "Protected QA connection is not configured." >&2
+            exit 1
+          fi
+          printf '%s\n' "$QA_KEY" > "$RUNNER_TEMP/finn-production-qa-key"
+          chmod 600 "$RUNNER_TEMP/finn-production-qa-key"
+          printf '%s\n' "$QA_KNOWN_HOSTS" > "$RUNNER_TEMP/finn-production-qa-known-hosts"
+          chmod 600 "$RUNNER_TEMP/finn-production-qa-known-hosts"
+          printf 'host=%s\n' "$QA_HOST" >> "$GITHUB_OUTPUT"
+          printf 'remote_dir=%s\n' "$QA_REMOTE_DIR" >> "$GITHUB_OUTPUT"
+
+      - name: Run protected production QA profile
+        shell: bash
+        env:
+          RELEASE_SHA: ${{ inputs.release_sha }}
+          QA_PROFILE: ${{ inputs.qa_profile }}
+          MANIFEST_ID: ${{ inputs.manifest_id }}
+          RUN_LABEL: ${{ inputs.run_label }}
+          QA_HOST: ${{ steps.connection.outputs.host }}
+          QA_REMOTE_DIR: ${{ steps.connection.outputs.remote_dir }}
+        run: |
+          set -euo pipefail
+          set +x
+          report_name="finn-production-qa-${GITHUB_RUN_ID}.json"
+          remote_report="/tmp/${report_name}"
+          remote_command=$(printf 'bash -s -- %q %q %q %q %q %q %q' "$RELEASE_SHA" "$QA_PROFILE" "$MANIFEST_ID" "$RUN_LABEL" "$QA_REMOTE_DIR" "$remote_report" "$GITHUB_RUN_ID")
+          set +e
+          ssh -i "$RUNNER_TEMP/finn-production-qa-key" -o UserKnownHostsFile="$RUNNER_TEMP/finn-production-qa-known-hosts" -o BatchMode=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=15 "ubuntu@${QA_HOST}" "$remote_command" <<'REMOTE'
+          set -euo pipefail
+          set +x
+          release_sha="$1"
+          qa_profile="$2"
+          manifest_id="$3"
+          run_label="$4"
+          remote_dir="$5"
+          report_path="$6"
+          workflow_run_id="$7"
+          cd "$remote_dir"
+          test "$(git rev-parse HEAD)" = "$release_sha"
+          set -a
+          source "$HOME/.secrets/trading.env"
+          set +a
+          PYTHONPATH=backend/trading-tool-backend \
+            python3 backend/trading-tool-backend/backend/scripts/run_finn_production_qa.py \
+              --release-sha "$release_sha" \
+              --profile "$qa_profile" \
+              --manifest-id "$manifest_id" \
+              --run-label "$run_label" \
+              --checkout "$remote_dir" \
+              --release-marker "$remote_dir/ops/deploy/production/LAST_GOOD_COMMIT" \
+              --manifest-root "${FINN_QA_MANIFEST_ROOT:-$HOME/ops/finn-qa-manifests}" \
+              --workflow-run-id "$workflow_run_id" \
+              --report-path "$report_path" >/dev/null
+          REMOTE
+          remote_status=$?
+          set -e
+          mkdir -p qa-artifacts
+          if ! scp -i "$RUNNER_TEMP/finn-production-qa-key" -o UserKnownHostsFile="$RUNNER_TEMP/finn-production-qa-known-hosts" -o BatchMode=yes -o StrictHostKeyChecking=yes "ubuntu@${QA_HOST}:${remote_report}" "qa-artifacts/${report_name}"; then
+            printf '{"schema_version":1,"outcome":"failed","error_category":"ssh","profile":"%s"}\n' "$QA_PROFILE" > "qa-artifacts/${report_name}"
+          fi
+          sha256sum "qa-artifacts/${report_name}" > "qa-artifacts/${report_name}.sha256"
+          ssh -i "$RUNNER_TEMP/finn-production-qa-key" -o UserKnownHostsFile="$RUNNER_TEMP/finn-production-qa-known-hosts" -o BatchMode=yes -o StrictHostKeyChecking=yes "ubuntu@${QA_HOST}" "rm -f '$remote_report'" || true
+          test "$remote_status" -eq 0
+
+      - name: Upload sanitized QA report
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: finn-production-qa-${{ github.run_id }}
+          path: qa-artifacts/
+          if-no-files-found: warn
+          retention-days: 14
