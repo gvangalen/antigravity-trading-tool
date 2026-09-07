@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.infrastructure.repositories.finn_v2_confirmation_repository import FinnV2ConfirmationRepository
 from backend.infrastructure.repositories.finn_v2_proposal_repository import FinnV2ProposalRepository
+from backend.infrastructure.repositories.finn_v2_runtime_contract_repository import FinnV2RuntimeContractRepository
 from backend.schemas.finn_v2_confirmation_schema import FinnV2ConfirmationRequest, FinnV2ConfirmationResult
 from backend.services.finn_v2_flag_service import FinnV2FlagService
 
@@ -22,6 +23,7 @@ class FinnV2ConfirmationService:
         self.flags = flag_service or FinnV2FlagService()
         self.confirmations = FinnV2ConfirmationRepository(session)
         self.proposals = FinnV2ProposalRepository(session)
+        self.runtime_contracts = FinnV2RuntimeContractRepository(session)
 
     async def issue_confirmation_token(self, *, proposal_id: str, user_id: int) -> tuple[str, datetime]:
         if not self._confirmations_available():
@@ -57,6 +59,7 @@ class FinnV2ConfirmationService:
         else:
             await self.confirmations.update(existing, token_hash=token_hash, payload_hash=proposal.payload_hash, confirmed=False, already_confirmed=False)
         await self.proposals.update_status(proposal, status="pending_confirmation")
+        await self._record_workflow_event(proposal, event="confirmation_issued")
         return raw_token, expires_at
 
     async def confirm(
@@ -89,6 +92,7 @@ class FinnV2ConfirmationService:
             raise LookupError("confirmation_token_invalid")
 
         if confirmation.confirmed:
+            await self._record_workflow_event(proposal, event="confirmed")
             return FinnV2ConfirmationResult(
                 confirmation_id=confirmation.id,
                 proposal_id=proposal.id,
@@ -103,6 +107,7 @@ class FinnV2ConfirmationService:
 
         await self.confirmations.update(confirmation, confirmed=True, already_confirmed=False)
         await self.proposals.update_status(proposal, status="confirmed")
+        await self._record_workflow_event(proposal, event="confirmed")
         return FinnV2ConfirmationResult(
             confirmation_id=confirmation.id,
             proposal_id=proposal.id,
@@ -113,6 +118,16 @@ class FinnV2ConfirmationService:
             eligibility_must_be_rechecked=True,
             reasons=[],
             created_at=confirmation.created_at,
+        )
+
+    async def _record_workflow_event(self, proposal, *, event: str) -> None:
+        """Attach only safe lifecycle facts to the originating run contract."""
+        await self.runtime_contracts.record_proposal_lifecycle(
+            run_id=proposal.run_id,
+            proposal_id=proposal.id,
+            operation_id=proposal.operation_type,
+            payload_hash=proposal.payload_hash,
+            event=event,
         )
 
     def _token_hash(self, *, proposal_id: str, user_id: int, payload_hash: str, expires_at: datetime, raw_token: str) -> str:

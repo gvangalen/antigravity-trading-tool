@@ -14,6 +14,7 @@ from backend.domain.finn_v2_runtime_contract import (
     new_runtime_contract_state,
     record_final_operation,
     record_initial_intent,
+    record_proposal_lifecycle,
     record_selection,
     terminal_projection,
 )
@@ -193,6 +194,60 @@ def test_terminal_projection_uses_the_same_immutable_contract_identity():
     assert projection["initial_operation_id"] == "evaluate_plan"
     assert projection["terminal_status"] == "failed"
     assert projection["terminal_response_type"] == "failure"
+
+
+def test_terminal_projection_keeps_safe_proposal_confirmation_and_execution_provenance():
+    state = record_initial_intent(
+        new_runtime_contract_state(run=_run(), contract_id="contract-run-contract-1"),
+        operation_id="create_strategy",
+        requested_mode="CREATE_PROPOSAL",
+    )
+    state = record_proposal_lifecycle(
+        state,
+        proposal_id="proposal-1",
+        operation_id="create_strategy",
+        payload_hash="payload-hash",
+        event="confirmation_issued",
+    )
+    state = record_proposal_lifecycle(
+        state,
+        proposal_id="proposal-1",
+        operation_id="create_strategy",
+        payload_hash="payload-hash",
+        event="confirmed",
+    )
+    state = record_proposal_lifecycle(
+        state,
+        proposal_id="proposal-1",
+        operation_id="create_strategy",
+        payload_hash="payload-hash",
+        event="execution_succeeded",
+        execution_id="execution-1",
+    )
+
+    projection = terminal_projection(
+        state,
+        status="completed",
+        mode="CREATE_PROPOSAL",
+        response={"proposal_id": "proposal-1"},
+    )
+
+    assert projection["proposal_lifecycle"] == {
+        "proposal_id": "proposal-1",
+        "operation_id": "create_strategy",
+        "payload_hash": "payload-hash",
+        "status": "succeeded",
+        "execution_id": "execution-1",
+    }
+    with pytest.raises(RuntimeContractImmutableFieldError, match="proposal_status_is_terminal"):
+        record_proposal_lifecycle(
+            state,
+            proposal_id="proposal-1",
+            operation_id="create_strategy",
+            payload_hash="payload-hash",
+            event="execution_failed",
+            execution_id="execution-1",
+        )
 
 
 def test_explicit_canonical_target_cannot_be_replaced_after_selection():

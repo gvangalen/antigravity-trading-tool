@@ -20,6 +20,13 @@ FINN_PUBLIC_PROJECTION_VERSION = "2026-09-03.terminal-projection.v1"
 # but retain a separate name for the repository boundary.
 RUNTIME_CONTRACT_VERSION = "2026-09-04.runtime-contract.v1"
 PENDING_STATUS = "pending"
+_WORKFLOW_EVENTS = frozenset({
+    "confirmation_issued",
+    "confirmed",
+    "execution_blocked",
+    "execution_succeeded",
+    "execution_failed",
+})
 
 
 class RuntimeContractConflictError(RuntimeError):
@@ -57,6 +64,7 @@ class FinnRuntimeContract(BaseModel):
     operation_change_reason: Optional[str] = None
     terminal_response_type: Optional[str] = None
     terminal_status: Optional[str] = None
+    proposal_lifecycle: Dict[str, Any] = Field(default_factory=dict)
     lineage_state_update: Dict[str, Any] = Field(default_factory=dict)
     timings_ms: Dict[str, float] = Field(default_factory=dict)
     total_ms: Optional[float] = None
@@ -94,6 +102,7 @@ class FinnRuntimeContract(BaseModel):
             "lineage": self.lineage_state_update,
             "terminal_response_type": self.terminal_response_type,
             "terminal_status": self.terminal_status,
+            "proposal_lifecycle": self.proposal_lifecycle,
             "timings_ms": self.timings_ms,
             "total_ms": self.total_ms,
         }
@@ -209,6 +218,11 @@ def new_runtime_contract_state(*, run: Any, contract_id: str) -> Dict[str, Any]:
         "operation_change_reason": None,
         "terminal_status": PENDING_STATUS,
         "terminal_response_type": None,
+        # Workflow status is provenance for a proposal already created by the
+        # registry-approved action contract. It deliberately contains no
+        # action fields, confirmation token, or execution payload.
+        "proposal_lifecycle": {},
+        "terminal_response": {},
         "transition_log": [],
     }
 
@@ -343,6 +357,64 @@ def record_conversation_state(
     return state
 
 
+def record_proposal_lifecycle(
+    state: Dict[str, Any],
+    *,
+    proposal_id: str,
+    operation_id: str,
+    payload_hash: str,
+    event: str,
+    execution_id: Optional[str] = None,
+) -> Dict[str, Any]:
+    """Record safe proposal workflow provenance without defining action fields.
+
+    The operation and payload identity must remain bound to the proposal that
+    the action contract already approved. Confirmation and execution only add
+    lifecycle facts; they cannot change an operation, target, or payload.
+    """
+    if event not in _WORKFLOW_EVENTS:
+        raise RuntimeContractImmutableFieldError("runtime_contract_unknown_workflow_event")
+    state = dict(state)
+    lifecycle = dict(state.get("proposal_lifecycle") or {})
+    expected = {
+        "proposal_id": proposal_id,
+        "operation_id": operation_id,
+        "payload_hash": payload_hash,
+    }
+    for field, value in expected.items():
+        existing = lifecycle.get(field)
+        if existing is not None and existing != value:
+            raise RuntimeContractImmutableFieldError(f"runtime_contract_proposal_{field}_is_immutable")
+        lifecycle[field] = value
+
+    status_by_event = {
+        "confirmation_issued": "pending_confirmation",
+        "confirmed": "confirmed",
+        "execution_blocked": "blocked",
+        "execution_succeeded": "succeeded",
+        "execution_failed": "failed",
+    }
+    status = status_by_event[event]
+    previous_status = lifecycle.get("status")
+    terminal_statuses = {"blocked", "succeeded", "failed"}
+    if previous_status in terminal_statuses and previous_status != status:
+        raise RuntimeContractImmutableFieldError("runtime_contract_proposal_status_is_terminal")
+    lifecycle["status"] = status
+    if execution_id:
+        existing_execution_id = lifecycle.get("execution_id")
+        if existing_execution_id is not None and existing_execution_id != execution_id:
+            raise RuntimeContractImmutableFieldError("runtime_contract_execution_id_is_immutable")
+        lifecycle["execution_id"] = execution_id
+    state["proposal_lifecycle"] = lifecycle
+    state.setdefault("transition_log", []).append({
+        "type": "proposal_lifecycle",
+        "event": event,
+        "proposal_id": proposal_id,
+        "status": status,
+    })
+    return state
+
+
 def terminal_projection(
     state: Dict[str, Any],
     *,
@@ -391,6 +463,7 @@ def terminal_projection(
         "conversation_reference": state.get("conversation_reference"),
         "terminal_status": status,
         "terminal_response_type": state.get("terminal_response_type") or ("failure" if status == "failed" else "response"),
+        "proposal_lifecycle": dict(state.get("proposal_lifecycle") or {}),
         "timings_ms": timings_ms,
         "error_code": error_code,
         "response": dict(response or {}),

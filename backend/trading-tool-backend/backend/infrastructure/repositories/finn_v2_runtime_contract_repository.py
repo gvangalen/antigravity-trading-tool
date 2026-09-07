@@ -8,12 +8,14 @@ from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.domain.finn_v2_runtime_contract import (
+    PENDING_STATUS,
     RUNTIME_CONTRACT_VERSION,
     RuntimeContractConflictError,
     new_runtime_contract_state,
     record_final_operation,
     record_initial_intent,
     record_conversation_state,
+    record_proposal_lifecycle,
     record_selection,
     terminal_projection,
 )
@@ -168,6 +170,50 @@ class FinnV2RuntimeContractRepository(FinnV2RepositoryTransactionMixin):
         )
         return await self._write_revision(row=row, state=next_state)
 
+    async def record_proposal_lifecycle(
+        self,
+        *,
+        run_id: str,
+        proposal_id: str,
+        operation_id: str,
+        payload_hash: str,
+        event: str,
+        execution_id: Optional[str] = None,
+    ) -> Optional[FinnV2RuntimeContract]:
+        """Project confirmation/execution facts onto a new run's contract.
+
+        Historical V2 proposals can predate runtime contracts. They remain
+        executable through their existing immutable proposal records, while
+        every new run with a contract receives the same safe workflow state in
+        its persisted terminal projection.
+        """
+        row = await self.get_for_run(run_id=run_id, for_update=True)
+        if row is None:
+            return None
+        state = record_proposal_lifecycle(
+            deepcopy(row.state_json or {}),
+            proposal_id=proposal_id,
+            operation_id=operation_id,
+            payload_hash=payload_hash,
+            event=event,
+            execution_id=execution_id,
+        )
+        row = await self._write_revision(row=row, state=state)
+        if row.terminal_projection_json is not None:
+            projection = terminal_projection(
+                state,
+                status=str(state.get("terminal_status") or PENDING_STATUS),
+                mode=state.get("final_mode"),
+                response=dict(state.get("terminal_response") or row.terminal_projection_json.get("response") or {}),
+            )
+            row.terminal_projection_json = projection
+            await self._flush_with_rollback(
+                operation="refresh_runtime_terminal_workflow_projection",
+                entity_type="FinnV2RuntimeContract",
+                run_id=run_id,
+            )
+        return row
+
     async def materialize_terminal(
         self,
         *,
@@ -183,6 +229,7 @@ class FinnV2RuntimeContractRepository(FinnV2RepositoryTransactionMixin):
         state["final_mode"] = mode or state.get("final_mode") or state.get("requested_mode")
         state["terminal_status"] = status
         state["terminal_response_type"] = "failure" if status == "failed" else "response"
+        state["terminal_response"] = dict(response or {})
         timestamps = dict(state.get("phase_timestamps") or {})
         timestamps.setdefault("created_at", row.created_at.astimezone(timezone.utc).isoformat())
         timestamps["terminal_at"] = datetime.now(timezone.utc).isoformat()

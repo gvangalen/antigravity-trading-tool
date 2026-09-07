@@ -50,12 +50,14 @@ def test_confirmation_does_not_store_raw_token_and_rejects_wrong_token(monkeypat
 def test_confirmation_token_has_sufficient_entropy(monkeypatch):
     monkeypatch.setenv("FINN_V2_CONFIRMATION_SECRET", "secret")
     service = FinnV2ConfirmationService(session=object())
+    service.runtime_contracts.record_proposal_lifecycle = lambda **_kwargs: asyncio.sleep(0)
     service.flags.is_confirmations_enabled = lambda: True
     proposal = SimpleNamespace(
         id="proposal-1",
         run_id="run-1",
         user_id=7,
         payload_hash="payload-hash",
+        operation_type="create_setup",
         status="draft",
         expires_at=datetime.now(timezone.utc) + timedelta(minutes=5),
     )

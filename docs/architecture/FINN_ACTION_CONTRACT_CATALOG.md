@@ -104,6 +104,13 @@ the V2 `publish`, `confirm` and `execute` endpoints for a `v2_proposal`; it
 does not send that proposal to the legacy assistant-action endpoint. A
 server-issued confirmation token is held only during that browser request.
 
+The originating runtime contract projects the safe proposal lifecycle
+(`pending_confirmation`, `confirmed`, `blocked`, `succeeded` or `failed`) with
+the immutable proposal identity and, after execution, its execution ID. It
+never stores a confirmation token, action fields or a second action schema.
+The same persisted terminal projection is refreshed in place so polling and
+SSE expose the identical lifecycle facts.
+
 `watchlist_add` additionally relies on the database constraint
 `ux_watchlists_user_symbol`; `ON CONFLICT (user_id, symbol) DO NOTHING` makes a
 replayed confirmation return the same logical result instead of inserting a

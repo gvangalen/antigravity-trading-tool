@@ -9,12 +9,15 @@ from backend.services.finn_v2_confirmation_service import FinnV2ConfirmationServ
 def test_confirmation_accepts_valid_token_and_is_idempotent(monkeypatch):
     monkeypatch.setenv("FINN_V2_CONFIRMATION_SECRET", "secret")
     service = FinnV2ConfirmationService(session=object())
+    workflow_events = []
+    service.runtime_contracts.record_proposal_lifecycle = lambda **kwargs: asyncio.sleep(0, result=workflow_events.append(kwargs))
     service.flags.is_confirmations_enabled = lambda: True
     proposal = SimpleNamespace(
         id="proposal-1",
         run_id="run-1",
         user_id=7,
         payload_hash="payload-hash",
+        operation_type="update_setup",
         status="pending_confirmation",
         expires_at=datetime.now(timezone.utc) + timedelta(minutes=5),
     )
@@ -49,6 +52,7 @@ def test_confirmation_accepts_valid_token_and_is_idempotent(monkeypatch):
 
     assert first.confirmed is True
     assert second.already_confirmed is True
+    assert [event["event"] for event in workflow_events] == ["confirmed", "confirmed"]
 
 
 def test_confirmation_issue_token_accepts_route_enabled_mode_without_legacy_flag(monkeypatch):
@@ -56,6 +60,8 @@ def test_confirmation_issue_token_accepts_route_enabled_mode_without_legacy_flag
     monkeypatch.setenv("JWT_SECRET_KEY", "jwt-secret")
 
     service = FinnV2ConfirmationService(session=object())
+    workflow_events = []
+    service.runtime_contracts.record_proposal_lifecycle = lambda **kwargs: asyncio.sleep(0, result=workflow_events.append(kwargs))
     service.flags.is_confirmations_enabled = lambda: False
     service.flags.is_confirmation_routes_enabled = lambda: True
     proposal = SimpleNamespace(
@@ -63,6 +69,7 @@ def test_confirmation_issue_token_accepts_route_enabled_mode_without_legacy_flag
         run_id="run-1",
         user_id=7,
         payload_hash="payload-hash",
+        operation_type="create_strategy",
         status="draft",
         expires_at=datetime.now(timezone.utc) + timedelta(minutes=5),
     )
@@ -74,3 +81,4 @@ def test_confirmation_issue_token_accepts_route_enabled_mode_without_legacy_flag
     raw_token, _ = asyncio.run(service.issue_confirmation_token(proposal_id="proposal-1", user_id=7))
 
     assert len(raw_token) >= 43
+    assert workflow_events[0]["event"] == "confirmation_issued"

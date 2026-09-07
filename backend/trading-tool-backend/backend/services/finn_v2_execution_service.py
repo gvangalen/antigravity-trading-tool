@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.infrastructure.repositories.finn_v2_execution_repository import FinnV2ExecutionRepository
 from backend.infrastructure.repositories.finn_v2_proposal_repository import FinnV2ProposalRepository
+from backend.infrastructure.repositories.finn_v2_runtime_contract_repository import FinnV2RuntimeContractRepository
 from backend.schemas.finn_v2_execution_schema import ExecutionResult
 from backend.schemas.finn_v2_policy_schema import StepUpProof
 from backend.services.finn_v2_action_adapter_registry import FinnV2ActionAdapterRegistry
@@ -25,6 +26,7 @@ class FinnV2ExecutionService:
         self.flags = flag_service or FinnV2FlagService()
         self.repo = FinnV2ExecutionRepository(session)
         self.proposals = FinnV2ProposalRepository(session)
+        self.runtime_contracts = FinnV2RuntimeContractRepository(session)
         self.gates = FinnV2ExecutionGateService(session, flag_service=self.flags)
         self.adapters = FinnV2ActionAdapterRegistry(session, flag_service=self.flags)
 
@@ -87,6 +89,11 @@ class FinnV2ExecutionService:
                 completed_at=datetime.now(timezone.utc),
             )
             increment_execution_safety_counter(f"finn_v2_executions_total:{proposal.operation_type}:blocked")
+            await self._record_workflow_event(
+                proposal,
+                event="execution_blocked",
+                execution_id=execution.id,
+            )
             return ExecutionResult(
                 execution_id=execution.id,
                 proposal_id=proposal_id,
@@ -129,6 +136,11 @@ class FinnV2ExecutionService:
             await self.session.flush()
             record_latency_sample(f"finn_v2_execution_latency_ms:{proposal.operation_type}", int((execution.completed_at - started_at).total_seconds() * 1000))
             increment_execution_safety_counter(f"finn_v2_executions_total:{proposal.operation_type}:succeeded")
+            await self._record_workflow_event(
+                proposal,
+                event="execution_succeeded",
+                execution_id=execution.id,
+            )
             return ExecutionResult(
                 execution_id=execution.id,
                 proposal_id=proposal_id,
@@ -148,6 +160,11 @@ class FinnV2ExecutionService:
             execution.completed_at = datetime.now(timezone.utc)
             await self.session.flush()
             increment_execution_safety_counter(f"finn_v2_executions_total:{proposal.operation_type}:failed")
+            await self._record_workflow_event(
+                proposal,
+                event="execution_failed",
+                execution_id=execution.id,
+            )
             return ExecutionResult(
                 execution_id=execution.id,
                 proposal_id=proposal_id,
@@ -161,6 +178,17 @@ class FinnV2ExecutionService:
                 started_at=started_at,
                 completed_at=execution.completed_at,
             )
+
+    async def _record_workflow_event(self, proposal, *, event: str, execution_id: str) -> None:
+        """Mirror a completed workflow step into the safe run projection."""
+        await self.runtime_contracts.record_proposal_lifecycle(
+            run_id=proposal.run_id,
+            proposal_id=proposal.id,
+            operation_id=proposal.operation_type,
+            payload_hash=proposal.payload_hash,
+            event=event,
+            execution_id=execution_id,
+        )
 
     def _hash(self, payload: dict) -> str:
         canonical = json.dumps(payload, sort_keys=True, default=str, separators=(",", ":"))

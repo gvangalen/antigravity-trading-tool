@@ -13,6 +13,8 @@ class _Session:
 
 def test_execution_service_records_postcondition_hash_on_success():
     service = FinnV2ExecutionService(session=_Session())
+    workflow_events = []
+    service.runtime_contracts.record_proposal_lifecycle = lambda **kwargs: asyncio.sleep(0, result=workflow_events.append(kwargs))
     service.repo.get_by_idempotency_key_for_user = lambda **kwargs: asyncio.sleep(0, result=None)
     service.repo.get_for_proposal = lambda **kwargs: asyncio.sleep(0, result=None)
     service.proposals.get_by_id_for_user = lambda **kwargs: asyncio.sleep(
@@ -46,10 +48,20 @@ def test_execution_service_records_postcondition_hash_on_success():
 
     assert result.status == "succeeded"
     assert result.postcondition_hash == "post-hash-1"
+    assert workflow_events == [{
+        "run_id": "run-1",
+        "proposal_id": "proposal-1",
+        "operation_id": "update_setup",
+        "payload_hash": "hash-1",
+        "event": "execution_succeeded",
+        "execution_id": result.execution_id,
+    }]
 
 
 def test_execution_service_persists_json_safe_gate_payload_when_blocked():
     service = FinnV2ExecutionService(session=_Session())
+    workflow_events = []
+    service.runtime_contracts.record_proposal_lifecycle = lambda **kwargs: asyncio.sleep(0, result=workflow_events.append(kwargs))
     captured = {}
     gate_payload = {
         "eligible": False,
@@ -97,3 +109,4 @@ def test_execution_service_persists_json_safe_gate_payload_when_blocked():
     assert result.status == "blocked"
     assert captured["result_json"] == to_json_safe(gate_payload)
     assert isinstance(captured["result_json"]["checked_at"], str)
+    assert workflow_events[0]["event"] == "execution_blocked"
