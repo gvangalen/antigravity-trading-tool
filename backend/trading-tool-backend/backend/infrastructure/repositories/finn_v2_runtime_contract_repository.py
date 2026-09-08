@@ -15,6 +15,7 @@ from backend.domain.finn_v2_runtime_contract import (
     record_final_operation,
     record_initial_intent,
     record_conversation_state,
+    record_contextual_inputs,
     record_proposal_lifecycle,
     record_selection,
     terminal_projection,
@@ -168,6 +169,18 @@ class FinnV2RuntimeContractRepository(FinnV2RepositoryTransactionMixin):
             lineage_state=lineage_state,
             guided_state=guided_state,
         )
+        return await self._write_revision(row=row, state=next_state)
+
+    async def record_contextual_inputs(
+        self, *, run_id: str, supplied_inputs: Dict[str, Any]
+    ) -> FinnV2RuntimeContract:
+        """Persist registry-authorized current-run evidence identifiers."""
+        row = await self._required_for_update(run_id)
+        next_state = record_contextual_inputs(
+            deepcopy(row.state_json or {}), supplied_inputs=supplied_inputs
+        )
+        if next_state == (row.state_json or {}):
+            return row
         return await self._write_revision(row=row, state=next_state)
 
     async def record_dispatch_metadata(

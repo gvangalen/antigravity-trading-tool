@@ -14,6 +14,7 @@ from backend.domain.finn_v2_runtime_contract import (
     new_runtime_contract_state,
     record_final_operation,
     record_initial_intent,
+    record_contextual_inputs,
     record_proposal_lifecycle,
     record_selection,
     terminal_projection,
@@ -346,6 +347,62 @@ def test_runtime_contract_uses_create_strategy_contract_for_optional_and_missing
     }
     assert selected["supplied_inputs"] == {"setup_id": 41, "name": "ETH swing"}
     assert selected["missing_inputs"] == ["execution_mode", "base_amount"]
+
+
+def test_runtime_contract_hydrates_only_registry_declared_current_run_reference_inputs():
+    state = record_initial_intent(
+        new_runtime_contract_state(run=_run(), contract_id="contract-run-contract-1"),
+        operation_id="create_strategy",
+        requested_mode="CREATE_PROPOSAL",
+    )
+    selected = record_selection(
+        state,
+        canonical_target="ETH",
+        target_source="explicit_current_turn",
+        original_target_text="Ethereum",
+        target_type="asset",
+        conversation_reference=None,
+        conversation_reference_kind=None,
+        supplied_inputs={"execution_mode": "fixed", "base_amount": 100},
+    )
+
+    hydrated = record_contextual_inputs(
+        selected,
+        supplied_inputs={"setup_id": 41, "bot_id": 99},
+    )
+
+    assert hydrated["supplied_inputs"] == {
+        "setup_id": 41,
+        "execution_mode": "fixed",
+        "base_amount": 100,
+    }
+    assert hydrated["missing_inputs"] == []
+    assert hydrated["transition_log"][-1] == {
+        "type": "contextual_input_hydration",
+        "operation_id": "create_strategy",
+        "fields": ["setup_id"],
+        "source": "current_run_user_scoped_evidence",
+    }
+
+
+def test_runtime_contract_never_replaces_an_explicit_reference_with_context_evidence():
+    state = record_initial_intent(
+        new_runtime_contract_state(run=_run(), contract_id="contract-run-contract-1"),
+        operation_id="delete_setup",
+        requested_mode="CREATE_PROPOSAL",
+    )
+    selected = record_selection(
+        state,
+        canonical_target=None,
+        target_source=None,
+        original_target_text=None,
+        target_type=None,
+        conversation_reference=None,
+        conversation_reference_kind=None,
+        supplied_inputs={"setup_id": 77},
+    )
+
+    assert record_contextual_inputs(selected, supplied_inputs={"setup_id": 41}) == selected
 
 
 def test_final_operation_transition_is_registry_validated_and_drives_execution_inputs():

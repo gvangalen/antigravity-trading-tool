@@ -84,3 +84,35 @@ def test_update_flow_collects_only_an_explicit_typed_changed_fields_object():
     assert typed.missing_required_inputs == []
     assert prose.collected_inputs == {"setup_id": 42}
     assert prose.missing_required_inputs == ["changed_fields"]
+
+
+def test_update_flow_collects_an_explicit_natural_field_value_without_a_second_schema():
+    service = FinnV2OperationStateService()
+    contract = FinnV2OperationRegistry().require_supported("update_setup")
+
+    state = service.resolve(
+        contract=contract,
+        message="Wijzig setup 42 timeframe naar 4H",
+        explicit_asset=None,
+        conversation_context={},
+    )
+
+    assert state.collected_inputs == {
+        "setup_id": 42,
+        "changed_fields": {"timeframe": "4H"},
+    }
+    assert state.missing_required_inputs == []
+
+
+def test_bot_name_uses_the_same_contract_slot_parser_as_setup_names():
+    service = FinnV2OperationStateService()
+    contract = FinnV2OperationRegistry().require_supported("create_bot")
+
+    state = service.resolve(
+        contract=contract,
+        message="Maak een bot voor strategy 52 met de naam Paper Scout",
+        explicit_asset=None,
+        conversation_context={},
+    )
+
+    assert state.collected_inputs == {"strategy_id": 52, "name": "Paper Scout"}

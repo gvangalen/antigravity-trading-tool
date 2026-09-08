@@ -78,6 +78,36 @@ class FinnV2OrchestratorService:
             "next_missing_input": missing_inputs[0] if missing_inputs else None,
         }
 
+    @staticmethod
+    def _contextual_inputs_from_snapshot(*, snapshot, execution_view: dict) -> dict:
+        """Use only this run's user-scoped evidence for declared ID slots."""
+        action_contract = dict(execution_view.get("action_contract") or {})
+        operation_id = str(action_contract.get("operation_id") or "")
+        if not operation_id:
+            return {}
+        from backend.domain.finn_v2_operation_registry import FinnV2OperationRegistry
+
+        contract = FinnV2OperationRegistry().require_supported(operation_id)
+        wanted = set(contract.contextual_reference_inputs)
+        if not wanted or snapshot is None:
+            return {}
+        entity_fields = {"setup": "setup_id", "strategy": "strategy_id", "bot": "bot_id"}
+        values = {}
+        for node in getattr(snapshot, "nodes", []) or []:
+            field = entity_fields.get(str(getattr(node, "entity_type", "")))
+            if field not in wanted or field in values or str(getattr(node, "availability", "")) != "available":
+                continue
+            payload = getattr(node, "payload", None)
+            facts = payload.dict() if hasattr(payload, "dict") else dict(payload or {})
+            value = facts.get(field) or getattr(node, "entity_id", None)
+            if value is None:
+                continue
+            try:
+                values[field] = int(value)
+            except (TypeError, ValueError):
+                continue
+        return values
+
     async def execute_run(
         self,
         *,
@@ -225,6 +255,24 @@ class FinnV2OrchestratorService:
         try:
             await self.tools.execute_tool_plan(run_id=run_id, user_id=user_id, tool_plan=tool_plan)
             snapshot, validation = await self.tools.run_state_pipeline(run_id=run_id, user_id=user_id)
+            contextual_inputs = self._contextual_inputs_from_snapshot(
+                snapshot=snapshot,
+                execution_view=FinnV2RuntimeContractRepository.execution_view(runtime_contract),
+            )
+            if contextual_inputs:
+                runtime_contract = await self.runtime_contracts.record_contextual_inputs(
+                    run_id=run_id, supplied_inputs=contextual_inputs
+                )
+                execution_view = FinnV2RuntimeContractRepository.execution_view(runtime_contract)
+                request_plan = request_plan.copy(
+                    update={
+                        "operation_state": self._contract_operation_state_view(execution_view),
+                        "missing_information": execution_view["missing_inputs"],
+                    }
+                )
+                analysis = analysis.copy(
+                    update={"request_plan": request_plan, "interaction_mode": execution_view["interaction_mode"]}
+                )
             result = self.outcomes.evaluate(
                 run_id=run_id,
                 user_id=user_id,

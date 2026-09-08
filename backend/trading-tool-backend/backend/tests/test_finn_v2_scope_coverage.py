@@ -96,6 +96,33 @@ def test_asset_selection_relevance_uses_the_shared_catalog_symbol():
     ) is True
 
 
+def test_typed_action_proposals_use_contract_relevance_not_read_answer_overlap():
+    service = FinnV2ResponseVerifierService(session=object())
+    draft = ResponseDraft(
+        draft_id="draft-action-proposal-contract-relevance",
+        run_id="run-action-proposal-contract-relevance",
+        user_id=7,
+        mode="ACTION_PROPOSAL",
+        direct_answer="Ik heb een veilig voorstel voorbereid.",
+        main_observation="Er is nog niets uitgevoerd.",
+        proposal_candidate=ProposalCandidate(
+            operation_type="select_asset",
+            target_type="asset",
+            asset="SOL",
+            proposed_changes={"asset": "SOL"},
+            impact_summary="De actieve asset wijzigt pas na bevestiging.",
+            risk_summary="Zonder bevestiging verandert er niets.",
+            confirmation_required=True,
+        ),
+        evidence_set_hash="hash-action-proposal-contract-relevance",
+        created_at=datetime.now(timezone.utc),
+    )
+
+    # This answer intentionally contains no literal copy of the user wording.
+    # The typed candidate is the semantic answer for every registry action.
+    assert service._is_relevant("Gebruik Solana als mijn actuele instrument.", draft) is True
+
+
 def test_integrated_plan_verifier_requires_a_grounded_strength_and_limitation():
     draft = ResponseDraft(
         draft_id="draft-plan-quality",
@@ -635,6 +662,40 @@ def test_mode_purity_accepts_not_executed_watchlist_proposal_wording():
     )
 
     assert service._mode_purity_ok(draft) is True
+
+
+def test_mode_purity_accepts_dutch_nothing_executed_proposal_wording():
+    service = FinnV2ResponseVerifierService(session=object())
+    draft = ResponseDraft(
+        draft_id="draft-nothing-executed-proposal",
+        run_id="run-nothing-executed-proposal",
+        user_id=7,
+        mode="ACTION_PROPOSAL",
+        direct_answer="Ik kan SOL als je actieve asset instellen na je bevestiging.",
+        main_observation="De actieve asset verandert pas na expliciete confirmation; er is nog niets uitgevoerd.",
+        claims=[],
+        evidence_set_hash="hash-nothing-executed",
+        created_at=datetime.now(timezone.utc),
+    )
+
+    assert service._mode_purity_ok(draft) is True
+
+
+def test_mode_purity_rejects_a_positive_execution_claim_in_a_proposal():
+    service = FinnV2ResponseVerifierService(session=object())
+    draft = ResponseDraft(
+        draft_id="draft-positive-executed-proposal",
+        run_id="run-positive-executed-proposal",
+        user_id=7,
+        mode="ACTION_PROPOSAL",
+        direct_answer="Ik heb SOL als je actieve asset ingesteld.",
+        main_observation="De wijziging is uitgevoerd.",
+        claims=[],
+        evidence_set_hash="hash-positive-executed",
+        created_at=datetime.now(timezone.utc),
+    )
+
+    assert service._mode_purity_ok(draft) is False
 
 
 def test_mode_purity_allows_read_response_to_reference_stored_order_reasoning():

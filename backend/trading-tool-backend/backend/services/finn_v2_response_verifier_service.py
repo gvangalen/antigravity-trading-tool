@@ -1306,6 +1306,18 @@ class FinnV2ResponseVerifierService:
         return scopes
 
     def _is_relevant(self, question: str, draft: ResponseDraft) -> bool:
+        candidate = draft.proposal_candidate
+        if (
+            normalize_interaction_mode(draft.mode) in {"CREATE_PROPOSAL", "ACTION_PROPOSAL"}
+            and candidate is not None
+        ):
+            # A write action answers the user by publishing a typed, safely
+            # confirmable candidate.  Its operation, inputs, target, policy,
+            # evidence and non-execution guarantees are checked separately by
+            # ``_proposal_ok``, ``_mode_purity_ok`` and the policy checks.
+            # Applying the READ/EVALUATE text-overlap heuristic here would
+            # reject valid proposals solely because they are not prose answers.
+            return True
         # A contract-limited plan evaluation explicitly answers the requested
         # assessment with the strongest conclusion the collected evidence can
         # support. It must not be treated as irrelevant merely because it
@@ -1333,16 +1345,6 @@ class FinnV2ResponseVerifierService:
         lowered = question.lower()
         answer = f"{draft.direct_answer} {draft.main_observation}".lower()
         provenance = draft.reasoning_provenance or {}
-        candidate = draft.proposal_candidate
-        if provenance.get("operation_id") == "select_asset":
-            # The registry contract stores the requested asset canonically.
-            # A deterministic proposal may publish that symbol instead of the
-            # user's natural-language alias, so relevance is target equality,
-            # not a literal-token comparison.
-            requested_asset = resolve_catalog_symbol_mention(question)
-            answered_asset = resolve_catalog_symbol_mention(answer)
-            if requested_asset and requested_asset == answered_asset:
-                return True
         if candidate is not None and candidate.asset:
             # The user may name an asset while the contract publishes its
             # catalog symbol. Compare their canonical forms, not wording.
@@ -1427,9 +1429,21 @@ class FinnV2ResponseVerifierService:
         if normalize_interaction_mode(draft.mode) in {"CREATE_PROPOSAL", "ACTION_PROPOSAL"}:
             if "already live" in text:
                 return False
-            if "uitgevoerd" in text and not any(phrase in text for phrase in ["niet uitgevoerd", "nog niet uitgevoerd"]):
+            # A proposal must make non-execution explicit.  Recognize the
+            # normal Dutch negative forms instead of treating "nog niets
+            # uitgevoerd" as a positive execution claim and stripping the
+            # typed candidate during repair.
+            dutch_not_executed = bool(
+                re.search(r"\b(?:niet|geen|niets)\s+uitgevoerd\b", text)
+                or re.search(r"\bnog\s+(?:niet|niets)\s+uitgevoerd\b", text)
+            )
+            english_not_executed = bool(
+                re.search(r"\b(?:not|no|nothing)\s+(?:yet\s+)?executed\b", text)
+                or "not yet executed" in text
+            )
+            if "uitgevoerd" in text and not dutch_not_executed:
                 return False
-            if "executed" in text and not any(phrase in text for phrase in ["not executed", "not yet executed"]):
+            if "executed" in text and not english_not_executed:
                 return False
             return True
         return True
@@ -1541,9 +1555,15 @@ class FinnV2ResponseVerifierService:
 
     def _proposal_ok(self, draft: ResponseDraft, policy: FinnV2PolicyDecision, evidence_by_ref: Dict[str, Any]) -> bool:
         candidate = draft.proposal_candidate
+        proposal_mode = normalize_interaction_mode(draft.mode) in {"CREATE_PROPOSAL", "ACTION_PROPOSAL"}
+        if proposal_mode and candidate is None:
+            # Proposal modes are only safe when the consumer can inspect the
+            # typed candidate before confirmation.  A prose-only action reply
+            # cannot stand in for a proposal.
+            return False
         if candidate is None:
             return True
-        if normalize_interaction_mode(draft.mode) not in {"CREATE_PROPOSAL", "ACTION_PROPOSAL"}:
+        if not proposal_mode:
             return False
         if policy.operation_type and candidate.operation_type != policy.operation_type:
             return False

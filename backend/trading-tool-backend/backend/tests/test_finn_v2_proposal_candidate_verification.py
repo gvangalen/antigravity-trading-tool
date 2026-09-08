@@ -73,3 +73,23 @@ def test_create_strategy_proposal_uses_its_parent_setup_as_the_owned_target():
     assert proposal.target.target_type == "setup"
     assert proposal.target.target_id == "12"
     assert proposal.change.strategy_fields["setup_id"] == 12
+
+
+def test_proposal_mode_without_a_typed_candidate_is_rejected():
+    service = FinnV2ResponseVerifierService(session=object())
+    draft = ResponseDraft(
+        draft_id="draft-missing-proposal",
+        run_id="run-missing-proposal",
+        user_id=7,
+        mode="CREATE_PROPOSAL",
+        direct_answer="Ik heb iets voorbereid.",
+        main_observation="Bevestiging is vereist.",
+        evidence_set_hash="hash-missing-proposal",
+        created_at=datetime.now(timezone.utc),
+    )
+
+    assert service._proposal_ok(
+        draft,
+        SimpleNamespace(operation_type="create_setup", confirmation_required=True),
+        {},
+    ) is False

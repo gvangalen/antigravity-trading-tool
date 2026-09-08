@@ -13,6 +13,7 @@ from backend.schemas.finn_v2_reasoning_schema import (
     ReasoningNextStep,
     ReasoningResult,
 )
+from backend.domain.finn_v2_operation_registry import FinnV2OperationRegistry
 
 
 class FinnV2ReasoningFallbackService:
@@ -740,6 +741,10 @@ class FinnV2ReasoningFallbackService:
                     confirmation_required=True,
                 ),
                 evidence_refs_used=evidence_refs,
+                reasoning_provenance={
+                    "reasoning_source": "deterministic_contract",
+                    "operation_id": "watchlist_add",
+                },
                 model=model,
                 created_at=datetime.now(timezone.utc),
             )
@@ -813,11 +818,24 @@ class FinnV2ReasoningFallbackService:
                     confirmation_required=True,
                 ),
                 evidence_refs_used=evidence_refs,
+                reasoning_provenance={
+                    "reasoning_source": "deterministic_contract",
+                    "operation_id": "select_asset",
+                },
                 model=model,
                 created_at=datetime.now(timezone.utc),
             )
 
-        if operation_id and operation_id != "create_setup":
+        # Every proposal operation is described by the canonical registry.
+        # The previous implementation only had handcrafted drafts for three
+        # operations and incorrectly reported every other registered action as
+        # unsupported.  A draft is safe to derive once the registry-owned
+        # slots are complete; proposal validation and confirmation still apply.
+        try:
+            contract = FinnV2OperationRegistry().require_supported(str(operation_id or ""))
+        except ValueError:
+            contract = None
+        if contract is None or contract.response_strategy != "proposal_draft":
             return self.unavailable_draft(
                 run_id=run_id,
                 user_id=user_id,
@@ -826,19 +844,6 @@ class FinnV2ReasoningFallbackService:
                 error_codes=[*error_codes, "proposal_operation_contract_missing"],
             )
         missing = list(operation_state.get("missing_required_inputs") or [])
-        if not operation_id:
-            requested_asset = self._first_asset_symbol(context.user_message) or asset
-            timeframe = self._first_timeframe(context.user_message)
-            if requested_asset is None or timeframe is None:
-                missing = ["symbol" if requested_asset is None else "timeframe"]
-            else:
-                operation_state = {
-                    "collected_inputs": {
-                        "symbol": requested_asset,
-                        "timeframe": timeframe,
-                        "setup_type": "trade",
-                    }
-                }
         if missing:
             from backend.services.finn_v2_operation_state_service import FinnV2OperationStateService
             next_field = operation_state.get("next_missing_input") or missing[0]
@@ -869,57 +874,142 @@ class FinnV2ReasoningFallbackService:
             )
 
         proposed_fields = dict(operation_state.get("collected_inputs") or {})
-        requested_asset = str(proposed_fields.get("symbol") or asset or "").upper()
-        if not requested_asset:
+        if any(not str(proposed_fields.get(field) or "").strip() for field in contract.required_inputs):
+            # The runtime contract is authoritative; never manufacture a
+            # proposal after a stale plan says an input was present.
             return self.unavailable_draft(
                 run_id=run_id,
                 user_id=user_id,
                 mode="UNAVAILABLE",
                 model=model,
-                error_codes=[*error_codes, "proposal_asset_missing_after_validation"],
+                error_codes=[*error_codes, "proposal_contract_inputs_incomplete"],
             )
+        requested_asset = str(
+            proposed_fields.get("asset")
+            or proposed_fields.get("symbol")
+            or (context.request_plan or {}).get("target_asset")
+            or asset
+            or ""
+        ).upper() or None
+        target_id = next(
+            (
+                str(proposed_fields[field])
+                for field in ("setup_id", "strategy_id", "bot_id")
+                if proposed_fields.get(field) is not None
+            ),
+            None,
+        )
+        target_type = {
+            "asset": "asset",
+            "watchlist": "watchlist",
+            "indicators": "indicator_configuration",
+            "setup": "setup",
+            "strategy": "strategy",
+            "bot": "bot",
+        }.get(contract.domain, "asset")
+        changes = self._proposal_changes(
+            operation_id=contract.operation_id,
+            supplied_inputs=proposed_fields,
+            evidence_by_tool=evidence_by_tool,
+        )
+        evidence_refs = [item.evidence_id for item in context.evidence]
+        display_target = requested_asset or target_id or contract.domain
         timeframe = str(proposed_fields.get("timeframe") or "").strip().upper()
-        timeframe_detail = f" met {timeframe} als primair timeframe" if timeframe else ""
-        evidence_refs = [item.evidence_id for item in [active_asset, evidence_by_tool.get("read_profile"), evidence_by_tool.get("read_user_preferences")] if item is not None]
+        target_detail = f" voor {display_target}" if display_target else ""
+        if timeframe:
+            target_detail = f"{target_detail} met {timeframe} als primair timeframe"
         return ReasoningResult(
             reasoning_result_id=f"finn-v2-reasoning-{uuid.uuid4().hex}",
             run_id=run_id,
             user_id=user_id,
-            mode="CREATE_PROPOSAL",
-            direct_answer=f"Ik kan een concept-setup voor {requested_asset} voorbereiden{timeframe_detail}.",
-            main_observation="Deze setup is nog niet opgeslagen; het gaat om een voorstel dat eerst bevestigd moet worden.",
+            mode=contract.mode,
+            direct_answer=f"Ik kan een voorstel{target_detail} voorbereiden.",
+            main_observation="Er is nog niets gewijzigd; het voorstel vereist eerst expliciete bevestiging.",
             supporting_points=[],
             claims=[],
             uncertainty_summary="Controleer de setupvelden eerst inhoudelijk voordat je bevestigt.",
             uncertainty_codes=list(error_codes),
             next_step=ReasoningNextStep(
-                title="Bevestig het setupvoorstel",
-                instruction=f"Controleer het voorstel voor {requested_asset} en bevestig pas als de trend- en entrylogica klopt.",
-                operation_type="create_setup",
-                target_entity_type="setup",
-                target_entity_id=None,
+                title="Bevestig het voorstel",
+                instruction="Controleer de contractvelden en bevestig alleen als de voorgestelde wijziging klopt.",
+                operation_type=contract.operation_id,
+                target_entity_type=target_type,
+                target_entity_id=target_id,
                 requires_confirmation=True,
             ),
             follow_up_question=None,
             proposal_candidate=ProposalCandidate(
-                operation_type="create_setup",
-                target_type="setup",
-                target_id=None,
+                operation_type=contract.operation_id,
+                target_type=target_type,
+                target_id=target_id,
                 asset=requested_asset,
-                proposed_changes={
-                    "proposal_status": "draft",
-                    "generation_source": "deterministic_validated",
-                    "setup_fields": proposed_fields,
-                },
+                proposed_changes=changes,
                 evidence_refs=evidence_refs,
-                impact_summary=f"Er wordt een nieuwe {requested_asset}-setup voorbereid op basis van je prompt.",
-                risk_summary="De setup wordt pas opgeslagen na expliciete confirmation.",
+                impact_summary=f"Er wordt een {contract.action_polarity.value}-voorstel voor {display_target} voorbereid.",
+                risk_summary="Er wordt niets uitgevoerd zonder expliciete confirmation.",
                 confirmation_required=True,
             ),
             evidence_refs_used=evidence_refs,
             model=model,
             created_at=datetime.now(timezone.utc),
         )
+
+    @staticmethod
+    def _proposal_changes(
+        *,
+        operation_id: str,
+        supplied_inputs: dict[str, Any],
+        evidence_by_tool: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Translate registry-owned slots to the existing proposal schema."""
+        fields = dict(supplied_inputs)
+        base = {"proposal_status": "draft", "generation_source": "deterministic_validated"}
+        if operation_id == "create_setup":
+            return {**base, "setup_fields": fields}
+        if operation_id == "create_strategy":
+            return {**base, "strategy_fields": fields}
+        if operation_id == "create_bot":
+            return {**base, "bot_fields": fields}
+        if operation_id in {
+            "create_indicator_configuration",
+            "update_indicator_configuration",
+            "delete_indicator_configuration",
+        }:
+            change = {
+                "create_indicator_configuration": "add",
+                "update_indicator_configuration": "update",
+                "delete_indicator_configuration": "remove",
+            }[operation_id]
+            payload = {**base, "indicator_id": fields["indicator"], "operation": change}
+            if operation_id == "create_indicator_configuration":
+                payload["after"] = {key: value for key, value in fields.items() if key != "asset"}
+            elif operation_id == "update_indicator_configuration":
+                payload["after"] = dict(fields["changed_fields"])
+            return payload
+        if operation_id in {"watchlist_add", "watchlist_remove"}:
+            return {
+                **base,
+                "asset": fields["asset"],
+                "operation": "add" if operation_id == "watchlist_add" else "remove",
+            }
+        if operation_id == "activate_paper_bot":
+            bot = evidence_by_tool.get("read_linked_bot")
+            bot_facts = dict(getattr(bot, "facts", {}) or {}) if bot is not None else {}
+            return {
+                **base,
+                "bot_id": fields["bot_id"],
+                "requested_mode": "paper",
+                "current_is_live": bool(bot_facts.get("is_live")),
+            }
+        if operation_id == "deactivate_bot":
+            return {
+                **base,
+                "bot_id": fields["bot_id"],
+                "changed_fields": {"is_active": False},
+            }
+        if operation_id.startswith("update_"):
+            return {**base, **fields, "changed_fields": dict(fields.get("changed_fields") or {})}
+        return {**base, **fields}
 
     def blocked_action_draft(
         self,

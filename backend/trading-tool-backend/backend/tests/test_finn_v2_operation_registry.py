@@ -44,6 +44,16 @@ def test_completed_v1_strategy_contract_is_a_confirmable_v2_operation():
     assert contract.confirmation_required is True
 
 
+def test_registry_declares_the_only_contextual_reference_slots_for_action_contracts():
+    registry = FinnV2OperationRegistry()
+
+    assert registry.require_supported("update_setup").contextual_reference_inputs == ("setup_id",)
+    assert registry.require_supported("create_strategy").contextual_reference_inputs == ("setup_id",)
+    assert registry.require_supported("update_strategy").contextual_reference_inputs == ("strategy_id",)
+    assert registry.require_supported("create_bot").contextual_reference_inputs == ("strategy_id",)
+    assert registry.require_supported("update_bot").contextual_reference_inputs == ("bot_id",)
+
+
 def test_audited_v1_flows_resolve_only_through_the_canonical_registry():
     """Keep the runtime from reviving a parallel legacy action definition."""
     registry = FinnV2OperationRegistry()

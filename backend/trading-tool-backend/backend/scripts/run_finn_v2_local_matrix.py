@@ -28,6 +28,15 @@ CASES = (
     ("indicator_configuration", "Welke indicatoren staan voor BTC ingesteld?", "read_indicator_configuration", {"completed"}),
 )
 
+# These are non-sealed synthetic prompts. They exercise the real worker path
+# for complete contract inputs and catch a proposal draft being downgraded
+# before it reaches the proposal service.
+ACTION_CASES = (
+    ("complete_setup_proposal", "Maak een swing setup voor SOL op 4 uur met de naam Lokale SOL Swing.", "create_setup"),
+    ("indicator_proposal", "Maak een momentum RSI indicatorconfiguratie voor SOL.", "create_indicator_configuration"),
+    ("select_asset_proposal", "Selecteer SOL als mijn actieve asset.", "select_asset"),
+)
+
 
 def _post(url: str, payload: dict) -> dict:
     request = urllib.request.Request(url, data=json.dumps(payload).encode(), headers={"Content-Type": "application/json"}, method="POST")
@@ -248,6 +257,31 @@ def _exercise_guided_setup(*, base_url: str, token: str) -> dict:
     }
 
 
+def _exercise_complete_action_contracts(*, base_url: str, token: str) -> list[dict]:
+    """Exercise public worker proposal creation with complete synthetic input."""
+    results = []
+    for case_id, message, operation_id in ACTION_CASES:
+        observed = run_gate(
+            base_url=base_url,
+            bearer_token=token,
+            message=message,
+            timeout_seconds=60.0,
+        )
+        projection = _proposal_projection_for_run(observed["run_id"])
+        results.append(
+            {
+                "case_id": case_id,
+                "operation_id": observed["final_operation_id"],
+                "operation_matches": observed["final_operation_id"] == operation_id,
+                "terminal_status": observed["status"],
+                "proposal_persisted": projection["proposal_persisted"],
+                "proposal_projection_operation": projection["proposal_projection_operation"],
+                "polling_sse_contract_projection": observed["polling_sse_contract_projection"],
+            }
+        )
+    return results
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--base-url", default="http://127.0.0.1:18000")
@@ -282,8 +316,9 @@ def main() -> None:
         results.append({"case_id": case_id, "run_id": run_id, "run_id_present": bool(run_id), "http_status": poll_status, "status": terminal.get("status"), "expected_operation_id": expected_operation, "expected_terminal_statuses": sorted(expected_statuses), "actual_operation_id": trace.get("final_operation_id"), "operation_matches": expected_operation == trace.get("final_operation_id"), "terminal_status_matches": terminal.get("status") in expected_statuses, "dispatch_count": trace.get("dispatch_count"), "attempt_count": trace.get("attempt_count"), "supplied_inputs": trace.get("supplied_inputs"), "missing_inputs": trace.get("missing_inputs"), "terminal_reason": trace.get("terminal_reason"), "contract_id_present": bool(observed["contract_id"]), "polling_sse_contract_projection": observed["polling_sse_contract_projection"], "elapsed_ms": observed["elapsed_ms"]})
     safe_execution = _exercise_safe_execution(base_url=base_url, token=token, user_id=user_id)
     guided_setup = _exercise_guided_setup(base_url=base_url, token=token)
-    passed = all(item["http_status"] == 200 and item["terminal_status_matches"] and item["operation_matches"] and item["dispatch_count"] == 1 and item["attempt_count"] == 1 and item["contract_id_present"] and item["polling_sse_contract_projection"] for item in results) and all(safe_execution[key] for key in ("proposal_created", "confirmation_succeeded", "execution_succeeded", "idempotency_replay")) and guided_setup["conversation_reused"] and guided_setup["guided_operation_preserved"] and guided_setup["proposal_persisted"] and guided_setup["proposal_projection_status"] == "draft" and guided_setup["proposal_projection_operation"] == "create_setup" and guided_setup["polling_sse_contract_projection"]
-    print(json.dumps({"synthetic_user": True, "fixture_seeded": True, "user_id_present": bool(user_id), "cases": results, "safe_execution": safe_execution, "guided_setup": guided_setup, "passed": passed}, sort_keys=True))
+    complete_actions = _exercise_complete_action_contracts(base_url=base_url, token=token)
+    passed = all(item["http_status"] == 200 and item["terminal_status_matches"] and item["operation_matches"] and item["dispatch_count"] == 1 and item["attempt_count"] == 1 and item["contract_id_present"] and item["polling_sse_contract_projection"] for item in results) and all(safe_execution[key] for key in ("proposal_created", "confirmation_succeeded", "execution_succeeded", "idempotency_replay")) and guided_setup["conversation_reused"] and guided_setup["guided_operation_preserved"] and guided_setup["proposal_persisted"] and guided_setup["proposal_projection_status"] == "draft" and guided_setup["proposal_projection_operation"] == "create_setup" and guided_setup["polling_sse_contract_projection"] and all(item["operation_matches"] and item["terminal_status"] == "completed" and item["proposal_persisted"] and item["proposal_projection_operation"] == item["operation_id"] and item["polling_sse_contract_projection"] for item in complete_actions)
+    print(json.dumps({"synthetic_user": True, "fixture_seeded": True, "user_id_present": bool(user_id), "cases": results, "safe_execution": safe_execution, "guided_setup": guided_setup, "complete_actions": complete_actions, "passed": passed}, sort_keys=True))
     if not passed:
         raise SystemExit(1)
 

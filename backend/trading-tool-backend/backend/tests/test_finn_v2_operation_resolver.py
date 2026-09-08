@@ -1,3 +1,5 @@
+import pytest
+
 from backend.domain.finn_v2_operation_registry import FinnV2OperationRegistry
 from backend.services.finn_v2_operation_resolver_service import FinnV2OperationResolverService
 from backend.services.finn_v2_structured_operation_selector_service import FinnV2StructuredOperationSelection
@@ -116,6 +118,31 @@ def test_semantic_frame_resolves_strategy_generation_to_the_single_v2_create_con
     )
 
     assert resolved.operation_id == "create_strategy"
+
+
+@pytest.mark.parametrize(
+    ("goal", "object_name", "operation_id"),
+    [
+        ("update", "setup", "update_setup"),
+        ("delete", "setup", "delete_setup"),
+        ("update", "strategy", "update_strategy"),
+        ("delete", "strategy", "delete_strategy"),
+        ("create", "bot", "create_bot"),
+        ("update", "bot", "update_bot"),
+        ("delete", "bot", "delete_bot"),
+        ("deactivate", "bot", "deactivate_bot"),
+        ("update", "indicator", "update_indicator_configuration"),
+    ],
+)
+def test_semantic_frame_resolves_registered_action_transitions_without_clarifying(goal, object_name, operation_id):
+    registry = FinnV2OperationRegistry()
+    resolved = FinnV2OperationResolverService(registry).resolve(
+        selection=_selection("clarify_request", {"goal": goal, "object": object_name}),
+        candidates=registry.list(),
+        conversation_context={},
+    )
+
+    assert resolved.operation_id == operation_id
 
 
 def test_capability_discourse_rejects_an_incompatible_nearby_plan_read():

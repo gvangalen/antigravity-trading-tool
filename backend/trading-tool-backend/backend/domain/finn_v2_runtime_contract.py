@@ -82,12 +82,20 @@ class FinnRuntimeContract(BaseModel):
         included here. These values can safely accompany every poll and SSE
         event without creating artifact fan-out or leaking sensitive context.
         """
+        operation_id = self.final_operation_id or self.initial_operation_id
+        try:
+            from backend.domain.finn_v2_operation_registry import FinnV2OperationRegistry
+
+            action_polarity = FinnV2OperationRegistry().require_supported(str(operation_id)).action_polarity.value
+        except (ValueError, AttributeError):
+            action_polarity = None
         return {
             "version": self.public_projection_version,
             "run_id": self.run_id,
             "conversation_id": self.conversation_id,
             "initial_operation_id": self.initial_operation_id,
             "final_operation_id": self.final_operation_id,
+            "action_polarity": action_polarity,
             "requested_mode": self.requested_mode,
             "final_mode": self.final_mode,
             "operation_change_reason": self.operation_change_reason,
@@ -349,6 +357,52 @@ def record_selection(
     return state
 
 
+def record_contextual_inputs(state: Dict[str, Any], *, supplied_inputs: Dict[str, Any]) -> Dict[str, Any]:
+    """Fill only registry-authorized identifiers from this run's evidence.
+
+    A user may omit the identifier for their active setup, strategy, or bot.
+    The registry explicitly declares which required slot may be sourced from
+    the user-scoped tool evidence collected for this run.  This transition
+    never replaces an explicit input and recomputes missing slots from the
+    same action contract that governs confirmation and execution.
+    """
+    state = dict(state)
+    operation_id = str(state.get("final_operation_id") or state.get("initial_operation_id") or "")
+    if not operation_id:
+        raise RuntimeContractImmutableFieldError("runtime_contract_initial_intent_missing")
+
+    from backend.domain.finn_v2_operation_registry import FinnV2OperationRegistry
+
+    action_contract = FinnV2OperationRegistry().require_supported(operation_id)
+    allowed = set(action_contract.contextual_reference_inputs)
+    if not allowed:
+        return state
+    collected = dict(state.get("supplied_inputs") or {})
+    hydrated: list[str] = []
+    for field in allowed:
+        value = supplied_inputs.get(field)
+        if field in collected or value is None or (isinstance(value, str) and not value.strip()):
+            continue
+        collected[field] = value
+        hydrated.append(field)
+    if not hydrated:
+        return state
+    state["supplied_inputs"] = collected
+    state["missing_inputs"] = [
+        field for field in action_contract.required_inputs
+        if field not in collected or collected[field] is None or (isinstance(collected[field], str) and not collected[field].strip())
+    ]
+    state.setdefault("transition_log", []).append(
+        {
+            "type": "contextual_input_hydration",
+            "operation_id": action_contract.operation_id,
+            "fields": sorted(hydrated),
+            "source": "current_run_user_scoped_evidence",
+        }
+    )
+    return state
+
+
 def record_conversation_state(
     state: Dict[str, Any], *, lineage_state: Dict[str, Any], guided_state: Dict[str, Any]
 ) -> Dict[str, Any]:
@@ -427,6 +481,15 @@ def terminal_projection(
     error_code: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Return the sole public terminal read model for a persisted contract."""
+    operation_id = state.get("final_operation_id") or state.get("initial_operation_id")
+    try:
+        from backend.domain.finn_v2_operation_registry import FinnV2OperationRegistry
+
+        action_polarity = FinnV2OperationRegistry().require_supported(str(operation_id)).action_polarity.value
+    except (ValueError, AttributeError):
+        # Historical projections remain readable; new runs always resolve
+        # their polarity from the canonical registry before persistence.
+        action_polarity = None
     identity = dict(state.get("identity") or {})
     timings_ms: Dict[str, int] = {}
     timestamps = dict(state.get("phase_timestamps") or {})
@@ -458,7 +521,8 @@ def terminal_projection(
         "conversation_id": identity.get("conversation_id"),
         "trace_id": identity.get("trace_id"),
         "initial_operation_id": state.get("initial_operation_id"),
-        "final_operation_id": state.get("final_operation_id") or state.get("initial_operation_id"),
+        "final_operation_id": operation_id,
+        "action_polarity": action_polarity,
         "requested_mode": state.get("requested_mode"),
         "final_mode": mode or state.get("final_mode") or state.get("requested_mode"),
         "operation_change_reason": state.get("operation_change_reason"),

@@ -4,6 +4,12 @@ import pytest
 
 from backend.schemas.finn_v2_reasoning_context_schema import ReasoningContextPackage, ReasoningEvidenceItem, ReasoningPolicyContext
 from backend.domain.finn_v2_operation_registry import FinnV2OperationRegistry
+from backend.schemas.finn_v2_proposal_schema import (
+    BotActivationChange,
+    BotChange,
+    IndicatorConfigurationChange,
+    WatchlistChange,
+)
 from backend.schemas.finn_v2_reasoning_schema import ProposalCandidate, ReasoningResult
 from backend.services.finn_v2_reasoning_service import FinnV2ReasoningService
 
@@ -237,6 +243,7 @@ def test_deterministic_asset_selection_proposal_uses_registry_input_without_prov
     assert result.proposal_candidate.asset == "SOL"
     assert result.proposal_candidate.proposed_changes["asset"] == "SOL"
     assert result.proposal_candidate.evidence_refs == ["Eactive"]
+    assert result.reasoning_provenance["operation_id"] == "select_asset"
 
 
 def test_deterministic_proposals_find_active_asset_by_contract_scope_not_tool_name():
@@ -313,3 +320,123 @@ def test_complete_proposal_contracts_remain_deterministic():
     assert service._uses_deterministic_contract_response(
         FinnV2OperationRegistry().require_supported("evaluate_plan")
     ) is False
+
+
+@pytest.mark.parametrize(
+    ("operation_id", "inputs", "target_type"),
+    [
+        ("create_indicator_configuration", {"asset": "SOL", "category": "momentum", "indicator": "RSI"}, "indicator_configuration"),
+        ("update_indicator_configuration", {"asset": "SOL", "category": "momentum", "indicator": "RSI", "changed_fields": {"period": 21}}, "indicator_configuration"),
+        ("delete_indicator_configuration", {"asset": "SOL", "category": "momentum", "indicator": "RSI"}, "indicator_configuration"),
+        ("update_setup", {"setup_id": 41, "changed_fields": {"timeframe": "1H"}}, "setup"),
+        ("delete_setup", {"setup_id": 41}, "setup"),
+        ("create_strategy", {"setup_id": 41, "execution_mode": "fixed", "base_amount": 100}, "strategy"),
+        ("update_strategy", {"strategy_id": 52, "changed_fields": {"risk": "low"}}, "strategy"),
+        ("delete_strategy", {"strategy_id": 52}, "strategy"),
+        ("create_bot", {"strategy_id": 52, "name": "Paper scout"}, "bot"),
+        ("update_bot", {"bot_id": 63, "changed_fields": {"name": "Paper scout two"}}, "bot"),
+        ("deactivate_bot", {"bot_id": 63}, "bot"),
+        ("delete_bot", {"bot_id": 63}, "bot"),
+        ("watchlist_remove", {"asset": "SOL"}, "watchlist"),
+    ],
+)
+def test_every_complete_registry_proposal_contract_has_a_deterministic_draft(
+    operation_id, inputs, target_type,
+):
+    service = FinnV2ReasoningService(session=object())
+    context = ReasoningContextPackage(
+        run_id=f"run-{operation_id}",
+        user_id=406,
+        user_message="Typed action-contract fixture.",
+        locale="en-US",
+        interaction_mode=FinnV2OperationRegistry().require_supported(operation_id).mode,
+        orchestrator_result_id=f"o-{operation_id}",
+        snapshot_id=f"s-{operation_id}",
+        validation_id=f"v-{operation_id}",
+        policy_decision_id=f"p-{operation_id}",
+        evidence_set_hash=f"hash-{operation_id}",
+        evidence=[
+            ReasoningEvidenceItem(
+                evidence_id="Efixture",
+                artifact_id="fixture",
+                tool_name="read_active_asset",
+                information_scope="active_asset",
+                domain="identity_context",
+                entity_type="asset",
+                asset="SOL",
+                source="fixture",
+                freshness="fresh",
+                confidence="high",
+                facts={"symbol": "SOL"},
+            )
+        ],
+        policy=ReasoningPolicyContext(
+            policy_class="proposal",
+            allowed=True,
+            proposal_allowed=True,
+            confirmation_required=True,
+            step_up_required=False,
+            execution_allowed=False,
+            operation_type=operation_id,
+        ),
+        request_plan={
+            "operation_id": operation_id,
+            "operation_state": {"collected_inputs": inputs, "missing_required_inputs": []},
+        },
+    )
+
+    result = service._deterministic_contract_draft(
+        contract=FinnV2OperationRegistry().require_supported(operation_id),
+        run_id=context.run_id,
+        user_id=context.user_id,
+        context=context,
+        model="deterministic",
+    )
+
+    assert result.mode == FinnV2OperationRegistry().require_supported(operation_id).mode
+    assert result.proposal_candidate is not None
+    assert result.proposal_candidate.operation_type == operation_id
+    assert result.proposal_candidate.target_type == target_type
+    assert result.proposal_candidate.confirmation_required is True
+
+
+def test_generic_draft_change_projection_uses_the_existing_proposal_union_members():
+    service = FinnV2ReasoningService(session=object()).fallbacks
+    change_payload = lambda payload: {
+        key: value for key, value in payload.items()
+        if key not in {"proposal_status", "generation_source"}
+    }
+
+    created_indicator = service._proposal_changes(
+        operation_id="create_indicator_configuration",
+        supplied_inputs={"asset": "SOL", "category": "momentum", "indicator": "RSI"},
+        evidence_by_tool={},
+    )
+    updated_indicator = service._proposal_changes(
+        operation_id="update_indicator_configuration",
+        supplied_inputs={"asset": "SOL", "category": "momentum", "indicator": "RSI", "changed_fields": {"period": 21}},
+        evidence_by_tool={},
+    )
+    removed_indicator = service._proposal_changes(
+        operation_id="delete_indicator_configuration",
+        supplied_inputs={"asset": "SOL", "category": "momentum", "indicator": "RSI"},
+        evidence_by_tool={},
+    )
+    watchlist = service._proposal_changes(
+        operation_id="watchlist_remove", supplied_inputs={"asset": "SOL"}, evidence_by_tool={}
+    )
+    bot = service._proposal_changes(
+        operation_id="deactivate_bot", supplied_inputs={"bot_id": 63}, evidence_by_tool={}
+    )
+    paper = service._proposal_changes(
+        operation_id="activate_paper_bot",
+        supplied_inputs={"bot_id": 63},
+        evidence_by_tool={"read_linked_bot": type("Evidence", (), {"facts": {"is_live": False}})()},
+    )
+
+    assert IndicatorConfigurationChange.parse_obj(change_payload(created_indicator)).operation == "add"
+    assert IndicatorConfigurationChange.parse_obj(change_payload(updated_indicator)).after == {"period": 21}
+    assert IndicatorConfigurationChange.parse_obj(change_payload(removed_indicator)).operation == "remove"
+    assert WatchlistChange.parse_obj(change_payload(watchlist)).operation == "remove"
+    assert BotChange.parse_obj(change_payload(bot)).changed_fields == {"is_active": False}
+    assert BotActivationChange.parse_obj(change_payload(paper)).requested_mode == "paper"

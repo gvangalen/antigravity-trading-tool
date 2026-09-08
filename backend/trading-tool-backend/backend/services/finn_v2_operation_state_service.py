@@ -7,6 +7,8 @@ from typing import Mapping, Optional
 
 from backend.domain.finn_v2_operation_registry import OperationContract
 from backend.domain.finn_v2_setup_input_catalog import FinnV2SetupInputCatalog
+from backend.domain.technical_indicator_catalog import get_active_technical_indicator_definitions
+from backend.domain.macro_indicator_catalog import get_active_macro_indicator_definitions
 from backend.schemas.finn_v2_orchestrator_schema import FinnV2OperationState
 
 
@@ -204,6 +206,21 @@ class FinnV2OperationStateService:
             identifier = re.search(rf"\b{label}(?:\s*(?:id|nummer|number))?\s*#?\s*(\d+)\b", text, re.IGNORECASE)
             if identifier:
                 values[field] = int(identifier.group(1))
+        if {"indicator", "category"}.intersection(accepted_inputs):
+            indicator = self._indicator_input_from_text(text)
+            if indicator is not None:
+                if "indicator" in accepted_inputs:
+                    values.setdefault("indicator", indicator["name"])
+                if "category" in accepted_inputs:
+                    values.setdefault("category", indicator["category"])
+        if "name" in accepted_inputs:
+            named = self._name_input_from_text(text)
+            if named:
+                values.setdefault("name", named)
+        if "changed_fields" in accepted_inputs:
+            changes = self._natural_changed_fields(text, contract=contract)
+            if changes:
+                values.setdefault("changed_fields", changes)
         if contract.operation_id == "create_setup":
             if "dca" in lowered:
                 values["setup_type"] = "dca"
@@ -214,21 +231,10 @@ class FinnV2OperationStateService:
             # Keep multi-word locale introducers ahead of their shorter
             # components. Word boundaries prevent ``name`` matching inside
             # German ``namens`` or an unrelated user-supplied word.
-            named = re.search(
-                r"\b(?:mit\s+dem\s+namen|unter\s+dem\s+namen|met\s+de\s+naam|namens|genannt|"
-                r"genaamd|named|called|call\s+it|nenne\s+(?:ihn|sie|es)|"
-                r"noem\s+(?:hem|haar|het|deze|dit)|ik\s+noem\s+(?:hem|haar|het|deze|dit)|"
-                r"hij\s+heet|het\s+heet|naam|name|titel|title)\b"
-                r"\s*(?:is|:|=)?\s*[\"']?([\w .-]{2,80})",
-                text,
-                re.IGNORECASE,
-            )
-            if named:
-                name = FinnV2SetupInputCatalog.display_name(
-                    self._trim_setup_name_clause(named.group(1).strip(" ."))
+            if values.get("name"):
+                values["name"] = FinnV2SetupInputCatalog.display_name(
+                    self._trim_setup_name_clause(str(values["name"]))
                 )
-                if name:
-                    values["name"] = name
             timeframe = FinnV2SetupInputCatalog.timeframe_from_text(text)
             if timeframe:
                 values["timeframe"] = timeframe
@@ -289,6 +295,85 @@ class FinnV2OperationStateService:
         if not all(isinstance(key, str) and key.strip() for key in raw):
             return {}
         return dict(raw)
+
+    @staticmethod
+    def _name_input_from_text(text: str) -> Optional[str]:
+        named = re.search(
+            r"\b(?:mit\s+dem\s+namen|unter\s+dem\s+namen|met\s+de\s+naam|namens|genannt|"
+            r"genaamd|named|called|call\s+it|nenne\s+(?:ihn|sie|es)|"
+            r"noem\s+(?:hem|haar|het|deze|dit)|ik\s+noem\s+(?:hem|haar|het|deze|dit)|"
+            r"hij\s+heet|het\s+heet|naam|name|titel|title)\b"
+            r"\s*(?:is|:|=)?\s*[\"']?([\w .-]{2,80})",
+            text,
+            re.IGNORECASE,
+        )
+        if not named:
+            return None
+        return named.group(1).strip(" .\"'") or None
+
+    @classmethod
+    def _natural_changed_fields(cls, text: str, *, contract: OperationContract) -> dict[str, object]:
+        """Capture one explicit natural-language change for a typed update slot.
+
+        The action contract deliberately exposes ``changed_fields`` as one
+        typed object; the downstream adapter remains the authority for which
+        fields it accepts.  This parser only serializes an explicitly stated
+        ``field -> value`` pair and does not infer a change from prose.
+        """
+        structured = cls._structured_changed_fields(text)
+        if structured:
+            return structured
+        match = re.search(
+            r"\b(?:wijzig|verander|zet|change|update|set|ändere|aktualisiere)\s+"
+            r"(?:mijn|my|de|het|the|den|die|das)?\s*([\w -]{2,48}?)\s+"
+            r"(?:naar|to|auf|als)\s+[\"']?([^,.!?\n]{1,80})",
+            text,
+            re.IGNORECASE,
+        )
+        if not match:
+            return {}
+        field = re.sub(r"\s+", "_", match.group(1).strip().casefold())
+        # Object names are supplied by the selected registry contract; remove
+        # only that object prefix, never a domain-specific list of fields.
+        domain_prefix = f"{contract.domain}_"
+        if field.startswith(domain_prefix):
+            field = field[len(domain_prefix):]
+        field = re.sub(r"^\d+_", "", field)
+        value = match.group(2).strip(" .\"'")
+        if not field or not value:
+            return {}
+        lowered = value.casefold()
+        if lowered in {"true", "waar", "ja", "yes"}:
+            typed_value: object = True
+        elif lowered in {"false", "onwaar", "nee", "no"}:
+            typed_value = False
+        elif re.fullmatch(r"\d+", value):
+            typed_value = int(value)
+        elif re.fullmatch(r"\d+[.,]\d+", value):
+            typed_value = float(value.replace(",", "."))
+        else:
+            typed_value = value
+        return {field: typed_value}
+
+    @staticmethod
+    def _indicator_input_from_text(text: str) -> Optional[dict[str, str]]:
+        """Resolve configured indicators from the canonical indicator catalogs."""
+        normalized = re.sub(r"[\s_-]+", " ", text.casefold()).strip()
+        definitions = [
+            *get_active_technical_indicator_definitions(),
+            *get_active_macro_indicator_definitions(),
+        ]
+        for definition in definitions:
+            name = str(definition.get("name") or "").strip()
+            category = str(definition.get("category") or "").strip()
+            display = str(definition.get("display_name") or "").strip()
+            variants = {name, display, name.replace("_", " "), display.replace("_", " ")}
+            if any(
+                variant and re.search(rf"(?<!\w){re.escape(variant.casefold())}(?!\w)", normalized)
+                for variant in variants
+            ):
+                return {"name": name, "category": category}
+        return None
 
     @staticmethod
     def _trim_setup_name_clause(value: str) -> str:

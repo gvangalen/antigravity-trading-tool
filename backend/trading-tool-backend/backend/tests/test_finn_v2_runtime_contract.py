@@ -43,6 +43,7 @@ def test_terminal_contract_is_versioned_hashed_and_does_not_expose_raw_message()
     projection = contract.public_projection()
     assert contract.public_projection_hash
     assert projection["initial_operation_id"] == projection["final_operation_id"] == "evaluate_plan"
+    assert projection["action_polarity"] == "evaluate"
     assert projection["canonical_target"] == "XAU"
     assert projection["target_source"] == "explicit_message"
     assert projection["conversation_reference"] == "previous_verified_response"
