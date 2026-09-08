@@ -42,6 +42,24 @@ ACTION_SPECS = (
     ("deactivate_bot", "Deactiveer de bot Matrix Deactivate Bot.", "Deactiveer een bot.", "Deactiveer de bot Matrix Deactivate Bot."),
 )
 
+# These are semantic reproductions of the published production findings. They
+# deliberately retain only the operation and prerequisite class, never a QA
+# prompt, identity, or internal production ID.
+PRODUCTION_QA_REGRESSIONS = {
+    "watchlist_add": ("a17",),
+    "update_indicator_configuration": ("a20",),
+    "create_setup": ("a23",),
+    "update_setup": ("a24",),
+    "delete_setup": ("a25",),
+    "create_strategy": ("a26",),
+    "update_strategy": ("a27",),
+    "delete_strategy": ("a28",),
+    "create_bot": ("a29",),
+    "update_bot": ("a30",),
+    "deactivate_bot": ("a31",),
+    "delete_bot": ("a32",),
+}
+
 
 def _create_local_user() -> dict[str, Any]:
     """Create a non-login synthetic user without consuming HTTP auth limits."""
@@ -285,6 +303,7 @@ def _run_contract(base_url: str, spec: tuple[str, str, str, str]) -> dict[str, A
         "action_polarity": contract.action_polarity.value,
         "status": "FAIL",
         "fixture_objects": _fixture_provenance(fields),
+        "production_regression_case_ids": list(PRODUCTION_QA_REGRESSIONS.get(operation_id, ())),
     }
     try:
         observed = run_gate(base_url=base_url, bearer_token=token, message=message, timeout_seconds=75)
