@@ -138,6 +138,15 @@ class FinnV2ActionAdapterRegistry:
             raise ValueError("execution_adapter_unavailable")
         change = payload["change"]
         raw_payload = dict(change.get("setup_fields") or {})
+        # FINN's typed contract accepts a user's trading style (for example
+        # "swing") while SetupService persists its established execution
+        # categories. Keep the original style as metadata and pass only the
+        # existing service's canonical category across that boundary.
+        setup_type = str(raw_payload.get("setup_type") or "").strip().lower()
+        service_setup_type = {"swing": "trade", "scalp": "trade", "long_term": "position"}.get(setup_type, setup_type)
+        if service_setup_type != setup_type:
+            raw_payload["strategy_style"] = setup_type
+            raw_payload["setup_type"] = service_setup_type
         setup_payload = SetupCreateSchema.parse_obj(raw_payload)
         return await self.setups.save_setup(setup_payload, raw_payload, user_id)
 

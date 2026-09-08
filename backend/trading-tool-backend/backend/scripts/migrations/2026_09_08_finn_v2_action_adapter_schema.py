@@ -1,20 +1,12 @@
-#!/usr/bin/env python3
-"""Create the non-production baseline required by historical FINN migrations."""
-from backend.infrastructure.database import Base, sync_engine
-from backend.infrastructure import models  # noqa: F401 - register ORM metadata
-from sqlalchemy import text
+"""Align legacy action tables with the existing FINN V2 adapter services.
 
+The adapters have always delegated to SetupService, StrategyService and
+BotService.  Older installations can retain minimal historical tables because
+``CREATE TABLE IF NOT EXISTS`` does not add later columns.  This idempotent
+migration makes that drift explicit instead of masking it in a test runner.
+"""
 
-LEGACY_BASELINE = """
-ALTER TABLE user_indicator_configs
-    ALTER COLUMN config_json TYPE JSONB USING config_json::text::jsonb;
--- ``create_all`` never alters an older local table. Keep the local baseline
--- compatible with the current asset catalog ORM before replaying migrations.
-ALTER TABLE asset_catalog
-    ADD COLUMN IF NOT EXISTS content_hash VARCHAR,
-    ADD COLUMN IF NOT EXISTS payload_json JSONB,
-    ADD COLUMN IF NOT EXISTS error_codes_json JSONB NOT NULL DEFAULT '[]'::jsonb;
-CREATE TABLE IF NOT EXISTS strategies (id SERIAL PRIMARY KEY, user_id INTEGER REFERENCES users(id), setup_id INTEGER REFERENCES setups(id));
+SQL = """
 CREATE TABLE IF NOT EXISTS active_strategy_snapshot (
     id SERIAL PRIMARY KEY,
     user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -31,16 +23,7 @@ CREATE TABLE IF NOT EXISTS active_strategy_snapshot (
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     UNIQUE (user_id, setup_id, snapshot_date)
 );
-CREATE TABLE IF NOT EXISTS bot_configs (id SERIAL PRIMARY KEY, user_id INTEGER REFERENCES users(id), strategy_id INTEGER REFERENCES strategies(id), cadence TEXT DEFAULT 'daily', symbol TEXT);
-CREATE TABLE IF NOT EXISTS bot_orders (id SERIAL PRIMARY KEY, user_id INTEGER REFERENCES users(id), decision_id INTEGER, status TEXT DEFAULT 'pending');
-CREATE TABLE IF NOT EXISTS bot_executions (id SERIAL PRIMARY KEY, user_id INTEGER REFERENCES users(id), bot_order_id INTEGER REFERENCES bot_orders(id));
-CREATE TABLE IF NOT EXISTS bot_ledger (id SERIAL PRIMARY KEY, user_id INTEGER REFERENCES users(id), order_id INTEGER REFERENCES bot_orders(id), entry_type TEXT);
-CREATE TABLE IF NOT EXISTS bot_portfolios (id SERIAL PRIMARY KEY, bot_id INTEGER REFERENCES bot_configs(id), user_id INTEGER REFERENCES users(id), symbol TEXT);
-CREATE TABLE IF NOT EXISTS global_market_insights (id SERIAL PRIMARY KEY, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP);
 
--- ``create_all`` deliberately never mutates legacy tables.  The safe FINN
--- adapters use the long-standing service schemas below, so a disposable local
--- runtime must receive the same additive baseline before action-matrix tests.
 ALTER TABLE setups
     ADD COLUMN IF NOT EXISTS setup_type VARCHAR DEFAULT 'trade',
     ADD COLUMN IF NOT EXISTS dca_frequency VARCHAR,
@@ -100,17 +83,4 @@ ALTER TABLE daily_setup_scores
     ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT TRUE,
     ADD COLUMN IF NOT EXISTS explanation TEXT,
     ADD COLUMN IF NOT EXISTS created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;
-
-ALTER TABLE user_indicator_configs
-    ALTER COLUMN updated_at SET DEFAULT CURRENT_TIMESTAMP;
 """
-
-
-def main() -> None:
-    Base.metadata.create_all(bind=sync_engine)
-    with sync_engine.begin() as connection:
-        connection.execute(text(LEGACY_BASELINE))
-
-
-if __name__ == "__main__":
-    main()

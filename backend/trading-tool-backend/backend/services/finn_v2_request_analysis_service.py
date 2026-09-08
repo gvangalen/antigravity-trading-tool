@@ -65,6 +65,9 @@ class FinnV2RequestAnalysisService:
         explicit_setup_id = self._extract_entity_id(text, "setup")
         explicit_strategy_id = self._extract_entity_id(text, "strateg")
         explicit_bot_id = self._extract_entity_id(text, "bot")
+        explicit_setup_name = self._extract_quoted_entity_name(text, "setup")
+        explicit_strategy_name = self._extract_quoted_entity_name(text, "strateg")
+        explicit_bot_name = self._extract_quoted_entity_name(text, "bot")
         # Only the preprocessor may mark a conversation reference.  This
         # avoids turning ordinary Dutch pronouns into stale conversation
         # selectors later in the pipeline.
@@ -115,6 +118,9 @@ class FinnV2RequestAnalysisService:
             explicit_setup_id=explicit_setup_id,
             explicit_strategy_id=explicit_strategy_id,
             explicit_bot_id=explicit_bot_id,
+            explicit_setup_name=explicit_setup_name,
+            explicit_strategy_name=explicit_strategy_name,
+            explicit_bot_name=explicit_bot_name,
         )
         missing_essential_inputs: List[str] = []
         # New V2 runs select their operation exclusively through the semantic
@@ -322,6 +328,9 @@ class FinnV2RequestAnalysisService:
             explicit_setup_id=explicit_setup_id,
             explicit_strategy_id=explicit_strategy_id,
             explicit_bot_id=explicit_bot_id,
+            explicit_setup_name=explicit_setup_name,
+            explicit_strategy_name=explicit_strategy_name,
+            explicit_bot_name=explicit_bot_name,
             financial_concept=preprocessed.financial_concept,
             initial_operation_id=initial_operation_id,
             operation_id=operation_id,
@@ -357,6 +366,9 @@ class FinnV2RequestAnalysisService:
             explicit_setup_id=explicit_setup_id,
             explicit_strategy_id=explicit_strategy_id,
             explicit_bot_id=explicit_bot_id,
+            explicit_setup_name=explicit_setup_name,
+            explicit_strategy_name=explicit_strategy_name,
+            explicit_bot_name=explicit_bot_name,
             primary_subject=primary_subject,
             requested_entities=requested_entities,
             output_contract=operation.response_strategy if operation is not None else "unavailable",
@@ -389,6 +401,9 @@ class FinnV2RequestAnalysisService:
         explicit_setup_id: Optional[int],
         explicit_strategy_id: Optional[int],
         explicit_bot_id: Optional[int],
+        explicit_setup_name: Optional[str],
+        explicit_strategy_name: Optional[str],
+        explicit_bot_name: Optional[str],
         financial_concept: Optional[str],
         initial_operation_id: str,
         operation_id: str,
@@ -460,6 +475,9 @@ class FinnV2RequestAnalysisService:
                     "setup_id": explicit_setup_id,
                     "strategy_id": explicit_strategy_id,
                     "bot_id": explicit_bot_id,
+                    "setup_name": explicit_setup_name,
+                    "strategy_name": explicit_strategy_name,
+                    "bot_name": explicit_bot_name,
                     "concept": financial_concept,
                 }.items()
                 if value is not None
@@ -602,6 +620,25 @@ class FinnV2RequestAnalysisService:
             return None
         return value if value > 0 else None
 
+    @staticmethod
+    def _extract_quoted_entity_name(original: str, keyword_root: str) -> Optional[str]:
+        """Extract an explicit, user-quoted owner-scoped object name.
+
+        Names are intentionally accepted only when quoted. This keeps ordinary
+        prose from becoming an implicit object selector while allowing a user
+        to address an existing setup, strategy or bot without knowing its ID.
+        Ownership and ambiguity are enforced later by the entity resolver.
+        """
+        match = re.search(
+            rf"\b{keyword_root}[a-z]*\s+[\"'“]([^\"'”]{{1,128}})[\"'”]",
+            original,
+            re.IGNORECASE,
+        )
+        if not match:
+            return None
+        name = re.sub(r"\s+", " ", match.group(1)).strip()
+        return name or None
+
     def _normalize_text(self, text: str) -> str:
         return re.sub(r"\s+", " ", text.casefold()).strip()
 
@@ -635,14 +672,17 @@ class FinnV2RequestAnalysisService:
         explicit_setup_id: Optional[int],
         explicit_strategy_id: Optional[int],
         explicit_bot_id: Optional[int],
+        explicit_setup_name: Optional[str] = None,
+        explicit_strategy_name: Optional[str] = None,
+        explicit_bot_name: Optional[str] = None,
     ) -> List[str]:
         entities: List[str] = []
         if explicit_asset:
             entities.append("asset")
-        if explicit_setup_id:
+        if explicit_setup_id or explicit_setup_name:
             entities.append("setup")
-        if explicit_strategy_id:
+        if explicit_strategy_id or explicit_strategy_name:
             entities.append("strategy")
-        if explicit_bot_id:
+        if explicit_bot_id or explicit_bot_name:
             entities.append("bot")
         return entities

@@ -7,6 +7,17 @@ ALTER TABLE user_indicator_configs
     ADD COLUMN IF NOT EXISTS source_record_id BIGINT,
     ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP;
 
+-- ADD COLUMN IF NOT EXISTS does not repair an already-present legacy column.
+-- The runtime writes canonical records without supplying updated_at, so the
+-- server default and non-null backfill must be idempotently enforced too.
+UPDATE user_indicator_configs
+SET updated_at = CURRENT_TIMESTAMP
+WHERE updated_at IS NULL;
+
+ALTER TABLE user_indicator_configs
+    ALTER COLUMN updated_at SET DEFAULT CURRENT_TIMESTAMP,
+    ALTER COLUMN updated_at SET NOT NULL;
+
 UPDATE user_indicator_configs
 SET symbol = UPPER(BTRIM(symbol))
 WHERE symbol IS NOT NULL

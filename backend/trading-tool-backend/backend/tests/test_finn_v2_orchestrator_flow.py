@@ -62,12 +62,21 @@ def _contract_boundary_for_unit_orchestrators(monkeypatch):
             ),
         )
 
+    async def _get_for_run(**_kwargs):
+        if not selected_intent:
+            return None
+        return await _record_selection()
+
     def _init(self, *args, **kwargs):
         original_init(self, *args, **kwargs)
         self.runtime_contracts = SimpleNamespace(
             record_initial_intent=_record_initial_intent,
             record_final_operation=_record_final_operation,
             record_selection=_record_selection,
+            # The post-tool execution boundary always reloads the persisted
+            # contract because a tool rollback can expire the earlier ORM row.
+            # Keep the unit double on that same authoritative read path.
+            get_for_run=_get_for_run,
         )
 
     monkeypatch.setattr(FinnV2OrchestratorService, "__init__", _init)

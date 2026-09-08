@@ -132,6 +132,7 @@ class _FakeRuntimeContracts:
         ("reasoning", "unavailable"),
         ("reasoning", "failed"),
         ("verifying", "completed"),
+        ("verifying", "clarification_required"),
         ("verifying", "downgraded"),
         ("verifying", "rejected"),
         ("verifying", "unavailable"),

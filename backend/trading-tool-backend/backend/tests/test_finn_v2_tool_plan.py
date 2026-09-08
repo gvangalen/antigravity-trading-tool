@@ -121,6 +121,8 @@ def test_tool_plan_routes_setup_creation_and_watchlist_actions_through_proposal_
         domain_plan=domain_service.determine(watchlist_analysis),
     )
 
+    # A missing descriptive field does not suppress the contract's explicit
+    # active-asset read. Only unresolved contextual IDs can skip tools.
     assert setup_plan.tool_names == ["read_active_asset"]
     assert setup_plan.required_evidence == ["active_asset"]
     assert watchlist_plan.tool_names == ["read_active_asset", "read_watchlist"]
@@ -173,3 +175,70 @@ def test_tool_plan_collects_bot_context_for_live_action_proposals():
         "linked_bot",
         "bot_status",
     ]
+
+
+def test_incomplete_action_contract_skips_unrelated_context_until_the_next_slot_is_supplied():
+    analysis_service = FinnV2RequestAnalysisService()
+    contract = analysis_service.operations.require_supported("update_strategy")
+    analysis_service.classifier.classify = lambda **_kwargs: SemanticOperationClassification(
+        operation_id="update_strategy",
+        action=contract.action_polarity.value,
+        domain=contract.domain,
+        discourse="action_request",
+        confidence="high",
+        selector_source="structured",
+    )
+    analysis = analysis_service.analyze(
+        message='Werk strategie "Mijn strategie" bij.',
+        conversation_context={
+            "conversation_state_version": "finn_v2.conversation-contracts.v1",
+            "active_guided_operation": {
+                "operation_id": "update_strategy",
+                "contract_version": contract.version,
+                "collected_inputs": {"strategy_id": 42},
+                "missing_required_inputs": ["changed_fields"],
+                "next_missing_input": "changed_fields",
+            },
+        },
+    )
+
+    domains = FinnV2DomainRequirementService().determine(analysis)
+    plan = FinnV2ToolPlanService().build(run_id="run-incomplete-strategy", analysis=analysis, domain_plan=domains)
+
+    assert domains.required_domains == []
+    assert plan.tool_names == []
+
+
+def test_follow_up_action_plan_uses_contract_collected_entity_id_before_active_context():
+    analysis_service = FinnV2RequestAnalysisService()
+    contract = analysis_service.operations.require_supported("update_strategy")
+    analysis_service.classifier.classify = lambda **_kwargs: SemanticOperationClassification(
+        operation_id="update_strategy",
+        action=contract.action_polarity.value,
+        domain=contract.domain,
+        discourse="action_request",
+        confidence="high",
+        selector_source="guided_state",
+    )
+    analysis = analysis_service.analyze(
+        message='Met {"base_amount": 120}.',
+        conversation_context={
+            "conversation_state_version": "finn_v2.conversation-contracts.v1",
+            "active_guided_operation": {
+                "operation_id": "update_strategy",
+                "contract_version": contract.version,
+                "collected_inputs": {"strategy_id": 42},
+                "missing_required_inputs": ["changed_fields"],
+                "next_missing_input": "changed_fields",
+            },
+        },
+    )
+
+    plan = FinnV2ToolPlanService().build(
+        run_id="run-follow-up-strategy",
+        analysis=analysis,
+        domain_plan=FinnV2DomainRequirementService().determine(analysis),
+    )
+
+    assert plan.entity_selectors["strategy_id"] == 42
+    assert plan.tool_inputs["read_linked_strategy"]["strategy_id"] == 42

@@ -60,6 +60,7 @@ class FinnV2ConfirmationService:
             await self.confirmations.update(existing, token_hash=token_hash, payload_hash=proposal.payload_hash, confirmed=False, already_confirmed=False)
         await self.proposals.update_status(proposal, status="pending_confirmation")
         await self._record_workflow_event(proposal, event="confirmation_issued")
+        await self._commit_before_success_response()
         return raw_token, expires_at
 
     async def confirm(
@@ -108,6 +109,10 @@ class FinnV2ConfirmationService:
         await self.confirmations.update(confirmation, confirmed=True, already_confirmed=False)
         await self.proposals.update_status(proposal, status="confirmed")
         await self._record_workflow_event(proposal, event="confirmed")
+        # A client may execute immediately after receiving this response. Do
+        # not expose ``confirmed`` until a fresh execution session can read
+        # both the confirmation and the proposal status atomically.
+        await self._commit_before_success_response()
         return FinnV2ConfirmationResult(
             confirmation_id=confirmation.id,
             proposal_id=proposal.id,
@@ -129,6 +134,12 @@ class FinnV2ConfirmationService:
             payload_hash=proposal.payload_hash,
             event=event,
         )
+
+    async def _commit_before_success_response(self) -> None:
+        """Keep direct proposal lifecycle calls free of a response/commit race."""
+        commit = getattr(self.session, "commit", None)
+        if commit is not None:
+            await commit()
 
     def _token_hash(self, *, proposal_id: str, user_id: int, payload_hash: str, expires_at: datetime, raw_token: str) -> str:
         secret = self._confirmation_secret()

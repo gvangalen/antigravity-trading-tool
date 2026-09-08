@@ -16,6 +16,7 @@ from backend.infrastructure.repositories.finn_v2_trace_repository import FinnV2T
 from backend.domain.finn_v2_contract import normalize_interaction_mode
 from backend.schemas.finn_v2_orchestrator_schema import LifecyclePhaseOutcome, ORCHESTRATOR_VERSION
 from backend.services.finn_v2_domain_requirement_service import FinnV2DomainRequirementService
+from backend.services.finn_v2_entity_resolution_service import FinnV2EntityResolutionService
 from backend.services.finn_v2_flag_service import FinnV2FlagService
 from backend.services.finn_v2_orchestrator_outcome_service import FinnV2OrchestratorOutcomeService
 from backend.services.finn_v2_policy_engine_service import FinnV2PolicyEngineService
@@ -52,6 +53,7 @@ class FinnV2OrchestratorService:
         self.conversations = FinnV2ConversationRepository(session)
         self.analysis = FinnV2RequestAnalysisService()
         self.requirements = FinnV2DomainRequirementService()
+        self.entities = FinnV2EntityResolutionService(session)
         self.tool_plans = FinnV2ToolPlanService()
         self.tools = FinnV2ToolExecutionService(session, self.flags)
         self.outcomes = FinnV2OrchestratorOutcomeService()
@@ -107,6 +109,63 @@ class FinnV2OrchestratorService:
             except (TypeError, ValueError):
                 continue
         return values
+
+    async def _resolve_explicit_action_references(
+        self,
+        *,
+        user_id: int,
+        message: str,
+        analysis,
+        conversation_context: dict,
+    ):
+        """Persist explicit object-name resolution before action slot checks.
+
+        The registry remains the schema authority: only required ``*_id``
+        slots of the selected contract may be added.  Resolution is strictly
+        owner-scoped and raises the existing typed lookup outcome for an
+        unknown or ambiguous name instead of falling back to active context.
+        """
+        request_plan = getattr(analysis, "request_plan", None)
+        operation_id = getattr(request_plan, "operation_id", None)
+        if request_plan is None or not operation_id:
+            return analysis
+        from backend.domain.finn_v2_operation_registry import FinnV2OperationRegistry
+
+        contract = FinnV2OperationRegistry().require_supported(operation_id)
+        selectors = dict(getattr(request_plan, "referenced_entities", {}) or {})
+        resolved = await self.entities.resolve_contract_reference_inputs(
+            user_id=user_id,
+            selector=selectors,
+            required_inputs=contract.required_inputs,
+        )
+        if not resolved:
+            return analysis
+        supplied = {
+            **dict(getattr(request_plan, "operation_state", {}) or {}).get("collected_inputs", {}),
+            **resolved,
+        }
+        state = self.analysis.operation_state.resolve(
+            contract=contract,
+            message=message,
+            explicit_asset=getattr(analysis, "explicit_asset", None),
+            conversation_context=conversation_context,
+            supplied_inputs=supplied,
+        )
+        request_plan = request_plan.copy(
+            update={
+                "referenced_entities": {**selectors, **resolved},
+                "operation_state": state.dict(),
+                "missing_information": list(state.missing_required_inputs),
+            }
+        )
+        return analysis.copy(
+            update={
+                "request_plan": request_plan,
+                "explicit_setup_id": resolved.get("setup_id") or getattr(analysis, "explicit_setup_id", None),
+                "explicit_strategy_id": resolved.get("strategy_id") or getattr(analysis, "explicit_strategy_id", None),
+                "explicit_bot_id": resolved.get("bot_id") or getattr(analysis, "explicit_bot_id", None),
+            }
+        )
 
     async def execute_run(
         self,
@@ -166,6 +225,13 @@ class FinnV2OrchestratorService:
                 timeout=self.flags.selector_phase_deadline_seconds(),
             )
         await self._record_phase_timestamp(run_id=run_id, phase="selector_completed")
+        request_plan = getattr(analysis, "request_plan", None)
+        analysis = await self._resolve_explicit_action_references(
+            user_id=user_id,
+            message=run.message,
+            analysis=analysis,
+            conversation_context=conversation_context,
+        )
         request_plan = getattr(analysis, "request_plan", None)
         await self.runtime_contracts.record_initial_intent(
             run_id=run_id,
@@ -255,6 +321,11 @@ class FinnV2OrchestratorService:
         try:
             await self.tools.execute_tool_plan(run_id=run_id, user_id=user_id, tool_plan=tool_plan)
             snapshot, validation = await self.tools.run_state_pipeline(run_id=run_id, user_id=user_id)
+            # Tool failures roll back their session and expire ORM rows. Reload
+            # the authoritative contract before deriving any downstream view.
+            runtime_contract = await self.runtime_contracts.get_for_run(run_id=run_id)
+            if runtime_contract is None:
+                raise RuntimeError("runtime_contract_missing_after_tool_pipeline")
             contextual_inputs = self._contextual_inputs_from_snapshot(
                 snapshot=snapshot,
                 execution_view=FinnV2RuntimeContractRepository.execution_view(runtime_contract),
@@ -264,14 +335,41 @@ class FinnV2OrchestratorService:
                     run_id=run_id, supplied_inputs=contextual_inputs
                 )
                 execution_view = FinnV2RuntimeContractRepository.execution_view(runtime_contract)
+                supplied_inputs = dict(execution_view.get("supplied_inputs") or {})
                 request_plan = request_plan.copy(
                     update={
                         "operation_state": self._contract_operation_state_view(execution_view),
                         "missing_information": execution_view["missing_inputs"],
+                        "clarification_required": bool(execution_view["missing_inputs"]),
                     }
                 )
+                # Entity IDs resolved from this user's evidence are contract
+                # inputs. Feed them back into the typed analysis view before
+                # rebuilding the plan: otherwise a short continuation turn
+                # can retain ``strategy_id`` in state while the tool layer
+                # still performs an ambiguous active-object lookup.
                 analysis = analysis.copy(
-                    update={"request_plan": request_plan, "interaction_mode": execution_view["interaction_mode"]}
+                    update={
+                        "request_plan": request_plan,
+                        "interaction_mode": execution_view["interaction_mode"],
+                        "explicit_asset": execution_view.get("canonical_target") or analysis.explicit_asset,
+                        "explicit_setup_id": supplied_inputs.get("setup_id") or analysis.explicit_setup_id,
+                        "explicit_strategy_id": supplied_inputs.get("strategy_id") or analysis.explicit_strategy_id,
+                        "explicit_bot_id": supplied_inputs.get("bot_id") or analysis.explicit_bot_id,
+                    }
+                )
+                # The initial domain and tool plans were built before the
+                # context pipeline resolved typed references and continuation
+                # slots. Rebuild their immutable views from this persisted
+                # contract revision before outcome/policy/reasoning. Without
+                # this, a completed clarification turn can still be judged by
+                # stale missing-input requirements and never produce its
+                # contractually valid proposal.
+                domain_requirements = self.requirements.determine(analysis)
+                tool_plan = self.tool_plans.build(
+                    run_id=run_id,
+                    analysis=analysis,
+                    domain_plan=domain_requirements,
                 )
             result = self.outcomes.evaluate(
                 run_id=run_id,

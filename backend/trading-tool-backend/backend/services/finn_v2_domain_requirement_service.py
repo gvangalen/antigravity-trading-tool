@@ -35,6 +35,21 @@ class FinnV2DomainRequirementService:
         request_plan = analysis.request_plan
         if request_plan is not None and request_plan.operation_id:
             contract = self.operations.require_supported(request_plan.operation_id)
+            operation_state = dict(request_plan.operation_state or {})
+            if (
+                contract.response_strategy == "proposal_draft"
+                and operation_state.get("missing_required_inputs")
+                and contract.contextual_reference_inputs
+            ):
+                # Missing action-contract slots are resolved through the typed
+                # guided flow, not by loading unrelated active plan context.
+                # The next turn will rebuild the same contract view after the
+                # user supplies the requested slot.
+                return DomainRequirementPlan(
+                    required_domains=[],
+                    optional_domains=[],
+                    requirement_reason=[f"contract:{contract.operation_id}:awaiting_required_input"],
+                )
             if contract.operation_id == "unavailable":
                 return DomainRequirementPlan(
                     required_domains=[],

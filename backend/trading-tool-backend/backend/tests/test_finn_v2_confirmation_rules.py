@@ -82,3 +82,47 @@ def test_confirmation_issue_token_accepts_route_enabled_mode_without_legacy_flag
 
     assert len(raw_token) >= 43
     assert workflow_events[0]["event"] == "confirmation_issued"
+
+
+def test_confirmation_commits_before_returning_confirmed(monkeypatch):
+    monkeypatch.setenv("FINN_V2_CONFIRMATION_SECRET", "secret")
+
+    class Session:
+        def __init__(self):
+            self.commits = 0
+
+        async def commit(self):
+            self.commits += 1
+
+    session = Session()
+    service = FinnV2ConfirmationService(session=session)
+    service.runtime_contracts.record_proposal_lifecycle = lambda **_kwargs: asyncio.sleep(0)
+    proposal = SimpleNamespace(
+        id="proposal-1", run_id="run-1", user_id=7, payload_hash="payload-hash",
+        operation_type="create_strategy", status="pending_confirmation",
+        expires_at=datetime.now(timezone.utc) + timedelta(minutes=5),
+    )
+    token = "token-1"
+    confirmation = SimpleNamespace(
+        id="confirmation-1", proposal_id="proposal-1", user_id=7,
+        token_hash=service._token_hash(
+            proposal_id=proposal.id, user_id=7, payload_hash=proposal.payload_hash,
+            expires_at=proposal.expires_at, raw_token=token,
+        ),
+        payload_hash=proposal.payload_hash, confirmed=False, already_confirmed=False,
+        created_at=datetime.now(timezone.utc),
+    )
+    service.proposals.get_by_id_for_user = lambda **_kwargs: asyncio.sleep(0, result=proposal)
+    service.confirmations.get_for_proposal_user = lambda **_kwargs: asyncio.sleep(0, result=confirmation)
+    service.confirmations.update = lambda row, **kwargs: asyncio.sleep(0, result=SimpleNamespace(**{**row.__dict__, **kwargs}))
+    service.proposals.update_status = lambda *_args, **_kwargs: asyncio.sleep(0, result=proposal)
+
+    result = asyncio.run(service.confirm(
+        user_id=7,
+        request=FinnV2ConfirmationRequest(
+            proposal_id=proposal.id, confirmation_token=token, expected_payload_hash=proposal.payload_hash,
+        ),
+    ))
+
+    assert result.confirmed is True
+    assert session.commits == 1

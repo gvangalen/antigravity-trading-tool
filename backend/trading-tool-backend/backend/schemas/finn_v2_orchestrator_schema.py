@@ -181,6 +181,9 @@ class RequestAnalysisResult(BaseModel):
     explicit_setup_id: Optional[int] = None
     explicit_strategy_id: Optional[int] = None
     explicit_bot_id: Optional[int] = None
+    explicit_setup_name: Optional[str] = None
+    explicit_strategy_name: Optional[str] = None
+    explicit_bot_name: Optional[str] = None
     primary_subject: Optional[str] = None
     requested_entities: List[str] = Field(default_factory=list)
     output_contract: Optional[str] = None

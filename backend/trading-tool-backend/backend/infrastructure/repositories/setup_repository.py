@@ -42,7 +42,7 @@ class SetupRepository:
                 :name, :symbol, :timeframe,
                 :setup_type,
                 :dca_frequency, :dca_day, :dca_month_day,
-                :account_type, :min_investment, :tags, :trend, :score_logic,
+                :account_type, :min_investment, CAST(:tags AS jsonb), :trend, :score_logic,
                 :favorite, :explanation, :description, :action, :category,
                 :min_macro_score, :max_macro_score,
                 :min_technical_score, :max_technical_score,
@@ -64,7 +64,10 @@ class SetupRepository:
             
             "account_type": payload.get("account_type"),
             "min_investment": payload.get("min_investment"),
-            "tags": tags,
+            # SQLAlchemy text bindings do not adapt Python lists for a JSON
+            # column consistently across async drivers. Keep the repository
+            # boundary explicit so every setup caller persists the same JSON.
+            "tags": json.dumps(tags or []),
             "trend": payload.get("trend"),
             "score_logic": payload.get("score_logic"),
             "favorite": payload.get("favorite", False),

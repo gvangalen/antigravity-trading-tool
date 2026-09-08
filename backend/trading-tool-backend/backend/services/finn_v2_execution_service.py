@@ -128,10 +128,18 @@ class FinnV2ExecutionService:
         )
         try:
             result_payload = await adapter(user_id, proposal.payload_json)
-            postcondition_hash = await self.adapters.postcondition_hash(proposal.operation_type, user_id=user_id, payload=result_payload)
+            # Adapters expose existing domain-service results. Normalize them at
+            # the execution boundary so values such as Decimal are safe for the
+            # persisted JSONB result and its deterministic postcondition hash.
+            safe_result_payload = to_json_safe(result_payload)
+            postcondition_hash = await self.adapters.postcondition_hash(
+                proposal.operation_type,
+                user_id=user_id,
+                payload=safe_result_payload,
+            )
             execution.status = "succeeded"
             execution.postcondition_hash = postcondition_hash
-            execution.result_json = result_payload
+            execution.result_json = safe_result_payload
             execution.completed_at = datetime.now(timezone.utc)
             await self.session.flush()
             record_latency_sample(f"finn_v2_execution_latency_ms:{proposal.operation_type}", int((execution.completed_at - started_at).total_seconds() * 1000))

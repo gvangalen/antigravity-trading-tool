@@ -1,0 +1,1010 @@
+{
+  "artifact_version": "finn_v2.local_action_matrix.v1",
+  "broker_orders": 0,
+  "complete": true,
+  "contracts_failed": 0,
+  "contracts_passed": 16,
+  "contracts_total": 16,
+  "live_bot_count": 0,
+  "live_trading_calls": 0,
+  "production_connections": 0,
+  "results": [
+    {
+      "action_polarity": "update",
+      "attempt_count": 1,
+      "confirmation_status": 200,
+      "confirmed": true,
+      "cross_user_rejected": true,
+      "dispatch_count": 1,
+      "elapsed_ms": 3665.28,
+      "execution_result": "succeeded",
+      "execution_status": 200,
+      "expected_contract_outcome": "proposal_confirmation_safe_execution_idempotent_replay",
+      "idempotency_replay_status": 200,
+      "idempotency_result": "already_executed",
+      "incomplete_follow_up": {
+        "conversation_reused": true,
+        "follow_up_missing_inputs": [],
+        "follow_up_operation_id": "select_asset",
+        "follow_up_run_id": "finn-v2-run-5139c022cbb441f3b7607efa46068f6f",
+        "follow_up_supplied_inputs": {
+          "asset": "SOL"
+        },
+        "initial_missing_inputs": [
+          "asset"
+        ],
+        "initial_operation_id": "select_asset",
+        "initial_run_id": "finn-v2-run-31fff13c7a0a44e79e47d5de656d77c8",
+        "passed": true,
+        "proposal_after_follow_up": true
+      },
+      "missing_inputs": [],
+      "operation_id": "select_asset",
+      "polling_sse_parity": true,
+      "proposal_id": "finn-v2-proposal-fc9d570c8ed641fcb582368c1b4a2109",
+      "proposal_status": "draft",
+      "publish_status": 200,
+      "required_inputs": [
+        "asset"
+      ],
+      "resolved_entity": {
+        "canonical_target": "SOL",
+        "target_source": "explicit_message"
+      },
+      "run_id": "finn-v2-run-231fcfbc793547f78f0d2d1408d43545",
+      "runtime_contract_id": "finn-v2-contract-finn-v2-run-231fcfbc793547f78f0d2d1408d43545",
+      "runtime_contract_revision": 18,
+      "safe_input_description": "Selecteer SOL als mijn actieve asset.",
+      "selector_result": {
+        "final_operation_id": "select_asset",
+        "initial_operation_id": "select_asset"
+      },
+      "status": "PASS",
+      "supplied_inputs": {
+        "asset": "SOL"
+      },
+      "terminal_reason": null,
+      "terminal_status": "completed",
+      "testcase": "local_action_select_asset"
+    },
+    {
+      "action_polarity": "add",
+      "attempt_count": 1,
+      "confirmation_status": 200,
+      "confirmed": true,
+      "cross_user_rejected": true,
+      "dispatch_count": 1,
+      "elapsed_ms": 2101.45,
+      "execution_result": "succeeded",
+      "execution_status": 200,
+      "expected_contract_outcome": "proposal_confirmation_safe_execution_idempotent_replay",
+      "idempotency_replay_status": 200,
+      "idempotency_result": "already_executed",
+      "incomplete_follow_up": {
+        "conversation_reused": true,
+        "follow_up_missing_inputs": [],
+        "follow_up_operation_id": "watchlist_add",
+        "follow_up_run_id": "finn-v2-run-4dbed1fb086c49019f01738a9d9af10a",
+        "follow_up_supplied_inputs": {
+          "asset": "ETH"
+        },
+        "initial_missing_inputs": [
+          "asset"
+        ],
+        "initial_operation_id": "watchlist_add",
+        "initial_run_id": "finn-v2-run-303257a7f1cc4d569cd39f04549c9049",
+        "passed": true,
+        "proposal_after_follow_up": true
+      },
+      "missing_inputs": [],
+      "operation_id": "watchlist_add",
+      "polling_sse_parity": true,
+      "proposal_id": "finn-v2-proposal-7c25606b652f4790aa65b446a680f5a8",
+      "proposal_status": "draft",
+      "publish_status": 200,
+      "required_inputs": [
+        "asset"
+      ],
+      "resolved_entity": {
+        "canonical_target": "ETH",
+        "target_source": "explicit_message"
+      },
+      "run_id": "finn-v2-run-86bff948da9f4b58a46f787d6e7f9e17",
+      "runtime_contract_id": "finn-v2-contract-finn-v2-run-86bff948da9f4b58a46f787d6e7f9e17",
+      "runtime_contract_revision": 18,
+      "safe_input_description": "Voeg ETH toe aan mijn watchlist.",
+      "selector_result": {
+        "final_operation_id": "watchlist_add",
+        "initial_operation_id": "watchlist_add"
+      },
+      "status": "PASS",
+      "supplied_inputs": {
+        "asset": "ETH"
+      },
+      "terminal_reason": null,
+      "terminal_status": "completed",
+      "testcase": "local_action_watchlist_add"
+    },
+    {
+      "action_polarity": "remove",
+      "attempt_count": 1,
+      "confirmation_status": 200,
+      "confirmed": true,
+      "cross_user_rejected": true,
+      "dispatch_count": 1,
+      "elapsed_ms": 2685.98,
+      "execution_result": "succeeded",
+      "execution_status": 200,
+      "expected_contract_outcome": "proposal_confirmation_safe_execution_idempotent_replay",
+      "idempotency_replay_status": 200,
+      "idempotency_result": "already_executed",
+      "incomplete_follow_up": {
+        "conversation_reused": true,
+        "follow_up_missing_inputs": [],
+        "follow_up_operation_id": "watchlist_remove",
+        "follow_up_run_id": "finn-v2-run-6e6daaec6d2a41f4a446f5de7f322b77",
+        "follow_up_supplied_inputs": {
+          "asset": "XRP"
+        },
+        "initial_missing_inputs": [
+          "asset"
+        ],
+        "initial_operation_id": "watchlist_remove",
+        "initial_run_id": "finn-v2-run-029f88f5fb974a2ea2ed2f0369fa8eae",
+        "passed": true,
+        "proposal_after_follow_up": true
+      },
+      "missing_inputs": [],
+      "operation_id": "watchlist_remove",
+      "polling_sse_parity": true,
+      "proposal_id": "finn-v2-proposal-4a080ae536a64e658c1bb94e5e4dbd1d",
+      "proposal_status": "draft",
+      "publish_status": 200,
+      "required_inputs": [
+        "asset"
+      ],
+      "resolved_entity": {
+        "canonical_target": "XRP",
+        "target_source": "explicit_message"
+      },
+      "run_id": "finn-v2-run-3266446b70434bbebc1022f4972ecb6f",
+      "runtime_contract_id": "finn-v2-contract-finn-v2-run-3266446b70434bbebc1022f4972ecb6f",
+      "runtime_contract_revision": 18,
+      "safe_input_description": "Verwijder XRP uit mijn watchlist.",
+      "selector_result": {
+        "final_operation_id": "watchlist_remove",
+        "initial_operation_id": "watchlist_remove"
+      },
+      "status": "PASS",
+      "supplied_inputs": {
+        "asset": "XRP"
+      },
+      "terminal_reason": null,
+      "terminal_status": "completed",
+      "testcase": "local_action_watchlist_remove"
+    },
+    {
+      "action_polarity": "create",
+      "attempt_count": 1,
+      "confirmation_status": 200,
+      "confirmed": true,
+      "cross_user_rejected": true,
+      "dispatch_count": 1,
+      "elapsed_ms": 2806.11,
+      "execution_result": "succeeded",
+      "execution_status": 200,
+      "expected_contract_outcome": "proposal_confirmation_safe_execution_idempotent_replay",
+      "idempotency_replay_status": 200,
+      "idempotency_result": "already_executed",
+      "incomplete_follow_up": {
+        "conversation_reused": true,
+        "follow_up_missing_inputs": [],
+        "follow_up_operation_id": "create_indicator_configuration",
+        "follow_up_run_id": "finn-v2-run-d331c5e9ce4942189ae17147fe65e572",
+        "follow_up_supplied_inputs": {
+          "asset": "ADA",
+          "category": "technical",
+          "indicator": "rsi"
+        },
+        "initial_missing_inputs": [
+          "asset"
+        ],
+        "initial_operation_id": "create_indicator_configuration",
+        "initial_run_id": "finn-v2-run-692efcfbec924f01ab7cbd2da88c287b",
+        "passed": true,
+        "proposal_after_follow_up": true
+      },
+      "missing_inputs": [],
+      "operation_id": "create_indicator_configuration",
+      "polling_sse_parity": true,
+      "proposal_id": "finn-v2-proposal-e8446794a81648b5aa4ad075e6c9f17f",
+      "proposal_status": "draft",
+      "publish_status": 200,
+      "required_inputs": [
+        "asset",
+        "category",
+        "indicator"
+      ],
+      "resolved_entity": {
+        "canonical_target": "ADA",
+        "target_source": "explicit_message"
+      },
+      "run_id": "finn-v2-run-5975064399cd4c0fa62b5264e478bd57",
+      "runtime_contract_id": "finn-v2-contract-finn-v2-run-5975064399cd4c0fa62b5264e478bd57",
+      "runtime_contract_revision": 18,
+      "safe_input_description": "Maak een technische RSI indicatorconfiguratie voor ADA.",
+      "selector_result": {
+        "final_operation_id": "create_indicator_configuration",
+        "initial_operation_id": "create_indicator_configuration"
+      },
+      "status": "PASS",
+      "supplied_inputs": {
+        "asset": "ADA",
+        "category": "technical",
+        "indicator": "rsi"
+      },
+      "terminal_reason": null,
+      "terminal_status": "completed",
+      "testcase": "local_action_create_indicator_configuration"
+    },
+    {
+      "action_polarity": "update",
+      "attempt_count": 1,
+      "confirmation_status": 200,
+      "confirmed": true,
+      "cross_user_rejected": true,
+      "dispatch_count": 1,
+      "elapsed_ms": 2260.82,
+      "execution_result": "succeeded",
+      "execution_status": 200,
+      "expected_contract_outcome": "proposal_confirmation_safe_execution_idempotent_replay",
+      "idempotency_replay_status": 200,
+      "idempotency_result": "already_executed",
+      "incomplete_follow_up": {
+        "conversation_reused": true,
+        "follow_up_missing_inputs": [],
+        "follow_up_operation_id": "update_indicator_configuration",
+        "follow_up_run_id": "finn-v2-run-7ffbb8205b0b40dc98a4859552bc6d72",
+        "follow_up_supplied_inputs": {
+          "asset": "BTC",
+          "category": "technical",
+          "changed_fields": {
+            "score_mode": "standard"
+          },
+          "indicator": "rsi"
+        },
+        "initial_missing_inputs": [
+          "asset",
+          "changed_fields"
+        ],
+        "initial_operation_id": "update_indicator_configuration",
+        "initial_run_id": "finn-v2-run-a680257efc3c49ad81d7d0a9c792d56d",
+        "passed": true,
+        "proposal_after_follow_up": true
+      },
+      "missing_inputs": [],
+      "operation_id": "update_indicator_configuration",
+      "polling_sse_parity": true,
+      "proposal_id": "finn-v2-proposal-19a9489930f24dad87c385401cb87052",
+      "proposal_status": "draft",
+      "publish_status": 200,
+      "required_inputs": [
+        "asset",
+        "category",
+        "indicator",
+        "changed_fields"
+      ],
+      "resolved_entity": {
+        "canonical_target": "BTC",
+        "target_source": "explicit_message"
+      },
+      "run_id": "finn-v2-run-64a3756c9c5d404e9247c2df0f894d73",
+      "runtime_contract_id": "finn-v2-contract-finn-v2-run-64a3756c9c5d404e9247c2df0f894d73",
+      "runtime_contract_revision": 18,
+      "safe_input_description": "Werk mijn technische RSI indicatorconfiguratie voor BTC bij met {\"score_mode\": \"standard\"}.",
+      "selector_result": {
+        "final_operation_id": "update_indicator_configuration",
+        "initial_operation_id": "update_indicator_configuration"
+      },
+      "status": "PASS",
+      "supplied_inputs": {
+        "asset": "BTC",
+        "category": "technical",
+        "changed_fields": {
+          "score_mode": "standard"
+        },
+        "indicator": "rsi"
+      },
+      "terminal_reason": null,
+      "terminal_status": "completed",
+      "testcase": "local_action_update_indicator_configuration"
+    },
+    {
+      "action_polarity": "delete",
+      "attempt_count": 1,
+      "confirmation_status": 200,
+      "confirmed": true,
+      "cross_user_rejected": true,
+      "dispatch_count": 1,
+      "elapsed_ms": 3371.48,
+      "execution_result": "succeeded",
+      "execution_status": 200,
+      "expected_contract_outcome": "proposal_confirmation_safe_execution_idempotent_replay",
+      "idempotency_replay_status": 200,
+      "idempotency_result": "already_executed",
+      "incomplete_follow_up": {
+        "conversation_reused": true,
+        "follow_up_missing_inputs": [],
+        "follow_up_operation_id": "delete_indicator_configuration",
+        "follow_up_run_id": "finn-v2-run-0b8167f41b63413594c5792d896db972",
+        "follow_up_supplied_inputs": {
+          "asset": "SOL",
+          "category": "technical",
+          "indicator": "rsi"
+        },
+        "initial_missing_inputs": [
+          "asset"
+        ],
+        "initial_operation_id": "delete_indicator_configuration",
+        "initial_run_id": "finn-v2-run-95d61789222b41889b70fc15520f03ac",
+        "passed": true,
+        "proposal_after_follow_up": true
+      },
+      "missing_inputs": [],
+      "operation_id": "delete_indicator_configuration",
+      "polling_sse_parity": true,
+      "proposal_id": "finn-v2-proposal-913387c4e79145c7a7b164c0bc81d464",
+      "proposal_status": "draft",
+      "publish_status": 200,
+      "required_inputs": [
+        "asset",
+        "category",
+        "indicator"
+      ],
+      "resolved_entity": {
+        "canonical_target": "SOL",
+        "target_source": "explicit_message"
+      },
+      "run_id": "finn-v2-run-8d0f09ec378f419ba2ade7fd1cca4367",
+      "runtime_contract_id": "finn-v2-contract-finn-v2-run-8d0f09ec378f419ba2ade7fd1cca4367",
+      "runtime_contract_revision": 18,
+      "safe_input_description": "Verwijder mijn technische RSI indicatorconfiguratie voor SOL.",
+      "selector_result": {
+        "final_operation_id": "delete_indicator_configuration",
+        "initial_operation_id": "delete_indicator_configuration"
+      },
+      "status": "PASS",
+      "supplied_inputs": {
+        "asset": "SOL",
+        "category": "technical",
+        "indicator": "rsi"
+      },
+      "terminal_reason": null,
+      "terminal_status": "completed",
+      "testcase": "local_action_delete_indicator_configuration"
+    },
+    {
+      "action_polarity": "create",
+      "attempt_count": 1,
+      "confirmation_status": 200,
+      "confirmed": true,
+      "cross_user_rejected": true,
+      "dispatch_count": 1,
+      "elapsed_ms": 2356.23,
+      "execution_result": "succeeded",
+      "execution_status": 200,
+      "expected_contract_outcome": "proposal_confirmation_safe_execution_idempotent_replay",
+      "idempotency_replay_status": 200,
+      "idempotency_result": "already_executed",
+      "incomplete_follow_up": {
+        "conversation_reused": true,
+        "follow_up_missing_inputs": [],
+        "follow_up_operation_id": "create_setup",
+        "follow_up_run_id": "finn-v2-run-ad02c3a0cbd8456597de47acd172e6cc",
+        "follow_up_supplied_inputs": {
+          "name": "Matrix Nieuwe Setup",
+          "setup_type": "swing",
+          "symbol": "SOL",
+          "timeframe": "4H"
+        },
+        "initial_missing_inputs": [
+          "timeframe",
+          "name"
+        ],
+        "initial_operation_id": "create_setup",
+        "initial_run_id": "finn-v2-run-a12a5769df0c46a8ba9972fb4d2caf9b",
+        "passed": true,
+        "proposal_after_follow_up": true
+      },
+      "missing_inputs": [],
+      "operation_id": "create_setup",
+      "polling_sse_parity": true,
+      "proposal_id": "finn-v2-proposal-3fcafc5dc1a044bf8bfaeb80efd153e5",
+      "proposal_status": "draft",
+      "publish_status": 200,
+      "required_inputs": [
+        "setup_type",
+        "timeframe",
+        "name",
+        "symbol"
+      ],
+      "resolved_entity": {
+        "canonical_target": "SOL",
+        "target_source": "explicit_message"
+      },
+      "run_id": "finn-v2-run-13654ec01b0b42f68cfccae64570c81d",
+      "runtime_contract_id": "finn-v2-contract-finn-v2-run-13654ec01b0b42f68cfccae64570c81d",
+      "runtime_contract_revision": 18,
+      "safe_input_description": "Maak een swing setup voor SOL op 4 uur met de naam Matrix Nieuwe Setup.",
+      "selector_result": {
+        "final_operation_id": "create_setup",
+        "initial_operation_id": "create_setup"
+      },
+      "status": "PASS",
+      "supplied_inputs": {
+        "name": "Matrix Nieuwe Setup",
+        "setup_type": "swing",
+        "symbol": "SOL",
+        "timeframe": "4H"
+      },
+      "terminal_reason": null,
+      "terminal_status": "completed",
+      "testcase": "local_action_create_setup"
+    },
+    {
+      "action_polarity": "update",
+      "attempt_count": 1,
+      "confirmation_status": 200,
+      "confirmed": true,
+      "cross_user_rejected": true,
+      "dispatch_count": 1,
+      "elapsed_ms": 2152.93,
+      "execution_result": "succeeded",
+      "execution_status": 200,
+      "expected_contract_outcome": "proposal_confirmation_safe_execution_idempotent_replay",
+      "idempotency_replay_status": 200,
+      "idempotency_result": "already_executed",
+      "incomplete_follow_up": {
+        "conversation_reused": true,
+        "follow_up_missing_inputs": [],
+        "follow_up_operation_id": "update_setup",
+        "follow_up_run_id": "finn-v2-run-b2939fd9c42e4bda874eff695cc92e60",
+        "follow_up_supplied_inputs": {
+          "changed_fields": {
+            "timeframe": "1H"
+          },
+          "setup_id": 137
+        },
+        "initial_missing_inputs": [
+          "changed_fields"
+        ],
+        "initial_operation_id": "update_setup",
+        "initial_run_id": "finn-v2-run-ecb8d423a7cb4f1b83f2db4e3cb98e81",
+        "passed": true,
+        "proposal_after_follow_up": true
+      },
+      "missing_inputs": [],
+      "operation_id": "update_setup",
+      "polling_sse_parity": true,
+      "proposal_id": "finn-v2-proposal-eae6148c378b45708ec6aea12ec55f72",
+      "proposal_status": "draft",
+      "publish_status": 200,
+      "required_inputs": [
+        "setup_id",
+        "changed_fields"
+      ],
+      "resolved_entity": {
+        "canonical_target": null,
+        "target_source": null
+      },
+      "run_id": "finn-v2-run-172c82c16f1c4205a8a2dd9c34287193",
+      "runtime_contract_id": "finn-v2-contract-finn-v2-run-172c82c16f1c4205a8a2dd9c34287193",
+      "runtime_contract_revision": 18,
+      "safe_input_description": "Werk setup \"Matrix Update Setup\" bij met {\"timeframe\": \"1H\"}.",
+      "selector_result": {
+        "final_operation_id": "update_setup",
+        "initial_operation_id": "update_setup"
+      },
+      "status": "PASS",
+      "supplied_inputs": {
+        "changed_fields": {
+          "timeframe": "1H"
+        },
+        "setup_id": 128
+      },
+      "terminal_reason": null,
+      "terminal_status": "completed",
+      "testcase": "local_action_update_setup"
+    },
+    {
+      "action_polarity": "delete",
+      "attempt_count": 1,
+      "confirmation_status": 200,
+      "confirmed": true,
+      "cross_user_rejected": true,
+      "dispatch_count": 1,
+      "elapsed_ms": 2145.59,
+      "execution_result": "succeeded",
+      "execution_status": 200,
+      "expected_contract_outcome": "proposal_confirmation_safe_execution_idempotent_replay",
+      "idempotency_replay_status": 200,
+      "idempotency_result": "already_executed",
+      "incomplete_follow_up": {
+        "conversation_reused": true,
+        "follow_up_missing_inputs": [],
+        "follow_up_operation_id": "delete_setup",
+        "follow_up_run_id": "finn-v2-run-f04adf5aed994878990939bd4a68bd7a",
+        "follow_up_supplied_inputs": {
+          "setup_id": 156
+        },
+        "initial_missing_inputs": [
+          "setup_id"
+        ],
+        "initial_operation_id": "delete_setup",
+        "initial_run_id": "finn-v2-run-f2bc636d100b4869a49a8bd534909121",
+        "passed": true,
+        "proposal_after_follow_up": true
+      },
+      "missing_inputs": [],
+      "operation_id": "delete_setup",
+      "polling_sse_parity": true,
+      "proposal_id": "finn-v2-proposal-34b2a4e6d8d247099f62f9bd85cb2e65",
+      "proposal_status": "draft",
+      "publish_status": 200,
+      "required_inputs": [
+        "setup_id"
+      ],
+      "resolved_entity": {
+        "canonical_target": null,
+        "target_source": null
+      },
+      "run_id": "finn-v2-run-63667640b9844f6ca70da5db8f91384c",
+      "runtime_contract_id": "finn-v2-contract-finn-v2-run-63667640b9844f6ca70da5db8f91384c",
+      "runtime_contract_revision": 18,
+      "safe_input_description": "Verwijder setup \"Matrix Delete Setup\".",
+      "selector_result": {
+        "final_operation_id": "delete_setup",
+        "initial_operation_id": "delete_setup"
+      },
+      "status": "PASS",
+      "supplied_inputs": {
+        "setup_id": 147
+      },
+      "terminal_reason": null,
+      "terminal_status": "completed",
+      "testcase": "local_action_delete_setup"
+    },
+    {
+      "action_polarity": "create",
+      "attempt_count": 1,
+      "confirmation_status": 200,
+      "confirmed": true,
+      "cross_user_rejected": true,
+      "dispatch_count": 1,
+      "elapsed_ms": 3351.6,
+      "execution_result": "succeeded",
+      "execution_status": 200,
+      "expected_contract_outcome": "proposal_confirmation_safe_execution_idempotent_replay",
+      "idempotency_replay_status": 200,
+      "idempotency_result": "already_executed",
+      "incomplete_follow_up": {
+        "conversation_reused": true,
+        "follow_up_missing_inputs": [],
+        "follow_up_operation_id": "create_strategy",
+        "follow_up_run_id": "finn-v2-run-772576408a62422ebaae451a1823af46",
+        "follow_up_supplied_inputs": {
+          "base_amount": 100.0,
+          "execution_mode": "fixed",
+          "name": "Matrix Nieuwe Strategie",
+          "setup_id": 175
+        },
+        "initial_missing_inputs": [
+          "base_amount"
+        ],
+        "initial_operation_id": "create_strategy",
+        "initial_run_id": "finn-v2-run-b984bc1d4ac34667a6fec78ca80b0e8e",
+        "passed": true,
+        "proposal_after_follow_up": true
+      },
+      "missing_inputs": [],
+      "operation_id": "create_strategy",
+      "polling_sse_parity": true,
+      "proposal_id": "finn-v2-proposal-d4b21d6bf5c04bbdb0b30df9c1e2dfab",
+      "proposal_status": "draft",
+      "publish_status": 200,
+      "required_inputs": [
+        "setup_id",
+        "execution_mode",
+        "base_amount"
+      ],
+      "resolved_entity": {
+        "canonical_target": null,
+        "target_source": null
+      },
+      "run_id": "finn-v2-run-3c4081d4bc4e4d7193856ce237dbd826",
+      "runtime_contract_id": "finn-v2-contract-finn-v2-run-3c4081d4bc4e4d7193856ce237dbd826",
+      "runtime_contract_revision": 18,
+      "safe_input_description": "Maak een fixed strategie voor setup \"Matrix Strategy Parent\" met bedrag 100 en naam Matrix Nieuwe Strategie.",
+      "selector_result": {
+        "final_operation_id": "create_strategy",
+        "initial_operation_id": "create_strategy"
+      },
+      "status": "PASS",
+      "supplied_inputs": {
+        "base_amount": 100.0,
+        "execution_mode": "fixed",
+        "name": "Matrix Nieuwe Strategie",
+        "setup_id": 166
+      },
+      "terminal_reason": null,
+      "terminal_status": "completed",
+      "testcase": "local_action_create_strategy"
+    },
+    {
+      "action_polarity": "update",
+      "attempt_count": 1,
+      "confirmation_status": 200,
+      "confirmed": true,
+      "cross_user_rejected": true,
+      "dispatch_count": 1,
+      "elapsed_ms": 2345.54,
+      "execution_result": "succeeded",
+      "execution_status": 200,
+      "expected_contract_outcome": "proposal_confirmation_safe_execution_idempotent_replay",
+      "idempotency_replay_status": 200,
+      "idempotency_result": "already_executed",
+      "incomplete_follow_up": {
+        "conversation_reused": true,
+        "follow_up_missing_inputs": [],
+        "follow_up_operation_id": "update_strategy",
+        "follow_up_run_id": "finn-v2-run-9790fc3d21e74271ac417d19b7d95cee",
+        "follow_up_supplied_inputs": {
+          "changed_fields": {
+            "base_amount": 120
+          },
+          "strategy_id": 128
+        },
+        "initial_missing_inputs": [
+          "changed_fields"
+        ],
+        "initial_operation_id": "update_strategy",
+        "initial_run_id": "finn-v2-run-d383ca2d8e7748119f4548a924479bcc",
+        "passed": true,
+        "proposal_after_follow_up": true
+      },
+      "missing_inputs": [],
+      "operation_id": "update_strategy",
+      "polling_sse_parity": true,
+      "proposal_id": "finn-v2-proposal-2818503705a641908392498a7b46fab7",
+      "proposal_status": "draft",
+      "publish_status": 200,
+      "required_inputs": [
+        "strategy_id",
+        "changed_fields"
+      ],
+      "resolved_entity": {
+        "canonical_target": null,
+        "target_source": null
+      },
+      "run_id": "finn-v2-run-9a315e8514c94dda9ba7e9b9635b1be5",
+      "runtime_contract_id": "finn-v2-contract-finn-v2-run-9a315e8514c94dda9ba7e9b9635b1be5",
+      "runtime_contract_revision": 18,
+      "safe_input_description": "Werk strategie \"Matrix Update Strategie\" bij met {\"base_amount\": 120}.",
+      "selector_result": {
+        "final_operation_id": "update_strategy",
+        "initial_operation_id": "update_strategy"
+      },
+      "status": "PASS",
+      "supplied_inputs": {
+        "changed_fields": {
+          "base_amount": 120
+        },
+        "strategy_id": 122
+      },
+      "terminal_reason": null,
+      "terminal_status": "completed",
+      "testcase": "local_action_update_strategy"
+    },
+    {
+      "action_polarity": "delete",
+      "attempt_count": 1,
+      "confirmation_status": 200,
+      "confirmed": true,
+      "cross_user_rejected": true,
+      "dispatch_count": 1,
+      "elapsed_ms": 2314.46,
+      "execution_result": "succeeded",
+      "execution_status": 200,
+      "expected_contract_outcome": "proposal_confirmation_safe_execution_idempotent_replay",
+      "idempotency_replay_status": 200,
+      "idempotency_result": "already_executed",
+      "incomplete_follow_up": {
+        "conversation_reused": true,
+        "follow_up_missing_inputs": [],
+        "follow_up_operation_id": "delete_strategy",
+        "follow_up_run_id": "finn-v2-run-0ab90aa84e074c0eaa47b1acf2779ff8",
+        "follow_up_supplied_inputs": {
+          "strategy_id": 141
+        },
+        "initial_missing_inputs": [
+          "strategy_id"
+        ],
+        "initial_operation_id": "delete_strategy",
+        "initial_run_id": "finn-v2-run-d15a1caee34f43018b7da1c7dd592a60",
+        "passed": true,
+        "proposal_after_follow_up": true
+      },
+      "missing_inputs": [],
+      "operation_id": "delete_strategy",
+      "polling_sse_parity": true,
+      "proposal_id": "finn-v2-proposal-e7d453f1df8a499a9413ee1d7b42fd94",
+      "proposal_status": "draft",
+      "publish_status": 200,
+      "required_inputs": [
+        "strategy_id"
+      ],
+      "resolved_entity": {
+        "canonical_target": null,
+        "target_source": null
+      },
+      "run_id": "finn-v2-run-f0b997b8d63a44f59796c675162ba717",
+      "runtime_contract_id": "finn-v2-contract-finn-v2-run-f0b997b8d63a44f59796c675162ba717",
+      "runtime_contract_revision": 18,
+      "safe_input_description": "Verwijder strategie \"Matrix Delete Strategie\".",
+      "selector_result": {
+        "final_operation_id": "delete_strategy",
+        "initial_operation_id": "delete_strategy"
+      },
+      "status": "PASS",
+      "supplied_inputs": {
+        "strategy_id": 135
+      },
+      "terminal_reason": null,
+      "terminal_status": "completed",
+      "testcase": "local_action_delete_strategy"
+    },
+    {
+      "action_polarity": "create",
+      "attempt_count": 1,
+      "confirmation_status": 200,
+      "confirmed": true,
+      "cross_user_rejected": true,
+      "dispatch_count": 1,
+      "elapsed_ms": 2145.49,
+      "execution_result": "succeeded",
+      "execution_status": 200,
+      "expected_contract_outcome": "proposal_confirmation_safe_execution_idempotent_replay",
+      "idempotency_replay_status": 200,
+      "idempotency_result": "already_executed",
+      "incomplete_follow_up": {
+        "conversation_reused": true,
+        "follow_up_missing_inputs": [],
+        "follow_up_operation_id": "create_bot",
+        "follow_up_run_id": "finn-v2-run-b8e6ed0b353d435d91daaf99b483919a",
+        "follow_up_supplied_inputs": {
+          "name": "Matrix Nieuwe Bot",
+          "strategy_id": 154
+        },
+        "initial_missing_inputs": [
+          "name"
+        ],
+        "initial_operation_id": "create_bot",
+        "initial_run_id": "finn-v2-run-30284f68cbdf4b7a906ef83e6a6843c9",
+        "passed": true,
+        "proposal_after_follow_up": true
+      },
+      "missing_inputs": [],
+      "operation_id": "create_bot",
+      "polling_sse_parity": true,
+      "proposal_id": "finn-v2-proposal-58305bae22284693a1fcfb84ecbe27b0",
+      "proposal_status": "draft",
+      "publish_status": 200,
+      "required_inputs": [
+        "strategy_id",
+        "name"
+      ],
+      "resolved_entity": {
+        "canonical_target": null,
+        "target_source": null
+      },
+      "run_id": "finn-v2-run-2bd520435de04f728b433e07851335fe",
+      "runtime_contract_id": "finn-v2-contract-finn-v2-run-2bd520435de04f728b433e07851335fe",
+      "runtime_contract_revision": 18,
+      "safe_input_description": "Maak een paper bot met de naam Matrix Nieuwe Bot voor strategie \"Matrix Bot Parent\".",
+      "selector_result": {
+        "final_operation_id": "create_bot",
+        "initial_operation_id": "create_bot"
+      },
+      "status": "PASS",
+      "supplied_inputs": {
+        "name": "Matrix Nieuwe Bot voor strategie",
+        "strategy_id": 148
+      },
+      "terminal_reason": null,
+      "terminal_status": "completed",
+      "testcase": "local_action_create_bot"
+    },
+    {
+      "action_polarity": "update",
+      "attempt_count": 1,
+      "confirmation_status": 200,
+      "confirmed": true,
+      "cross_user_rejected": true,
+      "dispatch_count": 1,
+      "elapsed_ms": 1994.11,
+      "execution_result": "succeeded",
+      "execution_status": 200,
+      "expected_contract_outcome": "proposal_confirmation_safe_execution_idempotent_replay",
+      "idempotency_replay_status": 200,
+      "idempotency_result": "already_executed",
+      "incomplete_follow_up": {
+        "conversation_reused": true,
+        "follow_up_missing_inputs": [],
+        "follow_up_operation_id": "update_bot",
+        "follow_up_run_id": "finn-v2-run-60ce7e9b687648039079ab17ae32b54b",
+        "follow_up_supplied_inputs": {
+          "bot_id": 83,
+          "changed_fields": {
+            "cadence": "weekly"
+          }
+        },
+        "initial_missing_inputs": [
+          "changed_fields"
+        ],
+        "initial_operation_id": "update_bot",
+        "initial_run_id": "finn-v2-run-27a495aa4f684d0682a4244564a81c18",
+        "passed": true,
+        "proposal_after_follow_up": true
+      },
+      "missing_inputs": [],
+      "operation_id": "update_bot",
+      "polling_sse_parity": true,
+      "proposal_id": "finn-v2-proposal-0954025d361742fa92c83291d0691f63",
+      "proposal_status": "draft",
+      "publish_status": 200,
+      "required_inputs": [
+        "bot_id",
+        "changed_fields"
+      ],
+      "resolved_entity": {
+        "canonical_target": null,
+        "target_source": null
+      },
+      "run_id": "finn-v2-run-f954a2f834e742a29e51bc3137e6389c",
+      "runtime_contract_id": "finn-v2-contract-finn-v2-run-f954a2f834e742a29e51bc3137e6389c",
+      "runtime_contract_revision": 18,
+      "safe_input_description": "Werk bot \"Matrix Update Bot\" bij met {\"cadence\": \"weekly\"}.",
+      "selector_result": {
+        "final_operation_id": "update_bot",
+        "initial_operation_id": "update_bot"
+      },
+      "status": "PASS",
+      "supplied_inputs": {
+        "bot_id": 80,
+        "changed_fields": {
+          "cadence": "weekly"
+        }
+      },
+      "terminal_reason": null,
+      "terminal_status": "completed",
+      "testcase": "local_action_update_bot"
+    },
+    {
+      "action_polarity": "delete",
+      "attempt_count": 1,
+      "confirmation_status": 200,
+      "confirmed": true,
+      "cross_user_rejected": true,
+      "dispatch_count": 1,
+      "elapsed_ms": 2175.99,
+      "execution_result": "succeeded",
+      "execution_status": 200,
+      "expected_contract_outcome": "proposal_confirmation_safe_execution_idempotent_replay",
+      "idempotency_replay_status": 200,
+      "idempotency_result": "already_executed",
+      "incomplete_follow_up": {
+        "conversation_reused": true,
+        "follow_up_missing_inputs": [],
+        "follow_up_operation_id": "delete_bot",
+        "follow_up_run_id": "finn-v2-run-6bcb8ef78dc444a7913765b851b421e7",
+        "follow_up_supplied_inputs": {
+          "bot_id": 90
+        },
+        "initial_missing_inputs": [
+          "bot_id"
+        ],
+        "initial_operation_id": "delete_bot",
+        "initial_run_id": "finn-v2-run-5a00ac167bd24ede999808a01a7c7c36",
+        "passed": true,
+        "proposal_after_follow_up": true
+      },
+      "missing_inputs": [],
+      "operation_id": "delete_bot",
+      "polling_sse_parity": true,
+      "proposal_id": "finn-v2-proposal-7334f7cc2e654deebec35e5a76adc693",
+      "proposal_status": "draft",
+      "publish_status": 200,
+      "required_inputs": [
+        "bot_id"
+      ],
+      "resolved_entity": {
+        "canonical_target": null,
+        "target_source": null
+      },
+      "run_id": "finn-v2-run-fb8153bf15894417976a6ebadb0f6e8c",
+      "runtime_contract_id": "finn-v2-contract-finn-v2-run-fb8153bf15894417976a6ebadb0f6e8c",
+      "runtime_contract_revision": 18,
+      "safe_input_description": "Verwijder bot \"Matrix Delete Bot\".",
+      "selector_result": {
+        "final_operation_id": "delete_bot",
+        "initial_operation_id": "delete_bot"
+      },
+      "status": "PASS",
+      "supplied_inputs": {
+        "bot_id": 87
+      },
+      "terminal_reason": null,
+      "terminal_status": "completed",
+      "testcase": "local_action_delete_bot"
+    },
+    {
+      "action_polarity": "update",
+      "attempt_count": 1,
+      "confirmation_status": 200,
+      "confirmed": true,
+      "cross_user_rejected": true,
+      "dispatch_count": 1,
+      "elapsed_ms": 4088.84,
+      "execution_result": "succeeded",
+      "execution_status": 200,
+      "expected_contract_outcome": "proposal_confirmation_safe_execution_idempotent_replay",
+      "idempotency_replay_status": 200,
+      "idempotency_result": "already_executed",
+      "incomplete_follow_up": {
+        "conversation_reused": true,
+        "follow_up_missing_inputs": [],
+        "follow_up_operation_id": "deactivate_bot",
+        "follow_up_run_id": "finn-v2-run-a6b3ec8b4bbd40e0a89d30216577a401",
+        "follow_up_supplied_inputs": {
+          "bot_id": 97
+        },
+        "initial_missing_inputs": [
+          "bot_id"
+        ],
+        "initial_operation_id": "deactivate_bot",
+        "initial_run_id": "finn-v2-run-4da93dd72ee2408194f13fcc93d1caf7",
+        "passed": true,
+        "proposal_after_follow_up": true
+      },
+      "missing_inputs": [],
+      "operation_id": "deactivate_bot",
+      "polling_sse_parity": true,
+      "proposal_id": "finn-v2-proposal-5611b90a7f9f4c1ca166882aa2e457b5",
+      "proposal_status": "draft",
+      "publish_status": 200,
+      "required_inputs": [
+        "bot_id"
+      ],
+      "resolved_entity": {
+        "canonical_target": null,
+        "target_source": null
+      },
+      "run_id": "finn-v2-run-211bee2240c94059ac718140acc0f23b",
+      "runtime_contract_id": "finn-v2-contract-finn-v2-run-211bee2240c94059ac718140acc0f23b",
+      "runtime_contract_revision": 18,
+      "safe_input_description": "Deactiveer bot \"Matrix Deactivate Bot\".",
+      "selector_result": {
+        "final_operation_id": "deactivate_bot",
+        "initial_operation_id": "deactivate_bot"
+      },
+      "status": "PASS",
+      "supplied_inputs": {
+        "bot_id": 94
+      },
+      "terminal_reason": null,
+      "terminal_status": "completed",
+      "testcase": "local_action_deactivate_bot"
+    }
+  ],
+  "synthetic_local_only": true
+}

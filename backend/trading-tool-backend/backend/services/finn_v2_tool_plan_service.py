@@ -40,20 +40,29 @@ class FinnV2ToolPlanService:
     def build(self, *, run_id: str, analysis: RequestAnalysisResult, domain_plan: DomainRequirementPlan) -> ToolPlan:
         request_plan = analysis.request_plan
         operation_id = request_plan.operation_id if request_plan is not None else None
+        operation_state = dict(getattr(request_plan, "operation_state", {}) or {})
+        collected_inputs = dict(operation_state.get("collected_inputs") or {})
         # A resolved target is authoritative for every contract consumer.
         # Workspace context remains separately persisted for explanations but
         # can never overwrite an explicit or lineage target in a tool call.
         selector_asset = (
             request_plan.target_asset
             or request_plan.referenced_asset
+            or collected_inputs.get("asset")
             or analysis.explicit_asset
             or request_plan.context_asset
         )
+        selector_values = {
+            "asset": selector_asset,
+            "setup_id": analysis.explicit_setup_id or collected_inputs.get("setup_id"),
+            "strategy_id": analysis.explicit_strategy_id or collected_inputs.get("strategy_id"),
+            "bot_id": analysis.explicit_bot_id or collected_inputs.get("bot_id"),
+            "setup_name": analysis.explicit_setup_name,
+            "strategy_name": analysis.explicit_strategy_name,
+            "bot_name": analysis.explicit_bot_name,
+        }
         selector = ToolSelector(
-            asset=selector_asset,
-            setup_id=analysis.explicit_setup_id,
-            strategy_id=analysis.explicit_strategy_id,
-            bot_id=analysis.explicit_bot_id,
+            **selector_values,
         ).dict(exclude_none=True)
         ordered_tools = self._tool_names_for(analysis=analysis, domain_plan=domain_plan)
         if len(ordered_tools) > 15:
@@ -85,9 +94,17 @@ class FinnV2ToolPlanService:
     def _tool_names_for(self, *, analysis: RequestAnalysisResult, domain_plan: DomainRequirementPlan) -> list[str]:
         request_plan = analysis.request_plan
         if request_plan is not None and request_plan.operation_id:
+            operation_state = dict(request_plan.operation_state or {})
+            contract = self.operations.require_supported(request_plan.operation_id)
+            if (
+                contract.response_strategy == "proposal_draft"
+                and operation_state.get("missing_required_inputs")
+                and contract.contextual_reference_inputs
+            ):
+                return []
             # Newly created runs are entirely contract-driven. The fallback
             # below remains only for historical planless records.
-            return list(self.operations.require_supported(request_plan.operation_id).tool_names)
+            return list(contract.tool_names)
         if analysis.interaction_mode == "CAPABILITY":
             return []
         if analysis.interaction_mode == "READ":
@@ -164,6 +181,14 @@ class FinnV2ToolPlanService:
     def _required_evidence_for(self, *, analysis: RequestAnalysisResult) -> list[str]:
         request_plan = analysis.request_plan
         if request_plan is not None and request_plan.operation_id:
+            operation_state = dict(request_plan.operation_state or {})
+            contract = self.operations.require_supported(request_plan.operation_id)
+            if (
+                contract.response_strategy == "proposal_draft"
+                and operation_state.get("missing_required_inputs")
+                and contract.contextual_reference_inputs
+            ):
+                return []
             return list(request_plan.required_information_scopes)
         if analysis.interaction_mode == "READ":
             if analysis.primary_subject == "setup":

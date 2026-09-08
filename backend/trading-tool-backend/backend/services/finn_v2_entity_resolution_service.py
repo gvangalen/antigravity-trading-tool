@@ -93,6 +93,40 @@ class FinnV2EntityResolutionService:
 
         raise LookupError("asset_not_resolved")
 
+    async def resolve_contract_reference_inputs(
+        self,
+        *,
+        user_id: int,
+        selector: Dict[str, Any],
+        required_inputs: tuple[str, ...],
+    ) -> Dict[str, int]:
+        """Resolve explicit, owner-scoped object names into registry ID slots.
+
+        Action contracts own which IDs are required.  This boundary only
+        resolves an explicitly named object before missing-input calculation;
+        it never guesses an active object or introduces a second input schema.
+        """
+        resolved: Dict[str, int] = {}
+        if "setup_id" in required_inputs and not self._coerce_int(selector.get("setup_id")):
+            if self._normalized_name(selector.get("setup_name")):
+                setup = await self.resolve_setup(user_id=user_id, selector=selector, asset=None)
+                value = self._coerce_int(setup["setup"].get("id") or setup["setup"].get("setup_id"))
+                if value:
+                    resolved["setup_id"] = value
+        if "strategy_id" in required_inputs and not self._coerce_int(selector.get("strategy_id")):
+            if self._normalized_name(selector.get("strategy_name")):
+                strategy = await self.resolve_strategy(user_id=user_id, selector=selector, setup=None)
+                value = self._coerce_int(strategy["strategy"].get("id") or strategy["strategy"].get("strategy_id"))
+                if value:
+                    resolved["strategy_id"] = value
+        if "bot_id" in required_inputs and not self._coerce_int(selector.get("bot_id")):
+            if self._normalized_name(selector.get("bot_name")):
+                bot = await self.resolve_bot(user_id=user_id, selector=selector, strategy=None)
+                value = self._coerce_int(bot["bot"].get("id") or bot["bot"].get("bot_id"))
+                if value:
+                    resolved["bot_id"] = value
+        return resolved
+
     async def resolve_setup(
         self,
         *,
@@ -106,6 +140,46 @@ class FinnV2EntityResolutionService:
             if row:
                 return {"setup": dict(row), "resolution_source": "explicit_setup_id"}
             raise LookupError("entity_not_found")
+
+        explicit_setup_name = self._normalized_name(selector.get("setup_name"))
+        if explicit_setup_name:
+            matches = [
+                dict(row)
+                for row in await self.setups.get_user_setups(user_id)
+                if self._normalized_name(row.get("name")) == explicit_setup_name
+            ]
+            if len(matches) == 1:
+                return {"setup": matches[0], "resolution_source": "explicit_setup_name"}
+            if len(matches) > 1:
+                raise LookupError("setup_ambiguous")
+            raise LookupError("entity_not_found")
+
+        # A named strategy or bot identifies its parent setup more precisely
+        # than an active-workspace fallback. This keeps an explicit object
+        # reference owner-scoped while satisfying contracts that need setup
+        # context before they can resolve the requested child object.
+        strategy_selector = self._has_explicit_identity(selector, "strategy")
+        if strategy_selector:
+            strategy = (await self.resolve_strategy(user_id=user_id, selector=selector, setup=None))["strategy"]
+            parent_setup_id = self._coerce_int(strategy.get("setup_id"))
+            if parent_setup_id:
+                row = await self.setups.get_setup_by_id(parent_setup_id, user_id)
+                if row:
+                    return {"setup": dict(row), "resolution_source": "explicit_strategy_link"}
+            raise LookupError("setup_not_resolved")
+
+        bot_selector = self._has_explicit_identity(selector, "bot")
+        if bot_selector:
+            bot = (await self.resolve_bot(user_id=user_id, selector=selector, strategy=None))["bot"]
+            parent_strategy_id = self._coerce_int(bot.get("strategy_id"))
+            if parent_strategy_id:
+                strategy = await self.strategies.get_raw_strategy_with_setup(parent_strategy_id, user_id)
+                parent_setup_id = self._coerce_int((strategy or {}).get("setup_id"))
+                if parent_setup_id:
+                    row = await self.setups.get_setup_by_id(parent_setup_id, user_id)
+                    if row:
+                        return {"setup": dict(row), "resolution_source": "explicit_bot_link"}
+            raise LookupError("setup_not_resolved")
 
         resolution = self.active_plans.resolve(
             asset=asset,
@@ -131,6 +205,30 @@ class FinnV2EntityResolutionService:
             if row:
                 return {"strategy": dict(row), "resolution_source": "explicit_strategy_id"}
             raise LookupError("entity_not_found")
+
+        explicit_strategy_name = self._normalized_name(selector.get("strategy_name"))
+        if explicit_strategy_name:
+            matches = [
+                row
+                for row in await self.strategies.query_strategies(user_id, {})
+                if self._normalized_name(row.get("name")) == explicit_strategy_name
+            ]
+            if len(matches) == 1:
+                return {"strategy": matches[0], "resolution_source": "explicit_strategy_name"}
+            if len(matches) > 1:
+                raise LookupError("strategy_ambiguous")
+            raise LookupError("entity_not_found")
+
+        # A named bot is an explicit reference to its parent strategy; do not
+        # let an unrelated active setup win before following that relation.
+        if self._has_explicit_identity(selector, "bot"):
+            bot = (await self.resolve_bot(user_id=user_id, selector=selector, strategy=None))["bot"]
+            parent_strategy_id = self._coerce_int(bot.get("strategy_id"))
+            if parent_strategy_id:
+                row = await self.strategies.get_raw_strategy_with_setup(parent_strategy_id, user_id)
+                if row:
+                    return {"strategy": dict(row), "resolution_source": "explicit_bot_link"}
+            raise LookupError("strategy_not_resolved")
 
         if setup and setup.get("id"):
             row = await self.strategies.get_strategy_by_setup(int(setup["id"]), user_id)
@@ -158,6 +256,14 @@ class FinnV2EntityResolutionService:
             raise LookupError("entity_not_found")
 
         configs = [dict(item) for item in await self.bots.get_bot_configs(user_id)]
+        explicit_bot_name = self._normalized_name(selector.get("bot_name"))
+        if explicit_bot_name:
+            matches = [row for row in configs if self._normalized_name(row.get("name")) == explicit_bot_name]
+            if len(matches) == 1:
+                return {"bot": matches[0], "resolution_source": "explicit_bot_name"}
+            if len(matches) > 1:
+                raise LookupError("bot_ambiguous")
+            raise LookupError("entity_not_found")
         if strategy and strategy.get("id"):
             linked = [row for row in configs if row.get("strategy_id") == strategy.get("id")]
             if len(linked) == 1:
@@ -173,6 +279,11 @@ class FinnV2EntityResolutionService:
         normalized = str(value or "").strip().upper()
         return normalized or None
 
+    @staticmethod
+    def _normalized_name(value: Any) -> Optional[str]:
+        normalized = " ".join(str(value or "").casefold().split())
+        return normalized or None
+
     def _matches_symbol(self, candidate: Any, asset: Optional[str]) -> bool:
         if not asset:
             return False
@@ -184,3 +295,9 @@ class FinnV2EntityResolutionService:
         except (TypeError, ValueError):
             return None
         return coerced if coerced > 0 else None
+
+    def _has_explicit_identity(self, selector: Dict[str, Any], entity: str) -> bool:
+        return bool(
+            self._coerce_int(selector.get(f"{entity}_id"))
+            or self._normalized_name(selector.get(f"{entity}_name"))
+        )

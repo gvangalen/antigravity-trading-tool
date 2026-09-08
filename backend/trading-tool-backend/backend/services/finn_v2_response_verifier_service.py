@@ -544,6 +544,7 @@ class FinnV2ResponseVerifierService:
         has_contract_metadata = bool(operation_id and contract_version)
         has_partial_contract_metadata = bool(operation_id or contract_version) and not has_contract_metadata
         contract_metadata_ok = not has_partial_contract_metadata
+        contract = None
         if has_contract_metadata:
             try:
                 contract = FinnV2OperationRegistry().require_supported(operation_id)
@@ -646,7 +647,20 @@ class FinnV2ResponseVerifierService:
         capability_grounding_ok = self._capability_grounding_ok(draft)
         if draft.mode == "CAPABILITY" and capability_grounding_ok:
             covered_scopes.add("capability")
-        if uses_canonical_scope_contract:
+        proposal_mode = normalize_interaction_mode(draft.mode) in {"CREATE_PROPOSAL", "ACTION_PROPOSAL"}
+        action_clarification = bool(
+            contract is not None
+            and contract.response_strategy == "proposal_draft"
+            and normalize_interaction_mode(draft.mode) == "CLARIFICATION"
+            and bool(dict(getattr(request_plan, "operation_state", {}) or {}).get("missing_required_inputs"))
+        )
+        if proposal_mode or action_clarification:
+            # Action contracts are answered by a typed, confirmable proposal.
+            # A missing-input action is instead answered by its typed next-slot
+            # clarification. Both paths are checked below for mode, policy and
+            # safety; neither is an explanatory READ/EVALUATE narrative.
+            satisfied_scopes = set(required_scopes)
+        elif uses_canonical_scope_contract:
             satisfied_scopes = {scope for scope in required_scopes if scope in covered_scopes}
         else:
             satisfied_scopes = {
@@ -1060,10 +1074,16 @@ class FinnV2ResponseVerifierService:
         # The strategy draft is created *for an existing setup*. The action
         # contract owns that relationship, so do not let a model-provided
         # strategy target bypass the existing setup ownership resolver.
-        if operation == "create_strategy":
+        if operation in {"create_strategy", "create_bot"}:
+            # Create actions target the existing parent object, never the
+            # child that is deliberately not persisted until confirmation and
+            # safe execution. Ownership validation must therefore resolve the
+            # setup for a strategy draft and the strategy for a bot draft.
+            parent_type = "setup" if operation == "create_strategy" else "strategy"
+            parent_key = "setup_id" if operation == "create_strategy" else "strategy_id"
             target = ProposalTarget(
-                target_type="setup",
-                target_id=str(candidate.target_id or changes.get("setup_id") or "") or None,
+                target_type=parent_type,
+                target_id=str(candidate.target_id or changes.get(parent_key) or "") or None,
                 asset=candidate.asset,
             )
         else:
@@ -1307,6 +1327,14 @@ class FinnV2ResponseVerifierService:
 
     def _is_relevant(self, question: str, draft: ResponseDraft) -> bool:
         candidate = draft.proposal_candidate
+        if (
+            normalize_interaction_mode(draft.mode) == "CLARIFICATION"
+            and bool(str(draft.follow_up_question or "").strip())
+        ):
+            # Typed clarifications answer an action by asking for its one
+            # missing contract slot. Their specificity is established by the
+            # contract/state verifier, not prose keyword overlap.
+            return True
         if (
             normalize_interaction_mode(draft.mode) in {"CREATE_PROPOSAL", "ACTION_PROPOSAL"}
             and candidate is not None

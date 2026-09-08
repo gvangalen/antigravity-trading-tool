@@ -4,6 +4,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import text
 from datetime import datetime
 
+from backend.services.finn_v2_json_safety import to_json_safe
+
 class StrategyRepository:
     def __init__(self, session: AsyncSession):
         self.session = session
@@ -70,14 +72,14 @@ class StrategyRepository:
             "setup_type": payload["setup_type"],
             "execution_mode": payload["execution_mode"],
             "base_amount": payload["base_amount"],
-            "decision_curve": json.dumps(raw_data.get("decision_curve")) if raw_data.get("decision_curve") else None,
+            "decision_curve": json.dumps(to_json_safe(raw_data.get("decision_curve"))) if raw_data.get("decision_curve") else None,
             "decision_curve_id": curve_id,
             "entry": str(raw_data.get("entry")) if raw_data.get("entry") is not None else None,
             "targets": raw_data.get("targets"), # Assuming SQLAlchemy handles array insert if column is Array
             "stop_loss": str(raw_data.get("stop_loss")) if raw_data.get("stop_loss") is not None else None,
             "explanation": raw_data.get("explanation"),
             "risk_profile": raw_data.get("risk_profile"),
-            "data": json.dumps(raw_data),
+            "data": json.dumps(to_json_safe(raw_data)),
             "user_id": user_id
         }
         
@@ -171,14 +173,14 @@ class StrategyRepository:
             "setup_type": existing_setup_type,
             "execution_mode": payload.get("execution_mode"),
             "base_amount": payload.get("base_amount"),
-            "decision_curve": json.dumps(raw_data.get("decision_curve")) if raw_data.get("decision_curve") else None,
+            "decision_curve": json.dumps(to_json_safe(raw_data.get("decision_curve"))) if raw_data.get("decision_curve") else None,
             "decision_curve_id": raw_data.get("decision_curve_id"),
             "entry": str(raw_data.get("entry")) if raw_data.get("entry") is not None else None,
             "targets": raw_data.get("targets"),
             "stop_loss": str(raw_data.get("stop_loss")) if raw_data.get("stop_loss") is not None else None,
             "explanation": raw_data.get("explanation"),
             "risk_profile": raw_data.get("risk_profile"),
-            "data": json.dumps(raw_data),
+            "data": json.dumps(to_json_safe(raw_data)),
             "id": strategy_id,
             "user_id": user_id
         }

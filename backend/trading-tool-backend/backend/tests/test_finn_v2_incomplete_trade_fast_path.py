@@ -103,6 +103,7 @@ def test_incomplete_trade_route_avoids_provider_and_returns_unavailable():
         record_initial_intent=_record_initial_intent,
         record_final_operation=_record_final_operation,
         record_selection=_record_selection,
+        get_for_run=lambda **_kwargs: _record_selection(),
     )
     service.flags.is_tool_registry_enabled = lambda: True
     service.flags.is_state_assembly_enabled = lambda: True

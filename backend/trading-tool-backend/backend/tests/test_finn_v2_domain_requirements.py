@@ -48,6 +48,8 @@ def test_domain_requirements_narrow_create_setup_and_watchlist_actions():
         analysis_service.analyze(message="Voeg ETH toe aan mijn watchlist.")
     )
 
+    # A missing descriptive slot does not suppress the registry-required
+    # active-asset read. Only unresolved contextual entity IDs may do that.
     assert setup_plan.required_domains == ["identity_context"]
     assert setup_plan.optional_domains == ["market_context", "plan_context"]
     assert "contract:create_setup:active_asset->identity_context" in setup_plan.requirement_reason

@@ -78,7 +78,10 @@ ALLOWED_RUN_TRANSITIONS: Mapping[str, Tuple[str, ...]] = {
     "collecting": ("planned", "blocked", "failed", "canceled"),
     "planned": ("reasoning", "clarification_required", "unavailable", "completed", "blocked", "failed", "canceled"),
     "reasoning": ("verifying", "completed", "downgraded", "rejected", "unavailable", "failed", "canceled"),
-    "verifying": ("completed", "downgraded", "rejected", "unavailable", "failed", "canceled"),
+    # Verification can legitimately determine that a typed action needs one
+    # more required input. Treat that as a terminal clarification, not as a
+    # lifecycle error after the verifier has already made its decision.
+    "verifying": ("clarification_required", "completed", "downgraded", "rejected", "unavailable", "failed", "canceled"),
     "clarification_required": (),
     "unavailable": (),
     "downgraded": (),

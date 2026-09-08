@@ -75,6 +75,44 @@ def test_create_strategy_proposal_uses_its_parent_setup_as_the_owned_target():
     assert proposal.change.strategy_fields["setup_id"] == 12
 
 
+def test_create_bot_proposal_uses_its_parent_strategy_as_the_owned_target():
+    service = FinnV2ResponseVerifierService(session=object())
+    draft = ResponseDraft(
+        draft_id="draft-bot-1",
+        run_id="run-bot-1",
+        user_id=7,
+        mode="CREATE_PROPOSAL",
+        direct_answer="Ik heb een paper-botdraft voorbereid.",
+        main_observation="De strategie is geselecteerd.",
+        proposal_candidate=ProposalCandidate(
+            operation_type="create_bot",
+            target_type="bot",
+            target_id="52",
+            proposed_changes={
+                "strategy_id": 52,
+                "bot_fields": {"strategy_id": 52, "name": "Paper scout"},
+            },
+            evidence_refs=["E1"],
+            impact_summary="impact",
+            risk_summary="risk",
+            confirmation_required=True,
+        ),
+        evidence_set_hash="hash-1",
+        created_at=datetime.now(timezone.utc),
+    )
+
+    proposal = service._proposal_input_from_candidate(
+        run=SimpleNamespace(id="run-bot-1"),
+        draft=draft,
+        validation=SimpleNamespace(id="validation-1", snapshot_id="snapshot-1", evidence_set_hash="hash-1"),
+    )
+
+    assert proposal is not None
+    assert proposal.target.target_type == "strategy"
+    assert proposal.target.target_id == "52"
+    assert proposal.change.bot_fields["strategy_id"] == 52
+
+
 def test_proposal_mode_without_a_typed_candidate_is_rejected():
     service = FinnV2ResponseVerifierService(session=object())
     draft = ResponseDraft(
