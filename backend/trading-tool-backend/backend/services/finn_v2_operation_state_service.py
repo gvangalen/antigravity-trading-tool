@@ -250,7 +250,7 @@ class FinnV2OperationStateService:
             if mode_match:
                 values["execution_mode"] = mode_match.group(1)
             amount_match = re.search(
-                r"\b(?:base\s*amount|bedrag|inleg|amount)\s*(?:is|:|=)?\s*(?:€|eur|\$)?\s*(\d+(?:[.,]\d+)?)",
+                r"\b(?:base\s*amount|basisinleg|basis\s*bedrag|bedrag|inleg|amount)\s*(?:is|:|=|van)?\s*(?:€|eur|\$)?\s*(\d+(?:[.,]\d+)?)",
                 lowered,
             )
             if amount_match:
@@ -323,13 +323,35 @@ class FinnV2OperationStateService:
         structured = cls._structured_changed_fields(text)
         if structured:
             return structured
+        # Prefer the final imperative in a natural update sentence. Object
+        # names can themselves contain words such as "Update", which must
+        # never become a changed-field name.
         match = re.search(
-            r"\b(?:wijzig|verander|zet|change|update|set|ändere|aktualisiere)\s+"
+            r"\b(?:zet|set|ändere)\s+"
             r"(?:mijn|my|de|het|the|den|die|das)?\s*([\w -]{2,48}?)\s+"
             r"(?:naar|to|auf|als)\s+[\"']?([^,.!?\n]{1,80})",
             text,
             re.IGNORECASE,
         )
+        if not match:
+            match = re.search(
+                r"\b(?:wijzig|verander|change|update|aktualisiere)\s+"
+            r"(?:mijn|my|de|het|the|den|die|das)?\s*([\w -]{2,48}?)\s+"
+            r"(?:naar|to|auf|als)\s+[\"']?([^,.!?\n]{1,80})",
+            text,
+            re.IGNORECASE,
+            )
+        if not match:
+            # Natural action requests commonly attach a typed update after the
+            # object reference ("werk ... bij met timeframe 1 uur"). This is
+            # still an explicit field/value pair, not inferred state.
+            match = re.search(
+                r"\b(?:met|with|en\s+zet|and\s+set|und\s+setze)\s+"
+                r"(?:de|het|the|den|die|das)?\s*([\w -]{2,48}?)\s+"
+                r"(?:(?:naar|to|auf|als)\s+)?[\"']?([^,.!?\n]{1,80})",
+                text,
+                re.IGNORECASE,
+            )
         if not match:
             return {}
         field = re.sub(r"\s+", "_", match.group(1).strip().casefold())
@@ -339,9 +361,21 @@ class FinnV2OperationStateService:
         if field.startswith(domain_prefix):
             field = field[len(domain_prefix):]
         field = re.sub(r"^\d+_", "", field)
+        field = {
+            "tijdframe": "timeframe",
+            "time_frame": "timeframe",
+            "periode": "period",
+            "basisinleg": "base_amount",
+            "basis_bedrag": "base_amount",
+            "bedrag": "base_amount",
+        }.get(field, field)
         value = match.group(2).strip(" .\"'")
         if not field or not value:
             return {}
+        # Currency is presentation around an otherwise explicit numeric action
+        # value; preserve the number's type instead of sending a prose value to
+        # the action adapter.
+        value = re.sub(r"\s*(?:eur|euro|€)\s*$", "", value, flags=re.IGNORECASE).strip()
         lowered = value.casefold()
         if lowered in {"true", "waar", "ja", "yes"}:
             typed_value: object = True
@@ -353,7 +387,7 @@ class FinnV2OperationStateService:
             typed_value = float(value.replace(",", "."))
         else:
             typed_value = value
-        return {field: typed_value}
+        return {field: FinnV2SetupInputCatalog.canonical_input(field, typed_value)}
 
     @staticmethod
     def _indicator_input_from_text(text: str) -> Optional[dict[str, str]]:

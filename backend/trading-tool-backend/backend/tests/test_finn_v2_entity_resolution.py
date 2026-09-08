@@ -136,6 +136,25 @@ def test_entity_resolution_projects_only_registry_required_named_ids():
     assert resolved == {"setup_id": 293, "strategy_id": 309, "bot_id": 170}
 
 
+def test_entity_resolution_resolves_unquoted_owner_scoped_names_from_user_message():
+    service = FinnV2EntityResolutionService(session=object())
+    service.setups = _FakeSetupRepo()
+    service.strategies = _FakeStrategyRepo()
+    service.bots = _FakeBotRepo()
+    service.setups.get_user_setups = lambda _user_id: asyncio.sleep(0, result=[
+        {"id": 293, "name": "Matrix Setup", "symbol": "BTC"},
+    ])
+
+    resolved = asyncio.run(service.resolve_contract_reference_inputs(
+        user_id=388,
+        selector={},
+        required_inputs=("setup_id", "strategy_id", "bot_id"),
+        message="Werk Matrix Setup, Matrix Strategy en Matrix Bot vandaag bij.",
+    ))
+
+    assert resolved == {"setup_id": 293, "strategy_id": 309, "bot_id": 170}
+
+
 def test_entity_resolution_rejects_ambiguous_explicit_quoted_name():
     service = FinnV2EntityResolutionService(session=object())
     service.setups = _FakeSetupRepo()

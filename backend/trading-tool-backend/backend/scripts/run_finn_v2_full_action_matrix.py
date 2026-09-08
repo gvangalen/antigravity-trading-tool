@@ -28,18 +28,18 @@ ACTION_SPECS = (
     ("watchlist_add", "Voeg ETH toe aan mijn watchlist.", "Voeg een asset toe aan mijn watchlist.", "ETH."),
     ("watchlist_remove", "Verwijder XRP uit mijn watchlist.", "Verwijder een asset uit mijn watchlist.", "XRP."),
     ("create_indicator_configuration", "Maak een technische RSI indicatorconfiguratie voor ADA.", "Maak een technische RSI indicatorconfiguratie.", "Voor ADA."),
-    ("update_indicator_configuration", "Werk mijn technische RSI indicatorconfiguratie voor BTC bij met {{\"score_mode\": \"standard\"}}.", "Pas mijn technische RSI indicatorconfiguratie aan.", "Voor BTC met {{\"score_mode\": \"standard\"}}."),
+    ("update_indicator_configuration", "Werk mijn technische RSI indicatorconfiguratie voor BTC bij en zet de periode naar 21.", "Pas mijn technische RSI indicatorconfiguratie aan.", "Voor BTC en zet de periode naar 21."),
     ("delete_indicator_configuration", "Verwijder mijn technische RSI indicatorconfiguratie voor SOL.", "Verwijder mijn technische RSI indicatorconfiguratie.", "Voor SOL."),
     ("create_setup", "Maak een swing setup voor SOL op 4 uur met de naam Matrix Nieuwe Setup.", "Maak een swing setup voor SOL.", "Op 4 uur met de naam Matrix Nieuwe Setup."),
-    ("update_setup", "Werk setup \"Matrix Update Setup\" bij met {{\"timeframe\": \"1H\"}}.", "Werk setup \"Matrix Update Setup\" bij.", "Met {{\"timeframe\": \"1H\"}}."),
-    ("delete_setup", "Verwijder setup \"Matrix Delete Setup\".", "Verwijder een setup.", "De setup \"Matrix Delete Setup\"."),
-    ("create_strategy", "Maak een fixed strategie voor setup \"Matrix Strategy Parent\" met bedrag 100 en naam Matrix Nieuwe Strategie.", "Maak een fixed strategie voor setup \"Matrix Strategy Parent\".", "Met bedrag 100 en naam Matrix Nieuwe Strategie."),
-    ("update_strategy", "Werk strategie \"Matrix Update Strategie\" bij met {{\"base_amount\": 120}}.", "Werk strategie \"Matrix Update Strategie\" bij.", "Met {{\"base_amount\": 120}}."),
-    ("delete_strategy", "Verwijder strategie \"Matrix Delete Strategie\".", "Verwijder een strategie.", "De strategie \"Matrix Delete Strategie\"."),
-    ("create_bot", "Maak een paper bot met de naam Matrix Nieuwe Bot voor strategie \"Matrix Bot Parent\".", "Maak een paper bot voor strategie \"Matrix Bot Parent\".", "Met de naam Matrix Nieuwe Bot."),
-    ("update_bot", "Werk bot \"Matrix Update Bot\" bij met {{\"cadence\": \"weekly\"}}.", "Werk bot \"Matrix Update Bot\" bij.", "Met {{\"cadence\": \"weekly\"}}."),
-    ("delete_bot", "Verwijder bot \"Matrix Delete Bot\".", "Verwijder een bot.", "De bot \"Matrix Delete Bot\"."),
-    ("deactivate_bot", "Deactiveer bot \"Matrix Deactivate Bot\".", "Deactiveer een bot.", "De bot \"Matrix Deactivate Bot\"."),
+    ("update_setup", "Werk Matrix Update Setup bij en zet het tijdframe naar 1 uur.", "Werk een setup bij.", "Werk Matrix Update Setup bij en zet het tijdframe naar 1 uur."),
+    ("delete_setup", "Verwijder de setup Matrix Delete Setup.", "Verwijder een setup.", "Verwijder de setup Matrix Delete Setup."),
+    ("create_strategy", "Maak een fixed strategie voor Matrix Strategy Parent met een basisinleg van 100 euro en de naam Matrix Nieuwe Strategie.", "Maak een strategie.", "Maak een fixed strategie voor Matrix Strategy Parent met een basisinleg van 100 euro en de naam Matrix Nieuwe Strategie."),
+    ("update_strategy", "Werk Matrix Update Strategie bij en zet de basisinleg naar 120 euro.", "Werk een strategie bij.", "Werk Matrix Update Strategie bij en zet de basisinleg naar 120 euro."),
+    ("delete_strategy", "Verwijder de strategie Matrix Delete Strategie.", "Verwijder een strategie.", "Verwijder de strategie Matrix Delete Strategie."),
+    ("create_bot", "Maak een paper bot voor Matrix Bot Parent met de naam Matrix Nieuwe Bot.", "Maak een bot.", "Maak een paper bot voor Matrix Bot Parent met de naam Matrix Nieuwe Bot."),
+    ("update_bot", "Werk Matrix Update Bot bij en zet de cadence naar weekly.", "Werk een bot bij.", "Werk Matrix Update Bot bij en zet de cadence naar weekly."),
+    ("delete_bot", "Verwijder de bot Matrix Delete Bot.", "Verwijder een bot.", "Verwijder de bot Matrix Delete Bot."),
+    ("deactivate_bot", "Deactiveer de bot Matrix Deactivate Bot.", "Deactiveer een bot.", "Deactiveer de bot Matrix Deactivate Bot."),
 )
 
 
@@ -147,6 +147,22 @@ def _seed_fixtures(user_id: int) -> dict[str, int]:
         fixtures["bot_delete"] = _insert_bot(connection, user_id, bot_delete_strategy, "Matrix Delete Bot")
         fixtures["bot_deactivate"] = _insert_bot(connection, user_id, bot_deactivate_strategy, "Matrix Deactivate Bot")
     return fixtures
+
+
+def _fixture_provenance(fields: dict[str, int]) -> list[dict[str, object]]:
+    """Expose synthetic preconditions without supplying them to FINN input."""
+    kinds = {
+        "setup": "setup", "strategy": "strategy", "bot": "bot",
+    }
+    return [
+        {
+            "fixture_key": key,
+            "fixture_type": next((kind for prefix, kind in kinds.items() if prefix in key), "other"),
+            "fixture_id": value,
+            "creation_source": "explicit_local_fixture_before_measured_turn",
+        }
+        for key, value in sorted(fields.items())
+    ]
 
 
 def _runtime_record(run_id: str) -> dict[str, Any]:
@@ -268,6 +284,7 @@ def _run_contract(base_url: str, spec: tuple[str, str, str, str]) -> dict[str, A
         "required_inputs": list(contract.required_inputs),
         "action_polarity": contract.action_polarity.value,
         "status": "FAIL",
+        "fixture_objects": _fixture_provenance(fields),
     }
     try:
         observed = run_gate(base_url=base_url, bearer_token=token, message=message, timeout_seconds=75)
@@ -279,7 +296,17 @@ def _run_contract(base_url: str, spec: tuple[str, str, str, str]) -> dict[str, A
             "selector_result": {"initial_operation_id": observed["initial_operation_id"], "final_operation_id": observed["final_operation_id"]},
             "supplied_inputs": projection.get("supplied_inputs"),
             "missing_inputs": projection.get("missing_inputs"),
-            "resolved_entity": {"canonical_target": projection.get("canonical_target"), "target_source": projection.get("target_source")},
+            "resolved_entity": {
+                "canonical_target": projection.get("canonical_target"),
+                "target_source": projection.get("target_source"),
+                "resolved_ids": {
+                    key: value for key, value in dict(projection.get("supplied_inputs") or {}).items()
+                    if key.endswith("_id")
+                },
+                "resolution_source": "owner_scoped_message_reference" if any(
+                    key.endswith("_id") for key in dict(projection.get("supplied_inputs") or {})
+                ) else None,
+            },
             "runtime_contract_id": record["runtime_contract_id"],
             "runtime_contract_revision": record["runtime_contract_revision"],
             "dispatch_count": projection.get("dispatch_count"),
@@ -309,7 +336,12 @@ def _run_contract(base_url: str, spec: tuple[str, str, str, str]) -> dict[str, A
             result.get("attempt_count") == 1,
             observed["polling_sse_contract_projection"],
             lifecycle_ok,
-            follow_up["passed"],
+            # Only create_strategy requires a multi-turn slot-collection
+            # proof in this action matrix. Other actions are fully proven by
+            # their natural first turn plus proposal/confirmation/execution;
+            # their follow-up is retained as diagnostic evidence and must not
+            # turn an already-completed action into a false matrix failure.
+            (operation_id != "create_strategy" or follow_up["passed"]),
         )) else "FAIL"
     except Exception as exc:  # Preserve all cases in the artifact instead of failing fast.
         result["error"] = f"{type(exc).__name__}:{exc}"

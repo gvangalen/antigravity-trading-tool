@@ -44,6 +44,19 @@ def test_strategy_inputs_are_collected_against_the_registry_contract():
     }
 
 
+def test_strategy_inputs_accept_natural_dutch_base_amount_wording():
+    state = FinnV2OperationStateService()
+    contract = FinnV2OperationRegistry().require_supported("create_strategy")
+
+    collected = state.explicit_inputs(
+        contract=contract,
+        message="Maak een fixed strategie met een basisinleg van 100 euro.",
+        explicit_asset=None,
+    )
+
+    assert collected == {"execution_mode": "fixed", "base_amount": 100.0}
+
+
 def test_guided_state_keeps_optional_inputs_declared_by_the_action_contract():
     service = FinnV2OperationStateService()
     contract = FinnV2OperationRegistry().require_supported("create_strategy")
@@ -100,6 +113,25 @@ def test_update_flow_collects_an_explicit_natural_field_value_without_a_second_s
     assert state.collected_inputs == {
         "setup_id": 42,
         "changed_fields": {"timeframe": "4H"},
+    }
+    assert state.missing_required_inputs == []
+
+
+def test_update_flow_collects_a_natural_post_reference_change_without_json():
+    service = FinnV2OperationStateService()
+    contract = FinnV2OperationRegistry().require_supported("update_setup")
+
+    state = service.resolve(
+        contract=contract,
+        message="Werk mijn setup vandaag bij met tijdframe 1 uur",
+        explicit_asset=None,
+        conversation_context={},
+        supplied_inputs={"setup_id": 42},
+    )
+
+    assert state.collected_inputs == {
+        "setup_id": 42,
+        "changed_fields": {"timeframe": "1H"},
     }
     assert state.missing_required_inputs == []
 

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from typing import Any, Dict, Optional
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -99,6 +100,7 @@ class FinnV2EntityResolutionService:
         user_id: int,
         selector: Dict[str, Any],
         required_inputs: tuple[str, ...],
+        message: str = "",
     ) -> Dict[str, int]:
         """Resolve explicit, owner-scoped object names into registry ID slots.
 
@@ -106,6 +108,16 @@ class FinnV2EntityResolutionService:
         resolves an explicitly named object before missing-input calculation;
         it never guesses an active object or introduces a second input schema.
         """
+        # The selector may omit an entity name from ordinary prose. Resolve an
+        # unambiguous, user-owned name present in that prose before deciding a
+        # registry ID slot is missing. We never use a cross-user or active-item
+        # fallback here: ambiguity remains a safe clarification.
+        selector = await self._selector_with_message_references(
+            user_id=user_id,
+            selector=selector,
+            required_inputs=required_inputs,
+            message=message,
+        )
         resolved: Dict[str, int] = {}
         if "setup_id" in required_inputs and not self._coerce_int(selector.get("setup_id")):
             if self._normalized_name(selector.get("setup_name")):
@@ -126,6 +138,40 @@ class FinnV2EntityResolutionService:
                 if value:
                     resolved["bot_id"] = value
         return resolved
+
+    async def _selector_with_message_references(
+        self,
+        *,
+        user_id: int,
+        selector: Dict[str, Any],
+        required_inputs: tuple[str, ...],
+        message: str,
+    ) -> Dict[str, Any]:
+        enriched = dict(selector)
+        repositories = {
+            "setup": self.setups.get_user_setups,
+            "strategy": lambda owner_id: self.strategies.query_strategies(owner_id, {}),
+            "bot": self.bots.get_bot_configs,
+        }
+        for entity, loader in repositories.items():
+            id_field, name_field = f"{entity}_id", f"{entity}_name"
+            if id_field not in required_inputs or self._coerce_int(enriched.get(id_field)) or self._normalized_name(enriched.get(name_field)):
+                continue
+            rows = await loader(user_id)
+            matches = [dict(row) for row in rows if self._message_mentions_name(message, row.get("name"))]
+            if len(matches) == 1:
+                enriched[name_field] = matches[0].get("name")
+            elif len(matches) > 1:
+                raise LookupError(f"{entity}_ambiguous")
+        return enriched
+
+    @staticmethod
+    def _message_mentions_name(message: str, name: Any) -> bool:
+        normalized_name = " ".join(str(name or "").casefold().split())
+        normalized_message = " ".join(str(message or "").casefold().split())
+        if len(normalized_name) < 2 or not normalized_message:
+            return False
+        return bool(re.search(rf"(?<!\w){re.escape(normalized_name)}(?!\w)", normalized_message))
 
     async def resolve_setup(
         self,
