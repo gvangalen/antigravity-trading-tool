@@ -535,6 +535,46 @@ def test_owned_worker_lifecycle_has_a_terminal_deadline_independent_of_delivery(
     assert 'error_code="lifecycle_deadline_exceeded"' in owned
 
 
+def test_verifying_failure_materializes_one_typed_terminal_projection():
+    """A verifier timeout must never leave an evaluate run in ``verifying``."""
+    service = object.__new__(FinnV2RunService)
+    persisted = []
+
+    class _Contracts:
+        async def materialize_terminal(self, **kwargs):
+            persisted.append(("contract", kwargs))
+            return SimpleNamespace(terminal_projection_json={
+                "run_id": kwargs["run_id"], "terminal_status": kwargs["status"],
+                "error_code": kwargs["error_code"], "response": kwargs["response"],
+            })
+
+    async def _persist_transition(*_args, **kwargs):
+        persisted.append(("run", kwargs))
+
+    async def _rollback_failed_session(**_kwargs):
+        return None
+
+    service.runtime_contracts = _Contracts()
+    service.persist_transition = _persist_transition
+    service._rollback_failed_session = _rollback_failed_session
+    service._session_requires_rollback = lambda: False
+
+    asyncio.run(service.fail_run(
+        run_id="evaluate-verifying-timeout",
+        user_id=7,
+        error_code="lifecycle_deadline_exceeded",
+        error_message="verification timed out",
+        failure_stage="verifying",
+        primary_exception=TimeoutError("verification timed out"),
+    ))
+
+    assert persisted[0][0] == "contract"
+    assert persisted[0][1]["status"] == "failed"
+    assert persisted[0][1]["error_code"] == "lifecycle_deadline_exceeded"
+    assert persisted[1][0] == "run"
+    assert persisted[1][1]["next_status"] == "failed"
+
+
 def test_selector_persistence_precedes_post_selection_execution_and_has_a_separate_budget():
     orchestrator = (ROOT / "services" / "finn_v2_orchestrator_service.py").read_text(encoding="utf-8")
     lifecycle = (ROOT / "services" / "finn_v2_run_service.py").read_text(encoding="utf-8")
