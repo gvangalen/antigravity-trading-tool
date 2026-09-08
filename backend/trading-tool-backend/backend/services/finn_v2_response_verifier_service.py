@@ -1037,6 +1037,16 @@ class FinnV2ResponseVerifierService:
             policy=policy,
             proposal_input=proposal_input,
         )
+        # The proposal is part of the terminal result of this run. Persist its
+        # immutable identity before materializing the verified response so the
+        # contract projection, delivery, and later confirmation use one source.
+        await self.runtime_contracts.record_proposal_lifecycle(
+            run_id=run.id,
+            proposal_id=record.proposal_id,
+            operation_id=record.operation_type,
+            payload_hash=record.payload_hash,
+            event="draft_created",
+        )
         await self._append_trace(trace_id=trace_id, run_id=run.id, user_id=run.user_id, event_type="draft_proposal_created", payload={"proposal_id": record.proposal_id, "operation_type": record.operation_type})
         increment_execution_safety_counter(f"finn_v2_verified_proposal_candidates_total:{record.operation_type}")
         return record.proposal_id

@@ -21,6 +21,7 @@ FINN_PUBLIC_PROJECTION_VERSION = "2026-09-03.terminal-projection.v1"
 RUNTIME_CONTRACT_VERSION = "2026-09-04.runtime-contract.v1"
 PENDING_STATUS = "pending"
 _WORKFLOW_EVENTS = frozenset({
+    "draft_created",
     "confirmation_issued",
     "confirmed",
     "execution_blocked",
@@ -389,6 +390,7 @@ def record_proposal_lifecycle(
         lifecycle[field] = value
 
     status_by_event = {
+        "draft_created": "draft",
         "confirmation_issued": "pending_confirmation",
         "confirmed": "confirmed",
         "execution_blocked": "blocked",

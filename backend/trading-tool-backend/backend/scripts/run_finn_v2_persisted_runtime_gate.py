@@ -65,17 +65,23 @@ def _terminal_sse(*, url: str, headers: Dict[str, str], timeout: float) -> Dict[
     raise AssertionError("runtime_gate_missing_terminal_sse_envelope")
 
 
-def run_gate(*, base_url: str, bearer_token: str, message: str, timeout_seconds: float) -> Dict[str, Any]:
+def run_gate(
+    *, base_url: str, bearer_token: str, message: str, timeout_seconds: float,
+    conversation_id: str | None = None,
+) -> Dict[str, Any]:
     if not bearer_token.strip():
         raise ValueError("runtime_gate_requires_explicit_qa_bearer_token")
     base_url = base_url.rstrip("/")
     headers = {"Authorization": f"Bearer {bearer_token}", "Content-Type": "application/json"}
     started_at = time.monotonic()
+    request_body: Dict[str, Any] = {"message": message, "transport": "chat"}
+    if conversation_id:
+        request_body["conversation_id"] = conversation_id
     created, status = _request_json(
         url=f"{base_url}/api/assistant/v2/runs",
         method="POST",
         headers=headers,
-        body={"message": message, "transport": "chat"},
+        body=request_body,
         timeout=timeout_seconds,
     )
     if status != 200:
@@ -133,6 +139,7 @@ def run_gate(*, base_url: str, bearer_token: str, message: str, timeout_seconds:
     return {
         "run_id": run_id,
         "contract_id": contract["contract_id"],
+        "conversation_id": str(created.get("conversation_id") or ""),
         "status": polling["status"],
         "initial_operation_id": projection.get("initial_operation_id"),
         "final_operation_id": projection.get("final_operation_id"),

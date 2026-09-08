@@ -391,3 +391,14 @@ def test_unbound_deictic_reference_requires_clarification_not_execution():
     )
 
     assert resolved.operation_id == "clarify_request"
+
+
+def test_unbound_deictic_reference_still_clarifies_when_provider_frame_is_empty():
+    registry = FinnV2OperationRegistry()
+    resolved = FinnV2OperationResolverService(registry).resolve(
+        selection=_selection("off_topic", {}),
+        candidates=registry.list(), conversation_context={},
+        request_facts={"ambiguous_reference": True},
+    )
+
+    assert resolved.operation_id == "clarify_request"

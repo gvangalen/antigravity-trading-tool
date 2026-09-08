@@ -383,8 +383,8 @@ def test_asset_catalog_repository_rolls_back_before_legacy_query_after_primary_f
         def __init__(self):
             self.rollback_calls = 0
 
-        def get_transaction(self):
-            return None
+        def in_transaction(self):
+            return False
 
         async def rollback(self):
             self.rollback_calls += 1
@@ -419,8 +419,8 @@ def test_asset_catalog_repository_uses_savepoints_for_legacy_fallback_inside_tra
         def __init__(self):
             self.begin_nested_calls = 0
 
-        def get_transaction(self):
-            return object()
+        def in_transaction(self):
+            return True
 
         def begin_nested(self):
             self.begin_nested_calls += 1
@@ -442,6 +442,27 @@ def test_asset_catalog_repository_uses_savepoints_for_legacy_fallback_inside_tra
     assert result == [{"symbol": "BTC"}]
     assert attempts == ["primary", "fallback"]
     assert repo.session.begin_nested_calls == 2
+
+
+def test_asset_catalog_repository_does_not_materialize_a_transaction_proxy():
+    class _Session:
+        def in_transaction(self):
+            return False
+
+        def get_transaction(self):
+            raise NotImplementedError("async proxy is unavailable")
+
+    repo = AssetCatalogRepository(_Session())
+
+    async def _value(value):
+        return value
+
+    result = asyncio.run(repo._with_legacy_fallback(
+        primary=lambda: _value([{"symbol": "BTC"}]),
+        fallback=lambda: _value([]),
+    ))
+
+    assert result == [{"symbol": "BTC"}]
 
 
 def test_workspace_reads_do_not_parallelize_a_shared_async_session():

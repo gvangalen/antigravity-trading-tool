@@ -8,6 +8,12 @@ from sqlalchemy import text
 LEGACY_BASELINE = """
 ALTER TABLE user_indicator_configs
     ALTER COLUMN config_json TYPE JSONB USING config_json::text::jsonb;
+-- ``create_all`` never alters an older local table. Keep the local baseline
+-- compatible with the current asset catalog ORM before replaying migrations.
+ALTER TABLE asset_catalog
+    ADD COLUMN IF NOT EXISTS content_hash VARCHAR,
+    ADD COLUMN IF NOT EXISTS payload_json JSONB,
+    ADD COLUMN IF NOT EXISTS error_codes_json JSONB NOT NULL DEFAULT '[]'::jsonb;
 CREATE TABLE IF NOT EXISTS strategies (id SERIAL PRIMARY KEY, user_id INTEGER REFERENCES users(id), setup_id INTEGER REFERENCES setups(id));
 CREATE TABLE IF NOT EXISTS bot_configs (id SERIAL PRIMARY KEY, user_id INTEGER REFERENCES users(id), strategy_id INTEGER REFERENCES strategies(id), cadence TEXT DEFAULT 'daily', symbol TEXT);
 CREATE TABLE IF NOT EXISTS bot_orders (id SERIAL PRIMARY KEY, user_id INTEGER REFERENCES users(id), decision_id INTEGER, status TEXT DEFAULT 'pending');

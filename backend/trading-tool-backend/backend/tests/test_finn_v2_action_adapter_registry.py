@@ -89,7 +89,15 @@ def test_supported_v1_write_contracts_resolve_to_exactly_one_registered_adapter(
         assert adapters.get(contract.execution_adapter) is not None
 
 
-def test_new_mutation_adapters_are_fail_closed_until_their_specific_flag_is_enabled():
+def test_new_mutation_adapters_are_fail_closed_until_their_specific_flag_is_enabled(monkeypatch):
+    # The local integration stack explicitly enables non-financial fixture
+    # adapters. This unit test verifies the production-default, not that
+    # deliberately isolated local environment.
+    monkeypatch.delenv("FINN_LOCAL_SAFE_ADAPTERS", raising=False)
+    monkeypatch.delenv("APP_ENV", raising=False)
+    monkeypatch.delenv("FINN_V2_EXECUTE_ASSET_SELECTION", raising=False)
+    monkeypatch.delenv("FINN_V2_EXECUTE_INDICATOR_CHANGES", raising=False)
+    monkeypatch.delenv("FINN_V2_EXECUTE_BOT_CHANGES", raising=False)
     registry = FinnV2ActionAdapterRegistry(session=object())
 
     assert registry.flags.execute_asset_selection_enabled() is False

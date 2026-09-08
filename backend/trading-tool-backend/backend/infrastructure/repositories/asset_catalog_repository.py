@@ -50,8 +50,12 @@ class AssetCatalogRepository:
         )
 
     async def _with_legacy_fallback(self, *, primary, fallback):
-        transaction = self.session.get_transaction()
-        if transaction is None:
+        # ``AsyncSession.get_transaction()`` materializes a proxy object. In a
+        # long-lived Celery event loop SQLAlchemy can reject that proxy even
+        # though the boolean transaction state is available. The runtime only
+        # needs to know whether it may open a savepoint, so do not request the
+        # proxy here.
+        if not self.session.in_transaction():
             try:
                 return await primary()
             except Exception:

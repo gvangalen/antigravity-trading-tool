@@ -460,10 +460,13 @@ class FinnV2RequestPreprocessorService:
             r"\b(?:koop\w*|verkoop\w*|buy\w*|sell\w*|trade\w*|handel\w*|"
             r"orders?|move|transfer|verplaats\w*|stort\w*)\b"
         )
-        autonomy = r"\b(?:autonoom\w*|autonom\w*|zelfstandig)\b"
+        autonomy = (
+            r"\b(?:autonoom\w*|autonom\w*|zelfstandig|automatisch\w*|"
+            r"automatically|automated|automatisiert\w*)\b"
+        )
         decision = (
             r"\b(?:\w*besluit\w*|beslissing\w*|decision\w*|entscheidung\w*|"
-            r"beheer\w*|manage\w*|verwalte\w*|whichever|welke\s+dan\s+ook)\b"
+            r"behe(?:er|r)\w*|manage\w*|verwalte\w*|whichever|welke\s+dan\s+ook)\b"
         )
         return bool(
             # Autonomous market delegation is consequential even when the

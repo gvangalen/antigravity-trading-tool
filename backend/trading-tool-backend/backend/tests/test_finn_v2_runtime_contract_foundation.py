@@ -207,6 +207,13 @@ def test_terminal_projection_keeps_safe_proposal_confirmation_and_execution_prov
         proposal_id="proposal-1",
         operation_id="create_strategy",
         payload_hash="payload-hash",
+        event="draft_created",
+    )
+    state = record_proposal_lifecycle(
+        state,
+        proposal_id="proposal-1",
+        operation_id="create_strategy",
+        payload_hash="payload-hash",
         event="confirmation_issued",
     )
     state = record_proposal_lifecycle(

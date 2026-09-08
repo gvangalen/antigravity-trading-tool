@@ -21,6 +21,8 @@ def test_preprocessor_marks_portfolio_as_a_financial_object_without_selecting_an
     )
 
     assert "portfolio" in facts.explicit_entities
+    assert facts.action_polarity == "execute"
+    assert facts.financial_execution_intent is True
 
 
 def test_preprocessor_marks_autonomous_market_decision_delegation_as_execution():

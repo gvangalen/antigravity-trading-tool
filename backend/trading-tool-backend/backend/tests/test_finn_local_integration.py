@@ -29,3 +29,19 @@ def test_local_harness_bootstraps_legacy_schema_before_canonical_migrations():
     assert source.index("bootstrap_local_finn_schema.py") < source.index("run_sql_migration.py")
     assert "Base.metadata.create_all" in bootstrap
     assert "bot_orders" in bootstrap and "bot_configs" in bootstrap
+    assert "content_hash" in bootstrap and "payload_json" in bootstrap
+
+
+def test_local_safe_adapters_require_the_exact_local_application_environment(monkeypatch):
+    from backend.services.finn_v2_flag_service import FinnV2FlagService
+
+    monkeypatch.setenv("FINN_LOCAL_SAFE_ADAPTERS", "1")
+    monkeypatch.setenv("APP_ENV", "production")
+    assert FinnV2FlagService().is_local_safe_action_adapters_enabled() is False
+
+    monkeypatch.setenv("APP_ENV", "local_finn")
+    flags = FinnV2FlagService()
+    assert flags.is_local_safe_action_adapters_enabled() is True
+    assert flags.execute_setup_changes_enabled() is True
+    assert flags.execute_bot_changes_enabled() is True
+    assert flags.execute_live_bot_activation_enabled() is False

@@ -305,33 +305,45 @@ class FinnV2FlagService:
     def is_action_execution_enabled(self) -> bool:
         return self._env_bool("FINN_V2_ACTION_EXECUTION_ENABLED", True)
 
+    def is_local_safe_action_adapters_enabled(self) -> bool:
+        """Enable only non-financial adapters for the isolated local stack.
+
+        This is tied to the exact local application environment, rather than
+        merely an opt-in flag. Production retains its explicit per-adapter
+        flags and cannot activate this test-only convenience path.
+        """
+        return (
+            str(os.getenv("APP_ENV", "")).strip() == "local_finn"
+            and self._env_bool("FINN_LOCAL_SAFE_ADAPTERS", False)
+        )
+
     def execute_indicator_changes_enabled(self) -> bool:
-        return self._env_bool("FINN_V2_EXECUTE_INDICATOR_CHANGES", False)
+        return self.is_local_safe_action_adapters_enabled() or self._env_bool("FINN_V2_EXECUTE_INDICATOR_CHANGES", False)
 
     def execute_asset_selection_enabled(self) -> bool:
-        return self._env_bool("FINN_V2_EXECUTE_ASSET_SELECTION", False)
+        return self.is_local_safe_action_adapters_enabled() or self._env_bool("FINN_V2_EXECUTE_ASSET_SELECTION", False)
 
     def execute_setup_changes_enabled(self) -> bool:
-        return self._env_bool("FINN_V2_EXECUTE_SETUP_CHANGES", False)
+        return self.is_local_safe_action_adapters_enabled() or self._env_bool("FINN_V2_EXECUTE_SETUP_CHANGES", False)
 
     def execute_strategy_changes_enabled(self) -> bool:
-        return self._env_bool("FINN_V2_EXECUTE_STRATEGY_CHANGES", False)
+        return self.is_local_safe_action_adapters_enabled() or self._env_bool("FINN_V2_EXECUTE_STRATEGY_CHANGES", False)
 
     def execute_watchlist_changes_enabled(self) -> bool:
-        return self._env_bool("FINN_V2_EXECUTE_WATCHLIST_CHANGES", True)
+        return self.is_local_safe_action_adapters_enabled() or self._env_bool("FINN_V2_EXECUTE_WATCHLIST_CHANGES", True)
 
     def execute_trade_plan_changes_enabled(self) -> bool:
-        return self._env_bool("FINN_V2_EXECUTE_TRADE_PLAN_CHANGES", False)
+        return self.is_local_safe_action_adapters_enabled() or self._env_bool("FINN_V2_EXECUTE_TRADE_PLAN_CHANGES", False)
 
     def execute_paper_bot_activation_enabled(self) -> bool:
-        return self._env_bool("FINN_V2_EXECUTE_PAPER_BOT_ACTIVATION", False)
+        return self.is_local_safe_action_adapters_enabled() or self._env_bool("FINN_V2_EXECUTE_PAPER_BOT_ACTIVATION", False)
 
     def execute_live_bot_activation_enabled(self) -> bool:
         return self._env_bool("FINN_V2_EXECUTE_LIVE_BOT_ACTIVATION", False)
 
     def execute_bot_changes_enabled(self) -> bool:
         """Keep non-live bot mutations explicitly disabled until enabled."""
-        return self._env_bool("FINN_V2_EXECUTE_BOT_CHANGES", False)
+        return self.is_local_safe_action_adapters_enabled() or self._env_bool("FINN_V2_EXECUTE_BOT_CHANGES", False)
 
     def _is_safe_readonly_config(self) -> bool:
         if not self.is_write_blocked():

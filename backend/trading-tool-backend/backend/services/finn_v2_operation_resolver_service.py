@@ -1,7 +1,8 @@
 """Resolve a provider semantic frame through the immutable operation registry."""
 from __future__ import annotations
 
-from dataclasses import replace
+from copy import copy
+from dataclasses import is_dataclass, replace
 from typing import Mapping, Optional
 
 from backend.domain.finn_v2_operation_registry import FinnV2OperationRegistry, OperationContract
@@ -47,8 +48,27 @@ class FinnV2OperationResolverService:
         request_facts: Mapping[str, object] | None = None,
     ) -> FinnV2StructuredOperationSelection:
         frame = getattr(selection, "semantic_frame", None)
+        # Legacy callers can provide a selection without a semantic frame.
+        # Preserve that selection unless a typed safety invariant requires a
+        # fail-closed correction. A provider may validly return an empty frame
+        # for an unbound deictic follow-up, which must still clarify instead
+        # of becoming an off-topic terminal response.
         if not isinstance(frame, Mapping) or not frame:
+            if (
+                selection.operation_id == "off_topic"
+                and
+                bool((request_facts or {}).get("ambiguous_reference"))
+                and not self._has_eligible_lineage(conversation_context)
+                and not self._has_pending_operation(conversation_context)
+                and any(contract.operation_id == "clarify_request" for contract in candidates)
+            ):
+                return self._with_resolved_operation(
+                    selection,
+                    operation_id="clarify_request",
+                    conversation_reference=selection.conversation_reference,
+                )
             return selection
+        frame = dict(frame)
         candidate_ids = {contract.operation_id for contract in candidates}
         goal = self._normalized(frame.get("goal"))
         object_name = self._normalized(frame.get("object"))
@@ -93,10 +113,13 @@ class FinnV2OperationResolverService:
         if (
             str((request_facts or {}).get("action_polarity") or "") == "read"
             and not bool((request_facts or {}).get("explicit_plan_subject"))
-            and bool((request_facts or {}).get("linked_graph_relationship"))
             and {"setup", "strategy", "bot"}.issubset(explicit_entities)
         ):
-            operation_id = "read_linked_bot"
+            operation_id = (
+                "read_linked_bot"
+                if bool((request_facts or {}).get("linked_graph_relationship"))
+                else "read_active_plan"
+            )
         # The provider still extracts the subject from free text.  Once it
         # has identified a plan, however, a deterministic assessment fact
         # makes ``clarify`` semantically incompatible: the user requested a
@@ -188,7 +211,31 @@ class FinnV2OperationResolverService:
             "previous_verified_response", "previous_response", "previous_evidence", "previous_conclusion",
         }:
             reference = "previous_verified_response"
-        return replace(selection, operation_id=operation_id, conversation_reference=reference)
+        return self._with_resolved_operation(
+            selection,
+            operation_id=operation_id,
+            conversation_reference=reference,
+        )
+
+    @staticmethod
+    def _with_resolved_operation(
+        selection: FinnV2StructuredOperationSelection,
+        *,
+        operation_id: str,
+        conversation_reference: str | None,
+    ) -> FinnV2StructuredOperationSelection:
+        """Preserve the typed production selection and compatible test doubles.
+
+        Production selector outputs are frozen dataclasses. A few legacy
+        classifier consumers supply a namespace-shaped selection, so resolver
+        invariants must not depend on that incidental implementation detail.
+        """
+        if is_dataclass(selection):
+            return replace(selection, operation_id=operation_id, conversation_reference=conversation_reference)
+        resolved = copy(selection)
+        resolved.operation_id = operation_id
+        resolved.conversation_reference = conversation_reference
+        return resolved
 
     def _operation_from_frame(
         self,
