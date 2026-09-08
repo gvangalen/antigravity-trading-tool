@@ -117,10 +117,14 @@ for the SHA of the commit that contains it.
   supporting artifacts and a fault batch where applicable. Do not test a
   different production SHA in the same official production run or initiate a
   repair loop.
-- For authenticated production QA, use the protected runner described in
-  `docs/operations/finn-production-qa-runner.md`. Do not require or request
-  SSH, production secrets, browser cookies, or a QA fixture identity from a
-  QA chat. QA reads the sanitized workflow artifact and issues one verdict.
+- For authenticated production QA, QA owns the protected `FINN_QA_USER_ID`
+  fixture and uses the protected runner described in
+  `docs/operations/finn-production-qa-runner.md`. QA performs the active
+  goal's authenticated preflight, run creation, runtime-contract and dispatch
+  checks, approved production matrix, controlled fixture writes, polling/SSE,
+  safety checks, and final verdict. Do not require or request SSH, production
+  secrets, browser cookies, or a QA fixture identity from a QA chat. QA reads
+  the sanitized workflow artifact and issues one verdict.
 
 ## Stop Criteria
 

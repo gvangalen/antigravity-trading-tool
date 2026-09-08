@@ -100,15 +100,20 @@ Stop and report when any of the following is true:
 `docs/agents/FINN_RELEASE_STATUS.md` is the sole current FINN release and QA
 status source.
 
-- Build completes one coherent local repair batch, verifies it, manages the
-  candidate, CI, deployment, and bounded live smoke, and records only measured
-  evidence in the status file. Its authenticated smoke uses only the canonical
-  Build smoke fixture and generic non-sealed cases. It must not start,
-  instruct, contact, poll, or otherwise coordinate a QA agent, access the QA
-  fixture, or read the QA-exclusive sealed holdout.
-- QA owns independent test execution and QA test material. Its active QA goal
-  defines the concrete scope, dataset, environment, matrix, and acceptance
-  criteria. Production QA tests only the exact live SHA in the status file;
+- Build completes one coherent local repair batch, verifies it locally, and
+  manages the candidate, CI, deployment, and post-deployment SHA/health
+  checks. Before deployment, Build must run the complete local worker-driven
+  action matrix for affected contracts, real-provider development/regression,
+  and the applicable backend and frontend suites. After deployment, Build
+  verifies only Auto Deploy, backend health, frontend build information, and
+  matching deployed SHAs. Build must not start, instruct, contact, poll, or
+  otherwise coordinate a QA agent, access the QA fixture, or read the
+  QA-exclusive sealed holdout. `FINN_BUILD_SMOKE_USER_ID` is optional for
+  targeted production diagnosis only; it is not a release gate.
+- QA owns independent test execution, QA test material, and the protected
+  `FINN_QA_USER_ID` authenticated runtime route. Its active QA goal defines
+  the concrete scope, dataset, environment, matrix, and acceptance criteria.
+  Production QA tests only the exact live SHA in the status file;
   targeted QA, smoke-QA, regression-QA, UI-QA, safety-QA, and full release
   acceptance may use different goal-defined scopes. QA completes the entire
   agreed matrix despite individual content failures, subject only to each

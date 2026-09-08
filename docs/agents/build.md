@@ -115,18 +115,20 @@ QA status source.
 - Treat all known, related FINN defects in the active goal as one local repair
   batch. Reproduce, fix, and cover them before creating a candidate; do not
   deploy after each individual fix.
-- Maintain at most one active candidate. Record measured test, provider, CI,
-  deployment, SHA, and smoke evidence in `FINN_RELEASE_STATUS.md`; never fill
-  a field from intent or an unverified claim.
-- Critical runtime claims need end-to-end evidence. Claims about provider
-  behavior need the real provider; selector-only or mocked tests cannot prove
-  a full runtime release path.
+- Maintain at most one active candidate. Before deployment, record measured
+  local worker-driven action-matrix, provider, and applicable suite evidence.
+  After deployment, record only measured CI, Auto Deploy, backend health,
+  frontend build-info, and SHA evidence in `FINN_RELEASE_STATUS.md`; never
+  fill a field from intent or an unverified claim.
+- Critical Build runtime claims need local worker-driven end-to-end evidence.
+  Claims about provider behavior need the real provider; selector-only or
+  mocked tests cannot prove a full local runtime release path. Authenticated
+  live runtime acceptance belongs to QA.
 - The sealed holdout is QA-exclusive. Build must not read, copy, score, tune
   against, or submit it through any fixture, runner, provider, or live route.
-- The authenticated Build smoke uses only the server-side
-  `FINN_BUILD_SMOKE_USER_ID` binding and generic non-sealed smoke cases. Its
-  token remains in the server-side smoke process and never grants access to
-  the QA fixture or sealed holdout.
+- `FINN_BUILD_SMOKE_USER_ID` may be used only for voluntary, generic,
+  non-sealed production diagnostics. It is not required before independent
+  QA, and its token remains in the server-side smoke process.
 - Do not start, instruct, contact, poll, or otherwise coordinate a QA agent.
   The user initiates independent QA only after the status file documents a
   complete live candidate.

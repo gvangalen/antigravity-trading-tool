@@ -8,18 +8,18 @@ short; link artifacts rather than copying reports or chat history.
 | Field | Value |
 | --- | --- |
 | Phase | `READY_FOR_INDEPENDENT_QA` |
-| Active goal | Protected FINN production-QA matrix runner |
-| Candidate branch | `codex/finn-production-qa-matrix-runner` |
-| Candidate SHA | `runtime marker verified during QA preflight` |
-| Production SHA | `runtime marker verified during QA preflight` |
+| Active goal | FINN action-contract runtime repair |
+| Candidate branch | `codex/finn-bb63-qa-repair` |
+| Candidate SHA | `a5781630ac3077050bd8be434cb659c668a0f2fa` |
+| Production SHA | `a5781630ac3077050bd8be434cb659c668a0f2fa` |
 | Release owner | Build |
-| Last updated | `2026-09-07` |
+| Last updated | `2026-09-08` |
 
 ## QA Runner
 
 - QA runner readiness: `MATRIX_INTAKE_DEPLOYED`
-- authenticated QA preflight: `PASS` — workflow `34149205266` on production SHA
-  `3c53513c8bcd9d2a6211eb65c1ce4c1e374fddf0`; authentication only, no content cases
+- authenticated QA preflight: `NOT_RUN` for the active release; QA owns this
+  live check through `FINN_QA_USER_ID` and its active QA goal.
 - official QA status: `NOT_STARTED`
 
 The protected GitHub Actions runner is the canonical authenticated production
@@ -33,9 +33,11 @@ committed status file as a self-referential release marker.
 
 | Gate | Status | Evidence |
 | --- | --- | --- |
-| Focused runner tests | `PASS` | `15 passed`: encrypted intake, redaction, profile validation, action boundary, release-marker parsing. |
-| CI | `PASS` | GitHub Actions `34150714774` for the matrix-runner implementation. |
-| Deployment | `PASS` | Auto Deploy `34150840370`; public backend and frontend markers matched before this status-only update. |
+| Local action matrix | `PASS` | `16/16` worker-driven action contracts; artifact SHA-256 `c338b3ec37b723377b6395090e16576d5e3f95ffa39f79be7ecbb9b0dc4fcc61`. |
+| Provider development/regression | `PASS` | `18/18` development and `102/102` regression with real provider. |
+| Backend suite | `PASS` | `1835 passed, 3 skipped`. |
+| CI | `PASS` | GitHub Actions `34266409708` for `a5781630ac3077050bd8be434cb659c668a0f2fa`. |
+| Deployment | `PASS` | Auto Deploy `34266601125`; public backend health `200` and frontend build-info both reported the production SHA. |
 | Official independent QA | `NOT_STARTED` | User-authorized QA must provide its own goal and manifest. |
 
 ## Independent QA

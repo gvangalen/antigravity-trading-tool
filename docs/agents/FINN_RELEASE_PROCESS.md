@@ -12,18 +12,23 @@ Architecture roles; it does not create additional agent roles.
 
 Build implements one complete repair batch, reproduces known defects locally,
 adds regressions, validates the relevant chain, creates one release candidate,
-runs CI, deploys, and performs the bounded authenticated live smoke. Build
-updates `FINN_RELEASE_STATUS.md` only with measured evidence. Build does not
-start, instruct, or contact QA, access the QA fixture, or access the
-QA-exclusive sealed holdout.
+runs CI, deploys, and verifies the deployed SHA and public health surfaces.
+Before deployment, Build must run the complete local worker-driven action
+matrix for affected action contracts, real-provider development/regression,
+and applicable backend/frontend suites. Build updates
+`FINN_RELEASE_STATUS.md` only with measured evidence. Build does not start,
+instruct, or contact QA, access the QA fixture, or access the QA-exclusive
+sealed holdout. The Build smoke fixture is optional diagnostic tooling, not a
+release gate.
 
 ### QA
 
-QA owns independent test execution and QA test material. Its active QA goal
-defines the concrete scope, dataset, environment, matrix, and acceptance
-criteria. Production QA is read-only and tests only the explicit live SHA in
-its active QA goal. QA preflight verifies that SHA against the production
-checkout, release marker, public backend health, and frontend build-info. A
+QA owns independent test execution, QA test material, and the protected
+`FINN_QA_USER_ID` authenticated runtime route. Its active QA goal defines the
+concrete scope, dataset, environment, matrix, and acceptance criteria.
+Production QA is read-only and tests only the explicit live SHA in its active
+QA goal. QA preflight verifies that SHA against the production checkout,
+release marker, public backend health, and frontend build-info. A
 committed status document cannot be the identity authority for its own
 deployment SHA because changing it creates a new SHA. The sealed holdout is QA-exclusive and QA uses it
 unchanged only when its active QA goal explicitly requires it. QA completes the
@@ -51,10 +56,13 @@ Build handles all defects in the active goal as one coherent batch:
 2. repair the implementation and add a regression test;
 3. re-run the focused test;
 4. run all applicable suites after the batch is complete;
-5. create and push one candidate;
-6. require successful CI, deploy the exact candidate, and verify backend,
-   frontend, checkout, and release markers;
-7. run the bounded authenticated live smoke and record its evidence.
+5. run the complete local worker-driven action matrix for every affected
+   action contract, real-provider development/regression, and the applicable
+   backend/frontend suites;
+6. create and push one candidate;
+7. require successful CI, deploy the exact candidate, and verify that Auto
+   Deploy succeeded, backend health returns `200`, frontend build-info is
+   reachable, and backend and frontend report the deployed SHA.
 
 Known red regressions, lower thresholds, weaker assertions, removed cases, or
 new skips never constitute a green Build gate. Full runtime claims require
@@ -62,24 +70,23 @@ end-to-end evidence; provider claims use the real provider. The sealed holdout
 is QA-exclusive and Build must not read, copy, score, tune against, or submit
 it through any local or live route.
 
-The live smoke is Build validation, not independent QA. It authenticates only
-with the dedicated server-side `FINN_BUILD_SMOKE_USER_ID` fixture, never the
-QA fixture. Its token remains in the smoke process, has normal non-admin FINN
-permissions, and is used only for generic non-sealed smoke cases. It covers
-the current batch's critical paths plus run creation, read-only capability,
-EVALUATE, a conversation follow-up, terminalization, polling/SSE parity,
-dispatch cardinality, safety, and latency.
+`FINN_BUILD_SMOKE_USER_ID` remains available only for voluntary, generic,
+non-sealed production diagnosis. It is not a deployment or independent-QA
+precondition and never grants access to the QA fixture or sealed holdout.
 
 ## Independent Production QA
 
 Only the user determines or authorizes an independent QA assignment. For
 production QA, the user starts the existing QA agent after the status file
-documents `READY_FOR_INDEPENDENT_QA` with evidence. QA reads the role
-instructions, this process, the status file, and its explicit QA goal; then
-tests the goal's live SHA and completes the matrix defined by that goal.
-Individual case failures are recorded and do not stop later cases. A sealed
-32-case matrix is mandatory only when the active QA goal explicitly requires
-it. Timeouts remain failures under the QA contract.
+documents `READY_FOR_INDEPENDENT_QA` with Build's local and deployment
+evidence. QA reads the role instructions, this process, the status file, and
+its explicit QA goal; then uses the protected `FINN_QA_USER_ID` route to run
+the goal's authenticated preflight, runtime/dispatch checks, controlled
+fixture actions where authorized, polling/SSE and safety checks, and the
+complete matrix defined by that goal. Individual case failures are recorded
+and do not stop later cases. A sealed 32-case matrix is mandatory only when
+the active QA goal explicitly requires it. Timeouts remain failures under the
+QA contract.
 
 QA publishes `ACCEPTED` or `NOT_ACCEPTED` once, with artifacts and hashes. The
 verdict does not start Build, deployment, or another QA run automatically.
