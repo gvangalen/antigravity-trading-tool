@@ -3,8 +3,8 @@
   "source_file": "finn_v2_selector_published_qa_609_source.json",
   "source_sha256": "c94e2fca35019f87ca058edb26a57c008cc78a95cdd236d539532223ebb6770a",
   "registry_version": "2026-08-23.operation-contracts.v1",
-  "registry_sha256": "28051ea2c2c3f7968ce02adc690a3ac9ad539e112a47a4708f801d048934a994",
-  "operation_contract_sha256": "6aeca7fc312a3e7fa37a2859ddca3306c277e599be16b89d70a598db353cf992",
+  "registry_sha256": "386e3fafa7bdc036411819afedc7797055fab1376a1bcf8501e65e6fac662226",
+  "operation_contract_sha256": "23a4fe7b224fa0c75199fadfe56b9e5764d4ac2a583930901d379b438441166d",
   "errata": [
     {
       "eval_id": "s609-17",

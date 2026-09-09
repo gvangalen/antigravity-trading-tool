@@ -52,6 +52,7 @@ VerifierStatus = Literal[
     "not_run",
     "registry_grounded",
     "passed",
+    "repaired",
     "failed",
     "downgraded",
 ]

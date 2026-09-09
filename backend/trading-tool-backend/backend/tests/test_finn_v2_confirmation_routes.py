@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 from starlette.requests import Request
 from pydantic import SecretStr
 
-from backend.api.ai_assistant_api import assistant_v2_confirm_proposal
+from backend.api.ai_assistant_api import assistant_v2_confirm_proposal, assistant_v2_execute_proposal
 from backend.schemas.finn_v2_execution_schema import FinnV2ExecuteProposalRequest
 
 
@@ -54,3 +54,37 @@ def test_confirmation_route_returns_confirmation_payload(monkeypatch):
 
     assert result["confirmed"] is True
     assert result["proposal_id"] == "proposal-1"
+
+
+def test_execution_replay_does_not_consume_a_second_mutation_rate_slot(monkeypatch):
+    calls = []
+    monkeypatch.setattr(
+        "backend.api.ai_assistant_api.execute_rate_limiter.check_rate_limit",
+        lambda *args, **kwargs: calls.append((args, kwargs)),
+    )
+    monkeypatch.setattr("backend.services.finn_v2_flag_service.FinnV2FlagService.is_action_execution_enabled", lambda self: True)
+
+    class ExecutionRepository:
+        async def get_by_idempotency_key_for_user(self, **kwargs):
+            return object()
+
+    class ExecutionService:
+        async def execute(self, **kwargs):
+            return type("Result", (), {"dict": lambda self: {"status": "already_executed"}})()
+
+    monkeypatch.setattr("backend.api.ai_assistant_api.FinnV2ExecutionRepository", lambda db: ExecutionRepository())
+    monkeypatch.setattr("backend.api.ai_assistant_api.FinnV2ExecutionService", lambda db: ExecutionService())
+
+    result = asyncio.run(
+        assistant_v2_execute_proposal(
+            "proposal-1",
+            FinnV2ExecuteProposalRequest(idempotency_key="abcdefgh", expected_payload_hash="hash-1"),
+            _request(),
+            None,
+            {"id": 7},
+            object(),
+        )
+    )
+
+    assert result["status"] == "already_executed"
+    assert calls == []

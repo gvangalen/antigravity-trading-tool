@@ -95,3 +95,15 @@ def test_verified_response_accepts_registry_grounded_capability_terminal():
     )
 
     assert response.verifier_status == "registry_grounded"
+
+
+def test_public_verified_response_accepts_the_persisted_repaired_verifier_status():
+    """Polling and SSE must read a verifier-repaired terminal response."""
+    response = VerifiedResponse(
+        mode="EVALUATE",
+        content="Herstelde, evidence-gebonden beoordeling.",
+        response_source="v2_runtime",
+        verifier_status="repaired",
+    )
+
+    assert response.verifier_status == "repaired"

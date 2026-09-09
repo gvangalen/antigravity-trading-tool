@@ -54,11 +54,18 @@ class FinnV2SetupInputCatalog:
         if match:
             return match.group(1).upper()
         lowered = cls._comparison_text(text)
+        # A concrete duration is more specific than a broad cadence word such
+        # as "daily". This matters for DCA setups: "daily DCA on 4 hours"
+        # contains a contribution cadence and one actual chart timeframe.
+        compound = cls._compound_timeframes(lowered)
+        if compound:
+            # Several concrete chart durations are ambiguous. Do not quietly
+            # choose the first alias after recognizing that ambiguity.
+            return next(iter(compound)) if len(compound) == 1 else None
         matches: set[str] = set()
         for canonical, aliases in cls._TIMEFRAME_ALIASES.items():
             if any(cls._has_phrase(lowered, alias) for alias in aliases):
                 matches.add(canonical)
-        matches.update(cls._compound_timeframes(lowered))
         return next(iter(matches)) if len(matches) == 1 else None
 
     @classmethod

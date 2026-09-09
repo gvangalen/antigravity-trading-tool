@@ -66,6 +66,8 @@ class FinnV2StructuredOperationSelectorService:
                     "prior conversation. A concrete bot question about identity, configuration, linkage, "
                     "or status is a READ contract; select evaluate_bot only for an actual assessment or "
                     "an implication of a previous assessment. "
+                    "For a bot READ, a question about whether it is live, active, inactive, enabled, or disabled "
+                    "is read_bot_status; identity, linkage, or configuration questions are read_linked_bot. "
                     "Use clarify_request for ambiguity, unsupported_financial_operation for "
                     "understood but unsupported finance or trading-product requests, and off_topic "
                     "only for requests unrelated to finance, FINN, or a trading workspace. "
@@ -79,8 +81,10 @@ class FinnV2StructuredOperationSelectorService:
                     "simplify, or restyle the immediately released safe response, select reformulate_previous_response. "
                     "Released lineage permits reformulation only; it never authorizes an evidence explanation, action, "
                     "or new financial conclusion. "
-                    "A question about what a prior assessment changes, supports, or requires is an evidence "
-                    "explanation, even if it mentions a linked bot. A request to repeat, restate, shorten, "
+                    "A question about the evidence, a control, a guard, or a requirement that follows from a prior "
+                    "assessment is an evidence explanation, including when that control concerns a linked bot. "
+                    "A request to assess the bot's own operational consequence, risk, suitability, or configuration is "
+                    "evaluate_bot. A request to repeat, restate, shorten, "
                     "or keep within previously released safe content is a reformulation, not evidence explanation. "
                     "When conversation_state has last_safe_terminal_context and the user asks why the immediately "
                     "previous request was outside FINN's supported boundary, select explain_previous_evidence. "
@@ -215,7 +219,7 @@ class FinnV2StructuredOperationSelectorService:
                 "domain": contract.domain,
                 "supported": contract.supported,
                 "required_entities": list(contract.required_entities),
-                "required_inputs": list(contract.required_inputs),
+                "required_inputs": list(contract.input_fields),
                 "requires_verified_context": contract.requires_verified_context,
                 "canonical_action_polarity": contract.action_polarity.value,
             }
@@ -404,7 +408,7 @@ class FinnV2StructuredOperationSelectorService:
     @staticmethod
     def _canonical_missing_inputs(*, contract: OperationContract, raw_inputs: list[str], facts: Mapping[str, object]) -> tuple[str, ...]:
         """Keep selector telemetry within the chosen contract's typed slots."""
-        missing = [item for item in raw_inputs if item in contract.required_inputs]
+        missing = [item for item in raw_inputs if item in contract.input_fields]
         referenced_asset = str(facts.get("referenced_asset") or "").strip()
         if referenced_asset:
             missing = [item for item in missing if item not in {"asset", "symbol"}]

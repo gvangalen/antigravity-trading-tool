@@ -36,7 +36,7 @@ class FinnV2OperationStateService:
         # Keep the literal spelling of a user-provided value. The semantic
         # projection may normalize an equivalent value for matching, but it
         # must not overwrite a typed setup name with that normalized form.
-        accepted_inputs = set(contract.required_inputs).union(contract.optional_inputs)
+        accepted_inputs = set(contract.input_fields)
         for key, value in (supplied_inputs or {}).items():
             if key in accepted_inputs and not self._is_missing(value):
                 explicit.setdefault(key, self._canonical_input(key, value))
@@ -44,7 +44,11 @@ class FinnV2OperationStateService:
         for key, value in (derived_inputs or {}).items():
             if key in accepted_inputs and key not in collected and not self._is_missing(value):
                 collected[key] = self._canonical_input(key, value)
-        missing = [field for field in contract.required_inputs if self._is_missing(collected.get(field))]
+        missing = [
+            field
+            for field in contract.required_inputs_for(collected)
+            if self._is_missing(collected.get(field))
+        ]
         context = conversation_context or {}
         verified_context = dict(context.get("last_verified_context") or {})
         resolved_context = dict(verified_context.get("resolved_entities") or {})
@@ -188,7 +192,7 @@ class FinnV2OperationStateService:
         text = str(message or "").strip()
         lowered = text.casefold()
         values: dict[str, object] = {}
-        accepted_inputs = set(contract.required_inputs).union(contract.optional_inputs)
+        accepted_inputs = set(contract.input_fields)
         if explicit_asset:
             for field in {"asset", "symbol"}.intersection(accepted_inputs):
                 values[field] = explicit_asset
@@ -238,6 +242,24 @@ class FinnV2OperationStateService:
             timeframe = FinnV2SetupInputCatalog.timeframe_from_text(text)
             if timeframe:
                 values["timeframe"] = timeframe
+            # The registry exposes this conditional slot for create_setup, but
+            # cadence words are inputs only after the user selected a DCA
+            # setup. A market's daily trend must not become a DCA schedule.
+            if values.get("setup_type") == "dca" and "dca_frequency" in accepted_inputs:
+                frequency = next(
+                    (
+                        canonical
+                        for token, canonical in (
+                            ("daily", "daily"), ("dagelijks", "daily"), ("dagelijkse", "daily"),
+                            ("weekly", "weekly"), ("wekelijks", "weekly"),
+                            ("monthly", "monthly"), ("maandelijks", "monthly"),
+                        )
+                        if re.search(rf"\b{token}\b", lowered)
+                    ),
+                    None,
+                )
+                if frequency:
+                    values["dca_frequency"] = frequency
             if any(token in lowered for token in ("daily trend", "dagtrend", "uptrend", "downtrend")):
                 values["market_condition"] = "trend_defined"
         elif contract.operation_id in {"watchlist_add", "watchlist_remove"} and explicit_asset:

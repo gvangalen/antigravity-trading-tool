@@ -189,6 +189,36 @@ def test_live_automation_enablement_is_not_a_bot_status_read():
     assert facts.discourse_act == "operation_request"
 
 
+def test_contextual_bot_consequence_keeps_the_registry_evaluate_bot_contract():
+    """A bot implication needs automation evidence, not generic lineage prose."""
+    class Selector:
+        def select(self, **_kwargs):
+            return FinnV2StructuredOperationSelection(
+                operation_id="evaluate_bot", confidence=0.9,
+                entities={"bot_id": None}, target_asset=None,
+                conversation_reference="previous_verified_response", missing_inputs=(),
+                ambiguity_reason=None,
+                semantic_frame={"goal": "consequence", "object": "bot"},
+            ), None
+
+    context = {
+        "last_verified_context": {
+            "verified_response_id": "verified-plan-1",
+            "run_id": "run-plan-1",
+            "operation_id": "evaluate_plan",
+            "mode": "EVALUATE",
+            "evidence_refs": ["evidence-plan-1"],
+        },
+    }
+    result = FinnV2OperationClassificationService(structured_selector=Selector()).classify(
+        message="Welke gevolgen heeft die beoordeling voor mijn gekoppelde bot?",
+        conversation_context=context,
+    )
+
+    assert result.operation_id == "evaluate_bot"
+    assert result.selected_conversation_reference == "previous_verified_response"
+
+
 @pytest.mark.parametrize("message", (
     "Waar wringt mijn huidige aanpak financieel gezien het meest?",
     "Welke risico's maken mijn handelswijze het kwetsbaarst?",

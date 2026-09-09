@@ -330,7 +330,7 @@ class FinnV2OperationClassificationService:
         # The typed input collector is authoritative for every registry slot.
         # Preserve its values in the semantic projection only where the
         # structured selector omitted a corresponding safe entity field.
-        for field in contract.required_inputs + contract.optional_inputs:
+        for field in contract.input_fields:
             if not selected_entities.get(field) and supplied_inputs.get(field):
                 selected_entities[field] = str(supplied_inputs[field])
         if not selected_entities.get("asset") and supplied_inputs.get("symbol"):
@@ -349,7 +349,7 @@ class FinnV2OperationClassificationService:
             selected_entities=selected_entities,
             selected_target_asset=target_resolution.target_asset,
             selected_conversation_reference=getattr(selection, "conversation_reference", None),
-            required_inputs=tuple(contract.required_inputs),
+            required_inputs=contract.required_inputs_for(supplied_inputs),
             supplied_inputs=supplied_inputs,
             derived_inputs=derived_inputs,
             selected_missing_inputs=selected_missing_inputs,
@@ -409,7 +409,7 @@ class FinnV2OperationClassificationService:
         # input extraction remains the only authority for user-provided
         # fields; the canonical request asset is handled above.
         unresolved = [
-            field for field in contract.required_inputs
+            field for field in contract.required_inputs_for(supplied)
             if FinnV2OperationStateService._is_missing(supplied.get(field))
         ]
         # The contract and proven inputs are authoritative. Selector telemetry

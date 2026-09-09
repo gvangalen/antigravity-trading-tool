@@ -338,7 +338,7 @@ def record_selection(
     from backend.domain.finn_v2_operation_registry import FinnV2OperationRegistry
 
     action_contract = FinnV2OperationRegistry().get(operation_id)
-    accepted_inputs = set(action_contract.required_inputs + action_contract.optional_inputs)
+    accepted_inputs = set(action_contract.input_fields)
     supplied = {
         field: value
         for field, value in dict(supplied_inputs or {}).items()
@@ -352,7 +352,9 @@ def record_selection(
     }
     state["supplied_inputs"] = supplied
     state["missing_inputs"] = [
-        field for field in action_contract.required_inputs if field not in supplied
+        field
+        for field in action_contract.required_inputs_for(supplied)
+        if field not in supplied
     ]
     return state
 
@@ -389,7 +391,7 @@ def record_contextual_inputs(state: Dict[str, Any], *, supplied_inputs: Dict[str
         return state
     state["supplied_inputs"] = collected
     state["missing_inputs"] = [
-        field for field in action_contract.required_inputs
+        field for field in action_contract.required_inputs_for(collected)
         if field not in collected or collected[field] is None or (isinstance(collected[field], str) and not collected[field].strip())
     ]
     state.setdefault("transition_log", []).append(

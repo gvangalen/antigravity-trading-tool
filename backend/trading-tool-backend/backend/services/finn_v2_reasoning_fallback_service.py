@@ -874,7 +874,10 @@ class FinnV2ReasoningFallbackService:
             )
 
         proposed_fields = dict(operation_state.get("collected_inputs") or {})
-        if any(not str(proposed_fields.get(field) or "").strip() for field in contract.required_inputs):
+        if any(
+            not str(proposed_fields.get(field) or "").strip()
+            for field in contract.required_inputs_for(proposed_fields)
+        ):
             # The runtime contract is authoritative; never manufacture a
             # proposal after a stale plan says an input was present.
             return self.unavailable_draft(

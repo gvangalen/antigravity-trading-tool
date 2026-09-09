@@ -1,3 +1,5 @@
+from types import SimpleNamespace
+
 import pytest
 
 from backend.domain.finn_v2_operation_registry import (
@@ -6,6 +8,9 @@ from backend.domain.finn_v2_operation_registry import (
     OperationContract,
 )
 from backend.services.finn_v2_request_analysis_service import FinnV2RequestAnalysisService
+from backend.services.finn_v2_operation_state_service import FinnV2OperationStateService
+from backend.domain.finn_v2_runtime_contract import new_runtime_contract_state, record_selection
+from backend.domain.finn_v2_setup_input_catalog import FinnV2SetupInputCatalog
 
 
 def test_registry_manifest_has_one_valid_contract_per_operation():
@@ -76,6 +81,55 @@ def test_audited_v1_flows_resolve_only_through_the_canonical_registry():
     # flows must resolve the single confirmable ``create_strategy`` contract.
     with pytest.raises(FinnV2OperationUnavailableError, match="unknown_operation:generate_strategy"):
         registry.get("generate_strategy")
+
+
+def test_create_dca_setup_exposes_its_service_required_frequency_in_the_same_contract():
+    contract = FinnV2OperationRegistry().require_supported("create_setup")
+
+    assert contract.required_inputs_for({"setup_type": "trade"}) == contract.required_inputs
+    assert contract.required_inputs_for({"setup_type": "dca"}) == (
+        "setup_type", "timeframe", "name", "symbol", "dca_frequency",
+    )
+    assert "dca_frequency" in contract.input_fields
+    assert FinnV2OperationStateService().explicit_inputs(
+        contract=contract,
+        message="Maak een dagelijkse DCA setup voor SOL op 4 uur met de naam Test.",
+        explicit_asset="SOL",
+    )["dca_frequency"] == "daily"
+
+
+def test_runtime_contract_preserves_registry_conditional_inputs():
+    state = new_runtime_contract_state(
+        run=SimpleNamespace(
+            id="run-1", conversation_id="conversation-1", trace_id="trace-1", user_id=1,
+            message="Maak een dagelijkse DCA setup.",
+        ),
+        contract_id="contract-1",
+    )
+    state["initial_operation_id"] = "create_setup"
+    state["final_operation_id"] = "create_setup"
+    projected = record_selection(
+        state,
+        canonical_target="SOL",
+        target_source="explicit_message",
+        original_target_text="SOL",
+        target_type="asset",
+        conversation_reference=None,
+        conversation_reference_kind=None,
+        supplied_inputs={
+            "setup_type": "dca", "timeframe": "4H", "name": "DCA SOL",
+            "symbol": "SOL", "dca_frequency": "daily",
+        },
+    )
+
+    assert projected["supplied_inputs"]["dca_frequency"] == "daily"
+    assert projected["missing_inputs"] == []
+
+
+def test_explicit_setup_duration_wins_over_dca_daily_cadence_word():
+    assert FinnV2SetupInputCatalog.timeframe_from_text(
+        "Maak een dagelijkse DCA setup voor SOL op 4 uur."
+    ) == "4H"
 
 
 def test_scores_and_portfolio_contracts_use_their_canonical_scopes():

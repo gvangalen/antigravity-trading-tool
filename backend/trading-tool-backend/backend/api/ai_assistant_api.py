@@ -58,6 +58,7 @@ from backend.infrastructure.repositories.bot_repository import BotRepository
 from backend.infrastructure.repositories.user_repository import UserRepository
 from backend.infrastructure.repositories.market_data_repository import MarketDataRepository
 from backend.infrastructure.repositories.strategy_repository import StrategyRepository
+from backend.infrastructure.repositories.finn_v2_execution_repository import FinnV2ExecutionRepository
 from backend.infrastructure.repositories.conversation_state_repository import ConversationStateRepository
 from backend.infrastructure.repositories.assistant_context_repository import AssistantContextRepository
 from backend.services.ai_action_engine import AiActionEngine
@@ -3162,7 +3163,10 @@ async def assistant_v2_publish_proposal(
     flags = FinnV2FlagService()
     if not flags.is_visible_proposals_enabled() or not flags.is_confirmation_routes_enabled():
         raise HTTPException(status_code=404, detail="Proposal publication disabled")
-    execute_rate_limiter.check_rate_limit(f"user_{current_user['id']}:finn_v2_publish", limit=10)
+    execute_rate_limiter.check_rate_limit(
+        f"user_{current_user['id']}:finn_v2_publish",
+        limit=ASSISTANT_EXECUTE_USER_LIMIT,
+    )
     _require_csrf_match(raw_request, x_csrf_token)
     token, expires_at = await FinnV2ConfirmationService(db).issue_confirmation_token(proposal_id=proposal_id, user_id=current_user["id"])
     proposal = await FinnV2ProposalRepository(db).get_by_id_for_user(proposal_id=proposal_id, user_id=current_user["id"])
@@ -3190,7 +3194,10 @@ async def assistant_v2_confirm_proposal(
     flags = FinnV2FlagService()
     if not flags.is_confirmation_routes_enabled():
         raise HTTPException(status_code=404, detail="Confirmation disabled")
-    execute_rate_limiter.check_rate_limit(f"user_{current_user['id']}:finn_v2_confirm", limit=10)
+    execute_rate_limiter.check_rate_limit(
+        f"user_{current_user['id']}:finn_v2_confirm",
+        limit=ASSISTANT_EXECUTE_USER_LIMIT,
+    )
     _require_csrf_match(raw_request, request.csrf_token or x_csrf_token)
     return (
         await FinnV2ConfirmationService(db).confirm(
@@ -3218,7 +3225,18 @@ async def assistant_v2_execute_proposal(
     flags = FinnV2FlagService()
     if not flags.is_action_execution_enabled():
         raise HTTPException(status_code=404, detail="Execution disabled")
-    execute_rate_limiter.check_rate_limit(f"user_{current_user['id']}:finn_v2_execute", limit=10)
+    # A replay with the same key cannot create another execution: the execution
+    # service returns the persisted result. Do not consume the mutation budget
+    # for that safe idempotency read, but keep the rate limit for every new key.
+    replay = await FinnV2ExecutionRepository(db).get_by_idempotency_key_for_user(
+        idempotency_key=request.idempotency_key,
+        user_id=current_user["id"],
+    )
+    if replay is None:
+        execute_rate_limiter.check_rate_limit(
+            f"user_{current_user['id']}:finn_v2_execute",
+            limit=ASSISTANT_EXECUTE_USER_LIMIT,
+        )
     _require_csrf_match(raw_request, request.csrf_token or x_csrf_token)
     return (
         await FinnV2ExecutionService(db).execute(

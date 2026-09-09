@@ -133,6 +133,11 @@ class OperationContract:
     selection_priority: int = 0
     required_inputs: tuple[str, ...] = ()
     optional_inputs: tuple[str, ...] = ()
+    # A contract can expose an input only when another typed slot makes it
+    # applicable. This keeps downstream service requirements in the same
+    # registry-owned schema instead of discovering them during execution.
+    # Each item is (input_name, dependency_field, dependency_value).
+    conditional_required_inputs: tuple[tuple[str, str, str], ...] = ()
     required_scopes: tuple[str, ...] = ()
     optional_scopes: tuple[str, ...] = ()
     scope_tool_bindings: tuple[tuple[str, str], ...] = ()
@@ -187,6 +192,14 @@ class OperationContract:
             raise FinnV2OperationContractError(f"scope_overlap:{self.operation_id}")
         if set(self.required_inputs).intersection(self.optional_inputs):
             raise FinnV2OperationContractError(f"input_overlap:{self.operation_id}")
+        declared_inputs = set(self.required_inputs).union(self.optional_inputs)
+        for field, dependency, expected in self.conditional_required_inputs:
+            if not field or not dependency or not expected:
+                raise FinnV2OperationContractError(f"conditional_input_invalid:{self.operation_id}")
+            if field in declared_inputs or dependency not in declared_inputs:
+                raise FinnV2OperationContractError(
+                    f"conditional_input_not_declared:{self.operation_id}:{field}:{dependency}"
+                )
         undeclared_contextual_inputs = set(self.contextual_reference_inputs).difference(self.required_inputs)
         if undeclared_contextual_inputs:
             raise FinnV2OperationContractError(
@@ -222,6 +235,26 @@ class OperationContract:
         missing_bindings = set(self.required_scopes).difference({"capability"}, bindings)
         if missing_bindings:
             raise FinnV2OperationContractError(f"missing_scope_binding:{self.operation_id}:{sorted(missing_bindings)}")
+
+    @property
+    def input_fields(self) -> tuple[str, ...]:
+        """All registry-declared input slots, including conditional slots."""
+        return tuple(
+            dict.fromkeys(
+                self.required_inputs
+                + self.optional_inputs
+                + tuple(field for field, _, _ in self.conditional_required_inputs)
+            )
+        )
+
+    def required_inputs_for(self, supplied_inputs: Mapping[str, object]) -> tuple[str, ...]:
+        """Return required fields after evaluating registry-owned conditions."""
+        required = list(self.required_inputs)
+        for field, dependency, expected in self.conditional_required_inputs:
+            actual = str(supplied_inputs.get(dependency) or "").strip().casefold()
+            if actual == expected.casefold():
+                required.append(field)
+        return tuple(dict.fromkeys(required))
 
     @property
     def tool_names(self) -> tuple[str, ...]:
@@ -426,7 +459,7 @@ _OPERATION_SELECTION_METADATA: Mapping[str, dict] = {
         "selection_priority": 100,
     },
     "explain_previous_evidence": {
-        "semantic_description": "Explain the factual basis, consequence, boundary, or required implication of a previous verified or degraded FINN assessment. Select this when the user asks which stored facts support an earlier conclusion, or what a prior assessment changes, supports, requires, or means for a linked setup, strategy, or bot. Mentioning a bot does not make this a fresh bot evaluation unless the user asks for a new assessment of that bot.",
+        "semantic_description": "Explain the factual basis, boundary, control, or requirement that follows from a previous verified or degraded FINN assessment. Select this when the user asks which stored facts support an earlier conclusion, which guard or requirement it establishes, or what it means for the prior assessment, a linked setup, strategy, or bot. A request to assess a bot's own operational consequence, risk, suitability, or configuration is evaluate_bot: it needs the bot-specific contract and automation evidence rather than this evidence explanation.",
         "required_discourse_acts": ("evidence_follow_up",),
         "requires_verified_context": True,
         "selection_priority": 100,
@@ -764,7 +797,7 @@ _CONTRACTS: tuple[OperationContract, ...] = (
     # SetupService validates the persisted setup fields unconditionally.
     # Score and market-condition details are useful trusted inputs, but must
     # not be invented by FINN.
-    OperationContract("create_setup", FinnV2OperationRegistry.VERSION, "setup", "CREATE_PROPOSAL", ("maak setup", "create setup", "setup voor"), action_polarity=ActionPolarity.CREATE, required_inputs=("setup_type", "timeframe", "name", "symbol"), required_scopes=("active_asset",), optional_scopes=("profile", "preferences", "indicator_configuration", "active_setup", "linked_strategy"), model_policy="optional", response_strategy="proposal_draft", policy_class="proposal", proposal_type="create_setup", confirmation_required=True, execution_adapter="create_setup", idempotency_rule="proposal_payload_hash", postcondition="setup_created_for_user_asset"),
+    OperationContract("create_setup", FinnV2OperationRegistry.VERSION, "setup", "CREATE_PROPOSAL", ("maak setup", "create setup", "setup voor"), action_polarity=ActionPolarity.CREATE, required_inputs=("setup_type", "timeframe", "name", "symbol"), conditional_required_inputs=(("dca_frequency", "setup_type", "dca"),), required_scopes=("active_asset",), optional_scopes=("profile", "preferences", "indicator_configuration", "active_setup", "linked_strategy"), model_policy="optional", response_strategy="proposal_draft", policy_class="proposal", proposal_type="create_setup", confirmation_required=True, execution_adapter="create_setup", idempotency_rule="proposal_payload_hash", postcondition="setup_created_for_user_asset"),
     OperationContract("update_setup", FinnV2OperationRegistry.VERSION, "setup", "CREATE_PROPOSAL", ("wijzig setup", "update setup", "setup andern"), action_polarity=ActionPolarity.UPDATE, required_inputs=("setup_id", "changed_fields"), contextual_reference_inputs=("setup_id",), required_scopes=("active_asset", "active_setup"), proposal_type="update_setup", confirmation_required=True, execution_adapter="update_setup", idempotency_rule="proposal_payload_hash", postcondition="setup_updated_for_user", response_strategy="proposal_draft", policy_class="proposal"),
     OperationContract("delete_setup", FinnV2OperationRegistry.VERSION, "setup", "CREATE_PROPOSAL", ("verwijder setup", "delete setup", "lösche setup"), action_polarity=ActionPolarity.DELETE, required_inputs=("setup_id",), contextual_reference_inputs=("setup_id",), required_scopes=("active_asset", "active_setup"), proposal_type="delete_setup", confirmation_required=True, execution_adapter="delete_setup", idempotency_rule="proposal_payload_hash", postcondition="setup_deleted_for_user", response_strategy="proposal_draft", policy_class="proposal"),
     OperationContract("evaluate_setup", FinnV2OperationRegistry.VERSION, "setup", "EVALUATE", ("beoordeel setup",), required_scopes=("active_asset", "active_setup"), optional_scopes=("indicator_configuration",), model_policy="required", response_strategy="model_reasoning", policy_class="advice"),
