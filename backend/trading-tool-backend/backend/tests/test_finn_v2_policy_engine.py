@@ -124,3 +124,19 @@ def test_policy_allows_deterministic_unavailable_delivery_when_outcome_is_unavai
     assert decision.allowed is True
     assert decision.blocking_codes == []
     assert decision.reasons == ["deterministic_unavailable_delivery"]
+
+
+def test_disabled_proposals_are_policy_blocked_before_verifier_persistence(monkeypatch):
+    import asyncio
+
+    monkeypatch.setenv("FINN_V2_PROPOSALS_ENABLED", "false")
+
+    decision = asyncio.run(_evaluate(
+        "Selecteer SOL als mijn actieve asset.",
+        "ACTION_PROPOSAL",
+        "select_asset",
+    ))
+
+    assert decision.proposal_allowed is False
+    assert decision.allowed is False
+    assert "proposals_disabled" in decision.blocking_codes

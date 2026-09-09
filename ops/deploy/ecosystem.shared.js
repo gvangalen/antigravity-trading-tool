@@ -84,9 +84,57 @@ const SHARED_RUNTIME_ENV = pickRuntimeEnv([
   "REDIS_URL",
   "CELERY_BROKER_URL",
   "CELERY_RESULT_BACKEND",
+  // FINN's runtime safety policy is configured by the protected server
+  // environment.  Forward every supported FINN V2 switch to both the API and
+  // all Celery workers so a proposal cannot be evaluated under one policy and
+  // executed under another after a PM2 restart.
+  "FINN_V2_ENABLED",
+  "FINN_V2_VISIBLE_ENABLED",
+  "FINN_V2_WRITE_BLOCKED",
+  "FINN_V2_MAX_EXECUTES_PER_MINUTE",
+  "FINN_V2_ALLOWED_TRANSPORTS",
+  "FINN_V2_ORCHESTRATOR_ENABLED",
+  "FINN_V2_POLICY_ENGINE_ENABLED",
+  "FINN_V2_PROPOSALS_ENABLED",
+  "FINN_V2_VISIBLE_PROPOSALS_ENABLED",
+  "FINN_V2_CONFIRMATIONS_ENABLED",
+  "FINN_V2_CONFIRMATION_ROUTES_ENABLED",
+  "FINN_V2_ACTION_EXECUTION_ENABLED",
+  "FINN_V2_EXECUTION_GATE_ENABLED",
+  "FINN_V2_ACTION_KILL_SWITCH",
+  "FINN_V2_LIVE_ACTIONS_ENABLED",
+  "FINN_V2_PAPER_ACTIONS_ENABLED",
+  "FINN_V2_EXECUTE_ASSET_SELECTION",
+  "FINN_V2_EXECUTE_WATCHLIST_CHANGES",
+  "FINN_V2_EXECUTE_INDICATOR_CHANGES",
+  "FINN_V2_EXECUTE_SETUP_CHANGES",
+  "FINN_V2_EXECUTE_STRATEGY_CHANGES",
+  "FINN_V2_EXECUTE_BOT_CHANGES",
+  "FINN_V2_EXECUTE_TRADE_PLAN_CHANGES",
+  "FINN_V2_EXECUTE_PAPER_BOT_ACTIVATION",
+  "FINN_V2_EXECUTE_LIVE_BOT_ACTIVATION",
+  "FINN_V2_LIFECYCLE_DEADLINE_SECONDS",
+  "FINN_V2_SELECTOR_PHASE_DEADLINE_SECONDS",
+  "FINN_V2_REASONING_TIMEOUT_SECONDS",
   "TRADAMIND_BUILD_COMMIT_SHA",
   "TRADAMIND_BUILD_TIME",
 ]);
+// PM2's --update-env merges with an existing process environment.  Define the
+// safe FINN defaults explicitly so an obsolete process-only false value cannot
+// survive a release when the protected environment deliberately omits a key.
+// A protected value in SHARED_RUNTIME_ENV always takes precedence.
+const FINN_RUNTIME_DEFAULT_ENV = {
+  FINN_V2_PROPOSALS_ENABLED: "true",
+  FINN_V2_VISIBLE_PROPOSALS_ENABLED: "true",
+  FINN_V2_CONFIRMATIONS_ENABLED: "true",
+  FINN_V2_CONFIRMATION_ROUTES_ENABLED: "true",
+  FINN_V2_ACTION_EXECUTION_ENABLED: "true",
+  FINN_V2_EXECUTION_GATE_ENABLED: "true",
+  FINN_V2_WRITE_BLOCKED: "true",
+  FINN_V2_ACTION_KILL_SWITCH: "true",
+  FINN_V2_LIVE_ACTIONS_ENABLED: "false",
+  FINN_V2_PAPER_ACTIONS_ENABLED: "false",
+};
 const RELEASE_METADATA_ENV = loadReleaseMetadata();
 
 function createEcosystem(environmentName) {
@@ -116,6 +164,7 @@ function createEcosystem(environmentName) {
         cwd: frontendDir,
         interpreter: NODE_INTERPRETER,
         env: {
+          ...FINN_RUNTIME_DEFAULT_ENV,
           ...SHARED_RUNTIME_ENV,
           ...RELEASE_METADATA_ENV,
           NODE_ENV: "production",
@@ -131,6 +180,7 @@ function createEcosystem(environmentName) {
         args: `-m uvicorn backend.main:app --host 0.0.0.0 --port ${environment.backendPort}`,
         cwd: backendDir,
         env: {
+          ...FINN_RUNTIME_DEFAULT_ENV,
           ...SHARED_RUNTIME_ENV,
           ...RELEASE_METADATA_ENV,
           APP_ENV: environment.appEnv,
@@ -145,6 +195,7 @@ function createEcosystem(environmentName) {
         cwd: backendDir,
         interpreter: "none",
         env: {
+          ...FINN_RUNTIME_DEFAULT_ENV,
           ...SHARED_RUNTIME_ENV,
           ...RELEASE_METADATA_ENV,
           APP_ENV: environment.appEnv,
@@ -159,6 +210,7 @@ function createEcosystem(environmentName) {
         cwd: backendDir,
         interpreter: "none",
         env: {
+          ...FINN_RUNTIME_DEFAULT_ENV,
           ...SHARED_RUNTIME_ENV,
           ...RELEASE_METADATA_ENV,
           APP_ENV: environment.appEnv,
@@ -173,6 +225,7 @@ function createEcosystem(environmentName) {
         cwd: backendDir,
         interpreter: "none",
         env: {
+          ...FINN_RUNTIME_DEFAULT_ENV,
           ...SHARED_RUNTIME_ENV,
           ...RELEASE_METADATA_ENV,
           APP_ENV: environment.appEnv,
@@ -187,6 +240,7 @@ function createEcosystem(environmentName) {
         cwd: backendDir,
         interpreter: "none",
         env: {
+          ...FINN_RUNTIME_DEFAULT_ENV,
           ...SHARED_RUNTIME_ENV,
           ...RELEASE_METADATA_ENV,
           APP_ENV: environment.appEnv,
@@ -201,6 +255,7 @@ function createEcosystem(environmentName) {
         cwd: backendDir,
         interpreter: "none",
         env: {
+          ...FINN_RUNTIME_DEFAULT_ENV,
           ...SHARED_RUNTIME_ENV,
           ...RELEASE_METADATA_ENV,
           APP_ENV: environment.appEnv,
@@ -215,6 +270,7 @@ function createEcosystem(environmentName) {
         cwd: backendDir,
         interpreter: "none",
         env: {
+          ...FINN_RUNTIME_DEFAULT_ENV,
           ...SHARED_RUNTIME_ENV,
           ...RELEASE_METADATA_ENV,
           APP_ENV: environment.appEnv,

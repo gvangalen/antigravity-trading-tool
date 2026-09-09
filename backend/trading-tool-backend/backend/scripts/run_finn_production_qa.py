@@ -286,7 +286,7 @@ def safe_projection(envelope: Dict[str, Any]) -> Dict[str, Any]:
         "operation_change_reason", "canonical_target", "target_source", "target_type",
         "conversation_reference", "conversation_reference_kind", "dispatch_id", "dispatch_count", "attempt_count",
         "projection_version", "projection_hash", "terminal_response_type", "terminal_status",
-        "requested_mode", "final_mode", "supplied_inputs", "missing_inputs", "proposal_lifecycle",
+        "requested_mode", "final_mode", "action_polarity", "required_inputs", "supplied_inputs", "missing_inputs", "proposal_lifecycle",
         "error_code", "terminal_reason", "timings_ms",
     }
     safe_response = {
@@ -416,6 +416,8 @@ def classify_case_failure(case_result: Dict[str, Any]) -> Optional[str]:
         return "product" if category == "server_http_response" else "infrastructure"
     terminal = case_result.get("terminal") or {}
     if terminal.get("status") not in TERMINAL_STATUSES or not case_result.get("polling_sse_equal"):
+        return "product"
+    if terminal.get("status") == "failed":
         return "product"
     if case_result.get("operation_matches") is False:
         return "product"

@@ -7,20 +7,20 @@ short; link artifacts rather than copying reports or chat history.
 
 | Field | Value |
 | --- | --- |
-| Phase | `READY_FOR_INDEPENDENT_QA` |
-| Active goal | FINN action-contract runtime repair |
-| Candidate branch | `codex/finn-bb63-qa-repair` |
-| Candidate SHA | `a5781630ac3077050bd8be434cb659c668a0f2fa` |
-| Production SHA | `a5781630ac3077050bd8be434cb659c668a0f2fa` |
+| Phase | `BUILDING` |
+| Active goal | FINN production write-action repair |
+| Candidate branch | `codex/finn-1a73-production-write-repair` |
+| Candidate SHA | `pending first repair commit` |
+| Production SHA | `1a73b5bbc2ef43a952535df4ecae4511002178c2` |
 | Release owner | Build |
-| Last updated | `2026-09-08` |
+| Last updated | `2026-09-09` |
 
 ## QA Runner
 
 - QA runner readiness: `MATRIX_INTAKE_DEPLOYED`
-- authenticated QA preflight: `NOT_RUN` for the active release; QA owns this
-  live check through `FINN_QA_USER_ID` and its active QA goal.
-- official QA status: `NOT_STARTED`
+- authenticated QA preflight: completed for the production SHA by the
+  independent workflow; Build does not access `FINN_QA_USER_ID`.
+- official QA status: `NOT_ACCEPTED` for production SHA `1a73b5bbc2ef43a952535df4ecae4511002178c2`.
 
 The protected GitHub Actions runner is the canonical authenticated production
 QA executor. The candidate adds encrypted QA-owned manifest intake and an
@@ -33,18 +33,22 @@ committed status file as a self-referential release marker.
 
 | Gate | Status | Evidence |
 | --- | --- | --- |
-| Local action matrix | `PASS` | `16/16` worker-driven action contracts; artifact SHA-256 `c338b3ec37b723377b6395090e16576d5e3f95ffa39f79be7ecbb9b0dc4fcc61`. |
-| Provider development/regression | `PASS` | `18/18` development and `102/102` regression with real provider. |
-| Backend suite | `PASS` | `1835 passed, 3 skipped`. |
-| CI | `PASS` | GitHub Actions `34266409708` for `a5781630ac3077050bd8be434cb659c668a0f2fa`. |
-| Deployment | `PASS` | Auto Deploy `34266601125`; public backend health `200` and frontend build-info both reported the production SHA. |
-| Official independent QA | `NOT_STARTED` | User-authorized QA must provide its own goal and manifest. |
+| Production diagnosis | `FAIL` | Independent QA workflow `34355138568` observed proposal-producing actions terminating as `orchestrator_failed` on the production SHA. |
+| Production-like regression | `PASS` | A disabled proposal policy now yields typed `downgraded` / `proposals_disabled`; enabled proposals terminalize with one dispatch and one attempt. |
+| Sequential local action chain | `PASS` | `16/16` natural-language steps from a fresh synthetic user, without pre-seeding downstream IDs; artifact `/tmp/finn-1a73-sequential-action-chain.json`, SHA-256 `1ef1ae6ab10eecd0fff423c7af4c0fd69b657eddd0f07227ef865d988bc01dd3`. |
+| Provider development/regression | `PASS` | `18/18` development and `102/102` regression with the real provider on the repair checkout. |
+| Backend suite | `PASS` | `1848 passed, 3 skipped` on the repair checkout. |
+| CI | `NOT_RUN` | Awaiting the bounded repair commit. |
+| Deployment | `NOT_RUN` | The production SHA remains the failed QA baseline. |
+| Official independent QA | `NOT_STARTED` | No new official QA may start until this repair is deployed and its limited Build diagnosis is green. |
 
 ## Independent QA
 
-- Tested SHA: `not started`.
-- Holdout manifest/hash, report, report hash: `not started`.
-- Verdict: `NOT_STARTED`.
+- Tested SHA: `1a73b5bbc2ef43a952535df4ecae4511002178c2`.
+- Holdout manifest/hash, report, report hash: retained by QA; Build does not
+  read or use sealed QA material.
+- Verdict: `NOT_ACCEPTED`; no subsequent official QA run is authorized during
+  this repair cycle.
 
 ## Allowed Phases
 

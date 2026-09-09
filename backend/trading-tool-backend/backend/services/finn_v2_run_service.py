@@ -191,6 +191,7 @@ class FinnV2RunService:
         terminal_reason = self._terminal_reason(
             terminal_status=next_status,
             orchestrator=orchestrator,
+            policy=policy,
             verifier=verifier,
             reasoning=reasoning,
         )
@@ -217,6 +218,7 @@ class FinnV2RunService:
         *,
         terminal_status: str,
         orchestrator: Dict[str, Any],
+        policy: Dict[str, Any],
         verifier: Dict[str, Any],
         reasoning: Dict[str, Any],
     ) -> Optional[str]:
@@ -229,6 +231,7 @@ class FinnV2RunService:
         if terminal_status not in {"unavailable", "downgraded", "rejected", "failed"}:
             return None
         for source, key in (
+            (policy, "blocking_codes"),
             (verifier, "reason_codes"),
             (orchestrator, "unavailable_codes"),
             (reasoning, "uncertainty_codes"),

@@ -142,6 +142,27 @@ def test_terminal_projection_exposes_typed_contract_input_and_reason_metadata():
     assert projection["terminal_reason"] == "missing_required_input"
 
 
+def test_terminal_projection_derives_required_inputs_and_polarity_from_registry():
+    projection = terminal_projection(
+        {
+            "identity": {"run_id": "run-1"},
+            "initial_operation_id": "create_setup",
+            "supplied_inputs": {"symbol": "SOL", "setup_type": "swing"},
+        },
+        status="clarification_required",
+        mode="CLARIFICATION",
+        response={},
+    )
+
+    assert projection["action_polarity"] == "create"
+    assert projection["required_inputs"] == list(
+        FinnV2OperationRegistry().require_supported("create_setup").required_inputs_for(
+            {"symbol": "SOL", "setup_type": "swing"}
+        )
+    )
+    assert projection["missing_inputs"] == []
+
+
 def test_terminal_projection_exposes_one_outbox_dispatch_and_attempt_count():
     projection = terminal_projection(
         {

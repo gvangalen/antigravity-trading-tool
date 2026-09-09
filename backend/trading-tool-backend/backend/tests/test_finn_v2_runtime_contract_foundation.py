@@ -626,15 +626,24 @@ def test_limited_terminal_responses_publish_a_safe_typed_reason():
     assert service._terminal_reason(
         terminal_status="downgraded",
         orchestrator={"unavailable_codes": ["active_setup_not_available"]},
+        policy={},
         verifier={"reason_codes": ["evidence_scope_incomplete"]},
         reasoning={},
     ) == "evidence_scope_incomplete"
     assert service._terminal_reason(
-        terminal_status="unavailable", orchestrator={}, verifier={}, reasoning={}
+        terminal_status="unavailable", orchestrator={}, policy={}, verifier={}, reasoning={}
     ) == "terminal_unavailable"
     assert service._terminal_reason(
-        terminal_status="completed", orchestrator={}, verifier={}, reasoning={}
+        terminal_status="completed", orchestrator={}, policy={}, verifier={}, reasoning={}
     ) is None
+
+    assert service._terminal_reason(
+        terminal_status="downgraded",
+        orchestrator={},
+        policy={"blocking_codes": ["proposals_disabled"]},
+        verifier={"reason_codes": ["response_not_answering_question"]},
+        reasoning={},
+    ) == "proposals_disabled"
 
 
 def test_selector_provider_budget_leaves_time_for_the_persisted_selection(monkeypatch):

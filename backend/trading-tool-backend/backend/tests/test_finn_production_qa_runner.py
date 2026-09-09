@@ -215,6 +215,7 @@ def test_safe_projection_excludes_response_content_and_preserves_contract_metada
             "initial_operation_id": "capability", "final_operation_id": "capability",
             "dispatch_id": "dispatch-1", "dispatch_count": 1, "attempt_count": 1,
             "supplied_inputs": {"asset": "BTC"}, "missing_inputs": [],
+            "required_inputs": ["asset"], "action_polarity": "add",
             "private": "omit",
         },
     })
@@ -222,9 +223,21 @@ def test_safe_projection_excludes_response_content_and_preserves_contract_metada
     assert projection["runtime_trace"]["contract_id"] == "contract-1"
     assert projection["runtime_trace"]["contract_revision"] == 4
     assert projection["runtime_trace"]["supplied_inputs"] == {"asset": "BTC"}
+    assert projection["runtime_trace"]["required_inputs"] == ["asset"]
+    assert projection["runtime_trace"]["action_polarity"] == "add"
     assert projection["runtime_trace"]["dispatch_count"] == 1
     assert "private response" not in json.dumps(projection)
     assert "private" not in projection["runtime_trace"]
+
+
+def test_failed_terminal_is_a_product_failure_even_when_delivery_is_consistent():
+    module = _module()
+    assert module.classify_case_failure({
+        "create_http_status": 200,
+        "polling_sse_equal": True,
+        "terminal": {"status": "failed"},
+        "fixture_action": {"mode": "read_only"},
+    }) == "product"
 
 
 def test_runner_uses_gateway_created_conversation_for_follow_up(monkeypatch):

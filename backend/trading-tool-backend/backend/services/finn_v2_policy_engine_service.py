@@ -95,7 +95,7 @@ class FinnV2PolicyEngineService:
                 workflow_type = "proposal_confirmation"
             elif contract.operation_id == "execute_proposal":
                 workflow_type = "proposal_execution"
-            proposal_allowed = contract.proposal_type is not None
+            proposal_allowed = contract.proposal_type is not None and self.flags.is_proposals_enabled()
             confirmation_required = contract.confirmation_required
             proposal_input_required = contract.proposal_type is not None
 
@@ -162,6 +162,15 @@ class FinnV2PolicyEngineService:
         else:
             policy_class = "unsupported_action"
             blocks.append("orchestrator_not_ready")
+
+        if mode in {"CREATE_PROPOSAL", "ACTION_PROPOSAL"} and not self.flags.is_proposals_enabled():
+            # A disabled proposal feature is an expected policy boundary, not
+            # an orchestrator exception. The verifier can now produce the
+            # typed safe terminal response without attempting persistence.
+            proposal_allowed = False
+            allowed = False
+            if "proposals_disabled" not in blocks:
+                blocks.append("proposals_disabled")
 
         if validation.integrity_status == "invalid" and mode in {"CREATE_PROPOSAL", "ACTION_PROPOSAL", "CONFIRMATION", "EXECUTION"}:
             if "snapshot_integrity_invalid" not in blocks:

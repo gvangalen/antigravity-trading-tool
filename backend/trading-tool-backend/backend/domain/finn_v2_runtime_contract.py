@@ -86,9 +86,12 @@ class FinnRuntimeContract(BaseModel):
         try:
             from backend.domain.finn_v2_operation_registry import FinnV2OperationRegistry
 
-            action_polarity = FinnV2OperationRegistry().require_supported(str(operation_id)).action_polarity.value
+            action_contract = FinnV2OperationRegistry().require_supported(str(operation_id))
+            action_polarity = action_contract.action_polarity.value
+            required_inputs = list(action_contract.required_inputs_for(dict(self.execution_requirements.get("supplied_inputs") or {})))
         except (ValueError, AttributeError):
             action_polarity = None
+            required_inputs = []
         return {
             "version": self.public_projection_version,
             "run_id": self.run_id,
@@ -96,6 +99,7 @@ class FinnRuntimeContract(BaseModel):
             "initial_operation_id": self.initial_operation_id,
             "final_operation_id": self.final_operation_id,
             "action_polarity": action_polarity,
+            "required_inputs": required_inputs,
             "requested_mode": self.requested_mode,
             "final_mode": self.final_mode,
             "operation_change_reason": self.operation_change_reason,
@@ -487,11 +491,14 @@ def terminal_projection(
     try:
         from backend.domain.finn_v2_operation_registry import FinnV2OperationRegistry
 
-        action_polarity = FinnV2OperationRegistry().require_supported(str(operation_id)).action_polarity.value
+        action_contract = FinnV2OperationRegistry().require_supported(str(operation_id))
+        action_polarity = action_contract.action_polarity.value
+        required_inputs = list(action_contract.required_inputs_for(dict(state.get("supplied_inputs") or {})))
     except (ValueError, AttributeError):
         # Historical projections remain readable; new runs always resolve
         # their polarity from the canonical registry before persistence.
         action_polarity = None
+        required_inputs = []
     identity = dict(state.get("identity") or {})
     timings_ms: Dict[str, int] = {}
     timestamps = dict(state.get("phase_timestamps") or {})
@@ -525,6 +532,7 @@ def terminal_projection(
         "initial_operation_id": state.get("initial_operation_id"),
         "final_operation_id": operation_id,
         "action_polarity": action_polarity,
+        "required_inputs": required_inputs,
         "requested_mode": state.get("requested_mode"),
         "final_mode": mode or state.get("final_mode") or state.get("requested_mode"),
         "operation_change_reason": state.get("operation_change_reason"),

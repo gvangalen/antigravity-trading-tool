@@ -152,6 +152,25 @@ def test_release_identity_is_written_before_pm2_and_loaded_by_every_process() ->
     assert "function loadReleaseMetadata()" in ecosystem_source
     assert "const RELEASE_METADATA_ENV = loadReleaseMetadata();" in ecosystem_source
     assert ecosystem_source.count("...RELEASE_METADATA_ENV,") == 8
+    # Explicit defaults replace obsolete PM2 process-only values when the
+    # protected environment intentionally omits an otherwise safe flag.
+    assert "const FINN_RUNTIME_DEFAULT_ENV =" in ecosystem_source
+    assert ecosystem_source.count("...FINN_RUNTIME_DEFAULT_ENV,") == 8
+    # Proposal policy must be identical in the gateway and FINN worker after
+    # PM2 restarts; otherwise a release can pass a read-only health check while
+    # action runs fail only after selection.
+    for key in (
+        '"FINN_V2_PROPOSALS_ENABLED"',
+        '"FINN_V2_VISIBLE_PROPOSALS_ENABLED"',
+        '"FINN_V2_EXECUTION_GATE_ENABLED"',
+        '"FINN_V2_LIVE_ACTIONS_ENABLED"',
+        '"FINN_V2_PAPER_ACTIONS_ENABLED"',
+        '"FINN_V2_EXECUTE_ASSET_SELECTION"',
+        '"FINN_V2_EXECUTE_SETUP_CHANGES"',
+        '"FINN_V2_EXECUTE_STRATEGY_CHANGES"',
+        '"FINN_V2_EXECUTE_BOT_CHANGES"',
+    ):
+        assert key in ecosystem_source
 
 
 def test_release_marker_remote_steps_are_independently_guarded() -> None:
