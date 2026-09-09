@@ -21,6 +21,7 @@ CANONICAL_DEPLOY_STEPS = frozenset(
         "migration_plan",
         "migrations",
         "schema_health",
+        "finn_runtime_policy",
         "frontend_export",
         "memory_headroom",
         "pm2_core",
