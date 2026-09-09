@@ -516,7 +516,7 @@ def _run_fixture_action(*, base_url: str, token: str, case: Dict[str, Any], term
     return result
 
 
-def run_cases(*, base_url: str, token: str, cases: Iterable[Dict[str, Any]], matrix_deadline_seconds: float = 2100.0, checkpoint=None) -> list[Dict[str, Any]]:
+def run_cases(*, base_url: str, token: str, cases: Iterable[Dict[str, Any]], matrix_deadline_seconds: float = 2100.0, case_timeout_seconds: float = 60.0, checkpoint=None) -> list[Dict[str, Any]]:
     results = []
     conversations: Dict[str, str] = {}
     matrix_deadline = time.monotonic() + matrix_deadline_seconds
@@ -526,6 +526,9 @@ def run_cases(*, base_url: str, token: str, cases: Iterable[Dict[str, Any]], mat
             if checkpoint:
                 checkpoint(results, incomplete=True)
             break
+        case_deadline = time.monotonic() + case_timeout_seconds
+        def remaining() -> float:
+            return case_deadline - time.monotonic()
         conversation_key = _logical_conversation_key(case)
         request_payload = {
             "message": case["message"],
@@ -536,7 +539,7 @@ def run_cases(*, base_url: str, token: str, cases: Iterable[Dict[str, Any]], mat
         }
         if conversation_key in conversations:
             request_payload["conversation_id"] = conversations[conversation_key]
-        status, created, latency, error_category = request_json(url=f"{base_url}/api/assistant/v2/runs", method="POST", token=token, payload=request_payload, timeout_seconds=20.0)
+        status, created, latency, error_category = request_json(url=f"{base_url}/api/assistant/v2/runs", method="POST", token=token, payload=request_payload, timeout_seconds=max(0.1, min(20.0, remaining())))
         run_id = created.get("run_id") if isinstance(created.get("run_id"), str) else None
         conversation_id = created.get("conversation_id") if isinstance(created.get("conversation_id"), str) else None
         if conversation_key and conversation_id:
@@ -553,7 +556,7 @@ def run_cases(*, base_url: str, token: str, cases: Iterable[Dict[str, Any]], mat
                 checkpoint(results, incomplete=False)
             continue
         terminal = created
-        deadline = time.monotonic() + 30.0
+        deadline = min(case_deadline, time.monotonic() + 30.0)
         poll_error: Optional[str] = None
         while time.monotonic() < deadline:
             time.sleep(0.25)
@@ -567,9 +570,13 @@ def run_cases(*, base_url: str, token: str, cases: Iterable[Dict[str, Any]], mat
             if terminal.get("status") in TERMINAL_STATUSES:
                 break
         projection = safe_projection(terminal)
-        sse_envelope, sse_error = request_sse_terminal(
-            url=f"{base_url}/api/assistant/v2/runs/{run_id}/stream", token=token
-        )
+        if remaining() <= 0:
+            sse_envelope, sse_error = {}, "case_timeout"
+        else:
+            sse_envelope, sse_error = request_sse_terminal(
+                url=f"{base_url}/api/assistant/v2/runs/{run_id}/stream", token=token,
+                timeout_seconds=max(0.1, min(35.0, remaining())),
+            )
         sse_projection = safe_projection(sse_envelope) if sse_envelope else {}
         if terminal.get("status") not in TERMINAL_STATUSES and sse_envelope:
             terminal = sse_envelope
@@ -583,7 +590,7 @@ def run_cases(*, base_url: str, token: str, cases: Iterable[Dict[str, Any]], mat
         result["poll_error"] = poll_error
         result["sse_error"] = sse_error
         if terminal.get("status") not in TERMINAL_STATUSES:
-            result["error_category"] = sse_error or poll_error or "terminal_timeout"
+            result["error_category"] = "case_timeout" if remaining() <= 0 else (sse_error or poll_error or "terminal_timeout")
         result["operation_matches"] = case.get("expected_operation_id") is None or actual == case["expected_operation_id"]
         result["fixture_action"] = _run_fixture_action(base_url=base_url, token=token, case=case, terminal=terminal)
         result["failure_classification"] = classify_case_failure(result)
@@ -609,6 +616,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--report-path", required=True)
     parser.add_argument("--workflow-run-id", default="local")
     parser.add_argument("--matrix-deadline-seconds", type=float, default=2100.0)
+    parser.add_argument("--case-timeout-seconds", type=float, default=60.0)
     return parser.parse_args()
 
 
@@ -663,7 +671,7 @@ def main() -> int:
                     temporary.write_text(json.dumps(redact(report), sort_keys=True, indent=2) + "\n", encoding="utf-8")
                     temporary.replace(report_path)
 
-                report["cases"] = run_cases(base_url=args.base_url.rstrip("/"), token=token, cases=cases, matrix_deadline_seconds=getattr(args, "matrix_deadline_seconds", 2100.0), checkpoint=checkpoint)
+                report["cases"] = run_cases(base_url=args.base_url.rstrip("/"), token=token, cases=cases, matrix_deadline_seconds=getattr(args, "matrix_deadline_seconds", 2100.0), case_timeout_seconds=getattr(args, "case_timeout_seconds", 60.0), checkpoint=checkpoint)
                 report["failure_summary"] = failure_summary(report["cases"])
                 report["safety"]["read_only_profile"] = all(case.get("fixture_action", "read_only") == "read_only" for case in cases)
                 report["safety"]["confirmation_calls"] = sum(1 for item in report["cases"] if item.get("fixture_action", {}).get("confirm_status") is not None)
