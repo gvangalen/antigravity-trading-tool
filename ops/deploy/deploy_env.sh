@@ -587,6 +587,12 @@ PY
     exit 1
   fi
 
+  DEPLOY_STEP_ID='finn_runtime_policy'
+  if ! node ops/deploy/check_finn_runtime_policy.js; then
+    echo \"❌ FINN runtime policy parity check failed after PM2 startup.\" >&2
+    exit 1
+  fi
+
   pm2 save --force
 
   health_ready=false

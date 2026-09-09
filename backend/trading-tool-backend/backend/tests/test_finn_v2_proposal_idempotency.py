@@ -109,3 +109,59 @@ def test_equivalent_active_draft_is_reused_across_distinct_runs():
 
     assert result.proposal_id == "proposal-ada"
     assert second_input.idempotency_key == key
+
+
+def test_completed_equivalent_proposal_is_not_reused_by_a_new_run():
+    service = FinnV2ProposalService(session=object())
+    service.flags.is_proposals_enabled = lambda: True
+    policy = FinnV2PolicyDecision(
+        policy_decision_id="policy-2", run_id="run-2", user_id=7, policy_class="proposal",
+        operation_type="manual_order", allowed=True, proposal_allowed=True,
+        proposal_input_required=True, confirmation_required=True, step_up_required=False,
+        execution_allowed=False, shadow_safe=True, created_at=datetime.now(timezone.utc),
+    )
+    canonical_key = FinnV2ProposalService.canonical_idempotency_key(
+        operation_type="manual_order",
+        target=ProposalTarget(target_type="order", asset="SOL"),
+        change=ManualOrderChange(asset="SOL", side="buy", order_type="market", quantity=Decimal("1")),
+    )
+    proposal_input = ValidatedProposalInput(
+        operation_type="manual_order", target=ProposalTarget(target_type="order", asset="SOL"),
+        change=ManualOrderChange(asset="SOL", side="buy", order_type="market", quantity=Decimal("1")),
+        impact_summary="impact", risk_summary="risk", source_run_id="run-2",
+        source_snapshot_id="snapshot-2", source_validation_id="validation-2",
+        evidence_set_hash="hash-2", idempotency_key=canonical_key,
+        expires_at=datetime.now(timezone.utc) + timedelta(minutes=5),
+    )
+    completed = SimpleNamespace(
+        id="proposal-confirmed", run_id="run-1", user_id=7, policy_decision_id="policy-1",
+        status="confirmed", operation_type="manual_order", target_type="order", target_id=None,
+        asset="SOL", payload_json=to_json_safe(proposal_input.dict()), payload_hash="old",
+        evidence_set_hash="hash-1", idempotency_key=canonical_key, requires_step_up_auth=False,
+        created_at=datetime.now(timezone.utc), updated_at=datetime.now(timezone.utc),
+        expires_at=datetime.now(timezone.utc) + timedelta(minutes=5),
+    )
+    created = SimpleNamespace(**{**completed.__dict__, "id": "proposal-new", "run_id": "run-2", "status": "draft"})
+    created_key = {}
+
+    service.proposals.get_by_idempotency_key_for_user = lambda **_kwargs: asyncio.sleep(0, result=completed)
+    service.proposals.get_by_payload_hash_for_run = lambda **_kwargs: asyncio.sleep(0, result=None)
+    service.states.get_by_id_for_user = lambda **_kwargs: asyncio.sleep(0, result=SimpleNamespace(evidence_set_hash="hash-2"))
+    service.validations.get_by_id_for_user = lambda **_kwargs: asyncio.sleep(0, result=SimpleNamespace(evidence_set_hash="hash-2"))
+    service._validate_target_user_scope = lambda **_kwargs: asyncio.sleep(0)
+
+    async def create(**kwargs):
+        created_key["value"] = kwargs["idempotency_key"]
+        created.idempotency_key = kwargs["idempotency_key"]
+        return created
+
+    service.proposals.create = create
+    result = asyncio.run(service.create_proposal(
+        user_id=7, run_id="run-2", trace_id="trace-2", policy=policy, proposal_input=proposal_input,
+    ))
+
+    assert result.proposal_id == "proposal-new"
+    assert created_key["value"] != canonical_key
+    assert created_key["value"] == FinnV2ProposalService.run_scoped_idempotency_key(
+        canonical_key=canonical_key, run_id="run-2",
+    )

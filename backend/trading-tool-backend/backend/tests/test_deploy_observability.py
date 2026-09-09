@@ -173,6 +173,19 @@ def test_release_identity_is_written_before_pm2_and_loaded_by_every_process() ->
         assert key in ecosystem_source
 
 
+def test_deploy_checks_effective_finn_policy_parity_without_printing_values() -> None:
+    deploy_source = DEPLOY_SCRIPT.read_text(encoding="utf-8")
+    policy_check = REPO_ROOT / "ops" / "deploy" / "check_finn_runtime_policy.js"
+    source = policy_check.read_text(encoding="utf-8")
+
+    assert "node ops/deploy/check_finn_runtime_policy.js" in deploy_source
+    assert "FINN_V2_PROPOSALS_ENABLED" in source
+    assert "FINN_V2_LIVE_ACTIONS_ENABLED" in source
+    assert "FINN_V2_EXECUTE_LIVE_BOT_ACTIVATION" in source
+    assert "JSON.stringify" in source
+    assert "requiredPolicy" in source
+
+
 def test_release_marker_remote_steps_are_independently_guarded() -> None:
     source = DEPLOY_SCRIPT.read_text(encoding="utf-8")
     marker_start = source.index('DEPLOY_STEP_ID="release_marker"')

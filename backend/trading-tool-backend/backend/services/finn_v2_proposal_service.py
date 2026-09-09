@@ -69,16 +69,29 @@ class FinnV2ProposalService:
             idempotency_key=proposal_input.idempotency_key,
             user_id=user_id,
         )
-        payload_json = to_json_safe(proposal_input.dict())
-        payload_hash = self._payload_hash(payload_json)
         if existing is not None:
-            if (
-                existing.status not in self._REUSABLE_STATUSES
-                or self.canonical_identity(existing.payload_json)
-                != self.canonical_identity(payload_json)
+            if self.canonical_identity(existing.payload_json) != self.canonical_identity(
+                to_json_safe(proposal_input.dict())
             ):
                 raise ValueError("operation_payload_invalid")
-            return self._row_to_record(existing)
+            if existing.status in self._REUSABLE_STATUSES:
+                return self._row_to_record(existing)
+
+            # A completed proposal must never be reused for a later user
+            # request. Scope its otherwise canonical proposal key to this run;
+            # duplicate attempts inside this run remain protected below by the
+            # payload-hash lookup and the run's dispatch idempotency.
+            proposal_input = proposal_input.copy(
+                update={
+                    "idempotency_key": self.run_scoped_idempotency_key(
+                        canonical_key=proposal_input.idempotency_key,
+                        run_id=run_id,
+                    )
+                }
+            )
+
+        payload_json = to_json_safe(proposal_input.dict())
+        payload_hash = self._payload_hash(payload_json)
 
         duplicate = await self.proposals.get_by_payload_hash_for_run(
             payload_hash=payload_hash,
@@ -223,6 +236,12 @@ class FinnV2ProposalService:
         )
         canonical = json.dumps(identity, sort_keys=True, separators=(",", ":"), default=str)
         return f"proposal-{hashlib.sha256(canonical.encode('utf-8')).hexdigest()}"
+
+    @staticmethod
+    def run_scoped_idempotency_key(*, canonical_key: str, run_id: str) -> str:
+        """Differentiate a new request from a completed equivalent proposal."""
+        source = f"{canonical_key}:{run_id}".encode("utf-8")
+        return f"proposal-{hashlib.sha256(source).hexdigest()}"
 
     def _row_to_record(self, row) -> FinnV2ProposalRecord:
         return FinnV2ProposalRecord(
