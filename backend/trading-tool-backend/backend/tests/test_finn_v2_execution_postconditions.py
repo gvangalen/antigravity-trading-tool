@@ -15,8 +15,9 @@ class _Session:
 def test_execution_service_records_postcondition_hash_on_success():
     service = FinnV2ExecutionService(session=_Session())
     workflow_events = []
+    action_results = []
     service.runtime_contracts.record_proposal_lifecycle = lambda **kwargs: asyncio.sleep(0, result=workflow_events.append(kwargs))
-    service.runtime_contracts.record_action_result = lambda **kwargs: asyncio.sleep(0)
+    service.runtime_contracts.record_action_result = lambda **kwargs: asyncio.sleep(0, result=action_results.append(kwargs))
     service.repo.get_by_idempotency_key_for_user = lambda **kwargs: asyncio.sleep(0, result=None)
     service.repo.get_for_proposal = lambda **kwargs: asyncio.sleep(0, result=None)
     service.proposals.get_by_id_for_user = lambda **kwargs: asyncio.sleep(
@@ -57,6 +58,25 @@ def test_execution_service_records_postcondition_hash_on_success():
         "payload_hash": "hash-1",
         "event": "execution_succeeded",
         "execution_id": result.execution_id,
+    }]
+    assert action_results == [{
+        "run_id": "run-1",
+        "action_result": {
+            "operation_id": "update_setup",
+            "entity_type": "setup",
+            "entity_id": "9",
+            "canonical_name": None,
+            "owner_user_id": 7,
+            "parent_entity_type": None,
+            "parent_entity_id": None,
+            "proposal_id": "proposal-1",
+            "execution_id": result.execution_id,
+            "result_status": "succeeded",
+            "created_at": result.completed_at.isoformat(),
+            "updated_at": result.completed_at.isoformat(),
+            "conversation_id": None,
+            "run_id": "run-1",
+        },
     }]
 
 
@@ -104,6 +124,27 @@ def test_execution_service_normalizes_adapter_results_before_json_persistence_an
 
     assert result.status == "succeeded"
     assert captured["payload"] == {"base_amount": "120.00"}
+
+
+def test_action_result_accepts_scalar_asset_result_without_failing_execution():
+    proposal = SimpleNamespace(
+        id="proposal-asset",
+        run_id="run-asset",
+        user_id=7,
+        operation_type="select_asset",
+        payload_json={"change": {"asset": "SOL"}, "target": {"asset": "SOL"}},
+    )
+    execution = SimpleNamespace(id="execution-asset", status="succeeded", completed_at=datetime.now(timezone.utc))
+
+    action_result = FinnV2ExecutionService._action_result(
+        proposal=proposal,
+        execution=execution,
+        result={"ok": True, "asset": "SOL"},
+    )
+
+    assert action_result["entity_type"] == "asset"
+    assert action_result["canonical_name"] == "SOL"
+    assert action_result["result_status"] == "succeeded"
 
 
 def test_strategy_repository_normalizes_decimal_payload_before_json_encoding():

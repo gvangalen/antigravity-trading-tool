@@ -257,7 +257,12 @@ class FinnV2RuntimeContractRepository(FinnV2RepositoryTransactionMixin):
         row = await self.get_for_run(run_id=run_id, for_update=True)
         if row is None:
             return None
-        state = record_action_result(deepcopy(row.state_json or {}), action_result=action_result)
+        persisted_result = dict(action_result)
+        # Execution proposals do not duplicate conversation identity. The run
+        # contract is authoritative, so bind the result to its conversation at
+        # persistence rather than asking a later reader to infer it.
+        persisted_result["conversation_id"] = persisted_result.get("conversation_id") or row.conversation_id
+        state = record_action_result(deepcopy(row.state_json or {}), action_result=persisted_result)
         row = await self._write_revision(row=row, state=state)
         if row.terminal_projection_json is not None:
             row.terminal_projection_json = terminal_projection(state, status=str(state.get("terminal_status") or PENDING_STATUS), mode=state.get("final_mode"), response=dict(state.get("terminal_response") or row.terminal_projection_json.get("response") or {}))

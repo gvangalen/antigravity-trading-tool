@@ -74,9 +74,17 @@ def _run_action(*, base_url: str, token: str, other_token: str, message: str, op
         "terminal_reason": projection.get("terminal_reason"),
         "polling_sse_parity": observed["polling_sse_contract_projection"],
         "proposal_id": proposal.get("id") if proposal else None,
+        "action_result": projection.get("action_result"),
+        "terminal_projection": projection,
     }
     if proposal:
         outcome["proposal_lifecycle"] = _proposal_lifecycle(base_url, token, other_token, proposal)
+        # Confirmation/execution update the persisted contract after the
+        # initial terminal response. Re-read that one projection for the
+        # action-result evidence instead of reconstructing it in the runner.
+        refreshed = _runtime_record(observed["run_id"])
+        outcome["action_result"] = refreshed["terminal_projection"].get("action_result")
+        outcome["terminal_projection"] = refreshed["terminal_projection"]
     lifecycle = outcome.get("proposal_lifecycle") or {}
     outcome["passed"] = all((
         outcome["initial_operation_id"] == operation_id,
@@ -89,6 +97,7 @@ def _run_action(*, base_url: str, token: str, other_token: str, message: str, op
         lifecycle.get("confirmed") is True,
         lifecycle.get("execution_result") == "succeeded",
         lifecycle.get("idempotency_result") == "already_executed",
+        bool(outcome["action_result"]),
     ))
     return outcome
 
@@ -240,6 +249,12 @@ def main() -> None:
             conversation_id=evaluate["conversation_id"],
             timeout_seconds=75,
         )
+        linked_bot = run_gate(
+            base_url=base_url,
+            bearer_token=token,
+            message=f"Welke bot is gekoppeld aan strategie {names['strategy']}?",
+            timeout_seconds=75,
+        )
         read_regressions = [
             {
                 "case_id": "evaluate_plan_terminalization",
@@ -256,6 +271,14 @@ def main() -> None:
                 "passed": consequence["initial_operation_id"] == "evaluate_bot"
                 and consequence["final_operation_id"] == "evaluate_bot"
                 and consequence["status"] in {"completed", "downgraded", "unavailable", "failed"},
+            },
+            {
+                "case_id": "read_linked_bot_terminalization",
+                "expected_operation_id": "read_linked_bot",
+                "actual": linked_bot,
+                "passed": linked_bot["initial_operation_id"] == "read_linked_bot"
+                and linked_bot["final_operation_id"] == "read_linked_bot"
+                and linked_bot["status"] in {"completed", "downgraded", "unavailable", "failed"},
             },
         ]
 

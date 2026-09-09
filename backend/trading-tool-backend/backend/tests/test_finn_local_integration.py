@@ -18,8 +18,8 @@ def test_local_harness_reuses_production_entrypoints_and_finn_queue():
 
 def test_local_compose_isolated_to_loopback_postgres_and_redis():
     compose = (ROOT / "docker-compose.finn-local.yml").read_text()
-    assert "127.0.0.1:55432:5432" in compose
-    assert "127.0.0.1:56379:6379" in compose
+    assert "127.0.0.1:${FINN_LOCAL_POSTGRES_PORT:-55432}:5432" in compose
+    assert "127.0.0.1:${FINN_LOCAL_REDIS_PORT:-56379}:6379" in compose
     assert "postgres:16" in compose and "redis:alpine" in compose
 
 

@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 from typing import Optional
 
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import text
 
 from backend.infrastructure.repositories.finn_v2_execution_repository import FinnV2ExecutionRepository
 from backend.infrastructure.repositories.finn_v2_proposal_repository import FinnV2ProposalRepository
@@ -127,6 +128,7 @@ class FinnV2ExecutionService:
             started_at=started_at,
         )
         try:
+            prior_entity = await self._owned_entity_reference(proposal=proposal)
             result_payload = await adapter(user_id, proposal.payload_json)
             # Adapters expose existing domain-service results. Normalize them at
             # the execution boundary so values such as Decimal are safe for the
@@ -146,7 +148,12 @@ class FinnV2ExecutionService:
             if callable(record_action_result):
                 await record_action_result(
                     run_id=proposal.run_id,
-                    action_result=self._action_result(proposal=proposal, execution=execution, result=safe_result_payload),
+                    action_result=self._action_result(
+                        proposal=proposal,
+                        execution=execution,
+                        result=safe_result_payload,
+                        prior_entity=prior_entity,
+                    ),
                 )
             record_latency_sample(f"finn_v2_execution_latency_ms:{proposal.operation_type}", int((execution.completed_at - started_at).total_seconds() * 1000))
             increment_execution_safety_counter(f"finn_v2_executions_total:{proposal.operation_type}:succeeded")
@@ -208,15 +215,82 @@ class FinnV2ExecutionService:
         canonical = json.dumps(payload, sort_keys=True, default=str, separators=(",", ":"))
         return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
+    async def _owned_entity_reference(self, *, proposal) -> dict:
+        """Capture a scoped object reference before an update or delete.
+
+        The execution result from established domain services is not uniform:
+        some mutations return their object and some return only a message.
+        This narrow, owner-scoped lookup preserves the existing canonical
+        object identity in the runtime contract without adding a second store.
+        """
+        operation = proposal.operation_type
+        entity_type = {
+            "update_setup": "setup", "delete_setup": "setup",
+            "update_strategy": "strategy", "delete_strategy": "strategy",
+            "update_bot": "bot", "delete_bot": "bot", "deactivate_bot": "bot",
+        }.get(operation)
+        if entity_type is None or not hasattr(self.session, "execute"):
+            return {}
+        change = dict((proposal.payload_json or {}).get("change") or {})
+        entity_id = change.get(f"{entity_type}_id") or (proposal.payload_json or {}).get("target", {}).get("target_id")
+        if entity_id is None:
+            return {}
+        queries = {
+            "setup": "SELECT id, name, NULL::text AS parent_entity_type, NULL::text AS parent_entity_id FROM setups WHERE id = :entity_id AND user_id = :user_id",
+            "strategy": "SELECT id, name, 'setup' AS parent_entity_type, setup_id::text AS parent_entity_id FROM strategies WHERE id = :entity_id AND user_id = :user_id",
+            "bot": "SELECT id, name, 'strategy' AS parent_entity_type, strategy_id::text AS parent_entity_id FROM bot_configs WHERE id = :entity_id AND user_id = :user_id",
+        }
+        result = await self.session.execute(text(queries[entity_type]), {"entity_id": int(entity_id), "user_id": proposal.user_id})
+        row = result.mappings().one_or_none()
+        return dict(row) if row else {}
+
     @staticmethod
-    def _action_result(*, proposal, execution, result: dict) -> dict:
+    def _action_result(*, proposal, execution, result: dict, prior_entity: dict | None = None) -> dict:
         change = dict((proposal.payload_json or {}).get("change") or {})
         target = dict((proposal.payload_json or {}).get("target") or {})
-        entity_type = target.get("target_type") or proposal.operation_type.removeprefix("create_").removeprefix("update_").removeprefix("delete_")
-        entity_id = result.get("id") or result.get(f"{entity_type}_id") or change.get(f"{entity_type}_id") or target.get("target_id")
-        canonical_name = result.get("name") or result.get("title") or change.get("name") or (change.get("setup_fields") or change.get("strategy_fields") or change.get("bot_fields") or {}).get("name")
+        # Action contracts own the persisted object type.  A proposal target can
+        # describe a parent asset (for example SOL for a strategy), so it must
+        # never redefine the action result's entity type.
+        entity_type = {
+            "select_asset": "asset",
+            "watchlist_add": "watchlist",
+            "watchlist_remove": "watchlist",
+            "deactivate_bot": "bot",
+        }.get(
+            proposal.operation_type,
+            proposal.operation_type.removeprefix("create_").removeprefix("update_").removeprefix("delete_"),
+        )
+        prior_entity = dict(prior_entity or {})
+        nested_entity = result.get(entity_type)
+        result_entity = dict(nested_entity) if isinstance(nested_entity, dict) else {}
+        entity_id = result.get("id") or result.get(f"{entity_type}_id") or result_entity.get("id") or prior_entity.get("id") or change.get(f"{entity_type}_id") or target.get("target_id")
+        canonical_name = result.get("name") or result.get("title") or result_entity.get("name") or prior_entity.get("name") or change.get("name") or (change.get("setup_fields") or change.get("strategy_fields") or change.get("bot_fields") or {}).get("name") or result.get("asset")
         fields = change.get("strategy_fields") or change.get("bot_fields") or {}
-        parent_type = "setup" if fields.get("setup_id") or change.get("setup_id") else ("strategy" if fields.get("strategy_id") or change.get("strategy_id") else None)
+        # Only domain relationships are parents. Updating a setup's own ID is
+        # an identity selector, never a setup->setup lineage edge.
+        parent_type = (
+            "setup" if entity_type == "strategy" and (fields.get("setup_id") or change.get("setup_id"))
+            else "strategy" if entity_type == "bot" and (fields.get("strategy_id") or change.get("strategy_id"))
+            else None
+        )
         parent_id = fields.get(f"{parent_type}_id") if parent_type else None
         parent_id = parent_id or (change.get(f"{parent_type}_id") if parent_type else None)
-        return {"operation_id": proposal.operation_type, "entity_type": entity_type, "entity_id": str(entity_id) if entity_id is not None else None, "canonical_name": canonical_name, "owner_user_id": proposal.user_id, "parent_entity_type": parent_type, "parent_entity_id": str(parent_id) if parent_id is not None else None, "proposal_id": proposal.id, "execution_id": execution.id, "result_status": execution.status, "conversation_id": None, "run_id": proposal.run_id}
+        parent_type = parent_type or prior_entity.get("parent_entity_type")
+        parent_id = parent_id or prior_entity.get("parent_entity_id")
+        completed_at = execution.completed_at.astimezone(timezone.utc).isoformat() if execution.completed_at else None
+        return {
+            "operation_id": proposal.operation_type,
+            "entity_type": entity_type,
+            "entity_id": str(entity_id) if entity_id is not None else None,
+            "canonical_name": canonical_name,
+            "owner_user_id": proposal.user_id,
+            "parent_entity_type": parent_type,
+            "parent_entity_id": str(parent_id) if parent_id is not None else None,
+            "proposal_id": proposal.id,
+            "execution_id": execution.id,
+            "result_status": execution.status,
+            "created_at": completed_at,
+            "updated_at": completed_at,
+            "conversation_id": None,
+            "run_id": proposal.run_id,
+        }
