@@ -338,3 +338,35 @@ def test_case_failure_categories_do_not_count_transport_as_selector_failures():
 
     assert [module.classify_case_failure(case) for case in cases] == ["infrastructure", "product", "product"]
     assert module.failure_summary(cases) == {"product": 2, "runner": 0, "infrastructure": 1}
+
+
+def test_case_timeout_is_checkpointed_and_does_not_block_the_next_case(monkeypatch):
+    module = _module()
+    original_sleep = module.time.sleep
+    calls = []
+    responses = iter([
+        (200, {"run_id": "slow", "conversation_id": "c1", "status": "pending"}, 1.0, None),
+        (200, {"run_id": "slow", "conversation_id": "c1", "status": "pending"}, 1.0, None),
+        (200, {"run_id": "fast", "conversation_id": "c2", "status": "pending"}, 1.0, None),
+        (200, {"run_id": "fast", "conversation_id": "c2", "status": "completed", "runtime_trace": {"initial_operation_id": "capability"}}, 1.0, None),
+    ])
+    monkeypatch.setattr(module, "request_json", lambda **kwargs: (calls.append(kwargs) or next(responses)))
+    monkeypatch.setattr(module.time, "sleep", lambda _seconds: original_sleep(0.01))
+    monkeypatch.setattr(module, "request_sse_terminal", lambda **_kwargs: ({"status": "completed", "runtime_trace": {"initial_operation_id": "capability"}}, None))
+    checkpoints = []
+    results = module.run_cases(base_url="https://example.test", token="token", case_timeout_seconds=0.005, checkpoint=lambda rows, **_kwargs: checkpoints.append(list(rows)), cases=[
+        {"case_id": "slow", "message": "slow"},
+        {"case_id": "fast", "message": "fast", "expected_operation_id": "capability"},
+    ])
+    assert results[0]["error_category"] == "case_timeout"
+    assert results[1]["run_id"] == "fast"
+    assert len(checkpoints) == 2
+
+
+def test_timeout_checkpoint_is_a_valid_partial_artifact(tmp_path):
+    report = tmp_path / "report.json"
+    payload = {"schema_version": 1, "cases": [{"case_id": "slow", "error_category": "case_timeout"}], "incomplete": True}
+    temporary = report.with_suffix(".json.tmp")
+    temporary.write_text(json.dumps(payload), encoding="utf-8")
+    temporary.replace(report)
+    assert json.loads(report.read_text(encoding="utf-8")) == payload
