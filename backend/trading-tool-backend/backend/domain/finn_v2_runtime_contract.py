@@ -478,6 +478,14 @@ def record_proposal_lifecycle(
     return state
 
 
+def record_action_result(state: Dict[str, Any], *, action_result: Dict[str, Any]) -> Dict[str, Any]:
+    """Persist the canonical result of a confirmed action on its run contract."""
+    state = dict(state)
+    state["action_result"] = dict(action_result)
+    state.setdefault("transition_log", []).append({"type": "action_result", "operation_id": action_result.get("operation_id")})
+    return state
+
+
 def terminal_projection(
     state: Dict[str, Any],
     *,
@@ -545,6 +553,7 @@ def terminal_projection(
         "terminal_status": status,
         "terminal_response_type": state.get("terminal_response_type") or ("failure" if status == "failed" else "response"),
         "proposal_lifecycle": dict(state.get("proposal_lifecycle") or {}),
+        "action_result": dict(state.get("action_result") or {}),
         "dispatch_id": (state.get("dispatch") or {}).get("dispatch_id"),
         "dispatch_count": (state.get("dispatch") or {}).get("dispatch_count"),
         "attempt_count": (state.get("dispatch") or {}).get("attempt_count"),

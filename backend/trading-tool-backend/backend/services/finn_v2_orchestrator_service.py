@@ -647,6 +647,11 @@ class FinnV2OrchestratorService:
         # Contract state is authoritative for new runs; context_json remains
         # only a compatible delivery projection for historical consumers.
         context.update(dict(previous_state.get("lineage_state") or {}))
+        action_result = dict(previous_state.get("action_result") or {})
+        if action_result.get("entity_id") and action_result.get("owner_user_id") == user_id:
+            # A confirmed execution is the only cross-turn object reference
+            # accepted without an explicit current-turn identifier.
+            context["previous_action_result"] = action_result
         guided_state = dict(previous_state.get("guided_state") or {})
         if guided_state:
             context["active_guided_operation"] = guided_state

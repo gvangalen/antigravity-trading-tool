@@ -17,6 +17,7 @@ from backend.domain.finn_v2_runtime_contract import (
     record_conversation_state,
     record_contextual_inputs,
     record_proposal_lifecycle,
+    record_action_result,
     record_selection,
     terminal_projection,
 )
@@ -250,6 +251,17 @@ class FinnV2RuntimeContractRepository(FinnV2RepositoryTransactionMixin):
                 entity_type="FinnV2RuntimeContract",
                 run_id=run_id,
             )
+        return row
+
+    async def record_action_result(self, *, run_id: str, action_result: Dict[str, Any]) -> Optional[FinnV2RuntimeContract]:
+        row = await self.get_for_run(run_id=run_id, for_update=True)
+        if row is None:
+            return None
+        state = record_action_result(deepcopy(row.state_json or {}), action_result=action_result)
+        row = await self._write_revision(row=row, state=state)
+        if row.terminal_projection_json is not None:
+            row.terminal_projection_json = terminal_projection(state, status=str(state.get("terminal_status") or PENDING_STATUS), mode=state.get("final_mode"), response=dict(state.get("terminal_response") or row.terminal_projection_json.get("response") or {}))
+            await self._flush_with_rollback(operation="refresh_runtime_action_result_projection", entity_type="FinnV2RuntimeContract", run_id=run_id)
         return row
 
     async def materialize_terminal(
