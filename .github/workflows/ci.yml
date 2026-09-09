@@ -96,10 +96,13 @@ jobs:
           fi
 
           changed_files="$(git diff --name-only HEAD^ HEAD)"
+          # Lockfile-only dependency metadata can leave a regenerated export
+          # byte-identical; the build below remains the verification authority.
           frontend_source_changed="$(
             printf '%s\n' "$changed_files" |
             grep '^frontend/trading-tool-frontend/' |
             grep -v '^frontend/trading-tool-frontend/out/' |
+            grep -Ev '^frontend/trading-tool-frontend/(package(-lock)?\.json)$' |
             grep -Ev '\.bak$' || true
           )"
           frontend_export_changed="$(printf '%s\n' "$changed_files" | grep '^frontend/trading-tool-frontend/out/' || true)"
