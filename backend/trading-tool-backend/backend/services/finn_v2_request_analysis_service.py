@@ -101,6 +101,7 @@ class FinnV2RequestAnalysisService:
             degraded_entities = dict((context.get("last_degraded_context") or {}).get("resolved_entities") or {})
             released_entities = dict((context.get("last_released_context") or {}).get("resolved_entities") or {})
             lineage_entities = verified_entities or degraded_entities or released_entities
+            action_result = dict(context.get("previous_action_result") or {})
             explicit_asset = explicit_asset or self._context_asset(
                 lineage_entities.get("asset") or context.get("resolved_asset")
             )
@@ -113,6 +114,14 @@ class FinnV2RequestAnalysisService:
             explicit_bot_id = explicit_bot_id or self._context_entity_id(
                 lineage_entities.get("bot_id") or context.get("resolved_bot_id")
             )
+            entity_type = str(action_result.get("entity_type") or "")
+            entity_id = self._context_entity_id(action_result.get("entity_id"))
+            if entity_type == "setup":
+                explicit_setup_id = explicit_setup_id or entity_id
+            elif entity_type == "strategy":
+                explicit_strategy_id = explicit_strategy_id or entity_id
+            elif entity_type == "bot":
+                explicit_bot_id = explicit_bot_id or entity_id
         requested_entities = self._requested_entities(
             explicit_asset=explicit_asset,
             explicit_setup_id=explicit_setup_id,

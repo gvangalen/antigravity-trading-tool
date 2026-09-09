@@ -52,6 +52,15 @@ class FinnV2OperationStateService:
         context = conversation_context or {}
         verified_context = dict(context.get("last_verified_context") or {})
         resolved_context = dict(verified_context.get("resolved_entities") or {})
+        action_result = dict(context.get("previous_action_result") or {})
+        action_entity_type = str(action_result.get("entity_type") or "")
+        action_entity_id = action_result.get("entity_id")
+        if action_entity_type == "setup" and action_entity_id is not None:
+            resolved_context.setdefault("setup_id", action_entity_id)
+        elif action_entity_type == "strategy" and action_entity_id is not None:
+            resolved_context.setdefault("strategy_id", action_entity_id)
+        elif action_entity_type == "bot" and action_entity_id is not None:
+            resolved_context.setdefault("bot_id", action_entity_id)
         is_canonical_context = context.get("conversation_state_version") == self.CONTEXT_STATE_VERSION
         resolved_entities = dict(existing.resolved_entities) if existing is not None else {}
         target_entities = dict(existing.target_entities) if existing is not None else {}

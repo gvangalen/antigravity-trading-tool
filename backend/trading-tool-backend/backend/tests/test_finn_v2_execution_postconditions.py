@@ -16,6 +16,7 @@ def test_execution_service_records_postcondition_hash_on_success():
     service = FinnV2ExecutionService(session=_Session())
     workflow_events = []
     service.runtime_contracts.record_proposal_lifecycle = lambda **kwargs: asyncio.sleep(0, result=workflow_events.append(kwargs))
+    service.runtime_contracts.record_action_result = lambda **kwargs: asyncio.sleep(0)
     service.repo.get_by_idempotency_key_for_user = lambda **kwargs: asyncio.sleep(0, result=None)
     service.repo.get_for_proposal = lambda **kwargs: asyncio.sleep(0, result=None)
     service.proposals.get_by_id_for_user = lambda **kwargs: asyncio.sleep(
@@ -63,6 +64,7 @@ def test_execution_service_normalizes_adapter_results_before_json_persistence_an
     service = FinnV2ExecutionService(session=_Session())
     captured = {}
     service.runtime_contracts.record_proposal_lifecycle = lambda **kwargs: asyncio.sleep(0)
+    service.runtime_contracts.record_action_result = lambda **kwargs: asyncio.sleep(0)
     service.repo.get_by_idempotency_key_for_user = lambda **kwargs: asyncio.sleep(0, result=None)
     service.repo.get_for_proposal = lambda **kwargs: asyncio.sleep(0, result=None)
     service.proposals.get_by_id_for_user = lambda **kwargs: asyncio.sleep(

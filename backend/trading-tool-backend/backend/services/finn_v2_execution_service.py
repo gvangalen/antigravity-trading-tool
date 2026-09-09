@@ -142,10 +142,12 @@ class FinnV2ExecutionService:
             execution.result_json = safe_result_payload
             execution.completed_at = datetime.now(timezone.utc)
             await self.session.flush()
-            await self.runtime_contracts.record_action_result(
-                run_id=proposal.run_id,
-                action_result=self._action_result(proposal=proposal, execution=execution, result=safe_result_payload),
-            )
+            record_action_result = getattr(self.runtime_contracts, "record_action_result", None)
+            if callable(record_action_result):
+                await record_action_result(
+                    run_id=proposal.run_id,
+                    action_result=self._action_result(proposal=proposal, execution=execution, result=safe_result_payload),
+                )
             record_latency_sample(f"finn_v2_execution_latency_ms:{proposal.operation_type}", int((execution.completed_at - started_at).total_seconds() * 1000))
             increment_execution_safety_counter(f"finn_v2_executions_total:{proposal.operation_type}:succeeded")
             await self._record_workflow_event(
@@ -213,4 +215,8 @@ class FinnV2ExecutionService:
         entity_type = target.get("target_type") or proposal.operation_type.removeprefix("create_").removeprefix("update_").removeprefix("delete_")
         entity_id = result.get("id") or result.get(f"{entity_type}_id") or change.get(f"{entity_type}_id") or target.get("target_id")
         canonical_name = result.get("name") or result.get("title") or change.get("name") or (change.get("setup_fields") or change.get("strategy_fields") or change.get("bot_fields") or {}).get("name")
-        return {"operation_id": proposal.operation_type, "entity_type": entity_type, "entity_id": str(entity_id) if entity_id is not None else None, "canonical_name": canonical_name, "owner_user_id": proposal.user_id, "proposal_id": proposal.id, "execution_id": execution.id, "result_status": execution.status, "conversation_id": None, "run_id": proposal.run_id}
+        fields = change.get("strategy_fields") or change.get("bot_fields") or {}
+        parent_type = "setup" if fields.get("setup_id") or change.get("setup_id") else ("strategy" if fields.get("strategy_id") or change.get("strategy_id") else None)
+        parent_id = fields.get(f"{parent_type}_id") if parent_type else None
+        parent_id = parent_id or (change.get(f"{parent_type}_id") if parent_type else None)
+        return {"operation_id": proposal.operation_type, "entity_type": entity_type, "entity_id": str(entity_id) if entity_id is not None else None, "canonical_name": canonical_name, "owner_user_id": proposal.user_id, "parent_entity_type": parent_type, "parent_entity_id": str(parent_id) if parent_id is not None else None, "proposal_id": proposal.id, "execution_id": execution.id, "result_status": execution.status, "conversation_id": None, "run_id": proposal.run_id}
