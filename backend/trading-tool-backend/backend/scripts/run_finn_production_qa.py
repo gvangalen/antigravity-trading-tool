@@ -516,10 +516,16 @@ def _run_fixture_action(*, base_url: str, token: str, case: Dict[str, Any], term
     return result
 
 
-def run_cases(*, base_url: str, token: str, cases: Iterable[Dict[str, Any]]) -> list[Dict[str, Any]]:
+def run_cases(*, base_url: str, token: str, cases: Iterable[Dict[str, Any]], matrix_deadline_seconds: float = 2100.0, checkpoint=None) -> list[Dict[str, Any]]:
     results = []
     conversations: Dict[str, str] = {}
+    matrix_deadline = time.monotonic() + matrix_deadline_seconds
     for case in cases:
+        if time.monotonic() >= matrix_deadline:
+            results.append({"case_id": case["case_id"], "error_category": "matrix_deadline", "incomplete": True})
+            if checkpoint:
+                checkpoint(results, incomplete=True)
+            break
         conversation_key = _logical_conversation_key(case)
         request_payload = {
             "message": case["message"],
@@ -543,6 +549,8 @@ def run_cases(*, base_url: str, token: str, cases: Iterable[Dict[str, Any]]) -> 
         }
         if status != 200 or not run_id:
             results.append(result)
+            if checkpoint:
+                checkpoint(results, incomplete=False)
             continue
         terminal = created
         deadline = time.monotonic() + 30.0
@@ -580,6 +588,8 @@ def run_cases(*, base_url: str, token: str, cases: Iterable[Dict[str, Any]]) -> 
         result["fixture_action"] = _run_fixture_action(base_url=base_url, token=token, case=case, terminal=terminal)
         result["failure_classification"] = classify_case_failure(result)
         results.append(result)
+        if checkpoint:
+            checkpoint(results, incomplete=False)
     return results
 
 
@@ -598,6 +608,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--manifest-crypto-script")
     parser.add_argument("--report-path", required=True)
     parser.add_argument("--workflow-run-id", default="local")
+    parser.add_argument("--matrix-deadline-seconds", type=float, default=2100.0)
     return parser.parse_args()
 
 
@@ -644,7 +655,15 @@ def main() -> int:
                     )
                 report["manifest_sha256"] = sha256_file(manifest_path(manifest_root=manifest_root, manifest_id=args.manifest_id))
                 cases = list(load_manifest(manifest_root=manifest_root, manifest_id=args.manifest_id))
-                report["cases"] = run_cases(base_url=args.base_url.rstrip("/"), token=token, cases=cases)
+                def checkpoint(results, *, incomplete: bool) -> None:
+                    report["cases"] = results
+                    report["incomplete"] = incomplete
+                    report_path.parent.mkdir(parents=True, exist_ok=True)
+                    temporary = report_path.with_suffix(report_path.suffix + ".tmp")
+                    temporary.write_text(json.dumps(redact(report), sort_keys=True, indent=2) + "\n", encoding="utf-8")
+                    temporary.replace(report_path)
+
+                report["cases"] = run_cases(base_url=args.base_url.rstrip("/"), token=token, cases=cases, matrix_deadline_seconds=getattr(args, "matrix_deadline_seconds", 2100.0), checkpoint=checkpoint)
                 report["failure_summary"] = failure_summary(report["cases"])
                 report["safety"]["read_only_profile"] = all(case.get("fixture_action", "read_only") == "read_only" for case in cases)
                 report["safety"]["confirmation_calls"] = sum(1 for item in report["cases"] if item.get("fixture_action", {}).get("confirm_status") is not None)

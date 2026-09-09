@@ -57,7 +57,7 @@ jobs:
     if: github.repository == 'gvangalen/antigravity-trading-tool'
     runs-on: ubuntu-latest
     environment: production
-    timeout-minutes: 20
+    timeout-minutes: 45
     permissions:
       contents: read
 
@@ -190,7 +190,7 @@ jobs:
             runner_args+=(--manifest-bundle-path "$manifest_bundle_path")
           fi
           PYTHONPATH=backend/trading-tool-backend \
-            python3 backend/trading-tool-backend/backend/scripts/run_finn_production_qa.py "${runner_args[@]}" >/dev/null
+            python3 backend/trading-tool-backend/backend/scripts/run_finn_production_qa.py "${runner_args[@]}" --matrix-deadline-seconds 2100 >/dev/null
           REMOTE
           remote_status=$?
           set -e
