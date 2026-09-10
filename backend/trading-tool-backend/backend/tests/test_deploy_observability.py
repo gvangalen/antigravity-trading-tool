@@ -205,6 +205,14 @@ def test_deploy_checks_effective_finn_policy_parity_without_printing_values() ->
         assert key in source
     assert "FINN_V2_LIVE_ACTIONS_ENABLED" in source
     assert "FINN_V2_EXECUTE_LIVE_BOT_ACTIVATION" in source
+    for result in (
+        "safe_action_policy_ready",
+        "api_worker_policy_parity",
+        "live_trading_disabled",
+        "live_bot_activation_disabled",
+        "broker_execution_disabled",
+    ):
+        assert result in source
     assert "JSON.stringify" in source
     assert "requiredPolicy" in source
 

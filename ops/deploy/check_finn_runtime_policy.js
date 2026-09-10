@@ -36,9 +36,34 @@ var requiredPolicy = {
   FINN_V2_EXECUTE_TRADE_PLAN_CHANGES: "false",
   FINN_V2_EXECUTE_PAPER_BOT_ACTIVATION: "false"
 };
+var safeActionPolicy = {
+  FINN_V2_EXECUTE_ASSET_SELECTION: "true",
+  FINN_V2_EXECUTE_WATCHLIST_CHANGES: "true",
+  FINN_V2_EXECUTE_INDICATOR_CHANGES: "true",
+  FINN_V2_EXECUTE_SETUP_CHANGES: "true",
+  FINN_V2_EXECUTE_STRATEGY_CHANGES: "true",
+  FINN_V2_EXECUTE_BOT_CHANGES: "true"
+};
+var liveTradingPolicy = {
+  FINN_V2_LIVE_ACTIONS_ENABLED: "false",
+  FINN_V2_PAPER_ACTIONS_ENABLED: "false"
+};
+var liveBotPolicy = {
+  FINN_V2_EXECUTE_LIVE_BOT_ACTIVATION: "false"
+};
+var brokerExecutionPolicy = {
+  FINN_V2_EXECUTE_TRADE_PLAN_CHANGES: "false"
+};
 
 function processEnv(process) {
   return (process.pm2_env && process.pm2_env.env) || {};
+}
+
+function allAppsMatch(byName, missing, policy) {
+  return missing.length === 0 && requiredApps.every(function (name) {
+    var env = processEnv(byName[name]);
+    return Object.keys(policy).every(function (key) { return env[key] === policy[key]; });
+  });
 }
 
 function main() {
@@ -60,10 +85,11 @@ function main() {
   var byName = {};
   apps.forEach(function (app) { byName[app.name] = app; });
   var missing = requiredApps.filter(function (name) { return !byName[name]; });
-  var policyMatch = missing.length === 0 && requiredApps.every(function (name) {
-    var env = processEnv(byName[name]);
-    return Object.keys(requiredPolicy).every(function (key) { return env[key] === requiredPolicy[key]; });
-  });
+  var policyMatch = allAppsMatch(byName, missing, requiredPolicy);
+  var safeActionPolicyReady = allAppsMatch(byName, missing, safeActionPolicy);
+  var liveTradingDisabled = allAppsMatch(byName, missing, liveTradingPolicy);
+  var liveBotActivationDisabled = allAppsMatch(byName, missing, liveBotPolicy);
+  var brokerExecutionDisabled = allAppsMatch(byName, missing, brokerExecutionPolicy);
   var sha = process.env.TRADAMIND_BUILD_COMMIT_SHA || "";
   var shaMatch = sha.length > 0 && requiredApps.every(function (name) {
     return processEnv(byName[name]).TRADAMIND_BUILD_COMMIT_SHA === sha;
@@ -72,9 +98,13 @@ function main() {
   console.log(JSON.stringify({
     check: "finn_runtime_policy",
     pass: pass,
+    safe_action_policy_ready: safeActionPolicyReady,
     api_worker_policy_parity: policyMatch,
     release_sha_parity: shaMatch,
-    live_actions_disabled: policyMatch
+    live_actions_disabled: liveTradingDisabled,
+    live_trading_disabled: liveTradingDisabled,
+    live_bot_activation_disabled: liveBotActivationDisabled,
+    broker_execution_disabled: brokerExecutionDisabled
   }));
   process.exit(pass ? 0 : 1);
 }
