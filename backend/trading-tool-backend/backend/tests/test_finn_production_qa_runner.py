@@ -93,7 +93,11 @@ def test_manifest_rejects_unsafe_fixture_actions_and_path_escape(monkeypatch, tm
     monkeypatch.setenv("FINN_QA_ALLOW_FIXTURE_ACTIONS", "1")
     monkeypatch.setenv("FINN_QA_ALLOW_FIXTURE_EXECUTION", "1")
     with pytest.raises(ValueError, match="fixture_action_operation_blocked"):
-        list(module.load_manifest(manifest_root=manifest_dir, manifest_id="unsafe"))
+        list(module.load_manifest(
+            manifest_root=manifest_dir,
+            manifest_id="unsafe",
+            fixture_namespace="qa-34510823510-f8cbd9c1-a1b2c3d4",
+        ))
     with pytest.raises(ValueError, match="manifest_id_invalid"):
         module.manifest_path(manifest_root=manifest_dir, manifest_id="../escape")
 
@@ -105,7 +109,11 @@ def test_manifest_allows_explicitly_authorized_safe_fixture_execution(monkeypatc
     (manifest_dir / "safe.json").write_text(json.dumps({"cases": [{"case_id": "one", "message": "add BTC", "expected_operation_id": "watchlist_add", "fixture_action": "safe_execution", "idempotency_replay": True}]}), encoding="utf-8")
     monkeypatch.setenv("FINN_QA_ALLOW_FIXTURE_ACTIONS", "1")
     monkeypatch.setenv("FINN_QA_ALLOW_FIXTURE_EXECUTION", "1")
-    assert list(module.load_manifest(manifest_root=manifest_dir, manifest_id="safe"))[0]["fixture_action"] == "safe_execution"
+    assert list(module.load_manifest(
+        manifest_root=manifest_dir,
+        manifest_id="safe",
+        fixture_namespace="qa-34510823510-f8cbd9c1-a1b2c3d4",
+    ))[0]["fixture_action"] == "safe_execution"
 
 
 def test_workflow_scopes_fixture_authorization_to_the_runner_subprocess():
@@ -114,6 +122,9 @@ def test_workflow_scopes_fixture_authorization_to_the_runner_subprocess():
     assert "export FINN_QA_ALLOW_FIXTURE_EXECUTION=0" in workflow
     assert "allow_fixture_actions=\"$9\"" in workflow
     assert "allow_safe_fixture_execution=\"${10}\"" in workflow
+    assert "Create isolated fixture namespace" in workflow
+    assert "FINN_QA_FIXTURE_NAMESPACE" in workflow
+    assert "--fixture-namespace \"$fixture_namespace\"" in workflow
 
 
 def test_encrypted_manifest_is_only_staged_after_server_side_decryption(tmp_path):
@@ -303,6 +314,127 @@ def test_manifest_rejects_an_object_create_case_without_a_workflow_namespace(tmp
         list(module.load_manifest(manifest_root=tmp_path, manifest_id="matrix"))
 
 
+def test_sealed_manifest_without_token_accepts_a_runtime_namespace_and_stays_immutable(tmp_path, monkeypatch):
+    module = _module()
+    monkeypatch.setenv("FINN_QA_ALLOW_FIXTURE_ACTIONS", "1")
+    monkeypatch.setenv("FINN_QA_ALLOW_FIXTURE_EXECUTION", "1")
+    manifest = tmp_path / "matrix.json"
+    manifest.write_text(json.dumps({"cases": [{
+        "case_id": "setup-create",
+        "message": "Maak een setup met de naam momentum.",
+        "fixture_action": "safe_execution",
+        "expected_operation_id": "create_setup",
+    }]}), encoding="utf-8")
+    before = module.sha256_file(manifest)
+
+    cases = list(module.load_manifest(
+        manifest_root=tmp_path,
+        manifest_id="matrix",
+        fixture_namespace="qa-34510823510-f8cbd9c1-a1b2c3d4",
+    ))
+
+    assert cases[0]["message"] == "Maak een setup met de naam momentum."
+    assert module.sha256_file(manifest) == before
+
+
+def test_fixture_preflight_recognizes_full_matrix_without_product_calls(tmp_path, monkeypatch):
+    module = _module()
+    monkeypatch.setenv("FINN_QA_ALLOW_FIXTURE_ACTIONS", "1")
+    monkeypatch.setenv("FINN_QA_ALLOW_FIXTURE_EXECUTION", "1")
+    operations = [
+        "select_asset", "watchlist_add", "watchlist_remove",
+        "create_indicator_configuration", "update_indicator_configuration", "delete_indicator_configuration",
+        "create_setup", "update_setup", "create_strategy", "update_strategy",
+        "create_bot", "update_bot", "deactivate_bot", "delete_bot", "delete_strategy", "delete_setup",
+    ]
+    cases = [
+        {"case_id": f"write-{index}", "message": f"fixture {index}", "fixture_action": "safe_execution", "expected_operation_id": operation}
+        for index, operation in enumerate(operations)
+    ]
+    cases.extend({"case_id": f"read-{index}", "message": "Lees status"} for index in range(21))
+    manifest = tmp_path / "matrix.json"
+    manifest.write_text(json.dumps({"cases": cases}), encoding="utf-8")
+    base_hash = module.sha256_file(manifest)
+
+    loaded = list(module.load_manifest(
+        manifest_root=tmp_path,
+        manifest_id="matrix",
+        fixture_namespace="qa-34510823510-f8cbd9c1-a1b2c3d4",
+    ))
+    preflight = module.fixture_preflight(loaded, fixture_namespace="qa-34510823510-f8cbd9c1-a1b2c3d4")
+
+    assert preflight == {
+        "planned_cases": 37,
+        "write_contracts_recognized": 16,
+        "lineage_dependencies_recognized": 9,
+        "fixture_namespace_present": True,
+        "product_calls_executed": 0,
+    }
+    assert module.sha256_file(manifest) == base_hash
+
+
+def test_missing_namespace_is_blocked_before_any_product_call(tmp_path, monkeypatch):
+    module = _module()
+    monkeypatch.setenv("FINN_QA_ALLOW_FIXTURE_ACTIONS", "1")
+    monkeypatch.setenv("FINN_QA_ALLOW_FIXTURE_EXECUTION", "1")
+    (tmp_path / "matrix.json").write_text(json.dumps({"cases": [{
+        "case_id": "setup-create", "message": "Maak setup.",
+        "fixture_action": "safe_execution", "expected_operation_id": "create_setup",
+    }]}), encoding="utf-8")
+    report = tmp_path / "report.json"
+    monkeypatch.setattr(module, "parse_args", lambda: type("Args", (), {
+        "release_sha": "a" * 40, "profile": "full_release_acceptance", "manifest_id": "matrix",
+        "run_label": "blocked-preflight", "base_url": "https://example.test", "checkout": str(tmp_path),
+        "release_marker": str(tmp_path / "marker"), "manifest_root": str(tmp_path),
+        "manifest_bundle_path": None, "manifest_private_key_path": str(tmp_path / "key"),
+        "manifest_crypto_script": None, "report_path": str(report), "workflow_run_id": "34510823510",
+        "fixture_namespace": None, "dry_preflight": True,
+    })())
+    monkeypatch.setattr(module, "request_json", lambda **_kwargs: pytest.fail("product call"))
+
+    assert module.main() == 1
+    payload = json.loads(report.read_text(encoding="utf-8"))
+    assert payload["outcome"] == "blocked"
+    assert payload["qa_status"] == "QA BLOCKED / NOT STARTED"
+    assert payload["planned_count"] == 1
+    assert payload["cases"] == []
+
+
+def test_all_downstream_fixture_cases_receive_the_same_execution_namespace():
+    module = _module()
+    namespace = "qa-34510823510-f8cbd9c1-a1b2c3d4"
+    create = module.materialize_fixture_namespace({
+        "case_id": "create", "message": "Maak een setup.", "fixture_action": "safe_execution",
+        "expected_operation_id": "create_setup",
+    }, namespace=namespace)
+    downstream = module.materialize_fixture_namespace({
+        "case_id": "update", "message": "Wijzig die setup.", "fixture_action": "safe_execution",
+        "expected_operation_id": "update_setup",
+    }, namespace=namespace)
+
+    assert create["client_context"]["fixture_namespace"] == namespace
+    assert create["client_context"]["fixture_name_suffix"] == namespace
+    assert namespace in create["message"]
+    assert downstream["client_context"]["fixture_namespace"] == namespace
+    assert downstream["client_context"]["fixture_lineage_namespace"] == namespace
+    assert namespace in downstream["message"]
+    assert "setup_id" not in json.dumps(create)
+
+
+def test_distinct_workflow_namespaces_are_not_interchangeable():
+    module = _module()
+    first = module.materialize_fixture_namespace(
+        {"case_id": "one", "message": "Maak setup.", "fixture_action": "safe_execution", "expected_operation_id": "create_setup"},
+        namespace="qa-34510823510-f8cbd9c1-a1b2c3d4",
+    )
+    second = module.materialize_fixture_namespace(
+        {"case_id": "two", "message": "Maak setup.", "fixture_action": "safe_execution", "expected_operation_id": "create_setup"},
+        namespace="qa-34510823511-f8cbd9c1-e5f6a7b8",
+    )
+
+    assert first["client_context"]["fixture_namespace"] != second["client_context"]["fixture_namespace"]
+
+
 def test_fixture_confirmation_includes_required_idempotency_key(monkeypatch):
     module = _module()
     calls = []
@@ -366,6 +498,7 @@ def test_case_content_failure_is_reported_without_runner_failure(monkeypatch, tm
     monkeypatch.setattr(module, "authenticated_preflight", lambda **_kwargs: {"fixture_authenticated": True})
     monkeypatch.setattr(module, "sha256_file", lambda _path: "a" * 64)
     monkeypatch.setattr(module, "manifest_path", lambda **_kwargs: tmp_path / "manifest.json")
+    monkeypatch.setattr(module, "manifest_cases", lambda _path: [{"case_id": "case", "message": "x"}])
     monkeypatch.setattr(module, "load_manifest", lambda **_kwargs: [{"case_id": "case", "message": "x"}])
     monkeypatch.setattr(module, "run_cases", lambda **_kwargs: [{"case_id": "case", "create_http_status": 200, "terminal": {"status": "completed"}, "polling_sse_equal": True, "operation_matches": False, "fixture_action": {"mode": "read_only"}}])
     report = tmp_path / "report.json"

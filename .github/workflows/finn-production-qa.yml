@@ -121,6 +121,16 @@ jobs:
           printf 'host=%s\n' "$QA_HOST" >> "$GITHUB_OUTPUT"
           printf 'remote_dir=%s\n' "$QA_REMOTE_DIR" >> "$GITHUB_OUTPUT"
 
+      - name: Create isolated fixture namespace
+        id: fixture_namespace
+        shell: bash
+        env:
+          RELEASE_SHA: ${{ inputs.release_sha }}
+        run: |
+          set -euo pipefail
+          suffix="$(od -An -N4 -tx1 /dev/urandom | tr -d ' \n')"
+          printf 'value=qa-%s-%s-%s\n' "$GITHUB_RUN_ID" "${RELEASE_SHA:0:8}" "$suffix" >> "$GITHUB_OUTPUT"
+
       - name: Run protected production QA profile
         shell: bash
         env:
@@ -133,6 +143,7 @@ jobs:
           ALLOW_SAFE_FIXTURE_EXECUTION: ${{ inputs.allow_safe_fixture_execution }}
           QA_HOST: ${{ steps.connection.outputs.host }}
           QA_REMOTE_DIR: ${{ steps.connection.outputs.remote_dir }}
+          FINN_QA_FIXTURE_NAMESPACE: ${{ steps.fixture_namespace.outputs.value }}
         run: |
           set -euo pipefail
           set +x
@@ -146,7 +157,7 @@ jobs:
           else
             remote_bundle=""
           fi
-          remote_command=$(printf 'bash -s -- %q %q %q %q %q %q %q %q %q %q' "$RELEASE_SHA" "$QA_PROFILE" "$MANIFEST_ID" "$RUN_LABEL" "$QA_REMOTE_DIR" "$remote_report" "$GITHUB_RUN_ID" "$remote_bundle" "$ALLOW_FIXTURE_ACTIONS" "$ALLOW_SAFE_FIXTURE_EXECUTION")
+          remote_command=$(printf 'bash -s -- %q %q %q %q %q %q %q %q %q %q %q' "$RELEASE_SHA" "$QA_PROFILE" "$MANIFEST_ID" "$RUN_LABEL" "$QA_REMOTE_DIR" "$remote_report" "$GITHUB_RUN_ID" "$remote_bundle" "$ALLOW_FIXTURE_ACTIONS" "$ALLOW_SAFE_FIXTURE_EXECUTION" "$FINN_QA_FIXTURE_NAMESPACE")
           set +e
           ssh -i "$RUNNER_TEMP/finn-production-qa-key" -o UserKnownHostsFile="$RUNNER_TEMP/finn-production-qa-known-hosts" -o BatchMode=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=15 "ubuntu@${QA_HOST}" "$remote_command" <<'REMOTE'
           set -euo pipefail
@@ -161,6 +172,7 @@ jobs:
           manifest_bundle_path="$8"
           allow_fixture_actions="$9"
           allow_safe_fixture_execution="${10}"
+          fixture_namespace="${11}"
           cd "$remote_dir"
           test "$(git rev-parse HEAD)" = "$release_sha"
           set -a
@@ -184,6 +196,7 @@ jobs:
               --release-marker "$remote_dir/ops/deploy/production/LAST_GOOD_COMMIT" \
               --manifest-root "${FINN_QA_MANIFEST_ROOT:-$HOME/ops/finn-qa-manifests}" \
               --workflow-run-id "$workflow_run_id" \
+              --fixture-namespace "$fixture_namespace" \
               --report-path "$report_path"
           )
           if [ -n "$manifest_bundle_path" ]; then

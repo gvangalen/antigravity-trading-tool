@@ -45,6 +45,17 @@ NAMESPACED_FIXTURE_CREATE_OPERATIONS = {
     "create_strategy",
     "create_bot",
 }
+LINEAGE_DEPENDENT_FIXTURE_OPERATIONS = {
+    "update_setup",
+    "create_strategy",
+    "update_strategy",
+    "create_bot",
+    "update_bot",
+    "deactivate_bot",
+    "delete_bot",
+    "delete_strategy",
+    "delete_setup",
+}
 
 
 def classify_internal_issue(value: object) -> str:
@@ -320,12 +331,21 @@ def manifest_path(*, manifest_root: Path, manifest_id: str) -> Path:
     return path
 
 
-def load_manifest(*, manifest_root: Path, manifest_id: str) -> Iterable[Dict[str, Any]]:
-    """Validate QA-owned scope without exposing its cases outside the host."""
-    payload = json.loads(manifest_path(manifest_root=manifest_root, manifest_id=manifest_id).read_text(encoding="utf-8"))
+def manifest_cases(path: Path) -> list[Dict[str, Any]]:
+    payload = json.loads(path.read_text(encoding="utf-8"))
     cases = payload.get("cases") if isinstance(payload, dict) else None
     if not isinstance(cases, list) or not cases:
         raise ValueError("manifest_cases_invalid")
+    return cases
+
+
+def load_manifest(
+    *, manifest_root: Path, manifest_id: str, fixture_namespace: Optional[str] = None,
+) -> Iterable[Dict[str, Any]]:
+    """Validate QA-owned scope without exposing its cases outside the host."""
+    if fixture_namespace:
+        validate_fixture_namespace(fixture_namespace)
+    cases = manifest_cases(manifest_path(manifest_root=manifest_root, manifest_id=manifest_id))
     for case in cases:
         if not isinstance(case, dict) or not isinstance(case.get("case_id"), str) or not isinstance(case.get("message"), str):
             raise ValueError("manifest_case_invalid")
@@ -333,6 +353,8 @@ def load_manifest(*, manifest_root: Path, manifest_id: str) -> Iterable[Dict[str
         if action_mode not in FIXTURE_ACTION_MODES:
             raise ValueError("manifest_fixture_action_invalid")
         if action_mode != "read_only":
+            if not fixture_namespace:
+                raise ValueError("fixture_namespace_required")
             if os.environ.get("FINN_QA_ALLOW_FIXTURE_ACTIONS") != "1":
                 raise ValueError("fixture_actions_not_authorized")
             if not isinstance(case.get("expected_operation_id"), str):
@@ -343,15 +365,9 @@ def load_manifest(*, manifest_root: Path, manifest_id: str) -> Iterable[Dict[str
         if action_mode == "safe_execution":
             if os.environ.get("FINN_QA_ALLOW_FIXTURE_EXECUTION") != "1":
                 raise ValueError("fixture_execution_not_authorized")
-            # Object-producing fixture cases must include the workflow-local
-            # natural-name token. It prevents one official matrix from ever
-            # resolving an object created by another run, without exposing an
-            # internal ID to selector input.
-            if (
-                case.get("expected_operation_id") in NAMESPACED_FIXTURE_CREATE_OPERATIONS
-                and QA_NAMESPACE_TOKEN not in case["message"]
-            ):
-                raise ValueError("fixture_namespace_required")
+            # Namespace isolation is execution context, not sealed corpus
+            # content. The workflow supplies it separately so an approved
+            # manifest remains byte-for-byte immutable across runs.
         expected_missing = case.get("expected_missing_inputs")
         if expected_missing is not None and (
             not isinstance(expected_missing, list) or not all(isinstance(item, str) and item for item in expected_missing)
@@ -417,6 +433,13 @@ def _logical_conversation_key(case: Dict[str, Any]) -> Optional[str]:
     return value if isinstance(value, str) and value else None
 
 
+def validate_fixture_namespace(namespace: Optional[str]) -> str:
+    value = str(namespace or "").strip()
+    if not re.fullmatch(r"qa-[a-z0-9-]{8,80}", value):
+        raise ValueError("fixture_namespace_invalid")
+    return value
+
+
 def materialize_fixture_namespace(case: Dict[str, Any], *, namespace: str) -> Dict[str, Any]:
     """Bind QA-owned natural object names without ever injecting IDs.
 
@@ -425,8 +448,7 @@ def materialize_fixture_namespace(case: Dict[str, Any], *, namespace: str) -> Di
     cannot match objects left by a prior QA workflow.  Object IDs remain solely
     a product-side lineage/resolution concern.
     """
-    if not re.fullmatch(r"qa-[a-z0-9-]{8,80}", namespace):
-        raise ValueError("fixture_namespace_invalid")
+    namespace = validate_fixture_namespace(namespace)
 
     def replace(value: Any) -> Any:
         if isinstance(value, str):
@@ -437,7 +459,52 @@ def materialize_fixture_namespace(case: Dict[str, Any], *, namespace: str) -> Di
             return {key: replace(item) for key, item in value.items()}
         return value
 
-    return replace(dict(case))
+    materialized = replace(dict(case))
+    action_mode = materialized.get("fixture_action", "read_only")
+    operation_id = materialized.get("expected_operation_id")
+    if action_mode != "read_only":
+        client_context = materialized.get("client_context")
+        client_context = dict(client_context) if isinstance(client_context, dict) else {}
+        # The API-visible context lets the QA fixture resolver isolate names
+        # without leaking an internal ID into natural-language requests.
+        client_context["fixture_namespace"] = namespace
+        if operation_id in NAMESPACED_FIXTURE_CREATE_OPERATIONS:
+            client_context["fixture_name_suffix"] = namespace
+        if operation_id in LINEAGE_DEPENDENT_FIXTURE_OPERATIONS:
+            client_context["fixture_lineage_namespace"] = namespace
+        materialized["client_context"] = client_context
+        # The manifest's operation and expected result remain untouched. This
+        # runtime-only instruction supplies the unique natural-name scope that
+        # lets creates and later references belong to this workflow alone.
+        if operation_id in NAMESPACED_FIXTURE_CREATE_OPERATIONS:
+            instruction = (
+                f"\n\nVoor deze geisoleerde QA-fixture: voeg de unieke "
+                f"naam-suffix {namespace} toe aan het nieuwe object."
+            )
+        else:
+            instruction = (
+                f"\n\nVoor deze geisoleerde QA-fixture: gebruik uitsluitend "
+                f"objecten met naamruimte {namespace}."
+            )
+        materialized["message"] = f"{materialized['message']}{instruction}"
+    return materialized
+
+
+def fixture_preflight(cases: Iterable[Dict[str, Any]], *, fixture_namespace: Optional[str]) -> Dict[str, Any]:
+    """Validate a matrix's runtime binding without issuing product requests."""
+    case_list = list(cases)
+    write_cases = [case for case in case_list if case.get("fixture_action", "read_only") != "read_only"]
+    lineage_cases = [
+        case for case in case_list
+        if case.get("expected_operation_id") in LINEAGE_DEPENDENT_FIXTURE_OPERATIONS
+    ]
+    return {
+        "planned_cases": len(case_list),
+        "write_contracts_recognized": len(write_cases),
+        "lineage_dependencies_recognized": len(lineage_cases),
+        "fixture_namespace_present": bool(fixture_namespace),
+        "product_calls_executed": 0,
+    }
 
 
 def classify_case_failure(case_result: Dict[str, Any]) -> Optional[str]:
@@ -695,8 +762,10 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--manifest-crypto-script")
     parser.add_argument("--report-path", required=True)
     parser.add_argument("--workflow-run-id", default="local")
+    parser.add_argument("--fixture-namespace", default=os.environ.get("FINN_QA_FIXTURE_NAMESPACE"))
     parser.add_argument("--matrix-deadline-seconds", type=float, default=2100.0)
     parser.add_argument("--case-timeout-seconds", type=float, default=60.0)
+    parser.add_argument("--dry-preflight", action="store_true")
     return parser.parse_args()
 
 
@@ -707,10 +776,29 @@ def main() -> int:
     if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]{0,80}", args.run_label):
         raise SystemExit("run_label is invalid")
     report_path = Path(args.report_path)
-    report: Dict[str, Any] = {"schema_version": 1, "workflow": "finn-production-qa", "workflow_run_id": args.workflow_run_id, "profile": args.profile, "run_label": args.run_label, "manifest_id": args.manifest_id, "manifest_sha256": None, "manifest_public_key": None, "release_identity": {}, "auth_preflight": {}, "cases": [], "planned_count": 0, "attempted_count": 0, "completed_count": 0, "failed_count": 0, "not_run_count": 0, "incomplete": False, "failure_summary": {"product": 0, "runner": 0, "infrastructure": 0}, "safety": {"read_only_profile": True, "confirmation_calls": 0, "execution_calls": 0, "live_trading_calls": 0, "live_bot_activation_calls": 0}, "outcome": "failed", "error_category": None}
+    fixture_namespace = getattr(args, "fixture_namespace", None)
+    report: Dict[str, Any] = {"schema_version": 1, "workflow": "finn-production-qa", "workflow_run_id": args.workflow_run_id, "target_sha": args.release_sha, "profile": args.profile, "run_label": args.run_label, "manifest_id": args.manifest_id, "manifest_sha256": None, "base_manifest_hash": None, "manifest_public_key": None, "fixture_namespace_present": bool(fixture_namespace), "release_identity": {}, "auth_preflight": {}, "cases": [], "planned_count": 0, "attempted_count": 0, "completed_count": 0, "failed_count": 0, "not_run_count": 0, "incomplete": False, "failure_summary": {"product": 0, "runner": 0, "infrastructure": 0}, "safety": {"read_only_profile": True, "confirmation_calls": 0, "execution_calls": 0, "live_trading_calls": 0, "live_bot_activation_calls": 0}, "outcome": "failed", "qa_status": "NOT_STARTED", "error_category": None}
     token: Optional[str] = None
     try:
         checkout = Path(args.checkout).resolve()
+        if getattr(args, "dry_preflight", False):
+            if args.manifest_id == "none":
+                raise ValueError("manifest_required")
+            manifest_root = Path(args.manifest_root)
+            manifest = manifest_path(manifest_root=manifest_root, manifest_id=args.manifest_id)
+            report["manifest_sha256"] = sha256_file(manifest)
+            report["base_manifest_hash"] = report["manifest_sha256"]
+            report["planned_count"] = len(manifest_cases(manifest))
+            cases = list(load_manifest(
+                manifest_root=manifest_root,
+                manifest_id=args.manifest_id,
+                fixture_namespace=fixture_namespace,
+            ))
+            report.update(fixture_preflight(cases, fixture_namespace=fixture_namespace))
+            report["planned_count"] = len(cases)
+            report["outcome"] = "passed"
+            report["qa_status"] = "PRECONDITION_PASSED"
+            return 0
         report["release_identity"] = release_identity(release_sha=args.release_sha, checkout=checkout, release_marker=Path(args.release_marker), base_url=args.base_url.rstrip("/"))
         if not report["release_identity"]["matches"]:
             report["error_category"] = "release_mismatch"
@@ -741,8 +829,16 @@ def main() -> int:
                         manifest_root=manifest_root,
                         manifest_id=args.manifest_id,
                     )
-                report["manifest_sha256"] = sha256_file(manifest_path(manifest_root=manifest_root, manifest_id=args.manifest_id))
-                cases = list(load_manifest(manifest_root=manifest_root, manifest_id=args.manifest_id))
+                manifest = manifest_path(manifest_root=manifest_root, manifest_id=args.manifest_id)
+                report["manifest_sha256"] = sha256_file(manifest)
+                report["base_manifest_hash"] = report["manifest_sha256"]
+                report["planned_count"] = len(manifest_cases(manifest))
+                cases = list(load_manifest(
+                    manifest_root=manifest_root,
+                    manifest_id=args.manifest_id,
+                    fixture_namespace=fixture_namespace,
+                ))
+                report.update(fixture_preflight(cases, fixture_namespace=fixture_namespace))
                 def checkpoint(results, *, planned_count: int) -> None:
                     # Copy snapshots: a later runner failure must not mutate a
                     # previously valid atomic checkpoint in memory.
@@ -755,8 +851,6 @@ def main() -> int:
                     temporary.write_text(json.dumps(redact(report), sort_keys=True, indent=2) + "\n", encoding="utf-8")
                     temporary.replace(report_path)
 
-                fixture_namespace = f"qa-{args.workflow_run_id.lower()}"
-                report["fixture_namespace"] = fixture_namespace
                 report["cases"] = run_cases(base_url=args.base_url.rstrip("/"), token=token, cases=cases, matrix_deadline_seconds=getattr(args, "matrix_deadline_seconds", 2100.0), case_timeout_seconds=getattr(args, "case_timeout_seconds", 60.0), fixture_namespace=fixture_namespace, checkpoint=checkpoint)
                 report.update(case_progress(cases=report["cases"], planned_count=len(cases)))
                 report["failure_summary"] = failure_summary(report["cases"])
@@ -766,6 +860,9 @@ def main() -> int:
                 report["outcome"] = "passed" if not report["incomplete"] and all(item.get("create_http_status") == 200 and item.get("terminal", {}).get("status") in TERMINAL_STATUSES and item.get("polling_sse_equal") and item.get("operation_matches") and not item["fixture_action"].get("error_category") for item in report["cases"]) else "failed"
     except (RuntimeError, ValueError) as error:
         report["error_category"] = str(error)
+        if report["error_category"] in {"fixture_namespace_required", "fixture_namespace_invalid"}:
+            report["outcome"] = "blocked"
+            report["qa_status"] = "QA BLOCKED / NOT STARTED"
     except Exception:
         report["error_category"] = "runner_internal"
     finally:
@@ -773,7 +870,7 @@ def main() -> int:
         # A late runner error must retain the most complete checkpoint.  Keep
         # progress derived from the saved case rows rather than resetting it to
         # the initial empty report shape.
-        if report["planned_count"]:
+        if report["planned_count"] and not getattr(args, "dry_preflight", False):
             report.update(case_progress(cases=report["cases"], planned_count=report["planned_count"]))
             report["failure_summary"] = failure_summary(report["cases"])
         report_path.parent.mkdir(parents=True, exist_ok=True)
