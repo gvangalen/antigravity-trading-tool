@@ -272,6 +272,7 @@ class FinnV2OperationStateService:
                         canonical
                         for token, canonical in (
                             ("daily", "daily"), ("dagelijks", "daily"), ("dagelijkse", "daily"),
+                            ("taeglich", "daily"), ("taegliche", "daily"), ("taegliches", "daily"),
                             ("weekly", "weekly"), ("wekelijks", "weekly"),
                             ("monthly", "monthly"), ("maandelijks", "monthly"),
                         )
@@ -301,14 +302,11 @@ class FinnV2OperationStateService:
                     "benutzerdefiniert": "custom",
                 }.get(mode, mode)
             amount_match = re.search(
-                r"\b(?:base\s*amount|basisinleg|basis\s*bedrag|bedrag|inleg|amount)\s*(?:is|:|=|van)?\s*(?:€|eur|\$)?\s*(\d+(?:[.,]\d+)?)",
+                r"\b(?:base\s*amount|basisinleg|basis\s*bedrag|grundbetrag|bedrag|inleg|amount)\s*(?:is|:|=|van|von)?\s*(?:€|eur|\$)?\s*(\d+(?:[.,]\d+)?)",
                 lowered,
             )
             if amount_match:
                 values["base_amount"] = float(amount_match.group(1).replace(",", "."))
-            named = re.search(r"\b(?:naam|name|named|called)\s*(?:is|:|=)?\s*[\"']?([\w .-]{2,80})", text, re.IGNORECASE)
-            if named:
-                values["name"] = named.group(1).strip(" .\"'")
         elif contract.operation_id in {"update_setup", "update_strategy"}:
             entity = "setup" if contract.operation_id == "update_setup" else "strategy"
             identifier = re.search(
@@ -350,7 +348,7 @@ class FinnV2OperationStateService:
     @staticmethod
     def _name_input_from_text(text: str) -> Optional[str]:
         named = re.search(
-            r"\b(?:mit\s+dem\s+namen|unter\s+dem\s+namen|met\s+de\s+naam|namens|genannt|"
+            r"\b(?:mit\s+dem\s+namen|unter\s+dem\s+namen|dem\s+namen|met\s+de\s+naam|namens|genannt|"
             r"genaamd|named|called|call\s+it|nenne\s+(?:ihn|sie|es)|"
             r"noem\s+(?:hem|haar|het|deze|dit)|ik\s+noem\s+(?:hem|haar|het|deze|dit)|"
             r"hij\s+heet|het\s+heet|naam|name|titel|title)\b"
@@ -384,6 +382,18 @@ class FinnV2OperationStateService:
             text,
             re.IGNORECASE,
         )
+        if not match:
+            # In a compound request, the initial update verb describes the
+            # object ("update that setup") while the later change clause
+            # owns the field/value pair. Prefer that explicit clause so it
+            # cannot be serialized as a synthetic field name.
+            match = re.search(
+                r"\b(?:wijzig|verander|change|aktualisiere)\s+"
+                r"(?:mijn|my|de|het|the|den|die|das)?\s*([\w -]{2,48}?)\s+"
+                r"(?:naar|to|auf|als)\s+[\"']?([^,.!?\n]{1,80})",
+                text,
+                re.IGNORECASE,
+            )
         if not match:
             match = re.search(
                 r"\b(?:wijzig|verander|change|update|aktualisiere)\s+"

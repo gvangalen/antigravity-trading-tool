@@ -98,6 +98,19 @@ def test_create_dca_setup_exposes_its_service_required_frequency_in_the_same_con
     )["dca_frequency"] == "daily"
 
 
+def test_create_dca_setup_canonicalizes_a_natural_german_daily_frequency():
+    contract = FinnV2OperationRegistry().require_supported("create_setup")
+
+    supplied = FinnV2OperationStateService().explicit_inputs(
+        contract=contract,
+        message="Erstelle ein taegliches DCA-Setup fuer SOL auf 4 Stunden mit dem Namen Geduldiger Aufbau.",
+        explicit_asset="SOL",
+    )
+
+    assert supplied["setup_type"] == "dca"
+    assert supplied["dca_frequency"] == "daily"
+
+
 def test_runtime_contract_preserves_registry_conditional_inputs():
     state = new_runtime_contract_state(
         run=SimpleNamespace(

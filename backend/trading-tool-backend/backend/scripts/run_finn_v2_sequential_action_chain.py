@@ -157,24 +157,24 @@ def _specifications(names: dict[str, str]) -> tuple[tuple[str, str, str], ...]:
     """Natural-language steps; object IDs never enter these user messages."""
     return (
         ("select_asset", "Selecteer SOL als mijn actieve asset.", "select_asset"),
-        ("watchlist_add", "Voeg SOL toe aan mijn watchlist.", "watchlist_add"),
-        ("watchlist_remove", "Verwijder SOL weer uit mijn watchlist.", "watchlist_remove"),
-        ("indicator_create", "Maak een technische RSI indicatorconfiguratie voor SOL.", "create_indicator_configuration"),
-        ("indicator_update", "Werk mijn RSI indicatorconfiguratie voor SOL bij en zet de periode naar 21.", "update_indicator_configuration"),
+        ("watchlist_add", "Add SOL to my watchlist.", "watchlist_add"),
+        ("watchlist_remove", "Entferne SOL wieder aus meiner Watchlist.", "watchlist_remove"),
+        ("indicator_create", "Create a technical RSI indicator configuration for SOL.", "create_indicator_configuration"),
+        ("indicator_update", "Aktualisiere meine RSI-Indikatorkonfiguration fuer SOL und setze die Periode auf 21.", "update_indicator_configuration"),
         ("indicator_delete", "Verwijder mijn RSI indicatorconfiguratie voor SOL.", "delete_indicator_configuration"),
-        ("setup_create", f"Maak een dagelijkse DCA setup voor SOL op 4 uur met de naam {names['setup']}.", "create_setup"),
+        ("setup_create", f"Erstelle ein taegliches DCA-Setup fuer SOL auf 4 Stunden mit dem Namen {names['setup']}.", "create_setup"),
         # Every dependent turn deliberately omits the object name and ID. It
         # must obtain its one safe reference from the preceding executed
         # action-result rather than from a pre-seeded fixture or text match.
-        ("setup_update", "Werk die setup bij en zet het tijdframe naar 1 uur.", "update_setup"),
-        ("strategy_create", f"Maak hiervoor een fixed strategie met een basisinleg van 100 euro en de naam {names['strategy']}.", "create_strategy"),
-        ("strategy_update", "Werk die strategie bij en zet de basisinleg naar 120 euro.", "update_strategy"),
-        ("bot_create", f"Maak hiervoor een paper bot met de naam {names['bot']}.", "create_bot"),
-        ("bot_update", "Werk die bot bij en zet de cadence naar weekly.", "update_bot"),
-        ("bot_deactivate", "Deactiveer die bot.", "deactivate_bot"),
-        ("bot_delete", "Verwijder die bot.", "delete_bot"),
-        ("strategy_delete", "Verwijder de gekoppelde strategie.", "delete_strategy"),
-        ("setup_delete", "Verwijder de gekoppelde setup.", "delete_setup"),
+        ("setup_update", "Update that setup and change the timeframe to one hour.", "update_setup"),
+        ("strategy_create", f"Erstelle dafuer eine fixed Strategie mit einem Grundbetrag von 100 Euro und dem Namen {names['strategy']}.", "create_strategy"),
+        ("strategy_update", "Update that strategy and set the base amount to 120 euro.", "update_strategy"),
+        ("bot_create", f"Erstelle dafuer einen Paper-Bot mit dem Namen {names['bot']}.", "create_bot"),
+        ("bot_update", "Update that bot and set the cadence to weekly.", "update_bot"),
+        ("bot_deactivate", "Deaktiviere diesen Bot.", "deactivate_bot"),
+        ("bot_delete", "Entferne diesen Bot.", "delete_bot"),
+        ("strategy_delete", "Delete the linked strategy.", "delete_strategy"),
+        ("setup_delete", "Entferne das verknuepfte Setup.", "delete_setup"),
     )
 
 

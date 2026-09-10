@@ -228,12 +228,12 @@ def _exercise_guided_setup(*, base_url: str, token: str) -> dict:
     """Use three real conversation turns to prove typed setup-state continuity."""
     first = run_gate(
         base_url=base_url, bearer_token=token,
-        message="Maak een swing setup voor BTC.", timeout_seconds=60.0,
+        message="Create a swing setup for BTC.", timeout_seconds=60.0,
     )
     conversation_id = first["conversation_id"]
     second = run_gate(
         base_url=base_url, bearer_token=token, conversation_id=conversation_id,
-        message="4 uur", timeout_seconds=60.0,
+        message="4 Stunden", timeout_seconds=60.0,
     )
     third = run_gate(
         base_url=base_url, bearer_token=token, conversation_id=conversation_id,

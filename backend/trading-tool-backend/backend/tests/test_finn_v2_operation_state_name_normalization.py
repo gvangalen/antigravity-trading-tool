@@ -186,6 +186,25 @@ def test_update_flow_collects_a_natural_post_reference_change_without_json():
     assert state.missing_required_inputs == []
 
 
+def test_update_flow_prefers_an_explicit_english_change_clause_after_the_object_reference():
+    service = FinnV2OperationStateService()
+    contract = FinnV2OperationRegistry().require_supported("update_setup")
+
+    state = service.resolve(
+        contract=contract,
+        message="Update that setup and change the timeframe to one hour.",
+        explicit_asset=None,
+        conversation_context={},
+        supplied_inputs={"setup_id": 42},
+    )
+
+    assert state.collected_inputs == {
+        "setup_id": 42,
+        "changed_fields": {"timeframe": "1H"},
+    }
+    assert state.missing_required_inputs == []
+
+
 def test_bot_name_uses_the_same_contract_slot_parser_as_setup_names():
     service = FinnV2OperationStateService()
     contract = FinnV2OperationRegistry().require_supported("create_bot")
@@ -198,3 +217,41 @@ def test_bot_name_uses_the_same_contract_slot_parser_as_setup_names():
     )
 
     assert state.collected_inputs == {"strategy_id": 52, "name": "Paper Scout"}
+
+
+def test_create_strategy_canonicalizes_a_natural_german_base_amount():
+    service = FinnV2OperationStateService()
+    contract = FinnV2OperationRegistry().require_supported("create_strategy")
+
+    state = service.resolve(
+        contract=contract,
+        message="Erstelle eine fixed Strategie mit einem Grundbetrag von 100 Euro.",
+        explicit_asset=None,
+        conversation_context={},
+        supplied_inputs={"setup_id": 42},
+    )
+
+    assert state.collected_inputs["execution_mode"] == "fixed"
+    assert state.collected_inputs["base_amount"] == 100.0
+    assert state.missing_required_inputs == []
+
+
+def test_create_strategy_uses_the_shared_german_name_introducer_without_prefix_truncation():
+    service = FinnV2OperationStateService()
+    contract = FinnV2OperationRegistry().require_supported("create_strategy")
+
+    state = service.resolve(
+        contract=contract,
+        message="Erstelle eine fixed Strategie mit dem Namen Geduldiger Aufbau.",
+        explicit_asset=None,
+        conversation_context={},
+        supplied_inputs={"setup_id": 42, "base_amount": 100},
+    )
+
+    assert state.collected_inputs["name"] == "Geduldiger Aufbau"
+
+
+def test_shared_name_parser_accepts_a_german_coordinated_name_clause():
+    assert FinnV2OperationStateService._name_input_from_text(
+        "Erstelle eine Strategie und dem Namen Geduldiger Aufbau."
+    ) == "Geduldiger Aufbau"
