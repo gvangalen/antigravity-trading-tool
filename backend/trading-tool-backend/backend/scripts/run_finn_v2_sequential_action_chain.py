@@ -130,13 +130,14 @@ def _assert_resolved_identity(step_id: str, result: dict[str, Any], steps: list[
     object_type, input_name = expected
     expected_id = _prior_object_id(steps, object_type)
     actual_id = (result.get("supplied_inputs") or {}).get(input_name)
+    normalized_actual_id = int(actual_id) if str(actual_id).isdigit() else actual_id
     assertion = {
         "required": True,
         "object_type": object_type,
         "input_name": input_name,
         "expected_prior_object_id": expected_id,
-        "resolved_object_id": actual_id,
-        "passed": expected_id is not None and actual_id == expected_id,
+        "resolved_object_id": normalized_actual_id,
+        "passed": expected_id is not None and normalized_actual_id == expected_id,
     }
     result["passed"] = result["passed"] and assertion["passed"]
     return assertion
@@ -152,15 +153,18 @@ def _specifications(names: dict[str, str]) -> tuple[tuple[str, str, str], ...]:
         ("indicator_update", "Werk mijn RSI indicatorconfiguratie voor SOL bij en zet de periode naar 21.", "update_indicator_configuration"),
         ("indicator_delete", "Verwijder mijn RSI indicatorconfiguratie voor SOL.", "delete_indicator_configuration"),
         ("setup_create", f"Maak een dagelijkse DCA setup voor SOL op 4 uur met de naam {names['setup']}.", "create_setup"),
-        ("setup_update", f"Werk de setup {names['setup']} bij en zet het tijdframe naar 1 uur.", "update_setup"),
-        ("strategy_create", f"Maak een fixed strategie voor setup {names['setup']} met een basisinleg van 100 euro en de naam {names['strategy']}.", "create_strategy"),
-        ("strategy_update", f"Werk de strategie {names['strategy']} bij en zet de basisinleg naar 120 euro.", "update_strategy"),
-        ("bot_create", f"Maak een paper bot voor strategie {names['strategy']} met de naam {names['bot']}.", "create_bot"),
-        ("bot_update", f"Werk de bot {names['bot']} bij en zet de cadence naar weekly.", "update_bot"),
-        ("bot_deactivate", f"Deactiveer de bot {names['bot']}.", "deactivate_bot"),
-        ("bot_delete", f"Verwijder de bot {names['bot']}.", "delete_bot"),
-        ("strategy_delete", f"Verwijder de strategie {names['strategy']}.", "delete_strategy"),
-        ("setup_delete", f"Verwijder de setup {names['setup']}.", "delete_setup"),
+        # Every dependent turn deliberately omits the object name and ID. It
+        # must obtain its one safe reference from the preceding executed
+        # action-result rather than from a pre-seeded fixture or text match.
+        ("setup_update", "Werk die setup bij en zet het tijdframe naar 1 uur.", "update_setup"),
+        ("strategy_create", f"Maak hiervoor een fixed strategie met een basisinleg van 100 euro en de naam {names['strategy']}.", "create_strategy"),
+        ("strategy_update", "Werk die strategie bij en zet de basisinleg naar 120 euro.", "update_strategy"),
+        ("bot_create", f"Maak hiervoor een paper bot met de naam {names['bot']}.", "create_bot"),
+        ("bot_update", "Werk die bot bij en zet de cadence naar weekly.", "update_bot"),
+        ("bot_deactivate", "Deactiveer die bot.", "deactivate_bot"),
+        ("bot_delete", "Verwijder die bot.", "delete_bot"),
+        ("strategy_delete", "Verwijder de gekoppelde strategie.", "delete_strategy"),
+        ("setup_delete", "Verwijder de gekoppelde setup.", "delete_setup"),
     )
 
 
@@ -249,6 +253,20 @@ def main() -> None:
             conversation_id=evaluate["conversation_id"],
             timeout_seconds=75,
         )
+        evidence_follow_up = run_gate(
+            base_url=base_url,
+            bearer_token=token,
+            message="Kun je de evidence achter die beoordeling toelichten?",
+            conversation_id=evaluate["conversation_id"],
+            timeout_seconds=75,
+        )
+        reformulation = run_gate(
+            base_url=base_url,
+            bearer_token=token,
+            message="Leg die vrijgegeven beoordeling eenvoudiger uit.",
+            conversation_id=evaluate["conversation_id"],
+            timeout_seconds=75,
+        )
         linked_bot = run_gate(
             base_url=base_url,
             bearer_token=token,
@@ -271,6 +289,22 @@ def main() -> None:
                 "passed": consequence["initial_operation_id"] == "evaluate_bot"
                 and consequence["final_operation_id"] == "evaluate_bot"
                 and consequence["status"] in {"completed", "downgraded", "unavailable", "failed"},
+            },
+            {
+                "case_id": "evidence_follow_up_lineage",
+                "expected_operation_id": "explain_previous_evidence",
+                "actual": evidence_follow_up,
+                "passed": evidence_follow_up["initial_operation_id"] == "explain_previous_evidence"
+                and evidence_follow_up["final_operation_id"] == "explain_previous_evidence"
+                and evidence_follow_up["status"] in {"completed", "downgraded", "unavailable", "failed"},
+            },
+            {
+                "case_id": "reformulation_lineage",
+                "expected_operation_id": "reformulate_previous_response",
+                "actual": reformulation,
+                "passed": reformulation["initial_operation_id"] == "reformulate_previous_response"
+                and reformulation["final_operation_id"] == "reformulate_previous_response"
+                and reformulation["status"] in {"completed", "downgraded", "unavailable", "failed"},
             },
             {
                 "case_id": "read_linked_bot_terminalization",

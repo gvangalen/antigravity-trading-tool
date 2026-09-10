@@ -73,6 +73,56 @@ def test_guided_state_keeps_optional_inputs_declared_by_the_action_contract():
     assert state.missing_required_inputs == ["execution_mode", "base_amount"]
 
 
+def test_cross_conversation_action_result_fills_only_contract_declared_parent_slot():
+    service = FinnV2OperationStateService()
+    contract = FinnV2OperationRegistry().require_supported("create_strategy")
+
+    state = service.resolve(
+        contract=contract,
+        message="Maak een fixed strategie met een basisinleg van 100.",
+        explicit_asset=None,
+        conversation_context={
+            "previous_action_result": {
+                "entity_type": "setup",
+                "entity_id": 42,
+                "owner_user_id": 7,
+                "result_status": "succeeded",
+            }
+        },
+    )
+
+    assert state.collected_inputs == {
+        "setup_id": 42,
+        "execution_mode": "fixed",
+        "base_amount": 100.0,
+    }
+    assert state.missing_required_inputs == []
+
+
+def test_parent_action_result_continues_a_downstream_delete_without_injecting_ids():
+    service = FinnV2OperationStateService()
+    contract = FinnV2OperationRegistry().require_supported("delete_strategy")
+
+    state = service.resolve(
+        contract=contract,
+        message="Verwijder de gekoppelde strategie.",
+        explicit_asset=None,
+        conversation_context={
+            "previous_action_result": {
+                "entity_type": "bot",
+                "entity_id": 93,
+                "parent_entity_type": "strategy",
+                "parent_entity_id": 54,
+                "owner_user_id": 7,
+                "result_status": "succeeded",
+            }
+        },
+    )
+
+    assert state.collected_inputs == {"strategy_id": 54}
+    assert state.missing_required_inputs == []
+
+
 def test_update_flow_collects_only_an_explicit_typed_changed_fields_object():
     service = FinnV2OperationStateService()
     contract = FinnV2OperationRegistry().require_supported("update_setup")

@@ -120,6 +120,18 @@ def test_semantic_frame_resolves_strategy_generation_to_the_single_v2_create_con
     assert resolved.operation_id == "create_strategy"
 
 
+def test_unambiguous_registry_update_is_not_replaced_by_a_model_clarification():
+    registry = FinnV2OperationRegistry()
+    resolved = FinnV2OperationResolverService(registry).resolve(
+        selection=_selection("clarify_request", {"goal": "clarify", "object": "bot"}),
+        candidates=(registry.require_supported("update_bot"),),
+        conversation_context={},
+        request_facts={"action_polarity": "update", "explicit_entities": ("bot",)},
+    )
+
+    assert resolved.operation_id == "update_bot"
+
+
 @pytest.mark.parametrize(
     ("goal", "object_name", "operation_id"),
     [

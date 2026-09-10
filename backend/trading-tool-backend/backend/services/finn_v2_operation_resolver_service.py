@@ -216,6 +216,11 @@ class FinnV2OperationResolverService:
                 operation_id = "clarify_request"
             elif action == "read" and explicit_entities == {"asset"}:
                 operation_id = "read_active_asset"
+        if operation_id == "clarify_request":
+            operation_id = self._unique_action_contract_candidate(
+                candidates=candidates,
+                request_facts=request_facts,
+            ) or operation_id
         if operation_id not in candidate_ids:
             return selection
         reference = selection.conversation_reference
@@ -228,6 +233,25 @@ class FinnV2OperationResolverService:
             operation_id=operation_id,
             conversation_reference=reference,
         )
+
+    @staticmethod
+    def _unique_action_contract_candidate(*, candidates, request_facts: Mapping[str, object] | None) -> str | None:
+        """Retain an unambiguous registry action when the model over-clarifies.
+
+        This does not infer an operation from wording: candidate construction
+        has already applied the registry's discourse, entity and polarity
+        constraints. The resolver can only retain the one candidate whose
+        canonical polarity equals the typed request fact.
+        """
+        action = str((request_facts or {}).get("action_polarity") or "")
+        if action not in {"create", "update", "delete", "add", "remove", "deactivate", "activate"}:
+            return None
+        matches = [
+            contract
+            for contract in candidates
+            if contract.action_polarity.value == action
+        ]
+        return matches[0].operation_id if len(matches) == 1 else None
 
     @staticmethod
     def _with_resolved_operation(

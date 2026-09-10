@@ -131,6 +131,46 @@ def test_continuation_context_uses_the_persisted_parent_contract_state():
     assert context["active_guided_operation"] == expected_flow
 
 
+def test_new_conversation_hydrates_only_the_latest_owner_action_result():
+    """Cross-conversation action continuation must not depend on JSON memory."""
+    from backend.services.finn_v2_orchestrator_service import FinnV2OrchestratorService
+
+    action_result = {
+        "entity_type": "setup",
+        "entity_id": 41,
+        "canonical_name": "ETH swing",
+        "owner_user_id": 7,
+        "result_status": "succeeded",
+    }
+
+    class _Conversations:
+        async def get_context(self, **_kwargs):
+            return {"legacy_projection": True}
+
+    class _Contracts:
+        async def get_latest_for_conversation(self, **_kwargs):
+            return None
+
+        async def get_latest_action_result_for_user(self, **kwargs):
+            assert kwargs == {"user_id": 7, "exclude_run_id": "child-run"}
+            return SimpleNamespace(state_json={"action_result": action_result})
+
+    service = object.__new__(FinnV2OrchestratorService)
+    service.conversations = _Conversations()
+    service.runtime_contracts = _Contracts()
+
+    context = asyncio.run(
+        service._load_continuation_context(
+            conversation_id="new-conversation",
+            user_id=7,
+            run_id="child-run",
+        )
+    )
+
+    assert context["previous_action_result"] == action_result
+    assert context["previous_action_result_source"] == "owner_action_result"
+
+
 def test_persisted_parent_contract_content_reaches_the_structured_selector_input():
     """The selector receives released lineage content, not merely a parent id."""
     from backend.services.finn_v2_operation_classification_service import FinnV2OperationClassificationService

@@ -733,7 +733,10 @@ _OPERATION_SELECTION_METADATA: Mapping[str, dict] = {
         "semantic_description": "Prepare a confirmed deactivation of an owner-scoped bot while preserving the bot configuration. It is not deletion or live activation.",
         "any_entities": ("bot",),
         "required_discourse_acts": ("operation_request",),
-        "allowed_action_polarities": ("update", "deactivate"),
+        # Deactivation is a distinct safety action. Treating every generic
+        # bot update as a possible deactivation made the action manifest
+        # ambiguous before the structured selector could choose a contract.
+        "allowed_action_polarities": ("deactivate",),
         "selection_priority": 83,
         "selection_focus_entities": ("bot",),
     },

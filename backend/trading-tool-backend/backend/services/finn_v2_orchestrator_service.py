@@ -621,29 +621,29 @@ class FinnV2OrchestratorService:
         be excluded from the lookup or it would mask the last released
         lineage and active guided flow for this continuation turn.
         """
-        if not conversation_id:
-            return {}
-        context = dict(
-            await self.conversations.get_context(
-                conversation_id=conversation_id,
-                user_id=user_id,
+        context = {}
+        if conversation_id:
+            context = dict(
+                await self.conversations.get_context(
+                    conversation_id=conversation_id,
+                    user_id=user_id,
+                )
+                or {}
             )
-            or {}
-        )
         get_latest = getattr(self.runtime_contracts, "get_latest_for_conversation", None)
         if not callable(get_latest):
             # Historical unit doubles do not implement contract continuation.
             # Production repositories always do; this retains compatibility
             # without creating a legacy production source of truth.
             return context
-        previous_contract = await get_latest(
-            conversation_id=conversation_id,
-            user_id=user_id,
-            exclude_run_id=run_id,
-        )
-        if previous_contract is None:
-            return context
-        previous_state = dict(previous_contract.state_json or {})
+        previous_contract = None
+        if conversation_id:
+            previous_contract = await get_latest(
+                conversation_id=conversation_id,
+                user_id=user_id,
+                exclude_run_id=run_id,
+            )
+        previous_state = dict((previous_contract.state_json or {}) if previous_contract else {})
         # Contract state is authoritative for new runs; context_json remains
         # only a compatible delivery projection for historical consumers.
         context.update(dict(previous_state.get("lineage_state") or {}))
@@ -652,6 +652,27 @@ class FinnV2OrchestratorService:
             # A confirmed execution is the only cross-turn object reference
             # accepted without an explicit current-turn identifier.
             context["previous_action_result"] = action_result
+        elif callable(getattr(self.runtime_contracts, "get_latest_action_result_for_user", None)):
+            # A completed write can be continued in a new conversation. Only
+            # the typed, owner-bound execution projection is eligible here;
+            # raw object tables and legacy conversation JSON are never used as
+            # an implicit cross-user or ambiguous fallback.
+            latest_action_contract = await self.runtime_contracts.get_latest_action_result_for_user(
+                user_id=user_id,
+                exclude_run_id=run_id,
+            )
+            latest_action_result = dict(
+                (latest_action_contract.state_json or {}).get("action_result")
+                if latest_action_contract is not None
+                else {}
+            )
+            if (
+                latest_action_result.get("owner_user_id") == user_id
+                and latest_action_result.get("entity_id") is not None
+                and latest_action_result.get("result_status") == "succeeded"
+            ):
+                context["previous_action_result"] = latest_action_result
+                context["previous_action_result_source"] = "owner_action_result"
         guided_state = dict(previous_state.get("guided_state") or {})
         if guided_state:
             context["active_guided_operation"] = guided_state

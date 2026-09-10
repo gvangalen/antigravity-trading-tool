@@ -44,11 +44,6 @@ class FinnV2OperationStateService:
         for key, value in (derived_inputs or {}).items():
             if key in accepted_inputs and key not in collected and not self._is_missing(value):
                 collected[key] = self._canonical_input(key, value)
-        missing = [
-            field
-            for field in contract.required_inputs_for(collected)
-            if self._is_missing(collected.get(field))
-        ]
         context = conversation_context or {}
         verified_context = dict(context.get("last_verified_context") or {})
         resolved_context = dict(verified_context.get("resolved_entities") or {})
@@ -61,6 +56,23 @@ class FinnV2OperationStateService:
             resolved_context.setdefault("strategy_id", action_entity_id)
         elif action_entity_type == "bot" and action_entity_id is not None:
             resolved_context.setdefault("bot_id", action_entity_id)
+        parent_entity_type = str(action_result.get("parent_entity_type") or "")
+        parent_entity_id = action_result.get("parent_entity_id")
+        if parent_entity_type == "setup" and parent_entity_id is not None:
+            resolved_context.setdefault("setup_id", parent_entity_id)
+        elif parent_entity_type == "strategy" and parent_entity_id is not None:
+            resolved_context.setdefault("strategy_id", parent_entity_id)
+        # Result lineage may only fill a slot exposed by this action contract.
+        # This keeps required-input semantics registry-owned while allowing a
+        # new natural-language turn to continue the immediately prior action.
+        for field in ("setup_id", "strategy_id", "bot_id"):
+            if field in accepted_inputs and not self._is_missing(resolved_context.get(field)):
+                collected.setdefault(field, resolved_context[field])
+        missing = [
+            field
+            for field in contract.required_inputs_for(collected)
+            if self._is_missing(collected.get(field))
+        ]
         is_canonical_context = context.get("conversation_state_version") == self.CONTEXT_STATE_VERSION
         resolved_entities = dict(existing.resolved_entities) if existing is not None else {}
         target_entities = dict(existing.target_entities) if existing is not None else {}
