@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
@@ -54,7 +55,15 @@ def _created_objects(user_id: int, names: dict[str, str]) -> dict[str, Any]:
         }
 
 
-def _run_action(*, base_url: str, token: str, other_token: str, message: str, operation_id: str) -> dict[str, Any]:
+def _run_action(
+    *,
+    base_url: str,
+    token: str,
+    other_token: str,
+    message: str,
+    operation_id: str,
+    persistence_boundary: dict[str, object] | None = None,
+) -> dict[str, Any]:
     observed = run_gate(base_url=base_url, bearer_token=token, message=message, timeout_seconds=75)
     record = _runtime_record(observed["run_id"])
     projection = record["terminal_projection"]
@@ -76,6 +85,7 @@ def _run_action(*, base_url: str, token: str, other_token: str, message: str, op
         "proposal_id": proposal.get("id") if proposal else None,
         "action_result": projection.get("action_result"),
         "terminal_projection": projection,
+        "persistence_boundary": dict(persistence_boundary or {}),
     }
     if proposal:
         outcome["proposal_lifecycle"] = _proposal_lifecycle(base_url, token, other_token, proposal)
@@ -173,6 +183,8 @@ def main() -> None:
     parser.add_argument("--base-url", default="http://127.0.0.1:18000")
     parser.add_argument("--output", required=True)
     parser.add_argument("--step-index", type=int, help="Run one persisted chain step (zero based).")
+    parser.add_argument("--backend-pid", type=int, help="Fresh local backend PID observed before this step.")
+    parser.add_argument("--worker-pid", type=int, help="Fresh local Celery PID observed before this step.")
     parser.add_argument("--read-regressions", action="store_true", help="Run persisted evaluate and bot-consequence checks after a completed chain.")
     args = parser.parse_args()
     base_url = args.base_url.rstrip("/")
@@ -229,9 +241,22 @@ def main() -> None:
     token = create_access_token({"sub": str(user_id), "role": "user"})
     other_token = create_access_token({"sub": str(other["id"]), "role": "user"})
     for step_id, message, operation_id in selected_specs:
+        boundary = {
+            "public_run_route": True,
+            "public_confirmation_route": True,
+            "injected_object_ids": False,
+            "injected_action_results": False,
+            "shared_in_memory_state": False,
+            "new_http_client_process": args.step_index is not None,
+            "runner_process_id": os.getpid(),
+            "database_sessions_scoped_to_runner_process": True,
+            "backend_pid": args.backend_pid,
+            "worker_pid": args.worker_pid,
+        }
         result = _run_action(
             base_url=base_url, token=token, other_token=other_token,
             message=message, operation_id=operation_id,
+            persistence_boundary=boundary,
         )
         result["step_id"] = step_id
         result["objects_after_step"] = _created_objects(user_id, names)
@@ -330,6 +355,29 @@ def main() -> None:
         "broker_orders": 0,
         "live_trading_calls": 0,
         "live_bot_activation_calls": 0,
+        "persistence_boundary_summary": {
+            "step_processes": len({
+                (item.get("persistence_boundary") or {}).get("backend_pid")
+                for item in steps
+                if (item.get("persistence_boundary") or {}).get("backend_pid")
+            }),
+            "runner_processes": len({
+                (item.get("persistence_boundary") or {}).get("runner_process_id")
+                for item in steps
+                if (item.get("persistence_boundary") or {}).get("runner_process_id")
+            }),
+            "all_public_routes": all(
+                bool((item.get("persistence_boundary") or {}).get("public_run_route"))
+                and bool((item.get("persistence_boundary") or {}).get("public_confirmation_route"))
+                for item in steps
+            ),
+            "all_memory_excluded": all(
+                not bool((item.get("persistence_boundary") or {}).get("injected_object_ids"))
+                and not bool((item.get("persistence_boundary") or {}).get("injected_action_results"))
+                and not bool((item.get("persistence_boundary") or {}).get("shared_in_memory_state"))
+                for item in steps
+            ),
+        },
     }
     output.write_text(json.dumps(artifact, sort_keys=True, indent=2) + "\n", encoding="utf-8")
     digest = hashlib.sha256(output.read_bytes()).hexdigest()
