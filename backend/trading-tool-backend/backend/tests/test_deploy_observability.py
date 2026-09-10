@@ -171,6 +171,18 @@ def test_release_identity_is_written_before_pm2_and_loaded_by_every_process() ->
         '"FINN_V2_EXECUTE_BOT_CHANGES"',
     ):
         assert key in ecosystem_source
+    # Non-financial owner-scoped actions remain confirmation-gated, while
+    # financial and live-bot controls must remain explicitly disabled.
+    for setting in (
+        'FINN_V2_EXECUTE_ASSET_SELECTION: "true"',
+        'FINN_V2_EXECUTE_SETUP_CHANGES: "true"',
+        'FINN_V2_EXECUTE_STRATEGY_CHANGES: "true"',
+        'FINN_V2_EXECUTE_BOT_CHANGES: "true"',
+        'FINN_V2_EXECUTE_TRADE_PLAN_CHANGES: "false"',
+        'FINN_V2_EXECUTE_PAPER_BOT_ACTIVATION: "false"',
+        'FINN_V2_EXECUTE_LIVE_BOT_ACTIVATION: "false"',
+    ):
+        assert setting in ecosystem_source
 
 
 def test_deploy_checks_effective_finn_policy_parity_without_printing_values() -> None:
@@ -180,6 +192,17 @@ def test_deploy_checks_effective_finn_policy_parity_without_printing_values() ->
 
     assert "node ops/deploy/check_finn_runtime_policy.js" in deploy_source
     assert "FINN_V2_PROPOSALS_ENABLED" in source
+    for key in (
+        "FINN_V2_EXECUTE_ASSET_SELECTION",
+        "FINN_V2_EXECUTE_WATCHLIST_CHANGES",
+        "FINN_V2_EXECUTE_INDICATOR_CHANGES",
+        "FINN_V2_EXECUTE_SETUP_CHANGES",
+        "FINN_V2_EXECUTE_STRATEGY_CHANGES",
+        "FINN_V2_EXECUTE_BOT_CHANGES",
+        "FINN_V2_EXECUTE_TRADE_PLAN_CHANGES",
+        "FINN_V2_EXECUTE_PAPER_BOT_ACTIVATION",
+    ):
+        assert key in source
     assert "FINN_V2_LIVE_ACTIONS_ENABLED" in source
     assert "FINN_V2_EXECUTE_LIVE_BOT_ACTIVATION" in source
     assert "JSON.stringify" in source

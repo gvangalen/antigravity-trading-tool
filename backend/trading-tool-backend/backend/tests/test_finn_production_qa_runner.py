@@ -272,13 +272,44 @@ def test_runner_uses_gateway_created_conversation_for_follow_up(monkeypatch):
     assert result[1]["conversation_id"] == "conversation-live"
 
 
+def test_runner_materializes_a_unique_natural_fixture_namespace_without_ids():
+    module = _module()
+    case = {
+        "case_id": "setup",
+        "message": "Maak een setup met de naam {{qa_run_namespace}}-setup.",
+        "workspace_hints": {"label": "{{qa_run_namespace}}"},
+    }
+
+    materialized = module.materialize_fixture_namespace(case, namespace="qa-34454930988")
+
+    assert materialized["message"] == "Maak een setup met de naam qa-34454930988-setup."
+    assert materialized["workspace_hints"]["label"] == "qa-34454930988"
+    assert case["message"].endswith("{{qa_run_namespace}}-setup.")
+    assert "setup_id" not in json.dumps(materialized)
+
+
+def test_manifest_rejects_an_object_create_case_without_a_workflow_namespace(tmp_path, monkeypatch):
+    module = _module()
+    monkeypatch.setenv("FINN_QA_ALLOW_FIXTURE_ACTIONS", "1")
+    monkeypatch.setenv("FINN_QA_ALLOW_FIXTURE_EXECUTION", "1")
+    (tmp_path / "matrix.json").write_text(json.dumps({"cases": [{
+        "case_id": "setup-create",
+        "message": "Maak een setup met de naam vaste naam.",
+        "fixture_action": "safe_execution",
+        "expected_operation_id": "create_setup",
+    }]}), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="fixture_namespace_required"):
+        list(module.load_manifest(manifest_root=tmp_path, manifest_id="matrix"))
+
+
 def test_fixture_confirmation_includes_required_idempotency_key(monkeypatch):
     module = _module()
     calls = []
     responses = iter([
         (200, {"proposal_id": "proposal-1", "status": "pending", "proposal_version": "v1", "payload_hash": "hash", "confirmation_required": True}, 1.0, None),
         (200, {"confirmation_token": "secret", "payload_hash": "hash"}, 1.0, None),
-        (200, {}, 1.0, None),
+        (200, {"status": "succeeded"}, 1.0, None),
     ])
     monkeypatch.setattr(module, "request_json", lambda **kwargs: (calls.append(kwargs) or next(responses)))
     result = module._run_fixture_action(
@@ -291,6 +322,26 @@ def test_fixture_confirmation_includes_required_idempotency_key(monkeypatch):
     assert result["proposal"]["contract_revision"] == 3
     assert confirm_call["payload"]["idempotency_key"].startswith("qa-confirm-")
     assert "secret" not in json.dumps(result)
+
+
+def test_fixture_execution_requires_a_successful_terminal_execution_status(monkeypatch):
+    module = _module()
+    responses = iter([
+        (200, {"proposal_id": "proposal-1", "status": "pending", "payload_hash": "hash", "confirmation_required": True}, 1.0, None),
+        (200, {"confirmation_token": "secret", "payload_hash": "hash"}, 1.0, None),
+        (200, {}, 1.0, None),
+        (200, {"status": "blocked"}, 1.0, None),
+    ])
+    monkeypatch.setattr(module, "request_json", lambda **_kwargs: next(responses))
+
+    result = module._run_fixture_action(
+        base_url="https://example.test", token="token", case={"fixture_action": "safe_execution"},
+        terminal={"response": {"proposal_id": "proposal-1"}, "runtime_trace": {}},
+    )
+
+    assert result["execute_status"] == 200
+    assert result["execution_status"] == "blocked"
+    assert result["error_category"] == "proposal_execute_failed"
 
 
 def test_incomplete_action_is_a_typed_contract_outcome_not_proposal_missing():
@@ -370,3 +421,63 @@ def test_timeout_checkpoint_is_a_valid_partial_artifact(tmp_path):
     temporary.write_text(json.dumps(payload), encoding="utf-8")
     temporary.replace(report)
     assert json.loads(report.read_text(encoding="utf-8")) == payload
+
+
+def test_matrix_deadline_marks_each_unattempted_case_and_preserves_prior_failure(monkeypatch):
+    module = _module()
+    clock_calls = 0
+
+    def monotonic():
+        nonlocal clock_calls
+        clock_calls += 1
+        return 0.0 if clock_calls <= 3 else 2.0
+
+    monkeypatch.setattr(module.time, "monotonic", monotonic)
+    monkeypatch.setattr(module, "request_json", lambda **_kwargs: (500, {}, 1.0, "server_http_response"))
+    checkpoints = []
+
+    results = module.run_cases(
+        base_url="https://example.test",
+        token="token",
+        matrix_deadline_seconds=1.0,
+        cases=[
+            {"case_id": "executed", "message": "first"},
+            {"case_id": "not-run-1", "message": "second"},
+            {"case_id": "not-run-2", "message": "third"},
+            {"case_id": "not-run-3", "message": "fourth"},
+            {"case_id": "not-run-4", "message": "fifth"},
+            {"case_id": "not-run-5", "message": "sixth"},
+        ],
+        checkpoint=lambda rows, **kwargs: checkpoints.append((list(rows), kwargs)),
+    )
+
+    assert [item["case_id"] for item in results] == ["executed", "not-run-1", "not-run-2", "not-run-3", "not-run-4", "not-run-5"]
+    assert all(item["case_status"] == "not_run" for item in results[1:])
+    progress = module.case_progress(cases=results, planned_count=6)
+    assert progress == {
+        "planned_count": 6,
+        "attempted_count": 1,
+        "completed_count": 1,
+        "failed_count": 1,
+        "not_run_count": 5,
+        "incomplete": True,
+    }
+    assert checkpoints[-1][1]["planned_count"] == 6
+
+
+def test_case_progress_marks_thirty_two_of_thirty_seven_as_incomplete():
+    module = _module()
+    cases = [
+        {"case_id": f"done-{index}", "case_status": "completed", "create_http_status": 200,
+         "terminal": {"status": "completed"}, "polling_sse_equal": True,
+         "operation_matches": True, "fixture_action": {}}
+        for index in range(32)
+    ]
+    cases.extend({"case_id": f"not-run-{index}", "case_status": "not_run", "error_category": "matrix_deadline"} for index in range(5))
+
+    progress = module.case_progress(cases=cases, planned_count=37)
+
+    assert progress["attempted_count"] == 32
+    assert progress["completed_count"] == 32
+    assert progress["not_run_count"] == 5
+    assert progress["incomplete"] is True

@@ -39,6 +39,12 @@ TERMINAL_STATUSES = {"completed", "failed", "canceled", "unavailable", "downgrad
 FIXTURE_ACTION_MODES = {"read_only", "proposal", "confirmation", "safe_execution"}
 INFRASTRUCTURE_ERROR_CATEGORIES = {"dns", "connect", "tls", "clienttimeout", "client", "ssh"}
 _DIAGNOSTIC_LOOP: Optional[asyncio.AbstractEventLoop] = None
+QA_NAMESPACE_TOKEN = "{{qa_run_namespace}}"
+NAMESPACED_FIXTURE_CREATE_OPERATIONS = {
+    "create_setup",
+    "create_strategy",
+    "create_bot",
+}
 
 
 def classify_internal_issue(value: object) -> str:
@@ -337,6 +343,15 @@ def load_manifest(*, manifest_root: Path, manifest_id: str) -> Iterable[Dict[str
         if action_mode == "safe_execution":
             if os.environ.get("FINN_QA_ALLOW_FIXTURE_EXECUTION") != "1":
                 raise ValueError("fixture_execution_not_authorized")
+            # Object-producing fixture cases must include the workflow-local
+            # natural-name token. It prevents one official matrix from ever
+            # resolving an object created by another run, without exposing an
+            # internal ID to selector input.
+            if (
+                case.get("expected_operation_id") in NAMESPACED_FIXTURE_CREATE_OPERATIONS
+                and QA_NAMESPACE_TOKEN not in case["message"]
+            ):
+                raise ValueError("fixture_namespace_required")
         expected_missing = case.get("expected_missing_inputs")
         if expected_missing is not None and (
             not isinstance(expected_missing, list) or not all(isinstance(item, str) and item for item in expected_missing)
@@ -402,9 +417,34 @@ def _logical_conversation_key(case: Dict[str, Any]) -> Optional[str]:
     return value if isinstance(value, str) and value else None
 
 
+def materialize_fixture_namespace(case: Dict[str, Any], *, namespace: str) -> Dict[str, Any]:
+    """Bind QA-owned natural object names without ever injecting IDs.
+
+    QA manifests may use ``{{qa_run_namespace}}`` in messages or context. The
+    runner substitutes it only in its ephemeral request copy, so a matrix run
+    cannot match objects left by a prior QA workflow.  Object IDs remain solely
+    a product-side lineage/resolution concern.
+    """
+    if not re.fullmatch(r"qa-[a-z0-9-]{8,80}", namespace):
+        raise ValueError("fixture_namespace_invalid")
+
+    def replace(value: Any) -> Any:
+        if isinstance(value, str):
+            return value.replace(QA_NAMESPACE_TOKEN, namespace)
+        if isinstance(value, list):
+            return [replace(item) for item in value]
+        if isinstance(value, dict):
+            return {key: replace(item) for key, item in value.items()}
+        return value
+
+    return replace(dict(case))
+
+
 def classify_case_failure(case_result: Dict[str, Any]) -> Optional[str]:
     """Keep runner, transport, and observed FINN behavior separately scored."""
     category = case_result.get("error_category")
+    if case_result.get("case_status") == "not_run":
+        return "infrastructure"
     if isinstance(category, str) and category in INFRASTRUCTURE_ERROR_CATEGORIES:
         return "infrastructure"
     if isinstance(category, str) and category in {"runner_internal", "manifest_case_invalid"}:
@@ -431,6 +471,29 @@ def failure_summary(cases: Iterable[Dict[str, Any]]) -> Dict[str, int]:
         if kind:
             summary[kind] += 1
     return summary
+
+
+def case_progress(*, cases: Iterable[Dict[str, Any]], planned_count: int) -> Dict[str, int | bool]:
+    """Report matrix completion independently from product correctness.
+
+    A delivery timeout must never turn a partially written checkpoint into a
+    complete matrix.  ``not_run`` is reserved for cases the runner never
+    attempted; every attempted case remains evidence even when it failed.
+    """
+    rows = list(cases)
+    explicit_not_run = sum(1 for item in rows if item.get("case_status") == "not_run")
+    attempted = sum(1 for item in rows if item.get("case_status") != "not_run")
+    completed = sum(1 for item in rows if item.get("case_status") == "completed")
+    failed = sum(1 for item in rows if item.get("case_status") == "completed" and classify_case_failure(item))
+    not_run = max(explicit_not_run, planned_count - attempted)
+    return {
+        "planned_count": planned_count,
+        "attempted_count": attempted,
+        "completed_count": completed,
+        "failed_count": failed,
+        "not_run_count": not_run,
+        "incomplete": attempted < planned_count or not_run > 0 or len(rows) < planned_count,
+    }
 
 
 def _run_fixture_action(*, base_url: str, token: str, case: Dict[str, Any], terminal: Dict[str, Any]) -> Dict[str, Any]:
@@ -503,29 +566,45 @@ def _run_fixture_action(*, base_url: str, token: str, case: Dict[str, Any], term
     execute_payload = {"idempotency_key": idempotency_key, "expected_payload_hash": payload_hash}
     status, _executed, _latency, error = request_json(url=f"{base_url}/api/assistant/v2/proposals/{proposal_id}/execute", method="POST", token=token, payload=execute_payload)
     result["execute_status"] = status
-    if status != 200 or error:
+    execution_status = _executed.get("status") if isinstance(_executed.get("status"), str) else None
+    result["execution_status"] = execution_status
+    if status != 200 or error or execution_status not in {"succeeded", "already_executed"}:
         result["error_category"] = error or "proposal_execute_failed"
         return result
     if case.get("idempotency_replay") is True:
         replay_status, _replayed, _latency, replay_error = request_json(url=f"{base_url}/api/assistant/v2/proposals/{proposal_id}/execute", method="POST", token=token, payload=execute_payload)
         result["idempotency_replay_status"] = replay_status
-        if replay_status != 200 or replay_error:
+        replay_execution_status = _replayed.get("status") if isinstance(_replayed.get("status"), str) else None
+        result["idempotency_replay_execution_status"] = replay_execution_status
+        if replay_status != 200 or replay_error or replay_execution_status not in {"succeeded", "already_executed"}:
             result["error_category"] = replay_error or "idempotency_replay_failed"
     if not result.get("error_category"):
         result["outcome"] = "executed"
     return result
 
 
-def run_cases(*, base_url: str, token: str, cases: Iterable[Dict[str, Any]], matrix_deadline_seconds: float = 2100.0, case_timeout_seconds: float = 60.0, checkpoint=None) -> list[Dict[str, Any]]:
+def run_cases(*, base_url: str, token: str, cases: Iterable[Dict[str, Any]], matrix_deadline_seconds: float = 2100.0, case_timeout_seconds: float = 60.0, fixture_namespace: Optional[str] = None, checkpoint=None) -> list[Dict[str, Any]]:
+    case_list = list(cases)
     results = []
     conversations: Dict[str, str] = {}
     matrix_deadline = time.monotonic() + matrix_deadline_seconds
-    for case in cases:
+    for index, case in enumerate(case_list):
         if time.monotonic() >= matrix_deadline:
-            results.append({"case_id": case["case_id"], "error_category": "matrix_deadline", "incomplete": True})
+            # Preserve every remaining manifest case as explicit evidence. A
+            # single synthetic deadline row previously hid the final cases.
+            results.extend(
+                {
+                    "case_id": pending_case["case_id"],
+                    "case_status": "not_run",
+                    "error_category": "matrix_deadline",
+                }
+                for pending_case in case_list[index:]
+            )
             if checkpoint:
-                checkpoint(results, incomplete=True)
+                checkpoint(results, planned_count=len(case_list))
             break
+        if fixture_namespace:
+            case = materialize_fixture_namespace(case, namespace=fixture_namespace)
         case_deadline = time.monotonic() + case_timeout_seconds
         def remaining() -> float:
             return case_deadline - time.monotonic()
@@ -548,12 +627,13 @@ def run_cases(*, base_url: str, token: str, cases: Iterable[Dict[str, Any]], mat
             "case_id": case["case_id"], "conversation_key": conversation_key,
             "create_http_status": status, "run_id": run_id, "conversation_id": conversation_id,
             "create_latency_ms": round(latency, 2), "error_category": error_category,
+            "case_status": "completed",
             "fixture_action": {"mode": case.get("fixture_action", "read_only")},
         }
         if status != 200 or not run_id:
             results.append(result)
             if checkpoint:
-                checkpoint(results, incomplete=False)
+                checkpoint(results, planned_count=len(case_list))
             continue
         terminal = created
         deadline = min(case_deadline, time.monotonic() + 30.0)
@@ -596,7 +676,7 @@ def run_cases(*, base_url: str, token: str, cases: Iterable[Dict[str, Any]], mat
         result["failure_classification"] = classify_case_failure(result)
         results.append(result)
         if checkpoint:
-            checkpoint(results, incomplete=False)
+            checkpoint(results, planned_count=len(case_list))
     return results
 
 
@@ -627,7 +707,7 @@ def main() -> int:
     if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]{0,80}", args.run_label):
         raise SystemExit("run_label is invalid")
     report_path = Path(args.report_path)
-    report: Dict[str, Any] = {"schema_version": 1, "workflow": "finn-production-qa", "workflow_run_id": args.workflow_run_id, "profile": args.profile, "run_label": args.run_label, "manifest_id": args.manifest_id, "manifest_sha256": None, "manifest_public_key": None, "release_identity": {}, "auth_preflight": {}, "cases": [], "failure_summary": {"product": 0, "runner": 0, "infrastructure": 0}, "safety": {"read_only_profile": True, "confirmation_calls": 0, "execution_calls": 0, "live_trading_calls": 0, "live_bot_activation_calls": 0}, "outcome": "failed", "error_category": None}
+    report: Dict[str, Any] = {"schema_version": 1, "workflow": "finn-production-qa", "workflow_run_id": args.workflow_run_id, "profile": args.profile, "run_label": args.run_label, "manifest_id": args.manifest_id, "manifest_sha256": None, "manifest_public_key": None, "release_identity": {}, "auth_preflight": {}, "cases": [], "planned_count": 0, "attempted_count": 0, "completed_count": 0, "failed_count": 0, "not_run_count": 0, "incomplete": False, "failure_summary": {"product": 0, "runner": 0, "infrastructure": 0}, "safety": {"read_only_profile": True, "confirmation_calls": 0, "execution_calls": 0, "live_trading_calls": 0, "live_bot_activation_calls": 0}, "outcome": "failed", "error_category": None}
     token: Optional[str] = None
     try:
         checkout = Path(args.checkout).resolve()
@@ -663,26 +743,39 @@ def main() -> int:
                     )
                 report["manifest_sha256"] = sha256_file(manifest_path(manifest_root=manifest_root, manifest_id=args.manifest_id))
                 cases = list(load_manifest(manifest_root=manifest_root, manifest_id=args.manifest_id))
-                def checkpoint(results, *, incomplete: bool) -> None:
-                    report["cases"] = results
-                    report["incomplete"] = incomplete
+                def checkpoint(results, *, planned_count: int) -> None:
+                    # Copy snapshots: a later runner failure must not mutate a
+                    # previously valid atomic checkpoint in memory.
+                    report["cases"] = [dict(item) for item in results]
+                    progress = case_progress(cases=report["cases"], planned_count=planned_count)
+                    report.update(progress)
+                    report["failure_summary"] = failure_summary(report["cases"])
                     report_path.parent.mkdir(parents=True, exist_ok=True)
                     temporary = report_path.with_suffix(report_path.suffix + ".tmp")
                     temporary.write_text(json.dumps(redact(report), sort_keys=True, indent=2) + "\n", encoding="utf-8")
                     temporary.replace(report_path)
 
-                report["cases"] = run_cases(base_url=args.base_url.rstrip("/"), token=token, cases=cases, matrix_deadline_seconds=getattr(args, "matrix_deadline_seconds", 2100.0), case_timeout_seconds=getattr(args, "case_timeout_seconds", 60.0), checkpoint=checkpoint)
+                fixture_namespace = f"qa-{args.workflow_run_id.lower()}"
+                report["fixture_namespace"] = fixture_namespace
+                report["cases"] = run_cases(base_url=args.base_url.rstrip("/"), token=token, cases=cases, matrix_deadline_seconds=getattr(args, "matrix_deadline_seconds", 2100.0), case_timeout_seconds=getattr(args, "case_timeout_seconds", 60.0), fixture_namespace=fixture_namespace, checkpoint=checkpoint)
+                report.update(case_progress(cases=report["cases"], planned_count=len(cases)))
                 report["failure_summary"] = failure_summary(report["cases"])
                 report["safety"]["read_only_profile"] = all(case.get("fixture_action", "read_only") == "read_only" for case in cases)
                 report["safety"]["confirmation_calls"] = sum(1 for item in report["cases"] if item.get("fixture_action", {}).get("confirm_status") is not None)
                 report["safety"]["execution_calls"] = sum(1 for item in report["cases"] if item.get("fixture_action", {}).get("execute_status") is not None)
-                report["outcome"] = "passed" if all(item.get("create_http_status") == 200 and item.get("terminal", {}).get("status") in TERMINAL_STATUSES and item.get("polling_sse_equal") and item.get("operation_matches") and not item["fixture_action"].get("error_category") for item in report["cases"]) else "failed"
+                report["outcome"] = "passed" if not report["incomplete"] and all(item.get("create_http_status") == 200 and item.get("terminal", {}).get("status") in TERMINAL_STATUSES and item.get("polling_sse_equal") and item.get("operation_matches") and not item["fixture_action"].get("error_category") for item in report["cases"]) else "failed"
     except (RuntimeError, ValueError) as error:
         report["error_category"] = str(error)
     except Exception:
         report["error_category"] = "runner_internal"
     finally:
         token = None
+        # A late runner error must retain the most complete checkpoint.  Keep
+        # progress derived from the saved case rows rather than resetting it to
+        # the initial empty report shape.
+        if report["planned_count"]:
+            report.update(case_progress(cases=report["cases"], planned_count=report["planned_count"]))
+            report["failure_summary"] = failure_summary(report["cases"])
         report_path.parent.mkdir(parents=True, exist_ok=True)
         report_path.write_text(json.dumps(redact(report), sort_keys=True, indent=2) + "\n", encoding="utf-8")
     # Content failures are QA evidence, not a runner failure. The workflow must

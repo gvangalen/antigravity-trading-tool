@@ -4,6 +4,7 @@ import logging
 from contextlib import suppress
 from datetime import datetime, timedelta, timezone
 import asyncio
+from time import monotonic
 from types import SimpleNamespace
 from typing import Any, Dict, Optional
 
@@ -517,9 +518,20 @@ class FinnV2RunService:
             lifecycle = asyncio.create_task(_run_owned_lifecycle())
             selector_started_waiter = asyncio.create_task(selector_started.wait())
             selection_waiter = asyncio.create_task(selection_ready.wait())
+            # One absolute budget prevents a selector allowance followed by a
+            # fresh lifecycle allowance from exceeding the visible-run SLA.
+            # The reserve remains available only for terminal persistence.
+            deadline = monotonic() + flags.lifecycle_deadline_seconds()
+
+            def _remaining(*, reserve: bool = False) -> float:
+                remaining = deadline - monotonic()
+                if reserve:
+                    remaining -= flags.terminal_persistence_reserve_seconds()
+                return max(0.1, remaining)
+
             done, _ = await asyncio.wait(
                 {lifecycle, selector_started_waiter},
-                timeout=flags.lifecycle_deadline_seconds(),
+                timeout=_remaining(),
                 return_when=asyncio.FIRST_COMPLETED,
             )
             if lifecycle in done:
@@ -529,10 +541,13 @@ class FinnV2RunService:
             if selector_started_waiter not in done:
                 raise asyncio.TimeoutError()
             await selector_started_waiter
-            await asyncio.wait_for(selection_waiter, timeout=flags.selector_phase_deadline_seconds())
+            await asyncio.wait_for(
+                selection_waiter,
+                timeout=min(flags.selector_phase_deadline_seconds(), _remaining(reserve=True)),
+            )
             await asyncio.wait_for(
                 lifecycle,
-                timeout=flags.lifecycle_deadline_seconds() + flags.terminal_persistence_reserve_seconds(),
+                timeout=_remaining(),
             )
         except asyncio.TimeoutError as exc:
             if lifecycle is not None and not lifecycle.done():

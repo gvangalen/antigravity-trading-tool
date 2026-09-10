@@ -629,6 +629,15 @@ def test_selector_persistence_precedes_post_selection_execution_and_has_a_separa
     assert "selector_phase_started" in lifecycle
     assert "selector_started()" in orchestrator
     assert "terminal_persistence_reserve_seconds" in lifecycle
+    assert "deadline = monotonic()" in lifecycle
+    assert "_remaining(reserve=True)" in lifecycle
+
+
+def test_reasoning_provider_call_does_not_block_the_lifecycle_event_loop():
+    source = (ROOT / "services" / "finn_v2_reasoning_service.py").read_text(encoding="utf-8")
+
+    assert "await asyncio.to_thread(" in source
+    assert "openai_client.ask_gpt_structured_response" in source
 
 
 def test_orchestrator_persists_final_operation_before_contract_derived_selection():

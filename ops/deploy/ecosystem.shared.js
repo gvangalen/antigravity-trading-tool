@@ -132,6 +132,17 @@ const FINN_RUNTIME_DEFAULT_ENV = {
   FINN_V2_EXECUTION_GATE_ENABLED: "true",
   FINN_V2_WRITE_BLOCKED: "true",
   FINN_V2_ACTION_KILL_SWITCH: "true",
+  // These actions mutate only owner-scoped FINN configuration records and all
+  // still require the existing proposal, confirmation and execution gates.
+  // They are distinct from financial order placement and live bot activation.
+  FINN_V2_EXECUTE_ASSET_SELECTION: "true",
+  FINN_V2_EXECUTE_WATCHLIST_CHANGES: "true",
+  FINN_V2_EXECUTE_INDICATOR_CHANGES: "true",
+  FINN_V2_EXECUTE_SETUP_CHANGES: "true",
+  FINN_V2_EXECUTE_STRATEGY_CHANGES: "true",
+  FINN_V2_EXECUTE_BOT_CHANGES: "true",
+  FINN_V2_EXECUTE_TRADE_PLAN_CHANGES: "false",
+  FINN_V2_EXECUTE_PAPER_BOT_ACTIVATION: "false",
   FINN_V2_LIVE_ACTIONS_ENABLED: "false",
   FINN_V2_PAPER_ACTIONS_ENABLED: "false",
   FINN_V2_EXECUTE_LIVE_BOT_ACTIVATION: "false",

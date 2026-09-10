@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 import re
 import uuid
+import asyncio
 from datetime import datetime, timezone
 from time import monotonic
 from typing import Any, Optional
@@ -521,7 +522,11 @@ class FinnV2ReasoningService:
             # connection for concurrent FINN runs.
             await self._commit_before_provider_call()
             call_started = monotonic()
-            response = openai_client.ask_gpt_structured_response(
+            # The provider helper is synchronous. Moving it off the worker
+            # event loop lets the owning lifecycle deadline terminalize a run
+            # even when an upstream transport ignores cancellation briefly.
+            response = await asyncio.to_thread(
+                openai_client.ask_gpt_structured_response,
                 prompt=self.prompts.build_user_prompt(
                     context,
                     repair_attempt=attempt > 0,
