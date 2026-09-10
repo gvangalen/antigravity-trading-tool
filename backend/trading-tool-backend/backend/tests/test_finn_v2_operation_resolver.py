@@ -49,6 +49,68 @@ def test_semantic_frame_resolves_a_bot_consequence_to_a_bounded_bot_evaluation()
     assert resolved.conversation_reference == "previous_verified_response"
 
 
+def test_bot_consequence_uses_evaluate_contract_without_prior_lineage():
+    registry = FinnV2OperationRegistry()
+    resolved = FinnV2OperationResolverService(registry).resolve(
+        selection=_selection("read_linked_bot", {
+            "goal": "consequence", "object": "bot", "reference_kind": None,
+        }),
+        candidates=registry.list(),
+        conversation_context={},
+        request_facts={"explicit_entities": ("bot",), "discourse_act": "evaluation"},
+    )
+
+    assert resolved.operation_id == "evaluate_bot"
+
+
+def test_bot_write_polarity_cannot_be_replaced_by_bot_evaluation():
+    registry = FinnV2OperationRegistry()
+    resolved = FinnV2OperationResolverService(registry).resolve(
+        selection=_selection("evaluate_bot", {"goal": "evaluate", "object": "bot"}),
+        candidates=registry.list(),
+        conversation_context={},
+        request_facts={"explicit_entities": ("bot",), "action_polarity": "update"},
+    )
+
+    assert resolved.operation_id == "update_bot"
+
+
+def test_object_remove_fact_uses_registry_delete_contract_not_bot_evaluation():
+    registry = FinnV2OperationRegistry()
+    resolved = FinnV2OperationResolverService(registry).resolve(
+        selection=_selection("evaluate_bot", {"goal": "evaluate", "object": "bot"}),
+        candidates=registry.list(),
+        conversation_context={},
+        request_facts={"explicit_entities": ("bot",), "action_polarity": "remove"},
+    )
+
+    assert resolved.operation_id == "delete_bot"
+
+
+def test_unambiguous_typed_entity_completes_an_omitted_frame_object_for_delete():
+    registry = FinnV2OperationRegistry()
+    resolved = FinnV2OperationResolverService(registry).resolve(
+        selection=_selection("evaluate_bot", {"goal": "evaluate", "object": None}),
+        candidates=registry.list(),
+        conversation_context={},
+        request_facts={"explicit_entities": ("bot",), "action_polarity": "remove"},
+    )
+
+    assert resolved.operation_id == "delete_bot"
+
+
+def test_typed_update_polarity_cannot_execute_create_strategy_contract():
+    registry = FinnV2OperationRegistry()
+    resolved = FinnV2OperationResolverService(registry).resolve(
+        selection=_selection("create_strategy", {"goal": "create", "object": "strategy"}),
+        candidates=registry.list(),
+        conversation_context={},
+        request_facts={"action_polarity": "update"},
+    )
+
+    assert resolved.operation_id == "update_strategy"
+
+
 def test_semantic_frame_keeps_live_bot_execution_as_typed_activation_for_policy():
     registry = FinnV2OperationRegistry()
     resolved = FinnV2OperationResolverService(registry).resolve(

@@ -143,14 +143,16 @@ class FinnV2FlagService:
         return max(5, min(15, self._env_int("FINN_V2_LIFECYCLE_DEADLINE_SECONDS", 14)))
 
     def selector_phase_deadline_seconds(self) -> int:
-        # The measured structured Responses call can validly take just over
-        # ten seconds. Keep its own bounded phase below the overall runtime,
-        # while reserving terminal persistence before post-selection work.
-        return max(5, min(40, self._env_int("FINN_V2_SELECTOR_PHASE_DEADLINE_SECONDS", 35)))
+        # A phase cannot consume more than the complete visible lifecycle.
+        # Reserve terminal persistence so a selector timeout still produces a
+        # durable typed envelope instead of stranding the run in ``planned``.
+        configured = max(5, min(40, self._env_int("FINN_V2_SELECTOR_PHASE_DEADLINE_SECONDS", 35)))
+        lifecycle_budget = self.lifecycle_deadline_seconds() - self.terminal_persistence_reserve_seconds()
+        return max(3, min(configured, lifecycle_budget))
 
     def selector_provider_timeout_seconds(self) -> int:
         """Reserve time to persist a successful structured selection."""
-        return max(3, self.selector_phase_deadline_seconds() - self.terminal_persistence_reserve_seconds())
+        return max(1, self.selector_phase_deadline_seconds() - self.terminal_persistence_reserve_seconds())
 
     def selector_max_output_tokens(self) -> int:
         """Keep the strict semantic frame compact; reasoning has its own budget."""

@@ -473,20 +473,12 @@ def materialize_fixture_namespace(case: Dict[str, Any], *, namespace: str) -> Di
         if operation_id in LINEAGE_DEPENDENT_FIXTURE_OPERATIONS:
             client_context["fixture_lineage_namespace"] = namespace
         materialized["client_context"] = client_context
-        # The manifest's operation and expected result remain untouched. This
-        # runtime-only instruction supplies the unique natural-name scope that
-        # lets creates and later references belong to this workflow alone.
-        if operation_id in NAMESPACED_FIXTURE_CREATE_OPERATIONS:
-            instruction = (
-                f"\n\nVoor deze geisoleerde QA-fixture: voeg de unieke "
-                f"naam-suffix {namespace} toe aan het nieuwe object."
-            )
-        else:
-            instruction = (
-                f"\n\nVoor deze geisoleerde QA-fixture: gebruik uitsluitend "
-                f"objecten met naamruimte {namespace}."
-            )
-        materialized["message"] = f"{materialized['message']}{instruction}"
+        # Keep fixture isolation out of the user's message.  Appending a
+        # natural-language instruction made the product correctly parse the
+        # suffix itself as a supplied action field (notably ``name``).  The
+        # public client-context binding is the runner's execution metadata;
+        # it is not an action input and cannot change the sealed prompt's
+        # semantics.
     return materialized
 
 
@@ -877,6 +869,11 @@ def main() -> int:
         if report["planned_count"] and not getattr(args, "dry_preflight", False):
             report.update(case_progress(cases=report["cases"], planned_count=report["planned_count"]))
             report["failure_summary"] = failure_summary(report["cases"])
+            if report["attempted_count"]:
+                report["qa_status"] = (
+                    "INCOMPLETE" if report["incomplete"]
+                    else ("COMPLETED" if report["outcome"] == "passed" else "COMPLETED_WITH_FAILURES")
+                )
         report_path.parent.mkdir(parents=True, exist_ok=True)
         report_path.write_text(json.dumps(redact(report), sort_keys=True, indent=2) + "\n", encoding="utf-8")
     # Content failures are QA evidence, not a runner failure. The workflow must

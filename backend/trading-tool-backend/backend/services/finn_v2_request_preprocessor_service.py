@@ -397,6 +397,13 @@ class FinnV2RequestPreprocessorService:
             return "activate"
         if re.search(r"\bpas\b.*\baan\b", text):
             return "update"
+        # Dutch separable update verbs can place the object between their
+        # parts ("werk die bot bij").  This is grammatical normalization of
+        # a mutation act, not a bot-specific route.
+        if re.search(r"\bwerk(?:\s+\w+){0,5}\s+bij\b", text):
+            return "update"
+        if re.search(r"\b(?:deactiveer\w*|deactivate\w*|schakel(?:\s+\w+){0,5}\s+uit)\b", text):
+            return "deactivate"
         # Delegating autonomous buy/sell decisions is a financial execution
         # safety fact.  This remains independent from the eventual contract
         # selection and prevents an unrecognised provider frame from treating

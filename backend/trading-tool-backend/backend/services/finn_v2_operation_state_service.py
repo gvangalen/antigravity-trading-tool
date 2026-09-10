@@ -289,9 +289,17 @@ class FinnV2OperationStateService:
             setup_match = re.search(r"\bsetup(?:\s*(?:id|nummer|number))?\s*#?\s*(\d+)\b", text, re.IGNORECASE)
             if setup_match:
                 values["setup_id"] = int(setup_match.group(1))
-            mode_match = re.search(r"\b(fixed|custom)\b", lowered)
+            mode_match = re.search(
+                r"\b(fixed|vast|standaard|custom|aangepast|individuell|benutzerdefiniert)\b",
+                lowered,
+            )
             if mode_match:
-                values["execution_mode"] = mode_match.group(1)
+                mode = mode_match.group(1)
+                values["execution_mode"] = {
+                    "vast": "fixed", "standaard": "fixed",
+                    "aangepast": "custom", "individuell": "custom",
+                    "benutzerdefiniert": "custom",
+                }.get(mode, mode)
             amount_match = re.search(
                 r"\b(?:base\s*amount|basisinleg|basis\s*bedrag|bedrag|inleg|amount)\s*(?:is|:|=|van)?\s*(?:€|eur|\$)?\s*(\d+(?:[.,]\d+)?)",
                 lowered,

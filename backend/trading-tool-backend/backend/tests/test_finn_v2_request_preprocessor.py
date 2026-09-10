@@ -112,3 +112,10 @@ def test_portfolio_and_strategy_generation_are_typed_entities_in_all_supported_l
     strategy = service.preprocess(message="Erstelle eine Strategie für dieses Setup.")
     assert "strategy" in strategy.explicit_entities
     assert strategy.action_polarity == "create"
+
+
+def test_separable_update_and_deactivate_verbs_keep_their_typed_mutation_polarity():
+    service = FinnV2RequestPreprocessorService()
+
+    assert service.preprocess(message="Werk die bot bij en zet de cadence naar weekly.").action_polarity == "update"
+    assert service.preprocess(message="Deactiveer die bot.").action_polarity == "deactivate"

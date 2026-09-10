@@ -102,6 +102,26 @@ class FinnV2OperationResolverService:
             context=conversation_context,
             requested_scopes=requested_scopes,
         )
+        # A structured request fact may make a selected action contract
+        # impossible: for example an update frame must not be executed as a
+        # create contract for the same typed object.  This does not classify
+        # wording a second time; it selects the one registry contract whose
+        # polarity agrees with the already typed semantic frame.
+        requested_action = str((request_facts or {}).get("action_polarity") or "")
+        # "remove" is the canonical watchlist polarity.  For a persisted
+        # object it is the same typed user act as the registry's delete
+        # contract, so normalize it before comparing contract polarities.
+        contract_action = "delete" if requested_action == "remove" and object_name != "watchlist" else requested_action
+        polarity_operation = self._GOAL_OBJECT_OPERATIONS.get((contract_action, object_name))
+        if polarity_operation in candidate_ids and contract_action in {
+            "create", "update", "delete", "add", "remove", "deactivate", "activate",
+        }:
+            selected_contract = next(
+                (contract for contract in candidates if contract.operation_id == operation_id),
+                None,
+            )
+            if selected_contract is None or selected_contract.action_polarity.value != contract_action:
+                operation_id = polarity_operation
         # Capability is a typed discourse fact, not a nearby plan read. The
         # selector still interprets the user's language, but a contract that
         # contradicts this explicit request act cannot be executed safely.
@@ -122,6 +142,22 @@ class FinnV2OperationResolverService:
             for item in (request_facts or {}).get("explicit_entities", ())
             if isinstance(item, str)
         }
+        # The semantic frame may omit its object while the typed entity ledger
+        # has one unambiguous product object.  Use that already extracted fact
+        # only to complete registry validation; do not infer an object from
+        # arbitrary wording or workspace context.
+        if not object_name and len(explicit_entities) == 1:
+            object_name = {
+                "indicator_configuration": "indicator",
+            }.get(next(iter(explicit_entities)), next(iter(explicit_entities)))
+            polarity_operation = self._GOAL_OBJECT_OPERATIONS.get((contract_action, object_name))
+            if polarity_operation in candidate_ids:
+                selected_contract = next(
+                    (contract for contract in candidates if contract.operation_id == operation_id),
+                    None,
+                )
+                if selected_contract is None or selected_contract.action_polarity.value != contract_action:
+                    operation_id = polarity_operation
         if (
             str((request_facts or {}).get("action_polarity") or "") == "read"
             and not bool((request_facts or {}).get("explicit_plan_subject"))
@@ -174,7 +210,7 @@ class FinnV2OperationResolverService:
         # evidence-only explanation because the contract owns bot state reads.
         if (
             "bot" in explicit_entities
-            and self._has_eligible_lineage(conversation_context)
+            and contract_action not in {"create", "update", "delete", "deactivate", "activate"}
             and (
                 goal == "consequence"
                 or str((request_facts or {}).get("discourse_act") or "") in {

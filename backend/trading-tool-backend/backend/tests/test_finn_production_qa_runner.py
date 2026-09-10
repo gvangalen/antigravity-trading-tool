@@ -426,10 +426,10 @@ def test_all_downstream_fixture_cases_receive_the_same_execution_namespace():
 
     assert create["client_context"]["fixture_namespace"] == namespace
     assert create["client_context"]["fixture_name_suffix"] == namespace
-    assert namespace in create["message"]
+    assert namespace not in create["message"]
     assert downstream["client_context"]["fixture_namespace"] == namespace
     assert downstream["client_context"]["fixture_lineage_namespace"] == namespace
-    assert namespace in downstream["message"]
+    assert namespace not in downstream["message"]
     assert "setup_id" not in json.dumps(create)
 
 
