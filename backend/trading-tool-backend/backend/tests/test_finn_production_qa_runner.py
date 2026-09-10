@@ -127,6 +127,18 @@ def test_workflow_scopes_fixture_authorization_to_the_runner_subprocess():
     assert "--fixture-namespace \"$fixture_namespace\"" in workflow
 
 
+def test_workflow_runs_hashed_control_plane_runner_against_product_checkout():
+    workflow = WORKFLOW_PATH.read_text(encoding="utf-8")
+    assert "Checkout QA control plane" in workflow
+    assert "path: .qa-control-plane" in workflow
+    assert "control_plane_runner=\".qa-control-plane/backend/trading-tool-backend/backend/scripts/run_finn_production_qa.py\"" in workflow
+    assert "runner_sha256=\"$(sha256sum \"$control_plane_runner\"" in workflow
+    assert "test \"$(sha256sum \"$runner_path\"" in workflow
+    assert "python3 \"$runner_path\"" in workflow
+    assert "--runner-revision \"$runner_revision\"" in workflow
+    assert "python3 backend/trading-tool-backend/backend/scripts/run_finn_production_qa.py" not in workflow
+
+
 def test_encrypted_manifest_is_only_staged_after_server_side_decryption(tmp_path):
     module = _module()
     private_key = tmp_path / "secrets" / "manifest.key"

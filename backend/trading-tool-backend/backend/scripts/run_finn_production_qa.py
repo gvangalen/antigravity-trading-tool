@@ -763,6 +763,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--report-path", required=True)
     parser.add_argument("--workflow-run-id", default="local")
     parser.add_argument("--fixture-namespace", default=os.environ.get("FINN_QA_FIXTURE_NAMESPACE"))
+    parser.add_argument("--runner-revision")
     parser.add_argument("--matrix-deadline-seconds", type=float, default=2100.0)
     parser.add_argument("--case-timeout-seconds", type=float, default=60.0)
     parser.add_argument("--dry-preflight", action="store_true")
@@ -775,9 +776,12 @@ def main() -> int:
         raise SystemExit("release_sha must be a full lowercase SHA")
     if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]{0,80}", args.run_label):
         raise SystemExit("run_label is invalid")
+    runner_revision = getattr(args, "runner_revision", None)
+    if runner_revision is not None and not re.fullmatch(r"[0-9a-f]{40}", runner_revision):
+        raise SystemExit("runner_revision must be a full lowercase SHA")
     report_path = Path(args.report_path)
     fixture_namespace = getattr(args, "fixture_namespace", None)
-    report: Dict[str, Any] = {"schema_version": 1, "workflow": "finn-production-qa", "workflow_run_id": args.workflow_run_id, "target_sha": args.release_sha, "profile": args.profile, "run_label": args.run_label, "manifest_id": args.manifest_id, "manifest_sha256": None, "base_manifest_hash": None, "manifest_public_key": None, "fixture_namespace_present": bool(fixture_namespace), "release_identity": {}, "auth_preflight": {}, "cases": [], "planned_count": 0, "attempted_count": 0, "completed_count": 0, "failed_count": 0, "not_run_count": 0, "incomplete": False, "failure_summary": {"product": 0, "runner": 0, "infrastructure": 0}, "safety": {"read_only_profile": True, "confirmation_calls": 0, "execution_calls": 0, "live_trading_calls": 0, "live_bot_activation_calls": 0}, "outcome": "failed", "qa_status": "NOT_STARTED", "error_category": None}
+    report: Dict[str, Any] = {"schema_version": 1, "workflow": "finn-production-qa", "workflow_run_id": args.workflow_run_id, "runner_revision": runner_revision, "target_sha": args.release_sha, "profile": args.profile, "run_label": args.run_label, "manifest_id": args.manifest_id, "manifest_sha256": None, "base_manifest_hash": None, "manifest_public_key": None, "fixture_namespace_present": bool(fixture_namespace), "release_identity": {}, "auth_preflight": {}, "cases": [], "planned_count": 0, "attempted_count": 0, "completed_count": 0, "failed_count": 0, "not_run_count": 0, "incomplete": False, "failure_summary": {"product": 0, "runner": 0, "infrastructure": 0}, "safety": {"read_only_profile": True, "confirmation_calls": 0, "execution_calls": 0, "live_trading_calls": 0, "live_bot_activation_calls": 0}, "outcome": "failed", "qa_status": "NOT_STARTED", "error_category": None}
     token: Optional[str] = None
     try:
         checkout = Path(args.checkout).resolve()

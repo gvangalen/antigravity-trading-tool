@@ -69,6 +69,14 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
+      - name: Checkout QA control plane
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          ref: ${{ github.sha }}
+          path: .qa-control-plane
+          fetch-depth: 1
+          persist-credentials: false
+
       - name: Validate release and profile inputs
         shell: bash
         env:
@@ -144,12 +152,17 @@ jobs:
           QA_HOST: ${{ steps.connection.outputs.host }}
           QA_REMOTE_DIR: ${{ steps.connection.outputs.remote_dir }}
           FINN_QA_FIXTURE_NAMESPACE: ${{ steps.fixture_namespace.outputs.value }}
+          QA_RUNNER_REVISION: ${{ github.sha }}
         run: |
           set -euo pipefail
           set +x
           report_name="finn-production-qa-${GITHUB_RUN_ID}.json"
           remote_report="/tmp/${report_name}"
           remote_bundle="/tmp/finn-production-qa-manifest-${GITHUB_RUN_ID}.bundle"
+          control_plane_runner=".qa-control-plane/backend/trading-tool-backend/backend/scripts/run_finn_production_qa.py"
+          remote_runner="/tmp/finn-production-qa-runner-${GITHUB_RUN_ID}.py"
+          runner_sha256="$(sha256sum "$control_plane_runner" | awk '{print $1}')"
+          scp -i "$RUNNER_TEMP/finn-production-qa-key" -o UserKnownHostsFile="$RUNNER_TEMP/finn-production-qa-known-hosts" -o BatchMode=yes -o StrictHostKeyChecking=yes "$control_plane_runner" "ubuntu@${QA_HOST}:${remote_runner}"
           if [ -n "${MANIFEST_BUNDLE:-}" ]; then
             printf '%s' "$MANIFEST_BUNDLE" > "$RUNNER_TEMP/finn-production-qa-manifest.bundle"
             chmod 600 "$RUNNER_TEMP/finn-production-qa-manifest.bundle"
@@ -157,7 +170,7 @@ jobs:
           else
             remote_bundle=""
           fi
-          remote_command=$(printf 'bash -s -- %q %q %q %q %q %q %q %q %q %q %q' "$RELEASE_SHA" "$QA_PROFILE" "$MANIFEST_ID" "$RUN_LABEL" "$QA_REMOTE_DIR" "$remote_report" "$GITHUB_RUN_ID" "$remote_bundle" "$ALLOW_FIXTURE_ACTIONS" "$ALLOW_SAFE_FIXTURE_EXECUTION" "$FINN_QA_FIXTURE_NAMESPACE")
+          remote_command=$(printf 'bash -s -- %q %q %q %q %q %q %q %q %q %q %q %q %q %q' "$RELEASE_SHA" "$QA_PROFILE" "$MANIFEST_ID" "$RUN_LABEL" "$QA_REMOTE_DIR" "$remote_report" "$GITHUB_RUN_ID" "$remote_bundle" "$ALLOW_FIXTURE_ACTIONS" "$ALLOW_SAFE_FIXTURE_EXECUTION" "$FINN_QA_FIXTURE_NAMESPACE" "$remote_runner" "$runner_sha256" "$QA_RUNNER_REVISION")
           set +e
           ssh -i "$RUNNER_TEMP/finn-production-qa-key" -o UserKnownHostsFile="$RUNNER_TEMP/finn-production-qa-known-hosts" -o BatchMode=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=15 "ubuntu@${QA_HOST}" "$remote_command" <<'REMOTE'
           set -euo pipefail
@@ -173,8 +186,12 @@ jobs:
           allow_fixture_actions="$9"
           allow_safe_fixture_execution="${10}"
           fixture_namespace="${11}"
+          runner_path="${12}"
+          runner_sha256="${13}"
+          runner_revision="${14}"
           cd "$remote_dir"
           test "$(git rev-parse HEAD)" = "$release_sha"
+          test "$(sha256sum "$runner_path" | awk '{print $1}')" = "$runner_sha256"
           set -a
           source "$HOME/.secrets/trading.env"
           set +a
@@ -197,13 +214,14 @@ jobs:
               --manifest-root "${FINN_QA_MANIFEST_ROOT:-$HOME/ops/finn-qa-manifests}" \
               --workflow-run-id "$workflow_run_id" \
               --fixture-namespace "$fixture_namespace" \
+              --runner-revision "$runner_revision" \
               --report-path "$report_path"
           )
           if [ -n "$manifest_bundle_path" ]; then
             runner_args+=(--manifest-bundle-path "$manifest_bundle_path")
           fi
           PYTHONPATH=backend/trading-tool-backend \
-            python3 backend/trading-tool-backend/backend/scripts/run_finn_production_qa.py "${runner_args[@]}" --matrix-deadline-seconds 2100 >/dev/null
+            python3 "$runner_path" "${runner_args[@]}" --matrix-deadline-seconds 2100 >/dev/null
           REMOTE
           remote_status=$?
           set -e
@@ -212,7 +230,7 @@ jobs:
             printf '{"schema_version":1,"outcome":"failed","error_category":"ssh","profile":"%s"}\n' "$QA_PROFILE" > "qa-artifacts/${report_name}"
           fi
           sha256sum "qa-artifacts/${report_name}" > "qa-artifacts/${report_name}.sha256"
-          ssh -i "$RUNNER_TEMP/finn-production-qa-key" -o UserKnownHostsFile="$RUNNER_TEMP/finn-production-qa-known-hosts" -o BatchMode=yes -o StrictHostKeyChecking=yes "ubuntu@${QA_HOST}" "rm -f '$remote_report' '$remote_bundle'" || true
+          ssh -i "$RUNNER_TEMP/finn-production-qa-key" -o UserKnownHostsFile="$RUNNER_TEMP/finn-production-qa-known-hosts" -o BatchMode=yes -o StrictHostKeyChecking=yes "ubuntu@${QA_HOST}" "rm -f '$remote_report' '$remote_bundle' '$remote_runner'" || true
           test "$remote_status" -eq 0
 
       - name: Upload sanitized QA report
