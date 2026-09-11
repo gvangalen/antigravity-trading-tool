@@ -98,6 +98,7 @@ def main() -> None:
     parser.add_argument("--base-url", default="http://127.0.0.1:18000")
     parser.add_argument("--output", required=True)
     parser.add_argument("--probe-interval-seconds", type=float, default=3.2)
+    parser.add_argument("--action-interval-seconds", type=float, default=3.2)
     args = parser.parse_args()
     base_url = args.base_url.rstrip("/")
     if urlparse(base_url).hostname not in {"127.0.0.1", "localhost"}:
@@ -113,6 +114,7 @@ def main() -> None:
         "--base-url", base_url,
         "--output", str(chain_path),
         "--fixture-namespace", namespace,
+        "--step-interval-seconds", str(max(0.0, args.action_interval_seconds)),
     ]
     chain_result = subprocess.run(chain_command, check=False, capture_output=True, text=True)
     chain = json.loads(chain_path.read_text(encoding="utf-8")) if chain_path.exists() else {"steps": []}
@@ -155,6 +157,7 @@ def main() -> None:
         },
         "chain_exit_code": chain_result.returncode,
         "probe_interval_seconds": args.probe_interval_seconds,
+        "action_interval_seconds": args.action_interval_seconds,
         "original_http_statuses": [case.get("initial_http_status") for case in cases],
         "all_passed": len(cases) == 37 and all(case["passed"] for case in cases),
     }

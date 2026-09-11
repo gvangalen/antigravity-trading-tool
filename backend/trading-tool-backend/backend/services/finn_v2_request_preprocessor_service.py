@@ -49,10 +49,12 @@ class FinnV2RequestPreprocessorService:
         ("execute", ("uitvoeren", "execute", "voer", "verplaats", "transfer", "stort")),
         ("remove", ("verwijder", "remove", "haal", "halen", "stop met")),
         ("add", ("voeg", "add", "toevoeg", "zet op", "volg")),
-        ("activate", ("activeer", "activate", "schakel", "inschakel", "start", "zet live", "go live")),
+        # Starting a new bot configuration is a create request. Live
+        # activation needs an explicit activation verb or live-order context.
+        ("activate", ("activeer", "activate", "schakel", "inschakel", "zet live", "go live")),
         ("update", ("wijzig", "update", "pas aan", "verbeter", "improve", "optimise", "optimize")),
         ("create", (
-            "maak", "maken", "create", "prepare", "preparing", "ontwerp", "stel", "bereid",
+            "maak", "maken", "create", "prepare", "preparing", "ontwerp", "stel", "bereid", "start",
             "voorbereid", "erstell", "anleg",
         )),
         ("evaluate", ("beoordeel", "evaluate", "zwak", "risico", "past", "fit", "ontbrek", "ontbreek", "vertrouwen")),

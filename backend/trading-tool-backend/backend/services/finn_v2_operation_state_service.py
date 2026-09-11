@@ -291,22 +291,25 @@ class FinnV2OperationStateService:
             if setup_match:
                 values["setup_id"] = int(setup_match.group(1))
             mode_match = re.search(
-                r"\b(fixed|vast|standaard|custom|aangepast|individuell|benutzerdefiniert)\b",
+                r"\b(fixed|vast|standaard|automatic|automatis\w*|custom|aangepast|individuell|benutzerdefiniert)\b",
                 lowered,
             )
             if mode_match:
                 mode = mode_match.group(1)
                 values["execution_mode"] = {
                     "vast": "fixed", "standaard": "fixed",
+                    "automatic": "fixed",
                     "aangepast": "custom", "individuell": "custom",
                     "benutzerdefiniert": "custom",
                 }.get(mode, mode)
             amount_match = re.search(
-                r"\b(?:base\s*amount|basisinleg|basis\s*bedrag|grundbetrag|bedrag|inleg|amount)\s*(?:is|:|=|van|von)?\s*(?:€|eur|\$)?\s*(\d+(?:[.,]\d+)?)",
+                r"\b(?:base\s*amount|basisinleg|basis\s*bedrag|grundbetrag|bedrag|inleg|amount)\s*(?:is|:|=|van|von|of)?\s*(?:€|eur|\$)?\s*(\d+(?:[.,]\d+)?)",
                 lowered,
             )
             if amount_match:
                 values["base_amount"] = float(amount_match.group(1).replace(",", "."))
+            if str(values.get("execution_mode") or "").startswith("automatis"):
+                values["execution_mode"] = "fixed"
         elif contract.operation_id in {"update_setup", "update_strategy"}:
             entity = "setup" if contract.operation_id == "update_setup" else "strategy"
             identifier = re.search(

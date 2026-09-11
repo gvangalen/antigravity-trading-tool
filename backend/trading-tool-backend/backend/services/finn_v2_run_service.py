@@ -454,61 +454,68 @@ class FinnV2RunService:
         lifecycle: asyncio.Task | None = None
         selector_started_waiter: asyncio.Task | None = None
         selection_waiter: asyncio.Task | None = None
+        lifecycle_released = asyncio.Event()
 
         async def _run_owned_lifecycle() -> None:
-            for status in ("queued", "collecting", "planned"):
+            try:
+                for status in ("queued", "collecting", "planned"):
+                    async with async_session_factory() as session:
+                        await cls(session).persist_transition(
+                            run_id,
+                            user_id,
+                            next_status=status,
+                            response_source="foundation_placeholder",
+                        )
+
                 async with async_session_factory() as session:
-                    await cls(session).persist_transition(
-                        run_id,
-                        user_id,
-                        next_status=status,
-                        response_source="foundation_placeholder",
-                    )
+                    service = cls(session)
+                    run = await service.runs.get_by_id_for_user(run_id=run_id, user_id=user_id)
+                    if run is None:
+                        raise LookupError("FINN V2 run not found")
+                    trace_id = run.trace_id
+                    visible = service._is_visible_run(run)
 
-            async with async_session_factory() as session:
-                service = cls(session)
-                run = await service.runs.get_by_id_for_user(run_id=run_id, user_id=user_id)
-                if run is None:
-                    raise LookupError("FINN V2 run not found")
-                trace_id = run.trace_id
-                visible = service._is_visible_run(run)
+                    async def transition_phase(**kwargs) -> None:
+                        async with async_session_factory() as transition_session:
+                            await cls(transition_session).persist_transition(**kwargs)
 
-                async def transition_phase(**kwargs) -> None:
-                    async with async_session_factory() as transition_session:
-                        await cls(transition_session).persist_transition(**kwargs)
+                    if visible or service.tools.flags.should_run_block4_shadow(user_id):
+                        async def selection_persisted() -> None:
+                            selection_ready.set()
 
-                if visible or service.tools.flags.should_run_block4_shadow(user_id):
-                    async def selection_persisted() -> None:
+                        async def selector_phase_started() -> None:
+                            selector_started.set()
+
+                        orchestrator = FinnV2OrchestratorService(
+                            session,
+                            phase_transition=transition_phase,
+                            selector_started=selector_phase_started,
+                            selection_persisted=selection_persisted,
+                        )
+                        await orchestrator.execute_run(run_id=run_id, user_id=user_id, trace_id=trace_id)
+                        phase_outcome = orchestrator.consume_phase_outcome()
+                    else:
+                        # Shadow-only runs have no selector boundary, so they do
+                        # not participate in the visible-run selector watchdog.
                         selection_ready.set()
+                        await service.tools.execute_shadow_tool_chain(run_id=run_id, user_id=user_id)
+                        phase_outcome = LifecyclePhaseOutcome(
+                            terminal_status="completed",
+                            interaction_mode="UNAVAILABLE",
+                            orchestrator_result_id="shadow-foundation",
+                        )
 
-                    async def selector_phase_started() -> None:
-                        selector_started.set()
-
-                    orchestrator = FinnV2OrchestratorService(
-                        session,
-                        phase_transition=transition_phase,
-                        selector_started=selector_phase_started,
-                        selection_persisted=selection_persisted,
+                async with async_session_factory() as session:
+                    await cls(session).complete_run(
+                        run_id=run_id,
+                        user_id=user_id,
+                        phase_outcome=phase_outcome,
                     )
-                    await orchestrator.execute_run(run_id=run_id, user_id=user_id, trace_id=trace_id)
-                    phase_outcome = orchestrator.consume_phase_outcome()
-                else:
-                    # Shadow-only runs have no selector boundary, so they do
-                    # not participate in the visible-run selector watchdog.
-                    selection_ready.set()
-                    await service.tools.execute_shadow_tool_chain(run_id=run_id, user_id=user_id)
-                    phase_outcome = LifecyclePhaseOutcome(
-                        terminal_status="completed",
-                        interaction_mode="UNAVAILABLE",
-                        orchestrator_result_id="shadow-foundation",
-                    )
-
-            async with async_session_factory() as session:
-                await cls(session).complete_run(
-                    run_id=run_id,
-                    user_id=user_id,
-                    phase_outcome=phase_outcome,
-                )
+            finally:
+                # A deadline terminalizer takes a fresh database unit of work.
+                # Signal only after every owned session has left its context so
+                # it can never contend with the cancelled lifecycle's locks.
+                lifecycle_released.set()
 
         async def _cancel_lifecycle_within_reserve() -> None:
             """Request cancellation without letting cleanup consume the SLA.
@@ -523,13 +530,19 @@ class FinnV2RunService:
             if lifecycle is None or lifecycle.done():
                 return
             lifecycle.cancel()
-            await asyncio.wait(
-                {lifecycle},
-                timeout=min(0.25, flags.terminal_persistence_reserve_seconds()),
+            release_waiter = asyncio.create_task(lifecycle_released.wait())
+            done, _ = await asyncio.wait(
+                {lifecycle, release_waiter},
+                timeout=min(1.0, flags.terminal_persistence_reserve_seconds()),
+                return_when=asyncio.FIRST_COMPLETED,
             )
+            if release_waiter not in done:
+                release_waiter.cancel()
+                with suppress(asyncio.CancelledError):
+                    await release_waiter
             if not lifecycle.done():
                 logger.warning(
-                    "FINN V2 lifecycle cancellation exceeded bounded reserve",
+                    "FINN V2 lifecycle cancellation did not release its session within the bounded reserve",
                     extra={"run_id": run_id, "user_id": user_id},
                 )
 

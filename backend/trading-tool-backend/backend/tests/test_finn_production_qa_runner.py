@@ -134,9 +134,18 @@ def test_workflow_runs_hashed_control_plane_runner_against_product_checkout():
     assert "control_plane_runner=\".qa-control-plane/backend/trading-tool-backend/backend/scripts/run_finn_production_qa.py\"" in workflow
     assert "runner_sha256=\"$(sha256sum \"$control_plane_runner\"" in workflow
     assert "test \"$(sha256sum \"$runner_path\"" in workflow
-    assert "python3 \"$runner_path\"" in workflow
+    assert "python3 $(printf '%q' \"$runner_path\")" in workflow
     assert "--runner-revision \"$runner_revision\"" in workflow
     assert "python3 backend/trading-tool-backend/backend/scripts/run_finn_production_qa.py" not in workflow
+
+
+def test_workflow_runs_the_server_job_detached_and_resumes_from_checkpoint():
+    workflow = WORKFLOW_PATH.read_text(encoding="utf-8")
+    assert "remote_state_dir=\"/tmp/finn-production-qa-${GITHUB_RUN_ID}\"" in workflow
+    assert "nohup \"$state_dir/run.sh\"" in workflow
+    assert "--resume >\"$state_dir/runner.log\"" in workflow
+    assert "elif test -s '$remote_state_dir/runner.pid'" in workflow
+    assert "restarted=0" in workflow
 
 
 def test_encrypted_manifest_is_only_staged_after_server_side_decryption(tmp_path):
@@ -626,3 +635,36 @@ def test_case_progress_marks_thirty_two_of_thirty_seven_as_incomplete():
     assert progress["completed_count"] == 32
     assert progress["not_run_count"] == 5
     assert progress["incomplete"] is True
+
+
+def test_resume_skips_checkpointed_cases_and_restores_their_conversation(monkeypatch):
+    module = _module()
+    calls = []
+    responses = iter([
+        (200, {"run_id": "run-child", "conversation_id": "conversation-live", "status": "pending"}, 1.0, None),
+        (200, {"run_id": "run-child", "conversation_id": "conversation-live", "status": "completed", "runtime_trace": {"initial_operation_id": "explain_previous_evidence"}}, 1.0, None),
+    ])
+    monkeypatch.setattr(module, "request_json", lambda **kwargs: (calls.append(kwargs) or next(responses)))
+    monkeypatch.setattr(module, "request_sse_terminal", lambda **_kwargs: ({
+        "run_id": "run-child", "conversation_id": "conversation-live", "status": "completed",
+        "runtime_trace": {"initial_operation_id": "explain_previous_evidence"},
+    }, None))
+    monkeypatch.setattr(module.time, "sleep", lambda _seconds: None)
+
+    results = module.run_cases(
+        base_url="https://example.test",
+        token="token",
+        cases=[
+            {"case_id": "parent", "message": "Wat kan je?", "conversation_id": "flow", "expected_operation_id": "capability"},
+            {"case_id": "child", "message": "Waarom?", "conversation_id": "flow", "expected_operation_id": "explain_previous_evidence"},
+        ],
+        existing_results=[{
+            "case_id": "parent", "case_status": "completed", "conversation_key": "flow",
+            "conversation_id": "conversation-live", "create_http_status": 200,
+        }],
+    )
+
+    assert [item["case_id"] for item in results] == ["parent", "child"]
+    create_calls = [call for call in calls if call.get("method") == "POST"]
+    assert len(create_calls) == 1
+    assert create_calls[0]["payload"]["conversation_id"] == "conversation-live"

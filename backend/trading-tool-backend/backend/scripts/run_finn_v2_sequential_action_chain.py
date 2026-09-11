@@ -12,6 +12,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import time
 from typing import Any
 from urllib.parse import urlparse
 import uuid
@@ -190,6 +191,12 @@ def main() -> None:
     )
     parser.add_argument("--backend-pid", type=int, help="Fresh local backend PID observed before this step.")
     parser.add_argument("--worker-pid", type=int, help="Fresh local Celery PID observed before this step.")
+    parser.add_argument(
+        "--step-interval-seconds",
+        type=float,
+        default=3.2,
+        help="Bounded production-shaped pacing between independent provider turns.",
+    )
     parser.add_argument("--read-regressions", action="store_true", help="Run persisted evaluate and bot-consequence checks after a completed chain.")
     args = parser.parse_args()
     base_url = args.base_url.rstrip("/")
@@ -267,6 +274,10 @@ def main() -> None:
         result["objects_after_step"] = _created_objects(user_id, names)
         result["identity_assertion"] = _assert_resolved_identity(step_id, result, steps)
         steps.append(result)
+        # The official matrix paces independent user turns. Mirror that here
+        # so this public parity gate does not manufacture provider saturation.
+        if args.step_index is None and step_id != selected_specs[-1][0]:
+            time.sleep(max(0.0, args.step_interval_seconds))
 
     read_regressions: list[dict[str, Any]] = list(artifact.get("read_regressions") or []) if args.read_regressions else []
     if args.read_regressions:

@@ -642,12 +642,40 @@ def _run_fixture_action(*, base_url: str, token: str, case: Dict[str, Any], term
     return result
 
 
-def run_cases(*, base_url: str, token: str, cases: Iterable[Dict[str, Any]], matrix_deadline_seconds: float = 2100.0, case_timeout_seconds: float = 60.0, fixture_namespace: Optional[str] = None, checkpoint=None) -> list[Dict[str, Any]]:
+def run_cases(
+    *,
+    base_url: str,
+    token: str,
+    cases: Iterable[Dict[str, Any]],
+    matrix_deadline_seconds: float = 2100.0,
+    case_timeout_seconds: float = 60.0,
+    fixture_namespace: Optional[str] = None,
+    checkpoint=None,
+    existing_results: Optional[Iterable[Dict[str, Any]]] = None,
+) -> list[Dict[str, Any]]:
     case_list = list(cases)
-    results = []
-    conversations: Dict[str, str] = {}
+    case_ids = [str(case["case_id"]) for case in case_list]
+    if len(case_ids) != len(set(case_ids)):
+        raise ValueError("manifest_case_ids_not_unique")
+    results = [dict(item) for item in (existing_results or [])]
+    completed_ids = {
+        str(item.get("case_id"))
+        for item in results
+        if item.get("case_id") and item.get("case_status") != "not_run"
+    }
+    unknown_ids = completed_ids.difference(case_ids)
+    if unknown_ids:
+        raise ValueError("checkpoint_case_not_in_manifest")
+    conversations: Dict[str, str] = {
+        str(item["conversation_key"]): str(item["conversation_id"])
+        for item in results
+        if item.get("conversation_key") and item.get("conversation_id")
+        and item.get("case_status") != "not_run"
+    }
     matrix_deadline = time.monotonic() + matrix_deadline_seconds
     for index, case in enumerate(case_list):
+        if str(case["case_id"]) in completed_ids:
+            continue
         if time.monotonic() >= matrix_deadline:
             # Preserve every remaining manifest case as explicit evidence. A
             # single synthetic deadline row previously hid the final cases.
@@ -658,6 +686,7 @@ def run_cases(*, base_url: str, token: str, cases: Iterable[Dict[str, Any]], mat
                     "error_category": "matrix_deadline",
                 }
                 for pending_case in case_list[index:]
+                if str(pending_case["case_id"]) not in completed_ids
             )
             if checkpoint:
                 checkpoint(results, planned_count=len(case_list))
@@ -758,6 +787,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--runner-revision")
     parser.add_argument("--matrix-deadline-seconds", type=float, default=2100.0)
     parser.add_argument("--case-timeout-seconds", type=float, default=60.0)
+    parser.add_argument(
+        "--resume",
+        action="store_true",
+        help="Resume this exact matrix from its atomic checkpoint without rerunning cases.",
+    )
     parser.add_argument("--dry-preflight", action="store_true")
     return parser.parse_args()
 
@@ -835,6 +869,18 @@ def main() -> int:
                     fixture_namespace=fixture_namespace,
                 ))
                 report.update(fixture_preflight(cases, fixture_namespace=fixture_namespace))
+                if getattr(args, "resume", False) and report_path.exists():
+                    prior = json.loads(report_path.read_text(encoding="utf-8"))
+                    if (
+                        prior.get("target_sha") != args.release_sha
+                        or prior.get("manifest_sha256") != report["manifest_sha256"]
+                        or prior.get("workflow_run_id") != args.workflow_run_id
+                    ):
+                        raise ValueError("checkpoint_identity_mismatch")
+                    previous_rows = prior.get("cases")
+                    if not isinstance(previous_rows, list):
+                        raise ValueError("checkpoint_cases_invalid")
+                    report["cases"] = [dict(item) for item in previous_rows]
                 def checkpoint(results, *, planned_count: int) -> None:
                     # Copy snapshots: a later runner failure must not mutate a
                     # previously valid atomic checkpoint in memory.
@@ -847,7 +893,7 @@ def main() -> int:
                     temporary.write_text(json.dumps(redact(report), sort_keys=True, indent=2) + "\n", encoding="utf-8")
                     temporary.replace(report_path)
 
-                report["cases"] = run_cases(base_url=args.base_url.rstrip("/"), token=token, cases=cases, matrix_deadline_seconds=getattr(args, "matrix_deadline_seconds", 2100.0), case_timeout_seconds=getattr(args, "case_timeout_seconds", 60.0), fixture_namespace=fixture_namespace, checkpoint=checkpoint)
+                report["cases"] = run_cases(base_url=args.base_url.rstrip("/"), token=token, cases=cases, matrix_deadline_seconds=getattr(args, "matrix_deadline_seconds", 2100.0), case_timeout_seconds=getattr(args, "case_timeout_seconds", 60.0), fixture_namespace=fixture_namespace, checkpoint=checkpoint, existing_results=report["cases"])
                 report.update(case_progress(cases=report["cases"], planned_count=len(cases)))
                 report["failure_summary"] = failure_summary(report["cases"])
                 report["safety"]["read_only_profile"] = all(case.get("fixture_action", "read_only") == "read_only" for case in cases)

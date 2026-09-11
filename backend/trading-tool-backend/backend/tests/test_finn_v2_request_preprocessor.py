@@ -121,6 +121,13 @@ def test_separable_update_and_deactivate_verbs_keep_their_typed_mutation_polarit
     assert service.preprocess(message="Deactiveer die bot.").action_polarity == "deactivate"
 
 
+def test_starting_a_new_bot_is_create_while_explicit_live_activation_stays_activate():
+    service = FinnV2RequestPreprocessorService()
+
+    assert service.preprocess(message="Start een nieuwe paper bot voor deze strategie.").action_polarity == "create"
+    assert service.preprocess(message="Activeer deze bot voor live orders.").action_polarity == "activate"
+
+
 def test_inflected_nl_en_de_object_mutations_keep_typed_polarity():
     service = FinnV2RequestPreprocessorService()
 

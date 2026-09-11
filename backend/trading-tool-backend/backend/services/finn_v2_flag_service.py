@@ -151,8 +151,8 @@ class FinnV2FlagService:
         return max(3, min(configured, lifecycle_budget))
 
     def selector_provider_timeout_seconds(self) -> int:
-        """Reserve time to persist a successful structured selection."""
-        return max(1, self.selector_phase_deadline_seconds() - self.terminal_persistence_reserve_seconds())
+        """Use the complete selector phase; lifecycle ownership reserves terminal time."""
+        return self.selector_phase_deadline_seconds()
 
     def selector_max_output_tokens(self) -> int:
         """Keep the strict semantic frame compact; reasoning has its own budget."""

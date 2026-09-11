@@ -1,3 +1,5 @@
+import pytest
+
 from backend.services.finn_v2_operation_state_service import FinnV2OperationStateService
 from backend.domain.finn_v2_operation_registry import FinnV2OperationRegistry
 
@@ -55,6 +57,21 @@ def test_strategy_inputs_accept_natural_dutch_base_amount_wording():
     )
 
     assert collected == {"execution_mode": "fixed", "base_amount": 100.0}
+
+
+@pytest.mark.parametrize("message", [
+    "Maak een automatische strategie met een basisinleg van 100 euro.",
+    "Create an automatic strategy with a base amount of 100.",
+    "Erstelle eine automatisierte Strategie mit Grundbetrag 100.",
+])
+def test_strategy_execution_mode_normalizes_nl_en_de_automatic_variants(message):
+    state = FinnV2OperationStateService()
+    contract = FinnV2OperationRegistry().require_supported("create_strategy")
+
+    collected = state.explicit_inputs(contract=contract, message=message, explicit_asset=None)
+
+    assert collected["execution_mode"] == "fixed"
+    assert collected["base_amount"] == 100.0
 
 
 def test_guided_state_keeps_optional_inputs_declared_by_the_action_contract():

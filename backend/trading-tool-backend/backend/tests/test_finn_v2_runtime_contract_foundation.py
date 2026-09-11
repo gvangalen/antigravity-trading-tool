@@ -575,7 +575,10 @@ def test_owned_worker_lifecycle_has_a_terminal_deadline_independent_of_delivery(
     assert 'error_code="lifecycle_deadline_exceeded"' in owned
     assert "_cancel_lifecycle_within_reserve" in owned
     assert "timeout=_remaining(reserve=True)" in owned
-    assert "lifecycle cancellation exceeded bounded reserve" in owned
+    assert "lifecycle_released = asyncio.Event()" in owned
+    assert "lifecycle_released.set()" in owned
+    assert "lifecycle_released.wait()" in owned
+    assert "did not release its session within the bounded reserve" in owned
 
 
 def test_verifying_failure_materializes_one_typed_terminal_projection():
@@ -706,7 +709,7 @@ def test_selector_provider_budget_leaves_time_for_the_persisted_selection(monkey
     flags = FinnV2FlagService()
     selector = (ROOT / "services" / "finn_v2_structured_operation_selector_service.py").read_text(encoding="utf-8")
 
-    assert flags.selector_provider_timeout_seconds() == 10
+    assert flags.selector_provider_timeout_seconds() == 12
     assert flags.selector_phase_deadline_seconds() == 12
     assert flags.selector_provider_timeout_seconds() < flags.lifecycle_deadline_seconds()
     assert flags.selector_max_output_tokens() == 240
