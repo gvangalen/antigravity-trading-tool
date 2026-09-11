@@ -1,0 +1,127 @@
+[
+  {
+    "eval_id": "reg-qa346013-q04-read-strategy",
+    "dataset": "regression",
+    "input_query": "Welke strategie is aan mijn actieve setup gekoppeld?",
+    "expected_operation_id": "read_linked_strategy",
+    "expected_domain": "strategy",
+    "expected_supported": true,
+    "expected_action_polarity": "read",
+    "expected_conversation_reference": null,
+    "expected_missing_inputs": [],
+    "expected_clarification": false,
+    "provider_call_expected": true,
+    "declassified_source": {
+      "artifact_sha256": "0da3aaaead747ff778bb551229be408a211a15c6826477e9e4738a3f0dc37d1f",
+      "case_id": "q04-read-strategy",
+      "necessary_prior_conversation_turns": [],
+      "expected_contract_inputs": {}
+    }
+  },
+  {
+    "eval_id": "reg-qa346013-q13-bot-consequence",
+    "dataset": "regression",
+    "input_query": "Wat betekent die eerdere beoordeling concreet voor mijn gekoppelde bot?",
+    "conversation_context": {
+      "last_verified_context": {
+        "verified_response_id": "declassified-previous-response",
+        "operation_id": "evaluate_plan",
+        "evidence_refs": ["E1"],
+        "resolved_entities": {"strategy_id": 9002, "bot_id": 9003}
+      }
+    },
+    "expected_operation_id": "evaluate_bot",
+    "expected_domain": "bot",
+    "expected_supported": true,
+    "expected_action_polarity": "evaluate",
+    "expected_conversation_reference": "previous_verified_response",
+    "expected_missing_inputs": [],
+    "expected_clarification": false,
+    "provider_call_expected": true,
+    "declassified_source": {
+      "artifact_sha256": "0da3aaaead747ff778bb551229be408a211a15c6826477e9e4738a3f0dc37d1f",
+      "case_id": "q13-bot-consequence",
+      "necessary_prior_conversation_turns": [
+        "Beoordeel mijn volledige actieve plan en noem precies één belangrijkste verbetering.",
+        "Welke opgeslagen feiten uit je vorige beoordeling ondersteunen die conclusie?",
+        "Herformuleer je vorige antwoord korter zonder de betekenis te wijzigen."
+      ],
+      "expected_contract_inputs": {}
+    }
+  },
+  {
+    "eval_id": "reg-qa346013-q30-strategy-create",
+    "dataset": "regression",
+    "input_query": "Maak voor die setup een strategie met execution mode handmatig en een basisbedrag van 100 euro.",
+    "conversation_context": {"previous_action_result": {"entity_type": "setup", "entity_id": 9001, "owner_user_id": 7, "result_status": "succeeded"}},
+    "expected_operation_id": "create_strategy",
+    "expected_domain": "strategy",
+    "expected_supported": true,
+    "expected_action_polarity": "create",
+    "expected_conversation_reference": "previous_action_result",
+    "expected_missing_inputs": [],
+    "expected_clarification": false,
+    "provider_call_expected": true,
+    "declassified_source": {"artifact_sha256": "0da3aaaead747ff778bb551229be408a211a15c6826477e9e4738a3f0dc37d1f", "case_id": "q30-strategy-create", "necessary_prior_conversation_turns": ["Maak een SOL swing trade setup op 4H met de naam QA Lifecycle 31DD Setup.", "Wijzig de setup die je zojuist hebt gemaakt en zet de timeframe op 1D."], "expected_contract_inputs": {"setup_id": "from q29 owner-scoped setup lineage", "execution_mode": "manual", "base_amount": 100.0}}
+  },
+  {
+    "eval_id": "reg-qa346013-q31-strategy-update",
+    "dataset": "regression",
+    "input_query": "Wijzig die strategie en zet execution mode op automatisch.",
+    "conversation_context": {"previous_action_result": {"entity_type": "strategy", "entity_id": 9002, "owner_user_id": 7, "result_status": "succeeded"}},
+    "expected_operation_id": "update_strategy",
+    "expected_domain": "strategy",
+    "expected_supported": true,
+    "expected_action_polarity": "update",
+    "expected_conversation_reference": "previous_action_result",
+    "expected_missing_inputs": [],
+    "expected_clarification": false,
+    "provider_call_expected": true,
+    "declassified_source": {"artifact_sha256": "0da3aaaead747ff778bb551229be408a211a15c6826477e9e4738a3f0dc37d1f", "case_id": "q31-strategy-update", "necessary_prior_conversation_turns": ["Maak voor die setup een strategie met execution mode handmatig en een basisbedrag van 100 euro."], "expected_contract_inputs": {"strategy_id": "from q30 owner-scoped strategy lineage", "changed_fields": {"execution_mode": "automatic"}}}
+  },
+  {
+    "eval_id": "reg-qa346013-q32-bot-create",
+    "dataset": "regression",
+    "input_query": "Maak voor die strategie een niet-live paper bot met de naam QA Lifecycle 31DD Bot.",
+    "conversation_context": {"previous_action_result": {"entity_type": "strategy", "entity_id": 9002, "owner_user_id": 7, "result_status": "succeeded"}},
+    "expected_operation_id": "create_bot",
+    "expected_domain": "bot",
+    "expected_supported": true,
+    "expected_action_polarity": "create",
+    "expected_conversation_reference": "previous_action_result",
+    "expected_missing_inputs": [],
+    "expected_clarification": false,
+    "provider_call_expected": true,
+    "declassified_source": {"artifact_sha256": "0da3aaaead747ff778bb551229be408a211a15c6826477e9e4738a3f0dc37d1f", "case_id": "q32-bot-create", "necessary_prior_conversation_turns": ["Maak voor die setup een strategie met execution mode handmatig en een basisbedrag van 100 euro.", "Wijzig die strategie en zet execution mode op automatisch."], "expected_contract_inputs": {"strategy_id": "from q31 owner-scoped strategy lineage", "name": "QA Lifecycle 31DD Bot"}}
+  },
+  {
+    "eval_id": "reg-qa346013-q33-bot-update",
+    "dataset": "regression",
+    "input_query": "Wijzig die bot en zet het budget op 100 euro.",
+    "conversation_context": {"previous_action_result": {"entity_type": "bot", "entity_id": 9003, "owner_user_id": 7, "result_status": "succeeded"}},
+    "expected_operation_id": "update_bot",
+    "expected_domain": "bot",
+    "expected_supported": true,
+    "expected_action_polarity": "update",
+    "expected_conversation_reference": "previous_action_result",
+    "expected_missing_inputs": [],
+    "expected_clarification": false,
+    "provider_call_expected": true,
+    "declassified_source": {"artifact_sha256": "0da3aaaead747ff778bb551229be408a211a15c6826477e9e4738a3f0dc37d1f", "case_id": "q33-bot-update", "necessary_prior_conversation_turns": ["Maak voor die strategie een niet-live paper bot met de naam QA Lifecycle 31DD Bot."], "expected_contract_inputs": {"bot_id": "from q32 owner-scoped bot lineage", "changed_fields": {"budget": 100.0}}}
+  },
+  {
+    "eval_id": "reg-qa346013-q34-bot-deactivate",
+    "dataset": "regression",
+    "input_query": "Deactiveer die bot maar verwijder hem niet.",
+    "conversation_context": {"previous_action_result": {"entity_type": "bot", "entity_id": 9003, "owner_user_id": 7, "result_status": "succeeded"}},
+    "expected_operation_id": "deactivate_bot",
+    "expected_domain": "bot",
+    "expected_supported": true,
+    "expected_action_polarity": "update",
+    "expected_conversation_reference": "previous_action_result",
+    "expected_missing_inputs": [],
+    "expected_clarification": false,
+    "provider_call_expected": true,
+    "declassified_source": {"artifact_sha256": "0da3aaaead747ff778bb551229be408a211a15c6826477e9e4738a3f0dc37d1f", "case_id": "q34-bot-deactivate", "necessary_prior_conversation_turns": ["Maak voor die strategie een niet-live paper bot met de naam QA Lifecycle 31DD Bot.", "Wijzig die bot en zet het budget op 100 euro."], "expected_contract_inputs": {"bot_id": "from q33 owner-scoped bot lineage"}}
+  }
+]

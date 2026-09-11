@@ -59,6 +59,77 @@ def test_strategy_inputs_accept_natural_dutch_base_amount_wording():
     assert collected == {"execution_mode": "fixed", "base_amount": 100.0}
 
 
+def test_declassified_strategy_create_prompt_collects_manual_mode_and_amount():
+    state = FinnV2OperationStateService()
+    contract = FinnV2OperationRegistry().require_supported("create_strategy")
+
+    resolved = state.resolve(
+        contract=contract,
+        message="Maak voor die setup een strategie met execution mode handmatig en een basisbedrag van 100 euro.",
+        explicit_asset=None,
+        conversation_context={
+            "previous_action_result": {
+                "entity_type": "setup",
+                "entity_id": 316,
+                "owner_user_id": 7,
+                "result_status": "succeeded",
+            }
+        },
+    )
+
+    # The existing persistence schema calls its deterministic manual mode
+    # ``fixed``. The source prompt is still a complete, typed action request.
+    assert resolved.collected_inputs == {
+        "setup_id": 316,
+        "execution_mode": "fixed",
+        "base_amount": 100.0,
+    }
+    assert resolved.missing_required_inputs == []
+
+
+def test_declassified_strategy_and_bot_updates_parse_set_field_op_value_without_ids():
+    state = FinnV2OperationStateService()
+    registry = FinnV2OperationRegistry()
+
+    strategy = state.resolve(
+        contract=registry.require_supported("update_strategy"),
+        message="Wijzig die strategie en zet execution mode op automatisch.",
+        explicit_asset=None,
+        conversation_context={
+            "previous_action_result": {
+                "entity_type": "strategy",
+                "entity_id": 41,
+                "owner_user_id": 7,
+                "result_status": "succeeded",
+            }
+        },
+    )
+    bot = state.resolve(
+        contract=registry.require_supported("update_bot"),
+        message="Wijzig die bot en zet het budget op 100 euro.",
+        explicit_asset=None,
+        conversation_context={
+            "previous_action_result": {
+                "entity_type": "bot",
+                "entity_id": 61,
+                "owner_user_id": 7,
+                "result_status": "succeeded",
+            }
+        },
+    )
+
+    assert strategy.collected_inputs == {
+        "strategy_id": 41,
+        "changed_fields": {"execution_mode": "automatisch"},
+    }
+    assert strategy.missing_required_inputs == []
+    assert bot.collected_inputs == {
+        "bot_id": 61,
+        "changed_fields": {"budget": 100},
+    }
+    assert bot.missing_required_inputs == []
+
+
 @pytest.mark.parametrize("message", [
     "Maak een automatische strategie met een basisinleg van 100 euro.",
     "Create an automatic strategy with a base amount of 100.",

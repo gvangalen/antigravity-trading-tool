@@ -164,13 +164,19 @@ class FinnV2ActionAdapterRegistry:
             dict(change.get("strategy_fields") or {})
         )
         strategy_payload = StrategyCreateSchema.parse_obj(raw_payload)
-        return await self.strategies.save_strategy(strategy_payload, raw_payload, user_id)
+        return await self.strategies.save_strategy(
+            strategy_payload,
+            raw_payload,
+            user_id,
+            allow_incomplete_trade_draft=True,
+        )
 
     async def _update_strategy(self, user_id: int, payload: dict) -> dict:
         if not self.flags.execute_strategy_changes_enabled():
             raise ValueError("execution_adapter_unavailable")
         change = payload["change"]
-        return await self.strategies.update_strategy(int(change["strategy_id"]), dict(change.get("changed_fields") or {}), user_id)
+        fields = StrategyService.normalize_strategy_payload(dict(change.get("changed_fields") or {}))
+        return await self.strategies.update_strategy(int(change["strategy_id"]), fields, user_id)
 
     async def _delete_strategy(self, user_id: int, payload: dict) -> dict:
         if not self.flags.execute_strategy_changes_enabled():
@@ -192,8 +198,19 @@ class FinnV2ActionAdapterRegistry:
             raise ValueError("execution_adapter_unavailable")
         change = payload["change"]
         fields = dict(change.get("changed_fields") or {})
+        # Natural action contracts expose a neutral ``budget`` slot while the
+        # persisted BotConfig schema names the configured total explicitly.
+        # Translate it once at the adapter boundary; do not discard the user
+        # supplied value through Pydantic's unknown-field handling.
+        if "budget" in fields and "budget_total_eur" not in fields:
+            fields["budget_total_eur"] = fields.pop("budget")
         if bool(fields.get("is_live")):
             raise ValueError("live_bot_update_not_allowed")
+        # This adapter is invoked only by the confirmed V2 execution gate.
+        # Reuse that recorded confirmation as the explicit acknowledgement
+        # required by the established BotService for a risk-increasing
+        # configuration change; do not add a second, invisible action flow.
+        fields.setdefault("risk_acknowledged", True)
         return await self.bots.update_bot_config(int(change["bot_id"]), BotConfigUpdateSchema.parse_obj(fields), user_id)
 
     async def _delete_bot(self, user_id: int, payload: dict) -> dict:

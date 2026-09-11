@@ -63,9 +63,16 @@ def _run_action(
     other_token: str,
     message: str,
     operation_id: str,
+    conversation_id: str | None = None,
     persistence_boundary: dict[str, object] | None = None,
 ) -> dict[str, Any]:
-    observed = run_gate(base_url=base_url, bearer_token=token, message=message, timeout_seconds=75)
+    observed = run_gate(
+        base_url=base_url,
+        bearer_token=token,
+        message=message,
+        conversation_id=conversation_id,
+        timeout_seconds=75,
+    )
     record = _runtime_record(observed["run_id"])
     projection = record["terminal_projection"]
     proposal = record["proposal"]
@@ -75,6 +82,7 @@ def _run_action(
         "initial_operation_id": observed["initial_operation_id"],
         "final_operation_id": observed["final_operation_id"],
         "run_id": observed["run_id"],
+        "conversation_id": observed["conversation_id"],
         "initial_http_status": observed["run_create_http_status"],
         "runtime_contract_id": record["runtime_contract_id"],
         "supplied_inputs": projection.get("supplied_inputs"),

@@ -1212,3 +1212,36 @@ def test_request_analysis_does_not_treat_read_questions_with_confirmed_wording_a
     assert strategy_result.subject_scopes == ["setup", "strategy"]
     assert bot_result.interaction_mode == "READ"
     assert bot_result.subject_scopes == ["bot"]
+
+
+def test_contextual_action_result_is_projected_as_typed_contract_lineage(monkeypatch):
+    service = FinnV2RequestAnalysisService()
+    monkeypatch.setattr(
+        service.classifier,
+        "classify",
+        lambda **_kwargs: SemanticOperationClassification(
+            operation_id="create_strategy",
+            action="create",
+            domain="strategy",
+            discourse="operation_request",
+            confidence="high",
+            selector_source="structured",
+            selected_conversation_reference="previous_action_result",
+        ),
+    )
+
+    analysis = service.analyze(
+        message="Maak voor die setup een strategie met execution mode handmatig en een basisbedrag van 100 euro.",
+        conversation_context={
+            "previous_action_result": {
+                "run_id": "run-setup-update",
+                "entity_type": "setup",
+                "entity_id": 41,
+                "result_status": "succeeded",
+            },
+        },
+    )
+
+    assert analysis.request_plan.operation_id == "create_strategy"
+    assert analysis.request_plan.conversation_reference == "run-setup-update"
+    assert analysis.request_plan.conversation_reference_kind == "previous_action_result"

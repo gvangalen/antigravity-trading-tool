@@ -211,6 +211,14 @@ class StrategyService:
             if target not in merged and merged.get(source) is not None:
                 merged[target] = merged[source]
 
+        # FINN accepts ordinary language for the two established persistence
+        # modes. Keep that translation at the schema boundary so the runtime
+        # contract can retain the user's typed field while this legacy service
+        # continues to persist only its canonical fixed/custom values.
+        execution_mode = str(merged.get("execution_mode") or "").strip().casefold()
+        if execution_mode in {"manual", "handmatig", "automatic", "automatisch"}:
+            merged["execution_mode"] = "fixed"
+
         if merged.get("targets") is None and isinstance(merged.get("trade_plan"), dict):
             trade_plan = merged["trade_plan"]
             if trade_plan.get("targets") is not None:
@@ -222,7 +230,14 @@ class StrategyService:
 
         return merged
 
-    async def save_strategy(self, payload: StrategyCreateSchema, raw_data: dict, user_id: int):
+    async def save_strategy(
+        self,
+        payload: StrategyCreateSchema,
+        raw_data: dict,
+        user_id: int,
+        *,
+        allow_incomplete_trade_draft: bool = False,
+    ):
         raw_data = self.normalize_strategy_payload(raw_data)
         execution_mode = payload.execution_mode.lower()
         if execution_mode not in ["fixed", "custom"]:
@@ -239,8 +254,15 @@ class StrategyService:
         if setup_type not in ["dca", "trade", "position"]:
             raise HTTPException(400, "Ongeldig setup_type")
 
-        if setup_type in {"trade", "position"}:
+        if setup_type in {"trade", "position"} and not allow_incomplete_trade_draft:
             self._validate_trade_strategy(raw_data)
+        elif setup_type in {"trade", "position"}:
+            # FINN's create_strategy action contract creates a confirmed
+            # configuration draft. It does not manufacture entry, stop-loss
+            # or target levels that the user did not supply. Mark it
+            # explicitly non-executable until those trade levels are added.
+            raw_data["execution_ready"] = False
+            raw_data["draft_reason"] = "trade_levels_not_supplied"
 
         exists = await self.repository.check_strategy_exists(payload.setup_id, user_id)
         if exists:
@@ -352,7 +374,7 @@ class StrategyService:
             raise HTTPException(400, "decision_curve verplicht")
 
         setup_type = (existing.get("existing_setup_type") or "").lower()
-        if setup_type in {"trade", "position"}:
+        if setup_type in {"trade", "position"} and merged_data.get("execution_ready") is not False:
             self._validate_trade_strategy(merged_data)
 
         updated_count = await self.repository.update_strategy(strategy_id, user_id, merged_data, setup_type, merged_data)

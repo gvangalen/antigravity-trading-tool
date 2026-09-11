@@ -144,6 +144,11 @@ def run_gate(
         "initial_operation_id": projection.get("initial_operation_id"),
         "final_operation_id": projection.get("final_operation_id"),
         "canonical_target": projection.get("canonical_target"),
+        # These are public terminal-projection fields.  Returning them keeps
+        # runtime gates from inferring lineage independently of the delivery
+        # envelope they are meant to validate.
+        "conversation_reference": projection.get("conversation_reference"),
+        "conversation_reference_kind": projection.get("conversation_reference_kind"),
         "elapsed_ms": round((time.monotonic() - started_at) * 1000, 2),
         "polling_terminal_elapsed_ms": round(((polling_terminal_at or time.monotonic()) - started_at) * 1000, 2),
         "delivery_transport": "sse_primary_polling_fallback",

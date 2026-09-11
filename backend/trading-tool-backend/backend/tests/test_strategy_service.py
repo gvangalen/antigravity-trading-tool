@@ -28,6 +28,13 @@ def test_normalize_strategy_payload_promotes_nested_alias_fields():
     assert payload["targets"] == "64000, 66000"
 
 
+@pytest.mark.parametrize("execution_mode", ["manual", "handmatig", "automatic", "automatisch"])
+def test_normalize_strategy_payload_maps_natural_execution_modes_to_the_existing_schema(execution_mode):
+    payload = StrategyService.normalize_strategy_payload({"execution_mode": execution_mode})
+
+    assert payload["execution_mode"] == "fixed"
+
+
 def test_validate_trade_strategy_accepts_nested_camelcase_payload():
     service = StrategyService(db_session=None)
 

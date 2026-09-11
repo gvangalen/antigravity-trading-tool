@@ -41,6 +41,7 @@ def fixture_paths(*, dataset: str | None = None) -> list[Path]:
     return [
         root / "finn_v2_selector_development.json",
         root / "finn_v2_selector_regression.json",
+        root / "finn_v2_selector_declassified_346013_regression.json",
         root / "finn_v2_selector_published_c118_regression.json",
         root / "finn_v2_selector_published_qa_609_regression.json",
     ]

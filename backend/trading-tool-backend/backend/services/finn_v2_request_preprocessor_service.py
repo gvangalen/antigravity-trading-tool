@@ -129,9 +129,13 @@ class FinnV2RequestPreprocessorService:
             "waarop baseer", "waar baseer", "welk bewijs", "waarom concludeerde",
             "leg de eerdere", "evidence achter", "vastgelegde feiten",
             "feiten achter", "gegeven oordeel", "zojuist gegeven oordeel",
-            "vorige oordeel", "eerdere oordeel", "vorige beoordeling", "previous judgment", "previous verdict",
+            "vorige oordeel", "eerdere oordeel", "vorige beoordeling", "eerdere beoordeling",
+            "previous judgment", "previous verdict",
         ),
-        "contextual_implication": ("wat betekent dat", "wat houdt dat in", "welk gevolg heeft dat"),
+        "contextual_implication": (
+            "wat betekent dat", "wat houdt dat in", "welk gevolg heeft dat",
+            "wat betekent die", "what does that mean for", "was bedeutet das fuer",
+        ),
         "reformulation": (
             "korter", "eenvoudiger", "simpler", "more simply",
             "herformuleer",
@@ -391,7 +395,17 @@ class FinnV2RequestPreprocessorService:
             return "read"
         if "live" in text and re.search(r"\b(staat|is|welke|toon)\b", text):
             return "read"
-        if "live" in text and re.search(r"\b(?:activeer\w*|activate\w*|schakel\w*|inschakel\w*|start\w*|zet|maak\w*)\b", text):
+        # A paper or explicitly non-live bot is a create/update constraint,
+        # never a request to activate live automation.  Preserve that typed
+        # safety fact before recognising an affirmative live activation.
+        live_state_is_negated = bool(re.search(
+            r"\b(?:niet[-\s]?live|non[-\s]?live|not[-\s]?live|paper)\b", text
+        ))
+        if (
+            "live" in text
+            and not live_state_is_negated
+            and re.search(r"\b(?:activeer\w*|activate\w*|schakel\w*|inschakel\w*|start\w*|zet|maak\w*)\b", text)
+        ):
             return "activate"
         if re.search(r"\b(?:echte|reële|live)\s+orders?\b", text) and re.search(
             r"\b(?:plaats\w*|uitvoer\w*|verstuur\w*|verstur\w*)\b", text

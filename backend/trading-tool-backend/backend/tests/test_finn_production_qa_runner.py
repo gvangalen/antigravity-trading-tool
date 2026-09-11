@@ -619,6 +619,87 @@ def test_matrix_deadline_marks_each_unattempted_case_and_preserves_prior_failure
     assert checkpoints[-1][1]["planned_count"] == 6
 
 
+def test_broken_transport_after_a_checkpoint_resumes_a_37_case_matrix_without_duplicate_runs(monkeypatch, tmp_path):
+    """A detached server runner can resume the same matrix after SSH drops."""
+    module = _module()
+    created_case_ids = []
+    active_case_ids = []
+
+    def request(**kwargs):
+        if kwargs.get("method") == "POST":
+            case_id = str(kwargs["payload"]["message"])
+            active_case_ids.append(case_id)
+            created_case_ids.append(case_id)
+            return 200, {
+                "run_id": f"run-{case_id}",
+                "conversation_id": f"conversation-{case_id}",
+                "status": "pending",
+            }, 1.0, None
+        run_id = str(kwargs["url"]).rsplit("/", 1)[-1]
+        return 200, {
+            "run_id": run_id,
+            "conversation_id": f"conversation-{run_id}",
+            "status": "completed",
+            "runtime_trace": {"initial_operation_id": "capability"},
+        }, 1.0, None
+
+    monkeypatch.setattr(module, "request_json", request)
+    def sse(**kwargs):
+        run_id = str(kwargs["url"]).rsplit("/", 2)[-2]
+        return {
+            "run_id": run_id,
+            "conversation_id": f"conversation-{run_id.removeprefix('run-')}",
+            "status": "completed",
+            "runtime_trace": {"initial_operation_id": "capability"},
+        }, None
+
+    monkeypatch.setattr(module, "request_sse_terminal", sse)
+    monkeypatch.setattr(module.time, "sleep", lambda _seconds: None)
+    cases = [
+        {"case_id": f"case-{index:02d}", "message": f"case-{index:02d}", "expected_operation_id": "capability"}
+        for index in range(37)
+    ]
+    checkpoint_path = tmp_path / "checkpoint.json"
+    snapshots = []
+
+    def interrupted_checkpoint(rows, **_kwargs):
+        snapshot = [dict(row) for row in rows]
+        snapshots.append(snapshot)
+        checkpoint_path.write_text(json.dumps({"cases": snapshot}), encoding="utf-8")
+        if len(snapshot) == 18:
+            raise BrokenPipeError("simulated_ssh_broken_pipe")
+
+    with pytest.raises(BrokenPipeError, match="simulated_ssh_broken_pipe"):
+        module.run_cases(
+            base_url="https://example.test",
+            token="token",
+            cases=cases,
+            checkpoint=interrupted_checkpoint,
+        )
+
+    persisted = json.loads(checkpoint_path.read_text(encoding="utf-8"))["cases"]
+    assert len(persisted) == 18
+    assert len(created_case_ids) == 18
+
+    def final_checkpoint(rows, **_kwargs):
+        checkpoint_path.write_text(json.dumps({"cases": rows}), encoding="utf-8")
+
+    resumed = module.run_cases(
+        base_url="https://example.test",
+        token="token",
+        cases=cases,
+        checkpoint=final_checkpoint,
+        existing_results=persisted,
+    )
+
+    assert len(resumed) == 37
+    assert {item["case_id"] for item in resumed} == {case["case_id"] for case in cases}
+    assert len(created_case_ids) == 37
+    assert len(set(created_case_ids)) == 37
+    assert all(item["case_status"] == "completed" for item in resumed)
+    assert module.case_progress(cases=resumed, planned_count=37)["incomplete"] is False
+
+
 def test_case_progress_marks_thirty_two_of_thirty_seven_as_incomplete():
     module = _module()
     cases = [

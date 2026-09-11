@@ -43,6 +43,25 @@ def test_published_holdouts_are_hash_pinned_and_only_run_as_regression():
     assert len(errata["operation_contract_sha256"]) == 64
 
 
+def test_declassified_346013_cases_are_public_regressions_with_immutable_contracts():
+    source = FIXTURES / "finn_v2_selector_declassified_346013_regression.json"
+    payload = json.loads(source.read_text(encoding="utf-8"))
+
+    assert [case["declassified_source"]["case_id"] for case in payload] == [
+        "q04-read-strategy", "q13-bot-consequence", "q30-strategy-create",
+        "q31-strategy-update", "q32-bot-create", "q33-bot-update", "q34-bot-deactivate",
+    ]
+    assert all(
+        case["declassified_source"]["artifact_sha256"]
+        == "0da3aaaead747ff778bb551229be408a211a15c6826477e9e4738a3f0dc37d1f"
+        for case in payload
+    )
+    cases = {case.eval_id: case for case in load_and_validate(fixture_paths(), allow_published_regression=True)}
+    assert cases["reg-qa346013-q13-bot-consequence"].expected_operation_id == "evaluate_bot"
+    assert cases["reg-qa346013-q30-strategy-create"].expected_missing_inputs == []
+    assert cases["reg-qa346013-q34-bot-deactivate"].expected_action_polarity.value == "update"
+
+
 def test_selector_eval_registry_rejects_duplicate_cross_dataset_queries(tmp_path):
     paths = _paths()
     duplicate = tmp_path / "finn_v2_selector_holdout.json"

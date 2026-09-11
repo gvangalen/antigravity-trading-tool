@@ -42,8 +42,14 @@ def test_watchlist_add_uses_database_unique_constraint_for_idempotency():
 
 def test_create_strategy_adapter_delegates_to_existing_strategy_service():
     class _Strategies:
-        async def save_strategy(self, payload, raw_payload, user_id):
-            return {"id": 91, "setup_id": payload.setup_id, "user_id": user_id, "raw": raw_payload}
+        async def save_strategy(self, payload, raw_payload, user_id, *, allow_incomplete_trade_draft):
+            return {
+                "id": 91,
+                "setup_id": payload.setup_id,
+                "user_id": user_id,
+                "raw": raw_payload,
+                "allow_incomplete_trade_draft": allow_incomplete_trade_draft,
+            }
 
     registry = FinnV2ActionAdapterRegistry(session=object())
     registry.flags.execute_strategy_changes_enabled = lambda: True
@@ -58,6 +64,41 @@ def test_create_strategy_adapter_delegates_to_existing_strategy_service():
 
     assert result["setup_id"] == 12
     assert result["user_id"] == 390
+    assert result["allow_incomplete_trade_draft"] is True
+
+
+def test_update_strategy_normalizes_natural_execution_mode_before_persistence():
+    class _Strategies:
+        async def update_strategy(self, strategy_id, fields, user_id):
+            return {"strategy_id": strategy_id, "fields": fields, "user_id": user_id}
+
+    registry = FinnV2ActionAdapterRegistry(session=object())
+    registry.flags.execute_strategy_changes_enabled = lambda: True
+    registry.strategies = _Strategies()
+
+    result = asyncio.run(registry._update_strategy(
+        390,
+        {"change": {"strategy_id": 12, "changed_fields": {"execution_mode": "automatisch"}}},
+    ))
+
+    assert result["fields"] == {"execution_mode": "fixed"}
+
+
+def test_update_bot_maps_the_contract_budget_slot_to_the_persisted_schema():
+    class _Bots:
+        async def update_bot_config(self, bot_id, payload, user_id):
+            return {"bot_id": bot_id, "payload": payload.dict(exclude_unset=True), "user_id": user_id}
+
+    registry = FinnV2ActionAdapterRegistry(session=object())
+    registry.flags.execute_bot_changes_enabled = lambda: True
+    registry.bots = _Bots()
+
+    result = asyncio.run(registry._update_bot(
+        390,
+        {"change": {"bot_id": 14, "changed_fields": {"budget": 100}}},
+    ))
+
+    assert result["payload"] == {"budget_total_eur": 100.0, "risk_acknowledged": True}
 
 
 def test_supported_v1_write_contracts_resolve_to_exactly_one_registered_adapter():

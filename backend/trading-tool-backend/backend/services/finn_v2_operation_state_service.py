@@ -291,14 +291,15 @@ class FinnV2OperationStateService:
             if setup_match:
                 values["setup_id"] = int(setup_match.group(1))
             mode_match = re.search(
-                r"\b(fixed|vast|standaard|automatic|automatis\w*|custom|aangepast|individuell|benutzerdefiniert)\b",
+                r"\b(fixed|vast|standaard|manual|handmatig|automatic|automatis\w*|"
+                r"custom|aangepast|individuell|benutzerdefiniert)\b",
                 lowered,
             )
             if mode_match:
                 mode = mode_match.group(1)
                 values["execution_mode"] = {
-                    "vast": "fixed", "standaard": "fixed",
-                    "automatic": "fixed",
+                    "vast": "fixed", "standaard": "fixed", "manual": "fixed",
+                    "handmatig": "fixed", "automatic": "fixed",
                     "aangepast": "custom", "individuell": "custom",
                     "benutzerdefiniert": "custom",
                 }.get(mode, mode)
@@ -381,7 +382,7 @@ class FinnV2OperationStateService:
         match = re.search(
             r"\b(?:zet|set|ändere)\s+"
             r"(?:mijn|my|de|het|the|den|die|das)?\s*([\w -]{2,48}?)\s+"
-            r"(?:naar|to|auf|als)\s+[\"']?([^,.!?\n]{1,80})",
+            r"(?:naar|to|auf|als|op|on)\s+[\"']?([^,.!?\n]{1,80})",
             text,
             re.IGNORECASE,
         )
@@ -393,7 +394,7 @@ class FinnV2OperationStateService:
             match = re.search(
                 r"\b(?:wijzig|verander|change|aktualisiere)\s+"
                 r"(?:mijn|my|de|het|the|den|die|das)?\s*([\w -]{2,48}?)\s+"
-                r"(?:naar|to|auf|als)\s+[\"']?([^,.!?\n]{1,80})",
+                r"(?:naar|to|auf|als|op|on)\s+[\"']?([^,.!?\n]{1,80})",
                 text,
                 re.IGNORECASE,
             )
@@ -401,7 +402,7 @@ class FinnV2OperationStateService:
             match = re.search(
                 r"\b(?:wijzig|verander|change|update|aktualisiere)\s+"
             r"(?:mijn|my|de|het|the|den|die|das)?\s*([\w -]{2,48}?)\s+"
-            r"(?:naar|to|auf|als)\s+[\"']?([^,.!?\n]{1,80})",
+            r"(?:naar|to|auf|als|op|on)\s+[\"']?([^,.!?\n]{1,80})",
             text,
             re.IGNORECASE,
             )
@@ -412,7 +413,7 @@ class FinnV2OperationStateService:
             match = re.search(
                 r"\b(?:met|with|en\s+zet|and\s+set|und\s+setze)\s+"
                 r"(?:de|het|the|den|die|das)?\s*([\w -]{2,48}?)\s+"
-                r"(?:(?:naar|to|auf|als)\s+)?[\"']?([^,.!?\n]{1,80})",
+                r"(?:(?:naar|to|auf|als|op|on)\s+)?[\"']?([^,.!?\n]{1,80})",
                 text,
                 re.IGNORECASE,
             )

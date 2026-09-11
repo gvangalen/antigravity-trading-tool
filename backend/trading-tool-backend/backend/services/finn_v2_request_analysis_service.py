@@ -86,6 +86,19 @@ class FinnV2RequestAnalysisService:
         uses_conversation_reference = bool(reference_markers - {"contextual_entity"}) or (
             "contextual_entity" in reference_markers and has_existing_safe_lineage
         )
+        # Confirmed action results are typed, owner-scoped lineage.  A
+        # resolver-approved follow-up must retain that provenance in the
+        # runtime contract even when its natural wording has no separate
+        # evidence-style reference marker.  Otherwise execution can resolve
+        # an ID while polling/SSE falsely reports no conversation reference.
+        selected_reference = str(getattr(semantic, "selected_conversation_reference", "") or "")
+        previous_action_result = dict((conversation_context or {}).get("previous_action_result") or {})
+        if (
+            selected_reference == "previous_action_result"
+            and previous_action_result.get("result_status") == "succeeded"
+            and previous_action_result.get("entity_id") is not None
+        ):
+            uses_conversation_reference = True
         if uses_conversation_reference and not self._has_safe_lineage(
             conversation_context or {},
             allow_degraded=preprocessed.discourse_act in {
@@ -462,6 +475,21 @@ class FinnV2RequestAnalysisService:
             elif not is_canonical_context and conversation_context.get("last_user_goal"):
                 reference = str(conversation_context["last_user_goal"])
                 reference_kind = "previous_verified_response"
+            action_result = dict(conversation_context.get("previous_action_result") or {})
+            if (
+                action_result.get("result_status") == "succeeded"
+                and action_result.get("entity_id") is not None
+                and operation_id in {
+                    "update_setup", "delete_setup", "create_strategy",
+                    "update_strategy", "delete_strategy", "create_bot",
+                    "update_bot", "deactivate_bot", "delete_bot",
+                }
+            ):
+                # The action result itself is a durable contract record. Its
+                # producing run is the opaque public reference; no internal
+                # object ID is exposed as conversation provenance.
+                reference = str(action_result.get("run_id") or reference or "") or None
+                reference_kind = "previous_action_result"
         score = {"high": 0.9, "medium": 0.7, "low": 0.4, "none": 0.0}[confidence]
         return RequestPlan(
             user_goal=self._user_goal(interaction_mode, primary_subject, normalized, integrated_plan),
@@ -522,6 +550,13 @@ class FinnV2RequestAnalysisService:
         context: Dict[str, object], *, allow_degraded: bool, allow_safe_terminal: bool = False,
         allow_released: bool = False,
     ) -> bool:
+        action_result = context.get("previous_action_result")
+        if (
+            isinstance(action_result, dict)
+            and action_result.get("result_status") == "succeeded"
+            and action_result.get("entity_id") is not None
+        ):
+            return True
         if context.get("last_verified_context") or context.get("last_verified_conclusion"):
             return True
         released = context.get("last_released_context")

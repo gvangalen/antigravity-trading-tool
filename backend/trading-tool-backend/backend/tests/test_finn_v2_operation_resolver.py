@@ -63,6 +63,36 @@ def test_bot_consequence_uses_evaluate_contract_without_prior_lineage():
     assert resolved.operation_id == "evaluate_bot"
 
 
+def test_persisted_action_result_is_projected_as_a_typed_conversation_reference():
+    registry = FinnV2OperationRegistry()
+    resolved = FinnV2OperationResolverService(registry).resolve(
+        selection=_selection("create_strategy", {"goal": "create", "object": "strategy"}),
+        candidates=registry.list(),
+        conversation_context={
+            "previous_action_result": {
+                "entity_type": "setup", "entity_id": 42, "result_status": "succeeded",
+            },
+        },
+        request_facts={"explicit_entities": ("strategy",), "action_polarity": "create"},
+    )
+
+    assert resolved.operation_id == "create_strategy"
+    assert resolved.conversation_reference == "previous_action_result"
+
+
+def test_contextual_bot_implication_has_a_released_response_reference():
+    registry = FinnV2OperationRegistry()
+    resolved = FinnV2OperationResolverService(registry).resolve(
+        selection=_selection("read_linked_bot", {"goal": "read", "object": "bot"}),
+        candidates=registry.list(),
+        conversation_context={"last_verified_context": {"verified_response_id": "response-1"}},
+        request_facts={"explicit_entities": ("bot",), "discourse_act": "contextual_follow_up"},
+    )
+
+    assert resolved.operation_id == "evaluate_bot"
+    assert resolved.conversation_reference == "previous_verified_response"
+
+
 def test_bot_write_polarity_cannot_be_replaced_by_bot_evaluation():
     registry = FinnV2OperationRegistry()
     resolved = FinnV2OperationResolverService(registry).resolve(

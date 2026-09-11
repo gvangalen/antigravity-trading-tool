@@ -404,6 +404,26 @@ class FinnV2OperationClassificationService:
             value = resolved.get(field)
             if value is not None and str(selected_entities.get(field) or "") == str(value):
                 supplied.setdefault(field, value)
+        # A confirmed action result is authoritative lineage. The runtime
+        # already hydrates these typed values before proposal construction;
+        # retain the same safe projection at the selector boundary rather
+        # than requiring the provider to echo an internal database ID.
+        action_result = dict((conversation_context or {}).get("previous_action_result") or {})
+        if str(action_result.get("result_status") or "") == "succeeded":
+            action_entity_type = str(action_result.get("entity_type") or "")
+            action_entity_id = action_result.get("entity_id")
+            parent_entity_type = str(action_result.get("parent_entity_type") or "")
+            parent_entity_id = action_result.get("parent_entity_id")
+            lineage_values = {
+                f"{action_entity_type}_id": action_entity_id,
+                f"{parent_entity_type}_id": parent_entity_id,
+            }
+            for field in contract.contextual_reference_inputs:
+                value = lineage_values.get(field)
+                if value is not None:
+                    supplied.setdefault(field, value)
+                    if not selected_entities.get(field):
+                        selected_entities[field] = str(value)
         # A structured selector may propose a useful display name, but that
         # does not prove the user supplied a required setup slot. Explicit
         # input extraction remains the only authority for user-provided

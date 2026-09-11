@@ -280,6 +280,26 @@ class FinnV2OperationResolverService:
             "previous_verified_response", "previous_response", "previous_evidence", "previous_conclusion",
         }:
             reference = "previous_verified_response"
+        # Persisted action results are a typed, owner-scoped antecedent for a
+        # follow-up mutation. Record that provenance even when the selector
+        # correctly omits the internal ID from its structured output.
+        previous_result = conversation_context.get("previous_action_result")
+        if (
+            isinstance(previous_result, Mapping)
+            and str(previous_result.get("result_status") or "") == "succeeded"
+            and previous_result.get("entity_id") is not None
+            and any(field in {"setup_id", "strategy_id", "bot_id"} for field in self.registry.get(operation_id).contextual_reference_inputs)
+        ):
+            reference = "previous_action_result"
+        # A contextual bot implication uses released plan lineage even if the
+        # provider frame expresses the implication without an explicit
+        # reference-kind token.
+        if (
+            operation_id == "evaluate_bot"
+            and str((request_facts or {}).get("discourse_act") or "") == "contextual_follow_up"
+            and self._has_eligible_lineage(conversation_context)
+        ):
+            reference = "previous_verified_response"
         return self._with_resolved_operation(
             selection,
             operation_id=operation_id,

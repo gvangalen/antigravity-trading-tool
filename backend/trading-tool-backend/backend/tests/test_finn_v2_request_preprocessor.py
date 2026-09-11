@@ -58,6 +58,26 @@ def test_bare_causal_question_is_a_lineage_marker_not_an_off_topic_fact():
     assert "previous_verified_conclusion" in facts.conversation_reference_markers
 
 
+def test_contextual_bot_implication_preserves_the_previous_assessment_fact():
+    facts = FinnV2RequestPreprocessorService().preprocess(
+        message="Wat betekent die eerdere beoordeling concreet voor mijn gekoppelde bot?"
+    )
+
+    assert "bot" in facts.explicit_entities
+    assert "previous_verified_conclusion" in facts.conversation_reference_markers
+    assert "contextual_implication" in facts.conversation_reference_markers
+    assert facts.discourse_act == "contextual_follow_up"
+
+
+def test_non_live_paper_bot_creation_is_not_a_live_activation_fact():
+    facts = FinnV2RequestPreprocessorService().preprocess(
+        message="Maak voor die strategie een niet-live paper bot met de naam Veilige Testbot."
+    )
+
+    assert facts.action_polarity == "create"
+    assert facts.financial_execution_intent is False
+
+
 def test_product_capability_availability_questions_remain_financial_in_all_supported_languages():
     service = FinnV2RequestPreprocessorService()
 
