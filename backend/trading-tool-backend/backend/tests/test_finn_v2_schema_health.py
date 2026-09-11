@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import pytest
 
 from backend.scripts.check_finn_v2_schema import FinnV2SchemaHealthError, assert_finn_v2_schema
@@ -16,6 +18,13 @@ RUNTIME_CONTRACT_METADATA = {
     ("finn_v2_runtime_contracts", "created_at"): ("timestamp with time zone", "timestamptz", "NO", "now()"),
     ("finn_v2_runtime_contracts", "updated_at"): ("timestamp with time zone", "timestamptz", "NO", "now()"),
 }
+
+
+def test_local_bootstrap_preserves_the_canonical_runtime_contract_identifier_types():
+    source = (Path(__file__).resolve().parents[1] / "scripts" / "bootstrap_local_finn_schema.py").read_text(encoding="utf-8")
+
+    for column in ("contract_id", "run_id", "conversation_id", "trace_id", "contract_version"):
+        assert f"ALTER COLUMN {column} TYPE TEXT" in source
 
 
 class _Cursor:

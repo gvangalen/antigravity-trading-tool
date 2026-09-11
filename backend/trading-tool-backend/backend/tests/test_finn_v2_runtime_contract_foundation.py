@@ -573,6 +573,9 @@ def test_owned_worker_lifecycle_has_a_terminal_deadline_independent_of_delivery(
     assert "asyncio.wait_for(" in owned
     assert "lifecycle_deadline_seconds()" in owned
     assert 'error_code="lifecycle_deadline_exceeded"' in owned
+    assert "_cancel_lifecycle_within_reserve" in owned
+    assert "timeout=_remaining(reserve=True)" in owned
+    assert "lifecycle cancellation exceeded bounded reserve" in owned
 
 
 def test_verifying_failure_materializes_one_typed_terminal_projection():
@@ -631,6 +634,8 @@ def test_selector_persistence_precedes_post_selection_execution_and_has_a_separa
     assert "terminal_persistence_reserve_seconds" in lifecycle
     assert "deadline = monotonic()" in lifecycle
     assert "_remaining(reserve=True)" in lifecycle
+    assert "before_selector_provider" in orchestrator
+    assert orchestrator.index("before_selector_provider") < orchestrator.index("selector_started()")
 
 
 def test_reasoning_provider_call_does_not_block_the_lifecycle_event_loop():

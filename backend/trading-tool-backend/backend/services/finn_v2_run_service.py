@@ -450,6 +450,10 @@ class FinnV2RunService:
         """
         selector_started = asyncio.Event()
         selection_ready = asyncio.Event()
+        flags = FinnV2FlagService()
+        lifecycle: asyncio.Task | None = None
+        selector_started_waiter: asyncio.Task | None = None
+        selection_waiter: asyncio.Task | None = None
 
         async def _run_owned_lifecycle() -> None:
             for status in ("queued", "collecting", "planned"):
@@ -506,6 +510,29 @@ class FinnV2RunService:
                     phase_outcome=phase_outcome,
                 )
 
+        async def _cancel_lifecycle_within_reserve() -> None:
+            """Request cancellation without letting cleanup consume the SLA.
+
+            ``asyncio.wait_for`` waits for a cancelled task to acknowledge
+            cancellation.  A provider thread or database cleanup can take
+            longer than the visible lifecycle deadline, so that behaviour
+            previously delayed the typed terminal projection and blocked the
+            dedicated interactive worker.  The lifecycle is cancellation-safe;
+            terminalisation always happens below in a fresh unit of work.
+            """
+            if lifecycle is None or lifecycle.done():
+                return
+            lifecycle.cancel()
+            await asyncio.wait(
+                {lifecycle},
+                timeout=min(0.25, flags.terminal_persistence_reserve_seconds()),
+            )
+            if not lifecycle.done():
+                logger.warning(
+                    "FINN V2 lifecycle cancellation exceeded bounded reserve",
+                    extra={"run_id": run_id, "user_id": user_id},
+                )
+
         try:
             # Context hydration, selector, and post-selection work have
             # separate budgets.  The provider watchdog begins only after
@@ -514,7 +541,6 @@ class FinnV2RunService:
             # terminal reserve is included only after the persisted selector
             # transition, so a slow but valid selector cannot cancel that
             # transition before its immutable intent reaches the contract.
-            flags = FinnV2FlagService()
             lifecycle = asyncio.create_task(_run_owned_lifecycle())
             selector_started_waiter = asyncio.create_task(selector_started.wait())
             selection_waiter = asyncio.create_task(selection_ready.wait())
@@ -545,15 +571,19 @@ class FinnV2RunService:
                 selection_waiter,
                 timeout=min(flags.selector_phase_deadline_seconds(), _remaining(reserve=True)),
             )
-            await asyncio.wait_for(
-                lifecycle,
-                timeout=_remaining(),
+            # Do not use ``wait_for`` here. It waits indefinitely for a task
+            # that is slow to acknowledge cancellation, which defeats the
+            # terminal reserve and can starve every following interactive run.
+            done, _ = await asyncio.wait(
+                {lifecycle},
+                timeout=_remaining(reserve=True),
+                return_when=asyncio.ALL_COMPLETED,
             )
+            if lifecycle not in done:
+                raise asyncio.TimeoutError()
+            await lifecycle
         except asyncio.TimeoutError as exc:
-            if lifecycle is not None and not lifecycle.done():
-                lifecycle.cancel()
-                with suppress(asyncio.CancelledError, asyncio.TimeoutError):
-                    await lifecycle
+            await _cancel_lifecycle_within_reserve()
             logger.warning(
                 "FINN V2 owned lifecycle reached terminal deadline",
                 extra={"run_id": run_id, "user_id": user_id},
@@ -575,16 +605,10 @@ class FinnV2RunService:
                         primary_exception=exc,
                     )
         except asyncio.CancelledError:
-            if lifecycle is not None and not lifecycle.done():
-                lifecycle.cancel()
-                with suppress(asyncio.CancelledError, asyncio.TimeoutError):
-                    await lifecycle
+            await _cancel_lifecycle_within_reserve()
             raise
         except Exception as exc:
-            if lifecycle is not None and not lifecycle.done():
-                lifecycle.cancel()
-                with suppress(asyncio.CancelledError, asyncio.TimeoutError):
-                    await lifecycle
+            await _cancel_lifecycle_within_reserve()
             logger.exception(
                 "FINN V2 owned lifecycle primary failure",
                 extra={"run_id": run_id, "user_id": user_id, "primary_exception": str(exc)},
@@ -600,6 +624,10 @@ class FinnV2RunService:
                     primary_exception=exc,
                 )
         finally:
+            if selector_started_waiter is not None and not selector_started_waiter.done():
+                selector_started_waiter.cancel()
+                with suppress(asyncio.CancelledError, asyncio.TimeoutError):
+                    await selector_started_waiter
             if selection_waiter is not None and not selection_waiter.done():
                 selection_waiter.cancel()
                 with suppress(asyncio.CancelledError, asyncio.TimeoutError):

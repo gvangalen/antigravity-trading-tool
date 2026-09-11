@@ -105,6 +105,29 @@ def test_new_mutation_adapters_are_fail_closed_until_their_specific_flag_is_enab
     assert registry.flags.execute_bot_changes_enabled() is False
 
 
+def test_action_adapter_flags_use_the_canonical_deployment_keys(monkeypatch):
+    """Reject lookalike settings so local and deployed policy stay comparable."""
+    monkeypatch.delenv("FINN_LOCAL_SAFE_ADAPTERS", raising=False)
+    monkeypatch.delenv("APP_ENV", raising=False)
+    for name in (
+        "FINN_V2_EXECUTE_ASSET_SELECTION",
+        "FINN_V2_EXECUTE_INDICATOR_CHANGES",
+        "FINN_V2_EXECUTE_SETUP_CHANGES",
+        "FINN_V2_EXECUTE_STRATEGY_CHANGES",
+        "FINN_V2_EXECUTE_BOT_CHANGES",
+    ):
+        monkeypatch.setenv(name, "true")
+        monkeypatch.setenv(f"{name}_ENABLED", "false")
+
+    flags = FinnV2ActionAdapterRegistry(session=object()).flags
+
+    assert flags.execute_asset_selection_enabled() is True
+    assert flags.execute_indicator_changes_enabled() is True
+    assert flags.execute_setup_changes_enabled() is True
+    assert flags.execute_strategy_changes_enabled() is True
+    assert flags.execute_bot_changes_enabled() is True
+
+
 def test_bot_creation_uses_existing_service_and_refuses_implicit_live_mode():
     class _Bots:
         async def create_bot_config(self, payload, user_id):

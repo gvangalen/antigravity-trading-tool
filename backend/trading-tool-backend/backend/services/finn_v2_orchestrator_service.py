@@ -199,6 +199,12 @@ class FinnV2OrchestratorService:
             run_id=run_id,
         )
         await self._record_phase_timestamp(run_id=run_id, phase="context_loaded")
+        # Context is now an immutable plain mapping and ``run`` is loaded
+        # with ``expire_on_commit=False``. Release this session's connection
+        # before the synchronous selector provider call so an overdue model
+        # response cannot exhaust the API's PostgreSQL pool and prevent later
+        # requests from creating their own durable run/dispatch records.
+        await self._commit_persistence_boundary(stage="before_selector_provider")
         # Selector quota is user-scoped. Without this context the OpenAI
         # boundary groups every lifecycle run into an unscoped global bucket,
         # allowing unrelated background/eval traffic to suppress user turns.

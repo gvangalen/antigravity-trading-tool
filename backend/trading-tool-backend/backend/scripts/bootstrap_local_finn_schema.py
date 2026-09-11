@@ -7,7 +7,50 @@ from sqlalchemy import text
 
 LEGACY_BASELINE = """
 ALTER TABLE user_indicator_configs
-    ALTER COLUMN config_json TYPE JSONB USING config_json::text::jsonb;
+    ALTER COLUMN config_json TYPE JSONB USING config_json::text::jsonb,
+    ALTER COLUMN config_json SET DEFAULT '{}'::jsonb,
+    ALTER COLUMN config_json SET NOT NULL,
+    ALTER COLUMN provenance TYPE TEXT,
+    ALTER COLUMN provenance SET DEFAULT 'product_api',
+    ALTER COLUMN provenance SET NOT NULL,
+    ALTER COLUMN source_record_id TYPE BIGINT,
+    ALTER COLUMN updated_at TYPE TIMESTAMP,
+    ALTER COLUMN updated_at SET DEFAULT CURRENT_TIMESTAMP,
+    ALTER COLUMN updated_at SET NOT NULL;
+-- ``create_all`` reflects the current ORM's String fields as VARCHAR. The
+-- canonical runtime-contract migration intentionally uses TEXT identifiers,
+-- and its CREATE TABLE IF NOT EXISTS cannot correct a table that bootstrap
+-- already created. Keep disposable local databases structurally equivalent
+-- to the production migration result before replaying the remaining scripts.
+ALTER TABLE finn_v2_runtime_contracts
+    ALTER COLUMN contract_id TYPE TEXT,
+    ALTER COLUMN run_id TYPE TEXT,
+    ALTER COLUMN conversation_id TYPE TEXT,
+    ALTER COLUMN trace_id TYPE TEXT,
+    ALTER COLUMN contract_version TYPE TEXT;
+ALTER TABLE finn_v2_evidence_artifacts
+    ALTER COLUMN information_scope TYPE TEXT,
+    ALTER COLUMN operation_id TYPE TEXT,
+    ALTER COLUMN operation_contract_version TYPE TEXT;
+ALTER TABLE finn_v2_tool_calls
+    ALTER COLUMN operation_id TYPE TEXT,
+    ALTER COLUMN operation_contract_version TYPE TEXT;
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1
+        FROM pg_constraint
+        WHERE conrelid = 'finn_v2_runtime_contracts'::regclass
+          AND contype = 'u'
+          AND conkey = ARRAY[
+              (SELECT attnum FROM pg_attribute
+               WHERE attrelid = 'finn_v2_runtime_contracts'::regclass AND attname = 'run_id')
+          ]
+    ) THEN
+        ALTER TABLE finn_v2_runtime_contracts
+            ADD CONSTRAINT finn_v2_runtime_contracts_run_id_key UNIQUE (run_id);
+    END IF;
+END $$;
 -- ``create_all`` never alters an older local table. Keep the local baseline
 -- compatible with the current asset catalog ORM before replaying migrations.
 ALTER TABLE asset_catalog
