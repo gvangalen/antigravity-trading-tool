@@ -7,13 +7,13 @@ short; link artifacts rather than copying reports or chat history.
 
 | Field | Value |
 | --- | --- |
-| Phase | `BUILDING` |
-| Active goal | FINN production write-action repair |
-| Candidate branch | `codex/finn-1a73-production-write-repair` |
-| Candidate SHA | `pending first repair commit` |
-| Production SHA | `1a73b5bbc2ef43a952535df4ecae4511002178c2` |
+| Phase | `BUILD_VALIDATED` |
+| Active goal | FINN production reliability and parity repair |
+| Candidate branch | `codex/finn-345660-reliability-parity-repair` |
+| Candidate code SHA | `af26ccd7582f3b63a9adbef6cc6fa87d4d21c767` |
+| Production SHA | `34f00d18b27c727788f5e3e95db720e3fa0f06c5` |
 | Release owner | Build |
-| Last updated | `2026-09-09` |
+| Last updated | `2026-09-11` |
 
 ## QA Runner
 
@@ -33,22 +33,19 @@ committed status file as a self-referential release marker.
 
 | Gate | Status | Evidence |
 | --- | --- | --- |
-| Production diagnosis | `FAIL` | Independent QA workflow `34355138568` observed proposal-producing actions terminating as `orchestrator_failed` on the production SHA. |
-| Production-like regression | `PASS` | A disabled proposal policy now yields typed `downgraded` / `proposals_disabled`; enabled proposals terminalize with one dispatch and one attempt. |
-| Sequential local action chain | `PASS` | `16/16` natural-language steps from a fresh synthetic user, without pre-seeding downstream IDs; artifact `/tmp/finn-1a73-sequential-action-chain.json`, SHA-256 `1ef1ae6ab10eecd0fff423c7af4c0fd69b657eddd0f07227ef865d988bc01dd3`. |
-| Provider development/regression | `PASS` | `18/18` development and `102/102` regression with the real provider on the repair checkout. |
-| Backend suite | `PASS` | `1848 passed, 3 skipped` on the repair checkout. |
-| CI | `NOT_RUN` | Awaiting the bounded repair commit. |
-| Deployment | `NOT_RUN` | The production SHA remains the failed QA baseline. |
-| Official independent QA | `NOT_STARTED` | No new official QA may start until this repair is deployed and its limited Build diagnosis is green. |
+| Public production-equivalent matrices | `PASS` | Three independent fresh namespaces: each `37/37`, `16/16` write actions, `9/9` persisted lineage, polling/SSE parity, one dispatch/attempt, and all 37 original HTTP statuses `200` with zero retries. Artifacts: `/tmp/finn-345660-local/final-parity-{3,4,5}.json`. |
+| Provider development | `PASS` | Real provider `18/18`, all measured accuracies `100%`; provider/schema/parse/validation/timeout failures `0%`. Artifact `/tmp/finn-345660-local/final-provider-development-af26.json`, SHA-256 `9c9d679aaac60eefd4bbf2d819a9356198b8754dbb4b6e5acd6dbc3bb584a681c`. |
+| Provider regression | `PASS` | Real provider `102/102`, all measured accuracies `100%`; provider/schema/parse/validation/timeout failures `0%`. Artifact `/tmp/finn-345660-local/final-provider-regression-af26.json`, SHA-256 `3e5dca12bc4ab1890407095887e3b1097f7c32d54ccef32629e6ec011afcc99a`. |
+| Backend suite | `PASS` | `1887 passed, 3 skipped` from the canonical checkout root. |
+| Frontend suite | `PASS` | `typecheck`, `lint:i18n`, `test:i18n`, `test:commands`, and `audit:high` passed. |
+| CI | `NOT_RUN` | Awaiting the validated candidate push. |
+| Deployment | `NOT_RUN` | Production remains on the prior release until Auto Deploy completes. |
+| Official independent QA | `NOT_STARTED` | Build does not initiate official QA. |
 
 ## Independent QA
 
-- Tested SHA: `1a73b5bbc2ef43a952535df4ecae4511002178c2`.
-- Holdout manifest/hash, report, report hash: retained by QA; Build does not
-  read or use sealed QA material.
-- Verdict: `NOT_ACCEPTED`; no subsequent official QA run is authorized during
-  this repair cycle.
+- No independent QA has been started for this candidate.
+- The sealed holdout remains QA-exclusive and was not read or used by Build.
 
 ## Allowed Phases
 
