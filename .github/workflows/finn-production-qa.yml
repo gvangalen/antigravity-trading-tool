@@ -172,7 +172,7 @@ jobs:
           fi
           remote_command=$(printf 'bash -s -- %q %q %q %q %q %q %q %q %q %q %q %q %q %q' "$RELEASE_SHA" "$QA_PROFILE" "$MANIFEST_ID" "$RUN_LABEL" "$QA_REMOTE_DIR" "$remote_report" "$GITHUB_RUN_ID" "$remote_bundle" "$ALLOW_FIXTURE_ACTIONS" "$ALLOW_SAFE_FIXTURE_EXECUTION" "$FINN_QA_FIXTURE_NAMESPACE" "$remote_runner" "$runner_sha256" "$QA_RUNNER_REVISION")
           set +e
-          ssh -i "$RUNNER_TEMP/finn-production-qa-key" -o UserKnownHostsFile="$RUNNER_TEMP/finn-production-qa-known-hosts" -o BatchMode=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=15 "ubuntu@${QA_HOST}" "$remote_command" <<'REMOTE'
+          ssh -i "$RUNNER_TEMP/finn-production-qa-key" -o UserKnownHostsFile="$RUNNER_TEMP/finn-production-qa-known-hosts" -o BatchMode=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=15 -o ServerAliveInterval=30 -o ServerAliveCountMax=20 "ubuntu@${QA_HOST}" "$remote_command" <<'REMOTE'
           set -euo pipefail
           set +x
           release_sha="$1"

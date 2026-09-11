@@ -139,6 +139,12 @@ def test_workflow_runs_hashed_control_plane_runner_against_product_checkout():
     assert "python3 backend/trading-tool-backend/backend/scripts/run_finn_production_qa.py" not in workflow
 
 
+def test_workflow_keeps_long_running_qa_transport_alive():
+    workflow = WORKFLOW_PATH.read_text(encoding="utf-8")
+    assert "-o ServerAliveInterval=30" in workflow
+    assert "-o ServerAliveCountMax=20" in workflow
+
+
 def test_encrypted_manifest_is_only_staged_after_server_side_decryption(tmp_path):
     module = _module()
     private_key = tmp_path / "secrets" / "manifest.key"
