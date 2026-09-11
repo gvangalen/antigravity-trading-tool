@@ -119,3 +119,21 @@ def test_separable_update_and_deactivate_verbs_keep_their_typed_mutation_polarit
 
     assert service.preprocess(message="Werk die bot bij en zet de cadence naar weekly.").action_polarity == "update"
     assert service.preprocess(message="Deactiveer die bot.").action_polarity == "deactivate"
+
+
+def test_inflected_nl_en_de_object_mutations_keep_typed_polarity():
+    service = FinnV2RequestPreprocessorService()
+
+    for message in (
+        "Verwijder de gekoppelde setup.",
+        "Delete the linked strategy.",
+        "Entferne das verknuepfte Setup.",
+    ):
+        assert service.preprocess(message=message).action_polarity == "remove"
+    for message in (
+        "Wijzig deze strategie.",
+        "Update that bot.",
+        "Aktualisiere diese Strategie.",
+    ):
+        assert service.preprocess(message=message).action_polarity == "update"
+    assert service.preprocess(message="Deaktiviere diesen Bot.").action_polarity == "deactivate"

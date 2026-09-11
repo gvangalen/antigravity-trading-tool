@@ -74,6 +74,7 @@ def _run_action(
         "initial_operation_id": observed["initial_operation_id"],
         "final_operation_id": observed["final_operation_id"],
         "run_id": observed["run_id"],
+        "initial_http_status": observed["run_create_http_status"],
         "runtime_contract_id": record["runtime_contract_id"],
         "supplied_inputs": projection.get("supplied_inputs"),
         "missing_inputs": projection.get("missing_inputs"),

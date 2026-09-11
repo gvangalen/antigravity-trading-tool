@@ -402,8 +402,16 @@ class FinnV2RequestPreprocessorService:
         # a mutation act, not a bot-specific route.
         if re.search(r"\bwerk(?:\s+\w+){0,5}\s+bij\b", text):
             return "update"
-        if re.search(r"\b(?:deactiveer\w*|deactivate\w*|schakel(?:\s+\w+){0,5}\s+uit)\b", text):
+        if re.search(r"\b(?:deactiveer\w*|deactivate\w*|deaktivier\w*|schakel(?:\s+\w+){0,5}\s+uit)\b", text):
             return "deactivate"
+        # Mutation polarity is a language fact that the registry uses to
+        # choose one existing action contract. Keep inflected NL/EN/DE forms
+        # together here rather than teaching individual object flows their
+        # own verbs.
+        if re.search(r"\b(?:verwijder\w*|entfern\w*|lösch\w*|loesch\w*|delet\w*|remov\w*)\b", text):
+            return "remove"
+        if re.search(r"\b(?:wijzig\w*|aktualisier\w*|änder\w*|aender\w*|updat\w*)\b", text):
+            return "update"
         # Delegating autonomous buy/sell decisions is a financial execution
         # safety fact.  This remains independent from the eventual contract
         # selection and prevents an unrecognised provider frame from treating

@@ -8,7 +8,6 @@ remain part of the observed path. It never confirms or executes an action.
 from __future__ import annotations
 
 import argparse
-from concurrent.futures import ThreadPoolExecutor
 import json
 import os
 import time
@@ -91,44 +90,44 @@ def run_gate(
     if not run_id or contract.get("run_id") != run_id or not contract.get("contract_id"):
         raise AssertionError("runtime_gate_contract_missing_at_run_creation")
 
-    # Subscribe before polling. SSE is the primary visible terminal delivery;
-    # bounded polling observes the same persisted projection as a fallback.
-    with ThreadPoolExecutor(max_workers=1, thread_name_prefix="finn-v2-sse") as executor:
-        sse_future = executor.submit(
-            _terminal_sse,
-            url=f"{base_url}/api/assistant/v2/runs/{run_id}/stream",
-            headers=headers,
-            timeout=timeout_seconds,
-        )
-        polling: Dict[str, Any] = created
-        polling_terminal_at = None
-        while time.monotonic() - started_at < timeout_seconds:
-            try:
-                polling, status = _request_json(
-                    url=f"{base_url}/api/assistant/v2/runs/{run_id}",
-                    method="GET",
-                    headers=headers,
-                    body=None,
-                    # SSE is the primary terminal transport. A fallback poll
-                    # must never hold the observer for multiple seconds when
-                    # a proxy is flushing that terminal event.
-                    timeout=min(POLL_REQUEST_TIMEOUT_SECONDS, timeout_seconds),
-                )
-            except TimeoutError:
-                time.sleep(0.1)
-                continue
-            if status in {502, 503, 504}:
-                time.sleep(0.1)
-                continue
-            if status != 200:
-                raise AssertionError(f"runtime_gate_poll_failed_http_{status}")
-            if polling.get("status") in TERMINAL_STATUSES:
-                polling_terminal_at = time.monotonic()
-                break
+    # Polling is bounded progress observation. Once it has observed the
+    # persisted terminal projection, the SSE endpoint must immediately expose
+    # exactly that same immutable envelope. Reading SSE after terminalization
+    # avoids an unbounded client thread when an HTTP implementation keeps an
+    # already-terminal stream socket open during teardown.
+    polling: Dict[str, Any] = created
+    polling_terminal_at = None
+    while time.monotonic() - started_at < timeout_seconds:
+        try:
+            polling, status = _request_json(
+                url=f"{base_url}/api/assistant/v2/runs/{run_id}",
+                method="GET",
+                headers=headers,
+                body=None,
+                timeout=min(POLL_REQUEST_TIMEOUT_SECONDS, timeout_seconds),
+            )
+        except TimeoutError:
             time.sleep(0.1)
-        else:
-            raise TimeoutError("runtime_gate_timeout")
-        sse = sse_future.result(timeout=max(0.1, timeout_seconds - (time.monotonic() - started_at)))
+            continue
+        if status in {502, 503, 504}:
+            time.sleep(0.1)
+            continue
+        if status != 200:
+            raise AssertionError(f"runtime_gate_poll_failed_http_{status}")
+        if polling.get("status") in TERMINAL_STATUSES:
+            polling_terminal_at = time.monotonic()
+            break
+        time.sleep(0.1)
+    else:
+        raise TimeoutError("runtime_gate_timeout")
+    remaining_seconds = timeout_seconds - (time.monotonic() - started_at)
+    if remaining_seconds <= 0:
+        raise TimeoutError("runtime_gate_sse_deadline_exceeded")
+    sse = _terminal_sse(
+        url=f"{base_url}/api/assistant/v2/runs/{run_id}/stream",
+        headers=headers,
+        timeout=max(0.1, remaining_seconds),
+    )
     if sse != polling:
         raise AssertionError("runtime_gate_polling_sse_envelope_mismatch")
     projection = dict(polling.get("runtime_trace") or {})
@@ -138,6 +137,7 @@ def run_gate(
         raise AssertionError("runtime_gate_legacy_compact_for_new_run")
     return {
         "run_id": run_id,
+        "run_create_http_status": status,
         "contract_id": contract["contract_id"],
         "conversation_id": str(created.get("conversation_id") or ""),
         "status": polling["status"],

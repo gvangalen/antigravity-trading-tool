@@ -132,6 +132,8 @@ def main() -> None:
             "terminal_status": step["terminal_status"],
             "elapsed_ms": None,
             "polling_sse_parity": step["polling_sse_parity"],
+            "initial_http_status": step.get("initial_http_status"),
+            "retry_count": 0,
             "passed": step["passed"],
         }
         for step in chain.get("steps", [])
@@ -153,7 +155,7 @@ def main() -> None:
         },
         "chain_exit_code": chain_result.returncode,
         "probe_interval_seconds": args.probe_interval_seconds,
-        "original_http_statuses": [case.get("initial_http_status") for case in probes],
+        "original_http_statuses": [case.get("initial_http_status") for case in cases],
         "all_passed": len(cases) == 37 and all(case["passed"] for case in cases),
     }
     output.write_text(json.dumps(artifact, sort_keys=True, indent=2) + "\n", encoding="utf-8")

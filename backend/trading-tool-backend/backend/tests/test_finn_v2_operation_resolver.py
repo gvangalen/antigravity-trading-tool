@@ -517,3 +517,15 @@ def test_completed_owner_action_result_resolves_a_typed_delete_follow_up():
     )
 
     assert resolved.operation_id == "delete_setup"
+
+
+def test_typed_remove_polarity_prevents_a_read_setup_selection_for_linked_mutation():
+    registry = FinnV2OperationRegistry()
+    resolved = FinnV2OperationResolverService(registry).resolve(
+        selection=_selection("read_active_setup", {"goal": "read", "object": "setup"}),
+        candidates=registry.list(),
+        conversation_context={},
+        request_facts={"action_polarity": "remove", "explicit_entities": ("setup",)},
+    )
+
+    assert resolved.operation_id == "delete_setup"
