@@ -257,6 +257,22 @@ class FinnV2OperationResolverService:
                 candidates=candidates,
                 request_facts=request_facts,
             ) or operation_id
+        # A completed owner-scoped action may be the only safe antecedent for
+        # a short follow-up such as "delete the linked setup".  Keep the
+        # already typed mutation polarity and derive only the object from the
+        # persisted result; arbitrary conversation text never supplies this
+        # fallback and ambiguous database matches still clarify.
+        previous_result = conversation_context.get("previous_action_result")
+        if (
+            operation_id == "clarify_request"
+            and isinstance(previous_result, Mapping)
+            and str(previous_result.get("result_status") or "") == "succeeded"
+        ):
+            prior_object = self._normalized(previous_result.get("entity_type"))
+            prior_action = str((request_facts or {}).get("action_polarity") or "")
+            prior_operation = self._GOAL_OBJECT_OPERATIONS.get((prior_action, prior_object))
+            if prior_operation in candidate_ids:
+                operation_id = prior_operation
         if operation_id not in candidate_ids:
             return selection
         reference = selection.conversation_reference

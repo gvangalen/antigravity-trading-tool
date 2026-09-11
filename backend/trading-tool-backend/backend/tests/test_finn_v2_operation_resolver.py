@@ -503,3 +503,17 @@ def test_unbound_deictic_reference_still_clarifies_when_provider_frame_is_empty(
     )
 
     assert resolved.operation_id == "clarify_request"
+
+
+def test_completed_owner_action_result_resolves_a_typed_delete_follow_up():
+    registry = FinnV2OperationRegistry()
+    resolved = FinnV2OperationResolverService(registry).resolve(
+        selection=_selection("clarify_request", {"goal": "clarify", "object": None}),
+        candidates=registry.list(),
+        conversation_context={
+            "previous_action_result": {"entity_type": "setup", "result_status": "succeeded"},
+        },
+        request_facts={"action_polarity": "delete"},
+    )
+
+    assert resolved.operation_id == "delete_setup"
