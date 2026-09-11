@@ -53,19 +53,12 @@ def _run_probe(*, base_url: str, token: str, item: tuple[str, str, str]) -> dict
     case_id, message, expected_operation = item
     started = monotonic()
     try:
-        for attempt in range(2):
-            try:
-                observed = run_gate(
-                    base_url=base_url,
-                    bearer_token=token,
-                    message=message,
-                    timeout_seconds=60,
-                )
-                break
-            except AssertionError as exc:
-                if attempt or "http_429" not in str(exc):
-                    raise
-                time.sleep(5)
+        observed = run_gate(
+            base_url=base_url,
+            bearer_token=token,
+            message=message,
+            timeout_seconds=60,
+        )
         passed = (
             observed["initial_operation_id"] == expected_operation
             and observed["final_operation_id"] == expected_operation
@@ -80,6 +73,8 @@ def _run_probe(*, base_url: str, token: str, item: tuple[str, str, str]) -> dict
             "terminal_status": observed["status"],
             "elapsed_ms": observed["elapsed_ms"],
             "polling_sse_parity": observed["polling_sse_contract_projection"],
+            "initial_http_status": 200,
+            "retry_count": 0,
             "passed": passed,
         }
     except Exception as exc:
@@ -92,6 +87,8 @@ def _run_probe(*, base_url: str, token: str, item: tuple[str, str, str]) -> dict
             "elapsed_ms": int((monotonic() - started) * 1000),
             "polling_sse_parity": False,
             "error": f"{type(exc).__name__}:{exc}",
+            "initial_http_status": int(str(exc).rsplit("_", 1)[-1]) if "_http_" in str(exc) and str(exc).rsplit("_", 1)[-1].isdigit() else None,
+            "retry_count": 0,
             "passed": False,
         }
 
@@ -100,6 +97,7 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--base-url", default="http://127.0.0.1:18000")
     parser.add_argument("--output", required=True)
+    parser.add_argument("--probe-interval-seconds", type=float, default=3.2)
     args = parser.parse_args()
     base_url = args.base_url.rstrip("/")
     if urlparse(base_url).hostname not in {"127.0.0.1", "localhost"}:
@@ -121,7 +119,10 @@ def main() -> None:
 
     user = _create_local_user()
     token = create_access_token({"sub": str(user["id"]), "role": str(user["role"])})
-    probes = [_run_probe(base_url=base_url, token=token, item=item) for item in PUBLIC_PROBES]
+    probes = []
+    for item in PUBLIC_PROBES:
+        probes.append(_run_probe(base_url=base_url, token=token, item=item))
+        time.sleep(max(0.0, args.probe_interval_seconds))
     cases = [
         {
             "case_id": step["step_id"],
@@ -151,6 +152,8 @@ def main() -> None:
             "live_bot_activation_calls": chain.get("live_bot_activation_calls", 0),
         },
         "chain_exit_code": chain_result.returncode,
+        "probe_interval_seconds": args.probe_interval_seconds,
+        "original_http_statuses": [case.get("initial_http_status") for case in probes],
         "all_passed": len(cases) == 37 and all(case["passed"] for case in cases),
     }
     output.write_text(json.dumps(artifact, sort_keys=True, indent=2) + "\n", encoding="utf-8")
