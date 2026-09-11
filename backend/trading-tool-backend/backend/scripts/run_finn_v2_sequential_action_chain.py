@@ -183,6 +183,10 @@ def main() -> None:
     parser.add_argument("--base-url", default="http://127.0.0.1:18000")
     parser.add_argument("--output", required=True)
     parser.add_argument("--step-index", type=int, help="Run one persisted chain step (zero based).")
+    parser.add_argument(
+        "--fixture-namespace",
+        help="Public local-only namespace used in generated object names.",
+    )
     parser.add_argument("--backend-pid", type=int, help="Fresh local backend PID observed before this step.")
     parser.add_argument("--worker-pid", type=int, help="Fresh local Celery PID observed before this step.")
     parser.add_argument("--read-regressions", action="store_true", help="Run persisted evaluate and bot-consequence checks after a completed chain.")
@@ -215,7 +219,7 @@ def main() -> None:
             steps = list(artifact["steps"])
         else:
             primary, other = _create_local_user(), _create_local_user()
-            suffix = uuid.uuid4().hex[:8]
+            suffix = args.fixture_namespace or uuid.uuid4().hex[:8]
             names = {
                 "indicator": f"chain_rsi_{suffix}",
                 "setup": f"Chain DCA Setup {suffix}",
@@ -228,7 +232,7 @@ def main() -> None:
         selected_specs = (_specifications(names)[args.step_index],)
     else:
         primary, other = _create_local_user(), _create_local_user()
-        suffix = uuid.uuid4().hex[:8]
+        suffix = args.fixture_namespace or uuid.uuid4().hex[:8]
         names = {
             "indicator": f"chain_rsi_{suffix}",
             "setup": f"Chain DCA Setup {suffix}",
