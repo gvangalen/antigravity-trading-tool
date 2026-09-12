@@ -265,14 +265,7 @@ jobs:
                 # A detached runner can exit cleanly after publishing an
                 # honest partial checkpoint.  Resume that same matrix once;
                 # ``--resume`` consumes only its explicit not_run rows.
-                incomplete="$(ssh "${ssh_opts[@]}" "ubuntu@${QA_HOST}" "python3 - '$remote_report' <<'PY'
-import json
-import sys
-try:
-    print('true' if json.load(open(sys.argv[1], encoding='utf-8')).get('incomplete') else 'false')
-except Exception:
-    print('true')
-PY" 2>/dev/null || echo true)"
+                incomplete="$(ssh "${ssh_opts[@]}" "ubuntu@${QA_HOST}" "python3 -c 'import json,sys; print(\"true\" if json.load(open(sys.argv[1], encoding=\"utf-8\")).get(\"incomplete\") else \"false\")' '$remote_report'" 2>/dev/null || echo true)"
                 if [ "$incomplete" = "true" ] && [ "$restarted" -eq 0 ]; then
                   restarted=1
                   ssh "${ssh_opts[@]}" "ubuntu@${QA_HOST}" "rm -f '$remote_state_dir/runner.exit'; nohup '$remote_state_dir/run.sh' </dev/null >/dev/null 2>&1 & echo \$! > '$remote_state_dir/runner.pid'" || true

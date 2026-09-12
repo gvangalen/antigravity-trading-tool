@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import re
 import socket
 import ssl
 from pathlib import Path
@@ -26,6 +27,9 @@ def _module():
 def test_workflow_is_manual_protected_and_serialized():
     workflow = WORKFLOW_PATH.read_text(encoding="utf-8")
     assert "workflow_dispatch:" in workflow
+    trigger_block = workflow.split("permissions:", maxsplit=1)[0]
+    assert re.search(r"^on:\n  workflow_dispatch:", trigger_block, flags=re.MULTILINE)
+    assert not re.search(r"^  (push|pull_request|schedule|workflow_run):", trigger_block, flags=re.MULTILINE)
     assert "environment: production" in workflow
     assert "finn-production-qa-${{ inputs.release_sha }}-${{ inputs.qa_profile }}" in workflow
     assert "persist-credentials: false" in workflow

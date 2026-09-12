@@ -7,6 +7,34 @@ on:
       - main
 
 jobs:
+  workflow-validation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5.1.0
+
+      - name: Validate GitHub Actions expressions with actionlint
+        uses: rhysd/actionlint@v1
+
+      - name: Validate workflow YAML syntax
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install --disable-pip-version-check PyYAML
+          python - <<'PY'
+          from pathlib import Path
+          import yaml
+
+          workflows = sorted(Path('.github/workflows').glob('*.yml'))
+          workflows += sorted(Path('.github/workflows').glob('*.yaml'))
+          assert workflows, 'no GitHub Actions workflows found'
+          for workflow in workflows:
+              yaml.safe_load(workflow.read_text(encoding='utf-8'))
+              print(f'YAML PASS: {workflow}')
+          PY
+
   backend-tests:
     runs-on: ubuntu-latest
     timeout-minutes: 30
