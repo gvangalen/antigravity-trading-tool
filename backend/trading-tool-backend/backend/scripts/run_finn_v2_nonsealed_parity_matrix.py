@@ -253,11 +253,7 @@ def main() -> None:
             "lineage_9_of_9": lineage_complete,
             "latency_within_budget": latency_within_budget,
         },
-        "safety": {
-            "broker_orders": chain.get("broker_orders", 0),
-            "live_trading_calls": chain.get("live_trading_calls", 0),
-            "live_bot_activation_calls": chain.get("live_bot_activation_calls", 0),
-        },
+        "safety": dict(chain.get("safety_observability") or {}),
         "chain_exit_code": chain_result.returncode,
         "probe_interval_seconds": args.probe_interval_seconds,
         "action_interval_seconds": args.action_interval_seconds,

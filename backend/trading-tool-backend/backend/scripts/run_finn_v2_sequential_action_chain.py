@@ -64,6 +64,38 @@ def _created_objects(user_id: int, names: dict[str, str]) -> dict[str, Any]:
         }
 
 
+def _safety_snapshot(user_id: int) -> dict[str, int]:
+    """Capture owner-scoped write evidence without exposing object contents.
+
+    The chain only permits the existing safe CRUD contracts.  Recording the
+    database boundary around every public confirmation makes an unexpected
+    execution or live bot observable instead of reporting a runner constant.
+    """
+    with sync_engine.connect() as connection:
+        row = connection.execute(text("""
+            SELECT
+                (SELECT count(*) FROM watchlists WHERE user_id = :user_id) AS watchlists,
+                (SELECT count(*) FROM user_indicator_configs WHERE user_id = :user_id) AS indicators,
+                (SELECT count(*) FROM setups WHERE user_id = :user_id) AS setups,
+                (SELECT count(*) FROM strategies WHERE user_id = :user_id) AS strategies,
+                (SELECT count(*) FROM bot_configs WHERE user_id = :user_id) AS bots,
+                (SELECT count(*) FROM bot_configs WHERE user_id = :user_id AND is_live IS TRUE) AS live_bots,
+                (SELECT count(*) FROM finn_v2_proposals WHERE user_id = :user_id) AS proposals,
+                (SELECT count(*) FROM finn_v2_executions WHERE user_id = :user_id) AS executions,
+                (SELECT count(*) FROM finn_v2_executions
+                 WHERE user_id = :user_id
+                   AND operation_type NOT IN (
+                       'select_asset', 'watchlist_add', 'watchlist_remove',
+                       'create_indicator_configuration', 'update_indicator_configuration',
+                       'delete_indicator_configuration', 'create_setup', 'update_setup',
+                       'delete_setup', 'create_strategy', 'update_strategy',
+                       'delete_strategy', 'create_bot', 'update_bot',
+                       'deactivate_bot', 'delete_bot'
+                   )) AS non_allowlisted_executions
+        """), {"user_id": user_id}).mappings().one()
+    return {key: int(value) for key, value in row.items()}
+
+
 def _run_action(
     *,
     base_url: str,
@@ -285,12 +317,15 @@ def main() -> None:
             "backend_pid": args.backend_pid,
             "worker_pid": args.worker_pid,
         }
+        database_before = _safety_snapshot(user_id)
         result = _run_action(
             base_url=base_url, token=token, other_token=other_token,
             message=message, operation_id=operation_id,
             persistence_boundary=boundary,
         )
         result["step_id"] = step_id
+        result["database_before"] = database_before
+        result["database_after"] = _safety_snapshot(user_id)
         result["objects_after_step"] = _created_objects(user_id, names)
         result["identity_assertion"] = _assert_resolved_identity(step_id, result, steps)
         steps.append(result)
@@ -400,9 +435,13 @@ def main() -> None:
         "read_regressions": read_regressions,
         "passed": sum(item["passed"] for item in steps),
         "total": len(steps),
-        "broker_orders": 0,
-        "live_trading_calls": 0,
-        "live_bot_activation_calls": 0,
+        "safety_observability": {
+            "database_before_after_per_step": all(
+                "database_before" in item and "database_after" in item for item in steps
+            ),
+            "live_bots_after_chain": _safety_snapshot(user_id)["live_bots"],
+            "non_allowlisted_executions_after_chain": _safety_snapshot(user_id)["non_allowlisted_executions"],
+        },
         "persistence_boundary_summary": {
             "step_processes": len({
                 (item.get("persistence_boundary") or {}).get("backend_pid")
