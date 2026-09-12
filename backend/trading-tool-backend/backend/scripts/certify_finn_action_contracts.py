@@ -34,14 +34,21 @@ def main() -> None:
     parser.add_argument("--output", required=True, type=Path)
     parser.add_argument("--write-matrix", type=Path)
     parser.add_argument("--runtime-matrix", type=Path)
+    parser.add_argument("--lineage-artifact", type=Path)
     args = parser.parse_args()
     write_matrix = load_artifact(args.write_matrix)
     runtime_matrix = load_artifact(args.runtime_matrix)
+    lineage_artifact = load_artifact(args.lineage_artifact)
     measured = {
         item.get("expected_operation_id"): item
         for item in (write_matrix.get("steps") or []) + (runtime_matrix.get("cases") or [])
         if item.get("expected_operation_id")
     }
+    for item in lineage_artifact.get("supporting_action_cases") or []:
+        measured[item.get("expected_operation_id")] = item
+    for item in (lineage_artifact.get("published_cases") or {}).values():
+        if item:
+            measured[item.get("expected_operation_id")] = item
     registry = FinnV2OperationRegistry()
     cards = []
     for contract in registry.list():
@@ -79,6 +86,7 @@ def main() -> None:
         "evidence_paths": {
             "write_matrix": str(args.write_matrix) if args.write_matrix else None,
             "runtime_matrix": str(args.runtime_matrix) if args.runtime_matrix else None,
+            "lineage_artifact": str(args.lineage_artifact) if args.lineage_artifact else None,
         },
     }
     args.output.parent.mkdir(parents=True, exist_ok=True)
