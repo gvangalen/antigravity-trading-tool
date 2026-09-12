@@ -579,6 +579,7 @@ def test_owned_worker_lifecycle_has_a_terminal_deadline_independent_of_delivery(
     assert "lifecycle_released.set()" in owned
     assert "lifecycle_released.wait()" in owned
     assert "did not release its session within the bounded reserve" in owned
+    assert "lifecycle stopped after an external terminal transition" in owned
 
 
 def test_verifying_failure_materializes_one_typed_terminal_projection():

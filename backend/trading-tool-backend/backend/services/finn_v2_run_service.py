@@ -497,6 +497,18 @@ class FinnV2RunService:
                             selection_persisted=selection_persisted,
                         )
                         await orchestrator.execute_run(run_id=run_id, user_id=user_id, trace_id=trace_id)
+                        # The client/runner may have terminalized this run
+                        # while a bounded provider call was unwinding.  Do not
+                        # let the worker revive or overwrite that durable
+                        # cancellation, and release the single interactive
+                        # worker before it can hold up the next dispatch.
+                        await session.refresh(run)
+                        if is_terminal_status(run.status):
+                            logger.info(
+                                "FINN V2 lifecycle stopped after an external terminal transition",
+                                extra={"run_id": run_id, "user_id": user_id, "status": run.status},
+                            )
+                            return
                         phase_outcome = orchestrator.consume_phase_outcome()
                     else:
                         # Shadow-only runs have no selector boundary, so they do

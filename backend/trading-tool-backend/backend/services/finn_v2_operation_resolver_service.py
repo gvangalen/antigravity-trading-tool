@@ -70,7 +70,7 @@ class FinnV2OperationResolverService:
                 selection.operation_id == "off_topic"
                 and
                 bool((request_facts or {}).get("ambiguous_reference"))
-                and not self._has_eligible_lineage(conversation_context)
+                and not self._has_any_eligible_lineage(conversation_context)
                 and not self._has_pending_operation(conversation_context)
                 and any(contract.operation_id == "clarify_request" for contract in candidates)
             ):
@@ -190,7 +190,7 @@ class FinnV2OperationResolverService:
             operation_id = "evaluate_plan"
         if (
             bool((request_facts or {}).get("ambiguous_reference"))
-            and not self._has_eligible_lineage(conversation_context)
+            and not self._has_any_eligible_lineage(conversation_context)
             and not self._has_pending_operation(conversation_context)
         ):
             operation_id = "clarify_request"
@@ -280,6 +280,14 @@ class FinnV2OperationResolverService:
             "previous_verified_response", "previous_response", "previous_evidence", "previous_conclusion",
         }:
             reference = "previous_verified_response"
+        elif (
+            operation_id == "reformulate_previous_response"
+            and self._has_released_lineage(conversation_context)
+            and reference_kind in {"previous_response", "previous_conclusion", "previous_released_response"}
+        ):
+            # A released answer is sufficient to restyle, but intentionally
+            # cannot be promoted to verified evidence.
+            reference = "previous_released_response"
         # Persisted action results are a typed, owner-scoped antecedent for a
         # follow-up mutation. Record that provenance even when the selector
         # correctly omits the internal ID from its structured output.
@@ -355,7 +363,10 @@ class FinnV2OperationResolverService:
         context: Mapping[str, object],
         requested_scopes: set[str],
     ) -> str:
-        if reference_kind and self._has_eligible_lineage(context):
+        if reference_kind and (
+            self._has_eligible_lineage(context)
+            or (goal in {"reformulate", "summarize"} and self._has_released_lineage(context))
+        ):
             if goal in {"reformulate", "summarize"}:
                 return "reformulate_previous_response"
             # A consequence requested for a concrete bot is a bounded bot
@@ -395,6 +406,15 @@ class FinnV2OperationResolverService:
         verified = context.get("last_verified_context")
         degraded = context.get("last_degraded_context")
         return bool(verified or (isinstance(degraded, Mapping) and degraded.get("evidence_refs")))
+
+    @staticmethod
+    def _has_released_lineage(context: Mapping[str, object]) -> bool:
+        released = context.get("last_released_context")
+        return isinstance(released, Mapping) and bool(released.get("run_id") and released.get("response"))
+
+    @classmethod
+    def _has_any_eligible_lineage(cls, context: Mapping[str, object]) -> bool:
+        return cls._has_eligible_lineage(context) or cls._has_released_lineage(context)
 
     @staticmethod
     def _has_pending_operation(context: Mapping[str, object]) -> bool:

@@ -49,6 +49,26 @@ def test_semantic_frame_resolves_a_bot_consequence_to_a_bounded_bot_evaluation()
     assert resolved.conversation_reference == "previous_verified_response"
 
 
+def test_reformulation_uses_released_lineage_without_promoting_it_to_evidence():
+    registry = FinnV2OperationRegistry()
+    resolved = FinnV2OperationResolverService(registry).resolve(
+        selection=_selection("clarify_request", {
+            "goal": "reformulate", "object": "response", "reference_kind": "previous_response",
+        }),
+        candidates=registry.list(),
+        conversation_context={
+            "last_released_context": {
+                "run_id": "released-run",
+                "response": "Een eerder veilig vrijgegeven antwoord.",
+            },
+        },
+        request_facts={"ambiguous_reference": True},
+    )
+
+    assert resolved.operation_id == "reformulate_previous_response"
+    assert resolved.conversation_reference == "previous_released_response"
+
+
 def test_bot_consequence_uses_evaluate_contract_without_prior_lineage():
     registry = FinnV2OperationRegistry()
     resolved = FinnV2OperationResolverService(registry).resolve(

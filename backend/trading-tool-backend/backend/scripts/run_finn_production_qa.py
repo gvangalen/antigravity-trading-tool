@@ -22,7 +22,7 @@ import urllib.error
 import urllib.request
 import uuid
 from pathlib import Path
-from typing import Any, Dict, Iterable, Optional, Tuple
+from typing import Any, Dict, Iterable, Mapping, Optional, Tuple
 
 from backend.scripts.finn_v2_matrix_transport import TERMINAL_STATUSES, observe_terminal
 
@@ -567,6 +567,73 @@ def case_progress(*, cases: Iterable[Dict[str, Any]], planned_count: int) -> Dic
     }
 
 
+def add_missing_not_run_cases(
+    *,
+    results: Iterable[Dict[str, Any]],
+    cases: Iterable[Dict[str, Any]],
+    error_category: str,
+) -> list[Dict[str, Any]]:
+    """Preserve every planned case when a runner process exits unexpectedly.
+
+    A checkpoint contains completed evidence, but it cannot prove completion
+    for manifest rows the process never reached.  Materialising those rows
+    makes an interruption resumable without hiding the missing work.
+    """
+    materialized = [dict(item) for item in results]
+    recorded_ids = {str(item.get("case_id")) for item in materialized if item.get("case_id")}
+    for case in cases:
+        case_id = str(case["case_id"])
+        if case_id not in recorded_ids:
+            materialized.append({
+                "case_id": case_id,
+                "case_status": "not_run",
+                "error_category": error_category,
+            })
+    return materialized
+
+
+def settle_timed_out_run(
+    *,
+    base_url: str,
+    token: str,
+    run_id: str,
+) -> Dict[str, Any]:
+    """Terminalise a timed-out case before the sequential matrix advances.
+
+    The API cancellation route persists a typed terminal projection.  This
+    prevents an abandoned worker lifecycle from accumulating behind later
+    cases while retaining the original timeout as the case result.
+    """
+    cancel_status, _cancelled, _cancel_latency, cancel_error = request_json(
+        url=f"{base_url}/api/assistant/v2/runs/{run_id}/cancel",
+        method="POST",
+        token=token,
+        payload={},
+        timeout_seconds=5.0,
+    )
+    status, projection, _status_latency, status_error = request_json(
+        url=f"{base_url}/api/assistant/v2/runs/{run_id}",
+        token=token,
+        timeout_seconds=5.0,
+    )
+    terminal_status = projection.get("status") if status == 200 and not status_error else None
+    return {
+        "cancel_attempted": True,
+        "cancel_http_status": cancel_status,
+        "cancel_error": cancel_error,
+        "server_status_after_cleanup": terminal_status,
+        "server_active_after_cleanup": terminal_status not in TERMINAL_STATUSES,
+    }
+
+
+def write_report_atomic(report_path: Path, report: Mapping[str, Any]) -> None:
+    """Publish a sanitized checkpoint or final report without a torn file."""
+    report_path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = report_path.with_suffix(report_path.suffix + ".tmp")
+    temporary.write_text(json.dumps(redact(dict(report)), sort_keys=True, indent=2) + "\n", encoding="utf-8")
+    temporary.replace(report_path)
+
+
 def _run_fixture_action(
     *,
     base_url: str,
@@ -698,7 +765,14 @@ def run_cases(
     case_ids = [str(case["case_id"]) for case in case_list]
     if len(case_ids) != len(set(case_ids)):
         raise ValueError("manifest_case_ids_not_unique")
-    results = [dict(item) for item in (existing_results or [])]
+    # ``not_run`` rows are evidence for an interrupted attempt, not completed
+    # work.  Drop only those rows when resuming so their manifest cases run
+    # exactly once and no stale placeholder survives a completed retry.
+    results = [
+        dict(item)
+        for item in (existing_results or [])
+        if item.get("case_status") != "not_run"
+    ]
     completed_ids = {
         str(item.get("case_id"))
         for item in results
@@ -818,13 +892,26 @@ def run_cases(
             )
             result["server_status_after_timeout"] = settled.get("status") if not settle_error else None
             result["server_active_after_timeout"] = result["server_status_after_timeout"] not in TERMINAL_STATUSES
+            if result["server_active_after_timeout"]:
+                result["timeout_cleanup"] = settle_timed_out_run(
+                    base_url=base_url,
+                    token=token,
+                    run_id=run_id,
+                )
         result["operation_matches"] = case.get("expected_operation_id") is None or actual == case["expected_operation_id"]
-        result["fixture_action"] = _run_fixture_action(
-            base_url=base_url,
-            token=token,
-            case=case,
-            terminal=terminal,
-            remaining_seconds=remaining,
+        # A timed-out lifecycle never progresses into a proposal/confirmation
+        # action.  The runner records the terminal cleanup and leaves any
+        # explicit safe fixture action untouched for a later resumed matrix.
+        result["fixture_action"] = (
+            _run_fixture_action(
+                base_url=base_url,
+                token=token,
+                case=case,
+                terminal=terminal,
+                remaining_seconds=remaining,
+            )
+            if terminal.get("status") in TERMINAL_STATUSES and not result.get("error_category")
+            else {"mode": case.get("fixture_action", "read_only"), "outcome": "not_run", "error_category": None}
         )
         result["failure_classification"] = classify_case_failure(result)
         results.append(result)
@@ -874,6 +961,7 @@ def main() -> int:
     fixture_namespace = getattr(args, "fixture_namespace", None)
     report: Dict[str, Any] = {"schema_version": 1, "workflow": "finn-production-qa", "workflow_run_id": args.workflow_run_id, "runner_revision": runner_revision, "target_sha": args.release_sha, "profile": args.profile, "run_label": args.run_label, "manifest_id": args.manifest_id, "manifest_sha256": None, "base_manifest_hash": None, "manifest_public_key": None, "fixture_namespace_present": bool(fixture_namespace), "release_identity": {}, "auth_preflight": {}, "cases": [], "planned_count": 0, "attempted_count": 0, "completed_count": 0, "failed_count": 0, "not_run_count": 0, "incomplete": False, "failure_summary": {"product": 0, "runner": 0, "infrastructure": 0}, "safety": {"read_only_profile": True, "confirmation_calls": 0, "execution_calls": 0, "live_trading_calls": 0, "live_bot_activation_calls": 0}, "outcome": "failed", "qa_status": "NOT_STARTED", "error_category": None}
     token: Optional[str] = None
+    known_cases: list[Dict[str, Any]] = []
     try:
         checkout = Path(args.checkout).resolve()
         if getattr(args, "dry_preflight", False):
@@ -933,6 +1021,7 @@ def main() -> int:
                     manifest_id=args.manifest_id,
                     fixture_namespace=fixture_namespace,
                 ))
+                known_cases = cases
                 report.update(fixture_preflight(cases, fixture_namespace=fixture_namespace))
                 if getattr(args, "resume", False) and report_path.exists():
                     prior = json.loads(report_path.read_text(encoding="utf-8"))
@@ -962,10 +1051,7 @@ def main() -> int:
                         else "IN_PROGRESS"
                     )
                     report["outcome"] = "incomplete" if report["incomplete"] else "running"
-                    report_path.parent.mkdir(parents=True, exist_ok=True)
-                    temporary = report_path.with_suffix(report_path.suffix + ".tmp")
-                    temporary.write_text(json.dumps(redact(report), sort_keys=True, indent=2) + "\n", encoding="utf-8")
-                    temporary.replace(report_path)
+                    write_report_atomic(report_path, report)
 
                 report["cases"] = run_cases(base_url=args.base_url.rstrip("/"), token=token, cases=cases, matrix_deadline_seconds=getattr(args, "matrix_deadline_seconds", 2100.0), case_timeout_seconds=getattr(args, "case_timeout_seconds", 60.0), fixture_namespace=fixture_namespace, checkpoint=checkpoint, existing_results=report["cases"])
                 report.update(case_progress(cases=report["cases"], planned_count=len(cases)))
@@ -986,6 +1072,12 @@ def main() -> int:
         # A late runner error must retain the most complete checkpoint.  Keep
         # progress derived from the saved case rows rather than resetting it to
         # the initial empty report shape.
+        if known_cases and not getattr(args, "dry_preflight", False):
+            report["cases"] = add_missing_not_run_cases(
+                results=report["cases"],
+                cases=known_cases,
+                error_category="runner_interrupted",
+            )
         if report["planned_count"] and not getattr(args, "dry_preflight", False):
             report.update(case_progress(cases=report["cases"], planned_count=report["planned_count"]))
             report["failure_summary"] = failure_summary(report["cases"])
@@ -994,8 +1086,7 @@ def main() -> int:
                     "INCOMPLETE" if report["incomplete"]
                     else ("COMPLETED" if report["outcome"] == "passed" else "COMPLETED_WITH_FAILURES")
                 )
-        report_path.parent.mkdir(parents=True, exist_ok=True)
-        report_path.write_text(json.dumps(redact(report), sort_keys=True, indent=2) + "\n", encoding="utf-8")
+        write_report_atomic(report_path, report)
     # Content failures are QA evidence, not a runner failure. The workflow must
     # upload the complete report instead of stopping before the matrix result.
     if report["outcome"] == "passed" or report["cases"]:

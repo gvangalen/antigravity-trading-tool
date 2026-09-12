@@ -146,6 +146,9 @@ def test_workflow_runs_the_server_job_detached_and_resumes_from_checkpoint():
     assert "--resume >\"$state_dir/runner.log\"" in workflow
     assert "elif test -s '$remote_state_dir/runner.pid'" in workflow
     assert "restarted=0" in workflow
+    assert "honest partial checkpoint" in workflow
+    assert "json.load(open(sys.argv[1]" in workflow
+    assert "rm -f '$remote_state_dir/runner.exit'" in workflow
     assert 'runner_exit="$(ssh' in workflow
     assert 'test "$runner_exit" -eq 0' in workflow
 
@@ -567,6 +570,8 @@ def test_case_timeout_is_checkpointed_and_does_not_block_the_next_case(monkeypat
     responses = iter([
         (200, {"run_id": "slow", "conversation_id": "c1", "status": "pending"}, 1.0, None),
         (200, {"run_id": "slow", "conversation_id": "c1", "status": "pending"}, 1.0, None),
+        (200, {"run_id": "slow", "conversation_id": "c1", "status": "canceled"}, 1.0, None),
+        (200, {"run_id": "slow", "conversation_id": "c1", "status": "canceled"}, 1.0, None),
         (200, {"run_id": "fast", "conversation_id": "c2", "status": "pending"}, 1.0, None),
         (200, {"run_id": "fast", "conversation_id": "c2", "status": "completed", "runtime_trace": {"initial_operation_id": "capability"}}, 1.0, None),
     ])
@@ -583,8 +588,46 @@ def test_case_timeout_is_checkpointed_and_does_not_block_the_next_case(monkeypat
         {"case_id": "fast", "message": "fast", "expected_operation_id": "capability"},
     ])
     assert results[0]["error_category"] == "case_timeout"
+    assert results[0]["timeout_cleanup"]["cancel_http_status"] == 200
+    assert results[0]["timeout_cleanup"]["server_active_after_cleanup"] is False
     assert results[1]["run_id"] == "fast"
     assert len(checkpoints) == 2
+
+
+def test_resume_replaces_not_run_placeholders_without_duplicate_cases(monkeypatch):
+    module = _module()
+    created = []
+
+    def request(**kwargs):
+        if kwargs.get("method") == "POST":
+            case_id = str(kwargs["payload"]["message"])
+            created.append(case_id)
+            return 200, {"run_id": f"run-{case_id}", "conversation_id": "conversation", "status": "pending"}, 1.0, None
+        run_id = str(kwargs["url"]).rsplit("/", 1)[-1]
+        return 200, {"run_id": run_id, "conversation_id": "conversation", "status": "completed", "runtime_trace": {"initial_operation_id": "capability"}}, 1.0, None
+
+    monkeypatch.setattr(module, "request_json", request)
+    monkeypatch.setattr(module, "request_sse_terminal", lambda **kwargs: ({
+        "run_id": str(kwargs["url"]).rsplit("/", 2)[-2], "conversation_id": "conversation",
+        "status": "completed", "runtime_trace": {"initial_operation_id": "capability"},
+    }, None))
+    cases = [
+        {"case_id": "done", "message": "done", "expected_operation_id": "capability"},
+        {"case_id": "resume", "message": "resume", "expected_operation_id": "capability"},
+    ]
+    resumed = module.run_cases(
+        base_url="https://example.test",
+        token="token",
+        cases=cases,
+        existing_results=[
+            {"case_id": "done", "case_status": "completed", "create_http_status": 200},
+            {"case_id": "resume", "case_status": "not_run", "error_category": "runner_interrupted"},
+        ],
+    )
+
+    assert [item["case_id"] for item in resumed] == ["done", "resume"]
+    assert created == ["resume"]
+    assert module.case_progress(cases=resumed, planned_count=2)["incomplete"] is False
 
 
 def test_terminal_sse_uses_one_persisted_snapshot_without_a_polling_loop(monkeypatch):
@@ -657,6 +700,15 @@ def test_timeout_checkpoint_is_a_valid_partial_artifact(tmp_path):
     temporary.write_text(json.dumps(payload), encoding="utf-8")
     temporary.replace(report)
     assert json.loads(report.read_text(encoding="utf-8")) == payload
+
+
+def test_final_runner_report_uses_the_same_atomic_publish_path(tmp_path):
+    module = _module()
+    report = tmp_path / "report.json"
+    module.write_report_atomic(report, {"cases": [{"case_id": "one"}], "incomplete": False})
+
+    assert json.loads(report.read_text(encoding="utf-8"))["cases"] == [{"case_id": "one"}]
+    assert not report.with_suffix(".json.tmp").exists()
 
 
 def test_matrix_deadline_marks_each_unattempted_case_and_preserves_prior_failure(monkeypatch):
