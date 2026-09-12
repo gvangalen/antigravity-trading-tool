@@ -342,14 +342,22 @@ class FinnV2ResponseVerifierService:
         # deterministic evidence.  Running a second model verifier here adds
         # latency without adding authority: policy and deterministic verifier
         # checks still gate every proposal, confirmation and execution.
+        # The reasoning service is authoritative about whether this particular
+        # response was built from a deterministic action contract. Do not infer
+        # that again from a possibly transformed operation id.
+        deterministic_contract_response = deterministic_contract_response or (
+            str((draft.reasoning_provenance or {}).get("reasoning_source") or "")
+            == "deterministic_contract"
+        )
         if verifier.passed and not deterministic_contract_response and self._should_run_semantic(mode=draft.mode):
             await self._append_trace(trace_id=trace_id, run_id=run.id, user_id=run.user_id, event_type="semantic_verification_started", payload={"draft_id": draft.draft_id, "mode": draft.mode})
-            semantic_result = self.semantic.verify(
+            semantic_result = await self.semantic.verify_async(
                 mode=draft.mode,
                 user_message=run.message,
                 sanitized_draft=self.drafts.sanitize_for_semantic_verifier(draft),
                 compact_evidence=self.drafts.compact_evidence(context.evidence, self._all_refs(draft)),
                 deterministic_summary={"passed": verifier.passed, "reason_codes": verifier.reason_codes, "coverage": verifier.coverage.dict()},
+                timeout_seconds=self.flags.semantic_verifier_timeout_seconds(),
             )
             await self._append_trace(trace_id=trace_id, run_id=run.id, user_id=run.user_id, event_type="semantic_verification_completed", payload={"draft_id": draft.draft_id, "available": semantic_result.available, "passes": semantic_result.passes, "reason_codes": semantic_result.reason_codes})
             verifier = self._merge_semantic(verifier, semantic_result, draft.mode)

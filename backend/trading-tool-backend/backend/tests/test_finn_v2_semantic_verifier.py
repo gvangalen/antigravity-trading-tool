@@ -1,3 +1,5 @@
+import asyncio
+import time
 from datetime import datetime, timezone
 from types import SimpleNamespace
 
@@ -42,6 +44,38 @@ def test_semantic_verifier_uses_strict_structured_output(monkeypatch):
 
     assert result.available is True
     assert result.passes is True
+
+
+def test_semantic_verifier_async_timeout_does_not_block_the_worker_loop(monkeypatch):
+    service = FinnV2SemanticVerifierService()
+    service.flags.is_semantic_verifier_enabled = lambda: True
+    service.flags.semantic_verifier_timeout_seconds = lambda: 1
+
+    def _slow_response(**_kwargs):
+        time.sleep(0.15)
+        return {"parsed": {"passes": True}}
+
+    monkeypatch.setattr(openai_module, "ask_gpt_structured_response", _slow_response)
+
+    async def _run():
+        task = asyncio.create_task(
+            service.verify_async(
+                mode="EVALUATE",
+                user_message="Beoordeel mijn plan",
+                sanitized_draft={},
+                compact_evidence=[],
+                deterministic_summary={},
+                timeout_seconds=0.02,
+            )
+        )
+        await asyncio.sleep(0.005)
+        assert task.done() is False
+        return await task
+
+    result = asyncio.run(_run())
+    assert result.available is False
+    assert result.passes is False
+    assert result.reason_codes == ["semantic_verifier_timeout"]
 
 
 def test_disabled_semantic_verifier_does_not_downgrade_required_evaluation_mode():

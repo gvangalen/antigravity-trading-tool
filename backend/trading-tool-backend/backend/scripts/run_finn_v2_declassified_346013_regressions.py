@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run the seven published 346013 regressions through FINN's public runtime.
+"""Run published 346013 plus 346394 regressions through FINN's public runtime.
 
 The source cases were explicitly declassified for Build. This runner preserves
 their prompts and disclosed conversation context, but only against an isolated
@@ -22,6 +22,7 @@ from backend.utils.auth_utils import create_access_token
 
 
 DECLASSIFIED_ARTIFACT_SHA256 = "0da3aaaead747ff778bb551229be408a211a15c6826477e9e4738a3f0dc37d1f"
+DECLASSIFIED_346394_ARTIFACT_SHA256 = "20465ab6a76bde0814dfdb04d925dd202845346a158cc712e06c73b9f4dd75df"
 
 
 def _read_case(
@@ -154,13 +155,17 @@ def main() -> None:
         conversation_id = action["conversation_id"]
         action["case_id"] = case_id
         action_cases.append(action)
-    published = {"q04": q04, "q13": q13}
+    # q11/q12 were explicitly declassified from 346394 after evaluate_plan
+    # failed before persisting a releasable response. They prove real persisted
+    # lineage rather than a selector-only continuation.
+    published = {"q04": q04, "q11": prior_turns[1], "q12": prior_turns[2], "q13": q13}
     for action in action_cases:
         if action["case_id"] in {"q30", "q31", "q32", "q33", "q34"}:
             published[action["case_id"]] = action
     artifact = {
-        "artifact_version": "finn_v2.declassified_346013_regressions.v1",
+        "artifact_version": "finn_v2.declassified_runtime_regressions.v2",
         "source_artifact_sha256": DECLASSIFIED_ARTIFACT_SHA256,
+        "additional_source_artifact_sha256": DECLASSIFIED_346394_ARTIFACT_SHA256,
         "sealed_qa_material_used": False,
         "public_routes": True,
         "injected_ids": False,
@@ -170,7 +175,7 @@ def main() -> None:
         "prior_conversation_turns": prior_turns,
         "published_cases": published,
         "published_passed": sum(bool(case and case.get("passed")) for case in published.values()),
-        "published_total": 7,
+        "published_total": 9,
         "downstream_delete_chain_passed": all(
             action["passed"] for action in action_cases if action["case_id"].startswith("delete_")
         ),
@@ -179,8 +184,8 @@ def main() -> None:
     output.parent.mkdir(parents=True, exist_ok=True)
     output.write_text(json.dumps(artifact, sort_keys=True, indent=2) + "\n", encoding="utf-8")
     digest = hashlib.sha256(output.read_bytes()).hexdigest()
-    print(json.dumps({"output": str(output), "sha256": digest, "passed": artifact["published_passed"], "total": 7}, sort_keys=True))
-    if artifact["published_passed"] != 7 or not artifact["downstream_delete_chain_passed"]:
+    print(json.dumps({"output": str(output), "sha256": digest, "passed": artifact["published_passed"], "total": 9}, sort_keys=True))
+    if artifact["published_passed"] != 9 or not artifact["downstream_delete_chain_passed"]:
         raise SystemExit(1)
 
 

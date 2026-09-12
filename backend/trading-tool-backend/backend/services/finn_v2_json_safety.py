@@ -6,8 +6,13 @@ from typing import Any
 
 
 def to_json_safe(value: Any) -> Any:
-    if value is None or isinstance(value, (str, int, float, bool)):
+    if value is None or isinstance(value, (int, float, bool)):
         return value
+    if isinstance(value, str):
+        # PostgreSQL text/JSON columns reject NUL. Provider output is untrusted
+        # transport data, so remove only the non-representable character before
+        # persisting the otherwise unchanged structured result.
+        return value.replace("\x00", "")
     if isinstance(value, (datetime, date, time)):
         return value.isoformat()
     if isinstance(value, dict):

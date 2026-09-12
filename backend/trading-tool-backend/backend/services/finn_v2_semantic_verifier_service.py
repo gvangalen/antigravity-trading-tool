@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import logging
 from time import monotonic
 from typing import Any, Dict, Optional
@@ -105,3 +106,49 @@ class FinnV2SemanticVerifierService:
             reason_codes=[str(item) for item in parsed.get("reason_codes", []) if str(item)],
             model=response.get("model"),
         )
+
+    async def verify_async(
+        self,
+        *,
+        mode: str,
+        user_message: str,
+        sanitized_draft: Dict[str, Any],
+        compact_evidence: list[dict],
+        deterministic_summary: Dict[str, Any],
+        timeout_seconds: float | None = None,
+    ) -> SemanticVerificationResult:
+        """Run the synchronous provider client without blocking the worker loop.
+
+        The lifecycle deadline runs on that loop. Calling the legacy sync client
+        directly made a slow verifier invisible to cancellation and starved later
+        interactive runs. The sync request has its own bounded provider timeout;
+        this outer bound keeps lifecycle terminalisation responsive as well.
+        """
+        if not self.flags.is_semantic_verifier_enabled():
+            return SemanticVerificationResult(available=False, passes=True)
+
+        configured_timeout = float(self.flags.semantic_verifier_timeout_seconds())
+        effective_timeout = max(0.1, min(configured_timeout, timeout_seconds or configured_timeout))
+        try:
+            return await asyncio.wait_for(
+                asyncio.to_thread(
+                    self.verify,
+                    mode=mode,
+                    user_message=user_message,
+                    sanitized_draft=sanitized_draft,
+                    compact_evidence=compact_evidence,
+                    deterministic_summary=deterministic_summary,
+                ),
+                timeout=effective_timeout,
+            )
+        except asyncio.TimeoutError:
+            logger.warning(
+                "FINN V2 semantic verifier timed out",
+                extra={"stage": "semantic_verifier", "mode": mode, "timeout_seconds": effective_timeout},
+            )
+            return SemanticVerificationResult(
+                available=False,
+                passes=False,
+                reason_codes=["semantic_verifier_timeout"],
+                model=self.flags.semantic_verifier_model(),
+            )

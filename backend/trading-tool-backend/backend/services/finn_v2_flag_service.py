@@ -240,7 +240,9 @@ class FinnV2FlagService:
         return parsed or {"EVALUATE", "CREATE_PROPOSAL", "ACTION_PROPOSAL"}
 
     def semantic_verifier_timeout_seconds(self) -> int:
-        return self._env_int("FINN_V2_SEMANTIC_VERIFIER_TIMEOUT_SECONDS", 30)
+        # A semantic verifier is a bounded secondary check. It must not consume
+        # the interactive lifecycle budget or block following runs indefinitely.
+        return max(1, min(8, self._env_int("FINN_V2_SEMANTIC_VERIFIER_TIMEOUT_SECONDS", 8)))
 
     def semantic_verifier_max_retries(self) -> int:
         return max(0, min(0, self._env_int("FINN_V2_SEMANTIC_VERIFIER_MAX_RETRIES", 0)))
