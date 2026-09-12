@@ -24,14 +24,12 @@ const ENVIRONMENTS = {
 };
 
 const WORKER_CONCURRENCY = {
-  // The production host has 1 GB RAM. Five prefork workers at concurrency 2
-  // cold-start into swap, delaying the user-facing FINN queue for minutes.
-  // One child per isolated queue keeps every workload serviceable without
-  // turning a deployment into a memory-contention event.
-  default: 1,
-  marketPortfolio: 1,
-  scoringExecution: 1,
-  aiReporting: 1,
+  // The production host has 1 GB RAM.  Four separate background prefork
+  // process trees plus FINN's dedicated queue exceeded that budget and the
+  // kernel killed workers under sustained interactive traffic.  Keep FINN
+  // isolated, but serve every non-interactive queue from one bounded shared
+  // background worker.
+  background: 1,
   finnInteractive: 1,
 };
 
@@ -160,10 +158,7 @@ function createEcosystem(environmentName) {
   const backendDir = path.join(projectDir, "backend", "trading-tool-backend");
   const backendApp = `backend${environment.suffix}`;
   const frontendApp = `frontend${environment.suffix}`;
-  const defaultWorker = `celery-worker-default${environment.suffix}`;
-  const marketPortfolioWorker = `celery-worker-market-portfolio${environment.suffix}`;
-  const scoringExecutionWorker = `celery-worker-scoring-execution${environment.suffix}`;
-  const aiReportingWorker = `celery-worker-ai-reporting${environment.suffix}`;
+  const backgroundWorker = `celery-worker-default${environment.suffix}`;
   const finnInteractiveWorker = `celery-worker-finn-interactive${environment.suffix}`;
   const beatWorker = `celery-beat${environment.suffix}`;
   const queuePrefix = environment.queueNamePrefix;
@@ -197,13 +192,14 @@ function createEcosystem(environmentName) {
           ...RELEASE_METADATA_ENV,
           APP_ENV: environment.appEnv,
           TRADAMIND_BUILD_SERVICE: "backend",
+          TRADAMIND_CELERY_PROFILE: "api",
         },
         max_memory_restart: "500M",
       },
       {
-        name: defaultWorker,
+        name: backgroundWorker,
         script: CELERY_BIN,
-        args: `-A backend.celery_task.celery_app worker --loglevel=info --concurrency=${WORKER_CONCURRENCY.default} -Q ${queuePrefix}celery -n ${environmentName}-default@%h`,
+        args: `-A backend.celery_task.celery_app worker --loglevel=info -Ofair --concurrency=${WORKER_CONCURRENCY.background} --max-tasks-per-child=50 -Q ${queuePrefix}celery,${queuePrefix}market_data,${queuePrefix}portfolio,${queuePrefix}scoring,${queuePrefix}execution_critical,${queuePrefix}ai_generation -n ${environmentName}-background@%h`,
         cwd: backendDir,
         interpreter: "none",
         env: {
@@ -212,53 +208,9 @@ function createEcosystem(environmentName) {
           ...RELEASE_METADATA_ENV,
           APP_ENV: environment.appEnv,
           TRADAMIND_BUILD_SERVICE: "celery-worker-default",
+          TRADAMIND_CELERY_PROFILE: "full",
         },
         max_memory_restart: "300M",
-      },
-      {
-        name: marketPortfolioWorker,
-        script: CELERY_BIN,
-        args: `-A backend.celery_task.celery_app worker --loglevel=info --concurrency=${WORKER_CONCURRENCY.marketPortfolio} -Q ${queuePrefix}market_data,${queuePrefix}portfolio -n ${environmentName}-market-portfolio@%h`,
-        cwd: backendDir,
-        interpreter: "none",
-        env: {
-          ...FINN_RUNTIME_DEFAULT_ENV,
-          ...SHARED_RUNTIME_ENV,
-          ...RELEASE_METADATA_ENV,
-          APP_ENV: environment.appEnv,
-          TRADAMIND_BUILD_SERVICE: "celery-worker-market-portfolio",
-        },
-        max_memory_restart: "300M",
-      },
-      {
-        name: scoringExecutionWorker,
-        script: CELERY_BIN,
-        args: `-A backend.celery_task.celery_app worker --loglevel=info --concurrency=${WORKER_CONCURRENCY.scoringExecution} -Q ${queuePrefix}scoring,${queuePrefix}execution_critical -n ${environmentName}-scoring-execution@%h`,
-        cwd: backendDir,
-        interpreter: "none",
-        env: {
-          ...FINN_RUNTIME_DEFAULT_ENV,
-          ...SHARED_RUNTIME_ENV,
-          ...RELEASE_METADATA_ENV,
-          APP_ENV: environment.appEnv,
-          TRADAMIND_BUILD_SERVICE: "celery-worker-scoring-execution",
-        },
-        max_memory_restart: "300M",
-      },
-      {
-        name: aiReportingWorker,
-        script: CELERY_BIN,
-        args: `-A backend.celery_task.celery_app worker --loglevel=info --concurrency=${WORKER_CONCURRENCY.aiReporting} -Q ${queuePrefix}ai_generation -n ${environmentName}-ai-reporting@%h`,
-        cwd: backendDir,
-        interpreter: "none",
-        env: {
-          ...FINN_RUNTIME_DEFAULT_ENV,
-          ...SHARED_RUNTIME_ENV,
-          ...RELEASE_METADATA_ENV,
-          APP_ENV: environment.appEnv,
-          TRADAMIND_BUILD_SERVICE: "celery-worker-ai-reporting",
-        },
-        max_memory_restart: "350M",
       },
       {
         name: finnInteractiveWorker,
@@ -272,6 +224,7 @@ function createEcosystem(environmentName) {
           ...RELEASE_METADATA_ENV,
           APP_ENV: environment.appEnv,
           TRADAMIND_BUILD_SERVICE: "celery-worker-finn-interactive",
+          TRADAMIND_CELERY_PROFILE: "finn",
         },
         max_memory_restart: "350M",
       },
@@ -287,6 +240,7 @@ function createEcosystem(environmentName) {
           ...RELEASE_METADATA_ENV,
           APP_ENV: environment.appEnv,
           TRADAMIND_BUILD_SERVICE: "celery-beat",
+          TRADAMIND_CELERY_PROFILE: "full",
         },
         max_memory_restart: "200M",
       },

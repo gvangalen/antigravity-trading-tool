@@ -35,6 +35,7 @@ from backend.schemas.finn_v2_reasoning_schema import (
 from backend.services.finn_v2_flag_service import FinnV2FlagService
 from backend.services.finn_v2_capability_registry_service import FinnV2CapabilityRegistryService
 from backend.services.finn_v2_json_safety import to_json_safe
+from backend.services.finn_v2_lifecycle_budget import remaining_lifecycle_seconds
 from backend.services.finn_v2_reasoning_context_service import FinnV2ReasoningContextService
 from backend.services.finn_v2_reasoning_fallback_service import FinnV2ReasoningFallbackService
 from backend.services.finn_v2_reasoning_prompt_service import (
@@ -521,28 +522,43 @@ class FinnV2ReasoningService:
             # waiting for the external provider. This also releases the pooled DB
             # connection for concurrent FINN runs.
             await self._commit_before_provider_call()
+            remaining = remaining_lifecycle_seconds(
+                reserve_seconds=self.flags.terminal_persistence_reserve_seconds(),
+            )
+            if remaining is not None and remaining < 0.5:
+                response = {
+                    "error": "lifecycle_provider_budget_exhausted",
+                    "input_tokens": None,
+                    "output_tokens": None,
+                    "reasoning_tokens": None,
+                }
+            else:
+                provider_timeout = self.flags.reasoning_timeout_seconds()
+                if remaining is not None:
+                    provider_timeout = min(provider_timeout, max(0.5, remaining))
             call_started = monotonic()
             # The provider helper is synchronous. Moving it off the worker
             # event loop lets the owning lifecycle deadline terminalize a run
             # even when an upstream transport ignores cancellation briefly.
-            response = await asyncio.to_thread(
-                openai_client.ask_gpt_structured_response,
-                prompt=self.prompts.build_user_prompt(
-                    context,
-                    repair_attempt=attempt > 0,
-                    validation_errors=repair_validation_errors,
-                    previous_response=repair_previous_response,
-                ),
-                system_role=system_prompt,
-                output_spec=StructuredOutputSpec(
-                    name="finn_v2_reasoning_result",
-                    schema=self.prompts.response_schema(),
-                ),
-                model_override=model_name,
-                timeout_seconds=self.flags.reasoning_timeout_seconds(),
-                max_output_tokens=self.flags.reasoning_max_output_tokens(),
-                client_max_retries=0,
-            )
+            if remaining is None or remaining >= 0.5:
+                response = await asyncio.to_thread(
+                    openai_client.ask_gpt_structured_response,
+                    prompt=self.prompts.build_user_prompt(
+                        context,
+                        repair_attempt=attempt > 0,
+                        validation_errors=repair_validation_errors,
+                        previous_response=repair_previous_response,
+                    ),
+                    system_role=system_prompt,
+                    output_spec=StructuredOutputSpec(
+                        name="finn_v2_reasoning_result",
+                        schema=self.prompts.response_schema(),
+                    ),
+                    model_override=model_name,
+                    timeout_seconds=provider_timeout,
+                    max_output_tokens=self.flags.reasoning_max_output_tokens(),
+                    client_max_retries=0,
+                )
             call_latency_ms = int((monotonic() - call_started) * 1000)
             logger.info(
                 "FINN V2 reasoning model call finished",

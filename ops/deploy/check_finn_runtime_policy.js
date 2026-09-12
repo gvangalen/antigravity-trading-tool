@@ -12,10 +12,7 @@ var pm2Bin = process.env.PM2_BIN || path.join(
 var requiredApps = [
   "backend",
   "celery-worker-finn-interactive",
-  "celery-worker-default",
-  "celery-worker-market-portfolio",
-  "celery-worker-scoring-execution",
-  "celery-worker-ai-reporting"
+  "celery-worker-default"
 ];
 var requiredPolicy = {
   FINN_V2_PROPOSALS_ENABLED: "true",

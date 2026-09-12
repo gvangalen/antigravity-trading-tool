@@ -18,14 +18,14 @@ case "$ENVIRONMENT" in
     BACKEND_APP="${BACKEND_APP:-backend}"
     BACKEND_PORT="${BACKEND_PORT:-8000}"
     FRONTEND_PORT="${FRONTEND_PORT:-5002}"
-    EXPECTED_PM2_APPS="${EXPECTED_PM2_APPS:-frontend backend celery-worker-default celery-worker-market-portfolio celery-worker-scoring-execution celery-worker-ai-reporting celery-worker-finn-interactive celery-beat}"
+    EXPECTED_PM2_APPS="${EXPECTED_PM2_APPS:-frontend backend celery-worker-default celery-worker-finn-interactive celery-beat}"
     ;;
   staging)
     PM2_CONFIG="ecosystem.staging.config.js"
     BACKEND_APP="${BACKEND_APP:-backend-staging}"
     BACKEND_PORT="${BACKEND_PORT:-8100}"
     FRONTEND_PORT="${FRONTEND_PORT:-5102}"
-    EXPECTED_PM2_APPS="${EXPECTED_PM2_APPS:-frontend-staging backend-staging celery-worker-default-staging celery-worker-market-portfolio-staging celery-worker-scoring-execution-staging celery-worker-ai-reporting-staging celery-worker-finn-interactive-staging celery-beat-staging}"
+    EXPECTED_PM2_APPS="${EXPECTED_PM2_APPS:-frontend-staging backend-staging celery-worker-default-staging celery-worker-finn-interactive-staging celery-beat-staging}"
     ;;
   *)
     echo "Unknown environment: $ENVIRONMENT" >&2

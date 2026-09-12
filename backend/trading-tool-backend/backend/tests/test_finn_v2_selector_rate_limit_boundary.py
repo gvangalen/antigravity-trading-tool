@@ -5,7 +5,7 @@ from backend.utils import openai_client
 def test_finn_selector_uses_its_bounded_dedicated_call_capacity(monkeypatch):
     captured = {}
     monkeypatch.setenv("OPENAI_MAX_CALLS_PER_SCOPE_WINDOW", "20")
-    monkeypatch.setenv("OPENAI_MAX_SELECTOR_CALLS_PER_SCOPE_WINDOW", "60")
+    monkeypatch.setenv("OPENAI_MAX_SELECTOR_CALLS_PER_SCOPE_WINDOW", "120")
     monkeypatch.setattr(
         openai_client,
         "acquire_ai_call_slot",
@@ -18,7 +18,7 @@ def test_finn_selector_uses_its_bounded_dedicated_call_capacity(monkeypatch):
     assert captured == {
         "scope": "finn_v2_selector:388:GLOBAL",
         "scheduled": False,
-        "limit_override": 60,
+        "limit_override": 120,
     }
 
 

@@ -13,6 +13,7 @@ import json
 import os
 from pathlib import Path
 import time
+from time import monotonic
 from typing import Any
 from urllib.parse import urlparse
 import uuid
@@ -27,6 +28,13 @@ from backend.scripts.run_finn_v2_full_action_matrix import (
 )
 from backend.scripts.run_finn_v2_persisted_runtime_gate import run_gate
 from backend.utils.auth_utils import create_access_token
+
+
+def _write_artifact_atomic(path: Path, artifact: dict[str, Any]) -> None:
+    """Keep completed action steps recoverable if a later provider turn dies."""
+    temporary = path.with_suffix(path.suffix + ".tmp")
+    temporary.write_text(json.dumps(artifact, sort_keys=True, indent=2) + "\n", encoding="utf-8")
+    temporary.replace(path)
 
 
 def _lookup(connection, query: str, user_id: int, name: str) -> dict[str, Any] | None:
@@ -66,6 +74,7 @@ def _run_action(
     conversation_id: str | None = None,
     persistence_boundary: dict[str, object] | None = None,
 ) -> dict[str, Any]:
+    started = monotonic()
     observed = run_gate(
         base_url=base_url,
         bearer_token=token,
@@ -84,6 +93,7 @@ def _run_action(
         "run_id": observed["run_id"],
         "conversation_id": observed["conversation_id"],
         "initial_http_status": observed["run_create_http_status"],
+        "run_create_elapsed_ms": observed["run_create_elapsed_ms"],
         "runtime_contract_id": record["runtime_contract_id"],
         "supplied_inputs": projection.get("supplied_inputs"),
         "missing_inputs": projection.get("missing_inputs"),
@@ -95,6 +105,8 @@ def _run_action(
         "proposal_id": proposal.get("id") if proposal else None,
         "action_result": projection.get("action_result"),
         "terminal_projection": projection,
+        "phase_timestamps": observed.get("phase_timestamps") or {},
+        "elapsed_ms": round((monotonic() - started) * 1000, 2),
         "persistence_boundary": dict(persistence_boundary or {}),
     }
     if proposal:
@@ -282,6 +294,17 @@ def main() -> None:
         result["objects_after_step"] = _created_objects(user_id, names)
         result["identity_assertion"] = _assert_resolved_identity(step_id, result, steps)
         steps.append(result)
+        _write_artifact_atomic(output, {
+            "artifact_version": "finn_v2.sequential_action_chain.v3",
+            "incomplete": True,
+            "downstream_fixtures_seeded": False,
+            "user_id": user_id,
+            "other_user_id": int(other["id"]),
+            "names": names,
+            "steps": steps,
+            "completed_steps": len(steps),
+            "total": 16,
+        })
         # The official matrix paces independent user turns. Mirror that here
         # so this public parity gate does not manufacture provider saturation.
         if args.step_index is None and step_id != selected_specs[-1][0]:
@@ -366,8 +389,9 @@ def main() -> None:
         ]
 
     artifact = {
-        "artifact_version": "finn_v2.sequential_action_chain.v2",
-        "synthetic_local_only": True,
+        "artifact_version": "finn_v2.sequential_action_chain.v3",
+        "isolated_public_runtime_gate": True,
+        "mocked_provider_responses": False,
         "downstream_fixtures_seeded": False,
         "user_id": user_id,
         "other_user_id": int(other["id"]),
@@ -403,7 +427,8 @@ def main() -> None:
             ),
         },
     }
-    output.write_text(json.dumps(artifact, sort_keys=True, indent=2) + "\n", encoding="utf-8")
+    artifact["incomplete"] = False
+    _write_artifact_atomic(output, artifact)
     digest = hashlib.sha256(output.read_bytes()).hexdigest()
     print(json.dumps({"output": str(output), "sha256": digest, "passed": artifact["passed"], "total": artifact["total"]}, sort_keys=True))
     if args.step_index is None and not args.read_regressions and artifact["passed"] != artifact["total"]:

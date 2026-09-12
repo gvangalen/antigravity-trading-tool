@@ -648,6 +648,16 @@ def test_reasoning_provider_call_does_not_block_the_lifecycle_event_loop():
     assert "openai_client.ask_gpt_structured_response" in source
 
 
+def test_semantic_verifier_has_the_same_database_and_deadline_boundary():
+    verifier = (ROOT / "services" / "finn_v2_response_verifier_service.py").read_text(encoding="utf-8")
+    semantic = (ROOT / "services" / "finn_v2_semantic_verifier_service.py").read_text(encoding="utf-8")
+
+    assert verifier.index("_commit_before_provider_call()") < verifier.index("semantic.verify_async(")
+    assert "remaining_lifecycle_seconds" in verifier
+    assert "remaining_lifecycle_seconds" in semantic
+    assert "semantic_verifier_budget_exhausted" in semantic
+
+
 def test_orchestrator_persists_final_operation_before_contract_derived_selection():
     orchestrator = (ROOT / "services" / "finn_v2_orchestrator_service.py").read_text(encoding="utf-8")
 

@@ -1,0 +1,16 @@
+FROM python:3.11-slim
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PYTHONPATH=/app
+
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends libpq5 supervisor \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+COPY backend/trading-tool-backend/backend/requirements.txt /tmp/requirements.txt
+COPY ops/local-finn/finn-parity-constraints.txt /tmp/constraints.txt
+RUN pip install --no-cache-dir --constraint /tmp/constraints.txt -r /tmp/requirements.txt
+COPY backend/trading-tool-backend /app
+COPY ops/local-finn/supervisord.finn-parity.conf /etc/supervisor/conf.d/finn-parity.conf

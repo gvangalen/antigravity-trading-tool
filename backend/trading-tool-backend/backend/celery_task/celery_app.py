@@ -286,30 +286,38 @@ if not legacy_periodic_ai_enabled():
 logger.info("🚀 Celery Beat schedule geladen (OPTIMIZED)")
 
 # =========================================================
-# 📌 FORCE IMPORTS
+# 📌 PROFILED TASK IMPORTS
 # =========================================================
+# The API only publishes named tasks and FINN's isolated worker only consumes
+# FINN tasks. Importing every market/reporting module in those processes used
+# several hundred MB on the 1 GB production host before a user run began.
+# Background and beat retain the complete registration set.
+CELERY_RUNTIME_PROFILE = os.getenv("TRADAMIND_CELERY_PROFILE", "full").strip().lower()
+if CELERY_RUNTIME_PROFILE not in {"api", "finn", "full"}:
+    raise RuntimeError("invalid_tradamind_celery_profile")
+
 try:
-    import backend.celery_task.onboarding_task
-    import backend.celery_task.dispatcher
-    import backend.celery_task.market_task
-    import backend.celery_task.macro_task
-    import backend.celery_task.technical_task
-    import backend.celery_task.store_daily_scores_task
-    import backend.celery_task.setup_task
-    import backend.celery_task.strategy_task
-    import backend.celery_task.trading_bot_task
-    import backend.celery_task.regime_memory_task
-    import backend.celery_task.portfolio_snapshot_task
-    import backend.celery_task.bootstrap_agents_task
-    import backend.celery_task.system_task
-    import backend.celery_task.finn_v2_task
-
-    import backend.celery_task.daily_report_task
-    import backend.celery_task.weekly_report_task
-    import backend.celery_task.monthly_report_task
-    import backend.celery_task.quarterly_report_task
-
-    logger.info("✅ Alle Celery TASKS succesvol geïmporteerd")
+    if CELERY_RUNTIME_PROFILE == "full":
+        import backend.celery_task.onboarding_task
+        import backend.celery_task.dispatcher
+        import backend.celery_task.market_task
+        import backend.celery_task.macro_task
+        import backend.celery_task.technical_task
+        import backend.celery_task.store_daily_scores_task
+        import backend.celery_task.setup_task
+        import backend.celery_task.strategy_task
+        import backend.celery_task.trading_bot_task
+        import backend.celery_task.regime_memory_task
+        import backend.celery_task.portfolio_snapshot_task
+        import backend.celery_task.bootstrap_agents_task
+        import backend.celery_task.system_task
+        import backend.celery_task.daily_report_task
+        import backend.celery_task.weekly_report_task
+        import backend.celery_task.monthly_report_task
+        import backend.celery_task.quarterly_report_task
+    if CELERY_RUNTIME_PROFILE in {"full", "finn"}:
+        import backend.celery_task.finn_v2_task
+    logger.info("✅ Celery tasks imported for profile=%s", CELERY_RUNTIME_PROFILE)
 
 except Exception:
     logger.error("❌ Fout bij Celery task imports", exc_info=True)

@@ -3,6 +3,7 @@ node_modules/
 .env.*
 ops/local-finn/finn-local.env
 .local-finn/
+.local-finn-parity-artifacts/
 venv/
 __pycache__/
 *.pyc

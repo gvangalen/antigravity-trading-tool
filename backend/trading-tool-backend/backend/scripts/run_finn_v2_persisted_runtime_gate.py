@@ -76,6 +76,7 @@ def run_gate(
     request_body: Dict[str, Any] = {"message": message, "transport": "chat"}
     if conversation_id:
         request_body["conversation_id"] = conversation_id
+    creation_started_at = time.monotonic()
     created, status = _request_json(
         url=f"{base_url}/api/assistant/v2/runs",
         method="POST",
@@ -83,6 +84,7 @@ def run_gate(
         body=request_body,
         timeout=timeout_seconds,
     )
+    run_create_elapsed_ms = round((time.monotonic() - creation_started_at) * 1000, 2)
     if status != 200:
         raise AssertionError(f"runtime_gate_create_failed_http_{status}")
     run_id = str(created.get("run_id") or "")
@@ -138,6 +140,7 @@ def run_gate(
     return {
         "run_id": run_id,
         "run_create_http_status": status,
+        "run_create_elapsed_ms": run_create_elapsed_ms,
         "contract_id": contract["contract_id"],
         "conversation_id": str(created.get("conversation_id") or ""),
         "status": polling["status"],
@@ -149,6 +152,18 @@ def run_gate(
         # envelope they are meant to validate.
         "conversation_reference": projection.get("conversation_reference"),
         "conversation_reference_kind": projection.get("conversation_reference_kind"),
+        # Safe timing and dispatch metadata are already part of the persisted
+        # public terminal projection. Returning them lets Build measure the
+        # same envelope that polling, SSE and QA consume.
+        # Production projections expose the phase series as timings_ms. Older
+        # projections used phase_timestamps, so keep the read-only fallback for
+        # historical runs while making new parity artifacts carry the actual
+        # persisted timings.
+        "phase_timestamps": dict(
+            projection.get("timings_ms") or projection.get("phase_timestamps") or {}
+        ),
+        "dispatch_count": projection.get("dispatch_count"),
+        "attempt_count": projection.get("attempt_count"),
         "elapsed_ms": round((time.monotonic() - started_at) * 1000, 2),
         "polling_terminal_elapsed_ms": round(((polling_terminal_at or time.monotonic()) - started_at) * 1000, 2),
         "delivery_transport": "sse_primary_polling_fallback",

@@ -567,7 +567,11 @@ def _rate_limit_allows_call() -> bool:
         generic_limit = max(1, int(os.getenv("OPENAI_MAX_CALLS_PER_SCOPE_WINDOW", "20")))
         limit_override = max(
             generic_limit,
-            int(os.getenv("OPENAI_MAX_SELECTOR_CALLS_PER_SCOPE_WINDOW", "60")),
+            # A normal interactive session may contain many short follow-up
+            # turns. Keep a bounded per-user quota, but never make the
+            # selector unavailable halfway through a sustained session merely
+            # because every turn correctly used the required model-first path.
+            int(os.getenv("OPENAI_MAX_SELECTOR_CALLS_PER_SCOPE_WINDOW", "120")),
         )
     allowed = acquire_ai_call_slot(scope, scheduled=scheduled, limit_override=limit_override)
     if not allowed:

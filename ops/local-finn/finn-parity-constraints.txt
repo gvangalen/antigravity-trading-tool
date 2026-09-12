@@ -1,0 +1,8 @@
+# The repository does not have a lockfile. Keep the Linux parity image aligned
+# with the validated local runtime rather than allowing an unconstrained
+# resolver to install a newer, incompatible FastAPI/OpenAI combination.
+fastapi==0.125.0
+pydantic==1.10.26
+sqlalchemy==2.0.38
+celery==5.6.3
+openai==2.30.0

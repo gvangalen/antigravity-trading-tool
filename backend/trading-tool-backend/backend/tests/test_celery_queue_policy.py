@@ -39,7 +39,26 @@ def test_queue_policy_import_does_not_bootstrap_celery_worker():
     assert result.returncode == 0, result.stderr
 
 
-def test_pm2_config_splits_named_queue_workers():
+def test_interactive_profile_registers_only_finn_tasks():
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            "from backend.celery_task.celery_app import celery_app; "
+            "assert 'backend.celery_task.finn_v2_task.process_finn_v2_run' in celery_app.tasks; "
+            "assert 'backend.celery_task.market_task.fetch_market_data' not in celery_app.tasks",
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+        cwd=Path(__file__).resolve().parents[2],
+        env={**__import__('os').environ, "TRADAMIND_CELERY_PROFILE": "finn"},
+    )
+
+    assert result.returncode == 0, result.stderr
+
+
+def test_pm2_config_keeps_finn_isolated_and_bounds_background_queues():
     from pathlib import Path
 
     production_ecosystem = Path(__file__).resolve().parents[4] / "ecosystem.production.config.js"
@@ -47,17 +66,12 @@ def test_pm2_config_splits_named_queue_workers():
     source = production_ecosystem.read_text() + "\n" + shared_ecosystem.read_text()
 
     assert "celery-worker-default" in source
-    assert "celery-worker-market-portfolio" in source
-    assert "celery-worker-scoring-execution" in source
-    assert "celery-worker-ai-reporting" in source
-    assert "default: 1" in source
-    assert "marketPortfolio: 1" in source
-    assert "scoringExecution: 1" in source
+    assert "celery-worker-finn-interactive" in source
+    assert "background: 1" in source
     assert "finnInteractive: 1" in source
-    assert "--concurrency=${WORKER_CONCURRENCY.default} -Q ${queuePrefix}celery -n ${environmentName}-default@%h" in source
-    assert "--concurrency=${WORKER_CONCURRENCY.marketPortfolio} -Q ${queuePrefix}market_data,${queuePrefix}portfolio -n ${environmentName}-market-portfolio@%h" in source
-    assert "--concurrency=${WORKER_CONCURRENCY.scoringExecution} -Q ${queuePrefix}scoring,${queuePrefix}execution_critical -n ${environmentName}-scoring-execution@%h" in source
-    assert "--concurrency=${WORKER_CONCURRENCY.aiReporting} -Q ${queuePrefix}ai_generation -n ${environmentName}-ai-reporting@%h" in source
+    assert "--concurrency=${WORKER_CONCURRENCY.background}" in source
+    assert "${queuePrefix}market_data,${queuePrefix}portfolio,${queuePrefix}scoring" in source
+    assert "${queuePrefix}finn_interactive" in source
 
 
 def test_worker_concurrency_is_centralized_in_shared_ecosystem_config():
@@ -67,10 +81,7 @@ def test_worker_concurrency_is_centralized_in_shared_ecosystem_config():
     source = shared_ecosystem.read_text()
 
     assert "const WORKER_CONCURRENCY = {" in source
-    assert "default: 1" in source
-    assert "marketPortfolio: 1" in source
-    assert "scoringExecution: 1" in source
-    assert "aiReporting: 1" in source
+    assert "background: 1" in source
     assert "finnInteractive: 1" in source
 
 

@@ -48,6 +48,7 @@ from backend.schemas.finn_v2_reasoning_schema import PersistedReasoningRecord, R
 from backend.schemas.finn_v2_response_schema import FINN_V2_VERIFIED_RESPONSE_VERSION, ResponseDraft, VerifiedResponse
 from backend.schemas.finn_v2_verifier_schema import ClaimVerification, CoverageVerification, SemanticVerificationResult, VerifierResult
 from backend.services.finn_v2_flag_service import FinnV2FlagService
+from backend.services.finn_v2_lifecycle_budget import remaining_lifecycle_seconds
 from backend.services.finn_v2_capability_registry_service import FinnV2CapabilityRegistryService
 from backend.services.asset_catalog_service import resolve_catalog_symbol_mention
 from backend.services.finn_v2_json_safety import to_json_safe
@@ -89,6 +90,12 @@ class FinnV2ResponseVerifierService:
         "reflection": "review_context",
         "portfolio": "portfolio_context",
     }
+
+    async def _commit_before_provider_call(self) -> None:
+        """Release any checked-out verification connection before model I/O."""
+        commit = getattr(self.session, "commit", None)
+        if callable(commit):
+            await commit()
     REPAIRABLE_CODES = FinnV2ResponseRepairService.REPAIRABLE_CODES
     BLOCKING_CODES = {
         "ownership_violation",
@@ -350,6 +357,14 @@ class FinnV2ResponseVerifierService:
             == "deterministic_contract"
         )
         if verifier.passed and not deterministic_contract_response and self._should_run_semantic(mode=draft.mode):
+            # Context and deterministic checks have already read all durable
+            # rows. Release their pooled connection before the bounded
+            # provider verifier so a slow semantic check cannot block run
+            # creation or a following interactive worker task.
+            await self._commit_before_provider_call()
+            remaining = remaining_lifecycle_seconds(
+                reserve_seconds=self.flags.terminal_persistence_reserve_seconds(),
+            )
             await self._append_trace(trace_id=trace_id, run_id=run.id, user_id=run.user_id, event_type="semantic_verification_started", payload={"draft_id": draft.draft_id, "mode": draft.mode})
             semantic_result = await self.semantic.verify_async(
                 mode=draft.mode,
@@ -357,7 +372,11 @@ class FinnV2ResponseVerifierService:
                 sanitized_draft=self.drafts.sanitize_for_semantic_verifier(draft),
                 compact_evidence=self.drafts.compact_evidence(context.evidence, self._all_refs(draft)),
                 deterministic_summary={"passed": verifier.passed, "reason_codes": verifier.reason_codes, "coverage": verifier.coverage.dict()},
-                timeout_seconds=self.flags.semantic_verifier_timeout_seconds(),
+                timeout_seconds=(
+                    min(self.flags.semantic_verifier_timeout_seconds(), max(0.1, remaining))
+                    if remaining is not None
+                    else self.flags.semantic_verifier_timeout_seconds()
+                ),
             )
             await self._append_trace(trace_id=trace_id, run_id=run.id, user_id=run.user_id, event_type="semantic_verification_completed", payload={"draft_id": draft.draft_id, "available": semantic_result.available, "passes": semantic_result.passes, "reason_codes": semantic_result.reason_codes})
             verifier = self._merge_semantic(verifier, semantic_result, draft.mode)

@@ -7,6 +7,7 @@ from typing import Any, Dict, Optional
 
 from backend.schemas.finn_v2_verifier_schema import SemanticVerificationResult
 from backend.services.finn_v2_flag_service import FinnV2FlagService
+from backend.services.finn_v2_lifecycle_budget import remaining_lifecycle_seconds
 from backend.utils import openai_client
 from backend.utils.openai_client import StructuredOutputSpec
 
@@ -51,6 +52,7 @@ class FinnV2SemanticVerifierService:
         sanitized_draft: Dict[str, Any],
         compact_evidence: list[dict],
         deterministic_summary: Dict[str, Any],
+        provider_timeout_seconds: float | None = None,
     ) -> SemanticVerificationResult:
         if not self.flags.is_semantic_verifier_enabled():
             return SemanticVerificationResult(available=False, passes=True)
@@ -72,7 +74,7 @@ class FinnV2SemanticVerifierService:
             system_role=system_prompt,
             output_spec=StructuredOutputSpec(name="finn_v2_semantic_verifier", schema=self.SCHEMA),
             model_override=self.flags.semantic_verifier_model(),
-            timeout_seconds=self.flags.semantic_verifier_timeout_seconds(),
+            timeout_seconds=provider_timeout_seconds or self.flags.semantic_verifier_timeout_seconds(),
             client_max_retries=0,
         )
         logger.info(
@@ -128,7 +130,20 @@ class FinnV2SemanticVerifierService:
             return SemanticVerificationResult(available=False, passes=True)
 
         configured_timeout = float(self.flags.semantic_verifier_timeout_seconds())
-        effective_timeout = max(0.1, min(configured_timeout, timeout_seconds or configured_timeout))
+        remaining = remaining_lifecycle_seconds()
+        if remaining is not None:
+            remaining = max(0.0, remaining)
+        effective_timeout = max(
+            0.1,
+            min(configured_timeout, timeout_seconds or configured_timeout, remaining if remaining is not None else configured_timeout),
+        )
+        if remaining is not None and remaining < 0.25:
+            return SemanticVerificationResult(
+                available=False,
+                passes=False,
+                reason_codes=["semantic_verifier_budget_exhausted"],
+                model=self.flags.semantic_verifier_model(),
+            )
         try:
             return await asyncio.wait_for(
                 asyncio.to_thread(
@@ -138,6 +153,7 @@ class FinnV2SemanticVerifierService:
                     sanitized_draft=sanitized_draft,
                     compact_evidence=compact_evidence,
                     deterministic_summary=deterministic_summary,
+                    provider_timeout_seconds=effective_timeout,
                 ),
                 timeout=effective_timeout,
             )

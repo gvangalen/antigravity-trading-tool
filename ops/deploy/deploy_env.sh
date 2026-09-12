@@ -65,8 +65,9 @@ case "$ENVIRONMENT" in
     BACKEND_PORT="${BACKEND_PORT:-8000}"
     FRONTEND_PORT="${FRONTEND_PORT:-5002}"
     CORE_PM2_APPS="${CORE_PM2_APPS:-frontend,backend}"
-    AUX_PM2_APPS="${AUX_PM2_APPS:-celery-worker-default,celery-worker-market-portfolio,celery-worker-scoring-execution,celery-worker-ai-reporting,celery-worker-finn-interactive,celery-beat}"
-    EXPECTED_PM2_APPS="${EXPECTED_PM2_APPS:-frontend backend celery-worker-default celery-worker-market-portfolio celery-worker-scoring-execution celery-worker-ai-reporting celery-worker-finn-interactive celery-beat}"
+    AUX_PM2_APPS="${AUX_PM2_APPS:-celery-worker-default,celery-worker-finn-interactive,celery-beat}"
+    EXPECTED_PM2_APPS="${EXPECTED_PM2_APPS:-frontend backend celery-worker-default celery-worker-finn-interactive celery-beat}"
+    RETIRED_PM2_APPS="${RETIRED_PM2_APPS:-celery-worker-market-portfolio,celery-worker-scoring-execution,celery-worker-ai-reporting}"
     DEPLOY_REF="origin/${BRANCH}"
     EXTERNAL_BASE_URL="${EXTERNAL_BASE_URL:-https://tradamind.com}"
     ;;
@@ -77,8 +78,9 @@ case "$ENVIRONMENT" in
     BACKEND_PORT="${BACKEND_PORT:-8100}"
     FRONTEND_PORT="${FRONTEND_PORT:-5102}"
     CORE_PM2_APPS="${CORE_PM2_APPS:-frontend-staging,backend-staging}"
-    AUX_PM2_APPS="${AUX_PM2_APPS:-celery-worker-default-staging,celery-worker-market-portfolio-staging,celery-worker-scoring-execution-staging,celery-worker-ai-reporting-staging,celery-worker-finn-interactive-staging,celery-beat-staging}"
-    EXPECTED_PM2_APPS="${EXPECTED_PM2_APPS:-frontend-staging backend-staging celery-worker-default-staging celery-worker-market-portfolio-staging celery-worker-scoring-execution-staging celery-worker-ai-reporting-staging celery-worker-finn-interactive-staging celery-beat-staging}"
+    AUX_PM2_APPS="${AUX_PM2_APPS:-celery-worker-default-staging,celery-worker-finn-interactive-staging,celery-beat-staging}"
+    EXPECTED_PM2_APPS="${EXPECTED_PM2_APPS:-frontend-staging backend-staging celery-worker-default-staging celery-worker-finn-interactive-staging celery-beat-staging}"
+    RETIRED_PM2_APPS="${RETIRED_PM2_APPS:-celery-worker-market-portfolio-staging,celery-worker-scoring-execution-staging,celery-worker-ai-reporting-staging}"
     DEPLOY_REF="origin/${BRANCH}"
     EXTERNAL_BASE_URL="${EXTERNAL_BASE_URL:-https://staging.tradamind.com}"
     ;;
@@ -548,6 +550,8 @@ PY
     else
       for_each_pm2_app \"$CORE_PM2_APPS\" pm2_delete_app
       for_each_pm2_app \"$AUX_PM2_APPS\" pm2_delete_app
+      # Remove obsolete process trees before the bounded topology starts.
+      for_each_pm2_app \"$RETIRED_PM2_APPS\" pm2_delete_app
     fi
     DEPLOY_STEP_ID='memory_headroom'
     if ! wait_for_deploy_memory_headroom; then

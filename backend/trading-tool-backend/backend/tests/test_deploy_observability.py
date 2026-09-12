@@ -151,11 +151,13 @@ def test_release_identity_is_written_before_pm2_and_loaded_by_every_process() ->
     assert 'metadata_path="ops/deploy/.release_metadata.env"' in rollback_source
     assert "function loadReleaseMetadata()" in ecosystem_source
     assert "const RELEASE_METADATA_ENV = loadReleaseMetadata();" in ecosystem_source
-    assert ecosystem_source.count("...RELEASE_METADATA_ENV,") == 8
+    # frontend, API, one bounded background worker, the isolated FINN worker,
+    # and beat all receive the immutable release metadata.
+    assert ecosystem_source.count("...RELEASE_METADATA_ENV,") == 5
     # Explicit defaults replace obsolete PM2 process-only values when the
     # protected environment intentionally omits an otherwise safe flag.
     assert "const FINN_RUNTIME_DEFAULT_ENV =" in ecosystem_source
-    assert ecosystem_source.count("...FINN_RUNTIME_DEFAULT_ENV,") == 8
+    assert ecosystem_source.count("...FINN_RUNTIME_DEFAULT_ENV,") == 5
     # Proposal policy must be identical in the gateway and FINN worker after
     # PM2 restarts; otherwise a release can pass a read-only health check while
     # action runs fail only after selection.

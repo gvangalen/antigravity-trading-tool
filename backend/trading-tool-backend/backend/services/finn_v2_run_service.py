@@ -28,6 +28,10 @@ from backend.services.finn_v2_delivery_service import FinnV2DeliveryService
 from backend.services.finn_v2_orchestrator_service import FinnV2OrchestratorService
 from backend.services.finn_v2_tool_execution_service import FinnV2ToolExecutionService
 from backend.services.finn_v2_flag_service import FinnV2FlagService
+from backend.services.finn_v2_lifecycle_budget import (
+    reset_lifecycle_deadline,
+    set_lifecycle_deadline,
+)
 from backend.schemas.finn_v2_schema import AgentRunStatusEnvelope, PolicyDecision, VerifiedResponse
 from backend.schemas.finn_v2_orchestrator_schema import LifecyclePhaseOutcome
 
@@ -554,14 +558,17 @@ class FinnV2RunService:
             # terminal reserve is included only after the persisted selector
             # transition, so a slow but valid selector cannot cancel that
             # transition before its immutable intent reaches the contract.
+            deadline = monotonic() + flags.lifecycle_deadline_seconds()
+            lifecycle_budget_token = set_lifecycle_deadline(deadline)
+            # ``create_task`` snapshots the context variable, keeping this
+            # deadline attached to provider work even after the coordinator
+            # resumes to watch for terminalisation.
             lifecycle = asyncio.create_task(_run_owned_lifecycle())
             selector_started_waiter = asyncio.create_task(selector_started.wait())
             selection_waiter = asyncio.create_task(selection_ready.wait())
             # One absolute budget prevents a selector allowance followed by a
             # fresh lifecycle allowance from exceeding the visible-run SLA.
             # The reserve remains available only for terminal persistence.
-            deadline = monotonic() + flags.lifecycle_deadline_seconds()
-
             def _remaining(*, reserve: bool = False) -> float:
                 remaining = deadline - monotonic()
                 if reserve:
@@ -637,6 +644,8 @@ class FinnV2RunService:
                     primary_exception=exc,
                 )
         finally:
+            if "lifecycle_budget_token" in locals():
+                reset_lifecycle_deadline(lifecycle_budget_token)
             if selector_started_waiter is not None and not selector_started_waiter.done():
                 selector_started_waiter.cancel()
                 with suppress(asyncio.CancelledError, asyncio.TimeoutError):
