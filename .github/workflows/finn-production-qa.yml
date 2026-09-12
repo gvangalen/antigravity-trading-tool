@@ -170,6 +170,7 @@ jobs:
             -o StrictHostKeyChecking=yes
             -o ConnectTimeout=15
           )
+          # shellcheck disable=SC2029 # The command intentionally expands the scoped remote path locally.
           ssh "${ssh_opts[@]}" "ubuntu@${QA_HOST}" "mkdir -p '$remote_state_dir' && chmod 700 '$remote_state_dir'"
           scp -i "$RUNNER_TEMP/finn-production-qa-key" -o UserKnownHostsFile="$RUNNER_TEMP/finn-production-qa-known-hosts" -o BatchMode=yes -o StrictHostKeyChecking=yes "$control_plane_runner" "ubuntu@${QA_HOST}:${remote_runner}"
           if [ -n "${MANIFEST_BUNDLE:-}" ]; then
@@ -180,6 +181,7 @@ jobs:
             remote_bundle=""
           fi
           remote_command=$(printf 'bash -s -- %q %q %q %q %q %q %q %q %q %q %q %q %q %q %q' "$RELEASE_SHA" "$QA_PROFILE" "$MANIFEST_ID" "$RUN_LABEL" "$QA_REMOTE_DIR" "$remote_report" "$GITHUB_RUN_ID" "$remote_bundle" "$ALLOW_FIXTURE_ACTIONS" "$ALLOW_SAFE_FIXTURE_EXECUTION" "$FINN_QA_FIXTURE_NAMESPACE" "$remote_runner" "$runner_sha256" "$QA_RUNNER_REVISION" "$remote_state_dir")
+          # shellcheck disable=SC2029 # The SSH arguments are intentionally constructed by this protected runner.
           ssh "${ssh_opts[@]}" "ubuntu@${QA_HOST}" "$remote_command" <<'REMOTE'
           set -euo pipefail
           set +x
@@ -259,15 +261,18 @@ jobs:
           completed=0
           restarted=0
           for _ in $(seq 1 225); do
+            # shellcheck disable=SC2029 # The remote state check deliberately receives local workflow paths.
             state="$(ssh "${ssh_opts[@]}" "ubuntu@${QA_HOST}" "if test -f '$remote_state_dir/runner.exit'; then echo complete; elif test -s '$remote_state_dir/runner.pid' && kill -0 \$(cat '$remote_state_dir/runner.pid') 2>/dev/null; then echo running; else echo interrupted; fi" 2>/dev/null || echo reconnecting)"
             case "$state" in
               complete)
                 # A detached runner can exit cleanly after publishing an
                 # honest partial checkpoint.  Resume that same matrix once;
                 # ``--resume`` consumes only its explicit not_run rows.
+                # shellcheck disable=SC2029 # The report path is an explicit remote argument, not a secret expansion.
                 incomplete="$(ssh "${ssh_opts[@]}" "ubuntu@${QA_HOST}" "python3 -c 'import json,sys; print(\"true\" if json.load(open(sys.argv[1], encoding=\"utf-8\")).get(\"incomplete\") else \"false\")' '$remote_report'" 2>/dev/null || echo true)"
                 if [ "$incomplete" = "true" ] && [ "$restarted" -eq 0 ]; then
                   restarted=1
+                  # shellcheck disable=SC2029 # Restart is intentionally scoped to this workflow's remote state directory.
                   ssh "${ssh_opts[@]}" "ubuntu@${QA_HOST}" "rm -f '$remote_state_dir/runner.exit'; nohup '$remote_state_dir/run.sh' </dev/null >/dev/null 2>&1 & echo \$! > '$remote_state_dir/runner.pid'" || true
                 else
                   completed=1
@@ -277,6 +282,7 @@ jobs:
               interrupted)
                 if [ "$restarted" -eq 1 ]; then break; fi
                 restarted=1
+                # shellcheck disable=SC2029 # Resume is intentionally scoped to this workflow's remote state directory.
                 ssh "${ssh_opts[@]}" "ubuntu@${QA_HOST}" "nohup '$remote_state_dir/run.sh' </dev/null >/dev/null 2>&1 & echo \$! > '$remote_state_dir/runner.pid'" || true
                 ;;
             esac
@@ -289,6 +295,7 @@ jobs:
           sha256sum "qa-artifacts/${report_name}" > "qa-artifacts/${report_name}.sha256"
           # Artifact collection precedes the runner exit check so a crash is
           # visible to QA instead of being mistaken for an empty matrix.
+          # shellcheck disable=SC2029 # The runner exit file belongs to this remote workflow state only.
           runner_exit="$(ssh "${ssh_opts[@]}" "ubuntu@${QA_HOST}" "cat '$remote_state_dir/runner.exit'" 2>/dev/null || true)"
           test "$completed" -eq 1
           test "$runner_exit" -eq 0
