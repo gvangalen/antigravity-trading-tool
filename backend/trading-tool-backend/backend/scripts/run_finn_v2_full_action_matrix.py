@@ -13,7 +13,9 @@ import json
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
+from urllib.request import urlopen
 import uuid
+from time import monotonic, sleep
 
 from sqlalchemy import text
 
@@ -24,7 +26,7 @@ from backend.utils.auth_utils import create_access_token
 
 
 ACTION_SPECS = (
-    ("select_asset", "Selecteer SOL als mijn actieve asset.", "Stel mijn actieve asset in.", "SOL."),
+    ("select_asset", "Selecteer SOL als mijn actieve asset.", "Selecteer een asset als mijn actieve asset.", "SOL."),
     ("watchlist_add", "Voeg ETH toe aan mijn watchlist.", "Voeg een asset toe aan mijn watchlist.", "ETH."),
     ("watchlist_remove", "Verwijder XRP uit mijn watchlist.", "Verwijder een asset uit mijn watchlist.", "XRP."),
     ("create_indicator_configuration", "Maak een technische RSI indicatorconfiguratie voor ADA.", "Maak een technische RSI indicatorconfiguratie.", "Voor ADA."),
@@ -41,6 +43,28 @@ ACTION_SPECS = (
     ("delete_bot", "Verwijder de bot Matrix Delete Bot.", "Verwijder een bot.", "Verwijder de bot Matrix Delete Bot."),
     ("deactivate_bot", "Deactiveer de bot Matrix Deactivate Bot.", "Deactiveer een bot.", "Deactiveer de bot Matrix Deactivate Bot."),
 )
+
+# Each answer fills one registry-reported slot in the existing conversation.
+# This is certification data, not a second action schema: the runner compares
+# every transition to ``OperationContract.required_inputs`` at runtime.
+GUIDED_SLOT_ANSWERS = {
+    "select_asset": ("SOL.",),
+    "watchlist_add": ("ETH.",),
+    "watchlist_remove": ("XRP.",),
+    "create_indicator_configuration": ("Voor ADA.",),
+    "update_indicator_configuration": ("Voor BTC.", "Zet de periode op 21."),
+    "delete_indicator_configuration": ("Voor SOL.",),
+    "create_setup": ("Op 4 uur.", "Noem hem Matrix Nieuwe Setup."),
+    "update_setup": ("Matrix Update Setup.", "Zet het tijdframe op 1 uur."),
+    "delete_setup": ("Matrix Delete Setup.",),
+    "create_strategy": ("Matrix Strategy Parent.", "Fixed.", "Basisinleg 100 euro."),
+    "update_strategy": ("Matrix Update Strategie.", "Zet de basisinleg op 120 euro."),
+    "delete_strategy": ("Matrix Delete Strategie.",),
+    "create_bot": ("Matrix Bot Parent.", "Noem hem Matrix Nieuwe Bot."),
+    "update_bot": ("Matrix Update Bot.", "Zet de cadence op weekly."),
+    "delete_bot": ("Matrix Delete Bot.",),
+    "deactivate_bot": ("Matrix Deactivate Bot.",),
+}
 
 # These are semantic reproductions of the published production findings. They
 # deliberately retain only the operation and prerequisite class, never a QA
@@ -74,6 +98,20 @@ def _create_local_user() -> dict[str, Any]:
         """), {"email": f"finn.local.matrix.{uuid.uuid4().hex[:16]}@example.com",
                 "preferences": json.dumps({"selected_asset": "BTC", "locale": "nl"})}).scalar_one()
     return {"id": int(user_id), "role": "user"}
+
+
+def _wait_for_runtime(base_url: str, *, timeout_seconds: float = 30.0) -> None:
+    """Do not turn a freshly restarted local API into false product failures."""
+    deadline = monotonic() + timeout_seconds
+    health_url = f"{base_url.rstrip('/')}/api/health"
+    while monotonic() < deadline:
+        try:
+            with urlopen(health_url, timeout=2) as response:
+                if response.status == 200:
+                    return
+        except OSError:
+            sleep(0.5)
+    raise RuntimeError("local_action_matrix_runtime_not_healthy")
 
 
 def _insert_setup(
@@ -127,6 +165,28 @@ def _seed_fixtures(user_id: int) -> dict[str, int]:
             VALUES ('BTC', 'Bitcoin', 'crypto', 'local_fixture', 'matrix-btc-v1', CAST(:payload AS jsonb))
             ON CONFLICT (symbol) DO NOTHING
         """), {"payload": json.dumps({"fixture": "local_action_matrix"})})
+        # Fixture evidence is persisted domain data, not an injected FINN
+        # answer. It lets the real evaluator release a verified score response
+        # for follow-up lineage certification.
+        connection.execute(text("""
+            INSERT INTO daily_scores (
+                user_id, report_date, symbol, macro_score, technical_score,
+                market_score, setup_score, macro_interpretation,
+                macro_top_contributors, technical_interpretation,
+                technical_top_contributors, market_interpretation,
+                market_top_contributors
+            ) VALUES (
+                :user_id, CURRENT_DATE, 'BTC', 61, 64, 58, 60,
+                'Stable macro fixture.', CAST(:macro AS jsonb),
+                'Positive technical fixture.', CAST(:technical AS jsonb),
+                'Neutral market fixture.', CAST(:market AS jsonb)
+            )
+        """), {
+            "user_id": user_id,
+            "macro": json.dumps(["macro_fixture"]),
+            "technical": json.dumps(["technical_fixture"]),
+            "market": json.dumps(["market_fixture"]),
+        })
         connection.execute(text("""
             INSERT INTO watchlists (user_id, symbol, created_at) VALUES (:user_id, 'XRP', NOW())
             ON CONFLICT (user_id, symbol) DO NOTHING
@@ -154,6 +214,7 @@ def _seed_fixtures(user_id: int) -> dict[str, int]:
             "bot_update_setup": _insert_setup(connection, user_id, "Matrix Bot Update Parent"),
             "bot_delete_setup": _insert_setup(connection, user_id, "Matrix Bot Delete Parent"),
             "bot_deactivate_setup": _insert_setup(connection, user_id, "Matrix Bot Deactivate Parent"),
+            "paper_activation_setup": _insert_setup(connection, user_id, "Matrix Paper Activation Parent"),
         }
         fixtures["strategy_update"] = _insert_strategy(connection, user_id, fixtures["strategy_update_setup"], "Matrix Update Strategie")
         fixtures["strategy_delete"] = _insert_strategy(connection, user_id, fixtures["strategy_delete_setup"], "Matrix Delete Strategie")
@@ -161,9 +222,11 @@ def _seed_fixtures(user_id: int) -> dict[str, int]:
         bot_update_strategy = _insert_strategy(connection, user_id, fixtures["bot_update_setup"], "Matrix Update Bot Strategie")
         bot_delete_strategy = _insert_strategy(connection, user_id, fixtures["bot_delete_setup"], "Matrix Delete Bot Strategie")
         bot_deactivate_strategy = _insert_strategy(connection, user_id, fixtures["bot_deactivate_setup"], "Matrix Deactivate Bot Strategie")
+        paper_activation_strategy = _insert_strategy(connection, user_id, fixtures["paper_activation_setup"], "Matrix Paper Activation Strategie")
         fixtures["bot_update"] = _insert_bot(connection, user_id, bot_update_strategy, "Matrix Update Bot")
         fixtures["bot_delete"] = _insert_bot(connection, user_id, bot_delete_strategy, "Matrix Delete Bot")
         fixtures["bot_deactivate"] = _insert_bot(connection, user_id, bot_deactivate_strategy, "Matrix Deactivate Bot")
+        fixtures["paper_activation_bot"] = _insert_bot(connection, user_id, paper_activation_strategy, "Matrix Paper Sandbox Bot")
     return fixtures
 
 
@@ -251,25 +314,39 @@ def _proposal_lifecycle(base_url: str, token: str, other_token: str, proposal: d
 
 
 def _run_follow_up(base_url: str, token: str, spec: tuple[str, str, str, str], fields: dict[str, int]) -> dict[str, Any]:
-    operation_id, _, incomplete, follow_up = spec
+    operation_id, _, incomplete, _ = spec
     first = run_gate(base_url=base_url, bearer_token=token, message=incomplete.format(**fields), timeout_seconds=75)
-    second = run_gate(base_url=base_url, bearer_token=token, conversation_id=first["conversation_id"], message=follow_up.format(**fields), timeout_seconds=75)
+    turns = []
+    previous = first
+    for answer in GUIDED_SLOT_ANSWERS[operation_id]:
+        next_turn = run_gate(
+            base_url=base_url,
+            bearer_token=token,
+            conversation_id=first["conversation_id"],
+            message=answer.format(**fields),
+            timeout_seconds=75,
+        )
+        turns.append(next_turn)
+        previous = next_turn
+    second = previous
     first_record = _runtime_record(first["run_id"])
     second_record = _runtime_record(second["run_id"])
     return {
         "initial_run_id": first["run_id"],
         "follow_up_run_id": second["run_id"],
+        "slot_turn_run_ids": [turn["run_id"] for turn in turns],
         "initial_operation_id": first["final_operation_id"],
         "initial_missing_inputs": first_record["terminal_projection"].get("missing_inputs"),
         "follow_up_supplied_inputs": second_record["terminal_projection"].get("supplied_inputs"),
         "follow_up_missing_inputs": second_record["terminal_projection"].get("missing_inputs"),
         "follow_up_operation_id": second["final_operation_id"],
-        "conversation_reused": first["conversation_id"] == second["conversation_id"],
+        "conversation_reused": bool(turns) and all(turn["conversation_id"] == first["conversation_id"] for turn in turns),
         "proposal_after_follow_up": bool(second_record["proposal"]),
         "passed": (
             first["final_operation_id"] in {operation_id, "clarify_request"}
             and second["final_operation_id"] == operation_id
-            and first["conversation_id"] == second["conversation_id"]
+            and bool(turns)
+            and all(turn["conversation_id"] == first["conversation_id"] for turn in turns)
             and not second_record["terminal_projection"].get("missing_inputs")
             and bool(second_record["proposal"])
         ),
@@ -375,6 +452,7 @@ def main() -> None:
     base_url = args.base_url.rstrip("/")
     if urlparse(base_url).hostname not in {"127.0.0.1", "localhost"}:
         raise ValueError("local_action_matrix_requires_loopback_base_url")
+    _wait_for_runtime(base_url)
     output = Path(args.output).expanduser().resolve()
     output.parent.mkdir(parents=True, exist_ok=True)
 

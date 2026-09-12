@@ -216,6 +216,12 @@ class FinnV2StructuredOperationSelectorService:
                 "description": FinnV2StructuredOperationSelectorService._selector_summary(
                     contract.semantic_description
                 ),
+                # These examples are registry-owned selection boundaries, not
+                # a second prompt catalogue.  Omitting them made a contract's
+                # documented NL/EN/DE distinctions invisible to the provider.
+                "positive_examples": list(contract.positive_examples),
+                "negative_examples": list(contract.negative_examples),
+                "selection_required_terms": list(contract.selection_required_terms),
                 "domain": contract.domain,
                 "supported": contract.supported,
                 "required_entities": list(contract.required_entities),

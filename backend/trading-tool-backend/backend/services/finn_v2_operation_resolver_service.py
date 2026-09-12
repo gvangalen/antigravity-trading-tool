@@ -108,13 +108,14 @@ class FinnV2OperationResolverService:
         # wording a second time; it selects the one registry contract whose
         # polarity agrees with the already typed semantic frame.
         requested_action = str((request_facts or {}).get("action_polarity") or "")
+        normalized_text = str((request_facts or {}).get("normalized_text") or "").casefold()
         # "remove" is the canonical watchlist polarity.  For a persisted
         # object it is the same typed user act as the registry's delete
         # contract, so normalize it before comparing contract polarities.
         contract_action = "delete" if requested_action == "remove" and object_name != "watchlist" else requested_action
         polarity_operation = self._GOAL_OBJECT_OPERATIONS.get((contract_action, object_name))
         if polarity_operation in candidate_ids and contract_action in {
-            "create", "update", "delete", "add", "remove", "deactivate", "activate",
+            "create", "update", "delete", "add", "remove", "deactivate", "activate", "explain",
         }:
             selected_contract = next(
                 (contract for contract in candidates if contract.operation_id == operation_id),
@@ -122,6 +123,27 @@ class FinnV2OperationResolverService:
             )
             if selected_contract is None or selected_contract.action_polarity.value != contract_action:
                 operation_id = polarity_operation
+        # Selection-required terms are registry constraints. A live-bot
+        # selection cannot override the explicit non-live paper qualifier.
+        selected_contract = next(
+            (contract for contract in candidates if contract.operation_id == operation_id),
+            None,
+        )
+        required_term_contracts = [
+            contract for contract in candidates
+            if contract.selection_required_terms
+            and all(term.casefold() in normalized_text for term in contract.selection_required_terms)
+        ]
+        if (
+            selected_contract is not None
+            and selected_contract.operation_id == "activate_bot"
+            and required_term_contracts
+            and (
+                not selected_contract.selection_required_terms
+                or not all(term.casefold() in normalized_text for term in selected_contract.selection_required_terms)
+            )
+        ):
+            operation_id = required_term_contracts[0].operation_id
         # Capability is a typed discourse fact, not a nearby plan read. The
         # selector still interprets the user's language, but a contract that
         # contradicts this explicit request act cannot be executed safely.

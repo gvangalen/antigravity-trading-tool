@@ -32,7 +32,12 @@ class FinnV2OperationStateService:
         # Only values proven by request parsing may be promoted to supplied
         # inputs. Typed selector values are passed separately so a later
         # projection cannot silently overwrite a user-supplied slot.
-        explicit = self.explicit_inputs(contract=contract, message=message, explicit_asset=explicit_asset)
+        explicit = self.explicit_inputs(
+            contract=contract,
+            message=message,
+            explicit_asset=explicit_asset,
+            continuation=existing is not None,
+        )
         # Keep the literal spelling of a user-provided value. The semantic
         # projection may normalize an equivalent value for matching, but it
         # must not overwrite a typed setup name with that normalized form.
@@ -209,7 +214,14 @@ class FinnV2OperationStateService:
             return context.get("active_guided_operation")
         return context.get("active_guided_operation") or context.get("operation_state")
 
-    def explicit_inputs(self, *, contract: OperationContract, message: str, explicit_asset: Optional[str]) -> dict[str, object]:
+    def explicit_inputs(
+        self,
+        *,
+        contract: OperationContract,
+        message: str,
+        explicit_asset: Optional[str],
+        continuation: bool = False,
+    ) -> dict[str, object]:
         text = str(message or "").strip()
         lowered = text.casefold()
         values: dict[str, object] = {}
@@ -217,6 +229,11 @@ class FinnV2OperationStateService:
         if explicit_asset:
             for field in {"asset", "symbol"}.intersection(accepted_inputs):
                 values[field] = explicit_asset
+        # Clarification owns a single free-text slot. Only a reply to an
+        # existing clarification flow may fill it; the initial vague request
+        # must remain eligible for the focused question.
+        if continuation and "requested_change" in accepted_inputs and text:
+            values["requested_change"] = text
         # A structured selector or a caller may provide a compact typed object
         # in a follow-up. Promote only fields already declared by this contract;
         # no operation-specific field list is maintained here.
@@ -291,7 +308,7 @@ class FinnV2OperationStateService:
             if setup_match:
                 values["setup_id"] = int(setup_match.group(1))
             mode_match = re.search(
-                r"\b(fixed|vast|standaard|manual|handmatig|automatic|automatis\w*|"
+                r"\b(fixed|vast|standaard|manual|handmatig|automatic|automatis\w*|fest(?:e)?|"
                 r"custom|aangepast|individuell|benutzerdefiniert)\b",
                 lowered,
             )
@@ -300,11 +317,12 @@ class FinnV2OperationStateService:
                 values["execution_mode"] = {
                     "vast": "fixed", "standaard": "fixed", "manual": "fixed",
                     "handmatig": "fixed", "automatic": "fixed",
+                    "fest": "fixed", "feste": "fixed",
                     "aangepast": "custom", "individuell": "custom",
                     "benutzerdefiniert": "custom",
                 }.get(mode, mode)
             amount_match = re.search(
-                r"\b(?:base\s*amount|basisinleg|basis\s*bedrag|grundbetrag|bedrag|inleg|amount)\s*(?:is|:|=|van|von|of)?\s*(?:€|eur|\$)?\s*(\d+(?:[.,]\d+)?)",
+                r"\b(?:base\s*amount|basisinleg|basis\s*bedrag|basisbetrag|grundbetrag|bedrag|inleg|amount)\s*(?:is|:|=|van|von|of)?\s*(?:€|eur|\$)?\s*(\d+(?:[.,]\d+)?)",
                 lowered,
             )
             if amount_match:
@@ -376,6 +394,38 @@ class FinnV2OperationStateService:
         structured = cls._structured_changed_fields(text)
         if structured:
             return structured
+        # The action contract deliberately has one ``changed_fields`` slot,
+        # while the owning domain services keep their field allowlists.  Parse
+        # common natural-language update clauses into those canonical domain
+        # keys before the generic field/value parser sees possessives such as
+        # "its timeframe" or a German object name.
+        domain_fields = {
+            "update_setup": {"timeframe"},
+            "update_strategy": {"base_amount"},
+        }.get(contract.operation_id, set())
+        canonical_clauses = (
+            ("timeframe", r"(?:its\s+)?(?:timeframe|time\s*frame|tijdframe|zeitrahmen)"),
+            ("base_amount", r"(?:the\s+)?(?:base\s*amount|basisinleg|basis\s*bedrag|basisbetrag|grundbetrag)"),
+        )
+        for field, aliases in canonical_clauses:
+            if field not in domain_fields:
+                continue
+            natural = re.search(
+                rf"\b(?:zet|set|setze|wijzig|verander|change|aktualisiere)\s+"
+                rf"(?:mijn|my|de|het|the|den|die|das)?\s*{aliases}\s+"
+                r"(?:naar|to|auf|als|op|on)\s+[\"']?([^,.!?\n]{1,80})",
+                text,
+                re.IGNORECASE,
+            )
+            if natural:
+                value = natural.group(1).strip(" .\"'")
+                if value:
+                    value = re.sub(r"\s*(?:eur|euro|€)\s*$", "", value, flags=re.IGNORECASE).strip()
+                    if re.fullmatch(r"\d+", value):
+                        value = int(value)
+                    elif re.fullmatch(r"\d+[.,]\d+", value):
+                        value = float(value.replace(",", "."))
+                    return {field: FinnV2SetupInputCatalog.canonical_input(field, value)}
         # Prefer the final imperative in a natural update sentence. Object
         # names can themselves contain words such as "Update", which must
         # never become a changed-field name.

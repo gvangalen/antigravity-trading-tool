@@ -6,6 +6,7 @@ into a second local intent router.
 """
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 from typing import Mapping, Optional
 
@@ -74,6 +75,12 @@ class FinnV2OperationClassificationService:
         facts = self.preprocessor.preprocess(
             message=message, workspace_hints=workspace_hints, client_context=client_context
         )
+        if self._is_score_explanation(message, facts):
+            contract = self.registry.require_supported("explain_score")
+            return self._result(
+                contract.operation_id, facts, "high", "registry_constraint", (contract,),
+                conversation_context=conversation_context,
+            )
         candidates = self._selector_manifest()
         guided_contract = self._guided_continuation_contract(facts=facts, context=conversation_context or {})
         if guided_contract is not None:
@@ -122,6 +129,7 @@ class FinnV2OperationClassificationService:
                     "linked_graph_relationship": facts.linked_graph_relationship,
                     "primary_entity": facts.primary_entity,
                     "financial_concept": facts.financial_concept,
+                    "normalized_text": facts.normalized_text,
                 },
             )
         safe_terminal_operations = {
@@ -174,6 +182,15 @@ class FinnV2OperationClassificationService:
     def _selector_manifest(self) -> tuple[OperationContract, ...]:
         """Return the versioned registry manifest, not retrieved local guesses."""
         return self.registry.list()
+
+    @staticmethod
+    def _is_score_explanation(message: str, facts: FinnV2PreprocessedRequest) -> bool:
+        """Map an explicit score explanation to its sole registry contract."""
+        text = str(message or "").casefold()
+        return (
+            "scores" in facts.explicit_entities
+            and bool(re.search(r"\b(?:explain|erklaere|erkläre)\b|\bleg(?:\s+\w+){0,8}\s+uit\b", text))
+        )
 
     def _guided_candidates(
         self,
@@ -252,9 +269,38 @@ class FinnV2OperationClassificationService:
         fills_pending_slot = bool(
             set(supplied).intersection(set(active.get("missing_required_inputs") or ()))
         )
-        if facts.discourse_act != "clarification_answer" and not fills_pending_slot:
+        # A name or numeric amount can be a complete slot answer without
+        # being recognisable as an entity before owner-scoped resolution. Keep
+        # it inside the persisted flow rather than reclassifying it as a read
+        # or off-topic request. Explicit new requests and lineage questions
+        # remain free to select their own registry contract.
+        short_slot_answer = (
+            len(facts.original_text.strip()) <= 80
+            and facts.domain_hint != "off_topic"
+            and facts.discourse_act not in {
+                "capability", "evaluation", "evidence_follow_up", "reformulation",
+            }
+        )
+        if (
+            facts.discourse_act != "clarification_answer"
+            and not fills_pending_slot
+            and (not short_slot_answer or self._starts_new_action_command(facts.original_text))
+        ):
             return None
         return contract
+
+    @staticmethod
+    def _starts_new_action_command(message: str) -> bool:
+        """Keep a named slot value from becoming a new action by accident."""
+        first = str(message or "").strip().casefold().split(maxsplit=1)
+        if not first:
+            return False
+        return first[0].strip(".,:;!?") in {
+            "activeer", "activate", "aktiviere", "wijzig", "update", "aktualisiere",
+            "verwijder", "delete", "loesch", "deactiveer", "deactivate", "deaktiviere",
+            "maak", "create", "erstelle", "toon", "show", "zeige", "beoordeel",
+            "evaluate", "bewerte", "voeg", "add", "fuege", "haal", "remove",
+        }
 
     @staticmethod
     def _is_guided_continuation(facts: FinnV2PreprocessedRequest) -> bool:
@@ -481,7 +527,7 @@ class FinnV2OperationClassificationValidator:
             contract = self.registry.require_supported(classification.operation_id)
         except ValueError:
             return "operation_not_supported"
-        if classification.selector_source not in {"structured", "provider_unavailable", "guided_state"}:
+        if classification.selector_source not in {"structured", "provider_unavailable", "guided_state", "registry_constraint"}:
             return "selector_source_invalid"
         if classification.action != contract.action_polarity.value:
             return "operation_canonical_action_mismatch"

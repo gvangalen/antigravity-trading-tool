@@ -271,7 +271,10 @@ class FinnV2ActionAdapterRegistry:
         if not self.flags.execute_paper_bot_activation_enabled():
             raise ValueError("execution_adapter_unavailable")
         change = payload["change"]
-        update = BotConfigUpdateSchema.parse_obj({"is_live": False, "mode": "paper", "is_active": True})
+        # Paper activation is a FINN policy mode, not a persisted BotConfig
+        # mode.  The domain accepts manual/semi-auto/auto only; ``is_live``
+        # is the authoritative live-trading boundary.
+        update = BotConfigUpdateSchema.parse_obj({"is_live": False, "mode": "manual", "is_active": True})
         return await self.bots.update_bot_config(int(change["bot_id"]), update, user_id)
 
     async def _activate_live_bot(self, user_id: int, payload: dict) -> dict:

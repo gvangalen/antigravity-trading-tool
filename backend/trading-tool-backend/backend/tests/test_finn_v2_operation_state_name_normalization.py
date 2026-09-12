@@ -145,6 +145,37 @@ def test_strategy_execution_mode_normalizes_nl_en_de_automatic_variants(message)
     assert collected["base_amount"] == 100.0
 
 
+def test_german_fixed_strategy_sentence_collects_contract_required_inputs():
+    contract = FinnV2OperationRegistry().require_supported("create_strategy")
+
+    collected = FinnV2OperationStateService().explicit_inputs(
+        contract=contract,
+        message="Erstelle eine feste Strategie mit einem Basisbetrag von 100 Euro.",
+        explicit_asset=None,
+    )
+
+    assert collected["execution_mode"] == "fixed"
+    assert collected["base_amount"] == 100.0
+
+
+@pytest.mark.parametrize(
+    ("operation_id", "message", "expected"),
+    (
+        ("update_setup", "Update my setup and set its timeframe to 1 hour.", {"timeframe": "1H"}),
+        ("update_setup", "Aktualisiere mein Setup und setze den Zeitrahmen auf 1 Stunde.", {"timeframe": "1H"}),
+        ("update_strategy", "Aktualisiere meine Strategie und setze den Basisbetrag auf 120 Euro.", {"base_amount": 120}),
+    ),
+)
+def test_natural_update_clauses_use_existing_domain_field_keys(operation_id, message, expected):
+    contract = FinnV2OperationRegistry().require_supported(operation_id)
+
+    collected = FinnV2OperationStateService().explicit_inputs(
+        contract=contract, message=message, explicit_asset=None,
+    )
+
+    assert collected["changed_fields"] == expected
+
+
 def test_guided_state_keeps_optional_inputs_declared_by_the_action_contract():
     service = FinnV2OperationStateService()
     contract = FinnV2OperationRegistry().require_supported("create_strategy")
@@ -343,3 +374,21 @@ def test_shared_name_parser_accepts_a_german_coordinated_name_clause():
     assert FinnV2OperationStateService._name_input_from_text(
         "Erstelle eine Strategie und dem Namen Geduldiger Aufbau."
     ) == "Geduldiger Aufbau"
+
+
+def test_clarification_follow_up_persists_the_requested_change():
+    service = FinnV2OperationStateService()
+    contract = FinnV2OperationRegistry().require_supported("clarify_request")
+    initial = service.resolve(
+        contract=contract, message="Ik wil iets wijzigen.", explicit_asset=None, conversation_context={},
+    )
+    follow_up = service.resolve(
+        contract=contract,
+        message="Mijn watchlist aanpassen.",
+        explicit_asset=None,
+        conversation_context={"active_guided_operation": initial.dict()},
+    )
+
+    assert initial.missing_required_inputs == ["requested_change"]
+    assert follow_up.collected_inputs["requested_change"] == "Mijn watchlist aanpassen."
+    assert follow_up.missing_required_inputs == []

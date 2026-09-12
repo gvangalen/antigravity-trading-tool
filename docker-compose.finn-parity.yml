@@ -16,6 +16,12 @@ x-finn-env: &finn-env
   JWT_SECRET_KEY: local-finn-parity-not-production-jwt-secret
   SECRET_KEY: local-finn-parity-not-production-app-secret
   FINN_LOCAL_SAFE_ADAPTERS: "1"
+  # This disposable fixture stack may execute only allowlisted paper actions.
+  # Broker, live-trading and live-bot flags remain unset and therefore closed.
+  FINN_V2_ACTION_KILL_SWITCH: "false"
+  # The public parity gate refuses to run unless this isolated prefork topology
+  # is explicitly attested; production never consumes this local-only flag.
+  FINN_PARITY_TOPOLOGY_ASSERTED: "true"
   FINN_V2_LIFECYCLE_DEADLINE_SECONDS: "14"
   FINN_V2_SELECTOR_PHASE_DEADLINE_SECONDS: "12"
   FINN_V2_REASONING_TIMEOUT_SECONDS: "12"

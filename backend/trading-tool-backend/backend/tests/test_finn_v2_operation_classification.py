@@ -219,6 +219,42 @@ def test_contextual_bot_consequence_keeps_the_registry_evaluate_bot_contract():
     assert result.selected_conversation_reference == "previous_verified_response"
 
 
+def test_short_guided_strategy_slot_answer_keeps_the_active_contract():
+    context = {
+        "active_guided_operation": {
+            "operation_id": "create_strategy",
+            "missing_required_inputs": ["setup_id", "execution_mode", "base_amount"],
+        },
+    }
+
+    result = CLASSIFIER.classify(
+        message="Matrix Strategy Parent.", conversation_context=context,
+    )
+
+    assert result.operation_id == "create_strategy"
+    assert result.selector_source == "guided_state"
+
+
+def test_guided_bot_name_with_action_word_keeps_the_active_contract():
+    context = {
+        "active_guided_operation": {
+            "operation_id": "activate_bot",
+            "missing_required_inputs": ["bot_id"],
+        },
+    }
+
+    result = CLASSIFIER.classify(message="Matrix Update Bot.", conversation_context=context)
+
+    assert result.operation_id == "activate_bot"
+    assert result.selector_source == "guided_state"
+
+
+def test_dutch_separable_explanation_selects_the_score_explanation_contract():
+    result = CLASSIFIER.classify(message="Leg mijn score uit.")
+
+    assert result.operation_id == "explain_score"
+
+
 @pytest.mark.parametrize("message", (
     "Waar wringt mijn huidige aanpak financieel gezien het meest?",
     "Welke risico's maken mijn handelswijze het kwetsbaarst?",
@@ -609,6 +645,16 @@ def test_catalog_canonicalizes_ether_for_an_explicit_unsupported_execution_targe
     )
 
     assert facts.referenced_asset == "ETH"
+
+
+def test_preprocessor_marks_german_automatic_buy_as_financial_execution():
+    facts = CLASSIFIER.preprocessor.preprocess(
+        message="Kaufe BTC automatisch ohne meine Bestätigung."
+    )
+
+    assert facts.financial_execution_intent is True
+    assert facts.action_polarity == "execute"
+    assert facts.domain_hint == "financial"
 
 
 def test_contrastive_current_turn_asset_wins_over_a_mentioned_workspace_asset():

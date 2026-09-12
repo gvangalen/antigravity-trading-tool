@@ -46,7 +46,7 @@ class FinnV2RequestPreprocessorService:
         # Dutch separable verbs may put the object between "voer" and
         # "uit" ("voer dit voorstel uit"). The imperative stem is still
         # an unambiguous execution act once the registry resolves its domain.
-        ("execute", ("uitvoeren", "execute", "voer", "verplaats", "transfer", "stort")),
+        ("execute", ("uitvoeren", "execute", "voer", "verplaats", "transfer", "stort", "kaufe", "verkaufe")),
         ("remove", ("verwijder", "remove", "haal", "halen", "stop met")),
         ("add", ("voeg", "add", "toevoeg", "zet op", "volg")),
         # Starting a new bot configuration is a create request. Live
@@ -250,7 +250,7 @@ class FinnV2RequestPreprocessorService:
             references = (*references, "previous_verified_conclusion")
         action = self._action_polarity(normalized)
         financial_execution_intent = self._is_explicit_financial_execution_intent(normalized) or bool(
-            asset and re.search(r"\b(?:koop\w*|verkoop\w*|buy\w*|sell\w*|place\w*|plaats\w*|submit\w*)\b", normalized)
+            asset and re.search(r"\b(?:koop\w*|verkoop\w*|buy\w*|sell\w*|kaufe\w*|verkaufe\w*|place\w*|plaats\w*|submit\w*)\b", normalized)
         )
         ambiguous_reference = self._has_unbound_deictic_reference(normalized, entities)
         if financial_execution_intent:
@@ -488,7 +488,7 @@ class FinnV2RequestPreprocessorService:
             r"transactions?|trades?|savings?|spaargeld|vermogen|funds?|kapitaal|coin(?:s)?)\b"
         )
         market_action = (
-            r"\b(?:koop\w*|verkoop\w*|buy\w*|sell\w*|trade\w*|handel\w*|"
+            r"\b(?:koop\w*|verkoop\w*|buy\w*|sell\w*|kaufe\w*|verkaufe\w*|trade\w*|handel\w*|"
             r"orders?|move|transfer|verplaats\w*|stort\w*)\b"
         )
         autonomy = (

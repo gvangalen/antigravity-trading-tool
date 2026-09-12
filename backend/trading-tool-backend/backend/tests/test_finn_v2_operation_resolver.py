@@ -172,6 +172,30 @@ def test_semantic_frame_keeps_live_bot_execution_as_typed_activation_for_policy(
     assert resolved.operation_id == "activate_bot"
 
 
+def test_registry_paper_constraint_overrides_a_live_bot_candidate():
+    registry = FinnV2OperationRegistry()
+    resolved = FinnV2OperationResolverService(registry).resolve(
+        selection=_selection("activate_bot", {"goal": "activate", "object": "bot"}),
+        candidates=(registry.require_supported("activate_bot"), registry.require_supported("activate_paper_bot")),
+        conversation_context={},
+        request_facts={"action_polarity": "activate", "normalized_text": "activate my bot in paper mode"},
+    )
+
+    assert resolved.operation_id == "activate_paper_bot"
+
+
+def test_registry_paper_constraint_does_not_replace_bot_creation():
+    registry = FinnV2OperationRegistry()
+    resolved = FinnV2OperationResolverService(registry).resolve(
+        selection=_selection("create_bot", {"goal": "create", "object": "bot"}),
+        candidates=registry.list(),
+        conversation_context={},
+        request_facts={"action_polarity": "create", "normalized_text": "create a non-live paper bot"},
+    )
+
+    assert resolved.operation_id == "create_bot"
+
+
 def test_semantic_frame_resolves_a_broad_assessment_to_plan_not_setup():
     registry = FinnV2OperationRegistry()
     resolved = FinnV2OperationResolverService(registry).resolve(

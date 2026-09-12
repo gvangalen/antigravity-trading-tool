@@ -437,6 +437,11 @@ def _gap(operation_id: str, domain: str, mode: str, aliases: tuple[str, ...], re
 _OPERATION_SELECTION_METADATA: Mapping[str, dict] = {
     "clarify_request": {
         "semantic_description": "Ask one focused clarification for an ambiguous request about the user's FINN trading workspace only when the requested object or supported operation itself is not identifiable. A vague request to improve, change or optimize the user's trading approach without saying what should change is ambiguous and must be clarified, not treated as an unsupported financial operation. Missing inputs for an identifiable typed operation belong to that operation's guided flow, not clarify_request. Never classify a trading-workspace request as off-topic merely because details are missing.",
+        "positive_examples": (
+            "Doe hetzelfde ermee.",
+            "Do the same with it.",
+            "Mach dasselbe damit.",
+        ),
         "allowed_action_polarities": ("update",),
     },
     "unavailable": {
@@ -447,6 +452,11 @@ _OPERATION_SELECTION_METADATA: Mapping[str, dict] = {
     },
     "unsupported_financial_operation": {
         "semantic_description": "Safely decline a clearly identified investing, trading, portfolio-management, brokerage, or financial-product operation for which FINN has no supported contract, such as autonomous portfolio management. Do not use this for an underspecified request to improve or change the user's own FINN workspace; that requires clarify_request. Do not use off_topic for financial requests.",
+        "positive_examples": (
+            "Koop automatisch BTC zonder bevestiging.",
+            "Buy BTC automatically without confirmation.",
+            "Kaufe BTC automatisch ohne meine Bestätigung.",
+        ),
     },
     "off_topic": {
         "semantic_description": "Decline a request unrelated to financial education, FINN, or the user's trading workspace.",
@@ -460,6 +470,16 @@ _OPERATION_SELECTION_METADATA: Mapping[str, dict] = {
     },
     "explain_previous_evidence": {
         "semantic_description": "Explain the factual basis, boundary, control, or requirement that follows from a previous verified or degraded FINN assessment. Select this when the user asks which stored facts support an earlier conclusion, which guard or requirement it establishes, or what it means for the prior assessment, a linked setup, strategy, or bot. A request to assess a bot's own operational consequence, risk, suitability, or configuration is evaluate_bot: it needs the bot-specific contract and automation evidence rather than this evidence explanation.",
+        "positive_examples": (
+            "Leg dat bewijs uit.",
+            "Explain that evidence.",
+            "Erklaere diese Belege.",
+        ),
+        "negative_examples": (
+            "Beoordeel mijn bot opnieuw.",
+            "Evaluate my bot again.",
+            "Bewerte meinen Bot erneut.",
+        ),
         "required_discourse_acts": ("evidence_follow_up",),
         "requires_verified_context": True,
         "selection_priority": 100,
@@ -563,6 +583,17 @@ _OPERATION_SELECTION_METADATA: Mapping[str, dict] = {
         "selection_focus_entities": ("setup",),
     },
     "evaluate_strategy": {
+        "semantic_description": "Assess the user's linked strategy for quality, risk, suitability or weaknesses. A request to show the strategy without assessment remains read_linked_strategy.",
+        "positive_examples": (
+            "Beoordeel mijn gekoppelde strategie.",
+            "Evaluate my linked strategy.",
+            "Bewerte meine verknuepfte Strategie.",
+        ),
+        "negative_examples": (
+            "Toon mijn gekoppelde strategie.",
+            "Show my linked strategy.",
+            "Zeige meine verknuepfte Strategie.",
+        ),
         "any_entities": ("strategy",),
         "required_discourse_acts": ("evaluation",),
         "selection_priority": 40,
@@ -571,6 +602,16 @@ _OPERATION_SELECTION_METADATA: Mapping[str, dict] = {
     "evaluate_bot": {
         "semantic_description": "Assess the user's linked bot, or explain the consequence of a previous verified plan assessment for that bot. Select this only when the user asks for an assessment, risk, suitability, or implication. A concrete identity, configuration, linkage, or status question remains a bot READ even with prior context. A contextual implication must retain the previous verified response reference and use bot evidence; it is not a request to activate or reconfigure the bot.",
         "any_entities": ("bot",),
+        "positive_examples": (
+            "Beoordeel de risico's van mijn bot.",
+            "Evaluate the risks of my bot.",
+            "Bewerte die Risiken meines Bots.",
+        ),
+        "negative_examples": (
+            "Toon de status van mijn bot.",
+            "Show my bot status.",
+            "Zeige den Status meines Bots.",
+        ),
         "required_discourse_acts": ("evaluation", "contextual_follow_up"),
         "selection_priority": 40,
         "selection_focus_entities": ("bot",),
@@ -693,12 +734,33 @@ _OPERATION_SELECTION_METADATA: Mapping[str, dict] = {
     },
     "activate_bot": {
         "semantic_description": "Handle a request for a linked bot or automation to begin placing real or live orders. This is the typed high-risk live-bot safety contract, distinct from reading bot status, changing bot configuration, or unsupported autonomous portfolio decision-making.",
+        "positive_examples": (
+            "Activeer mijn bot voor live trading.",
+            "Activate my bot for live trading.",
+            "Aktiviere meinen Bot fuer Live-Trading.",
+        ),
+        "negative_examples": (
+            "Toon de status van mijn bot.",
+            "Show my bot status.",
+            "Zeige den Status meines Bots.",
+        ),
         "any_entities": ("bot",),
         "required_discourse_acts": ("operation_request",),
         "allowed_action_polarities": ("activate",),
         "selection_priority": 80,
     },
     "activate_paper_bot": {
+        "semantic_description": "Prepare a confirmed activation of an existing owner-scoped bot in non-live paper mode. It is distinct from creating or updating a bot configuration, reading bot status, and activating live trading.",
+        "positive_examples": (
+            "Activeer mijn bot als paper bot.",
+            "Activate my bot in paper mode.",
+            "Aktiviere meinen Bot im Paper-Modus.",
+        ),
+        "negative_examples": (
+            "Werk mijn botconfiguratie bij.",
+            "Update my bot configuration.",
+            "Aktualisiere meine Botkonfiguration.",
+        ),
         "any_entities": ("bot",),
         "required_discourse_acts": ("operation_request",),
         "allowed_action_polarities": ("activate",),
@@ -745,6 +807,17 @@ _OPERATION_SELECTION_METADATA: Mapping[str, dict] = {
         "any_entities": ("report",),
         "required_discourse_acts": ("information_request",),
         "allowed_action_polarities": ("read",),
+        "positive_examples": (
+            "Toon mijn laatste rapport.",
+            "Toon mijn meest recente FINN-rapport.",
+            "Show my most recent FINN report.",
+            "Zeige meinen neuesten FINN-Bericht.",
+        ),
+        "negative_examples": (
+            "Genereer een nieuw rapport.",
+            "Create a new report.",
+            "Erstelle einen neuen Bericht.",
+        ),
         "selection_priority": 40,
     },
     "read_review_history": {

@@ -71,9 +71,11 @@ def test_selector_manifest_is_a_compact_projection_of_every_offered_contract():
     assert set(manifest[0]) == {
         "operation_id", "description", "domain", "supported", "required_entities",
         "required_inputs", "requires_verified_context", "canonical_action_polarity",
+        "positive_examples", "negative_examples", "selection_required_terms",
     }
     assert all(len(str(entry["description"])) <= 161 for entry in manifest)
-    assert all("positive_examples" not in entry for entry in manifest)
+    assert all(isinstance(entry["positive_examples"], list) for entry in manifest)
+    assert all(isinstance(entry["negative_examples"], list) for entry in manifest)
     assert all("execution_adapter" not in entry for entry in manifest)
 
 

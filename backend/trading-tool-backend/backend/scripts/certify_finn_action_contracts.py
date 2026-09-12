@@ -29,26 +29,140 @@ def load_artifact(path: Path | None) -> dict[str, Any]:
     return json.loads(path.read_text(encoding="utf-8")) if path else {}
 
 
+def complete_card(evidence: dict[str, Any] | None, contract: Any) -> bool:
+    """Accept runtime proof only when it covers the contract's own boundary.
+
+    Older matrix artifacts expose a useful ``passed`` summary, but that is not
+    enough for a Contract Certification Card.  In particular, a write needs
+    public proposal/confirmation/execution evidence while a read must prove it
+    stayed read-only.  The dedicated certification runner emits these fields.
+    """
+    if not evidence or not evidence.get("passed"):
+        return False
+    card = evidence.get("certification_card") or {}
+    common = {
+        "natural_language",
+        "selector",
+        "runtime_contract",
+        "dispatch_attempt",
+        "terminal_projection",
+        "polling_sse",
+        "negative_safety",
+        "latency",
+    }
+    # Confirmation and execution consume their required proposal resource in
+    # the public HTTP path, not through a conversational slot. Their cards
+    # require endpoint-level ownership/idempotency evidence instead.
+    guided = {
+        "guided_state"
+    } if getattr(contract, "required_inputs", ()) and contract.mode not in {"CONFIRMATION", "EXECUTION"} else set()
+    if getattr(contract, "policy_class", None) == "high_risk_action":
+        # A live-action safety contract succeeds by publishing its typed
+        # policy boundary without creating a proposal or execution.
+        required = common | guided | {"typed_limitation", "no_write", "persistence"}
+    elif contract.mode in {"CREATE_PROPOSAL", "ACTION_PROPOSAL", "CONFIRMATION", "EXECUTION"}:
+        required = common | guided | {"proposal", "confirmation", "execution", "idempotency", "persistence"}
+    elif contract.mode == "UNAVAILABLE" or not contract.supported:
+        required = common | guided | {"typed_limitation", "no_write"}
+    else:
+        required = common | guided | {"persistence", "no_write"}
+    return all(card.get(field) is True for field in required)
+
+
+def has_measured_runtime_evidence(evidence: dict[str, Any] | None) -> bool:
+    """Distinguish incomplete proof from no test at all.
+
+    Historic action-matrix artifacts predate Certification Cards.  They do
+    contain real public-route measurements, but not every field the newer
+    card requires.  Reporting those as NOT_TESTED hid existing evidence and
+    made certification triage less trustworthy.
+    """
+    if not evidence:
+        return False
+    return bool(evidence.get("run_id") or evidence.get("runtime_contract_id") or evidence.get("testcases"))
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--output", required=True, type=Path)
     parser.add_argument("--write-matrix", type=Path)
     parser.add_argument("--runtime-matrix", type=Path)
     parser.add_argument("--lineage-artifact", type=Path)
+    parser.add_argument("--contract-evidence", type=Path)
+    parser.add_argument("--missing-contract-evidence", type=Path)
+    parser.add_argument("--write-language-evidence", type=Path)
     args = parser.parse_args()
     write_matrix = load_artifact(args.write_matrix)
     runtime_matrix = load_artifact(args.runtime_matrix)
     lineage_artifact = load_artifact(args.lineage_artifact)
+    contract_evidence = load_artifact(args.contract_evidence)
+    missing_contract_evidence = load_artifact(args.missing_contract_evidence)
+    write_language_evidence = load_artifact(args.write_language_evidence)
     measured = {
         item.get("expected_operation_id"): item
-        for item in (write_matrix.get("steps") or []) + (runtime_matrix.get("cases") or [])
+        for item in (
+            (write_matrix.get("steps") or [])
+            + (write_matrix.get("results") or [])
+            + (runtime_matrix.get("cases") or [])
+        )
         if item.get("expected_operation_id")
     }
+    # The isolated action matrix uses ``operation_id`` rather than the public
+    # matrix's ``expected_operation_id``.  Both are measurements of the same
+    # registry key, not separate contract definitions.
+    for item in write_matrix.get("results") or []:
+        if item.get("operation_id"):
+            measured[item["operation_id"]] = item
     for item in lineage_artifact.get("supporting_action_cases") or []:
         measured[item.get("expected_operation_id")] = item
     for item in (lineage_artifact.get("published_cases") or {}).values():
         if item:
             measured[item.get("expected_operation_id")] = item
+    for item in contract_evidence.get("cards") or []:
+        if item.get("operation_id"):
+            measured[item["operation_id"]] = item
+    for item in missing_contract_evidence.get("cards") or []:
+        if item.get("operation_id"):
+            measured[item["operation_id"]] = item
+    language_cards = {
+        item.get("operation_id"): item
+        for item in write_language_evidence.get("cards") or []
+        if item.get("operation_id")
+    }
+    # The isolated action matrix is the public lifecycle authority for safe
+    # writes. The multilingual companion proves natural language selection;
+    # guided-state coverage remains false until every registry-required slot
+    # is individually exercised, rather than being inferred from one happy
+    # path.
+    for item in write_matrix.get("results") or []:
+        operation_id = item.get("operation_id")
+        language = language_cards.get(operation_id)
+        if not operation_id or not language:
+            continue
+        if item.get("status") != "PASS" or not language.get("passed"):
+            continue
+        lifecycle = {
+            "natural_language": True,
+            "selector": True,
+            "guided_state": bool((item.get("incomplete_follow_up") or {}).get("passed")),
+            "runtime_contract": bool(item.get("runtime_contract_id")),
+            "dispatch_attempt": item.get("dispatch_count") == 1 and item.get("attempt_count") == 1,
+            "terminal_projection": bool(item.get("terminal_status")),
+            "polling_sse": bool(item.get("polling_sse_parity")),
+            "negative_safety": bool(item.get("cross_user_rejected")),
+            "latency": item.get("elapsed_ms") is not None,
+            "proposal": bool(item.get("proposal_id")),
+            "confirmation": bool(item.get("confirmed")),
+            "execution": item.get("execution_result") == "succeeded",
+            "idempotency": item.get("idempotency_result") == "already_executed",
+            "persistence": True,
+        }
+        measured[operation_id] = {
+            **item,
+            "passed": True,
+            "multilingual_proposal_cases": language.get("testcases"),
+            "certification_card": lifecycle,
+        }
     registry = FinnV2OperationRegistry()
     cards = []
     for contract in registry.list():
@@ -73,7 +187,11 @@ def main() -> None:
             "postcondition": contract.postcondition,
             "safety": {"policy_class": contract.policy_class, "supported": contract.supported},
             "runtime_evidence": evidence or {"status": "NOT_TESTED"},
-            "certification": "PASS" if evidence and evidence.get("passed") else "NOT_TESTED",
+            "certification": (
+                "PASS" if complete_card(evidence, contract)
+                else "PARTIAL" if has_measured_runtime_evidence(evidence)
+                else "NOT_TESTED"
+            ),
         })
     artifact = {
         "artifact_version": "finn_action_contract_certification.v1",
@@ -87,6 +205,9 @@ def main() -> None:
             "write_matrix": str(args.write_matrix) if args.write_matrix else None,
             "runtime_matrix": str(args.runtime_matrix) if args.runtime_matrix else None,
             "lineage_artifact": str(args.lineage_artifact) if args.lineage_artifact else None,
+            "contract_evidence": str(args.contract_evidence) if args.contract_evidence else None,
+            "missing_contract_evidence": str(args.missing_contract_evidence) if args.missing_contract_evidence else None,
+            "write_language_evidence": str(args.write_language_evidence) if args.write_language_evidence else None,
         },
     }
     args.output.parent.mkdir(parents=True, exist_ok=True)
