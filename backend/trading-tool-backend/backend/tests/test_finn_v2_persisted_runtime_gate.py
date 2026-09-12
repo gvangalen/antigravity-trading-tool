@@ -21,4 +21,5 @@ def test_persisted_runtime_gate_uses_public_gateway_polling_and_sse_only():
     assert "ThreadPoolExecutor" not in source
     assert "runtime_gate_sse_deadline_exceeded" in source
     assert "POLL_REQUEST_TIMEOUT_SECONDS = 0.5" in source
-    assert source.index("while time.monotonic() - started_at") < source.index("sse = _terminal_sse")
+    assert "from backend.scripts.finn_v2_matrix_transport import" in source
+    assert "observe_terminal(" in source

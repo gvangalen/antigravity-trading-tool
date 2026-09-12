@@ -170,6 +170,10 @@ class FinnV2FlagService:
     def reasoning_max_retries(self) -> int:
         return max(0, min(1, self._env_int("FINN_V2_REASONING_MAX_RETRIES", 1)))
 
+    def reasoning_retry_minimum_remaining_seconds(self) -> int:
+        """Reserve enough lifecycle budget for a retry to terminalize safely."""
+        return max(3, min(10, self._env_int("FINN_V2_REASONING_RETRY_MIN_REMAINING_SECONDS", 8)))
+
     def reasoning_effort(self) -> str:
         value = str(os.getenv("FINN_V2_REASONING_EFFORT", "medium")).strip().lower()
         return value if value in {"low", "medium", "high"} else "medium"

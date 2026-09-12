@@ -516,6 +516,19 @@ class FinnV2ReasoningService:
         repair_previous_response: dict[str, object] | None = None
         repair_contract: dict[str, object] | None = None
         semantic_repair_used = False
+
+        def has_retry_budget() -> bool:
+            """Never begin a second provider call that cannot finish safely."""
+            remaining = remaining_lifecycle_seconds(
+                reserve_seconds=self.flags.terminal_persistence_reserve_seconds(),
+            )
+            minimum = getattr(
+                self.flags,
+                "reasoning_retry_minimum_remaining_seconds",
+                lambda: 8,
+            )()
+            return remaining is None or remaining >= minimum
+
         for attempt in range(retries_allowed + 1):
             await self._append_trace(run_id, user_id, trace_id, "reasoning_started", context, model_name, "generating", None, attempt, input_hash, [])
             # Do not hold the transaction that contains tool/evidence state while
@@ -581,7 +594,11 @@ class FinnV2ReasoningService:
                 error = str(response["error"])
                 last_error_codes = [error]
                 normalized_mode = normalize_interaction_mode(context.interaction_mode)
-                if attempt < retries_allowed and error in {"schema_invalid", "incomplete_structured_response"}:
+                if (
+                    attempt < retries_allowed
+                    and error in {"schema_invalid", "incomplete_structured_response"}
+                    and has_retry_budget()
+                ):
                     await self._append_trace(
                         run_id,
                         user_id,
@@ -641,7 +658,11 @@ class FinnV2ReasoningService:
                         reasoning_tokens=response.get("reasoning_tokens"),
                         latency_ms=int((monotonic() - started) * 1000),
                     )
-                if attempt < retries_allowed and error in {"provider_error", "schema_invalid", "incomplete_structured_response", "timeout"}:
+                if (
+                    attempt < retries_allowed
+                    and error in {"provider_error", "schema_invalid", "incomplete_structured_response", "timeout"}
+                    and has_retry_budget()
+                ):
                     await self._append_trace(run_id, user_id, trace_id, "reasoning_retry", context, model_name, "generating", None, attempt + 1, input_hash, [error])
                     increment_execution_safety_counter(f"finn_v2_reasoning_retries_total:{error}")
                     continue
@@ -734,7 +755,7 @@ class FinnV2ReasoningService:
                 last_error_codes = [error]
                 # Semantic repairs are bounded to one attempt. A second invalid
                 # result must remain fail-closed rather than retrying the same claim.
-                can_repair = attempt < retries_allowed and (
+                can_repair = attempt < retries_allowed and has_retry_budget() and (
                     not isinstance(exc, FinnV2ReasoningContractError) or not semantic_repair_used
                 )
                 if can_repair:

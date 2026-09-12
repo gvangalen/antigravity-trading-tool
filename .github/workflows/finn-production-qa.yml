@@ -240,8 +240,13 @@ jobs:
           set +a
           export FINN_QA_ALLOW_FIXTURE_ACTIONS=$(printf '%q' "$FINN_QA_ALLOW_FIXTURE_ACTIONS")
           export FINN_QA_ALLOW_FIXTURE_EXECUTION=$(printf '%q' "$FINN_QA_ALLOW_FIXTURE_EXECUTION")
+          # Preserve both a partial checkpoint and an exit code.  `set -e`
+          # would otherwise skip runner.exit after a crash and make a later
+          # SSH reconnect mistake a valid partial matrix for a fresh run.
+          set +e
           PYTHONPATH=backend/trading-tool-backend python3 $(printf '%q' "$runner_path") $(printf '%q ' "${runner_args[@]}") --matrix-deadline-seconds 2100 --resume >"$state_dir/runner.log" 2>&1
           runner_status="\$?"
+          set -e
           printf '%s\\n' "\$runner_status" > "$state_dir/runner.exit"
           exit "\$runner_status"
           RUNNER
@@ -270,7 +275,11 @@ jobs:
             printf '{"schema_version":1,"outcome":"failed","error_category":"ssh","profile":"%s"}\n' "$QA_PROFILE" > "qa-artifacts/${report_name}"
           fi
           sha256sum "qa-artifacts/${report_name}" > "qa-artifacts/${report_name}.sha256"
+          # Artifact collection precedes the runner exit check so a crash is
+          # visible to QA instead of being mistaken for an empty matrix.
+          runner_exit="$(ssh "${ssh_opts[@]}" "ubuntu@${QA_HOST}" "cat '$remote_state_dir/runner.exit'" 2>/dev/null || true)"
           test "$completed" -eq 1
+          test "$runner_exit" -eq 0
 
       - name: Upload sanitized QA report
         if: always()

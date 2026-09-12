@@ -15,11 +15,7 @@ import urllib.error
 import urllib.request
 from typing import Any, Dict, Tuple
 
-
-TERMINAL_STATUSES = {
-    "completed", "clarification_required", "unavailable", "downgraded",
-    "rejected", "blocked", "failed", "canceled",
-}
+from backend.scripts.finn_v2_matrix_transport import TERMINAL_STATUSES, observe_terminal
 POLL_REQUEST_TIMEOUT_SECONDS = 0.5
 
 
@@ -92,45 +88,48 @@ def run_gate(
     if not run_id or contract.get("run_id") != run_id or not contract.get("contract_id"):
         raise AssertionError("runtime_gate_contract_missing_at_run_creation")
 
-    # Polling is bounded progress observation. Once it has observed the
-    # persisted terminal projection, the SSE endpoint must immediately expose
-    # exactly that same immutable envelope. Reading SSE after terminalization
-    # avoids an unbounded client thread when an HTTP implementation keeps an
-    # already-terminal stream socket open during teardown.
-    polling: Dict[str, Any] = created
-    polling_terminal_at = None
-    while time.monotonic() - started_at < timeout_seconds:
+    def remaining_seconds() -> float:
+        return timeout_seconds - (time.monotonic() - started_at)
+
+    def read_sse(timeout: float) -> tuple[Dict[str, Any], str | None]:
         try:
-            polling, status = _request_json(
+            return _terminal_sse(
+                url=f"{base_url}/api/assistant/v2/runs/{run_id}/stream",
+                headers=headers,
+                timeout=timeout,
+            ), None
+        except (TimeoutError, urllib.error.URLError):
+            return {}, "clienttimeout"
+
+    def fetch_projection(timeout: float) -> tuple[Dict[str, Any], str | None]:
+        try:
+            polling, poll_status = _request_json(
                 url=f"{base_url}/api/assistant/v2/runs/{run_id}",
                 method="GET",
                 headers=headers,
                 body=None,
-                timeout=min(POLL_REQUEST_TIMEOUT_SECONDS, timeout_seconds),
+                timeout=min(POLL_REQUEST_TIMEOUT_SECONDS, timeout),
             )
         except TimeoutError:
-            time.sleep(0.1)
-            continue
-        if status in {502, 503, 504}:
-            time.sleep(0.1)
-            continue
-        if status != 200:
-            raise AssertionError(f"runtime_gate_poll_failed_http_{status}")
-        if polling.get("status") in TERMINAL_STATUSES:
-            polling_terminal_at = time.monotonic()
-            break
-        time.sleep(0.1)
-    else:
-        raise TimeoutError("runtime_gate_timeout")
-    remaining_seconds = timeout_seconds - (time.monotonic() - started_at)
-    if remaining_seconds <= 0:
-        raise TimeoutError("runtime_gate_sse_deadline_exceeded")
-    sse = _terminal_sse(
-        url=f"{base_url}/api/assistant/v2/runs/{run_id}/stream",
-        headers=headers,
-        timeout=max(0.1, remaining_seconds),
+            return {}, "clienttimeout"
+        if poll_status in {502, 503, 504}:
+            return {}, "transient_http"
+        return polling, None if poll_status == 200 else f"http_{poll_status}"
+
+    observation = observe_terminal(
+        remaining_seconds=remaining_seconds,
+        read_sse_terminal=read_sse,
+        fetch_persisted_projection=fetch_projection,
+        initial_projection=created,
+        poll_interval_seconds=0.1,
     )
-    if sse != polling:
+    polling = observation.terminal
+    sse = observation.sse_terminal
+    if observation.sse_error == "case_timeout":
+        raise TimeoutError("runtime_gate_sse_deadline_exceeded")
+    if polling.get("status") not in TERMINAL_STATUSES:
+        raise TimeoutError("runtime_gate_timeout")
+    if not sse or sse != polling:
         raise AssertionError("runtime_gate_polling_sse_envelope_mismatch")
     projection = dict(polling.get("runtime_trace") or {})
     if projection.get("contract_id") != contract["contract_id"]:
@@ -165,7 +164,7 @@ def run_gate(
         "dispatch_count": projection.get("dispatch_count"),
         "attempt_count": projection.get("attempt_count"),
         "elapsed_ms": round((time.monotonic() - started_at) * 1000, 2),
-        "polling_terminal_elapsed_ms": round(((polling_terminal_at or time.monotonic()) - started_at) * 1000, 2),
+        "polling_terminal_elapsed_ms": round((time.monotonic() - started_at) * 1000, 2),
         "delivery_transport": "sse_primary_polling_fallback",
         "polling_sse_contract_projection": True,
     }

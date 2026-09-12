@@ -15,3 +15,10 @@ def test_reasoning_retries_once_on_transient_provider_error(monkeypatch):
     monkeypatch.setattr(service.flags, "reasoning_max_retries", lambda: 1)
 
     assert service.flags.reasoning_max_retries() == 1
+
+
+def test_reasoning_retry_reserves_terminalization_budget(monkeypatch):
+    service = FinnV2ReasoningService(session=object())
+    monkeypatch.delenv("FINN_V2_REASONING_RETRY_MIN_REMAINING_SECONDS", raising=False)
+
+    assert service.flags.reasoning_retry_minimum_remaining_seconds() == 8

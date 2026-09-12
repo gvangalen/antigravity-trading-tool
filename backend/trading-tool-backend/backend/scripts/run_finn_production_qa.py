@@ -24,6 +24,8 @@ import uuid
 from pathlib import Path
 from typing import Any, Dict, Iterable, Optional, Tuple
 
+from backend.scripts.finn_v2_matrix_transport import TERMINAL_STATUSES, observe_terminal
+
 
 ALLOWED_PROFILES = {
     "auth_preflight",
@@ -35,7 +37,6 @@ ALLOWED_PROFILES = {
     "latency",
 }
 SENSITIVE_KEYS = {"access_token", "authorization", "authorization_header", "cookie", "email", "password", "private_key", "secret", "token", "user_id"}
-TERMINAL_STATUSES = {"completed", "failed", "canceled", "unavailable", "downgraded", "rejected", "blocked"}
 FIXTURE_ACTION_MODES = {"read_only", "proposal", "confirmation", "safe_execution"}
 INFRASTRUCTURE_ERROR_CATEGORIES = {"dns", "connect", "tls", "clienttimeout", "client", "ssh"}
 _DIAGNOSTIC_LOOP: Optional[asyncio.AbstractEventLoop] = None
@@ -165,7 +166,13 @@ def request_json(
     *, url: str, method: str = "GET", token: Optional[str] = None,
     payload: Optional[Dict[str, Any]] = None, timeout_seconds: float = 15.0,
 ) -> Tuple[int, Dict[str, Any], float, Optional[str]]:
-    headers = {"Accept": "application/json", "User-Agent": "FINN-Production-QA-Runner/1.0"}
+    # Every request is deliberately short-lived.  A matrix must not retain a
+    # socket from a timed-out case and let it contaminate a later case.
+    headers = {
+        "Accept": "application/json",
+        "Connection": "close",
+        "User-Agent": "FINN-Production-QA-Runner/1.0",
+    }
     body = None
     if token:
         headers["Authorization"] = f"Bearer {token}"
@@ -191,7 +198,12 @@ def request_json(
 
 def request_sse_terminal(*, url: str, token: str, timeout_seconds: float = 35.0) -> Tuple[Dict[str, Any], Optional[str]]:
     """Read only the terminal envelope from SSE and discard all response text."""
-    headers = {"Accept": "text/event-stream", "Authorization": f"Bearer {token}", "User-Agent": "FINN-Production-QA-Runner/1.0"}
+    headers = {
+        "Accept": "text/event-stream",
+        "Authorization": f"Bearer {token}",
+        "Connection": "close",
+        "User-Agent": "FINN-Production-QA-Runner/1.0",
+    }
     try:
         with urllib.request.urlopen(urllib.request.Request(url, headers=headers), timeout=timeout_seconds) as response:
             for raw_line in response:
@@ -555,13 +567,29 @@ def case_progress(*, cases: Iterable[Dict[str, Any]], planned_count: int) -> Dic
     }
 
 
-def _run_fixture_action(*, base_url: str, token: str, case: Dict[str, Any], terminal: Dict[str, Any]) -> Dict[str, Any]:
+def _run_fixture_action(
+    *,
+    base_url: str,
+    token: str,
+    case: Dict[str, Any],
+    terminal: Dict[str, Any],
+    remaining_seconds=None,
+) -> Dict[str, Any]:
     """Exercise only an explicitly enabled non-financial QA fixture action."""
     action_mode = case.get("fixture_action", "read_only")
     result: Dict[str, Any] = {
         "mode": action_mode, "proposal": {}, "publish_status": None, "confirm_status": None,
         "execute_status": None, "idempotency_replay_status": None, "outcome": "not_applicable",
     }
+    def action_timeout() -> float:
+        if remaining_seconds is None:
+            return 15.0
+        return max(0.1, min(15.0, float(remaining_seconds())))
+
+    if remaining_seconds is not None and remaining_seconds() <= 0:
+        result["outcome"] = "case_timeout"
+        result["error_category"] = "case_timeout"
+        return result
     if action_mode == "read_only":
         return result
     proposal_id = _proposal_id(terminal)
@@ -580,7 +608,8 @@ def _run_fixture_action(*, base_url: str, token: str, case: Dict[str, Any], term
         result["error_category"] = "proposal_missing"
         return result
     proposal_status, proposal, _latency, proposal_error = request_json(
-        url=f"{base_url}/api/assistant/v2/proposals/{proposal_id}", token=token
+        url=f"{base_url}/api/assistant/v2/proposals/{proposal_id}", token=token,
+        timeout_seconds=action_timeout(),
     )
     if proposal_status != 200 or proposal_error:
         result["error_category"] = proposal_error or "proposal_read_failed"
@@ -595,7 +624,10 @@ def _run_fixture_action(*, base_url: str, token: str, case: Dict[str, Any], term
     if "contract_revision" in trace:
         result["proposal"]["contract_revision"] = trace["contract_revision"]
     result["outcome"] = "proposal_created"
-    status, published, _latency, error = request_json(url=f"{base_url}/api/assistant/v2/proposals/{proposal_id}/publish", method="POST", token=token, payload={})
+    status, published, _latency, error = request_json(
+        url=f"{base_url}/api/assistant/v2/proposals/{proposal_id}/publish",
+        method="POST", token=token, payload={}, timeout_seconds=action_timeout(),
+    )
     result["publish_status"] = status
     if status != 200 or error:
         result["error_category"] = error or "proposal_publish_failed"
@@ -612,7 +644,10 @@ def _run_fixture_action(*, base_url: str, token: str, case: Dict[str, Any], term
         "confirmation_token": confirmation_token,
         "expected_payload_hash": payload_hash,
     }
-    status, _confirmed, _latency, error = request_json(url=f"{base_url}/api/assistant/v2/proposals/{proposal_id}/confirm", method="POST", token=token, payload=confirm_payload)
+    status, _confirmed, _latency, error = request_json(
+        url=f"{base_url}/api/assistant/v2/proposals/{proposal_id}/confirm",
+        method="POST", token=token, payload=confirm_payload, timeout_seconds=action_timeout(),
+    )
     result["confirm_status"] = status
     confirmation_token = None
     if status != 200 or error:
@@ -623,7 +658,10 @@ def _run_fixture_action(*, base_url: str, token: str, case: Dict[str, Any], term
         return result
     idempotency_key = f"qa-execute-{uuid.uuid4().hex}"
     execute_payload = {"idempotency_key": idempotency_key, "expected_payload_hash": payload_hash}
-    status, _executed, _latency, error = request_json(url=f"{base_url}/api/assistant/v2/proposals/{proposal_id}/execute", method="POST", token=token, payload=execute_payload)
+    status, _executed, _latency, error = request_json(
+        url=f"{base_url}/api/assistant/v2/proposals/{proposal_id}/execute",
+        method="POST", token=token, payload=execute_payload, timeout_seconds=action_timeout(),
+    )
     result["execute_status"] = status
     execution_status = _executed.get("status") if isinstance(_executed.get("status"), str) else None
     result["execution_status"] = execution_status
@@ -631,7 +669,10 @@ def _run_fixture_action(*, base_url: str, token: str, case: Dict[str, Any], term
         result["error_category"] = error or "proposal_execute_failed"
         return result
     if case.get("idempotency_replay") is True:
-        replay_status, _replayed, _latency, replay_error = request_json(url=f"{base_url}/api/assistant/v2/proposals/{proposal_id}/execute", method="POST", token=token, payload=execute_payload)
+        replay_status, _replayed, _latency, replay_error = request_json(
+            url=f"{base_url}/api/assistant/v2/proposals/{proposal_id}/execute",
+            method="POST", token=token, payload=execute_payload, timeout_seconds=action_timeout(),
+        )
         result["idempotency_replay_status"] = replay_status
         replay_execution_status = _replayed.get("status") if isinstance(_replayed.get("status"), str) else None
         result["idempotency_replay_execution_status"] = replay_execution_status
@@ -723,32 +764,39 @@ def run_cases(
             if checkpoint:
                 checkpoint(results, planned_count=len(case_list))
             continue
-        terminal = created
-        deadline = min(case_deadline, time.monotonic() + 30.0)
-        poll_error: Optional[str] = None
-        while time.monotonic() < deadline:
-            time.sleep(0.25)
-            _, polled, _, poll_error = request_json(
-                url=f"{base_url}/api/assistant/v2/runs/{run_id}", token=token, timeout_seconds=5.0
+        # Both public Build matrices and the protected QA runner use the same
+        # bounded SSE-first observation engine.  The QA layer only supplies
+        # redaction, fixture authorization, and scoring around this result.
+        def read_sse(timeout_seconds: float) -> Tuple[Dict[str, Any], Optional[str]]:
+            return request_sse_terminal(
+                url=f"{base_url}/api/assistant/v2/runs/{run_id}/stream",
+                token=token,
+                timeout_seconds=timeout_seconds,
             )
-            if poll_error:
-                # A transient poll timeout must not erase a terminal SSE envelope.
-                continue
-            terminal = polled
-            if terminal.get("status") in TERMINAL_STATUSES:
-                break
+
+        def fetch_projection(timeout_seconds: float) -> Tuple[Dict[str, Any], Optional[str]]:
+            snapshot_status, snapshot, _snapshot_latency, snapshot_error = request_json(
+                url=f"{base_url}/api/assistant/v2/runs/{run_id}",
+                token=token,
+                timeout_seconds=timeout_seconds,
+            )
+            return (snapshot if snapshot_status == 200 else {}), snapshot_error or (
+                "server_http_response" if snapshot_status != 200 else None
+            )
+
+        observation = observe_terminal(
+            remaining_seconds=remaining,
+            read_sse_terminal=read_sse,
+            fetch_persisted_projection=fetch_projection,
+            initial_projection=created,
+        )
+        terminal = observation.terminal
+        sse_envelope = observation.sse_terminal
+        sse_error = observation.sse_error
+        poll_error = observation.fallback_poll_error
+        terminal_snapshot_error = observation.snapshot_error
         projection = safe_projection(terminal)
-        if remaining() <= 0:
-            sse_envelope, sse_error = {}, "case_timeout"
-        else:
-            sse_envelope, sse_error = request_sse_terminal(
-                url=f"{base_url}/api/assistant/v2/runs/{run_id}/stream", token=token,
-                timeout_seconds=max(0.1, min(35.0, remaining())),
-            )
         sse_projection = safe_projection(sse_envelope) if sse_envelope else {}
-        if terminal.get("status") not in TERMINAL_STATUSES and sse_envelope:
-            terminal = sse_envelope
-            projection = safe_projection(terminal)
         actual = projection["runtime_trace"].get("final_operation_id") or projection["runtime_trace"].get("initial_operation_id")
         result["terminal"] = projection
         result["sse_terminal"] = sse_projection
@@ -757,10 +805,27 @@ def run_cases(
         result["polling_sse_equal"] = bool(sse_projection) and projection == sse_projection
         result["poll_error"] = poll_error
         result["sse_error"] = sse_error
-        if terminal.get("status") not in TERMINAL_STATUSES:
-            result["error_category"] = "case_timeout" if remaining() <= 0 else (sse_error or poll_error or "terminal_timeout")
+        result["terminal_snapshot_error"] = terminal_snapshot_error
+        if terminal.get("status") not in TERMINAL_STATUSES or sse_error == "case_timeout":
+            result["error_category"] = "case_timeout" if remaining() <= 0 or sse_error == "case_timeout" else (sse_error or poll_error or "terminal_timeout")
+            # A final bounded status read records whether server work remains
+            # active before a following case may begin.  It never retries or
+            # duplicates the run.
+            _, settled, _settle_latency, settle_error = request_json(
+                url=f"{base_url}/api/assistant/v2/runs/{run_id}",
+                token=token,
+                timeout_seconds=5.0,
+            )
+            result["server_status_after_timeout"] = settled.get("status") if not settle_error else None
+            result["server_active_after_timeout"] = result["server_status_after_timeout"] not in TERMINAL_STATUSES
         result["operation_matches"] = case.get("expected_operation_id") is None or actual == case["expected_operation_id"]
-        result["fixture_action"] = _run_fixture_action(base_url=base_url, token=token, case=case, terminal=terminal)
+        result["fixture_action"] = _run_fixture_action(
+            base_url=base_url,
+            token=token,
+            case=case,
+            terminal=terminal,
+            remaining_seconds=remaining,
+        )
         result["failure_classification"] = classify_case_failure(result)
         results.append(result)
         if checkpoint:
@@ -888,6 +953,15 @@ def main() -> int:
                     progress = case_progress(cases=report["cases"], planned_count=planned_count)
                     report.update(progress)
                     report["failure_summary"] = failure_summary(report["cases"])
+                    # Checkpoints are independently publishable evidence.  A
+                    # runner crash must never leave completed product calls
+                    # labelled NOT_STARTED simply because final aggregation
+                    # did not get CPU time.
+                    report["qa_status"] = (
+                        "INCOMPLETE" if report["incomplete"]
+                        else "IN_PROGRESS"
+                    )
+                    report["outcome"] = "incomplete" if report["incomplete"] else "running"
                     report_path.parent.mkdir(parents=True, exist_ok=True)
                     temporary = report_path.with_suffix(report_path.suffix + ".tmp")
                     temporary.write_text(json.dumps(redact(report), sort_keys=True, indent=2) + "\n", encoding="utf-8")

@@ -146,6 +146,21 @@ def test_workflow_runs_the_server_job_detached_and_resumes_from_checkpoint():
     assert "--resume >\"$state_dir/runner.log\"" in workflow
     assert "elif test -s '$remote_state_dir/runner.pid'" in workflow
     assert "restarted=0" in workflow
+    assert 'runner_exit="$(ssh' in workflow
+    assert 'test "$runner_exit" -eq 0' in workflow
+
+
+def test_public_and_protected_matrix_paths_share_the_delivery_engine():
+    protected = SCRIPT_PATH.read_text(encoding="utf-8")
+    persisted = (
+        REPO_ROOT / "backend" / "trading-tool-backend" / "backend" / "scripts"
+        / "run_finn_v2_persisted_runtime_gate.py"
+    ).read_text(encoding="utf-8")
+
+    assert "from backend.scripts.finn_v2_matrix_transport import TERMINAL_STATUSES, observe_terminal" in protected
+    assert "from backend.scripts.finn_v2_matrix_transport import TERMINAL_STATUSES, observe_terminal" in persisted
+    assert "observe_terminal(" in protected
+    assert "observe_terminal(" in persisted
 
 
 def test_encrypted_manifest_is_only_staged_after_server_side_decryption(tmp_path):
@@ -557,7 +572,11 @@ def test_case_timeout_is_checkpointed_and_does_not_block_the_next_case(monkeypat
     ])
     monkeypatch.setattr(module, "request_json", lambda **kwargs: (calls.append(kwargs) or next(responses)))
     monkeypatch.setattr(module.time, "sleep", lambda _seconds: original_sleep(0.01))
-    monkeypatch.setattr(module, "request_sse_terminal", lambda **_kwargs: ({"status": "completed", "runtime_trace": {"initial_operation_id": "capability"}}, None))
+    def slow_sse(**_kwargs):
+        original_sleep(0.01)
+        return {"status": "completed", "runtime_trace": {"initial_operation_id": "capability"}}, None
+
+    monkeypatch.setattr(module, "request_sse_terminal", slow_sse)
     checkpoints = []
     results = module.run_cases(base_url="https://example.test", token="token", case_timeout_seconds=0.005, checkpoint=lambda rows, **_kwargs: checkpoints.append(list(rows)), cases=[
         {"case_id": "slow", "message": "slow"},
@@ -566,6 +585,69 @@ def test_case_timeout_is_checkpointed_and_does_not_block_the_next_case(monkeypat
     assert results[0]["error_category"] == "case_timeout"
     assert results[1]["run_id"] == "fast"
     assert len(checkpoints) == 2
+
+
+def test_terminal_sse_uses_one_persisted_snapshot_without_a_polling_loop(monkeypatch):
+    module = _module()
+    calls = []
+
+    def request(**kwargs):
+        calls.append(kwargs)
+        if kwargs.get("method") == "POST":
+            return 200, {"run_id": "run-1", "conversation_id": "conversation-1", "status": "created"}, 1.0, None
+        return 200, {
+            "run_id": "run-1", "conversation_id": "conversation-1", "status": "completed",
+            "runtime_trace": {"initial_operation_id": "capability"},
+        }, 1.0, None
+
+    monkeypatch.setattr(module, "request_json", request)
+    monkeypatch.setattr(module, "request_sse_terminal", lambda **_kwargs: ({
+        "run_id": "run-1", "conversation_id": "conversation-1", "status": "completed",
+        "runtime_trace": {"initial_operation_id": "capability"},
+    }, None))
+
+    result = module.run_cases(
+        base_url="https://example.test",
+        token="token",
+        cases=[{"case_id": "case", "message": "What can you do?", "expected_operation_id": "capability"}],
+    )
+
+    assert result[0]["polling_sse_equal"] is True
+    assert len(calls) == 2  # create + one persisted projection snapshot
+    assert calls[1].get("method", "GET") == "GET"
+
+
+def test_checkpoint_with_executed_cases_never_reports_not_started(monkeypatch, tmp_path):
+    module = _module()
+    report = tmp_path / "report.json"
+    args = type("Args", (), {
+        "release_sha": "a" * 40, "profile": "targeted_regression", "manifest_id": "scope",
+        "run_label": "run", "base_url": "https://example.test", "checkout": str(tmp_path),
+        "release_marker": str(tmp_path / "marker"), "manifest_root": str(tmp_path),
+        "manifest_bundle_path": None, "manifest_private_key_path": str(tmp_path / "key"),
+        "manifest_crypto_script": None, "report_path": str(report), "workflow_run_id": "workflow",
+        "fixture_namespace": "qa-12345678", "runner_revision": None,
+        "matrix_deadline_seconds": 60.0, "case_timeout_seconds": 60.0, "resume": False,
+        "dry_preflight": False,
+    })()
+    monkeypatch.setattr(module, "parse_args", lambda: args)
+    monkeypatch.setattr(module, "release_identity", lambda **_kwargs: {"matches": True})
+    monkeypatch.setattr(module, "issue_fixture_token", lambda **_kwargs: "token")
+    monkeypatch.setattr(module, "authenticated_preflight", lambda **_kwargs: {"fixture_authenticated": True})
+    manifest = tmp_path / "scope.json"
+    manifest.write_text(json.dumps({"cases": [{"case_id": "one", "message": "x"}]}), encoding="utf-8")
+    monkeypatch.setattr(module, "run_cases", lambda **kwargs: (
+        kwargs["checkpoint"]([{
+            "case_id": "one", "case_status": "completed", "create_http_status": 200,
+            "terminal": {"status": "completed"}, "polling_sse_equal": True,
+            "operation_matches": True, "fixture_action": {"mode": "read_only"},
+        }], planned_count=1) or (_ for _ in ()).throw(RuntimeError("simulated_crash"))
+    ))
+
+    assert module.main() == 0
+    payload = json.loads(report.read_text(encoding="utf-8"))
+    assert payload["qa_status"] == "COMPLETED_WITH_FAILURES"
+    assert payload["attempted_count"] == 1
 
 
 def test_timeout_checkpoint_is_a_valid_partial_artifact(tmp_path):
@@ -697,6 +779,46 @@ def test_broken_transport_after_a_checkpoint_resumes_a_37_case_matrix_without_du
     assert len(created_case_ids) == 37
     assert len(set(created_case_ids)) == 37
     assert all(item["case_status"] == "completed" for item in resumed)
+    assert module.case_progress(cases=resumed, planned_count=37)["incomplete"] is False
+
+
+def test_runner_crash_after_case_thirty_two_resumes_without_duplicate_cases(monkeypatch, tmp_path):
+    """The checkpoint preceding a runner crash is enough for one safe resume."""
+    module = _module()
+    created = []
+
+    def request(**kwargs):
+        if kwargs.get("method") == "POST":
+            case_id = str(kwargs["payload"]["message"])
+            created.append(case_id)
+            return 200, {"run_id": f"run-{case_id}", "conversation_id": f"conversation-{case_id}", "status": "pending"}, 1.0, None
+        run_id = str(kwargs["url"]).rsplit("/", 1)[-1]
+        return 200, {"run_id": run_id, "status": "completed", "runtime_trace": {"initial_operation_id": "capability"}}, 1.0, None
+
+    monkeypatch.setattr(module, "request_json", request)
+    monkeypatch.setattr(module, "request_sse_terminal", lambda **kwargs: ({
+        "run_id": str(kwargs["url"]).rsplit("/", 2)[-2], "status": "completed",
+        "runtime_trace": {"initial_operation_id": "capability"},
+    }, None))
+    cases = [{"case_id": f"case-{index:02d}", "message": f"case-{index:02d}", "expected_operation_id": "capability"} for index in range(37)]
+    checkpoint_path = tmp_path / "checkpoint.json"
+
+    def crash_after_thirty_two(rows, **_kwargs):
+        checkpoint_path.write_text(json.dumps({"cases": rows}), encoding="utf-8")
+        if len(rows) == 32:
+            raise RuntimeError("simulated_runner_crash_after_q32")
+
+    with pytest.raises(RuntimeError, match="simulated_runner_crash_after_q32"):
+        module.run_cases(base_url="https://example.test", token="token", cases=cases, checkpoint=crash_after_thirty_two)
+
+    checkpointed = json.loads(checkpoint_path.read_text(encoding="utf-8"))["cases"]
+    assert len(checkpointed) == 32
+    assert module.case_progress(cases=checkpointed, planned_count=37)["incomplete"] is True
+
+    resumed = module.run_cases(base_url="https://example.test", token="token", cases=cases, existing_results=checkpointed)
+    assert len(resumed) == 37
+    assert len(created) == 37
+    assert len(set(created)) == 37
     assert module.case_progress(cases=resumed, planned_count=37)["incomplete"] is False
 
 
