@@ -81,6 +81,21 @@ class FinnV2OperationClassificationService:
                 contract.operation_id, facts, "high", "registry_constraint", (contract,),
                 conversation_context=conversation_context,
             )
+        if self._is_workspace_setup_field_read(
+            message=message,
+            facts=facts,
+            workspace_hints=workspace_hints,
+            client_context=client_context,
+        ):
+            contract = self.registry.require_supported("read_active_setup")
+            return self._result(
+                contract.operation_id,
+                facts,
+                "high",
+                "workspace_setup_contract",
+                (contract,),
+                conversation_context=conversation_context,
+            )
         candidates = self._selector_manifest()
         guided_contract = self._guided_continuation_contract(facts=facts, context=conversation_context or {})
         if guided_contract is not None:
@@ -193,6 +208,33 @@ class FinnV2OperationClassificationService:
         return score_subject and bool(
             re.search(r"\b(?:explain|erklaere|erkläre)\b|\bleg(?:\s+\w+){0,8}\s+uit\b", text)
         )
+
+    @staticmethod
+    def _is_workspace_setup_field_read(
+        *,
+        message: str,
+        facts: FinnV2PreprocessedRequest,
+        workspace_hints: Optional[Mapping[str, object]],
+        client_context: Optional[Mapping[str, object]],
+    ) -> bool:
+        """Use the setup read contract for unconfigured strategy fields."""
+        if facts.discourse_act != "information_request":
+            return False
+        contexts = (workspace_hints or {}, client_context or {})
+        setup_id = next((context.get("setup_id") for context in contexts if context.get("setup_id") is not None), None)
+        strategy_id = next((context.get("strategy_id") for context in contexts if context.get("strategy_id") is not None), None)
+        try:
+            has_setup = int(setup_id) > 0
+        except (TypeError, ValueError):
+            has_setup = False
+        try:
+            has_strategy = int(strategy_id) > 0
+        except (TypeError, ValueError):
+            has_strategy = False
+        if not has_setup or has_strategy:
+            return False
+        text = str(message or "").casefold()
+        return bool(re.search(r"\b(entry|instap|einstieg|stop(?:-loss| loss)?|targets?|ziele?|doelen?|risico|risk)\b", text))
 
     def _guided_candidates(
         self,
@@ -529,7 +571,13 @@ class FinnV2OperationClassificationValidator:
             contract = self.registry.require_supported(classification.operation_id)
         except ValueError:
             return "operation_not_supported"
-        if classification.selector_source not in {"structured", "provider_unavailable", "guided_state", "registry_constraint"}:
+        if classification.selector_source not in {
+            "structured",
+            "provider_unavailable",
+            "guided_state",
+            "registry_constraint",
+            "workspace_setup_contract",
+        }:
             return "selector_source_invalid"
         if classification.action != contract.action_polarity.value:
             return "operation_canonical_action_mismatch"

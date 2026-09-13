@@ -128,6 +128,8 @@ def test_save_setup_applies_default_timeframe_for_trade_payload():
 
     assert result["status"] == "success"
     assert result["setup"]["timeframe"] == "4H"
+    assert result["field_sources"]["min_macro_score"] == "default"
+    assert raw_payload["min_market_score"] == 20
 
 
 @pytest.mark.parametrize("raw_day", ["monday", "maandag", "1", 1])

@@ -124,6 +124,7 @@ class ActiveSetupData(BaseModel):
     name: Optional[str] = None
     symbol: Optional[str] = None
     timeframe: Optional[str] = None
+    setup_type: Optional[str] = None
     score: Optional[float] = None
 
 

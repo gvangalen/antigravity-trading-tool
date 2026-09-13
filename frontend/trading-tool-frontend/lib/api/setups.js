@@ -2,6 +2,9 @@
 
 import { fetchAuth } from '@/lib/api/auth';
 import { toast } from 'react-hot-toast';
+import { normalizeSetupSaveResponse } from '@/lib/setup/activeSetup';
+
+const normalizePublicSetup = (setup) => normalizeSetupSaveResponse(setup) || setup;
 
 //
 // =========================================================
@@ -16,7 +19,7 @@ export const fetchSetups = async ({ setup_type = '' } = {}) => {
     const url = `/api/setups${query.toString() ? `?${query.toString()}` : ''}`;
 
     const result = await fetchAuth(url, { method: 'GET' });
-    return Array.isArray(result) ? result : [];
+    return Array.isArray(result) ? result.map(normalizePublicSetup) : [];
   } catch (err) {
     console.error('❌ [fetchSetups] Fout:', err);
     toast.error('Setups laden mislukt.');
@@ -37,7 +40,7 @@ export const fetchTopSetups = async (limit = 3) => {
     const result = await fetchAuth(`/api/setups/top?limit=${safe}`, {
       method: 'GET',
     });
-    return Array.isArray(result) ? result : [];
+    return Array.isArray(result) ? result.map(normalizePublicSetup) : [];
   } catch (err) {
     console.error('❌ [fetchTopSetups] Fout:', err);
     toast.error('Top setups laden mislukt.');
@@ -141,7 +144,7 @@ export const checkSetupNameExists = async (name) => {
 export const fetchLastSetup = async () => {
   try {
     const res = await fetchAuth('/api/setups/last', { method: 'GET' });
-    return res?.setup ?? null;
+    return normalizePublicSetup(res?.setup ?? null);
   } catch {
     return null;
   }
@@ -156,7 +159,7 @@ export const fetchActiveSetup = async (symbol = "BTC") => {
     const query = new URLSearchParams();
     if (symbol) query.set("symbol", String(symbol).toUpperCase());
     const res = await fetchAuth(`/api/setups/active${query.toString() ? `?${query.toString()}` : ""}`, { method: 'GET' });
-    return res?.active ?? null;
+    return normalizePublicSetup(res?.active ?? null);
   } catch (err) {
     console.error('❌ [fetchActiveSetup] Fout:', err);
     toast.error('Actieve setup laden mislukt.');

@@ -12,6 +12,7 @@ from backend.schemas.finn_v2_reasoning_context_schema import (
 from backend.schemas.finn_v2_response_schema import ResponseDraft
 from backend.domain.finn_v2_operation_registry import FinnV2OperationRegistry
 from backend.services.finn_v2_reasoning_fallback_service import FinnV2ReasoningFallbackService
+from backend.services.finn_v2_reasoning_context_service import FinnV2ReasoningContextService
 from backend.services.finn_v2_response_verifier_service import FinnV2ResponseVerifierService
 
 
@@ -194,6 +195,62 @@ def test_linked_bot_read_preserves_the_complete_registry_graph_for_delivery():
     assert {"Easset", "Esetup", "Estrat", "Ebot", "Estatus"}.issubset(reasoning.evidence_refs_used)
     assert "strategie 325" in reasoning.direct_answer
     assert "bot 186" in reasoning.direct_answer
+
+
+def test_active_setup_read_uses_persisted_name_type_and_timeframe_without_strategy_fields():
+    evidence = [
+        ReasoningEvidenceItem(evidence_id="Easset", artifact_id="asset", tool_name="read_active_asset", information_scope="active_asset", domain="identity_context", entity_type="asset", asset="BTC", source="workspace", freshness="fresh", confidence="high", facts={"symbol": "BTC"}),
+        ReasoningEvidenceItem(evidence_id="Esetup", artifact_id="setup", tool_name="read_active_setup", information_scope="active_setup", domain="plan_context", entity_type="setup", entity_id="326", asset="BTC", source="setups", freshness="fresh", confidence="high", facts={"setup_id": 326, "name": "BTC 4H Trade", "setup_type": "trade", "timeframe": "4H", "symbol": "BTC"}),
+    ]
+    context = _context(
+        operation_id="read_active_setup",
+        required_scope=["active_asset", "active_setup"],
+        message="Vat mijn setup samen.",
+        evidence=evidence,
+    )
+
+    reasoning = FinnV2ReasoningFallbackService().grounded_read_draft(
+        run_id=context.run_id, user_id=context.user_id, context=context, model="deterministic", error_codes=[]
+    )
+
+    assert "BTC 4H Trade" in reasoning.direct_answer
+    assert "trade" in reasoning.direct_answer
+    assert "4H" in reasoning.direct_answer
+
+
+def test_active_setup_strategy_fields_explain_missing_link_without_internal_verifier_code():
+    evidence = [
+        ReasoningEvidenceItem(evidence_id="Easset", artifact_id="asset", tool_name="read_active_asset", information_scope="active_asset", domain="identity_context", entity_type="asset", asset="BTC", source="workspace", freshness="fresh", confidence="high", facts={"symbol": "BTC"}),
+        ReasoningEvidenceItem(evidence_id="Esetup", artifact_id="setup", tool_name="read_active_setup", information_scope="active_setup", domain="plan_context", entity_type="setup", entity_id="326", asset="BTC", source="setups", freshness="fresh", confidence="high", facts={"setup_id": 326, "name": "BTC 4H Trade", "setup_type": "trade", "timeframe": "4H", "symbol": "BTC"}),
+    ]
+    context = _context(
+        operation_id="read_active_setup",
+        required_scope=["active_asset", "active_setup"],
+        message="Wat is mijn entryvoorwaarde en stop-loss voor deze setup?",
+        evidence=evidence,
+    )
+
+    reasoning = FinnV2ReasoningFallbackService().grounded_read_draft(
+        run_id=context.run_id, user_id=context.user_id, context=context, model="deterministic", error_codes=[]
+    )
+
+    assert "gekoppelde strategie" in reasoning.main_observation
+    assert "response_field_incomplete" not in reasoning.direct_answer
+
+
+def test_active_setup_context_preserves_the_persisted_setup_type():
+    facts = FinnV2ReasoningContextService(session=object())._sanitize_facts(
+        {
+            "setup_id": 326,
+            "name": "BTC 4H Trade",
+            "symbol": "BTC",
+            "timeframe": "4H",
+            "setup_type": "trade",
+        },
+        "read_active_setup",
+    )
+
+    assert facts["setup_type"] == "trade"
 
 
 def test_response_projection_makes_persisted_indicator_contract_fields_visible():

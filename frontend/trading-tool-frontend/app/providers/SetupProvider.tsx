@@ -3,6 +3,7 @@
 import React, { createContext, useContext, useState, useEffect } from "react";
 import { fetchAuth } from "@/lib/api/auth";
 import { useAuth } from "@/components/auth/AuthProvider";
+import { normalizeSetupSaveResponse } from "@/lib/setup/activeSetup";
 
 type SetupContextType = {
   activeSetup: any;
@@ -33,12 +34,12 @@ export function SetupProvider({ children }: { children: React.ReactNode }) {
       setSetupLoading(true);
       try {
         const resActive = await fetchAuth('/api/setups/active', { method: 'GET' });
-        const active = resActive?.active ?? null;
+        const active = normalizeSetupSaveResponse(resActive?.active ?? null);
         if (active) {
           setActiveSetup(active);
         } else {
           const resLast = await fetchAuth('/api/setups/last', { method: 'GET' });
-          const last = resLast?.setup ?? null;
+          const last = normalizeSetupSaveResponse(resLast?.setup ?? null);
           setActiveSetup(last || null);
         }
       } catch (err) {

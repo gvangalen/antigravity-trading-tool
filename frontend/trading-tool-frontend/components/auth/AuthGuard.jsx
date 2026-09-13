@@ -58,6 +58,10 @@ export default function AuthGuard({ children }) {
       nextParams.sort();
       const normalizedNextRoute = `${nextPathname}${nextParams.toString() ? `?${nextParams.toString()}` : ""}`;
       const sameRoute = currentRoute === normalizedNextRoute;
+      // Setup management remains available after a setup is persisted. This
+      // lets users inspect or correct their own plan before the later bot
+      // onboarding phase is complete.
+      const canManageSavedSetup = pathname.startsWith("/setup") && Boolean(status?.has_setup);
 
       debug("🧭 AuthGuard Onboarding Sync:", {
         isComplete,
@@ -66,7 +70,7 @@ export default function AuthGuard({ children }) {
         sameRoute,
       });
 
-      if (!isComplete && !pathname.startsWith("/onboarding") && !sameRoute) {
+      if (!isComplete && !pathname.startsWith("/onboarding") && !sameRoute && !canManageSavedSetup) {
         debug("🚧 AuthGuard: Onboarding niet compleet -> naar next_route", nextRoute);
         setRedirectingToOnboarding(true);
         router.replace(nextRoute);

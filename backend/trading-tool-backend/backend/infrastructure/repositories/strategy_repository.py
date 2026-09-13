@@ -75,7 +75,9 @@ class StrategyRepository:
             "decision_curve": json.dumps(to_json_safe(raw_data.get("decision_curve"))) if raw_data.get("decision_curve") else None,
             "decision_curve_id": curve_id,
             "entry": str(raw_data.get("entry")) if raw_data.get("entry") is not None else None,
-            "targets": raw_data.get("targets"), # Assuming SQLAlchemy handles array insert if column is Array
+            # PostgreSQL stores strategy targets as text[].  Browser and FINN
+            # both normalize numeric targets, so bind text consistently.
+            "targets": [str(target) for target in (raw_data.get("targets") or [])],
             "stop_loss": str(raw_data.get("stop_loss")) if raw_data.get("stop_loss") is not None else None,
             "explanation": raw_data.get("explanation"),
             "risk_profile": raw_data.get("risk_profile"),

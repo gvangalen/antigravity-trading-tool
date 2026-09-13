@@ -23,6 +23,7 @@ import DashboardErrorBoundary from "@/components/ui/DashboardErrorBoundary";
 import { useStrategyData } from "@/hooks/useStrategyData";
 import { useOnboarding } from "@/hooks/useOnboarding";
 import { createStrategy, deleteStrategy, updateStrategy } from "@/lib/api/strategy";
+import { getSetupId } from "@/lib/setup/activeSetup";
 import { useTranslation } from "@/app/providers/I18nProvider";
 
 export default function StrategiesWorkspaceSection() {
@@ -95,7 +96,7 @@ export default function StrategiesWorkspaceSection() {
 
   const handleStrategySubmit = async (strategy) => {
     try {
-      const setup = safeSetups.find((item) => String(item.id) === String(strategy.setup_id));
+      const setup = safeSetups.find((item) => String(getSetupId(item)) === String(strategy.setup_id));
       if (!setup) {
         showSnackbar(feedback.invalidSetup || "Choose a valid setup first.", "danger");
         return;
@@ -103,7 +104,7 @@ export default function StrategiesWorkspaceSection() {
 
       await createStrategy({
         ...strategy,
-        setup_id: setup.id,
+        setup_id: getSetupId(setup),
         setup_type: setup.setup_type,
       });
 

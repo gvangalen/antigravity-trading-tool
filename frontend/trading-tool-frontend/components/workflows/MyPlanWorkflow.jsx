@@ -10,6 +10,7 @@ import {
   CheckCircle2,
   ChevronRight,
   CircleDashed,
+  Copy,
   Layers3,
   Pencil,
   Plus,
@@ -29,6 +30,7 @@ import Drawer from "@/components/ui/Drawer";
 import { invalidateStrategyDataCaches, useStrategyData } from "@/hooks/useStrategyData";
 import { fetchBotConfigs } from "@/lib/api/botApi";
 import { deleteSetup, fetchActiveSetup } from "@/lib/api/setups";
+import { getSetupId } from "@/lib/setup/activeSetup";
 import { openFinnContext } from "@/lib/finnCommandSearch";
 
 const COPY = {
@@ -52,6 +54,7 @@ const COPY = {
     readyForAutomation: "Klaar voor Automation",
     notReady: "Nog niet compleet",
     editSetup: "Setup bewerken",
+    duplicateSetup: "Setup dupliceren",
     editStrategy: "Strategie bewerken",
     addStrategy: "Strategie toevoegen",
     openAutomation: "Naar Automation",
@@ -122,6 +125,7 @@ const COPY = {
     readyForAutomation: "Ready for Automation",
     notReady: "Not complete yet",
     editSetup: "Edit setup",
+    duplicateSetup: "Duplicate setup",
     editStrategy: "Edit strategy",
     addStrategy: "Add strategy",
     openAutomation: "Open Automation",
@@ -192,6 +196,7 @@ const COPY = {
     readyForAutomation: "Bereit für Automation",
     notReady: "Noch nicht vollständig",
     editSetup: "Setup bearbeiten",
+    duplicateSetup: "Setup duplizieren",
     editStrategy: "Strategie bearbeiten",
     addStrategy: "Strategie hinzufügen",
     openAutomation: "Zu Automation",
@@ -264,7 +269,7 @@ function strategyIsComplete(setup, strategy) {
 }
 
 function buildPlans(setups, strategies, bots = []) {
-  const setupIds = new Set(setups.map((setup) => normalizeId(setup.id)));
+  const setupIds = new Set(setups.map((setup) => normalizeId(getSetupId(setup))));
   const linked = new Map();
   const botByStrategyId = new Map(
     bots.map((bot) => [normalizeId(bot.strategy_id ?? bot.strategy?.id), bot])
@@ -277,8 +282,9 @@ function buildPlans(setups, strategies, bots = []) {
   });
 
   const plans = setups.flatMap((setup) => {
-    const matches = linked.get(normalizeId(setup.id)) || [];
-    if (!matches.length) return [{ key: `setup-${setup.id}`, setup, strategy: null }];
+    const setupId = getSetupId(setup);
+    const matches = linked.get(normalizeId(setupId)) || [];
+    if (!matches.length) return [{ key: `setup-${setupId}`, setup, strategy: null }];
     return matches.map((strategy) => ({ key: `strategy-${strategy.id}`, setup, strategy }));
   });
 
@@ -340,7 +346,7 @@ export default function MyPlanWorkflow({ symbol = "BTC" }) {
   const { locale } = useTranslation();
   const copy = getCopy(locale);
   const activeSymbol = String(searchParams.get("symbol") || symbol || "BTC").toUpperCase();
-  const { activeSetup } = useActiveSetup();
+  const { activeSetup, setActiveSetup } = useActiveSetup();
   const { openConfirm, showSnackbar } = useModal();
   const [bots, setBots] = useState([]);
   const [marketBestSetup, setMarketBestSetup] = useState(null);
@@ -449,6 +455,12 @@ export default function MyPlanWorkflow({ symbol = "BTC" }) {
   const askFinnForPlan = (plan, subjectType = "plan") => {
     const setup = plan?.setup || null;
     const strategy = plan?.strategy || null;
+    const setupId = getSetupId(setup);
+    if (setupId) {
+      // The plan selected by the user is the active FINN workspace context.
+      // Backend entity resolution still verifies its owner scope before use.
+      setActiveSetup({ ...setup, setup_id: setupId });
+    }
     const query = subjectType === "setup"
       ? `${copy.setupQuestion} ${copy.setupTerm}: ${setup?.name || copy.notReady}.`
       : subjectType === "strategy"
@@ -462,7 +474,7 @@ export default function MyPlanWorkflow({ symbol = "BTC" }) {
         page_type: copy.eyebrow,
         symbol: setup?.symbol || strategy?.symbol || activeSymbol,
         timeframe: setup?.timeframe || strategy?.timeframe || "1D",
-        setup_id: setup?.id || null,
+        setup_id: setupId,
         setup_name: setup?.name || null,
         setup_type: setup?.setup_type || setup?.type || null,
         setup_symbol: setup?.symbol || null,
@@ -476,35 +488,35 @@ export default function MyPlanWorkflow({ symbol = "BTC" }) {
 
   const plans = useMemo(() => {
     const result = buildPlans(setups, strategies, bots);
-    const activeSetupId = normalizeId(marketBestSetup?.id || activeSetup?.id);
+    const activeSetupId = normalizeId(getSetupId(marketBestSetup) || getSetupId(activeSetup));
     return result.sort((a, b) => {
-      const aActive = Number(Boolean(a.bot?.is_active)) + Number(normalizeId(a.setup?.id) === activeSetupId);
-      const bActive = Number(Boolean(b.bot?.is_active)) + Number(normalizeId(b.setup?.id) === activeSetupId);
+      const aActive = Number(Boolean(a.bot?.is_active)) + Number(normalizeId(getSetupId(a.setup)) === activeSetupId);
+      const bActive = Number(Boolean(b.bot?.is_active)) + Number(normalizeId(getSetupId(b.setup)) === activeSetupId);
       if (aActive !== bActive) return bActive - aActive;
       if (a.complete !== b.complete) return Number(b.complete) - Number(a.complete);
       return getPlanName(a, copy).localeCompare(getPlanName(b, copy));
     });
-  }, [activeSetup?.id, bots, copy, marketBestSetup?.id, setups, strategies]);
+  }, [activeSetup, bots, copy, marketBestSetup, setups, strategies]);
 
   const marketBestPlan = useMemo(() => {
-    const setupId = normalizeId(marketBestSetup?.id);
+    const setupId = normalizeId(getSetupId(marketBestSetup));
     if (!setupId) return null;
 
-    return plans.find((plan) => plan.complete && normalizeId(plan.setup?.id) === setupId)
-      || plans.find((plan) => plan.hasStrategy && normalizeId(plan.setup?.id) === setupId)
-      || plans.find((plan) => normalizeId(plan.setup?.id) === setupId)
+    return plans.find((plan) => plan.complete && normalizeId(getSetupId(plan.setup)) === setupId)
+      || plans.find((plan) => plan.hasStrategy && normalizeId(getSetupId(plan.setup)) === setupId)
+      || plans.find((plan) => normalizeId(getSetupId(plan.setup)) === setupId)
       || null;
-  }, [marketBestSetup?.id, plans]);
+  }, [marketBestSetup, plans]);
 
   const activePlan = useMemo(() => {
-    const setupId = normalizeId(activeSetup?.id);
+    const setupId = normalizeId(getSetupId(activeSetup));
     return marketBestPlan
-      || plans.find((plan) => plan.bot?.is_active && normalizeId(plan.setup?.id) === setupId)
+      || plans.find((plan) => plan.bot?.is_active && normalizeId(getSetupId(plan.setup)) === setupId)
       || plans.find((plan) => plan.bot?.is_active)
-      || plans.find((plan) => normalizeId(plan.setup?.id) === setupId)
+      || plans.find((plan) => normalizeId(getSetupId(plan.setup)) === setupId)
       || plans[0]
       || null;
-  }, [activeSetup?.id, marketBestPlan, plans]);
+  }, [activeSetup, marketBestPlan, plans]);
 
   const closeDrawer = () => setDrawer(null);
 
@@ -513,8 +525,28 @@ export default function MyPlanWorkflow({ symbol = "BTC" }) {
   };
 
   const handleSetupSaved = async (savedSetup) => {
+    const setupId = getSetupId(savedSetup);
+    if (setupId) {
+      setActiveSetup({ ...savedSetup, setup_id: setupId });
+    }
     closeDrawer();
     await refreshPlanWorkspace();
+  };
+
+  const duplicateSetup = (setup) => {
+    if (!setup) return;
+    setDrawer({
+      type: "new-setup",
+      setup: {
+        ...setup,
+        // A duplicate is always a new setup. Prefill the established form but
+        // never copy its database identity or linked strategy.
+        id: undefined,
+        setup_id: undefined,
+        name: `${setup.name || copy.setupTerm} copy`,
+      },
+      strategy: null,
+    });
   };
 
   const handleStrategySubmit = async (payload) => {
@@ -529,7 +561,7 @@ export default function MyPlanWorkflow({ symbol = "BTC" }) {
 
   const handleDeletePlan = (plan) => {
     const linkedStrategyCount = strategies.filter(
-      (strategy) => normalizeId(strategy.setup_id ?? strategy.setup?.id) === normalizeId(plan.setup?.id)
+      (strategy) => normalizeId(strategy.setup_id ?? getSetupId(strategy.setup)) === normalizeId(getSetupId(plan.setup))
     ).length;
     const removesSetup = !plan.strategy || linkedStrategyCount <= 1;
     openConfirm({
@@ -542,7 +574,7 @@ export default function MyPlanWorkflow({ symbol = "BTC" }) {
       cancelText: copy.cancel,
       onConfirm: async () => {
         if (plan.strategy?.id) await removeStrategy(plan.strategy.id);
-        if (removesSetup && plan.setup?.id) await deleteSetup(plan.setup.id);
+        if (removesSetup && getSetupId(plan.setup)) await deleteSetup(getSetupId(plan.setup));
         invalidateStrategyDataCaches();
         await refreshPlanWorkspace();
         showSnackbar(copy.deletePlan, "success");
@@ -551,7 +583,7 @@ export default function MyPlanWorkflow({ symbol = "BTC" }) {
   };
 
   const strategySeed = drawer?.strategy || (drawer?.setup ? {
-    setup_id: drawer.setup.id,
+    setup_id: getSetupId(drawer.setup),
     symbol: drawer.setup.symbol,
     timeframe: drawer.setup.timeframe,
   } : null);
@@ -724,6 +756,7 @@ export default function MyPlanWorkflow({ symbol = "BTC" }) {
                 plan={plan}
                 copy={copy}
                 onEditSetup={() => setDrawer({ type: "edit-setup", setup: plan.setup, strategy: plan.strategy })}
+                onDuplicateSetup={() => duplicateSetup(plan.setup)}
                 onEditStrategy={() => openStrategyDrawer(plan.setup, plan.strategy, plan.strategy ? "edit-strategy" : "new-strategy")}
                 onAskFinn={() => askFinnForPlan(plan)}
                 onDelete={() => handleDeletePlan(plan)}
@@ -768,7 +801,7 @@ export default function MyPlanWorkflow({ symbol = "BTC" }) {
       >
         <StrategyForm
           ref={strategyFormRef}
-          key={`${drawer?.type || "closed"}-${drawer?.strategy?.id || drawer?.setup?.id || "new"}`}
+          key={`${drawer?.type || "closed"}-${drawer?.strategy?.id || getSetupId(drawer?.setup) || "new"}`}
           setups={setups}
           strategy={strategySeed}
           isEdit={drawer?.type === "edit-strategy"}
@@ -816,7 +849,7 @@ function PlanPart({
   );
 }
 
-function PlanRow({ plan, copy, onEditSetup, onEditStrategy, onAskFinn, onDelete }) {
+function PlanRow({ plan, copy, onEditSetup, onDuplicateSetup, onEditStrategy, onAskFinn, onDelete }) {
   return (
     <div className="group grid gap-4 px-5 py-4 transition hover:bg-slate-50/70 dark:hover:bg-slate-900/40 lg:grid-cols-[1.1fr_1fr_1fr_auto_auto] lg:items-center lg:px-6">
       <div className="min-w-0">
@@ -837,6 +870,11 @@ function PlanRow({ plan, copy, onEditSetup, onEditStrategy, onAskFinn, onDelete 
           <span className="block truncate text-xs font-black text-slate-800 dark:text-slate-200">{plan.setup?.name || copy.notReady}</span>
         </span>
         {plan.setup ? <Check size={14} className="ml-auto shrink-0 text-emerald-500" /> : <CircleDashed size={14} className="ml-auto shrink-0 text-amber-500" />}
+      </button>
+
+      <button type="button" onClick={onDuplicateSetup} className="inline-flex min-h-9 items-center justify-center gap-1.5 rounded-xl px-2.5 text-[11px] font-black text-slate-400 transition hover:bg-blue-50 hover:text-blue-700 dark:hover:bg-blue-950/30 dark:hover:text-blue-300" title={copy.duplicateSetup}>
+        <Copy size={14} />
+        <span className="lg:hidden xl:inline">{copy.duplicateSetup}</span>
       </button>
 
       <button type="button" onClick={onEditStrategy} className={`flex min-w-0 items-center gap-3 rounded-xl border px-3 py-2.5 text-left transition ${plan.complete ? "border-slate-100 hover:border-blue-200 hover:bg-blue-50 dark:border-slate-800 dark:hover:border-blue-900 dark:hover:bg-blue-950/20" : "border-dashed border-amber-200 bg-amber-50/60 hover:border-amber-300 dark:border-amber-900/60 dark:bg-amber-950/10"}`}>

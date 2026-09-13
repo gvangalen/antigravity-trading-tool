@@ -158,6 +158,27 @@ def test_tool_execution_dispatches_watchlist_adapter(monkeypatch):
     assert service.calls.rows[-1].status == "completed"
 
 
+def test_setup_reads_use_the_workspace_setup_reference_without_overriding_selector_intent():
+    run = SimpleNamespace(
+        workspace_hints_json={"setup_id": 326},
+        client_context_json={"setup_id": 999},
+    )
+
+    derived = FinnV2ToolExecutionService._with_workspace_setup_reference(
+        selector={}, tool_name="read_active_setup", run=run
+    )
+    explicit = FinnV2ToolExecutionService._with_workspace_setup_reference(
+        selector={"setup_id": 777}, tool_name="read_active_setup", run=run
+    )
+    unrelated = FinnV2ToolExecutionService._with_workspace_setup_reference(
+        selector={}, tool_name="read_watchlist", run=run
+    )
+
+    assert derived == {"setup_id": 326}
+    assert explicit == {"setup_id": 777}
+    assert unrelated == {}
+
+
 def test_tool_redaction_service_serializes_nested_objects():
     service = FinnV2ToolRedactionService()
 

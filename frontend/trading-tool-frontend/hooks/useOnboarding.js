@@ -10,6 +10,7 @@ import {
   finishOnboarding,
   resetOnboarding,
   cacheOnboardingStatus,
+  subscribeOnboardingStatus,
 } from "@/lib/api/onboarding";
 import { trackAssistantEvent } from "@/lib/api/assistantAnalytics";
 
@@ -50,6 +51,13 @@ export function useOnboarding() {
     fetchStatus();
   }, [fetchStatus]);
 
+  useEffect(() => {
+    return subscribeOnboardingStatus((nextStatus) => {
+      setStatus(nextStatus);
+      setLoading(false);
+    });
+  }, []);
+
   // =====================================================
   // 2️⃣ Acties
   // =====================================================
@@ -59,10 +67,13 @@ export function useOnboarding() {
       setError(null);
 
       await completeOnboardingStep(step);
-      cacheOnboardingStatus({
+      const optimisticStatus = {
         ...(status || {}),
         [`has_${step}`]: true,
-      });
+      };
+      // Update the banner before the authoritative status refresh completes.
+      setStatus(optimisticStatus);
+      cacheOnboardingStatus(optimisticStatus);
       trackAssistantEvent({
         event_name: "onboarding_step_completed",
         page: pathname || "/onboarding",

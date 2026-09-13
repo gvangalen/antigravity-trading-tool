@@ -182,6 +182,11 @@ class FinnV2ToolExecutionService:
         )
 
         selector = self.redaction.redact_selector(selector or {})
+        selector = self._with_workspace_setup_reference(
+            selector=selector,
+            tool_name=tool_name,
+            run=run_context,
+        )
         tool_call = None
         tool_call_id = None
         if self.flags.is_tool_call_logging_enabled():
@@ -563,6 +568,36 @@ class FinnV2ToolExecutionService:
         if tool_name == "read_review_history":
             return await self.review_adapter.execute(user_id=user_id, selector=selector)
         raise LookupError("tool_unknown")
+
+    @staticmethod
+    def _with_workspace_setup_reference(*, selector: Dict[str, Any], tool_name: str, run) -> Dict[str, Any]:
+        """Carry a selected setup through a read graph without overriding intent.
+
+        The browser sends the active setup as trusted, user-scoped workspace
+        context.  The structured selector intentionally remains responsible
+        for operation selection, but it need not repeat that opaque identifier
+        in every natural-language read.  Entity resolution still verifies
+        ownership before using the value.
+        """
+        if tool_name not in {"read_active_setup", "read_linked_strategy", "read_linked_bot", "read_bot_status"}:
+            return selector
+        if selector.get("setup_id") is not None:
+            return selector
+
+        for context in (
+            getattr(run, "workspace_hints_json", {}) or {},
+            getattr(run, "client_context_json", {}) or {},
+        ):
+            value = context.get("setup_id")
+            try:
+                setup_id = int(value)
+            except (TypeError, ValueError):
+                continue
+            if setup_id > 0:
+                enriched = dict(selector)
+                enriched["setup_id"] = setup_id
+                return enriched
+        return selector
 
     async def _ensure_asset(self, *, user_id: int, selector: Dict[str, Any], run, shared_state: Dict[str, Any]) -> Dict[str, Any]:
         if "asset" in shared_state:

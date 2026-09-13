@@ -10,6 +10,7 @@ class SetupToolAdapter:
             name=setup.get("name"),
             symbol=setup.get("symbol"),
             timeframe=setup.get("timeframe"),
+            setup_type=setup.get("setup_type"),
             score=float(setup.get("score") or 0) if setup.get("score") is not None else None,
         )
         return {

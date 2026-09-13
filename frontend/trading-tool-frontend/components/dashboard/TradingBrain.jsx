@@ -5,6 +5,7 @@ import CardWrapper from "@/components/ui/CardWrapper";
 import { useActiveSetup } from "@/app/providers/SetupProvider";
 import { useScoresData } from "@/hooks/useScoresData";
 import { useSetupStrategy } from "@/hooks/useSetupStrategy";
+import { getActiveSetupId } from "@/lib/setup/activeSetup";
 import Link from "next/link";
 import { 
   Rocket, 
@@ -28,7 +29,7 @@ export default function TradingBrain({ symbol = "BTC", scoresSnapshot = null }) 
   const { activeSetup, loading: setupLoading } = useActiveSetup();
   const fallbackSnapshot = useScoresData(symbol, { includeHistory: false });
   const { macro, technical, market, setup: dailySetup, master, loading: scoresLoading } = scoresSnapshot || fallbackSnapshot;
-  const { strategy, loading: strategyLoading } = useSetupStrategy(activeSetup?.id);
+  const { strategy, loading: strategyLoading } = useSetupStrategy(getActiveSetupId(activeSetup));
 
   const isLoading = setupLoading || scoresLoading || strategyLoading;
   

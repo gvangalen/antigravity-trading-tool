@@ -889,7 +889,7 @@
       "assetTitle": "Choose your first asset",
       "assetPlaceholder": "Search BTC, Apple or Microsoft",
       "assetSelectedNotice": "Asset {symbol} selected. Continue with your first indicators.",
-      "assetChangeLabel": "Select asset",
+      "assetChangeLabel": "Change asset",
       "assetEmptyLabel": "No matching asset found.",
       "assetMarketFallback": "Market",
       "assetClasses": {

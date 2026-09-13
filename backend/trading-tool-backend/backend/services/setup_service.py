@@ -42,6 +42,17 @@ def sync_generate_setup_explanation(setup_id: int, user_id: int) -> str:
     return generate_setup_explanation(setup_id, user_id)
 
 class SetupService:
+    # These are product defaults for a setup created without explicit score
+    # ranges (for example the compact onboarding form).  The backend owns
+    # them so different frontend surfaces cannot silently diverge.
+    SETUP_SCORE_DEFAULTS = {
+        "min_macro_score": 30,
+        "max_macro_score": 70,
+        "min_technical_score": 40,
+        "max_technical_score": 80,
+        "min_market_score": 20,
+        "max_market_score": 60,
+    }
     # The domain service, not FINN, owns which persisted setup fields can be
     # changed. V2 adapters pass a typed proposal through this same boundary.
     UPDATE_ALLOWED_FIELDS = frozenset({
@@ -122,6 +133,9 @@ class SetupService:
 
         return {
             "id": item.get("id"),
+            # `setup_id` is the public cross-surface identifier. Keep `id`
+            # during the compatibility period for list and detail consumers.
+            "setup_id": item.get("id"),
             "name": item.get("name"),
             "symbol": item.get("symbol"),
             "timeframe": item.get("timeframe"),
@@ -270,6 +284,11 @@ class SetupService:
                 raise HTTPException(400, "min_investment mag niet negatief zijn.")
 
     async def save_setup(self, payload: SetupCreateSchema, raw_payload: dict, user_id: int) -> dict:
+        defaulted_score_fields = []
+        for field, value in self.SETUP_SCORE_DEFAULTS.items():
+            if raw_payload.get(field) is None:
+                raw_payload[field] = value
+                defaulted_score_fields.append(field)
         if not raw_payload.get("timeframe"):
             raw_payload["timeframe"] = self._default_timeframe_for_setup_type(raw_payload.get("setup_type"))
 
@@ -299,7 +318,15 @@ class SetupService:
         await self._mark_setup_step_completed_best_effort(user_id)
 
         created = await self.repository.get_setup_by_id(setup_id, user_id)
-        return {"status": "success", "setup_id": setup_id, "setup": self._format_setup(created)}
+        return {
+            "status": "success",
+            "setup_id": setup_id,
+            "setup": self._format_setup(created),
+            "field_sources": {
+                field: "default" if field in defaulted_score_fields else "supplied"
+                for field in self.SETUP_SCORE_DEFAULTS
+            },
+        }
 
     async def get_last_setup(self, user_id: int, setup_id: Optional[int] = None) -> dict:
         if setup_id:

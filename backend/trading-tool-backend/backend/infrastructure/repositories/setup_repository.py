@@ -13,13 +13,18 @@ class SetupRepository:
     async def check_name_exists(self, name: str, user_id: int) -> bool:
         query = text("""
             SELECT id FROM setups
-            WHERE name = :name AND user_id = :user_id
+            WHERE LOWER(BTRIM(name)) = LOWER(BTRIM(:name))
+              AND user_id = :user_id
         """)
         result = await self.session.execute(query, {"name": name, "user_id": user_id})
         return result.fetchone() is not None
 
     async def simple_check_name(self, name: str, user_id: int) -> bool:
-        query = text("SELECT COUNT(*) FROM setups WHERE name=:name AND user_id=:user_id")
+        query = text("""
+            SELECT COUNT(*) FROM setups
+            WHERE LOWER(BTRIM(name)) = LOWER(BTRIM(:name))
+              AND user_id = :user_id
+        """)
         result = await self.session.execute(query, {"name": name, "user_id": user_id})
         count = result.scalar() or 0
         return count > 0

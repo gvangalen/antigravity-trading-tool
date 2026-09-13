@@ -5,10 +5,21 @@ import { loadUserLocal } from "@/lib/api/user";
 
 const ONBOARDING_STATUS_CACHE_KEY = "tt_onboarding_status_cache_v2";
 const ONBOARDING_STATUS_CACHE_TTL_MS = 5 * 60 * 1000;
+const ONBOARDING_STATUS_UPDATED_EVENT = "tradamind:onboarding-status-updated";
 
 function getOnboardingStatusCacheKey() {
   const userId = loadUserLocal()?.id;
   return userId ? `${ONBOARDING_STATUS_CACHE_KEY}:${userId}` : ONBOARDING_STATUS_CACHE_KEY;
+}
+
+function publishOnboardingStatus(status) {
+  if (typeof window === "undefined") return;
+
+  window.dispatchEvent(
+    new CustomEvent(ONBOARDING_STATUS_UPDATED_EVENT, {
+      detail: { key: getOnboardingStatusCacheKey(), status },
+    })
+  );
 }
 
 function readOnboardingStatusCache(maxAgeMs = ONBOARDING_STATUS_CACHE_TTL_MS) {
@@ -38,9 +49,24 @@ export function cacheOnboardingStatus(status) {
         savedAt: Date.now(),
       })
     );
+    publishOnboardingStatus(status);
   } catch {
     // Silent cache failure
   }
+}
+
+/** Keep independently mounted onboarding surfaces in sync for this user. */
+export function subscribeOnboardingStatus(listener) {
+  if (typeof window === "undefined") return () => {};
+
+  const handleStatusUpdated = (event) => {
+    if (event?.detail?.key === getOnboardingStatusCacheKey()) {
+      listener(event.detail.status);
+    }
+  };
+
+  window.addEventListener(ONBOARDING_STATUS_UPDATED_EVENT, handleStatusUpdated);
+  return () => window.removeEventListener(ONBOARDING_STATUS_UPDATED_EVENT, handleStatusUpdated);
 }
 
 export function clearOnboardingStatusCache() {

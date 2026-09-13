@@ -47,6 +47,26 @@ def test_response_downgrade_to_fact_preserves_reasoning_level_evidence_refs_as_r
     assert result.evidence_refs_used == ["E1", "E2", "E3"]
 
 
+def test_unavailable_downgrade_keeps_internal_verifier_codes_out_of_user_copy():
+    draft = ResponseDraft(
+        draft_id="draft-4",
+        run_id="run-4",
+        user_id=7,
+        mode="READ",
+        direct_answer="Oorspronkelijk antwoord",
+        main_observation="Oorspronkelijke observatie",
+        evidence_set_hash="hash-4",
+        created_at=datetime.now(timezone.utc),
+    )
+
+    result = FinnV2ResponseDowngradeService().downgrade_to_unavailable(
+        draft=draft, reason="response_not_answering_question"
+    )
+
+    rendered = " ".join([result.direct_answer, result.main_observation, result.uncertainty_summary or ""])
+    assert "response_not_answering_question" not in rendered
+
+
 def test_evaluate_claim_downgrade_never_changes_the_request_to_read():
     verifier = FinnV2ResponseVerifierService(session=object())
 

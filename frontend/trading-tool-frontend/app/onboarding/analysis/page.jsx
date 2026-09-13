@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { CheckCircle2, Search, Sparkles } from "lucide-react";
 
@@ -297,7 +297,7 @@ export default function OnboardingAnalysisPage() {
   const searchParams = useSearchParams();
   const { t } = useTranslation();
   const { status, completeStep } = useOnboarding();
-  const { setSelectedAsset, addAsset } = useAsset();
+  const { selectedAsset, setSelectedAsset, addAsset } = useAsset();
   const { add, isInWatchlist } = useWatchlist();
 
   const copy = t?.traderProfile?.analysisOnboardingStep || {};
@@ -326,6 +326,7 @@ export default function OnboardingAnalysisPage() {
   const [selectedMarket, setSelectedMarket] = useState(null);
   const [selectedMacro, setSelectedMacro] = useState(null);
   const [selectedTechnical, setSelectedTechnical] = useState(null);
+  const hydratedAssetSymbolRef = useRef(null);
 
   const symbol = selectedAssetChoice?.symbol || "";
   const assetDone = Boolean(selectedAssetChoice);
@@ -352,6 +353,27 @@ export default function OnboardingAnalysisPage() {
     setSavingKey(null);
     setError(null);
   }, [pathname]);
+
+  useEffect(() => {
+    const normalizedAsset = String(selectedAsset || "").trim().toUpperCase();
+    if (
+      !status?.has_asset ||
+      !normalizedAsset ||
+      selectedAssetChoice ||
+      hydratedAssetSymbolRef.current === normalizedAsset
+    ) {
+      return;
+    }
+
+    // A refresh or a new login must resume the persisted onboarding asset.
+    // Keep this one-time hydration separate from the user's explicit change flow.
+    hydratedAssetSymbolRef.current = normalizedAsset;
+    setSelectedAssetChoice({
+      symbol: normalizedAsset,
+      display_name: normalizedAsset,
+      asset_class: null,
+    });
+  }, [selectedAsset, selectedAssetChoice, status?.has_asset]);
 
   useEffect(() => {
     let cancelled = false;
@@ -508,6 +530,7 @@ export default function OnboardingAnalysisPage() {
       setSubmittingAsset(true);
       setError(null);
       await persistSelectedAsset(asset);
+      hydratedAssetSymbolRef.current = asset?.symbol || null;
       setSelectedAssetChoice(asset);
       setAssetQuery(asset?.symbol || "");
       setSearchOpen(false);
@@ -668,6 +691,9 @@ export default function OnboardingAnalysisPage() {
           <SelectedAssetCard
             asset={selectedAssetChoice}
             onReset={() => {
+              // Do not re-hydrate the previous persisted asset while the user
+              // is actively choosing a replacement.
+              hydratedAssetSymbolRef.current = selectedAssetChoice?.symbol || null;
               setSelectedAssetChoice(null);
               setAssetQuery("");
               setSearchOpen(false);

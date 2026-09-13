@@ -890,7 +890,7 @@
       "assetTitle": "Kies je eerste asset",
       "assetPlaceholder": "Zoek BTC, Apple of Microsoft",
       "assetSelectedNotice": "Asset {symbol} geselecteerd. Ga nu verder met je eerste indicatoren.",
-      "assetChangeLabel": "Selecteer asset",
+      "assetChangeLabel": "Wijzig asset",
       "assetEmptyLabel": "Geen passend asset gevonden.",
       "assetMarketFallback": "Markt",
       "assetClasses": {

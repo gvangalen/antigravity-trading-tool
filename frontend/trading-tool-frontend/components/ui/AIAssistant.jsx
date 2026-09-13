@@ -32,6 +32,7 @@ import { useTranslation } from "@/app/providers/I18nProvider";
 import FinnCommandCenter from "@/components/finn/FinnCommandCenter";
 import { FINN_ASSETS } from "@/lib/finnCommandSearch";
 import { getWorkspaceSnapshot, subscribeWorkspaceSnapshot } from "@/lib/workspaceSnapshotStore";
+import { getActiveSetupId } from "@/lib/setup/activeSetup";
 
 const INDICATOR_MODAL_OPEN_EVENT = "finn-indicator-config:open";
 const INDICATOR_MODAL_COMPLETED_EVENT = "finn-indicator-config:completed";
@@ -997,7 +998,7 @@ function AIAssistantContent({
         (pathname.includes("dashboard") || pathname === "/"
           ? t?.common?.week || "Week"
           : t?.common?.day || "Day"),
-      setup_id: activeSetup?.id || activeSetup?.setup_id || null,
+      setup_id: getActiveSetupId(activeSetup),
       setup_type: activeSetup?.setup_type || activeSetup?.type || null,
       setup_symbol: activeSetup?.symbol || null,
       setup_timeframe: activeSetup?.timeframe || null,

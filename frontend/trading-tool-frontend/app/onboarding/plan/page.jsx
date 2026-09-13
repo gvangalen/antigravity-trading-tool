@@ -9,6 +9,11 @@ import OnboardingBanner from "@/components/onboarding/OnboardingBanner";
 import { useOnboarding } from "@/hooks/useOnboarding";
 import { fetchActiveSetup, fetchLastSetup, saveNewSetup } from "@/lib/api/setups";
 import { createStrategy, fetchLastStrategy, fetchStrategyBySetup } from "@/lib/api/strategy";
+import {
+  getActiveSetupId,
+  getSetupId,
+  normalizeSetupSaveResponse,
+} from "@/lib/setup/activeSetup";
 
 const DEFAULT_SETUP = {
   name: "",
@@ -141,6 +146,9 @@ export default function OnboardingPlanPage() {
               : null;
 
         if (setupCandidate) {
+          const setupId = activeSetup === setupCandidate
+            ? getActiveSetupId(setupCandidate)
+            : getSetupId(setupCandidate);
           setSavedSetup(setupCandidate);
           setSetup({
             name: setupCandidate.name || `${symbol} Setup`,
@@ -148,7 +156,9 @@ export default function OnboardingPlanPage() {
             timeframe: setupCandidate.timeframe || "4H",
           });
 
-          const bySetup = await fetchStrategyBySetup(setupCandidate.id).catch(() => null);
+          const bySetup = setupId
+            ? await fetchStrategyBySetup(setupId).catch(() => null)
+            : null;
           if (!cancelled && bySetup) {
             setSavedStrategy(bySetup);
             setStrategy({
@@ -163,7 +173,7 @@ export default function OnboardingPlanPage() {
                 : "",
               stopLoss: bySetup.stop_loss != null ? String(bySetup.stop_loss) : "",
             });
-          } else if (!cancelled && lastStrategy?.strategy?.setup_id === setupCandidate.id) {
+          } else if (!cancelled && lastStrategy?.strategy?.setup_id === setupId) {
             setSavedStrategy(lastStrategy.strategy);
           }
         }
@@ -212,15 +222,12 @@ export default function OnboardingPlanPage() {
         symbol,
         setup_type: setup.setupType,
         timeframe: setup.timeframe,
-        min_macro_score: 30,
-        max_macro_score: 70,
-        min_technical_score: 40,
-        max_technical_score: 80,
-        min_market_score: 20,
-        max_market_score: 60,
       });
 
-      const nextSetup = response?.setup ?? response ?? null;
+      const nextSetup = normalizeSetupSaveResponse(response);
+      if (!nextSetup) {
+        throw new Error("setup-save-response-missing-id");
+      }
       setSavedSetup(nextSetup);
 
       if (!status?.has_setup) {
@@ -255,7 +262,7 @@ export default function OnboardingPlanPage() {
 
       const payload = {
         name: strategy.name.trim(),
-        setup_id: Number(savedSetup.id),
+        setup_id: getSetupId(savedSetup),
         base_amount: Number(strategy.baseAmount),
         execution_mode: strategy.executionMode,
         setup_type: setup.setupType,

@@ -480,6 +480,51 @@ class FinnV2ReasoningFallbackService:
                 created_at=datetime.now(timezone.utc),
             )
 
+        if operation_id == "read_active_setup" and setup is not None:
+            setup_id = setup.facts.get("setup_id")
+            setup_name = setup.facts.get("name") or f"setup {setup_id}"
+            setup_type = setup.facts.get("setup_type") or "onbekend"
+            timeframe = setup.facts.get("timeframe") or "onbekend"
+            _add_claim(
+                "active-setup",
+                f"Je actieve {asset}-setup {setup_name} is van het type {setup_type} op timeframe {timeframe}.",
+                [setup.evidence_id],
+            )
+            asks_strategy_fields = any(
+                term in lowered for term in ("entry", "stop-loss", "stop loss", "targets", "risico")
+            )
+            if asks_strategy_fields and strategy is None:
+                direct_answer = (
+                    f"Je actieve {asset}-setup {setup_name} is een {setup_type}-setup op {timeframe}. "
+                    "Entry, stop-loss, targets en risico horen bij de gekoppelde strategie; "
+                    "voor deze setup is nog geen strategie opgeslagen."
+                )
+                observation = "De setup is opgeslagen, maar er is nog geen gekoppelde strategie om deze velden uit te lezen."
+            else:
+                direct_answer = (
+                    f"Je actieve {asset}-setup {setup_name} is van het type {setup_type} "
+                    f"en gebruikt timeframe {timeframe}."
+                )
+                observation = "Deze setupgegevens komen rechtstreeks uit je user-scoped opgeslagen setup."
+            return ReasoningResult(
+                reasoning_result_id=f"finn-v2-reasoning-{uuid.uuid4().hex}",
+                run_id=run_id,
+                user_id=user_id,
+                mode="READ",
+                direct_answer=direct_answer,
+                main_observation=observation,
+                supporting_points=[],
+                claims=claims,
+                uncertainty_summary="Er is geen providercall uitgevoerd voor deze opgeslagen setupcontext.",
+                uncertainty_codes=list(error_codes),
+                next_step=None,
+                follow_up_question=None,
+                proposal_candidate=None,
+                evidence_refs_used=refs,
+                model=model,
+                created_at=datetime.now(timezone.utc),
+            )
+
         if operation_id in {"read_linked_bot", "read_active_plan"} and all(
             item is not None for item in (setup, strategy, bot, bot_status)
         ):
@@ -610,11 +655,25 @@ class FinnV2ReasoningFallbackService:
                 f"De gekoppelde bot draait als {'live bot' if is_live else 'paper bot'} "
                 f"en heeft strategy_id {(bot.facts.get('strategy_id') if bot else None)}."
             )
-        elif "actieve setup" in lowered or ("setup" in lowered and "timeframe" in lowered):
-            setup_id = setup.facts.get("setup_id") if setup else None
+        elif any(term in lowered for term in ("entry", "stop-loss", "stop loss", "targets", "risico")) and strategy is None:
+            setup_name = setup.facts.get("name") if setup else None
+            setup_type = setup.facts.get("setup_type") if setup else None
             timeframe = setup.facts.get("timeframe") if setup else None
             direct_answer = (
-                f"Je actieve {asset}-setup is setup {setup_id} en gebruikt timeframe {timeframe}."
+                f"Je actieve setup {setup_name or 'heeft nog geen naam'} is een {setup_type or 'onbekend'}-setup "
+                f"op {timeframe or 'onbekend'}.")
+            main_observation = (
+                "Entry, stop-loss, targets en risico horen bij de gekoppelde strategie; "
+                "voor deze setup is nog geen strategie opgeslagen."
+            )
+        elif "actieve setup" in lowered or ("setup" in lowered and "timeframe" in lowered) or ("setup" in lowered and ("naam" in lowered or "type" in lowered or "samenvat" in lowered)):
+            setup_id = setup.facts.get("setup_id") if setup else None
+            timeframe = setup.facts.get("timeframe") if setup else None
+            setup_name = setup.facts.get("name") if setup else None
+            setup_type = setup.facts.get("setup_type") if setup else None
+            direct_answer = (
+                f"Je actieve {asset}-setup {setup_name or f'setup {setup_id}'} is van het type "
+                f"{setup_type or 'onbekend'} en gebruikt timeframe {timeframe}."
                 if setup_id is not None
                 else f"Ik zie nog geen actieve {asset}-setup in de opgeslagen plancontext."
             )

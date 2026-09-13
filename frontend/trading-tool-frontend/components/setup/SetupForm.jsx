@@ -17,6 +17,7 @@ import { saveNewSetup, updateSetup } from "@/lib/api/setups";
 import { useModal } from "@/components/modal/ModalProvider";
 import { useTranslation } from "@/app/providers/I18nProvider";
 import { useAsset } from "@/app/providers/AssetProvider";
+import { normalizeSetupSaveResponse } from "@/lib/setup/activeSetup";
 
 const SetupForm = forwardRef(function SetupForm({ onSaved, mode = "new", initialData = null }, ref) {
   const isEdit = mode === "edit";
@@ -182,8 +183,9 @@ const SetupForm = forwardRef(function SetupForm({ onSaved, mode = "new", initial
         setMarketScore([20, 60]);
       }
 
-      onSaved?.(savedSetup?.setup ?? savedSetup ?? null);
-      return { ok: true, data: savedSetup?.setup ?? savedSetup ?? null };
+      const normalizedSetup = normalizeSetupSaveResponse(savedSetup);
+      onSaved?.(normalizedSetup);
+      return { ok: true, data: normalizedSetup };
     } catch (err) {
       console.error(err);
       setSubmitError(copy.saveFailed);

@@ -60,6 +60,32 @@ def test_assess_is_a_general_evaluation_verb():
     assert CLASSIFIER.preprocessor.preprocess(message="Assess whether my configured indicators are coherent.").action_polarity == "evaluate"
 
 
+@pytest.mark.parametrize("message", [
+    "Wat zijn entry, stop-loss en targets?",
+    "What is the entry and risk for this setup?",
+    "Welche Einstiegs-, Stop-Loss- und Zielwerte gelten?",
+])
+def test_workspace_setup_without_strategy_uses_the_existing_setup_read_contract(message):
+    selection = CLASSIFIER.classify(
+        message=message,
+        workspace_hints={"setup_id": 326},
+        client_context={"setup_id": 326},
+    )
+
+    assert selection.operation_id == "read_active_setup"
+    assert selection.selector_source == "workspace_setup_contract"
+
+
+def test_workspace_setup_read_source_survives_contract_validation():
+    selection = CLASSIFIER.classify(
+        message="Wat zijn entry, stop-loss en targets?",
+        workspace_hints={"setup_id": 326},
+        client_context={"setup_id": 326},
+    )
+
+    assert FinnV2OperationClassificationValidator().validation_error(selection) is None
+
+
 def test_declassified_action_contract_acceptance_handoff_is_complete_and_immutable():
     """Keep every Build-authorized regression record available to public tests."""
     fixture = Path(__file__).parent / "fixtures" / "finn_v2_declassified_34746230528_regression.json"
