@@ -91,6 +91,7 @@ def main() -> None:
     parser.add_argument("--contract-evidence", type=Path)
     parser.add_argument("--missing-contract-evidence", type=Path)
     parser.add_argument("--write-language-evidence", type=Path)
+    parser.add_argument("--system-contract-evidence", type=Path)
     args = parser.parse_args()
     write_matrix = load_artifact(args.write_matrix)
     runtime_matrix = load_artifact(args.runtime_matrix)
@@ -98,6 +99,7 @@ def main() -> None:
     contract_evidence = load_artifact(args.contract_evidence)
     missing_contract_evidence = load_artifact(args.missing_contract_evidence)
     write_language_evidence = load_artifact(args.write_language_evidence)
+    system_contract_evidence = load_artifact(args.system_contract_evidence)
     measured = {
         item.get("expected_operation_id"): item
         for item in (
@@ -122,6 +124,9 @@ def main() -> None:
         if item.get("operation_id"):
             measured[item["operation_id"]] = item
     for item in missing_contract_evidence.get("cards") or []:
+        if item.get("operation_id"):
+            measured[item["operation_id"]] = item
+    for item in system_contract_evidence.get("cards") or []:
         if item.get("operation_id"):
             measured[item["operation_id"]] = item
     language_cards = {
@@ -208,6 +213,7 @@ def main() -> None:
             "contract_evidence": str(args.contract_evidence) if args.contract_evidence else None,
             "missing_contract_evidence": str(args.missing_contract_evidence) if args.missing_contract_evidence else None,
             "write_language_evidence": str(args.write_language_evidence) if args.write_language_evidence else None,
+            "system_contract_evidence": str(args.system_contract_evidence) if args.system_contract_evidence else None,
         },
     }
     args.output.parent.mkdir(parents=True, exist_ok=True)

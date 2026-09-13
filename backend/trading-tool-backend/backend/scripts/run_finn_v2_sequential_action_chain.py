@@ -304,6 +304,15 @@ def main() -> None:
     user_id = int(primary["id"])
     token = create_access_token({"sub": str(user_id), "role": "user"})
     other_token = create_access_token({"sub": str(other["id"]), "role": "user"})
+    # Pronouns such as "that setup" are a conversation continuation, not an
+    # invitation to select an arbitrary historical object owned by this user.
+    # Resume derives this value from the persisted public run result so no
+    # in-memory action-result or internal ID crosses a process boundary.
+    conversation_id = (
+        str(steps[-1].get("conversation_id") or "") or None
+        if steps
+        else None
+    )
     for step_id, message, operation_id in selected_specs:
         boundary = {
             "public_run_route": True,
@@ -321,6 +330,7 @@ def main() -> None:
         result = _run_action(
             base_url=base_url, token=token, other_token=other_token,
             message=message, operation_id=operation_id,
+            conversation_id=conversation_id,
             persistence_boundary=boundary,
         )
         result["step_id"] = step_id
@@ -329,6 +339,7 @@ def main() -> None:
         result["objects_after_step"] = _created_objects(user_id, names)
         result["identity_assertion"] = _assert_resolved_identity(step_id, result, steps)
         steps.append(result)
+        conversation_id = str(result.get("conversation_id") or "") or conversation_id
         _write_artifact_atomic(output, {
             "artifact_version": "finn_v2.sequential_action_chain.v3",
             "incomplete": True,

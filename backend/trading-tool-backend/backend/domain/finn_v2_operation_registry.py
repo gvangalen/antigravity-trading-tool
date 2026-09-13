@@ -577,6 +577,17 @@ _OPERATION_SELECTION_METADATA: Mapping[str, dict] = {
         "selection_focus_entities": ("indicator_configuration",),
     },
     "evaluate_setup": {
+        "semantic_description": "Assess the user's active or named setup for quality, risk, suitability, weaknesses, or missing conditions. A request to show, identify, or list the setup without judgment remains read_active_setup.",
+        "positive_examples": (
+            "Beoordeel mijn actieve setup.",
+            "Evaluate my active setup.",
+            "Bewerte mein aktives Setup.",
+        ),
+        "negative_examples": (
+            "Toon mijn actieve setup.",
+            "Show my active setup.",
+            "Zeige mein aktives Setup.",
+        ),
         "any_entities": ("setup",),
         "required_discourse_acts": ("evaluation",),
         "selection_priority": 40,

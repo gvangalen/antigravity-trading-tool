@@ -28,6 +28,14 @@ from backend.utils.auth_utils import create_access_token
 # registry at runtime.
 PROBES: dict[str, tuple[str, str, str]] = {
     "capability": ("Wat kan FINN doen?", "What can FINN do?", "Was kann FINN tun?"),
+    # ``unavailable`` is a system fallback rather than a user-selectable
+    # intent.  Its public lifecycle is run only with the local, fail-closed
+    # selector fault injection enabled.
+    "unavailable": (
+        "Leg RSI uit.",
+        "Explain RSI.",
+        "Erklaere RSI.",
+    ),
     "clarify_request": ("Doe hetzelfde ermee.", "Do the same with it.", "Mach dasselbe damit."),
     "explain_financial_concept": ("Leg RSI uit.", "Explain RSI.", "Erklaere RSI."),
     "unsupported_financial_operation": (
@@ -161,6 +169,11 @@ def main() -> None:
         raise ValueError(f"unknown_read_certification_operations:{','.join(unknown)}")
     cards = []
     for operation_id in requested:
+        if operation_id == "unavailable" and not (
+            os.getenv("APP_ENV") == "local_finn"
+            and os.getenv("FINN_V2_TEST_FORCE_SELECTOR_UNAVAILABLE") == "1"
+        ):
+            raise ValueError("unavailable_contract_certification_requires_local_forced_provider_failure")
         messages = PROBES[operation_id]
         probes = []
         for message in messages:

@@ -1,0 +1,5047 @@
+{
+  "artifact_type": "declassified_failure_handoff",
+  "declassification_limit": {
+    "authorized_case_count": 39,
+    "authorized_case_ids": [
+      "ac01",
+      "ac02",
+      "ac05",
+      "ac06",
+      "ac07",
+      "ac09",
+      "ac11",
+      "ac12",
+      "ac14",
+      "ac15",
+      "ac16",
+      "ac17",
+      "ac18",
+      "ac20",
+      "ac21",
+      "ac22",
+      "ac24",
+      "ac25",
+      "ac26",
+      "ac27",
+      "ac28",
+      "ac29",
+      "ac30",
+      "ac31",
+      "ac32",
+      "ac33",
+      "ac34",
+      "ac35",
+      "ac36",
+      "ac37",
+      "ac39",
+      "ac40",
+      "ac42",
+      "ac43",
+      "ac44",
+      "ac45",
+      "ac46",
+      "ac47",
+      "ac48"
+    ],
+    "exact_prompts_declassified": true,
+    "expectations_declassified": true,
+    "languages_declassified": true,
+    "other_manifest_cases_disclosed": false,
+    "sealed_manifest_modified": false
+  },
+  "failures": [
+    {
+      "action_contract_id": "capability",
+      "actual": {
+        "missing_inputs": [],
+        "required_inputs": [],
+        "supplied_inputs": {},
+        "target": {}
+      },
+      "case_id": "ac01",
+      "classification": "PRODUCT",
+      "conversation_and_lineage": {
+        "declassified_conversation_sequence": [
+          "ac01"
+        ],
+        "dependency_note": "Conversation dependency only where listed; no manifest lineage dependency flag.",
+        "depends_on_earlier_failed_case": false,
+        "earlier_failed_cases": [],
+        "expected_previous_cases": [],
+        "lineage_dependency_expected": false,
+        "reference_is_from_this_artifact": false
+      },
+      "declassified_user_question": "Waarmee kun je mij binnen mijn handelsplan concreet helpen?",
+      "expectation_checks": {
+        "action_polarity": false,
+        "canonical_target": true,
+        "dispatch_cardinality": true,
+        "missing_inputs": true,
+        "operation": false,
+        "required_inputs": true,
+        "runtime_contract_persisted": true,
+        "supplied_inputs": true,
+        "target_source": true,
+        "target_type": true,
+        "terminal_status": false
+      },
+      "expected": {
+        "action_polarity": "read",
+        "lifecycle_and_effects": {
+          "broker_orders_expected": 0,
+          "confirmation_expected": false,
+          "database_effect_expected": "no_write",
+          "idempotency_replay_expected": false,
+          "live_bot_activation_expected": false,
+          "live_trading_expected": false,
+          "no_duplicate_database_effect": false,
+          "no_write_before_confirmation": false,
+          "proposal_expected": false,
+          "safe_fixture_execution_expected": false,
+          "terminal_statuses": [
+            "completed",
+            "downgraded"
+          ]
+        },
+        "missing_inputs": [],
+        "operation": "capability",
+        "required_inputs": [],
+        "supplied_inputs": [],
+        "target": {
+          "canonical": "__none_expected__",
+          "type": "__none_expected__",
+          "source": "__none_expected__"
+        }
+      },
+      "failure_phase": "selector",
+      "language": "nl",
+      "result": "FAIL",
+      "run_id": "finn-v2-run-ff90b5161d7e4e5384224161edf83c62",
+      "terminal": {
+        "error_code": "selector_phase_timeout",
+        "reason": "selector_phase_timeout",
+        "status": "unavailable",
+        "typed_error": "selector_phase_timeout"
+      },
+      "timings": {
+        "create_latency_ms": 4771.28,
+        "runtime_timings_ms": {
+          "terminal_persist": 16385,
+          "total": 52272,
+          "until_collecting": 167,
+          "until_dispatch_claimed": 31840,
+          "until_dispatch_published": 3751,
+          "until_planned": 32,
+          "until_queued": 94
+        }
+      }
+    },
+    {
+      "action_contract_id": "explain_financial_concept",
+      "actual": {
+        "action_polarity": "read",
+        "missing_inputs": [
+          "concept"
+        ],
+        "operation": "explain_financial_concept",
+        "required_inputs": [
+          "concept"
+        ],
+        "supplied_inputs": {},
+        "target": {}
+      },
+      "case_id": "ac02",
+      "classification": "PRODUCT",
+      "conversation_and_lineage": {
+        "declassified_conversation_sequence": [
+          "ac02"
+        ],
+        "dependency_note": "Conversation dependency only where listed; no manifest lineage dependency flag.",
+        "depends_on_earlier_failed_case": false,
+        "earlier_failed_cases": [],
+        "expected_previous_cases": [],
+        "lineage_dependency_expected": false,
+        "reference_is_from_this_artifact": false
+      },
+      "declassified_user_question": "Explain dollar-cost averaging in plain language.",
+      "expectation_checks": {
+        "action_polarity": true,
+        "canonical_target": true,
+        "dispatch_cardinality": true,
+        "missing_inputs": false,
+        "operation": true,
+        "required_inputs": true,
+        "runtime_contract_persisted": true,
+        "supplied_inputs": false,
+        "target_source": true,
+        "target_type": true,
+        "terminal_status": true
+      },
+      "expected": {
+        "action_polarity": "read",
+        "lifecycle_and_effects": {
+          "broker_orders_expected": 0,
+          "confirmation_expected": false,
+          "database_effect_expected": "no_write",
+          "idempotency_replay_expected": false,
+          "live_bot_activation_expected": false,
+          "live_trading_expected": false,
+          "no_duplicate_database_effect": false,
+          "no_write_before_confirmation": false,
+          "proposal_expected": false,
+          "safe_fixture_execution_expected": false,
+          "terminal_statuses": [
+            "completed",
+            "downgraded"
+          ]
+        },
+        "missing_inputs": [],
+        "operation": "explain_financial_concept",
+        "required_inputs": [
+          "concept"
+        ],
+        "supplied_inputs": [
+          "concept"
+        ],
+        "target": {
+          "canonical": "__none_expected__",
+          "type": "__none_expected__",
+          "source": "__none_expected__"
+        }
+      },
+      "failure_phase": "input_contract_or_guided_state",
+      "language": "en",
+      "result": "FAIL",
+      "run_id": "finn-v2-run-a21d771ab6c643bca8c89e82f931b9d0",
+      "terminal": {
+        "status": "completed",
+        "typed_error": "contract_evidence_mismatch:missing_inputs,supplied_inputs"
+      },
+      "timings": {
+        "create_latency_ms": 579.09,
+        "runtime_timings_ms": {
+          "terminal_persist": 1311,
+          "total": 10305,
+          "until_collecting": 290,
+          "until_context_loaded": 494,
+          "until_dispatch_claimed": 4900,
+          "until_dispatch_published": 306,
+          "until_planned": 196,
+          "until_queued": 200,
+          "until_selection_persisted": 86,
+          "until_selector_completed": 2503,
+          "until_selector_started": 14
+        }
+      }
+    },
+    {
+      "action_contract_id": "clarify_request",
+      "actual": {
+        "action_polarity": "read",
+        "missing_inputs": [],
+        "operation": "read_active_setup",
+        "required_inputs": [],
+        "supplied_inputs": {},
+        "target": {}
+      },
+      "case_id": "ac05",
+      "classification": "PRODUCT",
+      "conversation_and_lineage": {
+        "declassified_conversation_sequence": [
+          "ac05"
+        ],
+        "dependency_note": "Conversation dependency only where listed; no manifest lineage dependency flag.",
+        "depends_on_earlier_failed_case": false,
+        "earlier_failed_cases": [],
+        "expected_previous_cases": [],
+        "lineage_dependency_expected": false,
+        "reference_is_from_this_artifact": false
+      },
+      "declassified_user_question": "Change that for me. Without any other context.",
+      "expectation_checks": {
+        "action_polarity": false,
+        "canonical_target": true,
+        "dispatch_cardinality": true,
+        "missing_inputs": false,
+        "operation": false,
+        "required_inputs": false,
+        "runtime_contract_persisted": true,
+        "supplied_inputs": true,
+        "target_source": true,
+        "target_type": true,
+        "terminal_status": true
+      },
+      "expected": {
+        "action_polarity": "clarify",
+        "lifecycle_and_effects": {
+          "broker_orders_expected": 0,
+          "confirmation_expected": false,
+          "database_effect_expected": "no_write",
+          "idempotency_replay_expected": false,
+          "live_bot_activation_expected": false,
+          "live_trading_expected": false,
+          "no_duplicate_database_effect": false,
+          "no_write_before_confirmation": false,
+          "proposal_expected": false,
+          "safe_fixture_execution_expected": false,
+          "terminal_statuses": [
+            "completed",
+            "downgraded"
+          ]
+        },
+        "missing_inputs": [
+          "requested_change"
+        ],
+        "operation": "clarify_request",
+        "required_inputs": [
+          "requested_change"
+        ],
+        "supplied_inputs": [],
+        "target": {
+          "canonical": "__none_expected__",
+          "type": "__none_expected__",
+          "source": "__none_expected__"
+        }
+      },
+      "failure_phase": "terminal_verification",
+      "language": "en",
+      "result": "FAIL",
+      "run_id": "finn-v2-run-d775482735f04a1fbe7eceb0b9453c84",
+      "terminal": {
+        "error_code": "response_scope_incomplete",
+        "reason": "response_scope_incomplete",
+        "status": "downgraded",
+        "typed_error": "response_scope_incomplete"
+      },
+      "timings": {
+        "create_latency_ms": 1195.67,
+        "runtime_timings_ms": {
+          "terminal_persist": 2378,
+          "total": 12285,
+          "until_collecting": 206,
+          "until_context_loaded": 321,
+          "until_dispatch_claimed": 5966,
+          "until_dispatch_published": 423,
+          "until_planned": 198,
+          "until_queued": 202,
+          "until_selection_persisted": 198,
+          "until_selector_completed": 2308,
+          "until_selector_started": 80
+        }
+      }
+    },
+    {
+      "action_contract_id": "unavailable",
+      "actual": {
+        "action_polarity": "read",
+        "missing_inputs": [],
+        "operation": "off_topic",
+        "required_inputs": [],
+        "supplied_inputs": {},
+        "target": {}
+      },
+      "case_id": "ac06",
+      "classification": "PRODUCT",
+      "conversation_and_lineage": {
+        "declassified_conversation_sequence": [
+          "ac06"
+        ],
+        "dependency_note": "Conversation dependency only where listed; no manifest lineage dependency flag.",
+        "depends_on_earlier_failed_case": false,
+        "earlier_failed_cases": [],
+        "expected_previous_cases": [],
+        "lineage_dependency_expected": false,
+        "reference_is_from_this_artifact": false
+      },
+      "declassified_user_question": "Nutze eine nicht vorhandene Steueroptimierungsfunktion für meine Trades.",
+      "expectation_checks": {
+        "action_polarity": true,
+        "canonical_target": true,
+        "dispatch_cardinality": true,
+        "missing_inputs": true,
+        "operation": false,
+        "required_inputs": true,
+        "runtime_contract_persisted": true,
+        "supplied_inputs": true,
+        "target_source": true,
+        "target_type": true,
+        "terminal_status": true
+      },
+      "expected": {
+        "action_polarity": "read",
+        "lifecycle_and_effects": {
+          "broker_orders_expected": 0,
+          "confirmation_expected": false,
+          "database_effect_expected": "no_write",
+          "idempotency_replay_expected": false,
+          "live_bot_activation_expected": false,
+          "live_trading_expected": false,
+          "no_duplicate_database_effect": false,
+          "no_write_before_confirmation": false,
+          "proposal_expected": false,
+          "safe_fixture_execution_expected": false,
+          "terminal_statuses": [
+            "unavailable",
+            "blocked",
+            "rejected",
+            "completed"
+          ]
+        },
+        "missing_inputs": [],
+        "operation": "unavailable",
+        "required_inputs": [],
+        "supplied_inputs": [],
+        "target": {
+          "canonical": "__none_expected__",
+          "type": "__none_expected__",
+          "source": "__none_expected__"
+        }
+      },
+      "failure_phase": "terminal_verification",
+      "language": "de",
+      "result": "FAIL",
+      "run_id": "finn-v2-run-e5bbd8f3937e4057b77cf4d32d70fa76",
+      "terminal": {
+        "error_code": "financial_domain_unavailable",
+        "reason": "financial_domain_unavailable",
+        "status": "unavailable",
+        "typed_error": "financial_domain_unavailable"
+      },
+      "timings": {
+        "create_latency_ms": 336.1,
+        "runtime_timings_ms": {
+          "terminal_persist": 1299,
+          "total": 6781,
+          "until_collecting": 113,
+          "until_context_loaded": 315,
+          "until_dispatch_claimed": 1904,
+          "until_dispatch_published": 176,
+          "until_planned": 489,
+          "until_queued": 197,
+          "until_selection_persisted": 603,
+          "until_selector_completed": 1597,
+          "until_selector_started": 83
+        }
+      }
+    },
+    {
+      "action_contract_id": "select_asset",
+      "action_lifecycle": {
+        "confirmation": {
+          "http_status": 200
+        },
+        "execution": {
+          "http_status": null,
+          "status": null
+        },
+        "proposal": {
+          "available": true,
+          "operation_type": "select_asset",
+          "status": "draft"
+        },
+        "replay": {
+          "http_status": null,
+          "no_duplicate_effect": null,
+          "status": null
+        }
+      },
+      "actual": {
+        "action_polarity": "update",
+        "missing_inputs": [],
+        "operation": "select_asset",
+        "required_inputs": [
+          "asset"
+        ],
+        "supplied_inputs": {
+          "asset": "XLM"
+        },
+        "target": {
+          "canonical": "XLM",
+          "source": "explicit_message"
+        }
+      },
+      "case_id": "ac07",
+      "classification": "FIXTURE",
+      "conversation_and_lineage": {
+        "declassified_conversation_sequence": [
+          "ac07"
+        ],
+        "dependency_note": "Conversation dependency only where listed; no manifest lineage dependency flag.",
+        "depends_on_earlier_failed_case": false,
+        "earlier_failed_cases": [],
+        "expected_previous_cases": [],
+        "lineage_dependency_expected": false,
+        "reference_is_from_this_artifact": false
+      },
+      "database_evidence": {
+        "after_confirmation_available": true,
+        "after_execution_available": false,
+        "after_replay_available": false,
+        "before_available": false,
+        "broker_orders_unchanged": null,
+        "live_bots_unchanged": null,
+        "measured_effect": null,
+        "no_duplicate_effect": null,
+        "no_write_before_confirmation": false
+      },
+      "declassified_user_question": "Stel XLM in als mijn actieve asset.",
+      "expectation_checks": {
+        "action_polarity": true,
+        "canonical_target": true,
+        "dispatch_cardinality": true,
+        "missing_inputs": true,
+        "operation": true,
+        "required_inputs": true,
+        "runtime_contract_persisted": true,
+        "supplied_inputs": true,
+        "target_source": true,
+        "target_type": true,
+        "terminal_status": true
+      },
+      "expected": {
+        "action_polarity": "update",
+        "lifecycle_and_effects": {
+          "broker_orders_expected": 0,
+          "confirmation_expected": true,
+          "database_effect_expected": "owner_scoped_contract_effect_once",
+          "idempotency_replay_expected": true,
+          "idempotency_replay_terminal_status": "already_executed",
+          "live_bot_activation_expected": false,
+          "live_trading_expected": false,
+          "no_duplicate_database_effect": true,
+          "no_write_before_confirmation": true,
+          "proposal_expected": true,
+          "safe_fixture_execution_expected": true,
+          "terminal_statuses": [
+            "completed",
+            "downgraded"
+          ]
+        },
+        "missing_inputs": [],
+        "operation": "select_asset",
+        "required_inputs": [
+          "asset"
+        ],
+        "supplied_inputs": [
+          "asset"
+        ],
+        "target": {
+          "canonical": "XLM",
+          "source": "explicit_message",
+          "type": "__none_expected__"
+        }
+      },
+      "failure_phase": "database_before_confirmation",
+      "language": "nl",
+      "result": "FAIL",
+      "run_id": "finn-v2-run-08f61b79aadb41fca20e09c67ddd4dac",
+      "terminal": {
+        "status": "completed",
+        "typed_error": "write_before_confirmation_or_database_evidence_unavailable"
+      },
+      "timings": {
+        "confirm_latency_ms": 319.94,
+        "create_latency_ms": 1913.55,
+        "execute_latency_ms": null,
+        "proposal_read_latency_ms": 213.99,
+        "publish_latency_ms": 271.08,
+        "replay_latency_ms": null,
+        "runtime_timings_ms": {
+          "terminal_persist": 3302,
+          "total": 10702,
+          "until_collecting": 183,
+          "until_context_loaded": 381,
+          "until_dispatch_claimed": 2802,
+          "until_dispatch_published": 1184,
+          "until_planned": 115,
+          "until_queued": 116,
+          "until_selection_persisted": 313,
+          "until_selector_completed": 2294,
+          "until_selector_started": 8
+        }
+      }
+    },
+    {
+      "action_contract_id": "watchlist_add",
+      "action_lifecycle": {
+        "confirmation": {
+          "http_status": 200
+        },
+        "execution": {
+          "http_status": 200,
+          "status": "succeeded",
+          "typed_errors": []
+        },
+        "proposal": {
+          "available": true,
+          "operation_type": "watchlist_add",
+          "status": "draft"
+        },
+        "replay": {
+          "http_status": 200,
+          "no_duplicate_effect": true,
+          "status": "already_executed"
+        }
+      },
+      "actual": {
+        "action_polarity": "add",
+        "missing_inputs": [],
+        "operation": "watchlist_add",
+        "required_inputs": [
+          "asset"
+        ],
+        "supplied_inputs": {
+          "asset": "ADA"
+        },
+        "target": {
+          "canonical": "ADA",
+          "source": "explicit_message"
+        }
+      },
+      "case_id": "ac09",
+      "classification": "FIXTURE",
+      "conversation_and_lineage": {
+        "declassified_conversation_sequence": [
+          "ac09"
+        ],
+        "dependency_note": "Conversation dependency only where listed; no manifest lineage dependency flag.",
+        "depends_on_earlier_failed_case": false,
+        "earlier_failed_cases": [],
+        "expected_previous_cases": [],
+        "lineage_dependency_expected": false,
+        "reference_is_from_this_artifact": false
+      },
+      "database_evidence": {
+        "after_confirmation_available": true,
+        "after_execution_available": true,
+        "after_replay_available": true,
+        "before_available": true,
+        "broker_orders_unchanged": true,
+        "live_bots_unchanged": true,
+        "measured_effect": false,
+        "no_duplicate_effect": true,
+        "no_write_before_confirmation": true
+      },
+      "declassified_user_question": "Füge ADA meiner Beobachtungsliste hinzu.",
+      "expectation_checks": {
+        "action_polarity": true,
+        "canonical_target": true,
+        "dispatch_cardinality": true,
+        "missing_inputs": true,
+        "operation": true,
+        "required_inputs": true,
+        "runtime_contract_persisted": true,
+        "supplied_inputs": true,
+        "target_source": true,
+        "target_type": true,
+        "terminal_status": true
+      },
+      "expected": {
+        "action_polarity": "add",
+        "lifecycle_and_effects": {
+          "broker_orders_expected": 0,
+          "confirmation_expected": true,
+          "database_effect_expected": "owner_scoped_contract_effect_once",
+          "idempotency_replay_expected": true,
+          "idempotency_replay_terminal_status": "already_executed",
+          "live_bot_activation_expected": false,
+          "live_trading_expected": false,
+          "no_duplicate_database_effect": true,
+          "no_write_before_confirmation": true,
+          "proposal_expected": true,
+          "safe_fixture_execution_expected": true,
+          "terminal_statuses": [
+            "completed",
+            "downgraded"
+          ]
+        },
+        "missing_inputs": [],
+        "operation": "watchlist_add",
+        "required_inputs": [
+          "asset"
+        ],
+        "supplied_inputs": [
+          "asset"
+        ],
+        "target": {
+          "canonical": "ADA",
+          "source": "explicit_message",
+          "type": "__none_expected__"
+        }
+      },
+      "failure_phase": "database_effect_verification",
+      "language": "de",
+      "result": "FAIL",
+      "run_id": "finn-v2-run-ff869f8ac87f43fb915594d158188b7a",
+      "terminal": {
+        "status": "completed",
+        "typed_error": "database_effect_missing"
+      },
+      "timings": {
+        "confirm_latency_ms": 260.1,
+        "create_latency_ms": 1186.5,
+        "execute_latency_ms": 295.53,
+        "proposal_read_latency_ms": 410.77,
+        "publish_latency_ms": 931.27,
+        "replay_latency_ms": 186.32,
+        "runtime_timings_ms": {
+          "terminal_persist": 3095,
+          "total": 13790,
+          "until_collecting": 212,
+          "until_context_loaded": 321,
+          "until_dispatch_claimed": 5893,
+          "until_dispatch_published": 603,
+          "until_planned": 1179,
+          "until_queued": 203,
+          "until_selection_persisted": 286,
+          "until_selector_completed": 1917,
+          "until_selector_started": 78
+        }
+      }
+    },
+    {
+      "action_contract_id": "create_indicator_configuration",
+      "action_lifecycle": {
+        "confirmation": {
+          "http_status": 200
+        },
+        "execution": {
+          "http_status": null,
+          "status": null
+        },
+        "proposal": {
+          "available": true,
+          "operation_type": "create_indicator_configuration",
+          "status": "draft"
+        },
+        "replay": {
+          "http_status": null,
+          "no_duplicate_effect": null,
+          "status": null
+        }
+      },
+      "actual": {
+        "action_polarity": "create",
+        "missing_inputs": [],
+        "operation": "create_indicator_configuration",
+        "required_inputs": [
+          "asset",
+          "category",
+          "indicator"
+        ],
+        "supplied_inputs": {
+          "asset": "XLM",
+          "category": "technical",
+          "indicator": "rsi"
+        },
+        "target": {
+          "canonical": "XLM",
+          "source": "explicit_message"
+        }
+      },
+      "case_id": "ac11",
+      "classification": "FIXTURE",
+      "conversation_and_lineage": {
+        "declassified_conversation_sequence": [
+          "ac11"
+        ],
+        "dependency_note": "Conversation dependency only where listed; no manifest lineage dependency flag.",
+        "depends_on_earlier_failed_case": false,
+        "earlier_failed_cases": [],
+        "expected_previous_cases": [],
+        "lineage_dependency_expected": false,
+        "reference_is_from_this_artifact": false
+      },
+      "database_evidence": {
+        "after_confirmation_available": true,
+        "after_execution_available": false,
+        "after_replay_available": false,
+        "before_available": false,
+        "broker_orders_unchanged": null,
+        "live_bots_unchanged": null,
+        "measured_effect": null,
+        "no_duplicate_effect": null,
+        "no_write_before_confirmation": false
+      },
+      "declassified_user_question": "Create a technical RSI indicator configuration for XLM.",
+      "expectation_checks": {
+        "action_polarity": true,
+        "canonical_target": true,
+        "dispatch_cardinality": true,
+        "missing_inputs": true,
+        "operation": true,
+        "required_inputs": true,
+        "runtime_contract_persisted": true,
+        "supplied_inputs": true,
+        "target_source": true,
+        "target_type": true,
+        "terminal_status": true
+      },
+      "expected": {
+        "action_polarity": "create",
+        "lifecycle_and_effects": {
+          "broker_orders_expected": 0,
+          "confirmation_expected": true,
+          "database_effect_expected": "owner_scoped_contract_effect_once",
+          "idempotency_replay_expected": true,
+          "idempotency_replay_terminal_status": "already_executed",
+          "live_bot_activation_expected": false,
+          "live_trading_expected": false,
+          "no_duplicate_database_effect": true,
+          "no_write_before_confirmation": true,
+          "proposal_expected": true,
+          "safe_fixture_execution_expected": true,
+          "terminal_statuses": [
+            "completed",
+            "downgraded"
+          ]
+        },
+        "missing_inputs": [],
+        "operation": "create_indicator_configuration",
+        "required_inputs": [
+          "asset",
+          "category",
+          "indicator"
+        ],
+        "supplied_inputs": [
+          "asset",
+          "category",
+          "indicator"
+        ],
+        "target": {
+          "canonical": "XLM",
+          "source": "explicit_message",
+          "type": "__none_expected__"
+        }
+      },
+      "failure_phase": "database_before_confirmation",
+      "language": "en",
+      "result": "FAIL",
+      "run_id": "finn-v2-run-d735b6ab50f548efa889dc1ac9d0bd3f",
+      "terminal": {
+        "status": "completed",
+        "typed_error": "write_before_confirmation_or_database_evidence_unavailable"
+      },
+      "timings": {
+        "confirm_latency_ms": 228.54,
+        "create_latency_ms": 1890.58,
+        "execute_latency_ms": null,
+        "proposal_read_latency_ms": 682.62,
+        "publish_latency_ms": 699.82,
+        "replay_latency_ms": null,
+        "runtime_timings_ms": {
+          "terminal_persist": 2707,
+          "total": 8010,
+          "until_collecting": 214,
+          "until_context_loaded": 412,
+          "until_dispatch_claimed": 191,
+          "until_dispatch_published": 706,
+          "until_planned": 194,
+          "until_queued": 284,
+          "until_selection_persisted": 695,
+          "until_selector_completed": 2597,
+          "until_selector_started": 8
+        }
+      }
+    },
+    {
+      "action_contract_id": "update_indicator_configuration",
+      "action_lifecycle": {
+        "confirmation": {
+          "http_status": null
+        },
+        "execution": {
+          "http_status": null,
+          "status": null
+        },
+        "proposal": {
+          "available": false,
+          "status": null
+        },
+        "replay": {
+          "http_status": null,
+          "no_duplicate_effect": null,
+          "status": null
+        }
+      },
+      "actual": {
+        "action_polarity": "update",
+        "missing_inputs": [
+          "changed_fields"
+        ],
+        "operation": "update_indicator_configuration",
+        "required_inputs": [
+          "asset",
+          "category",
+          "indicator",
+          "changed_fields"
+        ],
+        "supplied_inputs": {
+          "asset": "XLM",
+          "category": "technical",
+          "indicator": "rsi"
+        },
+        "target": {
+          "canonical": "XLM",
+          "source": "explicit_message"
+        }
+      },
+      "case_id": "ac12",
+      "classification": "PRODUCT",
+      "conversation_and_lineage": {
+        "declassified_conversation_sequence": [
+          "ac12"
+        ],
+        "dependency_note": "Conversation dependency only where listed; no manifest lineage dependency flag.",
+        "depends_on_earlier_failed_case": false,
+        "earlier_failed_cases": [],
+        "expected_previous_cases": [],
+        "lineage_dependency_expected": false,
+        "reference_is_from_this_artifact": false
+      },
+      "database_evidence": {
+        "after_confirmation_available": false,
+        "after_execution_available": false,
+        "after_replay_available": false,
+        "before_available": false,
+        "broker_orders_unchanged": null,
+        "live_bots_unchanged": null,
+        "measured_effect": null,
+        "no_duplicate_effect": null,
+        "no_write_before_confirmation": null
+      },
+      "declassified_user_question": "Ändere meine technische RSI-Konfiguration für XLM und deaktiviere sie.",
+      "expectation_checks": {
+        "action_polarity": true,
+        "canonical_target": true,
+        "dispatch_cardinality": true,
+        "missing_inputs": false,
+        "operation": true,
+        "required_inputs": true,
+        "runtime_contract_persisted": true,
+        "supplied_inputs": false,
+        "target_source": true,
+        "target_type": true,
+        "terminal_status": true
+      },
+      "expected": {
+        "action_polarity": "update",
+        "lifecycle_and_effects": {
+          "broker_orders_expected": 0,
+          "confirmation_expected": true,
+          "database_effect_expected": "owner_scoped_contract_effect_once",
+          "idempotency_replay_expected": true,
+          "idempotency_replay_terminal_status": "already_executed",
+          "live_bot_activation_expected": false,
+          "live_trading_expected": false,
+          "no_duplicate_database_effect": true,
+          "no_write_before_confirmation": true,
+          "proposal_expected": true,
+          "safe_fixture_execution_expected": true,
+          "terminal_statuses": [
+            "completed",
+            "downgraded"
+          ]
+        },
+        "missing_inputs": [],
+        "operation": "update_indicator_configuration",
+        "required_inputs": [
+          "asset",
+          "category",
+          "indicator",
+          "changed_fields"
+        ],
+        "supplied_inputs": [
+          "asset",
+          "category",
+          "indicator",
+          "changed_fields"
+        ],
+        "target": {
+          "canonical": "XLM",
+          "source": "explicit_message",
+          "type": "__none_expected__"
+        }
+      },
+      "failure_phase": "input_contract_or_guided_state",
+      "language": "de",
+      "result": "FAIL",
+      "run_id": "finn-v2-run-88cc83f3bbd54eaaa42897297f45c957",
+      "terminal": {
+        "status": "completed",
+        "typed_error": "missing_inputs_unexpected"
+      },
+      "timings": {
+        "confirm_latency_ms": null,
+        "create_latency_ms": 1597.14,
+        "execute_latency_ms": null,
+        "proposal_read_latency_ms": null,
+        "publish_latency_ms": null,
+        "replay_latency_ms": null,
+        "runtime_timings_ms": {
+          "terminal_persist": 2281,
+          "total": 9893,
+          "until_collecting": 198,
+          "until_context_loaded": 392,
+          "until_dispatch_claimed": 3289,
+          "until_dispatch_published": 797,
+          "until_planned": 194,
+          "until_queued": 129,
+          "until_selection_persisted": 115,
+          "until_selector_completed": 2474,
+          "until_selector_started": 19
+        }
+      }
+    },
+    {
+      "action_contract_id": "evaluate_indicator_configuration",
+      "actual": {
+        "action_polarity": "read",
+        "missing_inputs": [],
+        "operation": "read_indicator_configuration",
+        "required_inputs": [],
+        "supplied_inputs": {},
+        "target": {}
+      },
+      "case_id": "ac14",
+      "classification": "PRODUCT",
+      "conversation_and_lineage": {
+        "declassified_conversation_sequence": [
+          "ac14"
+        ],
+        "dependency_note": "Conversation dependency only where listed; no manifest lineage dependency flag.",
+        "depends_on_earlier_failed_case": false,
+        "earlier_failed_cases": [],
+        "expected_previous_cases": [],
+        "lineage_dependency_expected": false,
+        "reference_is_from_this_artifact": false
+      },
+      "declassified_user_question": "Assess whether my configured indicators form a coherent set.",
+      "expectation_checks": {
+        "action_polarity": false,
+        "canonical_target": true,
+        "dispatch_cardinality": true,
+        "missing_inputs": true,
+        "operation": false,
+        "required_inputs": true,
+        "runtime_contract_persisted": true,
+        "supplied_inputs": true,
+        "target_source": true,
+        "target_type": true,
+        "terminal_status": true
+      },
+      "expected": {
+        "action_polarity": "evaluate",
+        "lifecycle_and_effects": {
+          "broker_orders_expected": 0,
+          "confirmation_expected": false,
+          "database_effect_expected": "no_write",
+          "idempotency_replay_expected": false,
+          "live_bot_activation_expected": false,
+          "live_trading_expected": false,
+          "no_duplicate_database_effect": false,
+          "no_write_before_confirmation": false,
+          "proposal_expected": false,
+          "safe_fixture_execution_expected": false,
+          "terminal_statuses": [
+            "completed",
+            "downgraded"
+          ]
+        },
+        "missing_inputs": [],
+        "operation": "evaluate_indicator_configuration",
+        "required_inputs": [],
+        "supplied_inputs": [],
+        "target": {
+          "canonical": "__none_expected__",
+          "type": "__none_expected__",
+          "source": "__none_expected__"
+        }
+      },
+      "failure_phase": "selector",
+      "language": "en",
+      "result": "FAIL",
+      "run_id": "finn-v2-run-05611f71c1aa478a9f2e5ebefe044e18",
+      "terminal": {
+        "status": "completed",
+        "typed_error": "contract_evidence_mismatch:action_polarity,operation"
+      },
+      "timings": {
+        "create_latency_ms": 1806.31,
+        "runtime_timings_ms": {
+          "terminal_persist": 3195,
+          "total": 14710,
+          "until_collecting": 208,
+          "until_context_loaded": 301,
+          "until_dispatch_claimed": 6801,
+          "until_dispatch_published": 814,
+          "until_planned": 287,
+          "until_queued": 197,
+          "until_selection_persisted": 117,
+          "until_selector_completed": 2687,
+          "until_selector_started": 98
+        }
+      }
+    },
+    {
+      "action_contract_id": "delete_indicator_configuration",
+      "action_lifecycle": {
+        "confirmation": {
+          "http_status": 200
+        },
+        "execution": {
+          "http_status": 200,
+          "status": "succeeded",
+          "typed_errors": []
+        },
+        "proposal": {
+          "available": true,
+          "operation_type": "delete_indicator_configuration",
+          "status": "draft"
+        },
+        "replay": {
+          "http_status": 200,
+          "no_duplicate_effect": true,
+          "status": "already_executed"
+        }
+      },
+      "actual": {
+        "action_polarity": "delete",
+        "missing_inputs": [],
+        "operation": "delete_indicator_configuration",
+        "required_inputs": [
+          "asset",
+          "category",
+          "indicator"
+        ],
+        "supplied_inputs": {
+          "asset": "XLM",
+          "category": "technical",
+          "indicator": "rsi"
+        },
+        "target": {
+          "canonical": "XLM",
+          "source": "explicit_message"
+        }
+      },
+      "case_id": "ac15",
+      "classification": "FIXTURE",
+      "conversation_and_lineage": {
+        "declassified_conversation_sequence": [
+          "ac15"
+        ],
+        "dependency_note": "Conversation dependency only where listed; no manifest lineage dependency flag.",
+        "depends_on_earlier_failed_case": false,
+        "earlier_failed_cases": [],
+        "expected_previous_cases": [],
+        "lineage_dependency_expected": false,
+        "reference_is_from_this_artifact": false
+      },
+      "database_evidence": {
+        "after_confirmation_available": true,
+        "after_execution_available": true,
+        "after_replay_available": true,
+        "before_available": true,
+        "broker_orders_unchanged": true,
+        "live_bots_unchanged": true,
+        "measured_effect": false,
+        "no_duplicate_effect": true,
+        "no_write_before_confirmation": true
+      },
+      "declassified_user_question": "Lösche meine technische RSI-Konfiguration für XLM.",
+      "expectation_checks": {
+        "action_polarity": true,
+        "canonical_target": true,
+        "dispatch_cardinality": true,
+        "missing_inputs": true,
+        "operation": true,
+        "required_inputs": true,
+        "runtime_contract_persisted": true,
+        "supplied_inputs": true,
+        "target_source": true,
+        "target_type": true,
+        "terminal_status": true
+      },
+      "expected": {
+        "action_polarity": "delete",
+        "lifecycle_and_effects": {
+          "broker_orders_expected": 0,
+          "confirmation_expected": true,
+          "database_effect_expected": "owner_scoped_contract_effect_once",
+          "idempotency_replay_expected": true,
+          "idempotency_replay_terminal_status": "already_executed",
+          "live_bot_activation_expected": false,
+          "live_trading_expected": false,
+          "no_duplicate_database_effect": true,
+          "no_write_before_confirmation": true,
+          "proposal_expected": true,
+          "safe_fixture_execution_expected": true,
+          "terminal_statuses": [
+            "completed",
+            "downgraded"
+          ]
+        },
+        "missing_inputs": [],
+        "operation": "delete_indicator_configuration",
+        "required_inputs": [
+          "asset",
+          "category",
+          "indicator"
+        ],
+        "supplied_inputs": [
+          "asset",
+          "category",
+          "indicator"
+        ],
+        "target": {
+          "canonical": "XLM",
+          "source": "explicit_message",
+          "type": "__none_expected__"
+        }
+      },
+      "failure_phase": "database_effect_verification",
+      "language": "de",
+      "result": "FAIL",
+      "run_id": "finn-v2-run-401a884add394764a73ad3d1b38c00ec",
+      "terminal": {
+        "status": "completed",
+        "typed_error": "database_effect_missing"
+      },
+      "timings": {
+        "confirm_latency_ms": 281.66,
+        "create_latency_ms": 617.95,
+        "execute_latency_ms": 1106.39,
+        "proposal_read_latency_ms": 514.51,
+        "publish_latency_ms": 300.47,
+        "replay_latency_ms": 2103.27,
+        "runtime_timings_ms": {
+          "terminal_persist": 2906,
+          "total": 8708,
+          "until_collecting": 174,
+          "until_context_loaded": 1104,
+          "until_dispatch_claimed": 201,
+          "until_dispatch_published": 316,
+          "until_planned": 203,
+          "until_queued": 208,
+          "until_selection_persisted": 196,
+          "until_selector_completed": 3302,
+          "until_selector_started": 93
+        }
+      }
+    },
+    {
+      "action_contract_id": "create_setup",
+      "action_lifecycle": {
+        "confirmation": {
+          "http_status": 200
+        },
+        "execution": {
+          "http_status": 200,
+          "status": "failed",
+          "typed_errors": [
+            "409: Setup met deze naam bestaat al"
+          ]
+        },
+        "proposal": {
+          "available": true,
+          "operation_type": "create_setup",
+          "status": "draft"
+        },
+        "replay": {
+          "http_status": null,
+          "no_duplicate_effect": null,
+          "status": null
+        }
+      },
+      "actual": {
+        "action_polarity": "create",
+        "missing_inputs": [],
+        "operation": "create_setup",
+        "required_inputs": [
+          "setup_type",
+          "timeframe",
+          "name",
+          "symbol"
+        ],
+        "supplied_inputs": {
+          "name": "Atlas",
+          "setup_type": "swing",
+          "symbol": "XLM",
+          "timeframe": "4H"
+        },
+        "target": {
+          "canonical": "XLM",
+          "source": "explicit_message"
+        }
+      },
+      "case_id": "ac16",
+      "classification": "FIXTURE",
+      "conversation_and_lineage": {
+        "conversation_key": "natural-action-chain",
+        "declassified_conversation_sequence": [
+          "ac16",
+          "ac17",
+          "ac18",
+          "ac20",
+          "ac21",
+          "ac22",
+          "ac24",
+          "ac25",
+          "ac26",
+          "ac27",
+          "ac28",
+          "ac29",
+          "ac30",
+          "ac31",
+          "ac32",
+          "ac33",
+          "ac34",
+          "ac46",
+          "ac47",
+          "ac48"
+        ],
+        "dependency_note": "Conversation dependency only where listed; no manifest lineage dependency flag.",
+        "depends_on_earlier_failed_case": false,
+        "earlier_failed_cases": [],
+        "expected_previous_cases": [],
+        "lineage_dependency_expected": false,
+        "reference_is_from_this_artifact": false,
+        "turn_position_in_original_conversation": 1
+      },
+      "database_evidence": {
+        "after_confirmation_available": true,
+        "after_execution_available": false,
+        "after_replay_available": false,
+        "before_available": true,
+        "broker_orders_unchanged": null,
+        "live_bots_unchanged": null,
+        "measured_effect": null,
+        "no_duplicate_effect": null,
+        "no_write_before_confirmation": true
+      },
+      "declassified_user_question": "Maak een swingsetup met de naam Atlas, symbool XLM en timeframe 4H.",
+      "expectation_checks": {
+        "action_polarity": true,
+        "canonical_target": true,
+        "dispatch_cardinality": true,
+        "missing_inputs": true,
+        "operation": true,
+        "required_inputs": true,
+        "runtime_contract_persisted": true,
+        "supplied_inputs": true,
+        "target_source": true,
+        "target_type": true,
+        "terminal_status": true
+      },
+      "expected": {
+        "action_polarity": "create",
+        "lifecycle_and_effects": {
+          "broker_orders_expected": 0,
+          "confirmation_expected": true,
+          "database_effect_expected": "owner_scoped_contract_effect_once",
+          "idempotency_replay_expected": true,
+          "idempotency_replay_terminal_status": "already_executed",
+          "live_bot_activation_expected": false,
+          "live_trading_expected": false,
+          "no_duplicate_database_effect": true,
+          "no_write_before_confirmation": true,
+          "proposal_expected": true,
+          "safe_fixture_execution_expected": true,
+          "terminal_statuses": [
+            "completed",
+            "downgraded"
+          ]
+        },
+        "missing_inputs": [],
+        "operation": "create_setup",
+        "required_inputs": [
+          "setup_type",
+          "timeframe",
+          "name",
+          "symbol"
+        ],
+        "supplied_inputs": [
+          "setup_type",
+          "timeframe",
+          "name",
+          "symbol"
+        ],
+        "target": {
+          "canonical": "XLM",
+          "source": "explicit_message",
+          "type": "__none_expected__"
+        }
+      },
+      "failure_phase": "safe_fixture_execution",
+      "language": "nl",
+      "result": "FAIL",
+      "run_id": "finn-v2-run-3cf15517167e401e8752e7e89990a12d",
+      "terminal": {
+        "status": "completed",
+        "typed_error": "proposal_execute_failed"
+      },
+      "timings": {
+        "confirm_latency_ms": 122.03,
+        "create_latency_ms": 2275.33,
+        "execute_latency_ms": 366.64,
+        "proposal_read_latency_ms": 274.35,
+        "publish_latency_ms": 583.14,
+        "replay_latency_ms": null,
+        "runtime_timings_ms": {
+          "terminal_persist": 3998,
+          "total": 18099,
+          "until_collecting": 593,
+          "until_context_loaded": 1008,
+          "until_dispatch_claimed": 7266,
+          "until_dispatch_published": 922,
+          "until_planned": 1081,
+          "until_queued": 320,
+          "until_selection_persisted": 514,
+          "until_selector_completed": 2301,
+          "until_selector_started": 92
+        }
+      }
+    },
+    {
+      "action_contract_id": "update_setup",
+      "action_lifecycle": {
+        "confirmation": {
+          "http_status": null
+        },
+        "execution": {
+          "http_status": null,
+          "status": null
+        },
+        "proposal": {
+          "available": false,
+          "status": null
+        },
+        "replay": {
+          "http_status": null,
+          "no_duplicate_effect": null,
+          "status": null
+        }
+      },
+      "actual": {
+        "action_polarity": "update",
+        "missing_inputs": [],
+        "operation": "update_setup",
+        "required_inputs": [
+          "setup_id",
+          "changed_fields"
+        ],
+        "supplied_inputs": {
+          "changed_fields": {
+            "timeframe": "1D"
+          },
+          "setup_id": "320"
+        },
+        "target": {}
+      },
+      "case_id": "ac17",
+      "classification": "CASCADE",
+      "conversation_and_lineage": {
+        "conversation_key": "natural-action-chain",
+        "conversation_reference": "finn-v2-run-0d8e8e39cff2408fb510a5c974424cd8",
+        "conversation_reference_kind": "previous_action_result",
+        "declassified_conversation_sequence": [
+          "ac16",
+          "ac17",
+          "ac18",
+          "ac20",
+          "ac21",
+          "ac22",
+          "ac24",
+          "ac25",
+          "ac26",
+          "ac27",
+          "ac28",
+          "ac29",
+          "ac30",
+          "ac31",
+          "ac32",
+          "ac33",
+          "ac34",
+          "ac46",
+          "ac47",
+          "ac48"
+        ],
+        "dependency_note": "Manifest marks lineage dependency; concrete predecessor mapping follows the natural contract chain.",
+        "depends_on_earlier_failed_case": true,
+        "earlier_failed_cases": [
+          "ac16"
+        ],
+        "expected_previous_cases": [
+          "ac16"
+        ],
+        "lineage_dependency_expected": true,
+        "reference_is_from_this_artifact": false,
+        "root_failed_case": "ac16",
+        "turn_position_in_original_conversation": 2
+      },
+      "database_evidence": {
+        "after_confirmation_available": false,
+        "after_execution_available": false,
+        "after_replay_available": false,
+        "before_available": false,
+        "broker_orders_unchanged": null,
+        "live_bots_unchanged": null,
+        "measured_effect": null,
+        "no_duplicate_effect": null,
+        "no_write_before_confirmation": null
+      },
+      "declassified_user_question": "Update the setup I just saved: change its timeframe to 1D.",
+      "expectation_checks": {
+        "action_polarity": true,
+        "canonical_target": false,
+        "dispatch_cardinality": true,
+        "missing_inputs": true,
+        "operation": true,
+        "required_inputs": true,
+        "runtime_contract_persisted": true,
+        "supplied_inputs": true,
+        "target_source": true,
+        "target_type": true,
+        "terminal_status": false
+      },
+      "expected": {
+        "action_polarity": "update",
+        "lifecycle_and_effects": {
+          "broker_orders_expected": 0,
+          "confirmation_expected": true,
+          "database_effect_expected": "owner_scoped_contract_effect_once",
+          "idempotency_replay_expected": true,
+          "idempotency_replay_terminal_status": "already_executed",
+          "live_bot_activation_expected": false,
+          "live_trading_expected": false,
+          "no_duplicate_database_effect": true,
+          "no_write_before_confirmation": true,
+          "proposal_expected": true,
+          "safe_fixture_execution_expected": true,
+          "terminal_statuses": [
+            "completed",
+            "downgraded"
+          ]
+        },
+        "missing_inputs": [],
+        "operation": "update_setup",
+        "required_inputs": [
+          "setup_id",
+          "changed_fields"
+        ],
+        "supplied_inputs": [
+          "setup_id",
+          "changed_fields"
+        ],
+        "target": {
+          "canonical": "__present__",
+          "source": {
+            "allowed_sources": [
+              "previous_action_result",
+              "owner_action_result",
+              "persisted_operation"
+            ],
+            "no_source_allowed": true
+          },
+          "type": "__none_expected__"
+        }
+      },
+      "failure_phase": "proposal_creation",
+      "language": "en",
+      "result": "FAIL",
+      "run_id": "finn-v2-run-d9337e217ce340d08396b06578ebb715",
+      "terminal": {
+        "error_code": "orchestrator_failed",
+        "reason": "orchestrator_failed",
+        "status": "failed",
+        "typed_error": "proposal_missing"
+      },
+      "timings": {
+        "confirm_latency_ms": null,
+        "create_latency_ms": 1599.03,
+        "execute_latency_ms": null,
+        "proposal_read_latency_ms": null,
+        "publish_latency_ms": null,
+        "replay_latency_ms": null,
+        "runtime_timings_ms": {
+          "terminal_persist": 1201,
+          "total": 15396,
+          "until_collecting": 173,
+          "until_context_loaded": 1303,
+          "until_dispatch_claimed": 7599,
+          "until_dispatch_published": 1091,
+          "until_planned": 215,
+          "until_queued": 118,
+          "until_reasoning": 892,
+          "until_selection_persisted": 106,
+          "until_selector_completed": 2288,
+          "until_selector_started": 88,
+          "until_verifying": 317
+        }
+      }
+    },
+    {
+      "action_contract_id": "read_active_setup",
+      "actual": {
+        "action_polarity": "read",
+        "missing_inputs": [],
+        "operation": "read_active_setup",
+        "required_inputs": [],
+        "supplied_inputs": {},
+        "target": {
+          "canonical": "XLM",
+          "source": "persisted_operation"
+        }
+      },
+      "case_id": "ac18",
+      "classification": "CASCADE",
+      "conversation_and_lineage": {
+        "conversation_key": "natural-action-chain",
+        "conversation_reference": null,
+        "conversation_reference_kind": null,
+        "declassified_conversation_sequence": [
+          "ac16",
+          "ac17",
+          "ac18",
+          "ac20",
+          "ac21",
+          "ac22",
+          "ac24",
+          "ac25",
+          "ac26",
+          "ac27",
+          "ac28",
+          "ac29",
+          "ac30",
+          "ac31",
+          "ac32",
+          "ac33",
+          "ac34",
+          "ac46",
+          "ac47",
+          "ac48"
+        ],
+        "dependency_note": "Conversation dependency only where listed; no manifest lineage dependency flag.",
+        "depends_on_earlier_failed_case": true,
+        "earlier_failed_cases": [
+          "ac16"
+        ],
+        "expected_previous_cases": [
+          "ac16"
+        ],
+        "lineage_dependency_expected": false,
+        "reference_is_from_this_artifact": false,
+        "root_failed_case": "ac16",
+        "turn_position_in_original_conversation": 3
+      },
+      "declassified_user_question": "Zeige mir das aktuell gespeicherte Setup.",
+      "expectation_checks": {
+        "action_polarity": true,
+        "canonical_target": false,
+        "dispatch_cardinality": true,
+        "missing_inputs": true,
+        "operation": true,
+        "required_inputs": true,
+        "runtime_contract_persisted": true,
+        "supplied_inputs": true,
+        "target_source": false,
+        "target_type": true,
+        "terminal_status": true
+      },
+      "expected": {
+        "action_polarity": "read",
+        "lifecycle_and_effects": {
+          "broker_orders_expected": 0,
+          "confirmation_expected": false,
+          "database_effect_expected": "no_write",
+          "idempotency_replay_expected": false,
+          "live_bot_activation_expected": false,
+          "live_trading_expected": false,
+          "no_duplicate_database_effect": false,
+          "no_write_before_confirmation": false,
+          "proposal_expected": false,
+          "safe_fixture_execution_expected": false,
+          "terminal_statuses": [
+            "completed",
+            "downgraded"
+          ]
+        },
+        "missing_inputs": [],
+        "operation": "read_active_setup",
+        "required_inputs": [],
+        "supplied_inputs": [],
+        "target": {
+          "canonical": "__none_expected__",
+          "type": "__none_expected__",
+          "source": "__none_expected__"
+        }
+      },
+      "failure_phase": "terminal_verification",
+      "language": "de",
+      "result": "FAIL",
+      "run_id": "finn-v2-run-cc01c286c0ef49d79e8f8660d4869c83",
+      "terminal": {
+        "status": "completed",
+        "typed_error": "contract_evidence_mismatch:canonical_target,target_source"
+      },
+      "timings": {
+        "create_latency_ms": 579.01,
+        "runtime_timings_ms": {
+          "terminal_persist": 2613,
+          "total": 6987,
+          "until_collecting": 117,
+          "until_context_loaded": 303,
+          "until_dispatch_claimed": 187,
+          "until_dispatch_published": 384,
+          "until_planned": 282,
+          "until_queued": 198,
+          "until_selection_persisted": 296,
+          "until_selector_completed": 2593,
+          "until_selector_started": 8
+        }
+      }
+    },
+    {
+      "action_contract_id": "create_strategy",
+      "action_lifecycle": {
+        "confirmation": {
+          "http_status": null
+        },
+        "execution": {
+          "http_status": null,
+          "status": null
+        },
+        "proposal": {
+          "available": false,
+          "status": null
+        },
+        "replay": {
+          "http_status": null,
+          "no_duplicate_effect": null,
+          "status": null
+        }
+      },
+      "actual": {
+        "action_polarity": "create",
+        "missing_inputs": [
+          "base_amount"
+        ],
+        "operation": "create_strategy",
+        "required_inputs": [
+          "setup_id",
+          "execution_mode",
+          "base_amount"
+        ],
+        "supplied_inputs": {
+          "execution_mode": "fixed",
+          "name": "Atlas Plan",
+          "setup_id": 320
+        },
+        "target": {}
+      },
+      "case_id": "ac20",
+      "classification": "CASCADE",
+      "conversation_and_lineage": {
+        "conversation_key": "natural-action-chain",
+        "conversation_reference": "finn-v2-run-0d8e8e39cff2408fb510a5c974424cd8",
+        "conversation_reference_kind": "previous_action_result",
+        "declassified_conversation_sequence": [
+          "ac16",
+          "ac17",
+          "ac18",
+          "ac20",
+          "ac21",
+          "ac22",
+          "ac24",
+          "ac25",
+          "ac26",
+          "ac27",
+          "ac28",
+          "ac29",
+          "ac30",
+          "ac31",
+          "ac32",
+          "ac33",
+          "ac34",
+          "ac46",
+          "ac47",
+          "ac48"
+        ],
+        "dependency_note": "Manifest marks lineage dependency; concrete predecessor mapping follows the natural contract chain.",
+        "depends_on_earlier_failed_case": true,
+        "earlier_failed_cases": [
+          "ac16",
+          "ac17"
+        ],
+        "expected_previous_cases": [
+          "ac16",
+          "ac17"
+        ],
+        "lineage_dependency_expected": true,
+        "reference_is_from_this_artifact": false,
+        "root_failed_case": "ac16",
+        "turn_position_in_original_conversation": 5
+      },
+      "database_evidence": {
+        "after_confirmation_available": false,
+        "after_execution_available": false,
+        "after_replay_available": false,
+        "before_available": false,
+        "broker_orders_unchanged": null,
+        "live_bots_unchanged": null,
+        "measured_effect": null,
+        "no_duplicate_effect": null,
+        "no_write_before_confirmation": null
+      },
+      "declassified_user_question": "Create a manual strategy from that saved setup with 125 euros per execution and call it Atlas Plan.",
+      "expectation_checks": {
+        "action_polarity": true,
+        "canonical_target": false,
+        "dispatch_cardinality": true,
+        "missing_inputs": false,
+        "operation": true,
+        "required_inputs": true,
+        "runtime_contract_persisted": true,
+        "supplied_inputs": false,
+        "target_source": true,
+        "target_type": true,
+        "terminal_status": true
+      },
+      "expected": {
+        "action_polarity": "create",
+        "lifecycle_and_effects": {
+          "broker_orders_expected": 0,
+          "confirmation_expected": true,
+          "database_effect_expected": "owner_scoped_contract_effect_once",
+          "idempotency_replay_expected": true,
+          "idempotency_replay_terminal_status": "already_executed",
+          "live_bot_activation_expected": false,
+          "live_trading_expected": false,
+          "no_duplicate_database_effect": true,
+          "no_write_before_confirmation": true,
+          "proposal_expected": true,
+          "safe_fixture_execution_expected": true,
+          "terminal_statuses": [
+            "completed",
+            "downgraded"
+          ]
+        },
+        "missing_inputs": [],
+        "operation": "create_strategy",
+        "required_inputs": [
+          "setup_id",
+          "execution_mode",
+          "base_amount"
+        ],
+        "supplied_inputs": [
+          "setup_id",
+          "execution_mode",
+          "base_amount",
+          "name"
+        ],
+        "target": {
+          "canonical": "__present__",
+          "source": {
+            "allowed_sources": [
+              "previous_action_result",
+              "owner_action_result",
+              "persisted_operation"
+            ],
+            "no_source_allowed": true
+          },
+          "type": "__none_expected__"
+        }
+      },
+      "failure_phase": "input_contract_or_guided_state",
+      "language": "en",
+      "result": "FAIL",
+      "run_id": "finn-v2-run-f0091864fe594c1fa5a9f552cdfa8f0d",
+      "terminal": {
+        "status": "completed",
+        "typed_error": "missing_inputs_unexpected"
+      },
+      "timings": {
+        "confirm_latency_ms": null,
+        "create_latency_ms": 801.71,
+        "execute_latency_ms": null,
+        "proposal_read_latency_ms": null,
+        "publish_latency_ms": null,
+        "replay_latency_ms": null,
+        "runtime_timings_ms": {
+          "terminal_persist": 1288,
+          "total": 5672,
+          "until_collecting": 189,
+          "until_context_loaded": 398,
+          "until_dispatch_claimed": 500,
+          "until_dispatch_published": 472,
+          "until_planned": 109,
+          "until_queued": 190,
+          "until_selection_persisted": 24,
+          "until_selector_completed": 2487,
+          "until_selector_started": 11
+        }
+      }
+    },
+    {
+      "action_contract_id": "update_strategy",
+      "action_lifecycle": {
+        "confirmation": {
+          "http_status": null
+        },
+        "execution": {
+          "http_status": null,
+          "status": null
+        },
+        "proposal": {
+          "available": false,
+          "status": null
+        },
+        "replay": {
+          "http_status": null,
+          "no_duplicate_effect": null,
+          "status": null
+        }
+      },
+      "actual": {
+        "action_polarity": "create",
+        "missing_inputs": [
+          "base_amount"
+        ],
+        "operation": "create_strategy",
+        "required_inputs": [
+          "setup_id",
+          "execution_mode",
+          "base_amount"
+        ],
+        "supplied_inputs": {
+          "execution_mode": "fixed",
+          "name": "Atlas Plan",
+          "setup_id": "320"
+        },
+        "target": {}
+      },
+      "case_id": "ac21",
+      "classification": "CASCADE",
+      "conversation_and_lineage": {
+        "conversation_key": "natural-action-chain",
+        "conversation_reference": null,
+        "conversation_reference_kind": null,
+        "declassified_conversation_sequence": [
+          "ac16",
+          "ac17",
+          "ac18",
+          "ac20",
+          "ac21",
+          "ac22",
+          "ac24",
+          "ac25",
+          "ac26",
+          "ac27",
+          "ac28",
+          "ac29",
+          "ac30",
+          "ac31",
+          "ac32",
+          "ac33",
+          "ac34",
+          "ac46",
+          "ac47",
+          "ac48"
+        ],
+        "dependency_note": "Manifest marks lineage dependency; concrete predecessor mapping follows the natural contract chain.",
+        "depends_on_earlier_failed_case": true,
+        "earlier_failed_cases": [
+          "ac20"
+        ],
+        "expected_previous_cases": [
+          "ac20"
+        ],
+        "lineage_dependency_expected": true,
+        "reference_is_from_this_artifact": false,
+        "root_failed_case": "ac16",
+        "turn_position_in_original_conversation": 6
+      },
+      "database_evidence": {
+        "after_confirmation_available": false,
+        "after_execution_available": false,
+        "after_replay_available": false,
+        "before_available": false,
+        "broker_orders_unchanged": null,
+        "live_bots_unchanged": null,
+        "measured_effect": null,
+        "no_duplicate_effect": null,
+        "no_write_before_confirmation": null
+      },
+      "declassified_user_question": "Ändere die eben gespeicherte Strategie auf automatische Ausführung.",
+      "expectation_checks": {
+        "action_polarity": false,
+        "canonical_target": false,
+        "dispatch_cardinality": true,
+        "missing_inputs": false,
+        "operation": false,
+        "required_inputs": false,
+        "runtime_contract_persisted": true,
+        "supplied_inputs": false,
+        "target_source": true,
+        "target_type": true,
+        "terminal_status": true
+      },
+      "expected": {
+        "action_polarity": "update",
+        "lifecycle_and_effects": {
+          "broker_orders_expected": 0,
+          "confirmation_expected": true,
+          "database_effect_expected": "owner_scoped_contract_effect_once",
+          "idempotency_replay_expected": true,
+          "idempotency_replay_terminal_status": "already_executed",
+          "live_bot_activation_expected": false,
+          "live_trading_expected": false,
+          "no_duplicate_database_effect": true,
+          "no_write_before_confirmation": true,
+          "proposal_expected": true,
+          "safe_fixture_execution_expected": true,
+          "terminal_statuses": [
+            "completed",
+            "downgraded"
+          ]
+        },
+        "missing_inputs": [],
+        "operation": "update_strategy",
+        "required_inputs": [
+          "strategy_id",
+          "changed_fields"
+        ],
+        "supplied_inputs": [
+          "strategy_id",
+          "changed_fields"
+        ],
+        "target": {
+          "canonical": "__present__",
+          "source": {
+            "allowed_sources": [
+              "previous_action_result",
+              "owner_action_result",
+              "persisted_operation"
+            ],
+            "no_source_allowed": true
+          },
+          "type": "__none_expected__"
+        }
+      },
+      "failure_phase": "input_contract_or_guided_state",
+      "language": "de",
+      "result": "FAIL",
+      "run_id": "finn-v2-run-7f50e8b46da9422bba69854756f7d201",
+      "terminal": {
+        "status": "completed",
+        "typed_error": "missing_inputs_unexpected"
+      },
+      "timings": {
+        "confirm_latency_ms": null,
+        "create_latency_ms": 1483.05,
+        "execute_latency_ms": null,
+        "proposal_read_latency_ms": null,
+        "publish_latency_ms": null,
+        "replay_latency_ms": null,
+        "runtime_timings_ms": {
+          "terminal_persist": 1596,
+          "total": 6596,
+          "until_collecting": 198,
+          "until_context_loaded": 506,
+          "until_dispatch_claimed": 2807,
+          "until_dispatch_published": 980,
+          "until_planned": 109,
+          "until_queued": 196,
+          "until_selection_persisted": 99,
+          "until_selector_completed": 25,
+          "until_selector_started": 76
+        }
+      }
+    },
+    {
+      "action_contract_id": "read_linked_strategy",
+      "actual": {
+        "action_polarity": "create",
+        "missing_inputs": [
+          "base_amount"
+        ],
+        "operation": "create_strategy",
+        "required_inputs": [
+          "setup_id",
+          "execution_mode",
+          "base_amount"
+        ],
+        "supplied_inputs": {
+          "execution_mode": "fixed",
+          "name": "Atlas Plan",
+          "setup_id": "320"
+        },
+        "target": {}
+      },
+      "case_id": "ac22",
+      "classification": "CASCADE",
+      "conversation_and_lineage": {
+        "conversation_key": "natural-action-chain",
+        "conversation_reference": null,
+        "conversation_reference_kind": null,
+        "declassified_conversation_sequence": [
+          "ac16",
+          "ac17",
+          "ac18",
+          "ac20",
+          "ac21",
+          "ac22",
+          "ac24",
+          "ac25",
+          "ac26",
+          "ac27",
+          "ac28",
+          "ac29",
+          "ac30",
+          "ac31",
+          "ac32",
+          "ac33",
+          "ac34",
+          "ac46",
+          "ac47",
+          "ac48"
+        ],
+        "dependency_note": "Conversation dependency only where listed; no manifest lineage dependency flag.",
+        "depends_on_earlier_failed_case": true,
+        "earlier_failed_cases": [
+          "ac16",
+          "ac20"
+        ],
+        "expected_previous_cases": [
+          "ac16",
+          "ac20"
+        ],
+        "lineage_dependency_expected": false,
+        "reference_is_from_this_artifact": false,
+        "root_failed_case": "ac16",
+        "turn_position_in_original_conversation": 7
+      },
+      "declassified_user_question": "Welke strategie is gekoppeld aan deze setup?",
+      "expectation_checks": {
+        "action_polarity": false,
+        "canonical_target": true,
+        "dispatch_cardinality": true,
+        "missing_inputs": false,
+        "operation": false,
+        "required_inputs": false,
+        "runtime_contract_persisted": true,
+        "supplied_inputs": false,
+        "target_source": true,
+        "target_type": true,
+        "terminal_status": true
+      },
+      "expected": {
+        "action_polarity": "read",
+        "lifecycle_and_effects": {
+          "broker_orders_expected": 0,
+          "confirmation_expected": false,
+          "database_effect_expected": "no_write",
+          "idempotency_replay_expected": false,
+          "live_bot_activation_expected": false,
+          "live_trading_expected": false,
+          "no_duplicate_database_effect": false,
+          "no_write_before_confirmation": false,
+          "proposal_expected": false,
+          "safe_fixture_execution_expected": false,
+          "terminal_statuses": [
+            "completed",
+            "downgraded"
+          ]
+        },
+        "missing_inputs": [],
+        "operation": "read_linked_strategy",
+        "required_inputs": [],
+        "supplied_inputs": [],
+        "target": {
+          "canonical": "__none_expected__",
+          "type": "__none_expected__",
+          "source": "__none_expected__"
+        }
+      },
+      "failure_phase": "selector",
+      "language": "nl",
+      "result": "FAIL",
+      "run_id": "finn-v2-run-a11abeaccdb44f5ca2edbc2202de8c19",
+      "terminal": {
+        "status": "completed",
+        "typed_error": "contract_evidence_mismatch:action_polarity,missing_inputs,operation,required_inputs,supplied_inputs"
+      },
+      "timings": {
+        "create_latency_ms": 1487.37,
+        "runtime_timings_ms": {
+          "terminal_persist": 2019,
+          "total": 19495,
+          "until_collecting": 601,
+          "until_context_loaded": 804,
+          "until_dispatch_claimed": 14021,
+          "until_dispatch_published": 784,
+          "until_planned": 187,
+          "until_queued": 575,
+          "until_selection_persisted": 392,
+          "until_selector_completed": 94,
+          "until_selector_started": 13
+        }
+      }
+    },
+    {
+      "action_contract_id": "create_bot",
+      "action_lifecycle": {
+        "confirmation": {
+          "http_status": null
+        },
+        "execution": {
+          "http_status": null,
+          "status": null
+        },
+        "proposal": {
+          "available": false,
+          "status": null
+        },
+        "replay": {
+          "http_status": null,
+          "no_duplicate_effect": null,
+          "status": null
+        }
+      },
+      "actual": {
+        "action_polarity": "create",
+        "missing_inputs": [
+          "strategy_id"
+        ],
+        "operation": "create_bot",
+        "required_inputs": [
+          "strategy_id",
+          "name"
+        ],
+        "supplied_inputs": {
+          "name": "Atlas Bot"
+        },
+        "target": {}
+      },
+      "case_id": "ac24",
+      "classification": "CASCADE",
+      "conversation_and_lineage": {
+        "conversation_key": "natural-action-chain",
+        "conversation_reference": "finn-v2-run-0d8e8e39cff2408fb510a5c974424cd8",
+        "conversation_reference_kind": "previous_action_result",
+        "declassified_conversation_sequence": [
+          "ac16",
+          "ac17",
+          "ac18",
+          "ac20",
+          "ac21",
+          "ac22",
+          "ac24",
+          "ac25",
+          "ac26",
+          "ac27",
+          "ac28",
+          "ac29",
+          "ac30",
+          "ac31",
+          "ac32",
+          "ac33",
+          "ac34",
+          "ac46",
+          "ac47",
+          "ac48"
+        ],
+        "dependency_note": "Manifest marks lineage dependency; concrete predecessor mapping follows the natural contract chain.",
+        "depends_on_earlier_failed_case": true,
+        "earlier_failed_cases": [
+          "ac20",
+          "ac21"
+        ],
+        "expected_previous_cases": [
+          "ac20",
+          "ac21"
+        ],
+        "lineage_dependency_expected": true,
+        "reference_is_from_this_artifact": false,
+        "root_failed_case": "ac16",
+        "turn_position_in_original_conversation": 9
+      },
+      "database_evidence": {
+        "after_confirmation_available": false,
+        "after_execution_available": false,
+        "after_replay_available": false,
+        "before_available": false,
+        "broker_orders_unchanged": null,
+        "live_bots_unchanged": null,
+        "measured_effect": null,
+        "no_duplicate_effect": null,
+        "no_write_before_confirmation": null
+      },
+      "declassified_user_question": "Erstelle für diese gespeicherte Strategie einen nicht-live Paper-Bot namens Atlas Bot.",
+      "expectation_checks": {
+        "action_polarity": true,
+        "canonical_target": false,
+        "dispatch_cardinality": true,
+        "missing_inputs": false,
+        "operation": true,
+        "required_inputs": true,
+        "runtime_contract_persisted": true,
+        "supplied_inputs": false,
+        "target_source": true,
+        "target_type": true,
+        "terminal_status": true
+      },
+      "expected": {
+        "action_polarity": "create",
+        "lifecycle_and_effects": {
+          "broker_orders_expected": 0,
+          "confirmation_expected": true,
+          "database_effect_expected": "owner_scoped_contract_effect_once",
+          "idempotency_replay_expected": true,
+          "idempotency_replay_terminal_status": "already_executed",
+          "live_bot_activation_expected": false,
+          "live_trading_expected": false,
+          "no_duplicate_database_effect": true,
+          "no_write_before_confirmation": true,
+          "proposal_expected": true,
+          "safe_fixture_execution_expected": true,
+          "terminal_statuses": [
+            "completed",
+            "downgraded"
+          ]
+        },
+        "missing_inputs": [],
+        "operation": "create_bot",
+        "required_inputs": [
+          "strategy_id",
+          "name"
+        ],
+        "supplied_inputs": [
+          "strategy_id",
+          "name"
+        ],
+        "target": {
+          "canonical": "__present__",
+          "source": {
+            "allowed_sources": [
+              "previous_action_result",
+              "owner_action_result",
+              "persisted_operation"
+            ],
+            "no_source_allowed": true
+          },
+          "type": "__none_expected__"
+        }
+      },
+      "failure_phase": "input_contract_or_guided_state",
+      "language": "de",
+      "result": "FAIL",
+      "run_id": "finn-v2-run-e691662047444d4fb3d713c33e25de6e",
+      "terminal": {
+        "status": "completed",
+        "typed_error": "missing_inputs_unexpected"
+      },
+      "timings": {
+        "confirm_latency_ms": null,
+        "create_latency_ms": 385.39,
+        "execute_latency_ms": null,
+        "proposal_read_latency_ms": null,
+        "publish_latency_ms": null,
+        "replay_latency_ms": null,
+        "runtime_timings_ms": {
+          "terminal_persist": 2102,
+          "total": 12004,
+          "until_collecting": 490,
+          "until_context_loaded": 1002,
+          "until_dispatch_claimed": 5106,
+          "until_dispatch_published": 193,
+          "until_planned": 212,
+          "until_queued": 291,
+          "until_selection_persisted": 310,
+          "until_selector_completed": 2281,
+          "until_selector_started": 13
+        }
+      }
+    },
+    {
+      "action_contract_id": "update_bot",
+      "action_lifecycle": {
+        "confirmation": {
+          "http_status": null
+        },
+        "execution": {
+          "http_status": null,
+          "status": null
+        },
+        "proposal": {
+          "available": false,
+          "status": null
+        },
+        "replay": {
+          "http_status": null,
+          "no_duplicate_effect": null,
+          "status": null
+        }
+      },
+      "actual": {
+        "target": {}
+      },
+      "case_id": "ac25",
+      "classification": "CASCADE",
+      "conversation_and_lineage": {
+        "conversation_key": "natural-action-chain",
+        "conversation_reference": null,
+        "conversation_reference_kind": null,
+        "declassified_conversation_sequence": [
+          "ac16",
+          "ac17",
+          "ac18",
+          "ac20",
+          "ac21",
+          "ac22",
+          "ac24",
+          "ac25",
+          "ac26",
+          "ac27",
+          "ac28",
+          "ac29",
+          "ac30",
+          "ac31",
+          "ac32",
+          "ac33",
+          "ac34",
+          "ac46",
+          "ac47",
+          "ac48"
+        ],
+        "dependency_note": "Manifest marks lineage dependency; concrete predecessor mapping follows the natural contract chain.",
+        "depends_on_earlier_failed_case": true,
+        "earlier_failed_cases": [
+          "ac24"
+        ],
+        "expected_previous_cases": [
+          "ac24"
+        ],
+        "lineage_dependency_expected": true,
+        "reference_is_from_this_artifact": false,
+        "root_failed_case": "ac16",
+        "turn_position_in_original_conversation": 10
+      },
+      "database_evidence": {
+        "after_confirmation_available": false,
+        "after_execution_available": false,
+        "after_replay_available": false,
+        "before_available": false,
+        "broker_orders_unchanged": null,
+        "live_bots_unchanged": null,
+        "measured_effect": null,
+        "no_duplicate_effect": null,
+        "no_write_before_confirmation": null
+      },
+      "declassified_user_question": "Wijzig de zojuist opgeslagen bot en zet zijn cadence op weekly.",
+      "expectation_checks": {
+        "action_polarity": false,
+        "canonical_target": false,
+        "dispatch_cardinality": false,
+        "missing_inputs": true,
+        "operation": false,
+        "required_inputs": false,
+        "runtime_contract_persisted": false,
+        "supplied_inputs": false,
+        "target_source": true,
+        "target_type": true,
+        "terminal_status": false
+      },
+      "expected": {
+        "action_polarity": "update",
+        "lifecycle_and_effects": {
+          "broker_orders_expected": 0,
+          "confirmation_expected": true,
+          "database_effect_expected": "owner_scoped_contract_effect_once",
+          "idempotency_replay_expected": true,
+          "idempotency_replay_terminal_status": "already_executed",
+          "live_bot_activation_expected": false,
+          "live_trading_expected": false,
+          "no_duplicate_database_effect": true,
+          "no_write_before_confirmation": true,
+          "proposal_expected": true,
+          "safe_fixture_execution_expected": true,
+          "terminal_statuses": [
+            "completed",
+            "downgraded"
+          ]
+        },
+        "missing_inputs": [],
+        "operation": "update_bot",
+        "required_inputs": [
+          "bot_id",
+          "changed_fields"
+        ],
+        "supplied_inputs": [
+          "bot_id",
+          "changed_fields"
+        ],
+        "target": {
+          "canonical": "__present__",
+          "source": {
+            "allowed_sources": [
+              "previous_action_result",
+              "owner_action_result",
+              "persisted_operation"
+            ],
+            "no_source_allowed": true
+          },
+          "type": "__none_expected__"
+        }
+      },
+      "failure_phase": "terminal_observation",
+      "language": "nl",
+      "result": "FAIL",
+      "run_id": "finn-v2-run-e23f6c73b2024f96b76e10a55207d7bb",
+      "terminal": {
+        "error_code": null,
+        "reason": null,
+        "status": "created",
+        "typed_error": "case_timeout"
+      },
+      "timings": {
+        "confirm_latency_ms": null,
+        "create_latency_ms": 719.84,
+        "execute_latency_ms": null,
+        "proposal_read_latency_ms": null,
+        "publish_latency_ms": null,
+        "replay_latency_ms": null,
+        "runtime_timings_ms": null
+      }
+    },
+    {
+      "action_contract_id": "read_linked_bot",
+      "actual": {
+        "target": {}
+      },
+      "case_id": "ac26",
+      "classification": "INFRASTRUCTURE",
+      "conversation_and_lineage": {
+        "conversation_key": "natural-action-chain",
+        "conversation_reference": null,
+        "conversation_reference_kind": null,
+        "declassified_conversation_sequence": [
+          "ac16",
+          "ac17",
+          "ac18",
+          "ac20",
+          "ac21",
+          "ac22",
+          "ac24",
+          "ac25",
+          "ac26",
+          "ac27",
+          "ac28",
+          "ac29",
+          "ac30",
+          "ac31",
+          "ac32",
+          "ac33",
+          "ac34",
+          "ac46",
+          "ac47",
+          "ac48"
+        ],
+        "dependency_note": "Conversation dependency only where listed; no manifest lineage dependency flag.",
+        "depends_on_earlier_failed_case": true,
+        "earlier_failed_cases": [
+          "ac20",
+          "ac24"
+        ],
+        "expected_previous_cases": [
+          "ac20",
+          "ac24"
+        ],
+        "lineage_dependency_expected": false,
+        "reference_is_from_this_artifact": false,
+        "turn_position_in_original_conversation": 11
+      },
+      "declassified_user_question": "Which bot is linked to this strategy?",
+      "expected": {
+        "action_polarity": "read",
+        "lifecycle_and_effects": {
+          "broker_orders_expected": 0,
+          "confirmation_expected": false,
+          "database_effect_expected": "no_write",
+          "idempotency_replay_expected": false,
+          "live_bot_activation_expected": false,
+          "live_trading_expected": false,
+          "no_duplicate_database_effect": false,
+          "no_write_before_confirmation": false,
+          "proposal_expected": false,
+          "safe_fixture_execution_expected": false,
+          "terminal_statuses": [
+            "completed",
+            "downgraded"
+          ]
+        },
+        "missing_inputs": [],
+        "operation": "read_linked_bot",
+        "required_inputs": [],
+        "supplied_inputs": [],
+        "target": {
+          "canonical": "__none_expected__",
+          "type": "__none_expected__",
+          "source": "__none_expected__"
+        }
+      },
+      "failure_phase": "run_creation_transport",
+      "language": "en",
+      "result": "FAIL",
+      "run_id": null,
+      "terminal": {
+        "error_code": null,
+        "reason": null,
+        "status": null,
+        "typed_error": "clienttimeout"
+      },
+      "timings": {
+        "create_latency_ms": 20309.21,
+        "runtime_timings_ms": null
+      }
+    },
+    {
+      "action_contract_id": "read_bot_status",
+      "actual": {
+        "target": {}
+      },
+      "case_id": "ac27",
+      "classification": "INFRASTRUCTURE",
+      "conversation_and_lineage": {
+        "conversation_key": "natural-action-chain",
+        "conversation_reference": null,
+        "conversation_reference_kind": null,
+        "declassified_conversation_sequence": [
+          "ac16",
+          "ac17",
+          "ac18",
+          "ac20",
+          "ac21",
+          "ac22",
+          "ac24",
+          "ac25",
+          "ac26",
+          "ac27",
+          "ac28",
+          "ac29",
+          "ac30",
+          "ac31",
+          "ac32",
+          "ac33",
+          "ac34",
+          "ac46",
+          "ac47",
+          "ac48"
+        ],
+        "dependency_note": "Conversation dependency only where listed; no manifest lineage dependency flag.",
+        "depends_on_earlier_failed_case": true,
+        "earlier_failed_cases": [
+          "ac24"
+        ],
+        "expected_previous_cases": [
+          "ac24"
+        ],
+        "lineage_dependency_expected": false,
+        "reference_is_from_this_artifact": false,
+        "turn_position_in_original_conversation": 12
+      },
+      "declassified_user_question": "Welchen Status hat der verknüpfte Bot gerade?",
+      "expected": {
+        "action_polarity": "read",
+        "lifecycle_and_effects": {
+          "broker_orders_expected": 0,
+          "confirmation_expected": false,
+          "database_effect_expected": "no_write",
+          "idempotency_replay_expected": false,
+          "live_bot_activation_expected": false,
+          "live_trading_expected": false,
+          "no_duplicate_database_effect": false,
+          "no_write_before_confirmation": false,
+          "proposal_expected": false,
+          "safe_fixture_execution_expected": false,
+          "terminal_statuses": [
+            "completed",
+            "downgraded"
+          ]
+        },
+        "missing_inputs": [],
+        "operation": "read_bot_status",
+        "required_inputs": [],
+        "supplied_inputs": [],
+        "target": {
+          "canonical": "__none_expected__",
+          "type": "__none_expected__",
+          "source": "__none_expected__"
+        }
+      },
+      "failure_phase": "run_creation_transport",
+      "language": "de",
+      "result": "FAIL",
+      "run_id": null,
+      "terminal": {
+        "error_code": null,
+        "reason": null,
+        "status": null,
+        "typed_error": "clienttimeout"
+      },
+      "timings": {
+        "create_latency_ms": 20107.92,
+        "runtime_timings_ms": null
+      }
+    },
+    {
+      "action_contract_id": "evaluate_bot",
+      "actual": {
+        "target": {}
+      },
+      "case_id": "ac28",
+      "classification": "CASCADE",
+      "conversation_and_lineage": {
+        "conversation_key": "natural-action-chain",
+        "conversation_reference": null,
+        "conversation_reference_kind": null,
+        "declassified_conversation_sequence": [
+          "ac16",
+          "ac17",
+          "ac18",
+          "ac20",
+          "ac21",
+          "ac22",
+          "ac24",
+          "ac25",
+          "ac26",
+          "ac27",
+          "ac28",
+          "ac29",
+          "ac30",
+          "ac31",
+          "ac32",
+          "ac33",
+          "ac34",
+          "ac46",
+          "ac47",
+          "ac48"
+        ],
+        "dependency_note": "Conversation dependency only where listed; no manifest lineage dependency flag.",
+        "depends_on_earlier_failed_case": true,
+        "earlier_failed_cases": [
+          "ac24"
+        ],
+        "expected_previous_cases": [
+          "ac24"
+        ],
+        "lineage_dependency_expected": false,
+        "reference_is_from_this_artifact": false,
+        "root_failed_case": "ac16",
+        "turn_position_in_original_conversation": 13
+      },
+      "declassified_user_question": "Beoordeel de gevolgen van deze bot voor mijn huidige plan.",
+      "expectation_checks": {
+        "action_polarity": false,
+        "canonical_target": true,
+        "dispatch_cardinality": false,
+        "missing_inputs": true,
+        "operation": false,
+        "required_inputs": true,
+        "runtime_contract_persisted": false,
+        "supplied_inputs": true,
+        "target_source": true,
+        "target_type": true,
+        "terminal_status": false
+      },
+      "expected": {
+        "action_polarity": "evaluate",
+        "lifecycle_and_effects": {
+          "broker_orders_expected": 0,
+          "confirmation_expected": false,
+          "database_effect_expected": "no_write",
+          "idempotency_replay_expected": false,
+          "live_bot_activation_expected": false,
+          "live_trading_expected": false,
+          "no_duplicate_database_effect": false,
+          "no_write_before_confirmation": false,
+          "proposal_expected": false,
+          "safe_fixture_execution_expected": false,
+          "terminal_statuses": [
+            "completed",
+            "downgraded"
+          ]
+        },
+        "missing_inputs": [],
+        "operation": "evaluate_bot",
+        "required_inputs": [],
+        "supplied_inputs": [],
+        "target": {
+          "canonical": "__none_expected__",
+          "type": "__none_expected__",
+          "source": "__none_expected__"
+        }
+      },
+      "failure_phase": "terminal_observation",
+      "language": "nl",
+      "result": "FAIL",
+      "run_id": "finn-v2-run-9339b5e21630472c9c88efb9cbf097c5",
+      "terminal": {
+        "error_code": null,
+        "reason": null,
+        "status": "created",
+        "typed_error": "case_timeout"
+      },
+      "timings": {
+        "create_latency_ms": 13931.83,
+        "runtime_timings_ms": null
+      }
+    },
+    {
+      "action_contract_id": "activate_bot",
+      "actual": {
+        "target": {}
+      },
+      "case_id": "ac29",
+      "classification": "INFRASTRUCTURE",
+      "conversation_and_lineage": {
+        "conversation_key": "natural-action-chain",
+        "conversation_reference": null,
+        "conversation_reference_kind": null,
+        "declassified_conversation_sequence": [
+          "ac16",
+          "ac17",
+          "ac18",
+          "ac20",
+          "ac21",
+          "ac22",
+          "ac24",
+          "ac25",
+          "ac26",
+          "ac27",
+          "ac28",
+          "ac29",
+          "ac30",
+          "ac31",
+          "ac32",
+          "ac33",
+          "ac34",
+          "ac46",
+          "ac47",
+          "ac48"
+        ],
+        "dependency_note": "Conversation dependency only where listed; no manifest lineage dependency flag.",
+        "depends_on_earlier_failed_case": true,
+        "earlier_failed_cases": [
+          "ac24"
+        ],
+        "expected_previous_cases": [
+          "ac24"
+        ],
+        "lineage_dependency_expected": false,
+        "reference_is_from_this_artifact": false,
+        "turn_position_in_original_conversation": 14
+      },
+      "declassified_user_question": "Activate this bot for live trading now.",
+      "expected": {
+        "action_polarity": "activate",
+        "lifecycle_and_effects": {
+          "broker_orders_expected": 0,
+          "confirmation_expected": false,
+          "database_effect_expected": "no_write",
+          "idempotency_replay_expected": false,
+          "live_bot_activation_expected": false,
+          "live_trading_expected": false,
+          "no_duplicate_database_effect": false,
+          "no_write_before_confirmation": false,
+          "proposal_expected": false,
+          "safe_fixture_execution_expected": false,
+          "terminal_statuses": [
+            "completed",
+            "downgraded"
+          ]
+        },
+        "missing_inputs": [],
+        "operation": "activate_bot",
+        "required_inputs": [
+          "bot_id"
+        ],
+        "supplied_inputs": [
+          "bot_id"
+        ],
+        "target": {
+          "canonical": "__present__",
+          "source": {
+            "allowed_sources": [
+              "previous_action_result",
+              "owner_action_result",
+              "persisted_operation"
+            ],
+            "no_source_allowed": true
+          },
+          "type": "__none_expected__"
+        }
+      },
+      "failure_phase": "run_creation_transport",
+      "language": "en",
+      "result": "FAIL",
+      "run_id": null,
+      "terminal": {
+        "error_code": null,
+        "reason": null,
+        "status": null,
+        "typed_error": "clienttimeout"
+      },
+      "timings": {
+        "create_latency_ms": 20108.36,
+        "runtime_timings_ms": null
+      }
+    },
+    {
+      "action_contract_id": "activate_paper_bot",
+      "actual": {
+        "target": {}
+      },
+      "case_id": "ac30",
+      "classification": "CASCADE",
+      "conversation_and_lineage": {
+        "conversation_key": "natural-action-chain",
+        "conversation_reference": null,
+        "conversation_reference_kind": null,
+        "declassified_conversation_sequence": [
+          "ac16",
+          "ac17",
+          "ac18",
+          "ac20",
+          "ac21",
+          "ac22",
+          "ac24",
+          "ac25",
+          "ac26",
+          "ac27",
+          "ac28",
+          "ac29",
+          "ac30",
+          "ac31",
+          "ac32",
+          "ac33",
+          "ac34",
+          "ac46",
+          "ac47",
+          "ac48"
+        ],
+        "dependency_note": "Conversation dependency only where listed; no manifest lineage dependency flag.",
+        "depends_on_earlier_failed_case": true,
+        "earlier_failed_cases": [
+          "ac24"
+        ],
+        "expected_previous_cases": [
+          "ac24"
+        ],
+        "lineage_dependency_expected": false,
+        "reference_is_from_this_artifact": false,
+        "root_failed_case": "ac16",
+        "turn_position_in_original_conversation": 15
+      },
+      "declassified_user_question": "Aktiviere diesen Bot ausschließlich im Paper-Modus.",
+      "expectation_checks": {
+        "action_polarity": false,
+        "canonical_target": false,
+        "dispatch_cardinality": false,
+        "missing_inputs": true,
+        "operation": false,
+        "required_inputs": false,
+        "runtime_contract_persisted": false,
+        "supplied_inputs": false,
+        "target_source": true,
+        "target_type": true,
+        "terminal_status": false
+      },
+      "expected": {
+        "action_polarity": "activate",
+        "lifecycle_and_effects": {
+          "broker_orders_expected": 0,
+          "confirmation_expected": false,
+          "database_effect_expected": "no_write",
+          "idempotency_replay_expected": false,
+          "live_bot_activation_expected": false,
+          "live_trading_expected": false,
+          "no_duplicate_database_effect": false,
+          "no_write_before_confirmation": false,
+          "proposal_expected": false,
+          "safe_fixture_execution_expected": false,
+          "terminal_statuses": [
+            "completed",
+            "downgraded"
+          ]
+        },
+        "missing_inputs": [],
+        "operation": "activate_paper_bot",
+        "required_inputs": [
+          "bot_id"
+        ],
+        "supplied_inputs": [
+          "bot_id"
+        ],
+        "target": {
+          "canonical": "__present__",
+          "source": {
+            "allowed_sources": [
+              "previous_action_result",
+              "owner_action_result",
+              "persisted_operation"
+            ],
+            "no_source_allowed": true
+          },
+          "type": "__none_expected__"
+        }
+      },
+      "failure_phase": "terminal_observation",
+      "language": "de",
+      "result": "FAIL",
+      "run_id": "finn-v2-run-6ff4843566d147a6a7ea7dee07f1558f",
+      "terminal": {
+        "error_code": null,
+        "reason": null,
+        "status": "created",
+        "typed_error": "case_timeout"
+      },
+      "timings": {
+        "create_latency_ms": 17815.61,
+        "runtime_timings_ms": null
+      }
+    },
+    {
+      "action_contract_id": "confirm_proposal",
+      "actual": {
+        "action_polarity": "create",
+        "missing_inputs": [
+          "strategy_id"
+        ],
+        "operation": "create_bot",
+        "required_inputs": [
+          "strategy_id",
+          "name"
+        ],
+        "supplied_inputs": {
+          "name": "Atlas Bot"
+        },
+        "target": {}
+      },
+      "case_id": "ac31",
+      "classification": "CASCADE",
+      "conversation_and_lineage": {
+        "conversation_key": "natural-action-chain",
+        "conversation_reference": null,
+        "conversation_reference_kind": null,
+        "declassified_conversation_sequence": [
+          "ac16",
+          "ac17",
+          "ac18",
+          "ac20",
+          "ac21",
+          "ac22",
+          "ac24",
+          "ac25",
+          "ac26",
+          "ac27",
+          "ac28",
+          "ac29",
+          "ac30",
+          "ac31",
+          "ac32",
+          "ac33",
+          "ac34",
+          "ac46",
+          "ac47",
+          "ac48"
+        ],
+        "dependency_note": "Conversation dependency only where listed; no manifest lineage dependency flag.",
+        "depends_on_earlier_failed_case": true,
+        "earlier_failed_cases": [
+          "ac30"
+        ],
+        "expected_previous_cases": [
+          "ac30"
+        ],
+        "lineage_dependency_expected": false,
+        "reference_is_from_this_artifact": false,
+        "root_failed_case": "ac16",
+        "turn_position_in_original_conversation": 16
+      },
+      "declassified_user_question": "Bevestig het zojuist getoonde voorstel.",
+      "expectation_checks": {
+        "action_polarity": false,
+        "canonical_target": false,
+        "dispatch_cardinality": true,
+        "missing_inputs": false,
+        "operation": false,
+        "required_inputs": false,
+        "runtime_contract_persisted": true,
+        "supplied_inputs": false,
+        "target_source": true,
+        "target_type": true,
+        "terminal_status": true
+      },
+      "expected": {
+        "action_polarity": "confirm",
+        "lifecycle_and_effects": {
+          "broker_orders_expected": 0,
+          "confirmation_expected": false,
+          "database_effect_expected": "no_write",
+          "idempotency_replay_expected": false,
+          "live_bot_activation_expected": false,
+          "live_trading_expected": false,
+          "no_duplicate_database_effect": false,
+          "no_write_before_confirmation": false,
+          "proposal_expected": false,
+          "safe_fixture_execution_expected": false,
+          "terminal_statuses": [
+            "completed",
+            "downgraded"
+          ]
+        },
+        "missing_inputs": [],
+        "operation": "confirm_proposal",
+        "required_inputs": [
+          "proposal_id"
+        ],
+        "supplied_inputs": [
+          "proposal_id"
+        ],
+        "target": {
+          "canonical": "__present__",
+          "source": {
+            "allowed_sources": [
+              "previous_response",
+              "persisted_operation"
+            ],
+            "no_source_allowed": true
+          },
+          "type": "__none_expected__"
+        }
+      },
+      "failure_phase": "selector",
+      "language": "nl",
+      "result": "FAIL",
+      "run_id": "finn-v2-run-b46e9062d56a40b2981dcef6c8fb5d1d",
+      "terminal": {
+        "status": "completed",
+        "typed_error": "contract_evidence_mismatch:action_polarity,canonical_target,missing_inputs,operation,required_inputs,supplied_inputs"
+      },
+      "timings": {
+        "create_latency_ms": 1718.47,
+        "runtime_timings_ms": {
+          "terminal_persist": 4202,
+          "total": 14409,
+          "until_collecting": 178,
+          "until_context_loaded": 522,
+          "until_dispatch_claimed": 7677,
+          "until_dispatch_published": 1112,
+          "until_planned": 188,
+          "until_queued": 134,
+          "until_selection_persisted": 201,
+          "until_selector_completed": 104,
+          "until_selector_started": 84
+        }
+      }
+    },
+    {
+      "action_contract_id": "execute_proposal",
+      "actual": {
+        "action_polarity": "execute",
+        "missing_inputs": [],
+        "operation": "unsupported_financial_operation",
+        "required_inputs": [],
+        "supplied_inputs": {},
+        "target": {}
+      },
+      "case_id": "ac32",
+      "classification": "CASCADE",
+      "conversation_and_lineage": {
+        "conversation_key": "natural-action-chain",
+        "conversation_reference": null,
+        "conversation_reference_kind": null,
+        "declassified_conversation_sequence": [
+          "ac16",
+          "ac17",
+          "ac18",
+          "ac20",
+          "ac21",
+          "ac22",
+          "ac24",
+          "ac25",
+          "ac26",
+          "ac27",
+          "ac28",
+          "ac29",
+          "ac30",
+          "ac31",
+          "ac32",
+          "ac33",
+          "ac34",
+          "ac46",
+          "ac47",
+          "ac48"
+        ],
+        "dependency_note": "Conversation dependency only where listed; no manifest lineage dependency flag.",
+        "depends_on_earlier_failed_case": true,
+        "earlier_failed_cases": [
+          "ac30",
+          "ac31"
+        ],
+        "expected_previous_cases": [
+          "ac30",
+          "ac31"
+        ],
+        "lineage_dependency_expected": false,
+        "reference_is_from_this_artifact": false,
+        "root_failed_case": "ac16",
+        "turn_position_in_original_conversation": 17
+      },
+      "declassified_user_question": "Execute the proposal I just confirmed.",
+      "expectation_checks": {
+        "action_polarity": true,
+        "canonical_target": false,
+        "dispatch_cardinality": true,
+        "missing_inputs": true,
+        "operation": false,
+        "required_inputs": false,
+        "runtime_contract_persisted": true,
+        "supplied_inputs": false,
+        "target_source": true,
+        "target_type": true,
+        "terminal_status": false
+      },
+      "expected": {
+        "action_polarity": "execute",
+        "lifecycle_and_effects": {
+          "broker_orders_expected": 0,
+          "confirmation_expected": false,
+          "database_effect_expected": "no_write",
+          "idempotency_replay_expected": false,
+          "live_bot_activation_expected": false,
+          "live_trading_expected": false,
+          "no_duplicate_database_effect": false,
+          "no_write_before_confirmation": false,
+          "proposal_expected": false,
+          "safe_fixture_execution_expected": false,
+          "terminal_statuses": [
+            "completed",
+            "downgraded"
+          ]
+        },
+        "missing_inputs": [],
+        "operation": "execute_proposal",
+        "required_inputs": [
+          "proposal_id"
+        ],
+        "supplied_inputs": [
+          "proposal_id"
+        ],
+        "target": {
+          "canonical": "__present__",
+          "source": {
+            "allowed_sources": [
+              "previous_response",
+              "persisted_operation"
+            ],
+            "no_source_allowed": true
+          },
+          "type": "__none_expected__"
+        }
+      },
+      "failure_phase": "terminal_verification",
+      "language": "en",
+      "result": "FAIL",
+      "run_id": "finn-v2-run-89b3a7abec354216b532574510ade458",
+      "terminal": {
+        "error_code": "financial_domain_unavailable",
+        "reason": "financial_domain_unavailable",
+        "status": "unavailable",
+        "typed_error": "financial_domain_unavailable"
+      },
+      "timings": {
+        "create_latency_ms": 4293.51,
+        "runtime_timings_ms": {
+          "terminal_persist": 2395,
+          "total": 15015,
+          "until_collecting": 181,
+          "until_context_loaded": 310,
+          "until_dispatch_claimed": 2380,
+          "until_dispatch_published": 3123,
+          "until_planned": 196,
+          "until_queued": 117,
+          "until_selection_persisted": 715,
+          "until_selector_completed": 5582,
+          "until_selector_started": 12
+        }
+      }
+    },
+    {
+      "action_contract_id": "deactivate_bot",
+      "action_lifecycle": {
+        "confirmation": {
+          "http_status": null
+        },
+        "execution": {
+          "http_status": null,
+          "status": null
+        },
+        "proposal": {
+          "available": false,
+          "status": null
+        },
+        "replay": {
+          "http_status": null,
+          "no_duplicate_effect": null,
+          "status": null
+        }
+      },
+      "actual": {
+        "action_polarity": "update",
+        "missing_inputs": [
+          "bot_id"
+        ],
+        "operation": "deactivate_bot",
+        "required_inputs": [
+          "bot_id"
+        ],
+        "supplied_inputs": {},
+        "target": {}
+      },
+      "case_id": "ac33",
+      "classification": "CASCADE",
+      "conversation_and_lineage": {
+        "conversation_key": "natural-action-chain",
+        "conversation_reference": "finn-v2-run-0d8e8e39cff2408fb510a5c974424cd8",
+        "conversation_reference_kind": "previous_action_result",
+        "declassified_conversation_sequence": [
+          "ac16",
+          "ac17",
+          "ac18",
+          "ac20",
+          "ac21",
+          "ac22",
+          "ac24",
+          "ac25",
+          "ac26",
+          "ac27",
+          "ac28",
+          "ac29",
+          "ac30",
+          "ac31",
+          "ac32",
+          "ac33",
+          "ac34",
+          "ac46",
+          "ac47",
+          "ac48"
+        ],
+        "dependency_note": "Manifest marks lineage dependency; concrete predecessor mapping follows the natural contract chain.",
+        "depends_on_earlier_failed_case": true,
+        "earlier_failed_cases": [
+          "ac24",
+          "ac25"
+        ],
+        "expected_previous_cases": [
+          "ac24",
+          "ac25"
+        ],
+        "lineage_dependency_expected": true,
+        "reference_is_from_this_artifact": false,
+        "root_failed_case": "ac16",
+        "turn_position_in_original_conversation": 18
+      },
+      "database_evidence": {
+        "after_confirmation_available": false,
+        "after_execution_available": false,
+        "after_replay_available": false,
+        "before_available": false,
+        "broker_orders_unchanged": null,
+        "live_bots_unchanged": null,
+        "measured_effect": null,
+        "no_duplicate_effect": null,
+        "no_write_before_confirmation": null
+      },
+      "declassified_user_question": "Deaktiviere den gespeicherten Bot, aber lösche ihn nicht.",
+      "expectation_checks": {
+        "action_polarity": true,
+        "canonical_target": false,
+        "dispatch_cardinality": true,
+        "missing_inputs": false,
+        "operation": true,
+        "required_inputs": true,
+        "runtime_contract_persisted": true,
+        "supplied_inputs": false,
+        "target_source": true,
+        "target_type": true,
+        "terminal_status": true
+      },
+      "expected": {
+        "action_polarity": "update",
+        "lifecycle_and_effects": {
+          "broker_orders_expected": 0,
+          "confirmation_expected": true,
+          "database_effect_expected": "owner_scoped_contract_effect_once",
+          "idempotency_replay_expected": true,
+          "idempotency_replay_terminal_status": "already_executed",
+          "live_bot_activation_expected": false,
+          "live_trading_expected": false,
+          "no_duplicate_database_effect": true,
+          "no_write_before_confirmation": true,
+          "proposal_expected": true,
+          "safe_fixture_execution_expected": true,
+          "terminal_statuses": [
+            "completed",
+            "downgraded"
+          ]
+        },
+        "missing_inputs": [],
+        "operation": "deactivate_bot",
+        "required_inputs": [
+          "bot_id"
+        ],
+        "supplied_inputs": [
+          "bot_id"
+        ],
+        "target": {
+          "canonical": "__present__",
+          "source": {
+            "allowed_sources": [
+              "previous_action_result",
+              "owner_action_result",
+              "persisted_operation"
+            ],
+            "no_source_allowed": true
+          },
+          "type": "__none_expected__"
+        }
+      },
+      "failure_phase": "input_contract_or_guided_state",
+      "language": "de",
+      "result": "FAIL",
+      "run_id": "finn-v2-run-0e04f95b8e8a4e7687d3602f57f71531",
+      "terminal": {
+        "status": "completed",
+        "typed_error": "missing_inputs_unexpected"
+      },
+      "timings": {
+        "confirm_latency_ms": null,
+        "create_latency_ms": 1387.89,
+        "execute_latency_ms": null,
+        "proposal_read_latency_ms": null,
+        "publish_latency_ms": null,
+        "replay_latency_ms": null,
+        "runtime_timings_ms": {
+          "terminal_persist": 2515,
+          "total": 10717,
+          "until_collecting": 208,
+          "until_context_loaded": 680,
+          "until_dispatch_claimed": 3902,
+          "until_dispatch_published": 602,
+          "until_planned": 202,
+          "until_queued": 191,
+          "until_selection_persisted": 213,
+          "until_selector_completed": 2186,
+          "until_selector_started": 14
+        }
+      }
+    },
+    {
+      "action_contract_id": "read_active_plan",
+      "actual": {
+        "action_polarity": "read",
+        "missing_inputs": [],
+        "operation": "read_active_plan",
+        "required_inputs": [],
+        "supplied_inputs": {},
+        "target": {
+          "canonical": "XLM",
+          "source": "selector_message"
+        }
+      },
+      "case_id": "ac34",
+      "classification": "CASCADE",
+      "conversation_and_lineage": {
+        "conversation_key": "natural-action-chain",
+        "conversation_reference": null,
+        "conversation_reference_kind": null,
+        "declassified_conversation_sequence": [
+          "ac16",
+          "ac17",
+          "ac18",
+          "ac20",
+          "ac21",
+          "ac22",
+          "ac24",
+          "ac25",
+          "ac26",
+          "ac27",
+          "ac28",
+          "ac29",
+          "ac30",
+          "ac31",
+          "ac32",
+          "ac33",
+          "ac34",
+          "ac46",
+          "ac47",
+          "ac48"
+        ],
+        "dependency_note": "Conversation dependency only where listed; no manifest lineage dependency flag.",
+        "depends_on_earlier_failed_case": true,
+        "earlier_failed_cases": [
+          "ac16",
+          "ac20",
+          "ac24"
+        ],
+        "expected_previous_cases": [
+          "ac16",
+          "ac20",
+          "ac24"
+        ],
+        "lineage_dependency_expected": false,
+        "reference_is_from_this_artifact": false,
+        "root_failed_case": "ac16",
+        "turn_position_in_original_conversation": 19
+      },
+      "declassified_user_question": "Toon mijn complete actieve plan met setup, strategie en bot.",
+      "expectation_checks": {
+        "action_polarity": true,
+        "canonical_target": false,
+        "dispatch_cardinality": true,
+        "missing_inputs": true,
+        "operation": true,
+        "required_inputs": true,
+        "runtime_contract_persisted": true,
+        "supplied_inputs": true,
+        "target_source": false,
+        "target_type": true,
+        "terminal_status": true
+      },
+      "expected": {
+        "action_polarity": "read",
+        "lifecycle_and_effects": {
+          "broker_orders_expected": 0,
+          "confirmation_expected": false,
+          "database_effect_expected": "no_write",
+          "idempotency_replay_expected": false,
+          "live_bot_activation_expected": false,
+          "live_trading_expected": false,
+          "no_duplicate_database_effect": false,
+          "no_write_before_confirmation": false,
+          "proposal_expected": false,
+          "safe_fixture_execution_expected": false,
+          "terminal_statuses": [
+            "completed",
+            "downgraded"
+          ]
+        },
+        "missing_inputs": [],
+        "operation": "read_active_plan",
+        "required_inputs": [],
+        "supplied_inputs": [],
+        "target": {
+          "canonical": "__none_expected__",
+          "type": "__none_expected__",
+          "source": "__none_expected__"
+        }
+      },
+      "failure_phase": "terminal_verification",
+      "language": "nl",
+      "result": "FAIL",
+      "run_id": "finn-v2-run-da5158808d744c34a82766d50fed2ede",
+      "terminal": {
+        "error_code": "response_scope_incomplete",
+        "reason": "response_scope_incomplete",
+        "status": "downgraded",
+        "typed_error": "response_scope_incomplete"
+      },
+      "timings": {
+        "create_latency_ms": 3303.69,
+        "runtime_timings_ms": {
+          "terminal_persist": 3400,
+          "total": 13596,
+          "until_collecting": 279,
+          "until_context_loaded": 389,
+          "until_dispatch_claimed": 5095,
+          "until_dispatch_published": 1698,
+          "until_planned": 112,
+          "until_queued": 119,
+          "until_selection_persisted": 183,
+          "until_selector_completed": 2309,
+          "until_selector_started": 7
+        }
+      }
+    },
+    {
+      "action_contract_id": "evaluate_plan",
+      "actual": {
+        "action_polarity": "evaluate",
+        "missing_inputs": [],
+        "operation": "evaluate_plan",
+        "required_inputs": [],
+        "supplied_inputs": {},
+        "target": {}
+      },
+      "case_id": "ac35",
+      "classification": "PRODUCT",
+      "conversation_and_lineage": {
+        "conversation_key": "evidence-follow-up",
+        "declassified_conversation_sequence": [
+          "ac35",
+          "ac36",
+          "ac37"
+        ],
+        "dependency_note": "Conversation dependency only where listed; no manifest lineage dependency flag.",
+        "depends_on_earlier_failed_case": false,
+        "earlier_failed_cases": [],
+        "expected_previous_cases": [],
+        "lineage_dependency_expected": false,
+        "reference_is_from_this_artifact": false,
+        "turn_position_in_original_conversation": 1
+      },
+      "declassified_user_question": "What is the weakest verified part of my current plan?",
+      "expectation_checks": {
+        "action_polarity": true,
+        "canonical_target": true,
+        "dispatch_cardinality": true,
+        "missing_inputs": true,
+        "operation": true,
+        "required_inputs": true,
+        "runtime_contract_persisted": true,
+        "supplied_inputs": true,
+        "target_source": true,
+        "target_type": true,
+        "terminal_status": false
+      },
+      "expected": {
+        "action_polarity": "evaluate",
+        "lifecycle_and_effects": {
+          "broker_orders_expected": 0,
+          "confirmation_expected": false,
+          "database_effect_expected": "no_write",
+          "idempotency_replay_expected": false,
+          "live_bot_activation_expected": false,
+          "live_trading_expected": false,
+          "no_duplicate_database_effect": false,
+          "no_write_before_confirmation": false,
+          "proposal_expected": false,
+          "safe_fixture_execution_expected": false,
+          "terminal_statuses": [
+            "completed",
+            "downgraded"
+          ]
+        },
+        "missing_inputs": [],
+        "operation": "evaluate_plan",
+        "required_inputs": [],
+        "supplied_inputs": [],
+        "target": {
+          "canonical": "__none_expected__",
+          "type": "__none_expected__",
+          "source": "__none_expected__"
+        }
+      },
+      "failure_phase": "lifecycle_terminalization",
+      "language": "en",
+      "result": "FAIL",
+      "run_id": "finn-v2-run-9bb0ed13f3c744dc9492f4c7cca45f8a",
+      "terminal": {
+        "error_code": "lifecycle_deadline_exceeded",
+        "reason": "lifecycle_deadline_exceeded",
+        "status": "failed",
+        "typed_error": "lifecycle_deadline_exceeded"
+      },
+      "timings": {
+        "create_latency_ms": 1496.62,
+        "runtime_timings_ms": {
+          "terminal_persist": 691,
+          "total": 15788,
+          "until_collecting": 205,
+          "until_context_loaded": 492,
+          "until_dispatch_claimed": 2497,
+          "until_dispatch_published": 593,
+          "until_planned": 208,
+          "until_queued": 295,
+          "until_reasoning": 3303,
+          "until_selection_persisted": 208,
+          "until_selector_completed": 2587,
+          "until_selector_started": 103,
+          "until_verifying": 4602
+        }
+      }
+    },
+    {
+      "action_contract_id": "explain_previous_evidence",
+      "actual": {
+        "action_polarity": "clarify",
+        "missing_inputs": [
+          "requested_change"
+        ],
+        "operation": "clarify_request",
+        "required_inputs": [
+          "requested_change"
+        ],
+        "supplied_inputs": {},
+        "target": {}
+      },
+      "case_id": "ac36",
+      "classification": "PRODUCT",
+      "conversation_and_lineage": {
+        "conversation_key": "evidence-follow-up",
+        "conversation_reference": null,
+        "conversation_reference_kind": null,
+        "declassified_conversation_sequence": [
+          "ac35",
+          "ac36",
+          "ac37"
+        ],
+        "dependency_note": "Conversation dependency only where listed; no manifest lineage dependency flag.",
+        "depends_on_earlier_failed_case": true,
+        "earlier_failed_cases": [
+          "ac35"
+        ],
+        "expected_previous_cases": [
+          "ac35"
+        ],
+        "lineage_dependency_expected": false,
+        "reference_is_from_this_artifact": false,
+        "turn_position_in_original_conversation": 2
+      },
+      "declassified_user_question": "Waarom volgt die conclusie uit het bewijs dat je net gebruikte?",
+      "expectation_checks": {
+        "action_polarity": false,
+        "canonical_target": true,
+        "dispatch_cardinality": true,
+        "missing_inputs": false,
+        "operation": false,
+        "required_inputs": false,
+        "runtime_contract_persisted": true,
+        "supplied_inputs": true,
+        "target_source": true,
+        "target_type": true,
+        "terminal_status": true
+      },
+      "expected": {
+        "action_polarity": "read",
+        "lifecycle_and_effects": {
+          "broker_orders_expected": 0,
+          "confirmation_expected": false,
+          "database_effect_expected": "no_write",
+          "idempotency_replay_expected": false,
+          "live_bot_activation_expected": false,
+          "live_trading_expected": false,
+          "no_duplicate_database_effect": false,
+          "no_write_before_confirmation": false,
+          "proposal_expected": false,
+          "safe_fixture_execution_expected": false,
+          "terminal_statuses": [
+            "completed",
+            "downgraded"
+          ]
+        },
+        "missing_inputs": [],
+        "operation": "explain_previous_evidence",
+        "required_inputs": [],
+        "supplied_inputs": [],
+        "target": {
+          "source": {
+            "allowed_sources": [
+              "previous_response",
+              "conversation_lineage"
+            ],
+            "no_source_allowed": true
+          },
+          "canonical": "__none_expected__",
+          "type": "__none_expected__"
+        }
+      },
+      "failure_phase": "selector",
+      "language": "nl",
+      "result": "FAIL",
+      "run_id": "finn-v2-run-7070e55990c249209a24b3fd241c3b76",
+      "terminal": {
+        "status": "completed",
+        "typed_error": "contract_evidence_mismatch:action_polarity,missing_inputs,operation,required_inputs"
+      },
+      "timings": {
+        "create_latency_ms": 2291.64,
+        "runtime_timings_ms": {
+          "terminal_persist": 2613,
+          "total": 15115,
+          "until_collecting": 197,
+          "until_context_loaded": 513,
+          "until_dispatch_claimed": 7808,
+          "until_dispatch_published": 1104,
+          "until_planned": 206,
+          "until_queued": 290,
+          "until_selection_persisted": 176,
+          "until_selector_completed": 2107,
+          "until_selector_started": 96
+        }
+      }
+    },
+    {
+      "action_contract_id": "reformulate_previous_response",
+      "actual": {
+        "action_polarity": "clarify",
+        "missing_inputs": [],
+        "operation": "clarify_request",
+        "required_inputs": [
+          "requested_change"
+        ],
+        "supplied_inputs": {
+          "requested_change": "Formuliere deine vorige Antwort kürzer und einfacher."
+        },
+        "target": {}
+      },
+      "case_id": "ac37",
+      "classification": "PRODUCT",
+      "conversation_and_lineage": {
+        "conversation_key": "evidence-follow-up",
+        "conversation_reference": null,
+        "conversation_reference_kind": null,
+        "declassified_conversation_sequence": [
+          "ac35",
+          "ac36",
+          "ac37"
+        ],
+        "dependency_note": "Conversation dependency only where listed; no manifest lineage dependency flag.",
+        "depends_on_earlier_failed_case": true,
+        "earlier_failed_cases": [
+          "ac35",
+          "ac36"
+        ],
+        "expected_previous_cases": [
+          "ac35",
+          "ac36"
+        ],
+        "lineage_dependency_expected": false,
+        "reference_is_from_this_artifact": false,
+        "turn_position_in_original_conversation": 3
+      },
+      "declassified_user_question": "Formuliere deine vorige Antwort kürzer und einfacher.",
+      "expectation_checks": {
+        "action_polarity": false,
+        "canonical_target": true,
+        "dispatch_cardinality": true,
+        "missing_inputs": true,
+        "operation": false,
+        "required_inputs": false,
+        "runtime_contract_persisted": true,
+        "supplied_inputs": false,
+        "target_source": true,
+        "target_type": true,
+        "terminal_status": true
+      },
+      "expected": {
+        "action_polarity": "read",
+        "lifecycle_and_effects": {
+          "broker_orders_expected": 0,
+          "confirmation_expected": false,
+          "database_effect_expected": "no_write",
+          "idempotency_replay_expected": false,
+          "live_bot_activation_expected": false,
+          "live_trading_expected": false,
+          "no_duplicate_database_effect": false,
+          "no_write_before_confirmation": false,
+          "proposal_expected": false,
+          "safe_fixture_execution_expected": false,
+          "terminal_statuses": [
+            "completed",
+            "downgraded"
+          ]
+        },
+        "missing_inputs": [],
+        "operation": "reformulate_previous_response",
+        "required_inputs": [],
+        "supplied_inputs": [],
+        "target": {
+          "source": {
+            "allowed_sources": [
+              "previous_response",
+              "conversation_lineage"
+            ],
+            "no_source_allowed": true
+          },
+          "canonical": "__none_expected__",
+          "type": "__none_expected__"
+        }
+      },
+      "failure_phase": "terminal_observation",
+      "language": "de",
+      "result": "FAIL",
+      "run_id": "finn-v2-run-a3b9224ba0c949c3ae25396fad3b19a1",
+      "terminal": {
+        "status": "completed",
+        "typed_error": "case_timeout"
+      },
+      "timings": {
+        "create_latency_ms": 2325.36,
+        "runtime_timings_ms": {
+          "terminal_persist": 3783,
+          "total": 62703,
+          "until_collecting": 308,
+          "until_context_loaded": 2584,
+          "until_dispatch_claimed": 50592,
+          "until_dispatch_published": 1208,
+          "until_planned": 192,
+          "until_queued": 509,
+          "until_selection_persisted": 182,
+          "until_selector_completed": 3319,
+          "until_selector_started": 22
+        }
+      }
+    },
+    {
+      "action_contract_id": "explain_score",
+      "actual": {
+        "target": {}
+      },
+      "case_id": "ac39",
+      "classification": "PRODUCT",
+      "conversation_and_lineage": {
+        "declassified_conversation_sequence": [
+          "ac39"
+        ],
+        "dependency_note": "Conversation dependency only where listed; no manifest lineage dependency flag.",
+        "depends_on_earlier_failed_case": false,
+        "earlier_failed_cases": [],
+        "expected_previous_cases": [],
+        "lineage_dependency_expected": false,
+        "reference_is_from_this_artifact": false
+      },
+      "declassified_user_question": "Leg uit wat mijn huidige totaalscore praktisch betekent.",
+      "expectation_checks": {
+        "action_polarity": false,
+        "canonical_target": true,
+        "dispatch_cardinality": false,
+        "missing_inputs": true,
+        "operation": false,
+        "required_inputs": true,
+        "runtime_contract_persisted": false,
+        "supplied_inputs": true,
+        "target_source": true,
+        "target_type": true,
+        "terminal_status": false
+      },
+      "expected": {
+        "action_polarity": "evaluate",
+        "lifecycle_and_effects": {
+          "broker_orders_expected": 0,
+          "confirmation_expected": false,
+          "database_effect_expected": "no_write",
+          "idempotency_replay_expected": false,
+          "live_bot_activation_expected": false,
+          "live_trading_expected": false,
+          "no_duplicate_database_effect": false,
+          "no_write_before_confirmation": false,
+          "proposal_expected": false,
+          "safe_fixture_execution_expected": false,
+          "terminal_statuses": [
+            "completed",
+            "downgraded"
+          ]
+        },
+        "missing_inputs": [],
+        "operation": "explain_score",
+        "required_inputs": [],
+        "supplied_inputs": [],
+        "target": {
+          "canonical": "__none_expected__",
+          "type": "__none_expected__",
+          "source": "__none_expected__"
+        }
+      },
+      "failure_phase": "terminal_observation",
+      "language": "nl",
+      "result": "FAIL",
+      "run_id": "finn-v2-run-fafe0357ac9248b6ba37428167ac6e7f",
+      "terminal": {
+        "error_code": null,
+        "reason": null,
+        "status": "created",
+        "typed_error": "case_timeout"
+      },
+      "timings": {
+        "create_latency_ms": 2289.45,
+        "runtime_timings_ms": null
+      }
+    },
+    {
+      "action_contract_id": "read_portfolio",
+      "actual": {
+        "missing_inputs": [],
+        "required_inputs": [],
+        "supplied_inputs": {},
+        "target": {}
+      },
+      "case_id": "ac40",
+      "classification": "PRODUCT",
+      "conversation_and_lineage": {
+        "declassified_conversation_sequence": [
+          "ac40"
+        ],
+        "dependency_note": "Conversation dependency only where listed; no manifest lineage dependency flag.",
+        "depends_on_earlier_failed_case": false,
+        "earlier_failed_cases": [],
+        "expected_previous_cases": [],
+        "lineage_dependency_expected": false,
+        "reference_is_from_this_artifact": false
+      },
+      "declassified_user_question": "Zeige mir mein aktuelles Portfolio.",
+      "expectation_checks": {
+        "action_polarity": false,
+        "canonical_target": true,
+        "dispatch_cardinality": true,
+        "missing_inputs": true,
+        "operation": false,
+        "required_inputs": true,
+        "runtime_contract_persisted": true,
+        "supplied_inputs": true,
+        "target_source": true,
+        "target_type": true,
+        "terminal_status": false
+      },
+      "expected": {
+        "action_polarity": "read",
+        "lifecycle_and_effects": {
+          "broker_orders_expected": 0,
+          "confirmation_expected": false,
+          "database_effect_expected": "no_write",
+          "idempotency_replay_expected": false,
+          "live_bot_activation_expected": false,
+          "live_trading_expected": false,
+          "no_duplicate_database_effect": false,
+          "no_write_before_confirmation": false,
+          "proposal_expected": false,
+          "safe_fixture_execution_expected": false,
+          "terminal_statuses": [
+            "completed",
+            "downgraded"
+          ]
+        },
+        "missing_inputs": [],
+        "operation": "read_portfolio",
+        "required_inputs": [],
+        "supplied_inputs": [],
+        "target": {
+          "canonical": "__none_expected__",
+          "type": "__none_expected__",
+          "source": "__none_expected__"
+        }
+      },
+      "failure_phase": "terminal_observation",
+      "language": "de",
+      "result": "FAIL",
+      "run_id": "finn-v2-run-56da944fe1f142f3be4db17bb1b94555",
+      "terminal": {
+        "error_code": "lifecycle_deadline_exceeded",
+        "reason": "lifecycle_deadline_exceeded",
+        "status": "failed",
+        "typed_error": "case_timeout"
+      },
+      "timings": {
+        "create_latency_ms": 14185.63,
+        "runtime_timings_ms": {
+          "terminal_persist": 9515,
+          "total": 41370,
+          "until_collecting": 610,
+          "until_context_loaded": 2177,
+          "until_dispatch_claimed": 26685,
+          "until_dispatch_published": 1169,
+          "until_planned": 201,
+          "until_queued": 1009
+        }
+      }
+    },
+    {
+      "action_contract_id": "read_latest_report",
+      "actual": {
+        "action_polarity": "read",
+        "missing_inputs": [],
+        "operation": "read_latest_report",
+        "required_inputs": [],
+        "supplied_inputs": {},
+        "target": {}
+      },
+      "case_id": "ac42",
+      "classification": "PRODUCT",
+      "conversation_and_lineage": {
+        "declassified_conversation_sequence": [
+          "ac42"
+        ],
+        "dependency_note": "Conversation dependency only where listed; no manifest lineage dependency flag.",
+        "depends_on_earlier_failed_case": false,
+        "earlier_failed_cases": [],
+        "expected_previous_cases": [],
+        "lineage_dependency_expected": false,
+        "reference_is_from_this_artifact": false
+      },
+      "declassified_user_question": "Toon de metadata van mijn laatst opgeslagen rapport.",
+      "expectation_checks": {
+        "action_polarity": true,
+        "canonical_target": true,
+        "dispatch_cardinality": true,
+        "missing_inputs": true,
+        "operation": true,
+        "required_inputs": true,
+        "runtime_contract_persisted": true,
+        "supplied_inputs": true,
+        "target_source": true,
+        "target_type": true,
+        "terminal_status": true
+      },
+      "expected": {
+        "action_polarity": "read",
+        "lifecycle_and_effects": {
+          "broker_orders_expected": 0,
+          "confirmation_expected": false,
+          "database_effect_expected": "no_write",
+          "idempotency_replay_expected": false,
+          "live_bot_activation_expected": false,
+          "live_trading_expected": false,
+          "no_duplicate_database_effect": false,
+          "no_write_before_confirmation": false,
+          "proposal_expected": false,
+          "safe_fixture_execution_expected": false,
+          "terminal_statuses": [
+            "completed",
+            "downgraded"
+          ]
+        },
+        "missing_inputs": [],
+        "operation": "read_latest_report",
+        "required_inputs": [],
+        "supplied_inputs": [],
+        "target": {
+          "canonical": "__none_expected__",
+          "type": "__none_expected__",
+          "source": "__none_expected__"
+        }
+      },
+      "failure_phase": "terminal_observation",
+      "language": "nl",
+      "result": "FAIL",
+      "run_id": "finn-v2-run-170bd1df00ff409e9b90e110cfc00fde",
+      "terminal": {
+        "error_code": "response_scope_incomplete",
+        "reason": "response_scope_incomplete",
+        "status": "downgraded",
+        "typed_error": "case_timeout"
+      },
+      "timings": {
+        "create_latency_ms": 1298.71,
+        "runtime_timings_ms": {
+          "terminal_persist": 1832,
+          "total": 18208,
+          "until_collecting": 200,
+          "until_context_loaded": 798,
+          "until_dispatch_claimed": 11720,
+          "until_dispatch_published": 678,
+          "until_planned": 293,
+          "until_queued": 192,
+          "until_selection_persisted": 88,
+          "until_selector_completed": 2388,
+          "until_selector_started": 16
+        }
+      }
+    },
+    {
+      "action_contract_id": "read_review_history",
+      "actual": {
+        "target": {}
+      },
+      "case_id": "ac43",
+      "classification": "PRODUCT",
+      "conversation_and_lineage": {
+        "declassified_conversation_sequence": [
+          "ac43"
+        ],
+        "dependency_note": "Conversation dependency only where listed; no manifest lineage dependency flag.",
+        "depends_on_earlier_failed_case": false,
+        "earlier_failed_cases": [],
+        "expected_previous_cases": [],
+        "lineage_dependency_expected": false,
+        "reference_is_from_this_artifact": false
+      },
+      "declassified_user_question": "Zeige meine gespeicherte Review-Historie.",
+      "expectation_checks": {
+        "action_polarity": false,
+        "canonical_target": true,
+        "dispatch_cardinality": false,
+        "missing_inputs": true,
+        "operation": false,
+        "required_inputs": true,
+        "runtime_contract_persisted": false,
+        "supplied_inputs": true,
+        "target_source": true,
+        "target_type": true,
+        "terminal_status": false
+      },
+      "expected": {
+        "action_polarity": "read",
+        "lifecycle_and_effects": {
+          "broker_orders_expected": 0,
+          "confirmation_expected": false,
+          "database_effect_expected": "no_write",
+          "idempotency_replay_expected": false,
+          "live_bot_activation_expected": false,
+          "live_trading_expected": false,
+          "no_duplicate_database_effect": false,
+          "no_write_before_confirmation": false,
+          "proposal_expected": false,
+          "safe_fixture_execution_expected": false,
+          "terminal_statuses": [
+            "completed",
+            "downgraded"
+          ]
+        },
+        "missing_inputs": [],
+        "operation": "read_review_history",
+        "required_inputs": [],
+        "supplied_inputs": [],
+        "target": {
+          "canonical": "__none_expected__",
+          "type": "__none_expected__",
+          "source": "__none_expected__"
+        }
+      },
+      "failure_phase": "terminal_observation",
+      "language": "de",
+      "result": "FAIL",
+      "run_id": "finn-v2-run-c784c429f26642d986cd491448ca4485",
+      "terminal": {
+        "error_code": null,
+        "reason": null,
+        "status": "created",
+        "typed_error": "case_timeout"
+      },
+      "timings": {
+        "create_latency_ms": 8369.14,
+        "runtime_timings_ms": null
+      }
+    },
+    {
+      "action_contract_id": "evaluate_review_history",
+      "actual": {
+        "action_polarity": "evaluate",
+        "missing_inputs": [],
+        "operation": "evaluate_review_history",
+        "required_inputs": [],
+        "supplied_inputs": {},
+        "target": {}
+      },
+      "case_id": "ac44",
+      "classification": "PRODUCT",
+      "conversation_and_lineage": {
+        "declassified_conversation_sequence": [
+          "ac44"
+        ],
+        "dependency_note": "Conversation dependency only where listed; no manifest lineage dependency flag.",
+        "depends_on_earlier_failed_case": false,
+        "earlier_failed_cases": [],
+        "expected_previous_cases": [],
+        "lineage_dependency_expected": false,
+        "reference_is_from_this_artifact": false
+      },
+      "declassified_user_question": "Evaluate the recurring pattern in my stored review history.",
+      "expectation_checks": {
+        "action_polarity": true,
+        "canonical_target": true,
+        "dispatch_cardinality": true,
+        "missing_inputs": true,
+        "operation": true,
+        "required_inputs": true,
+        "runtime_contract_persisted": true,
+        "supplied_inputs": true,
+        "target_source": true,
+        "target_type": true,
+        "terminal_status": false
+      },
+      "expected": {
+        "action_polarity": "evaluate",
+        "lifecycle_and_effects": {
+          "broker_orders_expected": 0,
+          "confirmation_expected": false,
+          "database_effect_expected": "no_write",
+          "idempotency_replay_expected": false,
+          "live_bot_activation_expected": false,
+          "live_trading_expected": false,
+          "no_duplicate_database_effect": false,
+          "no_write_before_confirmation": false,
+          "proposal_expected": false,
+          "safe_fixture_execution_expected": false,
+          "terminal_statuses": [
+            "completed",
+            "downgraded"
+          ]
+        },
+        "missing_inputs": [],
+        "operation": "evaluate_review_history",
+        "required_inputs": [],
+        "supplied_inputs": [],
+        "target": {
+          "canonical": "__none_expected__",
+          "type": "__none_expected__",
+          "source": "__none_expected__"
+        }
+      },
+      "failure_phase": "lifecycle_terminalization",
+      "language": "en",
+      "result": "FAIL",
+      "run_id": "finn-v2-run-534d174805554edcb36e3f0adac7c045",
+      "terminal": {
+        "error_code": "lifecycle_deadline_exceeded",
+        "reason": "lifecycle_deadline_exceeded",
+        "status": "failed",
+        "typed_error": "lifecycle_deadline_exceeded"
+      },
+      "timings": {
+        "create_latency_ms": 2303.86,
+        "runtime_timings_ms": {
+          "terminal_persist": 8112,
+          "total": 44586,
+          "until_collecting": 204,
+          "until_context_loaded": 619,
+          "until_dispatch_claimed": 30384,
+          "until_dispatch_published": 1493,
+          "until_planned": 100,
+          "until_queued": 217,
+          "until_selection_persisted": 592,
+          "until_selector_completed": 2803,
+          "until_selector_started": 58
+        }
+      }
+    },
+    {
+      "action_contract_id": "watchlist_remove",
+      "action_lifecycle": {
+        "confirmation": {
+          "http_status": 200
+        },
+        "execution": {
+          "http_status": null,
+          "status": null
+        },
+        "proposal": {
+          "available": true,
+          "operation_type": "watchlist_remove",
+          "status": "draft"
+        },
+        "replay": {
+          "http_status": null,
+          "no_duplicate_effect": null,
+          "status": null
+        }
+      },
+      "actual": {
+        "action_polarity": "remove",
+        "missing_inputs": [],
+        "operation": "watchlist_remove",
+        "required_inputs": [
+          "asset"
+        ],
+        "supplied_inputs": {
+          "asset": "ADA"
+        },
+        "target": {
+          "canonical": "ADA",
+          "source": "explicit_message"
+        }
+      },
+      "case_id": "ac45",
+      "classification": "FIXTURE",
+      "conversation_and_lineage": {
+        "conversation_reference": null,
+        "conversation_reference_kind": null,
+        "declassified_conversation_sequence": [
+          "ac45"
+        ],
+        "dependency_note": "Conversation dependency only where listed; no manifest lineage dependency flag.",
+        "depends_on_earlier_failed_case": true,
+        "earlier_failed_cases": [
+          "ac09"
+        ],
+        "expected_previous_cases": [
+          "ac09"
+        ],
+        "lineage_dependency_expected": false,
+        "reference_is_from_this_artifact": false
+      },
+      "database_evidence": {
+        "after_confirmation_available": true,
+        "after_execution_available": false,
+        "after_replay_available": false,
+        "before_available": false,
+        "broker_orders_unchanged": null,
+        "live_bots_unchanged": null,
+        "measured_effect": null,
+        "no_duplicate_effect": null,
+        "no_write_before_confirmation": false
+      },
+      "declassified_user_question": "Verwijder ADA weer uit mijn volglijst.",
+      "expectation_checks": {
+        "action_polarity": true,
+        "canonical_target": true,
+        "dispatch_cardinality": true,
+        "missing_inputs": true,
+        "operation": true,
+        "required_inputs": true,
+        "runtime_contract_persisted": true,
+        "supplied_inputs": true,
+        "target_source": true,
+        "target_type": true,
+        "terminal_status": true
+      },
+      "expected": {
+        "action_polarity": "remove",
+        "lifecycle_and_effects": {
+          "broker_orders_expected": 0,
+          "confirmation_expected": true,
+          "database_effect_expected": "owner_scoped_contract_effect_once",
+          "idempotency_replay_expected": true,
+          "idempotency_replay_terminal_status": "already_executed",
+          "live_bot_activation_expected": false,
+          "live_trading_expected": false,
+          "no_duplicate_database_effect": true,
+          "no_write_before_confirmation": true,
+          "proposal_expected": true,
+          "safe_fixture_execution_expected": true,
+          "terminal_statuses": [
+            "completed",
+            "downgraded"
+          ]
+        },
+        "missing_inputs": [],
+        "operation": "watchlist_remove",
+        "required_inputs": [
+          "asset"
+        ],
+        "supplied_inputs": [
+          "asset"
+        ],
+        "target": {
+          "canonical": "ADA",
+          "source": "explicit_message",
+          "type": "__none_expected__"
+        }
+      },
+      "failure_phase": "database_before_confirmation",
+      "language": "nl",
+      "result": "FAIL",
+      "run_id": "finn-v2-run-ba631c42701f4218b32fd2978fdff8be",
+      "terminal": {
+        "status": "completed",
+        "typed_error": "write_before_confirmation_or_database_evidence_unavailable"
+      },
+      "timings": {
+        "confirm_latency_ms": 187.05,
+        "create_latency_ms": 1711.17,
+        "execute_latency_ms": null,
+        "proposal_read_latency_ms": 114.48,
+        "publish_latency_ms": 498.75,
+        "replay_latency_ms": null,
+        "runtime_timings_ms": {
+          "terminal_persist": 8197,
+          "total": 13019,
+          "until_collecting": 184,
+          "until_context_loaded": 487,
+          "until_dispatch_claimed": 299,
+          "until_dispatch_published": 1388,
+          "until_planned": 140,
+          "until_queued": 120,
+          "until_selection_persisted": 216,
+          "until_selector_completed": 1978,
+          "until_selector_started": 5
+        }
+      }
+    },
+    {
+      "action_contract_id": "delete_bot",
+      "case_id": "ac46",
+      "classification": "RUNNER",
+      "conversation_and_lineage": {
+        "conversation_key": "natural-action-chain",
+        "declassified_conversation_sequence": [
+          "ac16",
+          "ac17",
+          "ac18",
+          "ac20",
+          "ac21",
+          "ac22",
+          "ac24",
+          "ac25",
+          "ac26",
+          "ac27",
+          "ac28",
+          "ac29",
+          "ac30",
+          "ac31",
+          "ac32",
+          "ac33",
+          "ac34",
+          "ac46",
+          "ac47",
+          "ac48"
+        ],
+        "dependency_note": "Manifest marks lineage dependency; concrete predecessor mapping follows the natural contract chain.",
+        "depends_on_earlier_failed_case": true,
+        "earlier_failed_cases": [
+          "ac24",
+          "ac33"
+        ],
+        "expected_previous_cases": [
+          "ac24",
+          "ac33"
+        ],
+        "lineage_dependency_expected": true,
+        "turn_position_in_original_conversation": 20
+      },
+      "declassified_user_question": "Delete the bot created in this flow.",
+      "expected": {
+        "action_polarity": "delete",
+        "lifecycle_and_effects": {
+          "broker_orders_expected": 0,
+          "confirmation_expected": true,
+          "database_effect_expected": "owner_scoped_contract_effect_once",
+          "idempotency_replay_expected": true,
+          "idempotency_replay_terminal_status": "already_executed",
+          "live_bot_activation_expected": false,
+          "live_trading_expected": false,
+          "no_duplicate_database_effect": true,
+          "no_write_before_confirmation": true,
+          "proposal_expected": true,
+          "safe_fixture_execution_expected": true,
+          "terminal_statuses": [
+            "completed",
+            "downgraded"
+          ]
+        },
+        "missing_inputs": [],
+        "operation": "delete_bot",
+        "required_inputs": [
+          "bot_id"
+        ],
+        "supplied_inputs": [
+          "bot_id"
+        ],
+        "target": {
+          "canonical": "__present__",
+          "source": {
+            "allowed_sources": [
+              "previous_action_result",
+              "owner_action_result",
+              "persisted_operation"
+            ],
+            "no_source_allowed": true
+          },
+          "type": "__none_expected__"
+        }
+      },
+      "failure_phase": "runner_completion",
+      "language": "en",
+      "result": "NOT_EXECUTED",
+      "run_id": null,
+      "terminal": {
+        "reason": null,
+        "status": null,
+        "typed_error": "not_executed"
+      }
+    },
+    {
+      "action_contract_id": "delete_strategy",
+      "case_id": "ac47",
+      "classification": "RUNNER",
+      "conversation_and_lineage": {
+        "conversation_key": "natural-action-chain",
+        "declassified_conversation_sequence": [
+          "ac16",
+          "ac17",
+          "ac18",
+          "ac20",
+          "ac21",
+          "ac22",
+          "ac24",
+          "ac25",
+          "ac26",
+          "ac27",
+          "ac28",
+          "ac29",
+          "ac30",
+          "ac31",
+          "ac32",
+          "ac33",
+          "ac34",
+          "ac46",
+          "ac47",
+          "ac48"
+        ],
+        "dependency_note": "Manifest marks lineage dependency; concrete predecessor mapping follows the natural contract chain.",
+        "depends_on_earlier_failed_case": true,
+        "earlier_failed_cases": [
+          "ac20",
+          "ac46"
+        ],
+        "expected_previous_cases": [
+          "ac20",
+          "ac46"
+        ],
+        "lineage_dependency_expected": true,
+        "turn_position_in_original_conversation": 21
+      },
+      "declassified_user_question": "Lösche die in diesem Ablauf erstellte Strategie.",
+      "expected": {
+        "action_polarity": "delete",
+        "lifecycle_and_effects": {
+          "broker_orders_expected": 0,
+          "confirmation_expected": true,
+          "database_effect_expected": "owner_scoped_contract_effect_once",
+          "idempotency_replay_expected": true,
+          "idempotency_replay_terminal_status": "already_executed",
+          "live_bot_activation_expected": false,
+          "live_trading_expected": false,
+          "no_duplicate_database_effect": true,
+          "no_write_before_confirmation": true,
+          "proposal_expected": true,
+          "safe_fixture_execution_expected": true,
+          "terminal_statuses": [
+            "completed",
+            "downgraded"
+          ]
+        },
+        "missing_inputs": [],
+        "operation": "delete_strategy",
+        "required_inputs": [
+          "strategy_id"
+        ],
+        "supplied_inputs": [
+          "strategy_id"
+        ],
+        "target": {
+          "canonical": "__present__",
+          "source": {
+            "allowed_sources": [
+              "previous_action_result",
+              "owner_action_result",
+              "persisted_operation"
+            ],
+            "no_source_allowed": true
+          },
+          "type": "__none_expected__"
+        }
+      },
+      "failure_phase": "runner_completion",
+      "language": "de",
+      "result": "NOT_EXECUTED",
+      "run_id": null,
+      "terminal": {
+        "reason": null,
+        "status": null,
+        "typed_error": "not_executed"
+      }
+    },
+    {
+      "action_contract_id": "delete_setup",
+      "case_id": "ac48",
+      "classification": "RUNNER",
+      "conversation_and_lineage": {
+        "conversation_key": "natural-action-chain",
+        "declassified_conversation_sequence": [
+          "ac16",
+          "ac17",
+          "ac18",
+          "ac20",
+          "ac21",
+          "ac22",
+          "ac24",
+          "ac25",
+          "ac26",
+          "ac27",
+          "ac28",
+          "ac29",
+          "ac30",
+          "ac31",
+          "ac32",
+          "ac33",
+          "ac34",
+          "ac46",
+          "ac47",
+          "ac48"
+        ],
+        "dependency_note": "Manifest marks lineage dependency; concrete predecessor mapping follows the natural contract chain.",
+        "depends_on_earlier_failed_case": true,
+        "earlier_failed_cases": [
+          "ac16",
+          "ac47"
+        ],
+        "expected_previous_cases": [
+          "ac16",
+          "ac47"
+        ],
+        "lineage_dependency_expected": true,
+        "turn_position_in_original_conversation": 22
+      },
+      "declassified_user_question": "Verwijder de setup die in deze flow is aangemaakt.",
+      "expected": {
+        "action_polarity": "delete",
+        "lifecycle_and_effects": {
+          "broker_orders_expected": 0,
+          "confirmation_expected": true,
+          "database_effect_expected": "owner_scoped_contract_effect_once",
+          "idempotency_replay_expected": true,
+          "idempotency_replay_terminal_status": "already_executed",
+          "live_bot_activation_expected": false,
+          "live_trading_expected": false,
+          "no_duplicate_database_effect": true,
+          "no_write_before_confirmation": true,
+          "proposal_expected": true,
+          "safe_fixture_execution_expected": true,
+          "terminal_statuses": [
+            "completed",
+            "downgraded"
+          ]
+        },
+        "missing_inputs": [],
+        "operation": "delete_setup",
+        "required_inputs": [
+          "setup_id"
+        ],
+        "supplied_inputs": [
+          "setup_id"
+        ],
+        "target": {
+          "canonical": "__present__",
+          "source": {
+            "allowed_sources": [
+              "previous_action_result",
+              "owner_action_result",
+              "persisted_operation"
+            ],
+            "no_source_allowed": true
+          },
+          "type": "__none_expected__"
+        }
+      },
+      "failure_phase": "runner_completion",
+      "language": "nl",
+      "result": "NOT_EXECUTED",
+      "run_id": null,
+      "terminal": {
+        "reason": null,
+        "status": null,
+        "typed_error": "not_executed"
+      }
+    }
+  ],
+  "investigations": {
+    "database_before_unavailable": {
+      "cases": [
+        "ac07",
+        "ac11",
+        "ac45"
+      ],
+      "conclusion": "This is missing QA evidence, not proof of a pre-confirmation write. The sanitized artifact omits the underlying database exception, so the exact database/loop/query cause is not recoverable.",
+      "finding": "The first owner-scoped snapshot returned status=unavailable/internal_unclassified; the post-confirmation snapshot then succeeded."
+    },
+    "primary_vs_cascade": {
+      "cascade_cases": [
+        "ac17",
+        "ac18",
+        "ac20",
+        "ac21",
+        "ac22",
+        "ac24",
+        "ac25",
+        "ac28",
+        "ac30",
+        "ac31",
+        "ac32",
+        "ac33",
+        "ac34"
+      ],
+      "primary_setup_failure": "ac16",
+      "stale_reference_cases": [
+        "ac17",
+        "ac20",
+        "ac24",
+        "ac33"
+      ],
+      "stale_reference_finding": "These cases reference previous_action_result run finn-v2-run-0d8e8e39cff2408fb510a5c974424cd8, which is absent from this workflow artifact."
+    },
+    "selector_or_input_extraction": {
+      "missing_input_mismatch_cases": [
+        "ac02",
+        "ac05",
+        "ac12",
+        "ac20",
+        "ac21",
+        "ac22",
+        "ac24",
+        "ac31",
+        "ac33",
+        "ac36"
+      ],
+      "operation_mismatch_cases": [
+        "ac01",
+        "ac05",
+        "ac06",
+        "ac14",
+        "ac21",
+        "ac22",
+        "ac25",
+        "ac28",
+        "ac30",
+        "ac31",
+        "ac32",
+        "ac36",
+        "ac37",
+        "ac39",
+        "ac40",
+        "ac43"
+      ],
+      "required_input_mismatch_cases": [
+        "ac05",
+        "ac21",
+        "ac22",
+        "ac25",
+        "ac30",
+        "ac31",
+        "ac32",
+        "ac36",
+        "ac37"
+      ],
+      "supplied_input_mismatch_cases": [
+        "ac02",
+        "ac12",
+        "ac20",
+        "ac21",
+        "ac22",
+        "ac24",
+        "ac25",
+        "ac30",
+        "ac31",
+        "ac32",
+        "ac33",
+        "ac37"
+      ]
+    },
+    "timeout_or_missing_evidence_only": {
+      "case_timeout": [
+        "ac25",
+        "ac28",
+        "ac30",
+        "ac37",
+        "ac39",
+        "ac40",
+        "ac42",
+        "ac43"
+      ],
+      "database_before_unavailable": [
+        "ac07",
+        "ac11",
+        "ac45"
+      ],
+      "lifecycle_deadline": [
+        "ac35",
+        "ac44"
+      ],
+      "not_executed": [
+        "ac46",
+        "ac47",
+        "ac48"
+      ],
+      "transport_clienttimeout": [
+        "ac26",
+        "ac27",
+        "ac29"
+      ]
+    },
+    "unique_namespace_but_existing_setup_name": {
+      "conclusion": "The artifact proves that namespace isolation did not survive through to the uniqueness key checked by setup execution. It does not contain the prompt or proposal payload/name, so it cannot distinguish runner substitution loss from product-side name normalization or uniqueness outside the namespaced snapshot.",
+      "evidence": [
+        "fixture_namespace_present=true",
+        "database_before setup row_count=0 inside the namespace-filtered snapshot",
+        "execution status=failed",
+        "execution error code reports duplicate setup name"
+      ],
+      "finding": "ac16 reached confirmed create_setup execution but returned a typed failed execution with 409: Setup met deze naam bestaat al."
+    },
+    "workflow_budget_after_45": {
+      "conclusion": "The source artifact does not record the consumed deadline, stop timestamp, or runner exception. It proves incomplete runner finalization but cannot prove that the configured time budget itself was exhausted.",
+      "finding": "planned_count=48, attempted_count=45, not_run_count=3, but no rows were persisted for ac46-ac48 and no action_contract_acceptance final aggregation exists."
+    }
+  },
+  "manifest_verification": {
+    "hash_matches_sealed_metadata": true,
+    "manifest_id": "qa-action-contract-acceptance-v1",
+    "manifest_sha256": "28e88841243abfa6b3c8c90e6a889ccafaccebed1836beaf1863d1e2ee34541f",
+    "manifest_version": "2026-09-13.1"
+  },
+  "primary_root_causes": [
+    {
+      "cascade_cases": [
+        "ac17",
+        "ac18",
+        "ac20",
+        "ac21",
+        "ac22",
+        "ac24",
+        "ac25",
+        "ac28",
+        "ac30",
+        "ac31",
+        "ac32",
+        "ac33",
+        "ac34"
+      ],
+      "evidence": "ac16 had a unique fixture namespace and zero namespaced setup rows before execution, yet confirmed create_setup failed with typed HTTP 409 duplicate-name.",
+      "id": "RC-01",
+      "primary_cases": [
+        "ac16"
+      ],
+      "title": "Namespaced setup-create returns duplicate-name 409"
+    },
+    {
+      "evidence": "Runtime conversation_reference points to finn-v2-run-0d8e8e39cff2408fb510a5c974424cd8, absent from workflow 34746230528.",
+      "id": "RC-02",
+      "primary_cases": [
+        "ac17",
+        "ac20",
+        "ac24",
+        "ac33"
+      ],
+      "title": "Stale or external action-result lineage outside current workflow"
+    },
+    {
+      "id": "RC-03",
+      "missing_input_mismatch_cases": [
+        "ac02",
+        "ac05",
+        "ac12",
+        "ac20",
+        "ac21",
+        "ac22",
+        "ac24",
+        "ac31",
+        "ac33",
+        "ac36"
+      ],
+      "primary_cases": [
+        "ac01",
+        "ac05",
+        "ac06",
+        "ac14",
+        "ac21",
+        "ac22",
+        "ac25",
+        "ac28",
+        "ac30",
+        "ac31",
+        "ac32",
+        "ac36",
+        "ac37",
+        "ac39",
+        "ac40",
+        "ac43"
+      ],
+      "required_input_mismatch_cases": [
+        "ac05",
+        "ac21",
+        "ac22",
+        "ac25",
+        "ac30",
+        "ac31",
+        "ac32",
+        "ac36",
+        "ac37"
+      ],
+      "supplied_input_mismatch_cases": [
+        "ac02",
+        "ac12",
+        "ac20",
+        "ac21",
+        "ac22",
+        "ac24",
+        "ac25",
+        "ac30",
+        "ac31",
+        "ac32",
+        "ac33",
+        "ac37"
+      ],
+      "title": "Primary selector and input extraction failures"
+    },
+    {
+      "case_timeout_cases": [
+        "ac25",
+        "ac28",
+        "ac30",
+        "ac37",
+        "ac39",
+        "ac40",
+        "ac42",
+        "ac43"
+      ],
+      "id": "RC-04",
+      "lifecycle_deadline_cases": [
+        "ac35",
+        "ac44"
+      ],
+      "title": "Lifecycle and transport timeouts",
+      "transport_cases": [
+        "ac26",
+        "ac27",
+        "ac29"
+      ]
+    },
+    {
+      "evidence": "The first owner-scoped pre-confirmation snapshot was unavailable/internal_unclassified while later snapshots were available.",
+      "id": "RC-05",
+      "primary_cases": [
+        "ac07",
+        "ac11",
+        "ac45"
+      ],
+      "title": "Missing DB-before snapshots"
+    },
+    {
+      "evidence": "planned_count=48, attempted_count=45, not_run_count=3; no rows for ac46-ac48 and no final acceptance aggregation.",
+      "id": "RC-06",
+      "primary_cases": [
+        "ac46",
+        "ac47",
+        "ac48"
+      ],
+      "title": "Runner stopped after 45/48 without acceptance aggregate"
+    }
+  ],
+  "schema_version": 2,
+  "scope": {
+    "attempted_cases": 45,
+    "classification_counts": {
+      "CASCADE": 13,
+      "FIXTURE": 6,
+      "INFRASTRUCTURE": 3,
+      "PRODUCT": 14,
+      "RUNNER": 3
+    },
+    "infrastructure_failures_in_source": 3,
+    "not_executed": 3,
+    "planned_cases": 48,
+    "product_failures_in_source": 33,
+    "records": 39
+  },
+  "source": {
+    "artifact_path": "/Users/gvangalen/.codex/qa-artifacts/34746230528/finn-production-qa-34746230528.json",
+    "artifact_sha256": "1fe42de18bb6e2e1b905a2dc3cf962504412a9539a00ea5bcf36d82056729012",
+    "manifest_id": "qa-action-contract-acceptance-v1",
+    "manifest_sha256": "28e88841243abfa6b3c8c90e6a889ccafaccebed1836beaf1863d1e2ee34541f",
+    "product_sha": "71765ffeae0f858d2c99ec4ee5f327335cf95ec6",
+    "runner_revision": "92525fc882026eed57775a9cdb3654ad7cf8ee4e",
+    "source_artifact_only": true,
+    "workflow_id": "34746230528"
+  }
+}

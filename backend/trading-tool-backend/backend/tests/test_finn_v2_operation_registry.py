@@ -1,4 +1,6 @@
 from types import SimpleNamespace
+import json
+from pathlib import Path
 
 import pytest
 
@@ -22,6 +24,18 @@ def test_registry_manifest_has_one_valid_contract_per_operation():
         assert not set(contract.required_scopes).intersection(contract.optional_scopes)
         if contract.supported:
             assert contract.mode
+
+
+def test_every_declassified_action_acceptance_record_maps_to_one_registry_contract():
+    fixture = Path(__file__).parent / "fixtures" / "finn_v2_declassified_34746230528_regression.json"
+    records = json.loads(fixture.read_text(encoding="utf-8"))["failures"]
+    registry = FinnV2OperationRegistry()
+
+    assert len(records) == 39
+    for record in records:
+        operation_id = record["expected"]["operation"]
+        contract = registry.require_supported(operation_id)
+        assert contract.action_polarity.value == record["expected"]["action_polarity"], record["case_id"]
 
 
 def test_supported_read_contracts_have_canonical_tools_and_no_model_call():
@@ -81,6 +95,21 @@ def test_audited_v1_flows_resolve_only_through_the_canonical_registry():
     # flows must resolve the single confirmable ``create_strategy`` contract.
     with pytest.raises(FinnV2OperationUnavailableError, match="unknown_operation:generate_strategy"):
         registry.get("generate_strategy")
+
+
+def test_evaluate_setup_contract_distinguishes_multilingual_assessment_from_reading():
+    contract = FinnV2OperationRegistry().require_supported("evaluate_setup")
+
+    assert set(contract.positive_examples) >= {
+        "Beoordeel mijn actieve setup.",
+        "Evaluate my active setup.",
+        "Bewerte mein aktives Setup.",
+    }
+    assert set(contract.negative_examples) >= {
+        "Toon mijn actieve setup.",
+        "Show my active setup.",
+        "Zeige mein aktives Setup.",
+    }
 
 
 def test_create_dca_setup_exposes_its_service_required_frequency_in_the_same_contract():

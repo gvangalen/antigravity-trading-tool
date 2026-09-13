@@ -131,8 +131,8 @@ def test_continuation_context_uses_the_persisted_parent_contract_state():
     assert context["active_guided_operation"] == expected_flow
 
 
-def test_new_conversation_hydrates_only_the_latest_owner_action_result():
-    """Cross-conversation action continuation must not depend on JSON memory."""
+def test_conversation_hydrates_its_latest_owner_action_result_not_global_history():
+    """A follow-up may use only its own conversation's persisted action result."""
     from backend.services.finn_v2_orchestrator_service import FinnV2OrchestratorService
 
     action_result = {
@@ -151,8 +151,12 @@ def test_new_conversation_hydrates_only_the_latest_owner_action_result():
         async def get_latest_for_conversation(self, **_kwargs):
             return None
 
-        async def get_latest_action_result_for_user(self, **kwargs):
-            assert kwargs == {"user_id": 7, "exclude_run_id": "child-run"}
+        async def get_latest_action_result_for_conversation(self, **kwargs):
+            assert kwargs == {
+                "conversation_id": "new-conversation",
+                "user_id": 7,
+                "exclude_run_id": "child-run",
+            }
             return SimpleNamespace(state_json={"action_result": action_result})
 
     service = object.__new__(FinnV2OrchestratorService)
@@ -168,7 +172,34 @@ def test_new_conversation_hydrates_only_the_latest_owner_action_result():
     )
 
     assert context["previous_action_result"] == action_result
-    assert context["previous_action_result_source"] == "owner_action_result"
+    assert context["previous_action_result_source"] == "conversation_action_result"
+
+
+def test_new_conversation_does_not_implicitly_load_an_unrelated_owner_action_result():
+    from backend.services.finn_v2_orchestrator_service import FinnV2OrchestratorService
+
+    class _Conversations:
+        async def get_context(self, **_kwargs):
+            return {}
+
+    class _Contracts:
+        async def get_latest_for_conversation(self, **_kwargs):
+            return None
+
+        async def get_latest_action_result_for_conversation(self, **_kwargs):
+            return None
+
+    service = object.__new__(FinnV2OrchestratorService)
+    service.conversations = _Conversations()
+    service.runtime_contracts = _Contracts()
+
+    context = asyncio.run(
+        service._load_continuation_context(
+            conversation_id="new-conversation", user_id=7, run_id="child-run"
+        )
+    )
+
+    assert "previous_action_result" not in context
 
 
 def test_persisted_parent_contract_content_reaches_the_structured_selector_input():

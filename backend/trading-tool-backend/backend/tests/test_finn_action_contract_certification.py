@@ -152,6 +152,18 @@ def test_legacy_runtime_measurement_is_partial_not_not_tested():
     assert has_measured_runtime_evidence(evidence)
 
 
+def test_typed_unavailable_card_can_use_a_dedicated_system_fallback_probe():
+    contract = SimpleNamespace(mode="UNAVAILABLE", supported=True)
+    evidence = {"passed": True, "certification_card": dict(
+        _COMMON,
+        typed_limitation=True,
+        no_write=True,
+        persistence=True,
+    )}
+
+    assert complete_card(evidence, contract)
+
+
 def test_write_card_does_not_pass_without_individual_guided_state_evidence():
     contract = SimpleNamespace(mode="ACTION_PROPOSAL", supported=True, required_inputs=("asset",))
     evidence = {"passed": True, "certification_card": dict(

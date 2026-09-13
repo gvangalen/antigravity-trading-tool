@@ -46,6 +46,15 @@ class FinnV2StructuredOperationSelectorService:
         candidate_ids = tuple(contract.operation_id for contract in candidate_contracts)
         if not candidate_ids:
             return None, "selector_no_candidates"
+        # The unavailable contract is a typed provider-failure boundary, not a
+        # natural-language intent.  This fault injection exists solely for the
+        # disposable local parity stack so its public API lifecycle can be
+        # certified without weakening or changing any deployed selector path.
+        if (
+            os.getenv("APP_ENV") == "local_finn"
+            and os.getenv("FINN_V2_TEST_FORCE_SELECTOR_UNAVAILABLE") == "1"
+        ):
+            return None, "selector_test_forced_unavailable"
         try:
             response = self._provider(
                 prompt=str({

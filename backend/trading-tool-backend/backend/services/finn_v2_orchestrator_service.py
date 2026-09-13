@@ -654,16 +654,22 @@ class FinnV2OrchestratorService:
         # only a compatible delivery projection for historical consumers.
         context.update(dict(previous_state.get("lineage_state") or {}))
         action_result = dict(previous_state.get("action_result") or {})
-        if action_result.get("entity_id") and action_result.get("owner_user_id") == user_id:
+        if (
+            action_result.get("entity_id")
+            and action_result.get("owner_user_id") == user_id
+            and action_result.get("result_status") == "succeeded"
+        ):
             # A confirmed execution is the only cross-turn object reference
             # accepted without an explicit current-turn identifier.
             context["previous_action_result"] = action_result
-        elif callable(getattr(self.runtime_contracts, "get_latest_action_result_for_user", None)):
-            # A completed write can be continued in a new conversation. Only
-            # the typed, owner-bound execution projection is eligible here;
-            # raw object tables and legacy conversation JSON are never used as
-            # an implicit cross-user or ambiguous fallback.
-            latest_action_contract = await self.runtime_contracts.get_latest_action_result_for_user(
+        elif conversation_id and callable(
+            getattr(self.runtime_contracts, "get_latest_action_result_for_conversation", None)
+        ):
+            # Continue only a result produced inside this persisted
+            # conversation. A global "latest action for this user" lookup can
+            # select an object from an older QA workflow or unrelated task.
+            latest_action_contract = await self.runtime_contracts.get_latest_action_result_for_conversation(
+                conversation_id=conversation_id,
                 user_id=user_id,
                 exclude_run_id=run_id,
             )
@@ -678,7 +684,7 @@ class FinnV2OrchestratorService:
                 and latest_action_result.get("result_status") == "succeeded"
             ):
                 context["previous_action_result"] = latest_action_result
-                context["previous_action_result_source"] = "owner_action_result"
+                context["previous_action_result_source"] = "conversation_action_result"
         guided_state = dict(previous_state.get("guided_state") or {})
         if guided_state:
             context["active_guided_operation"] = guided_state

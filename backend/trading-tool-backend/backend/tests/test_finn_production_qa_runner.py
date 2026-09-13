@@ -352,6 +352,22 @@ def test_runner_materializes_a_unique_natural_fixture_namespace_without_ids():
     assert "setup_id" not in json.dumps(materialized)
 
 
+@pytest.mark.parametrize("message", [
+    "Maak een swingsetup met de naam Atlas, symbool XLM en timeframe 4H.",
+    "Create a manual strategy from that setup and call it Atlas Plan.",
+    "Erstelle einen Paper-Bot namens Atlas Bot.",
+])
+def test_runner_binds_declared_fixture_names_without_qa_instructions(message):
+    module = _module()
+    namespace = "qa-34746230528-f1e2d3c4"
+
+    bound = module.bind_fixture_natural_name(message, namespace=namespace)
+
+    assert namespace in bound
+    assert "fixture namespace" not in bound.casefold()
+    assert "setup_id" not in bound
+
+
 def test_manifest_rejects_an_object_create_case_without_a_workflow_namespace(tmp_path, monkeypatch):
     module = _module()
     monkeypatch.setenv("FINN_QA_ALLOW_FIXTURE_ACTIONS", "1")
@@ -583,7 +599,7 @@ def test_all_downstream_fixture_cases_receive_the_same_execution_namespace():
     }, namespace=namespace)
 
     assert create["client_context"]["fixture_namespace"] == namespace
-    assert create["client_context"]["fixture_name_suffix"] == namespace
+    assert "fixture_name_suffix" not in create["client_context"]
     assert namespace not in create["message"]
     assert downstream["client_context"]["fixture_namespace"] == namespace
     assert downstream["client_context"]["fixture_lineage_namespace"] == namespace

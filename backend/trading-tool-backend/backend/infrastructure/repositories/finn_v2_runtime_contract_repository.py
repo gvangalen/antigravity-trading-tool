@@ -107,6 +107,42 @@ class FinnV2RuntimeContractRepository(FinnV2RepositoryTransactionMixin):
                 return row
         return None
 
+    async def get_latest_action_result_for_conversation(
+        self,
+        *,
+        conversation_id: str,
+        user_id: int,
+        exclude_run_id: Optional[str] = None,
+    ) -> Optional[FinnV2RuntimeContract]:
+        """Return the newest successful action result in this conversation.
+
+        A later read or clarification contract can be newer than the action
+        that created the object.  Scanning the conversation prevents that
+        harmless newer turn from masking valid lineage, while deliberately
+        excluding unrelated historical objects owned by the same user.
+        """
+        conditions = [
+            FinnV2RuntimeContract.conversation_id == conversation_id,
+            FinnV2RuntimeContract.user_id == user_id,
+        ]
+        if exclude_run_id:
+            conditions.append(FinnV2RuntimeContract.run_id != exclude_run_id)
+        result = await self.session.execute(
+            select(FinnV2RuntimeContract)
+            .where(*conditions)
+            .order_by(desc(FinnV2RuntimeContract.updated_at))
+            .limit(32)
+        )
+        for row in result.scalars():
+            action_result = dict((row.state_json or {}).get("action_result") or {})
+            if (
+                action_result.get("owner_user_id") == user_id
+                and action_result.get("entity_id") is not None
+                and action_result.get("result_status") == "succeeded"
+            ):
+                return row
+        return None
+
     @staticmethod
     def execution_view(row: FinnV2RuntimeContract) -> Dict[str, Any]:
         """Return the authoritative execution fields for a new contract run.

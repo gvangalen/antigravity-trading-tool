@@ -634,14 +634,20 @@ def materialize_fixture_namespace(case: Dict[str, Any], *, namespace: str) -> Di
     materialized = replace(dict(case))
     action_mode = materialized.get("fixture_action", "read_only")
     operation_id = materialized.get("expected_operation_id")
+    if operation_id in NAMESPACED_FIXTURE_CREATE_OPERATIONS:
+        # The fixture namespace must reach the domain object's unique natural
+        # name, not merely runner metadata.  This is an ephemeral runner-side
+        # binding: FINN receives an ordinary user request with a unique name
+        # and has no QA namespace branch in its product logic.
+        materialized["message"] = bind_fixture_natural_name(
+            str(materialized.get("message") or ""), namespace=namespace
+        )
     if action_mode != "read_only":
         client_context = materialized.get("client_context")
         client_context = dict(client_context) if isinstance(client_context, dict) else {}
         # The API-visible context lets the QA fixture resolver isolate names
         # without leaking an internal ID into natural-language requests.
         client_context["fixture_namespace"] = namespace
-        if operation_id in NAMESPACED_FIXTURE_CREATE_OPERATIONS:
-            client_context["fixture_name_suffix"] = namespace
         if operation_id in LINEAGE_DEPENDENT_FIXTURE_OPERATIONS:
             client_context["fixture_lineage_namespace"] = namespace
         materialized["client_context"] = client_context
@@ -652,6 +658,39 @@ def materialize_fixture_namespace(case: Dict[str, Any], *, namespace: str) -> Di
         # it is not an action input and cannot change the sealed prompt's
         # semantics.
     return materialized
+
+
+def bind_fixture_natural_name(message: str, *, namespace: str) -> str:
+    """Make a QA-created object's declared natural name unique.
+
+    The protected manifest remains byte-for-byte frozen.  At execution time
+    the runner changes only the value following an existing name introducer;
+    it never appends an instruction, injects an ID, or asks FINN to interpret
+    QA metadata.  Downstream turns continue through persisted action-result
+    lineage, not through a namespace-aware product resolver.
+    """
+    namespace = validate_fixture_namespace(namespace)
+    patterns = (
+        # NL: "met de naam Atlas, ..." / "genaamd Atlas"
+        r"(?P<prefix>\b(?:met\s+de\s+naam|onder\s+de\s+naam|genaamd|naam)\s+)(?P<name>[\w][\w .-]{1,76}?)(?=(?:[,.;!?]|\s+(?:symbool|symbol|timeframe|en|and|und)\b|$))",
+        # EN: "call it Atlas Plan" / "named Atlas"
+        r"(?P<prefix>\b(?:call\s+it|named|called|name)\s+)(?P<name>[\w][\w .-]{1,76}?)(?=(?:[,.;!?]|\s+(?:with|for|and)\b|$))",
+        # DE: "namens Atlas Bot" / "genannt Atlas"
+        r"(?P<prefix>\b(?:namens|genannt|name)\s+)(?P<name>[\w][\w .-]{1,76}?)(?=(?:[,.;!?]|\s+(?:mit|und|f.r)\b|$))",
+    )
+    for pattern in patterns:
+        match = re.search(pattern, message, flags=re.IGNORECASE)
+        if not match:
+            continue
+        name = match.group("name").strip()
+        if namespace in name:
+            return message
+        # Setup/strategy/bot names allow 80 characters. Keep a deterministic
+        # suffix while retaining as much of the declared natural name as fits.
+        suffix = f" {namespace}"
+        bound_name = f"{name[: max(1, 80 - len(suffix))].rstrip()}{suffix}"
+        return f"{message[:match.start('name')]}{bound_name}{message[match.end('name'):] }"
+    return message
 
 
 def fixture_preflight(cases: Iterable[Dict[str, Any]], *, fixture_namespace: Optional[str]) -> Dict[str, Any]:

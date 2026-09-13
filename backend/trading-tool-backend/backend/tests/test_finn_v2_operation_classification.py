@@ -1,3 +1,7 @@
+import hashlib
+import json
+from pathlib import Path
+
 import pytest
 
 from backend.services.finn_v2_operation_classification_service import (
@@ -9,6 +13,19 @@ from backend.services.finn_v2_structured_operation_selector_service import FinnV
 
 
 CLASSIFIER = FinnV2OperationClassificationService()
+
+
+def test_declassified_action_contract_acceptance_handoff_is_complete_and_immutable():
+    """Keep every Build-authorized regression record available to public tests."""
+    fixture = Path(__file__).parent / "fixtures" / "finn_v2_declassified_34746230528_regression.json"
+    payload = fixture.read_bytes()
+    assert hashlib.sha256(payload).hexdigest() == "00f1e65a1bd2abaf487c92c33113972993ab3250a6bd2e8be018f43e6be001f0"
+    records = json.loads(payload)["failures"]
+    assert len(records) == 39
+    assert {record["case_id"] for record in records} == {
+        f"ac{number:02d}"
+        for number in (1, 2, 5, 6, 7, 9, 11, 12, 14, 15, 16, 17, 18, 20, 21, 22, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 39, 40, 42, 43, 44, 45, 46, 47, 48)
+    }
 
 
 @pytest.mark.parametrize(
@@ -509,6 +526,34 @@ def test_provider_failure_is_terminal_and_never_selects_a_local_operation():
 
     assert result.operation_id == "unavailable"
     assert result.selector_source == "provider_unavailable"
+
+
+def test_local_parity_fault_injection_exercises_the_typed_unavailable_boundary(monkeypatch):
+    """The certification-only switch is impossible in every non-local env."""
+    from backend.services.finn_v2_structured_operation_selector_service import (
+        FinnV2StructuredOperationSelectorService,
+    )
+
+    called = False
+
+    def provider(**_kwargs):
+        nonlocal called
+        called = True
+        return {}
+
+    monkeypatch.setenv("APP_ENV", "local_finn")
+    monkeypatch.setenv("FINN_V2_TEST_FORCE_SELECTOR_UNAVAILABLE", "1")
+    selector = FinnV2StructuredOperationSelectorService(provider=provider)
+    selection, error = selector.select(
+        message="Explain RSI.",
+        candidate_contracts=FinnV2OperationClassificationService().registry.list(),
+        facts={},
+        verified_context=None,
+    )
+
+    assert selection is None
+    assert error == "selector_test_forced_unavailable"
+    assert called is False
 
 
 def test_low_confidence_safe_terminal_selection_remains_typed():
