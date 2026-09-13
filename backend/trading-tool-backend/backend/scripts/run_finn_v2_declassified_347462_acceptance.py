@@ -12,6 +12,7 @@ import argparse
 import hashlib
 import json
 from pathlib import Path
+from time import sleep
 from urllib.parse import urlparse
 import uuid
 
@@ -35,6 +36,12 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--base-url", default="http://127.0.0.1:18000")
     parser.add_argument("--output", required=True)
+    parser.add_argument(
+        "--case-interval-seconds",
+        type=float,
+        default=0.25,
+        help="Bounded production-runner-compatible pause after every case.",
+    )
     args = parser.parse_args()
     if urlparse(args.base_url).hostname not in {"127.0.0.1", "localhost"}:
         raise ValueError("declassified_acceptance_requires_loopback")
@@ -68,6 +75,10 @@ def main() -> None:
         temporary = output.with_suffix(".tmp")
         temporary.write_text(json.dumps(payload, sort_keys=True, indent=2) + "\n", encoding="utf-8")
         temporary.replace(output)
+
+    def finish_case() -> None:
+        checkpoint()
+        sleep(max(0.0, args.case_interval_seconds))
 
     for record in fixture["failures"]:
         sequence = record["conversation_and_lineage"]["declassified_conversation_sequence"]
@@ -121,7 +132,7 @@ def main() -> None:
                         "public_confirmation_route": True, "proposal_id_present": True,
                         "passed": True,
                     })
-                    checkpoint()
+                    finish_case()
                     continue
                 executed, execution_status = _request_json(
                     url=f"{args.base_url.rstrip('/')}/api/assistant/v2/proposals/{proposal_id}/execute",
@@ -139,7 +150,7 @@ def main() -> None:
                     "public_execution_route": True, "proposal_id_present": True,
                     "passed": True,
                 })
-                checkpoint()
+                finish_case()
                 continue
             if expected["operation"] in SAFE_WRITE_OPERATIONS:
                 observed = _run_action(
@@ -172,7 +183,7 @@ def main() -> None:
                 "error_category": type(error).__name__,
                 "error": str(error),
             })
-            checkpoint()
+            finish_case()
             continue
         checks = {
             "http_200": http_status == 200,
@@ -207,7 +218,7 @@ def main() -> None:
             "checks": checks,
             "passed": passed,
         })
-        checkpoint()
+        finish_case()
 
     artifact = {
         "artifact_version": "finn_v2.declassified_347462_runtime_acceptance.v1",
