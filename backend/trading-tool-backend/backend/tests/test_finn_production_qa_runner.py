@@ -28,7 +28,7 @@ def test_workflow_is_manual_protected_and_serialized():
     workflow = WORKFLOW_PATH.read_text(encoding="utf-8")
     assert "workflow_dispatch:" in workflow
     trigger_block = workflow.split("permissions:", maxsplit=1)[0]
-    assert re.search(r"^on:\n  workflow_dispatch:", trigger_block, flags=re.MULTILINE)
+    assert re.search(r'^"on":\n  workflow_dispatch:', trigger_block, flags=re.MULTILINE)
     assert not re.search(r"^  (push|pull_request|schedule|workflow_run):", trigger_block, flags=re.MULTILINE)
     assert "environment: production" in workflow
     assert "finn-production-qa-${{ inputs.release_sha }}-${{ inputs.qa_profile }}" in workflow
@@ -41,6 +41,14 @@ def test_workflow_is_manual_protected_and_serialized():
     assert "allow_fixture_actions" in workflow
     assert "allow_safe_fixture_execution" in workflow
     assert "Safe fixture execution requires fixture-action authorization." in workflow
+
+
+def test_workflow_has_only_the_manual_dispatch_trigger():
+    """Official QA must never be started by a repository event."""
+    workflow = WORKFLOW_PATH.read_text(encoding="utf-8")
+    trigger_block = workflow.split("permissions:", maxsplit=1)[0]
+
+    assert re.findall(r"^  ([A-Za-z_]+):", trigger_block, flags=re.MULTILINE) == ["workflow_dispatch"]
 
 
 def test_workflow_never_exports_fixture_or_bearer_token():

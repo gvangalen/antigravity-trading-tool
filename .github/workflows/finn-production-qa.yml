@@ -1,6 +1,8 @@
 name: FINN Production QA
 
-on:
+# Quoting keeps generic YAML 1.1 tooling from coercing this key to a boolean.
+# GitHub Actions still receives the canonical manual trigger name.
+"on":
   workflow_dispatch:
     inputs:
       release_sha:
@@ -269,7 +271,11 @@ jobs:
                 # honest partial checkpoint.  Resume that same matrix once;
                 # ``--resume`` consumes only its explicit not_run rows.
                 # shellcheck disable=SC2029 # The report path is an explicit remote argument, not a secret expansion.
-                incomplete="$(ssh "${ssh_opts[@]}" "ubuntu@${QA_HOST}" "python3 -c 'import json,sys; print(\"true\" if json.load(open(sys.argv[1], encoding=\"utf-8\")).get(\"incomplete\") else \"false\")' '$remote_report'" 2>/dev/null || echo true)"
+                incomplete="$(
+                  ssh "${ssh_opts[@]}" "ubuntu@${QA_HOST}" \
+                    "python3 -c 'import json,sys; report=json.load(open(sys.argv[1], encoding=\"utf-8\")); print(\"true\" if report.get(\"incomplete\") else \"false\")' '$remote_report'" \
+                    2>/dev/null || echo true
+                )"
                 if [ "$incomplete" = "true" ] && [ "$restarted" -eq 0 ]; then
                   restarted=1
                   # shellcheck disable=SC2029 # Restart is intentionally scoped to this workflow's remote state directory.
