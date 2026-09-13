@@ -35,7 +35,10 @@ from backend.schemas.finn_v2_reasoning_schema import (
 from backend.services.finn_v2_flag_service import FinnV2FlagService
 from backend.services.finn_v2_capability_registry_service import FinnV2CapabilityRegistryService
 from backend.services.finn_v2_json_safety import to_json_safe
-from backend.services.finn_v2_lifecycle_budget import remaining_lifecycle_seconds
+from backend.services.finn_v2_lifecycle_budget import (
+    remaining_lifecycle_seconds,
+    remaining_provider_seconds,
+)
 from backend.services.finn_v2_reasoning_context_service import FinnV2ReasoningContextService
 from backend.services.finn_v2_reasoning_fallback_service import FinnV2ReasoningFallbackService
 from backend.services.finn_v2_reasoning_prompt_service import (
@@ -535,12 +538,15 @@ class FinnV2ReasoningService:
             # waiting for the external provider. This also releases the pooled DB
             # connection for concurrent FINN runs.
             await self._commit_before_provider_call()
-            remaining = remaining_lifecycle_seconds(
-                reserve_seconds=self.flags.terminal_persistence_reserve_seconds(),
+            terminal_reserve = self.flags.terminal_persistence_reserve_seconds()
+            remaining = remaining_provider_seconds(
+                terminal_reserve_seconds=terminal_reserve,
             )
             if remaining is not None and remaining < 0.5:
                 response = {
-                    "error": "lifecycle_provider_budget_exhausted",
+                    # Do not begin a call that cannot leave time for the
+                    # existing safe timeout fallback and terminal projection.
+                    "error": "timeout",
                     "input_tokens": None,
                     "output_tokens": None,
                     "reasoning_tokens": None,

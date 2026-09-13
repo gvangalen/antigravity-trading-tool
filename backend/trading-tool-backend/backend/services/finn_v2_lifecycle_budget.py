@@ -32,3 +32,16 @@ def remaining_lifecycle_seconds(*, reserve_seconds: float = 0.0) -> float | None
     if deadline is None:
         return None
     return max(0.0, deadline - monotonic() - max(0.0, reserve_seconds))
+
+
+def remaining_provider_seconds(*, terminal_reserve_seconds: float) -> float | None:
+    """Leave time to persist a typed terminal result after provider work.
+
+    A provider timeout is an expected outcome. It must return before the
+    terminal-persistence reserve, otherwise the lifecycle owner can race its
+    safe fallback and publish a generic deadline failure.
+    """
+    remaining = remaining_lifecycle_seconds(reserve_seconds=terminal_reserve_seconds)
+    if remaining is None:
+        return None
+    return max(0.0, remaining - max(0.0, terminal_reserve_seconds))

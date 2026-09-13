@@ -2,6 +2,7 @@ import asyncio
 from time import monotonic
 
 from backend.services.finn_v2_lifecycle_budget import (
+    remaining_provider_seconds,
     remaining_lifecycle_seconds,
     reset_lifecycle_deadline,
     set_lifecycle_deadline,
@@ -20,6 +21,18 @@ def test_lifecycle_budget_is_task_local_and_reserves_terminal_time():
         reset_lifecycle_deadline(token)
 
     assert remaining_lifecycle_seconds() is None
+
+
+def test_provider_budget_reserves_time_for_typed_terminalisation():
+    token = set_lifecycle_deadline(monotonic() + 1.0)
+    try:
+        lifecycle_budget = remaining_lifecycle_seconds(reserve_seconds=0.2)
+        provider_budget = remaining_provider_seconds(terminal_reserve_seconds=0.2)
+        assert lifecycle_budget is not None
+        assert provider_budget is not None
+        assert 0 < provider_budget < lifecycle_budget
+    finally:
+        reset_lifecycle_deadline(token)
 
 
 def test_semantic_verifier_does_not_start_provider_when_terminal_budget_is_gone(monkeypatch):
