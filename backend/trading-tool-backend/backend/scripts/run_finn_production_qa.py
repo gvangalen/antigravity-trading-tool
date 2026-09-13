@@ -32,6 +32,7 @@ ALLOWED_PROFILES = {
     "manifest_key",
     "targeted_regression",
     "runtime_acceptance",
+    "action_contract_acceptance",
     "full_release_acceptance",
     "safety",
     "latency",
@@ -40,6 +41,7 @@ SENSITIVE_KEYS = {"access_token", "authorization", "authorization_header", "cook
 FIXTURE_ACTION_MODES = {"read_only", "proposal", "confirmation", "safe_execution"}
 INFRASTRUCTURE_ERROR_CATEGORIES = {"dns", "connect", "tls", "clienttimeout", "client", "ssh"}
 _DIAGNOSTIC_LOOP: Optional[asyncio.AbstractEventLoop] = None
+_DATABASE_LOOP: Optional[asyncio.AbstractEventLoop] = None
 QA_NAMESPACE_TOKEN = "{{qa_run_namespace}}"
 NAMESPACED_FIXTURE_CREATE_OPERATIONS = {
     "create_setup",
@@ -57,6 +59,62 @@ LINEAGE_DEPENDENT_FIXTURE_OPERATIONS = {
     "delete_strategy",
     "delete_setup",
 }
+ACTION_CONTRACT_ACCEPTANCE_PROFILE = "action_contract_acceptance"
+ACTION_CONTRACT_ACCEPTANCE_CASE_COUNT = 48
+ACTION_CONTRACT_ACCEPTANCE_WRITE_OPERATIONS = frozenset({
+    "select_asset",
+    "watchlist_add",
+    "watchlist_remove",
+    "create_indicator_configuration",
+    "update_indicator_configuration",
+    "delete_indicator_configuration",
+    "create_setup",
+    "update_setup",
+    "delete_setup",
+    "create_strategy",
+    "update_strategy",
+    "delete_strategy",
+    "create_bot",
+    "update_bot",
+    "delete_bot",
+    "deactivate_bot",
+})
+ACCEPTANCE_EXPECTATION_FIELDS = frozenset({
+    "expected_operation_id",
+    "expected_action_polarity",
+    "expected_required_inputs",
+    "expected_supplied_inputs",
+    "expected_missing_inputs",
+    "expected_canonical_target",
+    "expected_target_type",
+    "expected_target_source",
+    "expected_terminal_statuses",
+})
+ACCEPTANCE_REPORT_EVIDENCE_FIELDS = (
+    "terminal",
+    "sse_terminal",
+    "polling_sse_equal",
+    "contract_evidence",
+    "fixture_action.proposal",
+    "fixture_action.database_before_confirmation",
+    "fixture_action.database_after_confirmation",
+    "fixture_action.database_after_execution",
+    "fixture_action.database_after_replay",
+    "fixture_action.no_write_before_confirmation",
+    "fixture_action.no_duplicate_effect",
+    "fixture_action.safety_database_unchanged",
+)
+NATURAL_LINEAGE_SEQUENCE = (
+    "update_setup",
+    "create_strategy",
+    "update_strategy",
+    "create_bot",
+    "update_bot",
+    "deactivate_bot",
+    "delete_bot",
+    "delete_strategy",
+    "delete_setup",
+)
 
 
 def classify_internal_issue(value: object) -> str:
@@ -126,6 +184,108 @@ def runtime_diagnostic(run_id: str) -> Dict[str, Any]:
         return _DIAGNOSTIC_LOOP.run_until_complete(_load_runtime_diagnostic(run_id))
     except Exception:
         return {"diagnostic_status": "unavailable"}
+
+
+_DATABASE_SCOPE_BY_OPERATION = {
+    "select_asset": ("users", "preferences"),
+    "watchlist_add": ("watchlists", "watchlist"),
+    "watchlist_remove": ("watchlists", "watchlist"),
+    "create_indicator_configuration": ("user_indicator_configs", "indicator_configuration"),
+    "update_indicator_configuration": ("user_indicator_configs", "indicator_configuration"),
+    "delete_indicator_configuration": ("user_indicator_configs", "indicator_configuration"),
+    "create_setup": ("setups", "setup"),
+    "update_setup": ("setups", "setup"),
+    "delete_setup": ("setups", "setup"),
+    "create_strategy": ("strategies", "strategy"),
+    "update_strategy": ("strategies", "strategy"),
+    "delete_strategy": ("strategies", "strategy"),
+    "create_bot": ("bot_configs", "bot"),
+    "update_bot": ("bot_configs", "bot"),
+    "delete_bot": ("bot_configs", "bot"),
+    "deactivate_bot": ("bot_configs", "bot"),
+}
+
+
+async def _load_owner_scoped_database_snapshot(
+    *, operation_id: str, fixture_namespace: str
+) -> Dict[str, Any]:
+    """Read a sanitized owner-only state fingerprint around an approved write."""
+    from sqlalchemy import text
+
+    from backend.infrastructure.database import async_session_factory
+
+    raw_user_id = os.environ.get("FINN_QA_USER_ID")
+    if not raw_user_id or not raw_user_id.isdigit():
+        raise RuntimeError("fixture_binding_invalid")
+    user_id = int(raw_user_id)
+    table, scope = _DATABASE_SCOPE_BY_OPERATION[operation_id]
+    params = {"user_id": user_id, "namespace": f"%{fixture_namespace}%"}
+    if table == "users":
+        statement = text("""
+            SELECT id,
+                   jsonb_build_object(
+                       'selected_asset', ai_preferences -> 'selected_asset',
+                       'active_asset', ai_preferences -> 'active_asset'
+                   ) AS state
+            FROM users WHERE id = :user_id
+        """)
+    else:
+        namespace_filter = ""
+        if table in {"setups", "strategies", "bot_configs"}:
+            namespace_filter = " AND name LIKE :namespace"
+        statement = text(f"""
+            SELECT id,
+                   to_jsonb(t) - ARRAY[
+                       'user_id', 'created_at', 'updated_at', 'last_run'
+                   ] AS state
+            FROM {table} AS t
+            WHERE user_id = :user_id{namespace_filter}
+            ORDER BY id
+        """)
+    async with async_session_factory() as session:
+        rows = (await session.execute(statement, params)).mappings().all()
+        live_bot_count = int((await session.execute(
+            text("SELECT COUNT(*) FROM bot_configs WHERE user_id=:user_id AND COALESCE(is_live, false)=true"),
+            {"user_id": user_id},
+        )).scalar_one())
+        broker_order_count = int((await session.execute(
+            text("SELECT COUNT(*) FROM bot_orders WHERE user_id=:user_id"),
+            {"user_id": user_id},
+        )).scalar_one())
+    normalized = [
+        {"id": int(row["id"]), "state": row["state"]}
+        for row in rows
+    ]
+    digest = hashlib.sha256(
+        json.dumps(normalized, sort_keys=True, default=str, separators=(",", ":")).encode("utf-8")
+    ).hexdigest()
+    return {
+        "scope": scope,
+        "owner_scoped": True,
+        "row_count": len(normalized),
+        "entity_ids": [row["id"] for row in normalized],
+        "state_sha256": digest,
+        "live_bot_count": live_bot_count,
+        "broker_order_count": broker_order_count,
+    }
+
+
+def owner_scoped_database_snapshot(*, operation_id: str, fixture_namespace: str) -> Dict[str, Any]:
+    """Keep database evidence on one private loop and expose only safe fingerprints."""
+    global _DATABASE_LOOP
+    try:
+        if operation_id not in _DATABASE_SCOPE_BY_OPERATION:
+            return {"status": "not_applicable"}
+        if _DATABASE_LOOP is None:
+            _DATABASE_LOOP = asyncio.new_event_loop()
+        return _DATABASE_LOOP.run_until_complete(
+            _load_owner_scoped_database_snapshot(
+                operation_id=operation_id,
+                fixture_namespace=validate_fixture_namespace(fixture_namespace),
+            )
+        )
+    except Exception as error:
+        return {"status": "unavailable", "error_category": classify_internal_issue(error)}
 
 
 def redact(value: Any) -> Any:
@@ -511,6 +671,121 @@ def fixture_preflight(cases: Iterable[Dict[str, Any]], *, fixture_namespace: Opt
     }
 
 
+def action_contract_acceptance_preflight(
+    cases: Iterable[Dict[str, Any]], *, fixture_namespace: Optional[str]
+) -> Dict[str, Any]:
+    """Fail closed unless the sealed matrix covers the complete live registry."""
+    from backend.domain.finn_v2_operation_registry import FinnV2OperationRegistry
+
+    case_list = list(cases)
+    registry = FinnV2OperationRegistry()
+    contracts = {contract.operation_id: contract for contract in registry.list()}
+    expected_operations = [case.get("expected_operation_id") for case in case_list]
+    if len(case_list) != ACTION_CONTRACT_ACCEPTANCE_CASE_COUNT:
+        raise ValueError("acceptance_contract_count_invalid")
+    if len(expected_operations) != len(set(expected_operations)):
+        raise ValueError("acceptance_contract_duplicate")
+    if set(expected_operations) != set(contracts):
+        raise ValueError("acceptance_registry_coverage_invalid")
+
+    write_operations = {
+        case.get("expected_operation_id")
+        for case in case_list
+        if case.get("fixture_action") == "safe_execution"
+    }
+    if write_operations != ACTION_CONTRACT_ACCEPTANCE_WRITE_OPERATIONS:
+        raise ValueError("acceptance_write_coverage_invalid")
+    lineage_operations = {
+        case.get("expected_operation_id")
+        for case in case_list
+        if case.get("lineage_dependency") is True
+    }
+    if lineage_operations != LINEAGE_DEPENDENT_FIXTURE_OPERATIONS:
+        raise ValueError("acceptance_lineage_coverage_invalid")
+    ordered_lineage = tuple(
+        case.get("expected_operation_id")
+        for case in case_list
+        if case.get("lineage_dependency") is True
+    )
+    if ordered_lineage != NATURAL_LINEAGE_SEQUENCE:
+        raise ValueError("acceptance_lineage_sequence_invalid")
+    if len({case.get("message") for case in case_list}) != len(case_list):
+        raise ValueError("acceptance_natural_prompts_not_unique")
+
+    for case in case_list:
+        missing_fields = ACCEPTANCE_EXPECTATION_FIELDS.difference(case)
+        if missing_fields:
+            raise ValueError("acceptance_evidence_fields_missing")
+        contract = contracts[str(case["expected_operation_id"])]
+        if case["expected_action_polarity"] != contract.action_polarity.value:
+            raise ValueError("acceptance_polarity_expectation_invalid")
+        if set(case["expected_required_inputs"]) != set(contract.required_inputs):
+            raise ValueError("acceptance_required_inputs_expectation_invalid")
+        if case.get("language") not in {"nl", "en", "de"}:
+            raise ValueError("acceptance_language_invalid")
+        if re.search(r"\b(?:setup_id|strategy_id|bot_id|proposal_id|action_result)\b", case["message"], re.IGNORECASE):
+            raise ValueError("acceptance_prompt_internal_reference_forbidden")
+        if contract.operation_id in ACTION_CONTRACT_ACCEPTANCE_WRITE_OPERATIONS:
+            if case.get("fixture_action") != "safe_execution" or case.get("idempotency_replay") is not True:
+                raise ValueError("acceptance_write_lifecycle_incomplete")
+
+    base = fixture_preflight(case_list, fixture_namespace=fixture_namespace)
+    base.update({
+        "active_contracts_recognized": len(contracts),
+        "contract_cases_recognized": len(expected_operations),
+        "write_contracts_recognized": len(write_operations),
+        "lineage_dependencies_recognized": len(lineage_operations),
+        "acceptance_evidence_fields_supported": sorted(ACCEPTANCE_EXPECTATION_FIELDS),
+        "acceptance_report_fields_supported": list(ACCEPTANCE_REPORT_EVIDENCE_FIELDS),
+        "workflow_dispatch_available": True,
+    })
+    return base
+
+
+def _input_names(value: Any) -> set[str]:
+    if isinstance(value, dict):
+        return {str(key) for key in value}
+    if isinstance(value, list):
+        return {str(item) for item in value}
+    return set()
+
+
+def contract_expectation_result(case: Mapping[str, Any], projection: Mapping[str, Any]) -> Dict[str, bool]:
+    """Score sealed expectations against the persisted runtime projection."""
+    trace = projection.get("runtime_trace") if isinstance(projection.get("runtime_trace"), dict) else {}
+    actual_operation = trace.get("final_operation_id") or trace.get("initial_operation_id")
+    expected_target_source = case.get("expected_target_source")
+    if isinstance(expected_target_source, list):
+        target_source_matches = trace.get("target_source") in expected_target_source
+    else:
+        target_source_matches = trace.get("target_source") == expected_target_source
+    expected_target_type = case.get("expected_target_type")
+    if isinstance(expected_target_type, list):
+        target_type_matches = trace.get("target_type") in expected_target_type
+    else:
+        target_type_matches = trace.get("target_type") == expected_target_type
+    expected_statuses = set(case.get("expected_terminal_statuses") or [])
+    expected_canonical_target = case.get("expected_canonical_target")
+    canonical_target_matches = (
+        bool(trace.get("canonical_target"))
+        if expected_canonical_target == "__present__"
+        else trace.get("canonical_target") == expected_canonical_target
+    )
+    return {
+        "operation": actual_operation == case.get("expected_operation_id"),
+        "action_polarity": trace.get("action_polarity") == case.get("expected_action_polarity"),
+        "required_inputs": _input_names(trace.get("required_inputs")) == set(case.get("expected_required_inputs") or []),
+        "supplied_inputs": _input_names(trace.get("supplied_inputs")) == set(case.get("expected_supplied_inputs") or []),
+        "missing_inputs": _input_names(trace.get("missing_inputs")) == set(case.get("expected_missing_inputs") or []),
+        "canonical_target": canonical_target_matches,
+        "target_type": target_type_matches,
+        "target_source": target_source_matches,
+        "runtime_contract_persisted": bool(trace.get("contract_id")) and trace.get("contract_revision") is not None,
+        "dispatch_cardinality": trace.get("dispatch_count") == 1 and trace.get("attempt_count") in {0, 1},
+        "terminal_status": not expected_statuses or projection.get("status") in expected_statuses,
+    }
+
+
 def classify_case_failure(case_result: Dict[str, Any]) -> Optional[str]:
     """Keep runner, transport, and observed FINN behavior separately scored."""
     category = case_result.get("error_category")
@@ -532,7 +807,132 @@ def classify_case_failure(case_result: Dict[str, Any]) -> Optional[str]:
         return "product"
     if case_result.get("operation_matches") is False:
         return "product"
+    evidence = case_result.get("contract_evidence")
+    if isinstance(evidence, dict) and not all(evidence.values()):
+        return "product"
     return None
+
+
+def _percentile(values: list[float], percentile: float) -> Optional[float]:
+    if not values:
+        return None
+    ordered = sorted(values)
+    index = min(len(ordered) - 1, max(0, int((len(ordered) - 1) * percentile + 0.5)))
+    return round(ordered[index], 2)
+
+
+def action_contract_acceptance_summary(
+    *, cases: Iterable[Dict[str, Any]], manifest_cases_list: Iterable[Dict[str, Any]]
+) -> Dict[str, Any]:
+    """Publish contract-by-contract acceptance evidence without sealed prompts."""
+    rows = list(cases)
+    manifest_by_id = {str(case["case_id"]): case for case in manifest_cases_list}
+    contract_results = []
+    for row in rows:
+        expected = manifest_by_id.get(str(row.get("case_id")), {})
+        operation_id = expected.get("expected_operation_id")
+        fixture_action = row.get("fixture_action") if isinstance(row.get("fixture_action"), dict) else {}
+        passed = classify_case_failure(row) is None
+        contract_results.append({
+            "case_id": row.get("case_id"),
+            "operation_id": operation_id,
+            "run_id": row.get("run_id"),
+            "language": expected.get("language"),
+            "passed": passed,
+            "failure_classification": classify_case_failure(row),
+            "typed_error": row.get("error_category") or fixture_action.get("error_category"),
+        })
+    write_rows = [
+        row for row in rows
+        if manifest_by_id.get(str(row.get("case_id")), {}).get("expected_operation_id")
+        in ACTION_CONTRACT_ACCEPTANCE_WRITE_OPERATIONS
+    ]
+    lineage_rows = [
+        row for row in rows
+        if manifest_by_id.get(str(row.get("case_id")), {}).get("lineage_dependency") is True
+    ]
+    accuracy_fields = {
+        "operation": "operation",
+        "target_type": "target_type",
+        "target_source": "target_source",
+        "canonical_target": "canonical_target",
+        "action_polarity": "action_polarity",
+        "required_inputs": "required_inputs",
+        "supplied_inputs": "supplied_inputs",
+        "missing_inputs": "missing_inputs",
+    }
+    accuracies = {}
+    for label, evidence_key in accuracy_fields.items():
+        numerator = sum(
+            1 for row in rows
+            if (row.get("contract_evidence") or {}).get(evidence_key) is True
+        )
+        accuracies[label] = {"passed": numerator, "total": len(rows)}
+    latencies = [float(row["create_latency_ms"]) for row in rows if isinstance(row.get("create_latency_ms"), (int, float))]
+    action_latencies = [
+        float(value)
+        for row in write_rows
+        for key, value in (row.get("fixture_action") or {}).items()
+        if key.endswith("_latency_ms") and isinstance(value, (int, float))
+    ]
+    write_results = []
+    for row in write_rows:
+        expected = manifest_by_id[str(row.get("case_id"))]
+        action = row.get("fixture_action") if isinstance(row.get("fixture_action"), dict) else {}
+        write_results.append({
+            "operation_id": expected.get("expected_operation_id"),
+            "run_id": row.get("run_id"),
+            "proposal": bool(action.get("proposal", {}).get("proposal_id")),
+            "confirmation_http_status": action.get("confirm_status"),
+            "execution_http_status": action.get("execute_status"),
+            "execution_status": action.get("execution_status"),
+            "replay_http_status": action.get("idempotency_replay_status"),
+            "replay_status": action.get("idempotency_replay_execution_status"),
+            "no_write_before_confirmation": action.get("no_write_before_confirmation"),
+            "database_before": action.get("database_before_confirmation"),
+            "database_after": action.get("database_after_execution"),
+            "database_after_replay": action.get("database_after_replay"),
+            "no_duplicate_effect": action.get("no_duplicate_effect"),
+            "passed": classify_case_failure(row) is None,
+        })
+    lineage_results = []
+    for row in lineage_rows:
+        expected = manifest_by_id[str(row.get("case_id"))]
+        action = row.get("fixture_action") if isinstance(row.get("fixture_action"), dict) else {}
+        trace = (row.get("terminal") or {}).get("runtime_trace") or {}
+        lineage_results.append({
+            "operation_id": expected.get("expected_operation_id"),
+            "run_id": row.get("run_id"),
+            "conversation_reference": trace.get("conversation_reference"),
+            "conversation_reference_kind": trace.get("conversation_reference_kind"),
+            "target_source": trace.get("target_source"),
+            "persisted_entity_ids": (action.get("database_after_execution") or {}).get("entity_ids"),
+            "passed": classify_case_failure(row) is None,
+        })
+    return {
+        "contract_results": contract_results,
+        "contracts": {"passed": sum(1 for item in contract_results if item["passed"]), "total": len(contract_results)},
+        "writes": {
+            "passed": sum(1 for row in write_rows if classify_case_failure(row) is None),
+            "total": len(write_rows),
+        },
+        "write_results": write_results,
+        "lineage": {
+            "passed": sum(1 for row in lineage_rows if classify_case_failure(row) is None),
+            "total": len(lineage_rows),
+        },
+        "lineage_results": lineage_results,
+        "accuracy": accuracies,
+        "latency_ms": {
+            "p50": _percentile(latencies, 0.50),
+            "p95": _percentile(latencies, 0.95),
+            "max": round(max(latencies), 2) if latencies else None,
+            "action_p50": _percentile(action_latencies, 0.50),
+            "action_p95": _percentile(action_latencies, 0.95),
+            "action_max": round(max(action_latencies), 2) if action_latencies else None,
+        },
+        "http_statuses": [row.get("create_http_status") for row in rows],
+    }
 
 
 def failure_summary(cases: Iterable[Dict[str, Any]]) -> Dict[str, int]:
@@ -648,6 +1048,18 @@ def _run_fixture_action(
         "mode": action_mode, "proposal": {}, "publish_status": None, "confirm_status": None,
         "execute_status": None, "idempotency_replay_status": None, "outcome": "not_applicable",
     }
+    operation_id = str(case.get("expected_operation_id") or "")
+    context = case.get("client_context") if isinstance(case.get("client_context"), dict) else {}
+    fixture_namespace = str(context.get("fixture_namespace") or "")
+    database_evidence_required = operation_id in ACTION_CONTRACT_ACCEPTANCE_WRITE_OPERATIONS
+
+    def database_snapshot() -> Dict[str, Any]:
+        if operation_id not in ACTION_CONTRACT_ACCEPTANCE_WRITE_OPERATIONS:
+            return {"status": "not_applicable"}
+        return owner_scoped_database_snapshot(
+            operation_id=operation_id,
+            fixture_namespace=fixture_namespace,
+        )
     def action_timeout() -> float:
         if remaining_seconds is None:
             return 15.0
@@ -674,28 +1086,32 @@ def _run_fixture_action(
         result["outcome"] = "proposal_missing"
         result["error_category"] = "proposal_missing"
         return result
-    proposal_status, proposal, _latency, proposal_error = request_json(
+    proposal_status, proposal, proposal_latency, proposal_error = request_json(
         url=f"{base_url}/api/assistant/v2/proposals/{proposal_id}", token=token,
         timeout_seconds=action_timeout(),
     )
     if proposal_status != 200 or proposal_error:
         result["error_category"] = proposal_error or "proposal_read_failed"
         return result
+    result["proposal_read_latency_ms"] = round(proposal_latency, 2)
     result["proposal"] = {
         key: proposal.get(key)
         for key in ("proposal_id", "status", "operation_type", "proposal_version", "contract_revision",
                     "requires_step_up_auth", "payload_hash", "confirmation_required")
         if key in proposal
     }
+    if database_evidence_required:
+        result["database_before_confirmation"] = database_snapshot()
     trace = terminal.get("runtime_trace") if isinstance(terminal.get("runtime_trace"), dict) else {}
     if "contract_revision" in trace:
         result["proposal"]["contract_revision"] = trace["contract_revision"]
     result["outcome"] = "proposal_created"
-    status, published, _latency, error = request_json(
+    status, published, publish_latency, error = request_json(
         url=f"{base_url}/api/assistant/v2/proposals/{proposal_id}/publish",
         method="POST", token=token, payload={}, timeout_seconds=action_timeout(),
     )
     result["publish_status"] = status
+    result["publish_latency_ms"] = round(publish_latency, 2)
     if status != 200 or error:
         result["error_category"] = error or "proposal_publish_failed"
         return result
@@ -711,40 +1127,91 @@ def _run_fixture_action(
         "confirmation_token": confirmation_token,
         "expected_payload_hash": payload_hash,
     }
-    status, _confirmed, _latency, error = request_json(
+    status, _confirmed, confirm_latency, error = request_json(
         url=f"{base_url}/api/assistant/v2/proposals/{proposal_id}/confirm",
         method="POST", token=token, payload=confirm_payload, timeout_seconds=action_timeout(),
     )
     result["confirm_status"] = status
+    result["confirm_latency_ms"] = round(confirm_latency, 2)
     confirmation_token = None
     if status != 200 or error:
         result["error_category"] = error or "proposal_confirm_failed"
         return result
+    before: Dict[str, Any] = {}
+    if database_evidence_required:
+        result["database_after_confirmation"] = database_snapshot()
+        before = result["database_before_confirmation"]
+        after_confirmation = result["database_after_confirmation"]
+        result["no_write_before_confirmation"] = (
+            before.get("status") != "unavailable"
+            and before.get("state_sha256") == after_confirmation.get("state_sha256")
+            and before.get("row_count") == after_confirmation.get("row_count")
+            and before.get("broker_order_count") == after_confirmation.get("broker_order_count")
+            and before.get("live_bot_count") == after_confirmation.get("live_bot_count")
+        )
+        if not result["no_write_before_confirmation"]:
+            result["error_category"] = "write_before_confirmation_or_database_evidence_unavailable"
+            return result
     if action_mode == "confirmation":
         result["outcome"] = "confirmed"
         return result
     idempotency_key = f"qa-execute-{uuid.uuid4().hex}"
     execute_payload = {"idempotency_key": idempotency_key, "expected_payload_hash": payload_hash}
-    status, _executed, _latency, error = request_json(
+    status, _executed, execute_latency, error = request_json(
         url=f"{base_url}/api/assistant/v2/proposals/{proposal_id}/execute",
         method="POST", token=token, payload=execute_payload, timeout_seconds=action_timeout(),
     )
     result["execute_status"] = status
+    result["execute_latency_ms"] = round(execute_latency, 2)
     execution_status = _executed.get("status") if isinstance(_executed.get("status"), str) else None
     result["execution_status"] = execution_status
+    result["execution"] = {
+        key: _executed.get(key)
+        for key in ("execution_id", "proposal_id", "operation_type", "status", "postcondition_hash", "error_codes")
+        if key in _executed
+    }
     if status != 200 or error or execution_status not in {"succeeded", "already_executed"}:
         result["error_category"] = error or "proposal_execute_failed"
         return result
+    if database_evidence_required:
+        result["database_after_execution"] = database_snapshot()
     if case.get("idempotency_replay") is True:
-        replay_status, _replayed, _latency, replay_error = request_json(
+        replay_status, _replayed, replay_latency, replay_error = request_json(
             url=f"{base_url}/api/assistant/v2/proposals/{proposal_id}/execute",
             method="POST", token=token, payload=execute_payload, timeout_seconds=action_timeout(),
         )
         result["idempotency_replay_status"] = replay_status
+        result["idempotency_replay_latency_ms"] = round(replay_latency, 2)
         replay_execution_status = _replayed.get("status") if isinstance(_replayed.get("status"), str) else None
         result["idempotency_replay_execution_status"] = replay_execution_status
         if replay_status != 200 or replay_error or replay_execution_status not in {"succeeded", "already_executed"}:
             result["error_category"] = replay_error or "idempotency_replay_failed"
+        if database_evidence_required:
+            result["database_after_replay"] = database_snapshot()
+        if replay_execution_status != "already_executed":
+            result["error_category"] = result.get("error_category") or "idempotency_replay_not_already_executed"
+        if database_evidence_required:
+            result["no_duplicate_effect"] = (
+                result["database_after_execution"].get("state_sha256")
+                == result["database_after_replay"].get("state_sha256")
+                and result["database_after_execution"].get("row_count")
+                == result["database_after_replay"].get("row_count")
+            )
+            if not result["no_duplicate_effect"]:
+                result["error_category"] = result.get("error_category") or "idempotency_replay_changed_database"
+    if database_evidence_required:
+        result["database_effect_observed"] = (
+            before.get("state_sha256") != result["database_after_execution"].get("state_sha256")
+            or before.get("row_count") != result["database_after_execution"].get("row_count")
+        )
+        result["safety_database_unchanged"] = {
+            "broker_orders": before.get("broker_order_count") == result["database_after_execution"].get("broker_order_count"),
+            "live_bots": before.get("live_bot_count") == result["database_after_execution"].get("live_bot_count"),
+        }
+        if not all(result["safety_database_unchanged"].values()):
+            result["error_category"] = result.get("error_category") or "unsafe_database_effect"
+        if not result["database_effect_observed"]:
+            result["error_category"] = result.get("error_category") or "database_effect_missing"
     if not result.get("error_category"):
         result["outcome"] = "executed"
     return result
@@ -899,6 +1366,8 @@ def run_cases(
                     run_id=run_id,
                 )
         result["operation_matches"] = case.get("expected_operation_id") is None or actual == case["expected_operation_id"]
+        if ACCEPTANCE_EXPECTATION_FIELDS.issubset(case):
+            result["contract_evidence"] = contract_expectation_result(case, projection)
         # A timed-out lifecycle never progresses into a proposal/confirmation
         # action.  The runner records the terminal cleanup and leaves any
         # explicit safe fixture action untouched for a later resumed matrix.
@@ -977,7 +1446,12 @@ def main() -> int:
                 manifest_id=args.manifest_id,
                 fixture_namespace=fixture_namespace,
             ))
-            report.update(fixture_preflight(cases, fixture_namespace=fixture_namespace))
+            preflight_result = (
+                action_contract_acceptance_preflight(cases, fixture_namespace=fixture_namespace)
+                if args.profile == ACTION_CONTRACT_ACCEPTANCE_PROFILE
+                else fixture_preflight(cases, fixture_namespace=fixture_namespace)
+            )
+            report.update(preflight_result)
             report["planned_count"] = len(cases)
             report["outcome"] = "passed"
             report["qa_status"] = "PRECONDITION_PASSED"
@@ -1022,7 +1496,12 @@ def main() -> int:
                     fixture_namespace=fixture_namespace,
                 ))
                 known_cases = cases
-                report.update(fixture_preflight(cases, fixture_namespace=fixture_namespace))
+                preflight_result = (
+                    action_contract_acceptance_preflight(cases, fixture_namespace=fixture_namespace)
+                    if args.profile == ACTION_CONTRACT_ACCEPTANCE_PROFILE
+                    else fixture_preflight(cases, fixture_namespace=fixture_namespace)
+                )
+                report.update(preflight_result)
                 if getattr(args, "resume", False) and report_path.exists():
                     prior = json.loads(report_path.read_text(encoding="utf-8"))
                     if (
@@ -1059,7 +1538,39 @@ def main() -> int:
                 report["safety"]["read_only_profile"] = all(case.get("fixture_action", "read_only") == "read_only" for case in cases)
                 report["safety"]["confirmation_calls"] = sum(1 for item in report["cases"] if item.get("fixture_action", {}).get("confirm_status") is not None)
                 report["safety"]["execution_calls"] = sum(1 for item in report["cases"] if item.get("fixture_action", {}).get("execute_status") is not None)
-                report["outcome"] = "passed" if not report["incomplete"] and all(item.get("create_http_status") == 200 and item.get("terminal", {}).get("status") in TERMINAL_STATUSES and item.get("polling_sse_equal") and item.get("operation_matches") and not item["fixture_action"].get("error_category") for item in report["cases"]) else "failed"
+                if args.profile == ACTION_CONTRACT_ACCEPTANCE_PROFILE:
+                    acceptance = action_contract_acceptance_summary(
+                        cases=report["cases"], manifest_cases_list=cases,
+                    )
+                    report["action_contract_acceptance"] = acceptance
+                    write_evidence = acceptance["write_results"]
+                    report["safety"].update({
+                        "no_write_before_confirmation": all(
+                            item.get("no_write_before_confirmation") is True
+                            for item in write_evidence
+                        ),
+                        "broker_orders_unchanged": all(
+                            (item.get("database_before") or {}).get("broker_order_count")
+                            == (item.get("database_after") or {}).get("broker_order_count")
+                            for item in write_evidence
+                        ),
+                        "live_bots_unchanged": all(
+                            (item.get("database_before") or {}).get("live_bot_count")
+                            == (item.get("database_after") or {}).get("live_bot_count")
+                            for item in write_evidence
+                        ),
+                        "idempotency_replays_already_executed": all(
+                            item.get("replay_status") == "already_executed"
+                            and item.get("no_duplicate_effect") is True
+                            for item in write_evidence
+                        ),
+                    })
+                report["outcome"] = (
+                    "passed"
+                    if not report["incomplete"]
+                    and all(classify_case_failure(item) is None for item in report["cases"])
+                    else "failed"
+                )
     except (RuntimeError, ValueError) as error:
         report["error_category"] = str(error)
         if report["error_category"] in {"fixture_namespace_required", "fixture_namespace_invalid"}:
