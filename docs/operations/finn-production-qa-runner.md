@@ -21,7 +21,7 @@ The manual workflow `.github/workflows/finn-production-qa.yml` requires:
 | Input | Meaning |
 | --- | --- |
 | `release_sha` | Full, already-live SHA. It must be an ancestor of `main`. |
-| `qa_profile` | `auth_preflight`, `manifest_key`, `targeted_regression`, `runtime_acceptance`, `full_release_acceptance`, `safety`, or `latency`. |
+| `qa_profile` | `auth_preflight`, `manifest_key`, `targeted_regression`, `runtime_acceptance`, `action_contract_acceptance`, `full_release_acceptance`, `safety`, or `latency`. |
 | `manifest_id` | Approved QA-owned manifest identifier. `auth_preflight` uses `none`. |
 | `run_label` | Safe trace label; no user, fixture, or credential data. |
 | `manifest_bundle` | Optional encrypted QA-owned manifest. It is decrypted only on the protected host. |
@@ -31,6 +31,13 @@ The manual workflow `.github/workflows/finn-production-qa.yml` requires:
 The profile defines only the execution class. The active QA goal remains the
 authority for scope, acceptance criteria, and whether a sealed QA manifest is
 allowed. The workflow never silently substitutes a sealed 32-case matrix.
+
+`action_contract_acceptance` is the strict registry-wide profile. Before any
+product request it requires exactly one independent case for every active
+registry contract, all 16 safe write contracts, all nine declared natural
+lineage dependencies, and the complete acceptance evidence schema. Write
+cases capture owner-scoped database snapshots before confirmation, after
+confirmation, after execution, and after idempotency replay.
 
 ## Security Boundary
 

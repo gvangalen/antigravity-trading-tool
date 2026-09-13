@@ -41,6 +41,8 @@ def test_workflow_is_manual_protected_and_serialized():
     assert "allow_fixture_actions" in workflow
     assert "allow_safe_fixture_execution" in workflow
     assert "Safe fixture execution requires fixture-action authorization." in workflow
+    assert "action_contract_acceptance" in workflow
+    assert "timeout-minutes: 90" in workflow
 
 
 def test_workflow_never_exports_fixture_or_bearer_token():
@@ -414,6 +416,123 @@ def test_fixture_preflight_recognizes_full_matrix_without_product_calls(tmp_path
         "product_calls_executed": 0,
     }
     assert module.sha256_file(manifest) == base_hash
+
+
+def _acceptance_cases(module):
+    from backend.domain.finn_v2_operation_registry import FinnV2OperationRegistry
+
+    write_operations = module.ACTION_CONTRACT_ACCEPTANCE_WRITE_OPERATIONS
+    lineage_operations = module.LINEAGE_DEPENDENT_FIXTURE_OPERATIONS
+    cases = []
+    for index, contract in enumerate(FinnV2OperationRegistry().list()):
+        cases.append({
+            "case_id": f"acceptance-{index:02d}",
+            "language": ("nl", "en", "de")[index % 3],
+            "message": f"Independent acceptance question {index}",
+            "expected_operation_id": contract.operation_id,
+            "expected_action_polarity": contract.action_polarity.value,
+            "expected_required_inputs": list(contract.required_inputs),
+            "expected_supplied_inputs": [],
+            "expected_missing_inputs": list(contract.required_inputs),
+            "expected_canonical_target": None,
+            "expected_target_type": None,
+            "expected_target_source": None,
+            "expected_terminal_statuses": ["completed"],
+            "fixture_action": "safe_execution" if contract.operation_id in write_operations else "read_only",
+            "idempotency_replay": contract.operation_id in write_operations,
+            "lineage_dependency": contract.operation_id in lineage_operations,
+        })
+    non_lineage = [case for case in cases if not case["lineage_dependency"]]
+    by_operation = {case["expected_operation_id"]: case for case in cases}
+    return non_lineage + [by_operation[operation] for operation in module.NATURAL_LINEAGE_SEQUENCE]
+
+
+def test_action_contract_acceptance_dry_preflight_requires_48_16_and_9():
+    module = _module()
+    result = module.action_contract_acceptance_preflight(
+        _acceptance_cases(module), fixture_namespace="qa-acceptance-a1b2c3d4",
+    )
+
+    assert result["active_contracts_recognized"] == 48
+    assert result["contract_cases_recognized"] == 48
+    assert result["write_contracts_recognized"] == 16
+    assert result["lineage_dependencies_recognized"] == 9
+    assert result["product_calls_executed"] == 0
+    assert result["workflow_dispatch_available"] is True
+    assert set(result["acceptance_evidence_fields_supported"]) == module.ACCEPTANCE_EXPECTATION_FIELDS
+    assert set(result["acceptance_report_fields_supported"]) == set(module.ACCEPTANCE_REPORT_EVIDENCE_FIELDS)
+
+
+def test_action_contract_acceptance_rejects_incomplete_registry_coverage():
+    module = _module()
+    with pytest.raises(ValueError, match="acceptance_contract_count_invalid"):
+        module.action_contract_acceptance_preflight(
+            _acceptance_cases(module)[:-1], fixture_namespace="qa-acceptance-a1b2c3d4",
+        )
+
+
+def test_contract_expectations_are_scored_from_persisted_projection():
+    module = _module()
+    case = {
+        "expected_operation_id": "select_asset",
+        "expected_action_polarity": "update",
+        "expected_required_inputs": ["asset"],
+        "expected_supplied_inputs": ["asset"],
+        "expected_missing_inputs": [],
+        "expected_canonical_target": "SOL",
+        "expected_target_type": None,
+        "expected_target_source": "explicit_message",
+        "expected_terminal_statuses": ["completed"],
+    }
+    evidence = module.contract_expectation_result(case, {
+        "status": "completed",
+        "runtime_trace": {
+            "contract_id": "contract-1", "contract_revision": 3,
+            "final_operation_id": "select_asset", "action_polarity": "update",
+            "required_inputs": ["asset"], "supplied_inputs": {"asset": "SOL"},
+            "missing_inputs": [], "canonical_target": "SOL", "target_type": None,
+            "target_source": "explicit_message", "dispatch_count": 1, "attempt_count": 1,
+        },
+    })
+    assert all(evidence.values())
+
+
+def test_safe_write_captures_owner_database_effect_and_idempotent_replay(monkeypatch):
+    module = _module()
+    calls = []
+    responses = iter([
+        (200, {"proposal_id": "proposal-1", "status": "draft", "payload_hash": "hash", "confirmation_required": True}, 1.0, None),
+        (200, {"confirmation_token": "secret", "payload_hash": "hash"}, 1.0, None),
+        (200, {"status": "confirmed"}, 1.0, None),
+        (200, {"execution_id": "execution-1", "proposal_id": "proposal-1", "operation_type": "create_setup", "status": "succeeded"}, 1.0, None),
+        (200, {"execution_id": "execution-1", "proposal_id": "proposal-1", "operation_type": "create_setup", "status": "already_executed"}, 1.0, None),
+    ])
+    monkeypatch.setattr(module, "request_json", lambda **kwargs: (calls.append(kwargs) or next(responses)))
+    snapshots = iter([
+        {"owner_scoped": True, "row_count": 0, "state_sha256": "before", "broker_order_count": 0, "live_bot_count": 0},
+        {"owner_scoped": True, "row_count": 0, "state_sha256": "before", "broker_order_count": 0, "live_bot_count": 0},
+        {"owner_scoped": True, "row_count": 1, "state_sha256": "after", "broker_order_count": 0, "live_bot_count": 0, "entity_ids": [41]},
+        {"owner_scoped": True, "row_count": 1, "state_sha256": "after", "broker_order_count": 0, "live_bot_count": 0, "entity_ids": [41]},
+    ])
+    monkeypatch.setattr(module, "owner_scoped_database_snapshot", lambda **_kwargs: next(snapshots))
+
+    result = module._run_fixture_action(
+        base_url="https://example.test", token="token",
+        case={
+            "fixture_action": "safe_execution", "expected_operation_id": "create_setup",
+            "idempotency_replay": True,
+            "client_context": {"fixture_namespace": "qa-acceptance-a1b2c3d4"},
+        },
+        terminal={"response": {"proposal_id": "proposal-1"}, "runtime_trace": {"contract_revision": 3}},
+    )
+
+    assert result["outcome"] == "executed"
+    assert result["no_write_before_confirmation"] is True
+    assert result["database_effect_observed"] is True
+    assert result["idempotency_replay_execution_status"] == "already_executed"
+    assert result["no_duplicate_effect"] is True
+    assert result["safety_database_unchanged"] == {"broker_orders": True, "live_bots": True}
+    assert result.get("error_category") is None
 
 
 def test_missing_namespace_is_blocked_before_any_product_call(tmp_path, monkeypatch):

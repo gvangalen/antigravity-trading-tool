@@ -17,6 +17,7 @@ on:
           - manifest_key
           - targeted_regression
           - runtime_acceptance
+          - action_contract_acceptance
           - full_release_acceptance
           - safety
           - latency
@@ -57,7 +58,7 @@ jobs:
     if: github.repository == 'gvangalen/antigravity-trading-tool'
     runs-on: ubuntu-latest
     environment: production
-    timeout-minutes: 45
+    timeout-minutes: 90
     permissions:
       contents: read
 
@@ -90,7 +91,7 @@ jobs:
         run: |
           set -uo pipefail
           [[ "$RELEASE_SHA" =~ ^[0-9a-f]{40}$ ]]
-          [[ "$QA_PROFILE" =~ ^(auth_preflight|manifest_key|targeted_regression|runtime_acceptance|full_release_acceptance|safety|latency)$ ]]
+          [[ "$QA_PROFILE" =~ ^(auth_preflight|manifest_key|targeted_regression|runtime_acceptance|action_contract_acceptance|full_release_acceptance|safety|latency)$ ]]
           [[ "$MANIFEST_ID" =~ ^[a-z0-9][a-z0-9._-]{0,80}$ ]]
           [[ "$RUN_LABEL" =~ ^[A-Za-z0-9][A-Za-z0-9._-]{0,80}$ ]]
           [ "${#MANIFEST_BUNDLE}" -le 65535 ]
@@ -246,7 +247,7 @@ jobs:
           # would otherwise skip runner.exit after a crash and make a later
           # SSH reconnect mistake a valid partial matrix for a fresh run.
           set +e
-          PYTHONPATH=backend/trading-tool-backend python3 $(printf '%q' "$runner_path") $(printf '%q ' "${runner_args[@]}") --matrix-deadline-seconds 2100 --resume >"$state_dir/runner.log" 2>&1
+          PYTHONPATH=backend/trading-tool-backend python3 $(printf '%q' "$runner_path") $(printf '%q ' "${runner_args[@]}") --matrix-deadline-seconds 4800 --resume >"$state_dir/runner.log" 2>&1
           runner_status="\$?"
           set -e
           printf '%s\\n' "\$runner_status" > "$state_dir/runner.exit"
@@ -260,7 +261,7 @@ jobs:
           # while this workflow polls cannot cancel its protected server job.
           completed=0
           restarted=0
-          for _ in $(seq 1 225); do
+          for _ in $(seq 1 500); do
             # shellcheck disable=SC2029 # The remote state check deliberately receives local workflow paths.
             state="$(ssh "${ssh_opts[@]}" "ubuntu@${QA_HOST}" "if test -f '$remote_state_dir/runner.exit'; then echo complete; elif test -s '$remote_state_dir/runner.pid' && kill -0 \$(cat '$remote_state_dir/runner.pid') 2>/dev/null; then echo running; else echo interrupted; fi" 2>/dev/null || echo reconnecting)"
             case "$state" in
