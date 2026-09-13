@@ -151,8 +151,17 @@ class FinnV2FlagService:
         return max(3, min(configured, lifecycle_budget))
 
     def selector_provider_timeout_seconds(self) -> int:
-        """Use the complete selector phase; lifecycle ownership reserves terminal time."""
-        return self.selector_phase_deadline_seconds()
+        """Bound the provider before the selector phase must terminalize.
+
+        The selector runs in a worker thread because the SDK is synchronous.
+        Its provider timeout must therefore leave the same durable-terminal
+        reserve as the outer phase watchdog; otherwise a slow socket read can
+        consume the whole lifecycle before the owned failure projection is
+        persisted.
+        """
+        phase_budget = self.selector_phase_deadline_seconds()
+        reserve = self.terminal_persistence_reserve_seconds()
+        return max(3, phase_budget - reserve)
 
     def selector_max_output_tokens(self) -> int:
         """Keep the strict semantic frame compact; reasoning has its own budget."""
