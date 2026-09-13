@@ -53,9 +53,18 @@ def complete_card(evidence: dict[str, Any] | None, contract: Any) -> bool:
     # Confirmation and execution consume their required proposal resource in
     # the public HTTP path, not through a conversational slot. Their cards
     # require endpoint-level ownership/idempotency evidence instead.
+    # Registry-required fields on a terminal READ or CLARIFICATION response
+    # describe what the selector recognized, not slots that the response
+    # itself is allowed to collect.  Only proposal-producing contracts own a
+    # multi-turn input-collection flow, so require guided-state evidence only
+    # for those registry modes.  This keeps the Certification Card aligned
+    # with the canonical contract rather than inventing a second slot schema.
     guided = {
         "guided_state"
-    } if getattr(contract, "required_inputs", ()) and contract.mode not in {"CONFIRMATION", "EXECUTION"} else set()
+    } if (
+        getattr(contract, "required_inputs", ())
+        and contract.mode in {"CREATE_PROPOSAL", "ACTION_PROPOSAL"}
+    ) else set()
     if getattr(contract, "policy_class", None) == "high_risk_action":
         # A live-action safety contract succeeds by publishing its typed
         # policy boundary without creating a proposal or execution.

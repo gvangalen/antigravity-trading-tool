@@ -259,8 +259,23 @@ class FinnV2OperationStateService:
             named = self._name_input_from_text(text)
             if named:
                 values.setdefault("name", named)
+        if contract.operation_id == "explain_financial_concept" and "concept" in accepted_inputs:
+            concepts = {
+                "dollar cost averaging": "dollar cost averaging", "dca": "DCA",
+                "relative strength index": "RSI", "rsi": "RSI", "macd": "MACD", "atr": "ATR",
+            }
+            normalized_concepts = lowered.replace("-", " ")
+            for term, concept in concepts.items():
+                if term in normalized_concepts:
+                    values.setdefault("concept", concept)
+                    break
         if "changed_fields" in accepted_inputs:
             changes = self._natural_changed_fields(text, contract=contract)
+            if contract.operation_id == "update_indicator_configuration" and re.search(
+                r"\b(?:deactivate|disable|turn\s+off|deaktiviere|deaktivier|ausschalt)\w*\b",
+                lowered,
+            ):
+                changes = {"enabled": False}
             if changes:
                 values.setdefault("changed_fields", changes)
         if contract.operation_id == "create_setup":
@@ -322,11 +337,11 @@ class FinnV2OperationStateService:
                     "benutzerdefiniert": "custom",
                 }.get(mode, mode)
             amount_match = re.search(
-                r"\b(?:base\s*amount|basisinleg|basis\s*bedrag|basisbetrag|grundbetrag|bedrag|inleg|amount)\s*(?:is|:|=|van|von|of)?\s*(?:€|eur|\$)?\s*(\d+(?:[.,]\d+)?)",
+                r"(?:\b(?:base\s*amount|basisinleg|basis\s*bedrag|basisbetrag|grundbetrag|bedrag|inleg|amount)\s*(?:is|:|=|van|von|of)?\s*(?:€|eur|euros?|euro|\$)?\s*(\d+(?:[.,]\d+)?))|(?:\b(\d+(?:[.,]\d+)?)\s*(?:€|eur|euros?|euro|\$)\b)",
                 lowered,
             )
             if amount_match:
-                values["base_amount"] = float(amount_match.group(1).replace(",", "."))
+                values["base_amount"] = float((amount_match.group(1) or amount_match.group(2)).replace(",", "."))
             if str(values.get("execution_mode") or "").startswith("automatis"):
                 values["execution_mode"] = "fixed"
         elif contract.operation_id in {"update_setup", "update_strategy"}:
@@ -394,6 +409,21 @@ class FinnV2OperationStateService:
         structured = cls._structured_changed_fields(text)
         if structured:
             return structured
+        if contract.operation_id == "update_strategy":
+            mode = re.search(
+                r"\b(?:naar|to|auf)\s+(manual|handmatig|automatic|automatis\w*|fest(?:e)?|"
+                r"fixed|vast|custom|aangepast|individuell|benutzerdefiniert)\b",
+                text,
+                re.IGNORECASE,
+            )
+            if mode:
+                raw_mode = mode.group(1).casefold()
+                canonical_mode = {
+                    "handmatig": "fixed", "manual": "fixed", "fixed": "fixed", "vast": "fixed",
+                    "fest": "fixed", "feste": "fixed", "automatic": "automatic",
+                    "aangepast": "custom", "individuell": "custom", "benutzerdefiniert": "custom",
+                }.get(raw_mode, "automatic" if raw_mode.startswith("automatis") else raw_mode)
+                return {"execution_mode": canonical_mode}
         # The action contract deliberately has one ``changed_fields`` slot,
         # while the owning domain services keep their field allowlists.  Parse
         # common natural-language update clauses into those canonical domain

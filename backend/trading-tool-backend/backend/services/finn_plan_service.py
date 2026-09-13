@@ -13689,6 +13689,17 @@ class FinnPlanService:
                     "generation_status": "fallback",
                     "trace": self._first_dashboard_trace_payload(stored_briefing),
                 }
+        # A completed briefing is bound to the input context that produced
+        # it. A different context version must render the current
+        # deterministic fallback, rather than exposing a loading state that
+        # could be mistaken for a continuation of stale AI output.
+        if stored_version and stored_version != current_version:
+            return {
+                "briefing": payload.get("fallback_result") or {},
+                "response_source": "deterministic_fallback",
+                "generation_status": "stale_context",
+                "trace": self._first_dashboard_trace_payload(stored_briefing),
+            }
         if get_ai_availability().get("available"):
             return {
                 "briefing": self._first_dashboard_loading_result(payload.get("asset") or "BTC"),

@@ -267,7 +267,14 @@ def _runtime_record(run_id: str) -> dict[str, Any]:
     }
 
 
-def _proposal_lifecycle(base_url: str, token: str, other_token: str, proposal: dict[str, Any]) -> dict[str, Any]:
+def _proposal_lifecycle(
+    base_url: str,
+    token: str,
+    other_token: str,
+    proposal: dict[str, Any],
+    *,
+    mutation_pace_seconds: float = 0.0,
+) -> dict[str, Any]:
     proposal_id = str(proposal["id"])
     headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
     other_headers = {"Authorization": f"Bearer {other_token}", "Content-Type": "application/json"}
@@ -275,6 +282,7 @@ def _proposal_lifecycle(base_url: str, token: str, other_token: str, proposal: d
         url=f"{base_url}/api/assistant/v2/proposals/{proposal_id}", method="GET",
         headers=other_headers, body=None, timeout=10,
     )
+    sleep(max(0.0, mutation_pace_seconds))
     published, publish_status = _request_json(
         url=f"{base_url}/api/assistant/v2/proposals/{proposal_id}/publish", method="POST",
         headers=headers, body={}, timeout=10,
@@ -285,6 +293,7 @@ def _proposal_lifecycle(base_url: str, token: str, other_token: str, proposal: d
         "confirmation_token": confirmation_token,
         "expected_payload_hash": proposal["payload_hash"],
     }
+    sleep(max(0.0, mutation_pace_seconds))
     confirmed, confirmation_status = _request_json(
         url=f"{base_url}/api/assistant/v2/proposals/{proposal_id}/confirm", method="POST",
         headers=headers, body=confirmation_payload, timeout=10,
@@ -293,10 +302,12 @@ def _proposal_lifecycle(base_url: str, token: str, other_token: str, proposal: d
         "idempotency_key": f"local-execute-{uuid.uuid4().hex}",
         "expected_payload_hash": proposal["payload_hash"],
     }
+    sleep(max(0.0, mutation_pace_seconds))
     executed, execution_status = _request_json(
         url=f"{base_url}/api/assistant/v2/proposals/{proposal_id}/execute", method="POST",
         headers=headers, body=execution_payload, timeout=20,
     )
+    sleep(max(0.0, mutation_pace_seconds))
     replayed, replay_status = _request_json(
         url=f"{base_url}/api/assistant/v2/proposals/{proposal_id}/execute", method="POST",
         headers=headers, body=execution_payload, timeout=20,
@@ -353,7 +364,12 @@ def _run_follow_up(base_url: str, token: str, spec: tuple[str, str, str, str], f
     }
 
 
-def _run_contract(base_url: str, spec: tuple[str, str, str, str]) -> dict[str, Any]:
+def _run_contract(
+    base_url: str,
+    spec: tuple[str, str, str, str],
+    *,
+    mutation_pace_seconds: float = 0.0,
+) -> dict[str, Any]:
     operation_id, complete, _, _ = spec
     primary = _create_local_user()
     other = _create_local_user()
@@ -415,7 +431,13 @@ def _run_contract(base_url: str, spec: tuple[str, str, str, str]) -> dict[str, A
             "elapsed_ms": observed["elapsed_ms"],
         })
         if proposal:
-            lifecycle = _proposal_lifecycle(base_url, token, other_token, proposal)
+            lifecycle = _proposal_lifecycle(
+                base_url,
+                token,
+                other_token,
+                proposal,
+                mutation_pace_seconds=mutation_pace_seconds,
+            )
             result.update(lifecycle)
         follow_up = _run_follow_up(base_url, follow_up_token, spec, follow_up_fields)
         result["incomplete_follow_up"] = follow_up
@@ -448,6 +470,12 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--base-url", default="http://127.0.0.1:18000")
     parser.add_argument("--output", required=True)
+    parser.add_argument(
+        "--mutation-pace-seconds",
+        type=float,
+        default=0.0,
+        help="Bounded delay between proposal, confirmation, execution and replay requests.",
+    )
     args = parser.parse_args()
     base_url = args.base_url.rstrip("/")
     if urlparse(base_url).hostname not in {"127.0.0.1", "localhost"}:
@@ -477,7 +505,13 @@ def main() -> None:
 
     results: list[dict[str, Any]] = []
     for spec in ACTION_SPECS:
-        results.append(_run_contract(base_url, spec))
+        results.append(
+            _run_contract(
+                base_url,
+                spec,
+                mutation_pace_seconds=max(0.0, args.mutation_pace_seconds),
+            )
+        )
         write_artifact(results, complete=False)
     artifact = write_artifact(results, complete=True)
     digest = hashlib.sha256(output.read_bytes()).hexdigest()

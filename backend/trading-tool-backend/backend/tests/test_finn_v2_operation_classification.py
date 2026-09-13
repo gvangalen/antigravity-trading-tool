@@ -9,10 +9,55 @@ from backend.services.finn_v2_operation_classification_service import (
     SemanticOperationClassification,
 )
 from backend.domain.finn_v2_operation_registry import ActionPolarity, FinnV2OperationRegistry
+from backend.services.finn_v2_operation_state_service import FinnV2OperationStateService
 from backend.services.finn_v2_structured_operation_selector_service import FinnV2StructuredOperationSelection
 
 
 CLASSIFIER = FinnV2OperationClassificationService()
+
+
+def test_strategy_amount_accepts_natural_currency_before_the_execution_phrase():
+    contract = FinnV2OperationRegistry().get("create_strategy")
+    state = FinnV2OperationStateService().resolve(
+        contract=contract,
+        message="Create a manual strategy with 125 euros per execution.",
+        explicit_asset=None,
+        conversation_context={"previous_action_result": {"entity_type": "setup", "entity_id": 42}},
+    )
+
+    assert state.collected_inputs["base_amount"] == 125.0
+    assert state.missing_required_inputs == []
+
+
+def test_strategy_update_canonicalizes_a_natural_german_execution_mode():
+    contract = FinnV2OperationRegistry().get("update_strategy")
+    state = FinnV2OperationStateService().resolve(
+        contract=contract,
+        message="Ändere die eben gespeicherte Strategie auf automatische Ausführung.",
+        explicit_asset=None,
+        conversation_context={"previous_action_result": {"entity_type": "strategy", "entity_id": 42}},
+    )
+
+    assert state.collected_inputs["changed_fields"] == {"execution_mode": "automatic"}
+
+
+def test_contract_inputs_cover_financial_concepts_and_indicator_deactivation():
+    service = FinnV2OperationStateService()
+    concept = service.resolve(
+        contract=FinnV2OperationRegistry().get("explain_financial_concept"),
+        message="Explain dollar-cost averaging in plain language.", explicit_asset=None, conversation_context={},
+    )
+    indicator = service.resolve(
+        contract=FinnV2OperationRegistry().get("update_indicator_configuration"),
+        message="Deaktiviere meine technische RSI-Konfiguration für XLM.", explicit_asset="XLM", conversation_context={},
+    )
+
+    assert concept.collected_inputs["concept"] == "dollar cost averaging"
+    assert indicator.collected_inputs["changed_fields"] == {"enabled": False}
+
+
+def test_assess_is_a_general_evaluation_verb():
+    assert CLASSIFIER.preprocessor.preprocess(message="Assess whether my configured indicators are coherent.").action_polarity == "evaluate"
 
 
 def test_declassified_action_contract_acceptance_handoff_is_complete_and_immutable():

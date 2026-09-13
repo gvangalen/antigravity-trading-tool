@@ -401,7 +401,25 @@ class FinnV2ResponseVerifierService:
             if verifier.action == "downgrade_to_fact":
                 draft = self.downgrades.downgrade_to_fact(draft=draft)
             elif verifier.action == "downgrade_to_clarification":
-                draft = self.downgrades.downgrade_to_clarification(draft=draft, orchestrator_result=orchestrator_result)
+                request_plan = getattr(orchestrator_result.analysis, "request_plan", None)
+                operation_id = getattr(request_plan, "operation_id", None)
+                if operation_id == "evaluate_plan":
+                    # A complete-plan request remains an evaluation when the
+                    # evidence is bounded. Its contract owns the safe limited
+                    # response; a generic clarification loses both intent and
+                    # usable evidence lineage. This also covers genuinely
+                    # absent plan context: the typed limitation identifies
+                    # what is missing without pretending a clarification is a
+                    # different user intent.
+                    draft = self.downgrades.downgrade_to_contract_limited_evaluate(
+                        draft=draft,
+                        reason=verifier.reason_codes[0] if verifier.reason_codes else None,
+                    )
+                else:
+                    draft = self.downgrades.downgrade_to_clarification(
+                        draft=draft,
+                        orchestrator_result=orchestrator_result,
+                    )
             elif verifier.action == "downgrade_to_unavailable":
                 request_plan = getattr(orchestrator_result.analysis, "request_plan", None)
                 operation_id = getattr(request_plan, "operation_id", None)
@@ -416,6 +434,46 @@ class FinnV2ResponseVerifierService:
                         reason=verifier.reason_codes[0] if verifier.reason_codes else None,
                     )
             elif verifier.action == "reject":
+                # A typed reject can be persisted even when an upstream
+                # boundary supplied no analysis object.  Keep the special
+                # limited-EVALUATE path when an immutable request plan is
+                # available, but never turn a verifier rejection into an
+                # internal error while reading optional context.
+                request_plan = getattr(
+                    getattr(orchestrator_result, "analysis", None),
+                    "request_plan",
+                    None,
+                )
+                operation_id = getattr(request_plan, "operation_id", None)
+                if operation_id == "evaluate_plan" and bool(draft.evidence_refs_used):
+                    # A plan request with partial verified evidence must end in
+                    # the contract-limited EVALUATE response, not an opaque
+                    # rejection. The downgrade only publishes the verified
+                    # evidence boundary and a concrete next step.
+                    draft = self.downgrades.downgrade_to_contract_limited_evaluate(
+                        draft=draft,
+                        reason=verifier.reason_codes[0] if verifier.reason_codes else None,
+                    )
+                    verifier = await self._verify(
+                        run=run,
+                        orchestrator_result=orchestrator_result,
+                        policy=policy,
+                        context=context,
+                        validation=validation,
+                        draft=draft,
+                        trace_id=trace_id,
+                        repair_attempt=repair_attempt + 1,
+                        deterministic_contract_response=deterministic_contract_response,
+                    )
+                    if verifier.passed:
+                        return await self._persist_verified_response(
+                            run=run,
+                            draft=draft,
+                            verifier=verifier,
+                            proposal_id=None,
+                            confirmation_required=False,
+                            lineage_eligible=True,
+                        )
                 verifier_row = await self._persist_verifier_result(run=run, draft=draft, verifier=verifier)
                 await self._append_trace(
                     trace_id=trace_id,

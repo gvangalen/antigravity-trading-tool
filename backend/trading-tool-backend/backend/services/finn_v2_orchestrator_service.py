@@ -997,19 +997,23 @@ class FinnV2OrchestratorService:
         return self.phase_outcome
 
     def _build_phase_outcome(self, *, result, verified_response) -> LifecyclePhaseOutcome:
-        if result.outcome == "clarification_required":
+        # A verifier-delivered response is the terminal authority. In
+        # particular, a safe limited EVALUATE response can be delivered after
+        # request analysis initially identified missing context; retaining the
+        # earlier clarification would discard the verified contract response.
+        if result.outcome == "clarification_required" and verified_response is None:
             return LifecyclePhaseOutcome(
                 terminal_status="clarification_required",
                 interaction_mode=result.analysis.interaction_mode,
                 orchestrator_result_id=result.orchestrator_result_id,
             )
-        if result.outcome == "unavailable":
+        if result.outcome == "unavailable" and verified_response is None:
             return LifecyclePhaseOutcome(
                 terminal_status="unavailable",
                 interaction_mode=result.analysis.interaction_mode,
                 orchestrator_result_id=result.orchestrator_result_id,
             )
-        if result.outcome == "failed":
+        if result.outcome == "failed" and verified_response is None:
             return LifecyclePhaseOutcome(
                 terminal_status="failed",
                 interaction_mode=result.analysis.interaction_mode,

@@ -57,7 +57,7 @@ class FinnV2RequestPreprocessorService:
             "maak", "maken", "create", "prepare", "preparing", "ontwerp", "stel", "bereid", "start",
             "voorbereid", "erstell", "anleg",
         )),
-        ("evaluate", ("beoordeel", "evaluate", "zwak", "risico", "past", "fit", "ontbrek", "ontbreek", "vertrouwen")),
+        ("evaluate", ("beoordeel", "evaluate", "assess", "bewert", "zwak", "risico", "past", "fit", "ontbrek", "ontbreek", "vertrouwen")),
     )
     # These are assessment predicates, not operation routes.  Combined with
     # an explicitly detected plan subject they constrain the model's semantic
@@ -200,7 +200,8 @@ class FinnV2RequestPreprocessorService:
         # contracts. This is a typed grammatical fact; it does not select an
         # operation or inspect a particular asset, setup, or bot.
         linked_graph_relationship = relational_graph and bool(re.search(
-            r"\b(?:gekoppel\w*|verbond\w*|verbund\w*|linked|connect\w*|associated|zugeordnet)\b",
+            r"\b(?:gekoppel\w*|verbond\w*|verbund\w*|linked|connect\w*|associated|zugeordnet|"
+            r"hoort|gehort|gehört|meiner\s+strategie|mijn\s+strategie)\b",
             normalized,
         ))
         explicit_plan = bool(re.search(r"\b(?:mijn\s+)?(?:actieve\s+)?plan\b|\bactive\s+plan\b", normalized))

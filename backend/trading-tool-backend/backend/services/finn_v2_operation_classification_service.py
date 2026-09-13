@@ -187,9 +187,11 @@ class FinnV2OperationClassificationService:
     def _is_score_explanation(message: str, facts: FinnV2PreprocessedRequest) -> bool:
         """Map an explicit score explanation to its sole registry contract."""
         text = str(message or "").casefold()
-        return (
-            "scores" in facts.explicit_entities
-            and bool(re.search(r"\b(?:explain|erklaere|erkläre)\b|\bleg(?:\s+\w+){0,8}\s+uit\b", text))
+        score_subject = "scores" in facts.explicit_entities or bool(
+            re.search(r"\b(?:total(?:e)?score|totaalscore|score|scores|punktzahl|bewertung)\b", text)
+        )
+        return score_subject and bool(
+            re.search(r"\b(?:explain|erklaere|erkläre)\b|\bleg(?:\s+\w+){0,8}\s+uit\b", text)
         )
 
     def _guided_candidates(
@@ -570,7 +572,10 @@ class FinnV2OperationClassificationValidator:
                 and bool(context["last_safe_terminal_context"].get("terminal_reason"))
             )
             has_released_response = (
-                classification.operation_id == "reformulate_previous_response"
+                classification.operation_id in {
+                    "explain_previous_evidence",
+                    "reformulate_previous_response",
+                }
                 and isinstance(context.get("last_released_context"), Mapping)
                 and bool(context["last_released_context"].get("run_id"))
             )

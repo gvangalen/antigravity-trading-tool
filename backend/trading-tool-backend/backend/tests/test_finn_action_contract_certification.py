@@ -47,6 +47,25 @@ def test_read_card_requires_no_write_and_persistence_proof():
     assert complete_card(evidence, contract)
 
 
+def test_terminal_read_and_clarification_contracts_do_not_invent_guided_slots():
+    """Only registry proposal modes own a multi-turn input-collection flow."""
+    evidence = {"passed": True, "certification_card": dict(
+        _COMMON,
+        guided_state=False,
+        no_write=True,
+        persistence=True,
+    )}
+
+    assert complete_card(
+        evidence,
+        SimpleNamespace(mode="READ", supported=True, required_inputs=("concept",)),
+    )
+    assert complete_card(
+        evidence,
+        SimpleNamespace(mode="CLARIFICATION", supported=True, required_inputs=("requested_change",)),
+    )
+
+
 def test_typed_unavailable_card_requires_limitation_and_no_write():
     contract = SimpleNamespace(mode="UNAVAILABLE", supported=True)
     evidence = {"passed": True, "certification_card": dict(_COMMON, no_write=True)}

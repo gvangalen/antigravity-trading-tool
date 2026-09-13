@@ -382,6 +382,55 @@ def test_linked_graph_relationship_completes_an_underprojected_read_frame():
     assert resolved.operation_id == "read_linked_bot"
 
 
+def test_linked_bot_question_needs_only_the_bot_and_its_strategy_subjects():
+    registry = FinnV2OperationRegistry()
+    resolved = FinnV2OperationResolverService(registry).resolve(
+        selection=_selection("read_linked_strategy", {"goal": "read", "object": "strategy"}),
+        candidates=registry.list(),
+        conversation_context={},
+        request_facts={
+            "action_polarity": "read",
+            "explicit_entities": ("strategy", "bot"),
+            "linked_graph_relationship": True,
+        },
+    )
+
+    assert resolved.operation_id == "read_linked_bot"
+
+
+def test_indicator_deactivation_stays_an_indicator_update_contract():
+    registry = FinnV2OperationRegistry()
+    resolved = FinnV2OperationResolverService(registry).resolve(
+        selection=_selection("deactivate_bot", {"goal": "deactivate", "object": "bot"}),
+        candidates=registry.list(), conversation_context={},
+        request_facts={"action_polarity": "deactivate", "explicit_entities": ("indicator_configuration",)},
+    )
+
+    assert resolved.operation_id == "update_indicator_configuration"
+
+
+def test_typed_bot_status_overrides_the_generic_linked_bot_read():
+    registry = FinnV2OperationRegistry()
+    resolved = FinnV2OperationResolverService(registry).resolve(
+        selection=_selection("read_linked_bot", {"goal": "read", "object": "bot"}),
+        candidates=registry.list(), conversation_context={},
+        request_facts={"action_polarity": "read", "explicit_entities": ("bot", "bot_status")},
+    )
+
+    assert resolved.operation_id == "read_bot_status"
+
+
+def test_unavailable_financial_capability_is_not_reduced_to_off_topic():
+    registry = FinnV2OperationRegistry()
+    for text in ("use a nonexistent trading optimization", "nutze eine nicht vorhandene steueroptimierung"):
+        resolved = FinnV2OperationResolverService(registry).resolve(
+            selection=_selection("off_topic", {"goal": "off_topic", "object": None}),
+            candidates=registry.list(), conversation_context={},
+            request_facts={"domain_hint": "financial", "action_polarity": "read", "normalized_text": text},
+        )
+        assert resolved.operation_id == "unavailable"
+
+
 def test_linked_graph_relationship_overrides_an_aggregate_plan_projection():
     registry = FinnV2OperationRegistry()
     resolved = FinnV2OperationResolverService(registry).resolve(

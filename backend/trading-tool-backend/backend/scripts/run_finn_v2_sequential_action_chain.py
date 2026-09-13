@@ -105,6 +105,7 @@ def _run_action(
     operation_id: str,
     conversation_id: str | None = None,
     persistence_boundary: dict[str, object] | None = None,
+    mutation_pace_seconds: float = 0.0,
 ) -> dict[str, Any]:
     started = monotonic()
     observed = run_gate(
@@ -142,7 +143,13 @@ def _run_action(
         "persistence_boundary": dict(persistence_boundary or {}),
     }
     if proposal:
-        outcome["proposal_lifecycle"] = _proposal_lifecycle(base_url, token, other_token, proposal)
+        outcome["proposal_lifecycle"] = _proposal_lifecycle(
+            base_url,
+            token,
+            other_token,
+            proposal,
+            mutation_pace_seconds=mutation_pace_seconds,
+        )
         # Confirmation/execution update the persisted contract after the
         # initial terminal response. Re-read that one projection for the
         # action-result evidence instead of reconstructing it in the runner.

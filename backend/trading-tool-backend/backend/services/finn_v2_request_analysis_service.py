@@ -166,9 +166,6 @@ class FinnV2RequestAnalysisService:
             )
             operation_id = "clarify_request"
             operation_change_reason = "guided_operation_cancelled"
-        if uses_conversation_reference and "conversation_reference_without_verified_context" in unresolved_signals:
-            operation_id = "clarify_request"
-            operation_change_reason = "lineage_not_available"
         try:
             operation = self.operations.require_supported(operation_id)
         except FinnV2OperationUnavailableError as exc:
@@ -205,7 +202,9 @@ class FinnV2RequestAnalysisService:
                     "explain_previous_evidence", "reformulate_previous_response", "evaluate_bot",
                 },
                 allow_safe_terminal=operation.operation_id == "explain_previous_evidence",
-                allow_released=operation.operation_id == "reformulate_previous_response",
+                allow_released=operation.operation_id in {
+                    "explain_previous_evidence", "reformulate_previous_response",
+                },
             )
             if not has_safe_lineage and "conversation_reference_without_verified_context" not in unresolved_signals:
                 unresolved_signals.append("conversation_reference_without_verified_context")

@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from copy import copy
 from dataclasses import is_dataclass, replace
+import re
 from typing import Mapping, Optional
 
 from backend.domain.finn_v2_operation_registry import FinnV2OperationRegistry, OperationContract
@@ -39,6 +40,7 @@ class FinnV2OperationResolverService:
         ("read", "plan"): "read_active_plan",
         ("read", "setup"): "read_active_setup",
         ("read", "bot"): "read_linked_bot",
+        ("read", "bot_status"): "read_bot_status",
         ("read", "indicator"): "read_indicator_configuration",
         ("read", "scores"): "read_scores",
         ("read", "score"): "read_scores",
@@ -102,6 +104,14 @@ class FinnV2OperationResolverService:
             context=conversation_context,
             requested_scopes=requested_scopes,
         )
+        # The selector can already have bound an evidence follow-up to a
+        # typed persisted response. A less-specific frame such as ``clarify``
+        # must not erase that validated operation during resolution.
+        if (
+            selection.operation_id == "explain_previous_evidence"
+            and self._has_any_eligible_lineage(conversation_context)
+        ):
+            operation_id = "explain_previous_evidence"
         # A structured request fact may make a selected action contract
         # impossible: for example an update frame must not be executed as a
         # create contract for the same typed object.  This does not classify
@@ -164,6 +174,13 @@ class FinnV2OperationResolverService:
             for item in (request_facts or {}).get("explicit_entities", ())
             if isinstance(item, str)
         }
+        # Deactivating a stored indicator is an update of that configuration.
+        # A verb alone cannot select the bot-only deactivate contract when the
+        # typed request ledger names an indicator configuration instead.
+        if requested_action in {"update", "deactivate"} and "indicator_configuration" in explicit_entities:
+            operation_id = "update_indicator_configuration"
+        if requested_action == "read" and "bot_status" in explicit_entities:
+            operation_id = "read_bot_status"
         # The semantic frame may omit its object while the typed entity ledger
         # has one unambiguous product object.  Use that already extracted fact
         # only to complete registry validation; do not infer an object from
@@ -183,7 +200,7 @@ class FinnV2OperationResolverService:
         if (
             str((request_facts or {}).get("action_polarity") or "") == "read"
             and not bool((request_facts or {}).get("explicit_plan_subject"))
-            and {"setup", "strategy", "bot"}.issubset(explicit_entities)
+            and {"strategy", "bot"}.issubset(explicit_entities)
         ):
             operation_id = (
                 "read_linked_bot"
@@ -224,6 +241,7 @@ class FinnV2OperationResolverService:
         if (
             str((request_facts or {}).get("action_polarity") or "") == "read"
             and "indicator_configuration" in explicit_entities
+            and str((request_facts or {}).get("discourse_act") or "") != "evaluation"
             and not bool((request_facts or {}).get("financial_concept"))
         ):
             operation_id = "read_indicator_configuration"
@@ -268,7 +286,14 @@ class FinnV2OperationResolverService:
         # read, or an execution intent respectively.
         if operation_id == "off_topic" and str((request_facts or {}).get("domain_hint") or "") == "financial":
             action = str((request_facts or {}).get("action_polarity") or "")
-            if action == "execute":
+            unavailable_capability = bool(re.search(
+                r"\b(?:not\s+(?:available|existing)|nonexistent|niet\s+(?:bestaand\w*|beschikbaar\w*)|"
+                r"nicht\s+(?:vorhand\w*|verfugbar\w*|verfügbar\w*))\b",
+                normalized_text,
+            ))
+            if unavailable_capability:
+                operation_id = "unavailable"
+            elif action == "execute":
                 operation_id = "unsupported_financial_operation"
             elif action == "update":
                 operation_id = "clarify_request"
@@ -302,6 +327,11 @@ class FinnV2OperationResolverService:
             "previous_verified_response", "previous_response", "previous_evidence", "previous_conclusion",
         }:
             reference = "previous_verified_response"
+        elif (
+            operation_id == "explain_previous_evidence"
+            and self._has_released_lineage(conversation_context)
+        ):
+            reference = "previous_released_response"
         elif (
             operation_id == "reformulate_previous_response"
             and self._has_released_lineage(conversation_context)
@@ -386,8 +416,7 @@ class FinnV2OperationResolverService:
         requested_scopes: set[str],
     ) -> str:
         if reference_kind and (
-            self._has_eligible_lineage(context)
-            or (goal in {"reformulate", "summarize"} and self._has_released_lineage(context))
+            self._has_any_eligible_lineage(context)
         ):
             if goal in {"reformulate", "summarize"}:
                 return "reformulate_previous_response"
@@ -398,6 +427,16 @@ class FinnV2OperationResolverService:
                 return "evaluate_bot"
             if goal in {"explain", "consequence", "clarify"}:
                 return "explain_previous_evidence"
+        # A provider can omit reference_kind for a short natural follow-up.
+        # A released typed response is still a safe antecedent for explaining
+        # the just-delivered boundary; do not erase that lineage into a fresh
+        # generic clarification.
+        if (
+            goal in {"explain", "consequence", "clarify"}
+            and not object_name
+            and self._has_any_eligible_lineage(context)
+        ):
+            return "explain_previous_evidence"
         # A multi-node overview is a plan read.  The plan contract owns the
         # complete setup/strategy/bot graph; a linked-bot read is reserved for
         # an explicit relationship or bot-centric subject.

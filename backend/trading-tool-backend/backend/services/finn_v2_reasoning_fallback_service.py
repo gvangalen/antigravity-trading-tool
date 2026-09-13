@@ -481,7 +481,7 @@ class FinnV2ReasoningFallbackService:
             )
 
         if operation_id in {"read_linked_bot", "read_active_plan"} and all(
-            item is not None for item in (active_asset, setup, strategy, bot, bot_status)
+            item is not None for item in (setup, strategy, bot, bot_status)
         ):
             setup_id = setup.facts.get("setup_id")
             strategy_id = strategy.facts.get("strategy_id")
@@ -489,6 +489,16 @@ class FinnV2ReasoningFallbackService:
             setup_name = setup.facts.get("name") or f"setup {setup_id}"
             timeframe = setup.facts.get("timeframe")
             is_live = bool(bot_status.facts.get("is_live", bot.facts.get("is_live")))
+            evidence_refs = [
+                item.evidence_id
+                for item in (active_asset, setup, strategy, bot, bot_status)
+                if item is not None
+            ]
+            asset = str(
+                (active_asset.facts.get("symbol") if active_asset is not None else None)
+                or setup.facts.get("symbol")
+                or "deze asset"
+            ).upper()
             _add_claim(
                 "active-plan-graph",
                 (
@@ -496,11 +506,7 @@ class FinnV2ReasoningFallbackService:
                     f"en bot {bot_id}; de bot staat {'live' if is_live else 'niet live'}."
                 ),
                 [
-                    active_asset.evidence_id,
-                    setup.evidence_id,
-                    strategy.evidence_id,
-                    bot.evidence_id,
-                    bot_status.evidence_id,
+                    *evidence_refs,
                 ],
             )
             timeframe_detail = f" op timeframe {timeframe}" if timeframe else ""
@@ -521,7 +527,7 @@ class FinnV2ReasoningFallbackService:
                 next_step=None,
                 follow_up_question=None,
                 proposal_candidate=None,
-                evidence_refs_used=refs,
+                evidence_refs_used=evidence_refs,
                 model=model,
                 created_at=datetime.now(timezone.utc),
             )
