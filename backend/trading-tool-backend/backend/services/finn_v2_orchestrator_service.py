@@ -526,7 +526,13 @@ class FinnV2OrchestratorService:
             await self._commit_persistence_boundary(stage="orchestrator_rejected")
             increment_execution_safety_counter("finn_v2_orchestrator_rejections_total")
             self.phase_outcome = LifecyclePhaseOutcome(
-                terminal_status="rejected",
+                # The verifier remains authoritative: its rejection and typed
+                # reason stay persisted.  A user-facing EVALUATE run cannot
+                # safely deliver the rejected claim, however, so it must
+                # terminalize as an explicit unavailable response rather than
+                # expose an internal verifier lifecycle state as its product
+                # outcome.
+                terminal_status="unavailable",
                 interaction_mode="UNAVAILABLE",
                 orchestrator_result_id=result.orchestrator_result_id,
                 verifier_action="reject",

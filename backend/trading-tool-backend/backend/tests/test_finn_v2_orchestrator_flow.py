@@ -917,7 +917,7 @@ def test_orchestrator_terminalizes_a_persisted_verifier_reject_without_a_second_
 
     assert result.run_id == run.id
     assert len(service.results.created) == 1
-    assert service.consume_phase_outcome().terminal_status == "rejected"
+    assert service.consume_phase_outcome().terminal_status == "unavailable"
     assert service.consume_phase_outcome().verifier_action == "reject"
     assert [event["event_type"] for event in service.traces.events][-1] == "orchestrator_rejected"
     degraded = service.conversations.updated["context"]["last_degraded_context"]
