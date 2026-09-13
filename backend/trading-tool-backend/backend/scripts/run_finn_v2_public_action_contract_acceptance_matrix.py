@@ -16,7 +16,7 @@ import subprocess
 import sys
 import uuid
 from pathlib import Path
-from time import monotonic
+from time import monotonic, sleep
 from urllib.parse import urlparse
 
 from backend.domain.finn_v2_operation_registry import FinnV2OperationRegistry
@@ -101,6 +101,12 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--base-url", required=True)
     parser.add_argument("--output", required=True, type=Path)
+    parser.add_argument(
+        "--case-interval-seconds",
+        type=float,
+        default=3.2,
+        help="Production-shaped pacing shared with the QA matrix engine.",
+    )
     args = parser.parse_args()
     base_url = args.base_url.rstrip("/")
     if urlparse(base_url).hostname not in {"127.0.0.1", "localhost"}:
@@ -114,6 +120,7 @@ def main() -> None:
         str(Path(__file__).with_name("run_finn_v2_declassified_347462_acceptance.py")),
         "--base-url", base_url,
         "--output", str(declassified_path),
+        "--case-interval-seconds", str(max(0.0, args.case_interval_seconds)),
     ]
     delegated = subprocess.run(command, check=False, capture_output=True, text=True)
     declassified = json.loads(declassified_path.read_text(encoding="utf-8")) if declassified_path.exists() else {"cases": []}
@@ -134,6 +141,7 @@ def main() -> None:
             "incomplete": True,
             "cases": cases,
         })
+        sleep(max(0.0, args.case_interval_seconds))
 
     registry_ids = {contract.operation_id for contract in FinnV2OperationRegistry().list()}
     observed_ids = {case.get("expected_operation_id") for case in cases}
