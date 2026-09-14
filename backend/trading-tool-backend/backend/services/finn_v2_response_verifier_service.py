@@ -402,9 +402,8 @@ class FinnV2ResponseVerifierService:
                 draft = self.downgrades.downgrade_to_fact(draft=draft)
             elif verifier.action == "downgrade_to_clarification":
                 request_plan = getattr(orchestrator_result.analysis, "request_plan", None)
-                operation_id = getattr(request_plan, "operation_id", None)
-                if operation_id == "evaluate_plan":
-                    # A complete-plan request remains an evaluation when the
+                if self._is_evidence_backed_evaluation(request_plan=request_plan, draft=draft):
+                    # An evaluation request remains an evaluation when the
                     # evidence is bounded. Its contract owns the safe limited
                     # response; a generic clarification loses both intent and
                     # usable evidence lineage. This also covers genuinely
@@ -422,8 +421,7 @@ class FinnV2ResponseVerifierService:
                     )
             elif verifier.action == "downgrade_to_unavailable":
                 request_plan = getattr(orchestrator_result.analysis, "request_plan", None)
-                operation_id = getattr(request_plan, "operation_id", None)
-                if operation_id == "evaluate_plan" and bool(draft.evidence_refs_used):
+                if self._is_evidence_backed_evaluation(request_plan=request_plan, draft=draft):
                     draft = self.downgrades.downgrade_to_contract_limited_evaluate(
                         draft=draft,
                         reason=verifier.reason_codes[0] if verifier.reason_codes else None,
@@ -444,9 +442,8 @@ class FinnV2ResponseVerifierService:
                     "request_plan",
                     None,
                 )
-                operation_id = getattr(request_plan, "operation_id", None)
-                if operation_id == "evaluate_plan" and bool(draft.evidence_refs_used):
-                    # A plan request with partial verified evidence must end in
+                if self._is_evidence_backed_evaluation(request_plan=request_plan, draft=draft):
+                    # An evaluation request with partial verified evidence must end in
                     # the contract-limited EVALUATE response, not an opaque
                     # rejection. The downgrade only publishes the verified
                     # evidence boundary and a concrete next step.
@@ -811,14 +808,14 @@ class FinnV2ResponseVerifierService:
 
         if (
             evidence_limited_contract_outcome
-            and operation_id == "evaluate_plan"
+            and expected_mode == "EVALUATE"
             and bool(draft.evidence_refs_used)
             and draft.next_step is not None
         ):
             # This terminal is built from the complete validated evidence
             # ledger after the model exhausted its bounded repair. It is a
-            # safe answer to a plan evaluation, not a generic unavailable
-            # response; retain its typed fields for delivery and lineage.
+            # safe limited evaluation, not a generic unavailable response;
+            # retain its typed fields for delivery and lineage.
             coverage = coverage.copy(
                 update={
                     "covered_response_fields": list(required_response_fields),
@@ -1254,6 +1251,11 @@ class FinnV2ResponseVerifierService:
 
     def _evaluate_claim_support(self, text: str, evidence: list[Any], claim_type: str) -> tuple[str, list[str], bool]:
         haystack = text.lower()
+        if claim_type == "evaluation" and self._is_supported_strategy_setup_compatibility(
+            haystack=haystack,
+            evidence=evidence,
+        ):
+            return "supported", [], True
         # A stored configuration or status establishes only its own value.  It
         # cannot, by itself, support a claim about an outcome, risk or causal
         # weakness in a user's plan.
@@ -1294,6 +1296,53 @@ class FinnV2ResponseVerifierService:
         if claim_type == "recommendation":
             return "partially_supported", [], True
         return "unverifiable", ["unsupported_noncritical_claim"], False
+
+    @staticmethod
+    def _is_supported_strategy_setup_compatibility(*, haystack: str, evidence: list[Any]) -> bool:
+        """Allow a narrow configuration comparison without asserting market outcomes."""
+        if not {"strategie", "strategy"}.intersection(haystack.split()):
+            return False
+        if not {"setup", "opzet"}.intersection(haystack.split()):
+            return False
+        if not any(marker in haystack for marker in (
+            "compatibel", "compatib", "afgestemd", "overeenkomst", "zelfde",
+            "same", "match", "past",
+        )):
+            return False
+        if any(marker in haystack for marker in (
+            "winst", "profit", "performance", "rendement", "outcome", "return",
+            "markt", "market", "volatiliteit", "volatility",
+        )):
+            return False
+
+        setup_facts = next(
+            (dict(getattr(item, "facts", {}) or {}) for item in evidence
+             if str(getattr(item, "tool_name", "")) == "read_active_setup"),
+            None,
+        )
+        strategy_facts = next(
+            (dict(getattr(item, "facts", {}) or {}) for item in evidence
+             if str(getattr(item, "tool_name", "")) == "read_linked_strategy"),
+            None,
+        )
+        if not setup_facts or not strategy_facts:
+            return False
+        return (
+            bool(setup_facts.get("symbol"))
+            and str(setup_facts.get("symbol")).upper() == str(strategy_facts.get("symbol") or "").upper()
+            and bool(setup_facts.get("timeframe"))
+            and str(setup_facts.get("timeframe")).upper() == str(strategy_facts.get("timeframe") or "").upper()
+        )
+
+    @staticmethod
+    def _is_evidence_backed_evaluation(*, request_plan, draft: ResponseDraft) -> bool:
+        requested_mode = getattr(request_plan, "interaction_mode", None)
+        return (
+            bool(requested_mode)
+            and normalize_interaction_mode(requested_mode) == "EVALUATE"
+            and normalize_interaction_mode(draft.mode) == "EVALUATE"
+            and bool(draft.evidence_refs_used)
+        )
 
     @staticmethod
     def _is_supported_indicator_absence(text: str, evidence: Any) -> bool:

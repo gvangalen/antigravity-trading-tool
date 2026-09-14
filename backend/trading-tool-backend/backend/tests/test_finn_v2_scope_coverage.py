@@ -647,6 +647,25 @@ def test_evidence_limited_evaluation_is_not_treated_as_a_model_contract_bypass()
     assert verifier.action == "deliver"
 
 
+def test_strategy_setup_compatibility_requires_matching_persisted_fields():
+    service = FinnV2ResponseVerifierService(session=object())
+    evidence = [
+        SimpleNamespace(tool_name="read_active_setup", facts={"symbol": "BTC", "timeframe": "4H"}),
+        SimpleNamespace(tool_name="read_linked_strategy", facts={"symbol": "BTC", "timeframe": "4H"}),
+    ]
+
+    assert service._evaluate_claim_support(
+        "De strategie is compatibel met de setup omdat asset en timeframe overeenkomen.",
+        evidence,
+        "evaluation",
+    ) == ("supported", [], True)
+    assert service._evaluate_claim_support(
+        "De strategie garandeert winst omdat asset en timeframe overeenkomen.",
+        evidence,
+        "evaluation",
+    )[2] is False
+
+
 def test_mode_purity_accepts_not_executed_watchlist_proposal_wording():
     service = FinnV2ResponseVerifierService(session=object())
     draft = ResponseDraft(

@@ -112,6 +112,18 @@ def test_evaluate_setup_contract_distinguishes_multilingual_assessment_from_read
     }
 
 
+def test_evaluate_strategy_requires_only_the_persisted_strategy_graph():
+    contract = FinnV2OperationRegistry().require_supported("evaluate_strategy")
+
+    assert contract.required_scopes == (
+        "active_asset", "active_setup", "linked_strategy",
+    )
+    assert contract.optional_scopes == ("profile", "preferences")
+    assert contract.tool_names == (
+        "read_active_asset", "read_active_setup", "read_linked_strategy",
+    )
+
+
 def test_create_dca_setup_exposes_its_service_required_frequency_in_the_same_contract():
     contract = FinnV2OperationRegistry().require_supported("create_setup")
 

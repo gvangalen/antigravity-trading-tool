@@ -100,7 +100,7 @@ class FinnV2ResponseDowngradeService:
             user_id=draft.user_id,
             mode="EVALUATE",
             direct_answer=(
-                "Ik kan de beschikbare plancontext wel begrensd samenvatten, maar niet als volledige "
+                "Ik kan de beschikbare beoordelingscontext wel begrensd samenvatten, maar niet als volledige "
                 "financiele beoordeling vrijgeven omdat de responseverificatie niet alle vereiste velden kon bevestigen."
             ),
             main_observation=(
@@ -113,8 +113,8 @@ class FinnV2ResponseDowngradeService:
             uncertainty_summary="De beschikbare evidence is begrensd tot de geverifieerde context van deze run.",
             uncertainty_codes=list(dict.fromkeys([*draft.uncertainty_codes, "evidence_limitation_after_repair"])),
             next_step={
-                "title": "Vul plancontext aan",
-                "instruction": "Selecteer of lever de ontbrekende plancontext aan; FINN kan daarna dezelfde evaluatie opnieuw begrensd controleren.",
+                "title": "Vul beoordelingscontext aan",
+                "instruction": "Selecteer of lever de ontbrekende beoordelingscontext aan; FINN kan daarna dezelfde evaluatie opnieuw begrensd controleren.",
                 "requires_confirmation": False,
             },
             follow_up_question=None,
