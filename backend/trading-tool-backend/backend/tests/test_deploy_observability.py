@@ -219,6 +219,15 @@ def test_deploy_checks_effective_finn_policy_parity_without_printing_values() ->
     assert "requiredPolicy" in source
 
 
+def test_deploy_plan_includes_the_strategy_domain_schema_before_api_reload() -> None:
+    """Strategy routes must never deploy before their required columns exist."""
+    source = DEPLOY_SCRIPT.read_text(encoding="utf-8")
+    migration = "backend/scripts/migrations/2026_09_14_strategy_domain_multiple_strategies.py"
+
+    assert f"run_migration {migration}" in source
+    assert source.index(f"run_migration {migration}") < source.index("advance_deploy_step 'schema_health'")
+
+
 def test_release_marker_remote_steps_are_independently_guarded() -> None:
     source = DEPLOY_SCRIPT.read_text(encoding="utf-8")
     marker_start = source.index('DEPLOY_STEP_ID="release_marker"')

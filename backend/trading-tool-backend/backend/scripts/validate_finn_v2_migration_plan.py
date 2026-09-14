@@ -11,12 +11,20 @@ MIGRATION_CALL = re.compile(r"^\s*run_migration\s+backend/scripts/migrations/([^
 
 
 def canonical_finn_v2_migrations(migrations_dir: Path) -> set[str]:
-    """FINN V2 migration names are the canonical, deploy-required family."""
-    return {
+    """Return every FINN migration that must accompany a FINN V2 rollout.
+
+    Most canonical migrations retain the ``finn_v2`` filename prefix. The
+    Strategy-domain migration is intentionally named for its domain because it
+    is also consumed by the browser API; it is still a hard requirement for
+    the FINN V2 action adapters and repositories.
+    """
+    migrations = {
         path.name
         for path in migrations_dir.glob("*_finn_v2_*.py")
         if path.is_file() and not path.name.startswith("__")
     }
+    migrations.add("2026_09_14_strategy_domain_multiple_strategies.py")
+    return migrations
 
 
 def registered_migrations(deploy_script: Path) -> set[str]:
