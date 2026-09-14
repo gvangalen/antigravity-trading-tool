@@ -2138,7 +2138,11 @@
       "numericValidation": "Gebruik alleen geldige positieve waarden.",
       "assetExposureValidation": "Assetblootstelling mag maximaal 100% zijn.",
       "dailyLimitValidation": "Daglimiet mag niet hoger zijn dan het totale budget.",
-      "orderMaxValidation": "Maximale order mag niet hoger zijn dan het totale budget."
+      "orderMaxValidation": "Maximale order mag niet hoger zijn dan het totale budget.",
+      "riskAcknowledgementTitle": "Bevestig de risicowijziging",
+      "riskAcknowledgementBody": "Deze wijziging verhoogt een risicolimiet. Bevestig alleen als je dit bewust wilt opslaan.",
+      "riskAcknowledgementCancel": "Wijziging aanpassen",
+      "riskAcknowledgementConfirm": "Ik begrijp dit en sla op"
     },
     "settingsMenu": {
       "title": "Botinstellingen",

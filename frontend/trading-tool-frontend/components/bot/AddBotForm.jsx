@@ -27,6 +27,10 @@ import {
 import { useTranslation } from "@/app/providers/I18nProvider";
 import { useModal } from "@/components/modal/ModalProvider";
 import { actionButtonStyles } from "@/components/ui/actionButtonStyles";
+import {
+  getBotRiskAcknowledgement,
+  getBotSaveErrorMessage,
+} from "@/lib/bot/riskAcknowledgement.mjs";
 
 const RISK_PROFILE_ICONS = {
   conservative: Shield,
@@ -44,25 +48,6 @@ const GUIDED_BUDGET_DEFAULTS = {
 /**
  * AddBotForm — Tradamind 2.5 (FINAL)
  */
-const extractErrorMessage = (error, fallback) => {
-  if (error?.body) {
-    try {
-      const parsed = JSON.parse(error.body);
-      if (typeof parsed?.detail === "string" && parsed.detail.trim()) {
-        return parsed.detail.trim();
-      }
-    } catch {
-      // Ignore parse failure and use fallback.
-    }
-  }
-
-  if (typeof error?.message === "string" && error.message.trim()) {
-    return error.message.trim();
-  }
-
-  return fallback;
-};
-
 const AddBotForm = forwardRef(function AddBotForm({
   initialData = null,
   initialValues = null,
@@ -83,6 +68,7 @@ const AddBotForm = forwardRef(function AddBotForm({
   const { t } = useTranslation();
   const copy = t?.botPage?.form || {};
   const pageCopy = t?.botPage || {};
+  const riskCopy = pageCopy.budgetForm || {};
   const { showSnackbar } = useModal();
   const formRef = useRef(null);
 
@@ -106,6 +92,7 @@ const AddBotForm = forwardRef(function AddBotForm({
   });
   const [loading, setLoading] = useState(false);
   const [submitError, setSubmitError] = useState("");
+  const [riskAcknowledgement, setRiskAcknowledgement] = useState(null);
   const [showAdvancedBudget, setShowAdvancedBudget] = useState(false);
 
   const requiresExplicitBudget = form.is_live || form.mode !== "manual";
@@ -331,7 +318,7 @@ const AddBotForm = forwardRef(function AddBotForm({
     requiresExplicitBudget,
   ]);
 
-  const submitForm = useCallback(async () => {
+  const submitForm = useCallback(async (riskAcknowledged = false) => {
     if (loading) {
       return { ok: false, reason: "busy" };
     }
@@ -355,9 +342,11 @@ const AddBotForm = forwardRef(function AddBotForm({
       budget_min_order_eur: Number(form.budget_min_order_eur || 0),
       budget_max_order_eur: Number(form.budget_max_order_eur || 0),
       max_asset_exposure_pct: Number(form.max_asset_exposure_pct || 0),
+      ...(riskAcknowledged ? { risk_acknowledged: true } : {}),
     };
 
     setSubmitError("");
+    setRiskAcknowledgement(null);
     setLoading(true);
 
     try {
@@ -369,12 +358,16 @@ const AddBotForm = forwardRef(function AddBotForm({
       return { ok: true, data: savedBot ?? payload };
     } catch (error) {
       console.error(error);
-      const message = extractErrorMessage(
+      const acknowledgement = getBotRiskAcknowledgement(error);
+      const message = getBotSaveErrorMessage(
         error,
         saveFailedMessage || copy.saveFailed || "Opslaan van de bot mislukt."
       );
+      if (acknowledgement) {
+        setRiskAcknowledgement(acknowledgement);
+      }
       setSubmitError(message);
-      showSnackbar(message, "danger");
+      showSnackbar(message, acknowledgement ? "info" : "danger");
       return { ok: false, reason: "api", error };
     } finally {
       setLoading(false);
@@ -841,6 +834,33 @@ const AddBotForm = forwardRef(function AddBotForm({
       {submitError ? (
         <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">
           {submitError}
+        </div>
+      ) : null}
+
+      {riskAcknowledgement ? (
+        <div className="rounded-2xl border border-amber-300 bg-amber-50 px-4 py-4 text-sm text-amber-950">
+          <p className="font-black">{riskCopy.riskAcknowledgementTitle || "Bevestig de risicowijziging"}</p>
+          <p className="mt-1 font-medium leading-relaxed">
+            {riskAcknowledgement.message || riskCopy.riskAcknowledgementBody || "Deze wijziging verhoogt risico of automatisering. Bevestig alleen als je dit bewust wilt opslaan."}
+          </p>
+          <div className="mt-4 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+            <button
+              type="button"
+              disabled={loading}
+              onClick={() => setRiskAcknowledgement(null)}
+              className={actionButtonStyles({ variant: "secondary" })}
+            >
+              {riskCopy.riskAcknowledgementCancel || "Wijziging aanpassen"}
+            </button>
+            <button
+              type="button"
+              disabled={loading}
+              onClick={() => submitForm(true)}
+              className={actionButtonStyles({ variant: "primary" })}
+            >
+              {riskCopy.riskAcknowledgementConfirm || "Ik begrijp dit en sla op"}
+            </button>
+          </div>
         </div>
       ) : null}
 

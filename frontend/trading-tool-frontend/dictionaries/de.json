@@ -2138,7 +2138,11 @@
       "numericValidation": "Bitte nur gueltige positive Werte verwenden.",
       "assetExposureValidation": "Die Asset-Exponierung darf 100% nicht ueberschreiten.",
       "dailyLimitValidation": "Das Tageslimit darf nicht hoeher sein als das Gesamtbudget.",
-      "orderMaxValidation": "Die maximale Order darf nicht hoeher sein als das Gesamtbudget."
+      "orderMaxValidation": "Die maximale Order darf nicht hoeher sein als das Gesamtbudget.",
+      "riskAcknowledgementTitle": "Risikoaenderung bestaetigen",
+      "riskAcknowledgementBody": "Diese Aenderung erhoeht ein Risikolimit. Bestaetige nur, wenn du sie bewusst speichern willst.",
+      "riskAcknowledgementCancel": "Aenderung anpassen",
+      "riskAcknowledgementConfirm": "Ich verstehe und speichere"
     },
     "settingsMenu": {
       "title": "Bot-Einstellungen",

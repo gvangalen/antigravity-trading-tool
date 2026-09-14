@@ -2137,7 +2137,11 @@
       "numericValidation": "Use only valid positive values.",
       "assetExposureValidation": "Asset exposure cannot exceed 100%.",
       "dailyLimitValidation": "Daily limit cannot be higher than the total budget.",
-      "orderMaxValidation": "Maximum order size cannot be higher than the total budget."
+      "orderMaxValidation": "Maximum order size cannot be higher than the total budget.",
+      "riskAcknowledgementTitle": "Confirm the risk change",
+      "riskAcknowledgementBody": "This change raises a risk limit. Confirm only if you intentionally want to save it.",
+      "riskAcknowledgementCancel": "Adjust the change",
+      "riskAcknowledgementConfirm": "I understand and save"
     },
     "settingsMenu": {
       "title": "Bot settings",
