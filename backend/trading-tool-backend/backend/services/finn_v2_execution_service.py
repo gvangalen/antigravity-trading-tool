@@ -162,6 +162,11 @@ class FinnV2ExecutionService:
                 event="execution_succeeded",
                 execution_id=execution.id,
             )
+            # The execute endpoint can return before FastAPI closes its
+            # request-scoped session. Commit the execution, action result and
+            # terminal lifecycle together here so an immediate replay observes
+            # ``already_executed`` rather than a transient ``started`` row.
+            await self._commit_terminal_execution()
             return ExecutionResult(
                 execution_id=execution.id,
                 proposal_id=proposal_id,
@@ -186,6 +191,7 @@ class FinnV2ExecutionService:
                 event="execution_failed",
                 execution_id=execution.id,
             )
+            await self._commit_terminal_execution()
             return ExecutionResult(
                 execution_id=execution.id,
                 proposal_id=proposal_id,
@@ -210,6 +216,16 @@ class FinnV2ExecutionService:
             event=event,
             execution_id=execution_id,
         )
+
+    async def _commit_terminal_execution(self) -> None:
+        """Commit terminal execution state before returning it to the client.
+
+        Unit-test sessions intentionally implement only ``flush``. Production
+        sessions always expose ``commit`` through the request dependency.
+        """
+        commit = getattr(self.session, "commit", None)
+        if callable(commit):
+            await commit()
 
     def _hash(self, payload: dict) -> str:
         canonical = json.dumps(payload, sort_keys=True, default=str, separators=(",", ":"))

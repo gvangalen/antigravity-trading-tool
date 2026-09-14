@@ -8,12 +8,19 @@ from backend.services.finn_v2_execution_service import FinnV2ExecutionService
 
 
 class _Session:
+    def __init__(self):
+        self.commits = 0
+
     async def flush(self):
         return None
 
+    async def commit(self):
+        self.commits += 1
+
 
 def test_execution_service_records_postcondition_hash_on_success():
-    service = FinnV2ExecutionService(session=_Session())
+    session = _Session()
+    service = FinnV2ExecutionService(session=session)
     workflow_events = []
     action_results = []
     service.runtime_contracts.record_proposal_lifecycle = lambda **kwargs: asyncio.sleep(0, result=workflow_events.append(kwargs))
@@ -51,6 +58,7 @@ def test_execution_service_records_postcondition_hash_on_success():
 
     assert result.status == "succeeded"
     assert result.postcondition_hash == "post-hash-1"
+    assert session.commits == 1
     assert workflow_events == [{
         "run_id": "run-1",
         "proposal_id": "proposal-1",

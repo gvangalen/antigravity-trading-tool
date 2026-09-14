@@ -100,10 +100,20 @@ export const fetchStrategies = async (
 // 3. STRATEGIE UPDATEN
 // =========================================================
 export const updateStrategy = async (id, data) => {
-  const payload = {
-    ...data,
-    name: data.name || undefined,
-  };
+  // The update endpoint intentionally keeps the parent setup immutable. Do
+  // not leak form-only or create-only fields into this contract boundary.
+  const allowedFields = [
+    'name', 'symbol', 'timeframe', 'execution_mode', 'base_amount',
+    'decision_curve', 'decision_curve_name', 'decision_curve_id', 'entry',
+    'entry_type', 'trade_execution_mode', 'targets', 'stop_loss',
+    'explanation', 'ai_explanation', 'risk_profile', 'automation', 'tags',
+    'favorite',
+  ];
+  const payload = Object.fromEntries(
+    allowedFields
+      .filter((field) => data[field] !== undefined)
+      .map((field) => [field, field === 'name' ? data[field] || undefined : data[field]]),
+  );
 
   return await fetchAuth(`/api/strategies/${id}`, {
     method: 'PUT',

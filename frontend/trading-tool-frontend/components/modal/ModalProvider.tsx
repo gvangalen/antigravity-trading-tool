@@ -12,6 +12,7 @@ import { toast } from "react-hot-toast";
 import { X } from "lucide-react";
 import { actionButtonStyles } from "@/components/ui/actionButtonStyles";
 import OverlayShell from "@/components/ui/OverlayShell";
+import { toSnackbarMessage } from "@/lib/ui/snackbarMessage";
 
 /* ===========================================================
    TYPES
@@ -48,7 +49,7 @@ type SnackbarTone = "success" | "danger" | "info" | "primary";
 export type ModalContextValue = {
   openConfirm: (config: ModalConfig) => void;
   close: () => void;
-  showSnackbar: (msg: string, tone?: SnackbarTone) => void;
+  showSnackbar: (msg: unknown, tone?: SnackbarTone) => void;
 };
 
 /* ===========================================================
@@ -88,7 +89,8 @@ export function ModalProvider({ children }: { children: ReactNode }) {
 
   /* --- SNACKBAR (UNIFIED WITH TOAST) --- */
   const showSnackbar = useCallback(
-    (msg: string, tone: SnackbarTone = "success") => {
+    (message: unknown, tone: SnackbarTone = "success") => {
+      const msg = toSnackbarMessage(message);
       const options = {
         id: msg, // Prevent duplicates
       };

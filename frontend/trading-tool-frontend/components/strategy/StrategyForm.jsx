@@ -15,6 +15,7 @@ import { fetchAuth } from "@/lib/api/auth";
 import { Wallet, TrendingUp } from "lucide-react";
 import CurveEditor from "@/components/decision/CurveEditor";
 import { useTranslation } from "@/app/providers/I18nProvider";
+import { getSetupId } from "@/lib/setup/activeSetup";
 
 const StrategyForm = forwardRef(function StrategyForm({
   onSubmit,
@@ -118,7 +119,7 @@ const StrategyForm = forwardRef(function StrategyForm({
 
   const selectedSetup = useMemo(() => {
     return availableSetups.find(
-      (s) => String(s.id) === String(form.setup_id)
+      (s) => String(getSetupId(s)) === String(form.setup_id)
     );
   }, [form.setup_id, availableSetups]);
 
@@ -139,7 +140,7 @@ const StrategyForm = forwardRef(function StrategyForm({
 
     if (name === "setup_id") {
       const selected = availableSetups.find(
-        (s) => String(s.id) === value
+        (s) => String(getSetupId(s)) === value
       );
 
       setForm((p) => ({
@@ -265,6 +266,8 @@ const StrategyForm = forwardRef(function StrategyForm({
     const payload = {
       name: form.name.trim(),
       setup_id: Number(form.setup_id),
+      symbol: form.symbol.trim() || undefined,
+      timeframe: form.timeframe.trim() || undefined,
       base_amount: Number(form.base_amount),
       execution_mode: form.execution_mode,
       setup_type: setupType,
@@ -330,23 +333,6 @@ const StrategyForm = forwardRef(function StrategyForm({
         </h2>
       )}
 
-      {/* 🟢 STATUS TOGGLE (ONLY IN EDIT) */}
-      {isEdit && (
-        <div className="flex items-center justify-between p-4 bg-[var(--color-border-subtle)] border border-slate-100 rounded-2xl mb-6">
-           <div>
-              <div className="text-[10px] font-black text-secondary uppercase tracking-widest mb-1">{copy.statusLabel}</div>
-              <div className="text-sm font-bold text-slate-800">{form.is_active ? copy.active : copy.paused}</div>
-           </div>
-           <button
-             type="button"
-             onClick={() => setForm(p => ({ ...p, is_active: !p.is_active }))}
-             className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${form.is_active ? "bg-green-500" : "bg-slate-300"}`}
-           >
-              <span className={`inline-block h-4 w-4 transform rounded-full bg-card transition-transform ${form.is_active ? "translate-x-6" : "translate-x-1"}`} />
-           </button>
-        </div>
-      )}
-
       <input
         name="name"
         value={form.name}
@@ -363,11 +349,34 @@ const StrategyForm = forwardRef(function StrategyForm({
       >
         <option value="">{copy.setupPlaceholder}</option>
         {availableSetups.map((s) => (
-          <option key={s.id} value={s.id}>
+          <option key={getSetupId(s)} value={getSetupId(s) ?? ""}>
             {s.name} ({s.symbol})
           </option>
         ))}
       </select>
+
+      <div className="grid gap-4 sm:grid-cols-2">
+        <label className="block space-y-2">
+          <span className="text-sm font-semibold">{copy.assetLabel || "Asset"}</span>
+          <input
+            name="symbol"
+            value={form.symbol}
+            onChange={handleChange}
+            placeholder={copy.assetPlaceholder || "BTC"}
+            className="input"
+          />
+        </label>
+        <label className="block space-y-2">
+          <span className="text-sm font-semibold">{copy.timeframeLabel || "Timeframe"}</span>
+          <input
+            name="timeframe"
+            value={form.timeframe}
+            onChange={handleChange}
+            placeholder={copy.timeframePlaceholder || "4H"}
+            className="input"
+          />
+        </label>
+      </div>
 
       {/* BREAKOUT */}
       {isTrade && (

@@ -86,7 +86,7 @@ class StrategyService:
     # canonical allowlist at the domain boundary rather than letting a FINN
     # proposal pass arbitrary JSON through to storage.
     UPDATE_ALLOWED_FIELDS = frozenset({
-        "name", "execution_mode", "base_amount", "decision_curve",
+        "name", "symbol", "timeframe", "execution_mode", "base_amount", "decision_curve",
         "decision_curve_name", "decision_curve_id", "entry", "entry_type",
         "trade_execution_mode", "targets", "stop_loss", "explanation",
         "ai_explanation", "risk_profile", "automation", "tags", "favorite",
@@ -113,8 +113,8 @@ class StrategyService:
         targets = normalize_targets(row.get("targets") or data.get("targets"))
 
         name = normalize_string(row.get("name") or data.get("name"))
-        symbol = normalize_string(row.get("setup_symbol") or data.get("symbol"))
-        timeframe = normalize_string(row.get("setup_timeframe") or data.get("timeframe"))
+        symbol = normalize_string(row.get("symbol") or data.get("symbol") or row.get("setup_symbol"))
+        timeframe = normalize_string(row.get("timeframe") or data.get("timeframe") or row.get("setup_timeframe"))
         explanation = normalize_string(row.get("explanation") or data.get("explanation"))
         risk_profile = normalize_string(row.get("risk_profile") or data.get("risk_profile"))
         entry_type = normalize_string(data.get("entry_type") or data.get("trade_execution_mode"))
@@ -155,6 +155,7 @@ class StrategyService:
             "setup_name": row.get("setup_name"),
 
             "name": name,
+            "canonical_name": row.get("canonical_name"),
             "setup_type": row.get("setup_type") or row.get("existing_setup_type") or data.get("setup_type"),
 
             "execution_mode": row.get("execution_mode"),
@@ -166,6 +167,8 @@ class StrategyService:
 
             "symbol": symbol,
             "timeframe": timeframe,
+            "asset_source": data.get("asset_source"),
+            "timeframe_source": data.get("timeframe_source"),
 
             "entry": entry,
             "entry_type": entry_type,
@@ -230,6 +233,11 @@ class StrategyService:
 
         return merged
 
+    @staticmethod
+    def canonical_strategy_name(value: Any) -> str:
+        """Use one owner-scoped comparison key for Strategy names."""
+        return " ".join(str(value or "").split()).casefold()
+
     async def save_strategy(
         self,
         payload: StrategyCreateSchema,
@@ -264,13 +272,19 @@ class StrategyService:
             raw_data["execution_ready"] = False
             raw_data["draft_reason"] = "trade_levels_not_supplied"
 
-        exists = await self.repository.check_strategy_exists(payload.setup_id, user_id)
-        if exists:
-            raise HTTPException(409, "Strategie bestaat al voor deze setup")
-
         strategy_name = (payload.name or "").strip()
         if not strategy_name:
             strategy_name = f"{setup_type.upper()} {setup_row.get('symbol')} {setup_row.get('timeframe')}"
+        canonical_name = self.canonical_strategy_name(strategy_name)
+        if await self.repository.check_strategy_name_exists(payload.setup_id, user_id, canonical_name):
+            raise HTTPException(409, "Een strategie met deze naam bestaat al voor deze setup")
+
+        explicit_symbol = normalize_string(raw_data.get("symbol"))
+        explicit_timeframe = normalize_string(raw_data.get("timeframe"))
+        strategy_symbol = (explicit_symbol or normalize_string(setup_row.get("symbol")) or "").upper()
+        strategy_timeframe = explicit_timeframe or normalize_string(setup_row.get("timeframe"))
+        if not strategy_symbol or not strategy_timeframe:
+            raise HTTPException(400, "symbol en timeframe ontbreken voor deze strategie")
 
         curve_id = None
         if execution_mode == "custom":
@@ -284,6 +298,9 @@ class StrategyService:
         insert_payload = {
             "setup_id": payload.setup_id,
             "name": strategy_name,
+            "canonical_name": canonical_name,
+            "symbol": strategy_symbol,
+            "timeframe": strategy_timeframe,
             "setup_type": setup_type,
             "execution_mode": execution_mode,
             "base_amount": payload.base_amount
@@ -291,8 +308,10 @@ class StrategyService:
         
         # Hydrate raw data with essential setup context for the JSON dump
         raw_data["setup_type"] = setup_type
-        raw_data["symbol"] = setup_row.get("symbol")
-        raw_data["timeframe"] = setup_row.get("timeframe")
+        raw_data["symbol"] = strategy_symbol
+        raw_data["timeframe"] = strategy_timeframe
+        raw_data["asset_source"] = "explicit" if explicit_symbol else "setup_default"
+        raw_data["timeframe_source"] = "explicit" if explicit_timeframe else "setup_default"
         raw_data["setup_name"] = setup_row.get("name")
 
         strategy_id = await self.repository.create_strategy(insert_payload, curve_id, raw_data, user_id)
@@ -300,7 +319,15 @@ class StrategyService:
         
         from backend.services.onboarding_service import mark_step_completed
         await mark_step_completed(user_id, "strategy", self.session)
-        return {"id": strategy_id, "message": "✅ Strategie opgeslagen"}
+        return {
+            "id": strategy_id,
+            "strategy_id": strategy_id,
+            "setup_id": payload.setup_id,
+            "name": strategy_name,
+            "symbol": strategy_symbol,
+            "timeframe": strategy_timeframe,
+            "message": "✅ Strategie opgeslagen",
+        }
 
     def format_strategy_for_mobile(self, strategy: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -315,6 +342,7 @@ class StrategyService:
             "setup_id": strategy.get("setup_id"),
             "setup_name": strategy.get("setup_name"),
             "name": strategy.get("name"),
+            "canonical_name": strategy.get("canonical_name"),
             "setup_type": strategy.get("setup_type"),
             "execution_mode": strategy.get("execution_mode"),
             "base_amount": strategy.get("base_amount"),
@@ -358,7 +386,7 @@ class StrategyService:
             **existing_data,
             **{
                 key: existing.get(key)
-                for key in ("name", "execution_mode", "base_amount", "entry", "targets", "stop_loss", "explanation", "risk_profile", "decision_curve_id")
+                for key in ("name", "symbol", "timeframe", "execution_mode", "base_amount", "entry", "targets", "stop_loss", "explanation", "risk_profile", "decision_curve_id")
                 if existing.get(key) is not None
             },
             **raw_data,
@@ -374,6 +402,19 @@ class StrategyService:
             raise HTTPException(400, "decision_curve verplicht")
 
         setup_type = (existing.get("existing_setup_type") or "").lower()
+        merged_data["name"] = str(merged_data.get("name") or existing.get("name") or "").strip()
+        merged_data["canonical_name"] = self.canonical_strategy_name(merged_data["name"])
+        if await self.repository.check_strategy_name_exists(
+            int(existing["setup_id"]),
+            user_id,
+            merged_data["canonical_name"],
+            exclude_strategy_id=strategy_id,
+        ):
+            raise HTTPException(409, "Een strategie met deze naam bestaat al voor deze setup")
+        merged_data["symbol"] = (normalize_string(merged_data.get("symbol")) or normalize_string(existing.get("symbol")) or normalize_string(existing.get("setup_symbol")) or "").upper()
+        merged_data["timeframe"] = normalize_string(merged_data.get("timeframe")) or normalize_string(existing.get("timeframe")) or normalize_string(existing.get("setup_timeframe"))
+        if not merged_data["symbol"] or not merged_data["timeframe"]:
+            raise HTTPException(400, "symbol en timeframe ontbreken voor deze strategie")
         if setup_type in {"trade", "position"} and merged_data.get("execution_ready") is not False:
             self._validate_trade_strategy(merged_data)
 
@@ -382,7 +423,15 @@ class StrategyService:
             raise HTTPException(403, "Update gefaald")
             
         await self.session.commit()
-        return {"message": "✅ Strategie bijgewerkt"}
+        return {
+            "id": strategy_id,
+            "strategy_id": strategy_id,
+            "setup_id": existing.get("setup_id"),
+            "name": merged_data["name"],
+            "symbol": merged_data["symbol"],
+            "timeframe": merged_data["timeframe"],
+            "message": "✅ Strategie bijgewerkt",
+        }
 
     async def generate_strategy_for_setup(self, setup_id: int, user_id: int) -> dict:
         task_id = await asyncio.to_thread(sync_generate_strategy_task, setup_id, user_id)

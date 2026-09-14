@@ -24,6 +24,10 @@ class StrategyCreateSchema(BaseModel):
     
     # Optional explicitly defined standard fields
     name: Optional[str] = None
+    # A strategy can intentionally differ from its parent setup. When these
+    # fields are omitted the service records the setup-derived default source.
+    symbol: Optional[str] = None
+    timeframe: Optional[str] = None
     
     class Config:
         extra = Extra.allow

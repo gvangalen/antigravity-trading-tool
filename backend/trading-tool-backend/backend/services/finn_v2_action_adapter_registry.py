@@ -154,7 +154,7 @@ class FinnV2ActionAdapterRegistry:
         """Persist the confirmed V2 strategy draft through StrategyService.
 
         The service owns the existing schema, setup ownership validation and
-        one-strategy-per-setup domain invariant. FINN only submits a confirmed
+        owner/setup/canonical-name uniqueness invariant. FINN only submits a confirmed
         contract payload; it never invokes the legacy asynchronous generator.
         """
         if not self.flags.execute_strategy_changes_enabled():

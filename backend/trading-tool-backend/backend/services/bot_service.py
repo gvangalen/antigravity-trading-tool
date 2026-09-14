@@ -216,7 +216,7 @@ class BotService:
         strategy_id = raw_payload.get("strategy_id")
         if strategy_id is not None:
             strategy_query = text("""
-                SELECT s.id, COALESCE(st.symbol, raw.data->>'symbol') AS symbol
+                SELECT s.id, COALESCE(s.symbol, raw.data->>'symbol', st.symbol) AS symbol
                 FROM strategies s
                 LEFT JOIN setups st ON st.id = s.setup_id
                 LEFT JOIN LATERAL (SELECT s.data::jsonb AS data) raw ON TRUE

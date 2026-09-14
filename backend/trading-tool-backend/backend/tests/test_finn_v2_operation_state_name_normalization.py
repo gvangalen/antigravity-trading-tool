@@ -43,6 +43,9 @@ def test_strategy_inputs_are_collected_against_the_registry_contract():
         "execution_mode": "fixed",
         "base_amount": 250.0,
         "name": "ETH swing",
+        # An explicitly selected asset is a strategy override, while an
+        # omitted asset is deliberately defaulted from the parent setup.
+        "symbol": "ETH",
     }
 
 

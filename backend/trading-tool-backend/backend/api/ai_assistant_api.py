@@ -473,8 +473,8 @@ async def _build_setup_strategy_listing_envelope(
 
     strategy_lines = []
     for strategy in strategies[:3]:
-        symbol = str(strategy.get("setup_symbol") or "").upper()
-        timeframe = strategy.get("setup_timeframe") or "?"
+        symbol = str(strategy.get("symbol") or strategy.get("setup_symbol") or "").upper()
+        timeframe = strategy.get("timeframe") or strategy.get("setup_timeframe") or "?"
         name = strategy.get("name") or f"{symbol} strategie"
         strategy_lines.append(f"- Strategie #{strategy.get('id')}: {name} ({symbol} · {timeframe})")
 

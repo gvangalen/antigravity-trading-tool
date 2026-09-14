@@ -48,7 +48,7 @@ class FinnV2EntityResolutionService:
         explicit_strategy_id = self._coerce_int(selector.get("strategy_id"))
         if explicit_strategy_id:
             strategy = await self.strategies.get_raw_strategy_with_setup(explicit_strategy_id, user_id)
-            strategy_asset = self._normalize_symbol((strategy or {}).get("setup_symbol"))
+            strategy_asset = self._normalize_symbol((strategy or {}).get("symbol") or (strategy or {}).get("setup_symbol"))
             if strategy_asset:
                 return {"asset": strategy_asset, "resolution_source": "explicit_strategy_link"}
 

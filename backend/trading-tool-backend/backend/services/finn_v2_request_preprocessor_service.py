@@ -70,6 +70,14 @@ class FinnV2RequestPreprocessorService:
         "verletzlich", "fragil", "robust", "widerstandsfähig", "stark", "schwach", "risiko", "beleg",
         "schwachstelle", "qualität", "verbesser",
     )
+    # A consequence request about an existing bot is an assessment of that
+    # bot's operational impact.  It needs the evaluate_bot evidence contract,
+    # not the narrower linked-bot identity read.
+    _BOT_CONSEQUENCE_TERMS = (
+        "gevolg", "gevolgen", "impact", "uitwerking", "consequentie",
+        "consequence", "consequences", "implication", "implications",
+        "auswirkung", "auswirkungen", "folge", "folgen", "konsequenz",
+    )
     _ENTITY_TERMS = {
         "watchlist": ("watchlist", "volglijst", "follow", "gevolgde", "marktenlijst"),
         "indicator_configuration": (
@@ -93,7 +101,7 @@ class FinnV2RequestPreprocessorService:
         ),
         "profile": ("profiel", "risicoprofiel", "tradingstijl", "risk profile", "trading style"),
         "setup": ("setup", "set-up", "opzet", "positie-opzet"),
-        "strategy": ("strategie", "strategy"),
+        "strategy": ("strategie", "strategy", "methode", "method"),
         "scores": (
             "score", "scores", "scorecard", "scorekaart", "score overview",
             "score overzicht", "bewertung", "bewertungen", "punktzahl",
@@ -172,6 +180,13 @@ class FinnV2RequestPreprocessorService:
             r"|\b(?:setup|opzet)concept\b",
             re.IGNORECASE,
         ),
+        # Relationship compounds name the bot as part of a graph overview.
+        # Keeping these lexical compounds here lets the registry distinguish
+        # a whole-plan read from a request for only the active setup.
+        "bot": re.compile(
+            r"\b(?:bot|robot)[-_]?(?:relatie|relationship|koppeling|link)\b",
+            re.IGNORECASE,
+        ),
     }
 
     def preprocess(
@@ -205,6 +220,14 @@ class FinnV2RequestPreprocessorService:
             normalized,
         ))
         explicit_plan = bool(re.search(r"\b(?:mijn\s+)?(?:actieve\s+)?plan\b|\bactive\s+plan\b", normalized))
+        # A topology question about all graph nodes asks for the user's
+        # complete plan. This is distinct from a request to find one linked
+        # strategy or bot, which keeps the narrower linked-object contract.
+        topology_plan_subject = relational_graph and bool(re.search(
+            r"\b(?:hoe|how|wie)\b[^?.!]{0,160}\b(?:gekoppeld|verbonden|connected|related|verbunden)\b",
+            normalized,
+        ))
+        explicit_plan = explicit_plan or topology_plan_subject
         # Two linked plan entities are a graph request, not two isolated reads.
         # This remains a fact about the request's explicit nouns; the registry
         # remains responsible for selecting the graph contract and its tools.
@@ -438,6 +461,11 @@ class FinnV2RequestPreprocessorService:
         # Evaluate before ordinary request verbs. In a question such as
         # "welke risico's maken ...", the verb describes the diagnosis rather
         # than a request to create anything.
+        if (
+            self._contains_any(text, self._ENTITY_TERMS["bot"])
+            and self._contains_any(text, self._BOT_CONSEQUENCE_TERMS)
+        ):
+            return "evaluate"
         if self._is_plan_assessment(text):
             return "evaluate"
         # Confirmation qualifies a proposal lifecycle; it never changes the

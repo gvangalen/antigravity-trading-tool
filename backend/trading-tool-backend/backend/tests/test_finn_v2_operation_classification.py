@@ -307,6 +307,19 @@ def test_contextual_bot_consequence_keeps_the_registry_evaluate_bot_contract():
     assert result.selected_conversation_reference == "previous_verified_response"
 
 
+@pytest.mark.parametrize("message", (
+    "Welke gevolgen heeft die beoordeling voor mijn gekoppelde bot?",
+    "What consequences does that assessment have for my linked bot?",
+    "Welche Auswirkungen hat diese Bewertung auf meinen verbundenen Bot?",
+))
+def test_bot_consequence_is_an_evaluation_fact_before_model_selection(message):
+    facts = CLASSIFIER.preprocessor.preprocess(message=message)
+
+    assert facts.action_polarity == "evaluate"
+    assert "bot" in facts.explicit_entities
+    assert facts.discourse_act == "evaluation"
+
+
 def test_short_guided_strategy_slot_answer_keeps_the_active_contract():
     context = {
         "active_guided_operation": {
@@ -726,6 +739,15 @@ def test_preprocessor_distinguishes_an_explicit_plan_from_an_inferred_graph_subj
     assert graph_only.linked_graph_relationship is True
 
 
+def test_preprocessor_recognizes_a_dutch_strategy_and_bot_relationship_graph():
+    facts = CLASSIFIER.preprocessor.preprocess(
+        message="Breng mijn huidige handelsopzet, methode en robotrelatie in kaart."
+    )
+
+    assert {"setup", "strategy", "bot", "plan"}.issubset(facts.explicit_entities)
+    assert facts.primary_entity == "plan"
+
+
 def test_preprocessor_recognizes_current_asset_subjects_across_supported_languages():
     for message in (
         "Op welk effect staat mijn werkruimte nu?",
@@ -746,6 +768,15 @@ def test_preprocessor_keeps_a_complete_graph_overview_distinct_from_a_link_relat
 
     assert overview.linked_graph_relationship is False
     assert german_relationship.linked_graph_relationship is True
+
+
+def test_preprocessor_marks_a_complete_graph_topology_question_as_a_plan_subject():
+    facts = CLASSIFIER.preprocessor.preprocess(
+        message="Hoe zijn mijn setup, strategie en bot aan elkaar gekoppeld?"
+    )
+
+    assert facts.explicit_plan_subject is True
+    assert facts.primary_entity == "plan"
 
 
 def test_catalog_canonicalizes_cosmos_before_selector_or_proposal_boundaries():

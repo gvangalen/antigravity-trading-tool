@@ -62,12 +62,61 @@ class FinnV2OperationResolverService:
         request_facts: Mapping[str, object] | None = None,
     ) -> FinnV2StructuredOperationSelection:
         frame = getattr(selection, "semantic_frame", None)
+        # The preprocessor has already established an explicit aggregate plan
+        # diagnosis. A provider frame may express that diagnosis as a read or
+        # omit its subject, but neither form is compatible with the registry's
+        # evaluation contract. Apply this typed invariant before interpreting
+        # the optional provider frame.
+        if (
+            str((request_facts or {}).get("discourse_act") or "") == "evaluation"
+            and str((request_facts or {}).get("primary_entity") or "") == "plan"
+            and any(contract.operation_id == "evaluate_plan" for contract in candidates)
+        ):
+            return self._with_resolved_operation(
+                selection,
+                operation_id="evaluate_plan",
+                conversation_reference=selection.conversation_reference,
+            )
         # Legacy callers can provide a selection without a semantic frame.
         # Preserve that selection unless a typed safety invariant requires a
         # fail-closed correction. A provider may validly return an empty frame
         # for an unbound deictic follow-up, which must still clarify instead
         # of becoming an off-topic terminal response.
         if not isinstance(frame, Mapping) or not frame:
+            explicit_entities = {
+                self._normalized(item)
+                for item in (request_facts or {}).get("explicit_entities", ())
+                if isinstance(item, str)
+            }
+            if selection.operation_id.startswith("read_") and (
+                bool((request_facts or {}).get("explicit_plan_subject"))
+                or {"strategy", "bot"}.issubset(explicit_entities)
+            ):
+                operation_id = (
+                    "read_linked_bot"
+                    if bool((request_facts or {}).get("linked_graph_relationship"))
+                    else "read_active_plan"
+                )
+                if any(contract.operation_id == operation_id for contract in candidates):
+                    return self._with_resolved_operation(
+                        selection,
+                        operation_id=operation_id,
+                        conversation_reference=selection.conversation_reference,
+                    )
+            # The selector may omit a semantic frame while still returning a
+            # schema-valid operation.  An explicit aggregate plan assessment
+            # is already a typed request fact, so preserve the registry's
+            # plan contract rather than accepting a narrower setup selection.
+            if (
+                str((request_facts or {}).get("discourse_act") or "") == "evaluation"
+                and str((request_facts or {}).get("primary_entity") or "") == "plan"
+                and any(contract.operation_id == "evaluate_plan" for contract in candidates)
+            ):
+                return self._with_resolved_operation(
+                    selection,
+                    operation_id="evaluate_plan",
+                    conversation_reference=selection.conversation_reference,
+                )
             if (
                 selection.operation_id == "off_topic"
                 and

@@ -317,6 +317,34 @@ def test_aggregate_plan_assessment_overrides_a_conflicting_node_projection():
     assert resolved.operation_id == "evaluate_plan"
 
 
+def test_aggregate_plan_assessment_overrides_a_frame_less_setup_selection():
+    registry = FinnV2OperationRegistry()
+    selection = _selection("evaluate_setup", {})
+    resolved = FinnV2OperationResolverService(registry).resolve(
+        selection=selection,
+        candidates=registry.list(),
+        conversation_context={},
+        request_facts={"discourse_act": "evaluation", "primary_entity": "plan"},
+    )
+
+    assert resolved.operation_id == "evaluate_plan"
+
+
+def test_frame_less_plan_overview_uses_the_complete_plan_read_contract():
+    registry = FinnV2OperationRegistry()
+    resolved = FinnV2OperationResolverService(registry).resolve(
+        selection=_selection("read_active_setup", {}),
+        candidates=registry.list(),
+        conversation_context={},
+        request_facts={
+            "action_polarity": "read",
+            "explicit_entities": ("setup", "strategy", "bot"),
+        },
+    )
+
+    assert resolved.operation_id == "read_active_plan"
+
+
 def test_specific_setup_assessment_is_not_broadened_to_an_aggregate_plan():
     registry = FinnV2OperationRegistry()
     resolved = FinnV2OperationResolverService(registry).resolve(

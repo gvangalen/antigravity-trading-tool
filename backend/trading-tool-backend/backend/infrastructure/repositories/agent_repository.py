@@ -8,10 +8,10 @@ class AgentRepository:
 
     async def get_insight_by_category(self, user_id: int, category: str) -> Optional[dict]:
         query = text("""
-            SELECT avg_score, trend, bias, risk, summary, top_signals, date, created_at
+            SELECT avg_score, trend, bias, risk, summary, top_signals, date
             FROM ai_category_insights
             WHERE category=:category AND user_id=:user_id
-            ORDER BY date DESC, created_at DESC
+            ORDER BY date DESC
             LIMIT 1
         """)
         result = await self.session.execute(query, {"category": category, "user_id": user_id})

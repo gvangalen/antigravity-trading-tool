@@ -126,7 +126,11 @@ SSE_EVENT_BY_STATUS: Mapping[str, str] = {
     "canceled": "run.canceled",
 }
 
-FOUNDATION_PLACEHOLDER_CONTENT = "FINN Core V2 orchestration shadow run completed."
+# This response can be delivered while a runtime becomes unavailable. Keep
+# internal orchestration terminology out of the user-visible contract.
+FOUNDATION_PLACEHOLDER_CONTENT = (
+    "Ik kan deze FINN-aanvraag nu niet veilig afronden. Probeer het opnieuw of geef aanvullende context."
+)
 
 LEGACY_INTERACTION_MODE_ALIASES: Mapping[str, str] = {
     "FACT": "READ",

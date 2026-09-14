@@ -46,6 +46,21 @@ test("the real create envelope preserves setup_id for onboarding consumers", asy
   assert.match(form, /normalizeSetupSaveResponse\(savedSetup\)/);
 });
 
+test("the onboarding consumer uses the real backend response without reading a legacy id field", async () => {
+  const backendResponse = {
+    setup_id: 771,
+    setup: { name: "BTC Swing", symbol: "BTC", timeframe: "4H" },
+  };
+  const setup = normalizeSetupSaveResponse(backendResponse);
+
+  assert.equal(getSetupId(setup), 771);
+  assert.equal(setup.id, undefined);
+
+  const page = await readSource("app/onboarding/plan/page.jsx");
+  assert.match(page, /setup_id:\s*getSetupId\(savedSetup\)/);
+  assert.doesNotMatch(page, /savedSetup\.id/);
+});
+
 test("keeps compact onboarding score ranges backend-owned", async () => {
   const page = await readSource("app/onboarding/plan/page.jsx");
   assert.doesNotMatch(page, /min_macro_score/);
@@ -61,12 +76,13 @@ test("setup management duplicates through the established creation form without 
 });
 
 test("all active-setup consumers preserve setup_id as the canonical identifier", async () => {
-  const [brain, assistant, provider, setupApi, strategies] = await Promise.all([
+  const [brain, assistant, provider, setupApi, strategies, strategyForm] = await Promise.all([
     readSource("components/dashboard/TradingBrain.jsx"),
     readSource("components/ui/AIAssistant.jsx"),
     readSource("app/providers/SetupProvider.tsx"),
     readSource("lib/api/setups.js"),
     readSource("components/my-plan/StrategiesWorkspaceSection.jsx"),
+    readSource("components/strategy/StrategyForm.jsx"),
   ]);
 
   assert.match(brain, /useSetupStrategy\(getActiveSetupId\(activeSetup\)\)/);
@@ -74,6 +90,10 @@ test("all active-setup consumers preserve setup_id as the canonical identifier",
   assert.match(provider, /normalizeSetupSaveResponse\(resActive\?\.active \?\? null\)/);
   assert.match(setupApi, /const normalizePublicSetup/);
   assert.match(strategies, /setup_id: getSetupId\(setup\)/);
+  assert.match(strategyForm, /String\(getSetupId\(s\)\) === String\(form\.setup_id\)/);
+  assert.match(strategyForm, /String\(getSetupId\(s\)\) === value/);
+  assert.match(strategyForm, /key=\{getSetupId\(s\)\} value=\{getSetupId\(s\) \?\? ""\}/);
+  assert.doesNotMatch(strategyForm, /String\(s\.id\) === String\(form\.setup_id\)/);
 });
 
 test("opening or saving a plan synchronizes its setup with the FINN workspace", async () => {

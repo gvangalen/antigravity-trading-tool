@@ -20,12 +20,31 @@ class StrategyRepository:
         row = result.fetchone()
         return dict(row._mapping) if row else None
 
-    async def check_strategy_exists(self, setup_id: int, user_id: int) -> bool:
-        query = text("""
+    async def check_strategy_name_exists(
+        self,
+        setup_id: int,
+        user_id: int,
+        canonical_name: str,
+        *,
+        exclude_strategy_id: Optional[int] = None,
+    ) -> bool:
+        query = """
             SELECT id FROM strategies
-            WHERE setup_id = :setup_id AND user_id = :user_id
-        """)
-        result = await self.session.execute(query, {"setup_id": setup_id, "user_id": user_id})
+            WHERE setup_id = :setup_id
+              AND user_id = :user_id
+              AND canonical_name = :canonical_name
+        """
+        params = {
+            "setup_id": setup_id,
+            "user_id": user_id,
+            "canonical_name": canonical_name,
+        }
+        # asyncpg cannot infer a type for an optional NULL bind in an OR
+        # expression. Build the owner-scoped exclusion only for updates.
+        if exclude_strategy_id is not None:
+            query += " AND id <> :exclude_strategy_id"
+            params["exclude_strategy_id"] = exclude_strategy_id
+        result = await self.session.execute(text(query), params)
         return result.fetchone() is not None
 
     async def create_indicator_curve(self, user_id: int, curve_json: str, name: str) -> int:
@@ -46,9 +65,16 @@ class StrategyRepository:
         return row[0] if row else None
 
     async def create_strategy(self, payload: dict, curve_id: Optional[int], raw_data: dict, user_id: int) -> int:
+        # StrategyService supplies these values for every current flow. Keep
+        # direct legacy callers compatible while the migration keeps the new
+        # fields nullable for historical rows.
+        name = str(payload.get("name") or "").strip()
+        canonical_name = str(payload.get("canonical_name") or " ".join(name.split()).casefold()) or None
+        symbol = payload.get("symbol") or raw_data.get("symbol")
+        timeframe = payload.get("timeframe") or raw_data.get("timeframe")
         query = text("""
             INSERT INTO strategies (
-                setup_id, name, setup_type,
+                setup_id, name, canonical_name, symbol, timeframe, setup_type,
                 execution_mode, base_amount,
                 decision_curve, decision_curve_id,
                 entry, targets, stop_loss,
@@ -56,7 +82,7 @@ class StrategyRepository:
                 data, created_at, user_id
             )
             VALUES (
-                :setup_id, :name, :setup_type,
+                :setup_id, :name, :canonical_name, :symbol, :timeframe, :setup_type,
                 :execution_mode, :base_amount,
                 :decision_curve, :decision_curve_id,
                 :entry, :targets, :stop_loss,
@@ -68,7 +94,10 @@ class StrategyRepository:
         
         params = {
             "setup_id": payload["setup_id"],
-            "name": payload["name"],
+            "name": name,
+            "canonical_name": canonical_name,
+            "symbol": symbol,
+            "timeframe": timeframe,
             "setup_type": payload["setup_type"],
             "execution_mode": payload["execution_mode"],
             "base_amount": payload["base_amount"],
@@ -111,6 +140,9 @@ class StrategyRepository:
                 s.id,
                 s.setup_id,
                 s.name,
+                s.canonical_name,
+                s.symbol,
+                s.timeframe,
                 s.user_id,
                 COALESCE(sn.entry::text, s.entry::text) as entry,
                 COALESCE(sn.targets, array_to_string(s.targets, ',')) as targets,
@@ -139,11 +171,11 @@ class StrategyRepository:
         params = {"user_id": user_id}
         
         if filters.get("symbol"):
-            q += " AND st.symbol = :symbol"
+            q += " AND COALESCE(s.symbol, s.data->>'symbol', st.symbol) = :symbol"
             params["symbol"] = filters["symbol"]
             
         if filters.get("timeframe"):
-            q += " AND st.timeframe = :timeframe"
+            q += " AND COALESCE(s.timeframe, s.data->>'timeframe', st.timeframe) = :timeframe"
             params["timeframe"] = filters["timeframe"]
             
         q += " ORDER BY s.created_at DESC"
@@ -156,6 +188,9 @@ class StrategyRepository:
             UPDATE strategies
             SET
                 name = :name,
+                canonical_name = :canonical_name,
+                symbol = :symbol,
+                timeframe = :timeframe,
                 setup_type = :setup_type,
                 execution_mode = :execution_mode,
                 base_amount = :base_amount,
@@ -172,13 +207,18 @@ class StrategyRepository:
         
         params = {
             "name": payload.get("name"),
+            "canonical_name": payload.get("canonical_name"),
+            "symbol": payload.get("symbol"),
+            "timeframe": payload.get("timeframe"),
             "setup_type": existing_setup_type,
             "execution_mode": payload.get("execution_mode"),
             "base_amount": payload.get("base_amount"),
             "decision_curve": json.dumps(to_json_safe(raw_data.get("decision_curve"))) if raw_data.get("decision_curve") else None,
             "decision_curve_id": raw_data.get("decision_curve_id"),
             "entry": str(raw_data.get("entry")) if raw_data.get("entry") is not None else None,
-            "targets": raw_data.get("targets"),
+            # Keep update parity with create: ``strategies.targets`` is a
+            # PostgreSQL text[] column, while UI and FINN use numeric levels.
+            "targets": [str(target) for target in (raw_data.get("targets") or [])],
             "stop_loss": str(raw_data.get("stop_loss")) if raw_data.get("stop_loss") is not None else None,
             "explanation": raw_data.get("explanation"),
             "risk_profile": raw_data.get("risk_profile"),
@@ -201,6 +241,9 @@ class StrategyRepository:
                 s.id,
                 s.setup_id,
                 s.name,
+                s.canonical_name,
+                s.symbol,
+                s.timeframe,
                 s.user_id,
                 COALESCE(sn.entry::text, s.entry::text) as entry,
                 COALESCE(sn.targets, array_to_string(s.targets, ',')) as targets,
@@ -312,7 +355,12 @@ class StrategyRepository:
 
     async def get_strategy_full_join(self, strategy_id: int, user_id: int) -> Optional[dict]:
         query = text("""
-            SELECT s.*, st.*
+            SELECT
+                s.*,
+                st.name AS setup_name,
+                st.symbol AS setup_symbol,
+                st.timeframe AS setup_timeframe,
+                st.setup_type AS existing_setup_type
             FROM strategies s
             JOIN setups st ON st.id = s.setup_id
             WHERE s.id = :id AND s.user_id = :user_id
