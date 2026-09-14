@@ -81,12 +81,16 @@ def test_schema_health_accepts_the_conversation_context_contract():
         ("finn_v2_indicator_config_reconciliations", "source_record_ids"): ("jsonb", "jsonb", "NO", None),
         ("finn_v2_indicator_config_reconciliations", "legacy_config_json"): ("jsonb", "jsonb", "NO", "'{}'::jsonb"),
         ("finn_v2_indicator_config_reconciliations", "status"): ("text", "text", "NO", "'asset_scope_required'::text"),
+        ("strategies", "canonical_name"): ("character varying", "varchar", "YES", None),
+        ("strategies", "symbol"): ("character varying", "varchar", "YES", None),
+        ("strategies", "timeframe"): ("character varying", "varchar", "YES", None),
     })
 
     assert_finn_v2_schema(connection)
 
     assert any("SELECT context_json FROM finn_v2_conversations" in statement for statement, _ in connection.cursor_instance.executed)
     assert any("SELECT operation_id, operation_contract_version FROM finn_v2_tool_calls" in statement for statement, _ in connection.cursor_instance.executed)
+    assert any("SELECT canonical_name, symbol, timeframe FROM strategies" in statement for statement, _ in connection.cursor_instance.executed)
     constraint_queries = [
         statement
         for statement, _ in connection.cursor_instance.executed
@@ -121,6 +125,9 @@ def test_schema_health_rejects_incompatible_context_contract(metadata, error_cod
         ("finn_v2_indicator_config_reconciliations", "source_record_ids"): ("jsonb", "jsonb", "NO", None),
         ("finn_v2_indicator_config_reconciliations", "legacy_config_json"): ("jsonb", "jsonb", "NO", "'{}'::jsonb"),
         ("finn_v2_indicator_config_reconciliations", "status"): ("text", "text", "NO", "'asset_scope_required'::text"),
+        ("strategies", "canonical_name"): ("character varying", "varchar", "YES", None),
+        ("strategies", "symbol"): ("character varying", "varchar", "YES", None),
+        ("strategies", "timeframe"): ("character varying", "varchar", "YES", None),
     })
 
     with pytest.raises(FinnV2SchemaHealthError, match=error_code):
@@ -149,6 +156,9 @@ def test_schema_health_rejects_runtime_contract_without_required_relational_cont
         ("finn_v2_indicator_config_reconciliations", "source_record_ids"): ("jsonb", "jsonb", "NO", None),
         ("finn_v2_indicator_config_reconciliations", "legacy_config_json"): ("jsonb", "jsonb", "NO", "'{}'::jsonb"),
         ("finn_v2_indicator_config_reconciliations", "status"): ("text", "text", "NO", "'asset_scope_required'::text"),
+        ("strategies", "canonical_name"): ("character varying", "varchar", "YES", None),
+        ("strategies", "symbol"): ("character varying", "varchar", "YES", None),
+        ("strategies", "timeframe"): ("character varying", "varchar", "YES", None),
     }
 
     with pytest.raises(FinnV2SchemaHealthError, match=error_code):

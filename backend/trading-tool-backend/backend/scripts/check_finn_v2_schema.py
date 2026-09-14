@@ -130,6 +130,12 @@ REQUIRED_FINN_V2_COLUMNS = (
         nullable=False,
         default_fragment="'asset_scope_required'",
     ),
+    # Strategy API, FINN action adapters, and bot linkage all read these
+    # owner-scoped domain columns. Treat them as a release requirement rather
+    # than letting a missing domain migration become a runtime HTTP 500.
+    RequiredColumn("strategies", "canonical_name", "varchar", True),
+    RequiredColumn("strategies", "symbol", "varchar", True),
+    RequiredColumn("strategies", "timeframe", "varchar", True),
 )
 
 REQUIRED_FINN_V2_CONSTRAINTS = (
@@ -261,6 +267,10 @@ def assert_finn_v2_schema(connection: Any) -> None:
         cursor.execute(
             "SELECT source_user_id, category, indicator, status "
             "FROM finn_v2_indicator_config_reconciliations LIMIT 1"
+        )
+        cursor.fetchone()
+        cursor.execute(
+            "SELECT canonical_name, symbol, timeframe FROM strategies LIMIT 1"
         )
         cursor.fetchone()
 
