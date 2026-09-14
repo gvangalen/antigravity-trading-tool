@@ -37,6 +37,7 @@ class FinnV2OperationStateService:
             message=message,
             explicit_asset=explicit_asset,
             continuation=existing is not None,
+            requested_slot=existing.next_missing_input if existing is not None else None,
         )
         # Keep the literal spelling of a user-provided value. The semantic
         # projection may normalize an equivalent value for matching, but it
@@ -45,10 +46,13 @@ class FinnV2OperationStateService:
         for key, value in (supplied_inputs or {}).items():
             if key in accepted_inputs and not self._is_missing(value):
                 explicit.setdefault(key, self._canonical_input(key, value))
+        sources = dict(existing.input_sources) if existing is not None else {}
         collected.update(explicit)
+        sources.update({key: "explicit" for key in explicit})
         for key, value in (derived_inputs or {}).items():
             if key in accepted_inputs and key not in collected and not self._is_missing(value):
                 collected[key] = self._canonical_input(key, value)
+                sources[key] = "default"
         context = conversation_context or {}
         verified_context = dict(context.get("last_verified_context") or {})
         resolved_context = dict(verified_context.get("resolved_entities") or {})
@@ -73,6 +77,7 @@ class FinnV2OperationStateService:
         for field in ("setup_id", "strategy_id", "bot_id"):
             if field in accepted_inputs and not self._is_missing(resolved_context.get(field)):
                 collected.setdefault(field, resolved_context[field])
+                sources.setdefault(field, "context")
         missing = [
             field
             for field in contract.required_inputs_for(collected)
@@ -102,6 +107,7 @@ class FinnV2OperationStateService:
             contract_version=contract.version,
             state_revision=(existing.state_revision + 1) if existing is not None else 1,
             collected_inputs=collected,
+            input_sources=sources,
             resolved_entities=resolved_entities,
             target_entities=target_entities,
             missing_required_inputs=missing,
@@ -150,6 +156,7 @@ class FinnV2OperationStateService:
             "symbol": "Voor welke asset wil je deze setup precies voorbereiden?",
             "setup_type": "Wil je een trade- of DCA-setup voorbereiden?",
             "timeframe": "Welk primair timeframe wil je voor deze setup gebruiken?",
+            "dca_frequency": "Hoe vaak wil je volgens deze DCA-setup aankopen: dagelijks, wekelijks of maandelijks?",
             "setup_id": "Welke bestaande setup wil je aanpassen?",
             "changed_fields": "Welke concrete setupvelden wil je aanpassen?",
             "strategy_id": "Welke bestaande strategie wil je aanpassen?",
@@ -221,11 +228,20 @@ class FinnV2OperationStateService:
         message: str,
         explicit_asset: Optional[str],
         continuation: bool = False,
+        requested_slot: Optional[str] = None,
     ) -> dict[str, object]:
         text = str(message or "").strip()
         lowered = text.casefold()
         values: dict[str, object] = {}
         accepted_inputs = set(contract.input_fields)
+        # A short reply belongs to the one persisted requested slot. A setup
+        # name has no keyword and must not be reclassified as a fresh request.
+        if continuation and requested_slot in accepted_inputs and text:
+            slot_value = self._requested_slot_value(
+                field=str(requested_slot), text=text, contract=contract
+            )
+            if slot_value is not None:
+                values[str(requested_slot)] = slot_value
         if explicit_asset:
             for field in {"asset", "symbol"}.intersection(accepted_inputs):
                 values[field] = explicit_asset
@@ -357,6 +373,30 @@ class FinnV2OperationStateService:
             if changes:
                 values["changed_fields"] = changes
         return values
+
+    def _requested_slot_value(self, *, field: str, text: str, contract: OperationContract) -> Optional[object]:
+        """Canonicalize only the registry slot that the user was asked for."""
+        value = str(text or "").strip()
+        if not value:
+            return None
+        if field == "name":
+            named = self._name_input_from_text(value) or value
+            return FinnV2SetupInputCatalog.display_name(named) if contract.operation_id == "create_setup" else named
+        if field == "dca_frequency":
+            lowered = value.casefold()
+            for token, canonical in (
+                ("daily", "daily"), ("dagelijks", "daily"), ("taeglich", "daily"),
+                ("weekly", "weekly"), ("wekelijks", "weekly"),
+                ("monthly", "monthly"), ("maandelijks", "monthly"),
+            ):
+                if re.search(rf"\b{token}\b", lowered):
+                    return canonical
+            return None
+        if field == "timeframe":
+            return FinnV2SetupInputCatalog.timeframe_from_text(value)
+        if field == "setup_type":
+            return FinnV2SetupInputCatalog.setup_type_from_text(value)
+        return None
 
     @staticmethod
     def _structured_changed_fields(text: str) -> dict[str, object]:

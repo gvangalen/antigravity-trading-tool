@@ -309,6 +309,8 @@ class FinnV2OperationClassificationService:
             contract=contract,
             message=facts.original_text,
             explicit_asset=facts.referenced_asset,
+            continuation=True,
+            requested_slot=str(active.get("next_missing_input") or "") or None,
         )
         fills_pending_slot = bool(
             set(supplied).intersection(set(active.get("missing_required_inputs") or ()))

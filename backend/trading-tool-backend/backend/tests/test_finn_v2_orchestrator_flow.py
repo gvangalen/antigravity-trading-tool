@@ -186,7 +186,7 @@ def test_orchestrator_flow_executes_plan_and_persists_result():
 
     assert isinstance(result, OrchestratorResult)
     assert result.outcome == "reasoning_ready"
-    assert captured["tool_plan"].tool_names[0] == "read_active_asset"
+    assert captured["tool_plan"].tool_names[0] == "read_active_setup"
     assert service.results.created[0]["outcome"] == "reasoning_ready"
     assert [event["event_type"] for event in service.traces.events] == [
         "orchestrator_started",
@@ -274,7 +274,7 @@ def test_orchestrator_runs_policy_reasoning_and_verifier_for_visible_run_without
 
     assert isinstance(result, OrchestratorResult)
     assert result.outcome == "reasoning_ready"
-    assert captured["tool_plan"].tool_names[0] == "read_active_asset"
+    assert captured["tool_plan"].tool_names[0] == "read_active_setup"
     assert captured["policy"] == 1
     assert captured["reasoning"] == 1
     assert captured["verifier"] == 1
@@ -350,14 +350,14 @@ def test_orchestrator_persists_only_verified_conversation_references():
     assert context["last_evidence_refs"] == ["evidence-setup-1"]
     assert context["last_verified_conclusion"] == "The BTC setup is active."
     assert context["last_primary_domains"] == ["setup"]
-    assert context["last_required_information_scopes"] == ["active_asset", "active_setup"]
+    assert context["last_required_information_scopes"] == ["active_setup"]
     assert context["last_verified_context"] == {
         "operation_id": "read_active_setup",
         "contract_version": "2026-08-23.operation-contracts.v1",
         "mode": "READ",
         "conclusion": "The BTC setup is active.",
         "evidence_refs": ["evidence-setup-1"],
-        "required_scopes": ["active_asset", "active_setup"],
+        "required_scopes": ["active_setup"],
         "resolved_entities": {"asset": "BTC"},
     }
 
@@ -652,6 +652,37 @@ def test_verified_proposal_preserves_financial_lineage_and_marks_guided_state_pr
     assert context["last_verified_context"] == previous["last_verified_context"]
     assert context["active_guided_operation"]["status"] == "proposed"
     assert context["active_guided_operation"]["open_proposal_id"] == "proposal-setup"
+
+
+def test_collecting_setup_draft_persists_the_next_slot_without_reasoning_or_verifier_state():
+    service = FinnV2OrchestratorService(session=object())
+    service.conversations = _FakeConversationRepo()
+    request_plan = SimpleNamespace(
+        operation_id="create_setup",
+        operation_state={
+            "operation_id": "create_setup",
+            "contract_version": "contract-v1",
+            "state_revision": 2,
+            "collected_inputs": {"symbol": "BTC", "name": "FINN DCA Flow 0914"},
+            "missing_required_inputs": ["dca_frequency"],
+            "next_missing_input": "dca_frequency",
+        },
+    )
+
+    assert service._is_collecting_setup_draft(request_plan=request_plan) is True
+    asyncio.run(
+        service._persist_collecting_setup_context(
+            conversation_id="conversation-setup",
+            user_id=7,
+            existing_context={"last_verified_context": {"run_id": "prior"}},
+            guided_state=request_plan.operation_state,
+        )
+    )
+
+    persisted = service.conversations.updated["context"]
+    assert persisted["active_guided_operation"]["collected_inputs"]["name"] == "FINN DCA Flow 0914"
+    assert persisted["active_guided_operation"]["next_missing_input"] == "dca_frequency"
+    assert "operation_state" not in persisted
 
 
 def test_durable_lineage_uses_the_contract_target_instead_of_a_late_tool_selector():

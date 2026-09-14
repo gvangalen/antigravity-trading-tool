@@ -43,7 +43,7 @@ def test_supported_read_contracts_have_canonical_tools_and_no_model_call():
 
     setup = registry.require_supported("read_active_setup")
     assert setup.model_policy == "never"
-    assert setup.tool_names == ("read_active_asset", "read_active_setup")
+    assert setup.tool_names == ("read_active_setup",)
 
 
 def test_indicator_read_contract_requires_a_visible_count_and_all_indicator_names():

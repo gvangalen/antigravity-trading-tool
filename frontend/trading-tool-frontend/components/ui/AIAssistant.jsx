@@ -4368,6 +4368,8 @@ function AIAssistantContent({
       .finally(() => { sseFinished = true; });
     const completeTerminal = (run) => {
       const verified = run?.response;
+      const projection = run?.runtime_trace?.terminal_projection || run?.runtime_trace || {};
+      const setupDraft = projection?.setup_draft || null;
       const terminalText = verified?.content || "Ik kan deze FINN V2-run nu niet veilig afronden.";
       setMessages((prev) => prev.map((message) => (
         message.streamId === streamId
@@ -4381,7 +4383,9 @@ function AIAssistantContent({
                 current_flow: run?.status === "completed" ? "finn_v2_visible" : "finn_v2_visible_terminal_failed",
                 run_id: runId,
                 run_status: run?.status,
+                setup_draft: setupDraft,
               },
+              setupDraft,
               reasoning: null,
               canConfirm: Boolean(verified?.confirmation_required && verified?.proposal_id),
               actions: verified?.proposal_id ? [{
@@ -4973,6 +4977,52 @@ function AIAssistantContent({
     } finally {
       setExecutingAction(false);
     }
+  };
+
+  const renderV2SetupDraftCard = (message) => {
+    const draft = message.setupDraft || message.state?.setup_draft;
+    if (!draft || draft.operation_id !== "create_setup") return null;
+    const labels = {
+      name: at("fieldLabels.setup.name", "Naam"),
+      setup_type: at("draftRows.setupType", "Type"),
+      symbol: at("fieldLabels.asset", "Asset"),
+      timeframe: at("fieldLabels.setup.timeframe", "Timeframe"),
+      dca_frequency: at("fieldLabels.dca.frequency", "Frequentie"),
+    };
+    const values = Object.entries(draft.supplied_inputs || {}).filter(([field, value]) => (
+      labels[field] && value !== undefined && value !== null && value !== ""
+    ));
+    const nextLabel = labels[draft.requested_slot] || at("draftRows.next", "Volgende stap");
+    const status = draft.draft_status === "complete"
+      ? at("draftStatus.ready", "Klaar voor voorstel")
+      : at("draftStatus.collecting", "Setup in voorbereiding");
+    return (
+      <div className="mt-4 rounded-2xl border border-blue-200 dark:border-blue-900/50 bg-blue-50/70 dark:bg-blue-950/20 p-4 space-y-3">
+        <div className="flex items-center justify-between gap-3">
+          <div className="text-[10px] font-black uppercase tracking-widest text-blue-700 dark:text-blue-200">
+            {at("draftTitles.setup", "Setup concept")}
+          </div>
+          <span className="rounded-full bg-white/80 dark:bg-slate-950/40 px-2 py-1 text-[9px] font-black uppercase tracking-widest text-blue-700 dark:text-blue-200">
+            {status}
+          </span>
+        </div>
+        {values.length > 0 && (
+          <dl className="grid grid-cols-2 gap-x-3 gap-y-2 text-xs">
+            {values.map(([field, value]) => (
+              <div key={field}>
+                <dt className="text-[10px] font-bold text-slate-500 dark:text-slate-400">{labels[field]}</dt>
+                <dd className="font-semibold text-slate-800 dark:text-slate-100">{String(value)}</dd>
+              </div>
+            ))}
+          </dl>
+        )}
+        {draft.requested_slot && draft.draft_status !== "complete" && (
+          <div className="rounded-xl bg-white/80 dark:bg-slate-950/40 px-3 py-2 text-xs font-semibold text-slate-700 dark:text-slate-200">
+            {at("draftRows.next", "Volgende invoer")}: {nextLabel}
+          </div>
+        )}
+      </div>
+    );
   };
 
   const renderDraftCard = (message) => {
@@ -6584,6 +6634,7 @@ function AIAssistantContent({
                   </div>
                 )}
                 {renderBehavioralMemoryAckCard(m)}
+                {!isSimpleFinnModal && renderV2SetupDraftCard(m)}
                 {!isSimpleFinnModal && renderDraftCard(m)}
                 {!isSimpleFinnModal && renderInlineActionCard(m)}
                 {m.isError && (

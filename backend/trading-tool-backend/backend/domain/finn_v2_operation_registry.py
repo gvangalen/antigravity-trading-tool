@@ -880,7 +880,10 @@ _CONTRACTS: tuple[OperationContract, ...] = (
     OperationContract("update_indicator_configuration", FinnV2OperationRegistry.VERSION, "indicators", "CREATE_PROPOSAL", ("wijzig indicator", "update indicator", "ändere indikator"), action_polarity=ActionPolarity.UPDATE, required_inputs=("asset", "category", "indicator", "changed_fields"), required_scopes=("active_asset", "indicator_configuration"), proposal_type="update_indicator_configuration", confirmation_required=True, execution_adapter="update_indicator_configuration", idempotency_rule="proposal_payload_hash", postcondition="indicator_configuration_updated", response_strategy="proposal_draft", policy_class="proposal"),
     OperationContract("delete_indicator_configuration", FinnV2OperationRegistry.VERSION, "indicators", "CREATE_PROPOSAL", ("verwijder indicator", "delete indicator", "lösche indikator"), action_polarity=ActionPolarity.DELETE, required_inputs=("asset", "category", "indicator"), required_scopes=("active_asset", "indicator_configuration"), proposal_type="delete_indicator_configuration", confirmation_required=True, execution_adapter="delete_indicator_configuration", idempotency_rule="proposal_payload_hash", postcondition="indicator_configuration_removed", response_strategy="proposal_draft", policy_class="proposal"),
     OperationContract("evaluate_indicator_configuration", FinnV2OperationRegistry.VERSION, "indicators", "EVALUATE", ("beoordeel indicator",), required_scopes=("active_asset", "indicator_configuration"), model_policy="required", response_strategy="model_reasoning", policy_class="advice"),
-    _read("read_active_setup", "setup", ("active_asset", "active_setup"), ("actieve setup", "welke setup"), ("setup", "timeframe")),
+    # A persisted setup is self-describing: its owner-scoped record already
+    # carries the canonical asset and timeframe. Requiring a separate
+    # workspace asset makes an otherwise valid setup read unavailable.
+    _read("read_active_setup", "setup", ("active_setup",), ("actieve setup", "welke setup"), ("setup", "timeframe")),
     # SetupService validates the persisted setup fields unconditionally.
     # Score and market-condition details are useful trusted inputs, but must
     # not be invented by FINN.

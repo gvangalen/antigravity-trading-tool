@@ -719,6 +719,28 @@ def test_selected_capability_uses_the_post_selector_registry_fast_path():
     assert "tradingcontext" in response["content"]
 
 
+def test_collecting_setup_draft_uses_product_copy_in_its_terminal_placeholder():
+    run_service = FinnV2RunService(session=object())
+
+    response = run_service._terminal_placeholder_response(
+        interaction_mode="CREATE_PROPOSAL",
+        terminal_status="clarification_required",
+        orchestrator={},
+        verifier={},
+        reasoning={},
+        delivery_envelope={},
+        setup_draft={
+            "operation_id": "create_setup",
+            "requested_slot": "dca_frequency",
+            "supplied_inputs": {"name": "FINN DCA Flow 0914"},
+        },
+    )
+
+    assert response["mode"] == "CLARIFICATION"
+    assert "dagelijks" in response["content"]
+    assert "dca_frequency" not in response["content"]
+
+
 def test_limited_terminal_responses_publish_a_safe_typed_reason():
     service = FinnV2RunService(session=object())
 

@@ -165,6 +165,13 @@ class FinnV2RunService:
         verifier = artifacts.get("verifier_result") or {}
         reasoning = artifacts.get("reasoning_result") or {}
         policy = artifacts.get("policy_result") or PolicyDecision().dict()
+        get_runtime_contract = getattr(self.runtime_contracts, "get_for_run", None)
+        runtime_contract = (
+            await get_runtime_contract(run_id=run_id)
+            if callable(get_runtime_contract)
+            else None
+        )
+        setup_draft = dict((getattr(runtime_contract, "state_json", {}) or {}).get("setup_draft") or {})
         direct_answer = str(verified.get("direct_answer") or "").strip()
         main_observation = str(verified.get("main_observation") or "").strip()
         content = "\n\n".join([part for part in [direct_answer, main_observation] if part]).strip()
@@ -179,6 +186,7 @@ class FinnV2RunService:
                 verifier=verifier,
                 reasoning=reasoning,
                 delivery_envelope=artifacts.get("delivery_envelope") or {},
+                setup_draft=setup_draft,
             )
         else:
             response_json = {
@@ -257,6 +265,7 @@ class FinnV2RunService:
         verifier: Dict[str, Any],
         reasoning: Dict[str, Any],
         delivery_envelope: Dict[str, Any],
+        setup_draft: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         placeholder = build_placeholder_response()
         reasoning_result = reasoning.get("result") or {}
@@ -275,7 +284,18 @@ class FinnV2RunService:
             verifier_status = "registry_grounded"
         elif terminal_status == "clarification_required":
             clarification = orchestrator.get("selected_clarification") or {}
-            content = str(clarification.get("question") or "FINN heeft eerst een verduidelijking nodig.").strip()
+            content = str(clarification.get("question") or "").strip()
+            if not content and dict(setup_draft or {}).get("operation_id") == "create_setup":
+                from backend.services.finn_v2_operation_state_service import FinnV2OperationStateService
+                from backend.domain.finn_v2_operation_registry import FinnV2OperationRegistry
+
+                draft = dict(setup_draft or {})
+                content = FinnV2OperationStateService.clarification_question(
+                    draft.get("requested_slot"),
+                    contract=FinnV2OperationRegistry().require_supported("create_setup"),
+                    collected_inputs=dict(draft.get("supplied_inputs") or {}),
+                )
+            content = content or "FINN heeft eerst een verduidelijking nodig."
             mode = "CLARIFICATION"
         elif terminal_status == "rejected":
             content = "FINN heeft de response veilig afgewezen omdat de verificatie faalde."

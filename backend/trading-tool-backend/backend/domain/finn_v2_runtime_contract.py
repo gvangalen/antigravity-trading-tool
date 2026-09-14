@@ -226,6 +226,7 @@ def new_runtime_contract_state(*, run: Any, contract_id: str) -> Dict[str, Any]:
         "missing_inputs": [],
         "lineage_state": {},
         "guided_state": {},
+        "setup_draft": {},
         "final_operation_id": None,
         "final_mode": None,
         "operation_change_reason": None,
@@ -409,6 +410,33 @@ def record_contextual_inputs(state: Dict[str, Any], *, supplied_inputs: Dict[str
     return state
 
 
+def record_setup_draft(state: Dict[str, Any], *, guided_state: Dict[str, Any]) -> Dict[str, Any]:
+    """Persist a safe create-setup draft before tools or reasoning can run."""
+    state = dict(state)
+    operation_id = str(state.get("final_operation_id") or state.get("initial_operation_id") or "")
+    if operation_id != "create_setup":
+        return state
+    guided = dict(guided_state or {})
+    supplied = dict(guided.get("collected_inputs") or state.get("supplied_inputs") or {})
+    missing = list(guided.get("missing_required_inputs") or state.get("missing_inputs") or [])
+    state["guided_state"] = guided
+    state["setup_draft"] = {
+        "operation_id": "create_setup",
+        "draft_status": "complete" if not missing else "collecting",
+        "supplied_inputs": supplied,
+        "missing_inputs": missing,
+        "requested_slot": guided.get("next_missing_input"),
+        "field_sources": dict(guided.get("input_sources") or {}),
+        "conversation_id": (state.get("identity") or {}).get("conversation_id"),
+        "run_id": (state.get("identity") or {}).get("run_id"),
+        "draft_revision": guided.get("state_revision"),
+    }
+    state.setdefault("transition_log", []).append(
+        {"type": "setup_draft", "status": state["setup_draft"]["draft_status"]}
+    )
+    return state
+
+
 def record_conversation_state(
     state: Dict[str, Any], *, lineage_state: Dict[str, Any], guided_state: Dict[str, Any]
 ) -> Dict[str, Any]:
@@ -550,6 +578,7 @@ def terminal_projection(
         "conversation_reference_kind": state.get("conversation_reference_kind"),
         "supplied_inputs": dict(state.get("supplied_inputs") or {}),
         "missing_inputs": list(state.get("missing_inputs") or []),
+        "setup_draft": dict(state.get("setup_draft") or {}),
         "terminal_status": status,
         "terminal_response_type": state.get("terminal_response_type") or ("failure" if status == "failed" else "response"),
         "proposal_lifecycle": dict(state.get("proposal_lifecycle") or {}),

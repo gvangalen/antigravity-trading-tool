@@ -537,9 +537,16 @@ class FinnV2ToolExecutionService:
             asset_state = await self._ensure_asset(user_id=user_id, selector=selector, run=run, shared_state=shared_state)
             return await self.technical_adapter.execute(user_id=user_id, asset=asset_state["asset"])
         if tool_name == "read_active_setup":
-            asset_state = await self._ensure_asset(user_id=user_id, selector=selector, run=run, shared_state=shared_state)
-            resolved = await self.resolver.resolve_setup(user_id=user_id, selector=selector, asset=asset_state["asset"])
+            # A newly persisted setup is still a valid owner-scoped read even
+            # when the user has not selected a workspace asset yet. An
+            # explicitly selected asset remains a resolver filter.
+            explicit_asset = str(selector.get("asset") or "").strip().upper() or None
+            resolved = await self.resolver.resolve_setup(user_id=user_id, selector=selector, asset=explicit_asset)
             shared_state.update(resolved)
+            if explicit_asset:
+                shared_state["asset"] = explicit_asset
+            elif resolved.get("setup", {}).get("symbol"):
+                shared_state["asset"] = str(resolved["setup"]["symbol"]).upper()
             return await self.setup_adapter.execute(**resolved)
         if tool_name == "read_linked_strategy":
             setup_state = await self._ensure_setup(user_id=user_id, selector=selector, run=run, shared_state=shared_state)

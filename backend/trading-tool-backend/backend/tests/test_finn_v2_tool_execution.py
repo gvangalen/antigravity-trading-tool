@@ -179,6 +179,35 @@ def test_setup_reads_use_the_workspace_setup_reference_without_overriding_select
     assert unrelated == {}
 
 
+def test_active_setup_read_resolves_the_single_owner_setup_without_a_workspace_asset(monkeypatch):
+    service = FinnV2ToolExecutionService(session=_FakeSession())
+    run = SimpleNamespace(workspace_hints_json={}, client_context_json={})
+    service.resolver.resolve_setup = AsyncMock(
+        return_value={
+            "setup": {"id": 326, "name": "FINN DCA Flow", "symbol": "BTC"},
+            "resolution_source": "single_user_setup",
+        }
+    )
+    service.setup_adapter.execute = AsyncMock(return_value={"data": {"setup_id": 326}})
+
+    result = asyncio.run(
+        service._dispatch_tool(
+            tool_name="read_active_setup",
+            user_id=7,
+            selector={},
+            run=run,
+            shared_state={},
+        )
+    )
+
+    assert result == {"data": {"setup_id": 326}}
+    service.resolver.resolve_setup.assert_awaited_once_with(user_id=7, selector={}, asset=None)
+    service.setup_adapter.execute.assert_awaited_once_with(
+        setup={"id": 326, "name": "FINN DCA Flow", "symbol": "BTC"},
+        resolution_source="single_user_setup",
+    )
+
+
 def test_tool_redaction_service_serializes_nested_objects():
     service = FinnV2ToolRedactionService()
 

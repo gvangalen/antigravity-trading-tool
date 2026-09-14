@@ -603,6 +603,22 @@ def test_guided_setup_state_accepts_natural_name_follow_up():
     assert state["collected_inputs"]["name"] == "BTC Daily 4H concept"
 
 
+def test_guided_setup_binds_a_bare_name_to_the_persisted_requested_slot():
+    first = SERVICE.analyze(message="Maak een BTC swing setup op 4H.")
+
+    continued = SERVICE.analyze(
+        message="FINN DCA Flow 0914",
+        conversation_context={"active_guided_operation": first.request_plan.operation_state},
+    )
+
+    state = continued.request_plan.operation_state
+    assert continued.request_plan.operation_id == "create_setup"
+    assert continued.request_plan.selector_source == "guided_state"
+    assert state["collected_inputs"]["name"] == "FINN DCA Flow 0914"
+    assert state["input_sources"]["name"] == "explicit"
+    assert "name" not in state["missing_required_inputs"]
+
+
 def test_explicit_watchlist_operation_does_not_resume_pending_setup_state():
     setup_turn = SERVICE.analyze(message="Help me een nieuwe BTC-setup als concept te maken.")
 

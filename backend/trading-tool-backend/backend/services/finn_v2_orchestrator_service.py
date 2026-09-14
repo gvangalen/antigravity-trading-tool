@@ -277,6 +277,11 @@ class FinnV2OrchestratorService:
                 **dict(getattr(request_plan, "operation_state", {}).get("collected_inputs", {}) or {}),
             },
         )
+        guided_state = dict(getattr(request_plan, "operation_state", {}) or {})
+        if getattr(request_plan, "operation_id", None) == "create_setup" and guided_state:
+            runtime_contract = await self.runtime_contracts.record_setup_draft(
+                run_id=run_id, guided_state=guided_state
+            )
         await self._commit_persistence_boundary(stage="selector_persisted")
         await self._record_phase_timestamp(run_id=run_id, phase="selection_persisted")
         await self._commit_persistence_boundary(stage="selection_timing_persisted")
@@ -388,6 +393,35 @@ class FinnV2OrchestratorService:
                 validation=validation,
             )
             await self._persist_result(result)
+            if self._is_collecting_setup_draft(request_plan=request_plan):
+                # A requested setup slot is contract-owned state, not a new
+                # analysis. Persist its next revision and terminalize through
+                # the existing clarification outcome without policy, reasoning
+                # or verifier provider calls.
+                if conversation_id:
+                    await self._persist_collecting_setup_context(
+                        conversation_id=conversation_id,
+                        user_id=user_id,
+                        existing_context=conversation_context,
+                        guided_state=dict(getattr(request_plan, "operation_state", {}) or {}),
+                    )
+                await self._append_trace(
+                    run_id=run_id,
+                    user_id=user_id,
+                    trace_id=trace_id,
+                    event_type="setup_draft_fast_path_completed",
+                    payload_json={"run_id": run_id, "contract_id": runtime_contract.contract_id},
+                )
+                await self._record_phase_timestamp(run_id=run_id, phase="fast_path_completed")
+                # Tool outcome categories are intentionally broader than a
+                # guided draft. The persisted registry draft is unambiguous:
+                # it must always deliver the existing clarification envelope.
+                self.phase_outcome = LifecyclePhaseOutcome(
+                    terminal_status="clarification_required",
+                    interaction_mode="CREATE_PROPOSAL",
+                    orchestrator_result_id=result.orchestrator_result_id,
+                )
+                return result
             policy_decision = None
             if self._should_run_policy(run=run, user_id=user_id) and snapshot is not None and validation is not None and result.outcome != "failed":
                 requested_operation = None
@@ -695,6 +729,33 @@ class FinnV2OrchestratorService:
         if guided_state:
             context["active_guided_operation"] = guided_state
         return context
+
+    @staticmethod
+    def _is_collecting_setup_draft(*, request_plan) -> bool:
+        state = dict(getattr(request_plan, "operation_state", {}) or {})
+        return (
+            getattr(request_plan, "operation_id", None) == "create_setup"
+            and bool(state.get("missing_required_inputs"))
+        )
+
+    async def _persist_collecting_setup_context(
+        self,
+        *,
+        conversation_id: str,
+        user_id: int,
+        existing_context: dict,
+        guided_state: dict,
+    ) -> None:
+        """Keep the contract-backed draft available across a new worker turn."""
+        context = dict(existing_context or {})
+        context["conversation_state_version"] = "finn_v2.conversation-contracts.v1"
+        context["active_guided_operation"] = guided_state
+        context.pop("operation_state", None)
+        await self.conversations.update_context(
+            conversation_id=conversation_id,
+            user_id=user_id,
+            context={key: value for key, value in context.items() if value is not None},
+        )
 
     async def _persist_result(self, result) -> None:
         existing = await self.results.get_for_run_version(

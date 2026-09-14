@@ -142,6 +142,30 @@ def test_terminal_projection_exposes_typed_contract_input_and_reason_metadata():
     assert projection["terminal_reason"] == "missing_required_input"
 
 
+def test_terminal_projection_exposes_safe_persisted_setup_draft():
+    projection = terminal_projection(
+        {
+            "identity": {"run_id": "run-setup", "conversation_id": "conversation-setup"},
+            "initial_operation_id": "create_setup",
+            "final_operation_id": "create_setup",
+            "setup_draft": {
+                "operation_id": "create_setup",
+                "draft_status": "collecting",
+                "supplied_inputs": {"symbol": "BTC", "name": "FINN DCA Flow 0914"},
+                "missing_inputs": ["dca_frequency"],
+                "requested_slot": "dca_frequency",
+                "field_sources": {"symbol": "context", "name": "explicit"},
+            },
+        },
+        status="clarification_required",
+        mode="CREATE_PROPOSAL",
+        response={},
+    )
+
+    assert projection["setup_draft"]["requested_slot"] == "dca_frequency"
+    assert projection["setup_draft"]["supplied_inputs"]["name"] == "FINN DCA Flow 0914"
+
+
 def test_terminal_projection_derives_required_inputs_and_polarity_from_registry():
     projection = terminal_projection(
         {
