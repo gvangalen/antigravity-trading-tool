@@ -281,8 +281,9 @@ class FinnV2OperationClassificationService:
         )
         if not create_verb:
             return None
-        if "bot" in facts.explicit_entities and re.search(
-            r"\b(?:live|activeer|activate|aktivier|schakel|start|zet)\w*\b", text
+        if "bot" in facts.explicit_entities and (
+            facts.action_polarity == "activate"
+            or re.search(r"\b(?:activeer|activate|aktivier|schakel|start)\w*\b", text)
         ):
             return None
         create_target_patterns = (

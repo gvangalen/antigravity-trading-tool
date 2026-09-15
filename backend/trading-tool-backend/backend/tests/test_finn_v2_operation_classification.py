@@ -139,6 +139,20 @@ def test_activation_is_not_misclassified_as_create_bot_fast_path(message):
     assert result.operation_id != "create_bot"
 
 
+def test_strategy_name_containing_live_does_not_turn_paper_bot_creation_into_activation():
+    service = FinnV2OperationClassificationService()
+    message = (
+        "Maak een nieuwe paper bot voor mijn strategie FINN Strategy Live 0915J "
+        "voor BTC op 4H en stel ontbrekende vragen een voor een."
+    )
+    facts = service.preprocessor.preprocess(
+        message=message, workspace_hints={}, client_context={}
+    )
+
+    assert facts.action_polarity == "create"
+    assert service._explicit_guided_create_operation(message=message, facts=facts) == "create_bot"
+
+
 def test_declassified_action_contract_acceptance_handoff_is_complete_and_immutable():
     """Keep every Build-authorized regression record available to public tests."""
     fixture = Path(__file__).parent / "fixtures" / "finn_v2_declassified_34746230528_regression.json"
