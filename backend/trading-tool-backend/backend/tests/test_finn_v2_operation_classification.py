@@ -106,6 +106,39 @@ def test_explicit_create_setup_uses_registry_contract_without_provider():
     assert result.selected_target_asset == "BTC"
 
 
+@pytest.mark.parametrize(("message", "operation_id"), (
+    ("Maak een nieuwe strategie voor mijn bestaande setup.", "create_strategy"),
+    ("Create a new strategy for my existing setup.", "create_strategy"),
+    ("Erstelle eine neue Strategie für mein bestehendes Setup.", "create_strategy"),
+    ("Maak een nieuwe bot voor mijn bestaande strategie.", "create_bot"),
+    ("Create a new bot for my existing strategy.", "create_bot"),
+    ("Erstelle einen neuen Bot für meine bestehende Strategie.", "create_bot"),
+))
+def test_explicit_guided_create_uses_the_existing_registry_contract(message, operation_id):
+    class ExplodingSelector:
+        def select(self, **_kwargs):
+            raise AssertionError("unambiguous guided create must not call the provider selector")
+
+    result = FinnV2OperationClassificationService(
+        structured_selector=ExplodingSelector()
+    ).classify(message=message)
+
+    assert result.operation_id == operation_id
+    assert result.selector_source == "registry_constraint"
+    assert result.action == "create"
+
+
+@pytest.mark.parametrize("message", (
+    "Activeer mijn bestaande bot.",
+    "Activate my existing bot.",
+    "Aktiviere meinen bestehenden Bot.",
+))
+def test_activation_is_not_misclassified_as_create_bot_fast_path(message):
+    result = CLASSIFIER.classify(message=message)
+
+    assert result.operation_id != "create_bot"
+
+
 def test_declassified_action_contract_acceptance_handoff_is_complete_and_immutable():
     """Keep every Build-authorized regression record available to public tests."""
     fixture = Path(__file__).parent / "fixtures" / "finn_v2_declassified_34746230528_regression.json"

@@ -97,12 +97,13 @@ class FinnV2OperationClassificationService:
                 (contract,),
                 conversation_context=conversation_context,
             )
-        if self._is_explicit_create_setup_request(message=message, facts=facts):
-            # The entity/action pair maps to one existing registry contract.
-            # Skipping the provider selector here keeps guided setup turns
-            # bounded; registry input, policy and verifier checks still own
-            # the proposal and any eventual execution.
-            contract = self.registry.require_supported("create_setup")
+        explicit_create_operation = self._explicit_guided_create_operation(message=message, facts=facts)
+        if explicit_create_operation:
+            # An explicit create verb plus one typed domain object maps to one
+            # existing registry contract. This starts guided collection without
+            # paying for a redundant provider classification; the action
+            # contract still owns every input, policy and execution decision.
+            contract = self.registry.require_supported(explicit_create_operation)
             return self._result(
                 contract.operation_id,
                 facts,
@@ -268,9 +269,9 @@ class FinnV2OperationClassificationService:
         )
 
     @staticmethod
-    def _is_explicit_create_setup_request(
+    def _explicit_guided_create_operation(
         *, message: str, facts: FinnV2PreprocessedRequest
-    ) -> bool:
+    ) -> Optional[str]:
         text = str(message or "").casefold()
         create_verb = bool(
             re.search(
@@ -278,12 +279,21 @@ class FinnV2OperationClassificationService:
                 text,
             )
         )
-        return (
-            create_verb
-            and facts.primary_entity == "setup"
-            and "setup" in facts.explicit_entities
-            and not any(entity in facts.explicit_entities for entity in ("strategy", "bot"))
+        if not create_verb:
+            return None
+        if "bot" in facts.explicit_entities and re.search(
+            r"\b(?:live|activeer|activate|aktivier|schakel|start|zet)\w*\b", text
+        ):
+            return None
+        create_target_patterns = (
+            ("create_bot", r"\b(?:maak|aanmaken|cre(?:ate|eer)|erstelle|erstellen|lege\s+an)\b.{0,48}\b(?:bot|automation)\b"),
+            ("create_strategy", r"\b(?:maak|aanmaken|cre(?:ate|eer)|erstelle|erstellen|lege\s+an)\b.{0,48}\b(?:strategie|strategy)\b"),
+            ("create_setup", r"\b(?:maak|aanmaken|cre(?:ate|eer)|erstelle|erstellen|lege\s+an)\b.{0,48}\bsetup\b"),
         )
+        for operation_id, pattern in create_target_patterns:
+            if re.search(pattern, text):
+                return operation_id
+        return None
 
     @staticmethod
     def _is_workspace_setup_field_read(
