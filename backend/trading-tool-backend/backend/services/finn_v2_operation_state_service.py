@@ -29,21 +29,41 @@ class FinnV2OperationStateService:
     ) -> FinnV2OperationState:
         existing = self._existing_state(contract, conversation_context or {})
         collected = self._canonicalize_inputs(dict(existing.collected_inputs)) if existing is not None else {}
+        requested_slot = (
+            existing.next_missing_input
+            or next(iter(existing.missing_required_inputs or ()), None)
+            if existing is not None
+            else None
+        )
+        # A clarification reply belongs to the requested contract slot. Words
+        # inside a setup name (for example "Sol") must not be reinterpreted as
+        # a fresh asset and overwrite the persisted target.
+        contract_asset = (
+            explicit_asset
+            if existing is None or requested_slot in {"asset", "symbol"}
+            else None
+        )
         # Only values proven by request parsing may be promoted to supplied
         # inputs. Typed selector values are passed separately so a later
         # projection cannot silently overwrite a user-supplied slot.
         explicit = self.explicit_inputs(
             contract=contract,
             message=message,
-            explicit_asset=explicit_asset,
+            explicit_asset=contract_asset,
             continuation=existing is not None,
-            requested_slot=existing.next_missing_input if existing is not None else None,
+            requested_slot=requested_slot,
         )
         # Keep the literal spelling of a user-provided value. The semantic
         # projection may normalize an equivalent value for matching, but it
         # must not overwrite a typed setup name with that normalized form.
         accepted_inputs = set(contract.input_fields)
         for key, value in (supplied_inputs or {}).items():
+            if (
+                existing is not None
+                and requested_slot not in {"asset", "symbol"}
+                and key in {"asset", "symbol"}
+            ):
+                continue
             if key in accepted_inputs and not self._is_missing(value):
                 explicit.setdefault(key, self._canonical_input(key, value))
         sources = dict(existing.input_sources) if existing is not None else {}
@@ -90,7 +110,7 @@ class FinnV2OperationStateService:
             {
                 key: value
                 for key, value in {
-                    "asset": explicit_asset or resolved_context.get("asset") or (None if is_canonical_context else context.get("resolved_asset")),
+                    "asset": contract_asset or resolved_context.get("asset") or (None if is_canonical_context else context.get("resolved_asset")),
                     "setup_id": resolved_context.get("setup_id") or (None if is_canonical_context else context.get("resolved_setup_id")),
                     "strategy_id": resolved_context.get("strategy_id") or (None if is_canonical_context else context.get("resolved_strategy_id")),
                     "bot_id": resolved_context.get("bot_id") or (None if is_canonical_context else context.get("resolved_bot_id")),

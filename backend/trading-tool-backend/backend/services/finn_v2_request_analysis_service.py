@@ -240,13 +240,32 @@ class FinnV2RequestAnalysisService:
                 unresolved_signals.append("insufficient_trade_context")
         # A workspace asset may enrich a setup draft, but it is never a
         # substitute for the asset explicitly requested by a write operation.
+        active_guided = (conversation_context or {}).get("active_guided_operation")
+        guided_requested_slot = (
+            str(
+                active_guided.get("next_missing_input")
+                or next(iter(active_guided.get("missing_required_inputs") or ()), "")
+            )
+            if isinstance(active_guided, Mapping)
+            else ""
+        )
+        binds_non_asset_slot = bool(
+            active_guided
+            and guided_requested_slot not in {"asset", "symbol"}
+            and semantic.selector_source == "guided_state"
+        )
+        routed_message_asset = None if binds_non_asset_slot else message_asset
+        routed_selector_asset = None if binds_non_asset_slot else semantic.selected_target_asset
         preliminary_target = self.target_resolver.resolve(
-            explicit_target_asset=message_asset,
-            selector_target_asset=semantic.selected_target_asset,
+            explicit_target_asset=routed_message_asset,
+            selector_target_asset=routed_selector_asset,
             verified_context=conversation_context,
             operation_state=(conversation_context or {}).get("active_guided_operation") or (conversation_context or {}).get("operation_state"),
             workspace_asset=context_asset,
-            allow_workspace_fallback=operation.mode not in {"CREATE_PROPOSAL", "ACTION_PROPOSAL"},
+            allow_workspace_fallback=(
+                operation.operation_id == "create_setup"
+                or operation.mode not in {"CREATE_PROPOSAL", "ACTION_PROPOSAL"}
+            ),
         )
         operation_asset = preliminary_target.target_asset
         # ``concept`` is a normalized request fact, not a guided slot.  A
@@ -328,12 +347,15 @@ class FinnV2RequestAnalysisService:
                     "previous_safe_terminal_reason": terminal.get("terminal_reason"),
                 }
         target_resolution = self.target_resolver.resolve(
-            explicit_target_asset=message_asset,
-            selector_target_asset=semantic.selected_target_asset,
+            explicit_target_asset=routed_message_asset,
+            selector_target_asset=routed_selector_asset,
             verified_context=conversation_context,
             operation_state=operation_state_payload or (conversation_context or {}).get("active_guided_operation") or (conversation_context or {}).get("operation_state"),
             workspace_asset=context_asset,
-            allow_workspace_fallback=operation.mode not in {"CREATE_PROPOSAL", "ACTION_PROPOSAL"},
+            allow_workspace_fallback=(
+                operation.operation_id == "create_setup"
+                or operation.mode not in {"CREATE_PROPOSAL", "ACTION_PROPOSAL"}
+            ),
         )
         request_plan = self._request_plan(
             interaction_mode=interaction_mode,
@@ -361,7 +383,7 @@ class FinnV2RequestAnalysisService:
             context_asset=context_asset,
             target_asset=target_resolution.target_asset,
             target_asset_source=target_resolution.source,
-            referenced_asset=message_asset or explicit_asset,
+            referenced_asset=routed_message_asset or target_resolution.target_asset or explicit_asset,
             # The request plan is the runtime projection consumed by policy
             # and proposal services. Keep its action tied to the immutable
             # contract rather than to a selector or preprocessor verb.
@@ -383,7 +405,7 @@ class FinnV2RequestAnalysisService:
         return RequestAnalysisResult(
             interaction_mode=interaction_mode,
             subject_scopes=scopes,
-            explicit_asset=explicit_asset,
+            explicit_asset=target_resolution.target_asset or explicit_asset,
             explicit_setup_id=explicit_setup_id,
             explicit_strategy_id=explicit_strategy_id,
             explicit_bot_id=explicit_bot_id,

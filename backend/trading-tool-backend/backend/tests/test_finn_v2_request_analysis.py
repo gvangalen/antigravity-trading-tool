@@ -619,6 +619,23 @@ def test_guided_setup_binds_a_bare_name_to_the_persisted_requested_slot():
     assert "name" not in state["missing_required_inputs"]
 
 
+def test_guided_setup_name_does_not_reinterpret_asset_alias():
+    first = SERVICE.analyze(
+        message="Maak een DCA-setup op 4H.",
+        workspace_hints={"symbol": "BTC"},
+    )
+
+    continued = SERVICE.analyze(
+        message="FINN DCA Sol 0915",
+        conversation_context={"active_guided_operation": first.request_plan.operation_state},
+    )
+
+    state = continued.request_plan.operation_state
+    assert state["collected_inputs"]["name"] == "FINN DCA Sol 0915"
+    assert state["resolved_entities"]["asset"] == "BTC"
+    assert continued.explicit_asset == "BTC"
+
+
 def test_explicit_watchlist_operation_does_not_resume_pending_setup_state():
     setup_turn = SERVICE.analyze(message="Help me een nieuwe BTC-setup als concept te maken.")
 
