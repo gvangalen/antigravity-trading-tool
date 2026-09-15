@@ -19,9 +19,9 @@ def test_api_and_other_workers_keep_normal_database_pooling():
     assert options["pool_timeout"] == 3
 
 
-def test_interactive_task_refreshes_pool_before_first_database_session():
+def test_interactive_task_reuses_pre_pinged_pool_between_runs():
     import inspect
 
     source = inspect.getsource(finn_v2_task._process_finn_v2_run)
 
-    assert source.index("await engine.dispose(close=False)") < source.index("async with async_session_factory()")
+    assert "engine.dispose" not in source
