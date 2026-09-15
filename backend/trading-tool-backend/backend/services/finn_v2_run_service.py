@@ -159,7 +159,32 @@ class FinnV2RunService:
         user_id: int,
         phase_outcome: LifecyclePhaseOutcome,
     ):
-        artifacts = await self.delivery.get_delivery_artifacts(user_id=user_id, run_id=run_id)
+        # A verified successful response already contains the complete public
+        # terminal payload. Do not fan out across every diagnostic artifact
+        # table before making that response visible; those reads can contend
+        # with dashboard traffic and previously consumed the terminal reserve.
+        envelope = (
+            await self.delivery.get_delivery_envelope(user_id=user_id, run_id=run_id)
+            if hasattr(self.session, "execute")
+            else None
+        )
+        if (
+            envelope is not None
+            and envelope.response is not None
+            and phase_outcome.terminal_status == "completed"
+        ):
+            artifacts = {
+                "delivery_envelope": envelope.dict(),
+                "verified_response": envelope.response.dict(),
+                "orchestrator_result": {},
+                "policy_result": PolicyDecision().dict(),
+                "reasoning_result": {},
+                "verifier_result": {},
+            }
+        else:
+            artifacts = await self.delivery.get_delivery_artifacts(
+                user_id=user_id, run_id=run_id
+            )
         verified = artifacts.get("verified_response") or {}
         orchestrator = artifacts.get("orchestrator_result") or {}
         verifier = artifacts.get("verifier_result") or {}
