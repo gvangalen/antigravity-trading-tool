@@ -742,6 +742,42 @@ def test_collecting_setup_draft_uses_product_copy_in_its_terminal_placeholder():
     assert "dca_frequency" not in response["content"]
 
 
+def test_collecting_strategy_and_bot_drafts_use_contract_questions_not_internal_keys():
+    run_service = FinnV2RunService(session=object())
+
+    strategy = run_service._terminal_placeholder_response(
+        interaction_mode="CREATE_PROPOSAL",
+        terminal_status="clarification_required",
+        orchestrator={},
+        verifier={},
+        reasoning={},
+        delivery_envelope={},
+        setup_draft={
+            "operation_id": "create_strategy",
+            "requested_slot": "execution_mode",
+            "supplied_inputs": {"setup_id": 332},
+        },
+    )
+    bot = run_service._terminal_placeholder_response(
+        interaction_mode="CREATE_PROPOSAL",
+        terminal_status="clarification_required",
+        orchestrator={},
+        verifier={},
+        reasoning={},
+        delivery_envelope={},
+        setup_draft={
+            "operation_id": "create_bot",
+            "requested_slot": "name",
+            "supplied_inputs": {"strategy_id": 330},
+        },
+    )
+
+    assert "execution_mode" not in strategy["content"]
+    assert "fixed" in strategy["content"].lower()
+    assert "name" not in bot["content"].lower()
+    assert "bot" in bot["content"].lower()
+
+
 def test_limited_terminal_responses_publish_a_safe_typed_reason():
     service = FinnV2RunService(session=object())
 

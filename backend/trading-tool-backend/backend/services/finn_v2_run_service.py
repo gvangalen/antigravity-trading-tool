@@ -159,44 +159,71 @@ class FinnV2RunService:
         user_id: int,
         phase_outcome: LifecyclePhaseOutcome,
     ):
-        # A verified successful response already contains the complete public
-        # terminal payload. Do not fan out across every diagnostic artifact
-        # table before making that response visible; those reads can contend
-        # with dashboard traffic and previously consumed the terminal reserve.
-        envelope = (
-            await self.delivery.get_delivery_envelope(user_id=user_id, run_id=run_id)
-            if hasattr(self.session, "execute")
-            else None
-        )
-        if (
-            envelope is not None
-            and envelope.response is not None
-            and phase_outcome.terminal_status == "completed"
-        ):
-            artifacts = {
-                "delivery_envelope": envelope.dict(),
-                "verified_response": envelope.response.dict(),
-                "orchestrator_result": {},
-                "policy_result": PolicyDecision().dict(),
-                "reasoning_result": {},
-                "verifier_result": {},
-            }
-        else:
-            artifacts = await self.delivery.get_delivery_artifacts(
-                user_id=user_id, run_id=run_id
-            )
-        verified = artifacts.get("verified_response") or {}
-        orchestrator = artifacts.get("orchestrator_result") or {}
-        verifier = artifacts.get("verifier_result") or {}
-        reasoning = artifacts.get("reasoning_result") or {}
-        policy = artifacts.get("policy_result") or PolicyDecision().dict()
         get_runtime_contract = getattr(self.runtime_contracts, "get_for_run", None)
         runtime_contract = (
             await get_runtime_contract(run_id=run_id)
             if callable(get_runtime_contract)
             else None
         )
+        contract_state = dict(getattr(runtime_contract, "state_json", {}) or {})
+        guided_state = dict(contract_state.get("guided_state") or {})
+        guided_operation = str(guided_state.get("operation_id") or "")
+        is_guided_clarification = (
+            phase_outcome.terminal_status == "clarification_required"
+            and guided_operation in {"create_setup", "create_strategy", "create_bot"}
+            and bool(guided_state.get("missing_required_inputs"))
+        )
+        # A guided clarification intentionally has no tools, reasoning or
+        # verifier artifacts. Reading all those tables after the fast path can
+        # consume the terminal reserve for data that cannot exist.
+        if is_guided_clarification:
+            artifacts = {
+                "delivery_envelope": {},
+                "verified_response": {},
+                "orchestrator_result": {},
+                "policy_result": PolicyDecision().dict(),
+                "reasoning_result": {},
+                "verifier_result": {},
+            }
+        # A verified successful response already contains the complete public
+        # terminal payload. Do not fan out across every diagnostic artifact
+        # table before making that response visible; those reads can contend
+        # with dashboard traffic and previously consumed the terminal reserve.
+        else:
+            envelope = (
+                await self.delivery.get_delivery_envelope(user_id=user_id, run_id=run_id)
+                if hasattr(self.session, "execute")
+                else None
+            )
+            if (
+                envelope is not None
+                and envelope.response is not None
+                and phase_outcome.terminal_status == "completed"
+            ):
+                artifacts = {
+                    "delivery_envelope": envelope.dict(),
+                    "verified_response": envelope.response.dict(),
+                    "orchestrator_result": {},
+                    "policy_result": PolicyDecision().dict(),
+                    "reasoning_result": {},
+                    "verifier_result": {},
+                }
+            else:
+                artifacts = await self.delivery.get_delivery_artifacts(
+                    user_id=user_id, run_id=run_id
+                )
+        verified = artifacts.get("verified_response") or {}
+        orchestrator = artifacts.get("orchestrator_result") or {}
+        verifier = artifacts.get("verifier_result") or {}
+        reasoning = artifacts.get("reasoning_result") or {}
+        policy = artifacts.get("policy_result") or PolicyDecision().dict()
         setup_draft = dict((getattr(runtime_contract, "state_json", {}) or {}).get("setup_draft") or {})
+        guided_draft = setup_draft or {
+            "operation_id": guided_operation,
+            "supplied_inputs": dict(guided_state.get("collected_inputs") or {}),
+            "missing_inputs": list(guided_state.get("missing_required_inputs") or []),
+            "requested_slot": guided_state.get("next_missing_input"),
+        }
         direct_answer = str(verified.get("direct_answer") or "").strip()
         main_observation = str(verified.get("main_observation") or "").strip()
         content = "\n\n".join([part for part in [direct_answer, main_observation] if part]).strip()
@@ -211,7 +238,7 @@ class FinnV2RunService:
                 verifier=verifier,
                 reasoning=reasoning,
                 delivery_envelope=artifacts.get("delivery_envelope") or {},
-                setup_draft=setup_draft,
+                setup_draft=guided_draft,
             )
         else:
             response_json = {
@@ -343,14 +370,16 @@ class FinnV2RunService:
         elif terminal_status == "clarification_required":
             clarification = orchestrator.get("selected_clarification") or {}
             content = str(clarification.get("question") or "").strip()
-            if not content and dict(setup_draft or {}).get("operation_id") == "create_setup":
+            draft = dict(setup_draft or {})
+            if not content and draft.get("operation_id") in {
+                "create_setup", "create_strategy", "create_bot"
+            }:
                 from backend.services.finn_v2_operation_state_service import FinnV2OperationStateService
                 from backend.domain.finn_v2_operation_registry import FinnV2OperationRegistry
 
-                draft = dict(setup_draft or {})
                 content = FinnV2OperationStateService.clarification_question(
                     draft.get("requested_slot"),
-                    contract=FinnV2OperationRegistry().require_supported("create_setup"),
+                    contract=FinnV2OperationRegistry().require_supported(draft["operation_id"]),
                     collected_inputs=dict(draft.get("supplied_inputs") or {}),
                 )
             content = content or "FINN heeft eerst een verduidelijking nodig."
