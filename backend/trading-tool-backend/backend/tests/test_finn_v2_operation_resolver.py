@@ -196,6 +196,23 @@ def test_registry_paper_constraint_does_not_replace_bot_creation():
     assert resolved.operation_id == "create_bot"
 
 
+def test_explicit_bot_create_facts_correct_a_wrong_create_neighbour_candidate():
+    registry = FinnV2OperationRegistry()
+    resolved = FinnV2OperationResolverService(registry).resolve(
+        selection=_selection("create_setup", {"goal": "create", "object": "setup"}),
+        candidates=registry.list(),
+        conversation_context={},
+        request_facts={
+                "action_polarity": "create",
+                "primary_entity": "bot",
+                "explicit_entities": ("bot", "strategy"),
+            "normalized_text": "maak een paper bot voor mijn bestaande strategie",
+        },
+    )
+
+    assert resolved.operation_id == "create_bot"
+
+
 def test_semantic_frame_resolves_a_broad_assessment_to_plan_not_setup():
     registry = FinnV2OperationRegistry()
     resolved = FinnV2OperationResolverService(registry).resolve(

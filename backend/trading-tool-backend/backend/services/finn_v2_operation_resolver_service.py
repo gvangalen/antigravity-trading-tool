@@ -172,7 +172,12 @@ class FinnV2OperationResolverService:
         # object it is the same typed user act as the registry's delete
         # contract, so normalize it before comparing contract polarities.
         contract_action = "delete" if requested_action == "remove" and object_name != "watchlist" else requested_action
-        polarity_operation = self._GOAL_OBJECT_OPERATIONS.get((contract_action, object_name))
+        # The preprocessor's primary entity is an explicit grammatical fact.
+        # Prefer it over a conflicting provider frame for write requests; the
+        # registry still defines the only allowed resulting operation.
+        fact_object = self._normalized((request_facts or {}).get("primary_entity"))
+        action_object = fact_object or object_name
+        polarity_operation = self._GOAL_OBJECT_OPERATIONS.get((contract_action, action_object))
         if polarity_operation in candidate_ids and contract_action in {
             "create", "update", "delete", "add", "remove", "deactivate", "activate", "explain",
         }:
@@ -180,7 +185,11 @@ class FinnV2OperationResolverService:
                 (contract for contract in candidates if contract.operation_id == operation_id),
                 None,
             )
-            if selected_contract is None or selected_contract.action_polarity.value != contract_action:
+            # The provider proposes a candidate, but explicit typed action and
+            # object facts must resolve to their one registry contract.  For
+            # example, "maak een paper bot" cannot become create_setup merely
+            # because both contracts share CREATE polarity.
+            if selected_contract is None or selected_contract.operation_id != polarity_operation:
                 operation_id = polarity_operation
         # Selection-required terms are registry constraints. A live-bot
         # selection cannot override the explicit non-live paper qualifier.

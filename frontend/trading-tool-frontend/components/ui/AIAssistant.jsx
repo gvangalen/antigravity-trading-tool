@@ -1035,6 +1035,15 @@ function AIAssistantContent({
     return null;
   };
 
+  // A typed V2 clarification owns the next short answer. Command search is a
+  // useful discovery surface, but must never consume that answer as a direct
+  // navigation or asset command.
+  const latestAssistantState = getLatestAssistantState();
+  const hasActiveFinnV2GuidedTurn = Boolean(
+    latestAssistantState?.run_status === "clarification_required" ||
+    latestAssistantState?.setup_draft?.draft_status === "collecting"
+  );
+
   const getFlowProgress = (state) => {
     if (!state || !state.current_flow || state.current_flow === "none") return null;
     
@@ -5498,6 +5507,7 @@ function AIAssistantContent({
         "skip_bot_decision",
         "paper_execute_bot_decision",
         "live_preflight_bot_decision",
+        "v2_proposal",
       ].includes(action.type)
     ));
     if (actionOnly.length === 0 || message.draft) return null;
@@ -6634,9 +6644,9 @@ function AIAssistantContent({
                   </div>
                 )}
                 {renderBehavioralMemoryAckCard(m)}
-                {!isSimpleFinnModal && renderV2SetupDraftCard(m)}
+                {renderV2SetupDraftCard(m)}
                 {!isSimpleFinnModal && renderDraftCard(m)}
-                {!isSimpleFinnModal && renderInlineActionCard(m)}
+                {renderInlineActionCard(m)}
                 {m.isError && (
                   <button 
                     onClick={() => handleChat(messages[i-1]?.text)} 
@@ -6888,7 +6898,7 @@ function AIAssistantContent({
               updateQuery(e.target.value);
             }}
             onKeyDown={(event) => {
-              if (isSimpleFinnModal && commandCenterRef.current?.handleKeyDown(event)) return;
+              if (!hasActiveFinnV2GuidedTurn && isSimpleFinnModal && commandCenterRef.current?.handleKeyDown(event)) return;
               if (event.key === "Enter") handleChat();
             }}
             placeholder={isSimpleFinnModal ? composerMenuCopy.placeholder : uiText.inputPlaceholder}
@@ -6896,7 +6906,7 @@ function AIAssistantContent({
           />
           <button 
             onClick={() => {
-              if (isSimpleFinnModal && commandCenterRef.current?.submitPrimary()) return;
+              if (!hasActiveFinnV2GuidedTurn && isSimpleFinnModal && commandCenterRef.current?.submitPrimary()) return;
               handleChat();
             }}
             disabled={loading || !activeQuery.trim()}
