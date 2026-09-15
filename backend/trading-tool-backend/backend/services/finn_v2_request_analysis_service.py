@@ -21,7 +21,7 @@ class FinnV2RequestAnalysisService:
         self.classification_validator = FinnV2OperationClassificationValidator()
         self.target_resolver = FinnV2TargetAssetResolver()
 
-    def analyze(
+    async def analyze_async(
         self,
         *,
         message: str,
@@ -31,9 +31,39 @@ class FinnV2RequestAnalysisService:
         selector_timeout_seconds: Optional[int] = None,
         selector_max_output_tokens: Optional[int] = None,
     ) -> RequestAnalysisResult:
+        """Analyze with the same contract logic and a cancellable selector."""
+        semantic = await self.classifier.classify_async(
+            message=message,
+            conversation_context=conversation_context,
+            workspace_hints=workspace_hints,
+            client_context=client_context,
+            selector_timeout_seconds=selector_timeout_seconds,
+            selector_max_output_tokens=selector_max_output_tokens,
+        )
+        return self.analyze(
+            message=message,
+            workspace_hints=workspace_hints,
+            client_context=client_context,
+            conversation_context=conversation_context,
+            selector_timeout_seconds=selector_timeout_seconds,
+            selector_max_output_tokens=selector_max_output_tokens,
+            _semantic_override=semantic,
+        )
+
+    def analyze(
+        self,
+        *,
+        message: str,
+        workspace_hints: Optional[Dict[str, object]] = None,
+        client_context: Optional[Dict[str, object]] = None,
+        conversation_context: Optional[Dict[str, object]] = None,
+        selector_timeout_seconds: Optional[int] = None,
+        selector_max_output_tokens: Optional[int] = None,
+        _semantic_override=None,
+    ) -> RequestAnalysisResult:
         text = str(message or "").strip()
         normalized = self._normalize_text(text)
-        semantic = self.classifier.classify(
+        semantic = _semantic_override or self.classifier.classify(
             message=text,
             conversation_context=conversation_context,
             workspace_hints=workspace_hints,

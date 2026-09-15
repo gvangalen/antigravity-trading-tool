@@ -20,6 +20,9 @@ def finn_v2_structured_selector_test_double(monkeypatch):
     from backend.services.finn_v2_structured_operation_selector_service import (
         FinnV2StructuredOperationSelectorService,
     )
+    from backend.services.finn_v2_operation_classification_service import (
+        FinnV2OperationClassificationService,
+    )
 
     registry = FinnV2OperationRegistry()
 
@@ -94,3 +97,8 @@ def finn_v2_structured_selector_test_double(monkeypatch):
         ), None
 
     monkeypatch.setattr(FinnV2StructuredOperationSelectorService, "select", select)
+
+    async def classify_async(self, **kwargs):
+        return self.classify(**kwargs)
+
+    monkeypatch.setattr(FinnV2OperationClassificationService, "classify_async", classify_async)

@@ -220,8 +220,7 @@ class FinnV2OrchestratorService:
                 await self.selector_started()
             await self._record_phase_timestamp(run_id=run_id, phase="selector_started")
             analysis = await asyncio.wait_for(
-                asyncio.to_thread(
-                    self.analysis.analyze,
+                self.analysis.analyze_async(
                     message=run.message,
                     workspace_hints=getattr(run, "workspace_hints_json", {}) or {},
                     client_context=getattr(run, "client_context_json", {}) or {},

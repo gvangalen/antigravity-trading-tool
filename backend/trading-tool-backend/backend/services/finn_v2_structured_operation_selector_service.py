@@ -1,6 +1,7 @@
 """Strict model-first selection from the immutable FINN V2 manifest."""
 from __future__ import annotations
 
+import asyncio
 import os
 import re
 from dataclasses import dataclass, field
@@ -32,6 +33,51 @@ class FinnV2StructuredOperationSelectorService:
 
     def __init__(self, provider: Optional[Callable[..., Mapping[str, Any]]] = None):
         self._provider = provider or openai_client.ask_gpt_structured_response
+
+    async def select_async(
+        self,
+        *,
+        message: str,
+        candidate_contracts: tuple[OperationContract, ...],
+        facts: Mapping[str, object],
+        verified_context: Optional[Mapping[str, object]],
+        timeout_seconds: Optional[int] = None,
+        max_output_tokens: Optional[int] = None,
+    ) -> tuple[Optional[FinnV2StructuredOperationSelection], Optional[str]]:
+        """Run the exact selector contract through a cancellable transport."""
+        captured: dict[str, Any] = {}
+
+        def capture_provider(**kwargs: Any) -> Mapping[str, Any]:
+            captured.update(kwargs)
+            return {"error": "selector_request_captured"}
+
+        capture_selector = FinnV2StructuredOperationSelectorService(provider=capture_provider)
+        captured_result = capture_selector.select(
+            message=message,
+            candidate_contracts=candidate_contracts,
+            facts=facts,
+            verified_context=verified_context,
+            timeout_seconds=timeout_seconds,
+            max_output_tokens=max_output_tokens,
+        )
+        # Deterministic test and no-candidate exits never construct a provider
+        # request and must retain their exact existing result.
+        if not captured:
+            return captured_result
+        if self._provider is openai_client.ask_gpt_structured_response:
+            response = await openai_client.ask_gpt_structured_response_async(**captured)
+        else:
+            injected = self._provider(**captured)
+            response = await injected if asyncio.iscoroutine(injected) else injected
+        response_selector = FinnV2StructuredOperationSelectorService(provider=lambda **_kwargs: response)
+        return response_selector.select(
+            message=message,
+            candidate_contracts=candidate_contracts,
+            facts=facts,
+            verified_context=verified_context,
+            timeout_seconds=timeout_seconds,
+            max_output_tokens=max_output_tokens,
+        )
 
     def select(
         self,

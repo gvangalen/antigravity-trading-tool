@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
-from typing import Mapping, Optional
+from typing import Any, Mapping, Optional
 
 from backend.domain.finn_v2_operation_registry import FinnV2OperationRegistry, OperationContract
 from backend.services.finn_v2_request_preprocessor_service import (
@@ -21,6 +21,7 @@ from backend.services.finn_v2_structured_operation_selector_service import (
 from backend.services.finn_v2_operation_state_service import FinnV2OperationStateService
 from backend.services.finn_v2_operation_resolver_service import FinnV2OperationResolverService
 from backend.services.finn_v2_target_asset_resolver import FinnV2TargetAssetResolver
+from backend.utils import openai_client
 
 
 @dataclass(frozen=True)
@@ -207,6 +208,49 @@ class FinnV2OperationClassificationService:
             unsupported_capability=error or "selector_confidence_insufficient",
             conversation_context=conversation_context,
         )
+
+    async def classify_async(
+        self,
+        *,
+        message: str,
+        conversation_context: Optional[Mapping[str, object]] = None,
+        workspace_hints: Optional[Mapping[str, object]] = None,
+        client_context: Optional[Mapping[str, object]] = None,
+        selector_timeout_seconds: Optional[int] = None,
+        selector_max_output_tokens: Optional[int] = None,
+    ) -> SemanticOperationClassification:
+        """Execute the unchanged classifier with an async provider boundary."""
+        captured: dict[str, Any] = {}
+
+        def capture_provider(**kwargs: Any) -> Mapping[str, Any]:
+            captured.update(kwargs)
+            return {"error": "selector_request_captured"}
+
+        probe = FinnV2OperationClassificationService(
+            registry=self.registry,
+            preprocessor=self.preprocessor,
+            structured_selector=FinnV2StructuredOperationSelectorService(provider=capture_provider),
+            resolver=self.resolver,
+        )
+        arguments = {
+            "message": message,
+            "conversation_context": conversation_context,
+            "workspace_hints": workspace_hints,
+            "client_context": client_context,
+            "selector_timeout_seconds": selector_timeout_seconds,
+            "selector_max_output_tokens": selector_max_output_tokens,
+        }
+        probe_result = probe.classify(**arguments)
+        if not captured:
+            return probe_result
+        response = await openai_client.ask_gpt_structured_response_async(**captured)
+        resolved = FinnV2OperationClassificationService(
+            registry=self.registry,
+            preprocessor=self.preprocessor,
+            structured_selector=FinnV2StructuredOperationSelectorService(provider=lambda **_kwargs: response),
+            resolver=self.resolver,
+        )
+        return resolved.classify(**arguments)
 
     def _selector_manifest(self) -> tuple[OperationContract, ...]:
         """Return the versioned registry manifest, not retrieved local guesses."""

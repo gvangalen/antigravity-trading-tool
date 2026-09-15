@@ -1,3 +1,5 @@
+import asyncio
+
 import pytest
 
 from backend.domain.finn_v2_operation_registry import FinnV2OperationRegistry
@@ -30,6 +32,26 @@ def test_structured_selector_can_only_choose_an_offered_contract():
         ),
         facts={"entities": ("strategy", "bot")},
         verified_context=None,
+    )
+
+    assert error is None
+    assert selection is not None
+    assert selection.operation_id == "evaluate_strategy"
+
+
+def test_async_structured_selector_awaits_provider_and_preserves_contract_validation():
+    async def provider(**_kwargs):
+        await asyncio.sleep(0)
+        return _provider()
+
+    registry = FinnV2OperationRegistry()
+    selection, error = asyncio.run(
+        FinnV2StructuredOperationSelectorService(provider=provider).select_async(
+            message="Beoordeel mijn strategie.",
+            candidate_contracts=(registry.get("evaluate_strategy"),),
+            facts={"entities": ("strategy",)},
+            verified_context=None,
+        )
     )
 
     assert error is None

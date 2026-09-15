@@ -825,6 +825,11 @@ def test_orchestrator_classifies_requested_operation_for_action_proposal_modes()
     analyzed.reasoning_required = True
     service.analysis.analyze = lambda **_kwargs: analyzed
 
+    async def _analyze_async(**_kwargs):
+        return analyzed
+
+    service.analysis.analyze_async = _analyze_async
+
     async def _execute_tool_plan(**kwargs):
         return []
 

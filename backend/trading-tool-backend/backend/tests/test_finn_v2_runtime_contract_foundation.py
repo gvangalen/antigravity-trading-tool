@@ -657,7 +657,8 @@ def test_selector_persistence_precedes_post_selection_execution_and_has_a_separa
     orchestrator = (ROOT / "services" / "finn_v2_orchestrator_service.py").read_text(encoding="utf-8")
     lifecycle = (ROOT / "services" / "finn_v2_run_service.py").read_text(encoding="utf-8")
 
-    assert "asyncio.to_thread" in orchestrator
+    assert "self.analysis.analyze_async(" in orchestrator
+    assert "asyncio.to_thread(\n                    self.analysis.analyze" not in orchestrator
     assert "selector_phase_deadline_seconds" in orchestrator
     assert orchestrator.index("record_selection(") < orchestrator.index("execute_tool_plan(")
     assert orchestrator.index("selection_persisted()") < orchestrator.index("execute_tool_plan(")
