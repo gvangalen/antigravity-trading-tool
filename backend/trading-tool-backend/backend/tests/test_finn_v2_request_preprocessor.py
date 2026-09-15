@@ -78,6 +78,16 @@ def test_non_live_paper_bot_creation_is_not_a_live_activation_fact():
     assert facts.financial_execution_intent is False
 
 
+def test_create_request_uses_the_created_object_not_its_parent_reference():
+    service = FinnV2RequestPreprocessorService()
+
+    strategy = service.preprocess(message="Maak voor die setup een strategie met execution mode handmatig.")
+    bot = service.preprocess(message="Maak voor mijn bestaande strategie een paper bot.")
+
+    assert strategy.primary_entity == "strategy"
+    assert bot.primary_entity == "bot"
+
+
 def test_product_capability_availability_questions_remain_financial_in_all_supported_languages():
     service = FinnV2RequestPreprocessorService()
 

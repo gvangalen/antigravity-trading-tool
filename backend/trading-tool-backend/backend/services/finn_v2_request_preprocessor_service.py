@@ -258,10 +258,11 @@ class FinnV2RequestPreprocessorService:
         # The aggregate plan is the semantic subject when the user explicitly
         # names several plan components. Otherwise preserve the first entity
         # mentioned in natural language for registry candidate ranking.
-        primary_entity = "plan" if "plan" in entities and (relational_graph or explicit_plan or compound_plan_subject) else next(
+        created_entity = self._created_entity(normalized)
+        primary_entity = created_entity or ("plan" if "plan" in entities and (relational_graph or explicit_plan or compound_plan_subject) else next(
             (entity for entity in entities if entity != "plan"),
             "plan" if "plan" in entities else None,
-        )
+        ))
         references = tuple(
             marker
             for marker, terms in self._REFERENCE_MARKERS.items()
@@ -410,6 +411,21 @@ class FinnV2RequestPreprocessorService:
             for match in re.finditer(rf"(?<!\w){re.escape(term)}(?!\w)", text)
         ]
         return min(positions) if positions else None
+
+    @staticmethod
+    def _created_entity(text: str) -> Optional[str]:
+        """Return the grammatical object of an explicit create request."""
+        if not re.search(r"\b(?:maak\w*|create\w*|build\w*|erstel\w*|anleg\w*)\b", text):
+            return None
+        matches = re.findall(
+            r"\b(?:een|a|an|eine[nrms]?|new|nieuwe|neue[nrms]?)\s+"
+            r"(?:(?:paper|non[- ]?live|nieuwe|new)\s+)?"
+            r"(setup|strategie|strategy|bot)\b",
+            text,
+        )
+        if not matches:
+            return None
+        return {"strategie": "strategy"}.get(matches[-1], matches[-1])
 
     def _action_polarity(self, text: str) -> str:
         # Declarative and interrogative verb forms ("volg ik", "bevestigd")
