@@ -241,15 +241,48 @@ class FinnV2RunService:
             error_code=terminal_reason,
         )
         response_json["_runtime_contract_projection"] = contract.terminal_projection_json
-        await self.persist_transition(
-            run_id,
-            user_id,
-            next_status=next_status,
+        if not hasattr(self.session, "execute"):
+            # Preserve the narrow repository-free seam used by unit fixtures.
+            await self.persist_transition(
+                run_id,
+                user_id,
+                next_status=next_status,
+                interaction_mode=phase_outcome.interaction_mode or response_json["mode"],
+                policy_json=policy,
+                response_json=response_json,
+                response_source="v2_runtime",
+            )
+            return
+        # ``materialize_terminal`` already holds and revises the authoritative
+        # runtime-contract row. Calling ``persist_transition`` here used to
+        # enter a second savepoint and lock/revise that same row again. Under
+        # production concurrency this could consume the complete terminal
+        # reserve after a proposal had already been created. Persist the run
+        # and trace in this transaction without a second contract transition.
+        run = await self.runs.get_by_id_for_user(run_id=run_id, user_id=user_id)
+        if run is None:
+            raise LookupError("FINN V2 run not found")
+        validate_run_transition(run.status, next_status)
+        now = datetime.now(timezone.utc)
+        await self.runs.update_status(
+            run=run,
+            status=next_status,
             interaction_mode=phase_outcome.interaction_mode or response_json["mode"],
             policy_json=policy,
             response_json=response_json,
-            response_source="v2_runtime",
+            retryable=False,
+            completed_at=now,
         )
+        await self.traces.append_event(
+            run_id=run.id,
+            user_id=run.user_id,
+            trace_id=run.trace_id,
+            event_type=TRACE_EVENT_BY_STATUS[next_status],
+            payload_json=self._trace_payload(
+                run, status=next_status, response_source="v2_runtime"
+            ),
+        )
+        await self._commit_session_if_possible()
 
     @staticmethod
     def _terminal_reason(
