@@ -7,7 +7,6 @@ from fastapi import HTTPException
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 from sqlalchemy.orm import declarative_base
-from sqlalchemy.pool import NullPool
 from dotenv import load_dotenv
 
 load_dotenv(dotenv_path=Path(__file__).resolve().parents[1] / ".env", override=False)
@@ -24,13 +23,17 @@ ASYNC_DATABASE_URL = f"postgresql+asyncpg://{db_user}:{db_pass}@{db_host}:{db_po
 def _async_engine_options(build_service: str | None) -> dict:
     options = {"echo": False, "future": True}
     if build_service == "celery-worker-finn-interactive":
-        # The interactive worker is single-concurrency and opens short,
-        # explicit lifecycle sessions. A production proxy can silently leave
-        # an idle pooled socket half-open; its pre-ping then consumes roughly
-        # 15 seconds before reconnecting. Fresh bounded connections are faster
-        # here and prevent one stale socket from consuming the user SLA.
-        options["poolclass"] = NullPool
-        options["connect_args"] = {"timeout": 3}
+        # The single-concurrency worker refreshes this small pool at each task
+        # boundary. Its short lifecycle sessions can then reuse one known-good
+        # connection instead of opening a new TLS connection for every phase.
+        options.update(
+            pool_size=2,
+            max_overflow=0,
+            pool_pre_ping=True,
+            pool_recycle=60,
+            pool_timeout=3,
+            connect_args={"timeout": 3},
+        )
         return options
     options.update(
         pool_size=10,
