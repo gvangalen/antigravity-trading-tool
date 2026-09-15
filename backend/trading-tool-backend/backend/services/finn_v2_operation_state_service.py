@@ -177,6 +177,8 @@ class FinnV2OperationStateService:
             "setup_type": "Wil je een trade- of DCA-setup voorbereiden?",
             "timeframe": "Welk primair timeframe wil je voor deze setup gebruiken?",
             "dca_frequency": "Hoe vaak wil je volgens deze DCA-setup aankopen: dagelijks, wekelijks of maandelijks?",
+            "dca_day": "Op welke weekdag wil je volgens deze DCA-setup aankopen?",
+            "dca_month_day": "Op welke dag van de maand wil je volgens deze DCA-setup aankopen?",
             "setup_id": "Welke bestaande setup wil je aanpassen?",
             "changed_fields": "Welke concrete setupvelden wil je aanpassen?",
             "strategy_id": "Welke bestaande strategie wil je aanpassen?",
@@ -411,6 +413,23 @@ class FinnV2OperationStateService:
             ):
                 if re.search(rf"\b{token}\b", lowered):
                     return canonical
+            return None
+        if field == "dca_day":
+            lowered = FinnV2SetupInputCatalog._comparison_text(value)
+            weekdays = {
+                "monday": "monday", "maandag": "monday", "montag": "monday",
+                "tuesday": "tuesday", "dinsdag": "tuesday", "dienstag": "tuesday",
+                "wednesday": "wednesday", "woensdag": "wednesday", "mittwoch": "wednesday",
+                "thursday": "thursday", "donderdag": "thursday", "donnerstag": "thursday",
+                "friday": "friday", "vrijdag": "friday", "freitag": "friday",
+                "saturday": "saturday", "zaterdag": "saturday", "samstag": "saturday",
+                "sunday": "sunday", "zondag": "sunday", "sonntag": "sunday",
+            }
+            return weekdays.get(lowered)
+        if field == "dca_month_day":
+            match = re.fullmatch(r"(?:dag\s*)?(\d{1,2})(?:e|ste|de|st|nd|rd|th)?", value.casefold())
+            if match and 1 <= int(match.group(1)) <= 28:
+                return str(int(match.group(1)))
             return None
         if field == "timeframe":
             return FinnV2SetupInputCatalog.timeframe_from_text(value)

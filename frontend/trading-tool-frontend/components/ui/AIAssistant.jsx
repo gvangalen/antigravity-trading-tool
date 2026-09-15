@@ -4997,6 +4997,8 @@ function AIAssistantContent({
       symbol: at("fieldLabels.asset", "Asset"),
       timeframe: at("fieldLabels.setup.timeframe", "Timeframe"),
       dca_frequency: at("fieldLabels.dca.frequency", "Frequentie"),
+      dca_day: at("fieldLabels.dca.day", "Weekdag"),
+      dca_month_day: at("fieldLabels.dca.monthDay", "Dag van de maand"),
     };
     const values = Object.entries(draft.supplied_inputs || {}).filter(([field, value]) => (
       labels[field] && value !== undefined && value !== null && value !== ""

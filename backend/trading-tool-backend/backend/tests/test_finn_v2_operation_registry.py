@@ -132,6 +132,45 @@ def test_create_dca_setup_exposes_its_service_required_frequency_in_the_same_con
         "setup_type", "timeframe", "name", "symbol", "dca_frequency",
     )
     assert "dca_frequency" in contract.input_fields
+    assert contract.required_inputs_for({"setup_type": "dca", "dca_frequency": "weekly"})[-1] == "dca_day"
+    assert contract.required_inputs_for({"setup_type": "dca", "dca_frequency": "monthly"})[-1] == "dca_month_day"
+
+
+def test_create_dca_setup_binds_weekday_before_proposal_execution():
+    contract = FinnV2OperationRegistry().require_supported("create_setup")
+    service = FinnV2OperationStateService()
+    context = {
+        "conversation_state_version": service.CONTEXT_STATE_VERSION,
+        "active_guided_operation": {
+            "operation_id": "create_setup",
+            "contract_version": contract.version,
+            "state_revision": 3,
+            "collected_inputs": {
+                "setup_type": "dca",
+                "timeframe": "4H",
+                "name": "FINN DCA Flow",
+                "symbol": "BTC",
+                "dca_frequency": "weekly",
+            },
+            "input_sources": {},
+            "resolved_entities": {},
+            "target_entities": {},
+            "missing_required_inputs": ["dca_day"],
+            "next_missing_input": "dca_day",
+            "previous_evidence_refs": [],
+        },
+    }
+
+    state = service.resolve(
+        contract=contract,
+        message="maandag",
+        explicit_asset=None,
+        conversation_context=context,
+    )
+
+    assert state.collected_inputs["dca_day"] == "monday"
+    assert state.missing_required_inputs == []
+    assert state.next_missing_input is None
     assert FinnV2OperationStateService().explicit_inputs(
         contract=contract,
         message="Maak een dagelijkse DCA setup voor SOL op 4 uur met de naam Test.",
