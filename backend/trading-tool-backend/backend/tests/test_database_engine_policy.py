@@ -24,4 +24,4 @@ def test_interactive_task_refreshes_pool_before_first_database_session():
 
     source = inspect.getsource(finn_v2_task._process_finn_v2_run)
 
-    assert source.index("await engine.dispose()") < source.index("async with async_session_factory()")
+    assert source.index("await engine.dispose(close=False)") < source.index("async with async_session_factory()")

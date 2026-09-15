@@ -126,9 +126,11 @@ async def _warm_finn_v2_interactive_worker() -> str:
 async def _process_finn_v2_run(*, run_id: str, owner: str) -> str:
     # A production proxy may leave an idle asyncpg socket half-open between
     # interactive tasks. Refresh once at the task boundary, then reuse the
-    # fresh small pool across all lifecycle sessions in this task.
+    # fresh small pool across all lifecycle sessions in this task. Replacing
+    # the pool without synchronously closing stale transports prevents socket
+    # teardown itself from consuming the lifecycle budget.
     if os.getenv("TRADAMIND_BUILD_SERVICE") == "celery-worker-finn-interactive":
-        await engine.dispose()
+        await engine.dispose(close=False)
     async with async_session_factory() as session:
         dispatches = FinnV2DispatchRepository(session)
         run = (await session.execute(select(FinnV2Run).where(FinnV2Run.id == run_id))).scalars().first()
