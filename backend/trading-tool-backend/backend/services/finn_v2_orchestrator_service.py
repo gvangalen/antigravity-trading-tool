@@ -289,7 +289,6 @@ class FinnV2OrchestratorService:
             )
         await self._commit_persistence_boundary(stage="selector_persisted")
         await self._record_phase_timestamp(run_id=run_id, phase="selection_persisted")
-        await self._commit_persistence_boundary(stage="selection_timing_persisted")
         if self.selection_persisted is not None:
             await self.selection_persisted()
         # New runs use a contract-derived RequestPlan view. This preserves
@@ -357,6 +356,7 @@ class FinnV2OrchestratorService:
                 payload_json={"run_id": run_id, "contract_id": runtime_contract.contract_id},
             )
             await self._record_phase_timestamp(run_id=run_id, phase="fast_path_completed")
+            await self._commit_persistence_boundary(stage="guided_draft_fast_path_persisted")
             self.phase_outcome = LifecyclePhaseOutcome(
                 terminal_status="clarification_required",
                 interaction_mode="CREATE_PROPOSAL",
