@@ -74,8 +74,8 @@ ACTIVE_RUN_STATUSES = tuple(status for status in RUN_STATUSES if status not in T
 
 ALLOWED_RUN_TRANSITIONS: Mapping[str, Tuple[str, ...]] = {
     "created": ("queued", "failed", "canceled"),
-    "queued": ("collecting", "failed", "canceled"),
-    "collecting": ("planned", "blocked", "failed", "canceled"),
+    "queued": ("collecting", "unavailable", "failed", "canceled"),
+    "collecting": ("planned", "blocked", "unavailable", "failed", "canceled"),
     "planned": ("reasoning", "clarification_required", "unavailable", "completed", "blocked", "failed", "canceled"),
     "reasoning": ("verifying", "completed", "downgraded", "rejected", "unavailable", "failed", "canceled"),
     # Verification can legitimately determine that a typed action needs one

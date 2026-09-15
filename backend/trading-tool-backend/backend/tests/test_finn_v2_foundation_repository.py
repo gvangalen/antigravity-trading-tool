@@ -140,6 +140,8 @@ class _FakeRuntimeContracts:
         ("planned", "blocked"),
         ("planned", "failed"),
         ("planned", "canceled"),
+        ("queued", "unavailable"),
+        ("collecting", "unavailable"),
         ("reasoning", "verifying"),
         ("reasoning", "completed"),
         ("reasoning", "downgraded"),

@@ -540,9 +540,13 @@ class FinnV2RunService:
 
         async def _run_owned_lifecycle() -> None:
             try:
-                for status in ("queued", "collecting", "planned"):
-                    async with async_session_factory() as session:
-                        await cls(session).persist_transition(
+                # Reuse one short-lived session for the initial lifecycle
+                # transitions. Opening three production connections in series
+                # consumed most of the interactive deadline before selection.
+                async with async_session_factory() as session:
+                    transition_service = cls(session)
+                    for status in ("queued", "collecting", "planned"):
+                        await transition_service.persist_transition(
                             run_id,
                             user_id,
                             next_status=status,

@@ -922,13 +922,10 @@ class FinnV2ReasoningFallbackService:
                 user_id=user_id,
                 mode="CLARIFICATION",
                 direct_answer=question,
-                main_observation=(
-                    f"Het eerstvolgende ontbrekende verplichte veld is {next_field}. "
-                    "Ik vul geen setupvelden in op basis van aannames."
-                ),
+                main_observation="Ik heb je eerdere keuzes bewaard en wacht alleen nog op dit detail.",
                 supporting_points=[],
                 claims=[],
-                uncertainty_summary="Zonder dat detail zou ik setupvelden moeten invullen op basis van aannames.",
+                uncertainty_summary="Zonder dit detail kan ik nog geen volledig en veilig voorstel maken.",
                 uncertainty_codes=list(error_codes),
                 next_step=None,
                 follow_up_question=question,
