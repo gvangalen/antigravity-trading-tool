@@ -126,11 +126,12 @@ class FinnV2GatewayService:
             commit=False,
         )
         if hasattr(self.session, "add"):
+            dispatch_queue = self._dispatch_queue_for_request(request)
             dispatch = await self.dispatches.create(
                 dispatch_id=f"finn-v2-dispatch-{uuid.uuid4().hex}",
                 run_id=run.id,
                 task_id=f"finn-v2-task-{uuid.uuid4().hex}",
-                queue=resolve_task_queue("backend.celery_task.finn_v2_task.process_finn_v2_run"),
+                queue=dispatch_queue,
                 routing_rule="finn_v2.lifecycle",
                 status="pending",
                 attempt_count=0,
@@ -158,6 +159,19 @@ class FinnV2GatewayService:
             },
         )
         return run
+
+    @staticmethod
+    def _dispatch_queue_for_request(request: AgentRunRequest) -> str:
+        queue = resolve_task_queue(
+            "backend.celery_task.finn_v2_task.process_finn_v2_run"
+        )
+        if (request.client_context or {}).get("surface") == "today_with_finn":
+            # The automatically loaded dashboard briefing must never sit
+            # ahead of a user command on the single-concurrency interactive
+            # queue. The default worker runs the same typed lifecycle without
+            # delaying visible FINN turns.
+            return "celery"
+        return queue
 
     async def get_run(self, *, run_id: str, user_id: int):
         run = await self.runs.get_by_id_for_user(run_id=run_id, user_id=user_id)

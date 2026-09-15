@@ -7,10 +7,25 @@ import pytest
 from backend.domain.finn_v2_contract import InvalidRunTransitionError, validate_run_transition
 from backend.schemas.finn_v2_schema import AgentRunRequest
 from backend.services import finn_v2_gateway_service as gateway_module
+from backend.services.finn_v2_gateway_service import FinnV2GatewayService
 from backend.services.finn_v2_run_service import FinnV2RunService
 
 
 ROOT = Path(__file__).resolve().parents[1]
+
+
+def test_dashboard_briefing_cannot_block_the_interactive_finn_queue():
+    briefing = AgentRunRequest(
+        message="Today with FINN",
+        client_context={"surface": "today_with_finn"},
+    )
+    user_turn = AgentRunRequest(
+        message="Maak een nieuwe setup.",
+        client_context={"surface": "assistant_visible_v2"},
+    )
+
+    assert FinnV2GatewayService._dispatch_queue_for_request(briefing) == "celery"
+    assert FinnV2GatewayService._dispatch_queue_for_request(user_turn) == "finn_interactive"
 
 
 class _NestedTxn:

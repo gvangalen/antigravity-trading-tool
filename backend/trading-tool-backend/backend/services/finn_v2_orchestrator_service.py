@@ -329,6 +329,43 @@ class FinnV2OrchestratorService:
         domain_requirements = self.requirements.determine(analysis)
         tool_plan = self.tool_plans.build(run_id=run_id, analysis=analysis, domain_plan=domain_requirements)
 
+        if self._is_collecting_setup_draft(request_plan=request_plan):
+            # An incomplete setup draft needs no market tools, state snapshot,
+            # policy, reasoning, or verifier provider. Persist the typed
+            # clarification directly after selection so a slow workspace read
+            # cannot consume the user's lifecycle deadline.
+            result = self.outcomes.evaluate(
+                run_id=run_id,
+                user_id=user_id,
+                analysis=analysis,
+                domain_requirements=domain_requirements,
+                tool_plan=tool_plan,
+                snapshot_id=None,
+                validation=None,
+            )
+            await self._persist_result(result)
+            if conversation_id:
+                await self._persist_collecting_setup_context(
+                    conversation_id=conversation_id,
+                    user_id=user_id,
+                    existing_context=conversation_context,
+                    guided_state=dict(getattr(request_plan, "operation_state", {}) or {}),
+                )
+            await self._append_trace(
+                run_id=run_id,
+                user_id=user_id,
+                trace_id=trace_id,
+                event_type="setup_draft_fast_path_completed",
+                payload_json={"run_id": run_id, "contract_id": runtime_contract.contract_id},
+            )
+            await self._record_phase_timestamp(run_id=run_id, phase="fast_path_completed")
+            self.phase_outcome = LifecyclePhaseOutcome(
+                terminal_status="clarification_required",
+                interaction_mode="CREATE_PROPOSAL",
+                orchestrator_result_id=result.orchestrator_result_id,
+            )
+            return result
+
         result = None
         try:
             await self.tools.execute_tool_plan(run_id=run_id, user_id=user_id, tool_plan=tool_plan)
@@ -393,35 +430,6 @@ class FinnV2OrchestratorService:
                 validation=validation,
             )
             await self._persist_result(result)
-            if self._is_collecting_setup_draft(request_plan=request_plan):
-                # A requested setup slot is contract-owned state, not a new
-                # analysis. Persist its next revision and terminalize through
-                # the existing clarification outcome without policy, reasoning
-                # or verifier provider calls.
-                if conversation_id:
-                    await self._persist_collecting_setup_context(
-                        conversation_id=conversation_id,
-                        user_id=user_id,
-                        existing_context=conversation_context,
-                        guided_state=dict(getattr(request_plan, "operation_state", {}) or {}),
-                    )
-                await self._append_trace(
-                    run_id=run_id,
-                    user_id=user_id,
-                    trace_id=trace_id,
-                    event_type="setup_draft_fast_path_completed",
-                    payload_json={"run_id": run_id, "contract_id": runtime_contract.contract_id},
-                )
-                await self._record_phase_timestamp(run_id=run_id, phase="fast_path_completed")
-                # Tool outcome categories are intentionally broader than a
-                # guided draft. The persisted registry draft is unambiguous:
-                # it must always deliver the existing clarification envelope.
-                self.phase_outcome = LifecyclePhaseOutcome(
-                    terminal_status="clarification_required",
-                    interaction_mode="CREATE_PROPOSAL",
-                    orchestrator_result_id=result.orchestrator_result_id,
-                )
-                return result
             policy_decision = None
             if self._should_run_policy(run=run, user_id=user_id) and snapshot is not None and validation is not None and result.outcome != "failed":
                 requested_operation = None
