@@ -575,12 +575,13 @@ class FinnV2RunService:
                             selection_persisted=selection_persisted,
                         )
                         await orchestrator.execute_run(run_id=run_id, user_id=user_id, trace_id=trace_id)
-                        # The client/runner may have terminalized this run
-                        # while a bounded provider call was unwinding.  Do not
-                        # let the worker revive or overwrite that durable
-                        # cancellation, and release the single interactive
-                        # worker before it can hold up the next dispatch.
-                        await session.refresh(run)
+                        # The orchestrator has committed every persistence
+                        # boundary it owns. Do not refresh the original ORM
+                        # instance here: in production that defensive read
+                        # could wait behind an active polling transaction and
+                        # consume the terminal reserve after a proposal was
+                        # already durable. The terminal writer validates the
+                        # persisted status again in its fresh session.
                         if is_terminal_status(run.status):
                             logger.info(
                                 "FINN V2 lifecycle stopped after an external terminal transition",
