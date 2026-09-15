@@ -171,6 +171,26 @@ def test_create_dca_setup_binds_weekday_before_proposal_execution():
     assert state.collected_inputs["dca_day"] == "monday"
     assert state.missing_required_inputs == []
     assert state.next_missing_input is None
+
+
+def test_create_dca_setup_extracts_compound_weekly_schedule_without_polluting_name():
+    contract = FinnV2OperationRegistry().require_supported("create_setup")
+
+    supplied = FinnV2OperationStateService().explicit_inputs(
+        contract=contract,
+        message=(
+            "Maak een wekelijkse DCA-setup voor BTC op 4H met de naam "
+            "FINN DCA Live en koop op maandag."
+        ),
+        explicit_asset="BTC",
+    )
+
+    assert supplied["name"] == "FINN DCA Live"
+    assert supplied["dca_frequency"] == "weekly"
+    assert supplied["dca_day"] == "monday"
+    assert contract.required_inputs_for(supplied) == (
+        "setup_type", "timeframe", "name", "symbol", "dca_frequency", "dca_day",
+    )
     assert FinnV2OperationStateService().explicit_inputs(
         contract=contract,
         message="Maak een dagelijkse DCA setup voor SOL op 4 uur met de naam Test.",

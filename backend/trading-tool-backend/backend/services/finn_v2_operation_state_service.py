@@ -343,7 +343,7 @@ class FinnV2OperationStateService:
                         for token, canonical in (
                             ("daily", "daily"), ("dagelijks", "daily"), ("dagelijkse", "daily"),
                             ("taeglich", "daily"), ("taegliche", "daily"), ("taegliches", "daily"),
-                            ("weekly", "weekly"), ("wekelijks", "weekly"),
+                            ("weekly", "weekly"), ("wekelijks", "weekly"), ("wekelijkse", "weekly"),
                             ("monthly", "monthly"), ("maandelijks", "monthly"),
                         )
                         if re.search(rf"\b{token}\b", lowered)
@@ -352,6 +352,24 @@ class FinnV2OperationStateService:
                 )
                 if frequency:
                     values["dca_frequency"] = frequency
+                weekday_match = re.search(
+                    r"\b(monday|maandag|montag|tuesday|dinsdag|dienstag|wednesday|woensdag|mittwoch|"
+                    r"thursday|donderdag|donnerstag|friday|vrijdag|freitag|saturday|zaterdag|samstag|"
+                    r"sunday|zondag|sonntag)\b",
+                    lowered,
+                )
+                if weekday_match and "dca_day" in accepted_inputs:
+                    values["dca_day"] = self._requested_slot_value(
+                        field="dca_day", text=weekday_match.group(1), contract=contract
+                    )
+                month_day_match = re.search(
+                    r"\b(?:day|dag|tag)\s+(?:of\s+the\s+month|van\s+de\s+maand|des\s+monats)?\s*(\d{1,2})\b",
+                    lowered,
+                )
+                if month_day_match and "dca_month_day" in accepted_inputs:
+                    values["dca_month_day"] = self._requested_slot_value(
+                        field="dca_month_day", text=month_day_match.group(1), contract=contract
+                    )
             if any(token in lowered for token in ("daily trend", "dagtrend", "uptrend", "downtrend")):
                 values["market_condition"] = "trend_defined"
         elif contract.operation_id in {"watchlist_add", "watchlist_remove"} and explicit_asset:
@@ -639,6 +657,7 @@ class FinnV2OperationStateService:
         return re.split(
             r"\s+(?:(?:en|and|aber|but)\s+)?(?:sla\s+(?:niets|het)?\s*op|"
             r"(?:en|and|und)\s+(?:het\s+|the\s+|dem\s+)?(?:timeframe|tijdframe|time\s*frame)\b.*|"
+            r"(?:en\s+koop|and\s+buy|und\s+kauf\w*)\b.*|"
             r"(?:do\s+not|don't)\s+(?:save|write|persist)(?:\s+(?:it|the\s+setup|anything))?(?:\s+yet)?|"
             r"save\s+(?:nothing|it)|without\s+(?:saving|writing|persisting)\s+(?:it|anything)(?:\s+yet)?|"
             r"speicher\s+(?:nichts|es))\b",
