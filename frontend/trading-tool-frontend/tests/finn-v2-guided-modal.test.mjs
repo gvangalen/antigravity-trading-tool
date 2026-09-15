@@ -17,7 +17,7 @@ test("renders V2 setup drafts and proposals inside the simple FINN modal", () =>
 });
 
 test("builds strategy and bot draft cards from the terminal runtime contract", () => {
-  assert.match(source, /\["create_strategy", "create_bot"\]\.includes\(operationId\)/);
+  assert.match(source, /draftOperations\.includes\(initialOperationId\) \? initialOperationId : finalOperationId/);
   assert.match(source, /supplied_inputs: projection\?\.supplied_inputs \|\| \{\}/);
   assert.match(source, /draftTitles\.strategy/);
   assert.match(source, /draftTitles\.bot/);

@@ -4379,8 +4379,11 @@ function AIAssistantContent({
       const verified = run?.response;
       const projection = run?.runtime_trace?.terminal_projection || run?.runtime_trace || {};
       const setupDraft = projection?.setup_draft || null;
-      const operationId = projection?.final_operation_id || projection?.initial_operation_id;
-      const actionDraft = ["create_strategy", "create_bot"].includes(operationId)
+      const draftOperations = ["create_strategy", "create_bot"];
+      const initialOperationId = projection?.initial_operation_id;
+      const finalOperationId = projection?.final_operation_id;
+      const operationId = draftOperations.includes(initialOperationId) ? initialOperationId : finalOperationId;
+      const actionDraft = draftOperations.includes(operationId)
         ? {
             operation_id: operationId,
             draft_status: verified?.proposal_id ? "complete" : "collecting",
