@@ -4379,6 +4379,17 @@ function AIAssistantContent({
       const verified = run?.response;
       const projection = run?.runtime_trace?.terminal_projection || run?.runtime_trace || {};
       const setupDraft = projection?.setup_draft || null;
+      const operationId = projection?.final_operation_id || projection?.initial_operation_id;
+      const actionDraft = ["create_strategy", "create_bot"].includes(operationId)
+        ? {
+            operation_id: operationId,
+            draft_status: verified?.proposal_id ? "complete" : "collecting",
+            supplied_inputs: projection?.supplied_inputs || {},
+            missing_inputs: projection?.missing_inputs || [],
+            requested_slot: projection?.missing_inputs?.[0] || null,
+            canonical_target: projection?.canonical_target || null,
+          }
+        : null;
       const terminalText = verified?.content || "Ik kan deze FINN V2-run nu niet veilig afronden.";
       setMessages((prev) => prev.map((message) => (
         message.streamId === streamId
@@ -4393,8 +4404,10 @@ function AIAssistantContent({
                 run_id: runId,
                 run_status: run?.status,
                 setup_draft: setupDraft,
+                action_draft: actionDraft,
               },
               setupDraft,
+              actionDraft,
               reasoning: null,
               canConfirm: Boolean(verified?.confirmation_required && verified?.proposal_id),
               actions: verified?.proposal_id ? [{
@@ -5023,6 +5036,74 @@ function AIAssistantContent({
               <div key={field}>
                 <dt className="text-[10px] font-bold text-slate-500 dark:text-slate-400">{labels[field]}</dt>
                 <dd className="font-semibold text-slate-800 dark:text-slate-100">{String(value)}</dd>
+              </div>
+            ))}
+          </dl>
+        )}
+        {draft.requested_slot && draft.draft_status !== "complete" && (
+          <div className="rounded-xl bg-white/80 dark:bg-slate-950/40 px-3 py-2 text-xs font-semibold text-slate-700 dark:text-slate-200">
+            {at("draftRows.next", "Volgende invoer")}: {nextLabel}
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  const renderV2ActionDraftCard = (message) => {
+    const draft = message.actionDraft || message.state?.action_draft;
+    const operationId = draft?.operation_id;
+    if (!draft || !["create_strategy", "create_bot"].includes(operationId)) return null;
+
+    const isStrategy = operationId === "create_strategy";
+    const labels = isStrategy
+      ? {
+          name: at("fieldLabels.strategy.name", "Strategienaam"),
+          setup_id: at("fieldLabels.strategy.setup", "Gekoppelde setup"),
+          symbol: at("fieldLabels.asset", "Asset"),
+          timeframe: at("fieldLabels.setup.timeframe", "Timeframe"),
+          execution_mode: at("fieldLabels.strategy.executionMode", "Uitvoering"),
+          base_amount: at("fieldLabels.strategy.baseAmount", "Basisbedrag"),
+          entry: at("fieldLabels.strategy.entry", "Instap"),
+          stop_loss: at("fieldLabels.strategy.stopLoss", "Stop-loss"),
+          targets: at("fieldLabels.strategy.targets", "Koersdoelen"),
+          risk_rules: at("fieldLabels.strategy.risk", "Risicoregels"),
+        }
+      : {
+          name: at("fieldLabels.bot.name", "Botnaam"),
+          strategy_id: at("fieldLabels.bot.strategy", "Gekoppelde strategie"),
+          symbol: at("fieldLabels.asset", "Asset"),
+          mode: at("fieldLabels.bot.mode", "Modus"),
+          risk_profile: at("fieldLabels.bot.riskProfile", "Risicoprofiel"),
+          budget_total_eur: at("fieldLabels.bot.budget", "Budget"),
+        };
+    const values = Object.entries(draft.supplied_inputs || {}).filter(([field, value]) => (
+      labels[field] && value !== undefined && value !== null && value !== ""
+    ));
+    const formatValue = (value) => Array.isArray(value) ? value.join(", ") : String(value);
+    const status = draft.draft_status === "complete"
+      ? at("draftStatus.ready", "Klaar voor voorstel")
+      : at("draftStatus.collecting", "In voorbereiding");
+    const title = isStrategy
+      ? at("draftTitles.strategy", "Strategie concept")
+      : at("draftTitles.bot", "Bot concept");
+    const nextLabel = labels[draft.requested_slot] || at("draftRows.next", "Volgende invoer");
+
+    return (
+      <div className="mt-4 rounded-2xl border border-cyan-200 dark:border-cyan-900/50 bg-cyan-50/70 dark:bg-cyan-950/20 p-4 space-y-3">
+        <div className="flex items-center justify-between gap-3">
+          <div className="text-[10px] font-black uppercase tracking-widest text-cyan-800 dark:text-cyan-200">
+            {title}
+          </div>
+          <span className="rounded-full bg-white/80 dark:bg-slate-950/40 px-2 py-1 text-[9px] font-black uppercase tracking-widest text-cyan-800 dark:text-cyan-200">
+            {status}
+          </span>
+        </div>
+        {values.length > 0 && (
+          <dl className="grid grid-cols-2 gap-x-3 gap-y-2 text-xs">
+            {values.map(([field, value]) => (
+              <div key={field}>
+                <dt className="text-[10px] font-bold text-slate-500 dark:text-slate-400">{labels[field]}</dt>
+                <dd className="font-semibold text-slate-800 dark:text-slate-100">{formatValue(value)}</dd>
               </div>
             ))}
           </dl>
@@ -6647,6 +6728,7 @@ function AIAssistantContent({
                 )}
                 {renderBehavioralMemoryAckCard(m)}
                 {renderV2SetupDraftCard(m)}
+                {renderV2ActionDraftCard(m)}
                 {!isSimpleFinnModal && renderDraftCard(m)}
                 {renderInlineActionCard(m)}
                 {m.isError && (
