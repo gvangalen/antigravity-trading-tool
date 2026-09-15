@@ -11,7 +11,7 @@ from typing import Any, Dict, Optional
 from pathlib import Path
 
 from dotenv import load_dotenv
-from openai import OpenAI
+from openai import AsyncOpenAI, OpenAI
 from backend.services.ai_usage_observability_service import (
     elapsed_ms,
     get_ai_usage_context,
@@ -51,9 +51,11 @@ if not api_key:
     logger.warning("⚠️ OPENAI_API_KEY ontbreekt in de omgeving. AI functionaliteit is beperkt.")
 
 client = None
+async_client = None
 if api_key:
     try:
         client = OpenAI(api_key=api_key)
+        async_client = AsyncOpenAI(api_key=api_key)
         logger.info(f"🤖 OpenAI Client geïnitialiseerd (Model: {model})")
     except Exception as e:
         logger.error(f"❌ Fout bij initialiseren OpenAI Client: {e}")
@@ -61,13 +63,15 @@ if api_key:
 
 def reset_openai_client_after_fork() -> bool:
     """Give a prefork worker its own HTTP transports before it serves FINN."""
-    global client
+    global client, async_client
     if not api_key:
         client = None
+        async_client = None
         return False
     previous_client = client
     try:
         client = OpenAI(api_key=api_key)
+        async_client = AsyncOpenAI(api_key=api_key)
     except Exception:
         logger.warning("OpenAI client reset after worker fork failed", exc_info=True)
         client = None
@@ -78,6 +82,84 @@ def reset_openai_client_after_fork() -> bool:
         except Exception:
             logger.debug("Inherited OpenAI client close skipped after worker fork", exc_info=True)
     return True
+
+
+def _parse_structured_response(response: Any, *, active_model: str, started: float) -> Dict[str, Any]:
+    """Parse one Responses API JSON-schema result for sync and async callers."""
+    parsed = getattr(response, "output_parsed", None)
+    parsed_source = "sdk_parsed" if parsed is not None else None
+    if parsed is None and getattr(response, "output", None):
+        for item in response.output:
+            for content in getattr(item, "content", []) or []:
+                if getattr(content, "parsed", None) is not None:
+                    parsed = content.parsed
+                    parsed_source = "content_parsed"
+                    break
+            if parsed is not None:
+                break
+    if parsed is None:
+        output_text = getattr(response, "output_text", None)
+        if output_text:
+            try:
+                candidate = json.loads(output_text)
+                if isinstance(candidate, dict):
+                    parsed = candidate
+                    parsed_source = "response_output_text"
+            except (TypeError, json.JSONDecodeError):
+                pass
+    if parsed is None:
+        incomplete_details = getattr(response, "incomplete_details", None)
+        content_types = []
+        refusal = None
+        output_text = None
+        for item in getattr(response, "output", None) or []:
+            for content in getattr(item, "content", []) or []:
+                content_types.append(str(getattr(content, "type", "unknown")))
+                refusal = refusal or getattr(content, "refusal", None)
+                output_text = output_text or getattr(content, "text", None)
+        parse_error = None
+        if output_text:
+            try:
+                candidate = json.loads(output_text)
+                if isinstance(candidate, dict):
+                    parsed = candidate
+                    parsed_source = "content_text"
+            except (TypeError, json.JSONDecodeError) as exc:
+                parse_error = type(exc).__name__
+        if parsed is None:
+            detail = {
+                "response_status": getattr(response, "status", None),
+                "incomplete_reason": getattr(incomplete_details, "reason", None),
+                "content_types": content_types,
+                "refusal": str(refusal)[:500] if refusal else None,
+                "json_parse_error": parse_error,
+                "request_id": _read_request_id(response),
+            }
+            logger.warning("OpenAI structured response incomplete", extra={"structured_response_detail": detail})
+            return {"error": "incomplete_structured_response", "error_detail": detail}
+    usage = getattr(response, "usage", None)
+    input_tokens = int(getattr(usage, "input_tokens", 0) or 0)
+    output_tokens = int(getattr(usage, "output_tokens", 0) or 0)
+    reasoning_tokens = int(getattr(usage, "reasoning_tokens", 0) or 0)
+    _log_openai_usage(
+        model_name=str(getattr(response, "model", None) or active_model),
+        prompt_tokens=input_tokens,
+        completion_tokens=output_tokens,
+        response_time_ms=elapsed_ms(started),
+    )
+    return {
+        "parsed": parsed if isinstance(parsed, dict) else dict(parsed),
+        "model": str(getattr(response, "model", None) or active_model),
+        "input_tokens": input_tokens,
+        "output_tokens": output_tokens,
+        "reasoning_tokens": reasoning_tokens,
+        "provider_metadata": {
+            "response_status": getattr(response, "status", None),
+            "response_id": getattr(response, "id", None),
+            "request_id": _read_request_id(response),
+            "parsed_source": parsed_source,
+        },
+    }
 
 # ============================================================
 # 🔥 AI DEFAULTS
@@ -825,6 +907,111 @@ def ask_gpt_structured_response(
         if "timeout" in str(e).lower():
             return {"error": "timeout"}
     return {"error": "provider_error"}
+
+
+_DEFAULT_SYNC_STRUCTURED_PROVIDER = ask_gpt_structured_response
+
+
+async def ask_gpt_structured_response_async(
+    *,
+    prompt: str,
+    system_role: str,
+    output_spec: StructuredOutputSpec,
+    model_override: Optional[str] = None,
+    timeout_seconds: Optional[float] = None,
+    max_output_tokens: Optional[int] = None,
+    client_max_retries: Optional[int] = None,
+) -> Dict[str, Any]:
+    """Cancellable structured provider boundary for FINN lifecycle phases."""
+    # Existing callers and tests may inject the public sync provider. Honor an
+    # explicit replacement without making the production SDK call threaded.
+    if ask_gpt_structured_response is not _DEFAULT_SYNC_STRUCTURED_PROVIDER:
+        kwargs = {
+            "prompt": prompt,
+            "system_role": system_role,
+            "output_spec": output_spec,
+            "model_override": model_override,
+            "timeout_seconds": timeout_seconds,
+            "max_output_tokens": max_output_tokens,
+            "client_max_retries": client_max_retries,
+        }
+        if inspect.iscoroutinefunction(ask_gpt_structured_response):
+            injected = ask_gpt_structured_response(**kwargs)
+        else:
+            injected = asyncio.to_thread(ask_gpt_structured_response, **kwargs)
+        if timeout_seconds is None:
+            return await injected
+        return await asyncio.wait_for(injected, timeout=max(0.1, float(timeout_seconds)))
+    try:
+        _validate_structured_output_spec(output_spec)
+    except StructuredOutputContractError as exc:
+        return {"error": "structured_schema_contract_error", "error_detail": str(exc)}
+    availability = get_ai_availability()
+    if not availability["available"]:
+        _openai_runtime_state["blocked_calls"] = int(_openai_runtime_state.get("blocked_calls") or 0) + 1
+        reason = str(availability.get("reason") or AI_UNAVAILABLE_BUDGET)
+        _log_openai_quota_skip(reason)
+        return {"error": reason, "ai_status": availability}
+    if not async_client:
+        return {"error": "ai_unavailable_configuration", "ai_status": availability}
+    if not _rate_limit_allows_call():
+        return {"error": "ai_rate_limited", "ai_status": get_ai_availability()}
+    if _quota_breaker_active():
+        _openai_runtime_state["blocked_calls"] = int(_openai_runtime_state.get("blocked_calls") or 0) + 1
+        _log_quota_block_warning("Structured async")
+        _log_openai_quota_skip(AI_UNAVAILABLE_BUDGET)
+        return {"error": AI_UNAVAILABLE_BUDGET, "ai_status": get_ai_availability()}
+
+    _openai_runtime_state["json_calls"] = int(_openai_runtime_state.get("json_calls") or 0) + 1
+    active_model = str(model_override or model)
+    started = start_timer()
+    try:
+        options: Dict[str, Any] = {}
+        if client_max_retries is not None:
+            options["max_retries"] = client_max_retries
+        if timeout_seconds is not None:
+            options["timeout"] = max(0.1, float(timeout_seconds))
+        active_client = async_client.with_options(**options) if options else async_client
+        request_kwargs = build_structured_response_request(
+            model_name=active_model,
+            prompt=prompt,
+            system_role=system_role,
+            output_spec=output_spec,
+            max_output_tokens=max_output_tokens or MAX_TOKENS,
+            timeout_seconds=timeout_seconds,
+        )
+        if timeout_seconds is None:
+            response = await active_client.responses.create(**request_kwargs)
+        else:
+            response = await asyncio.wait_for(
+                active_client.responses.create(**request_kwargs),
+                timeout=max(0.1, float(timeout_seconds)),
+            )
+        return _parse_structured_response(response, active_model=active_model, started=started)
+    except asyncio.CancelledError:
+        raise
+    except Exception as exc:
+        logger.exception("OpenAI async structured response error")
+        if _is_provider_schema_contract_error(str(exc)):
+            return {"error": "structured_schema_contract_error", "error_detail": "provider_rejected_schema"}
+        _mark_runtime_error(str(exc))
+        if "insufficient_quota" in str(exc):
+            _mark_quota_exhausted()
+            _log_openai_quota_skip(AI_UNAVAILABLE_BUDGET)
+            return {"error": AI_UNAVAILABLE_BUDGET, "ai_status": get_ai_availability()}
+        if _is_rate_limited_exception(exc):
+            return {
+                "error": "ai_rate_limited",
+                "error_detail": "provider_http_429",
+                "provider_metadata": {
+                    "http_status": _read_status_code(exc),
+                    "request_id": _read_request_id(exc),
+                    "retry_after_seconds": _retry_after_seconds(exc),
+                },
+            }
+        if isinstance(exc, (asyncio.TimeoutError, TimeoutError)) or "timeout" in str(exc).lower():
+            return {"error": "timeout"}
+        return {"error": "provider_error"}
 
 
 def warm_openai_structured_runtime(*, timeout_seconds: int = 10) -> bool:

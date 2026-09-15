@@ -556,12 +556,10 @@ class FinnV2ReasoningService:
                 if remaining is not None:
                     provider_timeout = min(provider_timeout, max(0.5, remaining))
             call_started = monotonic()
-            # The provider helper is synchronous. Moving it off the worker
-            # event loop lets the owning lifecycle deadline terminalize a run
-            # even when an upstream transport ignores cancellation briefly.
+            # Use the cancellable async transport. A timed-out synchronous SDK
+            # call kept running in a thread and starved subsequent FINN turns.
             if remaining is None or remaining >= 0.5:
-                response = await asyncio.to_thread(
-                    openai_client.ask_gpt_structured_response,
+                response = await openai_client.ask_gpt_structured_response_async(
                     prompt=self.prompts.build_user_prompt(
                         context,
                         repair_attempt=attempt > 0,

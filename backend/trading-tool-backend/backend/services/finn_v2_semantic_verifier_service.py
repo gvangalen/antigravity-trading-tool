@@ -119,13 +119,7 @@ class FinnV2SemanticVerifierService:
         deterministic_summary: Dict[str, Any],
         timeout_seconds: float | None = None,
     ) -> SemanticVerificationResult:
-        """Run the synchronous provider client without blocking the worker loop.
-
-        The lifecycle deadline runs on that loop. Calling the legacy sync client
-        directly made a slow verifier invisible to cancellation and starved later
-        interactive runs. The sync request has its own bounded provider timeout;
-        this outer bound keeps lifecycle terminalisation responsive as well.
-        """
+        """Verify through the cancellable provider transport."""
         if not self.flags.is_semantic_verifier_enabled():
             return SemanticVerificationResult(available=False, passes=True)
 
@@ -145,17 +139,55 @@ class FinnV2SemanticVerifierService:
                 model=self.flags.semantic_verifier_model(),
             )
         try:
-            return await asyncio.wait_for(
-                asyncio.to_thread(
-                    self.verify,
-                    mode=mode,
-                    user_message=user_message,
-                    sanitized_draft=sanitized_draft,
-                    compact_evidence=compact_evidence,
-                    deterministic_summary=deterministic_summary,
-                    provider_timeout_seconds=effective_timeout,
+            started = monotonic()
+            response = await openai_client.ask_gpt_structured_response_async(
+                prompt=str({
+                    "user_message": user_message,
+                    "draft": sanitized_draft,
+                    "evidence": compact_evidence,
+                    "deterministic_summary": deterministic_summary,
+                }),
+                system_role=(
+                    "You are an independent verifier for FINN Core V2. "
+                    "Only judge question relevance, scope completeness, entailment, recommendation consistency, "
+                    "mode purity, and follow-up validity. Never reveal chain of thought. "
+                    "Deterministic failures are final and cannot be overridden."
                 ),
-                timeout=effective_timeout,
+                output_spec=StructuredOutputSpec(name="finn_v2_semantic_verifier", schema=self.SCHEMA),
+                model_override=self.flags.semantic_verifier_model(),
+                timeout_seconds=effective_timeout,
+                client_max_retries=0,
+            )
+            logger.info(
+                "FINN V2 semantic verifier async call finished",
+                extra={
+                    "stage": "semantic_verifier",
+                    "mode": mode,
+                    "model": response.get("model") or self.flags.semantic_verifier_model(),
+                    "latency_ms": int((monotonic() - started) * 1000),
+                    "output_status": "error" if response.get("error") else "ok",
+                    "error_code": response.get("error"),
+                },
+            )
+            if response.get("error"):
+                return SemanticVerificationResult(
+                    available=False,
+                    passes=False,
+                    reason_codes=[str(response["error"])],
+                    model=self.flags.semantic_verifier_model(),
+                )
+            parsed = response.get("parsed") or {}
+            return SemanticVerificationResult(
+                available=True,
+                passes=bool(parsed.get("passes")),
+                relevance_ok=bool(parsed.get("relevance_ok", True)),
+                scope_ok=bool(parsed.get("scope_ok", True)),
+                entailment_ok=bool(parsed.get("entailment_ok", True)),
+                recommendation_ok=bool(parsed.get("recommendation_ok", True)),
+                mode_purity_ok=bool(parsed.get("mode_purity_ok", True)),
+                follow_up_ok=bool(parsed.get("follow_up_ok", True)),
+                reason_codes=[str(item) for item in parsed.get("reason_codes", []) if str(item)],
+                model=response.get("model"),
             )
         except asyncio.TimeoutError:
             logger.warning(

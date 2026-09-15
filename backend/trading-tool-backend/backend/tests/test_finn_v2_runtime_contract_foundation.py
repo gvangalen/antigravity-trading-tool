@@ -676,8 +676,8 @@ def test_selector_persistence_precedes_post_selection_execution_and_has_a_separa
 def test_reasoning_provider_call_does_not_block_the_lifecycle_event_loop():
     source = (ROOT / "services" / "finn_v2_reasoning_service.py").read_text(encoding="utf-8")
 
-    assert "await asyncio.to_thread(" in source
-    assert "openai_client.ask_gpt_structured_response" in source
+    assert "await openai_client.ask_gpt_structured_response_async(" in source
+    assert "asyncio.to_thread(\n                    openai_client.ask_gpt_structured_response" not in source
 
 
 def test_semantic_verifier_has_the_same_database_and_deadline_boundary():
