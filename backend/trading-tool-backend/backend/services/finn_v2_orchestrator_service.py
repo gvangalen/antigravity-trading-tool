@@ -277,8 +277,14 @@ class FinnV2OrchestratorService:
             },
         )
         guided_state = dict(getattr(request_plan, "operation_state", {}) or {})
-        if getattr(request_plan, "operation_id", None) == "create_setup" and guided_state:
-            runtime_contract = await self.runtime_contracts.record_setup_draft(
+        record_guided_draft = getattr(self.runtime_contracts, "record_guided_draft", None)
+        if (
+            guided_state
+            and getattr(request_plan, "operation_id", None)
+            in {"create_setup", "create_strategy", "create_bot"}
+            and callable(record_guided_draft)
+        ):
+            runtime_contract = await record_guided_draft(
                 run_id=run_id, guided_state=guided_state
             )
         await self._commit_persistence_boundary(stage="selector_persisted")
@@ -343,13 +349,6 @@ class FinnV2OrchestratorService:
                 validation=None,
             )
             await self._persist_result(result)
-            if conversation_id:
-                await self._persist_collecting_guided_context(
-                    conversation_id=conversation_id,
-                    user_id=user_id,
-                    existing_context=conversation_context,
-                    guided_state=dict(getattr(request_plan, "operation_state", {}) or {}),
-                )
             await self._append_trace(
                 run_id=run_id,
                 user_id=user_id,
@@ -744,25 +743,6 @@ class FinnV2OrchestratorService:
             getattr(request_plan, "operation_id", None)
             in {"create_setup", "create_strategy", "create_bot"}
             and bool(state.get("missing_required_inputs"))
-        )
-
-    async def _persist_collecting_guided_context(
-        self,
-        *,
-        conversation_id: str,
-        user_id: int,
-        existing_context: dict,
-        guided_state: dict,
-    ) -> None:
-        """Keep a contract-backed guided draft available across worker turns."""
-        context = dict(existing_context or {})
-        context["conversation_state_version"] = "finn_v2.conversation-contracts.v1"
-        context["active_guided_operation"] = guided_state
-        context.pop("operation_state", None)
-        await self.conversations.update_context(
-            conversation_id=conversation_id,
-            user_id=user_id,
-            context={key: value for key, value in context.items() if value is not None},
         )
 
     async def _persist_result(self, result) -> None:

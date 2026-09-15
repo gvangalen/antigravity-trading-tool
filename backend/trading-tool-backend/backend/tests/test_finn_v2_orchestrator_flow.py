@@ -654,7 +654,7 @@ def test_verified_proposal_preserves_financial_lineage_and_marks_guided_state_pr
     assert context["active_guided_operation"]["open_proposal_id"] == "proposal-setup"
 
 
-def test_collecting_guided_draft_persists_the_next_slot_without_reasoning_or_verifier_state():
+def test_collecting_guided_draft_uses_contract_state_without_reasoning_or_verifier_state():
     service = FinnV2OrchestratorService(session=object())
     service.conversations = _FakeConversationRepo()
     request_plan = SimpleNamespace(
@@ -670,19 +670,8 @@ def test_collecting_guided_draft_persists_the_next_slot_without_reasoning_or_ver
     )
 
     assert service._is_collecting_guided_draft(request_plan=request_plan) is True
-    asyncio.run(
-        service._persist_collecting_guided_context(
-            conversation_id="conversation-setup",
-            user_id=7,
-            existing_context={"last_verified_context": {"run_id": "prior"}},
-            guided_state=request_plan.operation_state,
-        )
-    )
-
-    persisted = service.conversations.updated["context"]
-    assert persisted["active_guided_operation"]["collected_inputs"]["name"] == "FINN DCA Flow 0914"
-    assert persisted["active_guided_operation"]["next_missing_input"] == "dca_frequency"
-    assert "operation_state" not in persisted
+    assert request_plan.operation_state["collected_inputs"]["name"] == "FINN DCA Flow 0914"
+    assert request_plan.operation_state["next_missing_input"] == "dca_frequency"
 
 
 def test_strategy_and_bot_drafts_use_the_same_guided_fast_path():

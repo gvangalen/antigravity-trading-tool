@@ -166,6 +166,29 @@ def test_terminal_projection_exposes_safe_persisted_setup_draft():
     assert projection["setup_draft"]["supplied_inputs"]["name"] == "FINN DCA Flow 0914"
 
 
+def test_guided_strategy_and_bot_state_is_persisted_on_the_runtime_contract():
+    from backend.domain.finn_v2_runtime_contract import record_guided_draft
+
+    for operation_id, requested_slot in (
+        ("create_strategy", "execution_mode"),
+        ("create_bot", "name"),
+    ):
+        state = {
+            "initial_operation_id": operation_id,
+            "final_operation_id": operation_id,
+        }
+        guided_state = {
+            "operation_id": operation_id,
+            "collected_inputs": {"symbol": "BTC"},
+            "missing_required_inputs": [requested_slot],
+            "next_missing_input": requested_slot,
+        }
+
+        persisted = record_guided_draft(state, guided_state=guided_state)
+
+        assert persisted["guided_state"] == guided_state
+
+
 def test_terminal_projection_derives_required_inputs_and_polarity_from_registry():
     projection = terminal_projection(
         {

@@ -437,6 +437,19 @@ def record_setup_draft(state: Dict[str, Any], *, guided_state: Dict[str, Any]) -
     return state
 
 
+def record_guided_draft(state: Dict[str, Any], *, guided_state: Dict[str, Any]) -> Dict[str, Any]:
+    """Persist guided action state in the authoritative run contract."""
+    state = dict(state)
+    operation_id = str(state.get("final_operation_id") or state.get("initial_operation_id") or "")
+    if operation_id not in {"create_setup", "create_strategy", "create_bot"}:
+        return state
+    guided = dict(guided_state or {})
+    state["guided_state"] = guided
+    if operation_id == "create_setup":
+        return record_setup_draft(state, guided_state=guided)
+    return state
+
+
 def record_conversation_state(
     state: Dict[str, Any], *, lineage_state: Dict[str, Any], guided_state: Dict[str, Any]
 ) -> Dict[str, Any]:

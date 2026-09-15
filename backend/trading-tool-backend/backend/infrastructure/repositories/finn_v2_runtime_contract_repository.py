@@ -20,6 +20,7 @@ from backend.domain.finn_v2_runtime_contract import (
     record_action_result,
     record_selection,
     record_setup_draft,
+    record_guided_draft,
     terminal_projection,
 )
 from backend.infrastructure.models import FinnV2RuntimeContract
@@ -245,6 +246,14 @@ class FinnV2RuntimeContractRepository(FinnV2RepositoryTransactionMixin):
         """Persist a create-setup draft before tools or reasoning can run."""
         row = await self._required_for_update(run_id)
         next_state = record_setup_draft(deepcopy(row.state_json or {}), guided_state=guided_state)
+        if next_state == (row.state_json or {}):
+            return row
+        return await self._write_revision(row=row, state=next_state)
+
+    async def record_guided_draft(self, *, run_id: str, guided_state: Dict[str, Any]) -> FinnV2RuntimeContract:
+        """Persist any registry-backed guided create flow on its run contract."""
+        row = await self._required_for_update(run_id)
+        next_state = record_guided_draft(deepcopy(row.state_json or {}), guided_state=guided_state)
         if next_state == (row.state_json or {}):
             return row
         return await self._write_revision(row=row, state=next_state)
