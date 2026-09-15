@@ -96,6 +96,20 @@ class FinnV2OperationClassificationService:
                 (contract,),
                 conversation_context=conversation_context,
             )
+        if self._is_explicit_create_setup_request(message=message, facts=facts):
+            # The entity/action pair maps to one existing registry contract.
+            # Skipping the provider selector here keeps guided setup turns
+            # bounded; registry input, policy and verifier checks still own
+            # the proposal and any eventual execution.
+            contract = self.registry.require_supported("create_setup")
+            return self._result(
+                contract.operation_id,
+                facts,
+                "high",
+                "registry_constraint",
+                (contract,),
+                conversation_context=conversation_context,
+            )
         candidates = self._selector_manifest()
         guided_contract = self._guided_continuation_contract(facts=facts, context=conversation_context or {})
         if guided_contract is not None:
@@ -207,6 +221,24 @@ class FinnV2OperationClassificationService:
         )
         return score_subject and bool(
             re.search(r"\b(?:explain|erklaere|erkläre)\b|\bleg(?:\s+\w+){0,8}\s+uit\b", text)
+        )
+
+    @staticmethod
+    def _is_explicit_create_setup_request(
+        *, message: str, facts: FinnV2PreprocessedRequest
+    ) -> bool:
+        text = str(message or "").casefold()
+        create_verb = bool(
+            re.search(
+                r"\b(?:maak|aanmaken|cre(?:ate|eer)|erstelle|erstellen|lege\s+an)\b",
+                text,
+            )
+        )
+        return (
+            create_verb
+            and facts.primary_entity == "setup"
+            and "setup" in facts.explicit_entities
+            and not any(entity in facts.explicit_entities for entity in ("strategy", "bot"))
         )
 
     @staticmethod

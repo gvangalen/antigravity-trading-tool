@@ -86,6 +86,26 @@ def test_workspace_setup_read_source_survives_contract_validation():
     assert FinnV2OperationClassificationValidator().validation_error(selection) is None
 
 
+def test_explicit_create_setup_uses_registry_contract_without_provider():
+    class ExplodingSelector:
+        def select(self, **_kwargs):
+            raise AssertionError("explicit create_setup must not call the provider selector")
+
+    result = FinnV2OperationClassificationService(
+        structured_selector=ExplodingSelector()
+    ).classify(
+        message=(
+            "Maak een wekelijkse DCA-setup voor BTC op 4H met de naam "
+            "FINN DCA Live 0915D en koop op maandag."
+        )
+    )
+
+    assert result.operation_id == "create_setup"
+    assert result.selector_source == "registry_constraint"
+    assert result.action == "create"
+    assert result.selected_target_asset == "BTC"
+
+
 def test_declassified_action_contract_acceptance_handoff_is_complete_and_immutable():
     """Keep every Build-authorized regression record available to public tests."""
     fixture = Path(__file__).parent / "fixtures" / "finn_v2_declassified_34746230528_regression.json"

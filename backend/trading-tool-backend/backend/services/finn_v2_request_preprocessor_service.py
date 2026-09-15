@@ -277,6 +277,10 @@ class FinnV2RequestPreprocessorService:
         financial_execution_intent = self._is_explicit_financial_execution_intent(normalized) or bool(
             asset and re.search(r"\b(?:koop\w*|verkoop\w*|buy\w*|sell\w*|kaufe\w*|verkaufe\w*|place\w*|plaats\w*|submit\w*)\b", normalized)
         )
+        # In a create-setup request, "buy on Monday" describes the setup's
+        # schedule; it is not an instruction to place a market order now.
+        if primary_entity == "setup" and action == "create":
+            financial_execution_intent = False
         ambiguous_reference = self._has_unbound_deictic_reference(normalized, entities)
         if financial_execution_intent:
             action = "execute"
