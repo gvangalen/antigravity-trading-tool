@@ -328,8 +328,8 @@ class FinnV2OrchestratorService:
         domain_requirements = self.requirements.determine(analysis)
         tool_plan = self.tool_plans.build(run_id=run_id, analysis=analysis, domain_plan=domain_requirements)
 
-        if self._is_collecting_setup_draft(request_plan=request_plan):
-            # An incomplete setup draft needs no market tools, state snapshot,
+        if self._is_collecting_guided_draft(request_plan=request_plan):
+            # An incomplete guided action needs no market tools, state snapshot,
             # policy, reasoning, or verifier provider. Persist the typed
             # clarification directly after selection so a slow workspace read
             # cannot consume the user's lifecycle deadline.
@@ -344,7 +344,7 @@ class FinnV2OrchestratorService:
             )
             await self._persist_result(result)
             if conversation_id:
-                await self._persist_collecting_setup_context(
+                await self._persist_collecting_guided_context(
                     conversation_id=conversation_id,
                     user_id=user_id,
                     existing_context=conversation_context,
@@ -354,7 +354,7 @@ class FinnV2OrchestratorService:
                 run_id=run_id,
                 user_id=user_id,
                 trace_id=trace_id,
-                event_type="setup_draft_fast_path_completed",
+                event_type="guided_draft_fast_path_completed",
                 payload_json={"run_id": run_id, "contract_id": runtime_contract.contract_id},
             )
             await self._record_phase_timestamp(run_id=run_id, phase="fast_path_completed")
@@ -738,14 +738,15 @@ class FinnV2OrchestratorService:
         return context
 
     @staticmethod
-    def _is_collecting_setup_draft(*, request_plan) -> bool:
+    def _is_collecting_guided_draft(*, request_plan) -> bool:
         state = dict(getattr(request_plan, "operation_state", {}) or {})
         return (
-            getattr(request_plan, "operation_id", None) == "create_setup"
+            getattr(request_plan, "operation_id", None)
+            in {"create_setup", "create_strategy", "create_bot"}
             and bool(state.get("missing_required_inputs"))
         )
 
-    async def _persist_collecting_setup_context(
+    async def _persist_collecting_guided_context(
         self,
         *,
         conversation_id: str,
@@ -753,7 +754,7 @@ class FinnV2OrchestratorService:
         existing_context: dict,
         guided_state: dict,
     ) -> None:
-        """Keep the contract-backed draft available across a new worker turn."""
+        """Keep a contract-backed guided draft available across worker turns."""
         context = dict(existing_context or {})
         context["conversation_state_version"] = "finn_v2.conversation-contracts.v1"
         context["active_guided_operation"] = guided_state

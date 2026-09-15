@@ -654,7 +654,7 @@ def test_verified_proposal_preserves_financial_lineage_and_marks_guided_state_pr
     assert context["active_guided_operation"]["open_proposal_id"] == "proposal-setup"
 
 
-def test_collecting_setup_draft_persists_the_next_slot_without_reasoning_or_verifier_state():
+def test_collecting_guided_draft_persists_the_next_slot_without_reasoning_or_verifier_state():
     service = FinnV2OrchestratorService(session=object())
     service.conversations = _FakeConversationRepo()
     request_plan = SimpleNamespace(
@@ -669,9 +669,9 @@ def test_collecting_setup_draft_persists_the_next_slot_without_reasoning_or_veri
         },
     )
 
-    assert service._is_collecting_setup_draft(request_plan=request_plan) is True
+    assert service._is_collecting_guided_draft(request_plan=request_plan) is True
     asyncio.run(
-        service._persist_collecting_setup_context(
+        service._persist_collecting_guided_context(
             conversation_id="conversation-setup",
             user_id=7,
             existing_context={"last_verified_context": {"run_id": "prior"}},
@@ -683,6 +683,26 @@ def test_collecting_setup_draft_persists_the_next_slot_without_reasoning_or_veri
     assert persisted["active_guided_operation"]["collected_inputs"]["name"] == "FINN DCA Flow 0914"
     assert persisted["active_guided_operation"]["next_missing_input"] == "dca_frequency"
     assert "operation_state" not in persisted
+
+
+def test_strategy_and_bot_drafts_use_the_same_guided_fast_path():
+    service = FinnV2OrchestratorService(session=object())
+
+    for operation_id, missing in (
+        ("create_strategy", ["execution_mode"]),
+        ("create_bot", ["name"]),
+    ):
+        request_plan = SimpleNamespace(
+            operation_id=operation_id,
+            operation_state={
+                "operation_id": operation_id,
+                "collected_inputs": {"symbol": "BTC"},
+                "missing_required_inputs": missing,
+                "next_missing_input": missing[0],
+            },
+        )
+
+        assert service._is_collecting_guided_draft(request_plan=request_plan) is True
 
 
 def test_durable_lineage_uses_the_contract_target_instead_of_a_late_tool_selector():
