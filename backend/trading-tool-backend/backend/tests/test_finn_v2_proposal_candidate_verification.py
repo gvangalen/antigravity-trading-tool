@@ -75,6 +75,74 @@ def test_create_strategy_proposal_uses_its_parent_setup_as_the_owned_target():
     assert proposal.change.strategy_fields["setup_id"] == 12
 
 
+def test_create_strategy_parent_target_is_grounded_without_explicit_evidence_refs():
+    service = FinnV2ResponseVerifierService(session=object())
+    draft = ResponseDraft(
+        draft_id="draft-strategy-grounded",
+        run_id="run-strategy-grounded",
+        user_id=7,
+        mode="CREATE_PROPOSAL",
+        direct_answer="Ik heb een strategiedraft voorbereid.",
+        main_observation="De gekoppelde setup is gecontroleerd.",
+        proposal_candidate=ProposalCandidate(
+            operation_type="create_strategy",
+            target_type="strategy",
+            target_id="12",
+            proposed_changes={
+                "setup_id": 12,
+                "strategy_fields": {"setup_id": 12, "execution_mode": "fixed", "base_amount": 100},
+            },
+            evidence_refs=[],
+            impact_summary="impact",
+            risk_summary="risk",
+            confirmation_required=True,
+        ),
+        evidence_set_hash="hash-strategy-grounded",
+        created_at=datetime.now(timezone.utc),
+    )
+    evidence = {"E1": SimpleNamespace(entity_id="12", facts={"setup_id": 12})}
+
+    assert service._proposal_ok(
+        draft,
+        SimpleNamespace(operation_type="create_strategy", confirmation_required=True),
+        evidence,
+    ) is True
+
+
+def test_create_strategy_parent_target_rejects_unknown_or_mismatched_setup():
+    service = FinnV2ResponseVerifierService(session=object())
+    draft = ResponseDraft(
+        draft_id="draft-strategy-mismatch",
+        run_id="run-strategy-mismatch",
+        user_id=7,
+        mode="CREATE_PROPOSAL",
+        direct_answer="Ik heb een strategiedraft voorbereid.",
+        main_observation="De setup moet owner-scoped bestaan.",
+        proposal_candidate=ProposalCandidate(
+            operation_type="create_strategy",
+            target_type="strategy",
+            target_id="99",
+            proposed_changes={
+                "setup_id": 99,
+                "strategy_fields": {"setup_id": 99, "execution_mode": "fixed", "base_amount": 100},
+            },
+            evidence_refs=[],
+            impact_summary="impact",
+            risk_summary="risk",
+            confirmation_required=True,
+        ),
+        evidence_set_hash="hash-strategy-mismatch",
+        created_at=datetime.now(timezone.utc),
+    )
+    evidence = {"E1": SimpleNamespace(entity_id="12", facts={"setup_id": 12})}
+
+    assert service._proposal_ok(
+        draft,
+        SimpleNamespace(operation_type="create_strategy", confirmation_required=True),
+        evidence,
+    ) is False
+
+
 def test_create_bot_proposal_uses_its_parent_strategy_as_the_owned_target():
     service = FinnV2ResponseVerifierService(session=object())
     draft = ResponseDraft(

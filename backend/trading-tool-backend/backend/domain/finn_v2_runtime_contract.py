@@ -227,6 +227,7 @@ def new_runtime_contract_state(*, run: Any, contract_id: str) -> Dict[str, Any]:
         "lineage_state": {},
         "guided_state": {},
         "setup_draft": {},
+        "action_draft": {},
         "final_operation_id": None,
         "final_mode": None,
         "operation_change_reason": None,
@@ -447,6 +448,22 @@ def record_guided_draft(state: Dict[str, Any], *, guided_state: Dict[str, Any]) 
     state["guided_state"] = guided
     if operation_id == "create_setup":
         return record_setup_draft(state, guided_state=guided)
+    supplied = dict(guided.get("collected_inputs") or state.get("supplied_inputs") or {})
+    missing = list(guided.get("missing_required_inputs") or state.get("missing_inputs") or [])
+    state["action_draft"] = {
+        "operation_id": operation_id,
+        "draft_status": "complete" if not missing else "collecting",
+        "supplied_inputs": supplied,
+        "missing_inputs": missing,
+        "requested_slot": guided.get("next_missing_input"),
+        "field_sources": dict(guided.get("input_sources") or {}),
+        "conversation_id": (state.get("identity") or {}).get("conversation_id"),
+        "run_id": (state.get("identity") or {}).get("run_id"),
+        "draft_revision": guided.get("state_revision"),
+    }
+    state.setdefault("transition_log", []).append(
+        {"type": "action_draft", "operation_id": operation_id, "status": state["action_draft"]["draft_status"]}
+    )
     return state
 
 
@@ -592,6 +609,7 @@ def terminal_projection(
         "supplied_inputs": dict(state.get("supplied_inputs") or {}),
         "missing_inputs": list(state.get("missing_inputs") or []),
         "setup_draft": dict(state.get("setup_draft") or {}),
+        "action_draft": dict(state.get("action_draft") or {}),
         "terminal_status": status,
         "terminal_response_type": state.get("terminal_response_type") or ("failure" if status == "failed" else "response"),
         "proposal_lifecycle": dict(state.get("proposal_lifecycle") or {}),

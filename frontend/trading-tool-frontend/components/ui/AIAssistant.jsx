@@ -4383,7 +4383,8 @@ function AIAssistantContent({
       const initialOperationId = projection?.initial_operation_id;
       const finalOperationId = projection?.final_operation_id;
       const operationId = draftOperations.includes(initialOperationId) ? initialOperationId : finalOperationId;
-      const actionDraft = draftOperations.includes(operationId)
+      const persistedActionDraft = projection?.action_draft || null;
+      const actionDraft = persistedActionDraft || (draftOperations.includes(operationId)
         ? {
             operation_id: operationId,
             draft_status: verified?.proposal_id ? "complete" : "collecting",
@@ -4392,7 +4393,7 @@ function AIAssistantContent({
             requested_slot: projection?.missing_inputs?.[0] || null,
             canonical_target: projection?.canonical_target || null,
           }
-        : null;
+        : null);
       const terminalText = verified?.content || "Ik kan deze FINN V2-run nu niet veilig afronden.";
       setMessages((prev) => prev.map((message) => (
         message.streamId === streamId

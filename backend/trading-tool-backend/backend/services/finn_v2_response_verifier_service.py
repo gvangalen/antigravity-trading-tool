@@ -490,7 +490,18 @@ class FinnV2ResponseVerifierService:
                 increment_execution_safety_counter(f"finn_v2_verifier_results_total:{draft.mode}:reject")
                 raise FinnV2VerifierRejected(verifier, draft=draft)
             if verifier.action.startswith("downgrade_"):
-                await self._append_trace(trace_id=trace_id, run_id=run.id, user_id=run.user_id, event_type="response_downgraded", payload={"draft_id": draft.draft_id, "action": verifier.action})
+                await self._append_trace(
+                    trace_id=trace_id,
+                    run_id=run.id,
+                    user_id=run.user_id,
+                    event_type="response_downgraded",
+                    payload={
+                        "draft_id": draft.draft_id,
+                        "action": verifier.action,
+                        "reason_codes": list(verifier.reason_codes or []),
+                        "coverage": verifier.coverage.dict(),
+                    },
+                )
                 verifier = self._deterministic_verify(
                     run=run,
                     orchestrator_result=orchestrator_result,
@@ -1731,30 +1742,27 @@ class FinnV2ResponseVerifierService:
             return False
         if not candidate.confirmation_required == bool(policy.confirmation_required):
             return False
-        if candidate.evidence_refs:
-            if any(ref not in evidence_by_ref for ref in candidate.evidence_refs):
-                return False
-        else:
-            # A targetless CREATE proposal is grounded in its validated typed
-            # inputs rather than an existing owned entity. Requiring an
-            # evidence row here made a completed create_setup draft impossible
-            # to publish even though the registry contract, policy and payload
-            # had all passed. Mutations of existing entities still require an
-            # owner-scoped evidence reference below.
-            try:
-                candidate_operation = getattr(candidate.operation_type, "value", candidate.operation_type)
-                operation = FinnV2OperationRegistry().require_supported(str(candidate_operation))
-            except ValueError:
-                return False
-            if not (
-                operation.action_polarity.value == "create"
-                and not candidate.target_id
-                and bool(candidate.proposed_changes)
-            ):
-                return False
+        try:
+            candidate_operation = getattr(candidate.operation_type, "value", candidate.operation_type)
+            operation = FinnV2OperationRegistry().require_supported(str(candidate_operation))
+        except ValueError:
+            return False
+        if candidate.evidence_refs and any(ref not in evidence_by_ref for ref in candidate.evidence_refs):
+            return False
         if candidate.target_id:
-            return any((item.entity_id and str(item.entity_id) == str(candidate.target_id)) or (item.facts.get("bot_id") and str(item.facts.get("bot_id")) == str(candidate.target_id)) or (item.facts.get("strategy_id") and str(item.facts.get("strategy_id")) == str(candidate.target_id)) or (item.facts.get("setup_id") and str(item.facts.get("setup_id")) == str(candidate.target_id)) for item in evidence_by_ref.values())
-        return True
+            # Creates such as create_strategy/create_bot target an existing
+            # owner-scoped parent. They are valid without explicit evidence
+            # refs when the hydrated evidence set contains that exact parent.
+            return any(
+                (item.entity_id and str(item.entity_id) == str(candidate.target_id))
+                or (item.facts.get("bot_id") and str(item.facts.get("bot_id")) == str(candidate.target_id))
+                or (item.facts.get("strategy_id") and str(item.facts.get("strategy_id")) == str(candidate.target_id))
+                or (item.facts.get("setup_id") and str(item.facts.get("setup_id")) == str(candidate.target_id))
+                for item in evidence_by_ref.values()
+            )
+        # A targetless CREATE is grounded in the validated typed payload. All
+        # other actions require an owner-scoped target above.
+        return operation.action_polarity.value == "create" and bool(candidate.proposed_changes)
 
     def _safety_ok(self, draft: ResponseDraft) -> bool:
         text = f"{draft.direct_answer}\n{draft.main_observation}".lower()

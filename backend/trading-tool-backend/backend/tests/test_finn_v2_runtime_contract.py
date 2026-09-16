@@ -187,6 +187,16 @@ def test_guided_strategy_and_bot_state_is_persisted_on_the_runtime_contract():
         persisted = record_guided_draft(state, guided_state=guided_state)
 
         assert persisted["guided_state"] == guided_state
+        assert persisted["action_draft"]["operation_id"] == operation_id
+        assert persisted["action_draft"]["requested_slot"] == requested_slot
+        assert persisted["action_draft"]["supplied_inputs"] == {"symbol": "BTC"}
+        projection = terminal_projection(
+            persisted,
+            status="clarification_required",
+            mode="CREATE_PROPOSAL",
+            response={},
+        )
+        assert projection["action_draft"] == persisted["action_draft"]
 
 
 def test_terminal_projection_derives_required_inputs_and_polarity_from_registry():
