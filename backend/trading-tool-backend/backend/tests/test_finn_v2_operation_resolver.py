@@ -443,6 +443,22 @@ def test_linked_bot_question_needs_only_the_bot_and_its_strategy_subjects():
     assert resolved.operation_id == "read_linked_bot"
 
 
+def test_contextual_linked_bot_read_does_not_require_strategy_as_explicit_entity():
+    registry = FinnV2OperationRegistry()
+    resolved = FinnV2OperationResolverService(registry).resolve(
+        selection=_selection("evaluate_bot", {"goal": "evaluate", "object": "bot"}),
+        candidates=registry.list(),
+        conversation_context={},
+        request_facts={
+            "action_polarity": "read",
+            "explicit_entities": ("bot",),
+            "linked_graph_relationship": True,
+        },
+    )
+
+    assert resolved.operation_id == "read_linked_bot"
+
+
 def test_indicator_deactivation_stays_an_indicator_update_contract():
     registry = FinnV2OperationRegistry()
     resolved = FinnV2OperationResolverService(registry).resolve(
