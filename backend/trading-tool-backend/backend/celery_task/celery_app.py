@@ -295,7 +295,8 @@ logger.info("🚀 Celery Beat schedule geladen (OPTIMIZED)")
 # The API only publishes named tasks and FINN's isolated worker only consumes
 # FINN tasks. Importing every market/reporting module in those processes used
 # several hundred MB on the 1 GB production host before a user run began.
-# Background and beat retain the complete registration set.
+# The background worker retains the complete registration set. Beat and the
+# API only publish named tasks, so they use the lightweight publisher profile.
 CELERY_RUNTIME_PROFILE = os.getenv("TRADAMIND_CELERY_PROFILE", "full").strip().lower()
 if CELERY_RUNTIME_PROFILE not in {"api", "finn", "full"}:
     raise RuntimeError("invalid_tradamind_celery_profile")

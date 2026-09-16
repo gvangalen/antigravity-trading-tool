@@ -87,6 +87,16 @@ def test_worker_concurrency_is_centralized_in_shared_ecosystem_config():
     assert "finnInteractive: 1" in source
 
 
+def test_celery_beat_uses_lightweight_publisher_profile():
+    from pathlib import Path
+
+    shared_ecosystem = Path(__file__).resolve().parents[4] / "ops" / "deploy" / "ecosystem.shared.js"
+    source = shared_ecosystem.read_text()
+    beat_block = source.split("name: beatWorker", 1)[1].split("max_memory_restart", 1)[0]
+
+    assert 'TRADAMIND_CELERY_PROFILE: "api"' in beat_block
+
+
 def test_all_named_queues_are_assigned_to_pm2_workers():
     from pathlib import Path
 

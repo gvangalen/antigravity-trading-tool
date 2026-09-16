@@ -245,7 +245,7 @@ function createEcosystem(environmentName) {
           ...RELEASE_METADATA_ENV,
           APP_ENV: environment.appEnv,
           TRADAMIND_BUILD_SERVICE: "celery-beat",
-          TRADAMIND_CELERY_PROFILE: "full",
+          TRADAMIND_CELERY_PROFILE: "api",
         },
         max_memory_restart: "200M",
       },
