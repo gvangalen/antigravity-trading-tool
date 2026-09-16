@@ -106,7 +106,11 @@ def test_contextual_bot_implication_has_a_released_response_reference():
         selection=_selection("read_linked_bot", {"goal": "read", "object": "bot"}),
         candidates=registry.list(),
         conversation_context={"last_verified_context": {"verified_response_id": "response-1"}},
-        request_facts={"explicit_entities": ("bot",), "discourse_act": "contextual_follow_up"},
+        request_facts={
+            "explicit_entities": ("bot",),
+            "discourse_act": "contextual_follow_up",
+            "action_polarity": "evaluate",
+        },
     )
 
     assert resolved.operation_id == "evaluate_bot"
@@ -452,6 +456,23 @@ def test_contextual_linked_bot_read_does_not_require_strategy_as_explicit_entity
         request_facts={
             "action_polarity": "read",
             "explicit_entities": ("bot",),
+            "linked_graph_relationship": True,
+        },
+    )
+
+    assert resolved.operation_id == "read_linked_bot"
+
+
+def test_linked_bot_read_stays_read_even_with_prior_verified_lineage():
+    registry = FinnV2OperationRegistry()
+    resolved = FinnV2OperationResolverService(registry).resolve(
+        selection=_selection("evaluate_bot", {"goal": "evaluate", "object": "bot"}),
+        candidates=registry.list(),
+        conversation_context={"last_verified_context": {"verified_response_id": "response-1"}},
+        request_facts={
+            "action_polarity": "read",
+            "explicit_entities": ("bot", "strategy"),
+            "discourse_act": "contextual_follow_up",
             "linked_graph_relationship": True,
         },
     )

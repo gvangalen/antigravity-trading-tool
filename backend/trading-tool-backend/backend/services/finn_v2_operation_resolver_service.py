@@ -308,9 +308,13 @@ class FinnV2OperationResolverService:
             and contract_action not in {"create", "update", "delete", "deactivate", "activate"}
             and (
                 goal == "consequence"
-                or str((request_facts or {}).get("discourse_act") or "") in {
-                    "contextual_follow_up", "evaluation",
-                }
+                or requested_action == "evaluate"
+                or str((request_facts or {}).get("discourse_act") or "") == "evaluation"
+                or (
+                    str((request_facts or {}).get("discourse_act") or "") == "contextual_follow_up"
+                    and self._has_any_eligible_lineage(conversation_context)
+                    and not bool((request_facts or {}).get("linked_graph_relationship"))
+                )
             )
             and not bool((request_facts or {}).get("explicit_plan_subject"))
         ):
