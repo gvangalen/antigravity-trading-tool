@@ -197,6 +197,9 @@ class FinnV2OrchestratorService:
             conversation_id=conversation_id,
             user_id=user_id,
             run_id=run_id,
+            has_prior_run=(getattr(run, "client_context_json", {}) or {}).get(
+                "_conversation_has_prior_run"
+            ),
         )
         await self._record_phase_timestamp(run_id=run_id, phase="context_loaded")
         # Context is now an immutable plain mapping and ``run`` is loaded
@@ -666,6 +669,7 @@ class FinnV2OrchestratorService:
         conversation_id: Optional[str],
         user_id: int,
         run_id: str,
+        has_prior_run: Optional[bool] = None,
     ) -> dict:
         """Load the parent contract state before selector classification.
 
@@ -673,6 +677,8 @@ class FinnV2OrchestratorService:
         be excluded from the lookup or it would mask the last released
         lineage and active guided flow for this continuation turn.
         """
+        if has_prior_run is False:
+            return {}
         context = {}
         if conversation_id:
             context = dict(

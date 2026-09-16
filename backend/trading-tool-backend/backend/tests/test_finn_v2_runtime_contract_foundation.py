@@ -202,6 +202,29 @@ def test_new_conversation_does_not_implicitly_load_an_unrelated_owner_action_res
     assert "previous_action_result" not in context
 
 
+def test_proven_first_turn_skips_all_continuation_reads():
+    from backend.services.finn_v2_orchestrator_service import FinnV2OrchestratorService
+
+    class _NoReads:
+        def __getattr__(self, _name):
+            raise AssertionError("first turn must not read continuation state")
+
+    service = object.__new__(FinnV2OrchestratorService)
+    service.conversations = _NoReads()
+    service.runtime_contracts = _NoReads()
+
+    context = asyncio.run(
+        service._load_continuation_context(
+            conversation_id="new-conversation",
+            user_id=7,
+            run_id="first-run",
+            has_prior_run=False,
+        )
+    )
+
+    assert context == {}
+
+
 def test_persisted_parent_contract_content_reaches_the_structured_selector_input():
     """The selector receives released lineage content, not merely a parent id."""
     from backend.services.finn_v2_operation_classification_service import FinnV2OperationClassificationService

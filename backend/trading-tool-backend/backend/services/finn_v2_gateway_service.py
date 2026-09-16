@@ -95,6 +95,13 @@ class FinnV2GatewayService:
         redacted_workspace_hints = self._redact_hint_map(request.workspace_hints)
         redacted_client_context = self._redact_hint_map(request.client_context)
         redacted_client_context["_request_path"] = request_path
+        # The gateway has the authoritative conversation row before creating
+        # the child contract. Let the worker skip lineage reads only when this
+        # is provably the first run; continuations still hydrate exclusively
+        # from persisted contract state.
+        redacted_client_context["_conversation_has_prior_run"] = bool(
+            getattr(conversation, "last_run_id", None)
+        )
         run = await self.run_service.create_run(
             {
                 "id": f"finn-v2-run-{uuid.uuid4().hex}",

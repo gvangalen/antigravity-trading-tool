@@ -90,6 +90,7 @@ def test_gateway_autogenerates_conversation_and_redacts_hints(monkeypatch):
     assert run.client_context_json["cookie_value"] == "[redacted]"
     assert run.client_context_json["_client_ip_hash"] is not None
     assert run.client_context_json["_user_agent_hash"] is not None
+    assert run.client_context_json["_conversation_has_prior_run"] is False
 
 
 def test_gateway_serializes_sqlalchemy_objects_in_hints(monkeypatch):
