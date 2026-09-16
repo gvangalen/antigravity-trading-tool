@@ -220,7 +220,10 @@ function createEcosystem(environmentName) {
       {
         name: finnInteractiveWorker,
         script: CELERY_BIN,
-        args: `-A backend.celery_task.celery_app worker --loglevel=info -Ofair --concurrency=${WORKER_CONCURRENCY.finnInteractive} --max-tasks-per-child=50 -Q ${queuePrefix}finn_interactive -n ${environmentName}-finn-interactive@%h`,
+        // FINN has its own queue and runs exactly one task at a time. A solo
+        // pool keeps that isolation but avoids a redundant prefork parent on
+        // the memory-constrained production host.
+        args: `-A backend.celery_task.celery_app worker --pool=solo --loglevel=info -Ofair --concurrency=${WORKER_CONCURRENCY.finnInteractive} -Q ${queuePrefix}finn_interactive -n ${environmentName}-finn-interactive@%h`,
         cwd: backendDir,
         interpreter: "none",
         env: {

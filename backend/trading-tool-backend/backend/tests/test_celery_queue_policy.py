@@ -70,8 +70,8 @@ def test_pm2_config_keeps_finn_isolated_and_bounds_background_queues():
     assert "background: 1" in source
     assert "finnInteractive: 1" in source
     assert "--concurrency=${WORKER_CONCURRENCY.background}" in source
-    assert "worker --pool=solo --loglevel=info" in source
-    assert "worker --loglevel=info -Ofair --concurrency=${WORKER_CONCURRENCY.finnInteractive}" in source
+    assert source.count("worker --pool=solo --loglevel=info") == 2
+    assert "--concurrency=${WORKER_CONCURRENCY.finnInteractive}" in source
     assert "${queuePrefix}market_data,${queuePrefix}portfolio,${queuePrefix}scoring" in source
     assert "${queuePrefix}finn_interactive" in source
 
