@@ -126,6 +126,21 @@ class FinnV2OperationClassificationService:
                 (guided_contract,),
                 conversation_context=conversation_context,
             )
+        deterministic_read_operation = self._deterministic_graph_read_operation(facts)
+        if deterministic_read_operation:
+            # These registry reads are fully identified by typed request facts
+            # and have model_policy="never". Avoid making their availability
+            # depend on a redundant selector-provider round trip. Persisted
+            # guided state has priority, so slot answers cannot become reads.
+            contract = self.registry.require_supported(deterministic_read_operation)
+            return self._result(
+                contract.operation_id,
+                facts,
+                "high",
+                "registry_read_constraint",
+                (contract,),
+                conversation_context=conversation_context,
+            )
         candidates = self._guided_candidates(facts=facts, context=conversation_context or {}, candidates=candidates)
         candidates = self._lineage_candidates(facts=facts, context=conversation_context or {}, candidates=candidates)
         selection, error = self.structured_selector.select(
@@ -267,6 +282,46 @@ class FinnV2OperationClassificationService:
         return score_subject and bool(
             re.search(r"\b(?:explain|erklaere|erkläre)\b|\bleg(?:\s+\w+){0,8}\s+uit\b", text)
         )
+
+    def _deterministic_graph_read_operation(
+        self,
+        facts: FinnV2PreprocessedRequest,
+    ) -> Optional[str]:
+        """Resolve unambiguous provider-free graph reads through the registry."""
+        if (
+            facts.action_polarity != "read"
+            or facts.discourse_act not in {"information_request", "contextual_follow_up"}
+            or facts.explicit_plan_subject
+            or facts.ambiguous_reference
+        ):
+            return None
+        entities = set(facts.explicit_entities)
+        if "bot_status" in entities or "portfolio" in entities:
+            return None
+        if "setup" in entities and entities <= {"setup", "asset"}:
+            setup_inputs = self.operation_state.explicit_inputs(
+                contract=self.registry.require_supported("create_setup"),
+                message=facts.original_text,
+                explicit_asset=facts.referenced_asset,
+            )
+            if set(setup_inputs).intersection({"name", "setup_type", "timeframe"}):
+                return None
+            return "read_active_setup"
+        if (
+            facts.linked_graph_relationship
+            and "strategy" in entities
+            and "setup" in entities
+            and entities <= {"setup", "strategy", "plan"}
+        ):
+            return "read_linked_strategy"
+        if (
+            facts.linked_graph_relationship
+            and "bot" in entities
+            and "strategy" in entities
+            and entities <= {"bot", "strategy", "plan"}
+        ):
+            return "read_linked_bot"
+        return None
 
     @staticmethod
     def _explicit_guided_create_operation(
@@ -665,6 +720,7 @@ class FinnV2OperationClassificationValidator:
             "provider_unavailable",
             "guided_state",
             "registry_constraint",
+            "registry_read_constraint",
             "workspace_setup_contract",
         }:
             return "selector_source_invalid"

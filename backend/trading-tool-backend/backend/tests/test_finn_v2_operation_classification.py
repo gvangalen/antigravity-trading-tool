@@ -86,6 +86,83 @@ def test_workspace_setup_read_source_survives_contract_validation():
     assert FinnV2OperationClassificationValidator().validation_error(selection) is None
 
 
+@pytest.mark.parametrize(("message", "operation_id"), (
+    ("Welke setup heb ik actief?", "read_active_setup"),
+    ("Which setup is active?", "read_active_setup"),
+    ("Welches Setup ist aktiv?", "read_active_setup"),
+    ("Welke strategie is aan deze setup gekoppeld?", "read_linked_strategy"),
+    ("Which strategy is linked to this setup?", "read_linked_strategy"),
+    ("Welche Strategie ist mit diesem Setup verknüpft?", "read_linked_strategy"),
+    ("Welke bot is aan die strategie gekoppeld?", "read_linked_bot"),
+    ("Which bot is linked to that strategy?", "read_linked_bot"),
+    ("Welcher Bot ist mit dieser Strategie verknüpft?", "read_linked_bot"),
+))
+def test_unambiguous_graph_reads_use_registry_without_selector_provider(message, operation_id):
+    class ExplodingSelector:
+        def select(self, **_kwargs):
+            raise AssertionError("provider-free graph reads must not call the selector provider")
+
+    result = FinnV2OperationClassificationService(
+        structured_selector=ExplodingSelector()
+    ).classify(message=message)
+
+    assert result.operation_id == operation_id
+    assert result.selector_source == "registry_read_constraint"
+    assert result.action == "read"
+    assert FinnV2OperationClassificationValidator().validation_error(result) is None
+
+
+@pytest.mark.parametrize("message", (
+    "Welke bot draait live?",
+    "Wat zijn de gevolgen van die gekoppelde bot?",
+    "Evaluate the risks of the linked bot.",
+    "Geef een overzicht van mijn volledige plan.",
+))
+def test_near_neighbours_do_not_use_graph_read_fast_path(message):
+    result = CLASSIFIER.classify(message=message)
+
+    assert result.selector_source != "registry_read_constraint"
+
+
+def test_setup_draft_fields_keep_create_request_on_provider_selector_path():
+    class Selector:
+        def select(self, **_kwargs):
+            return FinnV2StructuredOperationSelection(
+                operation_id="create_setup",
+                confidence=0.95,
+                entities={
+                    "asset": "ETH",
+                    "setup_type": "swing",
+                    "timeframe": "4H",
+                    "name": "Quiet Breakout",
+                },
+                target_asset="ETH",
+                missing_inputs=(),
+                conversation_reference=None,
+                ambiguity_reason=None,
+            ), None
+
+    result = FinnV2OperationClassificationService(
+        structured_selector=Selector()
+    ).classify(
+        message=(
+            "Sketch an ETH swing setup on four hours called Quiet Breakout, "
+            "but keep it as an uncommitted draft."
+        )
+    )
+
+    assert result.operation_id == "create_setup"
+    assert result.selector_source == "structured"
+
+
+def test_sketch_is_a_typed_create_polarity_before_provider_selection():
+    facts = CLASSIFIER.preprocessor.preprocess(
+        message="Sketch an ETH swing setup on four hours called Quiet Breakout."
+    )
+
+    assert facts.action_polarity == "create"
+
+
 def test_explicit_create_setup_uses_registry_contract_without_provider():
     class ExplodingSelector:
         def select(self, **_kwargs):

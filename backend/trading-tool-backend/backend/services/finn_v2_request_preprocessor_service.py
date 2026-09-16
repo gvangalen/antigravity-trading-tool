@@ -54,7 +54,7 @@ class FinnV2RequestPreprocessorService:
         ("activate", ("activeer", "activate", "schakel", "inschakel", "zet live", "go live")),
         ("update", ("wijzig", "update", "pas aan", "verbeter", "improve", "optimise", "optimize")),
         ("create", (
-            "maak", "maken", "create", "prepare", "preparing", "ontwerp", "stel", "bereid", "start",
+            "maak", "maken", "create", "prepare", "preparing", "sketch", "ontwerp", "stel", "bereid", "start",
             "voorbereid", "erstell", "anleg",
         )),
         ("evaluate", ("beoordeel", "evaluate", "assess", "bewert", "zwak", "risico", "past", "fit", "ontbrek", "ontbreek", "vertrouwen")),
@@ -210,12 +210,12 @@ class FinnV2RequestPreprocessorService:
         entities = tuple(entity_positions)
         plan_components = {"indicator_configuration", "setup", "strategy", "bot"}
         relational_components = plan_components.intersection(entities)
-        relational_graph = "bot" in relational_components and bool({"setup", "strategy"}.intersection(relational_components))
+        relational_graph = len(relational_components) >= 2
         # A graph overview and a relationship question need different read
         # contracts. This is a typed grammatical fact; it does not select an
         # operation or inspect a particular asset, setup, or bot.
         linked_graph_relationship = relational_graph and bool(re.search(
-            r"\b(?:gekoppel\w*|verbond\w*|verbund\w*|linked|connect\w*|associated|zugeordnet|"
+            r"\b(?:gekoppel\w*|verbond\w*|verbund\w*|verkn(?:ue|ü)pf\w*|linked|connect\w*|associated|zugeordnet|"
             r"hoort|gehort|gehört|meiner\s+strategie|mijn\s+strategie)\b",
             normalized,
         ))
@@ -223,7 +223,7 @@ class FinnV2RequestPreprocessorService:
         # A topology question about all graph nodes asks for the user's
         # complete plan. This is distinct from a request to find one linked
         # strategy or bot, which keeps the narrower linked-object contract.
-        topology_plan_subject = relational_graph and bool(re.search(
+        topology_plan_subject = len(relational_components) >= 3 and bool(re.search(
             r"\b(?:hoe|how|wie)\b[^?.!]{0,160}\b(?:gekoppeld|verbonden|connected|related|verbunden)\b",
             normalized,
         ))
