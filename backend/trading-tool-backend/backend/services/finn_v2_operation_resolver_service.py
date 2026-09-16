@@ -300,6 +300,17 @@ class FinnV2OperationResolverService:
             and not bool((request_facts or {}).get("financial_concept"))
         ):
             operation_id = "read_indicator_configuration"
+        # An explicit setup-only read is narrower than the aggregate plan
+        # projection. The typed entity ledger is authoritative here; plan
+        # reads remain available only when the request actually names the
+        # plan or multiple graph subjects.
+        if (
+            str((request_facts or {}).get("action_polarity") or "") == "read"
+            and explicit_entities == {"setup"}
+            and str((request_facts or {}).get("discourse_act") or "") != "evaluation"
+            and not bool((request_facts or {}).get("explicit_plan_subject"))
+        ):
+            operation_id = "read_active_setup"
         # A lineage-bound question about the consequence or assessment of a
         # bot needs the bot evaluation contract. It cannot be reduced to an
         # evidence-only explanation because the contract owns bot state reads.

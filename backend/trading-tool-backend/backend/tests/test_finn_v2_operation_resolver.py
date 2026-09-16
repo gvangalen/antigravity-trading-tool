@@ -661,6 +661,24 @@ def test_indicator_read_fact_rejects_a_conflicting_financial_concept_projection(
     assert resolved.operation_id == "read_indicator_configuration"
 
 
+def test_explicit_setup_read_rejects_a_broader_plan_projection():
+    registry = FinnV2OperationRegistry()
+    resolved = FinnV2OperationResolverService(registry).resolve(
+        selection=_selection("read_active_plan", {"goal": "read", "object": "plan"}),
+        candidates=registry.list(),
+        conversation_context={"last_verified_context": {"verified_response_id": "response-1"}},
+        request_facts={
+            "action_polarity": "read",
+            "explicit_entities": ("setup",),
+            "primary_entity": "setup",
+            "discourse_act": "contextual_follow_up",
+            "explicit_plan_subject": False,
+        },
+    )
+
+    assert resolved.operation_id == "read_active_setup"
+
+
 def test_lineage_bound_bot_assessment_overrides_an_evidence_only_frame():
     registry = FinnV2OperationRegistry()
     resolved = FinnV2OperationResolverService(registry).resolve(
