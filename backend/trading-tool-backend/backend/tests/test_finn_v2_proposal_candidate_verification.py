@@ -131,3 +131,42 @@ def test_proposal_mode_without_a_typed_candidate_is_rejected():
         SimpleNamespace(operation_type="create_setup", confirmation_required=True),
         {},
     ) is False
+
+
+def test_targetless_create_setup_proposal_is_grounded_by_validated_typed_inputs():
+    service = FinnV2ResponseVerifierService(session=object())
+    draft = ResponseDraft(
+        draft_id="draft-create-setup",
+        run_id="run-create-setup",
+        user_id=7,
+        mode="CREATE_PROPOSAL",
+        direct_answer="Ik heb een setupvoorstel voorbereid.",
+        main_observation="Er is nog niets opgeslagen.",
+        proposal_candidate=ProposalCandidate(
+            operation_type="create_setup",
+            target_type="setup",
+            target_id=None,
+            asset="BTC",
+            proposed_changes={
+                "setup_fields": {
+                    "setup_type": "dca",
+                    "timeframe": "4H",
+                    "name": "Rustige DCA",
+                    "symbol": "BTC",
+                    "dca_frequency": "daily",
+                }
+            },
+            evidence_refs=[],
+            impact_summary="Er wordt na bevestiging een setup opgeslagen.",
+            risk_summary="Zonder bevestiging verandert niets.",
+            confirmation_required=True,
+        ),
+        evidence_set_hash="empty-evidence-set",
+        created_at=datetime.now(timezone.utc),
+    )
+
+    assert service._proposal_ok(
+        draft,
+        SimpleNamespace(operation_type="create_setup", confirmation_required=True),
+        {},
+    ) is True

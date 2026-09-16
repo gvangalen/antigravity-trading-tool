@@ -1731,8 +1731,27 @@ class FinnV2ResponseVerifierService:
             return False
         if not candidate.confirmation_required == bool(policy.confirmation_required):
             return False
-        if not candidate.evidence_refs or any(ref not in evidence_by_ref for ref in candidate.evidence_refs):
-            return False
+        if candidate.evidence_refs:
+            if any(ref not in evidence_by_ref for ref in candidate.evidence_refs):
+                return False
+        else:
+            # A targetless CREATE proposal is grounded in its validated typed
+            # inputs rather than an existing owned entity. Requiring an
+            # evidence row here made a completed create_setup draft impossible
+            # to publish even though the registry contract, policy and payload
+            # had all passed. Mutations of existing entities still require an
+            # owner-scoped evidence reference below.
+            try:
+                candidate_operation = getattr(candidate.operation_type, "value", candidate.operation_type)
+                operation = FinnV2OperationRegistry().require_supported(str(candidate_operation))
+            except ValueError:
+                return False
+            if not (
+                operation.action_polarity.value == "create"
+                and not candidate.target_id
+                and bool(candidate.proposed_changes)
+            ):
+                return False
         if candidate.target_id:
             return any((item.entity_id and str(item.entity_id) == str(candidate.target_id)) or (item.facts.get("bot_id") and str(item.facts.get("bot_id")) == str(candidate.target_id)) or (item.facts.get("strategy_id") and str(item.facts.get("strategy_id")) == str(candidate.target_id)) or (item.facts.get("setup_id") and str(item.facts.get("setup_id")) == str(candidate.target_id)) for item in evidence_by_ref.values())
         return True
