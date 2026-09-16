@@ -23,16 +23,18 @@ ASYNC_DATABASE_URL = f"postgresql+asyncpg://{db_user}:{db_pass}@{db_host}:{db_po
 def _async_engine_options(build_service: str | None) -> dict:
     options = {"echo": False, "future": True}
     if build_service == "celery-worker-finn-interactive":
-        # The single-concurrency worker refreshes this small pool at each task
-        # boundary. Its short lifecycle sessions can then reuse one known-good
-        # connection instead of opening a new TLS connection for every phase.
+        # The worker has concurrency=1. Keep exactly one recently verified
+        # connection warm rather than recycling it between user turns: closing
+        # an idle remote TLS socket can otherwise consume most of the visible
+        # lifecycle budget before the dispatch claim is persisted.
         options.update(
-            pool_size=2,
+            pool_size=1,
             max_overflow=0,
             pool_pre_ping=True,
-            pool_recycle=60,
+            pool_use_lifo=True,
+            pool_recycle=1800,
             pool_timeout=3,
-            connect_args={"timeout": 3},
+            connect_args={"timeout": 3, "command_timeout": 2},
         )
         return options
     options.update(

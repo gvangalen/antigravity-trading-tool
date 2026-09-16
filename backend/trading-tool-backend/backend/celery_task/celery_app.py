@@ -145,6 +145,10 @@ celery_app.conf.beat_schedule = {
         "backend.celery_task.finn_v2_task.recover_finn_v2_dispatches",
         timedelta(seconds=5),
     ),
+    "keep_finn_v2_interactive_database_warm": build_task_schedule_entry(
+        "backend.celery_task.finn_v2_task.warm_finn_v2_interactive_worker",
+        timedelta(seconds=30),
+    ),
 
     # =====================================================
     # 1️⃣ MARKET DATA (SAFE)

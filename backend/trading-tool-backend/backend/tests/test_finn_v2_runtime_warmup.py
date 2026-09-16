@@ -3,6 +3,7 @@ from types import SimpleNamespace
 
 import backend.celery_task.finn_v2_task as finn_tasks
 from backend.celery_task.celery_app import (
+    celery_app,
     reset_and_warm_finn_provider_after_fork,
     warm_finn_interactive_worker_after_ready,
 )
@@ -96,6 +97,14 @@ def test_warmup_database_probe_is_read_only(monkeypatch):
 
     assert asyncio.run(finn_tasks._warm_finn_v2_interactive_worker()) == "ready"
     assert statements == ["SELECT 1"]
+
+
+def test_interactive_database_warmup_runs_periodically_on_its_dedicated_queue():
+    entry = celery_app.conf.beat_schedule["keep_finn_v2_interactive_database_warm"]
+
+    assert entry["task"] == "backend.celery_task.finn_v2_task.warm_finn_v2_interactive_worker"
+    assert entry["schedule"].total_seconds() == 30
+    assert entry["options"]["queue"] == "finn_interactive"
 
 
 def test_interactive_task_lazily_keeps_one_loop_and_pool_between_warmup_and_run(monkeypatch):

@@ -5,10 +5,12 @@ from backend.celery_task import finn_v2_task
 def test_interactive_finn_worker_uses_fresh_bounded_database_connections():
     options = _async_engine_options("celery-worker-finn-interactive")
 
-    assert options["pool_size"] == 2
+    assert options["pool_size"] == 1
     assert options["max_overflow"] == 0
     assert options["pool_pre_ping"] is True
-    assert options["connect_args"] == {"timeout": 3}
+    assert options["pool_use_lifo"] is True
+    assert options["pool_recycle"] == 1800
+    assert options["connect_args"] == {"timeout": 3, "command_timeout": 2}
 
 
 def test_api_and_other_workers_keep_normal_database_pooling():
