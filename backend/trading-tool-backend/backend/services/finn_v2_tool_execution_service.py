@@ -181,6 +181,12 @@ class FinnV2ToolExecutionService:
             client_context_json=dict(getattr(run, "client_context_json", {}) or {}),
         )
 
+        # The interactive worker deliberately uses a single-connection pool.
+        # Release the primary read transaction before opening the short-lived
+        # durable tool-call session, otherwise both sessions wait on the same
+        # sole connection until the pool timeout expires.
+        await self._release_primary_connection()
+
         selector = self.redaction.redact_selector(selector or {})
         selector = self._with_workspace_setup_reference(
             selector=selector,
@@ -290,6 +296,10 @@ class FinnV2ToolExecutionService:
 
         persisted_tool_call = None
         if tool_call is not None:
+            # Read adapters use the primary session. Their result is already a
+            # plain payload, so commit and release that connection before the
+            # durable completion session acquires the pool's only slot.
+            await self._release_primary_connection()
             if not session_rolled_back and self._session_requires_rollback():
                 session_rolled_back = await self._rollback_failed_session(
                     run_id=run_id,
@@ -339,6 +349,10 @@ class FinnV2ToolExecutionService:
         ):
             await self._ingest_evidence(run_id=run_id, user_id=user_id, trace_id=run_context.trace_id, result=result)
         return result
+
+    async def _release_primary_connection(self) -> None:
+        if self.persistence_session_factory is not None and self.session.in_transaction():
+            await self.session.commit()
 
     async def _create_tool_call(
         self,

@@ -69,6 +69,7 @@ class _FakeSession:
         self.sync_session = SimpleNamespace(is_active=True)
         self._transaction = SimpleNamespace(is_active=True)
         self.rollback_calls = 0
+        self.commit_calls = 0
 
     def begin_nested(self):
         return _NestedTxn()
@@ -83,6 +84,9 @@ class _FakeSession:
         self.rollback_calls += 1
         self.sync_session.is_active = True
         self._transaction.is_active = True
+
+    async def commit(self):
+        self.commit_calls += 1
 
 
 @dataclass
@@ -114,6 +118,42 @@ def test_tool_execution_logs_successful_profile_call(monkeypatch):
 
     assert result.success is True
     assert service.calls.rows[-1].status == "completed"
+
+
+def test_tool_execution_releases_primary_connection_around_durable_call_sessions(monkeypatch):
+    session = _FakeSession()
+    service = FinnV2ToolExecutionService(session=session)
+    service.runs = _FakeRunRepo()
+    service.persistence_session_factory = object()
+    service.traces = _FakeTraceRepo()
+    monkeypatch.setattr(service.flags, "is_tool_registry_enabled", lambda: True)
+    monkeypatch.setattr(service.flags, "is_tool_registry_readonly", lambda: True)
+    monkeypatch.setattr(service.flags, "is_tool_call_logging_enabled", lambda: True)
+    monkeypatch.setattr(service.flags, "should_run_block3_shadow", lambda _user_id: False)
+
+    events = []
+
+    async def _create_tool_call(**_kwargs):
+        events.append(("create", session.commit_calls))
+        return SimpleNamespace(id=41), 41
+
+    async def _complete_tool_call(**_kwargs):
+        events.append(("complete", session.commit_calls))
+        return SimpleNamespace(id=41), False
+
+    service._create_tool_call = _create_tool_call
+    service._complete_tool_call = _complete_tool_call
+    service.profile_adapter.execute = lambda **_kwargs: asyncio.sleep(
+        0,
+        result={"data": {"ok": True}, "summary": {"title": "profile"}, "as_of": None},
+    )
+
+    result = asyncio.run(
+        service.execute_tool(run_id="run-1", user_id=7, tool_name="read_profile", selector={})
+    )
+
+    assert result.success is True
+    assert events == [("create", 1), ("complete", 2)]
 
 
 def test_tool_execution_dispatches_watchlist_adapter(monkeypatch):
