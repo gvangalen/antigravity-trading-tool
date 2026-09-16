@@ -1,5 +1,5 @@
 1:"$Sreact.fragment"
-9:I[57150,[],""]
+9:I[61465,[],""]
 :HL["/_next/static/css/d58ac85ad0f24d6c.css","style"]
 :HL["/_next/static/css/19c9db1a3af975a5.css","style"]
 2:Tc60,
@@ -91,20 +91,20 @@
     if (shouldRecover(reason)) clearStaleApp(reason);
   });
 })();0:{"P":null,"b":"static-export","p":"","c":["","profile"],"i":false,"f":[[["",{"children":["(protected)",{"children":["profile",{"children":["__PAGE__",{}]}]}]},"$undefined","$undefined",true],["",["$","$1","c",{"children":[[["$","link","0",{"rel":"stylesheet","href":"/_next/static/css/d58ac85ad0f24d6c.css","precedence":"next","crossOrigin":"$undefined","nonce":"$undefined"}]],["$","html",null,{"lang":"nl","suppressHydrationWarning":true,"children":[["$","head",null,{"children":[["$","link",null,{"rel":"apple-touch-icon","href":"/icon-192x192.png"}],["$","script",null,{"dangerouslySetInnerHTML":{"__html":"$2"}}],"$L3"]}],"$L4"]}]]}],{"children":["(protected)","$L5",{"children":["profile","$L6",{"children":["__PAGE__","$L7",{},null,false]},null,false]},null,false]},null,false],"$L8",false]],"m":"$undefined","G":["$9",[]],"s":false,"S":true}
-b:I[69835,["5319","static/chunks/5319-36a1ade57528f891.js","5969","static/chunks/5969-d9a6a61d44ea74bf.js","8111","static/chunks/8111-56d48e2e1a93dbbe.js","7619","static/chunks/7619-6f6bd9f13bf342c5.js","9617","static/chunks/9617-ff99405d04cc5511.js","7177","static/chunks/app/layout-9fbe5cbe3c6cd0c9.js"],"default"]
-c:I[55038,["5319","static/chunks/5319-36a1ade57528f891.js","5969","static/chunks/5969-d9a6a61d44ea74bf.js","8111","static/chunks/8111-56d48e2e1a93dbbe.js","7619","static/chunks/7619-6f6bd9f13bf342c5.js","9617","static/chunks/9617-ff99405d04cc5511.js","7177","static/chunks/app/layout-9fbe5cbe3c6cd0c9.js"],"default"]
-d:I[9766,[],""]
-e:I[98924,[],""]
-f:I[33293,["2619","static/chunks/2619-04bc32f026a0d946.js","8111","static/chunks/8111-56d48e2e1a93dbbe.js","4345","static/chunks/app/not-found-843d97b91491b215.js"],"default"]
-10:I[11803,["5319","static/chunks/5319-36a1ade57528f891.js","5969","static/chunks/5969-d9a6a61d44ea74bf.js","8111","static/chunks/8111-56d48e2e1a93dbbe.js","7619","static/chunks/7619-6f6bd9f13bf342c5.js","9617","static/chunks/9617-ff99405d04cc5511.js","7177","static/chunks/app/layout-9fbe5cbe3c6cd0c9.js"],"default"]
-11:I[17989,[],"ClientSegmentRoot"]
-12:I[16729,["5319","static/chunks/5319-36a1ade57528f891.js","2619","static/chunks/2619-04bc32f026a0d946.js","8607","static/chunks/8607-bce23f612b90da10.js","5969","static/chunks/5969-d9a6a61d44ea74bf.js","3743","static/chunks/3743-6bb8e2dcd27678d9.js","8111","static/chunks/8111-56d48e2e1a93dbbe.js","7619","static/chunks/7619-6f6bd9f13bf342c5.js","9617","static/chunks/9617-ff99405d04cc5511.js","8843","static/chunks/8843-65cf8a27ad247a79.js","3516","static/chunks/3516-827b157f496ab076.js","4390","static/chunks/4390-bc0f5ea8b7466731.js","1845","static/chunks/1845-2ca973bb3803d588.js","7580","static/chunks/7580-8b4085340479a20b.js","9059","static/chunks/9059-962b119ed874fdd8.js","1923","static/chunks/1923-b7129e38d75f699a.js","2358","static/chunks/2358-2678d480b2447b81.js","4163","static/chunks/app/(protected)/layout-3412972d96ea10f7.js"],"default"]
-14:I[81959,[],"ClientPageRoot"]
-15:I[61184,["5319","static/chunks/5319-36a1ade57528f891.js","2619","static/chunks/2619-04bc32f026a0d946.js","8111","static/chunks/8111-56d48e2e1a93dbbe.js","7619","static/chunks/7619-6f6bd9f13bf342c5.js","2118","static/chunks/app/(protected)/profile/page-1c9229518e45affe.js"],"default"]
-18:I[24431,[],"OutletBoundary"]
-1a:I[15278,[],"AsyncMetadataOutlet"]
-1c:I[24431,[],"ViewportBoundary"]
-1e:I[24431,[],"MetadataBoundary"]
+b:I[89399,["2157","static/chunks/2157-480af84db6c41675.js","1145","static/chunks/1145-4a470ebb195ffa29.js","7432","static/chunks/7432-f15ecd4e15728859.js","6195","static/chunks/6195-9627d9016ef4a1be.js","389","static/chunks/389-dcb15fbaccea7f2f.js","7177","static/chunks/app/layout-7e62d229b70b417f.js"],"default"]
+c:I[44202,["2157","static/chunks/2157-480af84db6c41675.js","1145","static/chunks/1145-4a470ebb195ffa29.js","7432","static/chunks/7432-f15ecd4e15728859.js","6195","static/chunks/6195-9627d9016ef4a1be.js","389","static/chunks/389-dcb15fbaccea7f2f.js","7177","static/chunks/app/layout-7e62d229b70b417f.js"],"default"]
+d:I[26291,[],""]
+e:I[46063,[],""]
+f:I[99361,["8618","static/chunks/8618-7c60d096f3705794.js","7432","static/chunks/7432-f15ecd4e15728859.js","4345","static/chunks/app/not-found-cfbd1329bdd35e0e.js"],"default"]
+10:I[62057,["2157","static/chunks/2157-480af84db6c41675.js","1145","static/chunks/1145-4a470ebb195ffa29.js","7432","static/chunks/7432-f15ecd4e15728859.js","6195","static/chunks/6195-9627d9016ef4a1be.js","389","static/chunks/389-dcb15fbaccea7f2f.js","7177","static/chunks/app/layout-7e62d229b70b417f.js"],"default"]
+11:I[65098,[],"ClientSegmentRoot"]
+12:I[45293,["2157","static/chunks/2157-480af84db6c41675.js","8618","static/chunks/8618-7c60d096f3705794.js","5946","static/chunks/5946-5298bd0ae62a8f69.js","1145","static/chunks/1145-4a470ebb195ffa29.js","8453","static/chunks/8453-e245f0947a1933c7.js","7432","static/chunks/7432-f15ecd4e15728859.js","6195","static/chunks/6195-9627d9016ef4a1be.js","389","static/chunks/389-dcb15fbaccea7f2f.js","1355","static/chunks/1355-91d0343c38bcb70f.js","1112","static/chunks/1112-958dc16c03b0dce3.js","7549","static/chunks/7549-d84ec8f4f5aab93f.js","8229","static/chunks/8229-ccb985ad4114f8c7.js","3692","static/chunks/3692-2169088ae68831e2.js","3835","static/chunks/3835-025e8d920289163f.js","4023","static/chunks/4023-572466fc091e700a.js","4158","static/chunks/4158-2c522f36b30e8942.js","4163","static/chunks/app/(protected)/layout-4df2383cc2f7b6d4.js"],"default"]
+14:I[41918,[],"ClientPageRoot"]
+15:I[19020,["2157","static/chunks/2157-480af84db6c41675.js","8618","static/chunks/8618-7c60d096f3705794.js","7432","static/chunks/7432-f15ecd4e15728859.js","6195","static/chunks/6195-9627d9016ef4a1be.js","2118","static/chunks/app/(protected)/profile/page-08ffb48fb6d877ce.js"],"default"]
+18:I[78490,[],"OutletBoundary"]
+1a:I[90127,[],"AsyncMetadataOutlet"]
+1c:I[78490,[],"ViewportBoundary"]
+1e:I[78490,[],"MetadataBoundary"]
 1f:"$Sreact.suspense"
 a:T619,
     (function () {
