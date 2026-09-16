@@ -75,7 +75,7 @@ def test_create_strategy_proposal_uses_its_parent_setup_as_the_owned_target():
     assert proposal.change.strategy_fields["setup_id"] == 12
 
 
-def test_create_strategy_parent_target_is_grounded_without_explicit_evidence_refs():
+def test_create_strategy_parent_target_is_grounded_by_validated_contextual_input():
     service = FinnV2ResponseVerifierService(session=object())
     draft = ResponseDraft(
         draft_id="draft-strategy-grounded",
@@ -100,12 +100,10 @@ def test_create_strategy_parent_target_is_grounded_without_explicit_evidence_ref
         evidence_set_hash="hash-strategy-grounded",
         created_at=datetime.now(timezone.utc),
     )
-    evidence = {"E1": SimpleNamespace(entity_id="12", facts={"setup_id": 12})}
-
     assert service._proposal_ok(
         draft,
         SimpleNamespace(operation_type="create_strategy", confirmation_required=True),
-        evidence,
+        {},
     ) is True
 
 
@@ -123,8 +121,8 @@ def test_create_strategy_parent_target_rejects_unknown_or_mismatched_setup():
             target_type="strategy",
             target_id="99",
             proposed_changes={
-                "setup_id": 99,
-                "strategy_fields": {"setup_id": 99, "execution_mode": "fixed", "base_amount": 100},
+                "setup_id": 12,
+                "strategy_fields": {"setup_id": 12, "execution_mode": "fixed", "base_amount": 100},
             },
             evidence_refs=[],
             impact_summary="impact",
@@ -134,12 +132,10 @@ def test_create_strategy_parent_target_rejects_unknown_or_mismatched_setup():
         evidence_set_hash="hash-strategy-mismatch",
         created_at=datetime.now(timezone.utc),
     )
-    evidence = {"E1": SimpleNamespace(entity_id="12", facts={"setup_id": 12})}
-
     assert service._proposal_ok(
         draft,
         SimpleNamespace(operation_type="create_strategy", confirmation_required=True),
-        evidence,
+        {},
     ) is False
 
 

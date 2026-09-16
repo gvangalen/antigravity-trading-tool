@@ -1751,15 +1751,30 @@ class FinnV2ResponseVerifierService:
             return False
         if candidate.target_id:
             # Creates such as create_strategy/create_bot target an existing
-            # owner-scoped parent. They are valid without explicit evidence
-            # refs when the hydrated evidence set contains that exact parent.
-            return any(
+            # owner-scoped parent. Prefer hydrated evidence; deterministic
+            # create routes may instead carry the already validated contextual
+            # reference input in their typed proposal payload.
+            if any(
                 (item.entity_id and str(item.entity_id) == str(candidate.target_id))
                 or (item.facts.get("bot_id") and str(item.facts.get("bot_id")) == str(candidate.target_id))
                 or (item.facts.get("strategy_id") and str(item.facts.get("strategy_id")) == str(candidate.target_id))
                 or (item.facts.get("setup_id") and str(item.facts.get("setup_id")) == str(candidate.target_id))
                 for item in evidence_by_ref.values()
-            )
+            ):
+                return True
+            if operation.action_polarity.value != "create":
+                return False
+            proposed_changes = dict(candidate.proposed_changes or {})
+            nested_changes = [
+                value for value in proposed_changes.values() if isinstance(value, dict)
+            ]
+            for input_name in operation.contextual_reference_inputs:
+                values = [proposed_changes.get(input_name)] + [
+                    nested.get(input_name) for nested in nested_changes
+                ]
+                if any(value is not None and str(value) == str(candidate.target_id) for value in values):
+                    return True
+            return False
         # A targetless CREATE is grounded in the validated typed payload. All
         # other actions require an owner-scoped target above.
         return operation.action_polarity.value == "create" and bool(candidate.proposed_changes)
