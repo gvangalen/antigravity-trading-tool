@@ -309,6 +309,14 @@ class FinnV2OperationClassificationService:
         ):
             return None
         entities = set(facts.explicit_entities)
+        if re.search(
+            r"\b(?:activeer|activeren|activate|enable|einschalten|deactiveer|deactiveren|"
+            r"deactivate|disable|ausschalten|maak|aanmaken|create|erstellen|wijzig|aanpassen|"
+            r"update|change|modify|aktualisieren|verwijder|delete|remove|löschen)\b|"
+            r"\b(?:orders?\s+(?:gaat\s+|gaan\s+)?(?:versturen|uitvoeren)|(?:send|place)\s+orders?)\b",
+            facts.normalized_text.casefold(),
+        ):
+            return None
         if "bot_status" in entities or "portfolio" in entities:
             return None
         if "setup" in entities and entities <= {"setup", "asset"}:
@@ -320,6 +328,15 @@ class FinnV2OperationClassificationService:
             if set(setup_inputs).intersection({"name", "setup_type", "timeframe"}):
                 return None
             return "read_active_setup"
+        if (
+            "bot" in entities
+            and entities <= {"bot", "asset"}
+            and (
+                facts.discourse_act == "information_request"
+                or "contextual_entity" in facts.conversation_reference_markers
+            )
+        ):
+            return "read_linked_bot"
         if (
             facts.linked_graph_relationship
             and "strategy" in entities

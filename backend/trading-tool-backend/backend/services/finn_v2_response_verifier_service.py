@@ -253,6 +253,8 @@ class FinnV2ResponseVerifierService:
         additions: list[str] = []
         indicators = facts_by_tool.get("read_indicator_configuration", {})
         active_asset = facts_by_tool.get("read_active_asset", {})
+        setup = facts_by_tool.get("read_active_setup", {})
+        strategy = facts_by_tool.get("read_linked_strategy", {})
         if "configured_count" in required_fields or "indicator_names" in required_fields:
             count = indicators.get("configured_count")
             names = [
@@ -276,6 +278,45 @@ class FinnV2ResponseVerifierService:
                     f"Voor {asset} zijn {count} indicatorconfiguraties opgeslagen: "
                     f"{', '.join(names) if names else 'geen indicatoren'}."
                 )
+        if "setup" in required_fields or "timeframe" in required_fields:
+            setup_id = setup.get("setup_id")
+            setup_name = setup.get("name")
+            setup_type = setup.get("setup_type")
+            timeframe = setup.get("timeframe")
+            setup_values = [setup_name, setup_type, timeframe]
+            if setup_id is not None or any(value for value in setup_values):
+                label = str(setup_name or f"setup {setup_id}")
+                details = [
+                    str(value)
+                    for value in (setup_type, timeframe)
+                    if value not in (None, "")
+                ]
+                if label.casefold() not in rendered or any(
+                    detail.casefold() not in rendered for detail in details
+                ):
+                    suffix = f" ({', '.join(details)})" if details else ""
+                    additions.append(f"Je gekoppelde setup is {label}{suffix}.")
+        if "strategy" in required_fields:
+            strategy_id = strategy.get("strategy_id")
+            strategy_name = strategy.get("name")
+            strategy_values = [
+                strategy_name,
+                strategy.get("symbol"),
+                strategy.get("timeframe"),
+                strategy.get("execution_mode"),
+            ]
+            if strategy_id is not None or any(value for value in strategy_values):
+                label = str(strategy_name or f"strategie {strategy_id}")
+                details = [
+                    str(value)
+                    for value in strategy_values[1:]
+                    if value not in (None, "")
+                ]
+                if label.casefold() not in rendered or any(
+                    detail.casefold() not in rendered for detail in details
+                ):
+                    suffix = f" ({', '.join(details)})" if details else ""
+                    additions.append(f"Je gekoppelde strategie is {label}{suffix}.")
         if "bot" in required_fields or "bot_status" in required_fields:
             bot = facts_by_tool.get("read_linked_bot", {})
             status = facts_by_tool.get("read_bot_status", {})

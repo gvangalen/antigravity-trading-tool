@@ -158,7 +158,13 @@ class FinnV2RequestPreprocessorService:
         ),
         "contextual_entity": (
             "die setup", "die strategie", "die bot", "die gekoppelde bot",
+            "diezelfde setup", "diezelfde strategie", "diezelfde bot",
+            "dezelfde setup", "dezelfde strategie", "dezelfde bot",
+            "hetzelfde plan",
             "that setup", "that strategy", "that bot",
+            "that same setup", "that same strategy", "that same bot",
+            "the same setup", "the same strategy", "the same bot",
+            "dieselbe setup", "dieselbe strategie", "derselbe bot", "denselben bot",
             "dat plan", "deze asset",
         ),
     }

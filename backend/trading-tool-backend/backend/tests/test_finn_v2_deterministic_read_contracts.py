@@ -330,6 +330,60 @@ def test_response_projection_makes_bot_and_status_visible():
     ) == ["bot", "bot_status"]
 
 
+def test_response_projection_makes_setup_and_strategy_contract_fields_visible():
+    draft = ResponseDraft(
+        draft_id="draft-projection-plan",
+        run_id="run-projection-plan",
+        user_id=406,
+        mode="READ",
+        direct_answer="Ik heb je opgeslagen plancontext gevonden.",
+        main_observation="De gegevens zijn owner-scoped geladen.",
+        evidence_set_hash="projection-plan-hash",
+        created_at=datetime.now(timezone.utc),
+    )
+    evidence = [
+        SimpleNamespace(
+            tool_name="read_active_setup",
+            facts={
+                "setup_id": 326,
+                "name": "BTC 4H Trade",
+                "setup_type": "trade",
+                "timeframe": "4H",
+            },
+        ),
+        SimpleNamespace(
+            tool_name="read_linked_strategy",
+            facts={
+                "strategy_id": 412,
+                "name": "BTC breakout",
+                "symbol": "BTC",
+                "timeframe": "4H",
+                "execution_mode": "fixed",
+            },
+        ),
+    ]
+
+    projected = FinnV2ResponseVerifierService._project_required_response_fields(
+        draft=draft,
+        orchestrator_result=SimpleNamespace(
+            analysis=SimpleNamespace(
+                request_plan=SimpleNamespace(operation_id="read_linked_strategy")
+            )
+        ),
+        context=SimpleNamespace(evidence=evidence),
+    )
+
+    assert "BTC 4H Trade" in projected.direct_answer
+    assert "trade" in projected.direct_answer
+    assert "BTC breakout" in projected.direct_answer
+    assert "fixed" in projected.direct_answer
+    assert FinnV2ResponseVerifierService._covered_response_fields(
+        draft=projected,
+        evidence=evidence,
+        required_fields=["setup", "strategy"],
+    ) == ["setup", "strategy"]
+
+
 def test_evaluate_plan_projection_keeps_profile_and_indicator_grounding_visible():
     draft = ResponseDraft(
         draft_id="draft-evaluate-projection", run_id="run-evaluate-projection", user_id=406,

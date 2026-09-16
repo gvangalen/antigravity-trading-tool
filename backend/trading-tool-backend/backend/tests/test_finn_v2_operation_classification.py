@@ -464,6 +464,48 @@ def test_bot_consequence_is_an_evaluation_fact_before_model_selection(message):
     assert facts.discourse_act == "evaluation"
 
 
+@pytest.mark.parametrize("message", (
+    "Toon diezelfde bot opnieuw.",
+    "Show that same bot again.",
+    "Zeige denselben Bot erneut.",
+))
+def test_same_bot_identity_followup_uses_the_registry_read_contract(message):
+    result = CLASSIFIER.classify(
+        message=message,
+        conversation_context={
+            "conversation_state_version": "finn_v2.conversation-contracts.v1",
+            "last_verified_context": {
+                "verified_response_id": "verified-bot-1",
+                "run_id": "run-bot-1",
+                "operation_id": "read_linked_bot",
+                "resolved_entities": {"bot_id": 170},
+                "evidence_refs": ["E1"],
+            },
+        },
+    )
+
+    assert result.operation_id == "read_linked_bot"
+    assert result.action == "read"
+
+
+def test_linked_bot_activation_request_is_not_captured_by_graph_read_fast_path():
+    class Selector:
+        def select(self, **_kwargs):
+            return FinnV2StructuredOperationSelection(
+                operation_id="activate_bot", confidence=0.95,
+                entities={"bot_id": None}, target_asset=None,
+                conversation_reference=None, missing_inputs=("bot_id",),
+                ambiguity_reason=None, semantic_frame={"goal": "activate", "object": "bot"},
+            ), None
+
+    result = FinnV2OperationClassificationService(structured_selector=Selector()).classify(
+        message="Zorg dat mijn gekoppelde automation reele orders gaat versturen.",
+    )
+
+    assert result.operation_id == "activate_bot"
+    assert result.action == "activate"
+
+
 def test_short_guided_strategy_slot_answer_keeps_the_active_contract():
     context = {
         "active_guided_operation": {

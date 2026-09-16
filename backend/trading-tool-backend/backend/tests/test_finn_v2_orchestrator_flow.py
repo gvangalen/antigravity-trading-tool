@@ -467,6 +467,89 @@ def test_released_concept_response_persists_typed_reformulation_lineage():
     assert released["evidence_refs"] == []
 
 
+def test_successful_read_tool_entities_are_persisted_for_later_references():
+    service = FinnV2OrchestratorService(session=object())
+    service.conversations = _FakeConversationRepo()
+
+    async def _contract_view(**_kwargs):
+        return {"target_asset": "BTC", "operation_id": "read_linked_bot"}
+
+    service._contract_execution_view = _contract_view
+    result = SimpleNamespace(
+        run_id="read-bot-run-1",
+        analysis=SimpleNamespace(
+            explicit_asset=None,
+            explicit_setup_id=None,
+            explicit_strategy_id=None,
+            explicit_bot_id=None,
+            interaction_mode="READ",
+            request_plan=SimpleNamespace(
+                operation_id="read_linked_bot",
+                operation_contract_version="contract-v1",
+                operation_state={},
+                user_goal="read_bot",
+                primary_domains=["bot"],
+                required_information_scopes=["linked_bot", "bot_status"],
+            ),
+        ),
+        tool_plan=SimpleNamespace(entity_selectors={"bot_name": "Atlas Paper Bot"}),
+    )
+    response = SimpleNamespace(
+        verifier_status="passed",
+        mode="READ",
+        run_id="read-bot-run-1",
+        verified_response_id="verified-read-bot-1",
+        direct_answer="Atlas Paper Bot is actief.",
+        main_observation="De gekoppelde bot is geladen.",
+        evidence_refs_used=["evidence-bot-1"],
+        reasoning_provenance={"lineage_eligible": True},
+        uncertainty_codes=[],
+        proposal_id=None,
+    )
+    tool_results = [
+        SimpleNamespace(
+            success=True,
+            status="completed",
+            result_summary={"setup_id": 229},
+        ),
+        SimpleNamespace(
+            success=True,
+            status="completed",
+            result_summary={"setup_id": 229, "strategy_id": 182},
+        ),
+        SimpleNamespace(
+            success=True,
+            status="completed",
+            result_summary={"strategy_id": 182, "bot_id": 123},
+        ),
+    ]
+
+    asyncio.run(service._update_conversation_context(
+        conversation_id="conversation-read-bot",
+        user_id=7,
+        existing_context={},
+        result=result,
+        verified_response=response,
+        tool_results=tool_results,
+    ))
+
+    context = service.conversations.updated["context"]
+    expected = {"asset": "BTC", "setup_id": 229, "strategy_id": 182, "bot_id": 123}
+    assert context["last_verified_context"]["resolved_entities"] == expected
+    assert context["last_released_context"]["resolved_entities"] == expected
+    assert context["resolved_setup_id"] == 229
+    assert context["resolved_strategy_id"] == 182
+    assert context["resolved_bot_id"] == 123
+
+
+def test_failed_or_malformed_tool_results_cannot_become_lineage_entities():
+    assert FinnV2OrchestratorService._resolved_entities_from_tool_results([
+        SimpleNamespace(success=False, status="failed", result_summary={"setup_id": 1}),
+        SimpleNamespace(success=True, status="completed", result_summary={"strategy_id": "invalid"}),
+        SimpleNamespace(success=True, status="completed", result_summary={"bot_id": 3}),
+    ]) == {"bot_id": 3}
+
+
 def test_off_topic_terminal_persists_only_a_safe_boundary_reference():
     service = FinnV2OrchestratorService(session=object())
     service.conversations = _FakeConversationRepo()

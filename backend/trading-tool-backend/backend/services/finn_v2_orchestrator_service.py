@@ -368,8 +368,11 @@ class FinnV2OrchestratorService:
             return result
 
         result = None
+        tool_results = []
         try:
-            await self.tools.execute_tool_plan(run_id=run_id, user_id=user_id, tool_plan=tool_plan)
+            tool_results = await self.tools.execute_tool_plan(
+                run_id=run_id, user_id=user_id, tool_plan=tool_plan
+            )
             snapshot, validation = await self.tools.run_state_pipeline(run_id=run_id, user_id=user_id)
             # Tool failures roll back their session and expire ORM rows. Reload
             # the authoritative contract before deriving any downstream view.
@@ -515,6 +518,7 @@ class FinnV2OrchestratorService:
                     existing_context=conversation_context,
                     result=result,
                     verified_response=verified_response,
+                    tool_results=tool_results,
                 )
             await self._append_trace(
                 run_id=run_id,
@@ -552,6 +556,7 @@ class FinnV2OrchestratorService:
                     existing_context=conversation_context,
                     result=result,
                     verified_response=self._rejected_response_lineage(rejection=rejection, run_id=run_id),
+                    tool_results=tool_results,
                 )
             await self._append_trace(
                 run_id=run_id,
@@ -788,6 +793,7 @@ class FinnV2OrchestratorService:
         existing_context: dict,
         result,
         verified_response,
+        tool_results=(),
     ) -> None:
         """Persist a durable lineage without letting failed turns poison context."""
         selectors = dict(getattr(result.tool_plan, "entity_selectors", {}) or {})
@@ -811,9 +817,10 @@ class FinnV2OrchestratorService:
             or getattr(result.analysis, "explicit_asset", None)
             or verified_context.get("resolved_entities", {}).get("asset")
         )
-        resolved_setup_id = selectors.get("setup_id") or getattr(result.analysis, "explicit_setup_id", None) or verified_context.get("resolved_entities", {}).get("setup_id")
-        resolved_strategy_id = selectors.get("strategy_id") or getattr(result.analysis, "explicit_strategy_id", None) or verified_context.get("resolved_entities", {}).get("strategy_id")
-        resolved_bot_id = selectors.get("bot_id") or getattr(result.analysis, "explicit_bot_id", None) or verified_context.get("resolved_entities", {}).get("bot_id")
+        evidence_entities = self._resolved_entities_from_tool_results(tool_results)
+        resolved_setup_id = selectors.get("setup_id") or getattr(result.analysis, "explicit_setup_id", None) or evidence_entities.get("setup_id") or verified_context.get("resolved_entities", {}).get("setup_id")
+        resolved_strategy_id = selectors.get("strategy_id") or getattr(result.analysis, "explicit_strategy_id", None) or evidence_entities.get("strategy_id") or verified_context.get("resolved_entities", {}).get("strategy_id")
+        resolved_bot_id = selectors.get("bot_id") or getattr(result.analysis, "explicit_bot_id", None) or evidence_entities.get("bot_id") or verified_context.get("resolved_entities", {}).get("bot_id")
         operation_state = dict(getattr(request_plan, "operation_state", {}) or {})
         response_mode = getattr(verified_response, "mode", None) or result.analysis.interaction_mode
         operation_id = contract_view.get("operation_id") or getattr(request_plan, "operation_id", None)
@@ -1018,6 +1025,25 @@ class FinnV2OrchestratorService:
                 },
                 guided_state=dict(context.get("active_guided_operation") or {}),
             )
+
+    @staticmethod
+    def _resolved_entities_from_tool_results(tool_results) -> dict:
+        """Project owner-scoped IDs returned by this run's successful tools."""
+        resolved = {}
+        allowed_fields = ("setup_id", "strategy_id", "bot_id")
+        for result in tool_results or ():
+            if not getattr(result, "success", False) or getattr(result, "status", None) != "completed":
+                continue
+            summary = dict(getattr(result, "result_summary", None) or {})
+            for field in allowed_fields:
+                value = summary.get(field)
+                if value is None:
+                    continue
+                try:
+                    resolved[field] = int(value)
+                except (TypeError, ValueError):
+                    continue
+        return resolved
 
     async def _contract_execution_view(self, *, run_id: str) -> dict:
         """Return authoritative selection fields when a persisted contract exists."""

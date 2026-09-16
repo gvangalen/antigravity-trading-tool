@@ -88,6 +88,21 @@ def test_create_request_uses_the_created_object_not_its_parent_reference():
     assert bot.primary_entity == "bot"
 
 
+def test_same_entity_followups_are_typed_contextual_references_in_nl_en_de():
+    service = FinnV2RequestPreprocessorService()
+
+    for message in (
+        "Toon diezelfde setup opnieuw.",
+        "Show that same strategy again.",
+        "Zeige denselben Bot erneut.",
+    ):
+        facts = service.preprocess(message=message)
+        assert "contextual_entity" in facts.conversation_reference_markers
+
+    fresh = service.preprocess(message='Toon setup "Atlas Setup".')
+    assert "contextual_entity" not in fresh.conversation_reference_markers
+
+
 def test_product_capability_availability_questions_remain_financial_in_all_supported_languages():
     service = FinnV2RequestPreprocessorService()
 

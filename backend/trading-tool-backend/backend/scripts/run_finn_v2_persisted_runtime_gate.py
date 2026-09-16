@@ -63,6 +63,7 @@ def _terminal_sse(*, url: str, headers: Dict[str, str], timeout: float) -> Dict[
 def run_gate(
     *, base_url: str, bearer_token: str, message: str, timeout_seconds: float,
     conversation_id: str | None = None,
+    workspace_hints: Dict[str, Any] | None = None,
 ) -> Dict[str, Any]:
     if not bearer_token.strip():
         raise ValueError("runtime_gate_requires_explicit_qa_bearer_token")
@@ -70,6 +71,8 @@ def run_gate(
     headers = {"Authorization": f"Bearer {bearer_token}", "Content-Type": "application/json"}
     started_at = time.monotonic()
     request_body: Dict[str, Any] = {"message": message, "transport": "chat"}
+    if workspace_hints:
+        request_body["workspace_hints"] = workspace_hints
     if conversation_id:
         request_body["conversation_id"] = conversation_id
     creation_started_at = time.monotonic()
