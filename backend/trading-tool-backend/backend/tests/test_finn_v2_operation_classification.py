@@ -1084,7 +1084,23 @@ def test_capability_request_never_gets_hijacked_by_verified_or_guided_context(me
     )
 
     assert result.operation_id == "capability"
-    assert result.selector_source == "structured"
+    assert result.selector_source == "registry_capability_constraint"
+
+
+def test_capability_request_does_not_call_selector_provider():
+    class Selector:
+        def select(self, **_kwargs):
+            raise AssertionError("provider must not be called")
+
+    service = FinnV2OperationClassificationService(structured_selector=Selector())
+
+    result = service.classify(
+        message="Wat kan FINN voor mij doen?",
+        conversation_context={},
+    )
+
+    assert result.operation_id == "capability"
+    assert result.selector_source == "registry_capability_constraint"
 
 
 def test_technical_configuration_is_an_indicator_read_not_a_workspace_asset_read():

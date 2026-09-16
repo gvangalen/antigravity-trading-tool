@@ -126,6 +126,19 @@ class FinnV2OperationClassificationService:
                 (guided_contract,),
                 conversation_context=conversation_context,
             )
+        if facts.discourse_act == "capability":
+            # Capability is a registry-defined informational operation once
+            # the deterministic preprocessor has identified the discourse
+            # act. Do not make this safe read depend on provider availability.
+            contract = self.registry.require_supported("capability")
+            return self._result(
+                contract.operation_id,
+                facts,
+                "high",
+                "registry_capability_constraint",
+                (contract,),
+                conversation_context=conversation_context,
+            )
         deterministic_read_operation = self._deterministic_graph_read_operation(facts)
         if deterministic_read_operation:
             # These registry reads are fully identified by typed request facts
@@ -720,6 +733,7 @@ class FinnV2OperationClassificationValidator:
             "provider_unavailable",
             "guided_state",
             "registry_constraint",
+            "registry_capability_constraint",
             "registry_read_constraint",
             "workspace_setup_contract",
         }:
