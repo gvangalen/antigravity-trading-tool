@@ -199,7 +199,12 @@ function createEcosystem(environmentName) {
       {
         name: backgroundWorker,
         script: CELERY_BIN,
-        args: `-A backend.celery_task.celery_app worker --loglevel=info -Ofair --concurrency=${WORKER_CONCURRENCY.background} --max-tasks-per-child=50 -Q ${queuePrefix}celery,${queuePrefix}market_data,${queuePrefix}portfolio,${queuePrefix}scoring,${queuePrefix}execution_critical,${queuePrefix}ai_generation -n ${environmentName}-background@%h`,
+        // This worker is already strictly serial. A prefork parent plus one
+        // child duplicated its heavy reporting/market imports on the 1 GB
+        // production host and forced the isolated FINN worker into swap. The
+        // solo pool preserves the same queues and concurrency while removing
+        // that redundant process tree; FINN itself remains isolated/prefork.
+        args: `-A backend.celery_task.celery_app worker --pool=solo --loglevel=info -Ofair --concurrency=${WORKER_CONCURRENCY.background} -Q ${queuePrefix}celery,${queuePrefix}market_data,${queuePrefix}portfolio,${queuePrefix}scoring,${queuePrefix}execution_critical,${queuePrefix}ai_generation -n ${environmentName}-background@%h`,
         cwd: backendDir,
         interpreter: "none",
         env: {
