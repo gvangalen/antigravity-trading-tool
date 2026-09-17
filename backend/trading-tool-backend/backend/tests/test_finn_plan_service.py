@@ -1041,6 +1041,44 @@ def test_build_mission_control_response_keeps_working_when_first_dashboard_conte
     assert "Mission Control stays available".lower() in result["first_dashboard_context"]["observation"].lower()
 
 
+def test_mission_personal_snapshot_exposes_typed_profile_plan_bot_and_analysis():
+    payload = {
+        "input_snapshot": {
+            "name": "Sam", "asset": "BTC",
+            "profile": {"trader_types": ["swing_trader"], "experience_levels": ["intermediate"], "risk_profiles": ["balanced"], "primary_timeframes": ["4h", "1d"]},
+            "indicators": {"market": ["Volume"], "macro": ["DXY"], "technical": ["RSI"]},
+            "setup": {"name": "BTC Setup", "timeframe": "4H", "setup_type": "trade"},
+            "strategy": {"name": "BTC Swing", "entry_rules": ["76000"]},
+            "bot": {"name": "BTC Paper", "is_live": False, "is_active": False},
+            "latest_analysis": {"availability": "available", "summary": "BTC consolidates."},
+        },
+        "fallback_result": {
+            "headline": "Your BTC plan is ready for your swing trader profile on 4h and 1d.",
+            "observation": "RSI and DXY deserve attention around the strategy entry.",
+            "reasoning": "BTC Paper is paused and live trading is disabled.",
+            "suggested_action": "Review BTC Swing",
+        },
+    }
+
+    snapshot = FinnPlanService._mission_personal_snapshot(payload)
+    briefing = FinnPlanService._mission_personal_briefing(payload)
+
+    assert snapshot["first_name"] == "Sam"
+    assert snapshot["trader_profile"] == ["swing_trader"]
+    assert snapshot["experience_level"] == "intermediate"
+    assert snapshot["risk_profile"] == ["balanced"]
+    assert snapshot["preferred_timeframes"] == ["4h", "1d"]
+    assert snapshot["selected_assets"] == ["BTC"]
+    assert snapshot["market_indicators"] == ["Volume"]
+    assert snapshot["macro_indicators"] == ["DXY"]
+    assert snapshot["technical_indicators"] == ["RSI"]
+    assert snapshot["paper_bot_status"] == "paused"
+    assert snapshot["latest_analysis_available"] is True
+    assert briefing["greeting"] == "Goedemorgen Sam"
+    for expected in ("BTC", "swing", "RSI", "DXY", "paused"):
+        assert expected.lower() in briefing["summary"].lower()
+
+
 def test_build_first_dashboard_context_returns_loading_when_payload_is_not_ready(monkeypatch):
     service = FinnPlanService(db_session=object())
 

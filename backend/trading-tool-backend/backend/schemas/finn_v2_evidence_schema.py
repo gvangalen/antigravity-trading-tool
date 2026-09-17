@@ -153,6 +153,7 @@ class LinkedBotData(BaseModel):
     is_active: bool = False
     is_live: bool = False
     mode: Optional[str] = None
+    budget_total_eur: Optional[float] = None
 
 
 class BotStatusData(BaseModel):

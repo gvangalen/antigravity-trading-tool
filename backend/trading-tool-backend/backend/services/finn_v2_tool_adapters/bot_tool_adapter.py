@@ -15,6 +15,7 @@ class BotToolAdapter:
             is_active=bool(bot.get("is_active")),
             is_live=bool(bot.get("is_live")),
             mode=bot.get("mode"),
+            budget_total_eur=bot.get("budget_total_eur"),
         )
         return {
             "data": payload,

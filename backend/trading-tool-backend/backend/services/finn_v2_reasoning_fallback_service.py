@@ -585,6 +585,7 @@ class FinnV2ReasoningFallbackService:
             setup_name = setup.facts.get("name") or f"setup {setup_id}"
             strategy_name = strategy.facts.get("name") or "de gekoppelde strategie"
             bot_name = bot.facts.get("name") or "de gekoppelde paper-bot"
+            budget_total_eur = bot.facts.get("budget_total_eur")
             timeframe = setup.facts.get("timeframe")
             is_live = bool(bot_status.facts.get("is_live", bot.facts.get("is_live")))
             evidence_refs = [
@@ -608,15 +609,25 @@ class FinnV2ReasoningFallbackService:
                 ],
             )
             timeframe_detail = f" op timeframe {timeframe}" if timeframe else ""
+            asks_budget = any(term in lowered for term in ("budget", "bedrag", "inleg", "amount", "betrag"))
+            if asks_budget and budget_total_eur is not None:
+                rendered_budget = (
+                    f"€{budget_total_eur:,.0f}".replace(",", ".")
+                    if isinstance(budget_total_eur, (int, float))
+                    else str(budget_total_eur)
+                )
+                direct_answer = f"Het huidige budget van paper-bot {bot_name} is {rendered_budget}."
+            else:
+                direct_answer = (
+                    f"Je actieve {asset}-plan gebruikt {setup_name}{timeframe_detail}, "
+                    f"strategie {strategy_name} en bot {bot_name}."
+                )
             return ReasoningResult(
                 reasoning_result_id=f"finn-v2-reasoning-{uuid.uuid4().hex}",
                 run_id=run_id,
                 user_id=user_id,
                 mode="READ",
-                direct_answer=(
-                    f"Je actieve {asset}-plan gebruikt {setup_name}{timeframe_detail}, "
-                    f"strategie {strategy_name} en bot {bot_name}."
-                ),
+                direct_answer=direct_answer,
                 main_observation=f"Paper-bot {bot_name} staat momenteel {'live' if is_live else 'niet live'}.",
                 supporting_points=[],
                 claims=claims,

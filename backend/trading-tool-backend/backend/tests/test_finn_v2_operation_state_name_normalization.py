@@ -398,6 +398,47 @@ def test_update_bot_extracts_budget_without_exposing_setup_copy():
     )
 
 
+@pytest.mark.parametrize(
+    "message",
+    (
+        "Wijzig deze setup van timeframe 4H naar 1D.",
+        "Zet het timeframe van BTC Setup op 1D.",
+    ),
+)
+def test_update_setup_extracts_only_the_new_timeframe(message):
+    service = FinnV2OperationStateService()
+    contract = FinnV2OperationRegistry().require_supported("update_setup")
+
+    state = service.resolve(
+        contract=contract,
+        message=message,
+        explicit_asset="BTC",
+        conversation_context={},
+        supplied_inputs={"setup_id": 42},
+    )
+
+    assert state.collected_inputs == {
+        "setup_id": 42,
+        "changed_fields": {"timeframe": "1D"},
+    }
+    assert state.missing_required_inputs == []
+
+
+@pytest.mark.parametrize(
+    ("slot", "question"),
+    (
+        ("base_amount", "Welk bedrag wil je per uitvoering inzetten?"),
+        ("entry", "Bij welke koers wil je instappen?"),
+        ("stop_loss", "Waar wil je je stop-loss zetten?"),
+        ("targets", "Welke koersdoelen wil je gebruiken?"),
+        ("risk_profile", "Hoeveel procent wil je maximaal riskeren?"),
+    ),
+)
+def test_strategy_guided_questions_use_human_slot_copy(slot, question):
+    contract = FinnV2OperationRegistry().require_supported("create_strategy")
+    assert FinnV2OperationStateService.clarification_question(slot, contract=contract) == question
+
+
 def test_strategy_guided_slot_reply_preserves_prior_contract_inputs():
     service = FinnV2OperationStateService()
     contract = FinnV2OperationRegistry().require_supported("create_strategy")

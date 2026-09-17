@@ -233,7 +233,11 @@ class FinnV2OperationStateService:
             "setup_id": "Welke bestaande setup wil je aanpassen?",
             "strategy_id": "Welke bestaande strategie wil je aanpassen?",
             "execution_mode": "Wil je een fixed of custom uitvoeringsmodus gebruiken?",
-            "base_amount": "Welke basisinleg wil je voor deze strategie gebruiken?",
+            "base_amount": "Welk bedrag wil je per uitvoering inzetten?",
+            "entry": "Bij welke koers wil je instappen?",
+            "stop_loss": "Waar wil je je stop-loss zetten?",
+            "targets": "Welke koersdoelen wil je gebruiken?",
+            "risk_profile": "Hoeveel procent wil je maximaal riskeren?",
             "proposal_id": "Welk voorstel wil je precies bevestigen of uitvoeren?",
             "asset": "Welke asset wil je aan je watchlist toevoegen?",
             "requested_change": "Wat wil je precies aan je manier van handelen verbeteren?",
@@ -746,6 +750,24 @@ class FinnV2OperationStateService:
             "update_strategy": {"base_amount"},
             "update_bot": {"budget_total_eur"},
         }.get(contract.operation_id, set())
+
+        # Natural update requests often describe both the old and new value:
+        # "Wijzig deze setup van timeframe 4H naar 1D."  The old value is
+        # context, not another mutation. Bind only the final value to the
+        # registry-owned changed_fields slot.
+        if contract.operation_id == "update_setup":
+            timeframe_transition = re.search(
+                r"\b(?:wijzig|verander|change|update|aktualisiere|ändere)\b"
+                r"[^,.!?\n]{0,100}?\b(?:van|from|von)\s+"
+                r"(?:timeframe|time\s*frame|tijdframe|zeitrahmen)\s+"
+                r"[\w-]+\s+(?:naar|to|auf)\s+([\w-]+)",
+                text,
+                re.IGNORECASE,
+            )
+            if timeframe_transition:
+                changes["timeframe"] = FinnV2SetupInputCatalog.canonical_input(
+                    "timeframe", timeframe_transition.group(1)
+                )
         canonical_clauses = (
             ("timeframe", r"(?:its\s+)?(?:timeframe|time\s*frame|tijdframe|zeitrahmen)"),
             ("base_amount", r"(?:the\s+)?(?:base\s*amount|basisinleg|basis\s*bedrag|basisbetrag|grundbetrag)"),

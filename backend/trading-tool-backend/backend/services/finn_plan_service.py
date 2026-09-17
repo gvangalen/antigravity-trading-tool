@@ -12662,6 +12662,14 @@ class FinnPlanService:
         activity_window = await self._get_recent_finn_activity(user_id, limit=180)
         activity_feed = activity_window[:40]
         day_log = self._mission_day_log(activity_window)
+        personal_payload = await self._prepare_first_dashboard_payload(
+            user_id=user_id,
+            analysis=analysis,
+            mission=mission,
+            activity_feed=activity_feed,
+            day_log=day_log,
+            require_first_dashboard_eligibility=False,
+        )
         resolved_item_ids = await self._get_today_resolved_mission_item_ids(user_id)
         if resolved_item_ids:
             mission = self._filter_resolved_mission_items(mission, resolved_item_ids)
@@ -12797,6 +12805,8 @@ class FinnPlanService:
             "flow": "mission_control",
             "autonomy_level": "advice_only",
             "summary": mission["summary"],
+            "personal_snapshot": self._mission_personal_snapshot(personal_payload),
+            "finn_briefing": self._mission_personal_briefing(personal_payload),
             "first_dashboard_context": mission.get("first_dashboard_context"),
             "workqueue": mission["workqueue"],
             "workqueue_groups": mission["workqueue_groups"],
@@ -12853,6 +12863,55 @@ class FinnPlanService:
                 "date": analysis.get("date"),
                 "asset_count": analysis.get("asset_count", 0),
             },
+        }
+
+    @staticmethod
+    def _mission_personal_snapshot(payload: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+        source = dict((payload or {}).get("input_snapshot") or {})
+        profile = dict(source.get("profile") or {})
+        indicators = dict(source.get("indicators") or {})
+        setup = dict(source.get("setup") or {})
+        strategy = dict(source.get("strategy") or {})
+        bot = dict(source.get("bot") or {})
+        latest = dict(source.get("latest_analysis") or {})
+        return {
+            "first_name": source.get("name") or None,
+            "trader_profile": list(profile.get("trader_types") or []),
+            "experience_level": (profile.get("experience_levels") or [None])[0],
+            "risk_profile": list(profile.get("risk_profiles") or []),
+            "preferred_timeframes": list(profile.get("primary_timeframes") or []),
+            "selected_assets": [source.get("asset")] if source.get("asset") else [],
+            "market_indicators": list(indicators.get("market") or []),
+            "macro_indicators": list(indicators.get("macro") or []),
+            "technical_indicators": list(indicators.get("technical") or []),
+            "active_setup": setup or None,
+            "active_strategy": strategy or None,
+            "paper_bot": bot or None,
+            "paper_bot_status": "live" if bot.get("is_live") else "paused" if bot else None,
+            "latest_analysis": latest or None,
+            "latest_analysis_available": str(latest.get("availability") or "").lower()
+            in {"available", "ready"},
+        }
+
+    @classmethod
+    def _mission_personal_briefing(cls, payload: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+        snapshot = cls._mission_personal_snapshot(payload)
+        fallback = dict((payload or {}).get("fallback_result") or {})
+        name = snapshot.get("first_name")
+        summary = " ".join(
+            part
+            for part in (
+                str(fallback.get("headline") or "").strip(),
+                str(fallback.get("observation") or "").strip(),
+                str(fallback.get("reasoning") or "").strip(),
+            )
+            if part
+        )
+        return {
+            "greeting": f"Goedemorgen {name}" if name else "Goedemorgen",
+            "summary": summary,
+            "suggested_actions": [fallback.get("suggested_action")]
+            if fallback.get("suggested_action") else [],
         }
 
     def _first_dashboard_error_context(
@@ -13359,6 +13418,7 @@ class FinnPlanService:
         mission: Optional[Dict[str, Any]] = None,
         activity_feed: Optional[List[Dict[str, Any]]] = None,
         day_log: Optional[Dict[str, Any]] = None,
+        require_first_dashboard_eligibility: bool = True,
     ) -> Optional[Dict[str, Any]]:
         if not self.session:
             return None
@@ -13390,12 +13450,13 @@ class FinnPlanService:
             return None
         if not onboarding_status.get("onboarding_complete"):
             return None
-        if self._first_dashboard_has_blocking_activity(local_activity_feed):
-            return None
-        if any(int((local_day_log or {}).get(key) or 0) > 0 for key in ("handled_count", "skipped_count", "snoozed_count")):
-            return None
-        if (local_mission or {}).get("bot_review_queue"):
-            return None
+        if require_first_dashboard_eligibility:
+            if self._first_dashboard_has_blocking_activity(local_activity_feed):
+                return None
+            if any(int((local_day_log or {}).get(key) or 0) > 0 for key in ("handled_count", "skipped_count", "snoozed_count")):
+                return None
+            if (local_mission or {}).get("bot_review_queue"):
+                return None
 
         active_asset = str(
             onboarding_status.get("active_asset")
@@ -13558,6 +13619,7 @@ class FinnPlanService:
             "asset": active_asset,
             "profile": {
                 "trader_types": profile.get("trader_types") or [],
+                "experience_levels": profile.get("experience_levels") or [],
                 "risk_profiles": profile.get("risk_profiles") or [],
                 "primary_timeframes": profile.get("primary_timeframes") or [],
             },
