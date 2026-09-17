@@ -124,6 +124,7 @@ class FinnV2OperationClassificationService:
                 conversation_context=conversation_context,
             )
         explicit_mutation_operation = self._explicit_mutation_operation(
+            message=message,
             facts=facts,
             workspace_hints=workspace_hints,
             client_context=client_context,
@@ -300,6 +301,7 @@ class FinnV2OperationClassificationService:
     @staticmethod
     def _explicit_mutation_operation(
         *,
+        message: str,
         facts: FinnV2PreprocessedRequest,
         workspace_hints: Optional[Mapping[str, object]],
         client_context: Optional[Mapping[str, object]],
@@ -307,6 +309,32 @@ class FinnV2OperationClassificationService:
         """Resolve one explicit registry mutation without a provider round-trip."""
         entities = set(facts.explicit_entities).intersection({"setup", "strategy", "bot"})
         polarity = str(facts.action_polarity or "")
+        role_match = re.search(
+            r"\b(?:wijzig|verander|update|change|aktualisiere|ändere|verwijder|delete|remove|"
+            r"lösche|deactiveer|deactivate|deaktiviere)\w*\s+"
+            r"(?:mijn|my|deze|dit|this|the|meine[nr]?|den|die|das|de)?\s*"
+            r"(setup|strategie|strategy|bot)\b",
+            str(message or ""),
+            re.IGNORECASE,
+        )
+        if role_match:
+            entity = {"strategie": "strategy"}.get(
+                role_match.group(1).casefold(), role_match.group(1).casefold()
+            )
+            operation = {
+                ("update", "setup"): "update_setup",
+                ("delete", "setup"): "delete_setup",
+                ("remove", "setup"): "delete_setup",
+                ("update", "strategy"): "update_strategy",
+                ("delete", "strategy"): "delete_strategy",
+                ("remove", "strategy"): "delete_strategy",
+                ("update", "bot"): "update_bot",
+                ("delete", "bot"): "delete_bot",
+                ("remove", "bot"): "delete_bot",
+                ("deactivate", "bot"): "deactivate_bot",
+            }.get((polarity, entity))
+            if operation:
+                return operation
         if len(entities) == 1:
             entity = next(iter(entities))
             operation = {

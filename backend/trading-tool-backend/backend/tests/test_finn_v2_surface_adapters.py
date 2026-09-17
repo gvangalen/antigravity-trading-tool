@@ -3,15 +3,20 @@ import asyncio
 from backend.services.finn_v2_visible_delivery_service import FinnV2VisibleDeliveryService
 
 
-def test_mission_control_surface_uses_visible_delivery_summary():
+def test_mission_control_surface_uses_owner_scoped_today_snapshot():
     service = FinnV2VisibleDeliveryService(session=object())
-    service.deliver_assistant_envelope = lambda **kwargs: asyncio.sleep(
+    service.mission_control.build_mission_control_response = lambda *_args, **_kwargs: asyncio.sleep(
         0,
         result={
-            "response": "BTC briefing",
-            "summary": "BTC briefing",
-            "next_best_action": "Review proposal",
-            "response_trace": {"trace_id": "trace-1"},
+            "generation_status": "ready",
+            "first_dashboard_context": {
+                "profile": {"trader_types": ["swing"]},
+                "indicators": {"market": ["Volume"], "macro": ["DXY"], "technical": ["RSI"]},
+                "setup": {"name": "BTC Swing", "timeframe": "4H"},
+                "strategy": {"name": "BTC Pullback"},
+                "bot": {"name": "BTC Paper", "is_live": False},
+                "briefing_text": "Je BTC-plan op 4H is klaar voor review.",
+            },
         },
     )
 
@@ -24,5 +29,7 @@ def test_mission_control_surface_uses_visible_delivery_summary():
         )
     )
 
-    assert payload["generation_status"] == "completed"
-    assert payload["finn_briefing"]["summary"] == "BTC briefing"
+    assert payload["generation_status"] == "ready"
+    assert payload["first_dashboard_context"]["setup"]["name"] == "BTC Swing"
+    assert payload["first_dashboard_context"]["strategy"]["name"] == "BTC Pullback"
+    assert payload["first_dashboard_context"]["bot"]["name"] == "BTC Paper"

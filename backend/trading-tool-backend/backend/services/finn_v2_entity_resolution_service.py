@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import re
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Literal, Optional
 
+from pydantic import BaseModel, Field
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.infrastructure.repositories.asset_catalog_repository import AssetCatalogRepository
@@ -13,6 +15,31 @@ from backend.infrastructure.repositories.strategy_repository import StrategyRepo
 from backend.infrastructure.repositories.user_repository import UserRepository
 from backend.services.asset_catalog_service import AssetCatalogService
 from backend.services.finn_v2_active_plan_resolver import FinnV2ActivePlanResolver
+
+
+EntityType = Literal["setup", "strategy", "bot"]
+ResolutionStatus = Literal["resolved", "ambiguous", "not_found", "forbidden", "invalid_type"]
+
+
+class CanonicalEntityTarget(BaseModel):
+    """One typed resolution result consumed by every existing-object operation."""
+
+    entity_type: EntityType
+    entity_id: Optional[int] = None
+    display_name: Optional[str] = None
+    owner_id: int
+    relation: Dict[str, Any] = Field(default_factory=dict)
+    source: Optional[str] = None
+    resolution_status: ResolutionStatus
+    candidate_names: list[str] = Field(default_factory=list)
+
+    @property
+    def relational_context(self) -> Dict[str, Any]:
+        return self.relation
+
+    @property
+    def resolution_source(self) -> Optional[str]:
+        return self.source
 
 
 class FinnV2EntityResolutionService:
@@ -26,6 +53,232 @@ class FinnV2EntityResolutionService:
         self.assets = AssetCatalogService(session)
         self.asset_repo = AssetCatalogRepository(session)
         self.active_plans = FinnV2ActivePlanResolver()
+
+    async def resolve_canonical_target(
+        self,
+        *,
+        user_id: int,
+        entity_type: EntityType,
+        selector: Optional[Dict[str, Any]] = None,
+        message: str = "",
+        conversation_context: Optional[Dict[str, Any]] = None,
+        workspace_hints: Optional[Dict[str, Any]] = None,
+        client_context: Optional[Dict[str, Any]] = None,
+    ) -> CanonicalEntityTarget:
+        """Resolve one existing object using the shared lifecycle precedence.
+
+        IDs are accepted only from trusted persisted/context sources and are
+        always re-read through owner-scoped repositories. A visible name in
+        the current message outranks every contextual reference.
+        """
+        selector = dict(selector or {})
+        conversation_context = dict(conversation_context or {})
+        workspace_hints = dict(workspace_hints or {})
+        client_context = dict(client_context or {})
+        candidates = await self._entity_candidates(user_id=user_id, entity_type=entity_type)
+
+        declared_type = selector.get("entity_type")
+        if declared_type and declared_type != entity_type:
+            return self._resolution_failure(user_id, entity_type, "invalid_type", source="explicit_selector")
+
+        message_matches = self._explicit_message_matches(message, candidates)
+        if len(message_matches) == 1:
+            return self._canonical_target(user_id, entity_type, message_matches[0], "explicit_name")
+        if len(message_matches) > 1:
+            return self._resolution_failure(
+                user_id,
+                entity_type,
+                "ambiguous",
+                source="explicit_name",
+                candidate_names=self._candidate_names(message_matches),
+            )
+
+        explicit_name = self._normalized_name(selector.get(f"{entity_type}_name"))
+        if explicit_name:
+            named = [row for row in candidates if self._normalized_name(row.get("name")) == explicit_name]
+            if len(named) == 1:
+                return self._canonical_target(user_id, entity_type, named[0], "explicit_name")
+            if len(named) > 1:
+                return self._resolution_failure(
+                    user_id,
+                    entity_type,
+                    "ambiguous",
+                    source="explicit_name",
+                    candidate_names=self._candidate_names(named),
+                )
+            return self._resolution_failure(user_id, entity_type, "not_found", source="explicit_name")
+
+        active_target = dict(conversation_context.get("canonical_entity_target") or {})
+        if active_target.get("entity_type") == entity_type:
+            entity_id = self._coerce_int(active_target.get("entity_id"))
+            if entity_id:
+                return await self._canonical_target_by_id(
+                    user_id=user_id,
+                    entity_type=entity_type,
+                    entity_id=entity_id,
+                    source="active_runtime_context",
+                )
+
+        action_result = dict(conversation_context.get("previous_action_result") or {})
+        if action_result.get("entity_type") == entity_type and action_result.get("result_status") == "succeeded":
+            entity_id = self._coerce_int(action_result.get("entity_id"))
+            if entity_id:
+                return await self._canonical_target_by_id(
+                    user_id=user_id,
+                    entity_type=entity_type,
+                    entity_id=entity_id,
+                    source="previous_action_result",
+                )
+
+        for context in (workspace_hints, client_context):
+            entity_id = self._coerce_int(context.get(f"{entity_type}_id"))
+            if entity_id:
+                return await self._canonical_target_by_id(
+                    user_id=user_id,
+                    entity_type=entity_type,
+                    entity_id=entity_id,
+                    source="workspace_context",
+                )
+
+        # A selector ID is model/legacy output, not visible user intent. Keep
+        # it only as a final owner-checked compatibility input after every
+        # authoritative context source has had precedence.
+        selector_id = self._coerce_int(selector.get(f"{entity_type}_id"))
+        if selector_id:
+            return await self._canonical_target_by_id(
+                user_id=user_id,
+                entity_type=entity_type,
+                entity_id=selector_id,
+                source="selector_compatibility",
+            )
+
+        if len(candidates) == 1:
+            return self._canonical_target(user_id, entity_type, candidates[0], "single_owner_candidate")
+        if len(candidates) > 1:
+            return self._resolution_failure(
+                user_id,
+                entity_type,
+                "ambiguous",
+                source="owner_candidates",
+                candidate_names=self._candidate_names(candidates),
+            )
+        return self._resolution_failure(user_id, entity_type, "not_found", source="owner_candidates")
+
+    async def _entity_candidates(self, *, user_id: int, entity_type: EntityType) -> list[Dict[str, Any]]:
+        if entity_type == "setup":
+            rows = await self.setups.get_user_setups(user_id)
+        elif entity_type == "strategy":
+            rows = await self.strategies.query_strategies(user_id, {})
+        else:
+            rows = await self.bots.get_bot_configs(user_id)
+        return [dict(row) for row in rows]
+
+    async def _canonical_target_by_id(
+        self,
+        *,
+        user_id: int,
+        entity_type: EntityType,
+        entity_id: int,
+        source: str,
+    ) -> CanonicalEntityTarget:
+        if entity_type == "setup":
+            row = await self.setups.get_setup_by_id(entity_id, user_id)
+        elif entity_type == "strategy":
+            row = await self.strategies.get_raw_strategy_with_setup(entity_id, user_id)
+        else:
+            row = await self.bots.get_bot_config(user_id, entity_id)
+        if not row:
+            status: ResolutionStatus = (
+                "forbidden"
+                if await self._entity_exists_for_another_owner(entity_type=entity_type, entity_id=entity_id, user_id=user_id)
+                else "not_found"
+            )
+            return self._resolution_failure(user_id, entity_type, status, source=source)
+        return self._canonical_target(user_id, entity_type, dict(row), source)
+
+    async def _entity_exists_for_another_owner(
+        self,
+        *,
+        entity_type: EntityType,
+        entity_id: int,
+        user_id: int,
+    ) -> bool:
+        if not callable(getattr(self.session, "execute", None)):
+            return False
+        tables = {"setup": "setups", "strategy": "strategies", "bot": "bot_configs"}
+        result = await self.session.execute(
+            text(f"SELECT 1 FROM {tables[entity_type]} WHERE id = :entity_id AND user_id <> :user_id LIMIT 1"),
+            {"entity_id": entity_id, "user_id": user_id},
+        )
+        return result.first() is not None
+
+    def _canonical_target(
+        self,
+        user_id: int,
+        entity_type: EntityType,
+        row: Dict[str, Any],
+        source: str,
+    ) -> CanonicalEntityTarget:
+        entity_id = self._coerce_int(row.get("id") or row.get(f"{entity_type}_id"))
+        if not entity_id:
+            return self._resolution_failure(user_id, entity_type, "not_found", source=source)
+        relation = {
+            key: row.get(key)
+            for key in (
+                "setup_id",
+                "setup_name",
+                "strategy_id",
+                "strategy_name",
+                "symbol",
+                "timeframe",
+            )
+            if row.get(key) is not None and key != f"{entity_type}_id"
+        }
+        return CanonicalEntityTarget(
+            entity_type=entity_type,
+            entity_id=entity_id,
+            display_name=str(row.get("name") or f"{entity_type.title()} {entity_id}"),
+            owner_id=user_id,
+            relation=relation,
+            source=source,
+            resolution_status="resolved",
+        )
+
+    @staticmethod
+    def _resolution_failure(
+        user_id: int,
+        entity_type: EntityType,
+        status: ResolutionStatus,
+        *,
+        source: Optional[str],
+        candidate_names: Optional[list[str]] = None,
+    ) -> CanonicalEntityTarget:
+        return CanonicalEntityTarget(
+            entity_type=entity_type,
+            owner_id=user_id,
+            source=source,
+            resolution_status=status,
+            candidate_names=list(candidate_names or []),
+        )
+
+    @staticmethod
+    def _candidate_names(rows: list[Dict[str, Any]]) -> list[str]:
+        return sorted({str(row.get("name") or "").strip() for row in rows if str(row.get("name") or "").strip()})
+
+    def _explicit_message_matches(
+        self,
+        message: str,
+        rows: list[Dict[str, Any]],
+    ) -> list[Dict[str, Any]]:
+        matches = [row for row in rows if self._message_mentions_name(message, row.get("name"))]
+        if len(matches) <= 1:
+            return matches
+        # If one visible name fully contains another ("Alpha" / "Alpha Bot"),
+        # the most specific name is the user's explicit target. Equal-length
+        # matches remain genuinely ambiguous.
+        lengths = [len(self._normalized_name(row.get("name")) or "") for row in matches]
+        longest = max(lengths, default=0)
+        return [row for row, length in zip(matches, lengths) if length == longest]
 
     async def resolve_asset(
         self,

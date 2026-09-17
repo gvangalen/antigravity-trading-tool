@@ -13410,11 +13410,17 @@ class FinnPlanService:
             return None
 
         preferences: Dict[str, Any] = {}
+        display_name = ""
         profile = normalize_trader_profile_preferences({})
         try:
             user = await UserRepository(self.session).get_by_id(user_id)
             preferences = getattr(user, "ai_preferences", {}) or {} if user else {}
             profile = normalize_trader_profile_preferences(preferences)
+            display_name = str(
+                getattr(user, "first_name", None)
+                or getattr(user, "name", None)
+                or ""
+            ).strip()
         except Exception:
             logger.exception(
                 "First dashboard profile lookup failed for user_id=%s trace_id=%s",
@@ -13448,6 +13454,12 @@ class FinnPlanService:
         has_scores = bool(asset_analysis.get("has_scores"))
         blockers = asset_analysis.get("blockers") or []
         market_snapshot = self._first_dashboard_market_snapshot(asset_analysis, data_readiness=data_readiness, has_scores=has_scores, blockers=blockers)
+        latest_analysis = await self._first_dashboard_latest_analysis(
+            user_id,
+            asset=active_asset,
+            asset_analysis=asset_analysis,
+            has_scores=has_scores,
+        )
         observation, next_action = self._first_dashboard_observation_and_action(
             active_asset,
             profile=profile,
@@ -13522,6 +13534,9 @@ class FinnPlanService:
             "market.status",
             "market.blockers",
             "market.freshness",
+            "latest_analysis.availability",
+            "latest_analysis.summary",
+            "latest_analysis.report_date",
             "missing_fields",
             "history.behavior",
         ]
@@ -13539,6 +13554,7 @@ class FinnPlanService:
             ),
         }
         input_snapshot = {
+            "name": display_name,
             "asset": active_asset,
             "profile": {
                 "trader_types": profile.get("trader_types") or [],
@@ -13560,12 +13576,14 @@ class FinnPlanService:
                 "risk_rules": self._first_dashboard_risk_rules(strategy, linked_bot),
             },
             "bot": linked_bot or {},
+            "latest_analysis": latest_analysis,
             "missing_fields": missing_fields,
         }
         context_version = hashlib.sha256(
             json.dumps(input_snapshot, sort_keys=True, separators=(",", ":"), default=str).encode("utf-8")
         ).hexdigest()
         ai_prompt_context = {
+            "name": display_name,
             "profile": input_snapshot["profile"],
             "asset": {"symbol": active_asset},
             "indicators": indicators,
@@ -13573,10 +13591,12 @@ class FinnPlanService:
             "strategy": input_snapshot["strategy"],
             "bot": linked_bot or {},
             "market": market_snapshot,
+            "latest_analysis": latest_analysis,
             "missing_fields": missing_fields,
             "history": {"behavior": "No behavior history exists yet."},
         }
         return {
+            "name": display_name,
             "asset": active_asset,
             "timeframes": timeframes,
             "profile": profile,
@@ -13586,6 +13606,7 @@ class FinnPlanService:
             "bot": linked_bot,
             "data_readiness": data_readiness,
             "market_snapshot": market_snapshot,
+            "latest_analysis": latest_analysis,
             "next_action": next_action,
             "fallback_result": fallback_result,
             "input_snapshot": input_snapshot,
@@ -13615,6 +13636,7 @@ class FinnPlanService:
     def _first_dashboard_minimal_payload(self, asset: str) -> Dict[str, Any]:
         symbol = str(asset or "BTC").upper()
         return {
+            "name": "",
             "asset": symbol,
             "timeframes": [],
             "profile": {},
@@ -13624,6 +13646,7 @@ class FinnPlanService:
             "bot": None,
             "data_readiness": {},
             "market_snapshot": {},
+            "latest_analysis": {"availability": "unknown"},
             "next_action": {
                 "label": f"Review your {symbol} plan",
                 "question": f"Review my {symbol} plan",
@@ -13728,6 +13751,7 @@ class FinnPlanService:
         ]
         return {
             "is_first_dashboard": True,
+            "name": payload.get("name") or "",
             "asset": payload.get("asset"),
             "timeframes": payload.get("timeframes") or [],
             "profile": payload.get("profile") or {},
@@ -13737,6 +13761,7 @@ class FinnPlanService:
             "bot": payload.get("bot"),
             "data_readiness": payload.get("data_readiness") or {},
             "market_snapshot": payload.get("market_snapshot") or {},
+            "latest_analysis": payload.get("latest_analysis") or {"availability": "unknown"},
             "observation": briefing.get("observation"),
             "reasoning": briefing.get("reasoning"),
             "next_action": {
@@ -14097,6 +14122,7 @@ class FinnPlanService:
                     "Do not list every field back to the user.",
                     "Choose one observation that reflects real evaluation of the stored context.",
                     "Use market claims only when supported by supplied market data.",
+                    "Say that analysis is missing only when latest_analysis.availability is absent; unknown is not evidence of absence.",
                     "Do not claim personal behavior patterns because no behavior history exists yet.",
                     "Do not change strategy or bot rules.",
                     "Return valid JSON only.",
@@ -14179,6 +14205,78 @@ class FinnPlanService:
                 "setup": asset_analysis.get("setup_score"),
             },
         }
+
+    async def _first_dashboard_latest_analysis(
+        self,
+        user_id: int,
+        *,
+        asset: str,
+        asset_analysis: Dict[str, Any],
+        has_scores: bool,
+    ) -> Dict[str, Any]:
+        """Return a safe, owner-scoped analysis availability projection.
+
+        A missing claim is allowed only after the owner-scoped report query
+        succeeds and both report and current score evidence are absent. Query
+        failures remain ``unknown`` so visible copy cannot turn an operational
+        error into a false statement about the user's data.
+        """
+        try:
+            report = await ReportRepository(self.session).get_latest_report(
+                user_id,
+                "daily_reports",
+                symbol=asset,
+            )
+        except Exception:
+            logger.exception(
+                "First dashboard latest analysis lookup failed for user_id=%s asset=%s trace_id=%s",
+                user_id,
+                asset,
+                self.trace_id,
+            )
+            return {"availability": "unknown", "source": "query_failed"}
+
+        if report:
+            summary = next(
+                (
+                    str(report.get(field) or "").strip()
+                    for field in (
+                        "summary",
+                        "headline",
+                        "market_summary",
+                        "macro_summary",
+                        "technical_summary",
+                    )
+                    if str(report.get(field) or "").strip()
+                ),
+                "",
+            )
+            return {
+                "availability": "available",
+                "source": "daily_report",
+                "report_date": str(report.get("report_date") or "") or None,
+                "summary": summary[:600] or None,
+            }
+
+        if has_scores:
+            score_parts = []
+            for label, field in (
+                ("Market", "market_score"),
+                ("Macro", "macro_score"),
+                ("Technisch", "technical_score"),
+                ("Setup", "setup_score"),
+            ):
+                value = asset_analysis.get(field)
+                if value is not None:
+                    score_parts.append(f"{label} {value}")
+            return {
+                "availability": "available",
+                "source": "score_snapshot",
+                "report_date": str(asset_analysis.get("date") or "") or None,
+                "summary": ", ".join(score_parts)[:600] or f"Actuele {asset}-analyse is beschikbaar.",
+            }
+
+        return {"availability": "absent", "source": "owner_scoped_query"}
 
     def _first_dashboard_missing_fields(
         self,

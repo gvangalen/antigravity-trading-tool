@@ -417,14 +417,20 @@ class SetupService:
     async def delete_setup(self, setup_id: int, user_id: int) -> dict:
         dependents = await self.session.execute(
             text("""
-                SELECT COUNT(*)
+                SELECT s.name
                 FROM strategies s
                 WHERE s.setup_id = :setup_id AND s.user_id = :user_id
+                ORDER BY s.created_at ASC, s.id ASC
             """),
             {"setup_id": setup_id, "user_id": user_id},
         )
-        if (dependents.scalar() or 0) > 0:
-            raise HTTPException(409, "Setup wordt nog gebruikt door een strategie. Verwijder eerst de gekoppelde strategie.")
+        dependent_names = [str(name).strip() for name in dependents.scalars().all() if str(name or "").strip()]
+        if dependent_names:
+            names = ", ".join(f"‘{name}’" for name in dependent_names)
+            raise HTTPException(
+                409,
+                f"Deze setup is nog gekoppeld aan strategie {names}. Verwijder eerst de gekoppelde strategie.",
+            )
 
         deleted = await self.repository.delete_setup(setup_id, user_id)
         if deleted == 0:

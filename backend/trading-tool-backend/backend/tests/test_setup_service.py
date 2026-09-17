@@ -1,3 +1,5 @@
+import asyncio
+
 import pytest
 from fastapi import HTTPException
 
@@ -187,3 +189,29 @@ def test_get_active_setup_filters_candidates_by_symbol(monkeypatch):
     assert result["active"]["setup_id"] == 2
     assert result["active"]["name"] == "BTC Smart DCA"
     assert result["active"]["symbol"] == "BTC"
+
+
+def test_delete_setup_dependency_names_the_owner_scoped_strategy():
+    class _Scalars:
+        def all(self):
+            return ["BTC Breakout"]
+
+    class _Result:
+        def scalars(self):
+            return _Scalars()
+
+    class _Session:
+        async def execute(self, _query, params):
+            assert params == {"setup_id": 12, "user_id": 7}
+            return _Result()
+
+    service = SetupService(_Session())
+
+    with pytest.raises(HTTPException) as exc:
+        asyncio.run(service.delete_setup(12, 7))
+
+    assert exc.value.status_code == 409
+    assert exc.value.detail == (
+        "Deze setup is nog gekoppeld aan strategie ‘BTC Breakout’. "
+        "Verwijder eerst de gekoppelde strategie."
+    )

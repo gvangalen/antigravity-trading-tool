@@ -171,7 +171,7 @@ def test_declassified_strategy_and_bot_updates_parse_set_field_op_value_without_
     assert strategy.missing_required_inputs == []
     assert bot.collected_inputs == {
         "bot_id": 61,
-        "changed_fields": {"budget": 100},
+        "changed_fields": {"budget_total_eur": 100},
     }
     assert bot.missing_required_inputs == []
 
@@ -210,7 +210,9 @@ def test_german_fixed_strategy_sentence_collects_contract_required_inputs():
         ("update_setup", "Update my setup and set its timeframe to 1 hour.", {"timeframe": "1H"}),
         ("update_setup", "Aktualisiere mein Setup und setze den Zeitrahmen auf 1 Stunde.", {"timeframe": "1H"}),
         ("update_setup", "Wijzig setup FINN DCA Flow 0917 naar timeframe 1D.", {"timeframe": "1D"}),
+        ("update_setup", "Wijzig deze setup naar timeframe 1D.", {"timeframe": "1D"}),
         ("update_strategy", "Aktualisiere meine Strategie und setze den Basisbetrag auf 120 Euro.", {"base_amount": 120}),
+        ("update_strategy", "Wijzig deze strategie en zet het bedrag naar €150.", {"base_amount": 150}),
     ),
 )
 def test_natural_update_clauses_use_existing_domain_field_keys(operation_id, message, expected):
@@ -328,6 +330,72 @@ def test_create_strategy_extracts_explicit_trade_contract_fields(message):
     assert state.collected_inputs["targets"] == [64500.0, 67000.0]
     assert state.collected_inputs["risk_profile"]
     assert state.missing_required_inputs == []
+
+
+def test_create_strategy_does_not_treat_risk_percentage_as_a_target():
+    service = FinnV2OperationStateService()
+    contract = FinnV2OperationRegistry().require_supported("create_strategy")
+
+    state = service.resolve(
+        contract=contract,
+        message=(
+            "Maak strategie Budget Flow met entry 76000 euro, stop-loss op 72000 euro, "
+            "target op 84000 euro en maximaal 1 procent risico."
+        ),
+        explicit_asset="BTC",
+        conversation_context={},
+        supplied_inputs={
+            "setup_id": 42,
+            "name": "Budget Flow",
+            "execution_mode": "fixed",
+            "base_amount": 100,
+        },
+    )
+
+    assert state.collected_inputs["targets"] == [84000.0]
+    assert state.collected_inputs["risk_profile"] == "maximaal 1 procent"
+
+
+def test_create_bot_preserves_an_explicit_optional_budget():
+    service = FinnV2OperationStateService()
+    contract = FinnV2OperationRegistry().require_supported("create_bot")
+
+    state = service.resolve(
+        contract=contract,
+        message="Maak paper-bot Budget Bot voor mijn strategie met een budget van 500 euro.",
+        explicit_asset="BTC",
+        conversation_context={},
+        supplied_inputs={"strategy_id": 84, "name": "Budget Bot"},
+    )
+
+    assert state.collected_inputs == {
+        "budget_total_eur": 500.0,
+        "strategy_id": 84,
+        "name": "Budget Bot",
+    }
+    assert state.missing_required_inputs == []
+
+
+def test_update_bot_extracts_budget_without_exposing_setup_copy():
+    service = FinnV2OperationStateService()
+    contract = FinnV2OperationRegistry().require_supported("update_bot")
+
+    state = service.resolve(
+        contract=contract,
+        message="Wijzig het budget van mijn paper-bot Budget Bot naar 1000 euro.",
+        explicit_asset="BTC",
+        conversation_context={},
+        supplied_inputs={"bot_id": 7},
+    )
+
+    assert state.collected_inputs == {
+        "changed_fields": {"budget_total_eur": 1000},
+        "bot_id": 7,
+    }
+    assert state.missing_required_inputs == []
+    assert service.clarification_question("changed_fields", contract=contract) == (
+        "Wat wil je aan deze paper-bot wijzigen?"
+    )
 
 
 def test_strategy_guided_slot_reply_preserves_prior_contract_inputs():

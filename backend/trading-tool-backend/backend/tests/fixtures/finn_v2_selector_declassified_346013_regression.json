@@ -59,7 +59,7 @@
     "expected_supported": true,
     "expected_action_polarity": "create",
     "expected_conversation_reference": "previous_action_result",
-    "expected_missing_inputs": [],
+    "expected_missing_inputs": ["name", "entry", "stop_loss", "targets", "risk_profile"],
     "expected_clarification": false,
     "provider_call_expected": true,
     "declassified_source": {"artifact_sha256": "0da3aaaead747ff778bb551229be408a211a15c6826477e9e4738a3f0dc37d1f", "case_id": "q30-strategy-create", "necessary_prior_conversation_turns": ["Maak een SOL swing trade setup op 4H met de naam QA Lifecycle 31DD Setup.", "Wijzig de setup die je zojuist hebt gemaakt en zet de timeframe op 1D."], "expected_contract_inputs": {"setup_id": "from q29 owner-scoped setup lineage", "execution_mode": "manual", "base_amount": 100.0}}

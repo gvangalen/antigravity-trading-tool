@@ -144,6 +144,25 @@ class FinnV2ProposalService:
         """
         operation = proposal_input.operation_type
         change = proposal_input.change
+        if operation == "create_strategy":
+            strategy_fields = dict(change.strategy_fields or {})
+            setup_id = strategy_fields.get("setup_id")
+            if setup_id is None:
+                raise ValueError("strategy_setup_required")
+            resolved = await self.resolver.resolve_setup(
+                user_id=user_id,
+                selector={"setup_id": setup_id},
+                asset=proposal_input.target.asset,
+            )
+            setup = dict(resolved["setup"] or {})
+            strategy_fields.setdefault("symbol", setup.get("symbol"))
+            strategy_fields.setdefault("timeframe", setup.get("timeframe"))
+            strategy_fields.setdefault("setup_name", setup.get("name"))
+            strategy_fields.setdefault("asset_source", "setup_default")
+            strategy_fields.setdefault("timeframe_source", "setup_default")
+            return proposal_input.copy(
+                update={"change": change.copy(update={"strategy_fields": strategy_fields})}
+            )
         if operation == "update_setup":
             unknown = set(change.changed_fields).difference(SetupService.UPDATE_ALLOWED_FIELDS)
             if unknown or not change.changed_fields:

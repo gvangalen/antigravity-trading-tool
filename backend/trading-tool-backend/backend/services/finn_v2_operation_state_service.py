@@ -207,6 +207,12 @@ class FinnV2OperationStateService:
     ) -> str:
         collected = collected_inputs or {}
         operation_id = contract.operation_id if contract is not None else None
+        if field == "changed_fields":
+            return {
+                "update_setup": "Wat wil je aan deze setup wijzigen?",
+                "update_strategy": "Wat wil je aan deze strategie wijzigen?",
+                "update_bot": "Wat wil je aan deze paper-bot wijzigen?",
+            }.get(operation_id, "Wat wil je precies wijzigen?")
         if field == "name":
             if operation_id == "create_bot":
                 return "Welke korte naam wil je voor deze paper-bot gebruiken?"
@@ -225,7 +231,6 @@ class FinnV2OperationStateService:
             "dca_day": "Op welke weekdag wil je volgens deze DCA-setup aankopen?",
             "dca_month_day": "Op welke dag van de maand wil je volgens deze DCA-setup aankopen?",
             "setup_id": "Welke bestaande setup wil je aanpassen?",
-            "changed_fields": "Welke concrete setupvelden wil je aanpassen?",
             "strategy_id": "Welke bestaande strategie wil je aanpassen?",
             "execution_mode": "Wil je een fixed of custom uitvoeringsmodus gebruiken?",
             "base_amount": "Welke basisinleg wil je voor deze strategie gebruiken?",
@@ -463,6 +468,15 @@ class FinnV2OperationStateService:
                 values["execution_mode"] = "fixed"
             strategy_values = self._strategy_trade_inputs(text)
             values.update({key: value for key, value in strategy_values.items() if key in accepted_inputs})
+        elif contract.operation_id == "create_bot" and "budget_total_eur" in accepted_inputs:
+            budget = re.search(
+                r"\b(?:budget|totaalbudget|total\s+budget|gesamtbudget)\s*"
+                r"(?:is|:|=|van|of|von)?\s*(?:€|eur|euros?|euro)?\s*(\d+(?:[.,]\d+)?)",
+                text,
+                re.IGNORECASE,
+            )
+            if budget:
+                values["budget_total_eur"] = float(budget.group(1).replace(",", "."))
         elif contract.operation_id in {"update_setup", "update_strategy"}:
             entity = "setup" if contract.operation_id == "update_setup" else "strategy"
             identifier = re.search(
@@ -623,7 +637,9 @@ class FinnV2OperationStateService:
         targets = re.search(
             r"\b(?:targets?|koersdoelen?|take[- ]?profits?|ziele?n?)\s*"
             r"(?:zijn|are|sind|:|=|op|at)?\s*"
-            r"([^.!?\n]+?)(?=(?:,?\s+(?:and|en|und))?\s+(?:risk|risico|risiko)|[.!?\n]|$)",
+            r"([^.!?\n]+?)(?=(?:,?\s+(?:and|en|und))?\s+(?:(?:maximaal|max(?:imum)?|"
+            r"maximum|höchstens)\s+\d+(?:[.,]\d+)?\s*(?:procent|percent|%|prozent)\s+)?"
+            r"(?:risk|risico|risiko)|[.!?\n]|$)",
             text,
             re.IGNORECASE,
         )
@@ -631,13 +647,21 @@ class FinnV2OperationStateService:
             numbers = re.findall(r"\d+(?:[.,]\d+)?", targets.group(1))
             if numbers:
                 values["targets"] = [float(number.replace(",", ".")) for number in numbers]
+        risk_prefix = re.search(
+            r"\b((?:maximaal|max(?:imum)?|maximum|höchstens)\s+\d+(?:[.,]\d+)?\s*"
+            r"(?:procent|percent|%|prozent))\s+(?:risk|risico|risiko)\b",
+            text,
+            re.IGNORECASE,
+        )
         risk = re.search(
             r"\b(?:risk(?:\s*profile|\s*rule)?|risico(?:profiel|regel)?|risikoprofil)\s*(?:is|:|=)?\s*"
             r"([^,.!?\n]+?)(?=\s+(?:and|en|und)\s+(?:(?:the|de|dem)\s+)?(?:name|naam|namen)|[,.!?\n]|$)",
             text,
             re.IGNORECASE,
         )
-        if risk:
+        if risk_prefix:
+            values["risk_profile"] = risk_prefix.group(1).strip()
+        elif risk:
             values["risk_profile"] = risk.group(1).strip()
         if requested_field == "name" and text.strip():
             values["name"] = cls._name_input_from_text(text) or text.strip(" .\"'")
@@ -720,10 +744,12 @@ class FinnV2OperationStateService:
         domain_fields = {
             "update_setup": {"timeframe"},
             "update_strategy": {"base_amount"},
+            "update_bot": {"budget_total_eur"},
         }.get(contract.operation_id, set())
         canonical_clauses = (
             ("timeframe", r"(?:its\s+)?(?:timeframe|time\s*frame|tijdframe|zeitrahmen)"),
             ("base_amount", r"(?:the\s+)?(?:base\s*amount|basisinleg|basis\s*bedrag|basisbetrag|grundbetrag)"),
+            ("budget_total_eur", r"(?:the\s+)?(?:total\s+budget|budget|totaalbudget|gesamtbudget)"),
         )
         for field, aliases in canonical_clauses:
             if field not in domain_fields:
@@ -746,13 +772,31 @@ class FinnV2OperationStateService:
                     changes[field] = FinnV2SetupInputCatalog.canonical_input(field, value)
             if field in changes:
                 continue
+            field_then_object = re.search(
+                rf"\b(?:zet|set|setze|wijzig|verander|change|aktualisiere)\s+"
+                rf"(?:mijn|my|de|het|the|den|die|das)?\s*{aliases}\b"
+                r"[^,.!?\n]{0,120}?\s+(?:naar|to|auf|als|op|on)\s+"
+                r"(?:€|eur|euro)?\s*[\"']?([^,.!?\n]{1,80})",
+                text,
+                re.IGNORECASE,
+            )
+            if field_then_object:
+                value = field_then_object.group(1).strip(" .\"'")
+                value = re.sub(r"\s*(?:eur|euro|€)\s*$", "", value, flags=re.IGNORECASE).strip()
+                if re.fullmatch(r"\d+", value):
+                    value = int(value)
+                elif re.fullmatch(r"\d+[.,]\d+", value):
+                    value = float(value.replace(",", "."))
+                changes[field] = FinnV2SetupInputCatalog.canonical_input(field, value)
+            if field in changes:
+                continue
             # Users often name the object before the requested field, for
             # example: "Wijzig setup My Plan naar timeframe 1D". Keep the
             # owner-scoped object reference separate and bind only the
             # canonical field/value tail to changed_fields.
             object_then_field = re.search(
                 rf"\b(?:wijzig|verander|change|update|aktualisiere|pas)\s+"
-                rf"(?:mijn|my|de|het|the|den|die|das)?\s*{re.escape(contract.domain)}\b"
+                rf"(?:mijn|my|deze|dit|this|het|the|den|die|das|dieses|de)?\s*{re.escape(contract.domain)}\b"
                 rf"[^,.!?\n]{{0,80}}?(?:\s+aan)?\s+(?:naar|to|auf|als|op|on)\s+{aliases}\s+"
                 r"(?:naar|to|auf|als|op|on)?\s*[\"']?([^,.!?\n]{1,80})",
                 text,
@@ -769,7 +813,7 @@ class FinnV2OperationStateService:
         # never become a changed-field name.
         match = re.search(
             r"\b(?:zet|set|setze|ändere)\s+"
-            r"(?:mijn|my|den|die|das|de|het|the)?\s*([\w -]{2,48}?)\s+"
+            r"(?:mijn|my|deze|dit|this|het|the|den|die|das|dieses|de)?\s*([\w -]{2,48}?)\s+"
             r"(?:naar|to|auf|als|op|on)\s+[\"']?([^,.!?\n]{1,80})",
             text,
             re.IGNORECASE,
@@ -781,7 +825,7 @@ class FinnV2OperationStateService:
             # cannot be serialized as a synthetic field name.
             match = re.search(
                 r"\b(?:wijzig|verander|change|aktualisiere)\s+"
-                r"(?:mijn|my|de|het|the|den|die|das)?\s*([\w -]{2,48}?)\s+"
+                r"(?:mijn|my|deze|dit|this|het|the|den|die|das|dieses|de)?\s*([\w -]{2,48}?)\s+"
                 r"(?:naar|to|auf|als|op|on)\s+[\"']?([^,.!?\n]{1,80})",
                 text,
                 re.IGNORECASE,
@@ -789,7 +833,7 @@ class FinnV2OperationStateService:
         if not match:
             match = re.search(
                 r"\b(?:wijzig|verander|change|update|aktualisiere)\s+"
-            r"(?:mijn|my|de|het|the|den|die|das)?\s*([\w -]{2,48}?)\s+"
+            r"(?:mijn|my|deze|dit|this|het|the|den|die|das|dieses|de)?\s*([\w -]{2,48}?)\s+"
             r"(?:naar|to|auf|als|op|on)\s+[\"']?([^,.!?\n]{1,80})",
             text,
             re.IGNORECASE,
@@ -800,7 +844,7 @@ class FinnV2OperationStateService:
             # still an explicit field/value pair, not inferred state.
             match = re.search(
                 r"\b(?:met|with|en\s+zet|and\s+set|und\s+setze)\s+"
-                r"(?:de|het|the|den|die|das)?\s*([\w -]{2,48}?)\s+"
+                r"(?:deze|dit|this|het|the|den|die|das|dieses|de)?\s*([\w -]{2,48}?)\s+"
                 r"(?:(?:naar|to|auf|als|op|on)\s+)?[\"']?([^,.!?\n]{1,80})",
                 text,
                 re.IGNORECASE,
@@ -831,6 +875,7 @@ class FinnV2OperationStateService:
         # Currency is presentation around an otherwise explicit numeric action
         # value; preserve the number's type instead of sending a prose value to
         # the action adapter.
+        value = re.sub(r"^\s*(?:eur|euro|€)\s*", "", value, flags=re.IGNORECASE)
         value = re.sub(r"\s*(?:eur|euro|€)\s*$", "", value, flags=re.IGNORECASE).strip()
         lowered = value.casefold()
         if lowered in {"true", "waar", "ja", "yes"}:

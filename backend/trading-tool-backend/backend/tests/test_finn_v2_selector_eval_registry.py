@@ -58,7 +58,9 @@ def test_declassified_346013_cases_are_public_regressions_with_immutable_contrac
     )
     cases = {case.eval_id: case for case in load_and_validate(fixture_paths(), allow_published_regression=True)}
     assert cases["reg-qa346013-q13-bot-consequence"].expected_operation_id == "evaluate_bot"
-    assert cases["reg-qa346013-q30-strategy-create"].expected_missing_inputs == []
+    assert cases["reg-qa346013-q30-strategy-create"].expected_missing_inputs == [
+        "name", "entry", "stop_loss", "targets", "risk_profile",
+    ]
     assert cases["reg-qa346013-q34-bot-deactivate"].expected_action_polarity.value == "update"
 
 

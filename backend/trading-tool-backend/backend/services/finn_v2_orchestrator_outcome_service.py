@@ -16,6 +16,44 @@ from backend.schemas.finn_v2_orchestrator_schema import (
 
 
 class FinnV2OrchestratorOutcomeService:
+    def build_target_clarification_result(
+        self,
+        *,
+        run_id: str,
+        user_id: int,
+        analysis: RequestAnalysisResult,
+        domain_requirements: DomainRequirementPlan,
+        tool_plan: ToolPlan,
+        entity_type: str,
+        candidate_names: list[str],
+    ) -> OrchestratorResult:
+        labels = {"setup": "setup", "strategy": "strategie", "bot": "paper-bot"}
+        label = labels.get(entity_type, "onderdeel")
+        if candidate_names:
+            choices = " of ".join(f"‘{name}’" for name in candidate_names)
+            question = f"Welke {label} bedoel je: {choices}?"
+            code = f"ambiguous_{entity_type}"
+        else:
+            question = f"Ik zie nog geen {label} die hierbij past. Wil je er eerst een aanmaken?"
+            code = f"missing_{entity_type}"
+        return OrchestratorResult(
+            orchestrator_result_id=f"finn-v2-orchestrator-{uuid.uuid4().hex}",
+            run_id=run_id,
+            user_id=user_id,
+            analysis=analysis,
+            domain_requirements=domain_requirements,
+            tool_plan=tool_plan,
+            outcome="clarification_required",
+            selected_clarification=ClarificationCandidate(
+                code=code,
+                domain="plan_context" if entity_type != "bot" else "automation_context",
+                question=question,
+                entity_type=entity_type,
+            ),
+            orchestrator_version=ORCHESTRATOR_VERSION,
+            created_at=datetime.now(timezone.utc),
+        )
+
     def build_failed_result(
         self,
         *,

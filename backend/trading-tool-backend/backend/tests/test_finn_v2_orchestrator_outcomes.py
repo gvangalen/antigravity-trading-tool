@@ -195,3 +195,46 @@ def test_active_setup_without_a_resolvable_setup_is_a_typed_clarification_not_fa
     assert result.outcome == "clarification_required"
     assert result.selected_clarification is not None
     assert result.selected_clarification.code == "missing_setup"
+
+
+def test_canonical_target_ambiguity_names_only_owner_scoped_choices():
+    analysis, domain_requirements, tool_plan = _build_inputs(
+        "Vat mijn strategie samen.", operation_id="read_linked_strategy"
+    )
+
+    result = FinnV2OrchestratorOutcomeService().build_target_clarification_result(
+        run_id="run-1",
+        user_id=7,
+        analysis=analysis,
+        domain_requirements=domain_requirements,
+        tool_plan=tool_plan,
+        entity_type="strategy",
+        candidate_names=["BTC Breakout", "ETH Swing"],
+    )
+
+    assert result.outcome == "clarification_required"
+    assert result.selected_clarification.code == "ambiguous_strategy"
+    assert result.selected_clarification.question == (
+        "Welke strategie bedoel je: ‘BTC Breakout’ of ‘ETH Swing’?"
+    )
+
+
+def test_canonical_target_absence_uses_human_copy_without_internal_fields():
+    analysis, domain_requirements, tool_plan = _build_inputs(
+        "Pauzeer mijn bot.", operation_id="deactivate_bot"
+    )
+
+    result = FinnV2OrchestratorOutcomeService().build_target_clarification_result(
+        run_id="run-1",
+        user_id=7,
+        analysis=analysis,
+        domain_requirements=domain_requirements,
+        tool_plan=tool_plan,
+        entity_type="bot",
+        candidate_names=[],
+    )
+
+    question = result.selected_clarification.question
+    assert question == "Ik zie nog geen paper-bot die hierbij past. Wil je er eerst een aanmaken?"
+    assert "bot_id" not in question
+    assert "runtime" not in question.casefold()

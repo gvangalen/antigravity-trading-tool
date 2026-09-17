@@ -452,14 +452,20 @@ class StrategyService:
     async def delete_strategy(self, strategy_id: int, user_id: int) -> dict:
         dependents = await self.session.execute(
             text("""
-                SELECT COUNT(*)
+                SELECT name
                 FROM bot_configs
                 WHERE strategy_id = :strategy_id AND user_id = :user_id
+                ORDER BY created_at ASC, id ASC
             """),
             {"strategy_id": strategy_id, "user_id": user_id},
         )
-        if (dependents.scalar() or 0) > 0:
-            raise HTTPException(409, "Strategie wordt nog gebruikt door een bot. Verwijder of wijzig eerst die bot.")
+        dependent_names = [str(name).strip() for name in dependents.scalars().all() if str(name or "").strip()]
+        if dependent_names:
+            names = ", ".join(f"‘{name}’" for name in dependent_names)
+            raise HTTPException(
+                409,
+                f"Deze strategie is nog gekoppeld aan paper-bot {names}. Verwijder eerst de gekoppelde paper-bot.",
+            )
 
         deleted = await self.repository.delete_strategy(strategy_id, user_id)
         if deleted == 0:

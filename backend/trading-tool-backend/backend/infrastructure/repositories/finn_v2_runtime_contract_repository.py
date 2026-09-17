@@ -160,6 +160,7 @@ class FinnV2RuntimeContractRepository(FinnV2RepositoryTransactionMixin):
             "operation_id": state.get("final_operation_id") or state.get("initial_operation_id"),
             "interaction_mode": state.get("final_mode") or state.get("requested_mode"),
             "target_asset": state.get("canonical_target"),
+            "canonical_entity_target": dict(state.get("canonical_entity_target") or {}),
             "target_asset_source": state.get("target_source"),
             "referenced_asset": state.get("original_target_text"),
             "conversation_reference": state.get("conversation_reference"),
@@ -213,6 +214,7 @@ class FinnV2RuntimeContractRepository(FinnV2RepositoryTransactionMixin):
         conversation_reference_kind: Optional[str],
         selector_provenance: Optional[Dict[str, Any]] = None,
         supplied_inputs: Optional[Dict[str, Any]] = None,
+        canonical_entity_target: Optional[Dict[str, Any]] = None,
     ) -> FinnV2RuntimeContract:
         """Persist the target selection before tool planning or policy reads it."""
         row = await self._required_for_update(run_id)
@@ -226,6 +228,7 @@ class FinnV2RuntimeContractRepository(FinnV2RepositoryTransactionMixin):
             conversation_reference_kind=conversation_reference_kind,
             selector_provenance=selector_provenance,
             supplied_inputs=supplied_inputs,
+            canonical_entity_target=canonical_entity_target,
         )
         if next_state == (row.state_json or {}):
             return row

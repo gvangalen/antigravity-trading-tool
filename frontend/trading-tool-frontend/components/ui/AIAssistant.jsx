@@ -40,6 +40,13 @@ const FINN_RECENT_CONVERSATIONS_STORAGE_KEY = "finn-recent-conversations:v1";
 const MAX_RECENT_FINN_CONVERSATIONS = 3;
 const ACTIVE_FINN_SESSION_ID_KEY = "active_finn_session_id";
 
+function publicFinnExecutionError(value) {
+  const reason = String(value || "").replace(/^\d{3}:\s*/, "").trim();
+  if (/^Deze setup is nog gekoppeld aan strategie /.test(reason)) return reason;
+  if (/^Deze strategie is nog gekoppeld aan paper-bot /.test(reason)) return reason;
+  return "Dat lukte niet. Ik heb niets gewijzigd.";
+}
+
 function normalizeFinnSessionId(value) {
   if (typeof value !== "string") return null;
   const normalized = value.trim();
@@ -4395,6 +4402,8 @@ function AIAssistantContent({
         }
         : null);
       let resolvedSetupName = actionDraft?.supplied_inputs?.setup_name || activeSetup?.name || null;
+      let resolvedSetupSymbol = null;
+      let resolvedSetupTimeframe = null;
       let resolvedStrategyName = actionDraft?.supplied_inputs?.strategy_name || activeBot?.strategy_name || null;
       let resolvedBotName = activeBot?.name || null;
       try {
@@ -4407,9 +4416,12 @@ function AIAssistantContent({
           const linkedStrategyId = strategyId || matchedBot?.strategy_id;
           const matchedStrategy = ownerStrategies.find((item) => Number(item.id || item.strategy_id) === Number(linkedStrategyId));
           const linkedSetupId = setupId || matchedStrategy?.setup_id;
-          resolvedSetupName = ownerSetups.find((item) => Number(item.id || item.setup_id) === Number(linkedSetupId))?.name
+          const matchedSetup = ownerSetups.find((item) => Number(item.id || item.setup_id) === Number(linkedSetupId));
+          resolvedSetupName = matchedSetup?.name
             || matchedStrategy?.setup_name
             || resolvedSetupName;
+          resolvedSetupSymbol = matchedSetup?.symbol || matchedSetup?.asset || null;
+          resolvedSetupTimeframe = matchedSetup?.timeframe || null;
           resolvedStrategyName = matchedStrategy?.name || resolvedStrategyName;
           resolvedBotName = matchedBot?.name || resolvedBotName;
         }
@@ -4422,6 +4434,8 @@ function AIAssistantContent({
             supplied_inputs: {
               ...(actionDraft.supplied_inputs || {}),
               ...(resolvedSetupName ? { setup_name: resolvedSetupName } : {}),
+              ...(resolvedSetupSymbol && !actionDraft?.supplied_inputs?.symbol ? { symbol: resolvedSetupSymbol } : {}),
+              ...(resolvedSetupTimeframe && !actionDraft?.supplied_inputs?.timeframe ? { timeframe: resolvedSetupTimeframe } : {}),
               ...(resolvedStrategyName ? { strategy_name: resolvedStrategyName } : {}),
             },
           }
@@ -4461,7 +4475,7 @@ function AIAssistantContent({
                     || (operationId?.includes("bot") ? resolvedBotName : null)
                     || null,
                   symbol: projection?.canonical_target || actionDraft?.supplied_inputs?.symbol || setupDraft?.supplied_inputs?.symbol || activeSetup?.symbol || null,
-                  timeframe: actionDraft?.supplied_inputs?.timeframe || setupDraft?.supplied_inputs?.timeframe || activeSetup?.timeframe || null,
+                  timeframe: actionDraft?.supplied_inputs?.timeframe || setupDraft?.supplied_inputs?.timeframe || null,
                   setup_name: resolvedSetupName,
                   strategy_name: resolvedStrategyName,
                   supplied_inputs: projection?.supplied_inputs || {},
@@ -4843,10 +4857,7 @@ function AIAssistantContent({
         const result = await confirmAndExecuteFinnV2Proposal(action.proposal_id);
         const execution = result?.execution || {};
         if (!["succeeded", "already_executed"].includes(execution.status)) {
-          const publicReason = String(execution.error_codes?.[0] || "")
-            .replace(/^\d{3}:\s*/, "")
-            .trim();
-          throw new Error(publicReason || execution.failure_reason || execution.status || "proposal_execution_failed");
+          throw new Error(publicFinnExecutionError(execution.error_codes?.[0]));
         }
         const displayContext = action.display_context || {};
         const operationId = displayContext.operation_id || execution.operation_id || "";
@@ -5066,8 +5077,8 @@ function AIAssistantContent({
       console.error("Finn action failed", err);
       setMessages(prev => [...prev, {
         role: "assistant",
-        text: action.type === "v2_proposal" && err?.message && !/^[a-z0-9_]+$/i.test(err.message)
-          ? err.message
+        text: action.type === "v2_proposal"
+          ? publicFinnExecutionError(err?.message)
           : action.type === "refresh_daily_scores"
           ? "Ik kon de daily scores nog niet verversen. Probeer het zo opnieuw."
           : action.type === "generate_bot_decision"

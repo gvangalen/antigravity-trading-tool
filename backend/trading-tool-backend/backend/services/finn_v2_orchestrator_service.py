@@ -117,13 +117,14 @@ class FinnV2OrchestratorService:
         message: str,
         analysis,
         conversation_context: dict,
+        workspace_hints: Optional[dict] = None,
+        client_context: Optional[dict] = None,
     ):
-        """Persist explicit object-name resolution before action slot checks.
+        """Resolve one owner-scoped target before any lifecycle consumer.
 
-        The registry remains the schema authority: only required ``*_id``
-        slots of the selected contract may be added.  Resolution is strictly
-        owner-scoped and raises the existing typed lookup outcome for an
-        unknown or ambiguous name instead of falling back to active context.
+        The action registry remains the input-schema authority. The canonical
+        entity target is separate metadata that READ and action contracts use
+        alike; only a contract-declared ID slot is copied into supplied input.
         """
         request_plan = getattr(analysis, "request_plan", None)
         operation_id = getattr(request_plan, "operation_id", None)
@@ -142,6 +143,50 @@ class FinnV2OrchestratorService:
             },
             **dict(getattr(request_plan, "referenced_entities", {}) or {}),
         }
+        operation_targets = {
+            "read_active_setup": "setup",
+            "evaluate_setup": "setup",
+            "update_setup": "setup",
+            "delete_setup": "setup",
+            "read_linked_strategy": "strategy",
+            "evaluate_strategy": "strategy",
+            "update_strategy": "strategy",
+            "delete_strategy": "strategy",
+            "read_linked_bot": "bot",
+            "read_bot_status": "bot",
+            "evaluate_bot": "bot",
+            "update_bot": "bot",
+            "deactivate_bot": "bot",
+            "delete_bot": "bot",
+        }
+        entity_type = operation_targets.get(operation_id)
+        canonical_target = None
+        # A few historical unit doubles intentionally replace the entire tool
+        # pipeline and pass ``object()`` instead of an AsyncSession. Production
+        # always has ``execute`` and must always cross this resolution boundary.
+        can_query_entities = callable(getattr(self.session, "execute", None))
+        if entity_type and can_query_entities:
+            canonical_target = await self.entities.resolve_canonical_target(
+                user_id=user_id,
+                entity_type=entity_type,
+                selector=selectors,
+                message=message,
+                conversation_context=conversation_context,
+                workspace_hints=workspace_hints,
+                client_context=client_context,
+            )
+            if canonical_target.resolution_status != "resolved":
+                selectors["target_resolution"] = {
+                    "status": canonical_target.resolution_status,
+                    "entity_type": canonical_target.entity_type,
+                    "candidate_names": canonical_target.candidate_names,
+                    "source": canonical_target.source,
+                }
+            else:
+                target_dict = canonical_target.dict()
+                selectors[f"{entity_type}_id"] = canonical_target.entity_id
+                selectors[f"{entity_type}_name"] = canonical_target.display_name
+                selectors["canonical_entity_target"] = target_dict
         resolved = await self.entities.resolve_contract_reference_inputs(
             user_id=user_id,
             selector=selectors,
@@ -149,7 +194,7 @@ class FinnV2OrchestratorService:
             message=message,
             operation_id=operation_id,
         )
-        if not resolved:
+        if not resolved and canonical_target is None and "target_resolution" not in selectors:
             return analysis
         supplied = {
             **collected_inputs,
@@ -172,9 +217,9 @@ class FinnV2OrchestratorService:
         return analysis.copy(
             update={
                 "request_plan": request_plan,
-                "explicit_setup_id": resolved.get("setup_id") or getattr(analysis, "explicit_setup_id", None),
-                "explicit_strategy_id": resolved.get("strategy_id") or getattr(analysis, "explicit_strategy_id", None),
-                "explicit_bot_id": resolved.get("bot_id") or getattr(analysis, "explicit_bot_id", None),
+                "explicit_setup_id": (resolved.get("setup_id") or selectors.get("setup_id") or getattr(analysis, "explicit_setup_id", None)),
+                "explicit_strategy_id": (resolved.get("strategy_id") or selectors.get("strategy_id") or getattr(analysis, "explicit_strategy_id", None)),
+                "explicit_bot_id": (resolved.get("bot_id") or selectors.get("bot_id") or getattr(analysis, "explicit_bot_id", None)),
             }
         )
 
@@ -250,6 +295,8 @@ class FinnV2OrchestratorService:
             message=run.message,
             analysis=analysis,
             conversation_context=conversation_context,
+            workspace_hints=getattr(run, "workspace_hints_json", {}) or {},
+            client_context=getattr(run, "client_context_json", {}) or {},
         )
         request_plan = getattr(analysis, "request_plan", None)
         await self.runtime_contracts.record_initial_intent(
@@ -288,6 +335,9 @@ class FinnV2OrchestratorService:
                 **dict(getattr(request_plan, "referenced_entities", {}) or {}),
                 **dict(getattr(request_plan, "operation_state", {}).get("collected_inputs", {}) or {}),
             },
+            canonical_entity_target=dict(
+                (getattr(request_plan, "referenced_entities", {}) or {}).get("canonical_entity_target") or {}
+            ),
         )
         guided_state = dict(getattr(request_plan, "operation_state", {}) or {})
         record_guided_draft = getattr(self.runtime_contracts, "record_guided_draft", None)
@@ -345,6 +395,52 @@ class FinnV2OrchestratorService:
             return None
         domain_requirements = self.requirements.determine(analysis)
         tool_plan = self.tool_plans.build(run_id=run_id, analysis=analysis, domain_plan=domain_requirements)
+
+        target_resolution = dict(
+            (getattr(request_plan, "referenced_entities", {}) or {}).get("target_resolution") or {}
+        )
+        if target_resolution.get("status") in {"ambiguous", "not_found"}:
+            # Existing-object operations must never fall through to legacy
+            # active/last-object lookup after the canonical resolver has
+            # established ambiguity or absence. Terminalize before tools.
+            result = self.outcomes.build_target_clarification_result(
+                run_id=run_id,
+                user_id=user_id,
+                analysis=analysis,
+                domain_requirements=domain_requirements,
+                tool_plan=tool_plan.copy(
+                    update={
+                        "tool_names": [],
+                        "tool_inputs": {},
+                        "clarification_required": True,
+                        "planning_reasons": list(tool_plan.planning_reasons)
+                        + [f"canonical_target:{target_resolution['status']}"],
+                    }
+                ),
+                entity_type=str(target_resolution.get("entity_type") or "object"),
+                candidate_names=list(target_resolution.get("candidate_names") or []),
+            )
+            await self._persist_result(result)
+            await self._append_trace(
+                run_id=run_id,
+                user_id=user_id,
+                trace_id=trace_id,
+                event_type="canonical_target_clarification_completed",
+                payload_json={
+                    "run_id": run_id,
+                    "contract_id": runtime_contract.contract_id,
+                    "entity_type": target_resolution.get("entity_type"),
+                    "resolution_status": target_resolution.get("status"),
+                },
+            )
+            await self._record_phase_timestamp(run_id=run_id, phase="fast_path_completed")
+            await self._commit_persistence_boundary(stage="canonical_target_clarification_persisted")
+            self.phase_outcome = LifecyclePhaseOutcome(
+                terminal_status="clarification_required",
+                interaction_mode=analysis.interaction_mode,
+                orchestrator_result_id=result.orchestrator_result_id,
+            )
+            return result
 
         if self._is_collecting_guided_draft(request_plan=request_plan):
             # An incomplete guided action needs no market tools, state snapshot,
@@ -720,6 +816,9 @@ class FinnV2OrchestratorService:
         # Contract state is authoritative for new runs; context_json remains
         # only a compatible delivery projection for historical consumers.
         context.update(dict(previous_state.get("lineage_state") or {}))
+        canonical_entity_target = dict(previous_state.get("canonical_entity_target") or {})
+        if canonical_entity_target.get("owner_id") == user_id:
+            context["canonical_entity_target"] = canonical_entity_target
         action_result = dict(previous_state.get("action_result") or {})
         if (
             action_result.get("entity_id")

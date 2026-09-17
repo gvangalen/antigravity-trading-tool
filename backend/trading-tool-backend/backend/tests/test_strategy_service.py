@@ -240,3 +240,29 @@ def test_strategy_update_binds_numeric_targets_as_postgres_text_array():
 
     assert result == 1
     assert params["targets"] == ["3300", "3500"]
+
+
+def test_delete_strategy_dependency_names_the_owner_scoped_paper_bot():
+    class _Scalars:
+        def all(self):
+            return ["Paper Guardian"]
+
+    class _Result:
+        def scalars(self):
+            return _Scalars()
+
+    class _Session:
+        async def execute(self, _query, params):
+            assert params == {"strategy_id": 44, "user_id": 9}
+            return _Result()
+
+    service = StrategyService(_Session())
+
+    with pytest.raises(HTTPException) as exc:
+        asyncio.run(service.delete_strategy(44, 9))
+
+    assert exc.value.status_code == 409
+    assert exc.value.detail == (
+        "Deze strategie is nog gekoppeld aan paper-bot ‘Paper Guardian’. "
+        "Verwijder eerst de gekoppelde paper-bot."
+    )

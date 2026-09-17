@@ -49,6 +49,7 @@ class FinnRuntimeContract(BaseModel):
     initial_operation_id: Optional[str] = None
     requested_mode: Optional[str] = None
     canonical_target: Optional[str] = None
+    canonical_entity_target: Dict[str, Any] = Field(default_factory=dict)
     target_type: Optional[str] = None
     target_source: Optional[str] = None
     original_target_text: Optional[str] = None
@@ -104,6 +105,7 @@ class FinnRuntimeContract(BaseModel):
             "final_mode": self.final_mode,
             "operation_change_reason": self.operation_change_reason,
             "canonical_target": self.canonical_target,
+            "canonical_entity_target": dict(self.canonical_entity_target),
             "target_type": self.target_type,
             "target_source": self.target_source,
             "conversation_reference": self.conversation_reference,
@@ -318,6 +320,7 @@ def record_selection(
     conversation_reference_kind: Optional[str],
     selector_provenance: Optional[Dict[str, Any]] = None,
     supplied_inputs: Optional[Dict[str, Any]] = None,
+    canonical_entity_target: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """Persist selection plus contract-derived inputs before tools run."""
     state = dict(state)
@@ -335,6 +338,7 @@ def record_selection(
     state["conversation_reference"] = conversation_reference
     state["conversation_reference_kind"] = conversation_reference_kind
     state["selector_provenance"] = dict(selector_provenance or {})
+    state["canonical_entity_target"] = dict(canonical_entity_target or {})
     operation_id = str(state.get("final_operation_id") or state.get("initial_operation_id") or "")
     if not operation_id:
         raise RuntimeContractImmutableFieldError("runtime_contract_initial_intent_missing")
@@ -603,6 +607,7 @@ def terminal_projection(
         "final_mode": mode or state.get("final_mode") or state.get("requested_mode"),
         "operation_change_reason": state.get("operation_change_reason"),
         "canonical_target": state.get("canonical_target"),
+        "canonical_entity_target": dict(state.get("canonical_entity_target") or {}),
         "target_source": state.get("target_source"),
         "conversation_reference": state.get("conversation_reference"),
         "conversation_reference_kind": state.get("conversation_reference_kind"),

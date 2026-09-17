@@ -276,6 +276,23 @@ def test_terminal_projection_uses_the_same_immutable_contract_identity():
         operation_id="evaluate_plan",
         requested_mode="EVALUATE",
     )
+    state = record_selection(
+        state,
+        canonical_target="BTC",
+        target_source="explicit_current_turn",
+        original_target_text="Bitcoin",
+        target_type="asset",
+        conversation_reference=None,
+        conversation_reference_kind=None,
+        canonical_entity_target={
+            "entity_type": "strategy",
+            "entity_id": 44,
+            "display_name": "BTC Breakout",
+            "owner_id": 7,
+            "relational_context": {"setup_id": 12},
+            "resolution_source": "explicit_name",
+        },
+    )
     projection = terminal_projection(
         state,
         status="failed",
@@ -287,6 +304,14 @@ def test_terminal_projection_uses_the_same_immutable_contract_identity():
     assert projection["contract_id"] == "contract-run-contract-1"
     assert projection["run_id"] == "run-contract-1"
     assert projection["initial_operation_id"] == "evaluate_plan"
+    assert projection["canonical_entity_target"] == {
+        "entity_type": "strategy",
+        "entity_id": 44,
+        "display_name": "BTC Breakout",
+        "owner_id": 7,
+        "relational_context": {"setup_id": 12},
+        "resolution_source": "explicit_name",
+    }
     assert projection["terminal_status"] == "failed"
     assert projection["terminal_response_type"] == "failure"
 

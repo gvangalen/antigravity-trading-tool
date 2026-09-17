@@ -9,6 +9,7 @@ from backend.domain.finn_v2_contract import is_terminal_status
 from backend.schemas.finn_v2_schema import AgentRunRequest
 from backend.services.finn_v2_delivery_service import FinnV2DeliveryService
 from backend.services.finn_v2_gateway_service import FinnV2GatewayService
+from backend.services.finn_plan_service import FinnPlanService
 
 
 logger = logging.getLogger(__name__)
@@ -27,6 +28,7 @@ class FinnV2VisibleDeliveryService:
         self.session = session
         self.gateway = FinnV2GatewayService(session)
         self.delivery = FinnV2DeliveryService(session)
+        self.mission_control = FinnPlanService(session)
 
     async def deliver_assistant_envelope(
         self,
@@ -123,25 +125,16 @@ class FinnV2VisibleDeliveryService:
         request_id: str,
         trace_id: str,
     ) -> dict[str, Any]:
-        envelope = await self.deliver_assistant_envelope(
-            user_id=user_id,
-            message="Today with FINN",
-            context_payload={"surface": "today_with_finn", **(context_payload or {})},
-            transport="chat",
-            request_path="/api/assistant/mission-control",
-            request_id=request_id,
-            trace_id=trace_id,
+        # Mission Control already owns the typed, owner-scoped Today snapshot:
+        # profile, timeframes, configured indicators, active plan graph, bot
+        # status and actual analysis availability. Do not route the synthetic
+        # phrase "Today with FINN" through the generic operation selector and
+        # then infer personalization from whichever read contract it chooses.
+        self.mission_control.trace_id = trace_id
+        return await self.mission_control.build_mission_control_response(
+            user_id,
+            {"page": "mission_control", "surface": "today_with_finn", **(context_payload or {})},
         )
-        return {
-            "greeting": "Today with FINN",
-            "finn_briefing": {
-                "greeting": "Today with FINN",
-                "summary": envelope.get("summary") or envelope.get("response"),
-                "suggested_actions": [envelope.get("next_best_action")] if envelope.get("next_best_action") else [],
-            },
-            "generation_status": "completed",
-            "response_trace": envelope.get("response_trace"),
-        }
 
     def _assistant_contract(self, response: dict[str, Any], *, trace_id: str, run_id: str, artifacts: dict[str, Any]) -> dict[str, Any]:
         lines = [response.get("direct_answer"), response.get("main_observation")]
@@ -217,7 +210,7 @@ class FinnV2VisibleDeliveryService:
     def _pending_contract(self, *, trace_id: str, run_id: str, status: str, conversation_id: Optional[str]) -> dict[str, Any]:
         return {
             "session_id": conversation_id,
-            "response": "Ik verwerk je FINN-verzoek nog. Je run blijft actief en komt via dezelfde run-ID beschikbaar zodra de verified response klaar is.",
+            "response": "Even controleren…",
             "intent": "processing",
             "action": None,
             "draft": None,
@@ -230,9 +223,9 @@ class FinnV2VisibleDeliveryService:
             "reasoning": None,
             "trace_id": trace_id,
             "suggested_actions": [],
-            "summary": "FINN verwerkt je verzoek nog.",
+            "summary": "Even controleren…",
             "risk_summary": None,
-            "next_best_action": "Wacht kort terwijl FINN deze run afrondt.",
+            "next_best_action": None,
             "review_reason": None,
             "response_trace": {
                 "trace_id": trace_id,
@@ -255,7 +248,7 @@ class FinnV2VisibleDeliveryService:
     ) -> dict[str, Any]:
         return {
             "session_id": conversation_id,
-            "response": "Ik kan deze FINN V2-run nu niet veilig afronden. Probeer het opnieuw of controleer de runstatus met dezelfde run-ID.",
+            "response": "Dat lukte niet. Ik heb niets gewijzigd.",
             "intent": "unavailable",
             "action": None,
             "draft": None,
@@ -268,8 +261,8 @@ class FinnV2VisibleDeliveryService:
             "reasoning": None,
             "trace_id": trace_id,
             "suggested_actions": [],
-            "summary": "De FINN V2-run eindigde zonder veilige verified response.",
-            "risk_summary": error_code,
+            "summary": "Dat lukte niet. Ik heb niets gewijzigd.",
+            "risk_summary": None,
             "next_best_action": None,
             "review_reason": None,
             "response_trace": {

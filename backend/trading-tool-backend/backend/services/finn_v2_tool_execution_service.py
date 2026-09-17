@@ -182,12 +182,6 @@ class FinnV2ToolExecutionService:
             client_context_json=dict(getattr(run, "client_context_json", {}) or {}),
         )
 
-        # The interactive worker deliberately uses a single-connection pool.
-        # Release the primary read transaction before opening the short-lived
-        # durable tool-call session, otherwise both sessions wait on the same
-        # sole connection until the pool timeout expires.
-        await self._release_primary_connection()
-
         selector = self.redaction.redact_selector(selector or {})
         if tool_name in {"read_active_setup", "read_linked_strategy", "read_linked_bot", "read_bot_status"}:
             selector = await self.resolver.enrich_tool_selector_from_message(
@@ -200,6 +194,13 @@ class FinnV2ToolExecutionService:
             tool_name=tool_name,
             run=run_context,
         )
+        # Resolver enrichment may query owner-scoped entities and therefore
+        # opens a new transaction after the run preflight. Release that final
+        # read transaction immediately before the short-lived durable tool-call
+        # session. Interactive workers intentionally use a single-connection
+        # pool, so doing this any earlier lets enrichment reacquire the only
+        # connection and deadlocks tool-call persistence behind itself.
+        await self._release_primary_connection()
         tool_call = None
         tool_call_id = None
         if self.flags.is_tool_call_logging_enabled():

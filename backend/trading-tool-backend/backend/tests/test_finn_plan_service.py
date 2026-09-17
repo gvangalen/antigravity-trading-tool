@@ -856,6 +856,61 @@ def test_first_dashboard_indicator_context_uses_canonical_symbol_scoped_reposito
     repository.get_configured_indicator_names.assert_awaited_once_with(7, symbol="BTC")
 
 
+def test_first_dashboard_latest_analysis_uses_owner_scoped_report(monkeypatch):
+    repository = SimpleNamespace(
+        get_latest_report=AsyncMock(return_value={
+            "report_date": "2026-09-17",
+            "summary": "BTC momentum is improving while macro confirmation remains mixed.",
+        })
+    )
+    monkeypatch.setattr(finn_plan_module, "ReportRepository", lambda _session: repository)
+
+    result = asyncio.run(FinnPlanService(db_session=object())._first_dashboard_latest_analysis(
+        7,
+        asset="BTC",
+        asset_analysis={},
+        has_scores=False,
+    ))
+
+    assert result == {
+        "availability": "available",
+        "source": "daily_report",
+        "report_date": "2026-09-17",
+        "summary": "BTC momentum is improving while macro confirmation remains mixed.",
+    }
+    repository.get_latest_report.assert_awaited_once_with(7, "daily_reports", symbol="BTC")
+
+
+def test_first_dashboard_does_not_claim_analysis_absent_when_scores_exist(monkeypatch):
+    repository = SimpleNamespace(get_latest_report=AsyncMock(return_value=None))
+    monkeypatch.setattr(finn_plan_module, "ReportRepository", lambda _session: repository)
+
+    result = asyncio.run(FinnPlanService(db_session=object())._first_dashboard_latest_analysis(
+        7,
+        asset="BTC",
+        asset_analysis={"market_score": 8, "macro_score": 6, "technical_score": 7},
+        has_scores=True,
+    ))
+
+    assert result["availability"] == "available"
+    assert result["source"] == "score_snapshot"
+    assert "Market 8" in result["summary"]
+
+
+def test_first_dashboard_analysis_query_failure_is_unknown_not_absent(monkeypatch):
+    repository = SimpleNamespace(get_latest_report=AsyncMock(side_effect=RuntimeError("db unavailable")))
+    monkeypatch.setattr(finn_plan_module, "ReportRepository", lambda _session: repository)
+
+    result = asyncio.run(FinnPlanService(db_session=object())._first_dashboard_latest_analysis(
+        7,
+        asset="BTC",
+        asset_analysis={},
+        has_scores=False,
+    ))
+
+    assert result == {"availability": "unknown", "source": "query_failed"}
+
+
 def test_prepare_first_dashboard_payload_survives_indicator_and_bot_lookup_failures(monkeypatch):
     service = FinnPlanService(db_session=object())
 

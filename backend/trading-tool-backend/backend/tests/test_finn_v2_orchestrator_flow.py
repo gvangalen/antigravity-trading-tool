@@ -1,12 +1,18 @@
 import asyncio
 from datetime import datetime, timezone
 from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
 import pytest
 
 from backend.schemas.finn_v2_domain_validation_schema import EvidenceValidationResult
 from backend.schemas.finn_v2_orchestrator_schema import OrchestratorResult
 from backend.services.finn_v2_orchestrator_service import FinnV2OrchestratorService
+from backend.services.finn_v2_entity_resolution_service import (
+    CanonicalEntityTarget,
+)
+from backend.services.finn_v2_operation_classification_service import SemanticOperationClassification
+from backend.services.finn_v2_request_analysis_service import FinnV2RequestAnalysisService
 from backend.services.finn_v2_response_verifier_service import FinnV2VerifierRejected
 from backend.schemas.finn_v2_verifier_schema import CoverageVerification, VerifierResult
 
@@ -123,6 +129,96 @@ class _FakeConversationRepo:
 
     async def update_context(self, **kwargs):
         self.updated = kwargs
+
+
+class _QueryableSession:
+    async def execute(self, *_args, **_kwargs):
+        raise AssertionError("repository access is replaced by the resolver double")
+
+
+def _analysis_for_operation(message, operation_id):
+    analyzer = FinnV2RequestAnalysisService()
+    contract = analyzer.operations.require_supported(operation_id)
+    analyzer.classifier.classify = lambda **_kwargs: SemanticOperationClassification(
+        operation_id=operation_id,
+        action=contract.action_polarity.value,
+        domain=contract.domain,
+        discourse="information_request",
+        confidence="high",
+        selector_source="structured",
+    )
+    return analyzer.analyze(message=message, conversation_context={})
+
+
+def test_orchestrator_projects_canonical_target_separately_for_read_contract():
+    message = "Vat strategie BTC Breakout samen."
+    service = FinnV2OrchestratorService(session=_QueryableSession())
+    analysis = _analysis_for_operation(message, "read_linked_strategy")
+    service.entities.resolve_canonical_target = AsyncMock(return_value=CanonicalEntityTarget(
+        entity_type="strategy",
+        entity_id=44,
+        display_name="BTC Breakout",
+        owner_id=7,
+        relation={"setup_id": 12, "setup_name": "BTC Plan"},
+        source="explicit_name",
+        resolution_status="resolved",
+    ))
+    service.entities.resolve_contract_reference_inputs = AsyncMock(return_value={})
+
+    resolved = asyncio.run(service._resolve_explicit_action_references(
+        user_id=7,
+        message=message,
+        analysis=analysis,
+        conversation_context={},
+        workspace_hints={"strategy_id": 99},
+        client_context={},
+    ))
+
+    references = resolved.request_plan.referenced_entities
+    assert references["strategy_id"] == 44
+    assert references["canonical_entity_target"] == {
+        "entity_type": "strategy",
+        "entity_id": 44,
+        "display_name": "BTC Breakout",
+        "owner_id": 7,
+        "relation": {"setup_id": 12, "setup_name": "BTC Plan"},
+        "source": "explicit_name",
+        "resolution_status": "resolved",
+        "candidate_names": [],
+    }
+    assert resolved.explicit_strategy_id == 44
+    assert "strategy_id" not in resolved.request_plan.operation_state["missing_required_inputs"]
+
+
+def test_orchestrator_preserves_typed_ambiguity_before_tools():
+    message = "Vat mijn strategie samen."
+    service = FinnV2OrchestratorService(session=_QueryableSession())
+    analysis = _analysis_for_operation(message, "read_linked_strategy")
+    service.entities.resolve_canonical_target = AsyncMock(return_value=CanonicalEntityTarget(
+        entity_type="strategy",
+        owner_id=7,
+        source="owner_candidates",
+        resolution_status="ambiguous",
+        candidate_names=["BTC Breakout", "ETH Swing"],
+    ))
+    service.entities.resolve_contract_reference_inputs = AsyncMock(return_value={})
+
+    resolved = asyncio.run(service._resolve_explicit_action_references(
+        user_id=7,
+        message=message,
+        analysis=analysis,
+        conversation_context={},
+        workspace_hints={},
+        client_context={},
+    ))
+
+    assert resolved.request_plan.referenced_entities["target_resolution"] == {
+        "status": "ambiguous",
+        "entity_type": "strategy",
+        "candidate_names": ["BTC Breakout", "ETH Swing"],
+        "source": "owner_candidates",
+    }
+    assert "canonical_entity_target" not in resolved.request_plan.referenced_entities
 
 
 def test_orchestrator_flow_executes_plan_and_persists_result():

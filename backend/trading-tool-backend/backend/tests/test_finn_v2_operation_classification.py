@@ -243,6 +243,19 @@ def test_workspace_setup_timeframe_update_uses_registry_without_selector_provide
     assert FinnV2OperationClassificationValidator().validation_error(result) is None
 
 
+def test_explicit_mutation_object_role_outranks_entity_words_inside_its_name():
+    class ExplodingSelector:
+        def select(self, **_kwargs):
+            raise AssertionError("explicit mutation object must not call the selector provider")
+
+    result = FinnV2OperationClassificationService(
+        structured_selector=ExplodingSelector()
+    ).classify(message="Verwijder mijn setup Resolver Strategy Parent.")
+
+    assert result.operation_id == "delete_setup"
+    assert result.selector_source == "registry_mutation_constraint"
+
+
 def test_natural_setup_update_keeps_the_setup_contract_and_typed_change():
     contract = FinnV2OperationRegistry().require_supported("update_setup")
     state = FinnV2OperationStateService().resolve(

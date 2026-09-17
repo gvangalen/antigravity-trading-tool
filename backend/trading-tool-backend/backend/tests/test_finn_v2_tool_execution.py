@@ -17,6 +17,7 @@ class _FakeRunRepo:
             user_id=user_id,
             status="planned",
             trace_id="trace-1",
+            message="Vat mijn setup Resolver Gate Setup samen.",
             workspace_hints_json={},
             client_context_json={},
         )
@@ -154,6 +155,58 @@ def test_tool_execution_releases_primary_connection_around_durable_call_sessions
 
     assert result.success is True
     assert events == [("create", 1), ("complete", 2)]
+
+
+def test_tool_execution_releases_connection_after_owner_scoped_selector_enrichment(monkeypatch):
+    session = _FakeSession()
+    service = FinnV2ToolExecutionService(session=session)
+    service.runs = _FakeRunRepo()
+    service.persistence_session_factory = object()
+    service.traces = _FakeTraceRepo()
+    monkeypatch.setattr(service.flags, "is_tool_registry_enabled", lambda: True)
+    monkeypatch.setattr(service.flags, "is_tool_registry_readonly", lambda: True)
+    monkeypatch.setattr(service.flags, "is_tool_call_logging_enabled", lambda: True)
+    monkeypatch.setattr(service.flags, "should_run_block3_shadow", lambda _user_id: False)
+
+    events = []
+
+    async def _enrich(**_kwargs):
+        events.append(("enrich", session.commit_calls))
+        return {"setup_id": 8}
+
+    async def _create_tool_call(**_kwargs):
+        events.append(("create", session.commit_calls))
+        return SimpleNamespace(id=42), 42
+
+    async def _complete_tool_call(**_kwargs):
+        events.append(("complete", session.commit_calls))
+        return SimpleNamespace(id=42), False
+
+    async def _dispatch_tool(**_kwargs):
+        return {
+            "data": {"setup_id": 8, "name": "Resolver Gate Setup"},
+            "summary": {"setup_id": 8, "name": "Resolver Gate Setup"},
+            "entity_type": "setup",
+            "entity_id": 8,
+            "as_of": None,
+        }
+
+    service.resolver.enrich_tool_selector_from_message = _enrich
+    service._create_tool_call = _create_tool_call
+    service._complete_tool_call = _complete_tool_call
+    service._dispatch_tool = _dispatch_tool
+
+    result = asyncio.run(
+        service.execute_tool(
+            run_id="run-1",
+            user_id=7,
+            tool_name="read_active_setup",
+            selector={},
+        )
+    )
+
+    assert result.success is True
+    assert events == [("enrich", 0), ("create", 1), ("complete", 2)]
 
 
 def test_tool_execution_dispatches_watchlist_adapter(monkeypatch):

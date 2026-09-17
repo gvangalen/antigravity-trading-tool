@@ -246,3 +246,153 @@ def test_read_tool_selector_resolves_an_exact_owner_scoped_setup_name():
     ))
 
     assert enriched["setup_id"] == 42
+
+
+def test_canonical_target_explicit_visible_name_wins_stale_workspace_context():
+    service = FinnV2EntityResolutionService(session=object())
+    service.setups = _FakeSetupRepo()
+    service.setups.get_user_setups = lambda _user_id: asyncio.sleep(0, result=[
+        {"id": 12, "name": "Stale Setup", "symbol": "ETH"},
+        {"id": 42, "name": "Fresh Setup", "symbol": "BTC", "timeframe": "4H"},
+    ])
+    service.setups.get_setup_by_id = lambda setup_id, _user_id: asyncio.sleep(
+        0,
+        result={"id": setup_id, "name": "Stale Setup"} if setup_id == 12 else None,
+    )
+
+    target = asyncio.run(service.resolve_canonical_target(
+        user_id=388,
+        entity_type="setup",
+        message="Pas setup Fresh Setup aan van 4H naar 1D.",
+        workspace_hints={"setup_id": 12},
+    ))
+
+    assert target.entity_id == 42
+    assert target.display_name == "Fresh Setup"
+    assert target.resolution_source == "explicit_name"
+    assert target.relational_context == {"symbol": "BTC", "timeframe": "4H"}
+
+
+def test_canonical_target_uses_previous_action_result_before_workspace():
+    service = FinnV2EntityResolutionService(session=object())
+    service.strategies = _FakeStrategyRepo()
+
+    target = asyncio.run(service.resolve_canonical_target(
+        user_id=388,
+        entity_type="strategy",
+        conversation_context={
+            "previous_action_result": {
+                "entity_type": "strategy",
+                "entity_id": 309,
+                "result_status": "succeeded",
+            }
+        },
+        workspace_hints={"strategy_id": 310},
+    ))
+
+    assert target.entity_id == 309
+    assert target.resolution_source == "previous_action_result"
+
+
+def test_canonical_target_active_runtime_wins_stale_selector_id():
+    service = FinnV2EntityResolutionService(session=object())
+    service.strategies = _FakeStrategyRepo()
+
+    target = asyncio.run(service.resolve_canonical_target(
+        user_id=388,
+        entity_type="strategy",
+        selector={"strategy_id": 310},
+        conversation_context={
+            "canonical_entity_target": {
+                "entity_type": "strategy",
+                "entity_id": 309,
+                "owner_id": 388,
+            }
+        },
+    ))
+
+    assert target.entity_id == 309
+    assert target.resolution_source == "active_runtime_context"
+
+
+def test_canonical_target_uses_most_specific_overlapping_visible_name():
+    service = FinnV2EntityResolutionService(session=object())
+    service.bots = _FakeBotRepo()
+    service.bots.get_bot_configs = lambda _user_id: asyncio.sleep(0, result=[
+        {"id": 170, "name": "Alpha", "strategy_id": 309},
+        {"id": 171, "name": "Alpha Bot", "strategy_id": 310, "strategy_name": "Momentum"},
+    ])
+
+    target = asyncio.run(service.resolve_canonical_target(
+        user_id=388,
+        entity_type="bot",
+        message="Pauzeer Alpha Bot.",
+    ))
+
+    assert target.entity_id == 171
+    assert target.display_name == "Alpha Bot"
+    assert target.relational_context["strategy_name"] == "Momentum"
+
+
+def test_canonical_target_returns_named_ambiguity_instead_of_guessing():
+    service = FinnV2EntityResolutionService(session=object())
+    service.bots = _FakeBotRepo()
+    service.bots.get_bot_configs = lambda _user_id: asyncio.sleep(0, result=[
+        {"id": 170, "name": "Paper Alpha", "strategy_id": 309},
+        {"id": 171, "name": "Paper Beta", "strategy_id": 310},
+    ])
+
+    target = asyncio.run(service.resolve_canonical_target(user_id=388, entity_type="bot"))
+
+    assert target.resolution_status == "ambiguous"
+    assert target.candidate_names == ["Paper Alpha", "Paper Beta"]
+
+
+def test_canonical_target_rejects_cross_user_context_id():
+    service = FinnV2EntityResolutionService(session=object())
+    service.bots = _FakeBotRepo()
+
+    target = asyncio.run(service.resolve_canonical_target(
+        user_id=999,
+        entity_type="bot",
+        client_context={"bot_id": 170},
+    ))
+
+    assert target.resolution_status == "not_found"
+    assert target.entity_id is None
+
+
+def test_canonical_target_marks_an_existing_cross_user_id_forbidden():
+    class _Result:
+        @staticmethod
+        def first():
+            return (1,)
+
+    class _Session:
+        async def execute(self, *_args, **_kwargs):
+            return _Result()
+
+    service = FinnV2EntityResolutionService(session=_Session())
+    service.bots = _FakeBotRepo()
+
+    target = asyncio.run(service.resolve_canonical_target(
+        user_id=999,
+        entity_type="bot",
+        selector={"bot_id": 170},
+    ))
+
+    assert target.resolution_status == "forbidden"
+    assert target.entity_id is None
+
+
+def test_canonical_target_rejects_an_explicitly_wrong_entity_type():
+    service = FinnV2EntityResolutionService(session=object())
+    service.setups = _FakeSetupRepo()
+
+    target = asyncio.run(service.resolve_canonical_target(
+        user_id=388,
+        entity_type="setup",
+        selector={"entity_type": "bot", "setup_id": 42},
+    ))
+
+    assert target.resolution_status == "invalid_type"
