@@ -466,10 +466,29 @@ class FinnV2OperationStateService:
                 r"(?:\b(?:base\s*amount|basisinleg|basis\s*bedrag|basisbetrag|grundbetrag|bedrag|inleg|amount)\s*(?:is|:|=|van|von|of)?\s*(?:€|eur|euros?|euro|\$)?\s*(\d+(?:[.,]\d+)?))|(?:\b(\d+(?:[.,]\d+)?)\s*(?:€|eur|euros?|euro|\$)\b)",
                 lowered,
             )
+            if amount_match is None:
+                amount_match = re.search(
+                    r"\b(?:fixed|vast|standaard|manual|handmatig|fest(?:e)?|custom|aangepast|"
+                    r"individuell|benutzerdefiniert)\s*(?:met|with|mit)?\s*(?:€|eur|euros?|euro|\$)?\s*"
+                    r"(\d+(?:[.,]\d+)?)\s*(?:€|eur|euros?|euro|\$)?\s*"
+                    r"(?:per\s+(?:uitvoering|execution|ausf.hrung)|each|je)?",
+                    lowered,
+                )
             if amount_match:
-                values["base_amount"] = float((amount_match.group(1) or amount_match.group(2)).replace(",", "."))
+                raw_amount = next((group for group in amount_match.groups() if group), None)
+                if raw_amount:
+                    values["base_amount"] = self._numeric_value(raw_amount)
             if str(values.get("execution_mode") or "").startswith("automatis"):
                 values["execution_mode"] = "fixed"
+            if "name" not in values:
+                natural_name = re.search(
+                    r"\b(?:strategie|strategy)\s+[\"']?(.{2,80}?)[\"']?\s+"
+                    r"(?:voor|for|f.r)\s+(?:de\s+|the\s+|die\s+)?setup\b",
+                    text,
+                    re.IGNORECASE,
+                )
+                if natural_name:
+                    values["name"] = natural_name.group(1).strip(" .\"'")
             strategy_values = self._strategy_trade_inputs(text)
             values.update({key: value for key, value in strategy_values.items() if key in accepted_inputs})
         elif contract.operation_id == "create_bot" and "budget_total_eur" in accepted_inputs:
@@ -643,6 +662,24 @@ class FinnV2OperationStateService:
         }
         return aliases.get(normalized)
 
+    @staticmethod
+    def _numeric_value(value: str) -> float:
+        """Parse a human-entered decimal or locale thousands separator."""
+        raw = str(value or "").strip().replace(" ", "")
+        if "," in raw and "." in raw:
+            decimal = "," if raw.rfind(",") > raw.rfind(".") else "."
+            grouping = "." if decimal == "," else ","
+            raw = raw.replace(grouping, "").replace(decimal, ".")
+        elif raw.count(".") > 1:
+            raw = raw.replace(".", "")
+        elif raw.count(",") > 1:
+            raw = raw.replace(",", "")
+        elif re.fullmatch(r"\d{1,3}[.,]\d{3}", raw):
+            raw = raw.replace(".", "").replace(",", "")
+        else:
+            raw = raw.replace(",", ".")
+        return float(raw)
+
     @classmethod
     def _strategy_trade_inputs(
         cls,
@@ -653,27 +690,27 @@ class FinnV2OperationStateService:
         """Extract only explicitly stated strategy contract fields."""
         values: dict[str, object] = {}
         patterns = {
-            "entry": r"\b(?:entry|instap(?:prijs)?|einstieg(?:spreis)?)\s*(?:is|:|=|op|at|bei)?\s*(\d+(?:[.,]\d+)?)",
-            "stop_loss": r"\b(?:stop[- ]?loss|stop|invalidatie|invalidation|invalidierung)\s*(?:is|:|=|op|at|bei)?\s*(\d+(?:[.,]\d+)?)",
+            "entry": r"\b(?:entry|instap(?:prijs)?|einstieg(?:spreis)?)\s*(?:is|:|=|op|at|bei)?\s*(?:€|eur|\$)?\s*(\d+(?:[.,]\d+)?)",
+            "stop_loss": r"\b(?:stop[- ]?loss|stop|invalidatie|invalidation|invalidierung)\s*(?:is|:|=|op|at|bei)?\s*(?:€|eur|\$)?\s*(\d+(?:[.,]\d+)?)",
             "base_amount": r"\b(?:base\s*amount|basisinleg|basis\s*bedrag|basisbetrag|grundbetrag|bedrag)\s*(?:is|:|=|van|of|von)?\s*(?:€|eur)?\s*(\d+(?:[.,]\d+)?)",
         }
         for field, pattern in patterns.items():
             match = re.search(pattern, text, re.IGNORECASE)
             if match:
-                values[field] = float(match.group(1).replace(",", "."))
+                values[field] = cls._numeric_value(match.group(1))
         targets = re.search(
             r"\b(?:targets?|koersdoelen?|take[- ]?profits?|ziele?n?)\s*"
             r"(?:zijn|are|sind|:|=|op|at)?\s*"
-            r"([^.!?\n]+?)(?=(?:,?\s+(?:and|en|und))?\s+(?:(?:maximaal|max(?:imum)?|"
-            r"maximum|höchstens)\s+\d+(?:[.,]\d+)?\s*(?:procent|percent|%|prozent)\s+)?"
-            r"(?:risk|risico|risiko)|[.!?\n]|$)",
+            r"(.+?)(?=,?\s+(?:(?:and|en|und)\s+)?(?:(?:maximaal|max(?:imum)?|maximum|höchstens)\s+"
+            r"\d+(?:[.,]\d+)?\s*(?:procent|percent|%|prozent)\s+)?(?:risk(?:\s*profile|\s*style)?|"
+            r"risico(?:profiel|stijl|regel)?|risikoprofil|risikostil)\b|[!?\n]|\.(?:\s|$)|$)",
             text,
             re.IGNORECASE,
         )
         if targets:
             numbers = re.findall(r"\d+(?:[.,]\d+)?", targets.group(1))
             if numbers:
-                values["targets"] = [float(number.replace(",", ".")) for number in numbers]
+                values["targets"] = [cls._numeric_value(number) for number in numbers]
         risk_prefix = re.search(
             r"\b((?:maximaal|max(?:imum)?|maximum|höchstens)\s+\d+(?:[.,]\d+)?\s*"
             r"(?:procent|percent|%|prozent))\s+(?:risk|risico|risiko)\b",
@@ -681,7 +718,7 @@ class FinnV2OperationStateService:
             re.IGNORECASE,
         )
         risk = re.search(
-            r"\b(?:risk(?:\s*profile|\s*rule)?|risico(?:profiel|regel)?|risikoprofil)\s*(?:is|:|=)?\s*"
+            r"\b(?:risk(?:\s*profile|\s*rule|\s*style)?|risico(?:profiel|regel|stijl)?|risikoprofil|risikostil)\s*(?:is|:|=)?\s*"
             r"([^,.!?\n]+?)(?=\s+(?:and|en|und)\s+(?:(?:the|de|dem)\s+)?(?:name|naam|namen)|[,.!?\n]|$)",
             text,
             re.IGNORECASE,

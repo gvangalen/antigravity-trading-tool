@@ -43,7 +43,7 @@
           "same owner-scoped bot resolved",
           "execution success replaced proposal card",
           "refresh retained updated data",
-          "readback rendered EUR 750",
+          "readback rendered EUR 1,000",
           "bot remained non-live"
         ]
       },
@@ -87,10 +87,22 @@
       }
     ],
     "visual_capture": {
-      "captured_with": "Codex CUA screenshot",
-      "contents": "FINN Today, incomplete Strategy card, complete Strategy card, Setup update card, Paper Bot card, delete Strategy card, and compact committed success responses",
-      "repository_file": null,
-      "note": "The desktop was locked, so macOS screencapture could not persist a duplicate file; the CUA capture remains attached to the validation transcript."
+      "captured_with": "Playwright against the real local browser frontend",
+      "directory": "test-results/finn-74ea-targeted-visible-repair/screenshots",
+      "screenshots": {
+        "setup_draft": "01-setup-draft.png",
+        "setup_executed": "03-setup-executed.png",
+        "strategy_complete_draft": "04-strategy-draft.png",
+        "strategy_executed": "05-strategy-executed.png",
+        "paper_bot_draft": "06-paper-bot-draft.png",
+        "paper_bot_executed": "07-paper-bot-executed.png",
+        "budget_update_draft": "08-budget-update-draft.png",
+        "budget_update_cancelled": "09-budget-update-cancelled.png",
+        "budget_update_executed": "10-budget-update-executed.png",
+        "bot_budget_readback": "11-bot-readback-refresh.png",
+        "strategy_delete_draft": "12-strategy-delete-draft.png",
+        "cleanup_complete": "13-cleanup-complete.png"
+      }
     }
   },
   "runtime_validation": {
@@ -128,7 +140,7 @@
       "cross_user_fallbacks": 0
     },
     "cleanup": {
-      "synthetic_user_id": 2,
+      "synthetic_fixture_only": true,
       "setups_after": 0,
       "strategies_after": 0,
       "bot_configs_after": 0,
@@ -149,7 +161,7 @@
   "tests": {
     "backend_rootsuite": {
       "result": "PASS",
-      "passed": 2155,
+      "passed": 2160,
       "skipped": 3
     },
     "frontend": {
@@ -165,8 +177,8 @@
       "operation_accuracy": 1.0,
       "target_accuracy": 1.0,
       "polarity_accuracy": 1.0,
-      "p50_ms": 2103,
-      "p95_ms": 3447,
+      "p50_ms": 1958.5,
+      "p95_ms": 2803,
       "failure_rates": {
         "provider": 0.0,
         "schema": 0.0,
@@ -174,8 +186,8 @@
         "validation": 0.0,
         "timeout": 0.0
       },
-      "artifact": "/tmp/finn-74ea-targeted-provider-development-final.json",
-      "sha256": "e8d5182eddc89fbe28ed0579765b9d47b7cf2e0f1ae8be2496fb8d469f86a43a"
+      "artifact": "/tmp/finn-74ea-targeted-provider-development-final-v2.json",
+      "sha256": "4c7b5ccf0a09aa390a29a81f9b5eb34c8cc45df7741beb694f633763ccd3a532"
     },
     "provider_regression": {
       "result": "PASS",
@@ -183,8 +195,8 @@
       "operation_accuracy": 1.0,
       "target_accuracy": 1.0,
       "polarity_accuracy": 1.0,
-      "p50_ms": 1984,
-      "p95_ms": 2884,
+      "p50_ms": 1933,
+      "p95_ms": 3069,
       "failure_rates": {
         "provider": 0.0,
         "schema": 0.0,
@@ -192,9 +204,23 @@
         "validation": 0.0,
         "timeout": 0.0
       },
-      "artifact": "/tmp/finn-74ea-targeted-provider-regression-final.json",
-      "sha256": "1f712ed5f20a74fe1219e64e13a14b2e9c0067e17a09c39f3f745cf309fba3a8"
+      "artifact": "/tmp/finn-74ea-targeted-provider-regression-final-v2.json",
+      "sha256": "5b70dab586ada4f1cc4844a2d0e6f0097aa82cc2986998982fb1d9c13dc1be1b"
     }
+  },
+  "local_runtime_note": {
+    "prefork_write_chain": "PASS",
+    "prefork_write_results": [
+      "setup executed",
+      "strategy executed",
+      "paper bot executed",
+      "budget update cancelled without write",
+      "budget update executed",
+      "dependency-ordered cleanup executed"
+    ],
+    "provider_readback": "PASS",
+    "provider_readback_worker_pool": "solo",
+    "reason": "The macOS Python 3.13 prefork child was killed by the host during provider-backed read work; product tests and real-provider selector suites remained green. No repository or production worker configuration was changed."
   },
   "release": {
     "deployment_performed": false,

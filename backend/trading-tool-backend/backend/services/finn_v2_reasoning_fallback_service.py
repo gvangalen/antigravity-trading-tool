@@ -713,8 +713,22 @@ class FinnV2ReasoningFallbackService:
             )
         elif "welke bot" in lowered or ("bot" in lowered and "live" in lowered):
             bot_id = bot.facts.get("bot_id") if bot else None
+            bot_name = bot.facts.get("name") if bot else None
+            budget_total_eur = bot.facts.get("budget_total_eur") if bot else None
             is_live = bool((bot_status or bot).facts.get("is_live")) if (bot_status or bot) else False
-            direct_answer = f"Bot {bot_id} is aan je {asset}-strategie gekoppeld en staat momenteel {'live' if is_live else 'niet live'}."
+            label = str(bot_name or f"Bot {bot_id}")
+            budget_detail = ""
+            if "budget" in lowered and budget_total_eur is not None:
+                rendered_budget = (
+                    f"€{budget_total_eur:,.0f}".replace(",", ".")
+                    if isinstance(budget_total_eur, (int, float))
+                    else str(budget_total_eur)
+                )
+                budget_detail = f" en heeft een budget van {rendered_budget}"
+            direct_answer = (
+                f"Je gekoppelde paper-bot ‘{label}’ staat momenteel "
+                f"{'live' if is_live else 'niet live'}{budget_detail}."
+            )
             main_observation = (
                 f"De gekoppelde bot draait als {'live bot' if is_live else 'paper bot'} "
                 f"en heeft strategy_id {(bot.facts.get('strategy_id') if bot else None)}."

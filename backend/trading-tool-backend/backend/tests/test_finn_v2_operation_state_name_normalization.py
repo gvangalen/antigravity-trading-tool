@@ -105,6 +105,45 @@ def test_strategy_inputs_accept_natural_dutch_base_amount_wording():
     assert collected == {"execution_mode": "fixed", "base_amount": 100.0}
 
 
+@pytest.mark.parametrize(
+    ("message", "expected_name"),
+    (
+        (
+            "Maak strategie Final BTC Strategy voor setup Final BTC Setup 2, BTC 4H, fixed €100 per "
+            "uitvoering, entry €76.000, stop-loss €72.000, targets €82.000 en €86.000, "
+            "risicostijl gebalanceerd.",
+            "Final BTC Strategy",
+        ),
+        (
+            "Create strategy Final BTC Strategy for setup Final BTC Setup 2, fixed EUR 100 per execution, "
+            "entry EUR 76,000, stop-loss EUR 72,000, targets EUR 82,000 and EUR 86,000, risk style balanced.",
+            "Final BTC Strategy",
+        ),
+        (
+            "Erstelle Strategie Final BTC Strategy für Setup Final BTC Setup 2, feste 100 EUR je Ausführung, "
+            "Einstieg 76000 EUR, Stop-Loss 72000 EUR, Ziele 82000 und 86000, Risikostil ausgewogen.",
+            "Final BTC Strategy",
+        ),
+    ),
+)
+def test_complete_natural_strategy_request_collects_typed_contract_inputs(message, expected_name):
+    contract = FinnV2OperationRegistry().require_supported("create_strategy")
+
+    collected = FinnV2OperationStateService().explicit_inputs(
+        contract=contract,
+        message=message,
+        explicit_asset="BTC",
+    )
+
+    assert collected["name"] == expected_name
+    assert collected["execution_mode"] == "fixed"
+    assert collected["base_amount"] == 100.0
+    assert collected["entry"] == 76000.0
+    assert collected["stop_loss"] == 72000.0
+    assert collected["targets"] == [82000.0, 86000.0]
+    assert collected["risk_profile"] == "balanced"
+
+
 def test_declassified_strategy_create_prompt_collects_manual_mode_and_amount():
     state = FinnV2OperationStateService()
     contract = FinnV2OperationRegistry().require_supported("create_strategy")

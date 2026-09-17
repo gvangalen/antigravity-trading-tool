@@ -224,6 +224,31 @@ def test_linked_bot_budget_read_mentions_the_typed_persisted_budget():
     assert "186" not in reasoning.direct_answer
 
 
+def test_bot_status_budget_read_mentions_budget_and_live_state():
+    required_scopes = ["active_asset", "active_setup", "linked_strategy", "linked_bot", "bot_status"]
+    evidence = [
+        ReasoningEvidenceItem(evidence_id="Easset", artifact_id="asset", tool_name="read_active_asset", information_scope="active_asset", domain="identity_context", entity_type="asset", entity_id="BTC", asset="BTC", source="workspace", freshness="fresh", confidence="high", facts={"symbol": "BTC"}),
+        ReasoningEvidenceItem(evidence_id="Esetup", artifact_id="setup", tool_name="read_active_setup", information_scope="active_setup", domain="plan_context", entity_type="setup", entity_id="309", asset="BTC", source="setups", freshness="fresh", confidence="high", facts={"setup_id": 309, "name": "BTC swing", "timeframe": "4H", "symbol": "BTC"}),
+        ReasoningEvidenceItem(evidence_id="Estrat", artifact_id="strategy", tool_name="read_linked_strategy", information_scope="linked_strategy", domain="plan_context", entity_type="strategy", entity_id="325", asset="BTC", source="strategies", freshness="fresh", confidence="high", facts={"strategy_id": 325, "setup_id": 309, "name": "BTC Fixed"}),
+        ReasoningEvidenceItem(evidence_id="Ebot", artifact_id="bot", tool_name="read_linked_bot", information_scope="linked_bot", domain="automation_context", entity_type="bot", entity_id="186", asset="BTC", source="bot_configs", freshness="fresh", confidence="high", facts={"bot_id": 186, "strategy_id": 325, "name": "BTC Paper", "budget_total_eur": 1000.0}),
+        ReasoningEvidenceItem(evidence_id="Estatus", artifact_id="status", tool_name="read_bot_status", information_scope="bot_status", domain="automation_context", entity_type="bot_status", entity_id="186", asset="BTC", source="bot_configs", freshness="fresh", confidence="high", facts={"bot_id": 186, "is_live": False}),
+    ]
+    context = _context(
+        operation_id="read_bot_status",
+        required_scope=required_scopes,
+        message="Welk budget heeft mijn paper-bot en staat hij live?",
+        evidence=evidence,
+    )
+
+    reasoning = FinnV2ReasoningFallbackService().grounded_read_draft(
+        run_id=context.run_id, user_id=context.user_id, context=context, model="deterministic", error_codes=[]
+    )
+
+    assert "€1.000" in reasoning.direct_answer
+    assert "niet live" in reasoning.direct_answer
+    assert "BTC Paper" in reasoning.direct_answer
+
+
 def test_active_setup_read_uses_persisted_name_type_and_timeframe_without_strategy_fields():
     evidence = [
         ReasoningEvidenceItem(evidence_id="Easset", artifact_id="asset", tool_name="read_active_asset", information_scope="active_asset", domain="identity_context", entity_type="asset", asset="BTC", source="workspace", freshness="fresh", confidence="high", facts={"symbol": "BTC"}),
