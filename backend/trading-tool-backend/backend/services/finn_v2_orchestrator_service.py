@@ -189,6 +189,13 @@ class FinnV2OrchestratorService:
                 target_dict = canonical_target.dict()
                 selectors[f"{entity_type}_id"] = canonical_target.entity_id
                 selectors[f"{entity_type}_name"] = canonical_target.display_name
+                # Parent identities belong to the same owner-validated target
+                # graph. They must replace stale conversation/workspace ids so
+                # every downstream tool reads one internally consistent graph.
+                for relation_field in ("setup_id", "strategy_id", "bot_id"):
+                    relation_value = (canonical_target.relation or {}).get(relation_field)
+                    if relation_value is not None:
+                        selectors[relation_field] = relation_value
                 selectors["canonical_entity_target"] = target_dict
         resolved = await self.entities.resolve_contract_reference_inputs(
             user_id=user_id,

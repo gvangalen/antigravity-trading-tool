@@ -448,3 +448,34 @@ def test_explicit_bot_name_wins_a_different_surface_relation():
 
     assert target.entity_id == 171
     assert target.resolution_source == "explicit_name"
+
+
+@pytest.mark.parametrize(
+    "workspace_hints",
+    [
+        {"surface": "automation", "bot_id": 171},
+        {"surface": "my_plan", "setup_id": 294},
+        {"surface": "analysis", "strategy_id": 310},
+        {"surface": "profile"},
+    ],
+)
+def test_explicit_bot_name_is_canonical_across_surfaces(workspace_hints):
+    service = FinnV2EntityResolutionService(session=object())
+    service.setups = _FakeSetupRepo()
+    service.strategies = _FakeStrategyRepo()
+    service.bots = _FakeBotRepo()
+    service.bots.get_bot_configs = lambda _user_id: asyncio.sleep(0, result=[
+        {"id": 170, "name": "Audit BTC Paper", "strategy_id": 309},
+        {"id": 171, "name": "Other Paper Bot", "strategy_id": 310},
+    ])
+
+    target = asyncio.run(service.resolve_canonical_target(
+        user_id=388,
+        entity_type="bot",
+        message='Wat is het budget van "Audit BTC Paper"?',
+        workspace_hints=workspace_hints,
+    ))
+
+    assert target.entity_id == 170
+    assert target.display_name == "Audit BTC Paper"
+    assert target.resolution_source == "explicit_name"

@@ -578,7 +578,7 @@ class FinnV2ReasoningFallbackService:
                 created_at=datetime.now(timezone.utc),
             )
 
-        if operation_id in {"read_linked_bot", "read_active_plan"} and all(
+        if operation_id in {"read_linked_bot", "read_bot_status", "read_active_plan"} and all(
             item is not None for item in (setup, strategy, bot, bot_status)
         ):
             setup_id = setup.facts.get("setup_id")

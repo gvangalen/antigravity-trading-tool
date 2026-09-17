@@ -244,9 +244,10 @@ def test_bot_status_budget_read_mentions_budget_and_live_state():
         run_id=context.run_id, user_id=context.user_id, context=context, model="deterministic", error_codes=[]
     )
 
-    assert "€1.000" in reasoning.direct_answer
-    assert "niet live" in reasoning.direct_answer
-    assert "BTC Paper" in reasoning.direct_answer
+    assert reasoning.direct_answer.startswith("Je paper-bot ‘BTC Paper’ heeft een budget van €1.000.")
+    assert "niet live" in reasoning.main_observation
+    assert "setup 309" not in reasoning.direct_answer
+    assert "strategie 325" not in reasoning.direct_answer
 
 
 def test_active_setup_read_uses_persisted_name_type_and_timeframe_without_strategy_fields():

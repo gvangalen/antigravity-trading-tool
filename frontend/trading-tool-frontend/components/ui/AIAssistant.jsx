@@ -504,6 +504,7 @@ function AIAssistantContent({
   const insightRequestKeyRef = useRef("");
   const finnStateRequestRef = useRef(null);
   const sharedSessionRestoreRef = useRef(false);
+  const forceNewFinnConversationRef = useRef(false);
   const [showReasoning, setShowReasoning] = useState(false);
   const at = createAssistantTranslator(t);
   const activeQuery = queryValue !== undefined ? queryValue : query;
@@ -4048,6 +4049,9 @@ function AIAssistantContent({
   };
 
   const startNewFinnConversation = async () => {
+    // State updates are asynchronous; this marker prevents an immediate send
+    // from reusing the previous conversation id from the current render.
+    forceNewFinnConversationRef.current = true;
     setActiveFinnSessionId(null);
     setFinnDraft(null);
     setActiveState(null);
@@ -4564,7 +4568,10 @@ function AIAssistantContent({
         ...(commandRequest?.context || {}),
       };
       const analyticsSessionId = getAssistantSessionId(user?.id || "anonymous");
-      const chatSessionId = activeFinnSessionId || "new";
+      const chatSessionId = forceNewFinnConversationRef.current
+        ? "new"
+        : activeFinnSessionId || "new";
+      forceNewFinnConversationRef.current = false;
 
       await assistantChatStream(
         nextQuery,

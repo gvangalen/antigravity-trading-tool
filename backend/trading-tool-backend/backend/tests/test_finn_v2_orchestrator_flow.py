@@ -211,6 +211,46 @@ def test_orchestrator_projects_canonical_target_separately_for_read_contract():
     assert "strategy_id" not in resolved.request_plan.operation_state["missing_required_inputs"]
 
 
+def test_canonical_bot_graph_replaces_stale_conversation_parent_ids():
+    message = "Wijzig het budget van paper-bot Audit BTC Paper naar €1.000."
+    service = FinnV2OrchestratorService(session=_QueryableSession())
+    analysis = _analysis_for_operation(message, "update_bot")
+    analysis.request_plan.referenced_entities.update({"setup_id": 3, "strategy_id": 3})
+    service.entities.resolve_canonical_target = AsyncMock(return_value=CanonicalEntityTarget(
+        entity_type="bot",
+        entity_id=4,
+        display_name="Audit BTC Paper",
+        owner_id=7,
+        relation={"setup_id": 4, "strategy_id": 4, "setup_name": "Audit BTC Setup"},
+        source="explicit_name",
+        resolution_status="resolved",
+    ))
+
+    async def _resolve_inputs(**kwargs):
+        selector = kwargs["selector"]
+        assert selector["bot_id"] == 4
+        assert selector["strategy_id"] == 4
+        assert selector["setup_id"] == 4
+        return {"bot_id": 4}
+
+    service.entities.resolve_contract_reference_inputs = AsyncMock(side_effect=_resolve_inputs)
+
+    resolved = asyncio.run(service._resolve_explicit_action_references(
+        user_id=7,
+        message=message,
+        analysis=analysis,
+        conversation_context={"previous_action_result": {"setup_id": 3, "strategy_id": 3}},
+        workspace_hints={"setup_id": 3, "strategy_id": 3},
+        client_context={},
+    ))
+
+    references = resolved.request_plan.referenced_entities
+    assert references["bot_id"] == 4
+    assert references["strategy_id"] == 4
+    assert references["setup_id"] == 4
+    assert references["canonical_entity_target"]["entity_id"] == 4
+
+
 def test_orchestrator_preserves_typed_ambiguity_before_tools():
     message = "Vat mijn strategie samen."
     service = FinnV2OrchestratorService(session=_QueryableSession())

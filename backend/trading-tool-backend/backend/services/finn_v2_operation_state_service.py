@@ -17,6 +17,25 @@ class FinnV2OperationStateService:
 
     CONTEXT_STATE_VERSION = "finn_v2.conversation-contracts.v1"
 
+    @staticmethod
+    def _typed_numeric_value(value: object) -> object:
+        """Parse user-facing NL/EN/DE numbers without losing thousands."""
+        if not isinstance(value, str):
+            return value
+        normalized = re.sub(r"\s+", "", value.strip()).rstrip(".,")
+        if not re.fullmatch(r"\d+(?:[.,]\d+)*", normalized):
+            return value
+        if "." in normalized and "," in normalized:
+            decimal_separator = "." if normalized.rfind(".") > normalized.rfind(",") else ","
+            thousands_separator = "," if decimal_separator == "." else "."
+            normalized = normalized.replace(thousands_separator, "").replace(decimal_separator, ".")
+        elif re.fullmatch(r"\d{1,3}(?:[.,]\d{3})+", normalized):
+            normalized = normalized.replace(".", "").replace(",", "")
+        else:
+            normalized = normalized.replace(",", ".")
+        number = float(normalized)
+        return int(number) if number.is_integer() else number
+
     def resolve(
         self,
         *,
@@ -817,6 +836,18 @@ class FinnV2OperationStateService:
             "update_bot": {"budget_total_eur"},
         }.get(contract.operation_id, set())
 
+        if contract.operation_id == "update_bot":
+            budget_transition = re.search(
+                r"\b(?:budget|totaalbudget|total\s+budget|gesamtbudget)\b"
+                r"[^\d\n]{0,120}?(?:€|eur|euro)?\s*([0-9][0-9.,]*)",
+                text,
+                re.IGNORECASE,
+            )
+            if budget_transition:
+                changes["budget_total_eur"] = cls._typed_numeric_value(
+                    budget_transition.group(1)
+                )
+
         # Natural update requests often describe both the old and new value:
         # "Wijzig deze setup van timeframe 4H naar 1D."  The old value is
         # context, not another mutation. Bind only the final value to the
@@ -842,6 +873,8 @@ class FinnV2OperationStateService:
         for field, aliases in canonical_clauses:
             if field not in domain_fields:
                 continue
+            if field in changes:
+                continue
             natural = re.search(
                 rf"\b(?:zet|set|setze|wijzig|verander|change|aktualisiere)\s+"
                 rf"(?:mijn|my|de|het|the|den|die|das)?\s*{aliases}\s+"
@@ -853,10 +886,7 @@ class FinnV2OperationStateService:
                 value = natural.group(1).strip(" .\"'")
                 if value:
                     value = re.sub(r"\s*(?:eur|euro|€)\s*$", "", value, flags=re.IGNORECASE).strip()
-                    if re.fullmatch(r"\d+", value):
-                        value = int(value)
-                    elif re.fullmatch(r"\d+[.,]\d+", value):
-                        value = float(value.replace(",", "."))
+                    value = cls._typed_numeric_value(value)
                     changes[field] = FinnV2SetupInputCatalog.canonical_input(field, value)
             if field in changes:
                 continue
@@ -871,10 +901,7 @@ class FinnV2OperationStateService:
             if field_then_object:
                 value = field_then_object.group(1).strip(" .\"'")
                 value = re.sub(r"\s*(?:eur|euro|€)\s*$", "", value, flags=re.IGNORECASE).strip()
-                if re.fullmatch(r"\d+", value):
-                    value = int(value)
-                elif re.fullmatch(r"\d+[.,]\d+", value):
-                    value = float(value.replace(",", "."))
+                value = cls._typed_numeric_value(value)
                 changes[field] = FinnV2SetupInputCatalog.canonical_input(field, value)
             if field in changes:
                 continue
@@ -970,10 +997,8 @@ class FinnV2OperationStateService:
             typed_value: object = True
         elif lowered in {"false", "onwaar", "nee", "no"}:
             typed_value = False
-        elif re.fullmatch(r"\d+", value):
-            typed_value = int(value)
-        elif re.fullmatch(r"\d+[.,]\d+", value):
-            typed_value = float(value.replace(",", "."))
+        elif re.fullmatch(r"\d+(?:[.,]\d+)*", value):
+            typed_value = cls._typed_numeric_value(value)
         else:
             typed_value = value
         return {field: FinnV2SetupInputCatalog.canonical_input(field, typed_value)}

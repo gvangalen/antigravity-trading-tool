@@ -439,6 +439,34 @@ def test_update_bot_extracts_budget_without_exposing_setup_copy():
 
 
 @pytest.mark.parametrize(
+    ("message", "expected"),
+    [
+        ("Wijzig het budget van paper-bot Audit BTC Paper naar €1.000.", 1000),
+        ("Set the budget of Audit BTC Paper to EUR 1,000.", 1000),
+        ("Setze das Budget von Audit BTC Paper auf 1.000 Euro.", 1000),
+        ("Wijzig het budget naar €1,5.", 1.5),
+    ],
+)
+def test_update_bot_preserves_localized_budget_magnitude(message, expected):
+    service = FinnV2OperationStateService()
+    contract = FinnV2OperationRegistry().require_supported("update_bot")
+
+    state = service.resolve(
+        contract=contract,
+        message=message,
+        explicit_asset="BTC",
+        conversation_context={},
+        supplied_inputs={"bot_id": 4},
+    )
+
+    assert state.collected_inputs == {
+        "changed_fields": {"budget_total_eur": expected},
+        "bot_id": 4,
+    }
+    assert state.missing_required_inputs == []
+
+
+@pytest.mark.parametrize(
     "message",
     (
         "Wijzig deze setup van timeframe 4H naar 1D.",
