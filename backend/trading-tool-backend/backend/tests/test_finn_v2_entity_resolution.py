@@ -396,3 +396,55 @@ def test_canonical_target_rejects_an_explicitly_wrong_entity_type():
     ))
 
     assert target.resolution_status == "invalid_type"
+
+
+def test_canonical_bot_target_follows_strategy_surface_relation():
+    service = FinnV2EntityResolutionService(session=object())
+    service.strategies = _FakeStrategyRepo()
+    service.bots = _FakeBotRepo()
+
+    target = asyncio.run(service.resolve_canonical_target(
+        user_id=388,
+        entity_type="bot",
+        workspace_hints={"strategy_id": 309},
+    ))
+
+    assert target.entity_id == 170
+    assert target.display_name == "Matrix Bot"
+    assert target.resolution_source == "workspace_strategy_link"
+
+
+def test_canonical_bot_target_follows_setup_surface_relation_when_unique():
+    service = FinnV2EntityResolutionService(session=object())
+    service.setups = _FakeSetupRepo()
+    service.strategies = _FakeStrategyRepo()
+    service.bots = _FakeBotRepo()
+
+    target = asyncio.run(service.resolve_canonical_target(
+        user_id=388,
+        entity_type="bot",
+        client_context={"setup_id": 293},
+    ))
+
+    assert target.entity_id == 170
+    assert target.resolution_source == "workspace_setup_link"
+
+
+def test_explicit_bot_name_wins_a_different_surface_relation():
+    service = FinnV2EntityResolutionService(session=object())
+    service.strategies = _FakeStrategyRepo()
+    service.bots = _FakeBotRepo()
+    service.bots.get_bot_configs = lambda _user_id: asyncio.sleep(0, result=[
+        {"id": 170, "name": "Matrix Bot", "strategy_id": 309},
+        {"id": 171, "name": "Named Bot", "strategy_id": 310},
+    ])
+
+    target = asyncio.run(service.resolve_canonical_target(
+        user_id=388,
+        entity_type="bot",
+        message="Zet het budget van Named Bot op 1000 euro.",
+        workspace_hints={"strategy_id": 309},
+    ))
+
+    assert target.entity_id == 171
+    assert target.resolution_source == "explicit_name"

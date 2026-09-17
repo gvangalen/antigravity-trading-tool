@@ -130,6 +130,15 @@ class FinnV2EntityResolutionService:
                     source="previous_action_result",
                 )
 
+        related = await self._resolve_workspace_relation(
+            user_id=user_id,
+            entity_type=entity_type,
+            workspace_hints=workspace_hints,
+            client_context=client_context,
+        )
+        if related is not None:
+            return related
+
         for context in (workspace_hints, client_context):
             entity_id = self._coerce_int(context.get(f"{entity_type}_id"))
             if entity_id:
@@ -163,6 +172,75 @@ class FinnV2EntityResolutionService:
                 candidate_names=self._candidate_names(candidates),
             )
         return self._resolution_failure(user_id, entity_type, "not_found", source="owner_candidates")
+
+    async def _resolve_workspace_relation(
+        self,
+        *,
+        user_id: int,
+        entity_type: EntityType,
+        workspace_hints: Dict[str, Any],
+        client_context: Dict[str, Any],
+    ) -> Optional[CanonicalEntityTarget]:
+        """Follow an owner-scoped page relation without narrowing search.
+
+        Product surfaces supply hints, never authority. Direct entity IDs are
+        handled by the caller after this relation step. For a bot reference on
+        a Setup or Strategy page, resolve the validated parent relation and
+        return a bot only when that relation identifies exactly one candidate.
+        """
+        if entity_type != "bot":
+            return None
+        contexts = (workspace_hints, client_context)
+        strategy_id = next(
+            (self._coerce_int(context.get("strategy_id")) for context in contexts if self._coerce_int(context.get("strategy_id"))),
+            None,
+        )
+        setup_id = next(
+            (self._coerce_int(context.get("setup_id")) for context in contexts if self._coerce_int(context.get("setup_id"))),
+            None,
+        )
+        bot_candidates = [dict(row) for row in await self.bots.get_bot_configs(user_id)]
+        if strategy_id:
+            strategy = await self.strategies.get_raw_strategy_with_setup(strategy_id, user_id)
+            if strategy:
+                linked = [row for row in bot_candidates if self._coerce_int(row.get("strategy_id")) == strategy_id]
+                if len(linked) == 1:
+                    return self._canonical_target(user_id, "bot", linked[0], "workspace_strategy_link")
+                if len(linked) > 1:
+                    return self._resolution_failure(
+                        user_id,
+                        "bot",
+                        "ambiguous",
+                        source="workspace_strategy_link",
+                        candidate_names=self._candidate_names(linked),
+                    )
+        if setup_id:
+            setup = await self.setups.get_setup_by_id(setup_id, user_id)
+            if setup:
+                strategies = [
+                    dict(row)
+                    for row in await self.strategies.query_strategies(user_id, {})
+                    if self._coerce_int(row.get("setup_id")) == setup_id
+                ]
+                strategy_ids = {
+                    self._coerce_int(row.get("id") or row.get("strategy_id"))
+                    for row in strategies
+                }
+                linked = [
+                    row for row in bot_candidates
+                    if self._coerce_int(row.get("strategy_id")) in strategy_ids
+                ]
+                if len(linked) == 1:
+                    return self._canonical_target(user_id, "bot", linked[0], "workspace_setup_link")
+                if len(linked) > 1:
+                    return self._resolution_failure(
+                        user_id,
+                        "bot",
+                        "ambiguous",
+                        source="workspace_setup_link",
+                        candidate_names=self._candidate_names(linked),
+                    )
+        return None
 
     async def _entity_candidates(self, *, user_id: int, entity_type: EntityType) -> list[Dict[str, Any]]:
         if entity_type == "setup":

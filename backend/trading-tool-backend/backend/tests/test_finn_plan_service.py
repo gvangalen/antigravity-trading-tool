@@ -1045,11 +1045,11 @@ def test_mission_personal_snapshot_exposes_typed_profile_plan_bot_and_analysis()
     payload = {
         "input_snapshot": {
             "name": "Sam", "asset": "BTC",
-            "profile": {"trader_types": ["swing_trader"], "experience_levels": ["intermediate"], "risk_profiles": ["balanced"], "primary_timeframes": ["4h", "1d"]},
+            "profile": {"trader_types": ["swing_trader"], "experience_levels": ["intermediate"], "risk_profiles": ["balanced"], "primary_timeframes": ["4h", "1d"], "behavior_flags": ["overtrades"]},
             "indicators": {"market": ["Volume"], "macro": ["DXY"], "technical": ["RSI"]},
             "setup": {"name": "BTC Setup", "timeframe": "4H", "setup_type": "trade"},
             "strategy": {"name": "BTC Swing", "entry_rules": ["76000"]},
-            "bot": {"name": "BTC Paper", "is_live": False, "is_active": False},
+            "bot": {"name": "BTC Paper", "is_live": False, "is_active": False, "budget_total_eur": 1000},
             "latest_analysis": {"availability": "available", "summary": "BTC consolidates."},
         },
         "fallback_result": {
@@ -1073,9 +1073,11 @@ def test_mission_personal_snapshot_exposes_typed_profile_plan_bot_and_analysis()
     assert snapshot["macro_indicators"] == ["DXY"]
     assert snapshot["technical_indicators"] == ["RSI"]
     assert snapshot["paper_bot_status"] == "paused"
+    assert snapshot["paper_bot_budget"] == 1000
+    assert snapshot["coaching_patterns"] == ["overtrades"]
     assert snapshot["latest_analysis_available"] is True
     assert briefing["greeting"] == "Goedemorgen Sam"
-    for expected in ("BTC", "swing", "RSI", "DXY", "paused"):
+    for expected in ("BTC", "swing", "RSI", "DXY", "gepauzeerd", "€1.000,00"):
         assert expected.lower() in briefing["summary"].lower()
 
 

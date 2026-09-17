@@ -377,6 +377,43 @@ def test_terminal_projection_keeps_safe_proposal_confirmation_and_execution_prov
         )
 
 
+def test_cancelled_proposal_replaces_stale_terminal_proposal_copy():
+    state = record_initial_intent(
+        new_runtime_contract_state(run=_run(), contract_id="contract-run-contract-1"),
+        operation_id="update_bot",
+        requested_mode="CREATE_PROPOSAL",
+    )
+    state["terminal_response"] = {
+        "content": "Ik heb een voorstel klaarstaan.",
+        "proposal_id": "proposal-1",
+        "confirmation_required": True,
+        "suggested_actions": [{"type": "confirm"}],
+    }
+    state = record_proposal_lifecycle(
+        state,
+        proposal_id="proposal-1",
+        operation_id="update_bot",
+        payload_hash="payload-hash",
+        event="draft_created",
+    )
+    state = record_proposal_lifecycle(
+        state,
+        proposal_id="proposal-1",
+        operation_id="update_bot",
+        payload_hash="payload-hash",
+        event="cancelled",
+    )
+
+    assert state["proposal_lifecycle"]["status"] == "cancelled"
+    assert state["terminal_response"] == {
+        "content": "Voorstel geannuleerd. Er is niets gewijzigd.",
+        "direct_answer": "Voorstel geannuleerd. Er is niets gewijzigd.",
+        "proposal_id": None,
+        "confirmation_required": False,
+        "suggested_actions": [],
+    }
+
+
 def test_explicit_canonical_target_cannot_be_replaced_after_selection():
     state = record_initial_intent(
         new_runtime_contract_state(run=_run(), contract_id="contract-run-contract-1"),

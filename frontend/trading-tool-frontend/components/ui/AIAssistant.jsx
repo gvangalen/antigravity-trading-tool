@@ -2,7 +2,7 @@
 
 import React, { Suspense, useState, useEffect, useLayoutEffect, useRef } from "react";
 import { usePathname, useSearchParams, useRouter } from "next/navigation";
-import { assistantChat, confirmAndExecuteFinnV2Proposal, executeAssistantAction, fetchAssistantInsight, getAssistantPreferences, getAssistantSessionDetail, getAssistantSessions, updateAssistantPreferences, assistantChatStream, executePendingAction, fetchFinnState, fetchFinnMissionControl, fetchFinnV2Run, waitForFinnV2TerminalSse } from "@/lib/api/ai";
+import { assistantChat, cancelFinnV2Proposal, confirmAndExecuteFinnV2Proposal, executeAssistantAction, fetchAssistantInsight, getAssistantPreferences, getAssistantSessionDetail, getAssistantSessions, updateAssistantPreferences, assistantChatStream, executePendingAction, fetchFinnState, fetchFinnMissionControl, fetchFinnV2Run, waitForFinnV2TerminalSse } from "@/lib/api/ai";
 import { Send, Zap, Brain, Shield, BarChart3, Loader2, X, MessageSquare, Target, Activity, FileText, Bot, ChevronDown, ListChecks, Terminal, Sparkles, CheckCircle2, Plus, Search, SlidersHorizontal } from "lucide-react";
 import useIntelligenceEvents from "@/hooks/useIntelligenceEvents";
 import { useOnboarding } from "@/hooks/useOnboarding";
@@ -4763,14 +4763,27 @@ function AIAssistantContent({
     }
   };
 
-  const handleCancelDraft = (index) => {
-    setMessages(prev => prev.map((m, idx) => {
-      if (idx === index) {
-        return { ...m, draftCanceled: true };
-      }
-      return m;
-    }));
-    showSnackbar("Concept geannuleerd", "info");
+  const handleCancelDraft = async (index) => {
+    const message = messages[index];
+    const proposalId = (message?.actions || []).find((action) => action?.type === "v2_proposal")?.proposal_id;
+    setExecutingAction(true);
+    try {
+      if (proposalId) await cancelFinnV2Proposal(proposalId);
+      setMessages(prev => prev.map((m, idx) => idx === index ? {
+        ...m,
+        text: "Voorstel geannuleerd. Er is niets gewijzigd.",
+        actions: [],
+        setupDraft: null,
+        actionDraft: null,
+        state: { ...(m.state || {}), setup_draft: null, action_draft: null },
+        draftCanceled: true,
+      } : m));
+      showSnackbar("Voorstel geannuleerd", "info");
+    } catch (error) {
+      showSnackbar("Dit voorstel kon niet worden geannuleerd.", "error");
+    } finally {
+      setExecutingAction(false);
+    }
   };
 
   const handleDraftSuccess = (index) => {
@@ -4864,24 +4877,23 @@ function AIAssistantContent({
         const operationLabel = operationId.includes("bot") ? "Paper-bot" : operationId.includes("strategy") ? "Strategie" : operationId.includes("setup") ? "Setup" : "Actie";
         const resultName = execution.action_result?.canonical_name || displayContext.name || `Je ${operationLabel.toLowerCase()}`;
         const resultVerb = operationId.startsWith("delete_") ? "verwijderd" : operationId.startsWith("update_") || operationId === "deactivate_bot" ? "bijgewerkt" : "opgeslagen";
-        setMessages((prev) => [...prev.map((message) => {
+        const terminalText = execution.status === "already_executed"
+          ? `${operationLabel} ‘${resultName}’ was al ${resultVerb}.`
+          : `${operationLabel} ‘${resultName}’ is ${resultVerb}.`;
+        setMessages((prev) => prev.map((message) => {
           const ownsProposal = (message.actions || []).some((candidate) => candidate?.proposal_id === action.proposal_id);
           if (!ownsProposal) return message;
           return {
             ...message,
+            text: terminalText,
+            intent: "finn_v2_proposal_execution",
+            isComplete: true,
             actions: [],
             setupDraft: null,
             actionDraft: null,
             state: { ...(message.state || {}), setup_draft: null, action_draft: null },
           };
-        }), {
-          role: "assistant",
-          text: execution.status === "already_executed"
-            ? `${operationLabel} ‘${resultName}’ was al ${resultVerb}.`
-            : `${operationLabel} ‘${resultName}’ is ${resultVerb}.`,
-          intent: "finn_v2_proposal_execution",
-          isComplete: true,
-        }]);
+        }));
         emitFinnRefreshSignals();
         await Promise.all([loadInsight(), loadMissionControl()]);
         return;
@@ -5151,7 +5163,11 @@ function AIAssistantContent({
       : `Paper · gekoppeld aan ${linkedName}`;
     const labels = { name: "naam", setup_id: "setup", strategy_id: "strategie", symbol: "asset", timeframe: "timeframe", execution_mode: "uitvoering", base_amount: "bedrag", entry: "entry", stop_loss: "stop-loss", targets: "targets", risk_profile: "risico", budget_total_eur: "budget" };
     const missing = (draft.missing_inputs || []).map((field) => labels[field]).filter(Boolean);
-    const formatValue = (value) => Array.isArray(value) ? value.join(", ") : String(value);
+    const formatValue = (value) => {
+      const riskLabels = { conservative: "Voorzichtig", balanced: "Gebalanceerd", aggressive: "Offensief" };
+      if (typeof value === "string" && riskLabels[value.toLowerCase()]) return riskLabels[value.toLowerCase()];
+      return Array.isArray(value) ? value.join(", ") : String(value);
+    };
     const rows = isStrategy
       ? [["Uitvoering", [supplied.execution_mode, supplied.base_amount ? `€${supplied.base_amount}` : null].filter(Boolean).join(" · ")], ["Entry", supplied.entry], ["Stop-loss", supplied.stop_loss], ["Targets", supplied.targets], ["Risico", supplied.risk_profile]]
       : [["Budget", supplied.budget_total_eur ? `€${supplied.budget_total_eur}` : null]];

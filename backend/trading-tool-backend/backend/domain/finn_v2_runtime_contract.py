@@ -24,9 +24,11 @@ _WORKFLOW_EVENTS = frozenset({
     "draft_created",
     "confirmation_issued",
     "confirmed",
+    "execution_started",
     "execution_blocked",
     "execution_succeeded",
     "execution_failed",
+    "cancelled",
 })
 
 
@@ -513,15 +515,17 @@ def record_proposal_lifecycle(
 
     status_by_event = {
         "draft_created": "draft",
-        "confirmation_issued": "pending_confirmation",
-        "confirmed": "confirmed",
+        "confirmation_issued": "confirming",
+        "confirmed": "confirming",
+        "execution_started": "executing",
         "execution_blocked": "blocked",
         "execution_succeeded": "succeeded",
         "execution_failed": "failed",
+        "cancelled": "cancelled",
     }
     status = status_by_event[event]
     previous_status = lifecycle.get("status")
-    terminal_statuses = {"blocked", "succeeded", "failed"}
+    terminal_statuses = {"blocked", "succeeded", "failed", "cancelled"}
     if previous_status in terminal_statuses and previous_status != status:
         raise RuntimeContractImmutableFieldError("runtime_contract_proposal_status_is_terminal")
     lifecycle["status"] = status
@@ -531,6 +535,30 @@ def record_proposal_lifecycle(
             raise RuntimeContractImmutableFieldError("runtime_contract_execution_id_is_immutable")
         lifecycle["execution_id"] = execution_id
     state["proposal_lifecycle"] = lifecycle
+    if status in terminal_statuses:
+        response = dict(state.get("terminal_response") or {})
+        response["proposal_id"] = None
+        response["confirmation_required"] = False
+        response["suggested_actions"] = []
+        if status == "cancelled":
+            response["content"] = "Voorstel geannuleerd. Er is niets gewijzigd."
+            response["direct_answer"] = response["content"]
+        elif status == "failed":
+            response["content"] = "Dat lukte niet. Ik heb niets gewijzigd."
+            response["direct_answer"] = response["content"]
+        elif status == "succeeded":
+            action_result = dict(state.get("action_result") or {})
+            entity_label = {
+                "setup": "Setup",
+                "strategy": "Strategie",
+                "bot": "Paper-bot",
+            }.get(str(action_result.get("entity_type") or ""), "Actie")
+            name = str(action_result.get("canonical_name") or "").strip()
+            operation = str(action_result.get("operation_id") or operation_id)
+            verb = "verwijderd" if operation.startswith("delete_") else "bijgewerkt" if operation.startswith("update_") or operation == "deactivate_bot" else "opgeslagen"
+            response["content"] = f"{entity_label} ‘{name}’ is {verb}." if name else f"{entity_label} is {verb}."
+            response["direct_answer"] = response["content"]
+        state["terminal_response"] = response
     state.setdefault("transition_log", []).append({
         "type": "proposal_lifecycle",
         "event": event,

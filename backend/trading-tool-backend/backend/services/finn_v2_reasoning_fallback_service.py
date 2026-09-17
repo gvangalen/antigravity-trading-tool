@@ -616,7 +616,7 @@ class FinnV2ReasoningFallbackService:
                     if isinstance(budget_total_eur, (int, float))
                     else str(budget_total_eur)
                 )
-                direct_answer = f"Het huidige budget van paper-bot {bot_name} is {rendered_budget}."
+                direct_answer = f"Je paper-bot ‘{bot_name}’ heeft een budget van {rendered_budget}."
             else:
                 direct_answer = (
                     f"Je actieve {asset}-plan gebruikt {setup_name}{timeframe_detail}, "

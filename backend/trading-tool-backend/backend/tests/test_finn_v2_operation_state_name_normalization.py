@@ -328,7 +328,7 @@ def test_create_strategy_extracts_explicit_trade_contract_fields(message):
     assert state.collected_inputs["entry"] == 62000.0
     assert state.collected_inputs["stop_loss"] == 59800.0
     assert state.collected_inputs["targets"] == [64500.0, 67000.0]
-    assert state.collected_inputs["risk_profile"]
+    assert state.collected_inputs["risk_profile"] == "conservative"
     assert state.missing_required_inputs == []
 
 
@@ -353,7 +353,8 @@ def test_create_strategy_does_not_treat_risk_percentage_as_a_target():
     )
 
     assert state.collected_inputs["targets"] == [84000.0]
-    assert state.collected_inputs["risk_profile"] == "maximaal 1 procent"
+    assert "risk_profile" not in state.collected_inputs
+    assert state.missing_required_inputs == ["risk_profile"]
 
 
 def test_create_bot_preserves_an_explicit_optional_budget():
@@ -431,7 +432,7 @@ def test_update_setup_extracts_only_the_new_timeframe(message):
         ("entry", "Bij welke koers wil je instappen?"),
         ("stop_loss", "Waar wil je je stop-loss zetten?"),
         ("targets", "Welke koersdoelen wil je gebruiken?"),
-        ("risk_profile", "Hoeveel procent wil je maximaal riskeren?"),
+        ("risk_profile", "Welke risicostijl wil je gebruiken: voorzichtig, gebalanceerd of offensief?"),
     ),
 )
 def test_strategy_guided_questions_use_human_slot_copy(slot, question):
@@ -491,7 +492,7 @@ def test_compound_german_strategy_does_not_parse_namespaced_name_as_target_or_ri
     )
 
     assert state.collected_inputs["targets"] == [65.0, 68.0]
-    assert state.collected_inputs["risk_profile"] == "defensiv"
+    assert state.collected_inputs["risk_profile"] == "conservative"
     assert state.collected_inputs["name"] == "Chain Strategy visiblecore-1789631146"
     assert state.missing_required_inputs == []
 

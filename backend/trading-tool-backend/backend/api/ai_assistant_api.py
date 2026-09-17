@@ -3211,6 +3211,26 @@ async def assistant_v2_confirm_proposal(
     ).dict()
 
 
+@router.post("/assistant/v2/proposals/{proposal_id}/cancel")
+async def assistant_v2_cancel_proposal(
+    proposal_id: str,
+    raw_request: Request,
+    x_csrf_token: Optional[str] = Header(None),
+    current_user: dict = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    _require_csrf_match(raw_request, x_csrf_token)
+    try:
+        return await FinnV2ConfirmationService(db).cancel(
+            proposal_id=proposal_id,
+            user_id=current_user["id"],
+        )
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail="Proposal not found") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail="Proposal can no longer be cancelled") from exc
+
+
 @router.post("/assistant/v2/proposals/{proposal_id}/execute")
 async def assistant_v2_execute_proposal(
     proposal_id: str,

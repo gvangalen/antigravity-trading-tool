@@ -237,7 +237,7 @@ class FinnV2OperationStateService:
             "entry": "Bij welke koers wil je instappen?",
             "stop_loss": "Waar wil je je stop-loss zetten?",
             "targets": "Welke koersdoelen wil je gebruiken?",
-            "risk_profile": "Hoeveel procent wil je maximaal riskeren?",
+            "risk_profile": "Welke risicostijl wil je gebruiken: voorzichtig, gebalanceerd of offensief?",
             "proposal_id": "Welk voorstel wil je precies bevestigen of uitvoeren?",
             "asset": "Welke asset wil je aan je watchlist toevoegen?",
             "requested_change": "Wat wil je precies aan je manier van handelen verbeteren?",
@@ -548,7 +548,8 @@ class FinnV2OperationStateService:
                 return {field: [float(number.replace(",", ".")) for number in numbers]} if numbers else {}
             if field == "risk_profile":
                 tail = re.split(alias, text, maxsplit=1, flags=re.IGNORECASE)[-1].strip(" .,:;-")
-                return {field: tail} if tail else {}
+                canonical = cls._canonical_risk_profile(tail) if tail else None
+                return {field: canonical} if canonical else {}
             number = re.search(r"\d+(?:[.,]\d+)?", text)
             return {field: float(number.group(0).replace(",", "."))} if number else {}
         return {}
@@ -617,8 +618,30 @@ class FinnV2OperationStateService:
                 numbers = re.findall(r"\d+(?:[.,]\d+)?", value)
                 return [float(number.replace(",", ".")) for number in numbers] or None
             if field == "risk_profile":
-                return value
+                return self._canonical_risk_profile(value)
         return None
+
+    @staticmethod
+    def _canonical_risk_profile(value: str) -> Optional[str]:
+        normalized = FinnV2SetupInputCatalog._comparison_text(value)
+        aliases = {
+            "conservative": "conservative",
+            "cautious": "conservative",
+            "voorzichtig": "conservative",
+            "defensief": "conservative",
+            "defensive": "conservative",
+            "defensiv": "conservative",
+            "vorsichtig": "conservative",
+            "balanced": "balanced",
+            "gebalanceerd": "balanced",
+            "evenwichtig": "balanced",
+            "ausgewogen": "balanced",
+            "aggressive": "aggressive",
+            "offensief": "aggressive",
+            "agressief": "aggressive",
+            "offensiv": "aggressive",
+        }
+        return aliases.get(normalized)
 
     @classmethod
     def _strategy_trade_inputs(
@@ -667,6 +690,12 @@ class FinnV2OperationStateService:
             values["risk_profile"] = risk_prefix.group(1).strip()
         elif risk:
             values["risk_profile"] = risk.group(1).strip()
+        if "risk_profile" in values:
+            canonical_risk = cls._canonical_risk_profile(str(values["risk_profile"]))
+            if canonical_risk:
+                values["risk_profile"] = canonical_risk
+            else:
+                values.pop("risk_profile", None)
         if requested_field == "name" and text.strip():
             values["name"] = cls._name_input_from_text(text) or text.strip(" .\"'")
         return values

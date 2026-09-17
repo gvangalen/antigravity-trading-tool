@@ -291,7 +291,20 @@ class FinnV2ReasoningContextService:
                 if source.get(key) is not None
             }
         if tool_name == "read_linked_bot":
-            return {key: payload.get(key) for key in ["bot_id", "name", "symbol", "strategy_id", "is_active", "is_live", "mode"] if payload.get(key) is not None}
+            return {
+                key: payload.get(key)
+                for key in [
+                    "bot_id",
+                    "name",
+                    "symbol",
+                    "strategy_id",
+                    "is_active",
+                    "is_live",
+                    "mode",
+                    "budget_total_eur",
+                ]
+                if payload.get(key) is not None
+            }
         if tool_name == "read_bot_status":
             return {key: payload.get(key) for key in ["bot_id", "is_active", "is_live", "last_run", "mode", "cadence"] if payload.get(key) is not None}
         if tool_name == "read_watchlist":

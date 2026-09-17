@@ -12879,6 +12879,7 @@ class FinnPlanService:
             "trader_profile": list(profile.get("trader_types") or []),
             "experience_level": (profile.get("experience_levels") or [None])[0],
             "risk_profile": list(profile.get("risk_profiles") or []),
+            "coaching_patterns": list(profile.get("behavior_flags") or []),
             "preferred_timeframes": list(profile.get("primary_timeframes") or []),
             "selected_assets": [source.get("asset")] if source.get("asset") else [],
             "market_indicators": list(indicators.get("market") or []),
@@ -12888,6 +12889,7 @@ class FinnPlanService:
             "active_strategy": strategy or None,
             "paper_bot": bot or None,
             "paper_bot_status": "live" if bot.get("is_live") else "paused" if bot else None,
+            "paper_bot_budget": bot.get("budget_total_eur") if bot else None,
             "latest_analysis": latest or None,
             "latest_analysis_available": str(latest.get("availability") or "").lower()
             in {"available", "ready"},
@@ -12896,16 +12898,40 @@ class FinnPlanService:
     @classmethod
     def _mission_personal_briefing(cls, payload: Optional[Dict[str, Any]]) -> Dict[str, Any]:
         snapshot = cls._mission_personal_snapshot(payload)
-        fallback = dict((payload or {}).get("fallback_result") or {})
         name = snapshot.get("first_name")
-        summary = " ".join(
-            part
-            for part in (
-                str(fallback.get("headline") or "").strip(),
-                str(fallback.get("observation") or "").strip(),
-                str(fallback.get("reasoning") or "").strip(),
-            )
-            if part
+        fallback = dict((payload or {}).get("fallback_result") or {})
+        facts = []
+        assets = snapshot.get("selected_assets") or []
+        setup = snapshot.get("active_setup") or {}
+        strategy = snapshot.get("active_strategy") or {}
+        bot = snapshot.get("paper_bot") or {}
+        if assets:
+            facts.append(f"Je actieve asset is {assets[0]}.")
+        if setup.get("name"):
+            facts.append(f"Je werkt met setup ‘{setup['name']}’.")
+        if strategy.get("name"):
+            facts.append(f"De gekoppelde strategie is ‘{strategy['name']}’.")
+        if bot.get("name"):
+            bot_fact = f"Paper-bot ‘{bot['name']}’ staat {'actief' if bot.get('is_active') else 'gepauzeerd'}"
+            if bot.get("budget_total_eur") is not None:
+                bot_fact += f" met een budget van €{float(bot['budget_total_eur']):,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+            facts.append(bot_fact + ".")
+        indicator_count = sum(len(snapshot.get(key) or []) for key in ("market_indicators", "macro_indicators", "technical_indicators"))
+        indicator_names = [
+            *(snapshot.get("technical_indicators") or []),
+            *(snapshot.get("macro_indicators") or []),
+            *(snapshot.get("market_indicators") or []),
+        ]
+        if indicator_names:
+            facts.append(f"Je volgt onder meer {', '.join(str(item) for item in indicator_names[:4])}.")
+        latest = snapshot.get("latest_analysis") or {}
+        if snapshot.get("latest_analysis_available"):
+            if latest.get("summary"):
+                facts.append(str(latest["summary"]).strip())
+        elif indicator_count:
+            facts.append(f"Je analyseprofiel staat klaar met {indicator_count} indicatoren; er is nog geen recente marktanalyse.")
+        summary = " ".join(facts) or " ".join(
+            str(fallback.get(key) or "").strip() for key in ("headline", "observation") if fallback.get(key)
         )
         return {
             "greeting": f"Goedemorgen {name}" if name else "Goedemorgen",
@@ -13622,6 +13648,7 @@ class FinnPlanService:
                 "experience_levels": profile.get("experience_levels") or [],
                 "risk_profiles": profile.get("risk_profiles") or [],
                 "primary_timeframes": profile.get("primary_timeframes") or [],
+                "behavior_flags": profile.get("behavior_flags") or [],
             },
             "indicators": indicators,
             "setup": {
@@ -14511,6 +14538,7 @@ class FinnPlanService:
             "is_live": bool(selected.get("is_live")),
             "mode": selected.get("mode"),
             "risk_profile": selected.get("risk_profile"),
+            "budget_total_eur": selected.get("budget_total_eur"),
         }
 
     def _first_dashboard_observation_and_action(

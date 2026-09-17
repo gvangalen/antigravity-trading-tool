@@ -126,3 +126,36 @@ def test_confirmation_commits_before_returning_confirmed(monkeypatch):
 
     assert result.confirmed is True
     assert session.commits == 1
+
+
+def test_owner_can_cancel_draft_proposal_and_replay_is_idempotent():
+    class Session:
+        def __init__(self):
+            self.commits = 0
+
+        async def commit(self):
+            self.commits += 1
+
+    session = Session()
+    service = FinnV2ConfirmationService(session=session)
+    events = []
+    proposal = SimpleNamespace(
+        id="proposal-1", run_id="run-1", user_id=7, payload_hash="payload-hash",
+        operation_type="update_bot", status="draft",
+    )
+    service.proposals.get_by_id_for_user = lambda **_kwargs: asyncio.sleep(0, result=proposal)
+
+    async def update_status(row, *, status):
+        row.status = status
+        return row
+
+    service.proposals.update_status = update_status
+    service.runtime_contracts.record_proposal_lifecycle = lambda **kwargs: asyncio.sleep(0, result=events.append(kwargs))
+
+    first = asyncio.run(service.cancel(proposal_id="proposal-1", user_id=7))
+    replay = asyncio.run(service.cancel(proposal_id="proposal-1", user_id=7))
+
+    assert first == {"proposal_id": "proposal-1", "status": "cancelled", "already_cancelled": False}
+    assert replay == {"proposal_id": "proposal-1", "status": "cancelled", "already_cancelled": True}
+    assert [event["event"] for event in events] == ["cancelled"]
+    assert session.commits == 1

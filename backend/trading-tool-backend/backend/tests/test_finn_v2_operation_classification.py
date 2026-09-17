@@ -86,6 +86,16 @@ def test_workspace_setup_read_source_survives_contract_validation():
     assert FinnV2OperationClassificationValidator().validation_error(selection) is None
 
 
+def test_bot_name_containing_target_is_not_misread_as_a_setup_field():
+    selection = CLASSIFIER.classify(
+        message="Welk budget heeft paper-bot Target Surface Bot?",
+        workspace_hints={"setup_id": 326},
+        client_context={"setup_id": 326},
+    )
+
+    assert selection.operation_id == "read_linked_bot"
+
+
 @pytest.mark.parametrize(("message", "operation_id"), (
     ("Welke setup heb ik actief?", "read_active_setup"),
     ("Which setup is active?", "read_active_setup"),

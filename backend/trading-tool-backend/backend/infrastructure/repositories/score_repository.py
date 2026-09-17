@@ -30,7 +30,7 @@ class ScoreRepository:
                    s.created_at AS timestamp,
                    COALESCE(ds.score, 0) AS score,
                    COALESCE(ds.active, false) AS is_active,
-                   COALESCE(ds.breakdown, '{}'::jsonb) AS breakdown
+                   COALESCE(ds.breakdown::jsonb, '{}'::jsonb) AS breakdown
             FROM setups s
             LEFT JOIN daily_setup_scores ds
                 ON ds.setup_id = s.id

@@ -118,6 +118,17 @@ export const confirmAndExecuteFinnV2Proposal = async (proposalId) => {
   return { publication, confirmation, execution };
 };
 
+export const cancelFinnV2Proposal = (proposalId) => {
+  const normalizedProposalId = String(proposalId || '').trim();
+  if (!normalizedProposalId) {
+    throw new Error('Deze FINN V2-proposal mist een server-issued proposal_id.');
+  }
+  return fetchAuth(`/api/assistant/v2/proposals/${encodeURIComponent(normalizedProposalId)}/cancel`, {
+    method: 'POST',
+    body: JSON.stringify({}),
+  });
+};
+
 export const waitForFinnV2TerminalSse = async (runId, { signal } = {}) => {
   const response = await fetch(`${API_BASE_URL}/api/assistant/v2/runs/${encodeURIComponent(runId)}/stream`, {
     method: 'GET',

@@ -1,0 +1,148 @@
+{
+  "schema_version": "1.0",
+  "baseline_sha": "74ea7bdc91f6dda3d113a3d444fe44458e2fca43",
+  "scope": [
+    "paper_bot_target_resolution",
+    "paper_bot_budget_readback",
+    "finn_today_personal_snapshot",
+    "strategy_risk_semantics",
+    "proposal_cancel_confirm_lifecycle",
+    "human_visible_copy"
+  ],
+  "browser_validation": {
+    "surface": "local_visible_browser",
+    "frontend_url": "http://127.0.0.1:13001",
+    "backend_url": "http://127.0.0.1:18000",
+    "synthetic_fixture_only": true,
+    "cases": [
+      {
+        "id": "paper_bot_budget_initial_read",
+        "result": "PASS",
+        "assertions": [
+          "owner-scoped bot resolved by natural name",
+          "linked setup and strategy names visible",
+          "budget rendered as EUR 500",
+          "non-live status visible"
+        ]
+      },
+      {
+        "id": "paper_bot_update_cancel",
+        "result": "PASS",
+        "assertions": [
+          "typed proposal card rendered",
+          "cancel persisted through public cancel route",
+          "original proposal card replaced",
+          "refresh did not restore stale confirmation controls",
+          "no business write occurred"
+        ]
+      },
+      {
+        "id": "paper_bot_update_confirm_readback",
+        "result": "PASS",
+        "assertions": [
+          "same owner-scoped bot resolved",
+          "execution success replaced proposal card",
+          "refresh retained updated data",
+          "readback rendered EUR 1000",
+          "bot remained non-live"
+        ]
+      }
+    ],
+    "visual_capture": {
+      "captured_with": "Codex CUA screenshot",
+      "contents": "cancel result, compact execution success, refreshed EUR 1000 readback",
+      "repository_file": null,
+      "note": "The desktop was locked, so macOS screencapture could not persist a duplicate file; the CUA capture remains attached to the validation transcript."
+    }
+  },
+  "runtime_validation": {
+    "finn_today": {
+      "result": "PASS",
+      "database": "PostgreSQL",
+      "personal_snapshot_fields": [
+        "first_name",
+        "trader_profile",
+        "experience_level",
+        "risk_profile",
+        "selected_assets",
+        "preferred_timeframes",
+        "coaching_patterns",
+        "active_setup",
+        "active_strategy",
+        "paper_bot",
+        "paper_bot_budget",
+        "paper_bot_status",
+        "market_indicators",
+        "macro_indicators",
+        "technical_indicators",
+        "latest_analysis",
+        "latest_analysis_available"
+      ],
+      "root_causes_fixed": [
+        "legacy JSON score breakdown required explicit JSONB cast",
+        "optional bot_decisions lookup lacked a table-existence guard and poisoned the shared transaction"
+      ]
+    },
+    "safety": {
+      "broker_orders": 0,
+      "live_trading_activations": 0,
+      "live_bot_activations": 0,
+      "cross_user_fallbacks": 0
+    }
+  },
+  "tests": {
+    "backend_rootsuite": {
+      "result": "PASS",
+      "passed": 2154,
+      "skipped": 3
+    },
+    "frontend": {
+      "typecheck": "PASS",
+      "lint_i18n": "PASS",
+      "i18n_tests": "7/7 PASS",
+      "command_tests": "5/5 PASS",
+      "targeted_source_tests": "21/21 PASS"
+    },
+    "provider_development": {
+      "result": "PASS",
+      "cases": "18/18",
+      "operation_accuracy": 1.0,
+      "target_accuracy": 1.0,
+      "polarity_accuracy": 1.0,
+      "p50_ms": 2044,
+      "p95_ms": 3392,
+      "failure_rates": {
+        "provider": 0.0,
+        "schema": 0.0,
+        "parse": 0.0,
+        "validation": 0.0,
+        "timeout": 0.0
+      },
+      "artifact": "/tmp/finn-74ea-targeted-provider-development.json",
+      "sha256": "039074cdb3eb54f330bf7cd6f07fd51b7b6d137f0f9498aa298c7b131c1dfb9f"
+    },
+    "provider_regression": {
+      "result": "PASS",
+      "cases": "109/109",
+      "operation_accuracy": 1.0,
+      "target_accuracy": 1.0,
+      "polarity_accuracy": 1.0,
+      "p50_ms": 2014,
+      "p95_ms": 3344,
+      "failure_rates": {
+        "provider": 0.0,
+        "schema": 0.0,
+        "parse": 0.0,
+        "validation": 0.0,
+        "timeout": 0.0
+      },
+      "artifact": "/tmp/finn-74ea-targeted-provider-regression.json",
+      "sha256": "87a4a4cd6f632cd03e679414abebffdb3ac1411b11711262952729cd4feafd1e"
+    }
+  },
+  "release": {
+    "deployment_performed": false,
+    "qa_started": false,
+    "ready_for_deployment": true
+  }
+}

@@ -477,6 +477,11 @@ class FinnV2OperationClassificationService:
         """Use the setup read contract for unconfigured strategy fields."""
         if facts.discourse_act != "information_request":
             return False
+        # A setup surface is only context. An explicitly named bot or strategy
+        # remains the grammatical subject, even when its product name contains
+        # words such as "Target" or "Risk" that resemble setup fields.
+        if set(facts.explicit_entities).intersection({"bot", "strategy"}):
+            return False
         contexts = (workspace_hints or {}, client_context or {})
         setup_id = next((context.get("setup_id") for context in contexts if context.get("setup_id") is not None), None)
         strategy_id = next((context.get("strategy_id") for context in contexts if context.get("strategy_id") is not None), None)

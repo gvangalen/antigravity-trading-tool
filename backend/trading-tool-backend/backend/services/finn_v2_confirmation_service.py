@@ -63,6 +63,19 @@ class FinnV2ConfirmationService:
         await self._commit_before_success_response()
         return raw_token, expires_at
 
+    async def cancel(self, *, proposal_id: str, user_id: int) -> dict:
+        proposal = await self.proposals.get_by_id_for_user(proposal_id=proposal_id, user_id=user_id)
+        if proposal is None:
+            raise LookupError("proposal_not_owned")
+        if proposal.status == "cancelled":
+            return {"proposal_id": proposal.id, "status": "cancelled", "already_cancelled": True}
+        if proposal.status not in {"draft", "pending_confirmation"}:
+            raise ValueError("proposal_cannot_be_cancelled")
+        await self.proposals.update_status(proposal, status="cancelled")
+        await self._record_workflow_event(proposal, event="cancelled")
+        await self._commit_before_success_response()
+        return {"proposal_id": proposal.id, "status": "cancelled", "already_cancelled": False}
+
     async def confirm(
         self,
         *,

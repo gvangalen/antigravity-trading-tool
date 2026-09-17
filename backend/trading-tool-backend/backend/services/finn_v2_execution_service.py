@@ -127,6 +127,11 @@ class FinnV2ExecutionService:
             error_codes_json=[],
             started_at=started_at,
         )
+        await self._record_workflow_event(
+            proposal,
+            event="execution_started",
+            execution_id=execution.id,
+        )
         try:
             prior_entity = await self._owned_entity_reference(proposal=proposal)
             result_payload = await adapter(user_id, proposal.payload_json)
@@ -143,6 +148,7 @@ class FinnV2ExecutionService:
             execution.postcondition_hash = postcondition_hash
             execution.result_json = safe_result_payload
             execution.completed_at = datetime.now(timezone.utc)
+            await self.proposals.update_status(proposal, status="executed")
             await self.session.flush()
             record_action_result = getattr(self.runtime_contracts, "record_action_result", None)
             if callable(record_action_result):
@@ -182,6 +188,7 @@ class FinnV2ExecutionService:
             )
         except Exception as exc:
             execution.status = "failed"
+            await self.proposals.update_status(proposal, status="failed")
             execution.error_codes_json = [str(exc)]
             execution.completed_at = datetime.now(timezone.utc)
             await self.session.flush()

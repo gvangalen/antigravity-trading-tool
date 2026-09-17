@@ -113,6 +113,8 @@ class BotRepository:
         return [dict(r._mapping) for r in result.fetchall()]
 
     async def get_bot_decisions_by_date(self, user_id: int, decision_date: date) -> List[dict]:
+        if not await self.check_table_exists("bot_decisions"):
+            return []
         query = text("""
             SELECT
               id, bot_id, symbol, decision_ts, action, confidence,

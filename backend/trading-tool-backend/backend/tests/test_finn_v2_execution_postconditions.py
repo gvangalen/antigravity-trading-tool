@@ -64,6 +64,13 @@ def test_execution_service_records_postcondition_hash_on_success():
         "proposal_id": "proposal-1",
         "operation_id": "update_setup",
         "payload_hash": "hash-1",
+        "event": "execution_started",
+        "execution_id": result.execution_id,
+    }, {
+        "run_id": "run-1",
+        "proposal_id": "proposal-1",
+        "operation_id": "update_setup",
+        "payload_hash": "hash-1",
         "event": "execution_succeeded",
         "execution_id": result.execution_id,
     }]
