@@ -228,7 +228,13 @@ def _specifications(names: dict[str, str]) -> tuple[tuple[str, str, str], ...]:
         # must obtain its one safe reference from the preceding executed
         # action-result rather than from a pre-seeded fixture or text match.
         ("setup_update", "Update that setup and change the timeframe to one hour.", "update_setup"),
-        ("strategy_create", f"Erstelle dafuer eine fixed Strategie mit einem Grundbetrag von 100 Euro und dem Namen {names['strategy']}.", "create_strategy"),
+        (
+            "strategy_create",
+            f"Erstelle dafuer eine fixed Strategie mit einem Grundbetrag von 100 Euro, "
+            f"Einstieg 62, Stop-Loss 59, Zielen 65 und 68, Risikoprofil defensiv "
+            f"und dem Namen {names['strategy']}.",
+            "create_strategy",
+        ),
         ("strategy_update", "Update that strategy and set the base amount to 120 euro.", "update_strategy"),
         ("bot_create", f"Erstelle dafuer einen Paper-Bot mit dem Namen {names['bot']}.", "create_bot"),
         ("bot_update", "Update that bot and set the cadence to weekly.", "update_bot"),
@@ -257,6 +263,11 @@ def main() -> None:
         help="Bounded production-shaped pacing between independent provider turns.",
     )
     parser.add_argument("--read-regressions", action="store_true", help="Run persisted evaluate and bot-consequence checks after a completed chain.")
+    parser.add_argument(
+        "--core-only",
+        action="store_true",
+        help="Run only the natural Setup -> Strategy -> Paper-Bot lifecycle.",
+    )
     args = parser.parse_args()
     base_url = args.base_url.rstrip("/")
     if urlparse(base_url).hostname not in {"127.0.0.1", "localhost"}:
@@ -308,6 +319,12 @@ def main() -> None:
         }
         steps = []
         selected_specs = _specifications(names)
+        if args.core_only:
+            selected_specs = tuple(
+                item
+                for item in selected_specs
+                if item[0].startswith(("setup_", "strategy_", "bot_"))
+            )
     user_id = int(primary["id"])
     token = create_access_token({"sub": str(user_id), "role": "user"})
     other_token = create_access_token({"sub": str(other["id"]), "role": "user"})
@@ -356,7 +373,7 @@ def main() -> None:
             "names": names,
             "steps": steps,
             "completed_steps": len(steps),
-            "total": 16,
+            "total": len(selected_specs),
         })
         # The official matrix paces independent user turns. Mirror that here
         # so this public parity gate does not manufacture provider saturation.

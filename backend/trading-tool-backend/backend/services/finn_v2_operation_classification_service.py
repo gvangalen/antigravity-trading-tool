@@ -126,6 +126,21 @@ class FinnV2OperationClassificationService:
                 (guided_contract,),
                 conversation_context=conversation_context,
             )
+        explicit_mutation_operation = self._explicit_mutation_operation(
+            facts=facts,
+            workspace_hints=workspace_hints,
+            client_context=client_context,
+        )
+        if explicit_mutation_operation:
+            contract = self.registry.require_supported(explicit_mutation_operation)
+            return self._result(
+                contract.operation_id,
+                facts,
+                "high",
+                "registry_mutation_constraint",
+                (contract,),
+                conversation_context=conversation_context,
+            )
         if facts.discourse_act == "capability":
             # Capability is a registry-defined informational operation once
             # the deterministic preprocessor has identified the discourse
@@ -284,6 +299,43 @@ class FinnV2OperationClassificationService:
     def _selector_manifest(self) -> tuple[OperationContract, ...]:
         """Return the versioned registry manifest, not retrieved local guesses."""
         return self.registry.list()
+
+    @staticmethod
+    def _explicit_mutation_operation(
+        *,
+        facts: FinnV2PreprocessedRequest,
+        workspace_hints: Optional[Mapping[str, object]],
+        client_context: Optional[Mapping[str, object]],
+    ) -> Optional[str]:
+        """Resolve one explicit registry mutation without a provider round-trip."""
+        entities = set(facts.explicit_entities).intersection({"setup", "strategy", "bot"})
+        polarity = str(facts.action_polarity or "")
+        if len(entities) == 1:
+            entity = next(iter(entities))
+            operation = {
+                ("update", "setup"): "update_setup",
+                ("delete", "setup"): "delete_setup",
+                ("remove", "setup"): "delete_setup",
+                ("update", "strategy"): "update_strategy",
+                ("delete", "strategy"): "delete_strategy",
+                ("remove", "strategy"): "delete_strategy",
+                ("update", "bot"): "update_bot",
+                ("delete", "bot"): "delete_bot",
+                ("remove", "bot"): "delete_bot",
+                ("deactivate", "bot"): "deactivate_bot",
+            }.get((polarity, entity))
+            if operation:
+                return operation
+        if polarity != "update" or entities:
+            return None
+        contexts = (workspace_hints or {}, client_context or {})
+        has_setup = any(context.get("setup_id") is not None for context in contexts)
+        if has_setup and re.search(
+            r"\b(?:timeframe|time\s*frame|tijdframe|zeitrahmen)\b",
+            facts.normalized_text.casefold(),
+        ):
+            return "update_setup"
+        return None
 
     @staticmethod
     def _is_score_explanation(message: str, facts: FinnV2PreprocessedRequest) -> bool:
@@ -599,6 +651,17 @@ class FinnV2OperationClassificationService:
                 selected_entities[field] = str(supplied_inputs[field])
         if not selected_entities.get("asset") and supplied_inputs.get("symbol"):
             selected_entities["asset"] = str(supplied_inputs["symbol"])
+        selected_reference = getattr(selection, "conversation_reference", None)
+        action_result = dict((conversation_context or {}).get("previous_action_result") or {})
+        if (
+            not selected_reference
+            and action_result.get("result_status") == "succeeded"
+            and any(
+                field in supplied_inputs
+                for field in contract.contextual_reference_inputs
+            )
+        ):
+            selected_reference = "previous_action_result"
         return SemanticOperationClassification(
             operation_id=operation_id,
             action=self._contract_action(contract, facts.action_polarity),
@@ -612,7 +675,7 @@ class FinnV2OperationClassificationService:
             unsupported_capability=unsupported_capability,
             selected_entities=selected_entities,
             selected_target_asset=target_resolution.target_asset,
-            selected_conversation_reference=getattr(selection, "conversation_reference", None),
+            selected_conversation_reference=selected_reference,
             required_inputs=contract.required_inputs_for(supplied_inputs),
             supplied_inputs=supplied_inputs,
             derived_inputs=derived_inputs,
@@ -752,6 +815,7 @@ class FinnV2OperationClassificationValidator:
             "registry_constraint",
             "registry_capability_constraint",
             "registry_read_constraint",
+            "registry_mutation_constraint",
             "workspace_setup_contract",
         }:
             return "selector_source_invalid"

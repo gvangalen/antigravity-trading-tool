@@ -26,7 +26,7 @@ def test_strategy_amount_accepts_natural_currency_before_the_execution_phrase():
     )
 
     assert state.collected_inputs["base_amount"] == 125.0
-    assert state.missing_required_inputs == []
+    assert state.missing_required_inputs == ["name", "entry", "stop_loss", "targets", "risk_profile"]
 
 
 def test_strategy_update_canonicalizes_a_natural_german_execution_mode():
@@ -203,6 +203,63 @@ def test_explicit_guided_create_uses_the_existing_registry_contract(message, ope
     assert result.operation_id == operation_id
     assert result.selector_source == "registry_constraint"
     assert result.action == "create"
+
+
+@pytest.mark.parametrize(("message", "operation_id"), (
+    ("Verwijder deze bot.", "delete_bot"),
+    ("Delete the linked strategy.", "delete_strategy"),
+    ("Entferne das verknuepfte Setup.", "delete_setup"),
+    ("Wijzig mijn strategie en zet het bedrag op 120 euro.", "update_strategy"),
+    ("Deactivate this bot.", "deactivate_bot"),
+))
+def test_explicit_graph_mutations_use_registry_without_selector_provider(message, operation_id):
+    class ExplodingSelector:
+        def select(self, **_kwargs):
+            raise AssertionError("explicit graph mutation must not call the selector provider")
+
+    result = FinnV2OperationClassificationService(
+        structured_selector=ExplodingSelector()
+    ).classify(message=message)
+
+    assert result.operation_id == operation_id
+    assert result.selector_source == "registry_mutation_constraint"
+    assert FinnV2OperationClassificationValidator().validation_error(result) is None
+
+
+def test_workspace_setup_timeframe_update_uses_registry_without_selector_provider():
+    class ExplodingSelector:
+        def select(self, **_kwargs):
+            raise AssertionError("workspace-bound setup update must not call the selector provider")
+
+    result = FinnV2OperationClassificationService(
+        structured_selector=ExplodingSelector()
+    ).classify(
+        message="Wijzig timeframe naar 1D.",
+        workspace_hints={"setup_id": 42},
+    )
+
+    assert result.operation_id == "update_setup"
+    assert result.selector_source == "registry_mutation_constraint"
+    assert FinnV2OperationClassificationValidator().validation_error(result) is None
+
+
+def test_registry_mutation_preserves_typed_action_result_reference():
+    result = FinnV2OperationClassificationService().classify(
+        message="Entferne diesen Bot.",
+        conversation_context={
+            "previous_action_result": {
+                "entity_type": "bot",
+                "entity_id": 91,
+                "owner_user_id": 7,
+                "result_status": "succeeded",
+                "run_id": "run-create-bot",
+            }
+        },
+    )
+
+    assert result.operation_id == "delete_bot"
+    assert result.supplied_inputs["bot_id"] == 91
+    assert result.selected_conversation_reference == "previous_action_result"
 
 
 @pytest.mark.parametrize("message", (

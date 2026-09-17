@@ -440,7 +440,9 @@ def test_runtime_contract_uses_create_strategy_contract_for_optional_and_missing
         "version": FinnV2OperationRegistry.VERSION,
     }
     assert selected["supplied_inputs"] == {"setup_id": 41, "name": "ETH swing"}
-    assert selected["missing_inputs"] == ["execution_mode", "base_amount"]
+    assert selected["missing_inputs"] == [
+        "execution_mode", "base_amount", "entry", "stop_loss", "targets", "risk_profile"
+    ]
 
 
 def test_runtime_contract_hydrates_only_registry_declared_current_run_reference_inputs():
@@ -470,7 +472,7 @@ def test_runtime_contract_hydrates_only_registry_declared_current_run_reference_
         "execution_mode": "fixed",
         "base_amount": 100,
     }
-    assert hydrated["missing_inputs"] == []
+    assert hydrated["missing_inputs"] == ["name", "entry", "stop_loss", "targets", "risk_profile"]
     assert hydrated["transition_log"][-1] == {
         "type": "contextual_input_hydration",
         "operation_id": "create_strategy",

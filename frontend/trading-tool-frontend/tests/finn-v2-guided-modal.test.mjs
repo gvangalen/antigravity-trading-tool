@@ -23,6 +23,16 @@ test("builds strategy and bot draft cards from the terminal runtime contract", (
   assert.match(source, /supplied_inputs: projection\?\.supplied_inputs \|\| \{\}/);
   assert.match(source, /draftTitles\.strategy/);
   assert.match(source, /draftTitles\.bot/);
+  assert.match(source, /hiddenIdentityFields = new Set\(\["setup_id", "strategy_id", "bot_id"\]\)/);
+  assert.match(source, /\["succeeded", "already_executed"\]\.includes\(execution\.status\)/);
+  assert.match(source, /display_context:/);
+  assert.match(source, /Paper · niet-live/);
+  assert.match(source, /execution\.error_codes\?\.\[0\]/);
+  assert.match(source, /replace\(\/\^\\d\{3\}:\\s\*\//);
+  assert.doesNotMatch(source, /\{context\.page_type \|\| "Finn"\} · \{context\.symbol \|\| "BTC"\} · \{context\.timeframe \|\| "1D"\}/);
+  assert.doesNotMatch(source, /draft\.strategy_id \? `#\$\{draft\.strategy_id\}`/);
+  assert.doesNotMatch(source, /draft\.setup_id \? `#\$\{draft\.setup_id\}`/);
+  assert.doesNotMatch(source, /#\$\{option\.id\} · \$\{option\.symbol\}/);
   assert.doesNotMatch(source, /proposal_payload/);
 });
 

@@ -706,7 +706,11 @@ class FinnV2RequestAnalysisService:
         return "read_only"
 
     def _extract_entity_id(self, original: str, keyword_root: str) -> Optional[int]:
-        match = re.search(rf"\b{keyword_root}[a-z]*\s+#?(\d+)\b", original, re.IGNORECASE)
+        match = re.search(
+            rf"\b{keyword_root}[a-z]*\s+#?((?!0\d)\d+)\b",
+            original,
+            re.IGNORECASE,
+        )
         if not match:
             return None
         try:

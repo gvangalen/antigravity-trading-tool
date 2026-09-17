@@ -4419,6 +4419,16 @@ function AIAssistantContent({
                 proposal_id: verified.proposal_id,
                 requires_confirmation: Boolean(verified.confirmation_required),
                 mode: verified.mode,
+                display_context: {
+                  operation_id: operationId || projection?.final_operation_id,
+                  name: actionDraft?.supplied_inputs?.name
+                    || setupDraft?.supplied_inputs?.name
+                    || projection?.action_result?.canonical_name
+                    || null,
+                  symbol: projection?.canonical_target || actionDraft?.supplied_inputs?.symbol || setupDraft?.supplied_inputs?.symbol || null,
+                  timeframe: actionDraft?.supplied_inputs?.timeframe || setupDraft?.supplied_inputs?.timeframe || null,
+                  safety_mode: operationId === "create_bot" ? "Paper · niet-live" : null,
+                },
               }] : [],
               isComplete: true,
             }
@@ -4792,6 +4802,12 @@ function AIAssistantContent({
       if (action.type === "v2_proposal") {
         const result = await confirmAndExecuteFinnV2Proposal(action.proposal_id);
         const execution = result?.execution || {};
+        if (!["succeeded", "already_executed"].includes(execution.status)) {
+          const publicReason = String(execution.error_codes?.[0] || "")
+            .replace(/^\d{3}:\s*/, "")
+            .trim();
+          throw new Error(publicReason || execution.failure_reason || execution.status || "proposal_execution_failed");
+        }
         setMessages((prev) => [...prev, {
           role: "assistant",
           text: execution.status === "already_executed"
@@ -4991,7 +5007,9 @@ function AIAssistantContent({
       console.error("Finn action failed", err);
       setMessages(prev => [...prev, {
         role: "assistant",
-        text: action.type === "refresh_daily_scores"
+        text: action.type === "v2_proposal" && err?.message && !/^[a-z0-9_]+$/i.test(err.message)
+          ? err.message
+          : action.type === "refresh_daily_scores"
           ? "Ik kon de daily scores nog niet verversen. Probeer het zo opnieuw."
           : action.type === "generate_bot_decision"
           ? "Ik kon de bot-decision nog niet genereren. Controleer de bot en probeer opnieuw."
@@ -5017,7 +5035,9 @@ function AIAssistantContent({
       dca_day: at("fieldLabels.dca.day", "Weekdag"),
       dca_month_day: at("fieldLabels.dca.monthDay", "Dag van de maand"),
     };
+    const hiddenIdentityFields = new Set(["setup_id", "strategy_id", "bot_id"]);
     const values = Object.entries(draft.supplied_inputs || {}).filter(([field, value]) => (
+      !hiddenIdentityFields.has(field) &&
       labels[field] && value !== undefined && value !== null && value !== ""
     ));
     const nextLabel = labels[draft.requested_slot] || at("draftRows.next", "Volgende stap");
@@ -5070,7 +5090,7 @@ function AIAssistantContent({
           entry: at("fieldLabels.strategy.entry", "Instap"),
           stop_loss: at("fieldLabels.strategy.stopLoss", "Stop-loss"),
           targets: at("fieldLabels.strategy.targets", "Koersdoelen"),
-          risk_rules: at("fieldLabels.strategy.risk", "Risicoregels"),
+          risk_profile: at("fieldLabels.strategy.risk", "Risicoprofiel"),
         }
       : {
           name: at("fieldLabels.bot.name", "Botnaam"),
@@ -5080,8 +5100,10 @@ function AIAssistantContent({
           risk_profile: at("fieldLabels.bot.riskProfile", "Risicoprofiel"),
           budget_total_eur: at("fieldLabels.bot.budget", "Budget"),
         };
+    const hiddenIdentityFields = new Set(["setup_id", "strategy_id", "bot_id"]);
     const values = Object.entries(draft.supplied_inputs || {}).filter(([field, value]) => (
-      labels[field] && value !== undefined && value !== null && value !== ""
+      !hiddenIdentityFields.has(field)
+      && labels[field] && value !== undefined && value !== null && value !== ""
     ));
     const formatValue = (value) => Array.isArray(value) ? value.join(", ") : String(value);
     const status = draft.draft_status === "complete"
@@ -5263,15 +5285,14 @@ function AIAssistantContent({
       isFinnIndicator ? [draftRowsText.nodeActive, draft.activate_node ? yesLabel : noLabel] : null,
       isFinnStrategy ? [draftRowsText.action, draft.operation === "update" ? draftRowsText.update : draftRowsText.create] : null,
       isFinnBot ? [draftRowsText.action, draft.operation === "update" ? draftRowsText.update : draftRowsText.create] : null,
-      isFinnBot && draft.operation === "update" ? [draftRowsText.botId, draft.bot_id ? `#${draft.bot_id}` : null] : null,
-      isFinnBot ? [draftRowsText.strategy, draft.strategy_id ? `#${draft.strategy_id}` : null] : null,
+      isFinnBot ? [draftRowsText.strategy, draft.strategy_name || null] : null,
       isFinnStrategy
         ? [
             draftRowsText.setup,
-            draft.setup_name && draft.setup_id ? `${draft.setup_name} (#${draft.setup_id})` : (draft.setup_id ? `#${draft.setup_id}` : null),
+            draft.setup_name || null,
           ]
         : null,
-      isFinnStrategy && draft.operation === "update" ? [draftRowsText.strategy, draft.strategy_id ? `#${draft.strategy_id}` : null] : null,
+      isFinnStrategy && draft.operation === "update" ? [draftRowsText.strategy, draft.strategy_name || draft.name || null] : null,
       isFinnStrategy ? [draftRowsText.setupType, valueLabel(draft.setup_type, draft.setup_type)] : null,
       isFinnBot ? [draftRowsText.bot, bot.name] : null,
       isFinnBot ? [draftRowsText.environment, valueLabel(bot.is_live ? "live" : "paper")] : null,
@@ -5331,9 +5352,9 @@ function AIAssistantContent({
                   onClick={() => handleChat(`setup ${option.id}`)}
                   className="text-left rounded-lg border border-blue-100 dark:border-blue-900/40 bg-blue-50/60 dark:bg-blue-950/20 px-3 py-2 hover:border-blue-300 dark:hover:border-blue-700 transition-colors"
                 >
-                  <div className="text-xs font-black text-slate-800 dark:text-slate-100">{option.name || `Setup #${option.id}`}</div>
+                  <div className="text-xs font-black text-slate-800 dark:text-slate-100">{option.name || at("fieldLabels.strategy.setup", "Gekoppelde setup")}</div>
                   <div className="mt-0.5 text-[10px] font-bold uppercase tracking-wider text-blue-500 dark:text-blue-300">
-                    #{option.id} · {option.symbol} · {valueLabel(option.setup_type, option.setup_type)} · {option.timeframe}
+                    {[option.symbol, valueLabel(option.setup_type, option.setup_type), option.timeframe].filter(Boolean).join(" · ")}
                   </div>
                 </button>
               ))}
@@ -5598,6 +5619,13 @@ function AIAssistantContent({
       ].includes(action.type)
     ));
     if (actionOnly.length === 0 || message.draft) return null;
+    const displayContext = actionOnly[0]?.display_context || {};
+    const contextParts = [
+      displayContext.name,
+      displayContext.symbol,
+      displayContext.timeframe,
+      displayContext.safety_mode,
+    ].filter(Boolean);
 
     return (
       <div className="mt-4 rounded-2xl border border-blue-200 dark:border-blue-900/50 bg-blue-50/70 dark:bg-blue-950/20 p-4 space-y-3">
@@ -5609,7 +5637,7 @@ function AIAssistantContent({
           <div className="rounded-xl border border-blue-100 dark:border-blue-900/40 bg-white/80 dark:bg-slate-950/35 px-3 py-2">
             <div className="text-[8px] font-black uppercase tracking-[0.22em] text-blue-500 dark:text-blue-300">{uiText.context}</div>
             <p className="mt-1 text-[11px] font-semibold text-slate-700 dark:text-slate-200">
-              {context.page_type || "Finn"} · {context.symbol || "BTC"} · {context.timeframe || "1D"}
+              {contextParts.length > 0 ? contextParts.join(" · ") : "FINN voorstel"}
             </p>
           </div>
           <div className="rounded-xl border border-blue-100 dark:border-blue-900/40 bg-white/80 dark:bg-slate-950/35 px-3 py-2">

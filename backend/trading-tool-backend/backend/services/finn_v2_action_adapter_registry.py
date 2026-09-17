@@ -168,7 +168,7 @@ class FinnV2ActionAdapterRegistry:
             strategy_payload,
             raw_payload,
             user_id,
-            allow_incomplete_trade_draft=True,
+            allow_incomplete_trade_draft=False,
         )
 
     async def _update_strategy(self, user_id: int, payload: dict) -> dict:

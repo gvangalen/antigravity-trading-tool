@@ -87,7 +87,7 @@ def test_declassified_strategy_create_prompt_collects_manual_mode_and_amount():
         "execution_mode": "fixed",
         "base_amount": 100.0,
     }
-    assert resolved.missing_required_inputs == []
+    assert resolved.missing_required_inputs == ["name", "entry", "stop_loss", "targets", "risk_profile"]
 
 
 def test_declassified_strategy_and_bot_updates_parse_set_field_op_value_without_ids():
@@ -166,6 +166,7 @@ def test_german_fixed_strategy_sentence_collects_contract_required_inputs():
     (
         ("update_setup", "Update my setup and set its timeframe to 1 hour.", {"timeframe": "1H"}),
         ("update_setup", "Aktualisiere mein Setup und setze den Zeitrahmen auf 1 Stunde.", {"timeframe": "1H"}),
+        ("update_setup", "Wijzig setup FINN DCA Flow 0917 naar timeframe 1D.", {"timeframe": "1D"}),
         ("update_strategy", "Aktualisiere meine Strategie und setze den Basisbetrag auf 120 Euro.", {"base_amount": 120}),
     ),
 )
@@ -177,6 +178,18 @@ def test_natural_update_clauses_use_existing_domain_field_keys(operation_id, mes
     )
 
     assert collected["changed_fields"] == expected
+
+
+def test_numeric_suffix_with_leading_zero_remains_part_of_natural_strategy_name():
+    contract = FinnV2OperationRegistry().require_supported("delete_strategy")
+
+    collected = FinnV2OperationStateService().explicit_inputs(
+        contract=contract,
+        message="Verwijder strategie FINN Trend Strategy 0917.",
+        explicit_asset=None,
+    )
+
+    assert "strategy_id" not in collected
 
 
 def test_guided_state_keeps_optional_inputs_declared_by_the_action_contract():
@@ -192,7 +205,9 @@ def test_guided_state_keeps_optional_inputs_declared_by_the_action_contract():
     )
 
     assert state.collected_inputs == {"setup_id": 42, "name": "ETH swing"}
-    assert state.missing_required_inputs == ["execution_mode", "base_amount"]
+    assert state.missing_required_inputs == [
+        "execution_mode", "base_amount", "entry", "stop_loss", "targets", "risk_profile"
+    ]
 
 
 def test_cross_conversation_action_result_fills_only_contract_declared_parent_slot():
@@ -218,7 +233,7 @@ def test_cross_conversation_action_result_fills_only_contract_declared_parent_sl
         "execution_mode": "fixed",
         "base_amount": 100.0,
     }
-    assert state.missing_required_inputs == []
+    assert state.missing_required_inputs == ["name", "entry", "stop_loss", "targets", "risk_profile"]
 
 
 def test_parent_action_result_continues_a_downstream_delete_without_injecting_ids():
@@ -242,6 +257,90 @@ def test_parent_action_result_continues_a_downstream_delete_without_injecting_id
     )
 
     assert state.collected_inputs == {"strategy_id": 54}
+    assert state.missing_required_inputs == []
+
+
+@pytest.mark.parametrize(
+    "message",
+    (
+        "Maak strategie Momentum met entry 62000, stop-loss 59800, targets 64500 en 67000 en risicoprofiel defensief.",
+        "Create strategy Momentum with entry 62000, stop loss 59800, targets 64500 and 67000 and risk profile defensive.",
+        "Erstelle Strategie Momentum mit Einstieg 62000, Stop-Loss 59800, Ziele 64500 und 67000 und Risikoprofil defensiv.",
+    ),
+)
+def test_create_strategy_extracts_explicit_trade_contract_fields(message):
+    service = FinnV2OperationStateService()
+    contract = FinnV2OperationRegistry().require_supported("create_strategy")
+
+    state = service.resolve(
+        contract=contract,
+        message=message,
+        explicit_asset=None,
+        conversation_context={},
+        supplied_inputs={"setup_id": 42, "name": "Momentum", "execution_mode": "fixed", "base_amount": 100},
+    )
+
+    assert state.collected_inputs["entry"] == 62000.0
+    assert state.collected_inputs["stop_loss"] == 59800.0
+    assert state.collected_inputs["targets"] == [64500.0, 67000.0]
+    assert state.collected_inputs["risk_profile"]
+    assert state.missing_required_inputs == []
+
+
+def test_strategy_guided_slot_reply_preserves_prior_contract_inputs():
+    service = FinnV2OperationStateService()
+    contract = FinnV2OperationRegistry().require_supported("create_strategy")
+    context = {
+        "operation_state": {
+            "operation_id": "create_strategy",
+            "contract_version": contract.version,
+            "state_revision": 4,
+            "collected_inputs": {
+                "setup_id": 42,
+                "name": "Momentum",
+                "execution_mode": "fixed",
+                "base_amount": 100,
+                "entry": 62000,
+                "stop_loss": 59800,
+            },
+            "input_sources": {},
+            "resolved_entities": {},
+            "target_entities": {},
+            "missing_required_inputs": ["targets", "risk_profile"],
+            "next_missing_input": "targets",
+        }
+    }
+
+    state = service.resolve(
+        contract=contract,
+        message="64500 en 67000",
+        explicit_asset=None,
+        conversation_context=context,
+    )
+
+    assert state.collected_inputs["base_amount"] == 100
+    assert state.collected_inputs["targets"] == [64500.0, 67000.0]
+    assert state.missing_required_inputs == ["risk_profile"]
+
+
+def test_compound_german_strategy_does_not_parse_namespaced_name_as_target_or_risk():
+    service = FinnV2OperationStateService()
+    contract = FinnV2OperationRegistry().require_supported("create_strategy")
+    state = service.resolve(
+        contract=contract,
+        message=(
+            "Erstelle dafuer eine fixed Strategie mit einem Grundbetrag von 100 Euro, "
+            "Einstieg 62, Stop-Loss 59, Zielen 65 und 68, Risikoprofil defensiv "
+            "und dem Namen Chain Strategy visiblecore-1789631146."
+        ),
+        explicit_asset=None,
+        conversation_context={},
+        supplied_inputs={"setup_id": 42},
+    )
+
+    assert state.collected_inputs["targets"] == [65.0, 68.0]
+    assert state.collected_inputs["risk_profile"] == "defensiv"
+    assert state.collected_inputs["name"] == "Chain Strategy visiblecore-1789631146"
     assert state.missing_required_inputs == []
 
 
@@ -355,7 +454,7 @@ def test_create_strategy_canonicalizes_a_natural_german_base_amount():
 
     assert state.collected_inputs["execution_mode"] == "fixed"
     assert state.collected_inputs["base_amount"] == 100.0
-    assert state.missing_required_inputs == []
+    assert state.missing_required_inputs == ["name", "entry", "stop_loss", "targets", "risk_profile"]
 
 
 def test_create_strategy_uses_the_shared_german_name_introducer_without_prefix_truncation():

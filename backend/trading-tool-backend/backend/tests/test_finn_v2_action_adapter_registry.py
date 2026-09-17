@@ -64,7 +64,7 @@ def test_create_strategy_adapter_delegates_to_existing_strategy_service():
 
     assert result["setup_id"] == 12
     assert result["user_id"] == 390
-    assert result["allow_incomplete_trade_draft"] is True
+    assert result["allow_incomplete_trade_draft"] is False
 
 
 def test_update_strategy_normalizes_natural_execution_mode_before_persistence():

@@ -80,6 +80,13 @@ def test_request_plan_requires_a_clarification_when_a_reference_has_no_verified_
     assert "conversation_reference_without_verified_context" in analysis.unresolved_signals
 
 
+def test_request_analysis_does_not_treat_namespaced_strategy_name_as_database_id():
+    analysis = ANALYSIS.analyze(message="Verwijder strategie FINN Trend Strategy 0917.")
+
+    assert analysis.request_plan.operation_id == "delete_strategy"
+    assert analysis.explicit_strategy_id is None
+
+
 @pytest.mark.parametrize("message", [
     "Welke asset bekijk ik nu?",
     "Waar staat mijn huidige workspace op?",

@@ -289,7 +289,11 @@ class FinnV2OperationStateService:
             if not field.endswith("_id") or field in values:
                 continue
             label = re.escape(field[:-3]).replace("_", r"\s*")
-            identifier = re.search(rf"\b{label}(?:\s*(?:id|nummer|number))?\s*#?\s*(\d+)\b", text, re.IGNORECASE)
+            identifier = re.search(
+                rf"\b{label}(?:\s*(?:id|nummer|number))?\s*#?\s*((?!0\d)\d+)\b",
+                text,
+                re.IGNORECASE,
+            )
             if identifier:
                 values[field] = int(identifier.group(1))
         if {"indicator", "category"}.intersection(accepted_inputs):
@@ -406,10 +410,12 @@ class FinnV2OperationStateService:
                 values["base_amount"] = float((amount_match.group(1) or amount_match.group(2)).replace(",", "."))
             if str(values.get("execution_mode") or "").startswith("automatis"):
                 values["execution_mode"] = "fixed"
+            strategy_values = self._strategy_trade_inputs(text)
+            values.update({key: value for key, value in strategy_values.items() if key in accepted_inputs})
         elif contract.operation_id in {"update_setup", "update_strategy"}:
             entity = "setup" if contract.operation_id == "update_setup" else "strategy"
             identifier = re.search(
-                rf"\b{entity}(?:\s*(?:id|nummer|number))?\s*#?\s*(\d+)\b",
+                rf"\b{entity}(?:\s*(?:id|nummer|number))?\s*#?\s*((?!0\d)\d+)\b",
                 text,
                 re.IGNORECASE,
             )
@@ -459,7 +465,60 @@ class FinnV2OperationStateService:
             return FinnV2SetupInputCatalog.timeframe_from_text(value)
         if field == "setup_type":
             return FinnV2SetupInputCatalog.setup_type_from_text(value)
+        if contract.operation_id == "create_strategy":
+            parsed = self._strategy_trade_inputs(value, requested_field=field)
+            if field in parsed:
+                return parsed[field]
+            if field in {"entry", "stop_loss", "base_amount"}:
+                number = re.search(r"-?\d+(?:[.,]\d+)?", value)
+                return float(number.group(0).replace(",", ".")) if number else None
+            if field == "targets":
+                numbers = re.findall(r"\d+(?:[.,]\d+)?", value)
+                return [float(number.replace(",", ".")) for number in numbers] or None
+            if field == "risk_profile":
+                return value
         return None
+
+    @classmethod
+    def _strategy_trade_inputs(
+        cls,
+        text: str,
+        *,
+        requested_field: Optional[str] = None,
+    ) -> dict[str, object]:
+        """Extract only explicitly stated strategy contract fields."""
+        values: dict[str, object] = {}
+        patterns = {
+            "entry": r"\b(?:entry|instap(?:prijs)?|einstieg(?:spreis)?)\s*(?:is|:|=|op|at|bei)?\s*(\d+(?:[.,]\d+)?)",
+            "stop_loss": r"\b(?:stop[- ]?loss|stop|invalidatie|invalidation|invalidierung)\s*(?:is|:|=|op|at|bei)?\s*(\d+(?:[.,]\d+)?)",
+            "base_amount": r"\b(?:base\s*amount|basisinleg|basis\s*bedrag|basisbetrag|grundbetrag|bedrag)\s*(?:is|:|=|van|of|von)?\s*(?:€|eur)?\s*(\d+(?:[.,]\d+)?)",
+        }
+        for field, pattern in patterns.items():
+            match = re.search(pattern, text, re.IGNORECASE)
+            if match:
+                values[field] = float(match.group(1).replace(",", "."))
+        targets = re.search(
+            r"\b(?:targets?|koersdoelen?|take[- ]?profits?|ziele?n?)\s*"
+            r"(?:zijn|are|sind|:|=|op|at)?\s*"
+            r"([^.!?\n]+?)(?=(?:,?\s+(?:and|en|und))?\s+(?:risk|risico|risiko)|[.!?\n]|$)",
+            text,
+            re.IGNORECASE,
+        )
+        if targets:
+            numbers = re.findall(r"\d+(?:[.,]\d+)?", targets.group(1))
+            if numbers:
+                values["targets"] = [float(number.replace(",", ".")) for number in numbers]
+        risk = re.search(
+            r"\b(?:risk(?:\s*profile|\s*rule)?|risico(?:profiel|regel)?|risikoprofil)\s*(?:is|:|=)?\s*"
+            r"([^,.!?\n]+?)(?=\s+(?:and|en|und)\s+(?:(?:the|de|dem)\s+)?(?:name|naam|namen)|[,.!?\n]|$)",
+            text,
+            re.IGNORECASE,
+        )
+        if risk:
+            values["risk_profile"] = risk.group(1).strip()
+        if requested_field == "name" and text.strip():
+            values["name"] = cls._name_input_from_text(text) or text.strip(" .\"'")
+        return values
 
     @staticmethod
     def _structured_changed_fields(text: str) -> dict[str, object]:
@@ -512,6 +571,7 @@ class FinnV2OperationStateService:
         structured = cls._structured_changed_fields(text)
         if structured:
             return structured
+        changes: dict[str, object] = {}
         if contract.operation_id == "update_strategy":
             mode = re.search(
                 r"\b(?:naar|to|auf)\s+(manual|handmatig|automatic|automatis\w*|fest(?:e)?|"
@@ -526,7 +586,8 @@ class FinnV2OperationStateService:
                     "fest": "fixed", "feste": "fixed", "automatic": "automatic",
                     "aangepast": "custom", "individuell": "custom", "benutzerdefiniert": "custom",
                 }.get(raw_mode, "automatic" if raw_mode.startswith("automatis") else raw_mode)
-                return {"execution_mode": canonical_mode}
+                changes["execution_mode"] = canonical_mode
+            changes.update(cls._strategy_trade_inputs(text))
         # The action contract deliberately has one ``changed_fields`` slot,
         # while the owning domain services keep their field allowlists.  Parse
         # common natural-language update clauses into those canonical domain
@@ -558,7 +619,27 @@ class FinnV2OperationStateService:
                         value = int(value)
                     elif re.fullmatch(r"\d+[.,]\d+", value):
                         value = float(value.replace(",", "."))
-                    return {field: FinnV2SetupInputCatalog.canonical_input(field, value)}
+                    changes[field] = FinnV2SetupInputCatalog.canonical_input(field, value)
+            if field in changes:
+                continue
+            # Users often name the object before the requested field, for
+            # example: "Wijzig setup My Plan naar timeframe 1D". Keep the
+            # owner-scoped object reference separate and bind only the
+            # canonical field/value tail to changed_fields.
+            object_then_field = re.search(
+                rf"\b(?:wijzig|verander|change|update|aktualisiere)\s+"
+                rf"(?:mijn|my|de|het|the|den|die|das)?\s*{re.escape(contract.domain)}\b"
+                rf"[^,.!?\n]{{0,80}}?\s+(?:naar|to|auf|als|op|on)\s+{aliases}\s+"
+                r"(?:naar|to|auf|als|op|on)?\s*[\"']?([^,.!?\n]{1,80})",
+                text,
+                re.IGNORECASE,
+            )
+            if object_then_field:
+                value = object_then_field.group(1).strip(" .\"'")
+                if value:
+                    changes[field] = FinnV2SetupInputCatalog.canonical_input(field, value)
+        if changes:
+            return changes
         # Prefer the final imperative in a natural update sentence. Object
         # names can themselves contain words such as "Update", which must
         # never become a changed-field name.

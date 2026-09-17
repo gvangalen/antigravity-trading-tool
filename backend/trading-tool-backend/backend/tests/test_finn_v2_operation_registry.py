@@ -58,7 +58,10 @@ def test_completed_v1_strategy_contract_is_a_confirmable_v2_operation():
     contract = registry.require_supported("create_strategy")
 
     assert contract.mode == "CREATE_PROPOSAL"
-    assert contract.required_inputs == ("setup_id", "execution_mode", "base_amount")
+    assert contract.required_inputs == (
+        "setup_id", "name", "execution_mode", "base_amount",
+        "entry", "stop_loss", "targets", "risk_profile",
+    )
     assert contract.execution_adapter == "create_strategy"
     assert contract.confirmation_required is True
 
@@ -83,7 +86,10 @@ def test_audited_v1_flows_resolve_only_through_the_canonical_registry():
         "evaluate_setup": ("EVALUATE", ()),
         "read_indicator_configuration": ("READ", ()),
         "evaluate_bot": ("EVALUATE", ()),
-        "create_strategy": ("CREATE_PROPOSAL", ("setup_id", "execution_mode", "base_amount")),
+        "create_strategy": (
+            "CREATE_PROPOSAL",
+            ("setup_id", "name", "execution_mode", "base_amount", "entry", "stop_loss", "targets", "risk_profile"),
+        ),
     }
 
     for operation_id, (mode, required_inputs) in expected.items():
