@@ -29,6 +29,20 @@ class FinnV2RunRepository(FinnV2RepositoryTransactionMixin):
         )
         return result.scalars().first()
 
+    async def get_active_for_conversation(self, *, conversation_id: str, user_id: int) -> Optional[FinnV2Run]:
+        terminal = {"clarification_required", "unavailable", "downgraded", "rejected", "blocked", "completed", "failed", "canceled"}
+        result = await self.session.execute(
+            select(FinnV2Run)
+            .where(
+                FinnV2Run.conversation_id == conversation_id,
+                FinnV2Run.user_id == user_id,
+                FinnV2Run.status.notin_(terminal),
+            )
+            .order_by(FinnV2Run.created_at.desc())
+            .limit(1)
+        )
+        return result.scalars().first()
+
     async def create(self, **kwargs) -> FinnV2Run:
         now = datetime.now(timezone.utc)
         row = FinnV2Run(

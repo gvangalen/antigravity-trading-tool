@@ -132,7 +132,16 @@ class FinnV2OrchestratorService:
         from backend.domain.finn_v2_operation_registry import FinnV2OperationRegistry
 
         contract = FinnV2OperationRegistry().require_supported(operation_id)
-        selectors = dict(getattr(request_plan, "referenced_entities", {}) or {})
+        operation_state = dict(getattr(request_plan, "operation_state", {}) or {})
+        collected_inputs = dict(operation_state.get("collected_inputs") or {})
+        selectors = {
+            **{
+                field: collected_inputs[field]
+                for field in ("setup_id", "strategy_id", "bot_id")
+                if collected_inputs.get(field) is not None
+            },
+            **dict(getattr(request_plan, "referenced_entities", {}) or {}),
+        }
         resolved = await self.entities.resolve_contract_reference_inputs(
             user_id=user_id,
             selector=selectors,
@@ -143,7 +152,7 @@ class FinnV2OrchestratorService:
         if not resolved:
             return analysis
         supplied = {
-            **dict(getattr(request_plan, "operation_state", {}) or {}).get("collected_inputs", {}),
+            **collected_inputs,
             **resolved,
         }
         state = self.analysis.operation_state.resolve(

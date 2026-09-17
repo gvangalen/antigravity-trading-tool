@@ -76,25 +76,20 @@ class FinnV2OperationClassificationService:
         facts = self.preprocessor.preprocess(
             message=message, workspace_hints=workspace_hints, client_context=client_context
         )
+        guided_contract = self._guided_continuation_contract(facts=facts, context=conversation_context or {})
+        if guided_contract is not None:
+            return self._result(
+                guided_contract.operation_id,
+                facts,
+                "high",
+                "guided_state",
+                (guided_contract,),
+                conversation_context=conversation_context,
+            )
         if self._is_score_explanation(message, facts):
             contract = self.registry.require_supported("explain_score")
             return self._result(
                 contract.operation_id, facts, "high", "registry_constraint", (contract,),
-                conversation_context=conversation_context,
-            )
-        if self._is_workspace_setup_field_read(
-            message=message,
-            facts=facts,
-            workspace_hints=workspace_hints,
-            client_context=client_context,
-        ):
-            contract = self.registry.require_supported("read_active_setup")
-            return self._result(
-                contract.operation_id,
-                facts,
-                "high",
-                "workspace_setup_contract",
-                (contract,),
                 conversation_context=conversation_context,
             )
         explicit_create_operation = self._explicit_guided_create_operation(message=message, facts=facts)
@@ -113,17 +108,19 @@ class FinnV2OperationClassificationService:
                 conversation_context=conversation_context,
             )
         candidates = self._selector_manifest()
-        guided_contract = self._guided_continuation_contract(facts=facts, context=conversation_context or {})
-        if guided_contract is not None:
-            # A typed answer to the one pending registry slot is not a new
-            # free-text operation. Reuse the persisted contract directly and
-            # avoid an otherwise redundant provider call on short turns.
+        if self._is_workspace_setup_field_read(
+            message=message,
+            facts=facts,
+            workspace_hints=workspace_hints,
+            client_context=client_context,
+        ):
+            contract = self.registry.require_supported("read_active_setup")
             return self._result(
-                guided_contract.operation_id,
+                contract.operation_id,
                 facts,
                 "high",
-                "guided_state",
-                (guided_contract,),
+                "workspace_setup_contract",
+                (contract,),
                 conversation_context=conversation_context,
             )
         explicit_mutation_operation = self._explicit_mutation_operation(

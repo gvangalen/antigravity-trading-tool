@@ -4511,6 +4511,7 @@ function AIAssistantContent({
   }
 
   async function handleChat(directQuery, isSilent = false, overrideContext = null) {
+    if (loading || activeStreamIdRef.current) return;
     const nextQuery = directQuery !== undefined ? directQuery : activeQuery;
     if (!nextQuery.trim()) return;
     if (shouldBlockFinnSubmission({ isAuthenticated: Boolean(user?.id), assetStatus })) {
@@ -7084,6 +7085,7 @@ function AIAssistantContent({
               updateQuery(e.target.value);
             }}
             onKeyDown={(event) => {
+              if (loading || activeStreamIdRef.current) return;
               if (!hasActiveFinnV2GuidedTurn && isSimpleFinnModal && commandCenterRef.current?.handleKeyDown(event)) return;
               if (event.key === "Enter") handleChat();
             }}

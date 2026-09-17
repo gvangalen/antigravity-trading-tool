@@ -77,7 +77,7 @@ def test_strategy_inputs_are_collected_against_the_registry_contract():
 
     collected = state.explicit_inputs(
         contract=contract,
-        message="Maak een fixed strategie voor setup 42; bedrag: 250; name: ETH swing.",
+        message="Maak een fixed strategie voor setup id 42; bedrag: 250; name: ETH swing.",
         explicit_asset="ETH",
     )
 
@@ -241,7 +241,7 @@ def test_guided_state_keeps_optional_inputs_declared_by_the_action_contract():
 
     state = service.resolve(
         contract=contract,
-        message="maak een strategie voor setup 42",
+        message="maak een strategie voor setup id 42",
         explicit_asset=None,
         conversation_context={},
         supplied_inputs={"name": "ETH swing", "unknown": "discard"},
@@ -393,13 +393,13 @@ def test_update_flow_collects_only_an_explicit_typed_changed_fields_object():
 
     typed = service.resolve(
         contract=contract,
-        message='Wijzig setup 42 met {"timeframe": "4h", "name": "ETH swing"}',
+        message='Wijzig setup id 42 met {"timeframe": "4h", "name": "ETH swing"}',
         explicit_asset=None,
         conversation_context={},
     )
     prose = service.resolve(
         contract=contract,
-        message="Wijzig setup 42 zodat hij beter wordt",
+        message="Wijzig setup id 42 zodat hij beter wordt",
         explicit_asset=None,
         conversation_context={},
     )
@@ -419,7 +419,7 @@ def test_update_flow_collects_an_explicit_natural_field_value_without_a_second_s
 
     state = service.resolve(
         contract=contract,
-        message="Wijzig setup 42 timeframe naar 4H",
+        message="Wijzig setup id 42 naar timeframe 4H",
         explicit_asset=None,
         conversation_context={},
     )
@@ -475,7 +475,7 @@ def test_bot_name_uses_the_same_contract_slot_parser_as_setup_names():
 
     state = service.resolve(
         contract=contract,
-        message="Maak een bot voor strategy 52 met de naam Paper Scout",
+        message="Maak een bot voor strategy id 52 met de naam Paper Scout",
         explicit_asset=None,
         conversation_context={},
     )

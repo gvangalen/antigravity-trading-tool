@@ -725,21 +725,33 @@ class FinnV2RequestAnalysisService:
 
     @staticmethod
     def _extract_quoted_entity_name(original: str, keyword_root: str) -> Optional[str]:
-        """Extract an explicit, user-quoted owner-scoped object name.
+        """Extract an explicit owner-scoped object name.
 
-        Names are intentionally accepted only when quoted. This keeps ordinary
-        prose from becoming an implicit object selector while allowing a user
-        to address an existing setup, strategy or bot without knowing its ID.
-        Ownership and ambiguity are enforced later by the entity resolver.
+        Quoted names remain the least ambiguous form. Natural relation clauses
+        are also accepted when their boundary is explicit (for example
+        ``voor setup NAME en ...``). This lets users address persisted objects
+        without knowing IDs or punctuation while keeping trailing instructions
+        out of the selector. Ownership and ambiguity are enforced later by the
+        entity resolver.
         """
         match = re.search(
             rf"\b{keyword_root}[a-z]*\s+[\"'“]([^\"'”]{{1,128}})[\"'”]",
             original,
             re.IGNORECASE,
         )
-        if not match:
+        if match:
+            name = re.sub(r"\s+", " ", match.group(1)).strip()
+            return name or None
+
+        natural = re.search(
+            rf"\b(?:voor|for|für|fur|aan|to|mit)\s+(?:de|het|the|der|die|das)?\s*"
+            rf"{keyword_root}[a-z]*\s+(.{{1,128}}?)(?=\s+(?:en|and|und|met|with|mit)\s+|[,.;!?]|$)",
+            original,
+            re.IGNORECASE,
+        )
+        if not natural:
             return None
-        name = re.sub(r"\s+", " ", match.group(1)).strip()
+        name = re.sub(r"\s+", " ", natural.group(1)).strip()
         return name or None
 
     def _normalize_text(self, text: str) -> str:

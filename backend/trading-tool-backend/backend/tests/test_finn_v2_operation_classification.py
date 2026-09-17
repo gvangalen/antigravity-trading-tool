@@ -624,12 +624,123 @@ def test_guided_strategy_requested_slot_cannot_overwrite_a_previous_amount():
         message="Entry rond 76000 euro",
         explicit_asset=None,
         conversation_context=context,
+        supplied_inputs={"entry": 76000.0, "base_amount": 76000.0},
     )
 
     assert state.collected_inputs["base_amount"] == 100.0
     assert state.collected_inputs["entry"] == 76000.0
     assert state.next_missing_input == "stop_loss"
     assert state.input_provenance["entry"] == {"source": "explicit", "state_revision": 5}
+
+
+def test_guided_strategy_entry_precedes_workspace_setup_field_read():
+    registry = FinnV2OperationRegistry()
+    contract = registry.require_supported("create_strategy")
+    context = {
+        "conversation_state_version": FinnV2OperationStateService.CONTEXT_STATE_VERSION,
+        "active_guided_operation": {
+            "operation_id": "create_strategy",
+            "contract_version": contract.version,
+            "state_revision": 4,
+            "collected_inputs": {
+                "setup_id": 12,
+                "name": "Rustige groei",
+                "execution_mode": "fixed",
+                "base_amount": 100.0,
+            },
+            "input_sources": {"base_amount": "explicit"},
+            "missing_required_inputs": ["entry", "stop_loss", "targets", "risk_profile"],
+            "next_missing_input": "entry",
+        },
+    }
+
+    result = CLASSIFIER.classify(
+        message="Entry rond 76000 euro",
+        conversation_context=context,
+        workspace_hints={"setup_id": 12, "asset": "BTC"},
+    )
+
+    assert result.operation_id == "create_strategy"
+    assert result.selector_source == "guided_state"
+
+
+def test_strategy_stop_loss_is_not_a_guided_cancel_intent():
+    service = FinnV2OperationStateService()
+
+    assert service.is_cancel_intent("Stop-loss op 72000 euro") is False
+    assert service.is_cancel_intent("stop hiermee") is True
+
+
+def test_natural_setup_name_suffix_is_not_an_internal_id():
+    service = FinnV2OperationStateService()
+    contract = FinnV2OperationRegistry().require_supported("update_setup")
+
+    values = service.explicit_inputs(
+        contract=contract,
+        message="Pas setup FINN Flow Setup 1655 aan naar timeframe 1D.",
+        explicit_asset=None,
+    )
+
+    assert "setup_id" not in values
+    assert values["changed_fields"] == {"timeframe": "1D"}
+
+
+def test_guided_targets_turn_cannot_change_existing_strategy_slots():
+    registry = FinnV2OperationRegistry()
+    contract = registry.require_supported("create_strategy")
+    service = FinnV2OperationStateService()
+    context = {
+        "conversation_state_version": service.CONTEXT_STATE_VERSION,
+        "active_guided_operation": {
+            "operation_id": "create_strategy",
+            "contract_version": contract.version,
+            "state_revision": 6,
+            "collected_inputs": {"setup_id": 12, "name": "Plan", "execution_mode": "fixed", "base_amount": 100.0, "entry": 76000.0, "stop_loss": 72000.0},
+            "missing_required_inputs": ["targets", "risk_profile"],
+            "next_missing_input": "targets",
+        },
+    }
+
+    state = service.resolve(
+        contract=contract,
+        message="Targets op 83000 en 87000 euro",
+        explicit_asset=None,
+        conversation_context=context,
+        supplied_inputs={"base_amount": 87000.0, "entry": 83000.0, "targets": [83000.0, 87000.0]},
+    )
+
+    assert state.collected_inputs["base_amount"] == 100.0
+    assert state.collected_inputs["entry"] == 76000.0
+    assert state.collected_inputs["targets"] == [83000.0, 87000.0]
+
+
+def test_guided_explicit_correction_changes_only_named_existing_slot():
+    registry = FinnV2OperationRegistry()
+    contract = registry.require_supported("create_strategy")
+    service = FinnV2OperationStateService()
+    context = {
+        "conversation_state_version": service.CONTEXT_STATE_VERSION,
+        "active_guided_operation": {
+            "operation_id": "create_strategy",
+            "contract_version": contract.version,
+            "state_revision": 6,
+            "collected_inputs": {"setup_id": 12, "name": "Plan", "execution_mode": "fixed", "base_amount": 100.0, "entry": 76000.0},
+            "missing_required_inputs": ["stop_loss", "targets", "risk_profile"],
+            "next_missing_input": "stop_loss",
+        },
+    }
+
+    state = service.resolve(
+        contract=contract,
+        message="Maak het bedrag toch 150 euro",
+        explicit_asset=None,
+        conversation_context=context,
+        supplied_inputs={"base_amount": 150.0, "entry": 150.0},
+    )
+
+    assert state.collected_inputs["base_amount"] == 150.0
+    assert state.collected_inputs["entry"] == 76000.0
+    assert state.next_missing_input == "stop_loss"
 
 
 def test_guided_bot_name_with_action_word_keeps_the_active_contract():

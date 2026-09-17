@@ -1253,6 +1253,69 @@ def test_off_topic_boundary_follow_up_keeps_only_a_safe_terminal_reference(monke
     }
 
 
+def test_natural_relation_clause_extracts_existing_setup_name_without_id_or_quotes(monkeypatch):
+    service = FinnV2RequestAnalysisService()
+    monkeypatch.setattr(
+        service.classifier,
+        "classify",
+        lambda **_kwargs: SemanticOperationClassification(
+            operation_id="create_strategy",
+            action="create",
+            domain="strategy",
+            discourse="request",
+            confidence="high",
+            selector_source="structured",
+        ),
+    )
+
+    for message in (
+        "Maak een strategie voor setup FINN Flow Setup 1655 en stel vragen.",
+        "Create a strategy for setup FINN Flow Setup 1655 and ask questions.",
+        "Erstelle eine Strategie für Setup FINN Flow Setup 1655 und stelle Fragen.",
+    ):
+        analysis = service.analyze(message=message)
+        assert analysis.explicit_setup_name == "FINN Flow Setup 1655"
+        assert analysis.request_plan.operation_state["collected_inputs"].get("setup_id") is None
+
+
+def test_short_strategy_follow_up_retains_persisted_setup_id(monkeypatch):
+    service = FinnV2RequestAnalysisService()
+    monkeypatch.setattr(
+        service.classifier,
+        "classify",
+        lambda **_kwargs: SemanticOperationClassification(
+            operation_id="create_strategy",
+            action="create",
+            domain="strategy",
+            discourse="contextual_follow_up",
+            confidence="high",
+            selector_source="guided_state",
+        ),
+    )
+
+    analysis = service.analyze(
+        message="FINN Guided Strategy 1655",
+        conversation_context={
+            "conversation_state_version": "2026-09-04.contract-authority.v1",
+            "active_guided_operation": {
+                "operation_id": "create_strategy",
+                "contract_version": "2026-08-23.operation-contracts.v1",
+                "state_revision": 1,
+                "collected_inputs": {"setup_id": 6, "symbol": "BTC"},
+                "input_sources": {"setup_id": "explicit", "symbol": "explicit"},
+                "input_provenance": {},
+                "resolved_entities": {},
+                "target_entities": {},
+                "missing_required_inputs": ["name"],
+                "next_missing_input": "name",
+                "status": "collecting",
+            },
+        },
+    )
+
+    assert analysis.request_plan.operation_state["collected_inputs"]["setup_id"] == 6
+    assert analysis.request_plan.operation_state["collected_inputs"]["name"] == "FINN Guided Strategy 1655"
+
 def test_concrete_bot_follow_up_can_use_degraded_scope_without_promoting_conclusion(monkeypatch):
     service = FinnV2RequestAnalysisService()
     monkeypatch.setattr(
@@ -1323,3 +1386,16 @@ def test_contextual_action_result_is_projected_as_typed_contract_lineage(monkeyp
     assert analysis.request_plan.operation_id == "create_strategy"
     assert analysis.request_plan.conversation_reference == "run-setup-update"
     assert analysis.request_plan.conversation_reference_kind == "previous_action_result"
+
+
+def test_setup_relation_name_stops_before_execution_details():
+    service = FinnV2RequestAnalysisService()
+
+    analysis = service.analyze(
+        message=(
+            "Maak een strategie genaamd Guided Boundary Strategy voor setup "
+            "FINN Flow Setup 1655 met Fixed uitvoering en 100 euro per keer."
+        )
+    )
+
+    assert analysis.explicit_setup_name == "FINN Flow Setup 1655"

@@ -11,6 +11,7 @@ from time import monotonic
 from typing import Any, Dict, Optional
 
 from fastapi import HTTPException
+from sqlalchemy import text
 from sqlalchemy.inspection import inspect as sa_inspect
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -91,6 +92,18 @@ class FinnV2GatewayService:
                 extra={"user_id": user_id, "transport": request.transport, "idempotency_hit": True},
             )
             return existing
+
+        bind = getattr(self.session, "bind", None)
+        if getattr(getattr(bind, "dialect", None), "name", None) == "postgresql":
+            await self.session.execute(
+                text("SELECT pg_advisory_xact_lock(hashtext(:conversation_id))"),
+                {"conversation_id": conversation.id},
+            )
+        active_run = await self.runs.get_active_for_conversation(
+            conversation_id=conversation.id, user_id=user_id
+        )
+        if active_run is not None:
+            raise HTTPException(status_code=409, detail="finn_conversation_turn_in_progress")
 
         redacted_workspace_hints = self._redact_hint_map(request.workspace_hints)
         redacted_client_context = self._redact_hint_map(request.client_context)

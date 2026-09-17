@@ -34,6 +34,7 @@ class _FakeConversationRepo:
 class _FakeRunRepo:
     def __init__(self, _session):
         self.rows = {}
+        self.active_run = None
 
     async def get_by_idempotency_key_for_user(self, *, idempotency_key, user_id):
         row = self.rows.get((user_id, idempotency_key))
@@ -43,6 +44,12 @@ class _FakeRunRepo:
         for row in self.rows.values():
             if row.id == run_id and row.user_id == user_id:
                 return row
+        return None
+
+    async def get_active_for_conversation(self, *, conversation_id, user_id):
+        row = self.active_run
+        if row and row.conversation_id == conversation_id and row.user_id == user_id:
+            return row
         return None
 
 
@@ -236,3 +243,34 @@ def test_gateway_server_side_idempotency_key_is_stable():
 
     assert first == second
     assert first != third
+
+
+def test_gateway_rejects_a_second_active_turn_in_the_same_conversation(monkeypatch):
+    monkeypatch.setattr(gateway_module, "FinnV2ConversationRepository", _FakeConversationRepo)
+    monkeypatch.setattr(gateway_module, "FinnV2RunRepository", _FakeRunRepo)
+    monkeypatch.setattr(gateway_module, "FinnV2RunService", _FakeRunService)
+    monkeypatch.setattr(gateway_module.run_rate_limiter, "check_rate_limit", lambda *args, **kwargs: None)
+
+    service = gateway_module.FinnV2GatewayService(session=object())
+    monkeypatch.setattr(service.flags, "resolve_mode", lambda _user_id: "visible_runtime")
+    monkeypatch.setattr(service.flags, "allows_transport", lambda _transport: True)
+    monkeypatch.setattr(service.flags, "max_runs_per_minute", lambda: 20)
+    service.conversations.rows["conv-guided"] = SimpleNamespace(
+        id="conv-guided", user_id=7, context={}, last_run_id="run-active"
+    )
+    service.runs.active_run = SimpleNamespace(
+        id="run-active", conversation_id="conv-guided", user_id=7, status="reasoning"
+    )
+
+    with pytest.raises(HTTPException) as exc:
+        asyncio.run(service.create_run(
+            user_id=7,
+            request=AgentRunRequest(message="Stop-loss op 72000", conversation_id="conv-guided"),
+            request_path="/api/assistant/v2/runs",
+            request_id="request-overlap",
+            trace_id="trace-overlap",
+        ))
+
+    assert exc.value.status_code == 409
+    assert exc.value.detail == "finn_conversation_turn_in_progress"
+    assert service.run_service.created == []

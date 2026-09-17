@@ -46,23 +46,52 @@ class FinnV2OperationStateService:
         # Only values proven by request parsing may be promoted to supplied
         # inputs. Typed selector values are passed separately so a later
         # projection cannot silently overwrite a user-supplied slot.
-        explicit = self.explicit_inputs(
-            contract=contract,
-            message=message,
-            explicit_asset=contract_asset,
-            continuation=existing is not None,
-            requested_slot=requested_slot,
-        )
+        is_slot_turn = existing is not None and bool(requested_slot)
+        is_correction = is_slot_turn and self._is_explicit_correction(message)
+        if is_slot_turn and is_correction:
+            explicit = self._explicit_correction_inputs(
+                contract=contract, message=message, accepted_inputs=set(contract.input_fields)
+            )
+        elif is_slot_turn:
+            slot_value = (
+                contract_asset
+                if requested_slot in {"asset", "symbol"} and contract_asset
+                else self._requested_slot_value(
+                    field=str(requested_slot), text=message, contract=contract
+                )
+            )
+            explicit = {str(requested_slot): slot_value} if slot_value is not None else {}
+        else:
+            explicit = self.explicit_inputs(
+                contract=contract,
+                message=message,
+                explicit_asset=contract_asset,
+                continuation=existing is not None,
+                requested_slot=requested_slot,
+            )
         # Keep the literal spelling of a user-provided value. The semantic
         # projection may normalize an equivalent value for matching, but it
         # must not overwrite a typed setup name with that normalized form.
         accepted_inputs = set(contract.input_fields)
+        permits_existing_field_changes = self._is_explicit_correction(message)
         for key, value in (supplied_inputs or {}).items():
+            if is_slot_turn:
+                continue
             if (
                 existing is not None
                 and requested_slot not in {"asset", "symbol"}
                 and key in {"asset", "symbol"}
             ):
+                continue
+            if (
+                existing is not None
+                and key in collected
+                and key != requested_slot
+                and not permits_existing_field_changes
+            ):
+                # The model output is a candidate extraction. During a typed
+                # guided turn it cannot reinterpret a number for the pending
+                # slot as a replacement for an already persisted field.
                 continue
             if key in accepted_inputs and not self._is_missing(value):
                 explicit.setdefault(key, self._canonical_input(key, value))
@@ -231,8 +260,14 @@ class FinnV2OperationStateService:
 
     @staticmethod
     def is_cancel_intent(message: str) -> bool:
-        words = set(re.findall(r"\w+", str(message or "").casefold()))
-        return bool(words.intersection({"annuleer", "annuleren", "cancel", "stop", "stoppen"}))
+        text = str(message or "").strip().casefold()
+        if re.search(r"\bstop[- ]?loss\b", text):
+            return False
+        return bool(re.fullmatch(
+            r"(?:annuleer|annuleren|cancel)(?:\s+(?:dit|deze|het|the|voorstel|proposal))*[.!?]?|"
+            r"(?:stop|stoppen)(?:\s+(?:met\s+)?(?:dit|deze|hiermee|strategie|strategy|flow|maar|please|aub))*[.!?]?",
+            text,
+        ))
 
     @staticmethod
     def _registry_contract(operation_id: str) -> OperationContract:
@@ -302,16 +337,19 @@ class FinnV2OperationStateService:
                 continue
             label = re.escape(field[:-3]).replace("_", r"\s*")
             identifier = re.search(
-                rf"(?:\b{label}(?:\s*(?:id|nummer|number)\s*#?|\s*#)\s*((?!0\d)\d+)\b|"
-                rf"\b(?:voor|for|für|fuer|aan|to|mit)\s+(?:de|het|the|den|die|das)?\s*{label}\s+"
-                rf"((?!0\d)\d+)\b|"
-                rf"\b(?:deactiveer|deactivate|deaktiviere|verwijder|delete|loesche|lösche|wijzig|update|"
-                rf"change|aktualisiere)\s+(?:de|het|the|den|die|das)?\s*{label}\s+((?!0\d)\d+)\b)",
+                rf"\b{label}(?:\s*(?:id|nummer|number)\s*#?|\s*#)\s*((?!0\d)\d+)\b",
                 text,
                 re.IGNORECASE,
             )
+            if identifier is None:
+                identifier = re.fullmatch(
+                    rf"(?:deactiveer|deactivate|deaktiviere|verwijder|delete|loesche|lösche|wijzig|update|"
+                    rf"change|aktualisiere)\s+(?:de|het|the|den|die|das)?\s*{label}\s+((?!0\d)\d+)[.!?]?",
+                    text.strip(),
+                    re.IGNORECASE,
+                )
             if identifier:
-                values[field] = int(identifier.group(1) or identifier.group(2) or identifier.group(3))
+                values[field] = int(identifier.group(1))
         if {"indicator", "category"}.intersection(accepted_inputs):
             indicator = self._indicator_input_from_text(text)
             if indicator is not None:
@@ -401,9 +439,6 @@ class FinnV2OperationStateService:
         elif contract.operation_id in {"watchlist_add", "watchlist_remove"} and explicit_asset:
             values["asset"] = explicit_asset
         elif contract.operation_id == "create_strategy":
-            setup_match = re.search(r"\bsetup(?:\s*(?:id|nummer|number))?\s*#?\s*(\d+)\b", text, re.IGNORECASE)
-            if setup_match:
-                values["setup_id"] = int(setup_match.group(1))
             mode_match = re.search(
                 r"\b(fixed|vast|standaard|manual|handmatig|automatic|automatis\w*|fest(?:e)?|"
                 r"custom|aangepast|individuell|benutzerdefiniert)\b",
@@ -431,7 +466,7 @@ class FinnV2OperationStateService:
         elif contract.operation_id in {"update_setup", "update_strategy"}:
             entity = "setup" if contract.operation_id == "update_setup" else "strategy"
             identifier = re.search(
-                rf"\b{entity}(?:\s*(?:id|nummer|number))?\s*#?\s*((?!0\d)\d+)\b",
+                rf"\b{entity}(?:\s*(?:id|nummer|number)\s*#?|\s*#)\s*((?!0\d)\d+)\b",
                 text,
                 re.IGNORECASE,
             )
@@ -466,6 +501,39 @@ class FinnV2OperationStateService:
             if any(marker in lowered for marker in markers)
         }
         return not mentioned or mentioned == {requested_slot}
+
+    @staticmethod
+    def _is_explicit_correction(text: str) -> bool:
+        return bool(re.search(
+            r"\b(?:corrigeer|correct|correctie|wijzig|verander|pas\s+aan|update|change|"
+            r"ändern|aendere|korrigiere|aktualisiere)\b|\bmaak\b.+\btoch\b",
+            str(text or "").casefold(),
+        ))
+
+    @classmethod
+    def _explicit_correction_inputs(
+        cls, *, contract: OperationContract, message: str, accepted_inputs: set[str]
+    ) -> dict[str, object]:
+        text = str(message or "")
+        aliases = (
+            ("base_amount", r"(?:basisinleg|basisbedrag|bedrag|inleg|amount|betrag)"),
+            ("entry", r"(?:entry|instap|einstieg)"),
+            ("stop_loss", r"(?:stop[- ]?loss|invalidatie|invalidation|invalidierung)"),
+            ("targets", r"(?:targets?|doelen?|take[- ]?profit|ziele?)"),
+            ("risk_profile", r"(?:risico|risk|risiko)"),
+        )
+        for field, alias in aliases:
+            if field not in accepted_inputs or not re.search(rf"\b{alias}\b", text, re.IGNORECASE):
+                continue
+            if field == "targets":
+                numbers = re.findall(r"\d+(?:[.,]\d+)?", text)
+                return {field: [float(number.replace(",", ".")) for number in numbers]} if numbers else {}
+            if field == "risk_profile":
+                tail = re.split(alias, text, maxsplit=1, flags=re.IGNORECASE)[-1].strip(" .,:;-")
+                return {field: tail} if tail else {}
+            number = re.search(r"\d+(?:[.,]\d+)?", text)
+            return {field: float(number.group(0).replace(",", "."))} if number else {}
+        return {}
 
     def _requested_slot_value(self, *, field: str, text: str, contract: OperationContract) -> Optional[object]:
         """Canonicalize only the registry slot that the user was asked for."""
@@ -506,6 +574,20 @@ class FinnV2OperationStateService:
             return FinnV2SetupInputCatalog.timeframe_from_text(value)
         if field == "setup_type":
             return FinnV2SetupInputCatalog.setup_type_from_text(value)
+        if field == "execution_mode":
+            lowered = value.casefold()
+            if re.search(r"\b(?:fixed|vast|standaard|manual|handmatig|fest(?:e)?)\b", lowered):
+                return "fixed"
+            if re.search(r"\b(?:custom|aangepast|individuell|benutzerdefiniert)\b", lowered):
+                return "custom"
+            if re.search(r"\b(?:automatic|automatis\w*)\b", lowered):
+                return "automatic"
+            return None
+        if field == "changed_fields":
+            changes = self._natural_changed_fields(value, contract=contract)
+            return changes or None
+        if field == "requested_change":
+            return value
         if contract.operation_id == "create_strategy":
             parsed = self._strategy_trade_inputs(value, requested_field=field)
             if field in parsed:

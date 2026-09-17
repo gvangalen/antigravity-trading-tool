@@ -355,6 +355,9 @@ class _FakeGatewayRunRepo:
     async def get_by_idempotency_key_for_user(self, *, idempotency_key, user_id):
         return None
 
+    async def get_active_for_conversation(self, *, conversation_id, user_id):
+        return None
+
 
 class _FakeGatewayRunService:
     def __init__(self, _session):
