@@ -66,6 +66,8 @@ class FinnV2OperationStateService:
                 continue
             if key in accepted_inputs and not self._is_missing(value):
                 explicit.setdefault(key, self._canonical_input(key, value))
+        if contract.operation_id == "create_bot" and explicit.get("name"):
+            explicit["name"] = self._trim_linked_strategy_clause(str(explicit["name"]))
         sources = dict(existing.input_sources) if existing is not None else {}
         collected.update(explicit)
         sources.update({key: "explicit" for key in explicit})
@@ -748,6 +750,16 @@ class FinnV2OperationStateService:
             r"(?:do\s+not|don't)\s+(?:save|write|persist)(?:\s+(?:it|the\s+setup|anything))?(?:\s+yet)?|"
             r"save\s+(?:nothing|it)|without\s+(?:saving|writing|persisting)\s+(?:it|anything)(?:\s+yet)?|"
             r"speicher\s+(?:nichts|es))\b",
+            value,
+            maxsplit=1,
+            flags=re.IGNORECASE,
+        )[0].strip(" .")
+
+    @staticmethod
+    def _trim_linked_strategy_clause(value: str) -> str:
+        """Keep a bot display name separate from its linked strategy reference."""
+        return re.split(
+            r"\s+(?:voor|for|f.r)\s+(?:de\s+|the\s+|die\s+)?(?:strategie|strategy)\b.*",
             value,
             maxsplit=1,
             flags=re.IGNORECASE,

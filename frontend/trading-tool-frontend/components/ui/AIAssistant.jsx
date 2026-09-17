@@ -4375,7 +4375,7 @@ function AIAssistantContent({
         if (error?.name !== "AbortError") console.warn("FINN V2 SSE fallback naar polling:", error);
       })
       .finally(() => { sseFinished = true; });
-    const completeTerminal = (run) => {
+    const completeTerminal = async (run) => {
       const verified = run?.response;
       const projection = run?.runtime_trace?.terminal_projection || run?.runtime_trace || {};
       const setupDraft = projection?.setup_draft || null;
@@ -4392,8 +4392,31 @@ function AIAssistantContent({
             missing_inputs: projection?.missing_inputs || [],
             requested_slot: projection?.missing_inputs?.[0] || null,
             canonical_target: projection?.canonical_target || null,
-          }
+        }
         : null);
+      let resolvedSetupName = actionDraft?.supplied_inputs?.setup_name || activeSetup?.name || null;
+      let resolvedStrategyName = actionDraft?.supplied_inputs?.strategy_name || activeBot?.strategy_name || null;
+      try {
+        if (operationId?.includes("strategy") || operationId?.includes("bot")) {
+          const [ownerSetups, ownerStrategies] = await Promise.all([fetchSetups(), fetchStrategies()]);
+          const setupId = actionDraft?.supplied_inputs?.setup_id || projection?.supplied_inputs?.setup_id;
+          const strategyId = actionDraft?.supplied_inputs?.strategy_id || projection?.supplied_inputs?.strategy_id;
+          resolvedSetupName = ownerSetups.find((item) => Number(item.id || item.setup_id) === Number(setupId))?.name || resolvedSetupName;
+          resolvedStrategyName = ownerStrategies.find((item) => Number(item.id || item.strategy_id) === Number(strategyId))?.name || resolvedStrategyName;
+        }
+      } catch (error) {
+        console.warn("FINN kon gekoppelde conceptnamen niet verversen:", error);
+      }
+      const visibleActionDraft = actionDraft
+        ? {
+            ...actionDraft,
+            supplied_inputs: {
+              ...(actionDraft.supplied_inputs || {}),
+              ...(resolvedSetupName ? { setup_name: resolvedSetupName } : {}),
+              ...(resolvedStrategyName ? { strategy_name: resolvedStrategyName } : {}),
+            },
+          }
+        : null;
       const terminalText = verified?.content || "Ik kan deze FINN V2-run nu niet veilig afronden.";
       setMessages((prev) => prev.map((message) => (
         message.streamId === streamId
@@ -4408,10 +4431,10 @@ function AIAssistantContent({
                 run_id: runId,
                 run_status: run?.status,
                 setup_draft: setupDraft,
-                action_draft: actionDraft,
+                action_draft: visibleActionDraft,
               },
               setupDraft,
-              actionDraft,
+              actionDraft: visibleActionDraft,
               reasoning: null,
               canConfirm: Boolean(verified?.confirmation_required && verified?.proposal_id),
               actions: verified?.proposal_id ? [{
@@ -4424,9 +4447,14 @@ function AIAssistantContent({
                   name: actionDraft?.supplied_inputs?.name
                     || setupDraft?.supplied_inputs?.name
                     || projection?.action_result?.canonical_name
+                    || (operationId?.includes("strategy") ? resolvedStrategyName : null)
                     || null,
-                  symbol: projection?.canonical_target || actionDraft?.supplied_inputs?.symbol || setupDraft?.supplied_inputs?.symbol || null,
-                  timeframe: actionDraft?.supplied_inputs?.timeframe || setupDraft?.supplied_inputs?.timeframe || null,
+                  symbol: projection?.canonical_target || actionDraft?.supplied_inputs?.symbol || setupDraft?.supplied_inputs?.symbol || activeSetup?.symbol || null,
+                  timeframe: actionDraft?.supplied_inputs?.timeframe || setupDraft?.supplied_inputs?.timeframe || activeSetup?.timeframe || null,
+                  setup_name: resolvedSetupName,
+                  strategy_name: resolvedStrategyName,
+                  supplied_inputs: projection?.supplied_inputs || {},
+                  changed_fields: projection?.supplied_inputs?.changed_fields || {},
                   safety_mode: operationId === "create_bot" ? "Paper · niet-live" : null,
                 },
               }] : [],
@@ -4442,7 +4470,7 @@ function AIAssistantContent({
         return;
       }
       if (sseTerminal) {
-        completeTerminal(sseTerminal);
+        await completeTerminal(sseTerminal);
         return;
       }
       try {
@@ -4453,7 +4481,7 @@ function AIAssistantContent({
           continue;
         }
 
-        completeTerminal(run);
+        await completeTerminal(run);
         sseController.abort();
         return;
       } catch (error) {
@@ -4808,14 +4836,31 @@ function AIAssistantContent({
             .trim();
           throw new Error(publicReason || execution.failure_reason || execution.status || "proposal_execution_failed");
         }
-        setMessages((prev) => [...prev, {
+        const displayContext = action.display_context || {};
+        const operationId = displayContext.operation_id || execution.operation_id || "";
+        const operationLabel = operationId.includes("bot") ? "Paper-bot" : operationId.includes("strategy") ? "Strategie" : operationId.includes("setup") ? "Setup" : "Actie";
+        const resultName = displayContext.name || execution.action_result?.canonical_name || `Je ${operationLabel.toLowerCase()}`;
+        const resultVerb = operationId.startsWith("delete_") ? "verwijderd" : operationId.startsWith("update_") || operationId === "deactivate_bot" ? "bijgewerkt" : "opgeslagen";
+        setMessages((prev) => [...prev.map((message) => {
+          const ownsProposal = (message.actions || []).some((candidate) => candidate?.proposal_id === action.proposal_id);
+          if (!ownsProposal) return message;
+          return {
+            ...message,
+            actions: [],
+            setupDraft: null,
+            actionDraft: null,
+            state: { ...(message.state || {}), setup_draft: null, action_draft: null },
+          };
+        }), {
           role: "assistant",
           text: execution.status === "already_executed"
-            ? "Dit bevestigde FINN V2-voorstel was al uitgevoerd."
-            : "Je bevestigde FINN V2-voorstel is veilig uitgevoerd.",
+            ? `${operationLabel} ‘${resultName}’ was al ${resultVerb}.`
+            : `${operationLabel} ‘${resultName}’ is ${resultVerb}.`,
           intent: "finn_v2_proposal_execution",
           isComplete: true,
         }]);
+        emitFinnRefreshSignals();
+        await Promise.all([loadInsight(), loadMissionControl()]);
         return;
       }
       const res = await executeAssistantAction(action);
@@ -4981,13 +5026,15 @@ function AIAssistantContent({
       if (!setupFound || !strategyFound || !botFound) {
         throw new Error("Aangemaakte objecten zijn nog niet terugleesbaar via de API.");
       }
+      const persistedStrategy = strategies.find((strategy) => Number(strategy.id || strategy.strategy_id) === Number(res.strategy_id));
+      const persistedBot = bots.find((bot) => Number(bot.id || bot.bot_id) === Number(res.bot_id));
 
       setMessages(prev => [...prev, {
         role: "assistant",
         text: isBotOnly
-          ? `${res.duplicate ? "Deze actie was al verwerkt. " : ""}Bot ${res.operation === "update" ? "bijgewerkt" : "aangemaakt"} en geverifieerd: bot #${res.bot_id} voor strategy #${res.strategy_id}.`
+          ? `${res.duplicate ? "Deze actie was al verwerkt. " : ""}Paper-bot ‘${persistedBot?.name || action?.payload?.name || "Nieuwe paper-bot"}’ is ${res.operation === "update" ? "bijgewerkt" : "aangemaakt"} en veilig opgeslagen.`
           : isStrategyOnly
-          ? `${res.duplicate ? "Deze actie was al verwerkt. " : ""}Strategie ${res.operation === "update" ? "bijgewerkt" : "aangemaakt"} en geverifieerd: strategy #${res.strategy_id} voor setup #${res.setup_id}.`
+          ? `${res.duplicate ? "Deze actie was al verwerkt. " : ""}Strategie ‘${persistedStrategy?.name || action?.payload?.name || "Nieuwe strategie"}’ is ${res.operation === "update" ? "bijgewerkt" : "aangemaakt"} en opgeslagen.`
           : (() => {
               const createdSetup = setups.find((setup) => Number(setup.id || setup.setup_id) === Number(res.setup_id));
               const createdName = createdSetup?.name || action?.payload?.name || "Nieuwe setup";
@@ -5023,122 +5070,84 @@ function AIAssistantContent({
     }
   };
 
-  const renderV2SetupDraftCard = (message) => {
+  const draftActionButtons = (message, messageIndex, noun) => {
+    const proposal = (message.actions || []).find((action) => action?.type === "v2_proposal");
+    if (!proposal) {
+      return (
+        <button type="button" onClick={() => commandCenterRef.current?.focus?.()} className={actionButtonStyles({ variant: "primary", className: "justify-center rounded-xl px-4 py-2.5 text-xs" })}>
+          {at("draftCards.continue", "Verder invullen")}
+        </button>
+      );
+    }
+    return (
+      <>
+        <button type="button" onClick={() => handleExecuteAction(proposal)} disabled={executingAction} className={actionButtonStyles({ variant: "primary", className: "min-w-[120px] justify-center rounded-xl px-4 py-2.5 text-xs" })}>
+          {executingAction ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle2 size={14} />} Bevestigen
+        </button>
+        <button type="button" onClick={() => handleChat(`Ik wil dit ${noun}voorstel aanpassen.`, false, message.state)} disabled={loading || executingAction} className="rounded-xl px-3 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-900">Aanpassen</button>
+        <button type="button" onClick={() => handleCancelDraft(messageIndex)} disabled={executingAction} className="rounded-xl px-3 py-2 text-xs font-semibold text-slate-400 hover:text-slate-700 dark:hover:text-slate-200">Annuleren</button>
+      </>
+    );
+  };
+
+  const renderV2SetupDraftCard = (message, messageIndex) => {
     const draft = message.setupDraft || message.state?.setup_draft;
     if (!draft || draft.operation_id !== "create_setup") return null;
-    const labels = {
-      name: at("fieldLabels.setup.name", "Naam"),
-      setup_type: at("draftRows.setupType", "Type"),
-      symbol: at("fieldLabels.asset", "Asset"),
-      timeframe: at("fieldLabels.setup.timeframe", "Timeframe"),
-      dca_frequency: at("fieldLabels.dca.frequency", "Frequentie"),
-      dca_day: at("fieldLabels.dca.day", "Weekdag"),
-      dca_month_day: at("fieldLabels.dca.monthDay", "Dag van de maand"),
-    };
-    const hiddenIdentityFields = new Set(["setup_id", "strategy_id", "bot_id"]);
-    const values = Object.entries(draft.supplied_inputs || {}).filter(([field, value]) => (
-      !hiddenIdentityFields.has(field) &&
-      labels[field] && value !== undefined && value !== null && value !== ""
-    ));
-    const nextLabel = labels[draft.requested_slot] || at("draftRows.next", "Volgende stap");
-    const status = draft.draft_status === "complete"
-      ? at("draftStatus.ready", "Klaar voor voorstel")
-      : at("draftStatus.collecting", "Setup in voorbereiding");
+    const supplied = draft.supplied_inputs || {};
+    const valueLabels = { dca: "DCA", trade: "Trade", daily: "Dagelijks", weekly: "Wekelijks", monthly: "Maandelijks", monday: "maandag", tuesday: "dinsdag", wednesday: "woensdag", thursday: "donderdag", friday: "vrijdag", saturday: "zaterdag", sunday: "zondag" };
+    const humanValue = (value) => valueLabels[String(value || "").toLowerCase()] || value;
+    const contextLine = [supplied.symbol, supplied.timeframe, humanValue(supplied.setup_type)].filter(Boolean).join(" · ");
+    const frequency = [humanValue(supplied.dca_frequency), humanValue(supplied.dca_day || supplied.dca_month_day)].filter(Boolean).join(" · ");
+    const labels = { name: "naam", setup_type: "type", symbol: "asset", timeframe: "timeframe", dca_frequency: "frequentie", dca_day: "weekdag", dca_month_day: "dag van de maand" };
+    const missing = (draft.missing_inputs || []).map((field) => labels[field]).filter(Boolean);
     return (
-      <div className="mt-4 rounded-2xl border border-blue-200 dark:border-blue-900/50 bg-blue-50/70 dark:bg-blue-950/20 p-4 space-y-3">
-        <div className="flex items-center justify-between gap-3">
-          <div className="text-[10px] font-black uppercase tracking-widest text-blue-700 dark:text-blue-200">
-            {at("draftTitles.setup", "Setup concept")}
-          </div>
-          <span className="rounded-full bg-white/80 dark:bg-slate-950/40 px-2 py-1 text-[9px] font-black uppercase tracking-widest text-blue-700 dark:text-blue-200">
-            {status}
-          </span>
+      <div className="mt-4 min-w-0 overflow-hidden rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-950/45">
+        <div className="text-[11px] font-bold text-slate-900 dark:text-slate-100">{at("draftCards.setupTitle", "Concept setup")}</div>
+        <div className="mt-0.5 text-[11px] text-slate-500 dark:text-slate-400">{at("draftCards.unsaved", "Nog niet opgeslagen")}</div>
+        <div className="mt-4 min-w-0">
+          <h3 className="truncate text-base font-bold text-slate-950 dark:text-white">{supplied.name || "Nieuwe setup"}</h3>
+          {contextLine && <p className="mt-1 break-words text-xs text-slate-500 dark:text-slate-400">{contextLine}</p>}
         </div>
-        {values.length > 0 && (
-          <dl className="grid grid-cols-2 gap-x-3 gap-y-2 text-xs">
-            {values.map(([field, value]) => (
-              <div key={field}>
-                <dt className="text-[10px] font-bold text-slate-500 dark:text-slate-400">{labels[field]}</dt>
-                <dd className="font-semibold text-slate-800 dark:text-slate-100">{String(value)}</dd>
-              </div>
-            ))}
-          </dl>
-        )}
-        {draft.requested_slot && draft.draft_status !== "complete" && (
-          <div className="rounded-xl bg-white/80 dark:bg-slate-950/40 px-3 py-2 text-xs font-semibold text-slate-700 dark:text-slate-200">
-            {at("draftRows.next", "Volgende invoer")}: {nextLabel}
-          </div>
-        )}
+        {frequency && <p className="mt-3 text-sm text-slate-700 dark:text-slate-200">Frequentie: <span className="font-semibold">{frequency}</span></p>}
+        {missing.length > 0 && <p className="mt-4 rounded-xl bg-slate-50 px-3 py-2.5 text-sm text-slate-700 dark:bg-slate-900/70 dark:text-slate-200">{at("draftCards.missingFields", "Nog nodig: {fields}.", { fields: missing.join(", ") })}</p>}
+        <div className="mt-4 flex flex-wrap items-center gap-2">{draftActionButtons(message, messageIndex, "setup")}</div>
       </div>
     );
   };
 
-  const renderV2ActionDraftCard = (message) => {
+  const renderV2ActionDraftCard = (message, messageIndex) => {
     const draft = message.actionDraft || message.state?.action_draft;
     const operationId = draft?.operation_id;
     if (!draft || !["create_strategy", "create_bot"].includes(operationId)) return null;
-
     const isStrategy = operationId === "create_strategy";
-    const labels = isStrategy
-      ? {
-          name: at("fieldLabels.strategy.name", "Strategienaam"),
-          setup_id: at("fieldLabels.strategy.setup", "Gekoppelde setup"),
-          symbol: at("fieldLabels.asset", "Asset"),
-          timeframe: at("fieldLabels.setup.timeframe", "Timeframe"),
-          execution_mode: at("fieldLabels.strategy.executionMode", "Uitvoering"),
-          base_amount: at("fieldLabels.strategy.baseAmount", "Basisbedrag"),
-          entry: at("fieldLabels.strategy.entry", "Instap"),
-          stop_loss: at("fieldLabels.strategy.stopLoss", "Stop-loss"),
-          targets: at("fieldLabels.strategy.targets", "Koersdoelen"),
-          risk_profile: at("fieldLabels.strategy.risk", "Risicoprofiel"),
-        }
-      : {
-          name: at("fieldLabels.bot.name", "Botnaam"),
-          strategy_id: at("fieldLabels.bot.strategy", "Gekoppelde strategie"),
-          symbol: at("fieldLabels.asset", "Asset"),
-          mode: at("fieldLabels.bot.mode", "Modus"),
-          risk_profile: at("fieldLabels.bot.riskProfile", "Risicoprofiel"),
-          budget_total_eur: at("fieldLabels.bot.budget", "Budget"),
-        };
-    const hiddenIdentityFields = new Set(["setup_id", "strategy_id", "bot_id"]);
-    const values = Object.entries(draft.supplied_inputs || {}).filter(([field, value]) => (
-      !hiddenIdentityFields.has(field)
-      && labels[field] && value !== undefined && value !== null && value !== ""
-    ));
+    const supplied = draft.supplied_inputs || {};
+    const context = (message.actions || []).find((action) => action?.type === "v2_proposal")?.display_context || {};
+    const linkedName = isStrategy ? supplied.setup_name || context.setup_name || "je setup" : supplied.strategy_name || context.strategy_name || "je strategie";
+    const contextLine = isStrategy
+      ? [supplied.symbol || context.symbol, supplied.timeframe || context.timeframe, `gekoppeld aan ${linkedName}`].filter(Boolean).join(" · ")
+      : `Paper · gekoppeld aan ${linkedName}`;
+    const labels = { name: "naam", setup_id: "setup", strategy_id: "strategie", symbol: "asset", timeframe: "timeframe", execution_mode: "uitvoering", base_amount: "bedrag", entry: "entry", stop_loss: "stop-loss", targets: "targets", risk_profile: "risico", budget_total_eur: "budget" };
+    const missing = (draft.missing_inputs || []).map((field) => labels[field]).filter(Boolean);
     const formatValue = (value) => Array.isArray(value) ? value.join(", ") : String(value);
-    const status = draft.draft_status === "complete"
-      ? at("draftStatus.ready", "Klaar voor voorstel")
-      : at("draftStatus.collecting", "In voorbereiding");
-    const title = isStrategy
-      ? at("draftTitles.strategy", "Strategie concept")
-      : at("draftTitles.bot", "Bot concept");
-    const nextLabel = labels[draft.requested_slot] || at("draftRows.next", "Volgende invoer");
-
+    const rows = isStrategy
+      ? [["Uitvoering", [supplied.execution_mode, supplied.base_amount ? `€${supplied.base_amount}` : null].filter(Boolean).join(" · ")], ["Entry", supplied.entry], ["Stop-loss", supplied.stop_loss], ["Targets", supplied.targets], ["Risico", supplied.risk_profile]]
+      : [["Budget", supplied.budget_total_eur ? `€${supplied.budget_total_eur}` : null]];
     return (
-      <div className="mt-4 rounded-2xl border border-cyan-200 dark:border-cyan-900/50 bg-cyan-50/70 dark:bg-cyan-950/20 p-4 space-y-3">
-        <div className="flex items-center justify-between gap-3">
-          <div className="text-[10px] font-black uppercase tracking-widest text-cyan-800 dark:text-cyan-200">
-            {title}
-          </div>
-          <span className="rounded-full bg-white/80 dark:bg-slate-950/40 px-2 py-1 text-[9px] font-black uppercase tracking-widest text-cyan-800 dark:text-cyan-200">
-            {status}
-          </span>
+      <div className="mt-4 min-w-0 overflow-hidden rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-950/45">
+        <div className="text-[11px] font-bold text-slate-900 dark:text-slate-100">{isStrategy ? "Concept strategie" : "Concept paper-bot"}</div>
+        <div className="mt-0.5 text-[11px] text-slate-500 dark:text-slate-400">{at("draftCards.unsaved", "Nog niet opgeslagen")}</div>
+        <div className="mt-4 min-w-0">
+          <h3 className="truncate text-base font-bold text-slate-950 dark:text-white">{supplied.name || (isStrategy ? "Nieuwe strategie" : "Nieuwe paper-bot")}</h3>
+          <p className="mt-1 break-words text-xs text-slate-500 dark:text-slate-400">{contextLine}</p>
         </div>
-        {values.length > 0 && (
-          <dl className="grid grid-cols-2 gap-x-3 gap-y-2 text-xs">
-            {values.map(([field, value]) => (
-              <div key={field}>
-                <dt className="text-[10px] font-bold text-slate-500 dark:text-slate-400">{labels[field]}</dt>
-                <dd className="font-semibold text-slate-800 dark:text-slate-100">{formatValue(value)}</dd>
-              </div>
-            ))}
-          </dl>
-        )}
-        {draft.requested_slot && draft.draft_status !== "complete" && (
-          <div className="rounded-xl bg-white/80 dark:bg-slate-950/40 px-3 py-2 text-xs font-semibold text-slate-700 dark:text-slate-200">
-            {at("draftRows.next", "Volgende invoer")}: {nextLabel}
-          </div>
-        )}
+        <dl className="mt-4 divide-y divide-slate-100 text-sm dark:divide-slate-800">
+          {rows.filter(([, value]) => value !== undefined && value !== null && value !== "").map(([label, value]) => (
+            <div key={label} className="flex min-w-0 items-start justify-between gap-4 py-2 first:pt-0 last:pb-0"><dt className="shrink-0 text-slate-500 dark:text-slate-400">{label}</dt><dd className="min-w-0 break-words text-right font-semibold text-slate-800 dark:text-slate-100">{formatValue(value)}</dd></div>
+          ))}
+        </dl>
+        {!isStrategy && <p className="mt-4 flex items-center gap-2 text-xs font-semibold text-emerald-700 dark:text-emerald-300"><Shield size={13} />{at("draftCards.noLiveTrading", "Geen live trading")}</p>}
+        {missing.length > 0 && <p className="mt-4 rounded-xl bg-slate-50 px-3 py-2.5 text-sm text-slate-700 dark:bg-slate-900/70 dark:text-slate-200">{at("draftCards.missingFields", "Nog nodig: {fields}.", { fields: missing.join(", ") })}</p>}
+        <div className="mt-4 flex flex-wrap items-center gap-2">{draftActionButtons(message, messageIndex, isStrategy ? "strategie" : "paper-bot")}</div>
       </div>
     );
   };
@@ -5618,14 +5627,64 @@ function AIAssistantContent({
         "v2_proposal",
       ].includes(action.type)
     ));
-    if (actionOnly.length === 0 || message.draft) return null;
+    const dedicatedDraftOperation = message.setupDraft?.operation_id
+      || message.actionDraft?.operation_id
+      || message.state?.setup_draft?.operation_id
+      || message.state?.action_draft?.operation_id;
+    const hasDedicatedDraftCard = ["create_setup", "create_strategy", "create_bot"].includes(dedicatedDraftOperation);
+    if (actionOnly.length === 0 || message.draft || hasDedicatedDraftCard) return null;
     const displayContext = actionOnly[0]?.display_context || {};
+    const operationId = displayContext.operation_id || "";
+    const isUpdate = operationId.startsWith("update_");
+    const isDelete = operationId.startsWith("delete_");
+    const objectType = operationId.includes("strategy") ? "Strategie" : operationId.includes("bot") ? "Paper-bot" : operationId.includes("setup") ? "Setup" : "Voorstel";
+    const objectName = displayContext.name
+      || (objectType === "Setup" ? activeSetup?.name : null)
+      || (objectType === "Strategie" ? displayContext.strategy_name || activeSetup?.strategy_name : null)
+      || (objectType === "Paper-bot" ? displayContext.bot_name || activeBot?.name : null)
+      || `deze ${objectType.toLowerCase()}`;
+    const linkedName = objectType === "Strategie" ? displayContext.setup_name || activeSetup?.name : objectType === "Paper-bot" ? displayContext.strategy_name || activeBot?.strategy_name : null;
+    const fieldLabels = { timeframe: "Timeframe", base_amount: "Bedrag", stop_loss: "Stop-loss", entry: "Entry", targets: "Targets", risk_profile: "Risico", budget_total_eur: "Budget", cadence: "Frequentie" };
+    const changedRows = Object.entries(displayContext.changed_fields || {}).filter(([, value]) => value !== null && value !== undefined).map(([field, value]) => {
+      const previous = operationId === "update_setup" ? activeSetup?.[field] : null;
+      return { label: fieldLabels[field] || field.replace(/_/g, " "), previous, value: Array.isArray(value) ? value.join(", ") : value };
+    });
+    const isDomainProposal = isUpdate || isDelete;
     const contextParts = [
       displayContext.name,
       displayContext.symbol,
       displayContext.timeframe,
       displayContext.safety_mode,
     ].filter(Boolean);
+
+    if (isDomainProposal) {
+      return (
+        <div className="mt-4 min-w-0 overflow-hidden rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-950/45">
+          <div className="text-[11px] font-bold text-slate-900 dark:text-slate-100">{isDelete ? `${objectType} verwijderen` : `${objectType} wijzigen`}</div>
+          <div className="mt-0.5 text-[11px] text-slate-500 dark:text-slate-400">{at("draftCards.notExecuted", "Nog niet uitgevoerd")}</div>
+          <h3 className="mt-4 break-words text-base font-bold text-slate-950 dark:text-white">{isDelete ? `${objectType} “${objectName}” verwijderen?` : objectName}</h3>
+          {linkedName && <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{at("draftCards.linkedTo", "Gekoppeld aan")} {linkedName}</p>}
+          {isUpdate && changedRows.length > 0 && (
+            <dl className="mt-4 divide-y divide-slate-100 text-sm dark:divide-slate-800">
+              {changedRows.map((row) => (
+                <div key={row.label} className="flex min-w-0 items-start justify-between gap-4 py-2 first:pt-0 last:pb-0">
+                  <dt className="shrink-0 text-slate-500 dark:text-slate-400">{row.label}</dt>
+                  <dd className="min-w-0 break-words text-right font-semibold text-slate-800 dark:text-slate-100">{row.previous ? `${row.previous} → ${row.value}` : row.value}</dd>
+                </div>
+              ))}
+            </dl>
+          )}
+          <div className="mt-4 flex flex-wrap items-center gap-2">
+            {actionOnly.map((action, index) => (
+              <button key={`${action.type}-${action.id || index}`} onClick={() => handleExecuteAction(action)} disabled={executingAction} className={actionButtonStyles({ variant: isDelete ? "danger" : "primary", className: "min-w-[120px] justify-center rounded-xl px-4 py-2.5 text-xs" })}>
+                {executingAction ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle2 size={14} />} {isDelete ? "Verwijderen" : "Bevestigen"}
+              </button>
+            ))}
+            <button type="button" onClick={() => handleCancelDraft(messages.indexOf(message))} disabled={executingAction} className="rounded-xl px-3 py-2 text-xs font-semibold text-slate-500 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-900">Annuleren</button>
+          </div>
+        </div>
+      );
+    }
 
     return (
       <div className="mt-4 rounded-2xl border border-blue-200 dark:border-blue-900/50 bg-blue-50/70 dark:bg-blue-950/20 p-4 space-y-3">
@@ -6759,8 +6818,8 @@ function AIAssistantContent({
                   </div>
                 )}
                 {renderBehavioralMemoryAckCard(m)}
-                {renderV2SetupDraftCard(m)}
-                {renderV2ActionDraftCard(m)}
+                {renderV2SetupDraftCard(m, i)}
+                {renderV2ActionDraftCard(m, i)}
                 {!isSimpleFinnModal && renderDraftCard(m)}
                 {renderInlineActionCard(m)}
                 {m.isError && (

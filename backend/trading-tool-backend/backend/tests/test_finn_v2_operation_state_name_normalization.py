@@ -28,6 +28,49 @@ def test_setup_name_drops_following_timeframe_clause():
     ) == "Rustige swing"
 
 
+@pytest.mark.parametrize(
+    ("message", "selector_name", "expected"),
+    (
+        (
+            "Maak een paper-bot met naam Rustige Paper Bot voor strategie Rustige Strategie.",
+            "Rustige Paper Bot voor strategie Rustige Strategie",
+            "Rustige Paper Bot",
+        ),
+        (
+            "Create a paper bot named Calm Paper Bot for strategy Calm Strategy.",
+            "Calm Paper Bot for strategy Calm Strategy",
+            "Calm Paper Bot",
+        ),
+        (
+            "Erstelle einen Paper-Bot namens Ruhiger Bot für Strategie Ruhige Strategie.",
+            "Ruhiger Bot für Strategie Ruhige Strategie",
+            "Ruhiger Bot",
+        ),
+    ),
+)
+def test_create_bot_name_excludes_linked_strategy_clause(message, selector_name, expected):
+    contract = FinnV2OperationRegistry().require_supported("create_bot")
+
+    collected = FinnV2OperationStateService().explicit_inputs(
+        contract=contract,
+        message=message,
+        explicit_asset=None,
+    )
+    resolved = FinnV2OperationStateService().resolve(
+        contract=contract,
+        message=message,
+        explicit_asset=None,
+        conversation_context={},
+        supplied_inputs={"name": selector_name},
+        derived_inputs={"strategy_id": 42},
+    )
+
+    assert FinnV2OperationStateService._trim_linked_strategy_clause(
+        str(collected.get("name") or selector_name)
+    ) == expected
+    assert resolved.collected_inputs["name"] == expected
+
+
 def test_strategy_inputs_are_collected_against_the_registry_contract():
     state = FinnV2OperationStateService()
     contract = FinnV2OperationRegistry().require_supported("create_strategy")
