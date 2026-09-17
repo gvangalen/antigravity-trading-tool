@@ -17,6 +17,7 @@ from backend.schemas.market_data_schema import (
 )
 from backend.schemas.market_provider_schema import AssetRecord
 from backend.infrastructure.models import MarketDataIndicator, MarketData7D
+from backend.domain.market_indicator_catalog import get_active_market_indicator_definitions
 from backend.services.asset_catalog_service import AssetCatalogService
 from backend.services.market_data_provider_registry import MarketDataProviderRegistry
 from backend.utils.scoring_utils import normalize_indicator_name
@@ -685,7 +686,21 @@ class MarketDataService:
     # =========================================================
     async def get_global_indicators(self) -> List[dict]:
         records = await self.repository.get_global_indicators('market')
-        return [{"name": r.name, "display_name": r.display_name} for r in records]
+        merged = {
+            str(definition["name"]): {
+                "name": str(definition["name"]),
+                "display_name": str(definition["display_name"]),
+            }
+            for definition in get_active_market_indicator_definitions()
+        }
+        for record in records:
+            if record.name in merged:
+                continue
+            merged[record.name] = {
+                "name": record.name,
+                "display_name": record.display_name,
+            }
+        return sorted(merged.values(), key=lambda row: row["display_name"].lower())
 
     async def get_indicator_rules(self, name: str, user_id: int) -> List[dict]:
         records = await self.repository.get_indicator_rules(name, user_id)

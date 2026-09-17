@@ -525,13 +525,66 @@ class FinnV2ReasoningFallbackService:
                 created_at=datetime.now(timezone.utc),
             )
 
+        if operation_id == "read_linked_strategy" and strategy is not None:
+            strategy_name = strategy.facts.get("name") or "je gekoppelde strategie"
+            setup_name = strategy.facts.get("setup_name") or (setup.facts.get("name") if setup else None)
+            symbol = str(strategy.facts.get("symbol") or asset).upper()
+            timeframe = strategy.facts.get("timeframe") or (setup.facts.get("timeframe") if setup else None)
+            execution_mode = strategy.facts.get("execution_mode") or "onbekend"
+            base_amount = strategy.facts.get("base_amount")
+            entry = strategy.facts.get("entry")
+            stop_loss = strategy.facts.get("stop_loss")
+            targets = strategy.facts.get("targets") or []
+            risk_profile = strategy.facts.get("risk_profile") or "onbekend"
+            detail_parts = [f"uitvoering {execution_mode}"]
+            if base_amount is not None:
+                detail_parts.append(f"bedrag €{base_amount:g}" if isinstance(base_amount, (int, float)) else f"bedrag {base_amount}")
+            if entry is not None:
+                detail_parts.append(f"entry {entry}")
+            if stop_loss is not None:
+                detail_parts.append(f"stop-loss {stop_loss}")
+            if targets:
+                detail_parts.append("targets " + ", ".join(str(value) for value in targets))
+            detail_parts.append(f"risico {risk_profile}")
+            setup_detail = f", gekoppeld aan setup {setup_name}" if setup_name else ""
+            timeframe_detail = f" op {timeframe}" if timeframe else ""
+            evidence_refs = [item.evidence_id for item in (setup, strategy) if item is not None]
+            _add_claim(
+                "linked-strategy",
+                f"{strategy_name} gebruikt {symbol}{timeframe_detail}{setup_detail} en " + ", ".join(detail_parts) + ".",
+                evidence_refs,
+            )
+            return ReasoningResult(
+                reasoning_result_id=f"finn-v2-reasoning-{uuid.uuid4().hex}",
+                run_id=run_id,
+                user_id=user_id,
+                mode="READ",
+                direct_answer=(
+                    f"Je strategie {strategy_name} gebruikt {symbol}{timeframe_detail}{setup_detail}. "
+                    + "De opgeslagen waarden zijn: "
+                    + ", ".join(detail_parts)
+                    + "."
+                ),
+                main_observation="Deze waarden komen rechtstreeks uit je owner-scoped opgeslagen strategie.",
+                supporting_points=[],
+                claims=claims,
+                uncertainty_summary="Er is geen providercall uitgevoerd voor deze opgeslagen strategiecontext.",
+                uncertainty_codes=list(error_codes),
+                next_step=None,
+                follow_up_question=None,
+                proposal_candidate=None,
+                evidence_refs_used=refs,
+                model=model,
+                created_at=datetime.now(timezone.utc),
+            )
+
         if operation_id in {"read_linked_bot", "read_active_plan"} and all(
             item is not None for item in (setup, strategy, bot, bot_status)
         ):
             setup_id = setup.facts.get("setup_id")
-            strategy_id = strategy.facts.get("strategy_id")
-            bot_id = bot.facts.get("bot_id")
             setup_name = setup.facts.get("name") or f"setup {setup_id}"
+            strategy_name = strategy.facts.get("name") or "de gekoppelde strategie"
+            bot_name = bot.facts.get("name") or "de gekoppelde paper-bot"
             timeframe = setup.facts.get("timeframe")
             is_live = bool(bot_status.facts.get("is_live", bot.facts.get("is_live")))
             evidence_refs = [
@@ -547,8 +600,8 @@ class FinnV2ReasoningFallbackService:
             _add_claim(
                 "active-plan-graph",
                 (
-                    f"Voor {asset} is {setup_name} gekoppeld aan strategie {strategy_id} "
-                    f"en bot {bot_id}; de bot staat {'live' if is_live else 'niet live'}."
+                    f"Voor {asset} is {setup_name} gekoppeld aan strategie {strategy_name} "
+                    f"en bot {bot_name}; de bot staat {'live' if is_live else 'niet live'}."
                 ),
                 [
                     *evidence_refs,
@@ -562,9 +615,9 @@ class FinnV2ReasoningFallbackService:
                 mode="READ",
                 direct_answer=(
                     f"Je actieve {asset}-plan gebruikt {setup_name}{timeframe_detail}, "
-                    f"strategie {strategy_id} en bot {bot_id}."
+                    f"strategie {strategy_name} en bot {bot_name}."
                 ),
-                main_observation=f"Bot {bot_id} staat momenteel {'live' if is_live else 'niet live'}.",
+                main_observation=f"Paper-bot {bot_name} staat momenteel {'live' if is_live else 'niet live'}.",
                 supporting_points=[],
                 claims=claims,
                 uncertainty_summary="Er is geen providercall uitgevoerd voor deze opgeslagen planrelaties.",

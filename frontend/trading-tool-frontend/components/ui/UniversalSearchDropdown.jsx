@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { useTranslation } from "@/app/providers/I18nProvider";
+import { matchesSearchQuery } from "@/lib/searchTerms";
 
 export default function UniversalSearchDropdown({
   label,
@@ -11,6 +12,7 @@ export default function UniversalSearchDropdown({
   placeholder,
   getItemLabel,
   getItemSecondaryLabel,
+  getItemSearchTerms,
   hideSecondaryLabel = false,
 }) {
   const { t } = useTranslation();
@@ -30,12 +32,16 @@ export default function UniversalSearchDropdown({
       return;
     }
 
-    const q = query.toLowerCase();
-    const filtered = items.filter(
-      (i) =>
-        i.display_name.toLowerCase().includes(q) ||
-        i.name.toLowerCase().includes(q)
-    );
+    const filtered = items.filter((item) => {
+      const terms = [
+        item?.display_name,
+        item?.name,
+        getItemLabel?.(item),
+        getItemSecondaryLabel?.(item),
+        ...(getItemSearchTerms?.(item) || []),
+      ];
+      return matchesSearchQuery(query, terms);
+    });
 
     setResults(filtered);
     setIsOpen(filtered.length > 0);

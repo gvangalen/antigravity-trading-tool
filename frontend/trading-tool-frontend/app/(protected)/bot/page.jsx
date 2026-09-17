@@ -576,10 +576,18 @@ function BotPageInner() {
       const mode = searchParams.get("mode") || "paper";
       const risk = searchParams.get("risk") || "balanced";
       const budget = searchParams.get("budget") || "";
-      const matchingStrategy =
+      const explicitlyRequestedStrategy =
         Number.isFinite(requestedStrategyId) && requestedStrategyId > 0
           ? strategies.find((strategy) => strategy.id === requestedStrategyId) || null
           : null;
+      const symbolStrategies = symbol
+        ? strategies.filter(
+            (strategy) => String(strategy?.symbol || "").toUpperCase() === symbol.toUpperCase()
+          )
+        : strategies;
+      const matchingStrategy =
+        explicitlyRequestedStrategy ||
+        (symbolStrategies.length === 1 ? symbolStrategies[0] : null);
       
       // Auto-prefill the form values
       const initialValues = {

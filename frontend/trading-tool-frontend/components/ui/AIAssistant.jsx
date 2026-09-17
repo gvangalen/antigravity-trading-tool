@@ -1004,7 +1004,7 @@ function AIAssistantContent({
       setup_timeframe: activeSetup?.timeframe || null,
       bot_id: activeBot?.id || activeBot?.bot_id || focusedBotId || null,
       strategy_id: activeSetup?.strategy_id || null,
-      setup_name: searchParams.get("name") || activeSetup?.name || t?.common?.none || "None",
+      setup_name: searchParams.get("name") || activeSetup?.name || null,
       finn_draft: finnDraft,
     };
   };
@@ -4396,13 +4396,22 @@ function AIAssistantContent({
         : null);
       let resolvedSetupName = actionDraft?.supplied_inputs?.setup_name || activeSetup?.name || null;
       let resolvedStrategyName = actionDraft?.supplied_inputs?.strategy_name || activeBot?.strategy_name || null;
+      let resolvedBotName = activeBot?.name || null;
       try {
-        if (operationId?.includes("strategy") || operationId?.includes("bot")) {
-          const [ownerSetups, ownerStrategies] = await Promise.all([fetchSetups(), fetchStrategies()]);
+        if (operationId?.includes("setup") || operationId?.includes("strategy") || operationId?.includes("bot")) {
+          const [ownerSetups, ownerStrategies, ownerBots] = await Promise.all([fetchSetups(), fetchStrategies(), fetchBotConfigs()]);
           const setupId = actionDraft?.supplied_inputs?.setup_id || projection?.supplied_inputs?.setup_id;
           const strategyId = actionDraft?.supplied_inputs?.strategy_id || projection?.supplied_inputs?.strategy_id;
-          resolvedSetupName = ownerSetups.find((item) => Number(item.id || item.setup_id) === Number(setupId))?.name || resolvedSetupName;
-          resolvedStrategyName = ownerStrategies.find((item) => Number(item.id || item.strategy_id) === Number(strategyId))?.name || resolvedStrategyName;
+          const botId = actionDraft?.supplied_inputs?.bot_id || projection?.supplied_inputs?.bot_id;
+          const matchedBot = ownerBots.find((item) => Number(item.id || item.bot_id) === Number(botId));
+          const linkedStrategyId = strategyId || matchedBot?.strategy_id;
+          const matchedStrategy = ownerStrategies.find((item) => Number(item.id || item.strategy_id) === Number(linkedStrategyId));
+          const linkedSetupId = setupId || matchedStrategy?.setup_id;
+          resolvedSetupName = ownerSetups.find((item) => Number(item.id || item.setup_id) === Number(linkedSetupId))?.name
+            || matchedStrategy?.setup_name
+            || resolvedSetupName;
+          resolvedStrategyName = matchedStrategy?.name || resolvedStrategyName;
+          resolvedBotName = matchedBot?.name || resolvedBotName;
         }
       } catch (error) {
         console.warn("FINN kon gekoppelde conceptnamen niet verversen:", error);
@@ -4447,7 +4456,9 @@ function AIAssistantContent({
                   name: actionDraft?.supplied_inputs?.name
                     || setupDraft?.supplied_inputs?.name
                     || projection?.action_result?.canonical_name
+                    || (operationId?.includes("setup") ? resolvedSetupName : null)
                     || (operationId?.includes("strategy") ? resolvedStrategyName : null)
+                    || (operationId?.includes("bot") ? resolvedBotName : null)
                     || null,
                   symbol: projection?.canonical_target || actionDraft?.supplied_inputs?.symbol || setupDraft?.supplied_inputs?.symbol || activeSetup?.symbol || null,
                   timeframe: actionDraft?.supplied_inputs?.timeframe || setupDraft?.supplied_inputs?.timeframe || activeSetup?.timeframe || null,
@@ -4839,7 +4850,7 @@ function AIAssistantContent({
         const displayContext = action.display_context || {};
         const operationId = displayContext.operation_id || execution.operation_id || "";
         const operationLabel = operationId.includes("bot") ? "Paper-bot" : operationId.includes("strategy") ? "Strategie" : operationId.includes("setup") ? "Setup" : "Actie";
-        const resultName = displayContext.name || execution.action_result?.canonical_name || `Je ${operationLabel.toLowerCase()}`;
+        const resultName = execution.action_result?.canonical_name || displayContext.name || `Je ${operationLabel.toLowerCase()}`;
         const resultVerb = operationId.startsWith("delete_") ? "verwijderd" : operationId.startsWith("update_") || operationId === "deactivate_bot" ? "bijgewerkt" : "opgeslagen";
         setMessages((prev) => [...prev.map((message) => {
           const ownsProposal = (message.actions || []).some((candidate) => candidate?.proposal_id === action.proposal_id);
@@ -5635,7 +5646,7 @@ function AIAssistantContent({
     if (actionOnly.length === 0 || message.draft || hasDedicatedDraftCard) return null;
     const displayContext = actionOnly[0]?.display_context || {};
     const operationId = displayContext.operation_id || "";
-    const isUpdate = operationId.startsWith("update_");
+    const isUpdate = operationId.startsWith("update_") || operationId === "deactivate_bot";
     const isDelete = operationId.startsWith("delete_");
     const objectType = operationId.includes("strategy") ? "Strategie" : operationId.includes("bot") ? "Paper-bot" : operationId.includes("setup") ? "Setup" : "Voorstel";
     const objectName = displayContext.name
@@ -5644,7 +5655,7 @@ function AIAssistantContent({
       || (objectType === "Paper-bot" ? displayContext.bot_name || activeBot?.name : null)
       || `deze ${objectType.toLowerCase()}`;
     const linkedName = objectType === "Strategie" ? displayContext.setup_name || activeSetup?.name : objectType === "Paper-bot" ? displayContext.strategy_name || activeBot?.strategy_name : null;
-    const fieldLabels = { timeframe: "Timeframe", base_amount: "Bedrag", stop_loss: "Stop-loss", entry: "Entry", targets: "Targets", risk_profile: "Risico", budget_total_eur: "Budget", cadence: "Frequentie" };
+    const fieldLabels = { name: "Naam", timeframe: "Timeframe", base_amount: "Bedrag", stop_loss: "Stop-loss", entry: "Entry", targets: "Targets", risk_profile: "Risico", budget_total_eur: "Budget", cadence: "Frequentie" };
     const changedRows = Object.entries(displayContext.changed_fields || {}).filter(([, value]) => value !== null && value !== undefined).map(([field, value]) => {
       const previous = operationId === "update_setup" ? activeSetup?.[field] : null;
       return { label: fieldLabels[field] || field.replace(/_/g, " "), previous, value: Array.isArray(value) ? value.join(", ") : value };

@@ -69,12 +69,19 @@ class FinnV2OperationStateService:
         if contract.operation_id == "create_bot" and explicit.get("name"):
             explicit["name"] = self._trim_linked_strategy_clause(str(explicit["name"]))
         sources = dict(existing.input_sources) if existing is not None else {}
+        provenance = dict(existing.input_provenance) if existing is not None else {}
         collected.update(explicit)
         sources.update({key: "explicit" for key in explicit})
+        next_revision = (existing.state_revision + 1) if existing is not None else 1
+        provenance.update({
+            key: {"source": "explicit", "state_revision": next_revision}
+            for key in explicit
+        })
         for key, value in (derived_inputs or {}).items():
             if key in accepted_inputs and key not in collected and not self._is_missing(value):
                 collected[key] = self._canonical_input(key, value)
                 sources[key] = "default"
+                provenance[key] = {"source": "default", "state_revision": next_revision}
         context = conversation_context or {}
         verified_context = dict(context.get("last_verified_context") or {})
         resolved_context = dict(verified_context.get("resolved_entities") or {})
@@ -127,9 +134,10 @@ class FinnV2OperationStateService:
         return FinnV2OperationState(
             operation_id=contract.operation_id,
             contract_version=contract.version,
-            state_revision=(existing.state_revision + 1) if existing is not None else 1,
+            state_revision=next_revision,
             collected_inputs=collected,
             input_sources=sources,
+            input_provenance=provenance,
             resolved_entities=resolved_entities,
             target_entities=target_entities,
             missing_required_inputs=missing,
@@ -272,6 +280,8 @@ class FinnV2OperationStateService:
             )
             if slot_value is not None:
                 values[str(requested_slot)] = slot_value
+                if self._is_short_slot_answer(text, requested_slot=str(requested_slot)):
+                    return values
         if explicit_asset:
             for field in {"asset", "symbol"}.intersection(accepted_inputs):
                 values[field] = explicit_asset
@@ -292,12 +302,16 @@ class FinnV2OperationStateService:
                 continue
             label = re.escape(field[:-3]).replace("_", r"\s*")
             identifier = re.search(
-                rf"\b{label}(?:\s*(?:id|nummer|number))?\s*#?\s*((?!0\d)\d+)\b",
+                rf"(?:\b{label}(?:\s*(?:id|nummer|number)\s*#?|\s*#)\s*((?!0\d)\d+)\b|"
+                rf"\b(?:voor|for|für|fuer|aan|to|mit)\s+(?:de|het|the|den|die|das)?\s*{label}\s+"
+                rf"((?!0\d)\d+)\b|"
+                rf"\b(?:deactiveer|deactivate|deaktiviere|verwijder|delete|loesche|lösche|wijzig|update|"
+                rf"change|aktualisiere)\s+(?:de|het|the|den|die|das)?\s*{label}\s+((?!0\d)\d+)\b)",
                 text,
                 re.IGNORECASE,
             )
             if identifier:
-                values[field] = int(identifier.group(1))
+                values[field] = int(identifier.group(1) or identifier.group(2) or identifier.group(3))
         if {"indicator", "category"}.intersection(accepted_inputs):
             indicator = self._indicator_input_from_text(text)
             if indicator is not None:
@@ -428,6 +442,31 @@ class FinnV2OperationStateService:
                 values["changed_fields"] = changes
         return values
 
+    @staticmethod
+    def _is_short_slot_answer(text: str, *, requested_slot: str) -> bool:
+        """Keep a focused clarification answer inside its requested slot.
+
+        Longer turns with explicit field labels remain eligible for multi-slot
+        extraction and corrections.
+        """
+        words = re.findall(r"\w+", str(text or ""), re.UNICODE)
+        if len(words) > 8:
+            return False
+        field_markers = {
+            "entry": ("entry", "instap", "einstieg"),
+            "stop_loss": ("stop", "invalidatie", "invalidation", "invalidierung"),
+            "targets": ("target", "doel", "take profit", "ziel"),
+            "risk_profile": ("risk", "risico", "risiko"),
+            "base_amount": ("bedrag", "inleg", "amount", "betrag"),
+        }
+        lowered = str(text or "").casefold()
+        mentioned = {
+            field
+            for field, markers in field_markers.items()
+            if any(marker in lowered for marker in markers)
+        }
+        return not mentioned or mentioned == {requested_slot}
+
     def _requested_slot_value(self, *, field: str, text: str, contract: OperationContract) -> Optional[object]:
         """Canonicalize only the registry slot that the user was asked for."""
         value = str(text or "").strip()
@@ -553,7 +592,8 @@ class FinnV2OperationStateService:
             r"genaamd|named|called|call\s+it|nenne\s+(?:ihn|sie|es)|"
             r"noem\s+(?:hem|haar|het|deze|dit)|ik\s+noem\s+(?:hem|haar|het|deze|dit)|"
             r"hij\s+heet|het\s+heet|naam|name|titel|title)\b"
-            r"\s*(?:is|:|=)?\s*[\"']?([\w .-]{2,80})",
+            r"\s*(?:is|:|=)?\s*[\"']?([\w .-]{2,80}?)"
+            r"(?=\s+(?:voor|for|für)\s+[\w-]+\b|\s+(?:op|on|auf)\s+\d|[,;.!?\n]|$)",
             text,
             re.IGNORECASE,
         )
@@ -629,9 +669,9 @@ class FinnV2OperationStateService:
             # owner-scoped object reference separate and bind only the
             # canonical field/value tail to changed_fields.
             object_then_field = re.search(
-                rf"\b(?:wijzig|verander|change|update|aktualisiere)\s+"
+                rf"\b(?:wijzig|verander|change|update|aktualisiere|pas)\s+"
                 rf"(?:mijn|my|de|het|the|den|die|das)?\s*{re.escape(contract.domain)}\b"
-                rf"[^,.!?\n]{{0,80}}?\s+(?:naar|to|auf|als|op|on)\s+{aliases}\s+"
+                rf"[^,.!?\n]{{0,80}}?(?:\s+aan)?\s+(?:naar|to|auf|als|op|on)\s+{aliases}\s+"
                 r"(?:naar|to|auf|als|op|on)?\s*[\"']?([^,.!?\n]{1,80})",
                 text,
                 re.IGNORECASE,
@@ -646,8 +686,8 @@ class FinnV2OperationStateService:
         # names can themselves contain words such as "Update", which must
         # never become a changed-field name.
         match = re.search(
-            r"\b(?:zet|set|ändere)\s+"
-            r"(?:mijn|my|de|het|the|den|die|das)?\s*([\w -]{2,48}?)\s+"
+            r"\b(?:zet|set|setze|ändere)\s+"
+            r"(?:mijn|my|den|die|das|de|het|the)?\s*([\w -]{2,48}?)\s+"
             r"(?:naar|to|auf|als|op|on)\s+[\"']?([^,.!?\n]{1,80})",
             text,
             re.IGNORECASE,
@@ -693,6 +733,9 @@ class FinnV2OperationStateService:
             field = field[len(domain_prefix):]
         field = re.sub(r"^\d+_", "", field)
         field = {
+            "naam": "name",
+            "namen": "name",
+            "titel": "name",
             "tijdframe": "timeframe",
             "time_frame": "timeframe",
             "periode": "period",

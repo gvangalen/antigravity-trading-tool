@@ -130,6 +130,7 @@ class FinnV2OperationState(BaseModel):
     # Presentation-safe provenance distinguishes typed values from allowed
     # context/default values in a persisted guided draft.
     input_sources: Dict[str, str] = Field(default_factory=dict)
+    input_provenance: Dict[str, Dict[str, object]] = Field(default_factory=dict)
     resolved_entities: Dict[str, object] = Field(default_factory=dict)
     # Targets are deliberately separate from the workspace-scoped entities.
     # A watchlist target, for example, must never become the asset selector

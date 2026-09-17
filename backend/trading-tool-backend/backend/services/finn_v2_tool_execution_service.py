@@ -177,6 +177,7 @@ class FinnV2ToolExecutionService:
         run_context = SimpleNamespace(
             id=run.id,
             trace_id=run.trace_id,
+            message=str(getattr(run, "message", "") or ""),
             workspace_hints_json=dict(getattr(run, "workspace_hints_json", {}) or {}),
             client_context_json=dict(getattr(run, "client_context_json", {}) or {}),
         )
@@ -188,6 +189,12 @@ class FinnV2ToolExecutionService:
         await self._release_primary_connection()
 
         selector = self.redaction.redact_selector(selector or {})
+        if tool_name in {"read_active_setup", "read_linked_strategy", "read_linked_bot", "read_bot_status"}:
+            selector = await self.resolver.enrich_tool_selector_from_message(
+                user_id=user_id,
+                selector=selector,
+                message=run_context.message,
+            )
         selector = self._with_workspace_setup_reference(
             selector=selector,
             tool_name=tool_name,
@@ -603,6 +610,13 @@ class FinnV2ToolExecutionService:
         if tool_name not in {"read_active_setup", "read_linked_strategy", "read_linked_bot", "read_bot_status"}:
             return selector
         if selector.get("setup_id") is not None:
+            return selector
+        if any(
+            selector.get(field) is not None
+            for field in ("strategy_id", "strategy_name", "bot_id", "bot_name")
+        ):
+            # The explicit child identifies its owner-scoped parent setup.
+            # A stale workspace setup must never outrank that relation.
             return selector
 
         for context in (

@@ -213,10 +213,18 @@ def test_setup_reads_use_the_workspace_setup_reference_without_overriding_select
     unrelated = FinnV2ToolExecutionService._with_workspace_setup_reference(
         selector={}, tool_name="read_watchlist", run=run
     )
+    explicit_strategy = FinnV2ToolExecutionService._with_workspace_setup_reference(
+        selector={"strategy_id": 42}, tool_name="read_active_setup", run=run
+    )
+    explicit_bot = FinnV2ToolExecutionService._with_workspace_setup_reference(
+        selector={"bot_name": "Safe Paper Bot"}, tool_name="read_active_setup", run=run
+    )
 
     assert derived == {"setup_id": 326}
     assert explicit == {"setup_id": 777}
     assert unrelated == {}
+    assert explicit_strategy == {"strategy_id": 42}
+    assert explicit_bot == {"bot_name": "Safe Paper Bot"}
 
 
 def test_active_setup_read_resolves_the_single_owner_setup_without_a_workspace_asset(monkeypatch):

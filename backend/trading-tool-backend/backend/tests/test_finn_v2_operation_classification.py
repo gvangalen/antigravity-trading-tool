@@ -243,6 +243,24 @@ def test_workspace_setup_timeframe_update_uses_registry_without_selector_provide
     assert FinnV2OperationClassificationValidator().validation_error(result) is None
 
 
+def test_natural_setup_update_keeps_the_setup_contract_and_typed_change():
+    contract = FinnV2OperationRegistry().require_supported("update_setup")
+    state = FinnV2OperationStateService().resolve(
+        contract=contract,
+        message="Pas die setup aan naar timeframe 1D.",
+        explicit_asset=None,
+        conversation_context={
+            "previous_action_result": {"entity_type": "setup", "entity_id": 42},
+        },
+    )
+
+    assert state.collected_inputs == {
+        "setup_id": 42,
+        "changed_fields": {"timeframe": "1D"},
+    }
+    assert state.missing_required_inputs == []
+
+
 def test_registry_mutation_preserves_typed_action_result_reference():
     result = FinnV2OperationClassificationService().classify(
         message="Entferne diesen Bot.",
@@ -577,6 +595,41 @@ def test_short_guided_strategy_slot_answer_keeps_the_active_contract():
 
     assert result.operation_id == "create_strategy"
     assert result.selector_source == "guided_state"
+
+
+def test_guided_strategy_requested_slot_cannot_overwrite_a_previous_amount():
+    registry = FinnV2OperationRegistry()
+    contract = registry.require_supported("create_strategy")
+    service = FinnV2OperationStateService()
+    context = {
+        "conversation_state_version": service.CONTEXT_STATE_VERSION,
+        "active_guided_operation": {
+            "operation_id": "create_strategy",
+            "contract_version": contract.version,
+            "state_revision": 4,
+            "collected_inputs": {
+                "setup_id": 12,
+                "name": "Rustige groei",
+                "execution_mode": "fixed",
+                "base_amount": 100.0,
+            },
+            "input_sources": {"base_amount": "explicit"},
+            "missing_required_inputs": ["entry", "stop_loss", "targets", "risk_profile"],
+            "next_missing_input": "entry",
+        },
+    }
+
+    state = service.resolve(
+        contract=contract,
+        message="Entry rond 76000 euro",
+        explicit_asset=None,
+        conversation_context=context,
+    )
+
+    assert state.collected_inputs["base_amount"] == 100.0
+    assert state.collected_inputs["entry"] == 76000.0
+    assert state.next_missing_input == "stop_loss"
+    assert state.input_provenance["entry"] == {"source": "explicit", "state_revision": 5}
 
 
 def test_guided_bot_name_with_action_word_keeps_the_active_contract():

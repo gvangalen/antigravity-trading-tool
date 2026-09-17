@@ -138,6 +138,7 @@ class FinnV2OrchestratorService:
             selector=selectors,
             required_inputs=contract.required_inputs,
             message=message,
+            operation_id=operation_id,
         )
         if not resolved:
             return analysis

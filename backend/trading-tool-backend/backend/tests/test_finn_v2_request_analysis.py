@@ -433,6 +433,51 @@ def test_request_analysis_handles_setup_strategy_and_bot_facts(monkeypatch):
     assert bot_result.subject_scopes == ["setup", "strategy", "bot"]
     assert status_result.subject_scopes == ["bot"]
 
+
+def test_request_analysis_routes_explicit_strategy_and_bot_summaries_to_reads():
+    cases = {
+        "Vat mijn strategie Momentum samen met setup, asset en timeframe.": "read_linked_strategy",
+        "Vat mijn strategie Momentum samen met uitvoering, entry, stop-loss, targets en risico.": "read_linked_strategy",
+        "Vat mijn strategie FINN Strategy 1759C samen met setup, asset, timeframe, uitvoering, entry, stop-loss, targets en risico.": "read_linked_strategy",
+        "Show my Momentum strategy with its setup, asset, and timeframe.": "read_linked_strategy",
+        "Fasse meine Momentum-Strategie mit Setup, Asset und Zeitrahmen zusammen.": "read_linked_strategy",
+        "Vat mijn paper-bot Alpha samen met de gekoppelde strategie.": "read_linked_bot",
+        "Show my Alpha paper bot and its linked strategy.": "read_linked_bot",
+        "Zeige meinen Alpha-Paper-Bot und die verknuepfte Strategie.": "read_linked_bot",
+    }
+
+    for message, operation_id in cases.items():
+        result = SERVICE.analyze(message=message)
+        assert result.request_plan.operation_id == operation_id
+        assert result.interaction_mode == "READ"
+
+
+def test_request_analysis_keeps_strategy_and_bot_near_neighbours_out_of_reads():
+    assert SERVICE.analyze(message="Beoordeel de risico's van mijn Momentum-strategie.").request_plan.operation_id == "evaluate_strategy"
+    assert SERVICE.analyze(message="Maak een paper-bot voor mijn Momentum-strategie.").request_plan.operation_id == "create_bot"
+    assert SERVICE.analyze(message="Wat zijn de risico's van mijn gekoppelde bot?").request_plan.operation_id == "evaluate_bot"
+
+
+def test_bot_update_canonicalizes_localized_name_fields():
+    cases = {
+        "Wijzig paper-bot Alpha: zet de naam op Beta.": "Beta",
+        "Update paper bot Alpha: set the name to Beta.": "Beta",
+        "Ändere den Paper-Bot Alpha: setze den Namen auf Beta.": "Beta",
+    }
+
+    for message, expected in cases.items():
+        result = SERVICE.analyze(message=message)
+        assert result.request_plan.operation_id == "update_bot"
+        assert result.request_plan.operation_state["collected_inputs"]["changed_fields"]["name"] == expected
+
+
+def test_numeric_suffix_in_object_name_is_not_treated_as_an_internal_id():
+    result = SERVICE.analyze(message="Verwijder paper-bot Browser Paper Bot 1759.")
+
+    assert result.request_plan.operation_id == "delete_bot"
+    assert result.explicit_bot_id is None
+    assert "bot_id" not in result.request_plan.operation_state["collected_inputs"]
+
 def test_request_analysis_routes_setup_create_and_watchlist_action_to_proposals():
     setup_result = SERVICE.analyze(message="Maak een setup voor BTC swing trading met daily trend en 4H entry.")
     watchlist_result = SERVICE.analyze(message="Voeg ETH toe aan mijn watchlist.")

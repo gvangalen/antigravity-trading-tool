@@ -1,5 +1,7 @@
 import asyncio
 
+import pytest
+
 from backend.services.finn_v2_entity_resolution_service import FinnV2EntityResolutionService
 
 
@@ -171,6 +173,38 @@ def test_entity_resolution_rejects_ambiguous_explicit_quoted_name():
         raise AssertionError("ambiguous owner-scoped name must not resolve")
 
 
+def test_create_strategy_auto_uses_exactly_one_owner_scoped_setup():
+    service = FinnV2EntityResolutionService(session=object())
+    service.setups = _FakeSetupRepo()
+    service.setups.get_user_setups = lambda _user_id: asyncio.sleep(0, result=[
+        {"id": 293, "name": "Only Setup"},
+    ])
+
+    resolved = asyncio.run(service.resolve_contract_reference_inputs(
+        user_id=388,
+        selector={},
+        required_inputs=("setup_id",),
+        operation_id="create_strategy",
+        message="Maak een strategie.",
+    ))
+
+    assert resolved == {"setup_id": 293}
+
+
+def test_create_bot_requires_a_name_when_multiple_owner_strategies_exist():
+    service = FinnV2EntityResolutionService(session=object())
+    service.strategies = _FakeStrategyRepo()
+
+    with pytest.raises(LookupError, match="strategy_ambiguous"):
+        asyncio.run(service.resolve_contract_reference_inputs(
+            user_id=388,
+            selector={},
+            required_inputs=("strategy_id",),
+            operation_id="create_bot",
+            message="Maak een paper-bot.",
+        ))
+
+
 def test_entity_resolution_follows_explicit_child_identity_to_its_parent_setup():
     service = FinnV2EntityResolutionService(session=object())
     service.setups = _FakeSetupRepo()
@@ -193,3 +227,22 @@ def test_entity_resolution_follows_explicit_child_identity_to_its_parent_setup()
     assert from_bot["resolution_source"] == "explicit_bot_link"
     assert strategy_from_bot["strategy"]["id"] == 309
     assert strategy_from_bot["resolution_source"] == "explicit_bot_link"
+
+
+def test_read_tool_selector_resolves_an_exact_owner_scoped_setup_name():
+    service = FinnV2EntityResolutionService(session=object())
+    service.setups = _FakeSetupRepo()
+    service.strategies = _FakeStrategyRepo()
+    service.bots = _FakeBotRepo()
+    service.setups.get_user_setups = lambda _user_id: asyncio.sleep(0, result=[
+        {"id": 12, "name": "Older Setup"},
+        {"id": 42, "name": "FINN DCA Flow 1759C"},
+    ])
+
+    enriched = asyncio.run(service.enrich_tool_selector_from_message(
+        user_id=388,
+        selector={},
+        message="Vat mijn setup FINN DCA Flow 1759C samen.",
+    ))
+
+    assert enriched["setup_id"] == 42

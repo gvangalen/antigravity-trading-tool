@@ -707,14 +707,18 @@ class FinnV2RequestAnalysisService:
 
     def _extract_entity_id(self, original: str, keyword_root: str) -> Optional[int]:
         match = re.search(
-            rf"\b{keyword_root}[a-z]*\s+#?((?!0\d)\d+)\b",
+            rf"(?:\b{keyword_root}[a-z]*\s*(?:id|nummer|number)\s*#?((?!0\d)\d+)\b|"
+            rf"\b{keyword_root}[a-z]*\s*#\s*((?!0\d)\d+)\b|"
+            rf"\b(?:deactiveer|deactivate|deaktiviere|verwijder|delete|loesche|lösche|wijzig|update|"
+            rf"change|aktualisiere)\s+(?:de|het|the|den|die|das)?\s*{keyword_root}[a-z]*\s+"
+            rf"((?!0\d)\d+)\b)",
             original,
             re.IGNORECASE,
         )
         if not match:
             return None
         try:
-            value = int(match.group(1))
+            value = int(next(group for group in match.groups() if group is not None))
         except ValueError:
             return None
         return value if value > 0 else None

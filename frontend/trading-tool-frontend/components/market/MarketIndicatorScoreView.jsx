@@ -17,6 +17,16 @@ const INDICATOR_LABEL_KEYS = {
   change_7d: "change7d",
 };
 
+const INDICATOR_SEARCH_ALIASES = {
+  price: ["prijs", "price", "preis"],
+  volume: ["volume", "marktvolume", "market volume", "markt volumen", "markt volumen"],
+  market_volume: ["volume", "marktvolume", "market volume", "markt volumen", "markt volumen"],
+  volume_change: ["volume 24h", "24h volume", "volumeverandering", "volumenaenderung"],
+  volume_change_24h: ["volume 24h", "24h volume", "volumeverandering", "volumenaenderung"],
+  change_24h: ["prijs 24h", "price 24h", "24h", "kurs 24h"],
+  change_7d: ["prijs 7d", "price 7d", "7d", "kurs 7d"],
+};
+
 export default function MarketIndicatorScoreView({
   availableIndicators = [],
   selectedIndicator,
@@ -186,6 +196,7 @@ export default function MarketIndicatorScoreView({
             selected={indicator}
             onSelect={handleSelect}
             getItemLabel={getLocalizedIndicatorLabel}
+            getItemSearchTerms={(item) => INDICATOR_SEARCH_ALIASES[item?.name] || []}
             hideSecondaryLabel
           />
           

@@ -353,10 +353,20 @@ class FinnV2OperationClassificationService:
         facts: FinnV2PreprocessedRequest,
     ) -> Optional[str]:
         """Resolve unambiguous provider-free graph reads through the registry."""
+        explicit_summary_request = bool(
+            re.search(
+                r"\b(?:toon|laat\s+zien|show|summari[sz]e|display|zeige|zusammenfassen|fasse)\b|"
+                r"\bvat(?:\s+\S+){0,16}\s+samen\b",
+                facts.normalized_text.casefold(),
+            )
+        )
         if (
-            facts.action_polarity != "read"
-            or facts.discourse_act not in {"information_request", "contextual_follow_up"}
-            or facts.explicit_plan_subject
+            (facts.action_polarity != "read" and not explicit_summary_request)
+            or (
+                facts.discourse_act not in {"information_request", "contextual_follow_up"}
+                and not explicit_summary_request
+            )
+            or (facts.explicit_plan_subject and not explicit_summary_request)
             or facts.ambiguous_reference
         ):
             return None
@@ -390,17 +400,15 @@ class FinnV2OperationClassificationService:
         ):
             return "read_linked_bot"
         if (
-            facts.linked_graph_relationship
-            and "strategy" in entities
-            and "setup" in entities
-            and entities <= {"setup", "strategy", "plan"}
+            "strategy" in entities
+            and entities <= {"asset", "setup", "strategy", "plan"}
+            and (facts.linked_graph_relationship or explicit_summary_request)
         ):
             return "read_linked_strategy"
         if (
-            facts.linked_graph_relationship
-            and "bot" in entities
-            and "strategy" in entities
-            and entities <= {"bot", "strategy", "plan"}
+            "bot" in entities
+            and entities <= {"asset", "setup", "strategy", "bot", "plan"}
+            and (facts.linked_graph_relationship or explicit_summary_request)
         ):
             return "read_linked_bot"
         return None

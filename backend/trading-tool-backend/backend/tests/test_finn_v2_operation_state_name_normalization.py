@@ -521,6 +521,12 @@ def test_shared_name_parser_accepts_a_german_coordinated_name_clause():
     ) == "Geduldiger Aufbau"
 
 
+def test_shared_name_parser_stops_before_asset_and_timeframe_context():
+    assert FinnV2OperationStateService._name_input_from_text(
+        "Maak een DCA-setup met naam FINN DCA Flow 1759B voor BTC op 4H, wekelijks op maandag."
+    ) == "FINN DCA Flow 1759B"
+
+
 def test_clarification_follow_up_persists_the_requested_change():
     service = FinnV2OperationStateService()
     contract = FinnV2OperationRegistry().require_supported("clarify_request")

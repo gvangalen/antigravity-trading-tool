@@ -101,6 +101,7 @@ class FinnV2EntityResolutionService:
         selector: Dict[str, Any],
         required_inputs: tuple[str, ...],
         message: str = "",
+        operation_id: str = "",
     ) -> Dict[str, int]:
         """Resolve explicit, owner-scoped object names into registry ID slots.
 
@@ -119,14 +120,30 @@ class FinnV2EntityResolutionService:
             message=message,
         )
         resolved: Dict[str, int] = {}
+        if operation_id == "create_strategy" and "setup_id" in required_inputs and not self._coerce_int(selector.get("setup_id")):
+            setups = [dict(row) for row in await self.setups.get_user_setups(user_id)]
+            if len(setups) == 1:
+                resolved["setup_id"] = self._coerce_int(setups[0].get("id") or setups[0].get("setup_id"))
+            elif len(setups) > 1 and not self._normalized_name(selector.get("setup_name")):
+                raise LookupError("setup_ambiguous")
+        if operation_id == "create_bot" and "strategy_id" in required_inputs and not self._coerce_int(selector.get("strategy_id")):
+            strategies = [dict(row) for row in await self.strategies.query_strategies(user_id, {})]
+            if len(strategies) == 1:
+                resolved["strategy_id"] = self._coerce_int(strategies[0].get("id") or strategies[0].get("strategy_id"))
+            elif len(strategies) > 1 and not self._normalized_name(selector.get("strategy_name")):
+                raise LookupError("strategy_ambiguous")
         if "setup_id" in required_inputs and not self._coerce_int(selector.get("setup_id")):
-            if self._normalized_name(selector.get("setup_name")):
+            if resolved.get("setup_id"):
+                pass
+            elif self._normalized_name(selector.get("setup_name")):
                 setup = await self.resolve_setup(user_id=user_id, selector=selector, asset=None)
                 value = self._coerce_int(setup["setup"].get("id") or setup["setup"].get("setup_id"))
                 if value:
                     resolved["setup_id"] = value
         if "strategy_id" in required_inputs and not self._coerce_int(selector.get("strategy_id")):
-            if self._normalized_name(selector.get("strategy_name")):
+            if resolved.get("strategy_id"):
+                pass
+            elif self._normalized_name(selector.get("strategy_name")):
                 strategy = await self.resolve_strategy(user_id=user_id, selector=selector, setup=None)
                 value = self._coerce_int(strategy["strategy"].get("id") or strategy["strategy"].get("strategy_id"))
                 if value:
@@ -161,6 +178,41 @@ class FinnV2EntityResolutionService:
             matches = [dict(row) for row in rows if self._message_mentions_name(message, row.get("name"))]
             if len(matches) == 1:
                 enriched[name_field] = matches[0].get("name")
+            elif len(matches) > 1:
+                raise LookupError(f"{entity}_ambiguous")
+        return enriched
+
+    async def enrich_tool_selector_from_message(
+        self,
+        *,
+        user_id: int,
+        selector: Dict[str, Any],
+        message: str,
+    ) -> Dict[str, Any]:
+        """Resolve exact owner-scoped names for read-tool context.
+
+        These identifiers are tool selectors, not action-contract inputs. They
+        guide evidence hydration without changing the registry-owned schema.
+        """
+        enriched = dict(selector)
+        repositories = {
+            "setup": self.setups.get_user_setups,
+            "strategy": lambda owner_id: self.strategies.query_strategies(owner_id, {}),
+            "bot": self.bots.get_bot_configs,
+        }
+        for entity, loader in repositories.items():
+            id_field = f"{entity}_id"
+            if self._coerce_int(enriched.get(id_field)):
+                continue
+            matches = [
+                dict(row)
+                for row in await loader(user_id)
+                if self._message_mentions_name(message, row.get("name"))
+            ]
+            if len(matches) == 1:
+                value = self._coerce_int(matches[0].get("id") or matches[0].get(id_field))
+                if value:
+                    enriched[id_field] = value
             elif len(matches) > 1:
                 raise LookupError(f"{entity}_ambiguous")
         return enriched

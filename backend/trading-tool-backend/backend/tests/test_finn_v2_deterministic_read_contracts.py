@@ -178,8 +178,8 @@ def test_linked_bot_read_preserves_the_complete_registry_graph_for_delivery():
     evidence = [
         ReasoningEvidenceItem(evidence_id="Easset", artifact_id="asset", tool_name="read_active_asset", information_scope="active_asset", domain="identity_context", entity_type="asset", entity_id="BTC", asset="BTC", source="workspace", freshness="fresh", confidence="high", facts={"symbol": "BTC"}),
         ReasoningEvidenceItem(evidence_id="Esetup", artifact_id="setup", tool_name="read_active_setup", information_scope="active_setup", domain="plan_context", entity_type="setup", entity_id="309", asset="BTC", source="setups", freshness="fresh", confidence="high", facts={"setup_id": 309, "name": "BTC swing", "timeframe": "4H", "symbol": "BTC"}),
-        ReasoningEvidenceItem(evidence_id="Estrat", artifact_id="strategy", tool_name="read_linked_strategy", information_scope="linked_strategy", domain="plan_context", entity_type="strategy", entity_id="325", asset="BTC", source="strategies", freshness="fresh", confidence="high", facts={"strategy_id": 325, "setup_id": 309}),
-        ReasoningEvidenceItem(evidence_id="Ebot", artifact_id="bot", tool_name="read_linked_bot", information_scope="linked_bot", domain="automation_context", entity_type="bot", entity_id="186", asset="BTC", source="bot_configs", freshness="fresh", confidence="high", facts={"bot_id": 186, "strategy_id": 325}),
+        ReasoningEvidenceItem(evidence_id="Estrat", artifact_id="strategy", tool_name="read_linked_strategy", information_scope="linked_strategy", domain="plan_context", entity_type="strategy", entity_id="325", asset="BTC", source="strategies", freshness="fresh", confidence="high", facts={"strategy_id": 325, "setup_id": 309, "name": "BTC Fixed"}),
+        ReasoningEvidenceItem(evidence_id="Ebot", artifact_id="bot", tool_name="read_linked_bot", information_scope="linked_bot", domain="automation_context", entity_type="bot", entity_id="186", asset="BTC", source="bot_configs", freshness="fresh", confidence="high", facts={"bot_id": 186, "strategy_id": 325, "name": "BTC Paper"}),
         ReasoningEvidenceItem(evidence_id="Estatus", artifact_id="status", tool_name="read_bot_status", information_scope="bot_status", domain="automation_context", entity_type="bot_status", entity_id="186", asset="BTC", source="bot_configs", freshness="fresh", confidence="high", facts={"bot_id": 186, "is_live": False}),
     ]
     context = _context(
@@ -193,8 +193,10 @@ def test_linked_bot_read_preserves_the_complete_registry_graph_for_delivery():
     )
     assert reasoning.mode == "READ"
     assert {"Easset", "Esetup", "Estrat", "Ebot", "Estatus"}.issubset(reasoning.evidence_refs_used)
-    assert "strategie 325" in reasoning.direct_answer
-    assert "bot 186" in reasoning.direct_answer
+    assert "strategie BTC Fixed" in reasoning.direct_answer
+    assert "bot BTC Paper" in reasoning.direct_answer
+    assert "325" not in reasoning.direct_answer
+    assert "186" not in reasoning.direct_answer
 
 
 def test_active_setup_read_uses_persisted_name_type_and_timeframe_without_strategy_fields():
@@ -236,6 +238,28 @@ def test_active_setup_strategy_fields_explain_missing_link_without_internal_veri
 
     assert "gekoppelde strategie" in reasoning.main_observation
     assert "response_field_incomplete" not in reasoning.direct_answer
+
+
+def test_linked_strategy_read_renders_all_persisted_strategy_fields_without_ids():
+    evidence = [
+        ReasoningEvidenceItem(evidence_id="Esetup", artifact_id="setup", tool_name="read_active_setup", information_scope="active_setup", domain="plan_context", entity_type="setup", entity_id="326", asset="BTC", source="setups", freshness="fresh", confidence="high", facts={"setup_id": 326, "name": "BTC DCA", "timeframe": "4H", "symbol": "BTC"}),
+        ReasoningEvidenceItem(evidence_id="Estrat", artifact_id="strategy", tool_name="read_linked_strategy", information_scope="linked_strategy", domain="plan_context", entity_type="strategy", entity_id="412", asset="BTC", source="strategies", freshness="fresh", confidence="high", facts={"strategy_id": 412, "setup_id": 326, "setup_name": "BTC DCA", "name": "BTC Fixed", "symbol": "BTC", "timeframe": "4H", "execution_mode": "fixed", "base_amount": 100, "entry": 76000, "stop_loss": 72000, "targets": [80000, 84000], "risk_profile": "balanced"}),
+    ]
+    context = _context(
+        operation_id="read_linked_strategy",
+        required_scope=["active_setup", "linked_strategy"],
+        message="Vat mijn strategie samen met entry, stop-loss, targets en risico.",
+        evidence=evidence,
+    )
+
+    reasoning = FinnV2ReasoningFallbackService().grounded_read_draft(
+        run_id=context.run_id, user_id=context.user_id, context=context, model="deterministic", error_codes=[]
+    )
+
+    for expected in ("BTC Fixed", "BTC DCA", "4H", "fixed", "100", "76000", "72000", "80000", "84000", "balanced"):
+        assert expected in reasoning.direct_answer
+    assert "412" not in reasoning.direct_answer
+    assert "326" not in reasoning.direct_answer
 
 
 def test_active_setup_context_preserves_the_persisted_setup_type():
@@ -324,7 +348,8 @@ def test_response_projection_makes_bot_and_status_visible():
         orchestrator_result=SimpleNamespace(analysis=SimpleNamespace(request_plan=SimpleNamespace(operation_id="read_bot_status"))),
         context=SimpleNamespace(evidence=evidence),
     )
-    assert "BTC paper bot (bot 170) staat niet live" in projected.direct_answer
+    assert "BTC paper bot staat niet live" in projected.direct_answer
+    assert "170" not in projected.direct_answer
     assert FinnV2ResponseVerifierService._covered_response_fields(
         draft=projected, evidence=evidence, required_fields=["bot", "bot_status"],
     ) == ["bot", "bot_status"]

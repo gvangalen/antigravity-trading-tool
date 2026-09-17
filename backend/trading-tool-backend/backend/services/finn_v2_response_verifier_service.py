@@ -285,7 +285,7 @@ class FinnV2ResponseVerifierService:
             timeframe = setup.get("timeframe")
             setup_values = [setup_name, setup_type, timeframe]
             if setup_id is not None or any(value for value in setup_values):
-                label = str(setup_name or f"setup {setup_id}")
+                label = str(setup_name or "je gekoppelde setup")
                 details = [
                     str(value)
                     for value in (setup_type, timeframe)
@@ -306,7 +306,7 @@ class FinnV2ResponseVerifierService:
                 strategy.get("execution_mode"),
             ]
             if strategy_id is not None or any(value for value in strategy_values):
-                label = str(strategy_name or f"strategie {strategy_id}")
+                label = str(strategy_name or "je gekoppelde strategie")
                 details = [
                     str(value)
                     for value in strategy_values[1:]
@@ -324,9 +324,7 @@ class FinnV2ResponseVerifierService:
             bot_name = bot.get("name") or status.get("name")
             is_live = status.get("is_live", bot.get("is_live"))
             if bot_id is not None or bot_name:
-                label = f"bot {bot_id}" if bot_id is not None else str(bot_name)
-                if bot_name and bot_id is not None:
-                    label = f"{bot_name} ({label})"
+                label = str(bot_name or "je gekoppelde paper-bot")
                 status_text = "live" if is_live is True else "niet live" if is_live is False else "status onbekend"
                 if label.casefold() not in rendered or status_text not in rendered:
                     additions.append(f"Je gekoppelde {label} staat {status_text}.")
