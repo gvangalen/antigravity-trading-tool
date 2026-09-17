@@ -3973,9 +3973,7 @@ function AIAssistantContent({
 
   useEffect(() => {
     if (isOpen) {
-      if (!previewSectionsOnly) {
-        loadMissionControl();
-      }
+      loadMissionControl();
       if (isAssetAnalysisPage) {
         loadInsight();
       }
@@ -5916,6 +5914,7 @@ function AIAssistantContent({
     compactMissionReason ||
     primaryBehaviorRule ||
     "";
+  const personalWorkspaceSummary = String(missionControl?.finn_briefing?.summary || "").trim();
   const defaultWorkspaceActionHint = workspaceBriefingLines[3] || "";
   const firstDashboardHeadline = firstDashboardContext?.headline
     || at("uiText.workspaceFirstDashboardHeadline", uiText.workspaceFirstDashboardHeadline, {
@@ -5936,13 +5935,13 @@ function AIAssistantContent({
         symbol: activeBriefingSymbol,
       })
     : defaultWorkspaceHeadline;
-  const workspaceSupport = firstDashboardContext
+  const workspaceSupport = personalWorkspaceSummary || (firstDashboardContext
     ? firstDashboardSupport
     : workspaceIsStillBuilding
     ? at("uiText.workspaceBuildingSupport", uiText.workspaceBuildingSupport, {
         symbol: activeBriefingSymbol,
       })
-    : defaultWorkspaceSupport;
+    : defaultWorkspaceSupport);
   const workspaceActionHint = firstDashboardContext
     ? firstDashboardHint
     : workspaceIsStillBuilding

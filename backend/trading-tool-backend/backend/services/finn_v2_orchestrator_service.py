@@ -70,6 +70,9 @@ class FinnV2OrchestratorService:
     @staticmethod
     def _contract_operation_state_view(execution_view: dict) -> dict:
         """Derive action state only from the persisted runtime contract."""
+        guided_state = dict(execution_view.get("guided_state") or {})
+        if guided_state.get("status") == "cancelled":
+            return guided_state
         missing_inputs = list(execution_view.get("missing_inputs") or [])
         action_contract = dict(execution_view.get("action_contract") or {})
         return {
@@ -341,6 +344,13 @@ class FinnV2OrchestratorService:
         )
         guided_state = dict(getattr(request_plan, "operation_state", {}) or {})
         record_guided_draft = getattr(self.runtime_contracts, "record_guided_draft", None)
+        record_conversation_state = getattr(self.runtime_contracts, "record_conversation_state", None)
+        if guided_state.get("status") == "cancelled" and callable(record_conversation_state):
+            runtime_contract = await record_conversation_state(
+                run_id=run_id,
+                lineage_state=dict((runtime_contract.state_json or {}).get("lineage_state") or {}),
+                guided_state=guided_state,
+            )
         if (
             guided_state
             and getattr(request_plan, "operation_id", None)
@@ -373,6 +383,22 @@ class FinnV2OrchestratorService:
             }
         )
         analysis = analysis.copy(update={"request_plan": request_plan, "interaction_mode": execution_view["interaction_mode"]})
+        if guided_state.get("status") == "cancelled":
+            await self._append_trace(
+                run_id=run_id,
+                user_id=user_id,
+                trace_id=trace_id,
+                event_type="guided_operation_cancelled",
+                payload_json={"run_id": run_id, "contract_id": runtime_contract.contract_id},
+            )
+            await self._record_phase_timestamp(run_id=run_id, phase="fast_path_completed")
+            await self._commit_persistence_boundary(stage="guided_cancel_persisted")
+            self.phase_outcome = LifecyclePhaseOutcome(
+                terminal_status="clarification_required",
+                interaction_mode="CLARIFICATION",
+                orchestrator_result_id="guided-operation-cancelled",
+            )
+            return None
         if execution_view["initial_operation_id"] == "capability":
             # This is a post-selector execution path, not a keyword router.
             # The persisted structured selection is a deterministic, read-only

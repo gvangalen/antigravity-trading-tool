@@ -16,13 +16,13 @@
     "synthetic_fixture_only": true,
     "cases": [
       {
-        "id": "paper_bot_budget_initial_read",
+        "id": "setup_strategy_paper_bot_visible_chain",
         "result": "PASS",
         "assertions": [
-          "owner-scoped bot resolved by natural name",
-          "linked setup and strategy names visible",
-          "budget rendered as EUR 500",
-          "non-live status visible"
+          "setup draft card rendered and confirmed",
+          "strategy draft retained EUR 100 across short guided turns",
+          "paper bot proposal named its linked strategy",
+          "all three persisted owner-scoped entities were visible after refresh and relogin"
         ]
       },
       {
@@ -43,14 +43,52 @@
           "same owner-scoped bot resolved",
           "execution success replaced proposal card",
           "refresh retained updated data",
-          "readback rendered EUR 1000",
+          "readback rendered EUR 750",
           "bot remained non-live"
         ]
+      },
+      {
+        "id": "guided_strategy_cancel_boundary",
+        "result": "PASS",
+        "assertions": [
+          "incomplete strategy card requested only the next missing slot",
+          "explicit standalone cancel persisted a typed cancelled transition",
+          "cancel terminalized through the public run route without tools or provider work",
+          "the following complete create_strategy command produced a fresh proposal"
+        ],
+        "terminal_content": "Het strategievoorstel is geannuleerd. Er is niets gewijzigd."
+      },
+      {
+        "id": "draft_card_visual_hierarchy",
+        "result": "PASS",
+        "assertions": [
+          "incomplete and complete Strategy cards use human labels",
+          "Setup update card shows only 4H to 1D",
+          "Paper Bot card states no live trading",
+          "delete Strategy card names the linked Setup",
+          "no IDs, runtime keys, null values, or shadow-run copy are visible"
+        ]
+      },
+      {
+        "id": "dependency_ordered_cleanup",
+        "result": "PASS",
+        "assertions": [
+          "paper bot deleted first",
+          "strategy deleted second",
+          "setup deleted last",
+          "each write required a visible proposal and explicit confirmation",
+          "compact success copy matched the committed database effect"
+        ],
+        "database_after": {
+          "setups": 0,
+          "strategies": 0,
+          "bot_configs": 0
+        }
       }
     ],
     "visual_capture": {
       "captured_with": "Codex CUA screenshot",
-      "contents": "cancel result, compact execution success, refreshed EUR 1000 readback",
+      "contents": "FINN Today, incomplete Strategy card, complete Strategy card, Setup update card, Paper Bot card, delete Strategy card, and compact committed success responses",
       "repository_file": null,
       "note": "The desktop was locked, so macOS screencapture could not persist a duplicate file; the CUA capture remains attached to the validation transcript."
     }
@@ -88,12 +126,30 @@
       "live_trading_activations": 0,
       "live_bot_activations": 0,
       "cross_user_fallbacks": 0
+    },
+    "cleanup": {
+      "synthetic_user_id": 2,
+      "setups_after": 0,
+      "strategies_after": 0,
+      "bot_configs_after": 0,
+      "unconfirmed_proposals_after": 0
+    },
+    "guided_cancel": {
+      "result": "PASS",
+      "selector_operation": "create_strategy",
+      "final_operation": "clarify_request",
+      "operation_change_reason": "guided_operation_cancelled",
+      "guided_status": "cancelled",
+      "dispatch_count": 1,
+      "attempt_count": 1,
+      "provider_calls": 0,
+      "business_writes": 0
     }
   },
   "tests": {
     "backend_rootsuite": {
       "result": "PASS",
-      "passed": 2154,
+      "passed": 2155,
       "skipped": 3
     },
     "frontend": {
@@ -109,8 +165,8 @@
       "operation_accuracy": 1.0,
       "target_accuracy": 1.0,
       "polarity_accuracy": 1.0,
-      "p50_ms": 2044,
-      "p95_ms": 3392,
+      "p50_ms": 2103,
+      "p95_ms": 3447,
       "failure_rates": {
         "provider": 0.0,
         "schema": 0.0,
@@ -118,8 +174,8 @@
         "validation": 0.0,
         "timeout": 0.0
       },
-      "artifact": "/tmp/finn-74ea-targeted-provider-development.json",
-      "sha256": "039074cdb3eb54f330bf7cd6f07fd51b7b6d137f0f9498aa298c7b131c1dfb9f"
+      "artifact": "/tmp/finn-74ea-targeted-provider-development-final.json",
+      "sha256": "e8d5182eddc89fbe28ed0579765b9d47b7cf2e0f1ae8be2496fb8d469f86a43a"
     },
     "provider_regression": {
       "result": "PASS",
@@ -127,8 +183,8 @@
       "operation_accuracy": 1.0,
       "target_accuracy": 1.0,
       "polarity_accuracy": 1.0,
-      "p50_ms": 2014,
-      "p95_ms": 3344,
+      "p50_ms": 1984,
+      "p95_ms": 2884,
       "failure_rates": {
         "provider": 0.0,
         "schema": 0.0,
@@ -136,8 +192,8 @@
         "validation": 0.0,
         "timeout": 0.0
       },
-      "artifact": "/tmp/finn-74ea-targeted-provider-regression.json",
-      "sha256": "87a4a4cd6f632cd03e679414abebffdb3ac1411b11711262952729cd4feafd1e"
+      "artifact": "/tmp/finn-74ea-targeted-provider-regression-final.json",
+      "sha256": "1f712ed5f20a74fe1219e64e13a14b2e9c0067e17a09c39f3f745cf309fba3a8"
     }
   },
   "release": {

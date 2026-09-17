@@ -829,6 +829,28 @@ def test_collecting_setup_draft_uses_product_copy_in_its_terminal_placeholder():
     assert "dca_frequency" not in response["content"]
 
 
+def test_cancelled_guided_draft_uses_natural_terminal_copy():
+    run_service = FinnV2RunService(session=object())
+
+    response = run_service._terminal_placeholder_response(
+        interaction_mode="CREATE_PROPOSAL",
+        terminal_status="clarification_required",
+        orchestrator={},
+        verifier={},
+        reasoning={},
+        delivery_envelope={},
+        setup_draft={
+            "operation_id": "create_strategy",
+            "draft_status": "cancelled",
+            "supplied_inputs": {"name": "Visible Card Strategy"},
+        },
+    )
+
+    assert response["mode"] == "CLARIFICATION"
+    assert response["verifier_status"] == "registry_grounded"
+    assert response["content"] == "Het strategievoorstel is geannuleerd. Er is niets gewijzigd."
+
+
 def test_collecting_strategy_and_bot_drafts_use_contract_questions_not_internal_keys():
     run_service = FinnV2RunService(session=object())
 

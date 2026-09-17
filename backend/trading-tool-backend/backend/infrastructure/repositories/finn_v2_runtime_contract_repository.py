@@ -167,6 +167,7 @@ class FinnV2RuntimeContractRepository(FinnV2RepositoryTransactionMixin):
             "conversation_reference_kind": state.get("conversation_reference_kind"),
             "selector_provenance": dict(state.get("selector_provenance") or {}),
             "action_contract": dict(state.get("action_contract") or {}),
+            "guided_state": dict(state.get("guided_state") or {}),
             "supplied_inputs": dict(state.get("supplied_inputs") or {}),
             "missing_inputs": list(state.get("missing_inputs") or []),
         }

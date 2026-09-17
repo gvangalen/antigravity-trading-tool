@@ -220,6 +220,7 @@ class FinnV2RunService:
         setup_draft = dict((getattr(runtime_contract, "state_json", {}) or {}).get("setup_draft") or {})
         guided_draft = setup_draft or {
             "operation_id": guided_operation,
+            "draft_status": guided_state.get("status"),
             "supplied_inputs": dict(guided_state.get("collected_inputs") or {}),
             "missing_inputs": list(guided_state.get("missing_required_inputs") or []),
             "requested_slot": guided_state.get("next_missing_input"),
@@ -358,7 +359,11 @@ class FinnV2RunService:
         content = placeholder.get("content") or "FINN V2 kon geen verified response afronden."
         mode = interaction_mode or "UNAVAILABLE"
         verifier_status = "not_run"
-        if normalize_interaction_mode(interaction_mode) == "CAPABILITY" and terminal_status == "completed":
+        if dict(setup_draft or {}).get("draft_status") == "cancelled":
+            content = "Het strategievoorstel is geannuleerd. Er is niets gewijzigd."
+            mode = "CLARIFICATION"
+            verifier_status = "registry_grounded"
+        elif normalize_interaction_mode(interaction_mode) == "CAPABILITY" and terminal_status == "completed":
             # The selector has already chosen and persisted this read-only
             # registry contract; it needs no tools or second provider call.
             content = (

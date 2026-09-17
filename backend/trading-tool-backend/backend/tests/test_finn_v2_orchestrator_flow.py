@@ -34,6 +34,27 @@ def test_contract_operation_state_view_uses_only_persisted_action_inputs():
     }
 
 
+def test_contract_operation_state_view_preserves_cancelled_guided_transition():
+    cancelled = {
+        "operation_id": "create_strategy",
+        "contract_version": "2026-08-23.operation-contracts.v1",
+        "collected_inputs": {"name": "Concept"},
+        "missing_required_inputs": [],
+        "next_missing_input": None,
+        "status": "cancelled",
+    }
+
+    state = FinnV2OrchestratorService._contract_operation_state_view({
+        "operation_id": "clarify_request",
+        "guided_state": cancelled,
+        "action_contract": {"version": "2026-08-23.operation-contracts.v1"},
+        "supplied_inputs": {},
+        "missing_inputs": ["requested_change"],
+    })
+
+    assert state == cancelled
+
+
 @pytest.fixture(autouse=True)
 def _contract_boundary_for_unit_orchestrators(monkeypatch):
     """These unit flows intentionally avoid a database; production does not."""
