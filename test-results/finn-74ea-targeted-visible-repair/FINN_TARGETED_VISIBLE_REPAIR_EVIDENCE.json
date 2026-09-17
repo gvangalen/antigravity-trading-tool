@@ -99,7 +99,6 @@
         "budget_update_draft": "08-budget-update-draft.png",
         "budget_update_cancelled": "09-budget-update-cancelled.png",
         "budget_update_executed": "10-budget-update-executed.png",
-        "bot_budget_readback": "11-bot-readback-refresh.png",
         "strategy_delete_draft": "12-strategy-delete-draft.png",
         "cleanup_complete": "13-cleanup-complete.png"
       }
@@ -161,7 +160,7 @@
   "tests": {
     "backend_rootsuite": {
       "result": "PASS",
-      "passed": 2160,
+      "passed": 2169,
       "skipped": 3
     },
     "frontend": {
@@ -177,8 +176,8 @@
       "operation_accuracy": 1.0,
       "target_accuracy": 1.0,
       "polarity_accuracy": 1.0,
-      "p50_ms": 1958.5,
-      "p95_ms": 2803,
+      "p50_ms": 1868.5,
+      "p95_ms": 3640,
       "failure_rates": {
         "provider": 0.0,
         "schema": 0.0,
@@ -186,8 +185,8 @@
         "validation": 0.0,
         "timeout": 0.0
       },
-      "artifact": "/tmp/finn-74ea-targeted-provider-development-final-v2.json",
-      "sha256": "4c7b5ccf0a09aa390a29a81f9b5eb34c8cc45df7741beb694f633763ccd3a532"
+      "artifact": "/tmp/finn-74ea-targeted-provider-development-final-v3.json",
+      "sha256": "9f0b21b07979213e3616de2ee94f49b5597c0a7710c71634dc7fffc842eb26ce"
     },
     "provider_regression": {
       "result": "PASS",
@@ -195,8 +194,8 @@
       "operation_accuracy": 1.0,
       "target_accuracy": 1.0,
       "polarity_accuracy": 1.0,
-      "p50_ms": 1933,
-      "p95_ms": 3069,
+      "p50_ms": 1916,
+      "p95_ms": 2548,
       "failure_rates": {
         "provider": 0.0,
         "schema": 0.0,
@@ -204,8 +203,8 @@
         "validation": 0.0,
         "timeout": 0.0
       },
-      "artifact": "/tmp/finn-74ea-targeted-provider-regression-final-v2.json",
-      "sha256": "5b70dab586ada4f1cc4844a2d0e6f0097aa82cc2986998982fb1d9c13dc1be1b"
+      "artifact": "/tmp/finn-74ea-targeted-provider-regression-final-v3.json",
+      "sha256": "2a9e2f53c3697e79a50d0ed923f956e218ee0274bf2df2d068a6df9a662e8245"
     }
   },
   "local_runtime_note": {
@@ -219,8 +218,18 @@
       "dependency-ordered cleanup executed"
     ],
     "provider_readback": "PASS",
-    "provider_readback_worker_pool": "solo",
-    "reason": "The macOS Python 3.13 prefork child was killed by the host during provider-backed read work; product tests and real-provider selector suites remained green. No repository or production worker configuration was changed."
+    "provider_readback_worker_pool": "Linux prefork",
+    "combined_linux_prefork_visible_browser": "PASS",
+    "runtime_contracts": "16/16",
+    "run_latency_ms": {
+      "p50": 617.2,
+      "p95": 3462.4,
+      "max": 4124.1
+    },
+    "validation_environment_notes": [
+      "The temporary ARM validation image pinned cryptography 43.0.3 to avoid a Docker Desktop ARM SIGILL in cryptography 50.0.1; repository dependencies and candidate code were unchanged.",
+      "The isolated parity database lacked a selectable technical-indicator catalog row, so only that synthetic onboarding completion bit was set. All FINN runtime and business mutations used the visible browser and public routes."
+    ]
   },
   "release": {
     "deployment_performed": false,
