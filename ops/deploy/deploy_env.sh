@@ -236,9 +236,11 @@ if ! printf '%s\n' "$DEPLOY_GIT_TOKEN" | timeout --foreground "${REMOTE_DEPLOY_C
   # healthy candidate fail its own SHA-bound readiness check.
   export TRADAMIND_BUILD_COMMIT_SHA=$TARGET_COMMIT_FULL
   export TRADAMIND_BUILD_TIME=$BUILD_TIMESTAMP_UTC
+  # Twelve Data is optional: the runtime has an explicit provider fallback
+  # when no key is configured. Do not block otherwise healthy releases on a
+  # credential that has never been part of the production secret contract.
   if [ -z "\${TWELVE_DATA_API_KEY:-}" ]; then
-    echo \"❌ TWELVE_DATA_API_KEY ontbreekt in runtime env (\$ENV_FILE).\" >&2
-    exit 1
+    echo \"ℹ️ TWELVE_DATA_API_KEY is not configured; provider fallback remains active.\"
   fi
   advance_deploy_step 'git_sync'
   mkdir -p $DEPLOY_STATE_DIR
