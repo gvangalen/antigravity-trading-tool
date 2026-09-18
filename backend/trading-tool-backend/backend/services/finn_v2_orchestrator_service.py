@@ -855,6 +855,7 @@ class FinnV2OrchestratorService:
             action_result.get("entity_id")
             and action_result.get("owner_user_id") == user_id
             and action_result.get("result_status") == "succeeded"
+            and not str(action_result.get("operation_id") or "").startswith("delete_")
         ):
             # A confirmed execution is the only cross-turn object reference
             # accepted without an explicit current-turn identifier.
@@ -879,6 +880,7 @@ class FinnV2OrchestratorService:
                 latest_action_result.get("owner_user_id") == user_id
                 and latest_action_result.get("entity_id") is not None
                 and latest_action_result.get("result_status") == "succeeded"
+                and not str(latest_action_result.get("operation_id") or "").startswith("delete_")
             ):
                 context["previous_action_result"] = latest_action_result
                 context["previous_action_result_source"] = "conversation_action_result"

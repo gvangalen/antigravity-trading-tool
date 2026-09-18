@@ -93,6 +93,19 @@ class FinnV2OperationStateService:
                 )
             )
             explicit = {str(requested_slot): slot_value} if slot_value is not None else {}
+            # A guided reply can explicitly answer more than the requested
+            # slot (for example "Trade setup, naam Momentum"). Keep the
+            # active contract authoritative and accept only its still-missing
+            # fields; already collected values remain immutable here.
+            labelled = self.explicit_inputs(
+                contract=contract,
+                message=message,
+                explicit_asset=contract_asset,
+            )
+            missing_fields = set(existing.missing_required_inputs)
+            for key, value in labelled.items():
+                if key in missing_fields and not self._is_missing(value):
+                    explicit.setdefault(key, value)
         else:
             explicit = self.explicit_inputs(
                 contract=contract,

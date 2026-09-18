@@ -116,6 +116,52 @@ def test_deterministic_proposal_contract_creates_one_missing_field_clarification
     assert result.proposal_candidate is None
 
 
+def test_deterministic_bot_draft_names_the_exact_missing_contract_field():
+    service = FinnV2ReasoningService(session=object())
+    context = ReasoningContextPackage(
+        run_id="run-guided-bot",
+        user_id=406,
+        user_message="Maak een paper-bot voor mijn strategie.",
+        locale="nl-NL",
+        interaction_mode="CREATE_PROPOSAL",
+        orchestrator_result_id="o-guided-bot",
+        snapshot_id="s-guided-bot",
+        validation_id="v-guided-bot",
+        policy_decision_id="p-guided-bot",
+        evidence_set_hash="guided-bot-hash",
+        evidence=[],
+        policy=ReasoningPolicyContext(
+            policy_class="proposal",
+            allowed=True,
+            proposal_allowed=True,
+            confirmation_required=True,
+            step_up_required=False,
+            execution_allowed=False,
+            operation_type="create_bot",
+        ),
+        request_plan={
+            "operation_id": "create_bot",
+            "operation_state": {
+                "collected_inputs": {"strategy_id": 52},
+                "missing_required_inputs": ["name"],
+                "next_missing_input": "name",
+            },
+        },
+    )
+
+    result = service._deterministic_contract_draft(
+        contract=FinnV2OperationRegistry().require_supported("create_bot"),
+        run_id=context.run_id,
+        user_id=context.user_id,
+        context=context,
+        model="deterministic",
+    )
+
+    assert result.mode == "CLARIFICATION"
+    assert result.follow_up_question == "Welke korte naam wil je voor deze paper-bot gebruiken?"
+    assert "ontbrekend detail" not in result.follow_up_question
+
+
 def test_deterministic_setup_proposal_uses_completed_typed_state_without_write():
     service = FinnV2ReasoningService(session=object())
     context = ReasoningContextPackage(

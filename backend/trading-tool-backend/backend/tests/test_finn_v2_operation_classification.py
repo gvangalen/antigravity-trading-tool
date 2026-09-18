@@ -656,6 +656,38 @@ def test_guided_strategy_requested_slot_cannot_overwrite_a_previous_amount():
     assert state.input_provenance["entry"] == {"source": "explicit", "state_revision": 5}
 
 
+def test_guided_setup_turn_accepts_multiple_explicit_missing_contract_fields():
+    registry = FinnV2OperationRegistry()
+    contract = registry.require_supported("create_setup")
+    service = FinnV2OperationStateService()
+    context = {
+        "conversation_state_version": service.CONTEXT_STATE_VERSION,
+        "active_guided_operation": {
+            "operation_id": "create_setup",
+            "contract_version": contract.version,
+            "state_revision": 2,
+            "collected_inputs": {"symbol": "BTC"},
+            "missing_required_inputs": ["setup_type", "timeframe", "name"],
+            "next_missing_input": "setup_type",
+            "status": "collecting",
+        },
+    }
+
+    state = service.resolve(
+        contract=contract,
+        message="Trade setup, naam BTC Lineage Flow en timeframe 4H.",
+        explicit_asset=None,
+        conversation_context=context,
+    )
+
+    assert state.operation_id == "create_setup"
+    assert state.collected_inputs["symbol"] == "BTC"
+    assert state.collected_inputs["setup_type"] == "trade"
+    assert state.collected_inputs["timeframe"] == "4H"
+    assert state.collected_inputs["name"] == "BTC Lineage Flow"
+    assert state.missing_required_inputs == []
+
+
 def test_guided_strategy_entry_precedes_workspace_setup_field_read():
     registry = FinnV2OperationRegistry()
     contract = registry.require_supported("create_strategy")

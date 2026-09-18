@@ -223,6 +223,42 @@ def test_conversation_hydrates_its_latest_owner_action_result_not_global_history
     assert context["previous_action_result_source"] == "conversation_action_result"
 
 
+def test_deleted_action_result_is_audited_but_not_reused_as_live_entity_lineage():
+    from backend.services.finn_v2_orchestrator_service import FinnV2OrchestratorService
+
+    deleted_result = {
+        "operation_id": "delete_indicator_configuration",
+        "entity_type": "indicator_configuration",
+        "entity_id": "technical:BTC:rsi",
+        "canonical_name": "RSI",
+        "owner_user_id": 7,
+        "result_status": "succeeded",
+    }
+
+    class _Conversations:
+        async def get_context(self, **_kwargs):
+            return {}
+
+    class _Contracts:
+        async def get_latest_for_conversation(self, **_kwargs):
+            return SimpleNamespace(state_json={"action_result": deleted_result})
+
+        async def get_latest_action_result_for_conversation(self, **_kwargs):
+            return SimpleNamespace(state_json={"action_result": deleted_result})
+
+    service = object.__new__(FinnV2OrchestratorService)
+    service.conversations = _Conversations()
+    service.runtime_contracts = _Contracts()
+
+    context = asyncio.run(service._load_continuation_context(
+        conversation_id="conversation-indicator-delete",
+        user_id=7,
+        run_id="next-delete-run",
+    ))
+
+    assert "previous_action_result" not in context
+
+
 def test_new_conversation_does_not_implicitly_load_an_unrelated_owner_action_result():
     from backend.services.finn_v2_orchestrator_service import FinnV2OrchestratorService
 

@@ -993,6 +993,7 @@ class FinnV2ReasoningFallbackService:
             next_field = operation_state.get("next_missing_input") or missing[0]
             question = FinnV2OperationStateService.clarification_question(
                 next_field,
+                contract=contract,
                 collected_inputs=operation_state.get("collected_inputs") or {},
             )
             return ReasoningResult(
