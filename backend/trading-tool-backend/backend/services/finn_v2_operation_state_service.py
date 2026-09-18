@@ -22,7 +22,19 @@ class FinnV2OperationStateService:
         """Parse user-facing NL/EN/DE numbers without losing thousands."""
         if not isinstance(value, str):
             return value
-        normalized = re.sub(r"\s+", "", value.strip()).rstrip(".,")
+        raw_value = value.strip().casefold().rstrip(".,")
+        word_numbers = {
+            "honderd": 100, "duizend": 1000,
+            "hundred": 100, "thousand": 1000,
+            "hundert": 100, "tausend": 1000,
+            "one hundred": 100, "one thousand": 1000,
+            "een honderd": 100, "een duizend": 1000,
+            "einhundert": 100, "eintausend": 1000,
+        }
+        currency_free = re.sub(r"\s*(?:€|eur|euro|euros)\s*$", "", raw_value).strip()
+        if currency_free in word_numbers:
+            return word_numbers[currency_free]
+        normalized = re.sub(r"\s+", "", currency_free)
         if not re.fullmatch(r"\d+(?:[.,]\d+)*", normalized):
             return value
         if "." in normalized and "," in normalized:
@@ -839,7 +851,9 @@ class FinnV2OperationStateService:
         if contract.operation_id == "update_bot":
             budget_transition = re.search(
                 r"\b(?:budget|totaalbudget|total\s+budget|gesamtbudget)\b"
-                r"[^\d\n]{0,120}?(?:€|eur|euro)?\s*([0-9][0-9.,]*)",
+                r"[^\n]{0,160}?\b(?:naar|to|auf|op|at|setze\s+auf)\s+"
+                r"(?:€|eur|euro)?\s*([0-9][0-9.,]*|honderd|duizend|hundred|thousand|hundert|tausend)"
+                r"(?:\s*(?:€|eur|euro|euros))?\b",
                 text,
                 re.IGNORECASE,
             )

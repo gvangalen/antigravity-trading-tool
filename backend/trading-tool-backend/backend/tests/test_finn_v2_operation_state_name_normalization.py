@@ -445,6 +445,9 @@ def test_update_bot_extracts_budget_without_exposing_setup_copy():
         ("Set the budget of Audit BTC Paper to EUR 1,000.", 1000),
         ("Setze das Budget von Audit BTC Paper auf 1.000 Euro.", 1000),
         ("Wijzig het budget naar €1,5.", 1.5),
+        ("Wijzig het budget van paper-bot BTC Paper 6mtjwt naar 1000 euro.", 1000),
+        ("Wijzig het budget van paper-bot BTC Paper 6mtjwt naar duizend euro.", 1000),
+        ("Set the budget of BTC Paper 6mtjwt to one thousand euro.", 1000),
     ],
 )
 def test_update_bot_preserves_localized_budget_magnitude(message, expected):

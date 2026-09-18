@@ -123,8 +123,14 @@ def _insert_setup(
     setup_type: str = "trade",
 ) -> int:
     return int(connection.execute(text("""
-        INSERT INTO setups (user_id, name, symbol, timeframe, setup_type, created_at)
-        VALUES (:user_id, :name, :symbol, '4H', :setup_type, NOW()) RETURNING id
+        INSERT INTO setups (
+            user_id, name, symbol, timeframe, setup_type, dca_frequency, created_at
+        )
+        VALUES (
+            :user_id, :name, :symbol, '4H', :setup_type,
+            CASE WHEN :setup_type = 'dca' THEN 'daily' ELSE NULL END,
+            NOW()
+        ) RETURNING id
     """), {"user_id": user_id, "name": name, "symbol": symbol, "setup_type": setup_type}).scalar_one())
 
 
@@ -133,7 +139,7 @@ def _insert_strategy(connection, user_id: int, setup_id: int, name: str) -> int:
         INSERT INTO strategies (user_id, setup_id, name, setup_type, execution_mode,
                                 base_amount, entry, targets, stop_loss, data, created_at)
         VALUES (:user_id, :setup_id, :name, 'trade', 'fixed', 100, 100,
-                ARRAY['120']::TEXT[], 90,
+                ARRAY[120]::NUMERIC[], 90,
                 CAST(:data AS jsonb), NOW()) RETURNING id
     """), {"user_id": user_id, "setup_id": setup_id, "name": name,
             "data": json.dumps({

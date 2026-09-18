@@ -26,4 +26,14 @@ test("FINN Today renders the typed personal mission-control briefing", () => {
     /if \(isOpen\) \{\s*loadMissionControl\(\);/,
     "the compact FINN Today preview must load the same typed mission-control projection",
   );
+  assert.match(
+    assistantSource,
+    /if \(Object\.keys\(preferences\)\.length === 0\)/,
+    "the compact first-login preview must load the persisted trader profile",
+  );
+  assert.doesNotMatch(
+    assistantSource,
+    /Laatste analyse nog niet beschikbaar\./,
+    "missing fresh market data must not erase the known personal context",
+  );
 });

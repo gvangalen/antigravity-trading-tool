@@ -940,11 +940,20 @@ function AIAssistantContent({
         .join("\n");
     }
 
+    const profileParts = [
+      traderTypes[0] ? traderTypeLabelMap[traderTypes[0]] || traderTypes[0].replaceAll("_", " ") : null,
+      profileRisk[0] ? humanizeSurfaceStatus(profileRisk[0]) : null,
+      profileTimeframes[0] || null,
+    ].filter(Boolean);
+    const personalContextLine = profileParts.length
+      ? `Je opgeslagen profiel (${profileParts.join(" · ")}) is actief voor ${symbol}.`
+      : `Je opgeslagen ${symbol}-context is actief.`;
+
     return [
       greetingLine,
-      at("briefing.market.default", "", { symbol }),
-      "Laatste analyse nog niet beschikbaar.",
-      "Nieuwe marktgegevens worden verwerkt.",
+      personalContextLine,
+      `Er is nog geen nieuwe marktanalyse voor ${symbol}; ik gebruik je profiel en opgeslagen plancontext wel al.`,
+      "Nieuwe marktgegevens worden op de achtergrond verwerkt.",
     ].join("\n");
   };
 
@@ -3981,7 +3990,7 @@ function AIAssistantContent({
       if (!previewSectionsOnly) {
         loadFinnState();
       }
-      if (!previewSectionsOnly && Object.keys(preferences).length === 0) {
+      if (Object.keys(preferences).length === 0) {
         getAssistantPreferences().then(res => setPreferences(res.preferences || {}));
       }
     } else {
@@ -4774,7 +4783,10 @@ function AIAssistantContent({
     setExecutingAction(true);
     try {
       if (proposalId) await cancelFinnV2Proposal(proposalId);
-      setMessages(prev => prev.map((m, idx) => idx === index ? {
+      setMessages(prev => prev.map((m, idx) => {
+        const messageProposalId = (m?.actions || []).find((action) => action?.type === "v2_proposal")?.proposal_id;
+        if (idx !== index && (!proposalId || messageProposalId !== proposalId)) return m;
+        return {
         ...m,
         text: "Voorstel geannuleerd. Er is niets gewijzigd.",
         actions: [],
@@ -4782,7 +4794,8 @@ function AIAssistantContent({
         actionDraft: null,
         state: { ...(m.state || {}), setup_draft: null, action_draft: null },
         draftCanceled: true,
-      } : m));
+        };
+      }));
       showSnackbar("Voorstel geannuleerd", "info");
     } catch (error) {
       showSnackbar("Dit voorstel kon niet worden geannuleerd.", "error");
@@ -5131,6 +5144,7 @@ function AIAssistantContent({
   };
 
   const renderV2SetupDraftCard = (message, messageIndex) => {
+    if (message?.draftCanceled || message?.draftExecuted) return null;
     const draft = message.setupDraft || message.state?.setup_draft;
     if (!draft || draft.operation_id !== "create_setup") return null;
     const supplied = draft.supplied_inputs || {};
@@ -5156,6 +5170,7 @@ function AIAssistantContent({
   };
 
   const renderV2ActionDraftCard = (message, messageIndex) => {
+    if (message?.draftCanceled || message?.draftExecuted) return null;
     const draft = message.actionDraft || message.state?.action_draft;
     const operationId = draft?.operation_id;
     if (!draft || !["create_strategy", "create_bot"].includes(operationId)) return null;
