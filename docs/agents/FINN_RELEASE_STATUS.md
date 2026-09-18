@@ -8,10 +8,10 @@ short; link artifacts rather than copying reports or chat history.
 | Field | Value |
 | --- | --- |
 | Phase | `BUILD_VALIDATED` |
-| Active goal | FINN targeted presentation and cross-surface context repair |
-| Candidate branch | `codex/finn-74ea-targeted-visible-repair` |
-| Candidate code SHA | `929062b3ea01a76b15c0b9bce48dab62cccc699a` |
-| Production SHA | `74ea7bdc91f6dda3d113a3d444fe44458e2fca43` |
+| Active goal | FINN Today finalized briefing and locale repair |
+| Candidate branch | `codex/finn-today-final-briefing` |
+| Candidate code SHA | `18df0f34ce0a0a64887f5a94a7e296078a5f678d` |
+| Production SHA | `77ed2738eac91e0f8c6c94eb9e576d1f6790d3d0` |
 | Release owner | Build |
 | Last updated | `2026-09-18` |
 
@@ -33,10 +33,10 @@ committed status file as a self-referential release marker.
 
 | Gate | Status | Evidence |
 | --- | --- | --- |
-| Targeted worker-driven browser flow | `PASS` | Visible Setup → Strategy → Paper-Bot, cross-surface target/readback, FINN Today, cancel/confirm, refresh/relogin, and cleanup passed. Evidence `/tmp/FINN_TARGETED_VISIBLE_REPAIR_FINAL.json`, SHA-256 `ccb28ecd91dfd0b2b2ff8fa8babd75f02a1d242ca6dcade027fcc06dd57c89f7`. |
-| Provider development | `PASS` | Real provider `18/18`; artifact `/tmp/finn-74ea-targeted-provider-development-final-v3.json`, SHA-256 `9f0b21b07979213e3616de2ee94f49b5597c0a7710c71634dc7fffc842eb26ce`. |
-| Provider regression | `PASS` | Real provider `109/109`; provider/schema/parse/validation/timeout failures `0`. Artifact `/tmp/finn-74ea-targeted-provider-regression-final-v3.json`, SHA-256 `2a9e2f53c3697e79a50d0ed923f956e218ee0274bf2df2d068a6df9a662e8245`. |
-| Backend suite | `PASS` | `2169 passed, 3 skipped` from the canonical checkout root. |
+| FINN Today finalization | `PASS` | A queued/generating briefing immediately projects the current personal fallback, compact preview polling remains active, and locale copy replaces backend loading/status text; focused backend `29/29` and frontend `6/6`. |
+| Provider development | `PASS` | Real provider `18/18`, no retries or provider/schema/parse/validation/timeout failures; artifact `/tmp/finn-today-final-provider-development.json`, SHA-256 `32c731c7266e2fca1eb51fbe6868f46691604208d9d172fbb02e153e561618dd`. |
+| Provider regression | `PASS` | Real provider `109/109`, no retries or provider/schema/parse/validation/timeout failures; artifact `/tmp/finn-today-final-provider-regression.json`, SHA-256 `77cd5dd3ddd2e40f70f3f996dcb2273de6348d05ae6f670d839506685ade909f`. |
+| Backend suite | `PASS` | `2173 passed, 3 skipped` from the canonical checkout root. |
 | Frontend suite | `PASS` | `typecheck`, `lint:i18n`, `test:i18n` (`7/7`), `test:commands` (`5/5`), `audit:high`, and production build passed. |
 | CI | `NOT_RUN` | Awaiting the validated candidate push. |
 | Deployment | `NOT_RUN` | Production remains on the prior release until Auto Deploy completes. |
