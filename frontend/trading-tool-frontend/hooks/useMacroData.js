@@ -15,6 +15,7 @@ import {
   bootstrapMacroPreferences,
   syncMacroPreferences,
 } from "@/lib/api/macro";
+import { mergeConfiguredIndicatorRows } from "@/lib/indicators/configuredIndicatorRows.mjs";
 
 const MACRO_INDICATOR_NAMES_CACHE_TTL_MS = 5 * 60 * 1000;
 let macroIndicatorNamesCache = [];
@@ -77,9 +78,12 @@ export function useMacroData(activeTab = "Dag", symbol = "BTC") {
      🔑 Helpers
   ------------------------------------------------------------ */
   const activeMacroIndicatorNames = macroData.map((m) => m.name);
-  const configuredMacroIndicatorNames = Array.isArray(preferences.indicators)
-    ? preferences.indicators.map((item) => item.indicator).filter(Boolean)
-    : [];
+  const configuredMacroIndicatorNames = useMemo(
+    () => Array.isArray(preferences.indicators)
+      ? preferences.indicators.map((item) => item.indicator).filter(Boolean)
+      : [],
+    [preferences.indicators],
+  );
   const assetClass = preferences.assetClass || null;
 
   const loadPreferences = useCallback(async () => {
@@ -207,7 +211,7 @@ export function useMacroData(activeTab = "Dag", symbol = "BTC") {
         timestamp: item.timestamp ?? null,
       }));
 
-      setMacroData(normalized);
+      setMacroData(mergeConfiguredIndicatorRows(normalized, configuredMacroIndicatorNames));
       return true;
     } catch (err) {
       console.error("❌ Macrodata load error:", err);

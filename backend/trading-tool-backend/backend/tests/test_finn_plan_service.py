@@ -1038,7 +1038,7 @@ def test_build_mission_control_response_keeps_working_when_first_dashboard_conte
     assert result["first_dashboard_context"]["asset"] == "AAPL"
     assert result["first_dashboard_context"]["response_source"] == "briefing_error"
     assert result["first_dashboard_context"]["generation_status"] == "error"
-    assert "Mission Control stays available".lower() in result["first_dashboard_context"]["observation"].lower()
+    assert "verder in mission control" in result["first_dashboard_context"]["observation"].lower()
 
 
 def test_mission_personal_snapshot_exposes_typed_profile_plan_bot_and_analysis():
@@ -1107,7 +1107,7 @@ def test_build_first_dashboard_context_returns_loading_when_payload_is_not_ready
     assert result["asset"] == "BTC"
     assert result["response_source"] == "briefing_generating"
     assert result["generation_status"] == "pending"
-    assert result["headline"] == "FINN is reviewing your plan"
+    assert result["headline"] == "FINN bekijkt je plan"
 
 
 def test_first_dashboard_projects_personal_fallback_while_background_generation_is_queued():

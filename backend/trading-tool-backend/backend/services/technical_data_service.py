@@ -389,6 +389,7 @@ class TechnicalDataService:
         await self.repository.remove_user_config(
             user_id,
             name,
+            category="technical",
             symbol=symbol,
             asset_class=(asset_scope or {}).get("asset_class"),
         )

@@ -18,6 +18,7 @@ import {
 } from "@/lib/api/technical";
 
 import { getDailyScores } from "@/lib/api/scores";
+import { mergeConfiguredIndicatorRows } from "@/lib/indicators/configuredIndicatorRows.mjs";
 
 const TECHNICAL_INDICATOR_NAMES_CACHE_TTL_MS = 5 * 60 * 1000;
 let technicalIndicatorNamesCache = [];
@@ -92,9 +93,12 @@ export function useTechnicalData(activeTab = "day", symbol = "BTC", options = {}
   const activeTechnicalIndicatorNames = Array.isArray(technicalData)
     ? technicalData.map((i) => i.name)
     : [];
-  const configuredTechnicalIndicatorNames = Array.isArray(preferences.indicators)
-    ? preferences.indicators.map((item) => item.indicator).filter(Boolean)
-    : [];
+  const configuredTechnicalIndicatorNames = useMemo(
+    () => Array.isArray(preferences.indicators)
+      ? preferences.indicators.map((item) => item.indicator).filter(Boolean)
+      : [],
+    [preferences.indicators],
+  );
   const assetClass = preferences.assetClass || null;
 
   const loadPreferences = useCallback(async () => {
@@ -154,7 +158,8 @@ export function useTechnicalData(activeTab = "day", symbol = "BTC", options = {}
           : null,
       }));
 
-      setTechnicalData(normalized);
+      const visibleRows = mergeConfiguredIndicatorRows(normalized, configuredTechnicalIndicatorNames);
+      setTechnicalData(visibleRows);
 
       /* --------------------------------------------------
          DAGELIJKSE TECHNICAL SCORE
@@ -168,10 +173,10 @@ export function useTechnicalData(activeTab = "day", symbol = "BTC", options = {}
           setAvgScore(rounded);
           setAdvies(getAdvies(backendScore, commonT));
         } else {
-          updateScore(normalized);
+          updateScore(visibleRows);
         }
       } else {
-        updateScore(normalized);
+        updateScore(visibleRows);
       }
     } catch (err) {
       console.error(`❌ Fout bij technical data (${normalizedSymbol}):`, err);
@@ -182,7 +187,7 @@ export function useTechnicalData(activeTab = "day", symbol = "BTC", options = {}
     } finally {
       setLoading(false);
     }
-  }, [activeTab, commonT, includeScoreSummary, normalizedSymbol, t?.pages?.technical?.loadError]);
+  }, [activeTab, commonT, configuredTechnicalIndicatorNames, includeScoreSummary, normalizedSymbol, t?.pages?.technical?.loadError]);
 
   /* --------------------------------------------------------
      INIT

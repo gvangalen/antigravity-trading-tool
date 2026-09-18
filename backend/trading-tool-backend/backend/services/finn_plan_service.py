@@ -12954,11 +12954,11 @@ class FinnPlanService:
                 asset = candidate
                 break
         briefing = {
-            "headline": "FINN is reviewing your plan",
-            "observation": f"I could not finish the first {asset} dashboard review yet, so Mission Control stays available while I retry safely.",
-            "reasoning": "Your stored onboarding context is intact, but the first-dashboard briefing encountered a recoverable processing error.",
-            "next_question": "Would you like to continue with Mission Control while FINN retries the first review?",
-            "suggested_action": "Continue in Mission Control",
+            "headline": "FINN bekijkt je plan",
+            "observation": f"De eerste dashboardbeoordeling voor {asset} is nog niet afgerond. Je kunt ondertussen gewoon verder in Mission Control.",
+            "reasoning": "Je opgeslagen onboardingcontext is intact. FINN probeert de persoonlijke briefing veilig opnieuw af te ronden.",
+            "next_question": "Wil je ondertussen verdergaan in Mission Control?",
+            "suggested_action": "Verder in Mission Control",
         }
         return {
             "is_first_dashboard": True,
@@ -12975,7 +12975,7 @@ class FinnPlanService:
                 "question": briefing["next_question"],
             },
             "review_state": "not_reviewed_yet",
-            "review_label": "Not reviewed yet",
+            "review_label": "Nog niet beoordeeld",
             "response_source": "briefing_error",
             "generation_status": "error",
             "evidence_refs": ["asset.symbol"],
@@ -14441,11 +14441,11 @@ class FinnPlanService:
     def _first_dashboard_loading_result(self, asset: str) -> Dict[str, Any]:
         symbol = str(asset or "BTC").upper()
         return {
-            "headline": "FINN is reviewing your plan",
-            "observation": f"I am comparing your {symbol} profile, strategy and connected bot before giving the first recommendation.",
-            "reasoning": "This first dashboard review is still being generated from your stored onboarding context.",
-            "next_question": "Please give me a moment to finish the first review.",
-            "suggested_action": "Review in progress",
+            "headline": "FINN bekijkt je plan",
+            "observation": f"FINN vergelijkt je {symbol}-profiel, strategie en gekoppelde bot voordat de eerste aanbeveling verschijnt.",
+            "reasoning": "De eerste dashboardbeoordeling wordt opgebouwd uit je opgeslagen onboardingcontext.",
+            "next_question": "Geef FINN een moment om de eerste beoordeling af te ronden.",
+            "suggested_action": "Beoordeling wordt voorbereid",
             "evidence_refs": ["asset.symbol", "history.behavior"],
         }
 

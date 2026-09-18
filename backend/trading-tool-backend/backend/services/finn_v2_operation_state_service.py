@@ -529,6 +529,15 @@ class FinnV2OperationStateService:
             strategy_values = self._strategy_trade_inputs(text)
             values.update({key: value for key, value in strategy_values.items() if key in accepted_inputs})
         elif contract.operation_id == "create_bot" and "budget_total_eur" in accepted_inputs:
+            if "name" not in values:
+                natural_name = re.search(
+                    r"\b(?:paper[- ]?bot|bot)\s+[\"']?(.{2,80}?)[\"']?\s+"
+                    r"(?:voor|for|f.r)\s+(?:de\s+|the\s+|die\s+)?(?:strategie|strategy)\b",
+                    text,
+                    re.IGNORECASE,
+                )
+                if natural_name:
+                    values["name"] = natural_name.group(1).strip(" .\"'")
             budget = re.search(
                 r"\b(?:budget|totaalbudget|total\s+budget|gesamtbudget)\s*"
                 r"(?:is|:|=|van|of|von)?\s*(?:€|eur|euros?|euro)?\s*(\d+(?:[.,]\d+)?)",

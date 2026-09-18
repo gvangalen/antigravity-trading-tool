@@ -49,6 +49,7 @@ def test_indicator_adapter_returns_the_exact_persisted_contract_identity():
     registry = FinnV2ActionAdapterRegistry(session=object())
     registry.flags.execute_indicator_changes_enabled = lambda: True
     registry.indicators = _Indicators()
+    registry._materialize_indicator = _async_noop
 
     result = asyncio.run(registry._create_indicator_configuration(
         390,
@@ -70,21 +71,21 @@ def test_indicator_adapter_returns_the_exact_persisted_contract_identity():
 
 
 def test_indicator_delete_calls_the_canonical_remove_path_and_keeps_identity():
-    class _Indicators:
-        async def reset_indicator_rules(self, **kwargs):
-            self.kwargs = kwargs
+    class _MarketIndicators:
+        async def delete_user_market_indicator(self, indicator, user_id, *, symbol):
+            self.kwargs = {"indicator": indicator, "user_id": user_id, "symbol": symbol}
 
     registry = FinnV2ActionAdapterRegistry(session=object())
     registry.flags.execute_indicator_changes_enabled = lambda: True
-    registry.indicators = _Indicators()
+    registry.market_indicators = _MarketIndicators()
 
     result = asyncio.run(registry._delete_indicator_configuration(
         390,
         {"target": {"asset": "BTC"}, "change": {"asset": "BTC", "indicator_id": "price", "category": "market"}},
     ))
 
-    assert registry.indicators.kwargs == {
-        "category": "market", "indicator": "price", "user_id": 390, "symbol": "BTC",
+    assert registry.market_indicators.kwargs == {
+        "indicator": "price", "user_id": 390, "symbol": "BTC",
     }
     assert result == {
         "ok": True,
@@ -95,6 +96,52 @@ def test_indicator_delete_calls_the_canonical_remove_path_and_keeps_identity():
     }
 
 
+def test_technical_indicator_delete_uses_the_visible_analysis_service():
+    class _TechnicalIndicators:
+        async def delete_indicator(self, indicator, user_id, *, symbol):
+            self.args = (indicator, user_id, symbol)
+            return 1
+
+    registry = FinnV2ActionAdapterRegistry(session=object())
+    registry.flags.execute_indicator_changes_enabled = lambda: True
+    registry.technical_indicators = _TechnicalIndicators()
+
+    result = asyncio.run(registry._delete_indicator_configuration(
+        390,
+        {"target": {"asset": "BTC"}, "change": {"asset": "BTC", "indicator_id": "ma_200", "category": "technical"}},
+    ))
+
+    assert registry.technical_indicators.args == ("ma_200", 390, "BTC")
+    assert result["indicator"] == "ma_200"
+
+
+async def _async_noop(**_kwargs):
+    return None
+
+
+def test_indicator_create_materializes_the_visible_analysis_row():
+    class _Indicators:
+        async def update_indicator_settings(self, **kwargs):
+            self.kwargs = kwargs
+
+    registry = FinnV2ActionAdapterRegistry(session=object())
+    registry.flags.execute_indicator_changes_enabled = lambda: True
+    registry.indicators = _Indicators()
+    materialized = []
+
+    async def materialize(**kwargs):
+        materialized.append(kwargs)
+
+    registry._materialize_indicator = materialize
+
+    asyncio.run(registry._create_indicator_configuration(
+        390,
+        {"target": {"asset": "BTC"}, "change": {"asset": "BTC", "indicator_id": "dxy", "category": "macro"}},
+    ))
+
+    assert materialized == [{"user_id": 390, "category": "macro", "indicator": "dxy", "symbol": "BTC"}]
+
+
 def test_indicator_postcondition_reads_owner_scoped_canonical_configuration():
     class _ProductRepository:
         async def get_user_configs(self, user_id, category, *, symbol):
@@ -103,6 +150,7 @@ def test_indicator_postcondition_reads_owner_scoped_canonical_configuration():
 
     registry = FinnV2ActionAdapterRegistry(session=object())
     registry.indicators = SimpleNamespace(product_repository=_ProductRepository())
+    registry._indicator_is_materialized = lambda **kwargs: _async_true()
 
     digest = asyncio.run(registry.postcondition_hash(
         "create_indicator_configuration",
@@ -120,6 +168,7 @@ def test_indicator_postcondition_rejects_a_false_success():
 
     registry = FinnV2ActionAdapterRegistry(session=object())
     registry.indicators = SimpleNamespace(product_repository=_ProductRepository())
+    registry._indicator_is_materialized = lambda **kwargs: _async_true()
 
     with pytest.raises(ValueError, match="indicator_configuration_postcondition_failed"):
         asyncio.run(registry.postcondition_hash(
@@ -127,6 +176,32 @@ def test_indicator_postcondition_rejects_a_false_success():
             user_id=390,
             payload={"asset": "BTC", "category": "technical", "indicator": "rsi"},
         ))
+
+
+async def _async_true():
+    return True
+
+
+def test_indicator_postcondition_accepts_config_while_live_data_is_pending():
+    class _ProductRepository:
+        async def get_user_configs(self, user_id, category, *, symbol):
+            return [SimpleNamespace(indicator="rsi", config_json={})]
+
+    registry = FinnV2ActionAdapterRegistry(session=object())
+    registry.indicators = SimpleNamespace(product_repository=_ProductRepository())
+
+    async def invisible(**_kwargs):
+        return False
+
+    registry._indicator_is_materialized = invisible
+
+    digest = asyncio.run(registry.postcondition_hash(
+        "create_indicator_configuration",
+        user_id=390,
+        payload={"asset": "BTC", "category": "technical", "indicator": "rsi"},
+    ))
+
+    assert len(digest) == 64
 
 
 def test_create_strategy_adapter_delegates_to_existing_strategy_service():

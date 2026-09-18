@@ -699,6 +699,30 @@ def test_bot_name_uses_the_same_contract_slot_parser_as_setup_names():
     assert state.collected_inputs == {"strategy_id": 52, "name": "Paper Scout"}
 
 
+@pytest.mark.parametrize(
+    ("message", "expected"),
+    (
+        ("Maak paper-bot Atlas 0918 voor strategie BTC Swing.", "Atlas 0918"),
+        ("Create paper bot Atlas 0918 for strategy BTC Swing.", "Atlas 0918"),
+        ("Erstelle Paper-Bot Atlas 0918 für Strategie BTC Swing.", "Atlas 0918"),
+    ),
+)
+def test_create_bot_retains_natural_name_from_complete_initial_prompt(message, expected):
+    service = FinnV2OperationStateService()
+    contract = FinnV2OperationRegistry().require_supported("create_bot")
+
+    state = service.resolve(
+        contract=contract,
+        message=message,
+        explicit_asset=None,
+        conversation_context={},
+        supplied_inputs={"strategy_id": 52},
+    )
+
+    assert state.collected_inputs["name"] == expected
+    assert "name" not in state.missing_required_inputs
+
+
 def test_create_strategy_canonicalizes_a_natural_german_base_amount():
     service = FinnV2OperationStateService()
     contract = FinnV2OperationRegistry().require_supported("create_strategy")

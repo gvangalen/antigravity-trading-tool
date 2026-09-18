@@ -6,6 +6,7 @@ from datetime import datetime
 from typing import Any, Awaitable, Callable, Optional
 
 from sqlalchemy import text
+from fastapi import HTTPException
 
 from backend.infrastructure.repositories.indicator_config_repository import IndicatorConfigRepository
 from backend.infrastructure.repositories.user_repository import UserRepository
@@ -13,8 +14,11 @@ from backend.schemas.bot_schema import BotConfigCreateSchema, BotConfigUpdateSch
 from backend.schemas.trading_schema import SetupCreateSchema, StrategyCreateSchema
 from backend.services.bot_service import BotService
 from backend.services.indicator_config_service import IndicatorConfigService
+from backend.services.macro_data_service import MacroDataService
+from backend.services.market_data_service import MarketDataService
 from backend.services.setup_service import SetupService
 from backend.services.strategy_service import StrategyService
+from backend.services.technical_data_service import TechnicalDataService
 from backend.services.finn_v2_flag_service import FinnV2FlagService
 
 
@@ -26,6 +30,9 @@ class FinnV2ActionAdapterRegistry:
         self.session = session
         self.flags = flag_service or FinnV2FlagService()
         self.indicators = IndicatorConfigService(IndicatorConfigRepository(session))
+        self.macro_indicators = MacroDataService(session)
+        self.market_indicators = MarketDataService(session)
+        self.technical_indicators = TechnicalDataService(session)
         self.users = UserRepository(session)
         self.setups = SetupService(session)
         self.strategies = StrategyService(session)
@@ -103,17 +110,97 @@ class FinnV2ActionAdapterRegistry:
             expected = operation_type != "delete_indicator_configuration"
             if exists != expected:
                 raise ValueError("indicator_configuration_postcondition_failed")
+            materialized = await self._indicator_is_materialized(
+                user_id=user_id,
+                category=category,
+                indicator=indicator,
+                symbol=asset,
+            )
             observed.update({
                 "asset": asset,
                 "category": category,
                 "indicator": indicator,
                 "exists": exists,
+                "data_materialized": materialized,
                 "config": dict(getattr(row, "config_json", {}) or {}) if row is not None else None,
             })
         else:
             observed["payload"] = payload
         canonical = json.dumps(observed, sort_keys=True, default=str)
         return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+    async def _indicator_is_materialized(
+        self,
+        *,
+        user_id: int,
+        category: str,
+        indicator: str,
+        symbol: str,
+    ) -> bool:
+        if category == "macro":
+            rows = await self.macro_indicators.get_macro_indicators(user_id, symbol=symbol)
+            values = (getattr(row, "name", None) for row in rows)
+        elif category == "market":
+            rows = await self.market_indicators.list_user_market_indicators(user_id, symbol=symbol)
+            values = (getattr(row, "name", None) for row in rows)
+        elif category == "technical":
+            rows = await self.technical_indicators.get_indicators(user_id, symbol=symbol)
+            values = (getattr(row, "indicator", None) for row in rows)
+        else:
+            raise ValueError("indicator_category_invalid")
+        normalized = indicator.strip().lower()
+        return any(str(value or "").strip().lower() == normalized for value in values)
+
+    async def _materialize_indicator(
+        self,
+        *,
+        user_id: int,
+        category: str,
+        indicator: str,
+        symbol: str,
+    ) -> bool:
+        try:
+            if category == "macro":
+                await self.macro_indicators.add_macro_indicator(
+                    user_id,
+                    indicator,
+                    payload_value=None,
+                    symbol=symbol,
+                    persist_preference=False,
+                )
+            elif category == "market":
+                await self.market_indicators.add_user_market_indicator(
+                    user_id,
+                    indicator,
+                    value=None,
+                    symbol=symbol,
+                    persist_preference=False,
+                )
+            elif category == "technical":
+                result = await self.technical_indicators.sync_effective_indicators(
+                    user_id,
+                    symbol,
+                    persist_preferences=False,
+                    explicit_indicators=[indicator],
+                )
+                if result.get("failed"):
+                    return False
+            else:
+                raise ValueError("indicator_category_invalid")
+        except HTTPException as exc:
+            return exc.status_code == 409
+        except (LookupError, RuntimeError, ValueError):
+            # Configuration persistence is the action contract. Live signal
+            # acquisition is an independent, retryable read concern and must
+            # not erase a valid confirmed preference when a provider is down.
+            return False
+
+        return await self._indicator_is_materialized(
+            user_id=user_id,
+            category=category,
+            indicator=indicator,
+            symbol=symbol,
+        )
 
     async def _update_indicator_configuration(self, user_id: int, payload: dict) -> dict:
         return await self._apply_indicator_configuration(user_id, payload, default_operation="update")
@@ -153,6 +240,12 @@ class FinnV2ActionAdapterRegistry:
                 score_mode=str(after.get("score_mode") or "standard"),
                 weight=float(after.get("weight") or 1.0),
             )
+        data_materialized = await self._materialize_indicator(
+            user_id=user_id,
+            category=category,
+            indicator=indicator,
+            symbol=symbol,
+        )
         return {
             "ok": True,
             "operation": f"{default_operation}_indicator_configuration",
@@ -164,6 +257,7 @@ class FinnV2ActionAdapterRegistry:
                 "weight": float(after.get("weight") or 1.0),
                 "rules": after.get("rules"),
             },
+            "data_status": "available" if data_materialized else "pending_refresh",
         }
 
     async def _delete_indicator_configuration(self, user_id: int, payload: dict) -> dict:
@@ -176,7 +270,22 @@ class FinnV2ActionAdapterRegistry:
         indicator = str(after.get("indicator_id") or change.get("indicator_id") or "").strip()
         if not symbol or not indicator:
             raise ValueError("indicator_scope_required")
-        await self.indicators.reset_indicator_rules(category=category, indicator=indicator, user_id=user_id, symbol=symbol)
+        try:
+            if category == "macro":
+                await self.macro_indicators.delete_macro_indicator(indicator, user_id, symbol=symbol)
+            elif category == "market":
+                await self.market_indicators.delete_user_market_indicator(indicator, user_id, symbol=symbol)
+            elif category == "technical":
+                await self.technical_indicators.delete_indicator(indicator, user_id, symbol=symbol)
+            else:
+                raise ValueError("indicator_category_invalid")
+        except HTTPException as exc:
+            # Historical configuration-only writes have no visible row. The
+            # category service has already removed the canonical preference;
+            # treating its missing materialized row as idempotent lets users
+            # clean that stale state without recreating it.
+            if exc.status_code != 404:
+                raise
         return {
             "ok": True,
             "operation": "delete_indicator_configuration",

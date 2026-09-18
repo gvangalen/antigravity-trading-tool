@@ -26,6 +26,7 @@ import {
 } from "@/lib/api/market";
 
 import { getDailyScores } from "@/lib/api/scores";
+import { mergeConfiguredIndicatorRows } from "@/lib/indicators/configuredIndicatorRows.mjs";
 
 const MARKET_INDICATOR_NAMES_CACHE_TTL_MS = 5 * 60 * 1000;
 let marketIndicatorNamesCache = [];
@@ -112,9 +113,12 @@ export function useMarketData(symbol = "BTC", options = {}) {
     () => (activeMarketIndicators || []).map((i) => i?.name).filter(Boolean),
     [activeMarketIndicators]
   );
-  const configuredMarketIndicatorNames = Array.isArray(preferences.indicators)
-    ? preferences.indicators.map((item) => item.indicator).filter(Boolean)
-    : [];
+  const configuredMarketIndicatorNames = useMemo(
+    () => Array.isArray(preferences.indicators)
+      ? preferences.indicators.map((item) => item.indicator).filter(Boolean)
+      : [],
+    [preferences.indicators],
+  );
   const assetClass = preferences.assetClass || null;
 
   const [availableIndicators, setAvailableIndicators] = useState([]);
@@ -263,7 +267,10 @@ export function useMarketData(symbol = "BTC", options = {}) {
       }
 
       if (shouldLoadIndicators) {
-        setActiveMarketIndicators(unwrapSettled(activeIndicatorsResult, []) || []);
+        setActiveMarketIndicators(mergeConfiguredIndicatorRows(
+          unwrapSettled(activeIndicatorsResult, []) || [],
+          configuredMarketIndicatorNames,
+        ));
         setAvailableIndicators(unwrapSettled(indicatorNamesResult, []) || []);
       } else {
         setActiveMarketIndicators([]);
@@ -298,6 +305,7 @@ export function useMarketData(symbol = "BTC", options = {}) {
     }
   }, [
     commonT,
+    configuredMarketIndicatorNames,
     normalizedSymbol,
     shouldLoadDailyScores,
     shouldLoadExtended,
