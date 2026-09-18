@@ -13358,7 +13358,7 @@ class FinnPlanService:
         mission["summary"] = {
             **(mission.get("summary") or {}),
             "review_state": "not_reviewed_yet",
-            "review_label": "Not reviewed yet",
+            "review_label": None,
             "posture": "not_reviewed_yet",
             "first_dashboard_response_source": context.get("response_source"),
         }
@@ -13777,16 +13777,16 @@ class FinnPlanService:
             }
         if stored_version == current_version and stored_status in {"pending", "queued", "generating", "retry_scheduled"}:
             return {
-                "briefing": self._first_dashboard_loading_result(payload.get("asset") or "BTC"),
-                "response_source": "briefing_generating",
+                "briefing": payload.get("fallback_result") or {},
+                "response_source": "deterministic_fallback_while_generating",
                 "generation_status": stored_status,
                 "trace": self._first_dashboard_trace_payload(stored_briefing),
             }
         if stored_version == current_version and stored_status == "fallback":
             if self._first_dashboard_retry_due(stored_briefing):
                 return {
-                    "briefing": self._first_dashboard_loading_result(payload.get("asset") or "BTC"),
-                    "response_source": "briefing_generating",
+                    "briefing": payload.get("fallback_result") or {},
+                    "response_source": "deterministic_fallback_while_generating",
                     "generation_status": "retry_scheduled",
                     "trace": self._first_dashboard_trace_payload(stored_briefing),
                 }
@@ -13814,8 +13814,8 @@ class FinnPlanService:
             }
         if get_ai_availability().get("available"):
             return {
-                "briefing": self._first_dashboard_loading_result(payload.get("asset") or "BTC"),
-                "response_source": "briefing_generating",
+                "briefing": payload.get("fallback_result") or {},
+                "response_source": "deterministic_fallback_while_generating",
                 "generation_status": "pending",
                 "trace": self._first_dashboard_trace_payload(stored_briefing),
             }
@@ -13858,7 +13858,7 @@ class FinnPlanService:
                 "question": briefing.get("next_question"),
             },
             "review_state": "not_reviewed_yet",
-            "review_label": "Not reviewed yet",
+            "review_label": None,
             "briefing_lines": [line for line in briefing_lines if line],
             "briefing_text": "\n".join([line for line in briefing_lines if line]),
             "headline": briefing.get("headline"),

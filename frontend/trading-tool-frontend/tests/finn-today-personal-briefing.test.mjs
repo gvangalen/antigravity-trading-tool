@@ -36,4 +36,19 @@ test("FINN Today renders the typed personal mission-control briefing", () => {
     /Laatste analyse nog niet beschikbaar\./,
     "missing fresh market data must not erase the known personal context",
   );
+  assert.match(
+    assistantSource,
+    /if \(!isOpen\) return;[\s\S]*?\["pending", "queued", "generating", "retry_scheduled"\]/,
+    "the compact FINN Today preview must keep polling while background enrichment is active",
+  );
+  assert.match(
+    assistantSource,
+    /firstDashboardContext\?\.review_state === "not_reviewed_yet"[\s\S]*?uiText\.workspaceFirstDashboardLabel/,
+    "review state must render through locale copy rather than a backend English label",
+  );
+  assert.match(
+    assistantSource,
+    /!firstDashboardIsGenerating && firstDashboardContext\?\.headline/,
+    "temporary backend generation copy must not leak into the localized compact workspace",
+  );
 });

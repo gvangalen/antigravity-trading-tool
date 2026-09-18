@@ -4004,9 +4004,9 @@ function AIAssistantContent({
   }, [currentConversationStorageKey, isAssetAnalysisPage, isOpen]);
 
   useEffect(() => {
-    if (!isOpen || previewSectionsOnly) return;
+    if (!isOpen) return;
     const generationStatus = String(missionControl?.first_dashboard_context?.generation_status || "").toLowerCase();
-    if (!["pending", "generating", "retry_scheduled"].includes(generationStatus)) return;
+    if (!["pending", "queued", "generating", "retry_scheduled"].includes(generationStatus)) return;
     const timer = window.setInterval(() => {
       void loadMissionControl();
     }, 4000);
@@ -5895,6 +5895,10 @@ function AIAssistantContent({
     "";
   const activeBriefingSymbol = String(context?.symbol || globalSymbol || "BTC").trim().toUpperCase();
   const firstDashboardContext = missionControl?.first_dashboard_context || null;
+  const firstDashboardGenerationStatus = String(firstDashboardContext?.generation_status || "").toLowerCase();
+  const firstDashboardIsGenerating = ["pending", "queued", "generating", "retry_scheduled"].includes(
+    firstDashboardGenerationStatus,
+  );
   const firstDashboardBriefingText = String(firstDashboardContext?.briefing_text || "").trim();
   const stableBriefingMatchesAsset = !isAssetAnalysisPage
     || !stableBriefingText
@@ -5938,15 +5942,15 @@ function AIAssistantContent({
     "";
   const personalWorkspaceSummary = String(missionControl?.finn_briefing?.summary || "").trim();
   const defaultWorkspaceActionHint = workspaceBriefingLines[3] || "";
-  const firstDashboardHeadline = firstDashboardContext?.headline
+  const firstDashboardHeadline = (!firstDashboardIsGenerating && firstDashboardContext?.headline)
     || at("uiText.workspaceFirstDashboardHeadline", uiText.workspaceFirstDashboardHeadline, {
       symbol: activeBriefingSymbol,
     });
-  const firstDashboardSupport = firstDashboardContext?.support
+  const firstDashboardSupport = (!firstDashboardIsGenerating && firstDashboardContext?.support)
     || at("uiText.workspaceFirstDashboardSupport", uiText.workspaceFirstDashboardSupport, {
       symbol: activeBriefingSymbol,
     });
-  const firstDashboardHint = firstDashboardContext?.action_hint
+  const firstDashboardHint = (!firstDashboardIsGenerating && firstDashboardContext?.action_hint)
     || at("uiText.workspaceFirstDashboardHint", uiText.workspaceFirstDashboardHint, {
       symbol: activeBriefingSymbol,
     });
@@ -6030,7 +6034,9 @@ function AIAssistantContent({
   const openItemsAreReviews =
     overlayMissionSections.todayItems.length > 0 &&
     overlayMissionSections.todayItems.every((item) => isReviewCandidate(item));
-  const compactOpenLabel = firstDashboardContext?.review_label
+  const compactOpenLabel = firstDashboardContext?.review_state === "not_reviewed_yet"
+      ? uiText.workspaceFirstDashboardLabel
+      : firstDashboardContext?.review_label
       ? firstDashboardContext.review_label
       : openItemsAreReviews
       ? (openSummaryCount === 1 ? uiText.openReviewsOne : at("uiText.openReviewsMany", "", { count: openSummaryCount }))

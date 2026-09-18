@@ -790,7 +790,7 @@ def test_resolve_first_dashboard_briefing_uses_fallback_when_context_version_cha
     assert display["briefing"]["headline"] == payload["fallback_result"]["headline"]
 
 
-def test_resolve_first_dashboard_briefing_uses_loading_state_while_generating():
+def test_resolve_first_dashboard_briefing_uses_current_fallback_while_generating():
     service = _service()
     payload = _first_dashboard_payload("ctx-v2")
     stored = {
@@ -800,9 +800,9 @@ def test_resolve_first_dashboard_briefing_uses_loading_state_while_generating():
 
     display = service._resolve_first_dashboard_briefing_display(payload, stored)
 
-    assert display["response_source"] == "briefing_generating"
+    assert display["response_source"] == "deterministic_fallback_while_generating"
     assert display["generation_status"] == "generating"
-    assert display["briefing"]["headline"] == "FINN is reviewing your plan"
+    assert display["briefing"] == payload["fallback_result"]
 
 
 def test_compose_first_dashboard_context_exposes_trace_fields():
@@ -1108,6 +1108,35 @@ def test_build_first_dashboard_context_returns_loading_when_payload_is_not_ready
     assert result["response_source"] == "briefing_generating"
     assert result["generation_status"] == "pending"
     assert result["headline"] == "FINN is reviewing your plan"
+
+
+def test_first_dashboard_projects_personal_fallback_while_background_generation_is_queued():
+    service = FinnPlanService(db_session=object())
+    payload = _first_dashboard_payload("ctx-v7")
+    payload["fallback_result"] = {
+        "headline": "Je BTC-plan staat klaar.",
+        "observation": "Je setup en paper-bot zijn gekoppeld.",
+        "reasoning": "RSI, DXY en volume vormen je eerste context.",
+        "next_question": "Wil je de risico's doornemen?",
+        "suggested_action": "Bekijk je plan",
+        "evidence_refs": ["asset.symbol"],
+    }
+
+    display = service._resolve_first_dashboard_briefing_display(
+        payload,
+        {
+            "status": "queued",
+            "context_version": "ctx-v7",
+            "updated_at": _utc_now().isoformat(),
+        },
+    )
+    context = service._compose_first_dashboard_context(payload, display)
+
+    assert context["headline"] == "Je BTC-plan staat klaar."
+    assert context["generation_status"] == "queued"
+    assert context["response_source"] == "deterministic_fallback_while_generating"
+    assert "reviewing your plan" not in context["briefing_text"].lower()
+    assert context["review_label"] is None
 
 
 def test_inline_generate_first_dashboard_briefing_if_needed_generates_missing_state(monkeypatch):
