@@ -137,11 +137,10 @@ class IndicatorConfigService:
         await self.repository.db.commit()
 
     async def reset_indicator_rules(self, category: str, indicator: str, user_id: int, symbol: str):
-        await self.product_repository.set_indicator_config_metadata(
+        await self.product_repository.remove_user_config(
             user_id,
             indicator,
             category,
             symbol=symbol,
-            config_json={},
         )
         await self.repository.db.commit()

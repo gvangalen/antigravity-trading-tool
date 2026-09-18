@@ -1,3 +1,5 @@
+import pytest
+
 from backend.services.finn_v2_request_analysis_service import FinnV2RequestAnalysisService
 from backend.services.finn_v2_request_preprocessor_service import FinnV2RequestPreprocessorService
 from backend.services.finn_v2_operation_classification_service import (
@@ -704,6 +706,32 @@ def test_watchlist_target_never_inherits_the_workspace_asset():
     assert analysis.request_plan.context_asset == "BTC"
     assert analysis.request_plan.target_asset is None
     assert analysis.request_plan.operation_state["missing_required_inputs"] == ["asset"]
+
+
+@pytest.mark.parametrize(
+    ("message", "expected_inputs"),
+    (
+        ("Voeg DXY toe aan Macro voor BTC.", {"asset": "BTC", "category": "macro", "indicator": "dxy"}),
+        ("Voeg RSI toe aan Technisch bewijs voor BTC.", {"asset": "BTC", "category": "technical", "indicator": "rsi"}),
+        ("Voeg MA 200 toe aan Technisch bewijs voor BTC.", {"asset": "BTC", "category": "technical", "indicator": "ma_200"}),
+        ("Voeg Price toe aan Marktindicatoren voor BTC.", {"asset": "BTC", "category": "market", "indicator": "price"}),
+    ),
+)
+def test_natural_indicator_create_requests_keep_complete_contract_inputs(message, expected_inputs):
+    analysis = SERVICE.analyze(message=message)
+
+    assert analysis.request_plan.operation_id == "create_indicator_configuration"
+    assert analysis.interaction_mode == "CREATE_PROPOSAL"
+    assert analysis.request_plan.operation_state["collected_inputs"] == expected_inputs
+    assert analysis.request_plan.operation_state["missing_required_inputs"] == []
+
+
+def test_natural_eth_watchlist_request_is_a_complete_add_contract():
+    analysis = SERVICE.analyze(message="Voeg ETH toe aan mijn watchlist.")
+
+    assert analysis.request_plan.operation_id == "watchlist_add"
+    assert analysis.request_plan.operation_state["collected_inputs"] == {"asset": "ETH"}
+    assert analysis.request_plan.operation_state["missing_required_inputs"] == []
 
 
 def test_guided_watchlist_target_asset_is_typed_and_never_reuses_workspace_asset():

@@ -448,8 +448,12 @@ def test_generic_draft_change_projection_uses_the_existing_proposal_union_member
     )
 
     assert IndicatorConfigurationChange.parse_obj(change_payload(created_indicator)).operation == "add"
-    assert IndicatorConfigurationChange.parse_obj(change_payload(updated_indicator)).after == {"period": 21}
-    assert IndicatorConfigurationChange.parse_obj(change_payload(removed_indicator)).operation == "remove"
+    assert IndicatorConfigurationChange.parse_obj(change_payload(updated_indicator)).after == {
+        "category": "momentum", "indicator_id": "RSI", "period": 21,
+    }
+    assert IndicatorConfigurationChange.parse_obj(change_payload(removed_indicator)).after == {
+        "category": "momentum", "indicator_id": "RSI",
+    }
     assert WatchlistChange.parse_obj(change_payload(watchlist)).operation == "remove"
     assert BotChange.parse_obj(change_payload(bot)).changed_fields == {"is_active": False}
     assert BotActivationChange.parse_obj(change_payload(paper)).requested_mode == "paper"

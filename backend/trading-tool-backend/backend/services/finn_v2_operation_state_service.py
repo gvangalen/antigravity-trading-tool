@@ -9,6 +9,7 @@ from backend.domain.finn_v2_operation_registry import OperationContract
 from backend.domain.finn_v2_setup_input_catalog import FinnV2SetupInputCatalog
 from backend.domain.technical_indicator_catalog import get_active_technical_indicator_definitions
 from backend.domain.macro_indicator_catalog import get_active_macro_indicator_definitions
+from backend.domain.market_indicator_catalog import get_active_market_indicator_definitions
 from backend.schemas.finn_v2_orchestrator_schema import FinnV2OperationState
 
 
@@ -324,6 +325,11 @@ class FinnV2OperationStateService:
         except (TypeError, ValueError):
             return None
         if state.operation_id != contract.operation_id or state.contract_version != contract.version:
+            return None
+        # A completed/proposed action is historical context, not an active
+        # guided draft. Reusing it made a fresh RSI request inherit an older
+        # DXY proposal because both share the indicator operation contract.
+        if not state.missing_required_inputs or state.status != "collecting":
             return None
         return state
 
@@ -1024,6 +1030,7 @@ class FinnV2OperationStateService:
         definitions = [
             *get_active_technical_indicator_definitions(),
             *get_active_macro_indicator_definitions(),
+            *get_active_market_indicator_definitions(),
         ]
         for definition in definitions:
             name = str(definition.get("name") or "").strip()

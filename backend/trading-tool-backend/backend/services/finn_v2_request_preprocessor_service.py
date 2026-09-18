@@ -13,6 +13,9 @@ from typing import Mapping, Optional
 
 from backend.services.asset_catalog_service import resolve_catalog_symbol, resolve_catalog_symbol_in_text
 from backend.domain.finn_v2_setup_input_catalog import FinnV2SetupInputCatalog
+from backend.domain.technical_indicator_catalog import get_active_technical_indicator_definitions
+from backend.domain.macro_indicator_catalog import get_active_macro_indicator_definitions
+from backend.domain.market_indicator_catalog import get_active_market_indicator_definitions
 
 
 @dataclass(frozen=True)
@@ -131,6 +134,21 @@ class FinnV2RequestPreprocessorService:
             "markt", "belegging", "investment",
         ),
     }
+    _CANONICAL_INDICATOR_TERMS = tuple(sorted({
+        variant.casefold()
+        for definition in (
+            *get_active_technical_indicator_definitions(),
+            *get_active_macro_indicator_definitions(),
+            *get_active_market_indicator_definitions(),
+        )
+        for variant in (
+            str(definition.get("name") or ""),
+            str(definition.get("display_name") or ""),
+            str(definition.get("name") or "").replace("_", " "),
+            str(definition.get("display_name") or "").replace("_", " "),
+        )
+        if variant
+    }))
     _REFERENCE_MARKERS = {
         "previous_verified_conclusion": (
             "die conclusie", "dat antwoord", "eerder antwoord", "onderbouw",
@@ -411,6 +429,10 @@ class FinnV2RequestPreprocessorService:
             compound_match = pattern.search(text)
             if compound_match and any(character.isalpha() for character in text[:compound_match.start()]):
                 matches.append((compound_match.start(), entity))
+        if "indicator_configuration" not in {item for _, item in matches}:
+            indicator_position = cls._first_term_position(text, cls._CANONICAL_INDICATOR_TERMS)
+            if indicator_position is not None:
+                matches.append((indicator_position, "indicator_configuration"))
         return {entity: position for position, entity in sorted(matches)}
 
     @staticmethod
@@ -670,6 +692,18 @@ class FinnV2RequestPreprocessorService:
             return None
         if len(matches) == 1:
             return matches[0][1]
+
+        # In mutation requests, ``indicator X for asset Y`` gives the two
+        # catalog-backed tokens different grammatical roles. Prefer the
+        # explicitly introduced target instead of treating the indicator
+        # token (for example DXY) as the requested asset.
+        target_clause = re.search(
+            r"\b(?:voor|for|f(?:ü|u)r)\s+([A-Za-z0-9]+)\b",
+            original,
+            flags=re.IGNORECASE,
+        )
+        if target_clause and (target := resolve_catalog_symbol_in_text(target_clause.group(1))):
+            return target
 
         # A contrast clause distinguishes a mentioned context from the target
         # the user is actually asking FINN to handle. The rule is deliberately

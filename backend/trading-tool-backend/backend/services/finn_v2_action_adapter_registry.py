@@ -70,7 +70,49 @@ class FinnV2ActionAdapterRegistry:
         return await self._apply_indicator_configuration(user_id, payload, default_operation="add")
 
     async def postcondition_hash(self, operation_type: str, *, user_id: int, payload: dict) -> str:
-        canonical = json.dumps({"operation_type": operation_type, "payload": payload}, sort_keys=True, default=str)
+        observed: dict[str, Any] = {"operation_type": operation_type}
+        if operation_type in {"watchlist_add", "watchlist_remove"}:
+            asset = str(payload.get("asset") or "").strip().upper()
+            result = await self.session.execute(
+                text("SELECT 1 FROM watchlists WHERE user_id = :user_id AND symbol = :symbol LIMIT 1"),
+                {"user_id": user_id, "symbol": asset},
+            )
+            exists = result.first() is not None
+            expected = operation_type == "watchlist_add"
+            if exists != expected:
+                raise ValueError("watchlist_postcondition_failed")
+            observed.update({"asset": asset, "exists": exists})
+        elif operation_type in {
+            "create_indicator_configuration",
+            "update_indicator_configuration",
+            "delete_indicator_configuration",
+        }:
+            asset = str(payload.get("asset") or "").strip().upper()
+            category = str(payload.get("category") or "").strip().lower()
+            indicator = str(payload.get("indicator") or "").strip().lower()
+            rows = await self.indicators.product_repository.get_user_configs(
+                user_id,
+                category,
+                symbol=asset,
+            )
+            row = next(
+                (item for item in rows if str(getattr(item, "indicator", "") or "").strip().lower() == indicator),
+                None,
+            )
+            exists = row is not None
+            expected = operation_type != "delete_indicator_configuration"
+            if exists != expected:
+                raise ValueError("indicator_configuration_postcondition_failed")
+            observed.update({
+                "asset": asset,
+                "category": category,
+                "indicator": indicator,
+                "exists": exists,
+                "config": dict(getattr(row, "config_json", {}) or {}) if row is not None else None,
+            })
+        else:
+            observed["payload"] = payload
+        canonical = json.dumps(observed, sort_keys=True, default=str)
         return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
     async def _update_indicator_configuration(self, user_id: int, payload: dict) -> dict:
@@ -89,10 +131,14 @@ class FinnV2ActionAdapterRegistry:
         ).strip().upper()
         if not symbol:
             raise ValueError("asset_required")
+        category = str(after.get("category") or change.get("category") or "technical").strip().lower()
+        indicator = str(after.get("indicator_id") or change.get("indicator_id") or "").strip().lower()
+        if not indicator:
+            raise ValueError("indicator_required")
         if "rules" in after:
             await self.indicators.save_custom_rules(
-                category=str(after.get("category") or "technical"),
-                indicator=str(after.get("indicator_id") or change.get("indicator_id")),
+                category=category,
+                indicator=indicator,
                 user_id=user_id,
                 symbol=symbol,
                 rules=after.get("rules") or [],
@@ -100,14 +146,25 @@ class FinnV2ActionAdapterRegistry:
             )
         else:
             await self.indicators.update_indicator_settings(
-                category=str(after.get("category") or "technical"),
-                indicator=str(after.get("indicator_id") or change.get("indicator_id")),
+                category=category,
+                indicator=indicator,
                 user_id=user_id,
                 symbol=symbol,
                 score_mode=str(after.get("score_mode") or "standard"),
                 weight=float(after.get("weight") or 1.0),
             )
-        return {"ok": True, "operation": f"{default_operation}_indicator_configuration", "asset": symbol}
+        return {
+            "ok": True,
+            "operation": f"{default_operation}_indicator_configuration",
+            "asset": symbol,
+            "category": category,
+            "indicator": indicator,
+            "configuration": {
+                "score_mode": str(after.get("score_mode") or "standard"),
+                "weight": float(after.get("weight") or 1.0),
+                "rules": after.get("rules"),
+            },
+        }
 
     async def _delete_indicator_configuration(self, user_id: int, payload: dict) -> dict:
         if not self.flags.execute_indicator_changes_enabled():
@@ -120,7 +177,13 @@ class FinnV2ActionAdapterRegistry:
         if not symbol or not indicator:
             raise ValueError("indicator_scope_required")
         await self.indicators.reset_indicator_rules(category=category, indicator=indicator, user_id=user_id, symbol=symbol)
-        return {"ok": True, "operation": "delete_indicator_configuration", "asset": symbol}
+        return {
+            "ok": True,
+            "operation": "delete_indicator_configuration",
+            "asset": symbol,
+            "category": category,
+            "indicator": indicator,
+        }
 
     async def _update_setup(self, user_id: int, payload: dict) -> dict:
         if not self.flags.execute_setup_changes_enabled():

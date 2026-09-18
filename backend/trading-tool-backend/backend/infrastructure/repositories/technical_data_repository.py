@@ -689,6 +689,40 @@ class TechnicalDataRepository:
             row.source_record_id = source_record_id
         return row
 
+    async def remove_user_config(
+        self,
+        user_id: int,
+        indicator: str,
+        category: str,
+        *,
+        symbol: str,
+        asset_class: Optional[str] = None,
+    ) -> bool:
+        """Remove one canonical owner- and asset-scoped indicator config."""
+        normalized_symbol, normalized_asset_class = await self._resolve_effective_scope(symbol, asset_class)
+        self._source_registry.get("indicator_configuration").validate_request(
+            user_id=user_id,
+            symbol=normalized_symbol,
+        )
+        columns = await self._get_user_config_columns()
+        conditions = ["user_id = :user_id", "indicator = :indicator"]
+        params: dict[str, Any] = {"user_id": user_id, "indicator": indicator}
+        if "category" in columns:
+            conditions.append("category = :category")
+            params["category"] = category
+        if "symbol" in columns:
+            conditions.append("symbol = :symbol")
+            params["symbol"] = normalized_symbol
+        elif "asset_class" in columns:
+            conditions.append("asset_class = :asset_class")
+            params["asset_class"] = normalized_asset_class
+        result = await self.session.execute(
+            text(f"DELETE FROM user_indicator_configs WHERE {' AND '.join(conditions)}"),
+            params,
+        )
+        await self.session.flush()
+        return bool(getattr(result, "rowcount", 0))
+
     async def get_latest_for_user(self, user_id: int, symbol: Optional[str] = None, limit: int = 50) -> List[TechnicalDataIndicator]:
         stmt = select(TechnicalDataIndicator).where(TechnicalDataIndicator.user_id == user_id)
         if symbol:

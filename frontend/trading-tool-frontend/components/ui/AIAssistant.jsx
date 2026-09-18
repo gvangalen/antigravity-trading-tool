@@ -4397,7 +4397,11 @@ function AIAssistantContent({
       const verified = run?.response;
       const projection = run?.runtime_trace?.terminal_projection || run?.runtime_trace || {};
       const setupDraft = projection?.setup_draft || null;
-      const draftOperations = ["create_strategy", "create_bot"];
+      const draftOperations = [
+        "create_strategy", "create_bot",
+        "watchlist_add", "watchlist_remove",
+        "create_indicator_configuration", "update_indicator_configuration", "delete_indicator_configuration",
+      ];
       const initialOperationId = projection?.initial_operation_id;
       const finalOperationId = projection?.final_operation_id;
       const operationId = draftOperations.includes(initialOperationId) ? initialOperationId : finalOperationId;
@@ -5173,14 +5177,21 @@ function AIAssistantContent({
     if (message?.draftCanceled || message?.draftExecuted) return null;
     const draft = message.actionDraft || message.state?.action_draft;
     const operationId = draft?.operation_id;
-    if (!draft || !["create_strategy", "create_bot"].includes(operationId)) return null;
+    const indicatorOperations = ["create_indicator_configuration", "update_indicator_configuration", "delete_indicator_configuration"];
+    const watchlistOperations = ["watchlist_add", "watchlist_remove"];
+    if (!draft || !["create_strategy", "create_bot", ...indicatorOperations, ...watchlistOperations].includes(operationId)) return null;
     const isStrategy = operationId === "create_strategy";
+    const isBot = operationId === "create_bot";
+    const isIndicator = indicatorOperations.includes(operationId);
+    const isWatchlist = watchlistOperations.includes(operationId);
     const supplied = draft.supplied_inputs || {};
     const context = (message.actions || []).find((action) => action?.type === "v2_proposal")?.display_context || {};
     const linkedName = isStrategy ? supplied.setup_name || context.setup_name || "je setup" : supplied.strategy_name || context.strategy_name || "je strategie";
     const contextLine = isStrategy
       ? [supplied.symbol || context.symbol, supplied.timeframe || context.timeframe, `gekoppeld aan ${linkedName}`].filter(Boolean).join(" · ")
-      : `Paper · gekoppeld aan ${linkedName}`;
+      : isBot
+        ? `Paper · gekoppeld aan ${linkedName}`
+        : [supplied.asset || context.symbol, isIndicator ? ({ technical: "Technisch bewijs", macro: "Macro", market: "Marktindicatoren" }[supplied.category] || supplied.category) : "Watchlist"].filter(Boolean).join(" · ");
     const labels = { name: "naam", setup_id: "setup", strategy_id: "strategie", symbol: "asset", timeframe: "timeframe", execution_mode: "uitvoering", base_amount: "bedrag", entry: "entry", stop_loss: "stop-loss", targets: "targets", risk_profile: "risico", budget_total_eur: "budget" };
     const missing = (draft.missing_inputs || []).map((field) => labels[field]).filter(Boolean);
     const formatValue = (value) => {
@@ -5190,13 +5201,28 @@ function AIAssistantContent({
     };
     const rows = isStrategy
       ? [["Uitvoering", [supplied.execution_mode, supplied.base_amount ? `€${supplied.base_amount}` : null].filter(Boolean).join(" · ")], ["Entry", supplied.entry], ["Stop-loss", supplied.stop_loss], ["Targets", supplied.targets], ["Risico", supplied.risk_profile]]
-      : [["Budget", supplied.budget_total_eur ? `€${supplied.budget_total_eur}` : null]];
+      : isBot
+        ? [["Budget", supplied.budget_total_eur ? `€${supplied.budget_total_eur}` : null]]
+        : isIndicator
+          ? [["Indicator", supplied.indicator ? String(supplied.indicator).toUpperCase() : null], ["Categorie", ({ technical: "Technisch bewijs", macro: "Macro", market: "Marktindicatoren" }[supplied.category] || supplied.category)], ["Weging", supplied.weight]]
+          : [];
+    const title = isStrategy
+      ? "Concept strategie"
+      : isBot
+        ? "Concept paper-bot"
+        : isIndicator
+          ? operationId === "delete_indicator_configuration" ? "Indicator verwijderen" : "Concept indicator"
+          : operationId === "watchlist_remove" ? "Uit watchlist verwijderen" : "Aan watchlist toevoegen";
+    const objectName = supplied.name
+      || (isIndicator ? String(supplied.indicator || "Indicator").toUpperCase() : null)
+      || (isWatchlist ? supplied.asset || context.symbol : null)
+      || (isStrategy ? "Nieuwe strategie" : "Nieuwe paper-bot");
     return (
       <div className="mt-4 min-w-0 overflow-hidden rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-950/45">
-        <div className="text-[11px] font-bold text-slate-900 dark:text-slate-100">{isStrategy ? "Concept strategie" : "Concept paper-bot"}</div>
+        <div className="text-[11px] font-bold text-slate-900 dark:text-slate-100">{title}</div>
         <div className="mt-0.5 text-[11px] text-slate-500 dark:text-slate-400">{at("draftCards.unsaved", "Nog niet opgeslagen")}</div>
         <div className="mt-4 min-w-0">
-          <h3 className="truncate text-base font-bold text-slate-950 dark:text-white">{supplied.name || (isStrategy ? "Nieuwe strategie" : "Nieuwe paper-bot")}</h3>
+          <h3 className="truncate text-base font-bold text-slate-950 dark:text-white">{objectName}</h3>
           <p className="mt-1 break-words text-xs text-slate-500 dark:text-slate-400">{contextLine}</p>
         </div>
         <dl className="mt-4 divide-y divide-slate-100 text-sm dark:divide-slate-800">
@@ -5204,9 +5230,9 @@ function AIAssistantContent({
             <div key={label} className="flex min-w-0 items-start justify-between gap-4 py-2 first:pt-0 last:pb-0"><dt className="shrink-0 text-slate-500 dark:text-slate-400">{label}</dt><dd className="min-w-0 break-words text-right font-semibold text-slate-800 dark:text-slate-100">{formatValue(value)}</dd></div>
           ))}
         </dl>
-        {!isStrategy && <p className="mt-4 flex items-center gap-2 text-xs font-semibold text-emerald-700 dark:text-emerald-300"><Shield size={13} />{at("draftCards.noLiveTrading", "Geen live trading")}</p>}
+        {isBot && <p className="mt-4 flex items-center gap-2 text-xs font-semibold text-emerald-700 dark:text-emerald-300"><Shield size={13} />{at("draftCards.noLiveTrading", "Geen live trading")}</p>}
         {missing.length > 0 && <p className="mt-4 rounded-xl bg-slate-50 px-3 py-2.5 text-sm text-slate-700 dark:bg-slate-900/70 dark:text-slate-200">{at("draftCards.missingFields", "Nog nodig: {fields}.", { fields: missing.join(", ") })}</p>}
-        <div className="mt-4 flex flex-wrap items-center gap-2">{draftActionButtons(message, messageIndex, isStrategy ? "strategie" : "paper-bot")}</div>
+        <div className="mt-4 flex flex-wrap items-center gap-2">{draftActionButtons(message, messageIndex, isStrategy ? "strategie" : isBot ? "paper-bot" : isIndicator ? "indicator" : "watchlist")}</div>
       </div>
     );
   };

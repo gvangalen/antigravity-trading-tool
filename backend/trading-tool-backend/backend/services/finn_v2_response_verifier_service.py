@@ -3,7 +3,7 @@ from __future__ import annotations
 import re
 import uuid
 from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Mapping, Optional
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -214,7 +214,7 @@ class FinnV2ResponseVerifierService:
             trace_id=trace_id,
             repair_attempt=0,
             deterministic_contract_response=self._is_deterministic_contract_response(
-                operation_id=getattr(request_plan, "operation_id", None)
+                operation_id=self._request_plan_value(request_plan, "operation_id")
             ),
         )
         return verified
@@ -235,7 +235,7 @@ class FinnV2ResponseVerifierService:
             draft = draft.copy(deep=True)
             draft.evidence_refs_used = evidence_refs_used
         request_plan = getattr(orchestrator_result.analysis, "request_plan", None)
-        operation_id = getattr(request_plan, "operation_id", None)
+        operation_id = FinnV2ResponseVerifierService._request_plan_value(request_plan, "operation_id")
         if not operation_id:
             return draft
         try:
@@ -592,7 +592,7 @@ class FinnV2ResponseVerifierService:
         """A delivery may be useful without being reusable financial lineage."""
         if not verifier.passed or not verifier.coverage.coverage_ok or not verifier.coverage.response_coverage_ok:
             return False
-        operation_id = getattr(request_plan, "operation_id", None)
+        operation_id = FinnV2ResponseVerifierService._request_plan_value(request_plan, "operation_id")
         if operation_id in {"off_topic", "unavailable", "explain_previous_evidence", "reformulate_previous_response"}:
             return False
         rendered = " ".join((draft.direct_answer, draft.main_observation)).casefold()
@@ -621,7 +621,7 @@ class FinnV2ResponseVerifierService:
             getattr(
                 orchestrator_result.analysis,
                 "interaction_mode",
-                getattr(request_plan_for_mode, "interaction_mode", draft.mode),
+                self._request_plan_value(request_plan_for_mode, "interaction_mode", draft.mode),
             )
         )
         actual_mode = normalize_interaction_mode(draft.mode)
@@ -671,8 +671,8 @@ class FinnV2ResponseVerifierService:
         model_reasoning_ok = "model_reasoning_contract_failed" not in reason_codes
 
         request_plan = getattr(orchestrator_result.analysis, "request_plan", None)
-        operation_id = getattr(request_plan, "operation_id", None)
-        contract_version = getattr(request_plan, "operation_contract_version", None)
+        operation_id = self._request_plan_value(request_plan, "operation_id")
+        contract_version = self._request_plan_value(request_plan, "operation_contract_version")
         has_contract_metadata = bool(operation_id and contract_version)
         has_partial_contract_metadata = bool(operation_id or contract_version) and not has_contract_metadata
         contract_metadata_ok = not has_partial_contract_metadata
@@ -784,7 +784,7 @@ class FinnV2ResponseVerifierService:
             contract is not None
             and contract.response_strategy == "proposal_draft"
             and normalize_interaction_mode(draft.mode) == "CLARIFICATION"
-            and bool(dict(getattr(request_plan, "operation_state", {}) or {}).get("missing_required_inputs"))
+            and bool(dict(self._request_plan_value(request_plan, "operation_state", {}) or {}).get("missing_required_inputs"))
         )
         if proposal_mode or action_clarification:
             # Action contracts are answered by a typed, confirmable proposal.
@@ -844,6 +844,11 @@ class FinnV2ResponseVerifierService:
             reason_codes.append("evaluate_plan_content_incomplete")
 
         relevance_ok = self._is_relevant(run.message, draft)
+        if proposal_mode and draft.proposal_candidate is not None:
+            # Proposal relevance is established by the typed candidate and the
+            # proposal/policy checks below, not by prose overlap. This remains
+            # strict: an invalid candidate still fails proposal_ok.
+            relevance_ok = True
         if not relevance_ok:
             reason_codes.append("response_not_answering_question")
 
@@ -1386,7 +1391,7 @@ class FinnV2ResponseVerifierService:
 
     @staticmethod
     def _is_evidence_backed_evaluation(*, request_plan, draft: ResponseDraft) -> bool:
-        requested_mode = getattr(request_plan, "interaction_mode", None)
+        requested_mode = FinnV2ResponseVerifierService._request_plan_value(request_plan, "interaction_mode")
         return (
             bool(requested_mode)
             and normalize_interaction_mode(requested_mode) == "EVALUATE"
@@ -1814,8 +1819,15 @@ class FinnV2ResponseVerifierService:
                 if any(value is not None and str(value) == str(candidate.target_id) for value in values):
                     return True
             return False
+        # Asset, watchlist and indicator actions use a canonical symbol or a
+        # composite (asset, category, indicator) identity rather than a
+        # database object id. Their adapters perform the owner-scoped lookup
+        # and the postcondition re-reads the resulting row. Requiring a scalar
+        # target_id here incorrectly rejected these otherwise typed actions.
+        if operation.domain in {"asset", "watchlist", "indicators"}:
+            return bool(candidate.asset and candidate.proposed_changes)
         # A targetless CREATE is grounded in the validated typed payload. All
-        # other actions require an owner-scoped target above.
+        # remaining mutations require an owner-scoped target above.
         return operation.action_polarity.value == "create" and bool(candidate.proposed_changes)
 
     def _safety_ok(self, draft: ResponseDraft) -> bool:
@@ -2037,3 +2049,9 @@ class FinnV2ResponseVerifierService:
                 ordered.append(value)
                 seen.add(value)
         return ordered
+    @staticmethod
+    def _request_plan_value(request_plan: Any, key: str, default: Any = None) -> Any:
+        """Read persisted mapping and typed RequestPlan views identically."""
+        if isinstance(request_plan, Mapping):
+            return request_plan.get(key, default)
+        return getattr(request_plan, key, default)

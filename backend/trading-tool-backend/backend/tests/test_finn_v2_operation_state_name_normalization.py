@@ -106,6 +106,42 @@ def test_strategy_inputs_accept_natural_dutch_base_amount_wording():
 
 
 @pytest.mark.parametrize(
+    ("message", "expected"),
+    (
+        ("Voeg RSI toe aan Technisch bewijs.", {"name": "rsi", "category": "technical"}),
+        ("Voeg DXY toe aan Macro.", {"name": "dxy", "category": "macro"}),
+        ("Voeg Price toe aan Marktindicatoren.", {"name": "price", "category": "market"}),
+        ("Add MA 200 to technical evidence.", {"name": "ma_200", "category": "technical"}),
+    ),
+)
+def test_indicator_inputs_use_every_canonical_catalog(message, expected):
+    assert FinnV2OperationStateService._indicator_input_from_text(message) == expected
+
+
+def test_completed_indicator_state_is_not_reused_for_a_fresh_indicator_request():
+    service = FinnV2OperationStateService()
+    contract = FinnV2OperationRegistry().require_supported("create_indicator_configuration")
+
+    state = service.resolve(
+        contract=contract,
+        message="Voeg RSI toe aan Technisch bewijs voor BTC.",
+        explicit_asset="BTC",
+        conversation_context={
+            "active_guided_operation": {
+                "operation_id": contract.operation_id,
+                "contract_version": contract.version,
+                "collected_inputs": {"asset": "BTC", "category": "macro", "indicator": "dxy"},
+                "missing_required_inputs": [],
+                "status": "proposed",
+            }
+        },
+    )
+
+    assert state.collected_inputs["indicator"] == "rsi"
+    assert state.collected_inputs["category"] == "technical"
+
+
+@pytest.mark.parametrize(
     ("message", "expected_name"),
     (
         (

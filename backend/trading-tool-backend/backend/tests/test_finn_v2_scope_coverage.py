@@ -531,6 +531,88 @@ def test_scope_coverage_allows_setup_proposal_when_identity_context_is_sufficien
     assert "response_scope_incomplete" not in verifier.reason_codes
 
 
+def test_persisted_mapping_plan_accepts_typed_watchlist_proposal_without_prose_overlap():
+    service = FinnV2ResponseVerifierService(session=object())
+    draft = ResponseDraft(
+        draft_id="draft-watchlist-proposal",
+        run_id="run-watchlist-proposal",
+        user_id=7,
+        mode="ACTION_PROPOSAL",
+        direct_answer="Ik heb de wijziging voor je klaargezet.",
+        main_observation="Er is nog niets uitgevoerd.",
+        claims=[],
+        proposal_candidate=ProposalCandidate(
+            operation_type="watchlist_add",
+            target_type="watchlist",
+            target_id=None,
+            asset="ETH",
+            proposed_changes={"operation": "add", "asset": "ETH"},
+            evidence_refs=["E1"],
+            impact_summary="ETH wordt na bevestiging toegevoegd.",
+            risk_summary="Uitvoering vereist bevestiging.",
+            confirmation_required=True,
+        ),
+        evidence_set_hash="hash-watchlist",
+        created_at=datetime.now(timezone.utc),
+    )
+    verifier = service._deterministic_verify(
+        run=SimpleNamespace(
+            id="run-watchlist-proposal",
+            user_id=7,
+            message="Voeg Ethereum toe aan mijn favorieten.",
+            conversation_id="conv-1",
+        ),
+        orchestrator_result=SimpleNamespace(
+            analysis=SimpleNamespace(
+                interaction_mode="ACTION_PROPOSAL",
+                subject_scopes=["watchlist"],
+                request_plan={
+                    "operation_id": "watchlist_add",
+                    "operation_contract_version": CONTRACT_VERSION,
+                    "interaction_mode": "ACTION_PROPOSAL",
+                    "operation_state": {"missing_required_inputs": []},
+                },
+            ),
+            selected_clarification=None,
+        ),
+        policy=SimpleNamespace(
+            allowed=True,
+            proposal_allowed=True,
+            confirmation_required=True,
+            operation_type="watchlist_add",
+        ),
+        context=SimpleNamespace(
+            evidence=[
+                SimpleNamespace(
+                    evidence_id="E1",
+                    domain="identity_context",
+                    tool_name="read_watchlist",
+                    information_scope="watchlist",
+                    entity_type="watchlist",
+                    entity_id="ETH",
+                    asset="ETH",
+                    freshness="fresh",
+                    availability="available",
+                    confidence="high",
+                    facts={"assets": []},
+                )
+            ],
+            uncertainty_codes=[],
+        ),
+        validation=SimpleNamespace(
+            id="validation-watchlist",
+            evidence_set_hash="hash-watchlist",
+            integrity_status="valid",
+        ),
+        draft=draft,
+        repair_attempt=0,
+    )
+
+    assert verifier.proposal_ok is True
+    assert verifier.relevance_ok is True
+    assert "response_not_answering_question" not in verifier.reason_codes
+
+
 def test_scope_coverage_uses_top_level_model_evidence_references():
     service = FinnV2ResponseVerifierService(session=object())
     draft = ResponseDraft(

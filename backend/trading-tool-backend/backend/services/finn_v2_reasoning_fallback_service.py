@@ -1061,12 +1061,37 @@ class FinnV2ReasoningFallbackService:
         target_detail = f" voor {display_target}" if display_target else ""
         if timeframe:
             target_detail = f"{target_detail} met {timeframe} als primair timeframe"
+        direct_answer = f"Ik kan een voorstel{target_detail} voorbereiden."
+        impact_summary = f"Er wordt een {contract.action_polarity.value}-voorstel voor {display_target} voorbereid."
+        if contract.operation_id in {
+            "create_indicator_configuration",
+            "update_indicator_configuration",
+            "delete_indicator_configuration",
+        }:
+            indicator = str(proposed_fields.get("indicator") or "indicator").strip()
+            category = str(proposed_fields.get("category") or "technical").strip().lower()
+            category_label = {
+                "technical": "Technisch bewijs",
+                "macro": "Macro",
+                "market": "Marktindicatoren",
+            }.get(category, category.capitalize())
+            verb = {
+                "create_indicator_configuration": "toevoegen aan",
+                "update_indicator_configuration": "bijwerken in",
+                "delete_indicator_configuration": "verwijderen uit",
+            }[contract.operation_id]
+            direct_answer = f"Ik kan {indicator.upper()} {verb} {category_label} voor {display_target}."
+            impact_summary = f"{indicator.upper()} wordt na bevestiging {verb} {category_label} voor {display_target}."
+        elif contract.operation_id in {"watchlist_add", "watchlist_remove"}:
+            verb = "toevoegen aan" if contract.operation_id == "watchlist_add" else "verwijderen uit"
+            direct_answer = f"Ik kan {display_target} {verb} je watchlist."
+            impact_summary = f"{display_target} wordt na bevestiging {verb} je watchlist."
         return ReasoningResult(
             reasoning_result_id=f"finn-v2-reasoning-{uuid.uuid4().hex}",
             run_id=run_id,
             user_id=user_id,
             mode=contract.mode,
-            direct_answer=f"Ik kan een voorstel{target_detail} voorbereiden.",
+            direct_answer=direct_answer,
             main_observation="Er is nog niets gewijzigd; het voorstel vereist eerst expliciete bevestiging.",
             supporting_points=[],
             claims=[],
@@ -1088,7 +1113,7 @@ class FinnV2ReasoningFallbackService:
                 asset=requested_asset,
                 proposed_changes=changes,
                 evidence_refs=evidence_refs,
-                impact_summary=f"Er wordt een {contract.action_polarity.value}-voorstel voor {display_target} voorbereid.",
+                impact_summary=impact_summary,
                 risk_summary="Er wordt niets uitgevoerd zonder expliciete confirmation.",
                 confirmation_required=True,
             ),
@@ -1127,7 +1152,16 @@ class FinnV2ReasoningFallbackService:
             if operation_id == "create_indicator_configuration":
                 payload["after"] = {key: value for key, value in fields.items() if key != "asset"}
             elif operation_id == "update_indicator_configuration":
-                payload["after"] = dict(fields["changed_fields"])
+                payload["after"] = {
+                    "category": fields["category"],
+                    "indicator_id": fields["indicator"],
+                    **dict(fields["changed_fields"]),
+                }
+            else:
+                payload["after"] = {
+                    "category": fields["category"],
+                    "indicator_id": fields["indicator"],
+                }
             return payload
         if operation_id in {"watchlist_add", "watchlist_remove"}:
             return {
