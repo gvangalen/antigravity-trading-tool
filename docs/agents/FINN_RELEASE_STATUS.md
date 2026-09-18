@@ -8,19 +8,19 @@ short; link artifacts rather than copying reports or chat history.
 | Field | Value |
 | --- | --- |
 | Phase | `BUILD_VALIDATED` |
-| Active goal | FINN production reliability and parity repair |
-| Candidate branch | `codex/finn-345660-reliability-parity-repair` |
-| Candidate code SHA | `af26ccd7582f3b63a9adbef6cc6fa87d4d21c767` |
-| Production SHA | `34f00d18b27c727788f5e3e95db720e3fa0f06c5` |
+| Active goal | FINN targeted presentation and cross-surface context repair |
+| Candidate branch | `codex/finn-74ea-targeted-visible-repair` |
+| Candidate code SHA | `929062b3ea01a76b15c0b9bce48dab62cccc699a` |
+| Production SHA | `74ea7bdc91f6dda3d113a3d444fe44458e2fca43` |
 | Release owner | Build |
-| Last updated | `2026-09-11` |
+| Last updated | `2026-09-18` |
 
 ## QA Runner
 
-- QA runner readiness: `MATRIX_INTAKE_DEPLOYED`
-- authenticated QA preflight: completed for the production SHA by the
-  independent workflow; Build does not access `FINN_QA_USER_ID`.
-- official QA status: `NOT_ACCEPTED` for production SHA `1a73b5bbc2ef43a952535df4ecae4511002178c2`.
+- QA runner readiness: `AVAILABLE`
+- authenticated QA preflight: not started for this candidate; Build does not
+  access `FINN_QA_USER_ID`.
+- official QA status: `NOT_STARTED` for this candidate.
 
 The protected GitHub Actions runner is the canonical authenticated production
 QA executor. The candidate adds encrypted QA-owned manifest intake and an
@@ -33,11 +33,11 @@ committed status file as a self-referential release marker.
 
 | Gate | Status | Evidence |
 | --- | --- | --- |
-| Public production-equivalent matrices | `PASS` | Three independent fresh namespaces: each `37/37`, `16/16` write actions, `9/9` persisted lineage, polling/SSE parity, one dispatch/attempt, and all 37 original HTTP statuses `200` with zero retries. Artifacts: `/tmp/finn-345660-local/final-parity-{3,4,5}.json`. |
-| Provider development | `PASS` | Real provider `18/18`, all measured accuracies `100%`; provider/schema/parse/validation/timeout failures `0%`. Artifact `/tmp/finn-345660-local/final-provider-development-af26.json`, SHA-256 `9c9d679aaac60eefd4bbf2d819a9356198b8754dbb4b6e5acd6dbc3bb584a681c`. |
-| Provider regression | `PASS` | Real provider `102/102`, all measured accuracies `100%`; provider/schema/parse/validation/timeout failures `0%`. Artifact `/tmp/finn-345660-local/final-provider-regression-af26.json`, SHA-256 `3e5dca12bc4ab1890407095887e3b1097f7c32d54ccef32629e6ec011afcc99a`. |
-| Backend suite | `PASS` | `1887 passed, 3 skipped` from the canonical checkout root. |
-| Frontend suite | `PASS` | `typecheck`, `lint:i18n`, `test:i18n`, `test:commands`, and `audit:high` passed. |
+| Targeted worker-driven browser flow | `PASS` | Visible Setup → Strategy → Paper-Bot, cross-surface target/readback, FINN Today, cancel/confirm, refresh/relogin, and cleanup passed. Evidence `/tmp/FINN_TARGETED_VISIBLE_REPAIR_FINAL.json`, SHA-256 `ccb28ecd91dfd0b2b2ff8fa8babd75f02a1d242ca6dcade027fcc06dd57c89f7`. |
+| Provider development | `PASS` | Real provider `18/18`; artifact `/tmp/finn-74ea-targeted-provider-development-final-v3.json`, SHA-256 `9f0b21b07979213e3616de2ee94f49b5597c0a7710c71634dc7fffc842eb26ce`. |
+| Provider regression | `PASS` | Real provider `109/109`; provider/schema/parse/validation/timeout failures `0`. Artifact `/tmp/finn-74ea-targeted-provider-regression-final-v3.json`, SHA-256 `2a9e2f53c3697e79a50d0ed923f956e218ee0274bf2df2d068a6df9a662e8245`. |
+| Backend suite | `PASS` | `2169 passed, 3 skipped` from the canonical checkout root. |
+| Frontend suite | `PASS` | `typecheck`, `lint:i18n`, `test:i18n` (`7/7`), `test:commands` (`5/5`), `audit:high`, and production build passed. |
 | CI | `NOT_RUN` | Awaiting the validated candidate push. |
 | Deployment | `NOT_RUN` | Production remains on the prior release until Auto Deploy completes. |
 | Official independent QA | `NOT_STARTED` | Build does not initiate official QA. |
