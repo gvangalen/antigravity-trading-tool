@@ -353,6 +353,11 @@ class FinnV2RuntimeContractRepository(FinnV2RepositoryTransactionMixin):
         # persistence rather than asking a later reader to infer it.
         persisted_result["conversation_id"] = persisted_result.get("conversation_id") or row.conversation_id
         state = record_action_result(deepcopy(row.state_json or {}), action_result=persisted_result)
+        # A successful execution closes the proposal draft. Keeping its guided
+        # state active makes the next independent action look like a slot
+        # answer or update continuation.
+        if persisted_result.get("result_status") == "succeeded":
+            state["guided_state"] = {}
         row = await self._write_revision(row=row, state=state)
         if row.terminal_projection_json is not None:
             row.terminal_projection_json = terminal_projection(state, status=str(state.get("terminal_status") or PENDING_STATUS), mode=state.get("final_mode"), response=dict(state.get("terminal_response") or row.terminal_projection_json.get("response") or {}))

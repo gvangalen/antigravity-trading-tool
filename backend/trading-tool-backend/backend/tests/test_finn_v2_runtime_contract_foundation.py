@@ -131,6 +131,54 @@ def test_continuation_context_uses_the_persisted_parent_contract_state():
     assert context["active_guided_operation"] == expected_flow
 
 
+def test_successful_action_result_closes_stale_guided_indicator_state():
+    from backend.services.finn_v2_orchestrator_service import FinnV2OrchestratorService
+
+    class _Conversations:
+        async def get_context(self, **_kwargs):
+            return {
+                "active_guided_operation": {
+                    "operation_id": "update_indicator_configuration",
+                    "missing_required_inputs": ["changed_fields"],
+                    "status": "collecting",
+                }
+            }
+
+    class _Contracts:
+        async def get_latest_for_conversation(self, **_kwargs):
+            return SimpleNamespace(
+                run_id="parent-run",
+                state_json={
+                    "guided_state": {
+                        "operation_id": "create_indicator_configuration",
+                        "status": "proposed",
+                    },
+                    "action_result": {
+                        "entity_type": "indicator_configuration",
+                        "entity_id": "macro:BTC:dxy",
+                        "owner_user_id": 7,
+                        "result_status": "succeeded",
+                    },
+                },
+            )
+
+    service = object.__new__(FinnV2OrchestratorService)
+    service.conversations = _Conversations()
+    service.runtime_contracts = _Contracts()
+
+    context = asyncio.run(
+        service._load_continuation_context(
+            conversation_id="conversation-indicators",
+            user_id=7,
+            run_id="child-run",
+        )
+    )
+
+    assert context["previous_action_result"]["entity_id"] == "macro:BTC:dxy"
+    assert "active_guided_operation" not in context
+    assert "operation_state" not in context
+
+
 def test_conversation_hydrates_its_latest_owner_action_result_not_global_history():
     """A follow-up may use only its own conversation's persisted action result."""
     from backend.services.finn_v2_orchestrator_service import FinnV2OrchestratorService

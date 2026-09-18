@@ -467,6 +467,18 @@ class FinnV2RequestPreprocessorService:
             return "read"
         if "live" in text and re.search(r"\b(staat|is|welke|toon)\b", text):
             return "read"
+        # An explicit explanation stays read-only when a later clause rules
+        # out creating or performing a personal analysis. A negated mutation
+        # verb must not turn financial education into a write proposal.
+        if (
+            re.search(r"\b(?:leg(?:\s+\w+){0,8}\s+uit|explain|erkl[aä]r\w*)\b", text)
+            and re.search(
+                r"\b(?:zonder|without|ohne)\b.{0,80}\b(?:ma(?:ak|k)\w*|create\w*|perform\w*|"
+                r"erstell\w*|durchf[uü]hr\w*)\b",
+                text,
+            )
+        ):
+            return "read"
         # A paper or explicitly non-live bot is a create/update constraint,
         # never a request to activate live automation.  Preserve that typed
         # safety fact before recognising an affirmative live activation.

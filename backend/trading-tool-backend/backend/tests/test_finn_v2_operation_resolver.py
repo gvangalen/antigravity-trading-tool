@@ -2,6 +2,7 @@ import pytest
 
 from backend.domain.finn_v2_operation_registry import FinnV2OperationRegistry
 from backend.services.finn_v2_operation_resolver_service import FinnV2OperationResolverService
+from backend.services.finn_v2_request_preprocessor_service import FinnV2RequestPreprocessorService
 from backend.services.finn_v2_structured_operation_selector_service import FinnV2StructuredOperationSelection
 
 
@@ -740,6 +741,45 @@ def test_completed_owner_action_result_resolves_a_typed_delete_follow_up():
     )
 
     assert resolved.operation_id == "delete_setup"
+
+
+def test_explicit_add_indicator_wins_over_previous_indicator_update_lineage():
+    registry = FinnV2OperationRegistry()
+    resolved = FinnV2OperationResolverService(registry).resolve(
+        selection=_selection(
+            "update_indicator_configuration",
+            {"goal": "update", "object": "indicator"},
+        ),
+        candidates=registry.list(),
+        conversation_context={
+            "previous_action_result": {
+                "entity_type": "indicator_configuration",
+                "entity_id": "macro:BTC:dxy",
+                "result_status": "succeeded",
+            },
+        },
+        request_facts={
+            "action_polarity": "add",
+            "primary_entity": "indicator_configuration",
+            "explicit_entities": ("indicator_configuration",),
+        },
+    )
+
+    assert resolved.operation_id == "create_indicator_configuration"
+
+
+@pytest.mark.parametrize(
+    "message",
+    (
+        "Leg RSI uit zonder een persoonlijke analyse te maken.",
+        "Explain RSI without creating a personal analysis.",
+        "Erklare RSI, ohne eine personliche Analyse zu erstellen.",
+    ),
+)
+def test_negated_analysis_creation_remains_a_read_explanation(message: str):
+    facts = FinnV2RequestPreprocessorService().preprocess(message=message)
+
+    assert facts.action_polarity == "read"
 
 
 def test_typed_remove_polarity_prevents_a_read_setup_selection_for_linked_mutation():

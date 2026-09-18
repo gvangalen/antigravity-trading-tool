@@ -237,10 +237,12 @@ def test_workspace_macro_rows_follow_active_asset_symbol():
 
 def test_workspace_projects_configured_macro_without_live_observation():
     service = object.__new__(WorkspaceDataService)
-    service.macro = SimpleNamespace(
+    service.macro_service = SimpleNamespace(
         resolve_effective_preferences=AsyncMock(
             return_value={"rows": [SimpleNamespace(indicator="dxy")]}
-        ),
+        )
+    )
+    service.macro = SimpleNamespace(
         get_active_day_macro_data=AsyncMock(return_value=[]),
         _get_data_by_days=AsyncMock(return_value=[]),
     )
@@ -264,10 +266,12 @@ def test_workspace_projects_configured_macro_without_live_observation():
 
 def test_workspace_projects_configured_technical_without_live_observation():
     service = object.__new__(WorkspaceDataService)
-    service.technical = SimpleNamespace(
+    service.technical_service = SimpleNamespace(
         resolve_effective_preferences=AsyncMock(
             return_value={"rows": [SimpleNamespace(indicator="rsi"), SimpleNamespace(indicator="ma_200")]}
-        ),
+        )
+    )
+    service.technical = SimpleNamespace(
         get_day_data=AsyncMock(return_value=[]),
     )
 
@@ -276,6 +280,35 @@ def test_workspace_projects_configured_technical_without_live_observation():
     assert [row["name"] for row in rows] == ["rsi", "ma_200"]
     assert all(row["configured"] is True for row in rows)
     assert all(row["data_status"] == "pending_refresh" for row in rows)
+
+
+def test_workspace_projects_arbitrary_configured_market_indicator_without_live_observation():
+    service = object.__new__(WorkspaceDataService)
+    service.market_service = SimpleNamespace(
+        resolve_effective_preferences=AsyncMock(
+            return_value={"rows": [SimpleNamespace(indicator="funding_spread_30d")]}
+        )
+    )
+    service.market = SimpleNamespace(get_active_day_indicators=AsyncMock(return_value=[]))
+
+    rows = asyncio.run(service._market_rows(7, "BTC", "day"))
+
+    assert rows[0]["name"] == "funding_spread_30d"
+    assert rows[0]["configured"] is True
+    assert rows[0]["data_status"] == "pending_refresh"
+
+
+def test_workspace_constructor_uses_category_services_for_saved_preferences():
+    session = object()
+
+    service = WorkspaceDataService(session)
+
+    assert service.market_service.session is session
+    assert service.macro_service.session is session
+    assert service.technical_service.session is session
+    assert callable(service.market_service.resolve_effective_preferences)
+    assert callable(service.macro_service.resolve_effective_preferences)
+    assert callable(service.technical_service.resolve_effective_preferences)
 
 
 def test_watchlist_materializes_quotes_before_asset_catalog_fallback_rolls_back():

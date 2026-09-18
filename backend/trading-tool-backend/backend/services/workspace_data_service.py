@@ -18,7 +18,10 @@ from backend.infrastructure.repositories.technical_data_repository import Techni
 from backend.infrastructure.repositories.user_repository import UserRepository
 from backend.services.asset_catalog_service import AssetCatalogService
 from backend.services.intelligence_service import IntelligenceService
+from backend.services.macro_data_service import MacroDataService
+from backend.services.market_data_service import MarketDataService
 from backend.services.score_service import ScoreService
+from backend.services.technical_data_service import TechnicalDataService
 
 logger = logging.getLogger(__name__)
 
@@ -306,6 +309,9 @@ class WorkspaceDataService:
         self.market = MarketDataRepository(session)
         self.macro = MacroDataRepository(session)
         self.technical = TechnicalDataRepository(session)
+        self.market_service = MarketDataService(session)
+        self.macro_service = MacroDataService(session)
+        self.technical_service = TechnicalDataService(session)
         self.scores = ScoreRepository(session)
         self.users = UserRepository(session)
         self.score_service = ScoreService(self.scores, self.users)
@@ -691,7 +697,7 @@ class WorkspaceDataService:
     async def _market_rows(self, user_id: int, symbol: str, period: str) -> list[dict[str, Any]]:
         allowed: set[str] = set()
         configured: list[Any] = []
-        resolver = getattr(self.market, "resolve_effective_preferences", None)
+        resolver = getattr(getattr(self, "market_service", None), "resolve_effective_preferences", None)
         if callable(resolver):
             resolved = await resolver(user_id, symbol=symbol)
             configured = list(resolved.get("rows", []))
@@ -718,7 +724,7 @@ class WorkspaceDataService:
     async def _macro_rows(self, user_id: int, symbol: str, period: str) -> list[dict[str, Any]]:
         allowed: set[str] = set()
         configured: list[Any] = []
-        resolver = getattr(self.macro, "resolve_effective_preferences", None)
+        resolver = getattr(getattr(self, "macro_service", None), "resolve_effective_preferences", None)
         if callable(resolver):
             resolved = await resolver(user_id, symbol=symbol)
             configured = list(resolved.get("rows", []))
@@ -745,7 +751,7 @@ class WorkspaceDataService:
     async def _technical_rows(self, user_id: int, symbol: str, period: str) -> list[dict[str, Any]]:
         allowed: set[str] = set()
         configured: list[Any] = []
-        resolver = getattr(self.technical, "resolve_effective_preferences", None)
+        resolver = getattr(getattr(self, "technical_service", None), "resolve_effective_preferences", None)
         if callable(resolver):
             resolved = await resolver(user_id, symbol=symbol)
             configured = list(resolved.get("rows", []))

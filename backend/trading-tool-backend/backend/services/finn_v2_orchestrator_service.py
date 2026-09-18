@@ -883,7 +883,10 @@ class FinnV2OrchestratorService:
                 context["previous_action_result"] = latest_action_result
                 context["previous_action_result_source"] = "conversation_action_result"
         guided_state = dict(previous_state.get("guided_state") or {})
-        if guided_state:
+        if context.get("previous_action_result", {}).get("result_status") == "succeeded":
+            context.pop("active_guided_operation", None)
+            context.pop("operation_state", None)
+        elif guided_state:
             context["active_guided_operation"] = guided_state
         return context
 
