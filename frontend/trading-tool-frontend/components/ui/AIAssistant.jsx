@@ -33,6 +33,7 @@ import FinnCommandCenter from "@/components/finn/FinnCommandCenter";
 import { FINN_ASSETS } from "@/lib/finnCommandSearch";
 import { getWorkspaceSnapshot, subscribeWorkspaceSnapshot } from "@/lib/workspaceSnapshotStore";
 import { getActiveSetupId } from "@/lib/setup/activeSetup";
+import { indicatorDisplayName } from "@/lib/indicators/configuredIndicatorRows.mjs";
 
 const INDICATOR_MODAL_OPEN_EVENT = "finn-indicator-config:open";
 const INDICATOR_MODAL_COMPLETED_EVENT = "finn-indicator-config:completed";
@@ -330,7 +331,7 @@ function buildIndicatorModalRequest(envelope, fallbackSymbol) {
   if (!indicatorName) return null;
 
   const symbol = draft.symbol || envelope?.selected_entity?.asset || fallbackSymbol || "BTC";
-  const label = draft.display_name || String(indicatorName).toUpperCase();
+  const label = draft.display_name || indicatorDisplayName(indicatorName);
 
   return {
     category,
@@ -4904,7 +4905,7 @@ function AIAssistantContent({
         const analysisResultText = operationId.startsWith("watchlist_")
           ? `${suppliedInputs.asset || execution.action_result?.canonical_name || "De asset"} is ${operationId === "watchlist_remove" ? "uit je watchlist verwijderd" : "aan je watchlist toegevoegd"}.`
           : operationId.includes("indicator_configuration")
-            ? `${String(suppliedInputs.indicator || execution.action_result?.canonical_name || "De indicator").toUpperCase()} is ${operationId.startsWith("delete_") ? "verwijderd uit" : operationId.startsWith("update_") ? "bijgewerkt in" : "toegevoegd aan"} ${categoryLabel || "je analyse"}${suppliedInputs.asset ? ` voor ${suppliedInputs.asset}` : ""}.`
+            ? `${indicatorDisplayName(suppliedInputs.indicator || execution.action_result?.canonical_name)} is ${operationId.startsWith("delete_") ? "verwijderd uit" : operationId.startsWith("update_") ? "bijgewerkt in" : "toegevoegd aan"} ${categoryLabel || "je analyse"}${suppliedInputs.asset ? ` voor ${suppliedInputs.asset}` : ""}.`
             : null;
         const terminalText = analysisResultText || (execution.status === "already_executed"
           ? `${operationLabel} ‘${resultName}’ was al ${resultVerb}.`
@@ -5211,7 +5212,7 @@ function AIAssistantContent({
       : isBot
         ? [["Budget", supplied.budget_total_eur ? `€${supplied.budget_total_eur}` : null]]
         : isIndicator
-          ? [["Indicator", supplied.indicator ? String(supplied.indicator).toUpperCase() : null], ["Categorie", ({ technical: "Technisch bewijs", macro: "Macro", market: "Marktindicatoren" }[supplied.category] || supplied.category)], ["Weging", supplied.weight]]
+          ? [["Indicator", supplied.indicator ? indicatorDisplayName(supplied.indicator) : null], ["Categorie", ({ technical: "Technisch bewijs", macro: "Macro", market: "Marktindicatoren" }[supplied.category] || supplied.category)], ["Weging", supplied.weight]]
           : [];
     const title = isStrategy
       ? "Concept strategie"
@@ -5221,7 +5222,7 @@ function AIAssistantContent({
           ? operationId === "delete_indicator_configuration" ? "Indicator verwijderen" : "Concept indicator"
           : operationId === "watchlist_remove" ? "Uit watchlist verwijderen" : "Aan watchlist toevoegen";
     const objectName = supplied.name
-      || (isIndicator ? String(supplied.indicator || "Indicator").toUpperCase() : null)
+      || (isIndicator ? indicatorDisplayName(supplied.indicator) : null)
       || (isWatchlist ? supplied.asset || context.symbol : null)
       || (isStrategy ? "Nieuwe strategie" : "Nieuwe paper-bot");
     return (
@@ -5758,7 +5759,7 @@ function AIAssistantContent({
 
     if (isWatchlistAction || isIndicatorAction) {
       const asset = suppliedInputs.asset || displayContext.symbol;
-      const indicator = String(suppliedInputs.indicator || "").toUpperCase();
+      const indicator = indicatorDisplayName(suppliedInputs.indicator);
       const category = ({ technical: "Technisch bewijs", macro: "Macro", market: "Marktindicatoren" })[suppliedInputs.category] || suppliedInputs.category;
       const title = isWatchlistAction
         ? operationId === "watchlist_remove" ? "Uit watchlist verwijderen" : "Aan watchlist toevoegen"

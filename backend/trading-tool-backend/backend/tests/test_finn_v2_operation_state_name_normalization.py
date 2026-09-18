@@ -531,6 +531,29 @@ def test_update_setup_extracts_only_the_new_timeframe(message):
     assert state.missing_required_inputs == []
 
 
+def test_complete_dutch_strategy_prompt_extracts_execution_and_risk_synonyms():
+    service = FinnV2OperationStateService()
+    contract = FinnV2OperationRegistry().require_supported("create_strategy")
+
+    state = service.resolve(
+        contract=contract,
+        message=(
+            "Maak strategie BTC Vast voor setup BTC Basis met vaste uitvoering, "
+            "100 euro, entry 76000, stop-loss 72000, targets 82000 en 86000 "
+            "en gebalanceerd risico."
+        ),
+        explicit_asset="BTC",
+        conversation_context={"previous_action_result": {
+            "entity_type": "setup", "entity_id": 42, "result_status": "succeeded"
+        }},
+    )
+
+    assert state.collected_inputs["execution_mode"] == "fixed"
+    assert state.collected_inputs["risk_profile"] == "balanced"
+    assert "execution_mode" not in state.missing_required_inputs
+    assert "risk_profile" not in state.missing_required_inputs
+
+
 @pytest.mark.parametrize(
     ("slot", "question"),
     (

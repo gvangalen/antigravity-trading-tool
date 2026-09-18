@@ -25,3 +25,20 @@ export function mergeConfiguredIndicatorRows(rows, configuredNames) {
 
   return result;
 }
+
+const INDICATOR_LABELS = {
+  dxy: "DXY",
+  rsi: "RSI",
+  ma_50: "MA 50",
+  ma_200: "MA 200",
+  price: "Price",
+  volume: "Volume",
+  change_24h: "24-uurs koerswijziging",
+};
+
+export function indicatorDisplayName(value) {
+  const normalized = String(value || "").trim().toLowerCase().replace(/[\s-]+/g, "_");
+  if (!normalized) return "Indicator";
+  return INDICATOR_LABELS[normalized]
+    || normalized.split("_").filter(Boolean).map((part) => part.length <= 4 ? part.toUpperCase() : `${part[0].toUpperCase()}${part.slice(1)}`).join(" ");
+}

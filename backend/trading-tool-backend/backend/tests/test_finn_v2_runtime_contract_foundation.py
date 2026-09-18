@@ -202,16 +202,23 @@ def test_new_conversation_does_not_implicitly_load_an_unrelated_owner_action_res
     assert "previous_action_result" not in context
 
 
-def test_proven_first_turn_skips_all_continuation_reads():
+def test_first_turn_hint_cannot_suppress_persisted_continuation_lookup():
     from backend.services.finn_v2_orchestrator_service import FinnV2OrchestratorService
 
-    class _NoReads:
-        def __getattr__(self, _name):
-            raise AssertionError("first turn must not read continuation state")
+    class _Conversations:
+        async def get_context(self, **_kwargs):
+            return {}
+
+    class _Contracts:
+        async def get_latest_for_conversation(self, **_kwargs):
+            return None
+
+        async def get_latest_action_result_for_conversation(self, **_kwargs):
+            return None
 
     service = object.__new__(FinnV2OrchestratorService)
-    service.conversations = _NoReads()
-    service.runtime_contracts = _NoReads()
+    service.conversations = _Conversations()
+    service.runtime_contracts = _Contracts()
 
     context = asyncio.run(
         service._load_continuation_context(

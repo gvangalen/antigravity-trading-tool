@@ -235,6 +235,49 @@ def test_workspace_macro_rows_follow_active_asset_symbol():
     ]
 
 
+def test_workspace_projects_configured_macro_without_live_observation():
+    service = object.__new__(WorkspaceDataService)
+    service.macro = SimpleNamespace(
+        resolve_effective_preferences=AsyncMock(
+            return_value={"rows": [SimpleNamespace(indicator="dxy")]}
+        ),
+        get_active_day_macro_data=AsyncMock(return_value=[]),
+        _get_data_by_days=AsyncMock(return_value=[]),
+    )
+
+    rows = asyncio.run(service._macro_rows(7, "BTC", "day"))
+
+    assert rows == [{
+        "name": "dxy",
+        "value": None,
+        "score": None,
+        "trend": None,
+        "interpretation": None,
+        "action": None,
+        "timestamp": None,
+        "sample_size": 0,
+        "period_aggregate": False,
+        "configured": True,
+        "data_status": "pending_refresh",
+    }]
+
+
+def test_workspace_projects_configured_technical_without_live_observation():
+    service = object.__new__(WorkspaceDataService)
+    service.technical = SimpleNamespace(
+        resolve_effective_preferences=AsyncMock(
+            return_value={"rows": [SimpleNamespace(indicator="rsi"), SimpleNamespace(indicator="ma_200")]}
+        ),
+        get_day_data=AsyncMock(return_value=[]),
+    )
+
+    rows = asyncio.run(service._technical_rows(7, "BTC", "day"))
+
+    assert [row["name"] for row in rows] == ["rsi", "ma_200"]
+    assert all(row["configured"] is True for row in rows)
+    assert all(row["data_status"] == "pending_refresh" for row in rows)
+
+
 def test_watchlist_materializes_quotes_before_asset_catalog_fallback_rolls_back():
     class ExpiringQuote:
         def __init__(self, symbol: str, price: Decimal):

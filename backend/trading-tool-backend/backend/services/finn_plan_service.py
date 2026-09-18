@@ -26,6 +26,7 @@ from backend.infrastructure.repositories.strategy_repository import StrategyRepo
 from backend.infrastructure.repositories.technical_data_repository import TechnicalDataRepository
 from backend.infrastructure.repositories.user_repository import UserRepository
 from backend.infrastructure.models import OnboardingStep
+from backend.domain.indicator_display import indicator_display_name
 from backend.schemas.bot_schema import BotConfigCreateSchema, BotConfigUpdateSchema
 from backend.schemas.trading_schema import SetupCreateSchema, StrategyCreateSchema
 from backend.services.ai_availability_service import acquire_ai_call_slot, get_ai_availability
@@ -12923,7 +12924,9 @@ class FinnPlanService:
             *(snapshot.get("market_indicators") or []),
         ]
         if indicator_names:
-            facts.append(f"Je volgt onder meer {', '.join(str(item) for item in indicator_names[:4])}.")
+            facts.append(
+                f"Je volgt onder meer {', '.join(indicator_display_name(item) for item in indicator_names[:4])}."
+            )
         latest = snapshot.get("latest_analysis") or {}
         if snapshot.get("latest_analysis_available"):
             if latest.get("summary"):

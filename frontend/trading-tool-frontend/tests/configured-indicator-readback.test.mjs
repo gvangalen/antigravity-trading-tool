@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { mergeConfiguredIndicatorRows } from "../lib/indicators/configuredIndicatorRows.mjs";
+import { indicatorDisplayName, mergeConfiguredIndicatorRows } from "../lib/indicators/configuredIndicatorRows.mjs";
 
 test("configured indicators remain visible when live data is not available yet", () => {
   const rows = mergeConfiguredIndicatorRows([], ["dxy", "rsi", "ma_200", "price"]);
@@ -18,4 +18,11 @@ test("live data wins without creating a duplicate configured row", () => {
   assert.equal(rows.length, 2);
   assert.deepEqual(rows[0], live[0]);
   assert.equal(rows[1].name, "DXY");
+});
+
+test("canonical indicator keys never leak into visible labels", () => {
+  assert.equal(indicatorDisplayName("ma_200"), "MA 200");
+  assert.equal(indicatorDisplayName("PRICE"), "Price");
+  assert.equal(indicatorDisplayName("dxy"), "DXY");
+  assert.equal(indicatorDisplayName("rsi"), "RSI");
 });

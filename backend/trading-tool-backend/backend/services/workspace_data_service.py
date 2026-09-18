@@ -158,6 +158,35 @@ def _indicator_key(value: Any) -> str:
     return re.sub(r"[^a-z0-9]+", "_", str(value or "").strip().lower()).strip("_")
 
 
+def _include_configured_rows(
+    rows: list[dict[str, Any]],
+    configured: Iterable[Any],
+) -> list[dict[str, Any]]:
+    """Project saved preferences even while their live observation is pending."""
+    visible = list(rows)
+    visible_keys = {_indicator_key(row.get("name")) for row in visible}
+    for config in configured:
+        name = str(getattr(config, "indicator", "") or "").strip()
+        key = _indicator_key(name)
+        if not name or key in visible_keys:
+            continue
+        visible.append({
+            "name": name,
+            "value": None,
+            "score": None,
+            "trend": None,
+            "interpretation": None,
+            "action": None,
+            "timestamp": None,
+            "sample_size": 0,
+            "period_aggregate": False,
+            "configured": True,
+            "data_status": "pending_refresh",
+        })
+        visible_keys.add(key)
+    return visible
+
+
 def _enrich_indicator_rows(
     rows: list[dict[str, Any]],
     *,
@@ -661,56 +690,77 @@ class WorkspaceDataService:
 
     async def _market_rows(self, user_id: int, symbol: str, period: str) -> list[dict[str, Any]]:
         allowed: set[str] = set()
+        configured: list[Any] = []
         resolver = getattr(self.market, "resolve_effective_preferences", None)
         if callable(resolver):
             resolved = await resolver(user_id, symbol=symbol)
+            configured = list(resolved.get("rows", []))
             allowed = {
                 _indicator_key(row.indicator)
-                for row in resolved.get("rows", [])
+                for row in configured
                 if str(row.indicator or "").strip()
             }
         if period == "day":
             rows = await self.market.get_active_day_indicators(user_id, symbol)
             payload = [_market_row(row) for row in _latest_by_name(rows, "name")]
-            return [row for row in payload if not allowed or _indicator_key(row.get("name")) in allowed]
+            return _include_configured_rows(
+                [row for row in payload if not allowed or _indicator_key(row.get("name")) in allowed],
+                configured,
+            )
         else:
             rows = await self.market.get_period_indicators(user_id, symbol, PERIOD_DAYS[period])
             payload = _aggregate_by_name(rows, "name", _market_row)
-            return [row for row in payload if not allowed or _indicator_key(row.get("name")) in allowed]
+            return _include_configured_rows(
+                [row for row in payload if not allowed or _indicator_key(row.get("name")) in allowed],
+                configured,
+            )
 
     async def _macro_rows(self, user_id: int, symbol: str, period: str) -> list[dict[str, Any]]:
         allowed: set[str] = set()
+        configured: list[Any] = []
         resolver = getattr(self.macro, "resolve_effective_preferences", None)
         if callable(resolver):
             resolved = await resolver(user_id, symbol=symbol)
+            configured = list(resolved.get("rows", []))
             allowed = {
                 _indicator_key(row.indicator)
-                for row in resolved.get("rows", [])
+                for row in configured
                 if str(row.indicator or "").strip()
             }
         if period == "day":
             rows = await self.macro.get_active_day_macro_data(user_id, symbol)
             payload = [_macro_row(row) for row in _latest_by_name(rows, "name")]
-            return [row for row in payload if not allowed or _indicator_key(row.get("name")) in allowed]
+            return _include_configured_rows(
+                [row for row in payload if not allowed or _indicator_key(row.get("name")) in allowed],
+                configured,
+            )
         else:
             rows = await self.macro._get_data_by_days(user_id, PERIOD_DAYS[period], symbol=symbol)
             payload = _aggregate_by_name(rows, "name", _macro_row)
-            return [row for row in payload if not allowed or _indicator_key(row.get("name")) in allowed]
+            return _include_configured_rows(
+                [row for row in payload if not allowed or _indicator_key(row.get("name")) in allowed],
+                configured,
+            )
 
     async def _technical_rows(self, user_id: int, symbol: str, period: str) -> list[dict[str, Any]]:
         allowed: set[str] = set()
+        configured: list[Any] = []
         resolver = getattr(self.technical, "resolve_effective_preferences", None)
         if callable(resolver):
             resolved = await resolver(user_id, symbol=symbol)
+            configured = list(resolved.get("rows", []))
             allowed = {
                 _indicator_key(row.indicator)
-                for row in resolved.get("rows", [])
+                for row in configured
                 if str(row.indicator or "").strip()
             }
         if period == "day":
             rows = await self.technical.get_day_data(user_id, symbol)
             payload = [_technical_row(row) for row in _latest_by_name(rows, "indicator")]
-            return [row for row in payload if not allowed or _indicator_key(row.get("name")) in allowed]
+            return _include_configured_rows(
+                [row for row in payload if not allowed or _indicator_key(row.get("name")) in allowed],
+                configured,
+            )
         elif period == "week":
             rows = await self.technical.get_week_data(user_id, symbol)
         elif period == "month":
@@ -718,7 +768,10 @@ class WorkspaceDataService:
         else:
             rows = await self.technical.get_quarter_data(user_id, symbol)
         payload = _aggregate_by_name(rows, "indicator", _technical_row)
-        return [row for row in payload if not allowed or _indicator_key(row.get("name")) in allowed]
+        return _include_configured_rows(
+            [row for row in payload if not allowed or _indicator_key(row.get("name")) in allowed],
+            configured,
+        )
 
     @staticmethod
     def _category_payload(

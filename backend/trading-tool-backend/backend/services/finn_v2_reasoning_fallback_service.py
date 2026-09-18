@@ -14,6 +14,7 @@ from backend.schemas.finn_v2_reasoning_schema import (
     ReasoningResult,
 )
 from backend.domain.finn_v2_operation_registry import FinnV2OperationRegistry
+from backend.domain.indicator_display import indicator_display_name
 
 
 class FinnV2ReasoningFallbackService:
@@ -1068,7 +1069,7 @@ class FinnV2ReasoningFallbackService:
             "update_indicator_configuration",
             "delete_indicator_configuration",
         }:
-            indicator = str(proposed_fields.get("indicator") or "indicator").strip()
+            indicator = indicator_display_name(proposed_fields.get("indicator") or "indicator")
             category = str(proposed_fields.get("category") or "technical").strip().lower()
             category_label = {
                 "technical": "Technisch bewijs",
@@ -1080,8 +1081,8 @@ class FinnV2ReasoningFallbackService:
                 "update_indicator_configuration": "bijwerken in",
                 "delete_indicator_configuration": "verwijderen uit",
             }[contract.operation_id]
-            direct_answer = f"Ik kan {indicator.upper()} {verb} {category_label} voor {display_target}."
-            impact_summary = f"{indicator.upper()} wordt na bevestiging {verb} {category_label} voor {display_target}."
+            direct_answer = f"Ik kan {indicator} {verb} {category_label} voor {display_target}."
+            impact_summary = f"{indicator} wordt na bevestiging {verb} {category_label} voor {display_target}."
         elif contract.operation_id in {"watchlist_add", "watchlist_remove"}:
             verb = "toevoegen aan" if contract.operation_id == "watchlist_add" else "verwijderen uit"
             direct_answer = f"Ik kan {display_target} {verb} je watchlist."

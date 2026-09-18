@@ -486,14 +486,14 @@ class FinnV2OperationStateService:
             values["asset"] = explicit_asset
         elif contract.operation_id == "create_strategy":
             mode_match = re.search(
-                r"\b(fixed|vast|standaard|manual|handmatig|automatic|automatis\w*|fest(?:e)?|"
+                r"\b(fixed|vast(?:e)?|standaard|manual|handmatig|automatic|automatis\w*|fest(?:e)?|"
                 r"custom|aangepast|individuell|benutzerdefiniert)\b",
                 lowered,
             )
             if mode_match:
                 mode = mode_match.group(1)
                 values["execution_mode"] = {
-                    "vast": "fixed", "standaard": "fixed", "manual": "fixed",
+                    "vast": "fixed", "vaste": "fixed", "standaard": "fixed", "manual": "fixed",
                     "handmatig": "fixed", "automatic": "fixed",
                     "fest": "fixed", "feste": "fixed",
                     "aangepast": "custom", "individuell": "custom",
@@ -773,6 +773,16 @@ class FinnV2OperationStateService:
             values["risk_profile"] = risk_prefix.group(1).strip()
         elif risk:
             values["risk_profile"] = risk.group(1).strip()
+        else:
+            natural_risk = re.search(
+                r"\b(conservative|cautious|voorzichtig|defensief|defensive|defensiv|vorsichtig|"
+                r"balanced|gebalanceerd|evenwichtig|ausgewogen|aggressive|offensief|agressief|"
+                r"offensiv)\s+(?:risk(?:\s*profile|\s*style)?|risico(?:profiel|stijl)?|risikoprofil|risikostil)\b",
+                text,
+                re.IGNORECASE,
+            )
+            if natural_risk:
+                values["risk_profile"] = natural_risk.group(1).strip()
         if "risk_profile" in values:
             canonical_risk = cls._canonical_risk_profile(str(values["risk_profile"]))
             if canonical_risk:

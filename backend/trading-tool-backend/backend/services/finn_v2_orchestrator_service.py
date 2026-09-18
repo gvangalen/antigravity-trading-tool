@@ -821,8 +821,6 @@ class FinnV2OrchestratorService:
         be excluded from the lookup or it would mask the last released
         lineage and active guided flow for this continuation turn.
         """
-        if has_prior_run is False:
-            return {}
         context = {}
         if conversation_id:
             context = dict(

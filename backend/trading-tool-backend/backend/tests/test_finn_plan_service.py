@@ -1081,6 +1081,18 @@ def test_mission_personal_snapshot_exposes_typed_profile_plan_bot_and_analysis()
         assert expected.lower() in briefing["summary"].lower()
 
 
+def test_mission_personal_briefing_uses_product_indicator_labels():
+    briefing = FinnPlanService._mission_personal_briefing({
+        "input_snapshot": {
+            "asset": "BTC",
+            "indicators": {"market": ["price"], "macro": ["dxy"], "technical": ["ma_200"]},
+        }
+    })
+
+    assert "MA 200, DXY, Price" in briefing["summary"]
+    assert "ma_200" not in briefing["summary"]
+
+
 def test_build_first_dashboard_context_returns_loading_when_payload_is_not_ready(monkeypatch):
     service = FinnPlanService(db_session=object())
 
