@@ -5716,12 +5716,19 @@ function AIAssistantContent({
       || message.actionDraft?.operation_id
       || message.state?.setup_draft?.operation_id
       || message.state?.action_draft?.operation_id;
-    const hasDedicatedDraftCard = ["create_setup", "create_strategy", "create_bot"].includes(dedicatedDraftOperation);
+    const hasDedicatedDraftCard = [
+      "create_setup", "create_strategy", "create_bot",
+      "watchlist_add", "watchlist_remove",
+      "create_indicator_configuration", "update_indicator_configuration", "delete_indicator_configuration",
+    ].includes(dedicatedDraftOperation);
     if (actionOnly.length === 0 || message.draft || hasDedicatedDraftCard) return null;
     const displayContext = actionOnly[0]?.display_context || {};
     const operationId = displayContext.operation_id || "";
     const isUpdate = operationId.startsWith("update_") || operationId === "deactivate_bot";
     const isDelete = operationId.startsWith("delete_");
+    const isWatchlistAction = ["watchlist_add", "watchlist_remove"].includes(operationId);
+    const isIndicatorAction = ["create_indicator_configuration", "update_indicator_configuration", "delete_indicator_configuration"].includes(operationId);
+    const suppliedInputs = displayContext.supplied_inputs || {};
     const objectType = operationId.includes("strategy") ? "Strategie" : operationId.includes("bot") ? "Paper-bot" : operationId.includes("setup") ? "Setup" : "Voorstel";
     const objectName = displayContext.name
       || (objectType === "Setup" ? activeSetup?.name : null)
@@ -5741,6 +5748,34 @@ function AIAssistantContent({
       displayContext.timeframe,
       displayContext.safety_mode,
     ].filter(Boolean);
+
+    if (isWatchlistAction || isIndicatorAction) {
+      const asset = suppliedInputs.asset || displayContext.symbol;
+      const indicator = String(suppliedInputs.indicator || "").toUpperCase();
+      const category = ({ technical: "Technisch bewijs", macro: "Macro", market: "Marktindicatoren" })[suppliedInputs.category] || suppliedInputs.category;
+      const title = isWatchlistAction
+        ? operationId === "watchlist_remove" ? "Uit watchlist verwijderen" : "Aan watchlist toevoegen"
+        : operationId === "delete_indicator_configuration" ? "Indicator verwijderen" : operationId === "update_indicator_configuration" ? "Indicator wijzigen" : "Indicator toevoegen";
+      const summary = isWatchlistAction
+        ? `${asset || "Asset"} ${operationId === "watchlist_remove" ? "uit je watchlist verwijderen" : "aan je watchlist toevoegen"}`
+        : `${indicator || "Indicator"} ${operationId === "delete_indicator_configuration" ? "verwijderen uit" : operationId === "update_indicator_configuration" ? "wijzigen in" : "toevoegen aan"} ${category || "je analyse"}${asset ? ` voor ${asset}` : ""}`;
+      return (
+        <div className="mt-4 min-w-0 overflow-hidden rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-950/45">
+          <div className="text-[11px] font-bold text-slate-900 dark:text-slate-100">{title}</div>
+          <div className="mt-0.5 text-[11px] text-slate-500 dark:text-slate-400">{at("draftCards.unsaved", "Nog niet opgeslagen")}</div>
+          <h3 className="mt-4 break-words text-base font-bold text-slate-950 dark:text-white">{summary}</h3>
+          {isIndicatorAction && <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{[asset, category].filter(Boolean).join(" · ")}</p>}
+          <div className="mt-4 flex flex-wrap items-center gap-2">
+            {actionOnly.map((action, index) => (
+              <button key={`${action.type}-${action.id || index}`} onClick={() => handleExecuteAction(action)} disabled={executingAction} className={actionButtonStyles({ variant: operationId.startsWith("delete_") ? "danger" : "primary", className: "min-w-[120px] justify-center rounded-xl px-4 py-2.5 text-xs" })}>
+                {executingAction ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle2 size={14} />} {operationId.startsWith("delete_") ? "Verwijderen" : "Bevestigen"}
+              </button>
+            ))}
+            <button type="button" onClick={() => handleCancelDraft(messages.indexOf(message))} disabled={executingAction} className="rounded-xl px-3 py-2 text-xs font-semibold text-slate-500 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-900">Annuleren</button>
+          </div>
+        </div>
+      );
+    }
 
     if (isDomainProposal) {
       return (
