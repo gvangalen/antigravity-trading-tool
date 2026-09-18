@@ -9,13 +9,25 @@ const assistantSource = readFileSync(
 
 test("an immediate send after Nieuw gesprek cannot reuse the previous conversation", () => {
   assert.match(assistantSource, /forceNewFinnConversationRef = useRef\(false\)/);
+  assert.match(assistantSource, /activeFinnSessionIdRef = useRef\(null\)/);
   assert.match(
     assistantSource,
-    /startNewFinnConversation[\s\S]*forceNewFinnConversationRef\.current = true[\s\S]*setActiveFinnSessionId\(null\)/,
+    /startNewFinnConversation[\s\S]*forceNewFinnConversationRef\.current = true[\s\S]*activeFinnSessionIdRef\.current = null[\s\S]*setActiveFinnSessionId\(null\)/,
   );
   assert.match(
     assistantSource,
-    /const chatSessionId = forceNewFinnConversationRef\.current[\s\S]*\? "new"[\s\S]*: activeFinnSessionId \|\| "new"/,
+    /const chatSessionId = forceNewFinnConversationRef\.current[\s\S]*\? "new"[\s\S]*: activeFinnSessionIdRef\.current \|\| activeFinnSessionId \|\| "new"/,
   );
   assert.match(assistantSource, /forceNewFinnConversationRef\.current = false/);
+});
+
+test("a terminal V2 envelope is immediately authoritative for the next turn", () => {
+  assert.match(
+    assistantSource,
+    /persistActiveFinnSessionId[\s\S]*activeFinnSessionIdRef\.current = normalized[\s\S]*setActiveFinnSessionId\(normalized\)/,
+  );
+  assert.match(
+    assistantSource,
+    /await persistActiveFinnSessionId\(envelope\?\.session_id \|\| chatSessionId\)/,
+  );
 });

@@ -506,6 +506,7 @@ function AIAssistantContent({
   const finnStateRequestRef = useRef(null);
   const sharedSessionRestoreRef = useRef(false);
   const forceNewFinnConversationRef = useRef(false);
+  const activeFinnSessionIdRef = useRef(null);
   const [showReasoning, setShowReasoning] = useState(false);
   const at = createAssistantTranslator(t);
   const activeQuery = queryValue !== undefined ? queryValue : query;
@@ -557,6 +558,7 @@ function AIAssistantContent({
     setRecentConversations([]);
     setDraftDrawer(null);
     setActiveFinnSessionId(null);
+    activeFinnSessionIdRef.current = null;
     setAvailableFinnSessions([]);
     handledContextRequestRef.current = null;
     loadedFinnStateRef.current = false;
@@ -4032,11 +4034,13 @@ function AIAssistantContent({
         if (!resolvedSessionId) return;
 
         if (isFinnV2ConversationId(resolvedSessionId)) {
+          activeFinnSessionIdRef.current = resolvedSessionId;
           setActiveFinnSessionId(resolvedSessionId);
           return;
         }
 
         const detail = await getAssistantSessionDetail(resolvedSessionId);
+        activeFinnSessionIdRef.current = resolvedSessionId;
         setActiveFinnSessionId(resolvedSessionId);
         setMessages((current) => (current.length > 0 ? current : mapBackendSessionMessages(detail?.messages)));
       } catch (error) {
@@ -4048,6 +4052,7 @@ function AIAssistantContent({
   const persistActiveFinnSessionId = async (sessionId) => {
     const normalized = normalizeFinnSessionId(sessionId);
     if (!normalized) return;
+    activeFinnSessionIdRef.current = normalized;
     setActiveFinnSessionId(normalized);
     try {
       await updateAssistantPreferences({
@@ -4062,6 +4067,7 @@ function AIAssistantContent({
     // State updates are asynchronous; this marker prevents an immediate send
     // from reusing the previous conversation id from the current render.
     forceNewFinnConversationRef.current = true;
+    activeFinnSessionIdRef.current = null;
     setActiveFinnSessionId(null);
     setFinnDraft(null);
     setActiveState(null);
@@ -4584,7 +4590,7 @@ function AIAssistantContent({
       const analyticsSessionId = getAssistantSessionId(user?.id || "anonymous");
       const chatSessionId = forceNewFinnConversationRef.current
         ? "new"
-        : activeFinnSessionId || "new";
+        : activeFinnSessionIdRef.current || activeFinnSessionId || "new";
       forceNewFinnConversationRef.current = false;
 
       await assistantChatStream(
