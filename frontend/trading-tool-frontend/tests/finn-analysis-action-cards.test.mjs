@@ -14,6 +14,8 @@ test("analysis proposals render operation-specific human cards", () => {
   assert.match(source, /Indicator toevoegen/);
   assert.match(source, /Technisch bewijs/);
   assert.match(source, /Marktindicatoren/);
+  assert.match(source, /aan je watchlist toegevoegd/);
+  assert.match(source, /toegevoegd aan.*categoryLabel/);
 });
 
 test("analysis proposal cards suppress the generic inline action card", () => {

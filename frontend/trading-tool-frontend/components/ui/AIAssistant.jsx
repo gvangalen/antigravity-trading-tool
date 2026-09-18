@@ -4896,12 +4896,19 @@ function AIAssistantContent({
         }
         const displayContext = action.display_context || {};
         const operationId = displayContext.operation_id || execution.operation_id || "";
-        const operationLabel = operationId.includes("bot") ? "Paper-bot" : operationId.includes("strategy") ? "Strategie" : operationId.includes("setup") ? "Setup" : "Actie";
+        const suppliedInputs = displayContext.supplied_inputs || {};
+        const operationLabel = operationId.includes("bot") ? "Paper-bot" : operationId.includes("strategy") ? "Strategie" : operationId.includes("setup") ? "Setup" : operationId.includes("indicator_configuration") ? "Indicator" : operationId.startsWith("watchlist_") ? "Watchlist" : "Actie";
         const resultName = execution.action_result?.canonical_name || displayContext.name || `Je ${operationLabel.toLowerCase()}`;
         const resultVerb = operationId.startsWith("delete_") ? "verwijderd" : operationId.startsWith("update_") || operationId === "deactivate_bot" ? "bijgewerkt" : "opgeslagen";
-        const terminalText = execution.status === "already_executed"
+        const categoryLabel = ({ technical: "Technisch bewijs", macro: "Macro", market: "Marktindicatoren" })[suppliedInputs.category] || suppliedInputs.category;
+        const analysisResultText = operationId.startsWith("watchlist_")
+          ? `${suppliedInputs.asset || execution.action_result?.canonical_name || "De asset"} is ${operationId === "watchlist_remove" ? "uit je watchlist verwijderd" : "aan je watchlist toegevoegd"}.`
+          : operationId.includes("indicator_configuration")
+            ? `${String(suppliedInputs.indicator || execution.action_result?.canonical_name || "De indicator").toUpperCase()} is ${operationId.startsWith("delete_") ? "verwijderd uit" : operationId.startsWith("update_") ? "bijgewerkt in" : "toegevoegd aan"} ${categoryLabel || "je analyse"}${suppliedInputs.asset ? ` voor ${suppliedInputs.asset}` : ""}.`
+            : null;
+        const terminalText = analysisResultText || (execution.status === "already_executed"
           ? `${operationLabel} ‘${resultName}’ was al ${resultVerb}.`
-          : `${operationLabel} ‘${resultName}’ is ${resultVerb}.`;
+          : `${operationLabel} ‘${resultName}’ is ${resultVerb}.`);
         setMessages((prev) => prev.map((message) => {
           const ownsProposal = (message.actions || []).some((candidate) => candidate?.proposal_id === action.proposal_id);
           if (!ownsProposal) return message;
