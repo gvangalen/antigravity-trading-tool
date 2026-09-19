@@ -1274,7 +1274,14 @@ function BotPageInner() {
 
 export default function BotPage() {
   return (
-    <Suspense fallback={<div className="min-h-screen bg-[#020617]" />}>
+    <Suspense fallback={
+      <div className="flex min-h-screen items-center justify-center bg-slate-50 px-6 text-center">
+        <div>
+          <div className="text-xs font-black uppercase tracking-[0.2em] text-blue-600">Automation</div>
+          <p className="mt-3 text-sm font-semibold text-slate-600">Je veilige paper-botomgeving wordt geladen...</p>
+        </div>
+      </div>
+    }>
       <ActiveBotProvider>
         <BotPageInner />
       </ActiveBotProvider>

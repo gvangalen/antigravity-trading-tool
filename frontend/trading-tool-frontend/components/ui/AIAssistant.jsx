@@ -4312,14 +4312,21 @@ function AIAssistantContent({
             return normalized;
           }
           setMissionControl(normalized);
-          if (normalized && typeof window !== "undefined" && requestKey) {
+          const generationStatus = String(
+            normalized?.generation_status || normalized?.first_dashboard_context?.generation_status || ""
+          ).toLowerCase();
+          const isRecoverableFailure = ["failed", "error", "fallback_error"].includes(generationStatus);
+          if (normalized && !isRecoverableFailure && typeof window !== "undefined" && requestKey) {
             try {
               window.sessionStorage.setItem(requestKey, JSON.stringify(normalized));
             } catch (err) {
               console.warn("Finn Mission Control cache write failed", err);
             }
           }
-          setMissionControlLoadError(null);
+          if (isRecoverableFailure && typeof window !== "undefined" && requestKey) {
+            window.sessionStorage.removeItem(requestKey);
+          }
+          setMissionControlLoadError(isRecoverableFailure ? uiText.missionControlUnavailable : null);
           setMissionControlLoading(false);
           return normalized;
         } catch (err) {

@@ -104,6 +104,19 @@ test("opening or saving a plan synchronizes its setup with the FINN workspace", 
   assert.match(workflow, /setActiveSetup\(\{ \.\.\.savedSetup, setup_id: setupId \}\)/);
 });
 
+test("onboarding hands the saved strategy to Automation and never renders a blank loading page", async () => {
+  const [planPage, botPage] = await Promise.all([
+    readSource("app/onboarding/plan/page.jsx"),
+    readSource("app/(protected)/bot/page.jsx"),
+  ]);
+
+  assert.match(planPage, /action=new_bot/);
+  assert.match(planPage, /strategy_id=/);
+  assert.match(planPage, /savedStrategy\?\.strategy_id \?\? savedStrategy\?\.id/);
+  assert.doesNotMatch(botPage, /fallback=\{<div className="min-h-screen bg-\[#020617\]" \/>\}/);
+  assert.match(botPage, /Je veilige paper-botomgeving wordt geladen/);
+});
+
 test("plan management uses setup_id for strategy, delete, and active-plan handoffs", async () => {
   const workflow = await readSource("components/workflows/MyPlanWorkflow.jsx");
 

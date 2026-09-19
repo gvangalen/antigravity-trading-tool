@@ -377,8 +377,7 @@ class FinnV2OrchestratorService:
             )
         if (
             guided_state
-            and getattr(request_plan, "operation_id", None)
-            in {"create_setup", "create_strategy", "create_bot"}
+            and guided_state.get("missing_required_inputs")
             and callable(record_guided_draft)
         ):
             runtime_contract = await record_guided_draft(
@@ -864,6 +863,11 @@ class FinnV2OrchestratorService:
         # Contract state is authoritative for new runs; context_json remains
         # only a compatible delivery projection for historical consumers.
         context.update(dict(previous_state.get("lineage_state") or {}))
+        # Legacy conversation projections are delivery compatibility only.
+        # They must not survive as operational targets when the parent
+        # runtime contract has a newer (or deliberately empty) reference.
+        context.pop("canonical_entity_target", None)
+        context.pop("previous_action_result", None)
         canonical_entity_target = dict(previous_state.get("canonical_entity_target") or {})
         if canonical_entity_target.get("owner_id") == user_id:
             context["canonical_entity_target"] = canonical_entity_target

@@ -450,8 +450,15 @@ def record_guided_draft(state: Dict[str, Any], *, guided_state: Dict[str, Any]) 
     operation_id = str(state.get("final_operation_id") or state.get("initial_operation_id") or "")
     if operation_id not in {
         "create_setup",
+        "update_setup",
+        "delete_setup",
         "create_strategy",
+        "update_strategy",
+        "delete_strategy",
         "create_bot",
+        "update_bot",
+        "deactivate_bot",
+        "delete_bot",
         "watchlist_add",
         "watchlist_remove",
         "create_indicator_configuration",

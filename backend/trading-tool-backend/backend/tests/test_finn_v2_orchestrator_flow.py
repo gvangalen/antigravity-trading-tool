@@ -184,7 +184,16 @@ def test_latest_collecting_guided_contract_wins_over_older_successful_action_lin
     }
     service.runtime_contracts = SimpleNamespace(
         get_latest_for_conversation=AsyncMock(return_value=SimpleNamespace(
-            state_json={"guided_state": guided},
+            state_json={
+                "guided_state": guided,
+                "action_result": {
+                    "operation_id": "create_setup",
+                    "entity_type": "setup",
+                    "entity_id": 309,
+                    "owner_user_id": 7,
+                    "result_status": "succeeded",
+                },
+            },
         )),
     )
 

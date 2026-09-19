@@ -52,3 +52,9 @@ test("FINN Today renders the typed personal mission-control briefing", () => {
     "temporary backend generation copy must not leak into the localized compact workspace",
   );
 });
+
+test("recoverable FINN Today failures are never persisted in browser cache", () => {
+  assert.match(assistantSource, /const isRecoverableFailure = \["failed", "error", "fallback_error"\]/);
+  assert.match(assistantSource, /normalized && !isRecoverableFailure/);
+  assert.match(assistantSource, /sessionStorage\.removeItem\(requestKey\)/);
+});

@@ -150,6 +150,36 @@ def test_tool_plan_preserves_explicit_read_target_over_stale_workspace_asset():
     assert plan.tool_inputs["read_indicator_configuration"] == {"asset": "BTC"}
 
 
+def test_tool_plan_preserves_setup_collection_selector_for_all_owner_matches():
+    analysis_service = FinnV2RequestAnalysisService()
+    contract = analysis_service.operations.require_supported("read_active_setup")
+    analysis_service.classifier.classify = lambda **_kwargs: SemanticOperationClassification(
+        operation_id="read_active_setup",
+        action=contract.action_polarity.value,
+        domain=contract.domain,
+        discourse="information_request",
+        confidence="high",
+        selector_source="structured",
+    )
+    analysis = analysis_service.analyze(message="Welke BTC setups heb ik?")
+    analysis = analysis.copy(update={
+        "request_plan": analysis.request_plan.copy(update={
+            "referenced_entities": {
+                **analysis.request_plan.referenced_entities,
+                "setup_collection_requested": True,
+            },
+        }),
+    })
+
+    plan = FinnV2ToolPlanService().build(
+        run_id="run-setup-collection",
+        analysis=analysis,
+        domain_plan=FinnV2DomainRequirementService().determine(analysis),
+    )
+
+    assert plan.tool_inputs["read_active_setup"]["setup_collection_requested"] is True
+
+
 def test_tool_plan_collects_bot_context_for_live_action_proposals():
     analysis = FinnV2RequestAnalysisService().analyze(message="Zet mijn bot live.")
     domain_plan = FinnV2DomainRequirementService().determine(analysis)

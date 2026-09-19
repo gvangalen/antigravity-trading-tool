@@ -339,6 +339,33 @@ def test_canonical_target_uses_previous_action_result_before_workspace():
     assert target.resolution_source == "previous_action_result"
 
 
+def test_latest_action_result_wins_over_stale_active_runtime_target():
+    service = FinnV2EntityResolutionService(session=object())
+    service.setups = _FakeSetupRepo()
+    service.setups.get_setup_by_id = lambda setup_id, user_id: asyncio.sleep(
+        0,
+        result={"id": setup_id, "name": "Apple Setup", "symbol": "AAPL"}
+        if user_id == 388 and setup_id == 310 else None,
+    )
+
+    target = asyncio.run(service.resolve_canonical_target(
+        user_id=388,
+        entity_type="setup",
+        conversation_context={
+            "previous_action_result": {
+                "entity_type": "setup", "entity_id": 310,
+                "result_status": "succeeded",
+            },
+            "canonical_entity_target": {
+                "entity_type": "setup", "entity_id": 309, "owner_id": 388,
+            },
+        },
+    ))
+
+    assert target.entity_id == 310
+    assert target.resolution_source == "previous_action_result"
+
+
 def test_canonical_target_active_runtime_wins_stale_selector_id():
     service = FinnV2EntityResolutionService(session=object())
     service.strategies = _FakeStrategyRepo()

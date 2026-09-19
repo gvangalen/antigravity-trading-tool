@@ -133,17 +133,6 @@ class FinnV2EntityResolutionService:
                 user_id, entity_type, "not_found", source="explicit_asset"
             )
 
-        active_target = dict(conversation_context.get("canonical_entity_target") or {})
-        if active_target.get("entity_type") == entity_type:
-            entity_id = self._coerce_int(active_target.get("entity_id"))
-            if entity_id:
-                return await self._canonical_target_by_id(
-                    user_id=user_id,
-                    entity_type=entity_type,
-                    entity_id=entity_id,
-                    source="active_runtime_context",
-                )
-
         action_result = dict(conversation_context.get("previous_action_result") or {})
         if action_result.get("entity_type") == entity_type and action_result.get("result_status") == "succeeded":
             entity_id = self._coerce_int(action_result.get("entity_id"))
@@ -153,6 +142,17 @@ class FinnV2EntityResolutionService:
                     entity_type=entity_type,
                     entity_id=entity_id,
                     source="previous_action_result",
+                )
+
+        active_target = dict(conversation_context.get("canonical_entity_target") or {})
+        if active_target.get("entity_type") == entity_type:
+            entity_id = self._coerce_int(active_target.get("entity_id"))
+            if entity_id:
+                return await self._canonical_target_by_id(
+                    user_id=user_id,
+                    entity_type=entity_type,
+                    entity_id=entity_id,
+                    source="active_runtime_context",
                 )
 
         related = await self._resolve_workspace_relation(

@@ -61,9 +61,11 @@ class FinnV2ToolPlanService:
             "strategy_name": analysis.explicit_strategy_name,
             "bot_name": analysis.explicit_bot_name,
         }
+        if (request_plan.referenced_entities or {}).get("setup_collection_requested"):
+            selector_values["setup_collection_requested"] = True
         selector = ToolSelector(
             **selector_values,
-        ).dict(exclude_none=True)
+        ).dict(exclude_none=True, exclude_defaults=True)
         ordered_tools = self._tool_names_for(analysis=analysis, domain_plan=domain_plan)
         if len(ordered_tools) > 15:
             raise ValueError("tool_plan_budget_exceeded")

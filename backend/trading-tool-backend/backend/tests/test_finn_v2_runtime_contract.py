@@ -199,6 +199,37 @@ def test_guided_strategy_and_bot_state_is_persisted_on_the_runtime_contract():
         assert projection["action_draft"] == persisted["action_draft"]
 
 
+@pytest.mark.parametrize(
+    ("operation_id", "requested_slot"),
+    [
+        ("update_setup", "setup_id"),
+        ("delete_setup", "setup_id"),
+        ("update_strategy", "strategy_id"),
+        ("delete_strategy", "strategy_id"),
+        ("update_bot", "bot_id"),
+        ("deactivate_bot", "bot_id"),
+        ("delete_bot", "bot_id"),
+    ],
+)
+def test_disambiguating_write_actions_persist_the_original_operation(operation_id, requested_slot):
+    from backend.domain.finn_v2_runtime_contract import record_guided_draft
+
+    guided_state = {
+        "operation_id": operation_id,
+        "collected_inputs": {"changed_fields": {"timeframe": "1D"}},
+        "missing_required_inputs": [requested_slot],
+        "next_missing_input": requested_slot,
+        "status": "collecting",
+    }
+    persisted = record_guided_draft(
+        {"initial_operation_id": operation_id, "final_operation_id": operation_id},
+        guided_state=guided_state,
+    )
+
+    assert persisted["guided_state"]["operation_id"] == operation_id
+    assert persisted["action_draft"]["requested_slot"] == requested_slot
+
+
 def test_terminal_projection_derives_required_inputs_and_polarity_from_registry():
     projection = terminal_projection(
         {

@@ -37,6 +37,7 @@ class ToolSelector(BaseModel):
     setup_id: Optional[int] = None
     strategy_id: Optional[int] = None
     bot_id: Optional[int] = None
+    setup_collection_requested: bool = False
     report_type: Optional[constr(strip_whitespace=True, min_length=1, max_length=32)] = None
     report_date: Optional[datetime] = None
 
