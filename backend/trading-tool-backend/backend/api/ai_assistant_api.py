@@ -3088,9 +3088,6 @@ async def get_finn_mission_control(
     request: Request = None,
 ):
     trace_id = getattr(request.state, "trace_id", None) if request else None
-    cached = _get_cached_mission_control(current_user["id"])
-    if cached:
-        return cached
     service = FinnV2VisibleDeliveryService(db)
     try:
         response = await asyncio.wait_for(
@@ -3108,10 +3105,9 @@ async def get_finn_mission_control(
             user_id=current_user["id"],
             trace_id=trace_id or f"mission-{uuid.uuid4().hex}",
         )
-    # A recoverable first-load failure must never become the user's cached
-    # dashboard state. The next refresh should retry against persisted data.
-    if response.get("generation_status") not in {"failed", "degraded"}:
-        _store_cached_mission_control(current_user["id"], response)
+    # Mission Control projects mutable owner-scoped state. A process-local
+    # cache cannot be coherently invalidated across PM2 workers after an
+    # execution, so every request reads the persisted projection directly.
     return response
 
 

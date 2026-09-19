@@ -67,6 +67,10 @@ class FinnV2ExecutionService:
             raise LookupError("proposal_not_owned")
         if proposal.payload_hash != expected_payload_hash:
             raise ValueError("proposal_payload_hash_mismatch")
+        # Historical proposals predate the envelope. Every proposal created by
+        # the current public V2 verifier includes one and is hash-validated.
+        if (proposal.payload_json or {}).get("action_envelope"):
+            self._validate_sealed_action_envelope(proposal=proposal, user_id=user_id)
         gate = await self.gates.check_execution_eligibility(
             user_id=user_id,
             run_id=proposal.run_id,
@@ -237,6 +241,24 @@ class FinnV2ExecutionService:
     def _hash(self, payload: dict) -> str:
         canonical = json.dumps(payload, sort_keys=True, default=str, separators=(",", ":"))
         return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+    @staticmethod
+    def _validate_sealed_action_envelope(*, proposal, user_id: int) -> None:
+        envelope = dict((proposal.payload_json or {}).get("action_envelope") or {})
+        claimed_hash = str(envelope.pop("envelope_hash", ""))
+        canonical = json.dumps(envelope, sort_keys=True, separators=(",", ":"), default=str)
+        if not claimed_hash or hashlib.sha256(canonical.encode("utf-8")).hexdigest() != claimed_hash:
+            raise ValueError("resolved_action_envelope_hash_mismatch")
+        if envelope.get("proposal_status") != "sealed":
+            raise ValueError("resolved_action_envelope_not_sealed")
+        if int(envelope.get("user_id") or 0) != int(user_id):
+            raise LookupError("proposal_not_owned")
+        if envelope.get("operation_id") != proposal.operation_type:
+            raise ValueError("resolved_action_envelope_operation_mismatch")
+        if dict(envelope.get("proposal_target") or {}) != dict((proposal.payload_json or {}).get("target") or {}):
+            raise ValueError("resolved_action_envelope_target_mismatch")
+        if dict(envelope.get("proposal_change") or {}) != dict((proposal.payload_json or {}).get("change") or {}):
+            raise ValueError("resolved_action_envelope_change_mismatch")
 
     async def _owned_entity_reference(self, *, proposal) -> dict:
         """Capture a scoped object reference before an update or delete.

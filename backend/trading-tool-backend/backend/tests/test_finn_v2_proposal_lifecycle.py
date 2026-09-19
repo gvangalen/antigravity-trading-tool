@@ -2,10 +2,50 @@ from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from types import SimpleNamespace
 import asyncio
+import hashlib
+import json
+
+import pytest
 
 from backend.schemas.finn_v2_policy_schema import FinnV2PolicyDecision
 from backend.schemas.finn_v2_proposal_schema import ManualOrderChange, ProposalTarget, SetupChange, StrategyChange, ValidatedProposalInput
 from backend.services.finn_v2_proposal_service import FinnV2ProposalService
+
+
+def _sealed_envelope(**overrides):
+    envelope = {
+        "action_id": "finn-v2-contract-run-1",
+        "conversation_id": "conversation-1",
+        "user_id": 7,
+        "operation_id": "manual_order",
+        "action_polarity": "execute",
+        "target_mode": "single",
+        "canonical_target": {},
+        "canonical_targets": {},
+        "asset": "BTC",
+        "lineage": {},
+        "known_inputs": {},
+        "changed_fields": {},
+        "resolution_source": "explicit_message",
+        "proposal_status": "sealed",
+        "revision": 2,
+    }
+    envelope.update(overrides)
+    envelope["envelope_hash"] = hashlib.sha256(
+        json.dumps(envelope, sort_keys=True, separators=(",", ":"), default=str).encode()
+    ).hexdigest()
+    return envelope
+
+
+def test_proposal_rejects_a_mutated_sealed_action_envelope():
+    envelope = _sealed_envelope()
+    envelope["asset"] = "AAPL"
+    proposal_input = SimpleNamespace(operation_type="manual_order", action_envelope=envelope)
+
+    with pytest.raises(ValueError, match="resolved_action_envelope_hash_mismatch"):
+        FinnV2ProposalService._validate_action_envelope(
+            user_id=7, run_id="run-1", proposal_input=proposal_input
+        )
 
 
 def test_proposal_creation_requires_typed_payload_and_starts_in_draft():

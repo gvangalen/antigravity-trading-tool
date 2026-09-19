@@ -10,6 +10,7 @@ from backend.schemas.finn_v2_orchestrator_schema import OrchestratorResult
 from backend.services.finn_v2_orchestrator_service import FinnV2OrchestratorService
 from backend.services.finn_v2_entity_resolution_service import (
     CanonicalEntityTarget,
+    CanonicalTargetCollection,
 )
 from backend.services.finn_v2_operation_classification_service import SemanticOperationClassification
 from backend.services.finn_v2_request_analysis_service import FinnV2RequestAnalysisService
@@ -390,6 +391,25 @@ def test_setup_collection_read_does_not_collapse_to_one_canonical_target():
     analysis = _analysis_for_operation(message, "read_active_setup")
     analysis = analysis.copy(update={"explicit_asset": "BTC"})
     service.entities.resolve_canonical_target = AsyncMock()
+    service.entities.resolve_target_collection = AsyncMock(return_value=CanonicalTargetCollection(
+        entity_type="setup",
+        owner_id=7,
+        filters={"asset": "BTC"},
+        items=[
+            CanonicalEntityTarget(
+                entity_type="setup", entity_id=11, display_name="BTC Swing", owner_id=7,
+                relation={"setup_id": 11, "symbol": "BTC"}, source="owner_collection",
+                resolution_status="resolved",
+            ),
+            CanonicalEntityTarget(
+                entity_type="setup", entity_id=12, display_name="BTC DCA", owner_id=7,
+                relation={"setup_id": 12, "symbol": "BTC"}, source="owner_collection",
+                resolution_status="resolved",
+            ),
+        ],
+        result_count=2,
+        resolution_status="resolved",
+    ))
     service.entities.resolve_contract_reference_inputs = AsyncMock(return_value={})
 
     resolved = asyncio.run(service._resolve_explicit_action_references(
@@ -402,8 +422,14 @@ def test_setup_collection_read_does_not_collapse_to_one_canonical_target():
     ))
 
     service.entities.resolve_canonical_target.assert_not_awaited()
+    service.entities.resolve_target_collection.assert_awaited_once_with(
+        user_id=7, entity_type="setup", asset="BTC",
+    )
     assert resolved.request_plan.referenced_entities["asset"] == "BTC"
     assert resolved.request_plan.referenced_entities["setup_collection_requested"] is True
+    collection = resolved.request_plan.referenced_entities["canonical_target_collection"]
+    assert collection["result_count"] == 2
+    assert [item["display_name"] for item in collection["items"]] == ["BTC Swing", "BTC DCA"]
 
 
 def test_orchestrator_flow_executes_plan_and_persists_result():

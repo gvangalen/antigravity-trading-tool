@@ -153,16 +153,15 @@ def test_deploy_env_applies_the_finn_v2_canonical_mode_backfill():
     assert "2026_08_22_finn_v2_remove_legacy_fact_mode.py" in source
 
 
-def test_mission_control_api_uses_short_ttl_cache_and_invalidates_after_finn_execute():
+def test_mission_control_api_uses_bounded_persisted_reads_across_pm2_workers():
     source = (BACKEND_ROOT / "api" / "ai_assistant_api.py").read_text(encoding="utf-8")
 
-    assert 'MISSION_CONTROL_CACHE_TTL_SECONDS = int(os.getenv("MISSION_CONTROL_CACHE_TTL_SECONDS", "20"))' in source
-    assert "_mission_control_cache" in source
-    assert "def _get_cached_mission_control" in source
-    assert "def _store_cached_mission_control" in source
     assert "def _invalidate_mission_control_cache" in source
-    assert "cached = _get_cached_mission_control(current_user[\"id\"])" in source
-    assert "_store_cached_mission_control(current_user[\"id\"], response)" in source
+    endpoint = source[source.index('async def get_finn_mission_control('):source.index('@router.get("/assistant/v2/proposals/', source.index('async def get_finn_mission_control('))]
+    assert "_get_cached_mission_control" not in endpoint
+    assert "_store_cached_mission_control" not in endpoint
+    assert "asyncio.wait_for" in endpoint
+    assert "timeout=8.0" in endpoint
     assert "_invalidate_mission_control_cache(user_id)" in source
 
 

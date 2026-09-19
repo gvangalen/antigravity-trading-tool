@@ -651,3 +651,23 @@ def test_demonstrative_setup_reference_survives_a_browser_conversation_boundary(
     assert target.entity_id == 294
     assert target.display_name == "Apple Full Setup"
     assert target.resolution_source == "previous_action_result"
+
+
+def test_setup_collection_preserves_every_owner_scoped_asset_match():
+    service = FinnV2EntityResolutionService(session=object())
+    service.setups = _FakeSetupRepo()
+    service.setups.get_user_setups = lambda _user_id: asyncio.sleep(0, result=[
+        {"id": 293, "name": "BTC Full Base", "symbol": "BTC", "timeframe": "4H"},
+        {"id": 294, "name": "BTC Breakout Full", "symbol": "BTC", "timeframe": "1D"},
+        {"id": 295, "name": "Apple Full Setup", "symbol": "AAPL", "timeframe": "1D"},
+    ])
+
+    collection = asyncio.run(service.resolve_target_collection(
+        user_id=388, entity_type="setup", asset="BTC"
+    ))
+
+    assert collection.result_count == 2
+    assert [item.display_name for item in collection.items] == [
+        "BTC Full Base", "BTC Breakout Full",
+    ]
+    assert all(item.owner_id == 388 for item in collection.items)

@@ -42,6 +42,15 @@ class CanonicalEntityTarget(BaseModel):
         return self.source
 
 
+class CanonicalTargetCollection(BaseModel):
+    entity_type: EntityType
+    owner_id: int
+    filters: Dict[str, Any] = Field(default_factory=dict)
+    items: list[CanonicalEntityTarget] = Field(default_factory=list)
+    result_count: int
+    resolution_status: Literal["resolved", "empty"]
+
+
 class FinnV2EntityResolutionService:
     def __init__(self, session: AsyncSession):
         self.session = session
@@ -53,6 +62,27 @@ class FinnV2EntityResolutionService:
         self.assets = AssetCatalogService(session)
         self.asset_repo = AssetCatalogRepository(session)
         self.active_plans = FinnV2ActivePlanResolver()
+
+    async def resolve_target_collection(
+        self,
+        *,
+        user_id: int,
+        entity_type: EntityType,
+        asset: Optional[str] = None,
+    ) -> CanonicalTargetCollection:
+        rows = await self._entity_candidates(user_id=user_id, entity_type=entity_type)
+        normalized_asset = self._normalize_symbol(asset)
+        if normalized_asset:
+            rows = [row for row in rows if self._candidate_asset(row) == normalized_asset]
+        items = [self._canonical_target(user_id, entity_type, row, "owner_collection") for row in rows]
+        return CanonicalTargetCollection(
+            entity_type=entity_type,
+            owner_id=user_id,
+            filters={"asset": normalized_asset} if normalized_asset else {},
+            items=items,
+            result_count=len(items),
+            resolution_status="resolved" if items else "empty",
+        )
 
     async def resolve_canonical_target(
         self,

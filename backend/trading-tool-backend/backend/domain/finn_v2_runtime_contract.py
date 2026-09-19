@@ -32,6 +32,132 @@ _WORKFLOW_EVENTS = frozenset({
 })
 
 
+def _json_safe(value: Any) -> Any:
+    """Normalize typed domain values before the contract reaches JSONB."""
+    # Keep this representation identical to the proposal persistence boundary:
+    # Decimal/date-like domain values are canonical strings, not lossy floats.
+    return json.loads(json.dumps(value, default=str))
+
+
+class ResolvedActionEnvelope(BaseModel):
+    """One revisioned action identity shared by projection and execution.
+
+    The operation registry remains the schema authority. This envelope stores
+    only the resolved values for one action, preventing later layers from
+    independently re-deriving target, asset, lineage, or changed fields.
+    """
+
+    action_id: str
+    conversation_id: Optional[str] = None
+    user_id: int
+    operation_id: str
+    action_polarity: str
+    target_mode: Literal["none", "single", "collection"] = "none"
+    canonical_target: Dict[str, Any] = Field(default_factory=dict)
+    canonical_targets: Dict[str, Any] = Field(default_factory=dict)
+    asset: Optional[str] = None
+    lineage: Dict[str, Any] = Field(default_factory=dict)
+    known_inputs: Dict[str, Any] = Field(default_factory=dict)
+    changed_fields: Dict[str, Any] = Field(default_factory=dict)
+    resolution_source: Optional[str] = None
+    proposal_status: str = "unsealed"
+    revision: int = 1
+    envelope_hash: str = ""
+
+    class Config:
+        extra = "forbid"
+
+    def with_hash(self) -> "ResolvedActionEnvelope":
+        payload = self.dict(exclude={"envelope_hash"})
+        digest = sha256(
+            json.dumps(payload, sort_keys=True, separators=(",", ":"), default=str).encode("utf-8")
+        ).hexdigest()
+        return self.copy(update={"envelope_hash": digest})
+
+
+def _resolved_action_envelope(state: Dict[str, Any], *, sealed: bool = False) -> Dict[str, Any]:
+    identity = dict(state.get("identity") or {})
+    operation_id = str(state.get("final_operation_id") or state.get("initial_operation_id") or "")
+    if not operation_id:
+        return {}
+    from backend.domain.finn_v2_operation_registry import FinnV2OperationRegistry
+
+    contract = FinnV2OperationRegistry().require_supported(operation_id)
+    supplied = _json_safe(dict(state.get("supplied_inputs") or {}))
+    target = _json_safe(dict(state.get("canonical_entity_target") or {}))
+    collection = _json_safe(dict(state.get("canonical_target_collection") or {}))
+    previous = dict(state.get("resolved_action_envelope") or {})
+    revision = int(previous.get("revision") or 0) + 1
+    changed = supplied.get("changed_fields")
+    if not isinstance(changed, dict):
+        changed = {}
+    lineage = {
+        key: value
+        for key, value in {
+            "setup": supplied.get("setup_id") or (target.get("relation") or {}).get("setup_id"),
+            "strategy": supplied.get("strategy_id") or (target.get("relation") or {}).get("strategy_id"),
+            "bot": supplied.get("bot_id") or (target.get("relation") or {}).get("bot_id"),
+        }.items()
+        if value is not None
+    }
+    asset = (
+        supplied.get("asset")
+        or target.get("asset_symbol")
+        or (target.get("relation") or {}).get("symbol")
+        or state.get("canonical_target")
+    )
+    envelope = ResolvedActionEnvelope(
+        action_id=str(previous.get("action_id") or state.get("contract_id") or identity.get("run_id") or ""),
+        conversation_id=identity.get("conversation_id"),
+        user_id=int(identity.get("user_id") or 0),
+        operation_id=operation_id,
+        action_polarity=contract.action_polarity.value,
+        target_mode="collection" if collection else "single" if target else "none",
+        canonical_target=target,
+        canonical_targets=collection,
+        asset=str(asset).upper() if asset else None,
+        lineage=lineage,
+        known_inputs=supplied,
+        changed_fields=changed,
+        resolution_source=(target.get("source") or state.get("target_source")),
+        proposal_status="sealed" if sealed else str(previous.get("proposal_status") or "unsealed"),
+        revision=revision,
+    ).with_hash()
+    return envelope.dict()
+
+
+def refresh_resolved_action_envelope(state: Dict[str, Any], *, sealed: bool = False) -> Dict[str, Any]:
+    state = dict(state)
+    envelope = _resolved_action_envelope(state, sealed=sealed)
+    if envelope:
+        state["resolved_action_envelope"] = envelope
+    return state
+
+
+def seal_resolved_action_envelope(
+    state: Dict[str, Any], *, proposal_target: Dict[str, Any], proposal_change: Dict[str, Any]
+) -> Dict[str, Any]:
+    """Seal the hydrated proposal target and typed change into one revision."""
+    state = refresh_resolved_action_envelope(dict(state), sealed=True)
+    envelope = dict(state.get("resolved_action_envelope") or {})
+    if not envelope:
+        raise RuntimeContractImmutableFieldError("resolved_action_envelope_missing")
+    envelope["proposal_target"] = _json_safe(dict(proposal_target or {}))
+    envelope["proposal_change"] = _json_safe(dict(proposal_change or {}))
+    target_asset = envelope["proposal_target"].get("asset")
+    if target_asset:
+        envelope["asset"] = str(target_asset).upper()
+    changed = envelope["proposal_change"].get("changed_fields")
+    if isinstance(changed, dict):
+        envelope["changed_fields"] = dict(changed)
+    payload = {key: value for key, value in envelope.items() if key != "envelope_hash"}
+    envelope["envelope_hash"] = sha256(
+        json.dumps(payload, sort_keys=True, separators=(",", ":"), default=str).encode("utf-8")
+    ).hexdigest()
+    state["resolved_action_envelope"] = envelope
+    return state
+
+
 class RuntimeContractConflictError(RuntimeError):
     pass
 
@@ -232,6 +358,8 @@ def new_runtime_contract_state(*, run: Any, contract_id: str) -> Dict[str, Any]:
         "guided_state": {},
         "setup_draft": {},
         "action_draft": {},
+        "canonical_target_collection": {},
+        "resolved_action_envelope": {},
         "final_operation_id": None,
         "final_mode": None,
         "operation_change_reason": None,
@@ -323,6 +451,7 @@ def record_selection(
     selector_provenance: Optional[Dict[str, Any]] = None,
     supplied_inputs: Optional[Dict[str, Any]] = None,
     canonical_entity_target: Optional[Dict[str, Any]] = None,
+    canonical_target_collection: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """Persist selection plus contract-derived inputs before tools run."""
     state = dict(state)
@@ -341,6 +470,7 @@ def record_selection(
     state["conversation_reference_kind"] = conversation_reference_kind
     state["selector_provenance"] = dict(selector_provenance or {})
     state["canonical_entity_target"] = dict(canonical_entity_target or {})
+    state["canonical_target_collection"] = dict(canonical_target_collection or {})
     operation_id = str(state.get("final_operation_id") or state.get("initial_operation_id") or "")
     if not operation_id:
         raise RuntimeContractImmutableFieldError("runtime_contract_initial_intent_missing")
@@ -368,7 +498,7 @@ def record_selection(
         for field in action_contract.required_inputs_for(supplied)
         if field not in supplied
     ]
-    return state
+    return refresh_resolved_action_envelope(state)
 
 
 def record_contextual_inputs(state: Dict[str, Any], *, supplied_inputs: Dict[str, Any]) -> Dict[str, Any]:
@@ -414,7 +544,7 @@ def record_contextual_inputs(state: Dict[str, Any], *, supplied_inputs: Dict[str
             "source": "current_run_user_scoped_evidence",
         }
     )
-    return state
+    return refresh_resolved_action_envelope(state)
 
 
 def record_setup_draft(state: Dict[str, Any], *, guided_state: Dict[str, Any]) -> Dict[str, Any]:
@@ -469,7 +599,7 @@ def record_guided_draft(state: Dict[str, Any], *, guided_state: Dict[str, Any]) 
     guided = dict(guided_state or {})
     state["guided_state"] = guided
     if operation_id == "create_setup":
-        return record_setup_draft(state, guided_state=guided)
+        return refresh_resolved_action_envelope(record_setup_draft(state, guided_state=guided))
     supplied = dict(guided.get("collected_inputs") or state.get("supplied_inputs") or {})
     missing = list(guided.get("missing_required_inputs") or state.get("missing_inputs") or [])
     state["action_draft"] = {
@@ -486,7 +616,7 @@ def record_guided_draft(state: Dict[str, Any], *, guided_state: Dict[str, Any]) 
     state.setdefault("transition_log", []).append(
         {"type": "action_draft", "operation_id": operation_id, "status": state["action_draft"]["draft_status"]}
     )
-    return state
+    return refresh_resolved_action_envelope(state)
 
 
 def record_conversation_state(
@@ -551,6 +681,8 @@ def record_proposal_lifecycle(
             raise RuntimeContractImmutableFieldError("runtime_contract_execution_id_is_immutable")
         lifecycle["execution_id"] = execution_id
     state["proposal_lifecycle"] = lifecycle
+    if event == "draft_created" and (state.get("resolved_action_envelope") or {}).get("proposal_status") != "sealed":
+        state = refresh_resolved_action_envelope(state, sealed=True)
     if status in terminal_statuses:
         response = dict(state.get("terminal_response") or {})
         response["proposal_id"] = None
@@ -588,6 +720,15 @@ def record_action_result(state: Dict[str, Any], *, action_result: Dict[str, Any]
     """Persist the canonical result of a confirmed action on its run contract."""
     state = dict(state)
     state["action_result"] = dict(action_result)
+    envelope = dict(state.get("resolved_action_envelope") or {})
+    if envelope:
+        envelope["postcondition"] = dict(action_result)
+        envelope["proposal_status"] = "executed"
+        payload = {key: value for key, value in envelope.items() if key != "envelope_hash"}
+        envelope["envelope_hash"] = sha256(
+            json.dumps(payload, sort_keys=True, separators=(",", ":"), default=str).encode("utf-8")
+        ).hexdigest()
+        state["resolved_action_envelope"] = envelope
     state.setdefault("transition_log", []).append({"type": "action_result", "operation_id": action_result.get("operation_id")})
     return state
 
@@ -652,6 +793,7 @@ def terminal_projection(
         "operation_change_reason": state.get("operation_change_reason"),
         "canonical_target": state.get("canonical_target"),
         "canonical_entity_target": dict(state.get("canonical_entity_target") or {}),
+        "canonical_target_collection": dict(state.get("canonical_target_collection") or {}),
         "target_source": state.get("target_source"),
         "conversation_reference": state.get("conversation_reference"),
         "conversation_reference_kind": state.get("conversation_reference_kind"),
@@ -663,6 +805,7 @@ def terminal_projection(
         "terminal_response_type": state.get("terminal_response_type") or ("failure" if status == "failed" else "response"),
         "proposal_lifecycle": dict(state.get("proposal_lifecycle") or {}),
         "action_result": dict(state.get("action_result") or {}),
+        "resolved_action_envelope": dict(state.get("resolved_action_envelope") or {}),
         "dispatch_id": (state.get("dispatch") or {}).get("dispatch_id"),
         "dispatch_count": (state.get("dispatch") or {}).get("dispatch_count"),
         "attempt_count": (state.get("dispatch") or {}).get("attempt_count"),

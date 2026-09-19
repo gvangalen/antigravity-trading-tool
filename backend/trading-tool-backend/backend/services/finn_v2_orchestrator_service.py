@@ -181,6 +181,13 @@ class FinnV2OrchestratorService:
         )
         if is_collection_read:
             selectors["setup_collection_requested"] = True
+            if can_query_entities:
+                collection = await self.entities.resolve_target_collection(
+                    user_id=user_id,
+                    entity_type="setup",
+                    asset=current_asset,
+                )
+                selectors["canonical_target_collection"] = collection.dict()
         if entity_type and can_query_entities and not is_collection_read:
             canonical_target = await self.entities.resolve_canonical_target(
                 user_id=user_id,
@@ -369,6 +376,9 @@ class FinnV2OrchestratorService:
             },
             canonical_entity_target=dict(
                 (getattr(request_plan, "referenced_entities", {}) or {}).get("canonical_entity_target") or {}
+            ),
+            canonical_target_collection=dict(
+                (getattr(request_plan, "referenced_entities", {}) or {}).get("canonical_target_collection") or {}
             ),
         )
         guided_state = dict(getattr(request_plan, "operation_state", {}) or {})

@@ -60,6 +60,16 @@ class FinnV2ProposalService:
         if proposal_input.expires_at.timestamp() > max_expiry:
             raise ValueError("proposal_expired")
 
+        # Public FINN V2 proposals always carry the sealed envelope injected
+        # by the verifier boundary. Keep historical/internal proposal records
+        # readable while strictly validating every envelope that is present.
+        if proposal_input.action_envelope:
+            self._validate_action_envelope(
+                user_id=user_id,
+                run_id=run_id,
+                proposal_input=proposal_input,
+            )
+
         proposal_input = await self._hydrate_domain_change(
             user_id=user_id,
             proposal_input=proposal_input,
@@ -230,6 +240,24 @@ class FinnV2ProposalService:
     def _payload_hash(self, payload_json: dict) -> str:
         canonical = json.dumps(payload_json, sort_keys=True, separators=(",", ":"), default=str)
         return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+    @staticmethod
+    def _validate_action_envelope(*, user_id: int, run_id: str, proposal_input: ValidatedProposalInput) -> None:
+        envelope = dict(proposal_input.action_envelope or {})
+        if not envelope:
+            raise ValueError("resolved_action_envelope_missing")
+        claimed_hash = str(envelope.pop("envelope_hash", ""))
+        canonical = json.dumps(envelope, sort_keys=True, separators=(",", ":"), default=str)
+        if not claimed_hash or hashlib.sha256(canonical.encode("utf-8")).hexdigest() != claimed_hash:
+            raise ValueError("resolved_action_envelope_hash_mismatch")
+        if int(envelope.get("user_id") or 0) != int(user_id):
+            raise LookupError("proposal_not_owned")
+        if envelope.get("action_id") not in {run_id, f"finn-v2-contract-{run_id}"}:
+            raise ValueError("resolved_action_envelope_run_mismatch")
+        if envelope.get("operation_id") != proposal_input.operation_type:
+            raise ValueError("resolved_action_envelope_operation_mismatch")
+        if envelope.get("proposal_status") != "sealed":
+            raise ValueError("resolved_action_envelope_not_sealed")
 
     @staticmethod
     def canonical_identity(payload_json: dict) -> dict:

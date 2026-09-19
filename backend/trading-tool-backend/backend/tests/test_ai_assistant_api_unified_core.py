@@ -1375,8 +1375,7 @@ def test_get_finn_mission_control_survives_non_database_action_failures(monkeypa
 
     db.rollback.assert_not_awaited()
     assert response["first_dashboard_context"]["generation_status"] == "ready"
-    assert stored["user_id"] == 30
-    assert stored["payload"]["first_dashboard_context"]["generation_status"] == "ready"
+    assert stored == {}
 
 
 def test_get_finn_mission_control_returns_owner_scoped_fallback_after_enrichment_failure(monkeypatch):

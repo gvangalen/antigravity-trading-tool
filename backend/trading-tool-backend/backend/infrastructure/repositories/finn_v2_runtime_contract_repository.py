@@ -20,6 +20,8 @@ from backend.domain.finn_v2_runtime_contract import (
     record_action_result,
     record_selection,
     record_setup_draft,
+    refresh_resolved_action_envelope,
+    seal_resolved_action_envelope,
     record_guided_draft,
     terminal_projection,
 )
@@ -232,6 +234,8 @@ class FinnV2RuntimeContractRepository(FinnV2RepositoryTransactionMixin):
             "interaction_mode": state.get("final_mode") or state.get("requested_mode"),
             "target_asset": state.get("canonical_target"),
             "canonical_entity_target": dict(state.get("canonical_entity_target") or {}),
+            "canonical_target_collection": dict(state.get("canonical_target_collection") or {}),
+            "resolved_action_envelope": dict(state.get("resolved_action_envelope") or {}),
             "target_asset_source": state.get("target_source"),
             "referenced_asset": state.get("original_target_text"),
             "conversation_reference": state.get("conversation_reference"),
@@ -287,6 +291,7 @@ class FinnV2RuntimeContractRepository(FinnV2RepositoryTransactionMixin):
         selector_provenance: Optional[Dict[str, Any]] = None,
         supplied_inputs: Optional[Dict[str, Any]] = None,
         canonical_entity_target: Optional[Dict[str, Any]] = None,
+        canonical_target_collection: Optional[Dict[str, Any]] = None,
     ) -> FinnV2RuntimeContract:
         """Persist the target selection before tool planning or policy reads it."""
         row = await self._required_for_update(run_id)
@@ -301,6 +306,7 @@ class FinnV2RuntimeContractRepository(FinnV2RepositoryTransactionMixin):
             selector_provenance=selector_provenance,
             supplied_inputs=supplied_inputs,
             canonical_entity_target=canonical_entity_target,
+            canonical_target_collection=canonical_target_collection,
         )
         if next_state == (row.state_json or {}):
             return row
@@ -331,6 +337,22 @@ class FinnV2RuntimeContractRepository(FinnV2RepositoryTransactionMixin):
         next_state = record_guided_draft(deepcopy(row.state_json or {}), guided_state=guided_state)
         if next_state == (row.state_json or {}):
             return row
+        return await self._write_revision(row=row, state=next_state)
+
+    async def seal_resolved_action_envelope(
+        self,
+        *,
+        run_id: str,
+        proposal_target: Optional[Dict[str, Any]] = None,
+        proposal_change: Optional[Dict[str, Any]] = None,
+    ) -> FinnV2RuntimeContract:
+        """Seal the exact action revision that proposal and execution consume."""
+        row = await self._required_for_update(run_id)
+        next_state = seal_resolved_action_envelope(
+            deepcopy(row.state_json or {}),
+            proposal_target=dict(proposal_target or {}),
+            proposal_change=dict(proposal_change or {}),
+        )
         return await self._write_revision(row=row, state=next_state)
 
     async def record_contextual_inputs(

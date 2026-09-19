@@ -4260,7 +4260,7 @@ function AIAssistantContent({
     missionControlRequestKeyRef.current = requestKey;
     missionControlRequestRef.current = (async () => {
       let lastError = null;
-      for (let attempt = 0; attempt < 2; attempt += 1) {
+      for (let attempt = 0; attempt < 1; attempt += 1) {
         try {
           const res = await fetchFinnMissionControl();
           const normalized = res
@@ -4348,9 +4348,6 @@ function AIAssistantContent({
           lastError = err;
           if (err?.status === 401 || err?.status === 403) {
             break;
-          }
-          if (attempt < 1) {
-            await new Promise((resolve) => setTimeout(resolve, 400));
           }
         }
       }
@@ -4958,6 +4955,10 @@ function AIAssistantContent({
           };
         }));
         emitFinnRefreshSignals();
+        if (typeof window !== "undefined" && missionControlCacheKeyRef.current) {
+          window.sessionStorage.removeItem(missionControlCacheKeyRef.current);
+        }
+        setMissionControl(null);
         await Promise.all([loadInsight(), loadMissionControl()]);
         return;
       }

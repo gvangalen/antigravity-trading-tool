@@ -234,6 +234,7 @@ class ValidatedProposalInput(BaseModel):
     source_snapshot_id: str
     source_validation_id: str
     evidence_set_hash: str
+    action_envelope: Optional[Dict[str, Any]] = None
     idempotency_key: constr(min_length=16, max_length=128)
     expires_at: datetime
 

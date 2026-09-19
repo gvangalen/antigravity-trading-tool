@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from datetime import datetime, timezone
+from decimal import Decimal
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -17,6 +19,8 @@ from backend.domain.finn_v2_runtime_contract import (
     record_contextual_inputs,
     record_proposal_lifecycle,
     record_selection,
+    record_guided_draft,
+    seal_resolved_action_envelope,
     terminal_projection,
 )
 from backend.domain.finn_v2_operation_registry import FinnV2OperationRegistry
@@ -35,6 +39,109 @@ def _run():
         user_id=7,
         message="Beoordeel mijn BTC-plan.",
     )
+
+
+def _selected_strategy_state():
+    state = new_runtime_contract_state(run=_run(), contract_id="finn-v2-contract-run-contract-1")
+    state = record_initial_intent(state, operation_id="update_strategy", requested_mode="CREATE_PROPOSAL")
+    state = record_final_operation(state, operation_id="update_strategy", mode="CREATE_PROPOSAL", reason=None)
+    return record_selection(
+        state,
+        canonical_target="AAPL",
+        target_source="explicit_message",
+        original_target_text="Apple Swing",
+        target_type="strategy",
+        conversation_reference=None,
+        conversation_reference_kind=None,
+        supplied_inputs={"strategy_id": 52, "changed_fields": {"base_amount": 250}},
+        canonical_entity_target={
+            "entity_type": "strategy",
+            "entity_id": 52,
+            "display_name": "Apple Swing",
+            "owner_id": 7,
+            "relation": {"setup_id": 41, "symbol": "AAPL", "timeframe": "1D"},
+            "source": "explicit_name",
+            "resolution_status": "resolved",
+        },
+    )
+
+
+def test_resolved_action_envelope_is_the_typed_multi_asset_action_identity():
+    state = _selected_strategy_state()
+    envelope = state["resolved_action_envelope"]
+
+    assert envelope["operation_id"] == "update_strategy"
+    assert envelope["action_polarity"] == "update"
+    assert envelope["asset"] == "AAPL"
+    assert envelope["canonical_target"]["display_name"] == "Apple Swing"
+    assert envelope["lineage"] == {"setup": 41, "strategy": 52}
+    assert envelope["changed_fields"] == {"base_amount": 250}
+    assert len(envelope["envelope_hash"]) == 64
+
+
+def test_complete_guided_revision_updates_envelope_without_losing_known_inputs():
+    state = _selected_strategy_state()
+    updated = record_guided_draft(
+        state,
+        guided_state={
+            "collected_inputs": {
+                "strategy_id": 52,
+                "changed_fields": {"base_amount": 250},
+            },
+            "missing_required_inputs": [],
+            "next_missing_input": None,
+            "status": "complete",
+            "state_revision": 4,
+        },
+    )
+
+    assert updated["action_draft"]["draft_status"] == "complete"
+    assert updated["resolved_action_envelope"]["known_inputs"]["strategy_id"] == 52
+    assert updated["resolved_action_envelope"]["canonical_target"]["display_name"] == "Apple Swing"
+
+
+def test_sealed_envelope_contains_the_exact_hydrated_proposal_revision():
+    state = _selected_strategy_state()
+    sealed = seal_resolved_action_envelope(
+        state,
+        proposal_target={"target_type": "strategy", "target_id": "52", "asset": "AAPL"},
+        proposal_change={
+            "strategy_id": 52,
+            "changed_fields": {"base_amount": 250},
+            "before": {"base_amount": 100},
+        },
+    )["resolved_action_envelope"]
+
+    assert sealed["proposal_status"] == "sealed"
+    assert sealed["proposal_target"]["asset"] == "AAPL"
+    assert sealed["proposal_change"]["before"] == {"base_amount": 100}
+    assert sealed["changed_fields"] == {"base_amount": 250}
+
+
+def test_resolved_action_envelope_normalizes_nested_decimal_values_for_jsonb():
+    state = new_runtime_contract_state(run=_run(), contract_id="contract-decimal")
+    state = record_initial_intent(state, operation_id="update_strategy", requested_mode="CREATE_PROPOSAL")
+    state = record_final_operation(state, operation_id="update_strategy", mode="CREATE_PROPOSAL", reason=None)
+    state = record_selection(
+        state,
+        canonical_target="BTC",
+        target_source="explicit_message",
+        original_target_text="Strategy",
+        target_type="strategy",
+        conversation_reference=None,
+        conversation_reference_kind=None,
+        supplied_inputs={"strategy_id": 52, "changed_fields": {"base_amount": Decimal("120.00")}},
+    )
+
+    sealed = seal_resolved_action_envelope(
+        state,
+        proposal_target={"strategy_id": 52},
+        proposal_change={"changed_fields": {"base_amount": Decimal("120.00")}},
+    )["resolved_action_envelope"]
+
+    assert sealed["known_inputs"]["changed_fields"]["base_amount"] == "120.00"
+    assert sealed["proposal_change"]["changed_fields"]["base_amount"] == "120.00"
+    json.dumps(sealed)
 
 
 def test_runtime_contract_identity_is_present_before_selector_and_intent_is_write_once():

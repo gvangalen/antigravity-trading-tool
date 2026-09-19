@@ -1180,6 +1180,21 @@ class FinnV2ResponseVerifierService:
         proposal_input = self._proposal_input_from_candidate(run=run, draft=draft, validation=validation)
         if proposal_input is None:
             return None
+        proposal_input = await self.proposals._hydrate_domain_change(
+            user_id=run.user_id,
+            proposal_input=proposal_input,
+        )
+        runtime_contract = await self.runtime_contracts.seal_resolved_action_envelope(
+            run_id=run.id,
+            proposal_target=proposal_input.target.dict(),
+            proposal_change=proposal_input.change.dict(),
+        )
+        envelope = dict((getattr(runtime_contract, "state_json", {}) or {}).get("resolved_action_envelope") or {})
+        if not envelope:
+            raise ValueError("resolved_action_envelope_missing")
+        if envelope.get("operation_id") != proposal_input.operation_type:
+            raise ValueError("resolved_action_envelope_operation_mismatch")
+        proposal_input = proposal_input.copy(update={"action_envelope": envelope})
         await self._append_trace(trace_id=trace_id, run_id=run.id, user_id=run.user_id, event_type="proposal_candidate_verified", payload={"operation_type": proposal_input.operation_type, "target_type": proposal_input.target.target_type})
         record = await self.proposals.create_proposal(
             user_id=run.user_id,

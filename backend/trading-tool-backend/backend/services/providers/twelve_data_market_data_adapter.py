@@ -40,6 +40,8 @@ class TwelveDataMarketDataAdapter:
         return params
 
     async def fetch_latest_snapshot(self, asset: AssetRecord) -> PriceSnapshotDTO:
+        if not self.api_key:
+            raise ValueError("twelve_data_not_configured")
         provider_symbol = asset.provider_symbol or asset.symbol
         async with httpx.AsyncClient(timeout=10.0) as client:
             quote_res = await client.get(
@@ -49,12 +51,19 @@ class TwelveDataMarketDataAdapter:
             quote_res.raise_for_status()
             payload = quote_res.json()
 
+        if payload.get("status") == "error" or payload.get("code"):
+            code = str(payload.get("code") or "provider_error")
+            raise ValueError(f"twelve_data_unavailable:{code}")
+        price = _float_or_none(payload.get("close")) or _float_or_none(payload.get("price"))
+        if price is None:
+            raise ValueError("twelve_data_snapshot_missing_price")
+
         observed_at = _parse_datetime(payload.get("datetime")) or datetime.now(timezone.utc)
         return PriceSnapshotDTO(
             symbol=asset.symbol,
             provider=self.provider_name,
             provider_symbol=provider_symbol,
-            price=_float_or_none(payload.get("close")) or _float_or_none(payload.get("price")),
+            price=price,
             open=_float_or_none(payload.get("open")),
             high=_float_or_none(payload.get("high")),
             low=_float_or_none(payload.get("low")),
