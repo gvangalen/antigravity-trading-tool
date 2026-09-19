@@ -17,3 +17,8 @@ test("bot onboarding does not guess when multiple strategies match the active as
   assert.match(source, /symbolStrategies\.length === 1/);
   assert.doesNotMatch(source, /symbolStrategies\[0\]\s*\|\|/);
 });
+
+test("bot onboarding preserves the Next router state when it consumes handoff parameters", () => {
+  assert.match(source, /window\.history\.replaceState\(window\.history\.state, "", newUrl\)/);
+  assert.doesNotMatch(source, /window\.history\.replaceState\(\{\},\s*['"]['"],\s*newUrl\)/);
+});

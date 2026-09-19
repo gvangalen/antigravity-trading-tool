@@ -285,7 +285,7 @@ def test_canonical_target_current_asset_requires_choice_before_stale_context():
     target = asyncio.run(service.resolve_canonical_target(
         user_id=388,
         entity_type="setup",
-        selector={"asset": "BTC"},
+        selector={"asset": "BTC", "asset_source": "explicit_message"},
         message="Verwijder mijn BTC setup.",
         conversation_context={"canonical_entity_target": {"entity_type": "setup", "entity_id": 13}},
     ))
@@ -358,6 +358,36 @@ def test_latest_action_result_wins_over_stale_active_runtime_target():
             },
             "canonical_entity_target": {
                 "entity_type": "setup", "entity_id": 309, "owner_id": 388,
+            },
+        },
+    ))
+
+    assert target.entity_id == 310
+    assert target.resolution_source == "previous_action_result"
+
+
+def test_latest_action_result_wins_over_contextual_workspace_asset():
+    service = FinnV2EntityResolutionService(session=object())
+    service.setups = _FakeSetupRepo()
+    service.setups.get_user_setups = lambda _user_id: asyncio.sleep(0, result=[
+        {"id": 309, "name": "BTC Setup", "symbol": "BTC"},
+        {"id": 310, "name": "Apple Setup", "symbol": "AAPL"},
+    ])
+    service.setups.get_setup_by_id = lambda setup_id, user_id: asyncio.sleep(
+        0,
+        result={"id": 310, "name": "Apple Setup", "symbol": "AAPL"}
+        if user_id == 388 and setup_id == 310 else None,
+    )
+
+    target = asyncio.run(service.resolve_canonical_target(
+        user_id=388,
+        entity_type="setup",
+        selector={"asset": "BTC", "asset_source": "workspace_context"},
+        message="Wat kun je over deze setup vertellen?",
+        conversation_context={
+            "previous_action_result": {
+                "entity_type": "setup", "entity_id": 310,
+                "owner_user_id": 388, "result_status": "succeeded",
             },
         },
     ))

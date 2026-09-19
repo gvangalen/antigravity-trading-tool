@@ -607,7 +607,10 @@ function BotPageInner() {
 
       // Clean search parameters to avoid re-opening modal on subsequent updates
       const newUrl = window.location.pathname;
-      window.history.replaceState({}, '', newUrl);
+      // Next.js stores its client-router tree in history.state. Replacing it
+      // with an empty object makes the soft onboarding handoff render blank
+      // until a hard refresh rebuilds that tree.
+      window.history.replaceState(window.history.state, "", newUrl);
     }
   }, [searchParams, strategies]);
 

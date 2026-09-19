@@ -152,6 +152,7 @@ class FinnV2OrchestratorService:
         )
         if current_asset:
             selectors["asset"] = current_asset
+            selectors["asset_source"] = getattr(request_plan, "target_asset_source", None)
         operation_targets = {
             "read_active_setup": "setup",
             "evaluate_setup": "setup",

@@ -52,13 +52,15 @@ test("builds strategy and bot draft cards from the terminal runtime contract", (
 
 test("keeps confirmation controls inside a single calm draft card", () => {
   assert.match(source, /const dedicatedDraftOperation = message\.setupDraft\?\.operation_id/);
-  assert.match(source, /\["create_setup", "create_strategy", "create_bot"\]\.includes\(dedicatedDraftOperation\)/);
+  assert.match(source, /"create_setup", "create_strategy", "create_bot",[\s\S]*?\]\.includes\(dedicatedDraftOperation\)/);
   assert.match(source, /if \(actionOnly\.length === 0 \|\| message\.draft \|\| hasDedicatedDraftCard\) return null/);
   assert.match(source, /draftActionButtons\(message, messageIndex/);
   assert.match(source, /min-w-0 overflow-hidden rounded-2xl/);
   assert.match(source, /break-words text-xs/);
   assert.match(source, /flex flex-wrap items-center gap-2/);
   assert.match(source, /displayContext\.strategy_name \|\| activeSetup\?\.strategy_name/);
+  assert.match(source, /event\.preventDefault\(\); event\.stopPropagation\(\); void handleExecuteAction/);
+  assert.match(source, /event\.preventDefault\(\); event\.stopPropagation\(\); void handleCancelDraft/);
 });
 
 test("keeps a typed guided answer out of command search", () => {

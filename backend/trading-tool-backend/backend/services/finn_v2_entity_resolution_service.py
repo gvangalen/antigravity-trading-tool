@@ -108,11 +108,12 @@ class FinnV2EntityResolutionService:
                 )
             return self._resolution_failure(user_id, entity_type, "not_found", source="explicit_name")
 
-        # An asset named in the current turn outranks stale conversation and
-        # workspace context.  It narrows the owner's candidates, but never
-        # guesses when more than one object exists for that asset.
+        # Only an asset named in the current turn outranks persisted lineage.
+        # A contextual/workspace asset is a fallback and must not displace the
+        # object produced by the preceding confirmed action ("deze setup").
         explicit_asset = self._normalize_symbol(selector.get("asset"))
-        if explicit_asset:
+        asset_source = str(selector.get("asset_source") or "").strip()
+        if explicit_asset and asset_source == "explicit_message":
             asset_candidates = [
                 row for row in candidates
                 if self._candidate_asset(row) == explicit_asset
@@ -142,6 +143,24 @@ class FinnV2EntityResolutionService:
                     entity_type=entity_type,
                     entity_id=entity_id,
                     source="previous_action_result",
+                )
+
+        if explicit_asset:
+            asset_candidates = [
+                row for row in candidates
+                if self._candidate_asset(row) == explicit_asset
+            ]
+            if len(asset_candidates) == 1:
+                return self._canonical_target(
+                    user_id, entity_type, asset_candidates[0], "contextual_asset"
+                )
+            if len(asset_candidates) > 1:
+                return self._resolution_failure(
+                    user_id,
+                    entity_type,
+                    "ambiguous",
+                    source="contextual_asset",
+                    candidate_names=self._candidate_names(asset_candidates),
                 )
 
         active_target = dict(conversation_context.get("canonical_entity_target") or {})
