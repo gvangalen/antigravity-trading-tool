@@ -134,7 +134,12 @@ class FinnV2EntityResolutionService:
                 user_id, entity_type, "not_found", source="explicit_asset"
             )
 
-        action_result = dict(conversation_context.get("previous_action_result") or {})
+        recent_action_results = dict(conversation_context.get("recent_action_results") or {})
+        action_result = dict(
+            recent_action_results.get(entity_type)
+            or conversation_context.get("previous_action_result")
+            or {}
+        )
         if action_result.get("entity_type") == entity_type and action_result.get("result_status") == "succeeded":
             entity_id = self._coerce_int(action_result.get("entity_id"))
             if entity_id:

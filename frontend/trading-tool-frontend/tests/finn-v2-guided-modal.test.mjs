@@ -59,8 +59,9 @@ test("keeps confirmation controls inside a single calm draft card", () => {
   assert.match(source, /break-words text-xs/);
   assert.match(source, /flex flex-wrap items-center gap-2/);
   assert.match(source, /displayContext\.strategy_name \|\| activeSetup\?\.strategy_name/);
-  assert.match(source, /onPointerUp=\{\(event\) => \{ event\.preventDefault\(\); event\.stopPropagation\(\); void handleExecuteAction/);
-  assert.match(source, /if \(event\.detail !== 0\) return; event\.preventDefault\(\); event\.stopPropagation\(\); void handleCancelDraft/);
+  assert.match(source, /onClick=\{\(\) => void handleExecuteAction\(proposal\)\}/);
+  assert.doesNotMatch(source, /if \(event\.detail !== 0\) return/);
+  assert.doesNotMatch(source, /onPointerUp=/);
 });
 
 test("keeps a typed guided answer out of command search", () => {

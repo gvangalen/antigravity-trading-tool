@@ -304,6 +304,10 @@ class FinnV2ReasoningService:
             contract is not None
             and contract.operation_id == "evaluate_bot"
             and str(request_plan_payload.get("discourse_type") or "") == "contextual_follow_up"
+        ) or (
+            contract is not None
+            and contract.operation_id == "read_active_setup"
+            and self._has_setup_collection_evidence(context)
         )
         if contract is not None and (contract.model_policy == "never" or deterministic_response):
             result = self._deterministic_contract_draft(
@@ -429,6 +433,14 @@ class FinnV2ReasoningService:
     def _uses_deterministic_contract_response(contract) -> bool:
         """Keep typed proposal payloads independent from optional model wording."""
         return contract is not None and (contract.response_strategy == "proposal_draft" or contract.model_policy == "never")
+
+    @staticmethod
+    def _has_setup_collection_evidence(context) -> bool:
+        return any(
+            item.tool_name == "read_active_setup"
+            and len((item.facts or {}).get("setups") or []) > 1
+            for item in (getattr(context, "evidence", None) or [])
+        )
 
     def _deterministic_contract_draft(self, *, contract, run_id: str, user_id: int, context, model: str) -> ReasoningResult:
         """Use the contract response strategy without consulting the provider."""

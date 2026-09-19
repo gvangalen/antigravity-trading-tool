@@ -234,6 +234,10 @@ class FinnV2OrchestratorService:
             explicit_asset=getattr(analysis, "explicit_asset", None),
             conversation_context=conversation_context,
             supplied_inputs=supplied,
+            # Canonical resolver output is owner-scoped trusted context. It
+            # must be allowed to satisfy an ID slot during disambiguation even
+            # though arbitrary selector values are ignored on guided turns.
+            derived_inputs=resolved,
         )
         request_plan = request_plan.copy(
             update={
@@ -906,6 +910,15 @@ class FinnV2OrchestratorService:
             ):
                 context["previous_action_result"] = latest_action_result
                 context["previous_action_result_source"] = "conversation_action_result"
+        recent_results_loader = getattr(
+            self.runtime_contracts, "get_recent_action_results_for_conversation", None
+        )
+        if conversation_id and callable(recent_results_loader):
+            context["recent_action_results"] = await recent_results_loader(
+                conversation_id=conversation_id,
+                user_id=user_id,
+                exclude_run_id=run_id,
+            )
         guided_state = dict(previous_state.get("guided_state") or {})
         is_collecting_guided_state = bool(
             guided_state.get("operation_id")

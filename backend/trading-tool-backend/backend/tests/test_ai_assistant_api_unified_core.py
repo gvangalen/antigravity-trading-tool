@@ -1379,7 +1379,7 @@ def test_get_finn_mission_control_survives_non_database_action_failures(monkeypa
     assert stored["payload"]["first_dashboard_context"]["generation_status"] == "ready"
 
 
-def test_get_finn_mission_control_returns_but_does_not_cache_transient_fallback(monkeypatch):
+def test_get_finn_mission_control_returns_owner_scoped_fallback_after_enrichment_failure(monkeypatch):
     db = SimpleNamespace(rollback=AsyncMock())
     stored = {}
 
@@ -1392,6 +1392,19 @@ def test_get_finn_mission_control_returns_but_does_not_cache_transient_fallback(
     class VisibleService:
         async def deliver_mission_control(self, **kwargs):
             raise RuntimeError("live mission control exploded")
+
+        async def deliver_mission_control_fallback(self, **kwargs):
+            return {
+                "finn_briefing": {
+                    "summary": "Je hebt 2 opgeslagen setups: BTC Base, BTC Breakout.",
+                    "suggested_actions": [],
+                },
+                "generation_status": "degraded",
+                "response_trace": {
+                    "pipeline_version": "finn_v2",
+                    "response_source": "owner_scoped_deterministic_fallback",
+                },
+            }
 
     monkeypatch.setattr("backend.api.ai_assistant_api.FinnV2VisibleDeliveryService", lambda db_session: VisibleService())
 
@@ -1407,9 +1420,10 @@ def test_get_finn_mission_control_returns_but_does_not_cache_transient_fallback(
     )
 
     db.rollback.assert_not_awaited()
-    assert response["generation_status"] == "failed"
+    assert response["generation_status"] == "degraded"
     assert response["response_trace"]["pipeline_version"] == "finn_v2"
-    assert response["response_trace"]["error"] == "live mission control exploded"
+    assert response["response_trace"]["response_source"] == "owner_scoped_deterministic_fallback"
+    assert "BTC Base" in response["finn_briefing"]["summary"]
     assert stored == {}
 
 

@@ -606,13 +606,12 @@ function BotPageInner() {
       handleAddBot(initialValues);
 
       // Clean search parameters to avoid re-opening modal on subsequent updates
-      const newUrl = window.location.pathname;
-      // Next.js stores its client-router tree in history.state. Replacing it
-      // with an empty object makes the soft onboarding handoff render blank
-      // until a hard refresh rebuilds that tree.
-      window.history.replaceState(window.history.state, "", newUrl);
+      // Keep query cleanup inside the Next router. Direct history mutation can
+      // leave useSearchParams and the app-router tree on different revisions,
+      // which rendered an empty Automation page until a hard refresh.
+      router.replace("/bot", { scroll: false });
     }
-  }, [searchParams, strategies]);
+  }, [searchParams, strategies, router]);
 
   const handleOpenBotSettings = async (type, bot) => {
     if (!bot) return;

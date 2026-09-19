@@ -3090,35 +3090,23 @@ async def get_finn_mission_control(
     cached = _get_cached_mission_control(current_user["id"])
     if cached:
         return cached
+    service = FinnV2VisibleDeliveryService(db)
     try:
-        response = await FinnV2VisibleDeliveryService(db).deliver_mission_control(
+        response = await service.deliver_mission_control(
             user_id=current_user["id"],
             context_payload={"page": "assistant", "surface": "today_with_finn"},
             request_id=trace_id or f"mission-{uuid.uuid4().hex}",
             trace_id=trace_id or f"mission-{uuid.uuid4().hex}",
         )
     except Exception as exc:
-        response = {
-            "greeting": "Today with FINN",
-            "finn_briefing": {
-                "greeting": "Today with FINN",
-                "summary": "De V2-runtime kon geen veilige Today with FINN-response afleveren.",
-                "suggested_actions": [],
-            },
-            "generation_status": "failed",
-            "response_trace": {
-                "trace_id": trace_id,
-                "run_id": None,
-                "pipeline_version": "finn_v2",
-                "router_name": "finn_v2_orchestrator",
-                "selected_handler": "FinnV2VisibleDeliveryService.deliver_mission_control",
-                "response_source": FINN_V2_VERIFIED_SOURCE,
-                "error": str(exc or "mission_control_build_failed"),
-            },
-        }
+        logger.exception("FINN mission control enrichment failed", exc_info=exc)
+        response = await service.deliver_mission_control_fallback(
+            user_id=current_user["id"],
+            trace_id=trace_id or f"mission-{uuid.uuid4().hex}",
+        )
     # A recoverable first-load failure must never become the user's cached
     # dashboard state. The next refresh should retry against persisted data.
-    if response.get("generation_status") != "failed":
+    if response.get("generation_status") not in {"failed", "degraded"}:
         _store_cached_mission_control(current_user["id"], response)
     return response
 

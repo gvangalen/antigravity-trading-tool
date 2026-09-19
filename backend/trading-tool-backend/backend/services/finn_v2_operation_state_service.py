@@ -159,7 +159,20 @@ class FinnV2OperationStateService:
         context = conversation_context or {}
         verified_context = dict(context.get("last_verified_context") or {})
         resolved_context = dict(verified_context.get("resolved_entities") or {})
-        action_result = dict(context.get("previous_action_result") or {})
+        operation_entity_type = next(
+            (
+                entity
+                for entity in ("setup", "strategy", "bot")
+                if contract.operation_id.endswith(entity)
+            ),
+            "",
+        )
+        recent_action_results = dict(context.get("recent_action_results") or {})
+        action_result = dict(
+            recent_action_results.get(operation_entity_type)
+            or context.get("previous_action_result")
+            or {}
+        )
         action_entity_type = str(action_result.get("entity_type") or "")
         action_entity_id = action_result.get("entity_id")
         if action_entity_type == "setup" and action_entity_id is not None:

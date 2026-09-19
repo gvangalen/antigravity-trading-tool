@@ -67,6 +67,8 @@ def test_mission_control_endpoint_routes_directly_to_v2_visible_delivery():
     service_source = _read(BACKEND_ROOT / "services" / "finn_plan_service.py")
 
     assert '"/assistant/mission-control"' in api_source
-    assert "FinnV2VisibleDeliveryService(db).deliver_mission_control" in api_source
+    assert "service = FinnV2VisibleDeliveryService(db)" in api_source
+    assert "response = await service.deliver_mission_control(" in api_source
+    assert "response = await service.deliver_mission_control_fallback(" in api_source
     assert "def _is_server_issued_action" in service_source
     assert "resolve_mission_item" in service_source
