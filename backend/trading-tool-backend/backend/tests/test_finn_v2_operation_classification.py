@@ -719,6 +719,42 @@ def test_guided_strategy_entry_precedes_workspace_setup_field_read():
     assert result.selector_source == "guided_state"
 
 
+def test_guided_strategy_name_projects_the_persisted_complete_contract_state():
+    registry = FinnV2OperationRegistry()
+    contract = registry.require_supported("create_strategy")
+    context = {
+        "conversation_state_version": FinnV2OperationStateService.CONTEXT_STATE_VERSION,
+        "active_guided_operation": {
+            "operation_id": "create_strategy",
+            "contract_version": contract.version,
+            "state_revision": 7,
+            "collected_inputs": {
+                "setup_id": 12,
+                "execution_mode": "fixed",
+                "base_amount": 100.0,
+                "entry": 76000.0,
+                "stop_loss": 72000.0,
+                "targets": [83000.0, 87000.0],
+                "risk_profile": "balanced",
+            },
+            "missing_required_inputs": ["name"],
+            "next_missing_input": "name",
+            "status": "collecting",
+        },
+    }
+
+    result = CLASSIFIER.classify(message="BTC Plan q219", conversation_context=context)
+
+    assert result.operation_id == "create_strategy"
+    assert result.selector_source == "guided_state"
+    assert result.selected_target_asset is None
+    assert result.selected_missing_inputs == ()
+    assert result.supplied_inputs == {
+        **context["active_guided_operation"]["collected_inputs"],
+        "name": "BTC Plan q219",
+    }
+
+
 def test_strategy_stop_loss_is_not_a_guided_cancel_intent():
     service = FinnV2OperationStateService()
 

@@ -660,9 +660,24 @@ class FinnV2OperationClassificationService:
     ) -> SemanticOperationClassification:
         contract = self.registry.get(operation_id)
         selected_entities = dict(getattr(selection, "entities", {}) or {})
+        context = conversation_context or {}
+        active_guided = context.get("active_guided_operation") or (
+            context.get("operation_state") if not context.get("conversation_state_version") else None
+        )
+        guided_requested_slot = (
+            str(active_guided.get("next_missing_input") or "")
+            if isinstance(active_guided, Mapping)
+            and active_guided.get("operation_id") == operation_id
+            else ""
+        )
+        binds_non_asset_slot = bool(
+            source == "guided_state"
+            and guided_requested_slot
+            and guided_requested_slot not in {"asset", "symbol"}
+        )
         target_resolution = FinnV2TargetAssetResolver().resolve(
-            explicit_target_asset=facts.referenced_asset,
-            selector_target_asset=getattr(selection, "target_asset", None),
+            explicit_target_asset=None if binds_non_asset_slot else facts.referenced_asset,
+            selector_target_asset=None if binds_non_asset_slot else getattr(selection, "target_asset", None),
             verified_context=conversation_context,
             allow_workspace_fallback=False,
         )
@@ -742,13 +757,32 @@ class FinnV2OperationClassificationService:
             return {}, {}, ("requested_change",)
         if not contract.required_inputs:
             return {}, {}, ()
+        active = (conversation_context or {}).get("active_guided_operation")
+        active_matches = bool(
+            isinstance(active, Mapping) and active.get("operation_id") == contract.operation_id
+        )
+        requested_slot = str(active.get("next_missing_input") or "") if active_matches else ""
         supplied = FinnV2OperationStateService().explicit_inputs(
             contract=contract,
             # Input collection must retain display values such as a setup
             # name. ``normalized_text`` is for semantic comparison only.
             message=facts.original_text,
-            explicit_asset=facts.referenced_asset,
+            explicit_asset=(
+                None
+                if active_matches and requested_slot not in {"asset", "symbol"}
+                else facts.referenced_asset
+            ),
+            continuation=bool(active_matches and active.get("missing_required_inputs")),
+            requested_slot=requested_slot or None,
         )
+        if active_matches:
+            retained = {
+                field: value
+                for field, value in dict(active.get("collected_inputs") or {}).items()
+                if field in contract.input_fields
+                and not FinnV2OperationStateService._is_missing(value)
+            }
+            supplied = {**retained, **supplied}
         if facts.financial_concept and "concept" in contract.required_inputs:
             supplied.setdefault("concept", facts.financial_concept)
         # Identifiers are not free-text write payloads: when the structured

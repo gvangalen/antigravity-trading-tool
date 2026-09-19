@@ -162,6 +162,65 @@ def test_deterministic_bot_draft_names_the_exact_missing_contract_field():
     assert "ontbrekend detail" not in result.follow_up_question
 
 
+def test_complete_bot_inputs_ignore_a_stale_non_contract_missing_field():
+    service = FinnV2ReasoningService(session=object())
+    context = ReasoningContextPackage(
+        run_id="run-complete-paper-bot",
+        user_id=406,
+        user_message=(
+            "Maak paper-bot BTC Bot q219 voor strategie BTC Plan q219 "
+            "met budget 500 euro en Paper mode."
+        ),
+        locale="nl-NL",
+        interaction_mode="CREATE_PROPOSAL",
+        orchestrator_result_id="o-complete-paper-bot",
+        snapshot_id="s-complete-paper-bot",
+        validation_id="v-complete-paper-bot",
+        policy_decision_id="p-complete-paper-bot",
+        evidence_set_hash="complete-paper-bot-hash",
+        evidence=[],
+        policy=ReasoningPolicyContext(
+            policy_class="paper_action",
+            allowed=True,
+            proposal_allowed=True,
+            confirmation_required=True,
+            step_up_required=False,
+            execution_allowed=False,
+            operation_type="create_bot",
+        ),
+        request_plan={
+            "operation_id": "create_bot",
+            "operation_state": {
+                "collected_inputs": {
+                    "strategy_id": 52,
+                    "name": "BTC Bot q219",
+                    "budget_total_eur": 500.0,
+                },
+                "missing_required_inputs": ["paper_mode"],
+                "next_missing_input": "paper_mode",
+            },
+        },
+    )
+
+    result = service._deterministic_contract_draft(
+        contract=FinnV2OperationRegistry().require_supported("create_bot"),
+        run_id=context.run_id,
+        user_id=context.user_id,
+        context=context,
+        model="deterministic",
+    )
+
+    assert result.mode == "CREATE_PROPOSAL"
+    assert result.follow_up_question is None
+    assert result.proposal_candidate is not None
+    assert result.proposal_candidate.operation_type == "create_bot"
+    assert result.proposal_candidate.proposed_changes["bot_fields"] == {
+        "strategy_id": 52,
+        "name": "BTC Bot q219",
+        "budget_total_eur": 500.0,
+    }
+
+
 def test_deterministic_setup_proposal_uses_completed_typed_state_without_write():
     service = FinnV2ReasoningService(session=object())
     context = ReasoningContextPackage(

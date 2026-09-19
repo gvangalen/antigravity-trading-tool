@@ -15,6 +15,7 @@ from backend.schemas.finn_v2_reasoning_schema import (
 )
 from backend.domain.finn_v2_operation_registry import FinnV2OperationRegistry
 from backend.domain.indicator_display import indicator_display_name
+from backend.services.finn_v2_operation_state_service import FinnV2OperationStateService
 
 
 class FinnV2ReasoningFallbackService:
@@ -820,7 +821,6 @@ class FinnV2ReasoningFallbackService:
                 # compatibility input; new runs always use operation_state.
                 target_asset = self._first_asset_symbol(context.user_message) or asset or ""
             if not target_asset:
-                from backend.services.finn_v2_operation_state_service import FinnV2OperationStateService
                 return ReasoningResult(
                     reasoning_result_id=f"finn-v2-reasoning-{uuid.uuid4().hex}",
                     run_id=run_id,
@@ -900,7 +900,6 @@ class FinnV2ReasoningFallbackService:
                 or ""
             ).upper()
             if not selected_asset:
-                from backend.services.finn_v2_operation_state_service import FinnV2OperationStateService
                 question = FinnV2OperationStateService.clarification_question("asset")
                 return ReasoningResult(
                     reasoning_result_id=f"finn-v2-reasoning-{uuid.uuid4().hex}",
@@ -987,10 +986,19 @@ class FinnV2ReasoningFallbackService:
                 model=model,
                 error_codes=[*error_codes, "proposal_operation_contract_missing"],
             )
-        missing = list(operation_state.get("missing_required_inputs") or [])
+        proposed_fields = dict(operation_state.get("collected_inputs") or {})
+        # Runtime telemetry can lag behind a newly resolved contextual input.
+        # The registry remains the sole input-schema authority, so derive the
+        # clarification slots again from the values that will form the draft.
+        missing = [
+            field
+            for field in contract.required_inputs_for(proposed_fields)
+            if FinnV2OperationStateService._is_missing(proposed_fields.get(field))
+        ]
         if missing:
-            from backend.services.finn_v2_operation_state_service import FinnV2OperationStateService
             next_field = operation_state.get("next_missing_input") or missing[0]
+            if next_field not in missing:
+                next_field = missing[0]
             question = FinnV2OperationStateService.clarification_question(
                 next_field,
                 contract=contract,
@@ -1015,7 +1023,6 @@ class FinnV2ReasoningFallbackService:
                 created_at=datetime.now(timezone.utc),
             )
 
-        proposed_fields = dict(operation_state.get("collected_inputs") or {})
         if any(
             not str(proposed_fields.get(field) or "").strip()
             for field in contract.required_inputs_for(proposed_fields)
