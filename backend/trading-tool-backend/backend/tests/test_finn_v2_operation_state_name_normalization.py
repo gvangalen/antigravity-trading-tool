@@ -837,3 +837,15 @@ def test_clarification_follow_up_persists_the_requested_change():
     assert initial.missing_required_inputs == ["requested_change"]
     assert follow_up.collected_inputs["requested_change"] == "Mijn watchlist aanpassen."
     assert follow_up.missing_required_inputs == []
+
+
+@pytest.mark.parametrize(
+    ("message", "expected"),
+    [
+        ("entry rond 200 euro", 200),
+        ("entry around 201 USD", 201),
+        ("Einstieg ungefähr 202 Euro", 202),
+    ],
+)
+def test_strategy_entry_accepts_natural_approximation_words(message, expected):
+    assert FinnV2OperationStateService._strategy_trade_inputs(message)["entry"] == expected

@@ -17,6 +17,7 @@ from backend.domain.finn_v2_runtime_contract import (
     record_final_operation,
     record_initial_intent,
     record_contextual_inputs,
+    record_action_result,
     record_proposal_lifecycle,
     record_selection,
     record_guided_draft,
@@ -74,7 +75,22 @@ def test_resolved_action_envelope_is_the_typed_multi_asset_action_identity():
     assert envelope["action_polarity"] == "update"
     assert envelope["asset"] == "AAPL"
     assert envelope["canonical_target"]["display_name"] == "Apple Swing"
-    assert envelope["lineage"] == {"setup": 41, "strategy": 52}
+    assert envelope["lineage"] == {
+        "setup": {
+            "entity_id": 41,
+            "display_name": None,
+            "owner_id": 7,
+            "asset_symbol": "AAPL",
+            "timeframe": "1D",
+        },
+        "strategy": {
+            "entity_id": 52,
+            "display_name": "Apple Swing",
+            "owner_id": 7,
+            "asset_symbol": "AAPL",
+            "timeframe": "1D",
+        },
+    }
     assert envelope["changed_fields"] == {"base_amount": 250}
     assert len(envelope["envelope_hash"]) == 64
 
@@ -116,6 +132,76 @@ def test_sealed_envelope_contains_the_exact_hydrated_proposal_revision():
     assert sealed["proposal_target"]["asset"] == "AAPL"
     assert sealed["proposal_change"]["before"] == {"base_amount": 100}
     assert sealed["changed_fields"] == {"base_amount": 250}
+
+
+def test_sealed_envelope_hydrates_human_parent_lineage_from_proposal():
+    state = _selected_strategy_state()
+    sealed = seal_resolved_action_envelope(
+        state,
+        proposal_target={"target_type": "setup", "target_id": "41", "asset": "AAPL"},
+        proposal_change={
+            "strategy_fields": {
+                "name": "Apple Fixed",
+                "setup_id": 41,
+                "setup_name": "Apple Daily",
+                "symbol": "AAPL",
+                "timeframe": "1D",
+            }
+        },
+    )["resolved_action_envelope"]
+
+    assert sealed["lineage"]["setup"] == {
+        "entity_id": 41,
+        "display_name": "Apple Daily",
+        "owner_id": 7,
+        "asset_symbol": "AAPL",
+        "timeframe": "1D",
+    }
+    assert sealed["lineage"]["strategy"] == {
+        "entity_id": 52,
+        "display_name": "Apple Fixed",
+        "owner_id": 7,
+        "asset_symbol": "AAPL",
+        "timeframe": "1D",
+    }
+
+
+def test_action_result_finalizes_created_entity_lineage_identity():
+    state = seal_resolved_action_envelope(
+        _selected_strategy_state(),
+        proposal_target={"target_type": "setup", "target_id": "41", "asset": "AAPL"},
+        proposal_change={
+            "strategy_fields": {
+                "name": "Apple Fixed",
+                "setup_id": 41,
+                "setup_name": "Apple Daily",
+                "symbol": "AAPL",
+                "timeframe": "1D",
+            }
+        },
+    )
+
+    completed = record_action_result(
+        state,
+        action_result={
+            "entity_type": "strategy",
+            "entity_id": 88,
+            "canonical_name": "Apple Fixed",
+            "owner_user_id": 7,
+            "parent_entity_type": "setup",
+            "parent_entity_id": 41,
+            "canonical_entity": {"id": 88, "name": "Apple Fixed", "symbol": "AAPL", "timeframe": "1D"},
+        },
+    )["resolved_action_envelope"]
+
+    assert completed["lineage"]["strategy"] == {
+        "entity_id": 88,
+        "display_name": "Apple Fixed",
+        "owner_id": 7,
+        "asset_symbol": "AAPL",
+        "timeframe": "1D",
+    }
+    assert completed["lineage"]["setup"]["entity_id"] == 41
 
 
 def test_resolved_action_envelope_normalizes_nested_decimal_values_for_jsonb():

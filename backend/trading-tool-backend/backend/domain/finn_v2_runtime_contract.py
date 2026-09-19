@@ -91,19 +91,34 @@ def _resolved_action_envelope(state: Dict[str, Any], *, sealed: bool = False) ->
     changed = supplied.get("changed_fields")
     if not isinstance(changed, dict):
         changed = {}
-    lineage = {
-        key: value
-        for key, value in {
-            "setup": supplied.get("setup_id") or (target.get("relation") or {}).get("setup_id"),
-            "strategy": supplied.get("strategy_id") or (target.get("relation") or {}).get("strategy_id"),
-            "bot": supplied.get("bot_id") or (target.get("relation") or {}).get("bot_id"),
-        }.items()
-        if value is not None
-    }
+    relation = dict(target.get("relation") or {})
+    relation_asset = (
+        supplied.get("asset")
+        or target.get("asset_symbol")
+        or relation.get("asset_symbol")
+        or relation.get("symbol")
+        or state.get("canonical_target")
+    )
+    lineage: Dict[str, Any] = {}
+    for entity_type in ("setup", "strategy", "bot"):
+        entity_id = supplied.get(f"{entity_type}_id") or relation.get(f"{entity_type}_id")
+        entity_name = supplied.get(f"{entity_type}_name") or relation.get(f"{entity_type}_name")
+        if target.get("entity_type") == entity_type:
+            entity_id = entity_id or target.get("entity_id")
+            entity_name = entity_name or target.get("display_name")
+        if entity_id is None and not entity_name:
+            continue
+        lineage[entity_type] = {
+            "entity_id": entity_id,
+            "display_name": entity_name,
+            "owner_id": int(identity.get("user_id") or 0),
+            "asset_symbol": str(relation_asset).upper() if relation_asset else None,
+            "timeframe": relation.get("timeframe") or supplied.get("timeframe"),
+        }
     asset = (
         supplied.get("asset")
         or target.get("asset_symbol")
-        or (target.get("relation") or {}).get("symbol")
+        or relation.get("symbol")
         or state.get("canonical_target")
     )
     envelope = ResolvedActionEnvelope(
@@ -144,6 +159,42 @@ def seal_resolved_action_envelope(
         raise RuntimeContractImmutableFieldError("resolved_action_envelope_missing")
     envelope["proposal_target"] = _json_safe(dict(proposal_target or {}))
     envelope["proposal_change"] = _json_safe(dict(proposal_change or {}))
+    lineage = dict(envelope.get("lineage") or {})
+    for entity_type in ("setup", "strategy", "bot"):
+        fields = envelope["proposal_change"].get(f"{entity_type}_fields")
+        if not isinstance(fields, dict):
+            continue
+        relation = dict(lineage.get(entity_type) or {})
+        entity_id = fields.get(f"{entity_type}_id") or relation.get("entity_id")
+        display_name = fields.get("name") or fields.get(f"{entity_type}_name") or relation.get("display_name")
+        if entity_id is None and not display_name:
+            continue
+        relation.update({
+            "entity_id": entity_id,
+            "display_name": display_name,
+            "owner_id": envelope.get("user_id"),
+            "asset_symbol": fields.get("symbol") or fields.get("asset") or relation.get("asset_symbol"),
+            "timeframe": fields.get("timeframe") or relation.get("timeframe"),
+        })
+        lineage[entity_type] = relation
+    for fields in envelope["proposal_change"].values():
+        if not isinstance(fields, dict):
+            continue
+        for entity_type in ("setup", "strategy", "bot"):
+            entity_id = fields.get(f"{entity_type}_id")
+            display_name = fields.get(f"{entity_type}_name")
+            if entity_id is None and not display_name:
+                continue
+            relation = dict(lineage.get(entity_type) or {})
+            relation.update({
+                "entity_id": entity_id or relation.get("entity_id"),
+                "display_name": display_name or relation.get("display_name"),
+                "owner_id": envelope.get("user_id"),
+                "asset_symbol": fields.get("symbol") or fields.get("asset") or relation.get("asset_symbol"),
+                "timeframe": fields.get("timeframe") or relation.get("timeframe"),
+            })
+            lineage[entity_type] = relation
+    envelope["lineage"] = lineage
     target_asset = envelope["proposal_target"].get("asset")
     if target_asset:
         envelope["asset"] = str(target_asset).upper()
@@ -724,6 +775,24 @@ def record_action_result(state: Dict[str, Any], *, action_result: Dict[str, Any]
     if envelope:
         envelope["postcondition"] = dict(action_result)
         envelope["proposal_status"] = "executed"
+        entity_type = str(action_result.get("entity_type") or "").strip()
+        if entity_type in {"setup", "strategy", "bot"}:
+            canonical_entity = dict(action_result.get("canonical_entity") or {})
+            lineage = dict(envelope.get("lineage") or {})
+            lineage[entity_type] = {
+                "entity_id": action_result.get("entity_id") or canonical_entity.get("id"),
+                "display_name": action_result.get("canonical_name") or canonical_entity.get("name"),
+                "owner_id": action_result.get("owner_user_id") or envelope.get("user_id"),
+                "asset_symbol": canonical_entity.get("symbol") or envelope.get("asset"),
+                "timeframe": canonical_entity.get("timeframe"),
+            }
+            parent_type = str(action_result.get("parent_entity_type") or "").strip()
+            parent_id = action_result.get("parent_entity_id")
+            if parent_type in {"setup", "strategy", "bot"} and parent_id is not None:
+                parent = dict(lineage.get(parent_type) or {})
+                parent["entity_id"] = parent_id
+                lineage[parent_type] = parent
+            envelope["lineage"] = lineage
         payload = {key: value for key, value in envelope.items() if key != "envelope_hash"}
         envelope["envelope_hash"] = sha256(
             json.dumps(payload, sort_keys=True, separators=(",", ":"), default=str).encode("utf-8")

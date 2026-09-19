@@ -763,7 +763,7 @@ class FinnV2OperationStateService:
         """Extract only explicitly stated strategy contract fields."""
         values: dict[str, object] = {}
         patterns = {
-            "entry": r"\b(?:entry|instap(?:prijs)?|einstieg(?:spreis)?)\s*(?:is|:|=|op|at|bei)?\s*(?:€|eur|\$)?\s*(\d+(?:[.,]\d+)?)",
+            "entry": r"\b(?:entry|instap(?:prijs)?|einstieg(?:spreis)?)\s*(?:is|:|=|op|at|bei|rond|around|ongeveer|ungefähr|ca\.?)?\s*(?:€|eur|\$)?\s*(\d+(?:[.,]\d+)?)",
             "stop_loss": r"\b(?:stop[- ]?loss|stop|invalidatie|invalidation|invalidierung)\s*(?:is|:|=|op|at|bei)?\s*(?:€|eur|\$)?\s*(\d+(?:[.,]\d+)?)",
             "base_amount": r"\b(?:base\s*amount|basisinleg|basis\s*bedrag|basisbetrag|grundbetrag|bedrag)\s*(?:is|:|=|van|of|von)?\s*(?:€|eur)?\s*(\d+(?:[.,]\d+)?)",
         }
