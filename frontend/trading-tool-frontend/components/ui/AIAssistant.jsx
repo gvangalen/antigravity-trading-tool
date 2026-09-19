@@ -6390,9 +6390,15 @@ function AIAssistantContent({
                         {workspaceHeadline}
                       </h3>
 
-                      {(workspaceSupport || workspaceActionHint) ? (
+                      {workspaceSupport ? (
                         <p className="mt-2.5 max-w-3xl text-[14px] font-medium leading-6 text-slate-600 dark:text-slate-300">
-                          {workspaceSupport || workspaceActionHint}
+                          {workspaceSupport}
+                        </p>
+                      ) : null}
+
+                      {workspaceActionHint ? (
+                        <p className="mt-2 max-w-3xl text-[14px] font-bold leading-6 text-slate-800 dark:text-slate-100">
+                          {workspaceActionHint}
                         </p>
                       ) : null}
 

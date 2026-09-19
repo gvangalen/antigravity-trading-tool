@@ -64,6 +64,16 @@ test("FINN Today renders the typed personal mission-control briefing", () => {
     "review state must render through locale copy rather than a backend English label",
   );
   assert.match(assistantSource, /const firstDashboardHeadline = firstDashboardCoaching\?\.assessment/);
+  assert.match(
+    assistantSource,
+    /\{workspaceSupport\}[\s\S]*?\{workspaceActionHint\}/,
+    "FINN Today must show both its reasoning and its recommended action",
+  );
+  assert.doesNotMatch(
+    assistantSource,
+    /\{workspaceSupport \|\| workspaceActionHint\}/,
+    "the recommended action must not disappear when reasoning is present",
+  );
   assert.match(assistantSource, /normalizeVisibleBriefing\(firstDashboardBriefingText/);
   assert.match(assistantSource, /NOT_REVIEWED_YET\|not_reviewed_yet/);
   assert.match(assistantSource, /raw\.includes\("not_reviewed"\).*workspaceFirstDashboardLabel/);
