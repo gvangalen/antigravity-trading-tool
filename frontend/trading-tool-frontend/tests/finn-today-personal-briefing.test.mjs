@@ -38,6 +38,11 @@ test("FINN Today renders the typed personal mission-control briefing", () => {
     /if \(isOpen\) \{\s*loadMissionControl\(\);/,
     "the compact FINN Today preview must load the same typed mission-control projection",
   );
+  assert.doesNotMatch(
+    assistantSource,
+    /finn-mission-control:\$\{currentConversationStorageKey\}:\$\{pathname/,
+    "FINN Today must not maintain route-specific caches",
+  );
   assert.match(
     assistantSource,
     /if \(Object\.keys\(preferences\)\.length === 0\)/,
@@ -50,7 +55,7 @@ test("FINN Today renders the typed personal mission-control briefing", () => {
   );
   assert.match(
     assistantSource,
-    /if \(!isOpen\) return;[\s\S]*?\["pending", "queued", "generating", "retry_scheduled"\]/,
+    /if \(!isOpen\) return;[\s\S]*?\["pending", "queued", "generating", "retry_scheduled", "stale_while_revalidate"\]/,
     "the compact FINN Today preview must keep polling while background enrichment is active",
   );
   assert.match(

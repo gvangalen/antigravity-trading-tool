@@ -67,6 +67,10 @@ class SetupChange(BaseModel):
     setup_id: int
     changed_fields: Dict[str, Any]
     before: Optional[Dict[str, Any]] = None
+    before_state: Optional[Dict[str, Any]] = None
+    requested_state: Optional[Dict[str, Any]] = None
+    target_revision: Optional[str] = None
+    snapshot_timestamp: Optional[datetime] = None
 
     class Config:
         extra = "forbid"
@@ -99,6 +103,10 @@ class StrategyChange(BaseModel):
     strategy_id: int
     changed_fields: Dict[str, Any]
     before: Optional[Dict[str, Any]] = None
+    before_state: Optional[Dict[str, Any]] = None
+    requested_state: Optional[Dict[str, Any]] = None
+    target_revision: Optional[str] = None
+    snapshot_timestamp: Optional[datetime] = None
 
     class Config:
         extra = "forbid"
@@ -154,6 +162,10 @@ class BotChange(BaseModel):
     bot_id: int
     changed_fields: Dict[str, Any]
     before: Optional[Dict[str, Any]] = None
+    before_state: Optional[Dict[str, Any]] = None
+    requested_state: Optional[Dict[str, Any]] = None
+    target_revision: Optional[str] = None
+    snapshot_timestamp: Optional[datetime] = None
 
     class Config:
         extra = "forbid"

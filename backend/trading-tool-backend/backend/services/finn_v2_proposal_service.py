@@ -74,6 +74,7 @@ class FinnV2ProposalService:
             user_id=user_id,
             proposal_input=proposal_input,
         )
+        proposal_input = self._reseal_hydrated_action_envelope(proposal_input)
 
         existing = await self.proposals.get_by_idempotency_key_for_user(
             idempotency_key=proposal_input.idempotency_key,
@@ -183,7 +184,13 @@ class FinnV2ProposalService:
                 asset=proposal_input.target.asset,
             )
             before = self._snapshot_changed_fields(resolved["setup"], change.changed_fields)
-            return proposal_input.copy(update={"change": change.copy(update={"before": before})})
+            return proposal_input.copy(update={"change": change.copy(update={
+                "before": before,
+                "before_state": before,
+                "requested_state": dict(change.changed_fields),
+                "target_revision": self._target_revision("setup", change.setup_id, user_id, before),
+                "snapshot_timestamp": datetime.now(timezone.utc),
+            })})
         if operation == "update_strategy":
             unknown = set(change.changed_fields).difference(StrategyService.UPDATE_ALLOWED_FIELDS)
             if unknown or not change.changed_fields:
@@ -194,8 +201,38 @@ class FinnV2ProposalService:
                 setup=None,
             )
             before = self._snapshot_changed_fields(resolved["strategy"], change.changed_fields)
-            return proposal_input.copy(update={"change": change.copy(update={"before": before})})
+            return proposal_input.copy(update={"change": change.copy(update={
+                "before": before,
+                "before_state": before,
+                "requested_state": dict(change.changed_fields),
+                "target_revision": self._target_revision("strategy", change.strategy_id, user_id, before),
+                "snapshot_timestamp": datetime.now(timezone.utc),
+            })})
         return proposal_input
+
+    @staticmethod
+    def _target_revision(entity_type: str, entity_id: object, user_id: int, before_state: dict) -> str:
+        payload = {
+            "entity_type": entity_type,
+            "entity_id": str(entity_id),
+            "owner_user_id": int(user_id),
+            "before_state": to_json_safe(before_state),
+        }
+        canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"), default=str)
+        return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+    @staticmethod
+    def _reseal_hydrated_action_envelope(proposal_input: ValidatedProposalInput) -> ValidatedProposalInput:
+        envelope = dict(proposal_input.action_envelope or {})
+        if not envelope:
+            return proposal_input
+        envelope["proposal_change"] = to_json_safe(proposal_input.change.dict())
+        envelope["proposal_target"] = to_json_safe(proposal_input.target.dict())
+        envelope["proposal_status"] = "sealed"
+        envelope.pop("envelope_hash", None)
+        canonical = json.dumps(envelope, sort_keys=True, separators=(",", ":"), default=str)
+        envelope["envelope_hash"] = hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+        return proposal_input.copy(update={"action_envelope": envelope})
 
     @staticmethod
     def _snapshot_changed_fields(row: object, changed_fields: dict) -> dict:

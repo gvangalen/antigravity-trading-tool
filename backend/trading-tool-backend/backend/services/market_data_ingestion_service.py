@@ -93,7 +93,7 @@ class MarketDataIngestionService:
         continue_on_error: bool = True,
     ) -> dict[str, Any]:
         return await self.ingest_latest_snapshots(
-            ["BTC", "SOL", "MSTR", "COIN", "SPY", "QQQ", "GLD", "VIX"],
+            ["BTC", "SOL", "AAPL", "MSFT", "MSTR", "COIN", "SPY", "QQQ", "GLD", "VIX"],
             commit=commit,
             continue_on_error=continue_on_error,
         )

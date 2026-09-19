@@ -338,6 +338,7 @@ if ! printf '%s\n' "$DEPLOY_GIT_TOKEN" | timeout --foreground "${REMOTE_DEPLOY_C
   run_migration backend/scripts/migrations/2026_09_04_finn_v2_runtime_contract_foundation.py
   run_migration backend/scripts/migrations/2026_09_07_finn_v2_action_contract_completion.py
   run_migration backend/scripts/migrations/2026_09_08_finn_v2_action_adapter_schema.py
+  run_migration backend/scripts/migrations/2026_09_19_equity_quote_provider_routing.py
   run_migration backend/scripts/migrations/2026_09_10_finn_v2_setup_tags_text_array.py
   run_migration backend/scripts/migrations/2026_09_12_finn_v2_certification_source_schema.py
   # The Strategy domain reads and writes these columns on every API path.

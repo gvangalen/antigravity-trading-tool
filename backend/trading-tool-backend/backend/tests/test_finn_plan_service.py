@@ -791,26 +791,26 @@ def test_resolve_first_dashboard_briefing_uses_cached_ai_for_matching_version():
     assert display["generation_status"] == "ready"
 
 
-def test_resolve_first_dashboard_briefing_uses_fallback_when_context_version_changed():
+def test_resolve_first_dashboard_briefing_keeps_last_good_copy_when_context_version_changed():
     service = _service()
     payload = _first_dashboard_payload("ctx-v2")
     stored = {
         "status": "ready",
         "context_version": "ctx-v1",
         "result": {
-            "headline": "Stale result",
-            "observation": "Old observation",
-            "reasoning": "Old reasoning",
-            "next_question": "Old question",
-            "suggested_action": "Old action",
+            "assessment": "Forceer nog geen BTC-entry.",
+            "reasoning": "De vorige bewezen beoordeling blijft zichtbaar terwijl FINN bijwerkt.",
+            "recommended_action": "Wacht op de vernieuwde beoordeling.",
+            "data_limitation": "De nieuwste snapshot wordt nog verwerkt.",
             "evidence_refs": ["asset.symbol"],
         },
     }
 
     display = service._resolve_first_dashboard_briefing_display(payload, stored)
 
-    assert display["response_source"] == "deterministic_fallback"
-    assert display["briefing"]["assessment"] == payload["fallback_result"]["assessment"]
+    assert display["response_source"] == "stale_while_revalidate"
+    assert display["generation_status"] == "stale_while_revalidate"
+    assert display["briefing"]["assessment"] == "Forceer nog geen BTC-entry."
 
 
 def test_resolve_first_dashboard_briefing_uses_current_fallback_while_generating():

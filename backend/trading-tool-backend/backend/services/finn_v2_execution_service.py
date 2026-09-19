@@ -138,6 +138,7 @@ class FinnV2ExecutionService:
         )
         try:
             prior_entity = await self._owned_entity_reference(proposal=proposal)
+            self._assert_target_revision(proposal=proposal, current_entity=prior_entity)
             result_payload = await adapter(user_id, proposal.payload_json)
             # Adapters expose existing domain-service results. Normalize them at
             # the execution boundary so values such as Decimal are safe for the
@@ -281,13 +282,49 @@ class FinnV2ExecutionService:
         if entity_id is None:
             return {}
         queries = {
-            "setup": "SELECT id, name, NULL::text AS parent_entity_type, NULL::text AS parent_entity_id FROM setups WHERE id = :entity_id AND user_id = :user_id",
-            "strategy": "SELECT id, name, 'setup' AS parent_entity_type, setup_id::text AS parent_entity_id FROM strategies WHERE id = :entity_id AND user_id = :user_id",
-            "bot": "SELECT id, name, 'strategy' AS parent_entity_type, strategy_id::text AS parent_entity_id FROM bot_configs WHERE id = :entity_id AND user_id = :user_id",
+            "setup": "SELECT *, NULL::text AS parent_entity_type, NULL::text AS parent_entity_id FROM setups WHERE id = :entity_id AND user_id = :user_id",
+            "strategy": "SELECT *, 'setup' AS parent_entity_type, setup_id::text AS parent_entity_id FROM strategies WHERE id = :entity_id AND user_id = :user_id",
+            "bot": "SELECT *, 'strategy' AS parent_entity_type, strategy_id::text AS parent_entity_id FROM bot_configs WHERE id = :entity_id AND user_id = :user_id",
         }
         result = await self.session.execute(text(queries[entity_type]), {"entity_id": int(entity_id), "user_id": proposal.user_id})
         row = result.mappings().one_or_none()
         return dict(row) if row else {}
+
+    @staticmethod
+    def _assert_target_revision(*, proposal, current_entity: dict) -> None:
+        change = dict((proposal.payload_json or {}).get("change") or {})
+        expected = str(change.get("target_revision") or "")
+        before_state = dict(change.get("before_state") or {})
+        if not expected or not before_state:
+            return
+        entity_type = {
+            "update_setup": "setup", "update_strategy": "strategy", "update_bot": "bot",
+            "deactivate_bot": "bot",
+        }.get(proposal.operation_type)
+        if not entity_type or not current_entity:
+            raise ValueError("proposal_target_changed")
+        nested = current_entity.get("data")
+        if isinstance(nested, str):
+            try:
+                nested = json.loads(nested)
+            except (TypeError, ValueError):
+                nested = {}
+        nested = dict(nested or {}) if isinstance(nested, dict) else {}
+        actual_before = {
+            field: current_entity[field] if field in current_entity else nested.get(field)
+            for field in before_state
+        }
+        entity_id = change.get(f"{entity_type}_id") or current_entity.get("id")
+        payload = {
+            "entity_type": entity_type,
+            "entity_id": str(entity_id),
+            "owner_user_id": int(proposal.user_id),
+            "before_state": to_json_safe(actual_before),
+        }
+        canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"), default=str)
+        actual = hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+        if actual != expected:
+            raise ValueError("proposal_target_changed")
 
     @staticmethod
     def _action_result(*, proposal, execution, result: dict, prior_entity: dict | None = None) -> dict:

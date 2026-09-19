@@ -5,6 +5,7 @@ from types import SimpleNamespace
 
 from backend.services.finn_v2_json_safety import to_json_safe
 from backend.services.finn_v2_execution_service import FinnV2ExecutionService
+from backend.services.finn_v2_proposal_service import FinnV2ProposalService
 
 
 class _Session:
@@ -16,6 +17,35 @@ class _Session:
 
     async def commit(self):
         self.commits += 1
+
+
+def test_execution_rejects_update_when_persisted_before_state_changed_after_proposal():
+    before_state = {"timeframe": "1W"}
+    revision = FinnV2ProposalService._target_revision("setup", 9, 7, before_state)
+    proposal = SimpleNamespace(
+        operation_type="update_setup",
+        user_id=7,
+        payload_json={"change": {
+            "setup_id": 9,
+            "changed_fields": {"timeframe": "1D"},
+            "before_state": before_state,
+            "target_revision": revision,
+        }},
+    )
+
+    FinnV2ExecutionService._assert_target_revision(
+        proposal=proposal,
+        current_entity={"id": 9, "timeframe": "1W"},
+    )
+    try:
+        FinnV2ExecutionService._assert_target_revision(
+            proposal=proposal,
+            current_entity={"id": 9, "timeframe": "4H"},
+        )
+    except ValueError as exc:
+        assert str(exc) == "proposal_target_changed"
+    else:
+        raise AssertionError("a stale update proposal must not execute")
 
 
 def test_execution_service_records_postcondition_hash_on_success():

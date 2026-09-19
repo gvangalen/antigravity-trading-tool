@@ -123,6 +123,10 @@ def test_update_setup_proposal_uses_existing_domain_fields_and_persists_before_s
     hydrated = asyncio.run(service._hydrate_domain_change(user_id=7, proposal_input=proposal_input))
 
     assert hydrated.change.before == {"timeframe": "1d", "name": "Existing setup"}
+    assert hydrated.change.before_state == {"timeframe": "1d", "name": "Existing setup"}
+    assert hydrated.change.requested_state == {"timeframe": "4h", "name": "ETH swing"}
+    assert len(hydrated.change.target_revision) == 64
+    assert hydrated.change.snapshot_timestamp.tzinfo is not None
 
 
 def test_update_strategy_proposal_rejects_fields_outside_existing_strategy_service_contract():

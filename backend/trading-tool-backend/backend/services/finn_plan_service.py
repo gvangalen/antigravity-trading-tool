@@ -13772,11 +13772,22 @@ class FinnPlanService:
                     "generation_status": "fallback",
                     "trace": self._first_dashboard_trace_payload(stored_briefing),
                 }
-        # A completed briefing is bound to the input context that produced
-        # it. A different context version must render the current
-        # deterministic fallback, rather than exposing a loading state that
-        # could be mistaken for a continuation of stale AI output.
+        # Keep the last proven coaching result visible while a newer snapshot
+        # is being enriched. Context versions remain explicit, so stale copy
+        # can never overwrite the eventual newer terminal result.
         if stored_version and stored_version != current_version:
+            stale_result = self._validate_first_dashboard_ai_result(
+                stored_briefing.get("result") or {},
+                allowed_refs=payload.get("allowed_evidence_refs") or [],
+                locale=str((payload.get("input_snapshot") or {}).get("locale") or "nl"),
+            )
+            if stale_result:
+                return {
+                    "briefing": stale_result,
+                    "response_source": "stale_while_revalidate",
+                    "generation_status": "stale_while_revalidate",
+                    "trace": self._first_dashboard_trace_payload(stored_briefing),
+                }
             return {
                 "briefing": payload.get("fallback_result") or {},
                 "response_source": "deterministic_fallback",

@@ -34,6 +34,7 @@ import { FINN_ASSETS } from "@/lib/finnCommandSearch";
 import { getWorkspaceSnapshot, subscribeWorkspaceSnapshot } from "@/lib/workspaceSnapshotStore";
 import { getActiveSetupId } from "@/lib/setup/activeSetup";
 import { indicatorDisplayName } from "@/lib/indicators/configuredIndicatorRows.mjs";
+import { formatExecutionMode } from "@/lib/contractValueFormatter.mjs";
 
 const INDICATOR_MODAL_OPEN_EVENT = "finn-indicator-config:open";
 const INDICATOR_MODAL_COMPLETED_EVENT = "finn-indicator-config:completed";
@@ -1058,8 +1059,9 @@ function AIAssistantContent({
   useEffect(() => {
     insightCacheKeyRef.current = `finn-insight:${currentConversationStorageKey}`;
     const missionControlSymbol = normalizeScopedAssetSymbol(globalSymbol || context.symbol) || "UNKNOWN";
-    missionControlCacheKeyRef.current = `finn-mission-control:${currentConversationStorageKey}:${pathname || "/assistant"}:${missionControlSymbol}`;
-  }, [currentConversationStorageKey, pathname, globalSymbol, context.symbol]);
+    const userScope = String(user?.id || "anonymous");
+    missionControlCacheKeyRef.current = `finn-mission-control:${userScope}:${missionControlSymbol}`;
+  }, [currentConversationStorageKey, user?.id, globalSymbol, context.symbol]);
 
   const getLatestAssistantState = () => {
     for (let i = messages.length - 1; i >= 0; i -= 1) {
@@ -4025,7 +4027,7 @@ function AIAssistantContent({
   useEffect(() => {
     if (!isOpen) return;
     const generationStatus = String(missionControl?.first_dashboard_context?.generation_status || "").toLowerCase();
-    if (!["pending", "queued", "generating", "retry_scheduled"].includes(generationStatus)) return;
+    if (!["pending", "queued", "generating", "retry_scheduled", "stale_while_revalidate"].includes(generationStatus)) return;
     const timer = window.setInterval(() => {
       void loadMissionControl();
     }, 4000);
@@ -4240,7 +4242,7 @@ function AIAssistantContent({
   async function loadMissionControl() {
     const requestKey =
       missionControlCacheKeyRef.current ||
-      `finn-mission-control:${currentConversationStorageKey}:${pathname || "/assistant"}:${String(globalSymbol || context.symbol || "UNKNOWN").toUpperCase()}`;
+      `finn-mission-control:${String(user?.id || "anonymous")}:${String(globalSymbol || context.symbol || "UNKNOWN").toUpperCase()}`;
     if (missionControlRequestRef.current && missionControlRequestKeyRef.current === requestKey) {
       return missionControlRequestRef.current;
     }
@@ -5243,7 +5245,7 @@ function AIAssistantContent({
       return Array.isArray(value) ? value.join(", ") : String(value);
     };
     const rows = isStrategy
-      ? [["Uitvoering", [supplied.execution_mode, supplied.base_amount ? `€${supplied.base_amount}` : null].filter(Boolean).join(" · ")], ["Entry", supplied.entry], ["Stop-loss", supplied.stop_loss], ["Targets", supplied.targets], ["Risico", supplied.risk_profile]]
+      ? [["Uitvoering", [formatExecutionMode(supplied.execution_mode, locale), supplied.base_amount ? `€${supplied.base_amount}` : null].filter(Boolean).join(" · ")], ["Entry", supplied.entry], ["Stop-loss", supplied.stop_loss], ["Targets", supplied.targets], ["Risico", supplied.risk_profile]]
       : isBot
         ? [["Budget", supplied.budget_total_eur ? `€${supplied.budget_total_eur}` : null]]
         : isIndicator
@@ -6000,7 +6002,7 @@ function AIAssistantContent({
   const activeBriefingSymbol = String(context?.symbol || globalSymbol || "BTC").trim().toUpperCase();
   const firstDashboardContext = missionControl?.first_dashboard_context || null;
   const firstDashboardGenerationStatus = String(firstDashboardContext?.generation_status || "").toLowerCase();
-  const firstDashboardIsGenerating = ["pending", "queued", "generating", "retry_scheduled"].includes(
+  const firstDashboardIsGenerating = ["pending", "queued", "generating", "retry_scheduled", "stale_while_revalidate"].includes(
     firstDashboardGenerationStatus,
   );
   const firstDashboardCoaching = firstDashboardContext?.coaching_briefing || null;
@@ -7297,7 +7299,7 @@ export function FinnPanel(props) {
 
 function UniversalActionCard({ card, onCancel, onSuccess, handleEditDraft }) {
   const { openConfirm, showSnackbar } = useModal();
-  const { t } = useTranslation();
+  const { t, locale } = useTranslation();
   const [status, setStatus] = useState("pending"); // pending, executing, success, error, canceled
   const [errorMessage, setErrorMessage] = useState("");
   const assistantCopy = t?.assistant || {};
@@ -7540,7 +7542,7 @@ function UniversalActionCard({ card, onCancel, onSuccess, handleEditDraft }) {
               ) : (
                 <div className="flex flex-col col-span-2 border-t border-slate-100 dark:border-slate-800 pt-2">
                   <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">{uiText.dcaMultiplierMode}</span>
-                  <span className="text-xs text-foreground dark:text-slate-200 uppercase font-mono">{payload.execution_mode || "fixed"}</span>
+                  <span className="text-xs text-foreground dark:text-slate-200">{formatExecutionMode(payload.execution_mode || "fixed", locale)}</span>
                 </div>
               )}
             </div>
@@ -7855,7 +7857,7 @@ function ActionCard({ action, onAction }) {
 
 function DraftCard({ draft, onCancel, onSuccess, handleEditDraft }) {
   const { openConfirm, showSnackbar } = useModal();
-  const { t } = useTranslation();
+  const { t, locale } = useTranslation();
   const at = createAssistantTranslator(t);
   const uiText = buildAssistantUiText(at);
   const [approving, setApproving] = useState(false);
@@ -8030,7 +8032,7 @@ function DraftCard({ draft, onCancel, onSuccess, handleEditDraft }) {
               ) : (
                 <div className="flex flex-col col-span-2 border-t border-slate-50 dark:border-slate-800 pt-2">
                   <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">{uiText.dcaMultiplierMode}</span>
-                  <span className="text-xs text-foreground dark:text-slate-200 uppercase font-mono">{payload.execution_mode || "fixed"}</span>
+                  <span className="text-xs text-foreground dark:text-slate-200">{formatExecutionMode(payload.execution_mode || "fixed", locale)}</span>
                 </div>
               )}
             </div>
@@ -8096,7 +8098,7 @@ function DraftCard({ draft, onCancel, onSuccess, handleEditDraft }) {
 }
 
 function ConceptCard({ state, onCancel, onEdit, onFinalize, onUpdateSlots }) {
-  const { t } = useTranslation();
+  const { t, locale } = useTranslation();
   const at = createAssistantTranslator(t);
   const uiText = buildAssistantUiText(at);
   const { current_flow, slots } = state;
@@ -8238,7 +8240,7 @@ function ConceptCard({ state, onCancel, onEdit, onFinalize, onUpdateSlots }) {
               ) : (
                 <div className="flex flex-col col-span-2 border-t border-slate-50 dark:border-slate-800 pt-2">
                   <span className="text-[8px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500 mb-0.5">{uiText.dcaMultiplierMode}</span>
-                    <span className="text-xs text-foreground dark:text-slate-200 uppercase font-mono">{slots?.execution_mode || <span className="text-slate-400 italic font-normal">{uiText.optional}</span>}</span>
+                    <span className="text-xs text-foreground dark:text-slate-200">{slots?.execution_mode ? formatExecutionMode(slots.execution_mode, locale) : <span className="text-slate-400 italic font-normal">{uiText.optional}</span>}</span>
                 </div>
               )}
             </div>

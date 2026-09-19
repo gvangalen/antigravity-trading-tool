@@ -204,6 +204,89 @@ def test_action_result_finalizes_created_entity_lineage_identity():
     assert completed["lineage"]["setup"]["entity_id"] == 41
 
 
+def test_successful_action_result_becomes_revisioned_active_conversation_target():
+    state = seal_resolved_action_envelope(
+        _selected_strategy_state(),
+        proposal_target={"target_type": "strategy", "target_id": "52", "asset": "AAPL"},
+        proposal_change={"strategy_id": 52, "changed_fields": {"base_amount": 150}},
+    )
+    state["contract_revision"] = 7
+
+    completed = record_action_result(
+        state,
+        action_result={
+            "operation_id": "update_strategy",
+            "entity_type": "strategy",
+            "entity_id": 52,
+            "canonical_name": "Apple Fixed",
+            "owner_user_id": 7,
+            "result_status": "succeeded",
+            "canonical_entity": {
+                "id": 52, "name": "Apple Fixed", "symbol": "AAPL",
+                "timeframe": "1D", "setup_id": 41,
+            },
+        },
+    )
+
+    assert completed["action_result"]["revision"] == 8
+    assert completed["canonical_entity_target"] == {
+        "entity_type": "strategy",
+        "entity_id": 52,
+        "display_name": "Apple Fixed",
+        "owner_id": 7,
+        "asset_symbol": "AAPL",
+        "relation": {"setup_id": 41, "timeframe": "1D"},
+        "source": "verified_action_result",
+        "resolution_status": "resolved",
+        "revision": 8,
+    }
+    assert completed["lineage_state"]["active_conversation_target"] == completed["canonical_entity_target"]
+
+
+def test_successful_delete_terminalizes_matching_active_conversation_target():
+    state = _selected_strategy_state()
+    state["canonical_entity_target"] = {
+        "entity_type": "strategy", "entity_id": 52, "display_name": "Apple Fixed",
+    }
+
+    completed = record_action_result(
+        state,
+        action_result={
+            "operation_id": "delete_strategy", "entity_type": "strategy",
+            "entity_id": 52, "owner_user_id": 7, "result_status": "succeeded",
+        },
+    )
+
+    assert completed["canonical_entity_target"] == {}
+    assert completed["lineage_state"]["active_conversation_target"] == {}
+
+
+def test_action_result_normalizes_database_types_before_jsonb_persistence():
+    state = _selected_strategy_state()
+
+    completed = record_action_result(
+        state,
+        action_result={
+            "operation_id": "update_strategy",
+            "entity_type": "strategy",
+            "entity_id": 52,
+            "canonical_name": "Apple Fixed",
+            "owner_user_id": 7,
+            "result_status": "succeeded",
+            "canonical_entity": {
+                "id": 52,
+                "name": "Apple Fixed",
+                "base_amount": Decimal("150.00"),
+                "updated_at": datetime(2026, 9, 19, 20, 46, tzinfo=timezone.utc),
+            },
+        },
+    )
+
+    assert completed["action_result"]["canonical_entity"]["base_amount"] == "150.00"
+    assert completed["action_result"]["canonical_entity"]["updated_at"] == "2026-09-19 20:46:00+00:00"
+    json.dumps(completed)
+
+
 def test_resolved_action_envelope_normalizes_nested_decimal_values_for_jsonb():
     state = new_runtime_contract_state(run=_run(), contract_id="contract-decimal")
     state = record_initial_intent(state, operation_id="update_strategy", requested_mode="CREATE_PROPOSAL")

@@ -770,7 +770,13 @@ def record_proposal_lifecycle(
 def record_action_result(state: Dict[str, Any], *, action_result: Dict[str, Any]) -> Dict[str, Any]:
     """Persist the canonical result of a confirmed action on its run contract."""
     state = dict(state)
-    state["action_result"] = dict(action_result)
+    # Adapter results can contain native PostgreSQL values such as Decimal and
+    # datetime. Normalize once at the runtime-contract boundary so every
+    # projection, lineage reference, and JSONB revision uses the same safe
+    # representation.
+    action_result = _json_safe(dict(action_result))
+    action_result.setdefault("revision", int(state.get("contract_revision") or 0) + 1)
+    state["action_result"] = action_result
     envelope = dict(state.get("resolved_action_envelope") or {})
     if envelope:
         envelope["postcondition"] = dict(action_result)
@@ -798,6 +804,49 @@ def record_action_result(state: Dict[str, Any], *, action_result: Dict[str, Any]
             json.dumps(payload, sort_keys=True, separators=(",", ":"), default=str).encode("utf-8")
         ).hexdigest()
         state["resolved_action_envelope"] = envelope
+    # The postcondition, not selector context or frontend state, owns the next
+    # demonstrative reference in this conversation. Failed/cancelled actions
+    # never reach this transition. Deletes explicitly terminalize the target.
+    if action_result.get("result_status") == "succeeded":
+        entity_type = str(action_result.get("entity_type") or "").strip()
+        operation_id = str(action_result.get("operation_id") or "").strip()
+        canonical_entity = dict(action_result.get("canonical_entity") or {})
+        entity_id = action_result.get("entity_id") or canonical_entity.get("id")
+        current_target = dict(state.get("canonical_entity_target") or {})
+        if operation_id.startswith("delete_"):
+            if (
+                current_target.get("entity_type") == entity_type
+                and str(current_target.get("entity_id") or "") == str(entity_id or "")
+            ):
+                state["canonical_entity_target"] = {}
+        elif entity_type in {"setup", "strategy", "bot"} and entity_id is not None:
+            state["canonical_entity_target"] = {
+                "entity_type": entity_type,
+                "entity_id": entity_id,
+                "display_name": action_result.get("canonical_name") or canonical_entity.get("name"),
+                "owner_id": action_result.get("owner_user_id") or (state.get("identity") or {}).get("user_id"),
+                "asset_symbol": canonical_entity.get("symbol"),
+                "relation": {
+                    key: value
+                    for key, value in {
+                        "setup_id": canonical_entity.get("setup_id"),
+                        "strategy_id": canonical_entity.get("strategy_id"),
+                        "bot_id": canonical_entity.get("bot_id"),
+                        "parent_entity_type": action_result.get("parent_entity_type"),
+                        "parent_entity_id": action_result.get("parent_entity_id"),
+                        "timeframe": canonical_entity.get("timeframe"),
+                    }.items()
+                    if value is not None
+                },
+                "source": "verified_action_result",
+                "resolution_status": "resolved",
+                "revision": action_result["revision"],
+            }
+        state["lineage_state"] = {
+            **dict(state.get("lineage_state") or {}),
+            "active_conversation_target": dict(state.get("canonical_entity_target") or {}),
+            "last_action_result": action_result,
+        }
     state.setdefault("transition_log", []).append({"type": "action_result", "operation_id": action_result.get("operation_id")})
     return state
 
