@@ -6003,6 +6003,7 @@ function AIAssistantContent({
   const firstDashboardIsGenerating = ["pending", "queued", "generating", "retry_scheduled"].includes(
     firstDashboardGenerationStatus,
   );
+  const firstDashboardCoaching = firstDashboardContext?.coaching_briefing || null;
   const firstDashboardBriefingText = String(firstDashboardContext?.briefing_text || "").trim();
   const stableBriefingMatchesAsset = !isAssetAnalysisPage
     || !stableBriefingText
@@ -6046,17 +6047,21 @@ function AIAssistantContent({
     "";
   const personalWorkspaceSummary = String(missionControl?.finn_briefing?.summary || "").trim();
   const defaultWorkspaceActionHint = workspaceBriefingLines[3] || "";
-  const firstDashboardHeadline = (!firstDashboardIsGenerating && !String(locale || "").toLowerCase().startsWith("nl") && firstDashboardContext?.headline)
-    || (String(locale || "").toLowerCase().startsWith("nl") && defaultWorkspaceHeadline)
+  const firstDashboardHeadline = firstDashboardCoaching?.assessment
+    || (!firstDashboardIsGenerating && firstDashboardContext?.headline)
     || at("uiText.workspaceFirstDashboardHeadline", uiText.workspaceFirstDashboardHeadline, {
       symbol: activeBriefingSymbol,
     });
-  const firstDashboardSupport = (!firstDashboardIsGenerating && !String(locale || "").toLowerCase().startsWith("nl") && firstDashboardContext?.support)
-    || (String(locale || "").toLowerCase().startsWith("nl") && defaultWorkspaceSupport)
+  const firstDashboardSupport = [
+    firstDashboardCoaching?.reasoning,
+    firstDashboardCoaching?.data_limitation,
+  ].filter(Boolean).join(" ")
+    || (!firstDashboardIsGenerating && firstDashboardContext?.support)
     || at("uiText.workspaceFirstDashboardSupport", uiText.workspaceFirstDashboardSupport, {
       symbol: activeBriefingSymbol,
     });
-  const firstDashboardHint = (!firstDashboardIsGenerating && firstDashboardContext?.action_hint)
+  const firstDashboardHint = firstDashboardCoaching?.recommended_action
+    || (!firstDashboardIsGenerating && firstDashboardContext?.action_hint)
     || at("uiText.workspaceFirstDashboardHint", uiText.workspaceFirstDashboardHint, {
       symbol: activeBriefingSymbol,
     });
@@ -6067,13 +6072,13 @@ function AIAssistantContent({
         symbol: activeBriefingSymbol,
       })
     : defaultWorkspaceHeadline;
-  const workspaceSupport = personalWorkspaceSummary || (firstDashboardContext
+  const workspaceSupport = firstDashboardContext
     ? firstDashboardSupport
     : workspaceIsStillBuilding
     ? at("uiText.workspaceBuildingSupport", uiText.workspaceBuildingSupport, {
         symbol: activeBriefingSymbol,
       })
-    : defaultWorkspaceSupport);
+    : personalWorkspaceSummary || defaultWorkspaceSupport;
   const workspaceActionHint = firstDashboardContext
     ? firstDashboardHint
     : workspaceIsStillBuilding

@@ -12878,6 +12878,7 @@ class FinnPlanService:
         bot = dict(source.get("bot") or {})
         latest = dict(source.get("latest_analysis") or {})
         return {
+            "locale": source.get("locale") or "nl",
             "first_name": source.get("name") or None,
             "trader_profile": list(profile.get("trader_types") or []),
             "experience_level": (profile.get("experience_levels") or [None])[0],
@@ -12902,47 +12903,23 @@ class FinnPlanService:
     def _mission_personal_briefing(cls, payload: Optional[Dict[str, Any]]) -> Dict[str, Any]:
         snapshot = cls._mission_personal_snapshot(payload)
         name = snapshot.get("first_name")
+        language = str(snapshot.get("locale") or "nl").lower().split("-", 1)[0]
+        greeting = {
+            "nl": "Goedemorgen",
+            "en": "Good morning",
+            "de": "Guten Morgen",
+        }.get(language, "Goedemorgen")
         fallback = dict((payload or {}).get("fallback_result") or {})
-        facts = []
-        assets = snapshot.get("selected_assets") or []
-        setup = snapshot.get("active_setup") or {}
-        strategy = snapshot.get("active_strategy") or {}
-        bot = snapshot.get("paper_bot") or {}
-        if assets:
-            facts.append(f"Je actieve asset is {assets[0]}.")
-        if setup.get("name"):
-            facts.append(f"Je werkt met setup ‘{setup['name']}’.")
-        if strategy.get("name"):
-            facts.append(f"De gekoppelde strategie is ‘{strategy['name']}’.")
-        if bot.get("name"):
-            bot_fact = f"Paper-bot ‘{bot['name']}’ staat {'actief' if bot.get('is_active') else 'gepauzeerd'}"
-            if bot.get("budget_total_eur") is not None:
-                bot_fact += f" met een budget van €{float(bot['budget_total_eur']):,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
-            facts.append(bot_fact + ".")
-        indicator_count = sum(len(snapshot.get(key) or []) for key in ("market_indicators", "macro_indicators", "technical_indicators"))
-        indicator_names = [
-            *(snapshot.get("technical_indicators") or []),
-            *(snapshot.get("macro_indicators") or []),
-            *(snapshot.get("market_indicators") or []),
-        ]
-        if indicator_names:
-            facts.append(
-                f"Je volgt onder meer {', '.join(indicator_display_name(item) for item in indicator_names[:4])}."
-            )
-        latest = snapshot.get("latest_analysis") or {}
-        if snapshot.get("latest_analysis_available"):
-            if latest.get("summary"):
-                facts.append(str(latest["summary"]).strip())
-        elif indicator_count:
-            facts.append(f"Je analyseprofiel staat klaar met {indicator_count} indicatoren; er is nog geen recente marktanalyse.")
-        summary = " ".join(facts) or " ".join(
-            str(fallback.get(key) or "").strip() for key in ("headline", "observation") if fallback.get(key)
+        summary = " ".join(
+            str(fallback.get(key) or "").strip()
+            for key in ("assessment", "reasoning", "data_limitation")
+            if fallback.get(key)
         )
         return {
-            "greeting": f"Goedemorgen {name}" if name else "Goedemorgen",
+            "greeting": f"{greeting} {name}" if name else greeting,
             "summary": summary,
-            "suggested_actions": [fallback.get("suggested_action")]
-            if fallback.get("suggested_action") else [],
+            "suggested_actions": [fallback.get("recommended_action")]
+            if fallback.get("recommended_action") else [],
         }
 
     def _first_dashboard_error_context(
@@ -12959,25 +12936,26 @@ class FinnPlanService:
                 asset = candidate
                 break
         briefing = {
-            "headline": "FINN bekijkt je plan",
-            "observation": f"De eerste dashboardbeoordeling voor {asset} is nog niet afgerond. Je kunt ondertussen gewoon verder in Mission Control.",
+            "assessment": f"Wacht nog even met een entry voor {asset}.",
             "reasoning": "Je opgeslagen onboardingcontext is intact. FINN probeert de persoonlijke briefing veilig opnieuw af te ronden.",
-            "next_question": "Wil je ondertussen verdergaan in Mission Control?",
-            "suggested_action": "Verder in Mission Control",
+            "recommended_action": "Gebruik Mission Control ondertussen gewoon verder.",
+            "data_limitation": "De persoonlijke marktbeoordeling is tijdelijk nog niet beschikbaar.",
         }
+        lines = [briefing[key] for key in ("assessment", "reasoning", "recommended_action", "data_limitation")]
         return {
             "is_first_dashboard": True,
             "asset": asset,
-            "briefing_lines": [briefing["headline"], briefing["observation"], briefing["reasoning"], briefing["next_question"]],
-            "briefing_text": "\n".join([briefing["headline"], briefing["observation"], briefing["reasoning"], briefing["next_question"]]),
-            "headline": briefing["headline"],
-            "observation": briefing["observation"],
+            "coaching_briefing": briefing,
+            "briefing_lines": lines,
+            "briefing_text": "\n".join(lines),
+            "headline": briefing["assessment"],
+            "observation": briefing["assessment"],
             "reasoning": briefing["reasoning"],
             "support": briefing["reasoning"],
-            "action_hint": briefing["suggested_action"],
+            "action_hint": briefing["recommended_action"],
             "next_action": {
-                "label": briefing["suggested_action"],
-                "question": briefing["next_question"],
+                "label": briefing["recommended_action"],
+                "question": briefing["recommended_action"],
             },
             "review_state": "not_reviewed_yet",
             "review_label": "Nog niet beoordeeld",
@@ -13289,6 +13267,7 @@ class FinnPlanService:
         validated = self._validate_first_dashboard_ai_result(
             ai_result,
             allowed_refs=payload.get("allowed_evidence_refs") or [],
+            locale=str((payload.get("input_snapshot") or {}).get("locale") or "nl"),
         )
         if not validated:
             return await self._finalize_first_dashboard_briefing_fallback(
@@ -13570,59 +13549,10 @@ class FinnPlanService:
             has_scores=has_scores,
             blockers=blockers,
         )
-        style_bits = []
-        if profile.get("trader_types"):
-            style_bits.append(profile["trader_types"][0].replace("_", " "))
         timeframes = list(dict.fromkeys([
             *[str(item) for item in profile.get("primary_timeframes") or [] if item],
             *([str(setup.get("timeframe"))] if setup.get("timeframe") else []),
         ]))
-        indicator_bits = [
-            *indicators.get("technical", [])[:3],
-            *indicators.get("macro", [])[:2],
-            *indicators.get("market", [])[:2],
-        ]
-        indicator_text = ", ".join(indicator_bits[:4]) if indicator_bits else None
-        timeframe_text = ", ".join(timeframes[:3])
-        if locale == "en":
-            headline_bits = [f"Your {active_asset} plan is ready"]
-            if style_bits:
-                headline_bits.append(f"for your {style_bits[0]} profile")
-            if timeframe_text:
-                headline_bits.append(f"on {timeframe_text}")
-        elif locale == "de":
-            headline_bits = [f"Dein {active_asset}-Plan ist bereit"]
-            if style_bits:
-                headline_bits.append(f"fur dein {style_bits[0]}-Profil")
-            if timeframe_text:
-                headline_bits.append(f"auf {timeframe_text}")
-        else:
-            headline_bits = [f"Je {active_asset}-plan is klaar"]
-            if style_bits:
-                headline_bits.append(f"voor je {style_bits[0]}-profiel")
-            if timeframe_text:
-                headline_bits.append(f"op {timeframe_text}")
-        fallback_headline = " ".join(headline_bits) + "."
-
-        fallback_reasoning_parts = []
-        labels = {
-            "nl": {"indicators": "Ingestelde indicatoren", "setup": "Setup", "strategy": "Strategie", "bot": "Bot", "linked": "is gekoppeld", "live_on": "live trading staat aan", "live_off": "live trading staat uit", "empty": "Je opgeslagen plancontext staat klaar voor een eerste beoordeling."},
-            "en": {"indicators": "Configured indicators", "setup": "Setup", "strategy": "Strategy", "bot": "Bot", "linked": "is linked", "live_on": "live trading is enabled", "live_off": "live trading is disabled", "empty": "Your stored plan context is ready for a first review."},
-            "de": {"indicators": "Konfigurierte Indikatoren", "setup": "Setup", "strategy": "Strategie", "bot": "Bot", "linked": "ist verknupft", "live_on": "Live-Trading ist aktiviert", "live_off": "Live-Trading ist deaktiviert", "empty": "Dein gespeicherter Plankontext ist fur eine erste Prufung bereit."},
-        }[locale]
-        if indicator_text:
-            fallback_reasoning_parts.append(f"{labels['indicators']}: {indicator_text}.")
-        if setup.get("name"):
-            fallback_reasoning_parts.append(f"{labels['setup']}: {setup.get('name')}.")
-        if strategy.get("name"):
-            fallback_reasoning_parts.append(f"{labels['strategy']}: {strategy.get('name')}.")
-        if linked_bot:
-            fallback_reasoning_parts.append(
-                f"{labels['bot']} {linked_bot.get('name') or labels['bot'].lower()} {labels['linked']}; "
-                f"{labels['live_on'] if linked_bot.get('is_live') else labels['live_off']}."
-            )
-        fallback_reasoning = " ".join(fallback_reasoning_parts[:3]) or labels["empty"]
-
         missing_fields = self._first_dashboard_missing_fields(
             profile=profile,
             setup=setup,
@@ -13660,11 +13590,16 @@ class FinnPlanService:
             "history.behavior",
         ]
         fallback_result = {
-            "headline": fallback_headline,
-            "observation": observation,
-            "reasoning": fallback_reasoning,
-            "next_question": next_action["question"],
-            "suggested_action": next_action["label"],
+            **self._first_dashboard_coaching_fallback(
+                locale=locale,
+                asset=active_asset,
+                observation=observation,
+                next_action=next_action,
+                market_snapshot=market_snapshot,
+                latest_analysis=latest_analysis,
+                blockers=blockers,
+                linked_bot=linked_bot,
+            ),
             "evidence_refs": self._first_dashboard_fallback_evidence_refs(
                 observation=observation,
                 indicators=indicators,
@@ -13673,6 +13608,7 @@ class FinnPlanService:
             ),
         }
         input_snapshot = {
+            "presentation_contract": "finn_today.coach_briefing.v1",
             "name": display_name,
             "locale": locale,
             "asset": active_asset,
@@ -13775,16 +13711,15 @@ class FinnPlanService:
                 "question": f"Review my {symbol} plan",
             },
             "fallback_result": {
-                "headline": f"Your {symbol} plan is ready.",
-                "observation": f"I am still preparing the first {symbol} dashboard review.",
-                "reasoning": "Stored onboarding data is available, but the first dashboard briefing is still being generated.",
-                "next_question": f"Would you like to review your {symbol} plan while FINN finishes the first briefing?",
-                "suggested_action": f"Review your {symbol} plan",
+                "assessment": f"Wacht nog even met een entry voor {symbol}.",
+                "reasoning": "FINN rondt je eerste persoonlijke beoordeling nog af.",
+                "recommended_action": "Gebruik Mission Control ondertussen gewoon verder.",
+                "data_limitation": "De eerste complete marktsnapshot is nog niet beschikbaar.",
                 "evidence_refs": ["asset.symbol"],
             },
-            "input_snapshot": {"asset": symbol},
-            "ai_prompt_context": {"asset": {"symbol": symbol}},
-            "context_version": f"pending:{symbol}",
+            "input_snapshot": {"asset": symbol, "presentation_contract": "finn_today.coach_briefing.v1"},
+            "ai_prompt_context": {"asset": {"symbol": symbol}, "locale": "nl"},
+            "context_version": f"coach-v1:pending:{symbol}",
             "allowed_evidence_refs": ["asset.symbol", "history.behavior"],
         }
 
@@ -13800,6 +13735,7 @@ class FinnPlanService:
         validated_result = self._validate_first_dashboard_ai_result(
             result or {},
             allowed_refs=payload.get("allowed_evidence_refs") or [],
+            locale=str((payload.get("input_snapshot") or {}).get("locale") or "nl"),
         ) if result else None
 
         if stored_version == current_version and stored_status == "ready" and validated_result:
@@ -13827,6 +13763,7 @@ class FinnPlanService:
             fallback = self._validate_first_dashboard_ai_result(
                 stored_briefing.get("result") or payload.get("fallback_result") or {},
                 allowed_refs=payload.get("allowed_evidence_refs") or [],
+                locale=str((payload.get("input_snapshot") or {}).get("locale") or "nl"),
             )
             if fallback:
                 return {
@@ -13866,11 +13803,15 @@ class FinnPlanService:
         display: Dict[str, Any],
     ) -> Dict[str, Any]:
         briefing = display.get("briefing") or {}
+        coaching_briefing = {
+            "assessment": briefing.get("assessment"),
+            "reasoning": briefing.get("reasoning"),
+            "recommended_action": briefing.get("recommended_action"),
+            "data_limitation": briefing.get("data_limitation"),
+        }
         briefing_lines = [
-            briefing.get("headline"),
-            briefing.get("observation"),
-            briefing.get("reasoning"),
-            briefing.get("next_question"),
+            coaching_briefing.get(key)
+            for key in ("assessment", "reasoning", "recommended_action", "data_limitation")
         ]
         return {
             "is_first_dashboard": True,
@@ -13885,19 +13826,20 @@ class FinnPlanService:
             "data_readiness": payload.get("data_readiness") or {},
             "market_snapshot": payload.get("market_snapshot") or {},
             "latest_analysis": payload.get("latest_analysis") or {"availability": "unknown"},
-            "observation": briefing.get("observation"),
+            "coaching_briefing": coaching_briefing,
+            "observation": briefing.get("assessment"),
             "reasoning": briefing.get("reasoning"),
             "next_action": {
-                "label": briefing.get("suggested_action"),
-                "question": briefing.get("next_question"),
+                "label": briefing.get("recommended_action"),
+                "question": briefing.get("recommended_action"),
             },
             "review_state": "not_reviewed_yet",
             "review_label": None,
             "briefing_lines": [line for line in briefing_lines if line],
             "briefing_text": "\n".join([line for line in briefing_lines if line]),
-            "headline": briefing.get("headline"),
-            "support": briefing.get("reasoning") or briefing.get("observation"),
-            "action_hint": briefing.get("suggested_action"),
+            "headline": briefing.get("assessment"),
+            "support": " ".join(filter(None, [briefing.get("reasoning"), briefing.get("data_limitation")])),
+            "action_hint": briefing.get("recommended_action"),
             "response_source": display.get("response_source"),
             "generation_status": display.get("generation_status"),
             "evidence_refs": briefing.get("evidence_refs") or [],
@@ -14234,21 +14176,25 @@ class FinnPlanService:
 
     def _first_dashboard_ai_system_role(self) -> str:
         return (
-            "You are FINN. Review one newly completed trading onboarding handoff. "
-            "Assess the stored profile, asset, indicators, setup, strategy, bot state, and market snapshot. "
-            "Return exactly one concrete observation, explain why it matters, and choose exactly one next question or action. "
+            "You are FINN, a concise personal trading coach. Review one grounded trading snapshot. "
+            "Turn the internal facts into one judgment, one reason, one practical next action, and one data limitation when relevant. "
+            "Never narrate database relationships or inventory the snapshot. Mention a name, indicator, timeframe, or budget only when it directly supports the advice. "
             "Do not invent market claims, behavior history, or rule changes. "
             "Use only the provided evidence references."
         )
 
     def _first_dashboard_ai_prompt(self, payload: Dict[str, Any]) -> str:
+        locale = str(((payload.get("ai_prompt_context") or {}).get("locale") or "nl")).lower().split("-", 1)[0]
+        required_language = {"nl": "Dutch", "en": "English", "de": "German"}.get(locale, "Dutch")
         prompt = {
             "task": {
                 "goal": "Generate the first FINN dashboard briefing after onboarding.",
+                "required_output_language": required_language,
                 "constraints": [
-                    "Write every user-visible string in the language specified by context.locale (nl=Dutch, en=English, de=German).",
-                    "Do not list every field back to the user.",
-                    "Choose one observation that reflects real evaluation of the stored context.",
+                    f"Write every user-visible string only in {required_language}; do not mix languages.",
+                    "Write like a personal trading coach, never like a database inspector.",
+                    "Lead with a decision or restraint, then explain why and state the next action.",
+                    "Do not list the active asset, linked setup, strategy, bot, budget, or indicators as an inventory.",
                     "Use market claims only when supported by supplied market data.",
                     "Say that analysis is missing only when latest_analysis.availability is absent; unknown is not evidence of absence.",
                     "Do not claim personal behavior patterns because no behavior history exists yet.",
@@ -14256,11 +14202,10 @@ class FinnPlanService:
                     "Return valid JSON only.",
                 ],
                 "output_contract": {
-                    "headline": "string",
-                    "observation": "string",
+                    "assessment": "string",
                     "reasoning": "string",
-                    "next_question": "string",
-                    "suggested_action": "string",
+                    "recommended_action": "string",
+                    "data_limitation": "string or empty string when no material limitation exists",
                     "evidence_refs": payload.get("allowed_evidence_refs") or [],
                 },
             },
@@ -14273,15 +14218,15 @@ class FinnPlanService:
         result: Dict[str, Any],
         *,
         allowed_refs: List[str],
+        locale: str = "nl",
     ) -> Optional[Dict[str, Any]]:
         if not isinstance(result, dict) or result.get("error"):
             return None
         required_fields = [
-            "headline",
-            "observation",
+            "assessment",
             "reasoning",
-            "next_question",
-            "suggested_action",
+            "recommended_action",
+            "data_limitation",
             "evidence_refs",
         ]
         cleaned: Dict[str, Any] = {}
@@ -14300,10 +14245,31 @@ class FinnPlanService:
                 cleaned[field] = refs[:6]
                 continue
             text_value = str(value or "").strip()
-            if len(text_value) < 6:
+            if field != "data_limitation" and len(text_value) < 6:
                 return None
             cleaned[field] = text_value
+        visible_text = " ".join(
+            cleaned.get(field, "")
+            for field in ("assessment", "reasoning", "recommended_action", "data_limitation")
+        )
+        if not self._first_dashboard_language_matches(visible_text, locale=locale):
+            return None
         return cleaned
+
+    @staticmethod
+    def _first_dashboard_language_matches(text: str, *, locale: str) -> bool:
+        language = str(locale or "nl").lower().split("-", 1)[0]
+        if language not in {"nl", "en", "de"}:
+            return True
+        tokens = set(re.findall(r"[a-zA-ZÀ-ÿ]+", str(text or "").lower()))
+        markers = {
+            "nl": {"de", "het", "een", "je", "jouw", "nog", "niet", "wacht", "markt", "voordat"},
+            "en": {"the", "a", "an", "your", "is", "are", "not", "wait", "market", "before"},
+            "de": {"der", "die", "das", "dein", "deine", "sie", "ist", "sind", "nicht", "warte", "warten", "aktuell", "aktuelle", "markt", "bevor", "handeln"},
+        }
+        scores = {key: len(tokens & values) for key, values in markers.items()}
+        strongest_other = max(score for key, score in scores.items() if key != language)
+        return not (scores[language] == 0 and strongest_other >= 2)
 
     def _first_dashboard_market_snapshot(
         self,
@@ -14480,11 +14446,10 @@ class FinnPlanService:
     def _first_dashboard_loading_result(self, asset: str) -> Dict[str, Any]:
         symbol = str(asset or "BTC").upper()
         return {
-            "headline": "FINN bekijkt je plan",
-            "observation": f"FINN vergelijkt je {symbol}-profiel, strategie en gekoppelde bot voordat de eerste aanbeveling verschijnt.",
-            "reasoning": "De eerste dashboardbeoordeling wordt opgebouwd uit je opgeslagen onboardingcontext.",
-            "next_question": "Geef FINN een moment om de eerste beoordeling af te ronden.",
-            "suggested_action": "Beoordeling wordt voorbereid",
+            "assessment": f"Wacht nog even met een entry voor {symbol}.",
+            "reasoning": "FINN rondt je eerste persoonlijke marktbeoordeling nog af.",
+            "recommended_action": "Geef FINN een moment om de actuele voorwaarden te controleren.",
+            "data_limitation": "De eerste complete marktsnapshot is nog niet beschikbaar.",
             "evidence_refs": ["asset.symbol", "history.behavior"],
         }
 
@@ -14578,6 +14543,59 @@ class FinnPlanService:
             "mode": selected.get("mode"),
             "risk_profile": selected.get("risk_profile"),
             "budget_total_eur": selected.get("budget_total_eur"),
+        }
+
+    @staticmethod
+    def _first_dashboard_coaching_fallback(
+        *,
+        locale: str,
+        asset: str,
+        observation: str,
+        next_action: Dict[str, str],
+        market_snapshot: Dict[str, Any],
+        latest_analysis: Dict[str, Any],
+        blockers: List[Dict[str, Any]],
+        linked_bot: Optional[Dict[str, Any]],
+    ) -> Dict[str, str]:
+        language = str(locale or "nl").lower().split("-", 1)[0]
+        market_ready = str((market_snapshot or {}).get("status") or "").lower() in {"ready", "available", "complete"}
+        analysis_ready = str((latest_analysis or {}).get("availability") or "").lower() in {"ready", "available"}
+        has_limitation = not market_ready or not analysis_ready
+        copy = {
+            "nl": {
+                "assessment": f"Forceer vandaag nog geen entry voor {asset}." if has_limitation else f"Je {asset}-plan is klaar voor een actuele beoordeling.",
+                "reasoning": "Je voorwaarden kunnen nog niet betrouwbaar aan de actuele markt worden getoetst." if has_limitation else "Je plan is opgebouwd, maar de actuele voorwaarden bepalen of handelen nu verantwoord is.",
+                "action": f"Wacht op een verse marktsnapshot en controleer daarna of je {asset}-voorwaarden samenkomen." if has_limitation else f"Controleer of je {asset}-voorwaarden samenkomen voordat je handelt.",
+                "limitation": "Er is nog geen complete, actuele marktsnapshot beschikbaar." if has_limitation else "",
+            },
+            "en": {
+                "assessment": f"Do not force an entry in {asset} yet." if has_limitation else f"Your {asset} plan is ready for a current assessment.",
+                "reasoning": "Your conditions cannot yet be tested reliably against the current market." if has_limitation else "Your plan is prepared, but current conditions determine whether acting now is justified.",
+                "action": f"Wait for a fresh market snapshot, then check whether your {asset} conditions align." if has_limitation else f"Check whether your {asset} conditions align before acting.",
+                "limitation": "A complete, current market snapshot is not available yet." if has_limitation else "",
+            },
+            "de": {
+                "assessment": f"Erzwinge jetzt noch keinen Einstieg in {asset}." if has_limitation else f"Dein {asset}-Plan ist bereit fur eine aktuelle Bewertung.",
+                "reasoning": "Deine Bedingungen konnen noch nicht zuverlassig am aktuellen Markt gepruft werden." if has_limitation else "Dein Plan steht, aber die aktuellen Bedingungen entscheiden, ob ein Einstieg jetzt vertretbar ist.",
+                "action": f"Warte auf einen frischen Marktsnapshot und prufe dann, ob deine {asset}-Bedingungen zusammenpassen." if has_limitation else f"Prufe vor dem Handeln, ob deine {asset}-Bedingungen zusammenpassen.",
+                "limitation": "Ein vollstandiger aktueller Marktsnapshot ist noch nicht verfugbar." if has_limitation else "",
+            },
+        }.get(language) or {}
+        if blockers and not has_limitation:
+            category = str((blockers[0] or {}).get("category") or "voorwaarde")
+            if language == "nl":
+                copy["reasoning"] = f"De actuele {category}-voorwaarde blokkeert je entry nog."
+            elif language == "de":
+                copy["reasoning"] = f"Die aktuelle Bedingung {category} blockiert deinen Einstieg noch."
+            else:
+                copy["reasoning"] = f"The current {category} condition still blocks your entry."
+        if linked_bot and not linked_bot.get("is_live") and language == "nl":
+            copy["reasoning"] += " Je bot blijft ondertussen veilig in Paper."
+        return {
+            "assessment": copy["assessment"],
+            "reasoning": copy["reasoning"],
+            "recommended_action": copy["action"],
+            "data_limitation": copy["limitation"],
         }
 
     def _first_dashboard_observation_and_action(

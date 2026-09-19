@@ -437,14 +437,13 @@ def _first_dashboard_payload(version: str = "ctx-v1"):
             "market.freshness",
         ],
         "fallback_result": {
-            "headline": "Your BTC plan is ready.",
-            "observation": "Your plan still lacks broader macro context.",
-            "reasoning": "Configured technical signals are present, but no macro layer is stored yet.",
-            "next_question": "Would you like to review one relevant macro indicator before activation?",
-            "suggested_action": "Review suggested macro context",
+            "assessment": "Do not force a BTC entry yet.",
+            "reasoning": "Configured technical signals cannot yet be tested against current market data.",
+            "recommended_action": "Wait for a fresh snapshot, then review your entry conditions.",
+            "data_limitation": "A complete current market snapshot is not available yet.",
             "evidence_refs": ["asset.symbol", "indicators.macro"],
         },
-        "input_snapshot": {"asset": "BTC"},
+        "input_snapshot": {"asset": "BTC", "presentation_contract": "finn_today.coach_briefing.v1"},
     }
 
 
@@ -472,11 +471,10 @@ def test_generate_first_dashboard_briefing_stores_valid_ai_result(monkeypatch):
         finn_plan_module,
         "ask_gpt_json",
         lambda **kwargs: {
-            "headline": "Your BTC plan is ready for review.",
-            "observation": "The plan is technically configured, but macro context is still missing.",
-            "reasoning": "That matters because your current confirmation layer relies only on technical inputs.",
-            "next_question": "Would you like me to suggest one macro indicator before activation?",
-            "suggested_action": "Review suggested macro context",
+            "assessment": "Forceer nog geen BTC-entry.",
+            "reasoning": "De huidige bevestiging steunt alleen op technische signalen.",
+            "recommended_action": "Wacht op een verse snapshot en controleer je voorwaarden.",
+            "data_limitation": "Actuele macrobevestiging ontbreekt nog.",
             "evidence_refs": ["asset.symbol", "indicators.macro"],
         },
     )
@@ -573,11 +571,10 @@ def test_generate_first_dashboard_briefing_retries_transient_fallback_when_due(m
         finn_plan_module,
         "ask_gpt_json",
         lambda **kwargs: {
-            "headline": "Your BTC plan is ready for review.",
-            "observation": "The plan is technically configured, but macro context is still missing.",
-            "reasoning": "That matters because your current confirmation layer relies only on technical inputs.",
-            "next_question": "Would you like me to suggest one macro indicator before activation?",
-            "suggested_action": "Review suggested macro context",
+            "assessment": "Forceer nog geen BTC-entry.",
+            "reasoning": "De huidige bevestiging steunt alleen op technische signalen.",
+            "recommended_action": "Wacht op een verse snapshot en controleer je voorwaarden.",
+            "data_limitation": "Actuele macrobevestiging ontbreekt nog.",
             "evidence_refs": ["asset.symbol", "indicators.macro"],
         },
     )
@@ -674,11 +671,10 @@ def test_generate_first_dashboard_briefing_can_take_over_stale_generating_state(
         finn_plan_module,
         "ask_gpt_json",
         lambda **kwargs: {
-            "headline": "Your BTC plan is ready for review.",
-            "observation": "The plan is technically configured, but macro context is still missing.",
-            "reasoning": "That matters because your current confirmation layer relies only on technical inputs.",
-            "next_question": "Would you like me to suggest one macro indicator before activation?",
-            "suggested_action": "Review suggested macro context",
+            "assessment": "Forceer nog geen BTC-entry.",
+            "reasoning": "De huidige bevestiging steunt alleen op technische signalen.",
+            "recommended_action": "Wacht op een verse snapshot en controleer je voorwaarden.",
+            "data_limitation": "Actuele macrobevestiging ontbreekt nog.",
             "evidence_refs": ["asset.symbol", "indicators.macro"],
         },
     )
@@ -781,11 +777,10 @@ def test_resolve_first_dashboard_briefing_uses_cached_ai_for_matching_version():
         "status": "ready",
         "context_version": "ctx-v2",
         "result": {
-            "headline": "Your BTC plan is ready for review.",
-            "observation": "Macro context is still missing from the decision layer.",
-            "reasoning": "That gap matters because broader confirmation is not yet part of the stored setup.",
-            "next_question": "Would you like me to suggest one macro indicator before activation?",
-            "suggested_action": "Review suggested macro context",
+            "assessment": "Forceer nog geen BTC-entry.",
+            "reasoning": "Bredere bevestiging maakt nog geen deel uit van je actuele beoordeling.",
+            "recommended_action": "Wacht op een verse snapshot en controleer je voorwaarden.",
+            "data_limitation": "Actuele macrobevestiging ontbreekt nog.",
             "evidence_refs": ["asset.symbol", "indicators.macro"],
         },
     }
@@ -815,7 +810,7 @@ def test_resolve_first_dashboard_briefing_uses_fallback_when_context_version_cha
     display = service._resolve_first_dashboard_briefing_display(payload, stored)
 
     assert display["response_source"] == "deterministic_fallback"
-    assert display["briefing"]["headline"] == payload["fallback_result"]["headline"]
+    assert display["briefing"]["assessment"] == payload["fallback_result"]["assessment"]
 
 
 def test_resolve_first_dashboard_briefing_uses_current_fallback_while_generating():
@@ -979,7 +974,8 @@ def test_prepare_first_dashboard_payload_survives_indicator_and_bot_lookup_failu
     assert payload["asset"] == "BTC"
     assert payload["bot"] is None
     assert payload["indicators"] == {"market": [], "macro": [], "technical": []}
-    assert payload["fallback_result"]["headline"].startswith("Je BTC-plan is klaar")
+    assert "entry" in payload["fallback_result"]["assessment"].lower()
+    assert payload["input_snapshot"]["presentation_contract"] == "finn_today.coach_briefing.v1"
     assert payload["input_snapshot"]["locale"] == "nl"
 
 
@@ -1067,13 +1063,13 @@ def test_build_mission_control_response_keeps_working_when_first_dashboard_conte
     assert result["first_dashboard_context"]["asset"] == "AAPL"
     assert result["first_dashboard_context"]["response_source"] == "briefing_error"
     assert result["first_dashboard_context"]["generation_status"] == "error"
-    assert "verder in mission control" in result["first_dashboard_context"]["observation"].lower()
+    assert "mission control" in result["first_dashboard_context"]["coaching_briefing"]["recommended_action"].lower()
 
 
 def test_mission_personal_snapshot_exposes_typed_profile_plan_bot_and_analysis():
     payload = {
         "input_snapshot": {
-            "name": "Sam", "asset": "BTC",
+            "name": "Sam", "asset": "BTC", "locale": "nl",
             "profile": {"trader_types": ["swing_trader"], "experience_levels": ["intermediate"], "risk_profiles": ["balanced"], "primary_timeframes": ["4h", "1d"], "behavior_flags": ["overtrades"]},
             "indicators": {"market": ["Volume"], "macro": ["DXY"], "technical": ["RSI"]},
             "setup": {"name": "BTC Setup", "timeframe": "4H", "setup_type": "trade"},
@@ -1082,10 +1078,10 @@ def test_mission_personal_snapshot_exposes_typed_profile_plan_bot_and_analysis()
             "latest_analysis": {"availability": "available", "summary": "BTC consolidates."},
         },
         "fallback_result": {
-            "headline": "Your BTC plan is ready for your swing trader profile on 4h and 1d.",
-            "observation": "RSI and DXY deserve attention around the strategy entry.",
-            "reasoning": "BTC Paper is paused and live trading is disabled.",
-            "suggested_action": "Review BTC Swing",
+            "assessment": "Forceer vandaag nog geen entry.",
+            "reasoning": "De actuele voorwaarden zijn nog niet bevestigd.",
+            "recommended_action": "Wacht op een verse marktsnapshot.",
+            "data_limitation": "Actuele marktdata ontbreekt.",
         },
     }
 
@@ -1106,20 +1102,87 @@ def test_mission_personal_snapshot_exposes_typed_profile_plan_bot_and_analysis()
     assert snapshot["coaching_patterns"] == ["overtrades"]
     assert snapshot["latest_analysis_available"] is True
     assert briefing["greeting"] == "Goedemorgen Sam"
-    for expected in ("BTC", "swing", "RSI", "DXY", "gepauzeerd", "€1.000,00"):
-        assert expected.lower() in briefing["summary"].lower()
+    assert briefing["summary"] == (
+        "Forceer vandaag nog geen entry. De actuele voorwaarden zijn nog niet bevestigd. "
+        "Actuele marktdata ontbreekt."
+    )
+    assert briefing["suggested_actions"] == ["Wacht op een verse marktsnapshot."]
+    for internal_fact in ("BTC Setup", "BTC Swing", "BTC Paper", "RSI", "DXY", "€1.000"):
+        assert internal_fact.lower() not in briefing["summary"].lower()
 
 
-def test_mission_personal_briefing_uses_product_indicator_labels():
+def test_mission_personal_briefing_keeps_typed_snapshot_out_of_product_copy():
     briefing = FinnPlanService._mission_personal_briefing({
         "input_snapshot": {
             "asset": "BTC",
             "indicators": {"market": ["price"], "macro": ["dxy"], "technical": ["ma_200"]},
-        }
+        },
+        "fallback_result": {
+            "assessment": "Forceer nog geen entry.",
+            "reasoning": "De marktbevestiging ontbreekt.",
+            "recommended_action": "Wacht op nieuwe marktdata.",
+            "data_limitation": "De snapshot is nog niet compleet.",
+        },
     })
 
-    assert "MA 200, DXY, Price" in briefing["summary"]
-    assert "ma_200" not in briefing["summary"]
+    assert briefing["summary"] == (
+        "Forceer nog geen entry. De marktbevestiging ontbreekt. De snapshot is nog niet compleet."
+    )
+    for internal_fact in ("MA 200", "DXY", "Price", "ma_200"):
+        assert internal_fact not in briefing["summary"]
+
+
+@pytest.mark.parametrize(
+    ("locale", "expected"),
+    [("nl-NL", "Goedemorgen Sam"), ("en-GB", "Good morning Sam"), ("de-DE", "Guten Morgen Sam")],
+)
+def test_mission_personal_briefing_localizes_greeting_without_mixing_languages(locale, expected):
+    briefing = FinnPlanService._mission_personal_briefing({
+        "input_snapshot": {"name": "Sam", "locale": locale},
+        "fallback_result": {
+            "assessment": "Assessment",
+            "reasoning": "Reasoning",
+            "recommended_action": "Action",
+            "data_limitation": "Limitation",
+        },
+    })
+
+    assert briefing["greeting"] == expected
+
+
+def test_first_dashboard_ai_validation_rejects_wrong_output_language():
+    service = _service()
+    result = {
+        "assessment": "Avoid trading AAPL for now.",
+        "reasoning": "The current market snapshot is unavailable.",
+        "recommended_action": "Wait before you act.",
+        "data_limitation": "Market data is missing.",
+        "evidence_refs": ["asset.symbol"],
+    }
+
+    assert service._validate_first_dashboard_ai_result(
+        result,
+        allowed_refs=["asset.symbol"],
+        locale="de",
+    ) is None
+    assert service._validate_first_dashboard_ai_result(
+        result,
+        allowed_refs=["asset.symbol"],
+        locale="en",
+    ) is not None
+
+    german_result = {
+        "assessment": "Vermeiden Sie vorerst einen Einstieg in AAPL.",
+        "reasoning": "Aktuelle Marktdaten sind noch nicht verfugbar.",
+        "recommended_action": "Warten Sie auf neue Daten, bevor Sie handeln.",
+        "data_limitation": "Die aktuelle Marktubersicht fehlt.",
+        "evidence_refs": ["asset.symbol"],
+    }
+    assert service._validate_first_dashboard_ai_result(
+        german_result,
+        allowed_refs=["asset.symbol"],
+        locale="de",
+    ) is not None
 
 
 def test_build_first_dashboard_context_returns_loading_when_payload_is_not_ready(monkeypatch):
@@ -1148,7 +1211,8 @@ def test_build_first_dashboard_context_returns_loading_when_payload_is_not_ready
     assert result["asset"] == "BTC"
     assert result["response_source"] == "briefing_generating"
     assert result["generation_status"] == "pending"
-    assert result["headline"] == "FINN bekijkt je plan"
+    assert result["headline"] == "Wacht nog even met een entry voor BTC."
+    assert result["coaching_briefing"]["data_limitation"]
 
 
 def test_build_first_dashboard_context_reuses_current_payload_after_user_activity(monkeypatch):
@@ -1188,18 +1252,17 @@ def test_build_first_dashboard_context_reuses_current_payload_after_user_activit
 
     assert result["asset"] == payload["asset"]
     assert result["generation_status"] != "pending"
-    assert result["headline"] == payload["fallback_result"]["headline"]
+    assert result["headline"] == payload["fallback_result"]["assessment"]
 
 
 def test_first_dashboard_projects_personal_fallback_while_background_generation_is_queued():
     service = FinnPlanService(db_session=object())
     payload = _first_dashboard_payload("ctx-v7")
     payload["fallback_result"] = {
-        "headline": "Je BTC-plan staat klaar.",
-        "observation": "Je setup en paper-bot zijn gekoppeld.",
-        "reasoning": "RSI, DXY en volume vormen je eerste context.",
-        "next_question": "Wil je de risico's doornemen?",
-        "suggested_action": "Bekijk je plan",
+        "assessment": "Forceer vandaag nog geen BTC-entry.",
+        "reasoning": "De actuele voorwaarden zijn nog niet bevestigd.",
+        "recommended_action": "Wacht op een verse marktsnapshot.",
+        "data_limitation": "Actuele marktdata ontbreekt.",
         "evidence_refs": ["asset.symbol"],
     }
 
@@ -1213,7 +1276,7 @@ def test_first_dashboard_projects_personal_fallback_while_background_generation_
     )
     context = service._compose_first_dashboard_context(payload, display)
 
-    assert context["headline"] == "Je BTC-plan staat klaar."
+    assert context["headline"] == "Forceer vandaag nog geen BTC-entry."
     assert context["generation_status"] == "queued"
     assert context["response_source"] == "deterministic_fallback_while_generating"
     assert "reviewing your plan" not in context["briefing_text"].lower()

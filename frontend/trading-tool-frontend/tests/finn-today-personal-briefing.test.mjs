@@ -18,8 +18,20 @@ test("FINN Today renders the typed personal mission-control briefing", () => {
   );
   assert.match(
     assistantSource,
+    /firstDashboardContext\?\.coaching_briefing/,
+    "the UI must consume the dedicated coach presentation contract",
+  );
+  for (const field of ["assessment", "reasoning", "recommended_action", "data_limitation"]) {
+    assert.match(
+      assistantSource,
+      new RegExp(`firstDashboardCoaching\\?\\.${field}`),
+      `the coach presentation must consume ${field}`,
+    );
+  }
+  assert.doesNotMatch(
+    assistantSource,
     /const workspaceSupport = personalWorkspaceSummary \|\|/,
-    "the personal plan summary must take precedence over generic support copy",
+    "the database-like workspace summary must not override FINN Today coaching copy",
   );
   assert.match(
     assistantSource,
@@ -46,11 +58,7 @@ test("FINN Today renders the typed personal mission-control briefing", () => {
     /firstDashboardContext\?\.review_state === "not_reviewed_yet"[\s\S]*?uiText\.workspaceFirstDashboardLabel/,
     "review state must render through locale copy rather than a backend English label",
   );
-  assert.match(
-    assistantSource,
-    /!firstDashboardIsGenerating && !String\(locale \|\| ""\)\.toLowerCase\(\)\.startsWith\("nl"\) && firstDashboardContext\?\.headline/,
-    "a backend-generated English headline must not override the Dutch persisted briefing",
-  );
+  assert.match(assistantSource, /const firstDashboardHeadline = firstDashboardCoaching\?\.assessment/);
   assert.match(assistantSource, /normalizeVisibleBriefing\(firstDashboardBriefingText/);
   assert.match(assistantSource, /NOT_REVIEWED_YET\|not_reviewed_yet/);
   assert.match(assistantSource, /raw\.includes\("not_reviewed"\).*workspaceFirstDashboardLabel/);
