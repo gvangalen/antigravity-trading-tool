@@ -1095,7 +1095,11 @@ class FinnV2OperationStateService:
     def _trim_linked_strategy_clause(value: str) -> str:
         """Keep a bot display name separate from its linked strategy reference."""
         return re.split(
-            r"\s+(?:voor|for|f.r)\s+(?:de\s+|the\s+|die\s+)?(?:strategie|strategy)\b.*",
+            r"\s+(?:(?:voor|for|f.r)\s+(?:de\s+|the\s+|die\s+)?|"
+            r"(?:gekoppeld|verbonden)\s+aan\s+(?:de\s+)?|"
+            r"(?:linked|connected)\s+to\s+(?:the\s+)?|"
+            r"(?:verknuepft|verknüpft|verbunden)\s+mit\s+(?:der\s+|die\s+)?)"
+            r"(?:strategie|strategy)\b.*",
             value,
             maxsplit=1,
             flags=re.IGNORECASE,

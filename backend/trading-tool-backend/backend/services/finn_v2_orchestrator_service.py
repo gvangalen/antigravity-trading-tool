@@ -885,11 +885,21 @@ class FinnV2OrchestratorService:
                 context["previous_action_result"] = latest_action_result
                 context["previous_action_result_source"] = "conversation_action_result"
         guided_state = dict(previous_state.get("guided_state") or {})
-        if context.get("previous_action_result", {}).get("result_status") == "succeeded":
+        is_collecting_guided_state = bool(
+            guided_state.get("operation_id")
+            and guided_state.get("status") in {None, "collecting"}
+            and guided_state.get("missing_required_inputs")
+        )
+        if is_collecting_guided_state:
+            # The immediately preceding runtime contract owns the pending
+            # user slot. An older successful action-result in this same
+            # conversation is dependency lineage, not a reason to discard a
+            # newer Setup, Strategy or Bot draft.
+            context["active_guided_operation"] = guided_state
+            context.pop("operation_state", None)
+        else:
             context.pop("active_guided_operation", None)
             context.pop("operation_state", None)
-        elif guided_state:
-            context["active_guided_operation"] = guided_state
         return context
 
     @staticmethod

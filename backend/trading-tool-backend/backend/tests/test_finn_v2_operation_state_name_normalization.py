@@ -746,6 +746,37 @@ def test_create_bot_retains_natural_name_from_complete_initial_prompt(message, e
     assert "name" not in state.missing_required_inputs
 
 
+@pytest.mark.parametrize(
+    "message",
+    (
+        "Maak een paper-bot met de naam BTC Bot q390 gekoppeld aan strategie BTC Plan q390, "
+        "met een budget van 1000 euro en Paper mode. Activeer geen live trading.",
+        "Create a paper bot named BTC Bot q390 linked to strategy BTC Plan q390, "
+        "with a budget of 1000 euros in paper mode. Do not activate live trading.",
+        "Erstelle einen Paper-Bot namens BTC Bot q390 verknuepft mit Strategie BTC Plan q390, "
+        "mit einem Budget von 1000 Euro im Paper-Modus. Aktiviere keinen Live-Handel.",
+    ),
+)
+def test_complete_safe_bot_prompt_collects_only_registry_inputs(message):
+    service = FinnV2OperationStateService()
+    contract = FinnV2OperationRegistry().require_supported("create_bot")
+
+    state = service.resolve(
+        contract=contract,
+        message=message,
+        explicit_asset=None,
+        conversation_context={},
+        supplied_inputs={"strategy_id": 52},
+    )
+
+    assert state.collected_inputs == {
+        "strategy_id": 52,
+        "name": "BTC Bot q390",
+        "budget_total_eur": 1000.0,
+    }
+    assert state.missing_required_inputs == []
+
+
 def test_create_strategy_canonicalizes_a_natural_german_base_amount():
     service = FinnV2OperationStateService()
     contract = FinnV2OperationRegistry().require_supported("create_strategy")

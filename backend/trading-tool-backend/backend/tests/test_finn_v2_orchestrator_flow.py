@@ -152,6 +152,54 @@ class _FakeConversationRepo:
         self.updated = kwargs
 
 
+def test_latest_collecting_guided_contract_wins_over_older_successful_action_lineage():
+    service = FinnV2OrchestratorService(session=object())
+    service.conversations = _FakeConversationRepo({
+        "conversation_state_version": "finn_v2.conversation-contracts.v1",
+        "previous_action_result": {
+            "operation_id": "create_setup",
+            "entity_type": "setup",
+            "entity_id": 309,
+            "owner_user_id": 7,
+            "result_status": "succeeded",
+            "run_id": "run-setup-execution",
+        },
+    })
+    guided = {
+        "operation_id": "create_strategy",
+        "contract_version": "2026-08-23.operation-contracts.v1",
+        "state_revision": 8,
+        "collected_inputs": {
+            "setup_id": 309,
+            "execution_mode": "fixed",
+            "base_amount": 100,
+            "entry": 76000,
+            "stop_loss": 72000,
+            "targets": [83000, 87000],
+            "risk_profile": "balanced",
+        },
+        "missing_required_inputs": ["name"],
+        "next_missing_input": "name",
+        "status": "collecting",
+    }
+    service.runtime_contracts = SimpleNamespace(
+        get_latest_for_conversation=AsyncMock(return_value=SimpleNamespace(
+            state_json={"guided_state": guided},
+        )),
+    )
+
+    context = asyncio.run(service._load_continuation_context(
+        conversation_id="conversation-guided-strategy",
+        user_id=7,
+        run_id="run-name-answer",
+        has_prior_run=True,
+    ))
+
+    assert context["active_guided_operation"] == guided
+    assert context["previous_action_result"]["entity_id"] == 309
+    assert "operation_state" not in context
+
+
 class _QueryableSession:
     async def execute(self, *_args, **_kwargs):
         raise AssertionError("repository access is replaced by the resolver double")
