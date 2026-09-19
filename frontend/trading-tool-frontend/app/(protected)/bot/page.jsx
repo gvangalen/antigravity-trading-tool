@@ -1275,10 +1275,14 @@ function BotPageInner() {
 export default function BotPage() {
   return (
     <Suspense fallback={
-      <div className="flex min-h-screen items-center justify-center bg-slate-50 px-6 text-center">
-        <div>
-          <div className="text-xs font-black uppercase tracking-[0.2em] text-blue-600">Automation</div>
-          <p className="mt-3 text-sm font-semibold text-slate-600">Je veilige paper-botomgeving wordt geladen...</p>
+      <div className="min-h-screen bg-slate-50 px-6 py-10" aria-busy="true">
+        <div className="mx-auto max-w-5xl animate-pulse space-y-6">
+          <div className="h-8 w-40 rounded-xl bg-blue-100" />
+          <div className="h-28 rounded-3xl border border-slate-200 bg-white" />
+          <div className="grid gap-5 md:grid-cols-2">
+            <div className="h-64 rounded-3xl border border-slate-200 bg-white" />
+            <div className="h-64 rounded-3xl border border-slate-200 bg-white" />
+          </div>
         </div>
       </div>
     }>

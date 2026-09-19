@@ -114,7 +114,8 @@ test("onboarding hands the saved strategy to Automation and never renders a blan
   assert.match(planPage, /strategy_id=/);
   assert.match(planPage, /savedStrategy\?\.strategy_id \?\? savedStrategy\?\.id/);
   assert.doesNotMatch(botPage, /fallback=\{<div className="min-h-screen bg-\[#020617\]" \/>\}/);
-  assert.match(botPage, /Je veilige paper-botomgeving wordt geladen/);
+  assert.match(botPage, /aria-busy="true"/);
+  assert.match(botPage, /animate-pulse/);
 });
 
 test("plan management uses setup_id for strategy, delete, and active-plan handoffs", async () => {
