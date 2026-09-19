@@ -3124,6 +3124,7 @@ async def assistant_v2_get_proposal(
     proposal = await FinnV2ProposalRepository(db).get_by_id_for_user(proposal_id=proposal_id, user_id=current_user["id"])
     if proposal is None:
         raise HTTPException(status_code=404, detail="Proposal not found")
+    change = dict((proposal.payload_json or {}).get("change") or {})
     return FinnV2ProposalSummary(
         proposal_id=proposal.id,
         run_id=proposal.run_id,
@@ -3137,6 +3138,10 @@ async def assistant_v2_get_proposal(
         expires_at=proposal.expires_at,
         proposal_version=PROPOSAL_VERSION,
         confirmation_required=True,
+        before_state=dict(change.get("before_state") or change.get("before") or {}),
+        requested_state=dict(change.get("requested_state") or change.get("changed_fields") or {}),
+        target_revision=change.get("target_revision"),
+        snapshot_timestamp=change.get("snapshot_timestamp"),
     )
 
 

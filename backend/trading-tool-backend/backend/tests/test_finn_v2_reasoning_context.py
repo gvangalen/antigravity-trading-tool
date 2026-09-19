@@ -171,6 +171,21 @@ def test_reasoning_context_rejects_evidence_from_another_run_user_or_asset():
     assert "evidence_scope_mismatch" in context.uncertainty_codes
 
 
+def test_reasoning_context_prefers_resolved_entity_asset_over_stale_workspace_asset():
+    referenced = {
+        "asset": "BTC",
+        "asset_source": "workspace_context",
+        "canonical_entity_target": {
+            "entity_type": "strategy",
+            "entity_id": 915,
+            "resolution_status": "resolved",
+            "relation": {"symbol": "MSFT", "setup_id": 1309},
+        },
+    }
+
+    assert FinnV2ReasoningContextService._expected_asset(referenced) == "MSFT"
+
+
 def test_reasoning_context_accepts_persisted_snapshot_and_validation_rows():
     service = FinnV2ReasoningContextService(session=object(), max_evidence_items=30, max_context_bytes=131072)
     service.evidence_repo.list_for_run = lambda **_kwargs: asyncio.sleep(0, result=[])

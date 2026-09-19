@@ -64,6 +64,14 @@ test("keeps confirmation controls inside a single calm draft card", () => {
   assert.doesNotMatch(source, /onPointerUp=/);
 });
 
+test("update cards use the immutable server proposal snapshot", () => {
+  assert.match(source, /fetchFinnV2Proposal\(verified\.proposal_id\)/);
+  assert.match(source, /before_state: immutableProposalState\?\.before_state/);
+  assert.match(source, /requested_state: immutableProposalState\?\.requested_state/);
+  assert.match(source, /const previous = displayContext\.before_state\?\.\[field\]/);
+  assert.doesNotMatch(source, /operationId === "update_setup" \? activeSetup\?\.\[field\]/);
+});
+
 test("keeps a typed guided answer out of command search", () => {
   assert.match(source, /hasActiveFinnV2GuidedTurn/);
   assert.match(source, /!hasActiveFinnV2GuidedTurn && isSimpleFinnModal && commandCenterRef\.current\?\.handleKeyDown/);

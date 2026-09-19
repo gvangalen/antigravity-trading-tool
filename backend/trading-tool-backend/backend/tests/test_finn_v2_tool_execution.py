@@ -286,6 +286,33 @@ def test_setup_reads_use_the_workspace_setup_reference_without_overriding_select
     assert collection == {"asset": "BTC", "setup_collection_requested": True}
 
 
+def test_relation_ids_discard_stale_workspace_asset_for_canonical_reads():
+    run = SimpleNamespace(
+        workspace_hints_json={"asset": "BTC", "setup_id": 11},
+        client_context_json={"asset": "BTC"},
+    )
+
+    strategy = FinnV2ToolExecutionService._with_workspace_setup_reference(
+        selector={"asset": "BTC", "setup_id": 42, "strategy_id": 73},
+        tool_name="read_linked_strategy",
+        run=run,
+    )
+    bot = FinnV2ToolExecutionService._with_workspace_setup_reference(
+        selector={"asset": "BTC", "bot_id": 91},
+        tool_name="read_linked_bot",
+        run=run,
+    )
+    asset = FinnV2ToolExecutionService._with_workspace_setup_reference(
+        selector={"asset": "BTC", "strategy_id": 73},
+        tool_name="read_active_asset",
+        run=run,
+    )
+
+    assert strategy == {"setup_id": 42, "strategy_id": 73}
+    assert bot == {"bot_id": 91}
+    assert asset == {"strategy_id": 73}
+
+
 def test_active_setup_read_resolves_the_single_owner_setup_without_a_workspace_asset(monkeypatch):
     service = FinnV2ToolExecutionService(session=_FakeSession())
     run = SimpleNamespace(workspace_hints_json={}, client_context_json={})

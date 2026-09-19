@@ -78,6 +78,16 @@ export const fetchFinnV2Run = (runId) => {
   });
 };
 
+export const fetchFinnV2Proposal = (proposalId) => {
+  const normalizedProposalId = String(proposalId || '').trim();
+  if (!normalizedProposalId) {
+    throw new Error('Deze FINN V2-proposal mist een server-issued proposal_id.');
+  }
+  return fetchAuth(`/api/assistant/v2/proposals/${encodeURIComponent(normalizedProposalId)}`, {
+    method: 'GET',
+  });
+};
+
 // A V2 proposal is visible before this function is called. One explicit UI
 // confirmation then uses only the V2 publish/confirm/execute contract, never
 // the legacy assistant-action mutation endpoint.

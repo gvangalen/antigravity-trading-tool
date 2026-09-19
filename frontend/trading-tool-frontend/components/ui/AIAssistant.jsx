@@ -2,7 +2,7 @@
 
 import React, { Suspense, useState, useEffect, useLayoutEffect, useRef } from "react";
 import { usePathname, useSearchParams, useRouter } from "next/navigation";
-import { assistantChat, cancelFinnV2Proposal, confirmAndExecuteFinnV2Proposal, executeAssistantAction, fetchAssistantInsight, getAssistantPreferences, getAssistantSessionDetail, getAssistantSessions, updateAssistantPreferences, assistantChatStream, executePendingAction, fetchFinnState, fetchFinnMissionControl, fetchFinnV2Run, waitForFinnV2TerminalSse } from "@/lib/api/ai";
+import { assistantChat, cancelFinnV2Proposal, confirmAndExecuteFinnV2Proposal, executeAssistantAction, fetchAssistantInsight, getAssistantPreferences, getAssistantSessionDetail, getAssistantSessions, updateAssistantPreferences, assistantChatStream, executePendingAction, fetchFinnState, fetchFinnMissionControl, fetchFinnV2Proposal, fetchFinnV2Run, waitForFinnV2TerminalSse } from "@/lib/api/ai";
 import { Send, Zap, Brain, Shield, BarChart3, Loader2, X, MessageSquare, Target, Activity, FileText, Bot, ChevronDown, ListChecks, Terminal, Sparkles, CheckCircle2, Plus, Search, SlidersHorizontal } from "lucide-react";
 import useIntelligenceEvents from "@/hooks/useIntelligenceEvents";
 import { useOnboarding } from "@/hooks/useOnboarding";
@@ -4450,9 +4450,16 @@ function AIAssistantContent({
       let resolvedSetupTimeframe = null;
       let resolvedStrategyName = actionDraft?.supplied_inputs?.strategy_name || activeBot?.strategy_name || null;
       let resolvedBotName = activeBot?.name || null;
+      let immutableProposalState = null;
       try {
         if (operationId?.includes("setup") || operationId?.includes("strategy") || operationId?.includes("bot")) {
-          const [ownerSetups, ownerStrategies, ownerBots] = await Promise.all([fetchSetups(), fetchStrategies(), fetchBotConfigs()]);
+          const [ownerSetups, ownerStrategies, ownerBots, proposalSummary] = await Promise.all([
+            fetchSetups(),
+            fetchStrategies(),
+            fetchBotConfigs(),
+            verified?.proposal_id ? fetchFinnV2Proposal(verified.proposal_id) : Promise.resolve(null),
+          ]);
+          immutableProposalState = proposalSummary;
           const setupId = actionDraft?.supplied_inputs?.setup_id || projection?.supplied_inputs?.setup_id;
           const strategyId = actionDraft?.supplied_inputs?.strategy_id || projection?.supplied_inputs?.strategy_id;
           const botId = actionDraft?.supplied_inputs?.bot_id || projection?.supplied_inputs?.bot_id;
@@ -4523,7 +4530,11 @@ function AIAssistantContent({
                   setup_name: resolvedSetupName,
                   strategy_name: resolvedStrategyName,
                   supplied_inputs: projection?.supplied_inputs || {},
-                  changed_fields: projection?.supplied_inputs?.changed_fields || {},
+                  before_state: immutableProposalState?.before_state || {},
+                  requested_state: immutableProposalState?.requested_state || projection?.supplied_inputs?.changed_fields || {},
+                  target_revision: immutableProposalState?.target_revision || null,
+                  snapshot_timestamp: immutableProposalState?.snapshot_timestamp || null,
+                  changed_fields: immutableProposalState?.requested_state || projection?.supplied_inputs?.changed_fields || {},
                   safety_mode: operationId === "create_bot" ? "Paper · niet-live" : null,
                 },
               }] : [],
@@ -5782,8 +5793,8 @@ function AIAssistantContent({
       || `deze ${objectType.toLowerCase()}`;
     const linkedName = objectType === "Strategie" ? displayContext.setup_name || activeSetup?.name : objectType === "Paper-bot" ? displayContext.strategy_name || activeBot?.strategy_name : null;
     const fieldLabels = { name: "Naam", timeframe: "Timeframe", base_amount: "Bedrag", stop_loss: "Stop-loss", entry: "Entry", targets: "Targets", risk_profile: "Risico", budget_total_eur: "Budget", cadence: "Frequentie" };
-    const changedRows = Object.entries(displayContext.changed_fields || {}).filter(([, value]) => value !== null && value !== undefined).map(([field, value]) => {
-      const previous = operationId === "update_setup" ? activeSetup?.[field] : null;
+    const changedRows = Object.entries(displayContext.requested_state || displayContext.changed_fields || {}).filter(([, value]) => value !== null && value !== undefined).map(([field, value]) => {
+      const previous = displayContext.before_state?.[field];
       return { label: fieldLabels[field] || field.replace(/_/g, " "), previous, value: Array.isArray(value) ? value.join(", ") : value };
     });
     const isDomainProposal = isUpdate || isDelete;
@@ -5834,7 +5845,7 @@ function AIAssistantContent({
               {changedRows.map((row) => (
                 <div key={row.label} className="flex min-w-0 items-start justify-between gap-4 py-2 first:pt-0 last:pb-0">
                   <dt className="shrink-0 text-slate-500 dark:text-slate-400">{row.label}</dt>
-                  <dd className="min-w-0 break-words text-right font-semibold text-slate-800 dark:text-slate-100">{row.previous ? `${row.previous} → ${row.value}` : row.value}</dd>
+                  <dd className="min-w-0 break-words text-right font-semibold text-slate-800 dark:text-slate-100">{row.previous !== null && row.previous !== undefined && row.previous !== "" ? `${row.previous} → ${row.value}` : row.value}</dd>
                 </div>
               ))}
             </dl>

@@ -608,12 +608,27 @@ class FinnV2ToolExecutionService:
         in every natural-language read.  Entity resolution still verifies
         ownership before using the value.
         """
-        if tool_name not in {"read_active_setup", "read_linked_strategy", "read_linked_bot", "read_bot_status"}:
+        relation_tools = {
+            "read_active_asset",
+            "read_active_setup",
+            "read_linked_strategy",
+            "read_linked_bot",
+            "read_bot_status",
+        }
+        if tool_name not in relation_tools:
             return selector
         if selector.get("setup_collection_requested"):
             # A collection contract is already the authoritative target. A
             # workspace singleton would collapse that collection and make the
             # executed evidence disagree with the persisted runtime contract.
+            return selector
+        if any(selector.get(field) is not None for field in ("setup_id", "strategy_id", "bot_id")):
+            # An owner-scoped relation is more specific than the browser's
+            # possibly stale workspace asset. Derive the canonical symbol
+            # from that relation instead of mixing contexts across assets.
+            selector = dict(selector)
+            selector.pop("asset", None)
+        if tool_name == "read_active_asset":
             return selector
         if selector.get("setup_id") is not None:
             return selector

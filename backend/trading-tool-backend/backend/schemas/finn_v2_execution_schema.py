@@ -29,6 +29,10 @@ class FinnV2ProposalSummary(BaseModel):
     expires_at: datetime
     proposal_version: str
     confirmation_required: bool = True
+    before_state: Dict[str, Any] = Field(default_factory=dict)
+    requested_state: Dict[str, Any] = Field(default_factory=dict)
+    target_revision: Optional[str] = None
+    snapshot_timestamp: Optional[datetime] = None
 
 
 class FinnV2ExecuteProposalRequest(BaseModel):

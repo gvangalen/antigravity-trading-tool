@@ -90,7 +90,7 @@ class FinnV2ReasoningContextService:
         provenance_issues: list[str] = []
         request_plan = (orchestrator_result.analysis.request_plan.dict() if orchestrator_result.analysis.request_plan else {})
         referenced = request_plan.get("referenced_entities") or {}
-        expected_asset = str(referenced.get("asset") or "").strip().upper() or None
+        expected_asset = self._expected_asset(referenced)
         index = 1
         for artifact in artifacts:
             domain = self.DOMAIN_BY_TOOL.get(artifact.tool_name)
@@ -174,6 +174,19 @@ class FinnV2ReasoningContextService:
             uncertainty_codes=list(dict.fromkeys([*orchestrator_result.uncertainty_codes, *provenance_issues])),
             evidence_boundary=self._evidence_boundary(evidence),
         )
+
+    @staticmethod
+    def _expected_asset(referenced: Dict[str, Any]) -> Optional[str]:
+        target = referenced.get("canonical_entity_target")
+        if isinstance(target, dict) and target.get("resolution_status") == "resolved":
+            relation = target.get("relation")
+            if isinstance(relation, dict):
+                canonical = str(
+                    relation.get("symbol") or relation.get("asset_symbol") or ""
+                ).strip().upper()
+                if canonical:
+                    return canonical
+        return str(referenced.get("asset") or "").strip().upper() or None
 
     @staticmethod
     def _evidence_boundary(evidence: list[ReasoningEvidenceItem]) -> ReasoningEvidenceBoundary:
