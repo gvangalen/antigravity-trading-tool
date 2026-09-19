@@ -69,6 +69,12 @@ class FinnV2ToolPlanService:
             # set and make the tool evidence contradict the runtime contract.
             for field in ("setup_id", "setup_name", "strategy_id", "strategy_name", "bot_id", "bot_name"):
                 selector_values.pop(field, None)
+            collection_payload = dict(
+                (request_plan.referenced_entities or {}).get("canonical_target_collection") or {}
+            )
+            collection_filters = dict(collection_payload.get("filters") or {})
+            if collection_payload and not collection_filters.get("asset"):
+                selector_values.pop("asset", None)
         selector = ToolSelector(
             **selector_values,
         ).dict(exclude_none=True, exclude_defaults=True)

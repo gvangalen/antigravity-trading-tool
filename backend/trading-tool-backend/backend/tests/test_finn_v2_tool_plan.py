@@ -188,6 +188,36 @@ def test_tool_plan_preserves_setup_collection_selector_for_all_owner_matches():
     }
 
 
+def test_tool_plan_does_not_reintroduce_context_asset_for_all_assets_collection():
+    analysis_service = FinnV2RequestAnalysisService()
+    analysis = analysis_service.analyze(
+        message="Welke setups heb ik voor al mijn assets?",
+        workspace_hints={"symbol": "BTC"},
+    )
+    analysis = analysis.copy(update={
+        "request_plan": analysis.request_plan.copy(update={
+            "target_asset": None,
+            "target_asset_source": None,
+            "referenced_asset": None,
+            "referenced_entities": {
+                "setup_collection_requested": True,
+                "canonical_target_collection": {
+                    "entity_type": "setup", "filters": {}, "items": [],
+                    "result_count": 0, "resolution_status": "empty",
+                },
+            },
+        }),
+    })
+
+    plan = FinnV2ToolPlanService().build(
+        run_id="run-all-assets",
+        analysis=analysis,
+        domain_plan=FinnV2DomainRequirementService().determine(analysis),
+    )
+
+    assert plan.tool_inputs["read_active_setup"] == {"setup_collection_requested": True}
+
+
 def test_tool_plan_collects_bot_context_for_live_action_proposals():
     analysis = FinnV2RequestAnalysisService().analyze(message="Zet mijn bot live.")
     domain_plan = FinnV2DomainRequirementService().determine(analysis)

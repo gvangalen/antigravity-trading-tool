@@ -279,12 +279,13 @@ class FinnV2ResponseVerifierService:
                     f"{', '.join(names) if names else 'geen indicatoren'}."
                 )
         if "setup" in required_fields or "timeframe" in required_fields:
+            setup_collection = list(setup.get("setups") or [])
             setup_id = setup.get("setup_id")
             setup_name = setup.get("name")
             setup_type = setup.get("setup_type")
             timeframe = setup.get("timeframe")
             setup_values = [setup_name, setup_type, timeframe]
-            if setup_id is not None or any(value for value in setup_values):
+            if len(setup_collection) <= 1 and (setup_id is not None or any(value for value in setup_values)):
                 label = str(setup_name or "je gekoppelde setup")
                 details = [
                     str(value)

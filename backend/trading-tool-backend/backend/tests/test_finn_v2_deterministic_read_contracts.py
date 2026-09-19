@@ -304,6 +304,33 @@ def test_setup_overview_read_names_every_owner_scoped_asset_setup():
     assert "BTC Swing (1D)" in reasoning.direct_answer
 
 
+def test_setup_overview_labels_multi_asset_collection_without_workspace_leak():
+    evidence = [
+        ReasoningEvidenceItem(evidence_id="Esetups", artifact_id="setups", tool_name="read_active_setup", information_scope="active_setup", domain="plan_context", entity_type="setup", entity_id="326", asset=None, source="setups", freshness="fresh", confidence="high", facts={
+            "setups": [
+                {"setup_id": 326, "name": "BTC DCA", "symbol": "BTC", "timeframe": "4H"},
+                {"setup_id": 327, "name": "Apple Swing", "symbol": "AAPL", "timeframe": "1D"},
+            ],
+            "setup_count": 2,
+        }),
+    ]
+    context = _context(
+        operation_id="read_active_setup",
+        required_scope=["active_setup"],
+        message="Welke setups heb ik voor al mijn assets?",
+        evidence=evidence,
+    )
+
+    reasoning = FinnV2ReasoningFallbackService().grounded_read_draft(
+        run_id=context.run_id, user_id=context.user_id, context=context, model="deterministic", error_codes=[]
+    )
+
+    assert "2 setups" in reasoning.direct_answer
+    assert "BTC DCA (BTC · 4H)" in reasoning.direct_answer
+    assert "Apple Swing (AAPL · 1D)" in reasoning.direct_answer
+    assert "BTC-setups" not in reasoning.direct_answer
+
+
 def test_active_setup_strategy_fields_explain_missing_link_without_internal_verifier_code():
     evidence = [
         ReasoningEvidenceItem(evidence_id="Easset", artifact_id="asset", tool_name="read_active_asset", information_scope="active_asset", domain="identity_context", entity_type="asset", asset="BTC", source="workspace", freshness="fresh", confidence="high", facts={"symbol": "BTC"}),

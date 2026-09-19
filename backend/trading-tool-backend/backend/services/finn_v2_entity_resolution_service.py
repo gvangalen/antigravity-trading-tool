@@ -655,6 +655,15 @@ class FinnV2EntityResolutionService:
         ))
 
     @staticmethod
+    def is_all_assets_collection_request(message: str) -> bool:
+        normalized = " ".join(str(message or "").casefold().split())
+        return bool(re.search(
+            r"\b(?:(?:al|alle)\s+(?:mijn\s+)?assets?|all\s+(?:my\s+)?assets?|"
+            r"alle\s+(?:meine[nr]?\s+)?assets?)\b",
+            normalized,
+        ))
+
+    @staticmethod
     def _message_mentions_name(message: str, name: Any) -> bool:
         normalized_name = " ".join(str(name or "").casefold().split())
         normalized_message = " ".join(str(message or "").casefold().split())

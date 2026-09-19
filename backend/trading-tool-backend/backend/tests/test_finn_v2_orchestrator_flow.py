@@ -432,6 +432,57 @@ def test_setup_collection_read_does_not_collapse_to_one_canonical_target():
     assert [item["display_name"] for item in collection["items"]] == ["BTC Swing", "BTC DCA"]
 
 
+def test_all_assets_setup_collection_outranks_workspace_asset():
+    assert FinnV2OrchestratorService(session=_QueryableSession()).entities.is_all_assets_collection_request(
+        "Welke setups heb ik voor al mijn assets?"
+    )
+    message = "Welke setups heb ik voor al mijn assets?"
+    service = FinnV2OrchestratorService(session=_QueryableSession())
+    analysis = _analysis_for_operation(message, "read_active_setup")
+    analysis = analysis.copy(update={"explicit_asset": None})
+    service.entities.resolve_canonical_target = AsyncMock()
+    service.entities.resolve_target_collection = AsyncMock(return_value=CanonicalTargetCollection(
+        entity_type="setup",
+        owner_id=7,
+        filters={},
+        items=[
+            CanonicalEntityTarget(
+                entity_type="setup", entity_id=11, owner_id=7, display_name="BTC Setup",
+                relation={"setup_id": 11, "symbol": "BTC"}, source="owner_collection",
+                resolution_status="resolved",
+            ),
+            CanonicalEntityTarget(
+                entity_type="setup", entity_id=12, owner_id=7, display_name="AAPL Setup",
+                relation={"setup_id": 12, "symbol": "AAPL"}, source="owner_collection",
+                resolution_status="resolved",
+            ),
+        ],
+        result_count=2,
+        resolution_status="resolved",
+    ))
+    service.entities.resolve_contract_reference_inputs = AsyncMock(return_value={})
+
+    resolved = asyncio.run(service._resolve_explicit_action_references(
+        user_id=7,
+        message=message,
+        analysis=analysis,
+        conversation_context={},
+        workspace_hints={"asset": "BTC"},
+        client_context={},
+    ))
+
+    service.entities.resolve_target_collection.assert_awaited_once_with(
+        user_id=7,
+        entity_type="setup",
+        asset=None,
+    )
+    selectors = resolved.request_plan.referenced_entities
+    assert "asset" not in selectors
+    assert resolved.request_plan.target_asset is None
+    assert resolved.request_plan.target_asset_source is None
+    assert selectors["canonical_target_collection"]["result_count"] == 2
+
+
 def test_orchestrator_flow_executes_plan_and_persists_result():
     run = SimpleNamespace(
         id="run-1",

@@ -485,14 +485,31 @@ class FinnV2ReasoningFallbackService:
         if operation_id == "read_active_setup" and setup is not None:
             setup_collection = list(setup.facts.get("setups") or [])
             if len(setup_collection) > 1:
+                collection_assets = {
+                    str(item.get("asset") or item.get("symbol") or "").upper()
+                    for item in setup_collection
+                    if item.get("asset") or item.get("symbol")
+                }
+                multi_asset = len(collection_assets) > 1
                 rendered = ", ".join(
-                    f"{item.get('name')} ({item.get('timeframe') or 'timeframe onbekend'})"
+                    (
+                        f"{item.get('name')} ({str(item.get('asset') or item.get('symbol')).upper()} · "
+                        f"{item.get('timeframe') or 'timeframe onbekend'})"
+                        if multi_asset else
+                        f"{item.get('name')} ({item.get('timeframe') or 'timeframe onbekend'})"
+                    )
                     for item in setup_collection
                     if item.get("name")
                 )
+                collection_label = "setups" if multi_asset else f"{asset}-setups"
+                observation = (
+                    "Dit overzicht komt rechtstreeks uit al je owner-scoped opgeslagen setups."
+                    if multi_asset else
+                    "Dit overzicht komt rechtstreeks uit al je owner-scoped opgeslagen setups voor deze asset."
+                )
                 _add_claim(
                     "setup-overview",
-                    f"Je hebt {len(setup_collection)} {asset}-setups: {rendered}.",
+                    f"Je hebt {len(setup_collection)} {collection_label}: {rendered}.",
                     [setup.evidence_id],
                 )
                 return ReasoningResult(
@@ -500,8 +517,8 @@ class FinnV2ReasoningFallbackService:
                     run_id=run_id,
                     user_id=user_id,
                     mode="READ",
-                    direct_answer=f"Je hebt {len(setup_collection)} {asset}-setups: {rendered}.",
-                    main_observation="Dit overzicht komt rechtstreeks uit al je owner-scoped opgeslagen setups voor deze asset.",
+                    direct_answer=f"Je hebt {len(setup_collection)} {collection_label}: {rendered}.",
+                    main_observation=observation,
                     supporting_points=[],
                     claims=claims,
                     uncertainty_summary="Er is geen providercall uitgevoerd voor dit opgeslagen setupoverzicht.",

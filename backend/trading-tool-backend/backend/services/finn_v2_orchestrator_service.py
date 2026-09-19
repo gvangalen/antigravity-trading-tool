@@ -179,8 +179,19 @@ class FinnV2OrchestratorService:
             operation_id == "read_active_setup"
             and self.entities.is_setup_collection_request(message)
         )
+        all_assets_collection = (
+            is_collection_read
+            and self.entities.is_all_assets_collection_request(message)
+        )
         if is_collection_read:
             selectors["setup_collection_requested"] = True
+            if all_assets_collection:
+                # Explicit collection scope outranks an implicit active-workspace
+                # asset. Leaving the asset absent makes the owner collection the
+                # canonical target instead of silently narrowing it to BTC.
+                current_asset = None
+                selectors.pop("asset", None)
+                selectors.pop("asset_source", None)
             if can_query_entities:
                 collection = await self.entities.resolve_target_collection(
                     user_id=user_id,
@@ -248,6 +259,11 @@ class FinnV2OrchestratorService:
         )
         request_plan = request_plan.copy(
             update={
+                **({
+                    "target_asset": None,
+                    "target_asset_source": None,
+                    "referenced_asset": None,
+                } if all_assets_collection else {}),
                 "referenced_entities": {**selectors, **resolved},
                 "operation_state": state.dict(),
                 "missing_information": list(state.missing_required_inputs),

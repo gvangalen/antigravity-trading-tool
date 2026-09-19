@@ -123,6 +123,27 @@ def test_unambiguous_graph_reads_use_registry_without_selector_provider(message,
 
 
 @pytest.mark.parametrize("message", (
+    "Welke setups heb ik?",
+    "Welke BTC setups heb ik?",
+    "Which setups do I have?",
+    "Welche Setups habe ich?",
+))
+def test_explicit_setup_collection_reads_use_registry_without_selector_provider(message):
+    class ExplodingSelector:
+        def select(self, **_kwargs):
+            raise AssertionError("explicit collection reads must not call the selector provider")
+
+    result = FinnV2OperationClassificationService(
+        structured_selector=ExplodingSelector(),
+    ).classify(message=message)
+
+    assert result.operation_id == "read_active_setup"
+    assert result.selector_source == "registry_read_constraint"
+    assert result.action == "read"
+    assert FinnV2OperationClassificationValidator().validation_error(result) is None
+
+
+@pytest.mark.parametrize("message", (
     "Welke bot draait live?",
     "Wat zijn de gevolgen van die gekoppelde bot?",
     "Evaluate the risks of the linked bot.",

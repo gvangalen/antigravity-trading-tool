@@ -86,6 +86,16 @@ class FinnV2OperationClassificationService:
                 (guided_contract,),
                 conversation_context=conversation_context,
             )
+        if self._is_explicit_setup_collection_read(message):
+            contract = self.registry.require_supported("read_active_setup")
+            return self._result(
+                contract.operation_id,
+                facts,
+                "high",
+                "registry_read_constraint",
+                (contract,),
+                conversation_context=conversation_context,
+            )
         if self._is_score_explanation(message, facts):
             contract = self.registry.require_supported("explain_score")
             return self._result(
@@ -361,6 +371,21 @@ class FinnV2OperationClassificationService:
         ):
             return "update_setup"
         return None
+
+    @staticmethod
+    def _is_explicit_setup_collection_read(message: str) -> bool:
+        """Recognize an explicit plural setup overview, with or without asset.
+
+        This does not resolve targets or infer an action from ambiguous prose;
+        it binds an unambiguous collection request to the existing registry
+        read contract. Owner and optional asset filtering remain resolver-owned.
+        """
+        normalized = " ".join(str(message or "").casefold().split())
+        return bool(re.search(
+            r"\b(?:welke|toon|noem|overzicht|which|show|list|what|welche|zeige|liste)\b"
+            r".*\b(?:setups|plannen|set-ups)\b",
+            normalized,
+        ))
 
     @staticmethod
     def _is_score_explanation(message: str, facts: FinnV2PreprocessedRequest) -> bool:
