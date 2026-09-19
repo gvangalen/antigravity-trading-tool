@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import json
+import logging
 from datetime import datetime
 from typing import Any, Awaitable, Callable, Optional
 
@@ -16,6 +18,7 @@ from backend.services.bot_service import BotService
 from backend.services.indicator_config_service import IndicatorConfigService
 from backend.services.macro_data_service import MacroDataService
 from backend.services.market_data_service import MarketDataService
+from backend.services.market_data_ingestion_service import MarketDataIngestionService
 from backend.services.setup_service import SetupService
 from backend.services.strategy_service import StrategyService
 from backend.services.technical_data_service import TechnicalDataService
@@ -23,6 +26,7 @@ from backend.services.finn_v2_flag_service import FinnV2FlagService
 
 
 AdapterFn = Callable[[int, dict], Awaitable[dict]]
+logger = logging.getLogger(__name__)
 
 
 class FinnV2ActionAdapterRegistry:
@@ -32,6 +36,7 @@ class FinnV2ActionAdapterRegistry:
         self.indicators = IndicatorConfigService(IndicatorConfigRepository(session))
         self.macro_indicators = MacroDataService(session)
         self.market_indicators = MarketDataService(session)
+        self.market_data_ingestion = MarketDataIngestionService(session)
         self.technical_indicators = TechnicalDataService(session)
         self.users = UserRepository(session)
         self.setups = SetupService(session)
@@ -417,7 +422,27 @@ class FinnV2ActionAdapterRegistry:
                 "symbol": asset,
             },
         )
-        return {"ok": True, "asset": asset, "operation": "watchlist_add"}
+        quote_status = "available"
+        try:
+            snapshot = await asyncio.wait_for(
+                self.market_data_ingestion.ingest_latest_snapshots(
+                    [asset], commit=False, continue_on_error=True
+                ),
+                timeout=5.0,
+            )
+            if int(snapshot.get("success_count") or 0) != 1:
+                quote_status = "pending"
+        except Exception as exc:
+            # The owner-scoped watchlist postcondition remains authoritative;
+            # a temporary provider outage must not undo that confirmed write.
+            quote_status = "pending"
+            logger.warning("Initial market snapshot pending for %s: %s", asset, exc)
+        return {
+            "ok": True,
+            "asset": asset,
+            "operation": "watchlist_add",
+            "quote_status": quote_status,
+        }
 
     async def _watchlist_remove(self, user_id: int, payload: dict) -> dict:
         if not self.flags.execute_watchlist_changes_enabled():

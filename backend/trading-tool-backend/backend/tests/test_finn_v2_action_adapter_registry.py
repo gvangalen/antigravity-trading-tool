@@ -2,6 +2,7 @@ import asyncio
 
 import pytest
 from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
 from backend.domain.finn_v2_operation_registry import FinnV2OperationRegistry
 from backend.services.finn_v2_action_adapter_registry import FinnV2ActionAdapterRegistry
@@ -20,6 +21,7 @@ def test_watchlist_add_uses_database_unique_constraint_for_idempotency():
     session = _Session()
     registry = FinnV2ActionAdapterRegistry(session)
     registry.flags.execute_watchlist_changes_enabled = lambda: True
+    registry.market_data_ingestion.ingest_latest_snapshots = AsyncMock(return_value={"success_count": 1})
 
     result = asyncio.run(
         registry._watchlist_add(
@@ -28,7 +30,9 @@ def test_watchlist_add_uses_database_unique_constraint_for_idempotency():
         )
     )
 
-    assert result == {"ok": True, "asset": "ETH", "operation": "watchlist_add"}
+    assert result == {
+        "ok": True, "asset": "ETH", "operation": "watchlist_add", "quote_status": "available",
+    }
     assert len(session.calls) == 1
     sql, params = session.calls[0]
     assert "INSERT INTO watchlists" in sql
@@ -39,6 +43,25 @@ def test_watchlist_add_uses_database_unique_constraint_for_idempotency():
         "user_id": 390,
         "symbol": "ETH",
     }
+
+
+def test_watchlist_add_keeps_write_when_initial_twelve_data_snapshot_is_pending():
+    session = _Session()
+    registry = FinnV2ActionAdapterRegistry(session)
+    registry.flags.execute_watchlist_changes_enabled = lambda: True
+    registry.market_data_ingestion.ingest_latest_snapshots = AsyncMock(
+        side_effect=TimeoutError("provider timeout")
+    )
+
+    result = asyncio.run(registry._watchlist_add(
+        390,
+        {"change": {"asset": "AAPL", "operation": "add"}},
+    ))
+
+    assert result == {
+        "ok": True, "asset": "AAPL", "operation": "watchlist_add", "quote_status": "pending",
+    }
+    assert len(session.calls) == 1
 
 
 def test_indicator_adapter_returns_the_exact_persisted_contract_identity():
