@@ -135,6 +135,14 @@ class FinnV2EntityResolutionService:
             )
 
         recent_action_results = dict(conversation_context.get("recent_action_results") or {})
+        demonstrative_reference = bool(re.search(
+            rf"\b(?:deze|die|dit|hem|haar|this|that|it|diese[nrms]?|dieser|dieses)\s+(?:{re.escape(entity_type)}|object|plan)\b",
+            str(message or "").casefold(),
+        ))
+        if demonstrative_reference and entity_type not in recent_action_results:
+            recent_action_results[entity_type] = dict(
+                (conversation_context.get("recent_owner_action_results") or {}).get(entity_type) or {}
+            )
         action_result = dict(
             recent_action_results.get(entity_type)
             or conversation_context.get("previous_action_result")

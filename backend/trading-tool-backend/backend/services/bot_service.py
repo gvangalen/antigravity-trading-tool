@@ -226,7 +226,10 @@ class BotService:
             strategy_row = res_strat.fetchone()
             if not strategy_row:
                 raise HTTPException(400, f"De opgegeven strategy_id ({strategy_id}) bestaat niet of is niet van jou.")
-            if not raw_payload.get("symbol") and strategy_row[1]:
+            if strategy_row[1]:
+                # The owner-scoped strategy is authoritative for a bot's
+                # asset. Workspace context is only presentation context and
+                # must never leak a previously selected asset into a new bot.
                 raw_payload["symbol"] = str(strategy_row[1]).upper()
 
             duplicate_strategy_query = text("""

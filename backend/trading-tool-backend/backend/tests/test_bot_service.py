@@ -173,6 +173,23 @@ def test_bot_payload_validation_normalizes_transactional_fields():
     assert payload["base_currency"] == "EUR"
 
 
+def test_bot_payload_uses_owner_scoped_strategy_asset_over_stale_workspace_asset():
+    service = BotService(_FakeSession())
+    payload = {
+        "name": "Apple Paper Bot",
+        "strategy_id": 42,
+        "symbol": "AAPL",
+        "mode": "manual",
+        "is_live": False,
+    }
+
+    asyncio.run(service.validate_bot_payload(payload, user_id=1))
+
+    # The fake owner-scoped strategy is BTC; a caller supplied workspace value
+    # may not redefine the persisted bot graph.
+    assert payload["symbol"] == "BTC"
+
+
 def test_bot_creation_rejects_duplicate_strategy_bot():
     service = BotService(_FakeSession(duplicate_strategy_bot_id=7))
     payload = {

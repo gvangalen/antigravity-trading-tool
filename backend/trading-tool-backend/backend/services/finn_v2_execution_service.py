@@ -301,11 +301,21 @@ class FinnV2ExecutionService:
         parent_type = parent_type or prior_entity.get("parent_entity_type")
         parent_id = parent_id or prior_entity.get("parent_entity_id")
         completed_at = execution.completed_at.astimezone(timezone.utc).isoformat() if execution.completed_at else None
+        canonical_entity = {
+            **prior_entity,
+            **result_entity,
+            **{key: result.get(key) for key in (
+                "id", "name", "symbol", "timeframe", "setup_type",
+                "setup_id", "strategy_id", "bot_id", "execution_mode",
+                "budget_total_eur", "mode", "is_live", "is_active",
+            ) if result.get(key) is not None},
+        }
         return {
             "operation_id": proposal.operation_type,
             "entity_type": entity_type,
             "entity_id": str(entity_id) if entity_id is not None else None,
             "canonical_name": canonical_name,
+            "canonical_entity": canonical_entity,
             "owner_user_id": proposal.user_id,
             "parent_entity_type": parent_type,
             "parent_entity_id": str(parent_id) if parent_id is not None else None,

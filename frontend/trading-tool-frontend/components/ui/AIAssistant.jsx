@@ -4518,7 +4518,7 @@ function AIAssistantContent({
                     || (operationId?.includes("strategy") ? resolvedStrategyName : null)
                     || (operationId?.includes("bot") ? resolvedBotName : null)
                     || null,
-                  symbol: projection?.canonical_target || actionDraft?.supplied_inputs?.symbol || setupDraft?.supplied_inputs?.symbol || activeSetup?.symbol || null,
+                  symbol: actionDraft?.supplied_inputs?.symbol || setupDraft?.supplied_inputs?.symbol || projection?.canonical_target || activeSetup?.symbol || null,
                   timeframe: actionDraft?.supplied_inputs?.timeframe || setupDraft?.supplied_inputs?.timeframe || null,
                   setup_name: resolvedSetupName,
                   strategy_name: resolvedStrategyName,
@@ -4926,8 +4926,13 @@ function AIAssistantContent({
         const displayContext = action.display_context || {};
         const operationId = displayContext.operation_id || execution.operation_id || "";
         const suppliedInputs = displayContext.supplied_inputs || {};
+        const canonicalEntity = execution.action_result?.canonical_entity || {};
         const operationLabel = operationId.includes("bot") ? "Paper-bot" : operationId.includes("strategy") ? "Strategie" : operationId.includes("setup") ? "Setup" : operationId.includes("indicator_configuration") ? "Indicator" : operationId.startsWith("watchlist_") ? "Watchlist" : "Actie";
-        const resultName = execution.action_result?.canonical_name || displayContext.name || `Je ${operationLabel.toLowerCase()}`;
+        const resultName = execution.action_result?.canonical_name
+          || canonicalEntity.name
+          || suppliedInputs.name
+          || displayContext.name
+          || `Je ${operationLabel.toLowerCase()}`;
         const resultVerb = operationId.startsWith("delete_") ? "verwijderd" : operationId.startsWith("update_") || operationId === "deactivate_bot" ? "bijgewerkt" : "opgeslagen";
         const categoryLabel = ({ technical: "Technisch bewijs", macro: "Macro", market: "Marktindicatoren" })[suppliedInputs.category] || suppliedInputs.category;
         const analysisResultText = operationId.startsWith("watchlist_")

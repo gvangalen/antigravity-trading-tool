@@ -618,3 +618,36 @@ def test_typed_recent_setup_result_wins_an_unrelated_latest_strategy_result():
     assert target.entity_id == 294
     assert target.display_name == "Apple Full Setup"
     assert target.resolution_source == "previous_action_result"
+
+
+def test_demonstrative_setup_reference_survives_a_browser_conversation_boundary():
+    service = FinnV2EntityResolutionService(session=object())
+    service.setups = _FakeSetupRepo()
+    service.setups.get_user_setups = lambda _user_id: asyncio.sleep(0, result=[
+        {"id": 293, "name": "BTC Full Base", "symbol": "BTC"},
+        {"id": 294, "name": "Apple Full Setup", "symbol": "AAPL"},
+    ])
+    service.setups.get_setup_by_id = lambda setup_id, _user_id: asyncio.sleep(
+        0,
+        result={"id": 294, "name": "Apple Full Setup", "symbol": "AAPL"}
+        if setup_id == 294 else None,
+    )
+
+    target = asyncio.run(service.resolve_canonical_target(
+        user_id=388,
+        entity_type="setup",
+        message="Wijzig deze setup terug naar 1D.",
+        conversation_context={
+            "recent_owner_action_results": {
+                "setup": {
+                    "entity_type": "setup", "entity_id": "294",
+                    "owner_user_id": 388, "result_status": "succeeded",
+                },
+            },
+        },
+        workspace_hints={"asset": "BTC", "setup_id": 293},
+    ))
+
+    assert target.entity_id == 294
+    assert target.display_name == "Apple Full Setup"
+    assert target.resolution_source == "previous_action_result"

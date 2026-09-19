@@ -180,6 +180,42 @@ class FinnV2RuntimeContractRepository(FinnV2RepositoryTransactionMixin):
                 by_type[entity_type] = action_result
         return by_type
 
+    async def get_recent_action_results_for_user(
+        self,
+        *,
+        user_id: int,
+        exclude_run_id: Optional[str] = None,
+    ) -> dict[str, dict]:
+        """Return the newest live execution result per entity type for one owner.
+
+        This is not a generic implicit target. Consumers may use it only for
+        an explicit demonstrative continuation such as ``deze setup`` after a
+        browser/session boundary. Every result remains owner-scoped and typed.
+        """
+        conditions = [FinnV2RuntimeContract.user_id == user_id]
+        if exclude_run_id:
+            conditions.append(FinnV2RuntimeContract.run_id != exclude_run_id)
+        result = await self.session.execute(
+            select(FinnV2RuntimeContract)
+            .where(*conditions)
+            .order_by(desc(FinnV2RuntimeContract.updated_at))
+            .limit(96)
+        )
+        by_type: dict[str, dict] = {}
+        for row in result.scalars():
+            action_result = dict((row.state_json or {}).get("action_result") or {})
+            entity_type = str(action_result.get("entity_type") or "")
+            if (
+                entity_type
+                and entity_type not in by_type
+                and action_result.get("owner_user_id") == user_id
+                and action_result.get("entity_id") is not None
+                and action_result.get("result_status") == "succeeded"
+                and not str(action_result.get("operation_id") or "").startswith("delete_")
+            ):
+                by_type[entity_type] = action_result
+        return by_type
+
     @staticmethod
     def execution_view(row: FinnV2RuntimeContract) -> Dict[str, Any]:
         """Return the authoritative execution fields for a new contract run.

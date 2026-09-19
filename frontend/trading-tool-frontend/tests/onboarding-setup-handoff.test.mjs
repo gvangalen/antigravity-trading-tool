@@ -46,6 +46,14 @@ test("the real create envelope preserves setup_id for onboarding consumers", asy
   assert.match(form, /normalizeSetupSaveResponse\(savedSetup\)/);
 });
 
+test("setup editor keeps stock assets instead of silently falling back to BTC", async () => {
+  const form = await readSource("components/setup/SetupForm.jsx");
+  assert.match(form, /selectedAsset, availableAssets/);
+  assert.match(form, /initialData\?\.symbol/);
+  assert.match(form, /assetOptions\.map/);
+  assert.doesNotMatch(form, /<option value="BTC">/);
+});
+
 test("the onboarding consumer uses the real backend response without reading a legacy id field", async () => {
   const backendResponse = {
     setup_id: 771,

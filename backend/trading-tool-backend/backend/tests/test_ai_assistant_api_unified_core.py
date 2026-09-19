@@ -1427,6 +1427,34 @@ def test_get_finn_mission_control_returns_owner_scoped_fallback_after_enrichment
     assert stored == {}
 
 
+def test_get_finn_mission_control_bounds_enrichment_and_returns_owner_fallback(monkeypatch):
+    db = SimpleNamespace(rollback=AsyncMock())
+    monkeypatch.setattr("backend.api.ai_assistant_api._get_cached_mission_control", lambda user_id: None)
+    monkeypatch.setattr("backend.api.ai_assistant_api._store_cached_mission_control", lambda *_args: None)
+
+    class VisibleService:
+        async def deliver_mission_control(self, **kwargs):
+            return {"generation_status": "completed"}
+
+        async def deliver_mission_control_fallback(self, **kwargs):
+            return {"generation_status": "degraded", "finn_briefing": {"summary": "Persisted owner state"}}
+
+    async def timeout_wait_for(awaitable, *, timeout):
+        awaitable.close()
+        assert timeout == 8.0
+        raise asyncio.TimeoutError
+
+    monkeypatch.setattr("backend.api.ai_assistant_api.FinnV2VisibleDeliveryService", lambda _db: VisibleService())
+    monkeypatch.setattr("backend.api.ai_assistant_api.asyncio.wait_for", timeout_wait_for)
+    request = Request({"type": "http", "headers": [], "client": ("127.0.0.1", 12345)})
+    request.state.trace_id = "trace-timeout"
+
+    response = asyncio.run(get_finn_mission_control(current_user={"id": 30}, db=db, request=request))
+
+    assert response["generation_status"] == "degraded"
+    assert response["finn_briefing"]["summary"] == "Persisted owner state"
+
+
 def test_conversation_state_repository_serializes_date_values():
     class _Session:
         def __init__(self):

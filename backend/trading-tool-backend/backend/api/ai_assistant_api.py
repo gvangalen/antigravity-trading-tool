@@ -1,3 +1,4 @@
+import asyncio
 import json
 import logging
 import os
@@ -3092,11 +3093,14 @@ async def get_finn_mission_control(
         return cached
     service = FinnV2VisibleDeliveryService(db)
     try:
-        response = await service.deliver_mission_control(
-            user_id=current_user["id"],
-            context_payload={"page": "assistant", "surface": "today_with_finn"},
-            request_id=trace_id or f"mission-{uuid.uuid4().hex}",
-            trace_id=trace_id or f"mission-{uuid.uuid4().hex}",
+        response = await asyncio.wait_for(
+            service.deliver_mission_control(
+                user_id=current_user["id"],
+                context_payload={"page": "assistant", "surface": "today_with_finn"},
+                request_id=trace_id or f"mission-{uuid.uuid4().hex}",
+                trace_id=trace_id or f"mission-{uuid.uuid4().hex}",
+            ),
+            timeout=8.0,
         )
     except Exception as exc:
         logger.exception("FINN mission control enrichment failed", exc_info=exc)

@@ -79,8 +79,9 @@ def test_execution_service_records_postcondition_hash_on_success():
         "action_result": {
             "operation_id": "update_setup",
             "entity_type": "setup",
-            "entity_id": "9",
-            "canonical_name": None,
+                "entity_id": "9",
+                "canonical_name": None,
+                "canonical_entity": {"setup_id": 9},
             "owner_user_id": 7,
             "parent_entity_type": None,
             "parent_entity_id": None,
@@ -160,6 +161,32 @@ def test_action_result_accepts_scalar_asset_result_without_failing_execution():
     assert action_result["entity_type"] == "asset"
     assert action_result["canonical_name"] == "SOL"
     assert action_result["result_status"] == "succeeded"
+
+
+def test_action_result_projects_the_committed_entity_snapshot():
+    proposal = SimpleNamespace(
+        id="proposal-strategy",
+        run_id="run-strategy",
+        user_id=7,
+        operation_type="create_strategy",
+        payload_json={"change": {"strategy_fields": {"setup_id": 12, "name": "Apple Swing"}}},
+    )
+    execution = SimpleNamespace(id="execution-strategy", status="succeeded", completed_at=datetime.now(timezone.utc))
+
+    action_result = FinnV2ExecutionService._action_result(
+        proposal=proposal,
+        execution=execution,
+        result={"id": 44, "name": "Apple Swing", "symbol": "AAPL", "timeframe": "1D", "setup_id": 12},
+    )
+
+    assert action_result["canonical_name"] == "Apple Swing"
+    assert action_result["canonical_entity"] == {
+        "id": 44,
+        "name": "Apple Swing",
+        "symbol": "AAPL",
+        "timeframe": "1D",
+        "setup_id": 12,
+    }
 
 
 def test_strategy_repository_normalizes_decimal_payload_before_json_encoding():

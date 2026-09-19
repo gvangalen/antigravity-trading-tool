@@ -380,11 +380,11 @@ class FinnV2OrchestratorService:
                 lineage_state=dict((runtime_contract.state_json or {}).get("lineage_state") or {}),
                 guided_state=guided_state,
             )
-        if (
-            guided_state
-            and guided_state.get("missing_required_inputs")
-            and callable(record_guided_draft)
-        ):
+        if guided_state and callable(record_guided_draft):
+            # Persist the complete revision as well as collecting revisions.
+            # Otherwise the terminal proposal is forced to reconstruct its
+            # card from stale workspace context exactly when the final slot is
+            # filled, while the execution still receives the correct payload.
             runtime_contract = await record_guided_draft(
                 run_id=run_id, guided_state=guided_state
             )
@@ -916,6 +916,14 @@ class FinnV2OrchestratorService:
         if conversation_id and callable(recent_results_loader):
             context["recent_action_results"] = await recent_results_loader(
                 conversation_id=conversation_id,
+                user_id=user_id,
+                exclude_run_id=run_id,
+            )
+        owner_results_loader = getattr(
+            self.runtime_contracts, "get_recent_action_results_for_user", None
+        )
+        if callable(owner_results_loader):
+            context["recent_owner_action_results"] = await owner_results_loader(
                 user_id=user_id,
                 exclude_run_id=run_id,
             )

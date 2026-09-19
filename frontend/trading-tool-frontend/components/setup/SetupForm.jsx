@@ -24,7 +24,7 @@ const SetupForm = forwardRef(function SetupForm({ onSaved, mode = "new", initial
   const { t } = useTranslation();
   const copy = t?.setups?.form || {};
   const { showSnackbar } = useModal();
-  const { selectedAsset } = useAsset();
+  const { selectedAsset, availableAssets } = useAsset();
   const formRef = useRef(null);
 
   // ----------------------------------------------------
@@ -121,6 +121,12 @@ const SetupForm = forwardRef(function SetupForm({ onSaved, mode = "new", initial
 
   const isDca = formData.setupType === "dca";
   const isTrade = formData.setupType === "trade";
+  const assetOptions = Array.from(new Set([
+    ...(availableAssets || []),
+    selectedAsset,
+    initialData?.symbol,
+    formData.symbol,
+  ].map((value) => String(value || "").trim().toUpperCase()).filter(Boolean)));
 
   // ----------------------------------------------------
   // SUBMIT
@@ -352,9 +358,11 @@ const SetupForm = forwardRef(function SetupForm({ onSaved, mode = "new", initial
               onChange={handleChange}
               className={fieldClass}
             >
-              <option value="BTC">{copy.assetBtc}</option>
-              <option value="ETH">{copy.assetEth}</option>
-              <option value="SOL">{copy.assetSol}</option>
+              {assetOptions.map((symbol) => (
+                <option key={symbol} value={symbol}>
+                  {symbol === "BTC" ? copy.assetBtc : symbol === "ETH" ? copy.assetEth : symbol === "SOL" ? copy.assetSol : symbol}
+                </option>
+              ))}
             </select>
           </div>
 
