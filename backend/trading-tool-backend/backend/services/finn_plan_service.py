@@ -12688,6 +12688,7 @@ class FinnPlanService:
                 mission,
                 activity_feed=activity_feed,
                 day_log=day_log,
+                prepared_payload=personal_payload,
             )
         except Exception as exc:
             logger.exception(
@@ -13333,14 +13334,17 @@ class FinnPlanService:
         *,
         activity_feed: List[Dict[str, Any]],
         day_log: Dict[str, Any],
+        prepared_payload: Optional[Dict[str, Any]] = None,
     ) -> Optional[Dict[str, Any]]:
-        payload = await self._prepare_first_dashboard_payload(
-            user_id=user_id,
-            analysis=analysis,
-            mission=mission,
-            activity_feed=activity_feed,
-            day_log=day_log,
-        )
+        payload = prepared_payload
+        if payload is None:
+            payload = await self._prepare_first_dashboard_payload(
+                user_id=user_id,
+                analysis=analysis,
+                mission=mission,
+                activity_feed=activity_feed,
+                day_log=day_log,
+            )
         if not payload:
             return await self._build_first_dashboard_loading_context(user_id, analysis)
 
@@ -13518,6 +13522,9 @@ class FinnPlanService:
                 user_id,
                 self.trace_id,
             )
+        locale = str(preferences.get("locale") or "nl").lower().split("-", 1)[0]
+        if locale not in {"nl", "en", "de"}:
+            locale = "nl"
         setup = asset_analysis.get("setup") or {}
         active_strategy = asset_analysis.get("active_strategy") or {}
         strategy = active_strategy.get("strategy") or {}
@@ -13553,6 +13560,7 @@ class FinnPlanService:
         )
         observation, next_action = self._first_dashboard_observation_and_action(
             active_asset,
+            locale=locale,
             profile=profile,
             setup=setup,
             strategy=strategy,
@@ -13575,25 +13583,45 @@ class FinnPlanService:
             *indicators.get("market", [])[:2],
         ]
         indicator_text = ", ".join(indicator_bits[:4]) if indicator_bits else None
-        headline_bits = [f"Your {active_asset} plan is ready"]
-        if style_bits:
-            headline_bits.append(f"for your {style_bits[0]} profile")
-        if timeframes:
-            headline_bits.append(f"on {', '.join(timeframes[:3])}")
+        timeframe_text = ", ".join(timeframes[:3])
+        if locale == "en":
+            headline_bits = [f"Your {active_asset} plan is ready"]
+            if style_bits:
+                headline_bits.append(f"for your {style_bits[0]} profile")
+            if timeframe_text:
+                headline_bits.append(f"on {timeframe_text}")
+        elif locale == "de":
+            headline_bits = [f"Dein {active_asset}-Plan ist bereit"]
+            if style_bits:
+                headline_bits.append(f"fur dein {style_bits[0]}-Profil")
+            if timeframe_text:
+                headline_bits.append(f"auf {timeframe_text}")
+        else:
+            headline_bits = [f"Je {active_asset}-plan is klaar"]
+            if style_bits:
+                headline_bits.append(f"voor je {style_bits[0]}-profiel")
+            if timeframe_text:
+                headline_bits.append(f"op {timeframe_text}")
         fallback_headline = " ".join(headline_bits) + "."
 
         fallback_reasoning_parts = []
+        labels = {
+            "nl": {"indicators": "Ingestelde indicatoren", "setup": "Setup", "strategy": "Strategie", "bot": "Bot", "linked": "is gekoppeld", "live_on": "live trading staat aan", "live_off": "live trading staat uit", "empty": "Je opgeslagen plancontext staat klaar voor een eerste beoordeling."},
+            "en": {"indicators": "Configured indicators", "setup": "Setup", "strategy": "Strategy", "bot": "Bot", "linked": "is linked", "live_on": "live trading is enabled", "live_off": "live trading is disabled", "empty": "Your stored plan context is ready for a first review."},
+            "de": {"indicators": "Konfigurierte Indikatoren", "setup": "Setup", "strategy": "Strategie", "bot": "Bot", "linked": "ist verknupft", "live_on": "Live-Trading ist aktiviert", "live_off": "Live-Trading ist deaktiviert", "empty": "Dein gespeicherter Plankontext ist fur eine erste Prufung bereit."},
+        }[locale]
         if indicator_text:
-            fallback_reasoning_parts.append(f"Configured indicators: {indicator_text}.")
+            fallback_reasoning_parts.append(f"{labels['indicators']}: {indicator_text}.")
         if setup.get("name"):
-            fallback_reasoning_parts.append(f"Setup: {setup.get('name')}.")
+            fallback_reasoning_parts.append(f"{labels['setup']}: {setup.get('name')}.")
         if strategy.get("name"):
-            fallback_reasoning_parts.append(f"Strategy: {strategy.get('name')}.")
+            fallback_reasoning_parts.append(f"{labels['strategy']}: {strategy.get('name')}.")
         if linked_bot:
             fallback_reasoning_parts.append(
-                f"Bot {linked_bot.get('name') or 'connected bot'} is linked and live trading is {'enabled' if linked_bot.get('is_live') else 'disabled'}."
+                f"{labels['bot']} {linked_bot.get('name') or labels['bot'].lower()} {labels['linked']}; "
+                f"{labels['live_on'] if linked_bot.get('is_live') else labels['live_off']}."
             )
-        fallback_reasoning = " ".join(fallback_reasoning_parts[:3]) or "Stored onboarding context is ready for a first dashboard review."
+        fallback_reasoning = " ".join(fallback_reasoning_parts[:3]) or labels["empty"]
 
         missing_fields = self._first_dashboard_missing_fields(
             profile=profile,
@@ -13646,6 +13674,7 @@ class FinnPlanService:
         }
         input_snapshot = {
             "name": display_name,
+            "locale": locale,
             "asset": active_asset,
             "profile": {
                 "trader_types": profile.get("trader_types") or [],
@@ -13677,6 +13706,7 @@ class FinnPlanService:
         ).hexdigest()
         ai_prompt_context = {
             "name": display_name,
+            "locale": locale,
             "profile": input_snapshot["profile"],
             "asset": {"symbol": active_asset},
             "indicators": indicators,
@@ -14216,6 +14246,7 @@ class FinnPlanService:
             "task": {
                 "goal": "Generate the first FINN dashboard briefing after onboarding.",
                 "constraints": [
+                    "Write every user-visible string in the language specified by context.locale (nl=Dutch, en=English, de=German).",
                     "Do not list every field back to the user.",
                     "Choose one observation that reflects real evaluation of the stored context.",
                     "Use market claims only when supported by supplied market data.",
@@ -14553,6 +14584,7 @@ class FinnPlanService:
         self,
         asset: str,
         *,
+        locale: str = "nl",
         profile: Dict[str, List[str]],
         setup: Dict[str, Any],
         strategy: Dict[str, Any],
@@ -14562,64 +14594,89 @@ class FinnPlanService:
         has_scores: bool,
         blockers: List[Dict[str, Any]],
     ) -> tuple[str, Dict[str, str]]:
+        language = str(locale or "nl").lower().split("-", 1)[0]
+        copy = {
+            "nl": {
+                "waiting": "Ik wacht nog op de eerste complete marktsnapshot. Daarom kan ik je entryvoorwaarden nog niet verantwoord beoordelen.",
+                "review": f"Bekijk je {asset}-plan",
+                "waiting_question": f"Wil je je {asset}-plan doornemen voordat de eerste actuele marktsnapshot beschikbaar is?",
+                "blocked": "{asset} voldoet nog niet aan een entryvoorwaarde: {category} valt buiten je ingestelde bereik {range}.",
+                "check": "Bekijk ontbrekende entryvoorwaarden",
+                "blocked_question": "Wil je bekijken waarom {category} je {asset}-plan blokkeert?",
+                "macro": "Je plan is technisch ingesteld, maar mist nog bredere macrocontext voor deze beoordeling.",
+                "macro_action": "Bekijk voorgestelde macrocontext",
+                "macro_question": f"Wil je voor {asset} eerst een relevante macro-indicator bekijken?",
+                "risk": "Je opgeslagen risicoprofiel is voorzichtig, terwijl de gekoppelde bot een agressief uitvoeringsprofiel gebruikt.",
+                "risk_question": "Wil je dit risicoverschil bekijken voordat je verdergaat?",
+                "paper": "Je strategie en bot zijn gekoppeld. Live trading staat uit; dat is de veilige onboardingstatus.",
+                "simulate": "Voer de eerste simulatie uit",
+                "simulate_question": f"Wil je eerst een simulatie voor {asset} uitvoeren?",
+                "timeframe": "Je swingprofiel sluit niet goed aan op het huidige {timeframe}-timeframe.",
+                "timeframe_question": "Wil je bekijken of {timeframe} het juiste timeframe voor dit plan is?",
+                "ready": "Je strategie {strategy} is volledig gekoppeld en de huidige setup toont nog geen blokkerende voorwaarde.",
+                "ready_question": f"Wil je je {asset}-plan doornemen voordat je de volgende stap zet?",
+            },
+            "en": {},
+            "de": {},
+        }.get(language) or {}
+        if language != "nl":
+            copy = {
+                "waiting": "I am still waiting for the first complete market snapshot, so I cannot responsibly assess your entry conditions yet.",
+                "review": f"Review your {asset} plan",
+                "waiting_question": f"Would you like to review your {asset} plan before the first live snapshot arrives?",
+                "blocked": "{asset} currently fails one of your entry conditions: {category} is outside your configured range {range}.",
+                "check": "Check missing entry conditions",
+                "blocked_question": "Would you like to inspect why {category} is blocking your {asset} plan?",
+                "macro": "Your plan is technically configured, but it still lacks broader macro context for the first dashboard review.",
+                "macro_action": "Review suggested macro context",
+                "macro_question": f"Would you like to review one relevant macro indicator for {asset} before activation?",
+                "risk": "Your stored risk profile is conservative, while the linked bot currently uses an aggressive execution profile.",
+                "risk_question": "Would you like to review that risk mismatch before you continue?",
+                "paper": "Your strategy and bot are connected, but live trading remains disabled, which is the safer onboarding state.",
+                "simulate": "Run first simulation",
+                "simulate_question": f"Would you like to run a first simulation for {asset} before any live activation?",
+                "timeframe": "Your stored swing profile does not line up cleanly with the current {timeframe} setup timeframe.",
+                "timeframe_question": "Would you like to review whether {timeframe} is really the right timeframe for this plan?",
+                "ready": "Your {strategy} is fully wired, and the current setup does not show a blocking condition yet.",
+                "ready_question": f"Would you like to review your {asset} plan before you take the next step?",
+            }
         if data_readiness.get("status") in {"onboarding_incomplete", "indicator_config_missing", "score_generation_missing"} or not has_scores:
             return (
-                "I am still waiting for the first complete market snapshot, so I cannot responsibly assess your entry conditions yet.",
-                {
-                    "label": f"Review your {asset} plan",
-                    "question": f"Would you like to review your {asset} plan before the first live snapshot arrives?",
-                },
+                copy["waiting"],
+                {"label": copy["review"], "question": copy["waiting_question"]},
             )
         if blockers:
             blocker = blockers[0]
             category = str(blocker.get("category") or "score")
             return (
-                f"{asset} currently fails one of your entry conditions: {category} is outside your configured range {blocker.get('range')}.",
-                {
-                    "label": "Check missing entry conditions",
-                    "question": f"Would you like to inspect why {category} is blocking your {asset} plan?",
-                },
+                copy["blocked"].format(asset=asset, category=category, range=blocker.get("range")),
+                {"label": copy["check"], "question": copy["blocked_question"].format(category=category, asset=asset)},
             )
         if not indicators.get("macro"):
             return (
-                "Your plan is technically configured, but it still lacks broader macro context for the first dashboard review.",
-                {
-                    "label": "Review suggested macro context",
-                    "question": f"Would you like to review one relevant macro indicator for {asset} before activation?",
-                },
+                copy["macro"],
+                {"label": copy["macro_action"], "question": copy["macro_question"]},
             )
         if "conservative" in set(profile.get("risk_profiles") or []) and linked_bot and str(linked_bot.get("risk_profile") or "").lower() == "aggressive":
             return (
-                "Your stored risk profile is conservative, while the linked bot currently uses an aggressive execution profile.",
-                {
-                    "label": f"Review your {asset} plan",
-                    "question": "Would you like to review that risk mismatch before you continue?",
-                },
+                copy["risk"],
+                {"label": copy["review"], "question": copy["risk_question"]},
             )
         if linked_bot and not linked_bot.get("is_live"):
             return (
-                "Your strategy and bot are connected, but live trading remains disabled, which is the safer onboarding state.",
-                {
-                    "label": "Run first simulation",
-                    "question": f"Would you like to run a first simulation for {asset} before any live activation?",
-                },
+                copy["paper"],
+                {"label": copy["simulate"], "question": copy["simulate_question"]},
             )
         timeframe = setup.get("timeframe")
         if timeframe and "swing_trader" in set(profile.get("trader_types") or []) and str(timeframe).lower() in {"5m", "15m", "1h"}:
             return (
-                f"Your stored swing profile does not line up cleanly with the current {timeframe} setup timeframe.",
-                {
-                    "label": f"Review your {asset} plan",
-                    "question": f"Would you like to review whether {timeframe} is really the right timeframe for this plan?",
-                },
+                copy["timeframe"].format(timeframe=timeframe),
+                {"label": copy["review"], "question": copy["timeframe_question"].format(timeframe=timeframe)},
             )
         strategy_name = strategy.get("name") or "strategy"
         return (
-            f"Your {strategy_name} is fully wired, and the current setup does not show a blocking condition yet.",
-            {
-                "label": f"Review your {asset} plan",
-                "question": f"Would you like to review your {asset} plan before you take the next step?",
-            },
+            copy["ready"].format(strategy=strategy_name),
+            {"label": copy["review"], "question": copy["ready_question"]},
         )
 
     def _mission_workqueue_from_first_dashboard_context(self, context: Dict[str, Any]) -> Dict[str, Any]:

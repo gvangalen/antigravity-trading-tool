@@ -44,7 +44,7 @@ const handleApi = async (promise) => {
 ===================================================== */
 
 export const fetchBotConfigs = async () => {
-  const data = await handleApi(fetchAuth(`/api/bot/configs`));
+  const data = await handleApi(fetchAuth(`/api/bot/configs`, { forceFresh: true }));
   return ensureArray(data);
 };
 

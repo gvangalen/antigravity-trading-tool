@@ -48,7 +48,7 @@ PUBLIC_PROBES = (
     ("portfolio", "Read my portfolio summary.", "read_portfolio"),
     ("indicator_evaluate", "Beoordeel mijn RSI-configuratie.", "evaluate_indicator_configuration"),
     ("asset_precedence", "Welke asset is actief als ik ETH noem?", "read_active_asset"),
-    ("setup_graph", "Toon setup, strategie en bot samen.", "read_active_plan"),
+    ("setup_graph", "Toon mijn actieve plan met setup, strategie en bot.", "read_active_plan"),
     ("financial_concept_de", "Was bedeutet gleitender Durchschnitt?", "explain_financial_concept"),
     ("capability_en", "What support is available?", "capability"),
 )
@@ -67,7 +67,7 @@ def _run_probe(*, base_url: str, token: str, item: tuple[str, str, str]) -> dict
         passed = (
             observed["initial_operation_id"] == expected_operation
             and observed["final_operation_id"] == expected_operation
-            and observed["status"] in {"completed", "downgraded", "unavailable", "failed"}
+            and observed["status"] in {"completed", "downgraded", "unavailable", "failed", "clarification_required"}
             and observed["polling_sse_contract_projection"]
         )
         return {

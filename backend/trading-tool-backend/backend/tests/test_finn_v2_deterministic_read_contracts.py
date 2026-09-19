@@ -223,6 +223,8 @@ def test_linked_bot_budget_read_mentions_the_typed_persisted_budget():
 
     assert "€1.000" in reasoning.direct_answer
     assert "BTC Paper" in reasoning.direct_answer
+    assert "BTC Fixed" in reasoning.direct_answer
+    assert "BTC op timeframe 4H" in reasoning.direct_answer
     assert "186" not in reasoning.direct_answer
 
 
@@ -246,7 +248,8 @@ def test_bot_status_budget_read_mentions_budget_and_live_state():
         run_id=context.run_id, user_id=context.user_id, context=context, model="deterministic", error_codes=[]
     )
 
-    assert reasoning.direct_answer.startswith("Je paper-bot ‘BTC Paper’ heeft een budget van €1.000.")
+    assert reasoning.direct_answer.startswith("Je paper-bot ‘BTC Paper’ is gekoppeld aan strategie BTC Fixed")
+    assert "budget van €1.000" in reasoning.direct_answer
     assert "niet live" in reasoning.main_observation
     assert "setup 309" not in reasoning.direct_answer
     assert "strategie 325" not in reasoning.direct_answer

@@ -365,6 +365,7 @@ def test_first_dashboard_observation_prefers_macro_gap_for_btc_swing_profile():
 
     observation, next_action = service._first_dashboard_observation_and_action(
         "BTC",
+        locale="en",
         profile={
             "trader_types": ["swing_trader"],
             "risk_profiles": ["balanced"],
@@ -388,6 +389,7 @@ def test_first_dashboard_observation_changes_for_aapl_missing_market_snapshot():
 
     observation, next_action = service._first_dashboard_observation_and_action(
         "AAPL",
+        locale="en",
         profile={
             "trader_types": ["investor"],
             "risk_profiles": ["conservative"],
@@ -977,7 +979,8 @@ def test_prepare_first_dashboard_payload_survives_indicator_and_bot_lookup_failu
     assert payload["asset"] == "BTC"
     assert payload["bot"] is None
     assert payload["indicators"] == {"market": [], "macro": [], "technical": []}
-    assert payload["fallback_result"]["headline"].startswith("Your BTC plan is ready")
+    assert payload["fallback_result"]["headline"].startswith("Je BTC-plan is klaar")
+    assert payload["input_snapshot"]["locale"] == "nl"
 
 
 def test_first_dashboard_allows_onboarding_configuration_activity_only():
@@ -1146,6 +1149,46 @@ def test_build_first_dashboard_context_returns_loading_when_payload_is_not_ready
     assert result["response_source"] == "briefing_generating"
     assert result["generation_status"] == "pending"
     assert result["headline"] == "FINN bekijkt je plan"
+
+
+def test_build_first_dashboard_context_reuses_current_payload_after_user_activity(monkeypatch):
+    service = FinnPlanService(db_session=object())
+    payload = _first_dashboard_payload("ctx-current")
+
+    async def fail_prepare(**kwargs):
+        raise AssertionError("prepared mission-control payload must not be recomputed")
+
+    async def empty_state(user_id):
+        return {
+            "first_dashboard_briefing": {
+                "status": "fallback",
+                "context_version": "ctx-current",
+                "result": payload["fallback_result"],
+            }
+        }
+
+    async def no_inline_generation(user_id, current_payload, state):
+        assert current_payload is payload
+        return False
+
+    monkeypatch.setattr(service, "_prepare_first_dashboard_payload", fail_prepare)
+    monkeypatch.setattr(service, "_load_first_dashboard_briefing_state", empty_state)
+    monkeypatch.setattr(service, "_inline_generate_first_dashboard_briefing_if_needed", no_inline_generation)
+
+    result = asyncio.run(
+        service._build_first_dashboard_context(
+            7,
+            {"assets": []},
+            {"summary": {}, "workqueue": [], "workqueue_groups": []},
+            activity_feed=[{"type": "update_bot"}],
+            day_log={"handled_count": 1, "skipped_count": 0, "snoozed_count": 0},
+            prepared_payload=payload,
+        )
+    )
+
+    assert result["asset"] == payload["asset"]
+    assert result["generation_status"] != "pending"
+    assert result["headline"] == payload["fallback_result"]["headline"]
 
 
 def test_first_dashboard_projects_personal_fallback_while_background_generation_is_queued():

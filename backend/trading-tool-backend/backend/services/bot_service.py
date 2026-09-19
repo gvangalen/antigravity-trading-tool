@@ -1614,7 +1614,7 @@ class BotService:
         out = []
         for b in bots:
             bot_id = b["id"]
-            symbol = "BTC"
+            symbol = str(b.get("symbol") or "").strip().upper()
             stats_raw = await self.repository.get_bot_ledger_stats(user_id, bot_id, today)
             
             stats = {
@@ -1633,7 +1633,7 @@ class BotService:
             stats["remaining_daily_eur"] = max(float(b["budget_daily_limit_eur"]) - stats["today_spent_eur"], 0)
             
             # Fetch price individually
-            last_price = await self.repository.get_market_price(symbol)
+            last_price = await self.repository.get_market_price(symbol) if symbol else None
             stats["last_price"] = last_price
             if last_price is not None:
                 stats["position_value_eur"] = round(stats["net_qty"] * last_price, 2)

@@ -1,0 +1,90 @@
+{
+  "artifact_version": "finn.multi_asset_resolved_action_envelope.v1",
+  "baseline": {
+    "product_sha": "77946b3cd49d5261d4e2cace1a4d0b62b69f9b72",
+    "qa_report": "/Users/gvangalen/.codex/qa-artifacts/finn-full-retest-77946b3c/report.md",
+    "qa_report_sha256": "9e7a1b91ee8916c3e8668efcc46a0331425084390aaaa4c984e4958b11a40f40"
+  },
+  "root_causes": {
+    "explicit_target_resolution": "A stale conversation or workspace ID could outrank an explicitly named current-turn object.",
+    "collection_reads": "Single-object context was reused for collection questions instead of returning all owner-scoped matches.",
+    "bot_projection": "Bot portfolio projection hard-coded BTC instead of joining the bot to its owner-scoped strategy and setup symbol.",
+    "finn_today": "Mission-control recomputed first-dashboard eligibility after activity and could enter loading; fallback and AI prompt lacked an explicit locale boundary.",
+    "aggregate_plan_read": "An explicit active-plan summary naming setup, strategy and bot was narrowed to read_linked_bot instead of the aggregate read_active_plan contract.",
+    "queue_parity": "Local parity task routes did not consistently apply the configured isolated queue prefix."
+  },
+  "validated_outcomes": {
+    "explicit_current_turn_target_overrides_stale_context": true,
+    "owner_scoped_collection_reads": true,
+    "bot_relationship_projection": {
+      "apple": "AAPL / 1D / Apple Envelope Strategy / Apple Envelope Setup",
+      "microsoft": "MSFT / 4H / MSFT Envelope Strategy / MSFT Envelope Setup"
+    },
+    "finn_today_uses_current_payload": true,
+    "finn_today_locale_bound": true,
+    "raw_not_reviewed_enum_hidden": true,
+    "aapl_quote_without_provider": "typed_unavailable_no_fabricated_price"
+  },
+  "runtime_matrix": {
+    "path": ".local-finn-parity-artifacts/finn-77946-final-runtime-matrix-certified.json",
+    "sha256": "dd043d085ea0476c05432b4330f500c31a69f19632e83c384b5c27ad23206e19",
+    "cases": "37/37",
+    "write_contracts": "16/16",
+    "persistent_lineage": "9/9",
+    "original_http_statuses": {"200": 37, "429": 0, "500": 0, "599": 0},
+    "timeouts": 0,
+    "run_create_ms": {"p50": 75.44, "p95": 317.22, "max": 603.03},
+    "terminal_ms": {"p50": 2283.64, "p95": 4346.57, "max": 6855.42},
+    "postgres_waiting": 0,
+    "redis_interactive_depth": 0
+  },
+  "provider_validation": {
+    "development": {
+      "path": "/tmp/finn-77946-final-provider-development.json",
+      "sha256": "c89436d4974ae3ffe90f51a9847337dbedd885ffe54af5de5c383638c6773b14",
+      "result": "18/18"
+    },
+    "regression": {
+      "path": "/tmp/finn-77946-final-provider-regression.json",
+      "sha256": "212780f1181a02b50cd6fb06e5e0044c1cac5e332e6cb8ee2343ce23074be948",
+      "result": "109/109",
+      "p50_ms": 1965,
+      "p95_ms": 2545,
+      "retries": 0
+    }
+  },
+  "tests": {
+    "backend_rootsuite": "2275 passed, 3 skipped",
+    "targeted_backend": "474 passed",
+    "classification_resolver_reads": "232 passed",
+    "frontend_typecheck": "PASS",
+    "frontend_build": "PASS",
+    "frontend_i18n": "7/7",
+    "frontend_commands": "5/5",
+    "frontend_finn_today": "2/2",
+    "frontend_audit_high": "0 vulnerabilities",
+    "git_diff_check": "PASS"
+  },
+  "database_evidence": {
+    "temporary_objects_removed": {
+      "setups": ["MSFT Envelope Setup", "BTC Collection Alpha", "BTC Collection Beta"],
+      "strategies": ["MSFT Envelope Strategy", "BTC Alpha Strategy", "BTC Beta Strategy"],
+      "bots": ["MSFT Envelope Bot"]
+    },
+    "preserved_objects": {
+      "setup": "Apple Envelope Setup",
+      "strategies": ["Apple Envelope Strategy", "Apple Envelope Direct Strategy"],
+      "bot": "Apple Envelope Bot",
+      "restored_budget_eur": 500
+    }
+  },
+  "safety": {
+    "live_bots": 0,
+    "broker_orders": 0,
+    "non_allowlisted_executions": 0,
+    "production_touched": false,
+    "deployment_started": false,
+    "qa_started": false
+  },
+  "ready_for_deployment": true
+}

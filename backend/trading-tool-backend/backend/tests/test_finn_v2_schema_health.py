@@ -27,6 +27,13 @@ def test_local_bootstrap_preserves_the_canonical_runtime_contract_identifier_typ
         assert f"ALTER COLUMN {column} TYPE TEXT" in source
 
 
+def test_local_bootstrap_expands_bot_ledger_for_portfolio_reads():
+    source = (Path(__file__).resolve().parents[1] / "scripts" / "bootstrap_local_finn_schema.py").read_text(encoding="utf-8")
+
+    for column in ("bot_id", "symbol", "cash_delta_eur", "qty_delta", "price_eur", "ts"):
+        assert f"ADD COLUMN IF NOT EXISTS {column}" in source
+
+
 class _Cursor:
     def __init__(self, metadata, *, constraints=True, indexes=True):
         self.metadata = metadata

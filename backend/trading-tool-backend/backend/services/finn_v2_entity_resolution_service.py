@@ -598,12 +598,16 @@ class FinnV2EntityResolutionService:
         }
         for entity, loader in repositories.items():
             id_field, name_field = f"{entity}_id", f"{entity}_name"
-            if id_field not in required_inputs or self._coerce_int(enriched.get(id_field)) or self._normalized_name(enriched.get(name_field)):
+            if id_field not in required_inputs:
                 continue
             rows = await loader(user_id)
-            matches = [dict(row) for row in rows if self._message_mentions_name(message, row.get("name"))]
+            matches = self._explicit_message_matches(message, [dict(row) for row in rows])
             if len(matches) == 1:
                 enriched[name_field] = matches[0].get("name")
+                # An owner-scoped name in the current turn outranks an ID from
+                # prior conversation/workspace context. Remove that stale ID
+                # so the normal name resolver emits the matched canonical ID.
+                enriched.pop(id_field, None)
             elif len(matches) > 1:
                 raise LookupError(f"{entity}_ambiguous")
         return enriched

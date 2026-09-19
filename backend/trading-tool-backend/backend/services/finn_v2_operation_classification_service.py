@@ -421,6 +421,8 @@ class FinnV2OperationClassificationService:
         ):
             return None
         entities = set(facts.explicit_entities)
+        if facts.explicit_plan_subject and explicit_summary_request:
+            return "read_active_plan"
         if re.search(
             r"\b(?:activeer|activeren|activate|enable|einschalten|deactiveer|deactiveren|"
             r"deactivate|disable|ausschalten|maak|aanmaken|create|erstellen|wijzig|aanpassen|"

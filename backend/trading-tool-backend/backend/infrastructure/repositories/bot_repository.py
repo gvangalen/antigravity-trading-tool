@@ -379,19 +379,22 @@ class BotRepository:
     async def get_bot_portfolios_base(self, user_id: int) -> List[dict]:
         has_base_currency = await self.check_column_exists("bot_configs", "base_currency")
         base_currency_select = (
-            "COALESCE(base_currency, 'EUR') as base_currency"
+            "COALESCE(b.base_currency, 'EUR') as base_currency"
             if has_base_currency
             else "'EUR' as base_currency"
         )
         query = text("""
             SELECT
-              id, name, is_active, is_live, mode, COALESCE(risk_profile,'balanced') as risk_profile,
-              COALESCE(budget_total_eur,0) as budget_total_eur, COALESCE(budget_daily_limit_eur,0) as budget_daily_limit_eur,
-              COALESCE(budget_min_order_eur,0) as budget_min_order_eur, COALESCE(budget_max_order_eur,0) as budget_max_order_eur,
+              b.id, b.name, b.is_active, b.is_live, b.mode, COALESCE(b.risk_profile,'balanced') as risk_profile,
+              COALESCE(b.budget_total_eur,0) as budget_total_eur, COALESCE(b.budget_daily_limit_eur,0) as budget_daily_limit_eur,
+              COALESCE(b.budget_min_order_eur,0) as budget_min_order_eur, COALESCE(b.budget_max_order_eur,0) as budget_max_order_eur,
+              COALESCE(s.symbol, s.data->>'symbol', st.symbol) AS symbol,
               """ + base_currency_select + """
-            FROM bot_configs
-            WHERE user_id=:user_id
-            ORDER BY id ASC
+            FROM bot_configs b
+            LEFT JOIN strategies s ON s.id = b.strategy_id AND s.user_id = b.user_id
+            LEFT JOIN setups st ON st.id = s.setup_id AND st.user_id = b.user_id
+            WHERE b.user_id=:user_id
+            ORDER BY b.id ASC
         """)
         result = await self.session.execute(query, {"user_id": user_id})
         return [dict(r._mapping) for r in result.fetchall()]

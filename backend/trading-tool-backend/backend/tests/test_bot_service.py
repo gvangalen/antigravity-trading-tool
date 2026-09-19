@@ -138,6 +138,60 @@ class _NoExchangeKeys:
         return []
 
 
+class _MultiAssetPortfolioRepo:
+    async def get_bot_portfolios_base(self, user_id):
+        return [
+            {
+                "id": 8,
+                "name": "Apple Paper",
+                "is_active": True,
+                "is_live": False,
+                "mode": "paper",
+                "risk_profile": "balanced",
+                "symbol": "AAPL",
+                "budget_total_eur": 500,
+                "budget_daily_limit_eur": 100,
+                "budget_min_order_eur": 10,
+                "budget_max_order_eur": 50,
+            },
+            {
+                "id": 10,
+                "name": "Microsoft Paper",
+                "is_active": True,
+                "is_live": False,
+                "mode": "paper",
+                "risk_profile": "balanced",
+                "symbol": "MSFT",
+                "budget_total_eur": 750,
+                "budget_daily_limit_eur": 100,
+                "budget_min_order_eur": 10,
+                "budget_max_order_eur": 50,
+            },
+        ]
+
+    async def get_bot_ledger_stats(self, user_id, bot_id, today):
+        return {
+            "net_cash": 0,
+            "executed_cash": 0,
+            "net_qty": 0,
+            "today_spent": 0,
+            "today_reserved": 0,
+        }
+
+    async def get_market_price(self, symbol):
+        return {"AAPL": 240.0, "MSFT": 510.0}.get(symbol)
+
+
+def test_bot_portfolios_use_each_bots_canonical_strategy_symbol():
+    service = BotService.__new__(BotService)
+    service.repository = _MultiAssetPortfolioRepo()
+
+    result = asyncio.run(service.get_bot_portfolios(user_id=27))
+
+    assert [item["symbol"] for item in result] == ["AAPL", "MSFT"]
+    assert [item["stats"]["last_price"] for item in result] == [240.0, 510.0]
+
+
 class _PreflightSession:
     def __init__(self, payload):
         self.payload = payload

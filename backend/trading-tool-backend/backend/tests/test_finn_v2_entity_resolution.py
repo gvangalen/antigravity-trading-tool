@@ -157,6 +157,32 @@ def test_entity_resolution_resolves_unquoted_owner_scoped_names_from_user_messag
     assert resolved == {"setup_id": 293, "strategy_id": 309, "bot_id": 170}
 
 
+def test_explicit_owner_name_in_current_turn_overrides_stale_context_ids():
+    service = FinnV2EntityResolutionService(session=object())
+    service.setups = _FakeSetupRepo()
+    service.strategies = _FakeStrategyRepo()
+    service.bots = _FakeBotRepo()
+    service.setups.get_user_setups = lambda _user_id: asyncio.sleep(0, result=[
+        {"id": 293, "name": "BTC Workspace Setup", "symbol": "BTC"},
+        {"id": 401, "name": "MSFT Envelope Setup", "symbol": "MSFT"},
+    ])
+    service.setups.get_setup_by_id = lambda setup_id, _user_id: asyncio.sleep(
+        0,
+        result={"id": 401, "name": "MSFT Envelope Setup", "symbol": "MSFT"}
+        if setup_id == 401 else None,
+    )
+
+    resolved = asyncio.run(service.resolve_contract_reference_inputs(
+        user_id=388,
+        selector={"setup_id": 293, "asset": "MSFT"},
+        required_inputs=("setup_id",),
+        operation_id="create_strategy",
+        message="Maak MSFT Envelope Strategy gekoppeld aan setup MSFT Envelope Setup.",
+    ))
+
+    assert resolved == {"setup_id": 401}
+
+
 def test_entity_resolution_rejects_ambiguous_explicit_quoted_name():
     service = FinnV2EntityResolutionService(session=object())
     service.setups = _FakeSetupRepo()

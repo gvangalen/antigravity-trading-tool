@@ -142,7 +142,10 @@ def resolve_workload_class(task_name: str) -> str:
 
 
 def celery_task_routes() -> Dict[str, Dict[str, str]]:
-    return {task_name: {"queue": queue} for task_name, queue in TASK_QUEUE_ROUTES.items()}
+    return {
+        task_name: {"queue": resolve_task_queue(task_name)}
+        for task_name in TASK_QUEUE_ROUTES
+    }
 
 
 def resolve_task_rate_limit(task_name: str) -> Optional[str]:

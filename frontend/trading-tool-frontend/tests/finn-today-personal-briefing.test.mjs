@@ -53,6 +53,7 @@ test("FINN Today renders the typed personal mission-control briefing", () => {
   );
   assert.match(assistantSource, /normalizeVisibleBriefing\(firstDashboardBriefingText/);
   assert.match(assistantSource, /NOT_REVIEWED_YET\|not_reviewed_yet/);
+  assert.match(assistantSource, /raw\.includes\("not_reviewed"\).*workspaceFirstDashboardLabel/);
 });
 
 test("recoverable FINN Today failures are never persisted in browser cache", () => {

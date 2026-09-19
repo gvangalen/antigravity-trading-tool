@@ -552,6 +552,7 @@ function AIAssistantContent({
     if (raw.includes("guarded")) return at("surfaceStatus.guarded");
     if (raw.includes("defensive")) return at("surfaceStatus.defensive");
     if (raw.includes("balanced")) return at("surfaceStatus.balanced");
+    if (raw.includes("not_reviewed")) return at("uiText.workspaceFirstDashboardLabel");
     return value;
   };
 

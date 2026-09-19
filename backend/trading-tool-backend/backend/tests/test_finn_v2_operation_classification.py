@@ -1310,6 +1310,23 @@ def test_preprocessor_distinguishes_an_explicit_plan_from_an_inferred_graph_subj
     assert graph_only.linked_graph_relationship is True
 
 
+def test_public_aggregate_plan_wording_is_an_explicit_plan_subject():
+    facts = CLASSIFIER.preprocessor.preprocess(
+        message="Toon mijn actieve plan met setup, strategie en bot."
+    )
+
+    assert facts.explicit_plan_subject is True
+    assert {"plan", "setup", "strategy", "bot"}.issubset(facts.explicit_entities)
+
+
+def test_public_aggregate_plan_wording_selects_the_complete_plan_contract():
+    result = CLASSIFIER.classify(
+        message="Toon mijn actieve plan met setup, strategie en bot."
+    )
+
+    assert result.operation_id == "read_active_plan"
+
+
 def test_preprocessor_recognizes_a_dutch_strategy_and_bot_relationship_graph():
     facts = CLASSIFIER.preprocessor.preprocess(
         message="Breng mijn huidige handelsopzet, methode en robotrelatie in kaart."
