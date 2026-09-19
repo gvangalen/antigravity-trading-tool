@@ -483,7 +483,10 @@ class FinnV2RequestPreprocessorService:
         # never a request to activate live automation.  Preserve that typed
         # safety fact before recognising an affirmative live activation.
         live_state_is_negated = bool(re.search(
-            r"\b(?:niet[-\s]?live|non[-\s]?live|not[-\s]?live|paper)\b", text
+            r"\b(?:niet[-\s]?live|non[-\s]?live|not[-\s]?live|paper)\b|"
+            r"\b(?:activeer\w*\s+geen|do\s+not\s+activate|don't\s+activate|"
+            r"aktiviere\w*\s+(?:kein\w*|nicht))\b.{0,24}\blive\b",
+            text,
         ))
         if (
             "live" in text
@@ -554,6 +557,8 @@ class FinnV2RequestPreprocessorService:
             return "add"
         for polarity, terms in self._ACTION_PATTERNS:
             if self._contains_any(text, terms):
+                if polarity == "activate" and live_state_is_negated:
+                    continue
                 if polarity == "execute" and self._contains_any(text, ("niet", "niets", "zonder")):
                     continue
                 return polarity

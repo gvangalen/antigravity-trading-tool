@@ -314,6 +314,21 @@ def test_activation_is_not_misclassified_as_create_bot_fast_path(message):
     assert result.operation_id != "create_bot"
 
 
+@pytest.mark.parametrize(
+    "message",
+    (
+        "Maak een paper bot met de naam BTC Bot q656 voor strategie BTC Plan q656 met een budget van 1000 euro. Activeer geen live trading.",
+        "Create a paper bot named BTC Bot q656 for strategy BTC Plan q656 with a budget of 1000 euros. Do not activate live trading.",
+        "Erstelle einen Paper-Bot namens BTC Bot q656 fuer Strategie BTC Plan q656 mit einem Budget von 1000 Euro. Aktiviere keinen Live-Handel.",
+    ),
+)
+def test_complete_safe_paper_bot_request_keeps_create_operation(message):
+    facts = CLASSIFIER.preprocessor.preprocess(message=message)
+
+    assert facts.action_polarity == "create"
+    assert CLASSIFIER._explicit_guided_create_operation(message=message, facts=facts) == "create_bot"
+
+
 def test_strategy_name_containing_live_does_not_turn_paper_bot_creation_into_activation():
     service = FinnV2OperationClassificationService()
     message = (

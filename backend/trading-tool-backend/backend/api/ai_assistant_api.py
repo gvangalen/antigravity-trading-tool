@@ -3258,7 +3258,7 @@ async def assistant_v2_execute_proposal(
             limit=ASSISTANT_EXECUTE_USER_LIMIT,
         )
     _require_csrf_match(raw_request, request.csrf_token or x_csrf_token)
-    return (
+    result = (
         await FinnV2ExecutionService(db).execute(
             proposal_id=proposal_id,
             user_id=current_user["id"],
@@ -3266,3 +3266,10 @@ async def assistant_v2_execute_proposal(
             expected_payload_hash=request.expected_payload_hash,
         )
     ).dict()
+    # V2 proposal execution mutates the same owner-scoped setup/strategy/bot
+    # state that FINN Today projects. Never serve the process-local pre-write
+    # snapshot after a confirmed action or idempotent replay.
+    _invalidate_mission_control_cache(current_user["id"])
+    from backend.services.finn_plan_service import FinnPlanService
+    FinnPlanService.invalidate_runtime_caches_for_user(current_user["id"])
+    return result

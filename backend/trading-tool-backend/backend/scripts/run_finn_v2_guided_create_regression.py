@@ -9,6 +9,9 @@ from pathlib import Path
 from urllib.parse import urlparse
 import uuid
 
+from sqlalchemy import text
+
+from backend.infrastructure.database import sync_engine
 from backend.scripts.run_finn_v2_full_action_matrix import (
     _create_local_user,
     _runtime_record,
@@ -80,6 +83,13 @@ def main() -> None:
     }
     before = _safety_snapshot(user_id)
 
+    selected_asset = _run_action(
+        base_url=base_url,
+        token=token,
+        other_token=other_token,
+        message="Selecteer BTC als mijn actieve asset.",
+        operation_id="select_asset",
+    )
     dependency_setup = _run_action(
         base_url=base_url,
         token=token,
@@ -135,14 +145,28 @@ def main() -> None:
         other_token=other_token,
         conversation_id=conversation_id,
         message=(
-            f"Maak een paper-bot met de naam {names['bot']} gekoppeld aan strategie "
-            f"{names['strategy']}, met een budget van 1000 euro en Paper mode. "
+            f"Maak een paper bot met de naam {names['bot']} voor strategie "
+            f"{names['strategy']} met een budget van 1000 euro. "
             "Activeer geen live trading."
         ),
         operation_id="create_bot",
     )
+    with sync_engine.connect() as connection:
+        persisted_bot = connection.execute(
+            text(
+                """
+                SELECT name, strategy_id, budget_total_eur, is_live
+                FROM bot_configs
+                WHERE user_id = :user_id AND name = :name
+                """
+            ),
+            {"user_id": user_id, "name": names["bot"]},
+        ).mappings().one_or_none()
+    persisted_bot = dict(persisted_bot) if persisted_bot else None
+    if persisted_bot is not None:
+        persisted_bot["budget_total_eur"] = float(persisted_bot["budget_total_eur"])
     after = _safety_snapshot(user_id)
-    steps = [dependency_setup, setup_draft, guided_setup, strategy_draft, guided_strategy, complete_bot]
+    steps = [selected_asset, dependency_setup, setup_draft, guided_setup, strategy_draft, guided_strategy, complete_bot]
     artifact = {
         "artifact_version": "finn_v2.guided_create_regression.v1",
         "synthetic_local_user": True,
@@ -150,11 +174,15 @@ def main() -> None:
         "steps": steps,
         "database_before": before,
         "database_after": after,
+        "persisted_bot": persisted_bot,
         "safety": {
             "live_bots": after["live_bots"],
             "non_allowlisted_executions": after["non_allowlisted_executions"],
         },
         "passed": all(step["passed"] for step in steps)
+        and persisted_bot is not None
+        and float(persisted_bot["budget_total_eur"]) == 1000.0
+        and persisted_bot["is_live"] is False
         and after["live_bots"] == 0
         and after["non_allowlisted_executions"] == 0,
     }

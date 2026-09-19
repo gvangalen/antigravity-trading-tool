@@ -1,3 +1,5 @@
+import pytest
+
 from backend.services.finn_v2_request_preprocessor_service import FinnV2RequestPreprocessorService
 
 
@@ -164,6 +166,18 @@ def test_separable_update_and_deactivate_verbs_keep_their_typed_mutation_polarit
 
     assert service.preprocess(message="Werk die bot bij en zet de cadence naar weekly.").action_polarity == "update"
     assert service.preprocess(message="Deactiveer die bot.").action_polarity == "deactivate"
+
+
+@pytest.mark.parametrize(
+    "message",
+    (
+        "Maak een paper bot met de naam BTC Bot voor mijn strategie. Activeer geen live trading.",
+        "Create a paper bot named BTC Bot for my strategy. Do not activate live trading.",
+        "Erstelle einen Paper-Bot namens BTC Bot. Aktiviere keinen Live-Handel.",
+    ),
+)
+def test_negated_live_activation_remains_a_create_constraint(message):
+    assert FinnV2RequestPreprocessorService().preprocess(message=message).action_polarity == "create"
 
 
 def test_starting_a_new_bot_is_create_while_explicit_live_activation_stays_activate():
