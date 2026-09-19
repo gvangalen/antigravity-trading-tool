@@ -19,6 +19,24 @@ from backend.services.finn_v2_operation_state_service import FinnV2OperationStat
 
 
 class FinnV2ReasoningFallbackService:
+    @staticmethod
+    def _strategy_value_label(*, field: str, value: Any, locale: str) -> str:
+        normalized = str(value or "").strip().casefold()
+        language = str(locale or "nl").split("-", 1)[0].casefold()
+        labels = {
+            "execution_mode": {
+                "fixed": {"nl": "vast", "en": "fixed", "de": "fest"},
+                "custom": {"nl": "aangepast", "en": "custom", "de": "individuell"},
+            },
+            "risk_profile": {
+                "conservative": {"nl": "voorzichtig", "en": "conservative", "de": "vorsichtig"},
+                "balanced": {"nl": "gebalanceerd", "en": "balanced", "de": "ausgewogen"},
+                "aggressive": {"nl": "offensief", "en": "aggressive", "de": "offensiv"},
+            },
+        }
+        localized = labels.get(field, {}).get(normalized, {})
+        return localized.get(language) or localized.get("en") or str(value or "onbekend")
+
     def safe_terminal_draft(self, *, run_id: str, user_id: int, operation_id: str, context: ReasoningContextPackage, model: str) -> ReasoningResult:
         plan = context.request_plan or {}
         if operation_id == "off_topic":
@@ -579,12 +597,20 @@ class FinnV2ReasoningFallbackService:
             setup_name = strategy.facts.get("setup_name") or (setup.facts.get("name") if setup else None)
             symbol = str(strategy.facts.get("symbol") or asset).upper()
             timeframe = strategy.facts.get("timeframe") or (setup.facts.get("timeframe") if setup else None)
-            execution_mode = strategy.facts.get("execution_mode") or "onbekend"
+            execution_mode = self._strategy_value_label(
+                field="execution_mode",
+                value=strategy.facts.get("execution_mode"),
+                locale=context.locale,
+            )
             base_amount = strategy.facts.get("base_amount")
             entry = strategy.facts.get("entry")
             stop_loss = strategy.facts.get("stop_loss")
             targets = strategy.facts.get("targets") or []
-            risk_profile = strategy.facts.get("risk_profile") or "onbekend"
+            risk_profile = self._strategy_value_label(
+                field="risk_profile",
+                value=strategy.facts.get("risk_profile"),
+                locale=context.locale,
+            )
             detail_parts = [f"uitvoering {execution_mode}"]
             if base_amount is not None:
                 detail_parts.append(f"bedrag €{base_amount:g}" if isinstance(base_amount, (int, float)) else f"bedrag {base_amount}")

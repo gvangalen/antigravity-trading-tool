@@ -18,13 +18,13 @@ from backend.schemas.finn_v2_evidence_schema import parse_tool_payload
 from backend.services.finn_v2_tool_adapters.setup_tool_adapter import SetupToolAdapter
 
 
-def _context(*, operation_id, required_scope, message, evidence):
+def _context(*, operation_id, required_scope, message, evidence, locale="nl-NL"):
     required_scopes = required_scope if isinstance(required_scope, list) else [required_scope]
     return ReasoningContextPackage(
         run_id="run-read-contract",
         user_id=406,
         user_message=message,
-        locale="nl-NL",
+        locale=locale,
         interaction_mode="READ",
         subject_scopes=required_scopes,
         required_domains=[],
@@ -354,7 +354,17 @@ def test_active_setup_strategy_fields_explain_missing_link_without_internal_veri
     assert "response_field_incomplete" not in reasoning.direct_answer
 
 
-def test_linked_strategy_read_renders_all_persisted_strategy_fields_without_ids():
+@pytest.mark.parametrize(
+    ("locale", "execution_label", "risk_label"),
+    [
+        ("nl-NL", "vast", "gebalanceerd"),
+        ("en-US", "fixed", "balanced"),
+        ("de-DE", "fest", "ausgewogen"),
+    ],
+)
+def test_linked_strategy_read_renders_all_persisted_strategy_fields_without_ids(
+    locale, execution_label, risk_label
+):
     evidence = [
         ReasoningEvidenceItem(evidence_id="Esetup", artifact_id="setup", tool_name="read_active_setup", information_scope="active_setup", domain="plan_context", entity_type="setup", entity_id="326", asset="BTC", source="setups", freshness="fresh", confidence="high", facts={"setup_id": 326, "name": "BTC DCA", "timeframe": "4H", "symbol": "BTC"}),
         ReasoningEvidenceItem(evidence_id="Estrat", artifact_id="strategy", tool_name="read_linked_strategy", information_scope="linked_strategy", domain="plan_context", entity_type="strategy", entity_id="412", asset="BTC", source="strategies", freshness="fresh", confidence="high", facts={"strategy_id": 412, "setup_id": 326, "setup_name": "BTC DCA", "name": "BTC Fixed", "symbol": "BTC", "timeframe": "4H", "execution_mode": "fixed", "base_amount": 100, "entry": 76000, "stop_loss": 72000, "targets": [80000, 84000], "risk_profile": "balanced"}),
@@ -364,14 +374,18 @@ def test_linked_strategy_read_renders_all_persisted_strategy_fields_without_ids(
         required_scope=["active_setup", "linked_strategy"],
         message="Vat mijn strategie samen met entry, stop-loss, targets en risico.",
         evidence=evidence,
+        locale=locale,
     )
 
     reasoning = FinnV2ReasoningFallbackService().grounded_read_draft(
         run_id=context.run_id, user_id=context.user_id, context=context, model="deterministic", error_codes=[]
     )
 
-    for expected in ("BTC Fixed", "BTC DCA", "4H", "fixed", "100", "76000", "72000", "80000", "84000", "balanced"):
+    for expected in ("BTC Fixed", "BTC DCA", "4H", execution_label, "100", "76000", "72000", "80000", "84000", risk_label):
         assert expected in reasoning.direct_answer
+    if locale == "nl-NL":
+        assert "uitvoering fixed" not in reasoning.direct_answer
+        assert "risico balanced" not in reasoning.direct_answer
     assert "412" not in reasoning.direct_answer
     assert "326" not in reasoning.direct_answer
 

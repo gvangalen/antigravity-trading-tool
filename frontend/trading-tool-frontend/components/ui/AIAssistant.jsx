@@ -517,6 +517,7 @@ function AIAssistantContent({
   const profileTelemetryKeyRef = useRef("");
   const missionControlRequestRef = useRef(null);
   const missionControlRequestKeyRef = useRef("");
+  const missionControlRequestGenerationRef = useRef(0);
   const insightRequestRef = useRef(null);
   const insightRequestKeyRef = useRef("");
   const finnStateRequestRef = useRef(null);
@@ -583,6 +584,7 @@ function AIAssistantContent({
     missionControlCacheKeyRef.current = "";
     missionControlRequestRef.current = null;
     missionControlRequestKeyRef.current = "";
+    missionControlRequestGenerationRef.current += 1;
     insightRequestRef.current = null;
     insightRequestKeyRef.current = "";
     finnStateRequestRef.current = null;
@@ -4239,13 +4241,15 @@ function AIAssistantContent({
     return insightRequestRef.current;
   }
 
-  async function loadMissionControl() {
+  async function loadMissionControl({ force = false } = {}) {
     const requestKey =
       missionControlCacheKeyRef.current ||
       `finn-mission-control:${String(user?.id || "anonymous")}:${String(globalSymbol || context.symbol || "UNKNOWN").toUpperCase()}`;
-    if (missionControlRequestRef.current && missionControlRequestKeyRef.current === requestKey) {
+    if (!force && missionControlRequestRef.current && missionControlRequestKeyRef.current === requestKey) {
       return missionControlRequestRef.current;
     }
+    const requestGeneration = missionControlRequestGenerationRef.current + 1;
+    missionControlRequestGenerationRef.current = requestGeneration;
     setMissionControlLoading(true);
     if (!missionControl && typeof window !== "undefined" && requestKey) {
       try {
@@ -4326,7 +4330,10 @@ function AIAssistantContent({
                   null,
               }
             : null;
-          if (requestKey !== missionControlCacheKeyRef.current) {
+          if (
+            requestKey !== missionControlCacheKeyRef.current ||
+            requestGeneration !== missionControlRequestGenerationRef.current
+          ) {
             return normalized;
           }
           setMissionControl(normalized);
@@ -4355,7 +4362,10 @@ function AIAssistantContent({
         }
       }
       console.error("Finn overzicht laden mislukt", lastError);
-      if (requestKey === missionControlCacheKeyRef.current) {
+      if (
+        requestKey === missionControlCacheKeyRef.current &&
+        requestGeneration === missionControlRequestGenerationRef.current
+      ) {
         setMissionControlLoadError(lastError?.message || uiText.missionControlUnavailable);
         setMissionControlLoading(false);
       }
@@ -4364,7 +4374,10 @@ function AIAssistantContent({
     try {
       return await missionControlRequestRef.current;
     } finally {
-      if (missionControlRequestKeyRef.current === requestKey) {
+      if (
+        missionControlRequestKeyRef.current === requestKey &&
+        requestGeneration === missionControlRequestGenerationRef.current
+      ) {
         missionControlRequestRef.current = null;
         missionControlRequestKeyRef.current = "";
       }
@@ -4972,8 +4985,7 @@ function AIAssistantContent({
         if (typeof window !== "undefined" && missionControlCacheKeyRef.current) {
           window.sessionStorage.removeItem(missionControlCacheKeyRef.current);
         }
-        setMissionControl(null);
-        await Promise.all([loadInsight(), loadMissionControl()]);
+        await Promise.all([loadInsight(), loadMissionControl({ force: true })]);
         return;
       }
       const res = await executeAssistantAction(action);
