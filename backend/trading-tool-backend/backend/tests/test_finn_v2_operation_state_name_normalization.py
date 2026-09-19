@@ -288,6 +288,9 @@ def test_german_fixed_strategy_sentence_collects_contract_required_inputs():
         ("update_setup", "Wijzig deze setup naar timeframe 1D.", {"timeframe": "1D"}),
         ("update_strategy", "Aktualisiere meine Strategie und setze den Basisbetrag auf 120 Euro.", {"base_amount": 120}),
         ("update_strategy", "Wijzig deze strategie en zet het bedrag naar €150.", {"base_amount": 150}),
+        ("update_strategy", "Wijzig het bedrag van mijn BTC strategie naar 300 euro.", {"base_amount": 300}),
+        ("update_strategy", "Change the amount of my BTC strategy to 300 euro.", {"base_amount": 300}),
+        ("update_strategy", "Ändere den Betrag meiner BTC Strategie auf 300 Euro.", {"base_amount": 300}),
     ),
 )
 def test_natural_update_clauses_use_existing_domain_field_keys(operation_id, message, expected):

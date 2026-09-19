@@ -610,6 +610,11 @@ class FinnV2ToolExecutionService:
         """
         if tool_name not in {"read_active_setup", "read_linked_strategy", "read_linked_bot", "read_bot_status"}:
             return selector
+        if selector.get("setup_collection_requested"):
+            # A collection contract is already the authoritative target. A
+            # workspace singleton would collapse that collection and make the
+            # executed evidence disagree with the persisted runtime contract.
+            return selector
         if selector.get("setup_id") is not None:
             return selector
         if any(

@@ -164,6 +164,10 @@ def test_tool_plan_preserves_setup_collection_selector_for_all_owner_matches():
     analysis = analysis_service.analyze(message="Welke BTC setups heb ik?")
     analysis = analysis.copy(update={
         "request_plan": analysis.request_plan.copy(update={
+            "operation_state": {
+                **analysis.request_plan.operation_state,
+                "collected_inputs": {"setup_id": 11},
+            },
             "referenced_entities": {
                 **analysis.request_plan.referenced_entities,
                 "setup_collection_requested": True,
@@ -178,6 +182,10 @@ def test_tool_plan_preserves_setup_collection_selector_for_all_owner_matches():
     )
 
     assert plan.tool_inputs["read_active_setup"]["setup_collection_requested"] is True
+    assert plan.tool_inputs["read_active_setup"] == {
+        "asset": "BTC",
+        "setup_collection_requested": True,
+    }
 
 
 def test_tool_plan_collects_bot_context_for_live_action_proposals():

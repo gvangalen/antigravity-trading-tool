@@ -12,6 +12,7 @@ from typing import Any, Dict, List, Optional
 from uuid import uuid4
 
 from fastapi import HTTPException
+from fastapi.encoders import jsonable_encoder
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -14166,7 +14167,11 @@ class FinnPlanService:
                 **state,
                 FIRST_DASHBOARD_BRIEFING_METADATA_KEY: briefing,
             }
-        step.step_metadata = state
+        # Strategy amounts and indicator values originate from PostgreSQL as
+        # Decimal instances. Onboarding metadata is JSON, so persist one
+        # canonical JSON-safe snapshot instead of poisoning the shared session
+        # during FINN Today generation.
+        step.step_metadata = jsonable_encoder(state)
         await self.session.commit()
 
     async def _get_first_dashboard_storage_step(self, user_id: int) -> Optional[OnboardingStep]:

@@ -487,6 +487,32 @@ def test_generate_first_dashboard_briefing_stores_valid_ai_result(monkeypatch):
     assert stored_state["first_dashboard_briefing"]["response_source"] == "ai_generated"
 
 
+def test_store_first_dashboard_briefing_serializes_decimal_snapshot(monkeypatch):
+    class Session:
+        committed = False
+
+        async def commit(self):
+            self.committed = True
+
+    session = Session()
+    service = FinnPlanService(db_session=session)
+    step = type("Step", (), {"id": 7, "step_key": "strategy", "step_metadata": {}})()
+
+    async def fake_step(_user_id):
+        return step
+
+    monkeypatch.setattr(service, "_get_first_dashboard_storage_step", fake_step)
+
+    asyncio.run(service._store_first_dashboard_briefing_state(9, {
+        "first_dashboard_briefing": {
+            "input_snapshot": {"strategy": {"base_amount": Decimal("300.00")}},
+        },
+    }))
+
+    assert session.committed is True
+    assert step.step_metadata["first_dashboard_briefing"]["input_snapshot"]["strategy"]["base_amount"] == 300.0
+
+
 def test_generate_first_dashboard_briefing_reuses_same_version_ready_state(monkeypatch):
     service = FinnPlanService(db_session=object())
 

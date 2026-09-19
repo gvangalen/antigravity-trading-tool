@@ -63,6 +63,12 @@ class FinnV2ToolPlanService:
         }
         if (request_plan.referenced_entities or {}).get("setup_collection_requested"):
             selector_values["setup_collection_requested"] = True
+            # Collection reads must never inherit a singleton identity from a
+            # prior guided/action turn. The asset remains a valid filter, but
+            # an old setup id or name would collapse the owner-scoped result
+            # set and make the tool evidence contradict the runtime contract.
+            for field in ("setup_id", "setup_name", "strategy_id", "strategy_name", "bot_id", "bot_name"):
+                selector_values.pop(field, None)
         selector = ToolSelector(
             **selector_values,
         ).dict(exclude_none=True, exclude_defaults=True)

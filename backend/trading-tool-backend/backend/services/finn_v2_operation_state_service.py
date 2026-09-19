@@ -889,6 +889,16 @@ class FinnV2OperationStateService:
                 }.get(raw_mode, "automatic" if raw_mode.startswith("automatis") else raw_mode)
                 changes["execution_mode"] = canonical_mode
             changes.update(cls._strategy_trade_inputs(text))
+            amount_transition = re.search(
+                r"\b(?:base\s*amount|amount|basisinleg|basis\s*bedrag|basisbetrag|grundbetrag|bedrag|betrag)\b"
+                r"[^\n]{0,160}?\b(?:naar|to|auf|op|at|setze\s+auf)\s+"
+                r"(?:€|eur|euro)?\s*([0-9][0-9.,]*|honderd|duizend|hundred|thousand|hundert|tausend)"
+                r"(?:\s*(?:€|eur|euro|euros))?\b",
+                text,
+                re.IGNORECASE,
+            )
+            if amount_transition:
+                changes["base_amount"] = cls._typed_numeric_value(amount_transition.group(1))
         # The action contract deliberately has one ``changed_fields`` slot,
         # while the owning domain services keep their field allowlists.  Parse
         # common natural-language update clauses into those canonical domain
