@@ -268,6 +268,51 @@ def test_orchestrator_projects_canonical_target_separately_for_read_contract():
     assert "strategy_id" not in resolved.request_plan.operation_state["missing_required_inputs"]
 
 
+def test_strategy_disambiguation_choice_resumes_the_persisted_update_operation():
+    message = "BTC Breakout Retest Strategy."
+    context = {
+        "active_guided_operation": {
+            "operation_id": "update_strategy",
+            "status": "collecting",
+            "collected_inputs": {"changed_fields": {"base_amount": 300}},
+            "missing_required_inputs": ["strategy_id"],
+            "next_missing_input": "strategy_id",
+        },
+    }
+    service = FinnV2OrchestratorService(session=_QueryableSession())
+    analysis = FinnV2RequestAnalysisService().analyze(
+        message=message,
+        conversation_context=context,
+    )
+    service.entities.resolve_canonical_target = AsyncMock(return_value=CanonicalEntityTarget(
+        entity_type="strategy",
+        entity_id=44,
+        display_name="BTC Breakout Retest Strategy",
+        owner_id=7,
+        relation={"setup_id": 12, "setup_name": "BTC Breakout Retest"},
+        source="explicit_name",
+        resolution_status="resolved",
+    ))
+    service.entities.resolve_contract_reference_inputs = AsyncMock(return_value={"strategy_id": 44})
+
+    resolved = asyncio.run(service._resolve_explicit_action_references(
+        user_id=7,
+        message=message,
+        analysis=analysis,
+        conversation_context=context,
+        workspace_hints={"asset": "BTC"},
+        client_context={},
+    ))
+
+    assert resolved.request_plan.operation_id == "update_strategy"
+    assert resolved.request_plan.operation_state["collected_inputs"] == {
+        "changed_fields": {"base_amount": 300},
+        "strategy_id": 44,
+    }
+    assert resolved.request_plan.operation_state["missing_required_inputs"] == []
+    assert resolved.request_plan.referenced_entities["strategy_id"] == 44
+
+
 def test_canonical_bot_graph_replaces_stale_conversation_parent_ids():
     message = "Wijzig het budget van paper-bot Audit BTC Paper naar €1.000."
     service = FinnV2OrchestratorService(session=_QueryableSession())

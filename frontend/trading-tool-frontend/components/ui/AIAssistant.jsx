@@ -129,6 +129,21 @@ function interpolateTranslation(template, vars = {}) {
   });
 }
 
+function normalizeVisibleBriefing(value) {
+  const seen = new Set();
+  return String(value || "")
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => {
+      if (!line || /^(?:NOT_REVIEWED_YET|not_reviewed_yet)$/i.test(line)) return false;
+      const key = line.toLocaleLowerCase();
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    })
+    .join("\n");
+}
+
 function createAssistantTranslator(t) {
   const assistantCopy = t?.assistant || {};
   return (path, fallback = "", vars = {}) => interpolateTranslation(getDictionaryValue(assistantCopy, path) ?? fallback, vars);
@@ -5159,11 +5174,11 @@ function AIAssistantContent({
     }
     return (
       <>
-        <button type="button" onClick={(event) => { event.preventDefault(); event.stopPropagation(); void handleExecuteAction(proposal); }} disabled={executingAction} className={actionButtonStyles({ variant: "primary", className: "min-w-[120px] justify-center rounded-xl px-4 py-2.5 text-xs" })}>
+        <button type="button" onPointerUp={(event) => { event.preventDefault(); event.stopPropagation(); void handleExecuteAction(proposal); }} onClick={(event) => { if (event.detail !== 0) return; event.preventDefault(); event.stopPropagation(); void handleExecuteAction(proposal); }} disabled={executingAction} className={actionButtonStyles({ variant: "primary", className: "min-w-[120px] justify-center rounded-xl px-4 py-2.5 text-xs" })}>
           {executingAction ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle2 size={14} />} Bevestigen
         </button>
         <button type="button" onClick={() => handleChat(`Ik wil dit ${noun}voorstel aanpassen.`, false, message.state)} disabled={loading || executingAction} className="rounded-xl px-3 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-900">Aanpassen</button>
-        <button type="button" onClick={(event) => { event.preventDefault(); event.stopPropagation(); void handleCancelDraft(messageIndex); }} disabled={executingAction} className="rounded-xl px-3 py-2 text-xs font-semibold text-slate-400 hover:text-slate-700 dark:hover:text-slate-200">Annuleren</button>
+        <button type="button" onPointerUp={(event) => { event.preventDefault(); event.stopPropagation(); void handleCancelDraft(messageIndex); }} onClick={(event) => { if (event.detail !== 0) return; event.preventDefault(); event.stopPropagation(); void handleCancelDraft(messageIndex); }} disabled={executingAction} className="rounded-xl px-3 py-2 text-xs font-semibold text-slate-400 hover:text-slate-700 dark:hover:text-slate-200">Annuleren</button>
       </>
     );
   };
@@ -5788,11 +5803,11 @@ function AIAssistantContent({
           {isIndicatorAction && <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{[asset, category].filter(Boolean).join(" · ")}</p>}
           <div className="mt-4 flex flex-wrap items-center gap-2">
             {actionOnly.map((action, index) => (
-              <button type="button" key={`${action.type}-${action.id || index}`} onClick={(event) => { event.preventDefault(); event.stopPropagation(); void handleExecuteAction(action); }} disabled={executingAction} className={actionButtonStyles({ variant: operationId.startsWith("delete_") ? "danger" : "primary", className: "min-w-[120px] justify-center rounded-xl px-4 py-2.5 text-xs" })}>
+              <button type="button" key={`${action.type}-${action.id || index}`} onPointerUp={(event) => { event.preventDefault(); event.stopPropagation(); void handleExecuteAction(action); }} onClick={(event) => { if (event.detail !== 0) return; event.preventDefault(); event.stopPropagation(); void handleExecuteAction(action); }} disabled={executingAction} className={actionButtonStyles({ variant: operationId.startsWith("delete_") ? "danger" : "primary", className: "min-w-[120px] justify-center rounded-xl px-4 py-2.5 text-xs" })}>
                 {executingAction ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle2 size={14} />} {operationId.startsWith("delete_") ? "Verwijderen" : "Bevestigen"}
               </button>
             ))}
-            <button type="button" onClick={(event) => { event.preventDefault(); event.stopPropagation(); void handleCancelDraft(messages.indexOf(message)); }} disabled={executingAction} className="rounded-xl px-3 py-2 text-xs font-semibold text-slate-500 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-900">Annuleren</button>
+            <button type="button" onPointerUp={(event) => { event.preventDefault(); event.stopPropagation(); void handleCancelDraft(messages.indexOf(message)); }} onClick={(event) => { if (event.detail !== 0) return; event.preventDefault(); event.stopPropagation(); void handleCancelDraft(messages.indexOf(message)); }} disabled={executingAction} className="rounded-xl px-3 py-2 text-xs font-semibold text-slate-500 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-900">Annuleren</button>
           </div>
         </div>
       );
@@ -5817,11 +5832,11 @@ function AIAssistantContent({
           )}
           <div className="mt-4 flex flex-wrap items-center gap-2">
             {actionOnly.map((action, index) => (
-              <button type="button" key={`${action.type}-${action.id || index}`} onClick={(event) => { event.preventDefault(); event.stopPropagation(); void handleExecuteAction(action); }} disabled={executingAction} className={actionButtonStyles({ variant: isDelete ? "danger" : "primary", className: "min-w-[120px] justify-center rounded-xl px-4 py-2.5 text-xs" })}>
+              <button type="button" key={`${action.type}-${action.id || index}`} onPointerUp={(event) => { event.preventDefault(); event.stopPropagation(); void handleExecuteAction(action); }} onClick={(event) => { if (event.detail !== 0) return; event.preventDefault(); event.stopPropagation(); void handleExecuteAction(action); }} disabled={executingAction} className={actionButtonStyles({ variant: isDelete ? "danger" : "primary", className: "min-w-[120px] justify-center rounded-xl px-4 py-2.5 text-xs" })}>
                 {executingAction ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle2 size={14} />} {isDelete ? "Verwijderen" : "Bevestigen"}
               </button>
             ))}
-            <button type="button" onClick={(event) => { event.preventDefault(); event.stopPropagation(); void handleCancelDraft(messages.indexOf(message)); }} disabled={executingAction} className="rounded-xl px-3 py-2 text-xs font-semibold text-slate-500 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-900">Annuleren</button>
+            <button type="button" onPointerUp={(event) => { event.preventDefault(); event.stopPropagation(); void handleCancelDraft(messages.indexOf(message)); }} onClick={(event) => { if (event.detail !== 0) return; event.preventDefault(); event.stopPropagation(); void handleCancelDraft(messages.indexOf(message)); }} disabled={executingAction} className="rounded-xl px-3 py-2 text-xs font-semibold text-slate-500 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-900">Annuleren</button>
           </div>
         </div>
       );
@@ -5985,10 +6000,10 @@ function AIAssistantContent({
   const stableBriefingMatchesAsset = !isAssetAnalysisPage
     || !stableBriefingText
     || stableBriefingText.toUpperCase().includes(activeBriefingSymbol);
-  const resolvedBriefingText = firstDashboardBriefingText
+  const resolvedBriefingText = normalizeVisibleBriefing(firstDashboardBriefingText
     || (stableBriefingMatchesAsset
       ? stableBriefingText || buildBriefingText(insight) || ""
-      : buildBriefingText(insight) || "");
+      : buildBriefingText(insight) || ""));
   const workspaceBriefingLines = String(resolvedBriefingText)
     .split("\n")
     .map((line) => line.trim())
@@ -6024,11 +6039,13 @@ function AIAssistantContent({
     "";
   const personalWorkspaceSummary = String(missionControl?.finn_briefing?.summary || "").trim();
   const defaultWorkspaceActionHint = workspaceBriefingLines[3] || "";
-  const firstDashboardHeadline = (!firstDashboardIsGenerating && firstDashboardContext?.headline)
+  const firstDashboardHeadline = (!firstDashboardIsGenerating && !String(locale || "").toLowerCase().startsWith("nl") && firstDashboardContext?.headline)
+    || (String(locale || "").toLowerCase().startsWith("nl") && defaultWorkspaceHeadline)
     || at("uiText.workspaceFirstDashboardHeadline", uiText.workspaceFirstDashboardHeadline, {
       symbol: activeBriefingSymbol,
     });
-  const firstDashboardSupport = (!firstDashboardIsGenerating && firstDashboardContext?.support)
+  const firstDashboardSupport = (!firstDashboardIsGenerating && !String(locale || "").toLowerCase().startsWith("nl") && firstDashboardContext?.support)
+    || (String(locale || "").toLowerCase().startsWith("nl") && defaultWorkspaceSupport)
     || at("uiText.workspaceFirstDashboardSupport", uiText.workspaceFirstDashboardSupport, {
       symbol: activeBriefingSymbol,
     });

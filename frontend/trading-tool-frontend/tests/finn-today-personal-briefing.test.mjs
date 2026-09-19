@@ -48,9 +48,11 @@ test("FINN Today renders the typed personal mission-control briefing", () => {
   );
   assert.match(
     assistantSource,
-    /!firstDashboardIsGenerating && firstDashboardContext\?\.headline/,
-    "temporary backend generation copy must not leak into the localized compact workspace",
+    /!firstDashboardIsGenerating && !String\(locale \|\| ""\)\.toLowerCase\(\)\.startsWith\("nl"\) && firstDashboardContext\?\.headline/,
+    "a backend-generated English headline must not override the Dutch persisted briefing",
   );
+  assert.match(assistantSource, /normalizeVisibleBriefing\(firstDashboardBriefingText/);
+  assert.match(assistantSource, /NOT_REVIEWED_YET\|not_reviewed_yet/);
 });
 
 test("recoverable FINN Today failures are never persisted in browser cache", () => {

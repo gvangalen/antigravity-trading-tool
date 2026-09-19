@@ -15,8 +15,9 @@ export default function MarketTerminalHUD({ score, bias, btc = {}, symbol = "BTC
   const copy = t?.pages?.market?.terminalHud || {};
   
   const scoreNum = Number(score ?? 0);
-  const priceChange = btc?.change_24h || 0;
-  const positive = priceChange >= 0;
+  const priceChange = btc?.change_24h === null || btc?.change_24h === undefined ? null : Number(btc.change_24h);
+  const hasPriceChange = priceChange !== null && Number.isFinite(priceChange);
+  const positive = hasPriceChange ? priceChange >= 0 : null;
   const ChangeIcon = positive ? TrendingUp : TrendingDown;
   
   const getBiasConfig = (s) => {
@@ -113,7 +114,7 @@ export default function MarketTerminalHUD({ score, bias, btc = {}, symbol = "BTC
                <div className={`p-1 rounded-lg ${positive ? 'bg-green-500/10' : 'bg-red-500/10'}`}>
                   <ChangeIcon size={16} strokeWidth={2.5} />
                </div>
-               <span className="text-base sm:text-lg tabular-nums">{positive ? "+" : ""}{Number(priceChange).toFixed(2)}%</span>
+               <span className="text-base sm:text-lg tabular-nums">{hasPriceChange ? `${positive ? "+" : ""}${priceChange.toFixed(2)}%` : "—"}</span>
                <span className="text-[9px] sm:text-[10px] text-secondary/40 font-bold ml-1 sm:ml-2">{copy.change24h}</span>
             </div>
          </div>

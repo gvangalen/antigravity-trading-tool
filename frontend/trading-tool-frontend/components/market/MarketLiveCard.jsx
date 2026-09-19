@@ -76,8 +76,10 @@ export default function MarketLiveCard({ symbol = "BTC", data = null, loading: p
     );
   }
 
-  const priceChange = asset.change_24h || 0;
-  const positive = priceChange >= 0;
+  const priceChange = asset.change_24h === null || asset.change_24h === undefined ? null : Number(asset.change_24h);
+  const hasPrice = Number.isFinite(Number(asset.price)) && Number(asset.price) > 0;
+  const hasPriceChange = priceChange !== null && Number.isFinite(priceChange);
+  const positive = hasPriceChange ? priceChange >= 0 : null;
   const changeColor = positive ? "text-green-600" : "text-red-600";
   const ChangeIcon = positive ? TrendingUp : TrendingDown;
   const formatTimestamp = (timestamp) =>
@@ -105,14 +107,14 @@ export default function MarketLiveCard({ symbol = "BTC", data = null, loading: p
           <div>
              <span className="metric-label">{copy.currentPrice}</span>
              <h2 suppressHydrationWarning className="metric-value text-5xl font-mono !tracking-tighter">
-                ${formatIntlNumber(Number(asset.price || 0), locale, {
+                {hasPrice ? `$${formatIntlNumber(Number(asset.price), locale, {
                   minimumFractionDigits: 2,
                   maximumFractionDigits: symbol === 'BTC' ? 2 : 4 
-                })}
+                })}` : "—"}
              </h2>
               <div className={`flex items-center gap-2 mt-4 font-black ${changeColor}`}>
                 <ChangeIcon size={18} />
-                <span className="text-lg">{positive ? "+" : ""}{Number(priceChange).toFixed(2)}%</span>
+                <span className="text-lg">{hasPriceChange ? `${positive ? "+" : ""}${priceChange.toFixed(2)}%` : "—"}</span>
                 <span className="text-[10px] uppercase tracking-widest text-secondary opacity-60 ml-1 sm:ml-2">{copy.change24h}</span>
               </div>
           </div>
