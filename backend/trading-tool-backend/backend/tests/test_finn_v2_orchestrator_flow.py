@@ -330,6 +330,28 @@ def test_orchestrator_preserves_typed_ambiguity_before_tools():
     assert "canonical_entity_target" not in resolved.request_plan.referenced_entities
 
 
+def test_setup_collection_read_does_not_collapse_to_one_canonical_target():
+    message = "Welke BTC setups heb ik?"
+    service = FinnV2OrchestratorService(session=_QueryableSession())
+    analysis = _analysis_for_operation(message, "read_active_setup")
+    analysis = analysis.copy(update={"explicit_asset": "BTC"})
+    service.entities.resolve_canonical_target = AsyncMock()
+    service.entities.resolve_contract_reference_inputs = AsyncMock(return_value={})
+
+    resolved = asyncio.run(service._resolve_explicit_action_references(
+        user_id=7,
+        message=message,
+        analysis=analysis,
+        conversation_context={"canonical_entity_target": {"entity_type": "setup", "entity_id": 99}},
+        workspace_hints={"setup_id": 99},
+        client_context={},
+    ))
+
+    service.entities.resolve_canonical_target.assert_not_awaited()
+    assert resolved.request_plan.referenced_entities["asset"] == "BTC"
+    assert resolved.request_plan.referenced_entities["setup_collection_requested"] is True
+
+
 def test_orchestrator_flow_executes_plan_and_persists_result():
     run = SimpleNamespace(
         id="run-1",

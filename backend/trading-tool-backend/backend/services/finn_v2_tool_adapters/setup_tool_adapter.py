@@ -4,7 +4,17 @@ from backend.schemas.finn_v2_evidence_schema import ActiveSetupData
 
 
 class SetupToolAdapter:
-    async def execute(self, *, setup: dict, resolution_source: str, **_kwargs):
+    async def execute(self, *, setup: dict, resolution_source: str, setups=None, **_kwargs):
+        collection = [
+            {
+                "setup_id": row.get("setup_id") or row.get("id"),
+                "name": row.get("name"),
+                "symbol": row.get("symbol"),
+                "timeframe": row.get("timeframe"),
+                "setup_type": row.get("setup_type"),
+            }
+            for row in (setups or [])
+        ]
         payload = ActiveSetupData(
             setup_id=setup.get("setup_id") or setup.get("id"),
             name=setup.get("name"),
@@ -12,8 +22,10 @@ class SetupToolAdapter:
             timeframe=setup.get("timeframe"),
             setup_type=setup.get("setup_type"),
             score=float(setup.get("score") or 0) if setup.get("score") is not None else None,
+            setups=collection,
+            setup_count=len(collection) if collection else None,
         )
-        return {
+        result = {
             "data": payload,
             "summary": {"title": "active_setup", "setup_id": payload.setup_id, "symbol": payload.symbol},
             "as_of": None,
@@ -24,3 +36,4 @@ class SetupToolAdapter:
             "entity_id": str(payload.setup_id),
             "asset": payload.symbol,
         }
+        return result

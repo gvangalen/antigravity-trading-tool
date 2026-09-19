@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import date, datetime
-from typing import List, Literal, Optional, Union
+from typing import Dict, List, Literal, Optional, Union
 
 from pydantic import BaseModel, Field, validator
 
@@ -126,6 +126,8 @@ class ActiveSetupData(BaseModel):
     timeframe: Optional[str] = None
     setup_type: Optional[str] = None
     score: Optional[float] = None
+    setups: List[Dict[str, object]] = Field(default_factory=list)
+    setup_count: Optional[int] = None
 
 
 class LinkedStrategyData(BaseModel):

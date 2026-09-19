@@ -820,6 +820,43 @@ def test_guided_targets_turn_cannot_change_existing_strategy_slots():
     assert state.collected_inputs["targets"] == [83000.0, 87000.0]
 
 
+def test_guided_risk_turn_accepts_short_dutch_answer_without_reselection():
+    contract = FinnV2OperationRegistry().require_supported("create_strategy")
+    service = FinnV2OperationStateService()
+    context = {
+        "conversation_state_version": service.CONTEXT_STATE_VERSION,
+        "active_guided_operation": {
+            "operation_id": "create_strategy",
+            "contract_version": contract.version,
+            "state_revision": 7,
+            "collected_inputs": {
+                "setup_id": 12,
+                "name": "BTC Voorzichtig",
+                "execution_mode": "fixed",
+                "base_amount": 100.0,
+                "entry": 76000.0,
+                "stop_loss": 72000.0,
+                "targets": [83000.0],
+            },
+            "missing_required_inputs": ["risk_profile"],
+            "next_missing_input": "risk_profile",
+            "status": "collecting",
+        },
+    }
+
+    state = service.resolve(
+        contract=contract,
+        message="Voorzichtig.",
+        explicit_asset=None,
+        conversation_context=context,
+        supplied_inputs={},
+    )
+
+    assert state.collected_inputs["risk_profile"] == "conservative"
+    assert state.missing_required_inputs == []
+    assert state.status == "complete"
+
+
 def test_guided_explicit_correction_changes_only_named_existing_slot():
     registry = FinnV2OperationRegistry()
     contract = registry.require_supported("create_strategy")

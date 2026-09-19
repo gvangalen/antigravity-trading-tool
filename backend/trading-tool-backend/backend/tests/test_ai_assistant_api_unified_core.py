@@ -1379,7 +1379,7 @@ def test_get_finn_mission_control_survives_non_database_action_failures(monkeypa
     assert stored["payload"]["first_dashboard_context"]["generation_status"] == "ready"
 
 
-def test_get_finn_mission_control_returns_fallback_when_build_fails(monkeypatch):
+def test_get_finn_mission_control_returns_but_does_not_cache_transient_fallback(monkeypatch):
     db = SimpleNamespace(rollback=AsyncMock())
     stored = {}
 
@@ -1410,8 +1410,7 @@ def test_get_finn_mission_control_returns_fallback_when_build_fails(monkeypatch)
     assert response["generation_status"] == "failed"
     assert response["response_trace"]["pipeline_version"] == "finn_v2"
     assert response["response_trace"]["error"] == "live mission control exploded"
-    assert stored["user_id"] == 30
-    assert stored["payload"]["generation_status"] == "failed"
+    assert stored == {}
 
 
 def test_conversation_state_repository_serializes_date_values():

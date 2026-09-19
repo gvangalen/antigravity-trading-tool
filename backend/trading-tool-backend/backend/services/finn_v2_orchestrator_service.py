@@ -146,6 +146,12 @@ class FinnV2OrchestratorService:
             },
             **dict(getattr(request_plan, "referenced_entities", {}) or {}),
         }
+        current_asset = (
+            getattr(analysis, "explicit_asset", None)
+            or getattr(request_plan, "target_asset", None)
+        )
+        if current_asset:
+            selectors["asset"] = current_asset
         operation_targets = {
             "read_active_setup": "setup",
             "evaluate_setup": "setup",
@@ -168,7 +174,13 @@ class FinnV2OrchestratorService:
         # pipeline and pass ``object()`` instead of an AsyncSession. Production
         # always has ``execute`` and must always cross this resolution boundary.
         can_query_entities = callable(getattr(self.session, "execute", None))
-        if entity_type and can_query_entities:
+        is_collection_read = (
+            operation_id == "read_active_setup"
+            and self.entities.is_setup_collection_request(message)
+        )
+        if is_collection_read:
+            selectors["setup_collection_requested"] = True
+        if entity_type and can_query_entities and not is_collection_read:
             canonical_target = await self.entities.resolve_canonical_target(
                 user_id=user_id,
                 entity_type=entity_type,
@@ -204,7 +216,12 @@ class FinnV2OrchestratorService:
             message=message,
             operation_id=operation_id,
         )
-        if not resolved and canonical_target is None and "target_resolution" not in selectors:
+        if (
+            not resolved
+            and canonical_target is None
+            and "target_resolution" not in selectors
+            and not is_collection_read
+        ):
             return analysis
         supplied = {
             **collected_inputs,

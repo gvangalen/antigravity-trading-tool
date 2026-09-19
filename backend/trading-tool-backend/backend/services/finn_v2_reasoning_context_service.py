@@ -263,11 +263,16 @@ class FinnV2ReasoningContextService:
         if tool_name == "read_technical_snapshot":
             return {"symbol": payload.get("symbol"), "items": payload.get("items", [])[:8]}
         if tool_name == "read_active_setup":
-            return {
+            facts = {
                 key: payload.get(key)
                 for key in ["setup_id", "name", "symbol", "timeframe", "setup_type", "score"]
                 if payload.get(key) is not None
             }
+            collection = payload.get("setups")
+            if isinstance(collection, list):
+                facts["setups"] = collection
+                facts["setup_count"] = len(collection)
+            return facts
         if tool_name == "read_linked_strategy":
             source = payload.get("data") if isinstance(payload.get("data"), dict) else payload
             return {

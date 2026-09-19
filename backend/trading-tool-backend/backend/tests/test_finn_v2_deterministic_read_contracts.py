@@ -14,6 +14,8 @@ from backend.domain.finn_v2_operation_registry import FinnV2OperationRegistry
 from backend.services.finn_v2_reasoning_fallback_service import FinnV2ReasoningFallbackService
 from backend.services.finn_v2_reasoning_context_service import FinnV2ReasoningContextService
 from backend.services.finn_v2_response_verifier_service import FinnV2ResponseVerifierService
+from backend.schemas.finn_v2_evidence_schema import parse_tool_payload
+from backend.services.finn_v2_tool_adapters.setup_tool_adapter import SetupToolAdapter
 
 
 def _context(*, operation_id, required_scope, message, evidence):
@@ -271,6 +273,37 @@ def test_active_setup_read_uses_persisted_name_type_and_timeframe_without_strate
     assert "4H" in reasoning.direct_answer
 
 
+def test_setup_overview_read_names_every_owner_scoped_asset_setup():
+    evidence = [
+        ReasoningEvidenceItem(evidence_id="Easset", artifact_id="asset", tool_name="read_active_asset", information_scope="active_asset", domain="identity_context", entity_type="asset", asset="BTC", source="workspace", freshness="fresh", confidence="high", facts={"symbol": "BTC"}),
+        ReasoningEvidenceItem(evidence_id="Esetups", artifact_id="setups", tool_name="read_active_setup", information_scope="active_setup", domain="plan_context", entity_type="setup", entity_id="326", asset="BTC", source="setups", freshness="fresh", confidence="high", facts={
+            "setup_id": 326,
+            "name": "BTC DCA",
+            "symbol": "BTC",
+            "timeframe": "4H",
+            "setups": [
+                {"setup_id": 326, "name": "BTC DCA", "symbol": "BTC", "timeframe": "4H"},
+                {"setup_id": 327, "name": "BTC Swing", "symbol": "BTC", "timeframe": "1D"},
+            ],
+            "setup_count": 2,
+        }),
+    ]
+    context = _context(
+        operation_id="read_active_setup",
+        required_scope=["active_asset", "active_setup"],
+        message="Welke BTC setups heb ik?",
+        evidence=evidence,
+    )
+
+    reasoning = FinnV2ReasoningFallbackService().grounded_read_draft(
+        run_id=context.run_id, user_id=context.user_id, context=context, model="deterministic", error_codes=[]
+    )
+
+    assert "2 BTC-setups" in reasoning.direct_answer
+    assert "BTC DCA (4H)" in reasoning.direct_answer
+    assert "BTC Swing (1D)" in reasoning.direct_answer
+
+
 def test_active_setup_strategy_fields_explain_missing_link_without_internal_verifier_code():
     evidence = [
         ReasoningEvidenceItem(evidence_id="Easset", artifact_id="asset", tool_name="read_active_asset", information_scope="active_asset", domain="identity_context", entity_type="asset", asset="BTC", source="workspace", freshness="fresh", confidence="high", facts={"symbol": "BTC"}),
@@ -326,6 +359,43 @@ def test_active_setup_context_preserves_the_persisted_setup_type():
     )
 
     assert facts["setup_type"] == "trade"
+
+
+def test_active_setup_collection_preserves_every_matching_setup_for_overview_reads():
+    facts = FinnV2ReasoningContextService(session=object())._sanitize_facts(
+        {
+            "setup_id": 326,
+            "name": "BTC DCA",
+            "symbol": "BTC",
+            "timeframe": "4H",
+            "setup_type": "dca",
+            "setups": [
+                {"setup_id": 326, "name": "BTC DCA", "symbol": "BTC", "timeframe": "4H"},
+                {"setup_id": 327, "name": "BTC Swing", "symbol": "BTC", "timeframe": "1D"},
+            ],
+        },
+        "read_active_setup",
+    )
+
+    assert facts["setup_count"] == 2
+    assert [setup["name"] for setup in facts["setups"]] == ["BTC DCA", "BTC Swing"]
+
+
+def test_setup_collection_survives_the_persisted_evidence_schema():
+    import asyncio
+
+    result = asyncio.run(SetupToolAdapter().execute(
+        setup={"id": 326, "name": "BTC DCA", "symbol": "BTC", "timeframe": "4H"},
+        setups=[
+            {"id": 326, "name": "BTC DCA", "symbol": "BTC", "timeframe": "4H"},
+            {"id": 327, "name": "BTC Swing", "symbol": "BTC", "timeframe": "1D"},
+        ],
+        resolution_source="owner_setup_collection",
+    ))
+    persisted = parse_tool_payload(result["schema_name"], result["data"].dict())
+
+    assert persisted.setup_count == 2
+    assert [setup["name"] for setup in persisted.setups] == ["BTC DCA", "BTC Swing"]
 
 
 def test_response_projection_makes_persisted_indicator_contract_fields_visible():

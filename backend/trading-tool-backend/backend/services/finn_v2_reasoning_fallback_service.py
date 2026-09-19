@@ -483,6 +483,36 @@ class FinnV2ReasoningFallbackService:
             )
 
         if operation_id == "read_active_setup" and setup is not None:
+            setup_collection = list(setup.facts.get("setups") or [])
+            if len(setup_collection) > 1:
+                rendered = ", ".join(
+                    f"{item.get('name')} ({item.get('timeframe') or 'timeframe onbekend'})"
+                    for item in setup_collection
+                    if item.get("name")
+                )
+                _add_claim(
+                    "setup-overview",
+                    f"Je hebt {len(setup_collection)} {asset}-setups: {rendered}.",
+                    [setup.evidence_id],
+                )
+                return ReasoningResult(
+                    reasoning_result_id=f"finn-v2-reasoning-{uuid.uuid4().hex}",
+                    run_id=run_id,
+                    user_id=user_id,
+                    mode="READ",
+                    direct_answer=f"Je hebt {len(setup_collection)} {asset}-setups: {rendered}.",
+                    main_observation="Dit overzicht komt rechtstreeks uit al je owner-scoped opgeslagen setups voor deze asset.",
+                    supporting_points=[],
+                    claims=claims,
+                    uncertainty_summary="Er is geen providercall uitgevoerd voor dit opgeslagen setupoverzicht.",
+                    uncertainty_codes=list(error_codes),
+                    next_step=None,
+                    follow_up_question=None,
+                    proposal_candidate=None,
+                    evidence_refs_used=refs,
+                    model=model,
+                    created_at=datetime.now(timezone.utc),
+                )
             setup_id = setup.facts.get("setup_id")
             setup_name = setup.facts.get("name") or f"setup {setup_id}"
             setup_type = setup.facts.get("setup_type") or "onbekend"

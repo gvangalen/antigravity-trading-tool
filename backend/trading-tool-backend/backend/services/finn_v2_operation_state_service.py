@@ -216,6 +216,7 @@ class FinnV2OperationStateService:
             target_entities=target_entities,
             missing_required_inputs=missing,
             next_missing_input=missing[0] if missing else None,
+            status="collecting" if missing else "complete",
             open_proposal_id=context.get("open_proposal_id"),
             previous_verified_response_id=(
                 verified_context.get("verified_response_id")
@@ -701,7 +702,7 @@ class FinnV2OperationStateService:
 
     @staticmethod
     def _canonical_risk_profile(value: str) -> Optional[str]:
-        normalized = FinnV2SetupInputCatalog._comparison_text(value)
+        normalized = FinnV2SetupInputCatalog._comparison_text(value).strip(" .,:;!?\"'")
         aliases = {
             "conservative": "conservative",
             "cautious": "conservative",

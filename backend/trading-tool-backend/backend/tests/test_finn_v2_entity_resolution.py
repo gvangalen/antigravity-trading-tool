@@ -273,6 +273,51 @@ def test_canonical_target_explicit_visible_name_wins_stale_workspace_context():
     assert target.relational_context == {"symbol": "BTC", "timeframe": "4H"}
 
 
+def test_canonical_target_current_asset_requires_choice_before_stale_context():
+    service = FinnV2EntityResolutionService(session=object())
+    service.setups = _FakeSetupRepo()
+    service.setups.get_user_setups = lambda _user_id: asyncio.sleep(0, result=[
+        {"id": 11, "name": "BTC DCA", "symbol": "BTC"},
+        {"id": 12, "name": "BTC Swing", "symbol": "BTC"},
+        {"id": 13, "name": "ETH Swing", "symbol": "ETH"},
+    ])
+
+    target = asyncio.run(service.resolve_canonical_target(
+        user_id=388,
+        entity_type="setup",
+        selector={"asset": "BTC"},
+        message="Verwijder mijn BTC setup.",
+        conversation_context={"canonical_entity_target": {"entity_type": "setup", "entity_id": 13}},
+    ))
+
+    assert target.resolution_status == "ambiguous"
+    assert target.resolution_source == "explicit_asset"
+    assert target.candidate_names == ["BTC DCA", "BTC Swing"]
+
+
+def test_setup_collection_read_returns_every_owner_asset_match():
+    service = FinnV2EntityResolutionService(session=object())
+    service.setups = _FakeSetupRepo()
+    service.strategies = _FakeStrategyRepo()
+    service.bots = _FakeBotRepo()
+    service.setups.get_user_setups = lambda _user_id: asyncio.sleep(0, result=[
+        {"id": 11, "name": "BTC DCA", "symbol": "BTC"},
+        {"id": 12, "name": "BTC Swing", "symbol": "BTC"},
+        {"id": 13, "name": "ETH Swing", "symbol": "ETH"},
+    ])
+
+    selector = asyncio.run(service.enrich_tool_selector_from_message(
+        user_id=388,
+        selector={"asset": "BTC"},
+        message="Welke BTC setups heb ik?",
+    ))
+    resolved = asyncio.run(service.resolve_setup(user_id=388, selector=selector, asset="BTC"))
+
+    assert selector["setup_collection_requested"] is True
+    assert [row["name"] for row in resolved["setups"]] == ["BTC DCA", "BTC Swing"]
+    assert resolved["resolution_source"] == "owner_setup_collection"
+
+
 def test_canonical_target_uses_previous_action_result_before_workspace():
     service = FinnV2EntityResolutionService(session=object())
     service.strategies = _FakeStrategyRepo()

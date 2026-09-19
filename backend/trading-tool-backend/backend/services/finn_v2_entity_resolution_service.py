@@ -108,6 +108,31 @@ class FinnV2EntityResolutionService:
                 )
             return self._resolution_failure(user_id, entity_type, "not_found", source="explicit_name")
 
+        # An asset named in the current turn outranks stale conversation and
+        # workspace context.  It narrows the owner's candidates, but never
+        # guesses when more than one object exists for that asset.
+        explicit_asset = self._normalize_symbol(selector.get("asset"))
+        if explicit_asset:
+            asset_candidates = [
+                row for row in candidates
+                if self._candidate_asset(row) == explicit_asset
+            ]
+            if len(asset_candidates) == 1:
+                return self._canonical_target(
+                    user_id, entity_type, asset_candidates[0], "explicit_asset"
+                )
+            if len(asset_candidates) > 1:
+                return self._resolution_failure(
+                    user_id,
+                    entity_type,
+                    "ambiguous",
+                    source="explicit_asset",
+                    candidate_names=self._candidate_names(asset_candidates),
+                )
+            return self._resolution_failure(
+                user_id, entity_type, "not_found", source="explicit_asset"
+            )
+
         active_target = dict(conversation_context.get("canonical_entity_target") or {})
         if active_target.get("entity_type") == entity_type:
             entity_id = self._coerce_int(active_target.get("entity_id"))
@@ -343,6 +368,14 @@ class FinnV2EntityResolutionService:
     def _candidate_names(rows: list[Dict[str, Any]]) -> list[str]:
         return sorted({str(row.get("name") or "").strip() for row in rows if str(row.get("name") or "").strip()})
 
+    def _candidate_asset(self, row: Dict[str, Any]) -> Optional[str]:
+        return self._normalize_symbol(
+            row.get("symbol")
+            or row.get("setup_symbol")
+            or row.get("strategy_symbol")
+            or row.get("asset")
+        )
+
     def _explicit_message_matches(
         self,
         message: str,
@@ -526,6 +559,8 @@ class FinnV2EntityResolutionService:
         guide evidence hydration without changing the registry-owned schema.
         """
         enriched = dict(selector)
+        if self.is_setup_collection_request(message):
+            enriched["setup_collection_requested"] = True
         repositories = {
             "setup": self.setups.get_user_setups,
             "strategy": lambda owner_id: self.strategies.query_strategies(owner_id, {}),
@@ -547,6 +582,15 @@ class FinnV2EntityResolutionService:
             elif len(matches) > 1:
                 raise LookupError(f"{entity}_ambiguous")
         return enriched
+
+    @staticmethod
+    def is_setup_collection_request(message: str) -> bool:
+        normalized = " ".join(str(message or "").casefold().split())
+        return bool(re.search(
+            r"\b(?:welke|toon|noem|overzicht|which|show|list|welche|zeige|liste)\b"
+            r".*\b(?:setups?|plannen?|set-ups?)\b",
+            normalized,
+        ))
 
     @staticmethod
     def _message_mentions_name(message: str, name: Any) -> bool:
@@ -582,6 +626,19 @@ class FinnV2EntityResolutionService:
             if len(matches) > 1:
                 raise LookupError("setup_ambiguous")
             raise LookupError("entity_not_found")
+
+        if selector.get("setup_collection_requested"):
+            candidates = [dict(row) for row in await self.setups.get_user_setups(user_id)]
+            normalized_asset = self._normalize_symbol(asset or selector.get("asset"))
+            if normalized_asset:
+                candidates = [row for row in candidates if self._candidate_asset(row) == normalized_asset]
+            if candidates:
+                return {
+                    "setup": candidates[0],
+                    "setups": candidates,
+                    "resolution_source": "owner_setup_collection",
+                }
+            raise LookupError("setup_not_resolved")
 
         # A named strategy or bot identifies its parent setup more precisely
         # than an active-workspace fallback. This keeps an explicit object

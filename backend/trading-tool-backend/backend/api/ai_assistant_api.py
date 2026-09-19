@@ -3116,7 +3116,10 @@ async def get_finn_mission_control(
                 "error": str(exc or "mission_control_build_failed"),
             },
         }
-    _store_cached_mission_control(current_user["id"], response)
+    # A recoverable first-load failure must never become the user's cached
+    # dashboard state. The next refresh should retry against persisted data.
+    if response.get("generation_status") != "failed":
+        _store_cached_mission_control(current_user["id"], response)
     return response
 
 
