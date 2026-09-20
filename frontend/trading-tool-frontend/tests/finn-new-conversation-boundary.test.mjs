@@ -39,10 +39,25 @@ test("a confirmed V2 proposal rebinds the composer to its verified conversation"
   );
   assert.match(
     assistantSource,
-    /const confirmedConversationId = normalizeFinnSessionId\([\s\S]*execution\.conversation_id \|\| displayContext\.conversation_id/,
+    /let confirmedConversationId = normalizeFinnSessionId\([\s\S]*execution\.conversation_id \|\| displayContext\.conversation_id/,
   );
   assert.match(
     assistantSource,
     /isFinnV2ConversationId\(confirmedConversationId\)[\s\S]*await persistActiveFinnSessionId\(confirmedConversationId\)/,
+  );
+});
+
+test("a confirmed proposal re-reads the committed run when its delivery response lacks a session", () => {
+  assert.match(
+    assistantSource,
+    /!isFinnV2ConversationId\(confirmedConversationId\) && displayContext\.run_id/,
+  );
+  assert.match(
+    assistantSource,
+    /await fetchFinnV2Run\(displayContext\.run_id\)/,
+  );
+  assert.match(
+    assistantSource,
+    /confirmedRun\?\.conversation_id[\s\S]*runtime_trace\?\.terminal_projection\?\.conversation_id/,
   );
 });

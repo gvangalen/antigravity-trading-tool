@@ -4958,9 +4958,23 @@ function AIAssistantContent({
         // Execution is the authoritative post-confirmation boundary. A card
         // can have been rendered from a delayed stream projection, whereas
         // the execution response is bound to the proposal's actual run.
-        const confirmedConversationId = normalizeFinnSessionId(
+        let confirmedConversationId = normalizeFinnSessionId(
           execution.conversation_id || displayContext.conversation_id,
         );
+        if (!isFinnV2ConversationId(confirmedConversationId) && displayContext.run_id) {
+          // The execution endpoint normally returns this identity. Re-read
+          // its committed run if an older delivery envelope omitted it.
+          try {
+            const confirmedRun = await fetchFinnV2Run(displayContext.run_id);
+            confirmedConversationId = normalizeFinnSessionId(
+              confirmedRun?.conversation_id
+              || confirmedRun?.runtime_trace?.conversation_id
+              || confirmedRun?.runtime_trace?.terminal_projection?.conversation_id,
+            );
+          } catch (error) {
+            console.warn("Kon bevestigde FINN-conversatie niet opnieuw laden:", error);
+          }
+        }
         if (isFinnV2ConversationId(confirmedConversationId)) {
           // Do not rely on an earlier stream envelope after a confirmation:
           // bind the composer to the conversation that owns this execution.
