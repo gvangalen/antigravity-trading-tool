@@ -109,13 +109,34 @@ def main() -> None:
         message="Wijzig deze setup naar timeframe 1D.",
         operation_id="update_setup",
     )
+    # The browser regression occurs after the confirmation boundary: a second
+    # natural ``deze setup`` mutation must resolve the action result that the
+    # first update just persisted, without a name or client-side ID.
+    update_setup_again = _run_action(
+        base_url=base_url,
+        token=token,
+        other_token=other_token,
+        conversation_id=conversation_id,
+        message="Wijzig deze setup terug naar timeframe 4H.",
+        operation_id="update_setup",
+    )
+    # A restored browser session can legitimately begin a fresh V2
+    # conversation. The wording stays demonstrative, so only the latest
+    # persisted, owner-scoped action result may supply its target.
+    update_setup_after_boundary = _run_action(
+        base_url=base_url,
+        token=token,
+        other_token=other_token,
+        message="Wijzig deze setup naar timeframe 1D.",
+        operation_id="update_setup",
+    )
     setup_read = _reference_read(
         base_url=base_url,
         token=token,
         conversation_id=conversation_id,
         message="Welk timeframe gebruikt deze setup nu?",
         entity_type="setup",
-        expected_id=str((update_setup.get("action_result") or {}).get("entity_id") or ""),
+        expected_id=str((update_setup_after_boundary.get("action_result") or {}).get("entity_id") or ""),
         expected_operation_id="read_active_setup",
     )
     create_strategy = _run_action(
@@ -138,19 +159,48 @@ def main() -> None:
         message="Wijzig deze strategie en zet het bedrag naar 150 euro.",
         operation_id="update_strategy",
     )
+    # Exercise the corresponding post-confirmation Strategy reference. This
+    # cannot be replaced by a passive read: the resolver must produce the ID
+    # required by the next write action itself.
+    update_strategy_again = _run_action(
+        base_url=base_url,
+        token=token,
+        other_token=other_token,
+        conversation_id=conversation_id,
+        message="Wijzig deze strategie en zet het bedrag terug naar 100 euro.",
+        operation_id="update_strategy",
+    )
+    update_strategy_after_boundary = _run_action(
+        base_url=base_url,
+        token=token,
+        other_token=other_token,
+        message="Wijzig deze strategie en zet het bedrag naar 125 euro.",
+        operation_id="update_strategy",
+    )
     strategy_read = _reference_read(
         base_url=base_url,
         token=token,
         conversation_id=conversation_id,
         message="Vat deze strategie samen.",
         entity_type="strategy",
-        expected_id=str((update_strategy.get("action_result") or {}).get("entity_id") or ""),
+        expected_id=str((update_strategy_after_boundary.get("action_result") or {}).get("entity_id") or ""),
         expected_operation_id="read_linked_strategy",
     )
     conversation_projection = _verified_conversation_projection(conversation_id)
     projection_result = dict(conversation_projection.get("action_result") or {})
     projection_target = dict(conversation_projection.get("active_target") or {})
-    steps = [create_setup, update_setup, setup_read, create_strategy, update_strategy, strategy_read]
+    steps = [
+        create_setup,
+        update_setup,
+        update_setup_again,
+        update_setup_after_boundary,
+        setup_read,
+        create_strategy,
+        update_strategy,
+        update_strategy_again,
+        update_strategy_after_boundary,
+        strategy_read,
+    ]
     artifact = {
         "artifact_version": "finn_v2.post_execution_reference_regression.v1",
         "synthetic_local_user": True,
@@ -159,9 +209,9 @@ def main() -> None:
         "verified_conversation_projection": conversation_projection,
         "passed": all(step.get("passed") for step in steps) and all((
             projection_result.get("operation_id") == "update_strategy",
-            projection_result.get("entity_id") == (update_strategy.get("action_result") or {}).get("entity_id"),
+            projection_result.get("entity_id") == (update_strategy_after_boundary.get("action_result") or {}).get("entity_id"),
             projection_target.get("entity_type") == "strategy",
-            projection_target.get("entity_id") == (update_strategy.get("action_result") or {}).get("entity_id"),
+            projection_target.get("entity_id") == (update_strategy_after_boundary.get("action_result") or {}).get("entity_id"),
         )),
     }
     output = Path(args.output).expanduser().resolve()

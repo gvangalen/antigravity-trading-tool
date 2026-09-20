@@ -31,3 +31,18 @@ test("a terminal V2 envelope is immediately authoritative for the next turn", ()
     /await persistActiveFinnSessionId\(envelope\?\.session_id \|\| chatSessionId\)/,
   );
 });
+
+test("a confirmed V2 proposal rebinds the composer to its verified conversation", () => {
+  assert.match(
+    assistantSource,
+    /conversation_id: projection\?\.conversation_id \|\| run\?\.conversation_id \|\| null/,
+  );
+  assert.match(
+    assistantSource,
+    /const confirmedConversationId = normalizeFinnSessionId\(displayContext\.conversation_id\)/,
+  );
+  assert.match(
+    assistantSource,
+    /isFinnV2ConversationId\(confirmedConversationId\)[\s\S]*await persistActiveFinnSessionId\(confirmedConversationId\)/,
+  );
+});

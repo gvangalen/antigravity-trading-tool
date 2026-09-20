@@ -4532,6 +4532,11 @@ function AIAssistantContent({
                 requires_confirmation: Boolean(verified.confirmation_required),
                 mode: verified.mode,
                 display_context: {
+                  // Confirmation runs outside the chat stream. Preserve the
+                  // server-issued conversation so the next demonstrative turn
+                  // starts from the verified action-result boundary.
+                  conversation_id: projection?.conversation_id || run?.conversation_id || null,
+                  run_id: runId,
                   operation_id: operationId || projection?.final_operation_id,
                   name: actionDraft?.supplied_inputs?.name
                     || setupDraft?.supplied_inputs?.name
@@ -4950,6 +4955,12 @@ function AIAssistantContent({
           throw new Error(publicFinnExecutionError(execution.error_codes?.[0]));
         }
         const displayContext = action.display_context || {};
+        const confirmedConversationId = normalizeFinnSessionId(displayContext.conversation_id);
+        if (isFinnV2ConversationId(confirmedConversationId)) {
+          // Do not rely on an earlier stream envelope after a confirmation:
+          // bind the composer to the conversation that owns this execution.
+          await persistActiveFinnSessionId(confirmedConversationId);
+        }
         const operationId = displayContext.operation_id || execution.operation_id || "";
         const suppliedInputs = displayContext.supplied_inputs || {};
         const canonicalEntity = execution.action_result?.canonical_entity || {};
