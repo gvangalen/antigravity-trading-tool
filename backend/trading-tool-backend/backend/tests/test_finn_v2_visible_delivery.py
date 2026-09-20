@@ -144,3 +144,46 @@ def test_visible_delivery_preserves_run_id_when_delivery_chain_raises():
     assert envelope["intent"] == "unavailable"
     assert envelope["state"]["run_id"] == "run-capability-1"
     assert envelope["response_trace"]["run_id"] == "run-capability-1"
+
+
+def test_visible_post_execution_runner_reads_only_browser_equivalent_public_contracts(monkeypatch):
+    """The host-side parity runner must not inspect a different local database.
+
+    A browser only receives the owner-scoped run and proposal routes. Keeping
+    this boundary explicit makes the confirmation-to-follow-up regression
+    meaningful when the runtime itself is running inside Docker.
+    """
+    from backend.scripts import run_finn_v2_visible_post_execution_reference_regression as runner
+
+    calls = []
+
+    def fake_request_json(*, url, method, headers, body, timeout):
+        calls.append((url, method, headers, body, timeout))
+        if url.endswith("/runs/run-visible-1"):
+            return {
+                "run_id": "run-visible-1",
+                "runtime_trace": {"contract_id": "contract-visible-1"},
+                "response": {"proposal_id": "proposal-visible-1"},
+            }, 200
+        if url.endswith("/proposals/proposal-visible-1"):
+            return {"proposal_id": "proposal-visible-1", "payload_hash": "hash-visible-1"}, 200
+        raise AssertionError(url)
+
+    monkeypatch.setattr(runner, "_request_json", fake_request_json)
+
+    record = runner._public_runtime_record(
+        base_url="http://127.0.0.1:18001",
+        token="local-test-token",
+        run_id="run-visible-1",
+    )
+
+    assert record == {
+        "runtime_contract_id": "contract-visible-1",
+        "runtime_state": {},
+        "terminal_projection": {"contract_id": "contract-visible-1"},
+        "proposal": {"id": "proposal-visible-1", "payload_hash": "hash-visible-1"},
+    }
+    assert [(method, url.rsplit("/", 1)[-1]) for url, method, *_ in calls] == [
+        ("GET", "run-visible-1"),
+        ("GET", "proposal-visible-1"),
+    ]

@@ -19,9 +19,8 @@ import uuid
 from backend.scripts.run_finn_v2_full_action_matrix import (
     _create_local_user,
     _proposal_lifecycle,
-    _runtime_record,
 )
-from backend.scripts.run_finn_v2_persisted_runtime_gate import _terminal_sse
+from backend.scripts.run_finn_v2_persisted_runtime_gate import _request_json, _terminal_sse
 from backend.utils.auth_utils import create_access_token
 
 
@@ -64,17 +63,63 @@ def _terminal_from_visible_envelope(*, base_url: str, token: str, envelope: dict
     return terminal
 
 
+def _public_runtime_record(*, base_url: str, token: str, run_id: str) -> dict:
+    """Read the same persisted delivery projection that the browser receives.
+
+    The parity stack runs in Docker, while this runner executes on the host.
+    Reading ``sync_engine`` here can therefore accidentally inspect a different
+    database.  The visible browser never has that privilege: it only receives
+    the owner-scoped run and proposal routes, so the regression must use them
+    too.
+    """
+    headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
+    run, run_status = _request_json(
+        url=f"{base_url}/api/assistant/v2/runs/{run_id}",
+        method="GET",
+        headers=headers,
+        body=None,
+        timeout=20,
+    )
+    if run_status != 200:
+        raise AssertionError(f"visible_reference_run_read_failed_{run_status}")
+    projection = dict(run.get("runtime_trace") or {})
+    proposal_id = str((run.get("response") or {}).get("proposal_id") or "")
+    proposal = None
+    if proposal_id:
+        proposal_payload, proposal_status = _request_json(
+            url=f"{base_url}/api/assistant/v2/proposals/{proposal_id}",
+            method="GET",
+            headers=headers,
+            body=None,
+            timeout=20,
+        )
+        if proposal_status != 200:
+            raise AssertionError(f"visible_reference_proposal_read_failed_{proposal_status}")
+        # Keep the existing lifecycle helper's minimal input shape while
+        # sourcing every value from its public proposal summary.
+        proposal = {
+            "id": proposal_payload.get("proposal_id"),
+            "payload_hash": proposal_payload.get("payload_hash"),
+        }
+    return {
+        "runtime_contract_id": projection.get("contract_id"),
+        "runtime_state": {},
+        "terminal_projection": projection,
+        "proposal": proposal,
+    }
+
+
 def _visible_action(*, base_url: str, token: str, other_token: str, query: str, session_id: str | None, expected_operation: str) -> dict:
     envelope = _stream_envelope(base_url=base_url, token=token, query=query, session_id=session_id)
     terminal = _terminal_from_visible_envelope(base_url=base_url, token=token, envelope=envelope)
     run_id = str(terminal.get("run_id") or "")
-    record = _runtime_record(run_id)
+    record = _public_runtime_record(base_url=base_url, token=token, run_id=run_id)
     proposal = record.get("proposal")
     lifecycle = _proposal_lifecycle(base_url, token, other_token, proposal) if proposal else {}
     # Execution writes the canonical action result after the first terminal
     # proposal projection. Re-read the persisted contract just as the browser
     # will on its next natural-language turn.
-    record_after_execution = _runtime_record(run_id)
+    record_after_execution = _public_runtime_record(base_url=base_url, token=token, run_id=run_id)
     projection = record_after_execution.get("terminal_projection") or {}
     next_session_id = str(lifecycle.get("execution_conversation_id") or "")
     checks = {
