@@ -20,3 +20,63 @@ def test_twelve_data_quote_without_configuration_is_typed_unavailable():
 
     with pytest.raises(ValueError, match="twelve_data_not_configured"):
         asyncio.run(adapter.fetch_latest_snapshot(asset))
+
+
+def test_twelve_data_quote_is_normalized_for_persistent_market_snapshots(monkeypatch):
+    class _Response:
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return {
+                "close": "221.40",
+                "open": "219.10",
+                "high": "222.20",
+                "low": "218.50",
+                "previous_close": "220.01",
+                "change": "1.39",
+                "percent_change": "0.63",
+                "volume": "1234567",
+                "datetime": "2026-09-20 14:30:00",
+                "currency": "USD",
+                "exchange": "NASDAQ",
+            }
+
+    class _Client:
+        def __init__(self, **kwargs):
+            self.kwargs = kwargs
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_args):
+            return False
+
+        async def get(self, url, params):
+            assert url.endswith("/quote")
+            assert params["symbol"] == "AAPL"
+            assert params["apikey"] == "test-key"
+            return _Response()
+
+    monkeypatch.setattr(
+        "backend.services.providers.twelve_data_market_data_adapter.httpx.AsyncClient",
+        _Client,
+    )
+    adapter = TwelveDataMarketDataAdapter(api_key="test-key")
+    asset = AssetRecord(
+        symbol="AAPL",
+        display_name="Apple Inc.",
+        asset_class="stock",
+        provider="twelve_data",
+        quote_currency="USD",
+        primary_provider="twelve_data",
+        provider_symbol="AAPL",
+    )
+
+    snapshot = asyncio.run(adapter.fetch_latest_snapshot(asset))
+
+    assert snapshot.symbol == "AAPL"
+    assert snapshot.provider == "twelve_data"
+    assert snapshot.price == 221.40
+    assert snapshot.change_percent == 0.63
+    assert snapshot.volume == 1234567.0

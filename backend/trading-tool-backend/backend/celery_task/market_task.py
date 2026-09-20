@@ -12,7 +12,10 @@ from backend.utils.db import get_db_connection
 from backend.celery_task.btc_price_history_task import update_btc_history
 from backend.utils.scoring_utils import generate_scores_db
 from backend.infrastructure.database import async_session_factory
+from backend.infrastructure.models import Watchlist
+from backend.services.market_data_ingestion_service import MarketDataIngestionService
 from backend.services.market_data_service import MarketDataService
+from sqlalchemy import select
 
 # =====================================================
 # ⚙️ Config
@@ -26,6 +29,30 @@ logging.basicConfig(
     format="%(asctime)s - %(levelname)s - %(message)s"
 )
 logger = logging.getLogger(__name__)
+
+
+async def _sync_configured_market_snapshots() -> dict:
+    """Refresh every owner-selected asset through its registry provider.
+
+    The legacy market task only owns the BTC feed.  A watchlist can however
+    contain equities and ETFs, whose snapshots must be refreshed through the
+    canonical provider registry rather than a BTC-specific fallback.
+    """
+    async with async_session_factory() as session:
+        symbols = list(
+            dict.fromkeys(
+                str(symbol or "").strip().upper()
+                for symbol in (await session.execute(select(Watchlist.symbol).distinct())).scalars().all()
+                if str(symbol or "").strip()
+            )
+        )
+        if not symbols:
+            return {"requested": [], "ingested": [], "failed": [], "success_count": 0, "failure_count": 0}
+        return await MarketDataIngestionService(session).ingest_latest_snapshots(
+            symbols,
+            commit=True,
+            continue_on_error=True,
+        )
 
 # =====================================================
 # 🔁 Safe HTTP-get met retry
@@ -135,6 +162,24 @@ def fetch_market_data():
         logger.info("✅ Live market RAW data verwerkt.")
     except Exception:
         logger.error("❌ Fout in fetch_market_data", exc_info=True)
+
+
+@shared_task(name="backend.celery_task.market_task.sync_configured_market_snapshots")
+def sync_configured_market_snapshots():
+    """Persist fresh quotes for configured watchlist assets without blocking FINN."""
+    try:
+        result = asyncio.run(_sync_configured_market_snapshots())
+        logger.info(
+            "Configured market snapshot refresh completed: %s ingested, %s pending.",
+            result["success_count"],
+            result["failure_count"],
+        )
+        return result
+    except Exception:
+        # A provider outage is reported by the typed availability path.  It
+        # must not make the market worker or unrelated FINN work unavailable.
+        logger.exception("Configured market snapshot refresh failed")
+        return {"requested": [], "ingested": [], "failed": [{"error": "refresh_failed"}], "success_count": 0, "failure_count": 1}
 
 # =====================================================
 # 🕛 Dagelijkse snapshot (GLOBAAL)

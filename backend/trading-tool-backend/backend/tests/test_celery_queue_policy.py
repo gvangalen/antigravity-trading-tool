@@ -212,6 +212,14 @@ def test_beat_schedule_routes_dispatch_and_direct_tasks_to_policy_queue():
         assert entry["options"]["queue"] == expected_queue
 
 
+def test_watchlist_snapshot_refresh_is_scheduled_on_the_market_queue():
+    from backend.celery_task.celery_app import celery_app
+
+    entry = celery_app.conf.beat_schedule["sync_configured_market_snapshots"]
+    assert entry["task"] == "backend.celery_task.market_task.sync_configured_market_snapshots"
+    assert entry["options"]["queue"] == resolve_task_queue(entry["task"])
+
+
 def test_celery_publisher_stamps_published_at_header():
     from backend.celery_task.celery_app import stamp_task_publish_time
 

@@ -157,6 +157,10 @@ celery_app.conf.beat_schedule = {
         "backend.celery_task.market_task.fetch_market_data",
         crontab(minute="*/15"),
     ),
+    "sync_configured_market_snapshots": build_task_schedule_entry(
+        "backend.celery_task.market_task.sync_configured_market_snapshots",
+        crontab(minute="*/5"),
+    ),
 
     "fetch_market_data_7d": build_task_schedule_entry(
         "backend.celery_task.market_task.fetch_market_data_7d",

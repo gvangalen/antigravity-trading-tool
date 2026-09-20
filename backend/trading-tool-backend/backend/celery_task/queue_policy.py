@@ -28,6 +28,7 @@ NAMED_QUEUES: List[str] = [f"{QUEUE_NAME_PREFIX}{queue_name}" for queue_name in 
 TASK_QUEUE_ROUTES: Dict[str, str] = {
     "backend.ai_agents.score_ai_agent.generate_master_score": "ai_generation",
     "backend.celery_task.market_task.fetch_market_data": "market_data",
+    "backend.celery_task.market_task.sync_configured_market_snapshots": "market_data",
     "backend.celery_task.market_task.fetch_market_data_7d": "market_data",
     "backend.celery_task.market_task.save_market_data_daily": "market_data",
     "backend.celery_task.market_task.calculate_and_save_forward_returns": "market_data",
