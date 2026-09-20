@@ -56,6 +56,21 @@ def test_reasoning_proposal_candidate_must_match_allowed_operation():
         service._validate_refs(result, context)
 
 
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [
+        ("btc", "BTC"),
+        ("MSFT", "MSFT"),
+        (1332, None),
+        ("1332", None),
+    ],
+)
+def test_public_asset_projection_never_treats_relational_ids_as_assets(value, expected):
+    service = FinnV2ReasoningService(session=object())
+
+    assert service.fallbacks._public_asset_symbol(value) == expected
+
+
 def test_deterministic_proposal_contract_creates_one_missing_field_clarification_without_provider():
     service = FinnV2ReasoningService(session=object())
     context = ReasoningContextPackage(

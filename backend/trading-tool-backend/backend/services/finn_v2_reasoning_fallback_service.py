@@ -1096,13 +1096,12 @@ class FinnV2ReasoningFallbackService:
                 model=model,
                 error_codes=[*error_codes, "proposal_contract_inputs_incomplete"],
             )
-        requested_asset = str(
+        requested_asset = self._public_asset_symbol(
             proposed_fields.get("asset")
             or proposed_fields.get("symbol")
             or (context.request_plan or {}).get("target_asset")
             or asset
-            or ""
-        ).upper() or None
+        )
         target_id = next(
             (
                 str(proposed_fields[field])
@@ -1686,6 +1685,14 @@ class FinnV2ReasoningFallbackService:
     def _first_asset_symbol(self, text: str) -> str | None:
         match = re.search(r"\b(BTC|ETH|SOL|AAPL|TSLA|NVDA)\b", text.upper())
         return match.group(1) if match else None
+
+    @staticmethod
+    def _public_asset_symbol(value: Any) -> str | None:
+        """Keep relational IDs out of the user-facing asset projection."""
+        candidate = str(value or "").strip().upper()
+        if re.fullmatch(r"[A-Z][A-Z0-9.\-]{0,14}", candidate):
+            return candidate
+        return None
 
     def _first_timeframe(self, text: str) -> str | None:
         lowered = text.lower()
