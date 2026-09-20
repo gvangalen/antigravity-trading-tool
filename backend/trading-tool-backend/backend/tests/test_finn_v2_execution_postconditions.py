@@ -126,6 +126,53 @@ def test_execution_service_records_postcondition_hash_on_success():
     }]
 
 
+def test_execution_returns_run_conversation_when_action_result_write_has_no_row():
+    session = _Session()
+    service = FinnV2ExecutionService(session=session)
+    service.runtime_contracts.record_proposal_lifecycle = lambda **kwargs: asyncio.sleep(0)
+    # Repository implementations may persist the result without returning a
+    # refreshed ORM row. The public execution response must still carry the
+    # run's conversation binding for an immediate natural-language follow-up.
+    service.runtime_contracts.record_action_result = lambda **kwargs: asyncio.sleep(0, result=None)
+    service.runtime_contracts.get_for_run = lambda **kwargs: asyncio.sleep(
+        0, result=SimpleNamespace(conversation_id="finn-v2-conversation-after-confirmation")
+    )
+    service.repo.get_by_idempotency_key_for_user = lambda **kwargs: asyncio.sleep(0, result=None)
+    service.repo.get_for_proposal = lambda **kwargs: asyncio.sleep(0, result=None)
+    service.proposals.get_by_id_for_user = lambda **kwargs: asyncio.sleep(
+        0,
+        result=SimpleNamespace(
+            id="proposal-conversation-fallback",
+            run_id="run-conversation-fallback",
+            user_id=7,
+            operation_type="update_setup",
+            payload_hash="hash-conversation-fallback",
+            payload_json={"change": {"setup_id": 9, "changed_fields": {"timeframe": "1D"}}},
+            expires_at=datetime.now(timezone.utc) + timedelta(minutes=5),
+        ),
+    )
+    service.gates.check_execution_eligibility = lambda **kwargs: asyncio.sleep(
+        0, result=SimpleNamespace(eligible=True, dict=lambda: {"eligible": True})
+    )
+    service.repo.create = lambda **kwargs: asyncio.sleep(0, result=SimpleNamespace(**kwargs))
+    service.adapters.get = lambda _operation_type: (
+        lambda _user_id, _payload: asyncio.sleep(0, result={"ok": True, "setup_id": 9})
+    )
+    service.adapters.postcondition_hash = lambda *_args, **_kwargs: asyncio.sleep(0, result="post-hash")
+
+    result = asyncio.run(
+        service.execute(
+            proposal_id="proposal-conversation-fallback",
+            user_id=7,
+            idempotency_key="idem-conversation-fallback",
+            expected_payload_hash="hash-conversation-fallback",
+        )
+    )
+
+    assert result.status == "succeeded"
+    assert result.conversation_id == "finn-v2-conversation-after-confirmation"
+
+
 def test_execution_mirrors_only_verified_postcondition_into_conversation():
     service = FinnV2ExecutionService(session=_Session())
     captured = {}

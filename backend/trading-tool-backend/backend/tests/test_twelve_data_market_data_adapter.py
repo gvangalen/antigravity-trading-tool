@@ -1,6 +1,7 @@
 import asyncio
 
 import pytest
+import httpx
 
 from backend.schemas.market_provider_schema import AssetRecord
 from backend.services.providers.twelve_data_market_data_adapter import TwelveDataMarketDataAdapter
@@ -80,3 +81,42 @@ def test_twelve_data_quote_is_normalized_for_persistent_market_snapshots(monkeyp
     assert snapshot.price == 221.40
     assert snapshot.change_percent == 0.63
     assert snapshot.volume == 1234567.0
+
+
+def test_twelve_data_rate_limit_is_a_typed_safe_provider_failure(monkeypatch):
+    class _Response:
+        def raise_for_status(self):
+            request = httpx.Request("GET", "https://api.twelvedata.com/quote")
+            response = httpx.Response(429, request=request)
+            raise httpx.HTTPStatusError("rate limited", request=request, response=response)
+
+    class _Client:
+        def __init__(self, **_kwargs):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_args):
+            return False
+
+        async def get(self, *_args, **_kwargs):
+            return _Response()
+
+    monkeypatch.setattr(
+        "backend.services.providers.twelve_data_market_data_adapter.httpx.AsyncClient",
+        _Client,
+    )
+    adapter = TwelveDataMarketDataAdapter(api_key="test-key")
+    asset = AssetRecord(
+        symbol="AAPL",
+        display_name="Apple Inc.",
+        asset_class="stock",
+        provider="twelve_data",
+        quote_currency="USD",
+        primary_provider="twelve_data",
+        provider_symbol="AAPL",
+    )
+
+    with pytest.raises(ValueError, match="^twelve_data_unavailable:http_429$"):
+        asyncio.run(adapter.fetch_latest_snapshot(asset))

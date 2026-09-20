@@ -45,17 +45,27 @@ class TwelveDataMarketDataAdapter:
         params.update(extra)
         return params
 
+    @staticmethod
+    def _raise_safe_transport_error(exc: httpx.HTTPError) -> None:
+        """Convert provider transport errors without retaining credential URLs."""
+        if isinstance(exc, httpx.HTTPStatusError) and exc.response is not None:
+            raise ValueError(f"twelve_data_unavailable:http_{exc.response.status_code}") from None
+        raise ValueError("twelve_data_transport_unavailable") from None
+
     async def fetch_latest_snapshot(self, asset: AssetRecord) -> PriceSnapshotDTO:
         if not self.api_key:
             raise ValueError("twelve_data_not_configured")
         provider_symbol = asset.provider_symbol or asset.symbol
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            quote_res = await client.get(
-                f"{self.base_url}/quote",
-                params=self._params(symbol=provider_symbol, interval="1min"),
-            )
-            quote_res.raise_for_status()
-            payload = quote_res.json()
+        try:
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                quote_res = await client.get(
+                    f"{self.base_url}/quote",
+                    params=self._params(symbol=provider_symbol, interval="1min"),
+                )
+                quote_res.raise_for_status()
+                payload = quote_res.json()
+        except httpx.HTTPError as exc:
+            self._raise_safe_transport_error(exc)
 
         if payload.get("status") == "error" or payload.get("code"):
             code = str(payload.get("code") or "provider_error")
@@ -105,10 +115,13 @@ class TwelveDataMarketDataAdapter:
         if end_at is not None:
             params["end_date"] = end_at.strftime("%Y-%m-%d %H:%M:%S")
 
-        async with httpx.AsyncClient(timeout=15.0) as client:
-            response = await client.get(f"{self.base_url}/time_series", params=params)
-            response.raise_for_status()
-            payload = response.json()
+        try:
+            async with httpx.AsyncClient(timeout=15.0) as client:
+                response = await client.get(f"{self.base_url}/time_series", params=params)
+                response.raise_for_status()
+                payload = response.json()
+        except httpx.HTTPError as exc:
+            self._raise_safe_transport_error(exc)
 
         values = payload.get("values") or []
         candles: list[OHLCVCandleDTO] = []

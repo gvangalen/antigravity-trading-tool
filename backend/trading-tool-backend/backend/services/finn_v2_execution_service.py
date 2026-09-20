@@ -185,6 +185,21 @@ class FinnV2ExecutionService:
             # terminal lifecycle together here so an immediate replay observes
             # ``already_executed`` rather than a transient ``started`` row.
             await self._commit_terminal_execution()
+            # ``record_action_result`` normally returns the locked runtime
+            # contract, but that is a persistence convenience rather than an
+            # API guarantee. Resolve the run binding independently so the
+            # first confirmed execution and an idempotency replay expose the
+            # same conversation authority to the next chat turn.
+            conversation_id = getattr(runtime_contract, "conversation_id", None)
+            if not conversation_id:
+                # The action is already atomically committed. A best-effort
+                # delivery lookup must not recast that durable success as a
+                # failed execution when an older test double or a transient
+                # post-commit reader cannot reload the row.
+                try:
+                    conversation_id = await self._conversation_id_for_run(proposal.run_id)
+                except Exception:
+                    conversation_id = None
             return ExecutionResult(
                 execution_id=execution.id,
                 proposal_id=proposal_id,
@@ -197,7 +212,7 @@ class FinnV2ExecutionService:
                 error_codes=[],
                 started_at=started_at,
                 completed_at=execution.completed_at,
-                conversation_id=getattr(runtime_contract, "conversation_id", None),
+                conversation_id=conversation_id,
             )
         except Exception as exc:
             execution.status = "failed"
