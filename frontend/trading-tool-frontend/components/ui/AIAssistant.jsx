@@ -4955,7 +4955,12 @@ function AIAssistantContent({
           throw new Error(publicFinnExecutionError(execution.error_codes?.[0]));
         }
         const displayContext = action.display_context || {};
-        const confirmedConversationId = normalizeFinnSessionId(displayContext.conversation_id);
+        // Execution is the authoritative post-confirmation boundary. A card
+        // can have been rendered from a delayed stream projection, whereas
+        // the execution response is bound to the proposal's actual run.
+        const confirmedConversationId = normalizeFinnSessionId(
+          execution.conversation_id || displayContext.conversation_id,
+        );
         if (isFinnV2ConversationId(confirmedConversationId)) {
           // Do not rely on an earlier stream envelope after a confirmation:
           // bind the composer to the conversation that owns this execution.

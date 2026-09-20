@@ -12,9 +12,11 @@ from backend.utils.db import get_db_connection
 from backend.celery_task.btc_price_history_task import update_btc_history
 from backend.utils.scoring_utils import generate_scores_db
 from backend.infrastructure.database import async_session_factory
-from backend.infrastructure.models import Watchlist
+from backend.infrastructure.models import UserIndicatorConfig, Watchlist
+from backend.services.macro_data_service import MacroDataService
 from backend.services.market_data_ingestion_service import MarketDataIngestionService
 from backend.services.market_data_service import MarketDataService
+from backend.services.technical_data_service import TechnicalDataService
 from sqlalchemy import select
 
 # =====================================================
@@ -32,27 +34,73 @@ logger = logging.getLogger(__name__)
 
 
 async def _sync_configured_market_snapshots() -> dict:
-    """Refresh every owner-selected asset through its registry provider.
+    """Refresh quotes and materialize every owner-scoped enabled indicator.
 
-    The legacy market task only owns the BTC feed.  A watchlist can however
-    contain equities and ETFs, whose snapshots must be refreshed through the
-    canonical provider registry rather than a BTC-specific fallback.
+    A configured indicator is a durable user choice.  When a provider was
+    temporarily unavailable at creation time, its configuration remains valid
+    but the workspace has no measured row yet.  This task rehydrates those
+    rows through the existing category services after snapshots are refreshed;
+    it does not create a second indicator contract or mutate preferences.
     """
     async with async_session_factory() as session:
+        watchlist_symbols = (await session.execute(select(Watchlist.symbol).distinct())).scalars().all()
+        configured_rows = (
+            await session.execute(
+                select(UserIndicatorConfig).where(
+                    UserIndicatorConfig.enabled.is_(True),
+                    UserIndicatorConfig.symbol.is_not(None),
+                )
+            )
+        ).scalars().all()
+        configured_scopes = {
+            (int(row.user_id), str(row.symbol or "").strip().upper(), str(row.category or "").strip().lower())
+            for row in configured_rows
+            if str(row.symbol or "").strip()
+            and str(row.category or "").strip().lower() in {"market", "macro", "technical"}
+        }
         symbols = list(
             dict.fromkeys(
                 str(symbol or "").strip().upper()
-                for symbol in (await session.execute(select(Watchlist.symbol).distinct())).scalars().all()
+                for symbol in [*watchlist_symbols, *(scope[1] for scope in configured_scopes)]
                 if str(symbol or "").strip()
             )
         )
         if not symbols:
-            return {"requested": [], "ingested": [], "failed": [], "success_count": 0, "failure_count": 0}
-        return await MarketDataIngestionService(session).ingest_latest_snapshots(
+            return {
+                "requested": [],
+                "ingested": [],
+                "failed": [],
+                "success_count": 0,
+                "failure_count": 0,
+                "rehydrated_scopes": [],
+                "rehydration_failures": [],
+            }
+
+        result = await MarketDataIngestionService(session).ingest_latest_snapshots(
             symbols,
             commit=True,
             continue_on_error=True,
         )
+        services = {
+            "market": MarketDataService(session),
+            "macro": MacroDataService(session),
+            "technical": TechnicalDataService(session),
+        }
+        rehydrated_scopes = []
+        rehydration_failures = []
+        for user_id, symbol, category in sorted(configured_scopes):
+            try:
+                await services[category].sync_effective_indicators(user_id, symbol)
+                rehydrated_scopes.append({"user_id": user_id, "symbol": symbol, "category": category})
+            except Exception:
+                # A single unavailable upstream indicator must not starve other
+                # user workspaces or make the snapshot task fail as a whole.
+                logger.exception("Configured %s indicator refresh failed for %s", category, symbol)
+                rehydration_failures.append({"user_id": user_id, "symbol": symbol, "category": category})
+        await session.commit()
+        result["rehydrated_scopes"] = rehydrated_scopes
+        result["rehydration_failures"] = rehydration_failures
+        return result
 
 # =====================================================
 # 🔁 Safe HTTP-get met retry

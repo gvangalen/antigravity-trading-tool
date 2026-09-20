@@ -17,6 +17,7 @@ def test_execution_service_returns_existing_result_for_same_idempotency_key():
         result=SimpleNamespace(
             id="exec-1",
             proposal_id="proposal-1",
+            run_id="run-1",
             user_id=7,
             operation_type="update_setup",
             status="succeeded",
@@ -29,6 +30,10 @@ def test_execution_service_returns_existing_result_for_same_idempotency_key():
         ),
     )
     service.repo.get_for_proposal = lambda **kwargs: asyncio.sleep(0, result=None)
+    service.runtime_contracts.get_for_run = lambda **kwargs: asyncio.sleep(
+        0,
+        result=SimpleNamespace(conversation_id="finn-v2-conversation-1"),
+    )
 
     result = asyncio.run(
         service.execute(
@@ -41,6 +46,7 @@ def test_execution_service_returns_existing_result_for_same_idempotency_key():
 
     assert result.status == "already_executed"
     assert result.postcondition_hash == "post"
+    assert result.conversation_id == "finn-v2-conversation-1"
 
 
 def test_execution_service_returns_existing_result_for_same_proposal():

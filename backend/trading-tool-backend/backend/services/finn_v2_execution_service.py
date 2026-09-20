@@ -48,6 +48,7 @@ class FinnV2ExecutionService:
                 error_codes=existing.error_codes_json,
                 started_at=existing.started_at,
                 completed_at=existing.completed_at,
+                conversation_id=await self._conversation_id_for_run(getattr(existing, "run_id", None)),
             )
         existing_for_proposal = await self.repo.get_for_proposal(proposal_id=proposal_id, user_id=user_id)
         if existing_for_proposal is not None:
@@ -63,6 +64,7 @@ class FinnV2ExecutionService:
                 error_codes=existing_for_proposal.error_codes_json,
                 started_at=existing_for_proposal.started_at,
                 completed_at=existing_for_proposal.completed_at,
+                conversation_id=await self._conversation_id_for_run(getattr(existing_for_proposal, "run_id", None)),
             )
         proposal = await self.proposals.get_by_id_for_user(proposal_id=proposal_id, user_id=user_id)
         if proposal is None:
@@ -195,6 +197,7 @@ class FinnV2ExecutionService:
                 error_codes=[],
                 started_at=started_at,
                 completed_at=execution.completed_at,
+                conversation_id=getattr(runtime_contract, "conversation_id", None),
             )
         except Exception as exc:
             execution.status = "failed"
@@ -222,6 +225,16 @@ class FinnV2ExecutionService:
                 started_at=started_at,
                 completed_at=execution.completed_at,
             )
+
+    async def _conversation_id_for_run(self, run_id: Optional[str]) -> Optional[str]:
+        """Return the verified conversation binding for a replayed execution."""
+        if not run_id:
+            return None
+        get_for_run = getattr(self.runtime_contracts, "get_for_run", None)
+        if not callable(get_for_run):
+            return None
+        runtime_contract = await get_for_run(run_id=run_id)
+        return getattr(runtime_contract, "conversation_id", None)
 
     async def _record_workflow_event(self, proposal, *, event: str, execution_id: str) -> None:
         """Mirror a completed workflow step into the safe run projection."""

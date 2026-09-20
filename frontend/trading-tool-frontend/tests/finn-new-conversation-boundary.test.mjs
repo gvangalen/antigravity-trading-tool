@@ -39,7 +39,7 @@ test("a confirmed V2 proposal rebinds the composer to its verified conversation"
   );
   assert.match(
     assistantSource,
-    /const confirmedConversationId = normalizeFinnSessionId\(displayContext\.conversation_id\)/,
+    /const confirmedConversationId = normalizeFinnSessionId\([\s\S]*execution\.conversation_id \|\| displayContext\.conversation_id/,
   );
   assert.match(
     assistantSource,

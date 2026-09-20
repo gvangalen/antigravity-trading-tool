@@ -54,3 +54,7 @@ class ExecutionResult(BaseModel):
     error_codes: List[str] = Field(default_factory=list)
     started_at: datetime
     completed_at: Optional[datetime] = None
+    # Confirmation runs outside the chat stream. Return only the owning
+    # conversation identity so the client can bind its next natural-language
+    # turn to the verified execution boundary.
+    conversation_id: Optional[str] = None
