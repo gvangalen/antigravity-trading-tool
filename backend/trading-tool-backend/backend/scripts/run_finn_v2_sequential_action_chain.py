@@ -167,7 +167,9 @@ def _run_action(
         outcome["polling_sse_parity"],
         lifecycle.get("confirmed") is True,
         lifecycle.get("execution_result") == "succeeded",
+        lifecycle.get("execution_conversation_id") == observed["conversation_id"],
         lifecycle.get("idempotency_result") == "already_executed",
+        lifecycle.get("idempotency_conversation_id") == observed["conversation_id"],
         bool(outcome["action_result"]),
     ))
     return outcome

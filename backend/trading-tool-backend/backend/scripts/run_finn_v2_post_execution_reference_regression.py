@@ -76,6 +76,14 @@ def _verified_conversation_projection(conversation_id: str) -> dict:
     return dict(row or {})
 
 
+def _execution_conversation(step: dict) -> str:
+    """Use only the public execute response for the next browser-like turn."""
+    conversation_id = str((step.get("proposal_lifecycle") or {}).get("execution_conversation_id") or "")
+    if not conversation_id:
+        raise AssertionError("post_execution_reference_missing_public_execution_conversation_id")
+    return conversation_id
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--base-url", default="http://127.0.0.1:18001")
@@ -100,7 +108,9 @@ def main() -> None:
         message=f"Maak een trade setup voor BTC op 4H met de naam {setup_name}.",
         operation_id="create_setup",
     )
-    conversation_id = create_setup["conversation_id"]
+    # The frontend receives this identity from the public execute endpoint.
+    # Never fall back to the pre-confirmation run response in this regression.
+    conversation_id = _execution_conversation(create_setup)
     update_setup = _run_action(
         base_url=base_url,
         token=token,
@@ -116,7 +126,7 @@ def main() -> None:
         base_url=base_url,
         token=token,
         other_token=other_token,
-        conversation_id=conversation_id,
+        conversation_id=_execution_conversation(update_setup),
         message="Wijzig deze setup terug naar timeframe 4H.",
         operation_id="update_setup",
     )
@@ -130,10 +140,14 @@ def main() -> None:
         message="Wijzig deze setup naar timeframe 1D.",
         operation_id="update_setup",
     )
+    # This deliberately began a fresh conversation to prove persisted
+    # owner-scoped lineage. From here on, model the browser exactly: bind the
+    # next turn to the conversation returned by that public execution.
+    conversation_id = _execution_conversation(update_setup_after_boundary)
     setup_read = _reference_read(
         base_url=base_url,
         token=token,
-        conversation_id=conversation_id,
+        conversation_id=_execution_conversation(update_setup_again),
         message="Welk timeframe gebruikt deze setup nu?",
         entity_type="setup",
         expected_id=str((update_setup_after_boundary.get("action_result") or {}).get("entity_id") or ""),
@@ -143,7 +157,7 @@ def main() -> None:
         base_url=base_url,
         token=token,
         other_token=other_token,
-        conversation_id=conversation_id,
+        conversation_id=_execution_conversation(update_setup_after_boundary),
         message=(
             f"Maak voor deze setup een vaste strategie met de naam {strategy_name}, "
             "100 euro per uitvoering, entry 76000, stop-loss 72000, "
@@ -155,7 +169,7 @@ def main() -> None:
         base_url=base_url,
         token=token,
         other_token=other_token,
-        conversation_id=conversation_id,
+        conversation_id=_execution_conversation(create_strategy),
         message="Wijzig deze strategie en zet het bedrag naar 150 euro.",
         operation_id="update_strategy",
     )
@@ -166,7 +180,7 @@ def main() -> None:
         base_url=base_url,
         token=token,
         other_token=other_token,
-        conversation_id=conversation_id,
+        conversation_id=_execution_conversation(update_strategy),
         message="Wijzig deze strategie en zet het bedrag terug naar 100 euro.",
         operation_id="update_strategy",
     )
@@ -180,12 +194,13 @@ def main() -> None:
     strategy_read = _reference_read(
         base_url=base_url,
         token=token,
-        conversation_id=conversation_id,
+        conversation_id=_execution_conversation(update_strategy_again),
         message="Vat deze strategie samen.",
         entity_type="strategy",
         expected_id=str((update_strategy_after_boundary.get("action_result") or {}).get("entity_id") or ""),
         expected_operation_id="read_linked_strategy",
     )
+    conversation_id = _execution_conversation(update_strategy_after_boundary)
     conversation_projection = _verified_conversation_projection(conversation_id)
     projection_result = dict(conversation_projection.get("action_result") or {})
     projection_target = dict(conversation_projection.get("active_target") or {})

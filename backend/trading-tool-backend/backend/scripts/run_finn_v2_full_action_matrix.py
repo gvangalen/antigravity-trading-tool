@@ -333,8 +333,13 @@ def _proposal_lifecycle(
         "confirmed": bool(confirmed.get("confirmed")),
         "execution_status": execution_status,
         "execution_result": executed.get("status"),
+        # The browser must use this server-issued identity after confirmation.
+        # Keeping it in the public matrix proves the execution endpoint does
+        # not silently drop the post-confirmation conversation boundary.
+        "execution_conversation_id": executed.get("conversation_id"),
         "idempotency_replay_status": replay_status,
         "idempotency_result": replayed.get("status"),
+        "idempotency_conversation_id": replayed.get("conversation_id"),
     }
 
 
