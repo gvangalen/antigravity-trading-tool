@@ -100,7 +100,7 @@ jobs:
             pm2_bin="$HOME/.nvm/versions/node/v20.19.5/bin/pm2"
           fi
           test -n "$pm2_bin"
-          "$pm2_bin" startOrReload ops/deploy/ecosystem.production.config.js --update-env
+          "$pm2_bin" startOrReload ecosystem.production.config.js --update-env
           "$pm2_bin" save --force
           curl -fsS --max-time 15 http://127.0.0.1:8000/api/health >/dev/null
           "$pm2_bin" jlist >/tmp/tradamind_pm2_jlist.json
