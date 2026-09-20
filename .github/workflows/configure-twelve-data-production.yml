@@ -1,0 +1,115 @@
+name: Configure Twelve Data Production
+
+# Provider credentials are production control-plane state. This workflow is
+# deliberately manual: code pushes must never mutate a server secret.
+"on":
+  workflow_dispatch:
+    inputs:
+      acknowledge:
+        description: Type CONFIGURE_TWELVE_DATA to apply the existing protected secret
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: configure-twelve-data-production
+  cancel-in-progress: false
+
+jobs:
+  configure:
+    if: github.repository == 'gvangalen/antigravity-trading-tool' && inputs.acknowledge == 'CONFIGURE_TWELVE_DATA'
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 15
+    env:
+      RAW_SERVER_IP: ${{ secrets.HOST || secrets.SERVER_IP || vars.HOST || vars.SERVER_IP }}
+      RAW_DEPLOY_KEY: ${{ secrets.SSH_PRIVATE_KEY || secrets.DEPLOY_SSH_KEY }}
+      TWELVE_DATA_API_KEY: ${{ secrets.TWELVE_DATA_API_KEY }}
+    steps:
+      - name: Validate protected inputs
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "${RAW_SERVER_IP:-}"
+          test -n "${RAW_DEPLOY_KEY:-}"
+          test -n "${TWELVE_DATA_API_KEY:-}"
+          printf '%s\n' "$RAW_DEPLOY_KEY" > "$RUNNER_TEMP/tradamind-deploy-key"
+          chmod 600 "$RUNNER_TEMP/tradamind-deploy-key"
+
+      - name: Update the protected server environment atomically
+        shell: bash
+        run: |
+          set -euo pipefail
+          provider_key_file="$RUNNER_TEMP/twelve-data-key"
+          umask 077
+          printf '%s' "$TWELVE_DATA_API_KEY" > "$provider_key_file"
+          chmod 600 "$provider_key_file"
+          scp \
+            -i "$RUNNER_TEMP/tradamind-deploy-key" \
+            -o BatchMode=yes \
+            -o StrictHostKeyChecking=accept-new \
+            "$provider_key_file" \
+            "ubuntu@$RAW_SERVER_IP:.secrets/.twelve-data-key"
+          rm -f "$provider_key_file"
+          ssh \
+            -i "$RUNNER_TEMP/tradamind-deploy-key" \
+            -o BatchMode=yes \
+            -o StrictHostKeyChecking=accept-new \
+            "ubuntu@$RAW_SERVER_IP" 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          provider_key_file="$HOME/.secrets/.twelve-data-key"
+          trap 'rm -f "$provider_key_file"' EXIT
+          test -f "$provider_key_file"
+          provider_key="$(cat "$provider_key_file")"
+          test -n "$provider_key"
+          test "$(wc -l < "$provider_key_file")" -eq 0
+
+          env_file="$HOME/.secrets/trading.env"
+          test -f "$env_file"
+          temporary_file="$(mktemp "${env_file}.tmp.XXXXXX")"
+          umask 077
+          grep -v '^TWELVE_DATA_API_KEY=' "$env_file" > "$temporary_file" || true
+          printf 'TWELVE_DATA_API_KEY=%s\n' "$provider_key" >> "$temporary_file"
+          chmod 600 "$temporary_file"
+          mv -f "$temporary_file" "$env_file"
+          grep -q '^TWELVE_DATA_API_KEY=.' "$env_file"
+          printf '%s\n' 'protected_provider_secret=PASS'
+          REMOTE
+
+      - name: Reload API and workers with the protected environment
+        shell: bash
+        run: |
+          set -euo pipefail
+          ssh \
+            -i "$RUNNER_TEMP/tradamind-deploy-key" \
+            -o BatchMode=yes \
+            -o StrictHostKeyChecking=accept-new \
+            "ubuntu@$RAW_SERVER_IP" 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          cd /home/ubuntu/antigravity-trading-tool
+          set -a
+          source "$HOME/.secrets/trading.env"
+          set +a
+          pm2 startOrReload ops/deploy/ecosystem.production.config.js --update-env
+          pm2 save --force
+          curl -fsS --max-time 15 http://127.0.0.1:8000/api/health >/dev/null
+          pm2 jlist >/tmp/tradamind_pm2_jlist.json
+          python3 - <<'PY'
+          import json
+
+          with open('/tmp/tradamind_pm2_jlist.json', encoding='utf-8') as handle:
+              processes = json.load(handle)
+          offline = [
+              process.get('name', 'unknown')
+              for process in processes
+              if (process.get('pm2_env') or {}).get('status') != 'online'
+          ]
+          if offline:
+              raise SystemExit('pm2_online=FAIL')
+          print('pm2_online=PASS')
+          print('api_health=PASS')
+          print('provider_environment_loaded=PASS')
+          PY
+          REMOTE
