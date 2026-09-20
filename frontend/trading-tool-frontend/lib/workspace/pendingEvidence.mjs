@@ -18,3 +18,18 @@ export function pendingWorkspaceEvidenceCategories(workspace) {
       && categories[category].rows.some(needsMaterialization),
   );
 }
+
+export async function materializeWorkspaceEvidence(categories, synchronize) {
+  const results = [];
+  for (const category of categories) {
+    try {
+      await synchronize(category);
+      results.push({ category, status: "fulfilled" });
+    } catch {
+      // Each category owns an independent provider request. Keep the
+      // remaining configured evidence eligible for materialization.
+      results.push({ category, status: "rejected" });
+    }
+  }
+  return results;
+}
