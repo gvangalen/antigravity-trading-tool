@@ -6,9 +6,13 @@ import { trackAssistantEvent } from "@/lib/api/assistantAnalytics";
 import { useVisibilityPolling } from "@/hooks/useVisibilityPolling";
 import { fetchAssetWorkspace } from "@/lib/api/workspace";
 import { fetchLatestPrice } from "@/lib/api/market";
+import { syncMarketPreferences } from "@/lib/api/market";
+import { syncMacroPreferences } from "@/lib/api/macro";
+import { syncTechnicalPreferences } from "@/lib/api/technical";
 import { getDailyScores } from "@/lib/api/scores";
 import { subscribeWorkspaceRefresh } from "@/lib/workspaceSync";
 import { setWorkspaceSnapshot } from "@/lib/workspaceSnapshotStore";
+import { pendingWorkspaceEvidenceCategories } from "@/lib/workspace/pendingEvidence.mjs";
 
 const WORKSPACE_REQUEST_TIMEOUT_MS = 15000;
 const WORKSPACE_CACHE_TTL_MS = 300_000;
@@ -17,6 +21,11 @@ const WORKSPACE_FORCE_REFRESH_COOLDOWN_MS = 2_500;
 
 const workspaceCache = new Map();
 const workspaceInFlightRequests = new Map();
+const materializeCategory = {
+  market: syncMarketPreferences,
+  macro: syncMacroPreferences,
+  technical: syncTechnicalPreferences,
+};
 
 function getFreshCache(cache, key, maxAgeMs) {
   const entry = cache.get(key);
@@ -188,6 +197,7 @@ export function useAssetWorkspaceData(symbol, periods, watchlistSymbols) {
   const fallbackStartedAtRef = useRef(null);
   const activeReloadPromiseRef = useRef(null);
   const quoteBackfillRequestKeyRef = useRef("");
+  const evidenceMaterializationKeyRef = useRef("");
   const latestWorkspaceRef = useRef(cachedWorkspace || null);
   const latestWatchlistRef = useRef(cachedWatchlist);
   const lastForegroundRefreshAtRef = useRef(0);
@@ -484,6 +494,31 @@ export function useAssetWorkspaceData(symbol, periods, watchlistSymbols) {
   useEffect(() => {
     void reloadWorkspace({ forceNetwork: false });
   }, [workspaceKey]);
+
+  useEffect(() => {
+    const pendingCategories = pendingWorkspaceEvidenceCategories(workspace);
+    if (pendingCategories.length === 0) {
+      evidenceMaterializationKeyRef.current = "";
+      return;
+    }
+
+    const key = `${workspaceKey}:evidence:${pendingCategories.join(",")}`;
+    if (evidenceMaterializationKeyRef.current === key) return;
+    evidenceMaterializationKeyRef.current = key;
+
+    let cancelled = false;
+    (async () => {
+      const results = await Promise.allSettled(
+        pendingCategories.map((category) => materializeCategory[category](assetSymbol)),
+      );
+      if (cancelled || !results.some((result) => result.status === "fulfilled")) return;
+      await reloadWorkspace({ forceNetwork: true });
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [assetSymbol, reloadWorkspace, workspace, workspaceKey]);
 
   useEffect(() => {
     return subscribeWorkspaceRefresh((payload) => {

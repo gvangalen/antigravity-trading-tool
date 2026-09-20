@@ -185,6 +185,34 @@ def test_add_user_market_indicator_uses_isolated_asset_scope_lookup(monkeypatch)
     outer_session.rollback.assert_not_awaited()
 
 
+def test_market_preference_sync_refreshes_existing_evidence_from_the_live_provider():
+    service = MarketDataService(AsyncMock())
+    service.resolve_effective_preferences = AsyncMock(
+        return_value={
+            "asset_class": "stock",
+            "scope": "symbol",
+            "rows": [SimpleNamespace(indicator="price")],
+        }
+    )
+    service.add_user_market_indicator = AsyncMock(
+        return_value=SimpleNamespace(dict=lambda: {"value": 313.30})
+    )
+
+    result = asyncio.run(service.sync_effective_indicators(7, "AAPL"))
+
+    assert result["failed"] == []
+    assert result["synced"] == [{"indicator": "price", "payload": {"value": 313.30}}]
+    service.add_user_market_indicator.assert_awaited_once_with(
+        7,
+        "price",
+        value=None,
+        symbol="AAPL",
+        persist_preference=False,
+        refresh_existing=True,
+        prefer_live_snapshot=True,
+    )
+
+
 def test_get_latest_market_snapshot_falls_back_to_live_provider_when_db_snapshot_is_missing(monkeypatch):
     service = MarketDataService(AsyncMock())
     service.repository.get_latest_snapshot = AsyncMock(return_value=None)

@@ -90,15 +90,22 @@ export function useTechnicalData(activeTab = "day", symbol = "BTC", options = {}
   /* --------------------------------------------------------
      🔹 Afgeleide helpers (BELANGRIJK)
   -------------------------------------------------------- */
-  const activeTechnicalIndicatorNames = Array.isArray(technicalData)
-    ? technicalData.map((i) => i.name)
-    : [];
   const configuredTechnicalIndicatorNames = useMemo(
     () => Array.isArray(preferences.indicators)
       ? preferences.indicators.map((item) => item.indicator).filter(Boolean)
       : [],
     [preferences.indicators],
   );
+  const hasUnmaterializedTechnicalEvidence = useMemo(() => {
+    if (configuredTechnicalIndicatorNames.length === 0) return false;
+    const rowsByName = new Map(
+      technicalData.map((row) => [String(row?.name || "").trim().toLowerCase(), row]),
+    );
+    return configuredTechnicalIndicatorNames.some((name) => {
+      const row = rowsByName.get(String(name).trim().toLowerCase());
+      return !row || !Number.isFinite(Number(row.value));
+    });
+  }, [configuredTechnicalIndicatorNames, technicalData]);
   const assetClass = preferences.assetClass || null;
 
   const loadPreferences = useCallback(async () => {
@@ -206,10 +213,9 @@ export function useTechnicalData(activeTab = "day", symbol = "BTC", options = {}
 
   useEffect(() => {
     const hasConfiguredIndicators = configuredTechnicalIndicatorNames.length > 0;
-    const hasLoadedSignals = activeTechnicalIndicatorNames.length > 0;
     const syncKey = `${normalizedSymbol}:${preferences.scope}:${configuredTechnicalIndicatorNames.join(",")}`;
 
-    if (!hasConfiguredIndicators || hasLoadedSignals) return;
+    if (!hasConfiguredIndicators || !hasUnmaterializedTechnicalEvidence) return;
     if (preferencesLoading || loading || syncing) return;
     if (autoSyncedRef.current.has(syncKey)) return;
 
@@ -225,8 +231,8 @@ export function useTechnicalData(activeTab = "day", symbol = "BTC", options = {}
         setSyncing(false);
       });
   }, [
-    activeTechnicalIndicatorNames.length,
     configuredTechnicalIndicatorNames,
+    hasUnmaterializedTechnicalEvidence,
     loadData,
     loading,
     normalizedSymbol,

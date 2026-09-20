@@ -426,6 +426,8 @@ class MarketDataService:
                     value=None,
                     symbol=normalized_symbol,
                     persist_preference=False,
+                    refresh_existing=True,
+                    prefer_live_snapshot=True,
                 )
                 results["synced"].append({"indicator": indicator_name, "payload": payload.dict()})
             except HTTPException as exc:
@@ -541,6 +543,8 @@ class MarketDataService:
         symbol: str = "BTC",
         *,
         persist_preference: bool = True,
+        refresh_existing: bool = False,
+        prefer_live_snapshot: bool = False,
     ) -> MarketDataIndicatorResponse:
         symbol = symbol.upper() if symbol else "BTC"
         indicator_name = raw_name.strip()
@@ -558,12 +562,12 @@ class MarketDataService:
             )
 
         exists = await self.repository.check_indicator_exists(indicator_name, user_id, symbol=symbol)
-        if exists:
+        if exists and not refresh_existing:
             raise HTTPException(409, f"Indicator '{indicator_name}' is al toegevoegd voor {symbol}.")
 
         # Bepaal value als deze leeg is
         if value is None:
-            snapshot = await self.repository.get_latest_snapshot(symbol)
+            snapshot = None if prefer_live_snapshot else await self.repository.get_latest_snapshot(symbol)
             if not snapshot:
                 asset_meta = await self._get_asset_scope(symbol)
                 asset = AssetRecord(**asset_meta)
@@ -617,6 +621,11 @@ class MarketDataService:
         trend = scored.get("trend") or "neutral"
         interpretation = scored.get("interpretation") or "Geen interpretatie beschikbaar"
         action = scored.get("action") or "Geen actie"
+
+        if exists:
+            # Keep the confirmed configuration, but replace a stale
+            # owner-scoped measurement only after a fresh value was obtained.
+            await self.repository.delete_user_market_indicator(indicator_name, user_id, symbol=symbol)
 
         # Opslaan
         new_record = MarketDataIndicator(

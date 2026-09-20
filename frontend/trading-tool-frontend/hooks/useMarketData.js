@@ -109,16 +109,22 @@ export function useMarketData(symbol = "BTC", options = {}) {
   const [syncing, setSyncing] = useState(false);
   const autoSyncedRef = useRef(new Set());
 
-  const activeMarketIndicatorNames = useMemo(
-    () => (activeMarketIndicators || []).map((i) => i?.name).filter(Boolean),
-    [activeMarketIndicators]
-  );
   const configuredMarketIndicatorNames = useMemo(
     () => Array.isArray(preferences.indicators)
       ? preferences.indicators.map((item) => item.indicator).filter(Boolean)
       : [],
     [preferences.indicators],
   );
+  const hasUnmaterializedMarketEvidence = useMemo(() => {
+    if (configuredMarketIndicatorNames.length === 0) return false;
+    const rowsByName = new Map(
+      activeMarketIndicators.map((row) => [String(row?.name || "").trim().toLowerCase(), row]),
+    );
+    return configuredMarketIndicatorNames.some((name) => {
+      const row = rowsByName.get(String(name).trim().toLowerCase());
+      return !row || !Number.isFinite(Number(row?.value));
+    });
+  }, [activeMarketIndicators, configuredMarketIndicatorNames]);
   const assetClass = preferences.assetClass || null;
 
   const [availableIndicators, setAvailableIndicators] = useState([]);
@@ -320,9 +326,8 @@ export function useMarketData(symbol = "BTC", options = {}) {
 
   useEffect(() => {
     const hasConfiguredIndicators = configuredMarketIndicatorNames.length > 0;
-    const hasLoadedSignals = activeMarketIndicatorNames.length > 0;
     const syncKey = `${normalizedSymbol}:${preferences.scope}:${configuredMarketIndicatorNames.join(",")}`;
-    if (!hasConfiguredIndicators || hasLoadedSignals) return;
+    if (!hasConfiguredIndicators || !hasUnmaterializedMarketEvidence) return;
     if (preferencesLoading || loading || syncing) return;
     if (autoSyncedRef.current.has(syncKey)) return;
 
@@ -335,8 +340,8 @@ export function useMarketData(symbol = "BTC", options = {}) {
       })
       .finally(() => setSyncing(false));
   }, [
-    activeMarketIndicatorNames.length,
     configuredMarketIndicatorNames,
+    hasUnmaterializedMarketEvidence,
     loadAll,
     loading,
     normalizedSymbol,
