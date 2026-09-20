@@ -126,6 +126,59 @@ def test_execution_service_records_postcondition_hash_on_success():
     }]
 
 
+def test_execution_mirrors_only_verified_postcondition_into_conversation():
+    service = FinnV2ExecutionService(session=_Session())
+    captured = {}
+    service.conversations.record_verified_action_result = lambda **kwargs: asyncio.sleep(0, result=captured.update(kwargs))
+    runtime_contract = SimpleNamespace(
+        revision=12,
+        state_json={
+            "identity": {"conversation_id": "conversation-1", "user_id": 7},
+            "action_result": {
+                "operation_id": "update_strategy",
+                "entity_type": "strategy",
+                "entity_id": "52",
+                "owner_user_id": 7,
+                "result_status": "succeeded",
+                "conversation_id": "conversation-1",
+            },
+            "canonical_entity_target": {
+                "entity_type": "strategy", "entity_id": "52", "owner_id": 7,
+            },
+        },
+    )
+
+    asyncio.run(service._record_verified_conversation_target(runtime_contract))
+
+    assert captured["conversation_id"] == "conversation-1"
+    assert captured["user_id"] == 7
+    assert captured["contract_revision"] == 12
+    assert captured["action_result"]["entity_id"] == "52"
+
+
+def test_execution_does_not_mirror_deleted_target_as_a_live_reference():
+    service = FinnV2ExecutionService(session=_Session())
+    calls = []
+    service.conversations.record_verified_action_result = lambda **kwargs: asyncio.sleep(0, result=calls.append(kwargs))
+    runtime_contract = SimpleNamespace(
+        revision=12,
+        state_json={
+            "identity": {"conversation_id": "conversation-1", "user_id": 7},
+            "action_result": {
+                "operation_id": "delete_strategy",
+                "entity_type": "strategy",
+                "entity_id": "52",
+                "owner_user_id": 7,
+                "result_status": "succeeded",
+            },
+        },
+    )
+
+    asyncio.run(service._record_verified_conversation_target(runtime_contract))
+
+    assert calls == []
+
+
 def test_execution_service_normalizes_adapter_results_before_json_persistence_and_hashing():
     service = FinnV2ExecutionService(session=_Session())
     captured = {}

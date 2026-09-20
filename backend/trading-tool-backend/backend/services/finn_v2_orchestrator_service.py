@@ -869,6 +869,8 @@ class FinnV2OrchestratorService:
         lineage and active guided flow for this continuation turn.
         """
         context = {}
+        verified_conversation_result = {}
+        verified_conversation_target = {}
         if conversation_id:
             context = dict(
                 await self.conversations.get_context(
@@ -877,6 +879,12 @@ class FinnV2OrchestratorService:
                 )
                 or {}
             )
+            # Confirmation/execution occurs after the orchestration turn that
+            # created the proposal.  This is a locked mirror of that later,
+            # verified runtime-contract postcondition, not a second source of
+            # action truth.
+            verified_conversation_result = dict(context.get("verified_action_result") or {})
+            verified_conversation_target = dict(context.get("active_conversation_target") or {})
         get_latest = getattr(self.runtime_contracts, "get_latest_for_conversation", None)
         if not callable(get_latest):
             # Historical unit doubles do not implement contract continuation.
@@ -902,6 +910,8 @@ class FinnV2OrchestratorService:
         canonical_entity_target = dict(previous_state.get("canonical_entity_target") or {})
         if canonical_entity_target.get("owner_id") == user_id:
             context["canonical_entity_target"] = canonical_entity_target
+        elif verified_conversation_target.get("owner_id") == user_id:
+            context["canonical_entity_target"] = verified_conversation_target
         action_result = dict(previous_state.get("action_result") or {})
         if (
             action_result.get("entity_id")
@@ -936,6 +946,15 @@ class FinnV2OrchestratorService:
             ):
                 context["previous_action_result"] = latest_action_result
                 context["previous_action_result_source"] = "conversation_action_result"
+        if (
+            "previous_action_result" not in context
+            and verified_conversation_result.get("owner_user_id") == user_id
+            and verified_conversation_result.get("entity_id") is not None
+            and verified_conversation_result.get("result_status") == "succeeded"
+            and not str(verified_conversation_result.get("operation_id") or "").startswith("delete_")
+        ):
+            context["previous_action_result"] = verified_conversation_result
+            context["previous_action_result_source"] = "verified_conversation_projection"
         recent_results_loader = getattr(
             self.runtime_contracts, "get_recent_action_results_for_conversation", None
         )
@@ -945,6 +964,10 @@ class FinnV2OrchestratorService:
                 user_id=user_id,
                 exclude_run_id=run_id,
             )
+            result_type = str(verified_conversation_result.get("entity_type") or "")
+            if result_type and result_type not in context["recent_action_results"]:
+                if context.get("previous_action_result_source") == "verified_conversation_projection":
+                    context["recent_action_results"][result_type] = verified_conversation_result
         owner_results_loader = getattr(
             self.runtime_contracts, "get_recent_action_results_for_user", None
         )

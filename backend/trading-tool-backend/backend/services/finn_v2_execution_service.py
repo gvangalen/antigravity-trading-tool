@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import text
 
 from backend.infrastructure.repositories.finn_v2_execution_repository import FinnV2ExecutionRepository
+from backend.infrastructure.repositories.finn_v2_conversation_repository import FinnV2ConversationRepository
 from backend.infrastructure.repositories.finn_v2_proposal_repository import FinnV2ProposalRepository
 from backend.infrastructure.repositories.finn_v2_runtime_contract_repository import FinnV2RuntimeContractRepository
 from backend.schemas.finn_v2_execution_schema import ExecutionResult
@@ -28,6 +29,7 @@ class FinnV2ExecutionService:
         self.repo = FinnV2ExecutionRepository(session)
         self.proposals = FinnV2ProposalRepository(session)
         self.runtime_contracts = FinnV2RuntimeContractRepository(session)
+        self.conversations = FinnV2ConversationRepository(session)
         self.gates = FinnV2ExecutionGateService(session, flag_service=self.flags)
         self.adapters = FinnV2ActionAdapterRegistry(session, flag_service=self.flags)
 
@@ -156,8 +158,9 @@ class FinnV2ExecutionService:
             await self.proposals.update_status(proposal, status="executed")
             await self.session.flush()
             record_action_result = getattr(self.runtime_contracts, "record_action_result", None)
+            runtime_contract = None
             if callable(record_action_result):
-                await record_action_result(
+                runtime_contract = await record_action_result(
                     run_id=proposal.run_id,
                     action_result=self._action_result(
                         proposal=proposal,
@@ -166,6 +169,8 @@ class FinnV2ExecutionService:
                         prior_entity=prior_entity,
                     ),
                 )
+            if runtime_contract is not None:
+                await self._record_verified_conversation_target(runtime_contract)
             record_latency_sample(f"finn_v2_execution_latency_ms:{proposal.operation_type}", int((execution.completed_at - started_at).total_seconds() * 1000))
             increment_execution_safety_counter(f"finn_v2_executions_total:{proposal.operation_type}:succeeded")
             await self._record_workflow_event(
@@ -238,6 +243,35 @@ class FinnV2ExecutionService:
         commit = getattr(self.session, "commit", None)
         if callable(commit):
             await commit()
+
+    async def _record_verified_conversation_target(self, runtime_contract) -> None:
+        """Publish the confirmed postcondition for an immediate next turn.
+
+        A proposal is projected into a conversation before confirmation.  Its
+        execution happens later in a separate request, so leaving that older
+        projection in place can make a direct ``deze setup`` continuation
+        race the durable runtime-contract lookup.  Mirror only the verified
+        action result and its target while holding the same transaction.
+        """
+        state = dict(getattr(runtime_contract, "state_json", {}) or {})
+        action_result = dict(state.get("action_result") or {})
+        identity = dict(state.get("identity") or {})
+        conversation_id = str(action_result.get("conversation_id") or identity.get("conversation_id") or "")
+        user_id = action_result.get("owner_user_id") or identity.get("user_id")
+        if (
+            not conversation_id
+            or user_id is None
+            or action_result.get("result_status") != "succeeded"
+            or str(action_result.get("operation_id") or "").startswith("delete_")
+        ):
+            return
+        await self.conversations.record_verified_action_result(
+            conversation_id=conversation_id,
+            user_id=int(user_id),
+            action_result=action_result,
+            active_target=dict(state.get("canonical_entity_target") or {}),
+            contract_revision=int(getattr(runtime_contract, "revision", 0) or 0),
+        )
 
     def _hash(self, payload: dict) -> str:
         canonical = json.dumps(payload, sort_keys=True, default=str, separators=(",", ":"))

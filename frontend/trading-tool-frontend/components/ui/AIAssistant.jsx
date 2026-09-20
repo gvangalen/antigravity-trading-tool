@@ -1060,9 +1060,11 @@ function AIAssistantContent({
 
   useEffect(() => {
     insightCacheKeyRef.current = `finn-insight:${currentConversationStorageKey}`;
-    const missionControlSymbol = normalizeScopedAssetSymbol(globalSymbol || context.symbol) || "UNKNOWN";
     const userScope = String(user?.id || "anonymous");
-    missionControlCacheKeyRef.current = `finn-mission-control:${userScope}:${missionControlSymbol}`;
+    // FINN Today is one owner-scoped briefing.  It must not be invalidated by
+    // an Analysis asset switch while the identical My Plan surface continues
+    // to render the same briefing.
+    missionControlCacheKeyRef.current = `finn-mission-control:${userScope}:shared`;
   }, [currentConversationStorageKey, user?.id, globalSymbol, context.symbol]);
 
   const getLatestAssistantState = () => {
@@ -4244,7 +4246,7 @@ function AIAssistantContent({
   async function loadMissionControl({ force = false } = {}) {
     const requestKey =
       missionControlCacheKeyRef.current ||
-      `finn-mission-control:${String(user?.id || "anonymous")}:${String(globalSymbol || context.symbol || "UNKNOWN").toUpperCase()}`;
+      `finn-mission-control:${String(user?.id || "anonymous")}:shared`;
     if (!force && missionControlRequestRef.current && missionControlRequestKeyRef.current === requestKey) {
       return missionControlRequestRef.current;
     }

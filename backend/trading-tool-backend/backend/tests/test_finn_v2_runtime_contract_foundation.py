@@ -499,6 +499,64 @@ def test_conversation_hydrates_its_latest_owner_action_result_not_global_history
     assert context["previous_action_result_source"] == "conversation_action_result"
 
 
+def test_post_execution_conversation_projection_bridges_the_next_turn():
+    """The immediate turn after confirmation must not see stale draft state."""
+    from backend.services.finn_v2_orchestrator_service import FinnV2OrchestratorService
+
+    action_result = {
+        "operation_id": "update_setup",
+        "entity_type": "setup",
+        "entity_id": "41",
+        "canonical_name": "Apple Swing",
+        "owner_user_id": 7,
+        "result_status": "succeeded",
+        "conversation_id": "conversation-after-confirmation",
+    }
+    active_target = {
+        "entity_type": "setup",
+        "entity_id": "41",
+        "display_name": "Apple Swing",
+        "owner_id": 7,
+        "source": "verified_action_result",
+    }
+
+    class _Conversations:
+        async def get_context(self, **_kwargs):
+            return {
+                "active_guided_operation": {"operation_id": "update_setup", "status": "proposed"},
+                "verified_action_result": action_result,
+                "active_conversation_target": active_target,
+            }
+
+    class _Contracts:
+        async def get_latest_for_conversation(self, **_kwargs):
+            # The post-confirmation worker projection can lag a direct user
+            # follow-up. The verified conversation mirror closes that gap.
+            return SimpleNamespace(state_json={"guided_state": {}})
+
+        async def get_latest_action_result_for_conversation(self, **_kwargs):
+            return None
+
+        async def get_recent_action_results_for_conversation(self, **_kwargs):
+            return {}
+
+        async def get_recent_action_results_for_user(self, **_kwargs):
+            return {}
+
+    service = object.__new__(FinnV2OrchestratorService)
+    service.conversations = _Conversations()
+    service.runtime_contracts = _Contracts()
+
+    context = asyncio.run(service._load_continuation_context(
+        conversation_id="conversation-after-confirmation", user_id=7, run_id="next-run"
+    ))
+
+    assert context["previous_action_result"] == action_result
+    assert context["previous_action_result_source"] == "verified_conversation_projection"
+    assert context["canonical_entity_target"] == active_target
+    assert context["recent_action_results"]["setup"] == action_result
+
+
 def test_deleted_action_result_is_audited_but_not_reused_as_live_entity_lineage():
     from backend.services.finn_v2_orchestrator_service import FinnV2OrchestratorService
 

@@ -14,13 +14,16 @@ class FinnV2ConversationRepository(FinnV2RepositoryTransactionMixin):
     def __init__(self, session: AsyncSession):
         self.session = session
 
-    async def get_by_id_for_user(self, conversation_id: str, user_id: int) -> Optional[FinnV2Conversation]:
-        result = await self.session.execute(
-            select(FinnV2Conversation).where(
+    async def get_by_id_for_user(
+        self, conversation_id: str, user_id: int, *, for_update: bool = False
+    ) -> Optional[FinnV2Conversation]:
+        statement = select(FinnV2Conversation).where(
                 FinnV2Conversation.id == conversation_id,
                 FinnV2Conversation.user_id == user_id,
             )
-        )
+        if for_update:
+            statement = statement.with_for_update()
+        result = await self.session.execute(statement)
         return result.scalars().first()
 
     async def get_by_session_id_for_user(self, session_id: str, user_id: int) -> Optional[FinnV2Conversation]:
@@ -77,4 +80,39 @@ class FinnV2ConversationRepository(FinnV2RepositoryTransactionMixin):
             operation="update_context",
             entity_type="FinnV2Conversation",
             run_id=row.last_run_id,
+        )
+
+    async def record_verified_action_result(
+        self,
+        *,
+        conversation_id: str,
+        user_id: int,
+        action_result: Dict[str, Any],
+        active_target: Dict[str, Any],
+        contract_revision: int,
+    ) -> None:
+        """Mirror a verified contract postcondition for the next chat turn.
+
+        The runtime contract remains the authority.  This row is a locked,
+        compatibility delivery projection so the next run cannot observe the
+        pre-confirmation guided state while the action-result lookup catches
+        up across the API and worker session boundary.
+        """
+        row = await self.get_by_id_for_user(conversation_id, user_id, for_update=True)
+        if row is None:
+            return
+        context = dict(row.context_json or {})
+        result = dict(action_result or {})
+        target = dict(active_target or {})
+        context.pop("active_guided_operation", None)
+        context.pop("operation_state", None)
+        context["verified_action_result"] = result
+        context["verified_action_result_revision"] = int(contract_revision)
+        context["active_conversation_target"] = target
+        row.context_json = context
+        row.updated_at = datetime.now(timezone.utc)
+        await self._flush_with_rollback(
+            operation="record_verified_action_result",
+            entity_type="FinnV2Conversation",
+            run_id=str(result.get("run_id") or row.last_run_id or ""),
         )
