@@ -92,10 +92,18 @@ jobs:
           set -a
           source "$HOME/.secrets/trading.env"
           set +a
-          pm2 startOrReload ops/deploy/ecosystem.production.config.js --update-env
-          pm2 save --force
+          if [ -s "$HOME/.nvm/nvm.sh" ]; then
+            source "$HOME/.nvm/nvm.sh"
+          fi
+          pm2_bin="$(command -v pm2 || true)"
+          if [ -z "$pm2_bin" ] && [ -x "$HOME/.nvm/versions/node/v20.19.5/bin/pm2" ]; then
+            pm2_bin="$HOME/.nvm/versions/node/v20.19.5/bin/pm2"
+          fi
+          test -n "$pm2_bin"
+          "$pm2_bin" startOrReload ops/deploy/ecosystem.production.config.js --update-env
+          "$pm2_bin" save --force
           curl -fsS --max-time 15 http://127.0.0.1:8000/api/health >/dev/null
-          pm2 jlist >/tmp/tradamind_pm2_jlist.json
+          "$pm2_bin" jlist >/tmp/tradamind_pm2_jlist.json
           python3 - <<'PY'
           import json
 
