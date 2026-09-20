@@ -27,22 +27,23 @@ class TwelveDataTechnicalIndicatorAdapter:
 
     async def fetch_indicator_value(self, asset: AssetRecord, indicator_name: str) -> float:
         normalized = str(indicator_name or "").strip().lower()
+        if asset.asset_class == "crypto":
+            try:
+                fallback = await self._fetch_without_api_key(asset, normalized)
+                if fallback is not None:
+                    return fallback
+            except Exception:
+                # A configured Twelve Data route remains available when the
+                # exchange fallback is transiently unavailable.
+                if not self.api_key:
+                    raise
+
         if not self.api_key:
             fallback = await self._fetch_without_api_key(asset, normalized)
             if fallback is not None:
                 return fallback
 
-        try:
-            return await self._fetch_twelve_data_indicator(asset, normalized)
-        except Exception:
-            # A configured Twelve Data route is canonical. Binance remains a
-            # crypto-only resilience fallback, never a prerequisite that can
-            # prevent a valid configured provider from being used.
-            if asset.asset_class == "crypto":
-                fallback = await self._fetch_without_api_key(asset, normalized)
-                if fallback is not None:
-                    return fallback
-            raise
+        return await self._fetch_twelve_data_indicator(asset, normalized)
 
     async def _fetch_twelve_data_indicator(self, asset: AssetRecord, normalized: str) -> float:
 

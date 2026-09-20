@@ -58,21 +58,41 @@ def test_crypto_indicator_falls_back_to_binance_without_twelve_data_key():
     asyncio.run(run())
 
 
-def test_crypto_indicator_prefers_configured_twelve_data_before_binance():
+def test_crypto_indicator_prefers_exchange_history_before_configured_twelve_data():
     adapter = TwelveDataTechnicalIndicatorAdapter(api_key="test-key")
     calls = []
 
     async def configured_provider(_asset, indicator):
-        calls.append(("twelve", indicator))
-        return 55.0
+        raise AssertionError("Twelve Data must not be charged while exchange history is available")
 
-    async def unexpected_binance(_asset, _indicator):
-        raise AssertionError("Binance must not run before configured Twelve Data")
+    async def exchange_history(_asset, indicator):
+        calls.append(("binance", indicator))
+        return 55.0
 
     async def run():
         adapter._fetch_twelve_data_indicator = configured_provider
-        adapter._fetch_without_api_key = unexpected_binance
+        adapter._fetch_without_api_key = exchange_history
         assert await adapter.fetch_indicator_value(_asset(), "rsi") == 55.0
+
+    import asyncio
+
+    asyncio.run(run())
+    assert calls == [("binance", "rsi")]
+
+
+def test_crypto_indicator_uses_configured_twelve_data_when_exchange_history_is_unavailable():
+    adapter = TwelveDataTechnicalIndicatorAdapter(api_key="test-key")
+
+    async def unavailable_exchange(_asset, _indicator):
+        raise ValueError("exchange_unavailable")
+
+    async def configured_provider(_asset, _indicator):
+        return 44.0
+
+    async def run():
+        adapter._fetch_without_api_key = unavailable_exchange
+        adapter._fetch_twelve_data_indicator = configured_provider
+        assert await adapter.fetch_indicator_value(_asset(), "rsi") == 44.0
 
     import asyncio
 

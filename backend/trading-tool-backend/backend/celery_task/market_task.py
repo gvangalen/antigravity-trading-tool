@@ -25,6 +25,10 @@ from sqlalchemy import select
 TIMEOUT = 10
 HEADERS = {"Content-Type": "application/json"}
 SYMBOL = "BTC"
+# A free/provider-limited account must not be exhausted by one periodic sweep.
+# Newer saved preferences are prioritized; the next bounded run picks up the
+# remaining scopes without holding the market queue hostage.
+MAX_CONFIGURED_INDICATOR_SCOPES_PER_RUN = 4
 
 logging.basicConfig(
     level=logging.INFO,
@@ -52,12 +56,25 @@ async def _sync_configured_market_snapshots() -> dict:
                 )
             )
         ).scalars().all()
-        configured_scopes = {
-            (int(row.user_id), str(row.symbol or "").strip().upper(), str(row.category or "").strip().lower())
-            for row in configured_rows
-            if str(row.symbol or "").strip()
-            and str(row.category or "").strip().lower() in {"market", "macro", "technical"}
-        }
+        scope_revisions = {}
+        for row in configured_rows:
+            symbol = str(row.symbol or "").strip().upper()
+            category = str(row.category or "").strip().lower()
+            if not symbol or category not in {"market", "macro", "technical"}:
+                continue
+            scope = (int(row.user_id), symbol, category)
+            updated_at = getattr(row, "updated_at", None) or getattr(row, "created_at", None)
+            if scope not in scope_revisions or updated_at > scope_revisions[scope]:
+                scope_revisions[scope] = updated_at
+        configured_scopes = [
+            scope
+            for scope, _updated_at in sorted(
+                scope_revisions.items(),
+                key=lambda item: (item[1] is not None, item[1]),
+                reverse=True,
+            )[:MAX_CONFIGURED_INDICATOR_SCOPES_PER_RUN]
+        ]
+        deferred_scope_count = max(0, len(scope_revisions) - len(configured_scopes))
         symbols = list(
             dict.fromkeys(
                 str(symbol or "").strip().upper()
@@ -74,6 +91,7 @@ async def _sync_configured_market_snapshots() -> dict:
                 "failure_count": 0,
                 "rehydrated_scopes": [],
                 "rehydration_failures": [],
+                "deferred_scope_count": deferred_scope_count,
             }
 
         result = await MarketDataIngestionService(session).ingest_latest_snapshots(
@@ -103,6 +121,7 @@ async def _sync_configured_market_snapshots() -> dict:
         await session.commit()
         result["rehydrated_scopes"] = rehydrated_scopes
         result["rehydration_failures"] = rehydration_failures
+        result["deferred_scope_count"] = deferred_scope_count
         return result
 
 # =====================================================
