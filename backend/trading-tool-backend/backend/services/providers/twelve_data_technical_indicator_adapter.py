@@ -6,6 +6,7 @@ import logging
 import httpx
 
 from backend.schemas.market_provider_schema import AssetRecord
+from backend.services.providers.twelve_data_response_cache import TwelveDataResponseCache
 from backend.utils.technical_interpreter import calculate_rsi
 
 
@@ -215,7 +216,7 @@ class TwelveDataTechnicalIndicatorAdapter:
 
     async def _get_quote(self, symbol: str) -> dict:
         if symbol not in self._quote_cache:
-            self._quote_cache[symbol] = await self._get("/quote", symbol=symbol)
+            self._quote_cache[symbol] = await self._get("/quote", symbol=symbol, interval="1min")
         return self._quote_cache[symbol]
 
     async def _get_binance_candles(self, symbol: str, *, limit: int = 300) -> list[dict[str, float]]:
@@ -240,11 +241,26 @@ class TwelveDataTechnicalIndicatorAdapter:
         return self._binance_candle_cache[symbol]
 
     async def _get(self, endpoint: str, **params):
+        if not self.api_key:
+            raise ValueError("twelve_data_not_configured")
+        cached = TwelveDataResponseCache.get(endpoint, **params)
+        if cached is not None:
+            return cached
         query = {"apikey": self.api_key, **params}
-        async with httpx.AsyncClient(timeout=20.0) as client:
-            response = await client.get(f"{self.base_url}{endpoint}", params=query)
-            response.raise_for_status()
-            return response.json()
+        try:
+            async with httpx.AsyncClient(timeout=20.0) as client:
+                response = await client.get(f"{self.base_url}{endpoint}", params=query)
+                response.raise_for_status()
+                payload = response.json()
+        except httpx.HTTPError as exc:
+            if isinstance(exc, httpx.HTTPStatusError) and exc.response is not None:
+                raise ValueError(f"twelve_data_unavailable:http_{exc.response.status_code}") from None
+            raise ValueError("twelve_data_transport_unavailable") from None
+        if payload.get("status") == "error" or payload.get("code"):
+            code = str(payload.get("code") or "provider_error")
+            raise ValueError(f"twelve_data_unavailable:{code}")
+        TwelveDataResponseCache.put(endpoint, payload, **params)
+        return payload
 
     @staticmethod
     def _moving_average_ratio_from_closes(closes: list[float], *, period: int) -> float:

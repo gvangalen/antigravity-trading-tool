@@ -1,9 +1,17 @@
 import logging
 
+import pytest
+
 from backend.schemas.market_provider_schema import AssetRecord
 from backend.services.providers.twelve_data_technical_indicator_adapter import (
     TwelveDataTechnicalIndicatorAdapter,
 )
+from backend.services.providers.twelve_data_response_cache import TwelveDataResponseCache
+
+
+@pytest.fixture(autouse=True)
+def clear_twelve_data_response_cache():
+    TwelveDataResponseCache.clear_for_testing()
 
 
 def _asset(symbol: str = "BTC", provider_symbol: str = "BTCUSDT", asset_class: str = "crypto") -> AssetRecord:
@@ -104,3 +112,45 @@ def test_provider_symbol_maps_stablecoin_crypto_pairs_to_usd():
 
     assert adapter._provider_symbol(_asset(provider_symbol="BTCUSDT")) == "BTC/USD"
     assert adapter._provider_symbol(_asset(provider_symbol="ETHUSDC")) == "ETH/USD"
+
+
+def test_twelve_data_reuses_one_successful_response_for_identical_technical_read(monkeypatch):
+    calls = []
+
+    class _Response:
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return {"values": [{"rsi": "56.2"}]}
+
+    class _Client:
+        def __init__(self, **_kwargs):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_args):
+            return False
+
+        async def get(self, _url, params):
+            calls.append(params)
+            return _Response()
+
+    monkeypatch.setattr(
+        "backend.services.providers.twelve_data_technical_indicator_adapter.httpx.AsyncClient",
+        _Client,
+    )
+    first_adapter = TwelveDataTechnicalIndicatorAdapter(api_key="test-key")
+    second_adapter = TwelveDataTechnicalIndicatorAdapter(api_key="test-key")
+
+    async def run():
+        asset = _asset(symbol="AAPL", provider_symbol="AAPL", asset_class="stock")
+        assert await first_adapter.fetch_indicator_value(asset, "rsi") == 56.2
+        assert await second_adapter.fetch_indicator_value(asset, "rsi") == 56.2
+
+    import asyncio
+
+    asyncio.run(run())
+    assert len(calls) == 1

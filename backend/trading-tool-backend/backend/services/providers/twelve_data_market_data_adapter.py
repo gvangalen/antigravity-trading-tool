@@ -8,6 +8,7 @@ from typing import Any
 import httpx
 
 from backend.schemas.market_provider_schema import AssetRecord, OHLCVCandleDTO, PriceSnapshotDTO
+from backend.services.providers.twelve_data_response_cache import TwelveDataResponseCache
 
 
 # Twelve Data requires a query-parameter credential. Do not let httpx's INFO
@@ -56,20 +57,24 @@ class TwelveDataMarketDataAdapter:
         if not self.api_key:
             raise ValueError("twelve_data_not_configured")
         provider_symbol = asset.provider_symbol or asset.symbol
+        request_params = {"symbol": provider_symbol, "interval": "1min"}
+        payload = TwelveDataResponseCache.get("/quote", **request_params)
         try:
-            async with httpx.AsyncClient(timeout=10.0) as client:
-                quote_res = await client.get(
-                    f"{self.base_url}/quote",
-                    params=self._params(symbol=provider_symbol, interval="1min"),
-                )
-                quote_res.raise_for_status()
-                payload = quote_res.json()
+            if payload is None:
+                async with httpx.AsyncClient(timeout=10.0) as client:
+                    quote_res = await client.get(
+                        f"{self.base_url}/quote",
+                        params=self._params(**request_params),
+                    )
+                    quote_res.raise_for_status()
+                    payload = quote_res.json()
         except httpx.HTTPError as exc:
             self._raise_safe_transport_error(exc)
 
         if payload.get("status") == "error" or payload.get("code"):
             code = str(payload.get("code") or "provider_error")
             raise ValueError(f"twelve_data_unavailable:{code}")
+        TwelveDataResponseCache.put("/quote", payload, **request_params)
         price = _float_or_none(payload.get("close")) or _float_or_none(payload.get("price"))
         if price is None:
             raise ValueError("twelve_data_snapshot_missing_price")
