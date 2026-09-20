@@ -1,3 +1,5 @@
+import logging
+
 from backend.schemas.market_provider_schema import AssetRecord
 from backend.services.providers.twelve_data_technical_indicator_adapter import (
     TwelveDataTechnicalIndicatorAdapter,
@@ -23,6 +25,10 @@ def test_provider_symbol_normalizes_crypto_pairs_for_twelve_data():
     assert adapter._provider_symbol(_asset(symbol="AAPL", provider_symbol="AAPL", asset_class="stock")) == "AAPL"
 
 
+def test_twelve_data_transport_does_not_log_query_parameter_credentials():
+    assert logging.getLogger("httpx").getEffectiveLevel() >= logging.WARNING
+
+
 def test_crypto_indicator_falls_back_to_binance_without_twelve_data_key():
     adapter = TwelveDataTechnicalIndicatorAdapter(api_key="")
     adapter.api_key = ""
@@ -46,6 +52,27 @@ def test_crypto_indicator_falls_back_to_binance_without_twelve_data_key():
 
         rsi_value = await adapter.fetch_indicator_value(_asset(provider_symbol="BTCUSDT"), "rsi")
         assert 0.0 <= rsi_value <= 100.0
+
+    import asyncio
+
+    asyncio.run(run())
+
+
+def test_crypto_indicator_prefers_configured_twelve_data_before_binance():
+    adapter = TwelveDataTechnicalIndicatorAdapter(api_key="test-key")
+    calls = []
+
+    async def configured_provider(_asset, indicator):
+        calls.append(("twelve", indicator))
+        return 55.0
+
+    async def unexpected_binance(_asset, _indicator):
+        raise AssertionError("Binance must not run before configured Twelve Data")
+
+    async def run():
+        adapter._fetch_twelve_data_indicator = configured_provider
+        adapter._fetch_without_api_key = unexpected_binance
+        assert await adapter.fetch_indicator_value(_asset(), "rsi") == 55.0
 
     import asyncio
 

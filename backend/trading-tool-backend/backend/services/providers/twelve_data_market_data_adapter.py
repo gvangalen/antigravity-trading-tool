@@ -1,12 +1,18 @@
 from __future__ import annotations
 
 import os
+import logging
 from datetime import datetime, timezone
 from typing import Any
 
 import httpx
 
 from backend.schemas.market_provider_schema import AssetRecord, OHLCVCandleDTO, PriceSnapshotDTO
+
+
+# Twelve Data requires a query-parameter credential. Do not let httpx's INFO
+# request logging expose that credential through a fully rendered URL.
+logging.getLogger("httpx").setLevel(logging.WARNING)
 
 
 def _float_or_none(value: Any) -> float | None:

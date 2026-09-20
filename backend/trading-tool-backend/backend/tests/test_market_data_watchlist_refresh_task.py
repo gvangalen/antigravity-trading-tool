@@ -113,3 +113,36 @@ def test_configured_snapshot_refresh_rehydrates_owner_scoped_indicator_without_w
     assert result["rehydrated_scopes"] == [{"user_id": 7, "symbol": "AAPL", "category": "technical"}]
     assert result["rehydration_failures"] == []
     assert session_context.session.committed is True
+
+
+def test_configured_snapshot_refresh_marks_partial_materialization_as_failed(monkeypatch):
+    config = SimpleNamespace(user_id=8, symbol="BTC", category="technical", enabled=True)
+
+    class _Ingestion:
+        def __init__(self, _session):
+            pass
+
+        async def ingest_latest_snapshots(self, symbols, *, commit, continue_on_error):
+            return {"requested": symbols, "ingested": [{"symbol": "BTC"}], "failed": [], "success_count": 1, "failure_count": 0}
+
+    class _Technical:
+        def __init__(self, _session):
+            pass
+
+        async def sync_effective_indicators(self, _user_id, _symbol):
+            return {"synced": [], "failed": [{"indicator": "rsi"}]}
+
+    class _UnexpectedCategory:
+        def __init__(self, _session):
+            pass
+
+    monkeypatch.setattr(market_task, "async_session_factory", lambda: _SessionContext([], [config]))
+    monkeypatch.setattr(market_task, "MarketDataIngestionService", _Ingestion)
+    monkeypatch.setattr(market_task, "TechnicalDataService", _Technical)
+    monkeypatch.setattr(market_task, "MarketDataService", _UnexpectedCategory)
+    monkeypatch.setattr(market_task, "MacroDataService", _UnexpectedCategory)
+
+    result = asyncio.run(market_task._sync_configured_market_snapshots())
+
+    assert result["rehydrated_scopes"] == []
+    assert result["rehydration_failures"] == [{"user_id": 8, "symbol": "BTC", "category": "technical"}]

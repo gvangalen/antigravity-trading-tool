@@ -1,11 +1,18 @@
 from __future__ import annotations
 
 import os
+import logging
 
 import httpx
 
 from backend.schemas.market_provider_schema import AssetRecord
 from backend.utils.technical_interpreter import calculate_rsi
+
+
+# httpx logs full request URLs at INFO. Twelve Data authenticates through a
+# query parameter, so suppress those transport lines rather than risk a key
+# appearing in process logs.
+logging.getLogger("httpx").setLevel(logging.WARNING)
 
 
 class TwelveDataTechnicalIndicatorAdapter:
@@ -20,15 +27,24 @@ class TwelveDataTechnicalIndicatorAdapter:
 
     async def fetch_indicator_value(self, asset: AssetRecord, indicator_name: str) -> float:
         normalized = str(indicator_name or "").strip().lower()
-        if asset.asset_class == "crypto":
-            fallback = await self._fetch_without_api_key(asset, normalized)
-            if fallback is not None:
-                return fallback
-
         if not self.api_key:
             fallback = await self._fetch_without_api_key(asset, normalized)
             if fallback is not None:
                 return fallback
+
+        try:
+            return await self._fetch_twelve_data_indicator(asset, normalized)
+        except Exception:
+            # A configured Twelve Data route is canonical. Binance remains a
+            # crypto-only resilience fallback, never a prerequisite that can
+            # prevent a valid configured provider from being used.
+            if asset.asset_class == "crypto":
+                fallback = await self._fetch_without_api_key(asset, normalized)
+                if fallback is not None:
+                    return fallback
+            raise
+
+    async def _fetch_twelve_data_indicator(self, asset: AssetRecord, normalized: str) -> float:
 
         symbol = self._provider_symbol(asset)
 

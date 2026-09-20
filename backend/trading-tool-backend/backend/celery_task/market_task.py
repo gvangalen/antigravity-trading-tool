@@ -90,7 +90,10 @@ async def _sync_configured_market_snapshots() -> dict:
         rehydration_failures = []
         for user_id, symbol, category in sorted(configured_scopes):
             try:
-                await services[category].sync_effective_indicators(user_id, symbol)
+                materialization = await services[category].sync_effective_indicators(user_id, symbol)
+                if materialization.get("failed"):
+                    rehydration_failures.append({"user_id": user_id, "symbol": symbol, "category": category})
+                    continue
                 rehydrated_scopes.append({"user_id": user_id, "symbol": symbol, "category": category})
             except Exception:
                 # A single unavailable upstream indicator must not starve other
