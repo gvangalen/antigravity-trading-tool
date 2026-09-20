@@ -47,74 +47,83 @@ class TwelveDataTechnicalIndicatorAdapter:
         return await self._fetch_twelve_data_indicator(asset, normalized)
 
     async def _fetch_twelve_data_indicator(self, asset: AssetRecord, normalized: str) -> float:
-
         symbol = self._provider_symbol(asset)
+        candles = await self._get_twelve_data_candles(symbol)
+        closes = [candle["close"] for candle in candles]
+        highs = [candle["high"] for candle in candles]
+        lows = [candle["low"] for candle in candles]
+        close = closes[-1]
 
         if normalized == "rsi":
-            payload = await self._get(
-                "/rsi",
-                symbol=symbol,
-                interval="1day",
-                time_period=14,
-                outputsize=1,
-            )
-            return float(payload["values"][0]["rsi"])
+            value = calculate_rsi(closes, period=14)
+            if value is None:
+                raise ValueError(f"Onvoldoende candlehistorie voor RSI ({asset.symbol}).")
+            return float(value)
 
         if normalized == "ma_50":
-            return await self._moving_average_ratio(symbol, endpoint="/sma", period=50, field="sma")
+            return self._moving_average_ratio_from_closes(closes, period=50)
 
         if normalized == "ma_200":
-            return await self._moving_average_ratio(symbol, endpoint="/sma", period=200, field="sma")
+            return self._moving_average_ratio_from_closes(closes, period=200)
 
         if normalized == "ema_20_gap_pct":
-            return await self._ema_gap_pct(symbol, period=20)
+            return self._ema_gap_pct_from_closes(closes, period=20)
 
         if normalized == "ema_50_gap_pct":
-            return await self._ema_gap_pct(symbol, period=50)
+            return self._ema_gap_pct_from_closes(closes, period=50)
 
         if normalized == "macd_hist_pct":
-            quote_payload = await self._get_quote(symbol)
-            macd_payload = await self._get(
-                "/macd",
-                symbol=symbol,
-                interval="1day",
-                fast_period=12,
-                slow_period=26,
-                signal_period=9,
-                outputsize=1,
-            )
-            close = float(quote_payload["close"])
-            hist = float(macd_payload["values"][0]["macd_hist"])
+            hist = self._macd_histogram(closes)
             if close == 0:
                 return 0.0
             return (hist / close) * 100.0
 
         if normalized == "atr_pct":
-            quote_payload = await self._get_quote(symbol)
-            atr_payload = await self._get(
-                "/atr",
-                symbol=symbol,
-                interval="1day",
-                time_period=14,
-                outputsize=1,
-            )
-            close = float(quote_payload["close"])
-            atr = float(atr_payload["values"][0]["atr"])
+            atr = self._atr(highs, lows, closes, period=14)
             if close == 0:
                 return 0.0
             return (atr / close) * 100.0
 
         if normalized == "adx":
-            payload = await self._get(
-                "/adx",
-                symbol=symbol,
-                interval="1day",
-                time_period=14,
-                outputsize=1,
-            )
-            return float(payload["values"][0]["adx"])
+            return self._adx(highs, lows, closes, period=14)
 
         raise ValueError(f"Unsupported Twelve Data technical indicator: {indicator_name}")
+
+    async def _get_twelve_data_candles(self, symbol: str) -> list[dict[str, float]]:
+        """Fetch one cached daily history series for every technical card.
+
+        Twelve Data charges and rate-limits individual indicator endpoints.
+        A shared OHLC series keeps the user-visible evidence cards consistent
+        while allowing every supported calculation to use the same source.
+        """
+        payload = await self._get(
+            "/time_series",
+            symbol=symbol,
+            interval="1day",
+            outputsize=300,
+        )
+        values = payload.get("values") if isinstance(payload, dict) else None
+        if not isinstance(values, list):
+            raise ValueError(f"Geen candlehistorie beschikbaar voor {symbol}.")
+
+        candles: list[tuple[str, dict[str, float]]] = []
+        for raw in values:
+            if not isinstance(raw, dict):
+                continue
+            try:
+                candles.append((
+                    str(raw.get("datetime") or raw.get("date") or ""),
+                    {
+                        "close": float(raw["close"]),
+                        "high": float(raw.get("high", raw["close"])),
+                        "low": float(raw.get("low", raw["close"])),
+                    },
+                ))
+            except (KeyError, TypeError, ValueError):
+                continue
+        if not candles:
+            raise ValueError(f"Geen bruikbare candlehistorie beschikbaar voor {symbol}.")
+        return [candle for _, candle in sorted(candles, key=lambda item: item[0])]
 
     async def _fetch_without_api_key(self, asset: AssetRecord, indicator_name: str) -> float | None:
         if asset.asset_class != "crypto":

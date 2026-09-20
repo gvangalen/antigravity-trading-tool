@@ -40,8 +40,24 @@ test("materializes categories serially and continues after a provider failure", 
 
   assert.deepEqual(calls, ["market", "macro", "technical"]);
   assert.deepEqual(results, [
-    { category: "market", status: "fulfilled" },
-    { category: "macro", status: "rejected" },
-    { category: "technical", status: "fulfilled" },
+    { category: "market", status: "fulfilled", reason: null },
+    { category: "macro", status: "rejected", reason: "provider_refresh_failed" },
+    { category: "technical", status: "fulfilled", reason: null },
   ]);
+});
+
+test("does not treat a partial provider sync as materialized evidence", async () => {
+  const results = await materializeWorkspaceEvidence(
+    ["technical"],
+    async () => ({
+      synced: [{ indicator: "rsi" }],
+      failed: [{ indicator: "ma_200", error: "provider rate limited" }],
+    }),
+  );
+
+  assert.deepEqual(results, [{
+    category: "technical",
+    status: "rejected",
+    reason: "provider_refresh_incomplete",
+  }]);
 });

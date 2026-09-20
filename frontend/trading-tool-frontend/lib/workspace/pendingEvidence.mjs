@@ -23,12 +23,17 @@ export async function materializeWorkspaceEvidence(categories, synchronize) {
   const results = [];
   for (const category of categories) {
     try {
-      await synchronize(category);
-      results.push({ category, status: "fulfilled" });
+      const payload = await synchronize(category);
+      const failed = Array.isArray(payload?.failed) ? payload.failed : [];
+      results.push({
+        category,
+        status: failed.length === 0 ? "fulfilled" : "rejected",
+        reason: failed.length === 0 ? null : "provider_refresh_incomplete",
+      });
     } catch {
       // Each category owns an independent provider request. Keep the
       // remaining configured evidence eligible for materialization.
-      results.push({ category, status: "rejected" });
+      results.push({ category, status: "rejected", reason: "provider_refresh_failed" });
     }
   }
   return results;

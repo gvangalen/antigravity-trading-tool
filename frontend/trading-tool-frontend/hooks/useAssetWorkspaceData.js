@@ -21,6 +21,8 @@ const WORKSPACE_REQUEST_TIMEOUT_MS = 15000;
 const WORKSPACE_CACHE_TTL_MS = 300_000;
 const FOREGROUND_REFRESH_COOLDOWN_MS = 30_000;
 const WORKSPACE_FORCE_REFRESH_COOLDOWN_MS = 2_500;
+const EVIDENCE_MATERIALIZATION_RETRY_MS = 60_000;
+const MAX_EVIDENCE_MATERIALIZATION_RETRIES = 1;
 
 const workspaceCache = new Map();
 const workspaceInFlightRequests = new Map();
@@ -201,6 +203,7 @@ export function useAssetWorkspaceData(symbol, periods, watchlistSymbols) {
   const activeReloadPromiseRef = useRef(null);
   const quoteBackfillRequestKeyRef = useRef("");
   const evidenceMaterializationKeyRef = useRef("");
+  const evidenceMaterializationRetriesRef = useRef(new Map());
   const latestWorkspaceRef = useRef(cachedWorkspace || null);
   const latestWatchlistRef = useRef(cachedWatchlist);
   const lastForegroundRefreshAtRef = useRef(0);
@@ -510,17 +513,35 @@ export function useAssetWorkspaceData(symbol, periods, watchlistSymbols) {
     evidenceMaterializationKeyRef.current = key;
 
     let cancelled = false;
+    let retryTimer = null;
     (async () => {
       const results = await materializeWorkspaceEvidence(
         pendingCategories,
         (category) => materializeCategory[category](assetSymbol),
       );
-      if (cancelled || !results.some((result) => result.status === "fulfilled")) return;
-      await reloadWorkspace({ forceNetwork: true });
+      if (cancelled) return;
+      if (results.some((result) => result.status === "fulfilled")) {
+        evidenceMaterializationRetriesRef.current.delete(key);
+        await reloadWorkspace({ forceNetwork: true });
+        return;
+      }
+
+      // A provider can temporarily reject a refresh. Do not cement that
+      // single observation into the visible card; retry once at a provider-
+      // safe interval and retain the existing pending state meanwhile.
+      const attempts = evidenceMaterializationRetriesRef.current.get(key) || 0;
+      if (attempts >= MAX_EVIDENCE_MATERIALIZATION_RETRIES) return;
+      evidenceMaterializationRetriesRef.current.set(key, attempts + 1);
+      retryTimer = window.setTimeout(() => {
+        if (evidenceMaterializationKeyRef.current !== key) return;
+        evidenceMaterializationKeyRef.current = "";
+        void reloadWorkspace({ forceNetwork: true });
+      }, EVIDENCE_MATERIALIZATION_RETRY_MS);
     })();
 
     return () => {
       cancelled = true;
+      if (retryTimer !== null) window.clearTimeout(retryTimer);
     };
   }, [assetSymbol, reloadWorkspace, workspace, workspaceKey]);
 

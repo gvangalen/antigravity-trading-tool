@@ -116,13 +116,22 @@ def test_provider_symbol_maps_stablecoin_crypto_pairs_to_usd():
 
 def test_twelve_data_reuses_one_successful_response_for_identical_technical_read(monkeypatch):
     calls = []
+    values = [
+        {
+            "datetime": f"2026-01-{day:02d}",
+            "close": str(100 + day),
+            "high": str(101 + day),
+            "low": str(99 + day),
+        }
+        for day in range(1, 20)
+    ]
 
     class _Response:
         def raise_for_status(self):
             return None
 
         def json(self):
-            return {"values": [{"rsi": "56.2"}]}
+            return {"values": values}
 
     class _Client:
         def __init__(self, **_kwargs):
@@ -147,10 +156,64 @@ def test_twelve_data_reuses_one_successful_response_for_identical_technical_read
 
     async def run():
         asset = _asset(symbol="AAPL", provider_symbol="AAPL", asset_class="stock")
-        assert await first_adapter.fetch_indicator_value(asset, "rsi") == 56.2
-        assert await second_adapter.fetch_indicator_value(asset, "rsi") == 56.2
+        assert 0.0 <= await first_adapter.fetch_indicator_value(asset, "rsi") <= 100.0
+        assert 0.0 <= await second_adapter.fetch_indicator_value(asset, "rsi") <= 100.0
 
     import asyncio
 
     asyncio.run(run())
     assert len(calls) == 1
+
+
+def test_stock_rsi_and_ma200_share_one_cached_history_request(monkeypatch):
+    calls = []
+    # Twelve Data returns newest daily candles first. The adapter must restore
+    # chronological order before calculating any technical value.
+    values = [
+        {
+            "datetime": f"2026-01-{day:03d}",
+            "close": str(100 + day),
+            "high": str(101 + day),
+            "low": str(99 + day),
+        }
+        for day in range(300, 0, -1)
+    ]
+
+    class _Response:
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return {"values": values}
+
+    class _Client:
+        def __init__(self, **_kwargs):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_args):
+            return False
+
+        async def get(self, url, params):
+            calls.append((url, params))
+            return _Response()
+
+    monkeypatch.setattr(
+        "backend.services.providers.twelve_data_technical_indicator_adapter.httpx.AsyncClient",
+        _Client,
+    )
+    adapter = TwelveDataTechnicalIndicatorAdapter(api_key="test-key")
+    asset = _asset(symbol="AAPL", provider_symbol="AAPL", asset_class="stock")
+
+    async def run():
+        assert 0.0 <= await adapter.fetch_indicator_value(asset, "rsi") <= 100.0
+        assert await adapter.fetch_indicator_value(asset, "ma_200") > 1.0
+
+    import asyncio
+
+    asyncio.run(run())
+    assert len(calls) == 1
+    assert calls[0][0].endswith("/time_series")
+    assert calls[0][1]["outputsize"] == 300
