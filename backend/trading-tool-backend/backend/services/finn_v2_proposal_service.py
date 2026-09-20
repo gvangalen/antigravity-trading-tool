@@ -70,10 +70,13 @@ class FinnV2ProposalService:
                 proposal_input=proposal_input,
             )
 
-        proposal_input = await self._hydrate_domain_change(
-            user_id=user_id,
-            proposal_input=proposal_input,
-        )
+        # Sealed public envelopes were hydrated by the verifier already. A
+        # second hydration mutates their before-state timestamp.
+        if not proposal_input.action_envelope:
+            proposal_input = await self._hydrate_domain_change(
+                user_id=user_id,
+                proposal_input=proposal_input,
+            )
         proposal_input = self._reseal_hydrated_action_envelope(proposal_input)
 
         existing = await self.proposals.get_by_idempotency_key_for_user(
@@ -81,11 +84,11 @@ class FinnV2ProposalService:
             user_id=user_id,
         )
         if existing is not None:
-            if self.canonical_identity(existing.payload_json) != self.canonical_identity(
-                to_json_safe(proposal_input.dict())
-            ):
-                raise ValueError("operation_payload_invalid")
             if existing.status in self._REUSABLE_STATUSES:
+                if self.canonical_identity(existing.payload_json) != self.canonical_identity(
+                    to_json_safe(proposal_input.dict())
+                ):
+                    raise ValueError("operation_payload_invalid")
                 return self._row_to_record(existing)
 
             # A completed proposal must never be reused for a later user

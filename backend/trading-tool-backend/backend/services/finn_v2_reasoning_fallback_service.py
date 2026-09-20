@@ -15,28 +15,11 @@ from backend.schemas.finn_v2_reasoning_schema import (
 )
 from backend.domain.finn_v2_operation_registry import FinnV2OperationRegistry
 from backend.domain.indicator_display import indicator_display_name
+from backend.domain.finn_v2_contract_value_labels import contract_value_label
 from backend.services.finn_v2_operation_state_service import FinnV2OperationStateService
 
 
 class FinnV2ReasoningFallbackService:
-    @staticmethod
-    def _strategy_value_label(*, field: str, value: Any, locale: str) -> str:
-        normalized = str(value or "").strip().casefold()
-        language = str(locale or "nl").split("-", 1)[0].casefold()
-        labels = {
-            "execution_mode": {
-                "fixed": {"nl": "vast", "en": "fixed", "de": "fest"},
-                "custom": {"nl": "aangepast", "en": "custom", "de": "individuell"},
-            },
-            "risk_profile": {
-                "conservative": {"nl": "voorzichtig", "en": "conservative", "de": "vorsichtig"},
-                "balanced": {"nl": "gebalanceerd", "en": "balanced", "de": "ausgewogen"},
-                "aggressive": {"nl": "offensief", "en": "aggressive", "de": "offensiv"},
-            },
-        }
-        localized = labels.get(field, {}).get(normalized, {})
-        return localized.get(language) or localized.get("en") or str(value or "onbekend")
-
     def safe_terminal_draft(self, *, run_id: str, user_id: int, operation_id: str, context: ReasoningContextPackage, model: str) -> ReasoningResult:
         plan = context.request_plan or {}
         if operation_id == "off_topic":
@@ -597,7 +580,7 @@ class FinnV2ReasoningFallbackService:
             setup_name = strategy.facts.get("setup_name") or (setup.facts.get("name") if setup else None)
             symbol = str(strategy.facts.get("symbol") or asset).upper()
             timeframe = strategy.facts.get("timeframe") or (setup.facts.get("timeframe") if setup else None)
-            execution_mode = self._strategy_value_label(
+            execution_mode = contract_value_label(
                 field="execution_mode",
                 value=strategy.facts.get("execution_mode"),
                 locale=context.locale,
@@ -606,7 +589,7 @@ class FinnV2ReasoningFallbackService:
             entry = strategy.facts.get("entry")
             stop_loss = strategy.facts.get("stop_loss")
             targets = strategy.facts.get("targets") or []
-            risk_profile = self._strategy_value_label(
+            risk_profile = contract_value_label(
                 field="risk_profile",
                 value=strategy.facts.get("risk_profile"),
                 locale=context.locale,

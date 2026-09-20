@@ -18,6 +18,7 @@ from backend.infrastructure.repositories.finn_v2_validation_repository import Fi
 from backend.infrastructure.repositories.finn_v2_verifier_repository import FinnV2VerifierRepository
 from backend.infrastructure.repositories.finn_v2_verified_response_repository import FinnV2VerifiedResponseRepository
 from backend.domain.finn_v2_contract import normalize_information_scope, normalize_interaction_mode
+from backend.domain.finn_v2_contract_value_labels import contract_value_label
 from backend.domain.finn_v2_operation_registry import FinnV2OperationRegistry
 from backend.schemas.finn_v2_delivery_schema import FinnV2DeliveryEnvelope
 from backend.schemas.finn_v2_orchestrator_schema import ORCHESTRATOR_VERSION, OrchestratorResult
@@ -300,11 +301,12 @@ class FinnV2ResponseVerifierService:
         if "strategy" in required_fields:
             strategy_id = strategy.get("strategy_id")
             strategy_name = strategy.get("name")
+            locale = str(getattr(context, "locale", "nl-NL") or "nl-NL")
             strategy_values = [
                 strategy_name,
                 strategy.get("symbol"),
                 strategy.get("timeframe"),
-                strategy.get("execution_mode"),
+                contract_value_label(field="execution_mode", value=strategy.get("execution_mode"), locale=locale),
             ]
             if strategy_id is not None or any(value for value in strategy_values):
                 label = str(strategy_name or "je gekoppelde strategie")

@@ -566,7 +566,8 @@ def test_response_projection_makes_setup_and_strategy_contract_fields_visible():
     assert "BTC 4H Trade" in projected.direct_answer
     assert "trade" in projected.direct_answer
     assert "BTC breakout" in projected.direct_answer
-    assert "fixed" in projected.direct_answer
+    assert "vast" in projected.direct_answer
+    assert "fixed" not in projected.direct_answer
     assert FinnV2ResponseVerifierService._covered_response_fields(
         draft=projected,
         evidence=evidence,

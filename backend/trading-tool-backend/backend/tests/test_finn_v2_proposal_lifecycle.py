@@ -129,6 +129,46 @@ def test_update_setup_proposal_uses_existing_domain_fields_and_persists_before_s
     assert hydrated.change.snapshot_timestamp.tzinfo is not None
 
 
+def test_terminal_proposal_scopes_key_before_comparing_a_new_before_state():
+    service = FinnV2ProposalService(session=object())
+    existing = SimpleNamespace(status="cancelled", payload_json={"different": "historical"})
+    scoped = []
+
+    async def _find_existing(**_kwargs):
+        return existing
+
+    service.proposals.get_by_idempotency_key_for_user = _find_existing
+    service.proposals.get_by_payload_hash_for_run = lambda **_kwargs: asyncio.sleep(0, result=None)
+    service.flags.is_proposals_enabled = lambda: True
+    service.run_scoped_idempotency_key = lambda *, canonical_key, run_id: scoped.append((canonical_key, run_id)) or "r" * 16
+    service.states.get_by_id_for_user = lambda **_kwargs: asyncio.sleep(0, result=SimpleNamespace(id="snapshot-1", evidence_set_hash="hash"))
+    service.validations.get_by_id_for_user = lambda **_kwargs: asyncio.sleep(0, result=SimpleNamespace(id="validation-1", evidence_set_hash="hash"))
+    service.resolver.resolve_asset = lambda **_kwargs: asyncio.sleep(0, result={"asset": "BTC"})
+
+    async def _create(**kwargs):
+        return SimpleNamespace(**kwargs, created_at=datetime.now(timezone.utc), updated_at=datetime.now(timezone.utc))
+
+    service.proposals.create = _create
+
+    policy = FinnV2PolicyDecision(
+        policy_decision_id="policy-1", run_id="run-2", user_id=7, policy_class="proposal",
+        operation_type="manual_order", allowed=True, proposal_allowed=True, proposal_input_required=True,
+        confirmation_required=True, step_up_required=False, execution_allowed=False, shadow_safe=True,
+        created_at=datetime.now(timezone.utc),
+    )
+    proposal_input = ValidatedProposalInput(
+        operation_type="manual_order", target=ProposalTarget(target_type="order", asset="BTC"),
+        change=ManualOrderChange(asset="BTC", side="buy", order_type="market", quantity=Decimal("1")),
+        impact_summary="impact", risk_summary="risk", source_run_id="run-2", source_snapshot_id="snapshot-1",
+        source_validation_id="validation-1", evidence_set_hash="hash", idempotency_key="c" * 16,
+        expires_at=datetime.now(timezone.utc) + timedelta(minutes=5),
+    )
+
+    asyncio.run(service.create_proposal(user_id=7, run_id="run-2", trace_id="trace-2", policy=policy, proposal_input=proposal_input))
+
+    assert scoped == [("c" * 16, "run-2")]
+
+
 def test_update_strategy_proposal_rejects_fields_outside_existing_strategy_service_contract():
     service = FinnV2ProposalService(session=object())
     proposal_input = ValidatedProposalInput(
