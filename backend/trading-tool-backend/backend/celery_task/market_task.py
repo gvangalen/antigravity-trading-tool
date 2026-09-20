@@ -2,6 +2,7 @@ import logging
 import requests
 import json
 import asyncio
+import time
 from datetime import datetime
 from collections import defaultdict
 
@@ -26,8 +27,8 @@ TIMEOUT = 10
 HEADERS = {"Content-Type": "application/json"}
 SYMBOL = "BTC"
 # A free/provider-limited account must not be exhausted by one periodic sweep.
-# Newer saved preferences are prioritized; the next bounded run picks up the
-# remaining scopes without holding the market queue hostage.
+# A deterministic round-robin picks up every remaining scope without holding
+# the market queue hostage.
 MAX_CONFIGURED_INDICATOR_SCOPES_PER_RUN = 4
 
 logging.basicConfig(
@@ -35,6 +36,18 @@ logging.basicConfig(
     format="%(asctime)s - %(levelname)s - %(message)s"
 )
 logger = logging.getLogger(__name__)
+
+
+def _configured_scope_window(scopes: list[tuple[int, str, str]], *, window_index: int) -> list[tuple[int, str, str]]:
+    """Select one bounded round-robin window without persisting user state."""
+    ordered = sorted(scopes)
+    if len(ordered) <= MAX_CONFIGURED_INDICATOR_SCOPES_PER_RUN:
+        return ordered
+    start = (window_index * MAX_CONFIGURED_INDICATOR_SCOPES_PER_RUN) % len(ordered)
+    return [
+        ordered[(start + offset) % len(ordered)]
+        for offset in range(MAX_CONFIGURED_INDICATOR_SCOPES_PER_RUN)
+    ]
 
 
 async def _sync_configured_market_snapshots() -> dict:
@@ -66,14 +79,10 @@ async def _sync_configured_market_snapshots() -> dict:
             updated_at = getattr(row, "updated_at", None) or getattr(row, "created_at", None)
             if scope not in scope_revisions or updated_at > scope_revisions[scope]:
                 scope_revisions[scope] = updated_at
-        configured_scopes = [
-            scope
-            for scope, _updated_at in sorted(
-                scope_revisions.items(),
-                key=lambda item: (item[1] is not None, item[1]),
-                reverse=True,
-            )[:MAX_CONFIGURED_INDICATOR_SCOPES_PER_RUN]
-        ]
+        configured_scopes = _configured_scope_window(
+            list(scope_revisions),
+            window_index=int(time.time() // 300),
+        )
         deferred_scope_count = max(0, len(scope_revisions) - len(configured_scopes))
         symbols = list(
             dict.fromkeys(

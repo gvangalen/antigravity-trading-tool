@@ -184,3 +184,15 @@ def test_configured_snapshot_refresh_bounds_provider_work_per_run(monkeypatch):
 
     assert len(calls) == market_task.MAX_CONFIGURED_INDICATOR_SCOPES_PER_RUN
     assert result["deferred_scope_count"] == 2
+
+
+def test_configured_scope_windows_eventually_cover_every_scope():
+    scopes = [(user_id, f"S{user_id}", "technical") for user_id in range(1, 11)]
+
+    first = market_task._configured_scope_window(scopes, window_index=0)
+    second = market_task._configured_scope_window(scopes, window_index=1)
+    third = market_task._configured_scope_window(scopes, window_index=2)
+
+    assert len(first) == market_task.MAX_CONFIGURED_INDICATOR_SCOPES_PER_RUN
+    assert len(second) == market_task.MAX_CONFIGURED_INDICATOR_SCOPES_PER_RUN
+    assert set(first + second + third) == set(scopes)
