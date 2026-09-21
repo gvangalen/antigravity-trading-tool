@@ -42,6 +42,27 @@ function pickRuntimeEnv(keys) {
   }, {});
 }
 
+function loadEnvFile(filePath, keys) {
+  try {
+    const allowed = new Set(keys);
+    return fs.readFileSync(filePath, "utf8").split("\n").reduce((env, rawLine) => {
+      const line = rawLine.trim();
+      if (!line || line.startsWith("#") || !line.includes("=")) return env;
+      const separator = line.indexOf("=");
+      const key = line.slice(0, separator).trim();
+      if (!allowed.has(key)) return env;
+      let value = line.slice(separator + 1).trim();
+      if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
+        value = value.slice(1, -1);
+      }
+      env[key] = value;
+      return env;
+    }, {});
+  } catch (error) {
+    return {};
+  }
+}
+
 function loadReleaseMetadata() {
   const metadataPath = path.join(BASE_REMOTE_DIR, "ops", "deploy", ".release_metadata.env");
   try {
@@ -57,7 +78,7 @@ function loadReleaseMetadata() {
   }
 }
 
-const SHARED_RUNTIME_ENV = pickRuntimeEnv([
+const SHARED_RUNTIME_KEYS = [
   "TWELVE_DATA_API_KEY",
   "OPENAI_API_KEY",
   "OPENAI_CALLS_ENABLED",
@@ -126,7 +147,8 @@ const SHARED_RUNTIME_ENV = pickRuntimeEnv([
   "FINN_V2_REASONING_TIMEOUT_SECONDS",
   "TRADAMIND_BUILD_COMMIT_SHA",
   "TRADAMIND_BUILD_TIME",
-]);
+];
+const SHARED_RUNTIME_ENV = pickRuntimeEnv(SHARED_RUNTIME_KEYS);
 // PM2's --update-env merges with an existing process environment.  Define the
 // safe FINN defaults explicitly so an obsolete process-only false value cannot
 // survive a release when the protected environment deliberately omits a key.
@@ -172,6 +194,12 @@ function createEcosystem(environmentName) {
   const finnInteractiveWorker = `celery-worker-finn-interactive${environment.suffix}`;
   const beatWorker = `celery-beat${environment.suffix}`;
   const queuePrefix = environment.queueNamePrefix;
+  const legacyStagingEnv = environmentName === "staging"
+    ? loadEnvFile(path.join(BASE_REMOTE_DIR, "backend", "trading-tool-backend", ".env"), SHARED_RUNTIME_KEYS)
+    : {};
+  // Explicit protected process values always win over the legacy staging
+  // dotenv fallback. The dotenv file is parsed as data, never as shell code.
+  const runtimeEnv = { ...legacyStagingEnv, ...SHARED_RUNTIME_ENV };
 
   return {
     apps: [
@@ -182,7 +210,7 @@ function createEcosystem(environmentName) {
         interpreter: NODE_INTERPRETER,
         env: {
           ...FINN_RUNTIME_DEFAULT_ENV,
-          ...SHARED_RUNTIME_ENV,
+          ...runtimeEnv,
           ...RELEASE_METADATA_ENV,
           NODE_ENV: "production",
           PORT: environment.frontendPort,
@@ -198,7 +226,7 @@ function createEcosystem(environmentName) {
         cwd: backendDir,
         env: {
           ...FINN_RUNTIME_DEFAULT_ENV,
-          ...SHARED_RUNTIME_ENV,
+          ...runtimeEnv,
           ...RELEASE_METADATA_ENV,
           APP_ENV: environment.appEnv,
           TRADAMIND_BUILD_SERVICE: "backend",
@@ -219,7 +247,7 @@ function createEcosystem(environmentName) {
         interpreter: "none",
         env: {
           ...FINN_RUNTIME_DEFAULT_ENV,
-          ...SHARED_RUNTIME_ENV,
+          ...runtimeEnv,
           ...RELEASE_METADATA_ENV,
           APP_ENV: environment.appEnv,
           TRADAMIND_BUILD_SERVICE: "celery-worker-default",
@@ -238,7 +266,7 @@ function createEcosystem(environmentName) {
         interpreter: "none",
         env: {
           ...FINN_RUNTIME_DEFAULT_ENV,
-          ...SHARED_RUNTIME_ENV,
+          ...runtimeEnv,
           ...RELEASE_METADATA_ENV,
           APP_ENV: environment.appEnv,
           TRADAMIND_BUILD_SERVICE: "celery-worker-finn-interactive",
@@ -254,7 +282,7 @@ function createEcosystem(environmentName) {
         interpreter: "none",
         env: {
           ...FINN_RUNTIME_DEFAULT_ENV,
-          ...SHARED_RUNTIME_ENV,
+          ...runtimeEnv,
           ...RELEASE_METADATA_ENV,
           APP_ENV: environment.appEnv,
           TRADAMIND_BUILD_SERVICE: "celery-beat",

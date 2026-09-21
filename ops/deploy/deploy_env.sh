@@ -227,12 +227,11 @@ if ! printf '%s\n' "$DEPLOY_GIT_TOKEN" | timeout --foreground "${REMOTE_DEPLOY_C
   advance_deploy_step \"\$DEPLOY_STEP_ID\"
   ENV_FILE="\$HOME/.secrets/trading.env"
   LEGACY_STAGING_ENV="$REMOTE_DIR/backend/trading-tool-backend/.env"
-  # New installations use the protected central environment. Preserve the
-  # established staging host during migration by importing its existing
-  # backend environment when the central file has not been provisioned yet.
-  # Production never falls back to this path.
-  if [ ! -f "\$ENV_FILE" ] && [ "$ENVIRONMENT" = "staging" ] && [ -f "\$LEGACY_STAGING_ENV" ]; then
-    ENV_FILE="\$LEGACY_STAGING_ENV"
+  # The PM2 ecosystem parser may read the established staging dotenv as data.
+  # Never source it as shell code; valid dotenv values can contain shell
+  # metacharacters. Keep it private while staging migrates to the central env.
+  if [ "$ENVIRONMENT" = "staging" ] && [ -f "\$LEGACY_STAGING_ENV" ]; then
+    chmod 600 "\$LEGACY_STAGING_ENV"
   fi
   if [ -f "\$ENV_FILE" ]; then
     chmod 600 "\$ENV_FILE"

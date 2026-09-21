@@ -193,7 +193,10 @@ def test_staging_deploy_uses_one_database_binding_for_migrations_api_and_workers
 
     assert 'LEGACY_STAGING_ENV="$REMOTE_DIR/backend/trading-tool-backend/.env"' in deploy_source
     assert '[ "$ENVIRONMENT" = "staging" ]' in deploy_source
-    assert 'chmod 600 "\\$ENV_FILE"' in deploy_source
+    assert 'chmod 600 "\\$LEGACY_STAGING_ENV"' in deploy_source
+    assert "loadEnvFile(" in ecosystem_source
+    assert "const runtimeEnv = { ...legacyStagingEnv, ...SHARED_RUNTIME_ENV };" in ecosystem_source
+    assert 'source "\\$LEGACY_STAGING_ENV"' not in deploy_source
     for key in ("DB_HOST", "DB_PORT", "DB_NAME", "DB_USER", "DB_PASS", "DB_PASSWORD", "PGPASSWORD"):
         assert f'"{key}"' in ecosystem_source
 
