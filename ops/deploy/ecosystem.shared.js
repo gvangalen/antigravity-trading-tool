@@ -65,6 +65,16 @@ const SHARED_RUNTIME_ENV = pickRuntimeEnv([
   "CORS_ORIGINS",
   "CORS_ALLOW_ORIGIN_REGEX",
   "DATABASE_URL",
+  // Keep the canonical DB_* binding identical for migrations, FastAPI and
+  // every Celery process. Established environments may use these discrete
+  // keys instead of DATABASE_URL.
+  "DB_HOST",
+  "DB_PORT",
+  "DB_NAME",
+  "DB_USER",
+  "DB_PASS",
+  "DB_PASSWORD",
+  "PGPASSWORD",
   "SECRET_KEY",
   "JWT_SECRET_KEY",
   "JWT_ALGORITHM",

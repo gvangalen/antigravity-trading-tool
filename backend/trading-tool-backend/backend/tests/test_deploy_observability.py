@@ -187,6 +187,17 @@ def test_release_identity_is_written_before_pm2_and_loaded_by_every_process() ->
         assert setting in ecosystem_source
 
 
+def test_staging_deploy_uses_one_database_binding_for_migrations_api_and_workers() -> None:
+    deploy_source = DEPLOY_SCRIPT.read_text(encoding="utf-8")
+    ecosystem_source = (REPO_ROOT / "ops" / "deploy" / "ecosystem.shared.js").read_text(encoding="utf-8")
+
+    assert 'LEGACY_STAGING_ENV="$REMOTE_DIR/backend/trading-tool-backend/.env"' in deploy_source
+    assert '[ "$ENVIRONMENT" = "staging" ]' in deploy_source
+    assert 'chmod 600 "\\$ENV_FILE"' in deploy_source
+    for key in ("DB_HOST", "DB_PORT", "DB_NAME", "DB_USER", "DB_PASS", "DB_PASSWORD", "PGPASSWORD"):
+        assert f'"{key}"' in ecosystem_source
+
+
 def test_deploy_checks_effective_finn_policy_parity_without_printing_values() -> None:
     deploy_source = DEPLOY_SCRIPT.read_text(encoding="utf-8")
     policy_check = REPO_ROOT / "ops" / "deploy" / "check_finn_runtime_policy.js"
