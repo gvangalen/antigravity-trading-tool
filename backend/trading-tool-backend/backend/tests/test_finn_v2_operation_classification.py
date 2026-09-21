@@ -106,6 +106,10 @@ def test_bot_name_containing_target_is_not_misread_as_a_setup_field():
     ("Welke bot is aan die strategie gekoppeld?", "read_linked_bot"),
     ("Which bot is linked to that strategy?", "read_linked_bot"),
     ("Welcher Bot ist mit dieser Strategie verknüpft?", "read_linked_bot"),
+    ("Welk budget heeft mijn paper-bot en staat hij live?", "read_bot_status"),
+    ("What is my paper bot budget and is it live?", "read_bot_status"),
+    ("Welches Budget hat mein Paper-Bot und ist er live?", "read_bot_status"),
+    ("Welke bot draait live?", "read_bot_status"),
 ))
 def test_unambiguous_graph_reads_use_registry_without_selector_provider(message, operation_id):
     class ExplodingSelector:
@@ -144,7 +148,6 @@ def test_explicit_setup_collection_reads_use_registry_without_selector_provider(
 
 
 @pytest.mark.parametrize("message", (
-    "Welke bot draait live?",
     "Wat zijn de gevolgen van die gekoppelde bot?",
     "Evaluate the risks of the linked bot.",
     "Geef een overzicht van mijn volledige plan.",

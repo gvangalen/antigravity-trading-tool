@@ -35,6 +35,7 @@ import { getWorkspaceSnapshot, subscribeWorkspaceSnapshot } from "@/lib/workspac
 import { getActiveSetupId } from "@/lib/setup/activeSetup";
 import { indicatorDisplayName } from "@/lib/indicators/configuredIndicatorRows.mjs";
 import { formatExecutionMode } from "@/lib/contractValueFormatter.mjs";
+import { clearActiveFinnConversation, readActiveFinnConversation, writeActiveFinnConversation } from "@/lib/finnActiveConversation.mjs";
 
 const INDICATOR_MODAL_OPEN_EVENT = "finn-indicator-config:open";
 const INDICATOR_MODAL_COMPLETED_EVENT = "finn-indicator-config:completed";
@@ -534,6 +535,9 @@ function AIAssistantContent({
   const userScopedRecentConversationStorageKey = React.useMemo(
     () => scopedRecentConversationStorageKey(user?.id),
     [user?.id],
+  );
+  const readBrowserFinnConversation = () => (
+    typeof window === "undefined" ? null : readActiveFinnConversation(window.sessionStorage, user?.id)
   );
 
   const composerMenuCopy = {
@@ -4048,11 +4052,12 @@ function AIAssistantContent({
         const nextPreferences = prefResponse?.preferences || {};
         setPreferences((current) => (Object.keys(current || {}).length ? current : nextPreferences));
 
+        const browserSessionId = readBrowserFinnConversation();
         const preferredSessionId = normalizeFinnSessionId(nextPreferences?.[ACTIVE_FINN_SESSION_ID_KEY]);
         const sessions = await getAssistantSessions();
         setAvailableFinnSessions(Array.isArray(sessions) ? sessions : []);
         const latestSessionId = normalizeFinnSessionId(sessions?.[0]?.id);
-        const resolvedSessionId = preferredSessionId || latestSessionId;
+        const resolvedSessionId = browserSessionId || preferredSessionId || latestSessionId;
         if (!resolvedSessionId) return;
 
         if (isFinnV2ConversationId(resolvedSessionId)) {
@@ -4076,6 +4081,9 @@ function AIAssistantContent({
     if (!normalized) return;
     activeFinnSessionIdRef.current = normalized;
     setActiveFinnSessionId(normalized);
+    if (typeof window !== "undefined") {
+      writeActiveFinnConversation(window.sessionStorage, user?.id, normalized);
+    }
     try {
       await updateAssistantPreferences({
         [ACTIVE_FINN_SESSION_ID_KEY]: normalized,
@@ -4091,6 +4099,9 @@ function AIAssistantContent({
     forceNewFinnConversationRef.current = true;
     activeFinnSessionIdRef.current = null;
     setActiveFinnSessionId(null);
+    if (typeof window !== "undefined") {
+      clearActiveFinnConversation(window.sessionStorage, user?.id);
+    }
     setFinnDraft(null);
     setActiveState(null);
     setMessages([]);
@@ -4643,7 +4654,7 @@ function AIAssistantContent({
       const analyticsSessionId = getAssistantSessionId(user?.id || "anonymous");
       const chatSessionId = forceNewFinnConversationRef.current
         ? "new"
-        : activeFinnSessionIdRef.current || activeFinnSessionId || "new";
+        : activeFinnSessionIdRef.current || activeFinnSessionId || readBrowserFinnConversation() || "new";
       forceNewFinnConversationRef.current = false;
 
       await assistantChatStream(

@@ -172,6 +172,11 @@ def main() -> None:
         query="Wijzig deze setup naar timeframe 1D.",
         session_id=setup_create["execution_conversation_id"], expected_operation="update_setup",
     )
+    setup_update_after_execution = _visible_action(
+        base_url=base_url, token=token, other_token=other_token,
+        query="Wijzig deze setup terug naar timeframe 4H.",
+        session_id=setup_update["execution_conversation_id"], expected_operation="update_setup",
+    )
     strategy_create = _visible_action(
         base_url=base_url, token=token, other_token=other_token,
         query=(
@@ -179,18 +184,31 @@ def main() -> None:
             "100 euro per uitvoering, entry 76000, stop-loss 72000, "
             "targets 83000 en 87000 en gebalanceerd risico."
         ),
-        session_id=setup_update["execution_conversation_id"], expected_operation="create_strategy",
+        session_id=setup_update_after_execution["execution_conversation_id"], expected_operation="create_strategy",
     )
     strategy_update = _visible_action(
         base_url=base_url, token=token, other_token=other_token,
         query="Wijzig deze strategie en zet het bedrag naar 150 euro.",
         session_id=strategy_create["execution_conversation_id"], expected_operation="update_strategy",
     )
+    strategy_update_after_execution = _visible_action(
+        base_url=base_url, token=token, other_token=other_token,
+        query="Wijzig deze strategie en zet het bedrag terug naar 100 euro.",
+        session_id=strategy_update["execution_conversation_id"], expected_operation="update_strategy",
+    )
+    steps = (
+        setup_create,
+        setup_update,
+        setup_update_after_execution,
+        strategy_create,
+        strategy_update,
+        strategy_update_after_execution,
+    )
     artifact = {
         "artifact_version": "finn_v2.visible_post_execution_reference.v1",
         "synthetic_local_user": True,
-        "steps": [setup_create, setup_update, strategy_create, strategy_update],
-        "passed": all(step["passed"] for step in (setup_create, setup_update, strategy_create, strategy_update)),
+        "steps": list(steps),
+        "passed": all(step["passed"] for step in steps),
     }
     output = Path(args.output).expanduser().resolve()
     output.parent.mkdir(parents=True, exist_ok=True)

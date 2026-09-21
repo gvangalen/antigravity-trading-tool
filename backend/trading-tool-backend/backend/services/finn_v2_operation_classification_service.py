@@ -431,7 +431,9 @@ class FinnV2OperationClassificationService:
             facts.normalized_text.casefold(),
         ):
             return None
-        if "bot_status" in entities or "portfolio" in entities:
+        if "bot_status" in entities and facts.discourse_act == "information_request":
+            return "read_bot_status"
+        if "portfolio" in entities:
             return None
         if "setup" in entities and entities <= {"setup", "asset"}:
             setup_inputs = self.operation_state.explicit_inputs(

@@ -16,15 +16,19 @@ test("an immediate send after Nieuw gesprek cannot reuse the previous conversati
   );
   assert.match(
     assistantSource,
-    /const chatSessionId = forceNewFinnConversationRef\.current[\s\S]*\? "new"[\s\S]*: activeFinnSessionIdRef\.current \|\| activeFinnSessionId \|\| "new"/,
+    /const chatSessionId = forceNewFinnConversationRef\.current[\s\S]*\? "new"[\s\S]*: activeFinnSessionIdRef\.current \|\| activeFinnSessionId \|\| readBrowserFinnConversation\(\) \|\| "new"/,
   );
   assert.match(assistantSource, /forceNewFinnConversationRef\.current = false/);
+  assert.match(
+    assistantSource,
+    /startNewFinnConversation[\s\S]*clearActiveFinnConversation\(window\.sessionStorage, user\?\.id\)/,
+  );
 });
 
 test("a terminal V2 envelope is immediately authoritative for the next turn", () => {
   assert.match(
     assistantSource,
-    /persistActiveFinnSessionId[\s\S]*activeFinnSessionIdRef\.current = normalized[\s\S]*setActiveFinnSessionId\(normalized\)/,
+    /persistActiveFinnSessionId[\s\S]*activeFinnSessionIdRef\.current = normalized[\s\S]*setActiveFinnSessionId\(normalized\)[\s\S]*writeActiveFinnConversation\(window\.sessionStorage, user\?\.id, normalized\)/,
   );
   assert.match(
     assistantSource,
