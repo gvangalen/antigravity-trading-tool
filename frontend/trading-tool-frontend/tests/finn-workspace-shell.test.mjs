@@ -45,7 +45,7 @@ test("scopes briefing fallbacks and mission-control cache per authenticated user
   assert.doesNotMatch(assistantSource, /preferences\?\.first_name\s*\|\|\s*"Gerrit"/);
   assert.doesNotMatch(assistantSource, /user\?\.first_name\s*\|\|\s*preferences\?\.first_name\s*\|\|\s*"Trader"/);
   assert.match(assistantSource, /user\?\.first_name\s*\|\|\s*"Trader"/);
-  assert.match(assistantSource, /finn-mission-control:\$\{userScope\}:shared/);
+  assert.match(assistantSource, /finn-mission-control:\$\{userScope\}:\$\{missionControlScope\}/);
   assert.match(assistantSource, /useEffect\(\(\)\s*=>\s*\{\s*setPreferences\(\{\}\);[\s\S]*sharedSessionRestoreRef\.current = false;[\s\S]*\}, \[user\?\.id\]\)/);
   assert.match(assistantSource, /scopedRecentConversationStorageKey/);
   assert.match(assistantSource, /getAssistantSessionId\(user\?\.id \|\| "anonymous"\)/);
@@ -59,7 +59,9 @@ test("keeps the last proven Today briefing visible while a forced refresh runs",
   assert.doesNotMatch(assistantSource, /setMissionControl\(null\);\s*await Promise\.all\(\[loadInsight\(\), loadMissionControl/);
 });
 
-test("uses one owner-scoped FINN Today cache across Analysis and My Plan", () => {
-  assert.match(assistantSource, /finn-mission-control:\$\{userScope\}:shared/);
-  assert.doesNotMatch(assistantSource, /finn-mission-control:\$\{userScope\}:\$\{missionControlSymbol\}/);
+test("scopes FINN Today by asset on Analysis while retaining a shared plan cache", () => {
+  assert.match(assistantSource, /const missionControlScope = isAssetAnalysisPage/);
+  assert.match(assistantSource, /finn-mission-control:\$\{userScope\}:\$\{missionControlScope\}/);
+  assert.match(assistantSource, /fetchFinnMissionControl\(requestedSymbol\)/);
+  assert.match(assistantSource, /loadMissionControl\(\{ force: true \}\)/);
 });

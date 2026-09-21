@@ -6,6 +6,7 @@ import re
 import asyncio
 import inspect
 import hashlib
+from contextlib import suppress
 from dataclasses import dataclass
 from typing import Any, Dict, Optional
 from pathlib import Path
@@ -912,6 +913,28 @@ def ask_gpt_structured_response(
 _DEFAULT_SYNC_STRUCTURED_PROVIDER = ask_gpt_structured_response
 
 
+async def _await_provider_call(awaitable, *, timeout_seconds: float):
+    """Await one provider call and always reap it on timeout/cancellation."""
+    task = asyncio.create_task(awaitable)
+    try:
+        done, _pending = await asyncio.wait(
+            {task},
+            timeout=max(0.1, float(timeout_seconds)),
+            return_when=asyncio.FIRST_COMPLETED,
+        )
+        if task not in done:
+            task.cancel()
+            with suppress(asyncio.CancelledError, Exception):
+                await task
+            raise asyncio.TimeoutError
+        return task.result()
+    except asyncio.CancelledError:
+        task.cancel()
+        with suppress(asyncio.CancelledError, Exception):
+            await task
+        raise
+
+
 async def ask_gpt_structured_response_async(
     *,
     prompt: str,
@@ -983,9 +1006,9 @@ async def ask_gpt_structured_response_async(
         if timeout_seconds is None:
             response = await active_client.responses.create(**request_kwargs)
         else:
-            response = await asyncio.wait_for(
+            response = await _await_provider_call(
                 active_client.responses.create(**request_kwargs),
-                timeout=max(0.1, float(timeout_seconds)),
+                timeout_seconds=max(0.1, float(timeout_seconds)),
             )
         return _parse_structured_response(response, active_model=active_model, started=started)
     except asyncio.CancelledError:

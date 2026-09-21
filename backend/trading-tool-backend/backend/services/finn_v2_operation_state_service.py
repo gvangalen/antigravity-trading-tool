@@ -454,7 +454,17 @@ class FinnV2OperationStateService:
             if changes:
                 values.setdefault("changed_fields", changes)
         if contract.operation_id == "create_setup":
-            if "dca" in lowered:
+            recurring_schedule = re.search(
+                r"\b(?:daily|dagelijks|iedere dag|elke dag|every day|jeden tag|taeglich|"
+                r"weekly|wekelijks|iedere week|elke week|every week|jede woche|"
+                r"monthly|maandelijks|iedere maand|elke maand|every month|jeden monat)\b",
+                lowered,
+            )
+            recurring_investment = bool(recurring_schedule) and bool(re.search(
+                r"\b(?:iedere|elke|every|jede|jeden|invest\w*|beleg\w*|aankop\w*|koop\w*|buy\w*|euro)\b|€",
+                lowered,
+            ))
+            if "dca" in lowered or recurring_investment:
                 values["setup_type"] = "dca"
             else:
                 setup_type = FinnV2SetupInputCatalog.setup_type_from_text(text)
@@ -468,6 +478,20 @@ class FinnV2OperationStateService:
                     self._trim_setup_name_clause(str(values["name"]))
                 )
             timeframe = FinnV2SetupInputCatalog.timeframe_from_text(text)
+            explicit_chart_timeframe = bool(
+                re.search(
+                    r"\b(?:\d+\s*(?:m|min|h|d|w|mo)|timeframe|chart|grafiek|zeiteinheit)\b",
+                    lowered,
+                )
+            )
+            if (
+                values.get("setup_type") == "dca"
+                and recurring_schedule
+                and not explicit_chart_timeframe
+            ):
+                # Daily/weekly/monthly describes the DCA cadence unless the
+                # user explicitly supplies a chart timeframe as well.
+                timeframe = None
             if timeframe:
                 values["timeframe"] = timeframe
             # The registry exposes this conditional slot for create_setup, but
@@ -479,9 +503,15 @@ class FinnV2OperationStateService:
                         canonical
                         for token, canonical in (
                             ("daily", "daily"), ("dagelijks", "daily"), ("dagelijkse", "daily"),
+                            ("every day", "daily"), ("iedere dag", "daily"), ("elke dag", "daily"),
+                            ("jeden tag", "daily"),
                             ("taeglich", "daily"), ("taegliche", "daily"), ("taegliches", "daily"),
                             ("weekly", "weekly"), ("wekelijks", "weekly"), ("wekelijkse", "weekly"),
+                            ("every week", "weekly"), ("iedere week", "weekly"), ("elke week", "weekly"),
+                            ("jede woche", "weekly"),
                             ("monthly", "monthly"), ("maandelijks", "monthly"),
+                            ("every month", "monthly"), ("iedere maand", "monthly"), ("elke maand", "monthly"),
+                            ("jeden monat", "monthly"),
                         )
                         if re.search(rf"\b{token}\b", lowered)
                     ),
@@ -507,6 +537,16 @@ class FinnV2OperationStateService:
                     values["dca_month_day"] = self._requested_slot_value(
                         field="dca_month_day", text=month_day_match.group(1), contract=contract
                     )
+            if "min_investment" in accepted_inputs:
+                investment = re.search(
+                    r"(?:(?:€|eur)\s*(\d+(?:[.,]\d+)?)|"
+                    r"(\d+(?:[.,]\d+)?)\s*(?:€|eur|euros?|euro))"
+                    r"(?:\s+(?:in|into|in\s+die|investeren\s+in|invest\s+in|anlegen\s+in))?",
+                    lowered,
+                )
+                if investment:
+                    raw_investment = next(group for group in investment.groups() if group)
+                    values["min_investment"] = self._numeric_value(raw_investment)
             if any(token in lowered for token in ("daily trend", "dagtrend", "uptrend", "downtrend")):
                 values["market_condition"] = "trend_defined"
         elif contract.operation_id in {"watchlist_add", "watchlist_remove"} and explicit_asset:
@@ -1117,7 +1157,15 @@ class FinnV2OperationStateService:
             name = str(definition.get("name") or "").strip()
             category = str(definition.get("category") or "").strip()
             display = str(definition.get("display_name") or "").strip()
-            variants = {name, display, name.replace("_", " "), display.replace("_", " ")}
+            aliases = [str(alias or "").strip() for alias in definition.get("aliases") or []]
+            variants = {
+                name,
+                display,
+                name.replace("_", " "),
+                display.replace("_", " "),
+                *aliases,
+                *(alias.replace("_", " ") for alias in aliases),
+            }
             if any(
                 variant and re.search(rf"(?<!\w){re.escape(variant.casefold())}(?!\w)", normalized)
                 for variant in variants

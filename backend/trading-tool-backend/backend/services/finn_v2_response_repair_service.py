@@ -16,6 +16,7 @@ class FinnV2ResponseRepairService:
         "missing_uncertainty",
         "mode_purity_violation",
         "unsupported_noncritical_claim",
+        "unsupported_configuration_causality",
         "follow_up_invalid",
     }
 
@@ -29,7 +30,14 @@ class FinnV2ResponseRepairService:
             return False
         return any(code in self.REPAIRABLE_CODES for code in reason_codes)
 
-    def repair(self, *, draft: ResponseDraft, reason_codes: list[str], uncertainty_summary: Optional[str]) -> ResponseDraft:
+    def repair(
+        self,
+        *,
+        draft: ResponseDraft,
+        reason_codes: list[str],
+        uncertainty_summary: Optional[str],
+        rejected_claim_ids: Optional[set[str]] = None,
+    ) -> ResponseDraft:
         updated = draft.copy(deep=True)
         updated.draft_id = f"finn-v2-draft-{uuid.uuid4().hex}"
         updated.created_at = datetime.now(timezone.utc)
@@ -45,8 +53,38 @@ class FinnV2ResponseRepairService:
                 "instruction": "Controleer de genoemde onderbouwing en vul alleen de ontbrekende of verouderde gegevens aan voordat je het plan wijzigt.",
                 "requires_confirmation": False,
             }
-        if "unsupported_noncritical_claim" in reason_codes:
-            updated.claims = [claim for claim in updated.claims if claim.claim_type in {"uncertainty", "recommendation"} or claim.evidence_refs]
+        if {
+            "unsupported_noncritical_claim",
+            "unsupported_configuration_causality",
+        }.intersection(reason_codes):
+            rejected = rejected_claim_ids or set()
+            updated.claims = (
+                [claim for claim in updated.claims if claim.claim_id not in rejected]
+                if rejected
+                else [claim for claim in updated.claims if claim.claim_type in {"uncertainty", "recommendation"}]
+            )
+            # Response-level prose may repeat a rejected claim even after the
+            # typed claim is removed. Rebuild it from surviving grounded
+            # claims so one unsupported conclusion cannot discard the useful
+            # evidence collected for the rest of the answer.
+            surviving = [claim.text.strip() for claim in updated.claims if claim.text.strip()]
+            if surviving:
+                updated.direct_answer = surviving[0]
+                updated.main_observation = " ".join(surviving[1:]) or surviving[0]
+            if (
+                updated.mode == "EVALUATE"
+                and updated.uncertainty_summary
+                and not any(claim.claim_type == "uncertainty" for claim in updated.claims)
+            ):
+                updated.claims.append(
+                    ResponseClaim(
+                        claim_id=f"limitation-{uuid.uuid4().hex[:12]}",
+                        claim_type="uncertainty",
+                        text=updated.uncertainty_summary,
+                        evidence_refs=list(updated.evidence_refs_used),
+                        confidence="high",
+                    )
+                )
         if "mode_purity_violation" in reason_codes and updated.mode == "READ":
             updated.proposal_candidate = None
             updated.next_step = None

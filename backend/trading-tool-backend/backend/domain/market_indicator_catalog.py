@@ -5,18 +5,21 @@ MARKET_INDICATOR_DEFINITIONS: List[Dict[str, object]] = [
     {
         "name": "price",
         "display_name": "Price",
+        "aliases": ["Prijs", "Preis"],
         "category": "market",
         "active": True,
     },
     {
         "name": "volume",
         "display_name": "Volume",
+        "aliases": ["Handelsvolume", "Volumen"],
         "category": "market",
         "active": True,
     },
     {
         "name": "change_24h",
         "display_name": "24h Price Change",
+        "aliases": ["24-uurs koerswijziging", "24h Preisänderung"],
         "category": "market",
         "active": True,
     },

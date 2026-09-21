@@ -1360,6 +1360,13 @@ def test_selector_provider_budget_leaves_time_for_the_persisted_selection(monkey
     assert "phase_budget_seconds" in selector
 
 
+def test_verifier_rechecks_safe_downgrades_through_the_canonical_deterministic_path():
+    source = (ROOT / "services" / "finn_v2_response_verifier_service.py").read_text(encoding="utf-8")
+
+    assert "await self._verify(" not in source
+    assert source.count("self._deterministic_verify(") >= 3
+
+
 def test_worker_dispatch_keeps_the_created_contract_attached_to_the_same_run(monkeypatch):
     """Exercise the production worker entrypoint without replacing it by complete_run."""
     from backend.celery_task import finn_v2_task

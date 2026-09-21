@@ -1,6 +1,8 @@
 from datetime import datetime, timezone
 from types import SimpleNamespace
 
+import pytest
+
 from backend.schemas.finn_v2_orchestrator_schema import RequestPlan
 from backend.schemas.finn_v2_reasoning_schema import ProposalCandidate, ReasoningNextStep, ReasoningSupportingPoint
 from backend.schemas.finn_v2_response_schema import ResponseClaim, ResponseDraft
@@ -687,6 +689,78 @@ def test_integrated_evaluation_does_not_pass_when_model_reasoning_contract_faile
     assert "model_reasoning_contract_failed" in verifier.reason_codes
 
 
+def test_deterministically_repaired_model_response_is_not_failed_again():
+    service = FinnV2ResponseVerifierService(session=object())
+    draft = ResponseDraft(
+        draft_id="draft-repaired-model", run_id="run-repaired-model", user_id=7, mode="EVALUATE",
+        direct_answer="RSI staat op 57,4.",
+        main_observation="De bredere marktcontext ontbreekt.",
+        claims=[
+            ResponseClaim(claim_id="C1", claim_type="fact", text="RSI staat op 57,4.", evidence_refs=["E1"], confidence="high"),
+            ResponseClaim(claim_id="C2", claim_type="uncertainty", text="De bredere marktcontext ontbreekt.", evidence_refs=["E2"], confidence="high"),
+        ],
+        evidence_refs_used=["E1", "E2"],
+        evidence_set_hash="hash-repaired-model",
+        reasoning_provenance={"provider_called": True, "validation_status": "deterministically_repaired"},
+        next_step={"title": "Controleer context", "instruction": "Controleer de actuele marktcontext.", "requires_confirmation": False},
+        created_at=datetime.now(timezone.utc),
+    )
+    evidence = [
+        SimpleNamespace(evidence_id="E1", domain="market_context", tool_name="read_technical_snapshot", entity_type="technical_snapshot", entity_id=None, asset="BTC", freshness="fresh", confidence="high", facts={"rsi": 57.4}),
+        SimpleNamespace(evidence_id="E2", domain="market_context", tool_name="read_market_snapshot", entity_type="market_snapshot", entity_id=None, asset="BTC", freshness="unavailable", confidence="low", availability="unavailable", information_scope="market_snapshot", facts={}),
+    ]
+
+    verifier = service._deterministic_verify(
+        run=SimpleNamespace(id="run-repaired-model", user_id=7, message="Wat zegt RSI?", conversation_id="conv-1"),
+        orchestrator_result=SimpleNamespace(analysis=SimpleNamespace(subject_scopes=["indicators"], request_plan=None), selected_clarification=None),
+        policy=SimpleNamespace(allowed=True, proposal_allowed=False, confirmation_required=False, operation_type=None),
+        context=SimpleNamespace(evidence=evidence, uncertainty_codes=["source_unavailable"]),
+        validation=SimpleNamespace(id="validation-repaired-model", evidence_set_hash="hash-repaired-model", integrity_status="valid"),
+        draft=draft,
+        repair_attempt=1,
+    )
+
+    assert "model_reasoning_contract_failed" not in verifier.reason_codes
+
+
+@pytest.mark.parametrize(
+    "text",
+    (
+        "Er is onzekerheid omdat actuele marktdata niet beschikbaar zijn.",
+        "There is uncertainty because current market data are not available.",
+        "Es bleibt Unsicherheit, weil aktuelle Marktdaten nicht verfuegbar sind.",
+    ),
+)
+def test_unavailable_evidence_supports_localized_uncertainty_claims(text):
+    service = FinnV2ResponseVerifierService(session=object())
+    evidence = [SimpleNamespace(availability="unavailable")]
+
+    assert service._is_supported_unavailability_limitation(
+        haystack=text.casefold(), evidence=evidence,
+    ) is True
+
+
+@pytest.mark.parametrize(
+    "text",
+    (
+        "De RSI staat op 64.",
+        "The RSI is currently 64.",
+        "Der RSI liegt aktuell bei 64.",
+    ),
+)
+def test_nested_typed_evidence_supports_localized_fact_claims(text):
+    service = FinnV2ResponseVerifierService(session=object())
+    evidence = [SimpleNamespace(
+        tool_name="read_technical_snapshot",
+        asset="BTC",
+        facts={"indicators": {"rsi": {"value": 64.0, "as_of": "2026-09-21T20:00:00Z"}}},
+    )]
+
+    status, reasons, grounded = service._evaluate_claim_support(text, evidence, "fact")
+
+    assert (status, reasons, grounded) == ("supported", [], True)
+
+
 def test_evidence_limited_evaluation_is_not_treated_as_a_model_contract_bypass():
     service = FinnV2ResponseVerifierService(session=object())
     draft = ResponseDraft(
@@ -745,6 +819,37 @@ def test_strategy_setup_compatibility_requires_matching_persisted_fields():
         "De strategie garandeert winst omdat asset en timeframe overeenkomen.",
         evidence,
         "evaluation",
+    )[2] is False
+
+
+def test_unavailability_limitation_requires_typed_unavailable_evidence():
+    service = FinnV2ResponseVerifierService(session=object())
+    unavailable = [
+        SimpleNamespace(
+            availability="unavailable",
+            tool_name="read_market_snapshot",
+            asset="BTC",
+            facts={"reason": "provider_unavailable"},
+        )
+    ]
+    available = [
+        SimpleNamespace(
+            availability="available",
+            tool_name="read_market_snapshot",
+            asset="BTC",
+            facts={"price": 100},
+        )
+    ]
+
+    assert service._evaluate_claim_support(
+        "Actuele marktdata zijn niet beschikbaar; daarom is de aansluiting niet bewezen.",
+        unavailable,
+        "uncertainty",
+    ) == ("supported", [], True)
+    assert service._evaluate_claim_support(
+        "Actuele marktdata zijn niet beschikbaar.",
+        available,
+        "uncertainty",
     )[2] is False
 
 

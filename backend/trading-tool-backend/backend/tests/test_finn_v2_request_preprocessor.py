@@ -71,6 +71,33 @@ def test_contextual_bot_implication_preserves_the_previous_assessment_fact():
     assert facts.discourse_act == "contextual_follow_up"
 
 
+@pytest.mark.parametrize(
+    "message",
+    (
+        "Wat zou dit veranderen aan mijn plan?",
+        "What would this change about my plan?",
+        "Was wuerde das an meinem Plan aendern?",
+    ),
+)
+def test_contextual_change_question_is_a_previous_response_reference(message):
+    facts = FinnV2RequestPreprocessorService().preprocess(message=message)
+
+    assert "contextual_implication" in facts.conversation_reference_markers
+    assert facts.discourse_act == "contextual_follow_up"
+
+
+@pytest.mark.parametrize(
+    ("message", "language"),
+    (
+        ("Wat betekent mijn RSI voor mijn actieve plan?", "nl"),
+        ("What does my RSI mean for my active plan?", "en"),
+        ("Was bedeutet mein RSI fuer meinen aktiven Plan?", "de"),
+    ),
+)
+def test_request_language_is_detected_without_client_locale(message, language):
+    assert FinnV2RequestPreprocessorService().preprocess(message=message).language == language
+
+
 def test_non_live_paper_bot_creation_is_not_a_live_activation_fact():
     facts = FinnV2RequestPreprocessorService().preprocess(
         message="Maak voor die strategie een niet-live paper bot met de naam Veilige Testbot."

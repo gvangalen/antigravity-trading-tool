@@ -75,13 +75,59 @@ class FinnV2OrchestratorService:
             return guided_state
         missing_inputs = list(execution_view.get("missing_inputs") or [])
         action_contract = dict(execution_view.get("action_contract") or {})
-        return {
+        operation_state = {
             "operation_id": execution_view.get("operation_id"),
             "contract_version": action_contract.get("version"),
             "collected_inputs": dict(execution_view.get("supplied_inputs") or {}),
             "missing_required_inputs": missing_inputs,
             "next_missing_input": missing_inputs[0] if missing_inputs else None,
         }
+        reference_kind = str(execution_view.get("conversation_reference_kind") or "")
+        lineage_state = dict(execution_view.get("lineage_state") or {})
+        if reference_kind == "previous_verified_response":
+            lineage = dict(lineage_state.get("last_verified_context") or {})
+            if lineage.get("run_id"):
+                operation_state.update({
+                    "previous_verified_response_id": lineage.get("verified_response_id"),
+                    "previous_verified_run_id": lineage.get("run_id"),
+                    "previous_verified_operation_id": lineage.get("operation_id"),
+                    "previous_verified_conclusion": lineage.get("conclusion"),
+                    "previous_verified_response": lineage.get("response"),
+                    "previous_evidence_refs": list(lineage.get("evidence_refs") or []),
+                    "resolved_entities": dict(lineage.get("resolved_entities") or {}),
+                })
+        elif reference_kind in {"previous_released_response", "previous_degraded_response"}:
+            degraded = dict(lineage_state.get("last_degraded_context") or {})
+            if degraded.get("run_id"):
+                operation_state.update({
+                    "previous_degraded_run_id": degraded.get("run_id"),
+                    "previous_degraded_operation_id": degraded.get("operation_id"),
+                    "previous_degraded_released_response": dict(degraded.get("released_response") or {}),
+                    "previous_degraded_released_sections": list(degraded.get("released_response_sections") or []),
+                    "previous_degraded_evidence_scopes": list(degraded.get("evidence_scopes") or []),
+                    "previous_evidence_refs": list(degraded.get("evidence_refs") or []),
+                    "resolved_entities": dict(degraded.get("resolved_entities") or {}),
+                })
+            else:
+                released = dict(lineage_state.get("last_released_context") or {})
+                if released.get("run_id"):
+                    operation_state.update({
+                        "previous_released_run_id": released.get("run_id"),
+                        "previous_released_operation_id": released.get("operation_id"),
+                        "previous_released_conclusion": released.get("conclusion"),
+                        "previous_released_response": released.get("response"),
+                        "previous_evidence_refs": list(released.get("evidence_refs") or []),
+                        "resolved_entities": dict(released.get("resolved_entities") or {}),
+                    })
+        elif reference_kind == "previous_safe_terminal":
+            terminal = dict(lineage_state.get("last_safe_terminal_context") or {})
+            if terminal.get("run_id"):
+                operation_state.update({
+                    "previous_safe_terminal_run_id": terminal.get("run_id"),
+                    "previous_safe_terminal_operation_id": terminal.get("operation_id"),
+                    "previous_safe_terminal_reason": terminal.get("terminal_reason"),
+                })
+        return operation_state
 
     @staticmethod
     def _contextual_inputs_from_snapshot(*, snapshot, execution_view: dict) -> dict:
@@ -400,10 +446,24 @@ class FinnV2OrchestratorService:
         guided_state = dict(getattr(request_plan, "operation_state", {}) or {})
         record_guided_draft = getattr(self.runtime_contracts, "record_guided_draft", None)
         record_conversation_state = getattr(self.runtime_contracts, "record_conversation_state", None)
-        if guided_state.get("status") == "cancelled" and callable(record_conversation_state):
+        lineage_state = {
+            key: dict(conversation_context.get(key) or {})
+            for key in (
+                "last_verified_context",
+                "last_degraded_context",
+                "last_released_context",
+                "last_safe_terminal_context",
+            )
+            if isinstance(conversation_context.get(key), dict)
+        }
+        if callable(record_conversation_state) and (lineage_state or guided_state):
+            # Persist the exact owner-scoped continuation snapshot before the
+            # execution view replaces the request analyzer's transport state.
+            # Otherwise previous-response fields disappear between selection
+            # and reasoning even though the preceding contract is durable.
             runtime_contract = await record_conversation_state(
                 run_id=run_id,
-                lineage_state=dict((runtime_contract.state_json or {}).get("lineage_state") or {}),
+                lineage_state=lineage_state,
                 guided_state=guided_state,
             )
         if guided_state and callable(record_guided_draft):

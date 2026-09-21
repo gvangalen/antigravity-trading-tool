@@ -12671,6 +12671,7 @@ class FinnPlanService:
             activity_feed=activity_feed,
             day_log=day_log,
             require_first_dashboard_eligibility=False,
+            preferred_asset=(context or {}).get("symbol"),
         )
         resolved_item_ids = await self._get_today_resolved_mission_item_ids(user_id)
         if resolved_item_ids:
@@ -13432,6 +13433,7 @@ class FinnPlanService:
         activity_feed: Optional[List[Dict[str, Any]]] = None,
         day_log: Optional[Dict[str, Any]] = None,
         require_first_dashboard_eligibility: bool = True,
+        preferred_asset: Optional[str] = None,
     ) -> Optional[Dict[str, Any]]:
         if not self.session:
             return None
@@ -13471,8 +13473,15 @@ class FinnPlanService:
             if (local_mission or {}).get("bot_review_queue"):
                 return None
 
+        requested_asset = str(preferred_asset or "").strip().upper()
+        available_assets = {
+            str(item.get("asset") or "").strip().upper()
+            for item in (local_analysis.get("assets") or [])
+            if item.get("asset")
+        }
         active_asset = str(
-            onboarding_status.get("active_asset")
+            (requested_asset if requested_asset in available_assets else None)
+            or onboarding_status.get("active_asset")
             or next((item.get("asset") for item in (local_analysis.get("assets") or []) if item.get("asset")), "")
             or "BTC"
         ).upper()
@@ -13731,6 +13740,8 @@ class FinnPlanService:
         current_version = str(payload.get("context_version") or "")
         stored_version = str(stored_briefing.get("context_version") or "")
         stored_status = str(stored_briefing.get("status") or "").lower()
+        stored_asset = str(stored_briefing.get("asset") or "").upper()
+        current_asset = str(payload.get("asset") or "").upper()
         result = stored_briefing.get("result") if isinstance(stored_briefing.get("result"), dict) else None
         validated_result = self._validate_first_dashboard_ai_result(
             result or {},
@@ -13775,7 +13786,7 @@ class FinnPlanService:
         # Keep the last proven coaching result visible while a newer snapshot
         # is being enriched. Context versions remain explicit, so stale copy
         # can never overwrite the eventual newer terminal result.
-        if stored_version and stored_version != current_version:
+        if stored_version and stored_version != current_version and stored_asset == current_asset:
             stale_result = self._validate_first_dashboard_ai_result(
                 stored_briefing.get("result") or {},
                 allowed_refs=payload.get("allowed_evidence_refs") or [],

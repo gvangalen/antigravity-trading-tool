@@ -147,6 +147,9 @@ class FinnV2StructuredOperationSelectorService:
                     "For a requested change, select a write contract only when the request identifies "
                     "its required FINN object. A create contract with an identified object may be selected "
                     "even when its remaining required slots are absent; list those slots in missing_inputs. "
+                    "When the user describes a new object they want to create and asks what information is "
+                    "still missing before it can be used, select that object's create contract. Do not turn "
+                    "the request into an evaluation of an existing object merely because it asks what is missing. "
                     "Generic requests to change trading settings, configuration, or preferences without an "
                     "identified FINN object must use clarify_request. A request "
                     "that diagnoses the robustness, fragility, quality, risk, or evidential support of an "
@@ -279,9 +282,6 @@ class FinnV2StructuredOperationSelectorService:
                 "selection_required_terms": list(contract.selection_required_terms),
                 "domain": contract.domain,
                 "supported": contract.supported,
-                "required_entities": list(contract.required_entities),
-                "required_inputs": list(contract.input_fields),
-                "requires_verified_context": contract.requires_verified_context,
                 "canonical_action_polarity": contract.action_polarity.value,
             }
             for contract in candidate_contracts

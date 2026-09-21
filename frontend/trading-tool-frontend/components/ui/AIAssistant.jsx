@@ -1065,10 +1065,10 @@ function AIAssistantContent({
   useEffect(() => {
     insightCacheKeyRef.current = `finn-insight:${currentConversationStorageKey}`;
     const userScope = String(user?.id || "anonymous");
-    // FINN Today is one owner-scoped briefing.  It must not be invalidated by
-    // an Analysis asset switch while the identical My Plan surface continues
-    // to render the same briefing.
-    missionControlCacheKeyRef.current = `finn-mission-control:${userScope}:shared`;
+    const missionControlScope = isAssetAnalysisPage
+      ? normalizeScopedAssetSymbol(context.symbol || globalSymbol) || "UNKNOWN"
+      : "shared";
+    missionControlCacheKeyRef.current = `finn-mission-control:${userScope}:${missionControlScope}`;
   }, [currentConversationStorageKey, user?.id, globalSymbol, context.symbol]);
 
   const getLatestAssistantState = () => {
@@ -4033,6 +4033,11 @@ function AIAssistantContent({
   }, [currentConversationStorageKey, isAssetAnalysisPage, isOpen]);
 
   useEffect(() => {
+    if (!isOpen || !isAssetAnalysisPage) return;
+    void loadMissionControl({ force: true });
+  }, [currentConversationStorageKey, isAssetAnalysisPage, isOpen]);
+
+  useEffect(() => {
     if (!isOpen) return;
     const generationStatus = String(missionControl?.first_dashboard_context?.generation_status || "").toLowerCase();
     if (!["pending", "queued", "generating", "retry_scheduled", "stale_while_revalidate"].includes(generationStatus)) return;
@@ -4282,7 +4287,10 @@ function AIAssistantContent({
       let lastError = null;
       for (let attempt = 0; attempt < 1; attempt += 1) {
         try {
-          const res = await fetchFinnMissionControl();
+          const requestedSymbol = isAssetAnalysisPage
+            ? normalizeScopedAssetSymbol(context.symbol || globalSymbol)
+            : null;
+          const res = await fetchFinnMissionControl(requestedSymbol);
           const normalized = res
             ? {
                 ...res,

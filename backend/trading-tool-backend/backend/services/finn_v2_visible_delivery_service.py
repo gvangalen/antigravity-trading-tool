@@ -139,11 +139,23 @@ class FinnV2VisibleDeliveryService:
             {"page": "mission_control", "surface": "today_with_finn", **(context_payload or {})},
         )
 
-    async def deliver_mission_control_fallback(self, *, user_id: int, trace_id: str) -> dict[str, Any]:
+    async def deliver_mission_control_fallback(
+        self,
+        *,
+        user_id: int,
+        trace_id: str,
+        symbol: str | None = None,
+    ) -> dict[str, Any]:
         """Build a truthful owner-scoped briefing if optional enrichment fails."""
         setups = [dict(row) for row in await SetupRepository(self.session).get_user_setups(user_id)]
         strategies = [dict(row) for row in await StrategyRepository(self.session).query_strategies(user_id, {})]
         bots = [dict(row) for row in await BotRepository(self.session).get_bot_configs(user_id)]
+        requested_symbol = str(symbol or "").strip().upper()
+        if requested_symbol:
+            setups = [row for row in setups if str(row.get("symbol") or "").upper() == requested_symbol]
+            strategies = [row for row in strategies if str(row.get("symbol") or "").upper() == requested_symbol]
+            strategy_ids = {row.get("id") for row in strategies}
+            bots = [row for row in bots if row.get("strategy_id") in strategy_ids]
         setup_names = [str(row.get("name")) for row in setups if row.get("name")]
         strategy_names = [str(row.get("name")) for row in strategies if row.get("name")]
         paper_bots = [row for row in bots if not bool(row.get("is_live"))]
@@ -157,7 +169,8 @@ class FinnV2VisibleDeliveryService:
             budget = bot.get("budget_total_eur")
             budget_text = f" met een budget van €{float(budget):,.2f}".replace(",", "X").replace(".", ",").replace("X", ".") if budget is not None else ""
             facts.append(f"Paper-bot ‘{bot.get('name') or 'Naamloos'}’ is {'actief' if bot.get('is_active') else 'gepauzeerd'}{budget_text} en niet-live.")
-        summary = " ".join(facts) or "Je werkruimte is klaar; er zijn nog geen setups, strategieën of paper-bots opgeslagen."
+        empty_scope = f" voor {requested_symbol}" if requested_symbol else ""
+        summary = " ".join(facts) or f"Je werkruimte is klaar; er zijn nog geen setups, strategieën of paper-bots{empty_scope} opgeslagen."
         return {
             "ok": True,
             "intent": "mission_control",

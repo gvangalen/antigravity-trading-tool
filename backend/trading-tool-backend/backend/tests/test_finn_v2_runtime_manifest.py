@@ -37,6 +37,7 @@ REQUIRED_MIGRATIONS = (
     "2026_08_23_finn_v2_evidence_information_scope.py",
     "2026_08_23_finn_v2_artifact_operation_contract.py",
     "2026_09_07_finn_v2_action_contract_completion.py",
+    "2026_09_21_finn_v2_live_evidence_scopes.py",
 )
 
 

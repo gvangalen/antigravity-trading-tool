@@ -38,10 +38,10 @@ test("FINN Today renders the typed personal mission-control briefing", () => {
     /if \(isOpen\) \{\s*loadMissionControl\(\);/,
     "the compact FINN Today preview must load the same typed mission-control projection",
   );
-  assert.doesNotMatch(
+  assert.match(
     assistantSource,
-    /finn-mission-control:\$\{currentConversationStorageKey\}:\$\{pathname/,
-    "FINN Today must not maintain route-specific caches",
+    /const missionControlScope = isAssetAnalysisPage/,
+    "analysis briefings must be scoped by the selected asset",
   );
   assert.match(
     assistantSource,

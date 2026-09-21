@@ -1009,6 +1009,19 @@ def test_natural_plan_assessment_is_an_evaluation_fact(message):
 
 
 @pytest.mark.parametrize("message", (
+    "Wat betekent mijn RSI voor mijn actieve BTC-plan?",
+    "What does my RSI mean for my active BTC plan?",
+    "Was bedeutet mein RSI für meinen aktiven BTC-Plan?",
+))
+def test_indicator_implication_for_explicit_plan_is_a_plan_evaluation(message):
+    facts = CLASSIFIER.preprocessor.preprocess(message=message)
+
+    assert facts.primary_entity == "plan"
+    assert facts.action_polarity == "evaluate"
+    assert facts.discourse_act == "evaluation"
+
+
+@pytest.mark.parametrize("message", (
     "Waar is mijn handelsaanpak het kwetsbaarst?",
     "Which part of my trading approach is least resilient?",
     "An welcher Stelle ist mein Handelsplan am fragilsten?",

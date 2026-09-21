@@ -1,3 +1,4 @@
+import asyncio
 from backend.domain.finn_v2_operation_registry import FinnV2OperationRegistry
 from backend.services.finn_v2_structured_operation_selector_service import FinnV2StructuredOperationSelectorService
 from backend.utils import openai_client
@@ -132,3 +133,32 @@ def test_provider_rate_limit_metadata_preserves_retry_after():
     assert openai_client._is_rate_limited_exception(error) is True
     assert openai_client._retry_after_seconds(error) == 7.0
     assert openai_client._read_request_id(error) == "req-rate"
+
+
+def test_async_provider_timeout_cancels_and_reaps_the_provider_task():
+    cancelled = asyncio.Event()
+
+    async def provider_call():
+        try:
+            await asyncio.sleep(60)
+        finally:
+            cancelled.set()
+
+    async def exercise():
+        try:
+            await openai_client._await_provider_call(
+                provider_call(),
+                timeout_seconds=0.01,
+            )
+        except asyncio.TimeoutError:
+            pass
+        else:
+            raise AssertionError("provider call should time out")
+        assert cancelled.is_set()
+        assert not [
+            task
+            for task in asyncio.all_tasks()
+            if task is not asyncio.current_task() and not task.done()
+        ]
+
+    asyncio.run(exercise())

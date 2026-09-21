@@ -547,7 +547,7 @@ def test_reasoning_uses_grounded_read_fallback_on_incomplete_structured_response
     assert set(result["result"].evidence_refs_used) == {"E1", "E2", "E3"}
 
 
-def test_reasoning_marks_grounded_read_fallback_ready_when_ai_rate_limited(monkeypatch):
+def test_reasoning_marks_provider_rate_limit_as_explicit_unavailable(monkeypatch):
     service = FinnV2ReasoningService(session=object())
     run = SimpleNamespace(
         id="run-read-rate-limit-1",
@@ -693,10 +693,11 @@ def test_reasoning_marks_grounded_read_fallback_ready_when_ai_rate_limited(monke
 
     result = asyncio.run(service.reason(user_id=7, run_id="run-read-rate-limit-1", trace_id="trace-read-rate-limit-1"))
 
-    assert result["status"] == "ready"
-    assert result["mode"] == "READ"
-    assert persisted["status"] == "ready"
-    assert "Bot 170" in result["result"].direct_answer
+    assert result["status"] == "unavailable"
+    assert result["mode"] == "UNAVAILABLE"
+    assert persisted["status"] == "unavailable"
+    assert "AI-dienst" in result["result"].direct_answer
+    assert "Bot 170" not in result["result"].direct_answer
 
 
 def test_reasoning_prefers_active_plan_fallback_over_generic_bot_read(monkeypatch):

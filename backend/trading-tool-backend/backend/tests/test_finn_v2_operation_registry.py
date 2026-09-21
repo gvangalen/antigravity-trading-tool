@@ -130,6 +130,29 @@ def test_evaluate_strategy_requires_only_the_persisted_strategy_graph():
     )
 
 
+def test_evaluate_indicator_configuration_collects_live_indicator_evidence():
+    contract = FinnV2OperationRegistry().require_supported("evaluate_indicator_configuration")
+
+    assert contract.tool_names == (
+        "read_active_asset",
+        "read_indicator_configuration",
+        "read_market_snapshot",
+        "read_macro_snapshot",
+        "read_technical_snapshot",
+    )
+
+
+def test_evaluate_plan_collects_scores_and_live_market_evidence():
+    contract = FinnV2OperationRegistry().require_supported("evaluate_plan")
+
+    assert {
+        "read_asset_scores",
+        "read_market_snapshot",
+        "read_macro_snapshot",
+        "read_technical_snapshot",
+    }.issubset(contract.tool_names)
+
+
 def test_create_dca_setup_exposes_its_service_required_frequency_in_the_same_contract():
     contract = FinnV2OperationRegistry().require_supported("create_setup")
 
@@ -138,8 +161,29 @@ def test_create_dca_setup_exposes_its_service_required_frequency_in_the_same_con
         "setup_type", "timeframe", "name", "symbol", "dca_frequency",
     )
     assert "dca_frequency" in contract.input_fields
+    assert "min_investment" in contract.optional_inputs
     assert contract.required_inputs_for({"setup_type": "dca", "dca_frequency": "weekly"})[-1] == "dca_day"
     assert contract.required_inputs_for({"setup_type": "dca", "dca_frequency": "monthly"})[-1] == "dca_month_day"
+
+
+def test_create_dca_setup_preserves_explicit_periodic_investment_amount():
+    contract = FinnV2OperationRegistry().require_supported("create_setup")
+    service = FinnV2OperationStateService()
+
+    for message in (
+        "Ik wil iedere week €150 in BTC DCA'en.",
+        "I want to invest 150 euros in BTC every week.",
+        "Ich moechte jede Woche 150 Euro in BTC investieren.",
+    ):
+        supplied = service.explicit_inputs(
+            contract=contract,
+            message=message,
+            explicit_asset="BTC",
+        )
+        assert supplied["setup_type"] == "dca"
+        assert supplied["dca_frequency"] == "weekly"
+        assert supplied["min_investment"] == 150.0
+        assert "timeframe" not in supplied
 
 
 def test_create_dca_setup_binds_weekday_before_proposal_execution():
@@ -192,6 +236,7 @@ def test_create_dca_setup_extracts_compound_weekly_schedule_without_polluting_na
     )
 
     assert supplied["name"] == "FINN DCA Live"
+    assert supplied["timeframe"] == "4H"
     assert supplied["dca_frequency"] == "weekly"
     assert supplied["dca_day"] == "monday"
     assert contract.required_inputs_for(supplied) == (

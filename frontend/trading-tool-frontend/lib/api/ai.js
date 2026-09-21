@@ -66,8 +66,9 @@ export const fetchFinnState = () => {
   });
 };
 
-export const fetchFinnMissionControl = () => {
-  return fetchAuth(`/api/assistant/mission-control`, {
+export const fetchFinnMissionControl = (symbol = null) => {
+  const query = symbol ? `?symbol=${encodeURIComponent(symbol)}` : "";
+  return fetchAuth(`/api/assistant/mission-control${query}`, {
     method: 'GET',
   });
 };

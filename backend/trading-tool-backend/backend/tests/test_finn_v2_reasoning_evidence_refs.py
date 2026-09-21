@@ -103,6 +103,32 @@ def test_integrated_plan_reasoning_accepts_complete_scope_coverage_without_metad
     service._validate_refs(result, context)
 
 
+def test_required_unavailable_scope_is_added_only_to_global_evidence_ledger():
+    service = FinnV2ReasoningService(session=object())
+    context = ReasoningContextPackage(
+        run_id="run-unavailable", user_id=7, user_message="Beoordeel mijn plan", locale="nl-NL",
+        interaction_mode="EVALUATE", orchestrator_result_id="o", snapshot_id="s", validation_id="v",
+        policy_decision_id="p", evidence_set_hash="hash",
+        request_plan={"required_information_scopes": ["technical_snapshot", "market_snapshot"]},
+        evidence=[
+            ReasoningEvidenceItem(evidence_id="Etech", artifact_id="atech", tool_name="read_technical_snapshot", information_scope="technical_snapshot", domain="market_context", entity_type="technical_snapshot", source="internal", freshness="fresh", availability="available", confidence="high", facts={"rsi": 57.4}),
+            ReasoningEvidenceItem(evidence_id="Emarket", artifact_id="amarket", tool_name="read_market_snapshot", information_scope="market_snapshot", domain="market_context", entity_type="market_snapshot", source="internal", freshness="unknown", availability="unavailable", confidence="low", facts={}),
+        ],
+        policy=ReasoningPolicyContext(policy_class="advice", allowed=True, proposal_allowed=False, confirmation_required=False, step_up_required=False, execution_allowed=False),
+    )
+    result = ReasoningResult(
+        reasoning_result_id="r", run_id="run-unavailable", user_id=7, mode="EVALUATE",
+        direct_answer="RSI is beschikbaar; actuele marktdata niet.", main_observation="De marktbron is niet beschikbaar.",
+        evidence_refs_used=["Etech"], model="gpt-test", created_at=datetime.now(timezone.utc),
+    )
+
+    service._include_required_evidence_ledger(result=result, context=context)
+
+    assert result.evidence_refs_used == ["Etech", "Emarket"]
+    assert result.claims == []
+    service._validate_refs(result, context)
+
+
 def test_integrated_plan_reasoning_still_requires_scope_coverage_from_model_refs():
     service = FinnV2ReasoningService(session=object())
     context = ReasoningContextPackage(

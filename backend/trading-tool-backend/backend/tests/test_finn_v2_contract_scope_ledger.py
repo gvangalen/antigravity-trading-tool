@@ -72,6 +72,8 @@ def test_evaluate_plan_contract_binds_every_required_scope_once():
 
     assert set(bindings) == set(contract.required_scopes)
     assert len(bindings) == len(contract.required_scopes)
+    assert bindings["macro_snapshot"] == "read_macro_snapshot"
+    assert bindings["technical_snapshot"] == "read_technical_snapshot"
 
 
 def test_contract_coverage_uses_all_valid_persisted_artifacts_not_only_draft_references():

@@ -509,7 +509,8 @@ def test_request_analysis_routes_complete_asset_plan_to_full_plan_contract():
     assert result.interaction_mode == "EVALUATE"
     assert result.request_plan.required_information_scopes == [
         "profile", "preferences", "active_asset", "indicator_configuration",
-        "active_setup", "linked_strategy", "linked_bot", "bot_status",
+        "market_snapshot", "macro_snapshot", "technical_snapshot",
+        "active_setup", "linked_strategy", "linked_bot", "bot_status", "scores",
     ]
 
 
@@ -723,6 +724,19 @@ def test_natural_indicator_create_requests_keep_complete_contract_inputs(message
     assert analysis.request_plan.operation_id == "create_indicator_configuration"
     assert analysis.interaction_mode == "CREATE_PROPOSAL"
     assert analysis.request_plan.operation_state["collected_inputs"] == expected_inputs
+    assert analysis.request_plan.operation_state["missing_required_inputs"] == []
+
+
+def test_dutch_price_delete_resolves_the_complete_market_indicator_contract():
+    analysis = SERVICE.analyze(message="Verwijder Prijs als marktindicator voor MSFT.")
+
+    assert analysis.request_plan.operation_id == "delete_indicator_configuration"
+    assert analysis.interaction_mode == "CREATE_PROPOSAL"
+    assert analysis.request_plan.operation_state["collected_inputs"] == {
+        "asset": "MSFT",
+        "category": "market",
+        "indicator": "price",
+    }
     assert analysis.request_plan.operation_state["missing_required_inputs"] == []
 
 

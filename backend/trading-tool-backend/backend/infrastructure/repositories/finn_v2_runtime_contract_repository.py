@@ -240,6 +240,7 @@ class FinnV2RuntimeContractRepository(FinnV2RepositoryTransactionMixin):
             "referenced_asset": state.get("original_target_text"),
             "conversation_reference": state.get("conversation_reference"),
             "conversation_reference_kind": state.get("conversation_reference_kind"),
+            "lineage_state": dict(state.get("lineage_state") or {}),
             "selector_provenance": dict(state.get("selector_provenance") or {}),
             "action_contract": dict(state.get("action_contract") or {}),
             "guided_state": dict(state.get("guided_state") or {}),

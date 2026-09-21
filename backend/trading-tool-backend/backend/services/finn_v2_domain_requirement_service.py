@@ -20,6 +20,7 @@ class FinnV2DomainRequirementService:
     _SCOPE_DOMAINS = {
         "profile": "identity_context", "preferences": "identity_context", "active_asset": "identity_context",
         "watchlist": "identity_context", "indicator_configuration": "market_context", "scores": "market_context", "market_snapshot": "market_context",
+        "macro_snapshot": "market_context", "technical_snapshot": "market_context",
         "active_setup": "plan_context", "linked_strategy": "plan_context", "linked_bot": "automation_context",
         "bot_status": "automation_context", "latest_report": "report_context", "review_history": "review_context",
     }

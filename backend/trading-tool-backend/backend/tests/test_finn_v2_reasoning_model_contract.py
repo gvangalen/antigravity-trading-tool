@@ -457,6 +457,9 @@ def test_configuration_causality_rejects_localized_stale_status_effects():
             "user_id": 7,
             "model": "gpt-4o-mini",
             "created_at": datetime.now(timezone.utc),
+            "supporting_points": [
+                {"title": "RSI", "explanation": "RSI staat op 57,4.", "evidence_refs": ["E1"]}
+            ],
         }
     )
     result_payload["direct_answer"] = "De verouderde botstatus voegt onzekerheid toe aan de strategie."
@@ -664,11 +667,12 @@ def test_model_repairs_unsupported_populated_strategy_field_absence(monkeypatch)
     assert result["status"] == "ready"
     assert persisted["result"].reasoning_provenance["reasoning_source"] == "model_repair"
     assert "unsupported_stored_field_absence" in prompts[1]
-    assert "stop loss" in prompts[1]
+    assert "stop_loss" in prompts[1]
     assert '"stop_loss":"92"' in prompts[1]
     assert '"targets":["112","125"]' in prompts[1]
     assert "Rejected response shape" in prompts[1]
-    assert "targets ontbreken" in prompts[1]
+    assert "targets ontbreken" not in prompts[1]
+    assert "[REJECTED: see primary reasoning trace]" in prompts[1]
 
 
 def test_model_repairs_unsupported_indicator_configuration_inference(monkeypatch):
@@ -825,6 +829,9 @@ def test_configuration_causality_rejects_non_bot_configuration_claims():
             "reasoning_version": "test",
             "model": "gpt-4o-mini",
             "created_at": datetime.now(timezone.utc),
+            "supporting_points": [
+                {"title": "RSI", "explanation": "RSI staat op 57,4.", "evidence_refs": ["E1"]}
+            ],
             "claims": [
                 {
                     "claim_id": "C1",
@@ -844,6 +851,161 @@ def test_configuration_causality_rejects_non_bot_configuration_claims():
     assert details["rejected_fields"] == [{"path": "claims[0]", "claim_id": "C1"}]
     assert details["configuration_facts"][0]["field"] == "setup_type"
     assert details["forbidden_claim_relationships"] == ["configuration_or_status_implies_causality"]
+
+
+def test_configuration_causality_allows_plan_risk_and_timeframe_as_parallel_facts():
+    service = FinnV2ReasoningService(session=object())
+    context_payload = _context().dict()
+    context_payload["evidence"][0]["facts"] = {"setup_type": "trade", "timeframe": "4H"}
+    context = ReasoningContextPackage.parse_obj(context_payload)
+    result = ReasoningResult.parse_obj(
+        {
+            **_model_output(),
+            "reasoning_result_id": "reasoning-parallel-facts",
+            "run_id": "run-1",
+            "user_id": 7,
+            "model": "gpt-4o-mini",
+            "created_at": datetime.now(timezone.utc),
+            "main_observation": "Je 4H-plan gebruikt een gebalanceerd risicoprofiel; RSI staat op 57,4.",
+        }
+    )
+
+    service._validate_configuration_causality(result=result, context=context)
+
+
+def test_bounded_repair_removes_only_rejected_optional_items():
+    result = ReasoningResult.parse_obj(
+        {
+            **_model_output(),
+            "reasoning_result_id": "reasoning-bounded-repair",
+            "run_id": "run-1",
+            "user_id": 7,
+            "model": "gpt-4o-mini",
+            "created_at": datetime.now(timezone.utc),
+            "supporting_points": [
+                {"title": "RSI", "explanation": "RSI staat op 57,4.", "evidence_refs": ["E1"]}
+            ],
+        }
+    )
+    original_answer = result.direct_answer
+
+    repaired = FinnV2ReasoningService._remove_rejected_optional_items(
+        result=result,
+        rejected_fields=[{"path": "supporting_points[0]", "claim_id": None}],
+    )
+
+    assert repaired is not None
+    assert repaired.direct_answer == original_answer
+    assert repaired.supporting_points == []
+    assert result.supporting_points != []
+    observation_repair = FinnV2ReasoningService._remove_rejected_optional_items(
+        result=result,
+        rejected_fields=[{"path": "main_observation", "claim_id": None}],
+    )
+    assert observation_repair is not None
+    assert observation_repair.direct_answer == original_answer
+    assert "begrensd tot de genoemde evidence" in observation_repair.main_observation
+    assert result.main_observation != observation_repair.main_observation
+
+    next_step_repair = FinnV2ReasoningService._remove_rejected_optional_items(
+        result=result,
+        rejected_fields=[{"path": "next_step", "claim_id": None}],
+    )
+    assert next_step_repair is not None
+    assert next_step_repair.direct_answer == original_answer
+    assert next_step_repair.next_step is None
+
+
+def test_bounded_repair_handles_multiple_independently_rejected_optional_fields(monkeypatch):
+    service = FinnV2ReasoningService(session=object())
+    result = ReasoningResult.parse_obj(
+        {
+            **_model_output(),
+            "reasoning_result_id": "reasoning-multiple-bounded-repairs",
+            "run_id": "run-1",
+            "user_id": 7,
+            "model": "gpt-4o-mini",
+            "created_at": datetime.now(timezone.utc),
+            "supporting_points": [
+                {"title": "Configuratie", "explanation": "Onveilige gevolgtrekking.", "evidence_refs": ["E1"]}
+            ],
+                "next_step": {
+                    "title": "Onveilig advies",
+                    "instruction": "Koop zonder onderbouwing.",
+                },
+        }
+    )
+    validations = iter(
+        [
+            FinnV2ReasoningContractError(
+                code="unsupported_market_causality",
+                missing_scopes=[],
+                grounding_values={"rejected_fields": [{"path": "next_step", "claim_id": None}]},
+            ),
+            None,
+        ]
+    )
+
+    def validate(candidate, _context):
+        outcome = next(validations)
+        if outcome is not None:
+            raise outcome
+
+    monkeypatch.setattr(service, "_validate_refs", validate)
+    first_error = FinnV2ReasoningContractError(
+        code="unsupported_indicator_configuration_inference",
+        missing_scopes=[],
+        grounding_values={"rejected_fields": [{"path": "supporting_points[0]", "claim_id": None}]},
+    )
+
+    repaired = service._apply_bounded_semantic_repairs(
+        result=result,
+        context=_context(),
+        error=first_error,
+    )
+
+    assert repaired is not None
+    assert repaired.supporting_points == []
+    assert repaired.next_step is None
+    assert repaired.direct_answer == result.direct_answer
+
+
+def test_bounded_repair_replaces_rejected_answer_with_surviving_grounded_claim(monkeypatch):
+    service = FinnV2ReasoningService(session=object())
+    result = ReasoningResult.parse_obj(
+        {
+            **_model_output(),
+            "reasoning_result_id": "reasoning-answer-repair",
+            "run_id": "run-1",
+            "user_id": 7,
+            "model": "gpt-4o-mini",
+            "created_at": datetime.now(timezone.utc),
+            "direct_answer": "Niet onderbouwde marktcausaliteit.",
+            "claims": [
+                {
+                    "claim_id": "C-safe",
+                    "claim_type": "fact",
+                    "text": "RSI staat op 57,4.",
+                    "evidence_refs": ["E1"],
+                    "confidence": "high",
+                }
+            ],
+        }
+    )
+    monkeypatch.setattr(service, "_validate_refs", lambda _result, _context: None)
+
+    repaired = service._apply_bounded_semantic_repairs(
+        result=result,
+        context=_context(),
+        error=FinnV2ReasoningContractError(
+            code="unsupported_market_causality",
+            missing_scopes=["market_measurement"],
+            grounding_values={"rejected_fields": [{"path": "direct_answer", "claim_id": None}]},
+        ),
+    )
+
+    assert repaired is not None
+    assert repaired.direct_answer == "RSI staat op 57,4."
 
 
 def test_indicator_inference_rejects_effectiveness_claim_from_empty_configuration():
@@ -989,18 +1151,16 @@ def test_repeated_configuration_causality_ends_with_evidence_limitation_after_on
     reasoning = persisted["result"]
     assert reasoning.mode == "EVALUATE"
     assert reasoning.reasoning_provenance["repair_status"] == "failed"
-    assert reasoning.reasoning_provenance["reasoning_source"] == "contract_evidence_limitation"
-    assert reasoning.reasoning_provenance["validation_status"] == "evidence_limited"
+    assert reasoning.reasoning_provenance["reasoning_source"] == "model_with_bounded_repair"
+    assert reasoning.reasoning_provenance["validation_status"] == "deterministically_repaired"
     assert "handmatige mode" not in reasoning.direct_answer.lower()
     assert "handmatige mode" not in reasoning.main_observation.lower()
-    assert reasoning.evidence_refs_used == ["E1", "E2"]
-    assert reasoning.reasoning_provenance["fallback_reason"] == "evidence_limitation_after_repair"
-    assert reasoning.reasoning_provenance["repair_contract"]["terminalization_reason"] == "schema_invalid"
+    assert reasoning.evidence_refs_used == ["E1"]
+    assert reasoning.reasoning_provenance["fallback_reason"] == "rejected_optional_item_removed"
     # The complete evidence ledger remains on the response, but no generic
     # prose claim is synthesized from structured facts. Such a claim cannot
     # be deterministically entailed for every fact shape.
     assert reasoning.claims == []
-    assert reasoning.next_step is not None
 
 
 def test_model_repairs_unsupported_market_causality(monkeypatch):
@@ -1057,6 +1217,24 @@ def test_model_repairs_unsupported_market_causality(monkeypatch):
     assert result["status"] == "ready"
     assert persisted["result"].reasoning_provenance["reasoning_source"] == "model_repair"
     assert "unsupported_market_causality" in prompts[1]
+
+
+def test_market_causality_allows_explicit_missing_measurement_limitation():
+    service = FinnV2ReasoningService(session=object())
+    context = _context()
+    result = ReasoningResult.parse_obj(
+        {
+            **_model_output(),
+            "reasoning_result_id": "reasoning-market-limitation",
+            "run_id": "run-1",
+            "user_id": 7,
+            "model": "gpt-4o-mini",
+            "created_at": datetime.now(timezone.utc),
+            "main_observation": "Zonder actuele prijs- of volatiliteitsmeting kunnen de huidige marktomstandigheden niet worden beoordeeld.",
+        }
+    )
+
+    service._validate_market_causality(result=result, context=context)
 
 
 def test_model_call_commits_state_before_waiting_for_provider(monkeypatch):

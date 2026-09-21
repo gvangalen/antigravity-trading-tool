@@ -162,6 +162,25 @@ class FinnV2OperationClassificationService:
                 (contract,),
                 conversation_context=conversation_context,
             )
+        if (
+            facts.discourse_act == "evaluation"
+            and facts.primary_entity == "plan"
+            and facts.explicit_plan_subject
+        ):
+            # The multilingual preprocessor has already produced the complete
+            # typed semantic frame for an explicit plan assessment. Repeating
+            # that same classification through the provider consumes the
+            # reasoning budget without adding ambiguity resolution. The
+            # evaluation itself still uses the real reasoning provider.
+            contract = self.registry.require_supported("evaluate_plan")
+            return self._result(
+                contract.operation_id,
+                facts,
+                "high",
+                "registry_evaluation_constraint",
+                (contract,),
+                conversation_context=conversation_context,
+            )
         deterministic_read_operation = self._deterministic_graph_read_operation(facts)
         if deterministic_read_operation:
             # These registry reads are fully identified by typed request facts
@@ -912,6 +931,7 @@ class FinnV2OperationClassificationValidator:
             "guided_state",
             "registry_constraint",
             "registry_capability_constraint",
+            "registry_evaluation_constraint",
             "registry_read_constraint",
             "registry_mutation_constraint",
             "workspace_setup_contract",

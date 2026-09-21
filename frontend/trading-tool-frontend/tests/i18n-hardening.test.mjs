@@ -78,6 +78,19 @@ test("auth dictionaries expose locale-specific login and reset copy", () => {
   assert.equal(de.auth.resetPasswordTitle, "Neues Passwort festlegen");
 });
 
+test("Dutch setup editor exposes product copy instead of English backend labels", () => {
+  const form = nl.setups.form;
+
+  assert.equal(form.phaseResponse, "Fasereactie");
+  assert.equal(form.assetSymbolLabel, "Assetsymbool");
+  assert.equal(form.timeframeLabel, "Tijdsframe");
+  assert.equal(form.dcaBlueprintTitle, "DCA-opzet");
+  assert.equal(form.tradeBlueprintTitle, "Trade-opzet");
+  assert.equal(form.technicalTitle, "Technisch");
+  assert.equal(form.marketTitle, "Markt / sentiment");
+  assert.equal(form.saveButton, "Setup opslaan");
+});
+
 test("third locale dictionary can be registered without component changes", () => {
   assert.equal(de.common.language, "Language");
   assert.match(i18nSource, /SUPPORTED_LOCALES = \["nl", "en", "de"\]/);

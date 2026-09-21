@@ -65,6 +65,38 @@ class FinnV2OperationResolverService:
         request_facts: Mapping[str, object] | None = None,
     ) -> FinnV2StructuredOperationSelection:
         frame = getattr(selection, "semantic_frame", None)
+        selected_contract = self.registry.get(selection.operation_id)
+        explicit_entities = {
+            self._normalized(item)
+            for item in (request_facts or {}).get("explicit_entities", ())
+            if isinstance(item, str) and item.strip()
+        }
+        selected_entities = {
+            key: value
+            for key, value in dict(getattr(selection, "entities", {}) or {}).items()
+            if str(value or "").strip()
+        }
+        # A proposal operation must be bound to a concrete typed subject. The
+        # provider may suggest a nearby mutation for a vague improvement
+        # request, but without an object, target, supplied entity, or persisted
+        # lineage there is no contract-safe action to draft. Fail closed via
+        # the registry's clarification contract instead of guessing a write.
+        if (
+            selected_contract.mode in {"CREATE_PROPOSAL", "ACTION_PROPOSAL"}
+            and "primary_entity" in (request_facts or {})
+            and not str((request_facts or {}).get("primary_entity") or "").strip()
+            and not explicit_entities
+            and not str(getattr(selection, "target_asset", None) or "").strip()
+            and not selected_entities
+            and not getattr(selection, "conversation_reference", None)
+            and not self._has_pending_operation(conversation_context)
+            and any(contract.operation_id == "clarify_request" for contract in candidates)
+        ):
+            return self._with_resolved_operation(
+                selection,
+                operation_id="clarify_request",
+                conversation_reference=None,
+            )
         # The preprocessor has already established an explicit aggregate plan
         # diagnosis. A provider frame may express that diagnosis as a read or
         # omit its subject, but neither form is compatible with the registry's
@@ -73,6 +105,7 @@ class FinnV2OperationResolverService:
         if (
             str((request_facts or {}).get("discourse_act") or "") == "evaluation"
             and str((request_facts or {}).get("primary_entity") or "") == "plan"
+            and bool((request_facts or {}).get("explicit_plan_subject"))
             and any(contract.operation_id == "evaluate_plan" for contract in candidates)
         ):
             return self._with_resolved_operation(
@@ -86,11 +119,6 @@ class FinnV2OperationResolverService:
         # for an unbound deictic follow-up, which must still clarify instead
         # of becoming an off-topic terminal response.
         if not isinstance(frame, Mapping) or not frame:
-            explicit_entities = {
-                self._normalized(item)
-                for item in (request_facts or {}).get("explicit_entities", ())
-                if isinstance(item, str)
-            }
             if selection.operation_id.startswith("read_") and (
                 bool((request_facts or {}).get("explicit_plan_subject"))
                 or {"strategy", "bot"}.issubset(explicit_entities)
@@ -113,6 +141,7 @@ class FinnV2OperationResolverService:
             if (
                 str((request_facts or {}).get("discourse_act") or "") == "evaluation"
                 and str((request_facts or {}).get("primary_entity") or "") == "plan"
+                and bool((request_facts or {}).get("explicit_plan_subject"))
                 and any(contract.operation_id == "evaluate_plan" for contract in candidates)
             ):
                 return self._with_resolved_operation(

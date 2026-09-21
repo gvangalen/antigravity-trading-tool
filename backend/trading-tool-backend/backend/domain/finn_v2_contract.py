@@ -149,6 +149,8 @@ class InformationScope(str, Enum):
     ACTIVE_ASSET = "active_asset"
     INDICATOR_CONFIGURATION = "indicator_configuration"
     MARKET_SNAPSHOT = "market_snapshot"
+    MACRO_SNAPSHOT = "macro_snapshot"
+    TECHNICAL_SNAPSHOT = "technical_snapshot"
     WATCHLIST = "watchlist"
     ACTIVE_SETUP = "active_setup"
     LINKED_STRATEGY = "linked_strategy"
@@ -174,6 +176,8 @@ INFORMATION_SCOPE_ALIASES: Mapping[str, str] = {
     "bot": InformationScope.LINKED_BOT.value,
     "linked_bot": InformationScope.LINKED_BOT.value,
     "analysis": InformationScope.MARKET_SNAPSHOT.value,
+    "macro_snapshot": InformationScope.MACRO_SNAPSHOT.value,
+    "technical_snapshot": InformationScope.TECHNICAL_SNAPSHOT.value,
     "user_preferences": InformationScope.PREFERENCES.value,
     "trading_preferences": InformationScope.PREFERENCES.value,
     "assistant_preferences": InformationScope.PREFERENCES.value,
@@ -187,8 +191,8 @@ TOOL_OUTPUT_SCOPES: Mapping[str, InformationScope] = {
     "read_indicator_configuration": InformationScope.INDICATOR_CONFIGURATION,
     "read_asset_scores": InformationScope.SCORES,
     "read_market_snapshot": InformationScope.MARKET_SNAPSHOT,
-    "read_macro_snapshot": InformationScope.MARKET_SNAPSHOT,
-    "read_technical_snapshot": InformationScope.MARKET_SNAPSHOT,
+    "read_macro_snapshot": InformationScope.MACRO_SNAPSHOT,
+    "read_technical_snapshot": InformationScope.TECHNICAL_SNAPSHOT,
     "read_active_setup": InformationScope.ACTIVE_SETUP,
     "read_linked_strategy": InformationScope.LINKED_STRATEGY,
     "read_linked_bot": InformationScope.LINKED_BOT,
@@ -204,6 +208,8 @@ PRIMARY_TOOL_BY_INFORMATION_SCOPE: Mapping[InformationScope, str] = {
     InformationScope.ACTIVE_ASSET: "read_active_asset",
     InformationScope.INDICATOR_CONFIGURATION: "read_indicator_configuration",
     InformationScope.MARKET_SNAPSHOT: "read_market_snapshot",
+    InformationScope.MACRO_SNAPSHOT: "read_macro_snapshot",
+    InformationScope.TECHNICAL_SNAPSHOT: "read_technical_snapshot",
     InformationScope.WATCHLIST: "read_watchlist",
     InformationScope.ACTIVE_SETUP: "read_active_setup",
     InformationScope.LINKED_STRATEGY: "read_linked_strategy",

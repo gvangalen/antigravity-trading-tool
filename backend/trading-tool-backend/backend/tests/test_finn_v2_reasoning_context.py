@@ -466,3 +466,111 @@ def test_reasoning_context_keeps_indicator_configuration_domains_and_counts():
         {"indicator": "forward_pe", "category": "market", "enabled": True, "priority": 2},
         {"indicator": "federal_funds_rate", "category": "macro", "enabled": True, "priority": 3},
     ]
+
+
+def test_reasoning_context_hydrates_released_degraded_lineage_and_prior_evidence():
+    service = FinnV2ReasoningContextService(session=object())
+    service.runtime_contracts.get_for_run = lambda **_kwargs: asyncio.sleep(
+        0,
+        result=SimpleNamespace(
+            state_json={
+                "conversation_reference_kind": "previous_released_response",
+                "lineage_state": {
+                    "last_degraded_context": {
+                        "run_id": "run-prior",
+                        "operation_id": "evaluate_plan",
+                        "evidence_refs": ["E1"],
+                        "evidence_scopes": ["active_setup"],
+                        "resolved_entities": {"asset": "BTC"},
+                        "released_response": {
+                            "direct_answer": "De eerdere beoordeling bleef begrensd.",
+                            "uncertainty_summary": "Actuele marktdata ontbrak.",
+                        },
+                        "released_response_sections": [
+                            {"kind": "evidence_availability", "text": "Setupdata was beschikbaar."}
+                        ],
+                    }
+                },
+            }
+        ),
+    )
+
+    async def evidence_for_run(*, run_id, user_id):
+        if run_id != "run-prior":
+            return []
+        return [
+            SimpleNamespace(
+                id="artifact-prior",
+                run_id="run-prior",
+                user_id=user_id,
+                tool_name="read_active_setup",
+                information_scope="active_setup",
+                entity_type="setup",
+                entity_id="41",
+                asset="BTC",
+                source="canonical",
+                source_as_of=None,
+                freshness="fresh",
+                availability="available",
+                payload_json={"name": "BTC DCA"},
+            )
+        ]
+
+    service.evidence_repo.list_for_run = evidence_for_run
+    run = SimpleNamespace(
+        id="run-current", user_id=7, message="Waarom?", locale="nl",
+        client_context_json={}, workspace_hints_json={},
+    )
+    orchestrator = OrchestratorResult(
+        orchestrator_result_id="orchestrator-current",
+        run_id=run.id,
+        user_id=run.user_id,
+        analysis=RequestAnalysisResult(
+            interaction_mode="EVALUATE",
+            subject_scopes=["setup"],
+            confidence="high",
+            reasoning_required=True,
+            request_plan=RequestPlan(
+                interaction_mode="EVALUATE",
+                operation_id="explain_previous_evidence",
+                conversation_reference="run-prior",
+                conversation_reference_kind="previous_released_response",
+                referenced_entities={"asset": "BTC"},
+                operation_state={},
+            ),
+        ),
+        domain_requirements=DomainRequirementPlan(required_domains=[], optional_domains=[], requirement_reason=[]),
+        tool_plan=ToolPlan(run_id=run.id, interaction_mode="EVALUATE", max_tool_calls=15),
+        snapshot_id="snapshot-current",
+        validation_id="validation-current",
+        outcome="reasoning_ready",
+        created_at=datetime.now(timezone.utc),
+    )
+    snapshot = FinancialStateSnapshot(
+        snapshot_id="snapshot-current", run_id=run.id, user_id=run.user_id,
+        revision=1, evidence_set_hash="hash-current", assembled_at=datetime.now(timezone.utc),
+    )
+    validation = EvidenceValidationResult(
+        validation_id="validation-current", snapshot_id=snapshot.snapshot_id,
+        run_id=run.id, user_id=run.user_id, evidence_set_hash=snapshot.evidence_set_hash,
+        integrity_status="valid", domains=[], issues=[], validated_at=datetime.now(timezone.utc),
+    )
+    policy = FinnV2PolicyDecision(
+        policy_decision_id="policy-current", run_id=run.id, user_id=run.user_id,
+        policy_class="read", allowed=True, proposal_allowed=False, confirmation_required=False,
+        step_up_required=False, execution_allowed=False, shadow_safe=True,
+        created_at=datetime.now(timezone.utc),
+    )
+
+    context = asyncio.run(
+        service.build(
+            run=run, orchestrator_result=orchestrator, snapshot=snapshot,
+            validation=validation, policy=policy,
+        )
+    )
+
+    state = context.request_plan["operation_state"]
+    assert state["previous_degraded_run_id"] == "run-prior"
+    assert state["previous_degraded_released_response"]["direct_answer"].startswith("De eerdere")
+    assert state["previous_degraded_evidence_scopes"] == ["active_setup"]
+    assert context.evidence[0].facts["name"] == "BTC DCA"

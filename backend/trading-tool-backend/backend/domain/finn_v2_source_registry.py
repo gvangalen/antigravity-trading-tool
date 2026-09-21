@@ -116,6 +116,8 @@ _SOURCES: tuple[InformationSource, ...] = (
     InformationSource("onboarding_status", "onboarding_steps", "OnboardingRepository", SourceClassification.DERIVED_VIEW, cache_namespace="onboarding_status:v1"),
     InformationSource("conversation_operation_state", "finn_v2_conversations.context_json", "FinnV2ConversationRepository", SourceClassification.CANONICAL_PRODUCT_STATE, cache_namespace="conversation_operation_state:v1"),
     InformationSource("market_snapshot", "market_data", "MarketDataRepository", SourceClassification.DERIVED_VIEW, required_asset_fields=("symbol",), cache_namespace="market_snapshot:v1"),
+    InformationSource("macro_snapshot", "macro_data", "MacroDataRepository", SourceClassification.DERIVED_VIEW, required_asset_fields=("symbol",), cache_namespace="macro_snapshot:v1"),
+    InformationSource("technical_snapshot", "technical_data", "TechnicalDataRepository", SourceClassification.DERIVED_VIEW, required_asset_fields=("symbol",), cache_namespace="technical_snapshot:v1"),
 )
 
 

@@ -18,6 +18,10 @@ def test_tool_plan_uses_canonical_order_and_explicit_selector():
         "read_user_preferences",
         "read_active_asset",
         "read_indicator_configuration",
+        "read_asset_scores",
+        "read_market_snapshot",
+        "read_macro_snapshot",
+        "read_technical_snapshot",
         "read_active_setup",
         "read_linked_strategy",
         "read_linked_bot",
@@ -29,10 +33,14 @@ def test_tool_plan_uses_canonical_order_and_explicit_selector():
         "preferences",
         "active_asset",
         "indicator_configuration",
+        "market_snapshot",
+        "macro_snapshot",
+        "technical_snapshot",
         "active_setup",
         "linked_strategy",
         "linked_bot",
         "bot_status",
+        "scores",
     ]
     assert plan.read_only is True
 

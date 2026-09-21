@@ -797,6 +797,7 @@ def test_resolve_first_dashboard_briefing_keeps_last_good_copy_when_context_vers
     stored = {
         "status": "ready",
         "context_version": "ctx-v1",
+        "asset": "BTC",
         "result": {
             "assessment": "Forceer nog geen BTC-entry.",
             "reasoning": "De vorige bewezen beoordeling blijft zichtbaar terwijl FINN bijwerkt.",
@@ -811,6 +812,34 @@ def test_resolve_first_dashboard_briefing_keeps_last_good_copy_when_context_vers
     assert display["response_source"] == "stale_while_revalidate"
     assert display["generation_status"] == "stale_while_revalidate"
     assert display["briefing"]["assessment"] == "Forceer nog geen BTC-entry."
+
+
+def test_resolve_first_dashboard_briefing_never_reuses_copy_from_another_asset():
+    service = _service()
+    payload = {
+        **_first_dashboard_payload("ctx-aapl"),
+        "asset": "AAPL",
+        "input_snapshot": {"asset": "AAPL", "presentation_contract": "finn_today.coach_briefing.v1"},
+        "fallback_result": {
+            **_first_dashboard_payload("ctx-aapl")["fallback_result"],
+            "assessment": "Forceer nog geen AAPL-entry.",
+        },
+    }
+    stored = {
+        "status": "ready",
+        "context_version": "ctx-btc",
+        "asset": "BTC",
+        "result": _first_dashboard_payload("ctx-btc")["fallback_result"],
+    }
+
+    display = service._resolve_first_dashboard_briefing_display(payload, stored)
+
+    assert display["briefing"]["assessment"] == "Forceer nog geen AAPL-entry."
+    assert "BTC" not in display["briefing"]["assessment"]
+    assert display["response_source"] in {
+        "deterministic_fallback",
+        "deterministic_fallback_while_generating",
+    }
 
 
 def test_resolve_first_dashboard_briefing_uses_current_fallback_while_generating():
@@ -961,17 +990,28 @@ def test_prepare_first_dashboard_payload_survives_indicator_and_bot_lookup_failu
                         "data_readiness": {"status": "ready", "message": "fresh"},
                         "has_scores": True,
                         "blockers": [],
-                    }
+                    },
+                    {
+                        "asset": "AAPL",
+                        "setup": {"name": "AAPL Setup", "timeframe": "1d"},
+                        "active_strategy": {"strategy": {"id": 12, "name": "AAPL Strategy"}},
+                        "data_readiness": {"status": "ready", "message": "fresh"},
+                        "has_scores": True,
+                        "blockers": [],
+                    },
                 ]
             },
             mission={"bot_review_queue": []},
             activity_feed=[],
             day_log={"handled_count": 0, "skipped_count": 0, "snoozed_count": 0},
+            preferred_asset="AAPL",
         )
     )
 
     assert payload is not None
-    assert payload["asset"] == "BTC"
+    assert payload["asset"] == "AAPL"
+    assert payload["setup"]["name"] == "AAPL Setup"
+    assert payload["strategy"]["name"] == "AAPL Strategy"
     assert payload["bot"] is None
     assert payload["indicators"] == {"market": [], "macro": [], "technical": []}
     assert "entry" in payload["fallback_result"]["assessment"].lower()

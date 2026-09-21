@@ -8,6 +8,7 @@ from typing import Any, Dict, Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.infrastructure.repositories.finn_v2_evidence_repository import FinnV2EvidenceRepository
+from backend.infrastructure.repositories.finn_v2_runtime_contract_repository import FinnV2RuntimeContractRepository
 from backend.schemas.finn_v2_orchestrator_schema import OrchestratorResult
 from backend.schemas.finn_v2_policy_schema import FinnV2PolicyDecision
 from backend.schemas.finn_v2_reasoning_context_schema import (
@@ -65,6 +66,7 @@ class FinnV2ReasoningContextService:
     def __init__(self, session: AsyncSession, *, max_evidence_items: int = 30, max_context_bytes: int = 131072):
         self.session = session
         self.evidence_repo = FinnV2EvidenceRepository(session)
+        self.runtime_contracts = FinnV2RuntimeContractRepository(session)
         self.max_evidence_items = max_evidence_items
         self.max_context_bytes = max_context_bytes
 
@@ -79,8 +81,77 @@ class FinnV2ReasoningContextService:
     ) -> ReasoningContextPackage:
         snapshot_model = self._snapshot_model(snapshot)
         validation_model = self._validation_model(validation)
+        request_plan = (orchestrator_result.analysis.request_plan.dict() if orchestrator_result.analysis.request_plan else {})
         artifacts = await self.evidence_repo.list_for_run(run_id=run.id, user_id=run.user_id)
+        allowed_evidence_run_ids = {run.id}
+        previous_run_id = ""
+        if request_plan.get("operation_id") in {
+            "explain_previous_evidence",
+            "reformulate_previous_response",
+        }:
+            runtime_contract = await self.runtime_contracts.get_for_run(run_id=run.id)
+            runtime_state = dict(getattr(runtime_contract, "state_json", None) or {})
+            lineage_state = dict(runtime_state.get("lineage_state") or {})
+            reference_kind = str(
+                request_plan.get("conversation_reference_kind")
+                or runtime_state.get("conversation_reference_kind")
+                or ""
+            )
+            degraded = dict(lineage_state.get("last_degraded_context") or {})
+            verified = dict(lineage_state.get("last_verified_context") or {})
+            released = dict(lineage_state.get("last_released_context") or {})
+            if reference_kind == "previous_released_response" and degraded:
+                source_key = "last_degraded_context"
+                lineage = degraded
+            elif reference_kind == "previous_released_response":
+                source_key = "last_released_context"
+                lineage = released
+            else:
+                source_key = "last_verified_context"
+                lineage = verified
+            previous_run_id = str(lineage.get("run_id") or "").strip()
+            if previous_run_id:
+                prior_artifacts = await self.evidence_repo.list_for_run(
+                    run_id=previous_run_id,
+                    user_id=run.user_id,
+                )
+                artifacts = prior_artifacts or artifacts
+                allowed_evidence_run_ids.add(previous_run_id)
+                operation_state = dict(request_plan.get("operation_state") or {})
+                if source_key == "last_degraded_context":
+                    operation_state.update(
+                        {
+                            "previous_degraded_run_id": previous_run_id,
+                            "previous_degraded_operation_id": lineage.get("operation_id"),
+                            "previous_degraded_released_response": dict(lineage.get("released_response") or {}),
+                            "previous_degraded_released_sections": list(lineage.get("released_response_sections") or []),
+                            "previous_degraded_evidence_scopes": list(lineage.get("evidence_scopes") or []),
+                            "previous_evidence_refs": list(lineage.get("evidence_refs") or []),
+                            "resolved_entities": dict(lineage.get("resolved_entities") or {}),
+                        }
+                    )
+                else:
+                    prefix = "previous_released" if source_key == "last_released_context" else "previous_verified"
+                    operation_state.update(
+                        {
+                            f"{prefix}_run_id": previous_run_id,
+                            f"{prefix}_operation_id": lineage.get("operation_id"),
+                            f"{prefix}_conclusion": lineage.get("conclusion"),
+                            f"{prefix}_response": lineage.get("response"),
+                            "previous_evidence_refs": list(lineage.get("evidence_refs") or []),
+                            "resolved_entities": dict(lineage.get("resolved_entities") or {}),
+                        }
+                    )
+                if source_key == "last_verified_context":
+                    operation_state["previous_verified_response_id"] = lineage.get("verified_response_id")
+                request_plan["operation_state"] = operation_state
         selected_domains = set(orchestrator_result.domain_requirements.required_domains + orchestrator_result.domain_requirements.optional_domains)
+        if previous_run_id:
+            selected_domains.update(
+                domain
+                for artifact in artifacts
+                if (domain := self.DOMAIN_BY_TOOL.get(artifact.tool_name)) is not None
+            )
         tool_plan = getattr(orchestrator_result, "tool_plan", None)
         for evidence_key in list(getattr(tool_plan, "required_evidence", []) or []) + list(getattr(tool_plan, "optional_evidence", []) or []):
             mapped_domain = self.DOMAIN_BY_REQUIRED_EVIDENCE.get(str(evidence_key))
@@ -88,7 +159,6 @@ class FinnV2ReasoningContextService:
                 selected_domains.add(mapped_domain)
         evidence: list[ReasoningEvidenceItem] = []
         provenance_issues: list[str] = []
-        request_plan = (orchestrator_result.analysis.request_plan.dict() if orchestrator_result.analysis.request_plan else {})
         referenced = request_plan.get("referenced_entities") or {}
         expected_asset = self._expected_asset(referenced)
         index = 1
@@ -100,7 +170,7 @@ class FinnV2ReasoningContextService:
             artifact_run_id = getattr(artifact, "run_id", run.id)
             artifact_owner = getattr(artifact, "user_id", run.user_id)
             if (
-                artifact_run_id != run.id
+                artifact_run_id not in allowed_evidence_run_ids
                 or artifact_owner != run.user_id
                 or (expected_asset and artifact_asset and artifact_asset != expected_asset)
             ):
@@ -119,6 +189,7 @@ class FinnV2ReasoningContextService:
                 source=artifact.source,
                 as_of=artifact.source_as_of,
                 freshness=artifact.freshness,
+                availability=artifact.availability,
                 confidence=self._confidence_for(artifact.availability, artifact.freshness),
                 facts=facts,
             )
@@ -359,7 +430,15 @@ class FinnV2ReasoningContextService:
     def _locale_for(self, run) -> str:
         context = getattr(run, "client_context_json", {}) or {}
         hints = getattr(run, "workspace_hints_json", {}) or {}
-        return str(context.get("locale") or hints.get("locale") or "nl-NL")
+        explicit = context.get("locale") or hints.get("locale")
+        if explicit:
+            return str(explicit)
+        from backend.services.finn_v2_request_preprocessor_service import FinnV2RequestPreprocessorService
+
+        language = FinnV2RequestPreprocessorService._language_from_text(
+            str(getattr(run, "message", "") or "").casefold()
+        )
+        return {"de": "de-DE", "en": "en-US"}.get(language, "nl-NL")
 
     def _snapshot_model(self, snapshot: Any) -> FinancialStateSnapshot:
         if isinstance(snapshot, FinancialStateSnapshot):

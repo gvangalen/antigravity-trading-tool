@@ -41,7 +41,7 @@ def remaining_provider_seconds(*, terminal_reserve_seconds: float) -> float | No
     terminal-persistence reserve, otherwise the lifecycle owner can race its
     safe fallback and publish a generic deadline failure.
     """
-    remaining = remaining_lifecycle_seconds(reserve_seconds=terminal_reserve_seconds)
+    remaining = remaining_lifecycle_seconds()
     if remaining is None:
         return None
     return max(0.0, remaining - max(0.0, terminal_reserve_seconds))

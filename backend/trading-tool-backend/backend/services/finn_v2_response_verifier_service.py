@@ -46,7 +46,7 @@ from backend.schemas.finn_v2_proposal_schema import (
 )
 from backend.schemas.finn_v2_reasoning_context_schema import REASONING_CONTEXT_VERSION
 from backend.schemas.finn_v2_reasoning_schema import PersistedReasoningRecord, ReasoningNextStep, ReasoningResult
-from backend.schemas.finn_v2_response_schema import FINN_V2_VERIFIED_RESPONSE_VERSION, ResponseDraft, VerifiedResponse
+from backend.schemas.finn_v2_response_schema import FINN_V2_VERIFIED_RESPONSE_VERSION, ResponseClaim, ResponseDraft, VerifiedResponse
 from backend.schemas.finn_v2_verifier_schema import ClaimVerification, CoverageVerification, SemanticVerificationResult, VerifierResult
 from backend.services.finn_v2_flag_service import FinnV2FlagService
 from backend.services.finn_v2_lifecycle_budget import remaining_lifecycle_seconds
@@ -425,7 +425,39 @@ class FinnV2ResponseVerifierService:
 
         if verifier.action == "repair_once" and self.repairs.can_repair(reason_codes=verifier.reason_codes, repair_attempt=repair_attempt):
             await self._append_trace(trace_id=trace_id, run_id=run.id, user_id=run.user_id, event_type="response_repair_started", payload={"draft_id": draft.draft_id, "reason_codes": verifier.reason_codes})
-            repaired = self.repairs.repair(draft=draft, reason_codes=verifier.reason_codes, uncertainty_summary=self._default_uncertainty(validation, context))
+            rejected_claim_ids = {
+                claim.claim_id
+                for claim in verifier.claim_results
+                if claim.status in {"unsupported", "contradicted", "unverifiable"}
+            }
+            repaired = self.repairs.repair(
+                draft=draft,
+                reason_codes=verifier.reason_codes,
+                uncertainty_summary=self._default_uncertainty(validation, context),
+                rejected_claim_ids=rejected_claim_ids,
+            )
+            if normalize_interaction_mode(repaired.mode) == "EVALUATE" and not any(
+                claim.claim_type in {"evaluation", "uncertainty"} for claim in repaired.claims
+            ):
+                unavailable_refs = [
+                    item.evidence_id
+                    for item in context.evidence
+                    if getattr(item, "availability", None) == "unavailable"
+                    and getattr(item, "information_scope", None) is not None
+                ]
+                if unavailable_refs:
+                    repaired.claims.append(
+                        ResponseClaim(
+                            claim_id=f"limitation-{uuid.uuid4().hex[:12]}",
+                            claim_type="uncertainty",
+                            text=(
+                                "Actuele markt- of macrodata zijn niet beschikbaar; "
+                                "daarom is niet bewezen dat deze indicator op zichzelf bij het plan past."
+                            ),
+                            evidence_refs=unavailable_refs,
+                            confidence="high",
+                        )
+                    )
             await self._append_trace(trace_id=trace_id, run_id=run.id, user_id=run.user_id, event_type="response_repair_completed", payload={"draft_id": repaired.draft_id})
             return await self._verify_draft(
                 run=run,
@@ -493,16 +525,14 @@ class FinnV2ResponseVerifierService:
                         draft=draft,
                         reason=verifier.reason_codes[0] if verifier.reason_codes else None,
                     )
-                    verifier = await self._verify(
+                    verifier = self._deterministic_verify(
                         run=run,
                         orchestrator_result=orchestrator_result,
                         policy=policy,
                         context=context,
                         validation=validation,
                         draft=draft,
-                        trace_id=trace_id,
                         repair_attempt=repair_attempt + 1,
-                        deterministic_contract_response=deterministic_contract_response,
                     )
                     if verifier.passed:
                         return await self._persist_verified_response(
@@ -667,7 +697,7 @@ class FinnV2ResponseVerifierService:
         if (
             normalize_interaction_mode(draft.mode) == "EVALUATE"
             and provenance.get("provider_called")
-            and provenance.get("validation_status") != "passed"
+            and provenance.get("validation_status") not in {"passed", "deterministically_repaired"}
             and not evidence_limited_contract_outcome
         ):
             reason_codes.append("model_reasoning_contract_failed")
@@ -778,6 +808,14 @@ class FinnV2ResponseVerifierService:
                 allow_legacy=not uses_canonical_scope_contract,
             )
         )
+        if normalize_interaction_mode(draft.mode) == "EVALUATE" and draft.uncertainty_summary:
+            for ref in self._all_refs(draft):
+                evidence = evidence_by_ref.get(ref)
+                if evidence is None or getattr(evidence, "availability", None) != "unavailable":
+                    continue
+                persisted_scope = getattr(evidence, "information_scope", None)
+                if persisted_scope:
+                    covered_scopes.add(normalize_information_scope(persisted_scope))
         covered_domains.update(self._covered_domains_from_draft(draft, evidence_by_ref))
         capability_grounding_ok = self._capability_grounding_ok(draft)
         if draft.mode == "CAPABILITY" and capability_grounding_ok:
@@ -789,7 +827,20 @@ class FinnV2ResponseVerifierService:
             and normalize_interaction_mode(draft.mode) == "CLARIFICATION"
             and bool(dict(self._request_plan_value(request_plan, "operation_state", {}) or {}).get("missing_required_inputs"))
         )
-        if proposal_mode or action_clarification:
+        typed_provider_unavailable = (
+            normalize_interaction_mode(draft.mode) == "UNAVAILABLE"
+            and bool(
+                {"ai_rate_limited", "ai_unavailable_budget", "ai_unavailable_configuration"}
+                & set(draft.uncertainty_codes or [])
+            )
+        )
+        if typed_provider_unavailable:
+            # Provider availability is a typed transport limitation, not an
+            # attempt to answer the requested financial scope. Preserve that
+            # truthful terminal reason instead of replacing it with response
+            # coverage errors for analysis that never ran.
+            satisfied_scopes = set(required_scopes)
+        elif proposal_mode or action_clarification:
             # Action contracts are answered by a typed, confirmable proposal.
             # A missing-input action is instead answered by its typed next-slot
             # clarification. Both paths are checked below for mode, policy and
@@ -834,6 +885,14 @@ class FinnV2ResponseVerifierService:
                 ),
             }
         )
+        if typed_provider_unavailable:
+            coverage = coverage.copy(
+                update={
+                    "covered_response_fields": list(required_response_fields),
+                    "missing_response_fields": [],
+                    "response_coverage_ok": True,
+                }
+            )
         if not coverage.coverage_ok:
             reason_codes.append("response_scope_incomplete")
         if not coverage.response_coverage_ok:
@@ -846,7 +905,7 @@ class FinnV2ResponseVerifierService:
         if not evaluate_plan_content_ok:
             reason_codes.append("evaluate_plan_content_incomplete")
 
-        relevance_ok = self._is_relevant(run.message, draft)
+        relevance_ok = typed_provider_unavailable or self._is_relevant(run.message, draft)
         if proposal_mode and draft.proposal_candidate is not None:
             # Proposal relevance is established by the typed candidate and the
             # proposal/policy checks below, not by prose overlap. This remains
@@ -1324,6 +1383,11 @@ class FinnV2ResponseVerifierService:
 
     def _evaluate_claim_support(self, text: str, evidence: list[Any], claim_type: str) -> tuple[str, list[str], bool]:
         haystack = text.lower()
+        if claim_type == "uncertainty" and self._is_supported_unavailability_limitation(
+            haystack=haystack,
+            evidence=evidence,
+        ):
+            return "supported", [], True
         if claim_type == "evaluation" and self._is_supported_strategy_setup_compatibility(
             haystack=haystack,
             evidence=evidence,
@@ -1364,11 +1428,69 @@ class FinnV2ResponseVerifierService:
                 return "unsupported", ["asset_scope_mismatch"], False
             if "score" in haystack and ("score': 0.0" in fact_blob or '"score": 0.0' in fact_blob) and "0" not in haystack:
                 return "unsupported", ["fabricated_score"], False
-            if any(str(value).lower() in haystack for value in facts.values() if value not in (None, "", [], {})):
+            if any(
+                self._evidence_scalar_matches_text(value=value, text=haystack)
+                for value in self._evidence_scalar_values(facts)
+                if value not in (None, "", True, False)
+            ):
                 return "supported", [], True
         if claim_type == "recommendation":
             return "partially_supported", [], True
         return "unverifiable", ["unsupported_noncritical_claim"], False
+
+    @staticmethod
+    def _evidence_scalar_values(value: Any) -> list[Any]:
+        """Flatten typed evidence without treating container reprs as facts."""
+        if isinstance(value, Mapping):
+            flattened: list[Any] = []
+            for nested in value.values():
+                flattened.extend(FinnV2ResponseVerifierService._evidence_scalar_values(nested))
+            return flattened
+        if isinstance(value, (list, tuple, set)):
+            flattened = []
+            for nested in value:
+                flattened.extend(FinnV2ResponseVerifierService._evidence_scalar_values(nested))
+            return flattened
+        return [value]
+
+    @staticmethod
+    def _evidence_scalar_matches_text(*, value: Any, text: str) -> bool:
+        if isinstance(value, (int, float)) and not isinstance(value, bool):
+            number = float(value)
+            candidates = {str(value), f"{number:g}", f"{number:g}".replace(".", ",")}
+            return any(re.search(rf"(?<!\d){re.escape(candidate)}(?!\d)", text) for candidate in candidates)
+        rendered = str(value).strip().casefold()
+        return len(rendered) >= 2 and rendered in text
+
+    @staticmethod
+    def _is_supported_unavailability_limitation(*, haystack: str, evidence: list[Any]) -> bool:
+        """Ground a limitation only in explicitly unavailable typed evidence."""
+        unavailable = [
+            item
+            for item in evidence
+            if getattr(item, "availability", None) == "unavailable"
+        ]
+        if not unavailable:
+            return False
+        limitation_terms = (
+            "niet beschikbaar",
+            "ontbreekt",
+            "ontbreken",
+            "geen actuele",
+            "niet bewezen",
+            "onvoldoende evidence",
+            "unavailable",
+            "missing",
+            "not available",
+            "not proven",
+            "onzeker",
+            "onzekerheid",
+            "uncertain",
+            "uncertainty",
+            "unsicher",
+            "unsicherheit",
+        )
+        return any(term in haystack for term in limitation_terms)
 
     @staticmethod
     def _is_supported_strategy_setup_compatibility(*, haystack: str, evidence: list[Any]) -> bool:
@@ -1492,7 +1614,7 @@ class FinnV2ResponseVerifierService:
         return None
 
     def _scopes_for_evidence(self, evidence: Any, *, allow_legacy: bool = False) -> set[str]:
-        if getattr(evidence, "availability", "available") not in {"available", "stale"}:
+        if getattr(evidence, "availability", "available") not in {"available", "stale", "unknown"}:
             return set()
         if not (getattr(evidence, "facts", None) or {}):
             return set()

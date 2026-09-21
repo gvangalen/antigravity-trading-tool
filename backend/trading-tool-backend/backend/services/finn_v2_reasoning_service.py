@@ -682,9 +682,14 @@ class FinnV2ReasoningService:
                     await self._append_trace(run_id, user_id, trace_id, "reasoning_retry", context, model_name, "generating", None, attempt + 1, input_hash, [error])
                     increment_execution_safety_counter(f"finn_v2_reasoning_retries_total:{error}")
                     continue
+                provider_unavailable = error in {
+                    "ai_unavailable_budget", "ai_unavailable_configuration", "ai_rate_limited",
+                }
                 fallback_ready_modes = {"READ", "EVALUATE"}
-                fallback_status = "ready" if normalized_mode in fallback_ready_modes else None
-                status = fallback_status or ("unavailable" if error in {"ai_unavailable_budget", "ai_unavailable_configuration", "ai_rate_limited"} else "failed")
+                fallback_status = (
+                    "ready" if normalized_mode in fallback_ready_modes and not provider_unavailable else None
+                )
+                status = fallback_status or ("unavailable" if provider_unavailable else "failed")
                 event = "reasoning_unavailable" if status == "unavailable" else "reasoning_failed"
                 if status == "ready":
                     event = "reasoning_fallback_ready"
@@ -738,6 +743,7 @@ class FinnV2ReasoningService:
                         "created_at": datetime.now(timezone.utc),
                     }
                 )
+                self._include_required_evidence_ledger(result=result, context=context)
                 self._validate_refs(result, context)
             except (ValidationError, FinnV2ReasoningContractError) as exc:
                 error = "schema_invalid"
@@ -797,6 +803,35 @@ class FinnV2ReasoningService:
                     )
                     increment_execution_safety_counter(f"finn_v2_reasoning_retries_total:{error}")
                     continue
+                deterministic_repair = None
+                if isinstance(exc, FinnV2ReasoningContractError):
+                    deterministic_repair = self._apply_bounded_semantic_repairs(
+                        result=result,
+                        context=context,
+                        error=exc,
+                    )
+                if deterministic_repair is not None:
+                    deterministic_repair.reasoning_provenance = self._reasoning_provenance(
+                        response=response,
+                        model=model_name,
+                        attempt=attempt,
+                        validation_status="deterministically_repaired",
+                        validation_errors=repair_validation_errors,
+                        fallback_reason="rejected_optional_item_removed",
+                    )
+                    deterministic_repair.reasoning_provenance["reasoning_source"] = "model_with_bounded_repair"
+                    return await self._persist_record(
+                        run_id=run_id, user_id=user_id,
+                        orchestrator_result_id=orchestrator_result.orchestrator_result_id,
+                        policy_decision_id=policy.policy_decision_id, snapshot_id=snapshot.id,
+                        validation_id=validation.id, status="ready", mode=deterministic_repair.mode,
+                        context_version=context.context_version, evidence_set_hash=context.evidence_set_hash,
+                        input_hash=input_hash, model=model_name, result=deterministic_repair,
+                        error_codes=["rejected_optional_item_removed"], retry_count=attempt,
+                        input_tokens=response.get("input_tokens"), output_tokens=response.get("output_tokens"),
+                        reasoning_tokens=response.get("reasoning_tokens"),
+                        latency_ms=int((monotonic() - started) * 1000),
+                    )
                 await self._append_trace(
                     run_id,
                     user_id,
@@ -1023,6 +1058,31 @@ class FinnV2ReasoningService:
         model_name: str,
         error_codes: list[str],
     ) -> ReasoningResult:
+        provider_unavailable = any(code in {
+            "ai_unavailable_budget", "ai_unavailable_configuration", "ai_rate_limited",
+        } for code in error_codes)
+        if provider_unavailable:
+            result = self.fallbacks.unavailable_draft(
+                run_id=run_id,
+                user_id=user_id,
+                mode="UNAVAILABLE",
+                error_codes=error_codes,
+                model=model_name,
+            )
+            locale = str(getattr(context, "locale", "nl-NL") or "nl-NL").lower()
+            if locale.startswith("de"):
+                result.direct_answer = "Der KI-Dienst ist vorübergehend nicht verfügbar; ich gebe deshalb keine inhaltliche Einschätzung vor."
+                result.main_observation = "Deine gespeicherten Daten wurden nicht verändert."
+                result.uncertainty_summary = "Versuche es später erneut, sobald der KI-Dienst wieder verfügbar ist."
+            elif locale.startswith("en"):
+                result.direct_answer = "The AI service is temporarily unavailable, so I will not pretend to provide an assessment."
+                result.main_observation = "Your stored data were not changed."
+                result.uncertainty_summary = "Try again when the AI service is available."
+            else:
+                result.direct_answer = "De AI-dienst is tijdelijk niet beschikbaar; daarom doe ik geen inhoudelijke beoordeling alsof die wel is uitgevoerd."
+                result.main_observation = "Je opgeslagen gegevens zijn niet gewijzigd."
+                result.uncertainty_summary = "Probeer het opnieuw zodra de AI-dienst weer beschikbaar is."
+            return result
         mode = normalize_interaction_mode(context.interaction_mode)
         if mode == "EVALUATE":
             return self.fallbacks.grounded_evaluation_draft(
@@ -1220,7 +1280,9 @@ class FinnV2ReasoningService:
             "leidt tot",
             "leiden tot",
             "oorzaakt",
-            "risico",
+            "verhoogt het risico",
+            "verlaagt het risico",
+            "brengt risico",
             "ineffici",
             "niet ideaal",
             "effectiviteit",
@@ -1228,8 +1290,8 @@ class FinnV2ReasoningService:
             "invloed",
             "beinvloed",
             "beïnvloed",
-            "onzekerheid",
-            "onzeker",
+            "voegt onzekerheid toe",
+            "maakt onzeker",
             "vertraging",
             "vertragingen",
             "delay",
@@ -1405,7 +1467,10 @@ class FinnV2ReasoningService:
                 r"\b(?:geen|no)\s+(?:bewijs|evidence)\b|"
                 r"\b(?:does\s+not|doesn't|cannot|can't|kan\s+niet|"
                 r"niet\s+aantonen|niet\s+vaststellen)\s+"
-                r"(?:bewijzen|aantonen|onderbouwen|establish|prove|show|support|demonstrate)\b)",
+                r"(?:bewijzen|aantonen|onderbouwen|beoordelen|vaststellen|"
+                r"establish|prove|show|support|demonstrate|assess|evaluate)\b|"
+                r"\b(?:zonder|without)\b[^.]{0,80}\b(?:kan\s+niet|kunnen\s+[^.]{0,80}niet|cannot|can't)\b[^.]{0,32}"
+                r"\b(?:beoordeeld|beoordelen|vastgesteld|assessed|evaluated|established)\b)",
                 statement,
             )
         )
@@ -1429,11 +1494,11 @@ class FinnV2ReasoningService:
         populated_fields = set(populated_values)
 
         statements = [
-            result.direct_answer or "",
-            result.main_observation or "",
-            *(claim.text for claim in result.claims),
-            *(point.explanation for point in result.supporting_points),
-            result.next_step.instruction if result.next_step is not None else "",
+            ("direct_answer", None, result.direct_answer or ""),
+            ("main_observation", None, result.main_observation or ""),
+            *[(f"claims[{index}]", claim.claim_id, claim.text) for index, claim in enumerate(result.claims)],
+            *[(f"supporting_points[{index}]", None, point.explanation) for index, point in enumerate(result.supporting_points)],
+            ("next_step", None, result.next_step.instruction if result.next_step is not None else ""),
         ]
         field_terms = {
             "entry": {"entry", "instap", "instapniveau"},
@@ -1441,13 +1506,15 @@ class FinnV2ReasoningService:
             "targets": {"target", "targets", "doel", "doelen", "exit-niveau", "exit niveau", "exit levels"},
         }
         absence_terms = {"geen", "zonder", "ontbreekt", "ontbreken", "mist", "missing", "absent", "no "}
-        unsupported = {
-            field
-            for statement in statements
-            for field in populated_fields
-            if any(term in statement.lower() for term in field_terms[field])
-            and any(term in statement.lower() for term in absence_terms)
-        }
+        rejected_fields = []
+        unsupported = set()
+        for path, claim_id, statement in statements:
+            for field in populated_fields:
+                if any(term in statement.lower() for term in field_terms[field]) and any(
+                    term in statement.lower() for term in absence_terms
+                ):
+                    unsupported.add(field)
+                    rejected_fields.append({"path": path, "claim_id": claim_id})
         if unsupported:
             raise FinnV2ReasoningContractError(
                 code="unsupported_stored_field_absence",
@@ -1460,21 +1527,20 @@ class FinnV2ReasoningService:
                         field: populated_values[field]
                         for field in sorted(unsupported)
                     },
+                    "rejected_fields": rejected_fields,
                 },
             )
 
     @staticmethod
     def _validate_market_causality(*, result: ReasoningResult, context) -> None:
         """Require market measurements before judging a plan against current conditions."""
-        text = " ".join(
-            [
-                result.direct_answer or "",
-                result.main_observation or "",
-                *(claim.text for claim in result.claims),
-                *(point.explanation for point in result.supporting_points),
-                result.next_step.instruction if result.next_step is not None else "",
-            ]
-        ).lower()
+        statements = [
+            ("direct_answer", None, result.direct_answer or ""),
+            ("main_observation", None, result.main_observation or ""),
+            *[(f"claims[{index}]", claim.claim_id, claim.text) for index, claim in enumerate(result.claims)],
+            *[(f"supporting_points[{index}]", None, point.explanation) for index, point in enumerate(result.supporting_points)],
+            ("next_step", None, result.next_step.instruction if result.next_step is not None else ""),
+        ]
         market_condition_terms = {
             "huidige marktomstandigheden",
             "current market conditions",
@@ -1483,7 +1549,13 @@ class FinnV2ReasoningService:
             "volatiliteit in de crypto",
             "given the volatility",
         }
-        if not any(term in text for term in market_condition_terms):
+        rejected_fields = [
+            {"path": path, "claim_id": claim_id}
+            for path, claim_id, statement in statements
+            if any(term in statement.lower() for term in market_condition_terms)
+            and not FinnV2ReasoningService._is_epistemic_non_inference(statement.lower())
+        ]
+        if not rejected_fields:
             return
 
         measurement_keys = {
@@ -1506,7 +1578,10 @@ class FinnV2ReasoningService:
                 code="unsupported_market_causality",
                 missing_scopes=["market_measurement"],
                 path="claims",
-                grounding_values={"required_market_measurement_keys": sorted(measurement_keys)},
+                grounding_values={
+                    "required_market_measurement_keys": sorted(measurement_keys),
+                    "rejected_fields": rejected_fields,
+                },
             )
 
     @classmethod
@@ -1561,6 +1636,140 @@ class FinnV2ReasoningService:
                 missing_scopes=[],
                 path="uncertainty_summary",
             )
+
+    @staticmethod
+    def _include_required_evidence_ledger(*, result: ReasoningResult, context) -> None:
+        """Complete the global required-scope ledger from typed context.
+
+        This never adds evidence to an individual claim. Claim entailment stays
+        model-selected and independently verified; this ledger only records
+        which required, owner-scoped artifacts formed the model context.
+        """
+        required_scopes = set((context.request_plan or {}).get("required_information_scopes") or [])
+        if not required_scopes or normalize_interaction_mode(context.interaction_mode) != "EVALUATE":
+            return
+        refs = list(result.evidence_refs_used)
+        known = set(refs)
+        for item in context.evidence:
+            scope = getattr(item, "information_scope", None)
+            if scope is None or normalize_information_scope(scope) not in required_scopes:
+                continue
+            if item.evidence_id in known:
+                continue
+            refs.append(item.evidence_id)
+            known.add(item.evidence_id)
+        result.evidence_refs_used = refs
+
+    @staticmethod
+    def _remove_rejected_optional_items(*, result: ReasoningResult, rejected_fields: list[dict]) -> ReasoningResult | None:
+        paths = [str(item.get("path") or "") for item in rejected_fields]
+        allowed_path = r"(?:main_observation|next_step|claims\[\d+\]|supporting_points\[\d+\])"
+        if not paths or any(not re.fullmatch(allowed_path, path) for path in paths):
+            return None
+        repaired = result.copy(deep=True)
+        claim_indexes = sorted(
+            {int(path.removeprefix("claims[").removesuffix("]")) for path in paths if path.startswith("claims[")},
+            reverse=True,
+        )
+        point_indexes = sorted(
+            {int(path.removeprefix("supporting_points[").removesuffix("]")) for path in paths if path.startswith("supporting_points[")},
+            reverse=True,
+        )
+        if any(index >= len(repaired.claims) for index in claim_indexes) or any(
+            index >= len(repaired.supporting_points) for index in point_indexes
+        ):
+            return None
+        for index in claim_indexes:
+            del repaired.claims[index]
+        for index in point_indexes:
+            del repaired.supporting_points[index]
+        if "main_observation" in paths:
+            # main_observation is presentation copy, not an independent
+            # evidence-bearing claim. Preserve the validated answer and typed
+            # claims while replacing only the rejected summary sentence.
+            repaired.main_observation = (
+                "De conclusie hierboven is begrensd tot de genoemde evidence en de expliciet vermelde onzekerheden."
+            )
+        if "next_step" in paths:
+            repaired.next_step = None
+        return repaired
+
+    def _apply_bounded_semantic_repairs(
+        self,
+        *,
+        result: ReasoningResult,
+        context,
+        error: FinnV2ReasoningContractError,
+    ) -> ReasoningResult | None:
+        """Remove only independently rejected presentation fields until valid.
+
+        Validators intentionally report the first unsafe field. A provider can
+        produce more than one optional sentence with unsupported causality, so
+        validating a one-field repair once caused a second exception to escape
+        and fail the entire run. Core answer fields remain non-removable.
+        """
+        repaired = result.copy(deep=True)
+        current_error = error
+        maximum_repairs = len(repaired.claims) + len(repaired.supporting_points) + 3
+        for _ in range(maximum_repairs):
+            if current_error.code == "missing_required_uncertainty" and context.uncertainty_codes:
+                locale = str(getattr(context, "locale", "nl") or "nl").casefold()
+                if locale.startswith("de"):
+                    repaired.uncertainty_summary = (
+                        "Ein Teil der benoetigten Daten ist nicht verfuegbar; die Schlussfolgerung bleibt deshalb begrenzt."
+                    )
+                elif locale.startswith("en"):
+                    repaired.uncertainty_summary = (
+                        "Some required data is unavailable, so this conclusion remains limited."
+                    )
+                else:
+                    repaired.uncertainty_summary = (
+                        "Een deel van de benodigde gegevens is niet beschikbaar; daarom blijft deze conclusie begrensd."
+                    )
+                repaired.uncertainty_codes = list(
+                    dict.fromkeys([*repaired.uncertainty_codes, *context.uncertainty_codes])
+                )
+            else:
+                rejected_fields = list(current_error.grounding_values.get("rejected_fields") or [])
+                rejected_paths = {str(item.get("path") or "") for item in rejected_fields}
+                if "direct_answer" in rejected_paths:
+                    safe_claims = [
+                        claim.text
+                        for index, claim in enumerate(repaired.claims)
+                        if f"claims[{index}]" not in rejected_paths and claim.evidence_refs
+                    ]
+                    safe_points = [
+                        point.explanation
+                        for index, point in enumerate(repaired.supporting_points)
+                        if f"supporting_points[{index}]" not in rejected_paths and point.evidence_refs
+                    ]
+                    replacement = next((text for text in [*safe_claims, *safe_points] if text.strip()), "")
+                    if not replacement:
+                        return None
+                    repaired.direct_answer = replacement
+                    rejected_fields = [
+                        item for item in rejected_fields if str(item.get("path") or "") != "direct_answer"
+                    ]
+                    if not rejected_fields:
+                        try:
+                            self._validate_refs(repaired, context)
+                            return repaired
+                        except FinnV2ReasoningContractError as next_error:
+                            current_error = next_error
+                            continue
+                candidate = self._remove_rejected_optional_items(
+                    result=repaired,
+                    rejected_fields=rejected_fields,
+                )
+                if candidate is None:
+                    return None
+                repaired = candidate
+            try:
+                self._validate_refs(repaired, context)
+                return repaired
+            except FinnV2ReasoningContractError as next_error:
+                current_error = next_error
+        return None
 
     def _validation_error_details(self, exc: ValidationError) -> list[dict[str, str]]:
         return [

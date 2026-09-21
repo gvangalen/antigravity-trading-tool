@@ -345,6 +345,7 @@ if ! printf '%s\n' "$DEPLOY_GIT_TOKEN" | timeout --foreground "${REMOTE_DEPLOY_C
   # Keep this non-V2-named domain migration in the canonical rollout plan so
   # production cannot run the new repository code against the old schema.
   run_migration backend/scripts/migrations/2026_09_14_strategy_domain_multiple_strategies.py
+  run_migration backend/scripts/migrations/2026_09_21_finn_v2_live_evidence_scopes.py
   advance_deploy_step 'schema_health'
   echo \"🩺 Checking FINN V2 schema contract before process startup...\"
   timeout --foreground "\${MIGRATION_COMMAND_TIMEOUT_SECONDS}s" \

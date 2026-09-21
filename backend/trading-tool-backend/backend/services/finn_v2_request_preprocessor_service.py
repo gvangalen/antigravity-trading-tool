@@ -66,12 +66,12 @@ class FinnV2RequestPreprocessorService:
     # an explicitly detected plan subject they constrain the model's semantic
     # frame: a request to diagnose a plan is not a request to clarify a change.
     _PLAN_ASSESSMENT_TERMS = (
-        "kwetsbaar", "fragiel", "robuust", "weerbaar", "sterk", "zwak", "risico", "onderbouw",
+        "kwetsbaar", "fragiel", "robuust", "weerbaar", "sterk", "zwak", "risico", "onderbouw", "beteken",
         "wring", "probleem", "kwaliteit", "verbeter",
         "vulnerable", "fragile", "robust", "resilient", "strong", "weak", "risk", "evidence",
-        "vulnerability", "quality", "improve",
+        "vulnerability", "quality", "improve", "mean for", "meaning for",
         "verletzlich", "fragil", "robust", "widerstandsfähig", "stark", "schwach", "risiko", "beleg",
-        "schwachstelle", "qualität", "verbesser",
+        "schwachstelle", "qualität", "verbesser", "bedeut",
     )
     # A consequence request about an existing bot is an assessment of that
     # bot's operational impact.  It needs the evaluate_bot evidence contract,
@@ -146,6 +146,8 @@ class FinnV2RequestPreprocessorService:
             str(definition.get("display_name") or ""),
             str(definition.get("name") or "").replace("_", " "),
             str(definition.get("display_name") or "").replace("_", " "),
+            *(str(alias or "") for alias in definition.get("aliases") or []),
+            *(str(alias or "").replace("_", " ") for alias in definition.get("aliases") or []),
         )
         if variant
     }))
@@ -160,7 +162,10 @@ class FinnV2RequestPreprocessorService:
         ),
         "contextual_implication": (
             "wat betekent dat", "wat houdt dat in", "welk gevolg heeft dat",
-            "wat betekent die", "what does that mean for", "was bedeutet das fuer",
+            "wat betekent die", "wat zou dit veranderen", "wat verandert dit",
+            "what does that mean for", "what would this change", "what does this change",
+            "was bedeutet das fuer", "was wuerde das aendern", "was wuerde das an",
+            "was aendert das",
         ),
         "reformulation": (
             "korter", "eenvoudiger", "simpler", "more simply",
@@ -351,7 +356,7 @@ class FinnV2RequestPreprocessorService:
         return FinnV2PreprocessedRequest(
             original_text=original,
             normalized_text=normalized,
-            language="en" if re.search(r"\b(what|which|add|remove|create|evaluate)\b", normalized) else "nl",
+            language=self._language_from_text(normalized),
             action_polarity=action,
             explicit_entities=entities,
             primary_entity=primary_entity,
@@ -369,6 +374,16 @@ class FinnV2RequestPreprocessorService:
             linked_graph_relationship=linked_graph_relationship,
             guidance_requested=guidance_requested,
         )
+
+    @staticmethod
+    def _language_from_text(text: str) -> str:
+        scores = {
+            "de": len(re.findall(r"\b(?:was|welche|mein(?:e[rmns]?)?|fuer|für|bedeutet|erstelle|aendere|ändere|warum|und)\b", text)),
+            "en": len(re.findall(r"\b(?:what|which|my|for|does|mean|create|change|why|and)\b", text)),
+            "nl": len(re.findall(r"\b(?:wat|welke|mijn|voor|betekent|maak|wijzig|waarom|en)\b", text)),
+        }
+        language, score = max(scores.items(), key=lambda item: item[1])
+        return language if score else "nl"
 
     @staticmethod
     def _financial_concept(text: str) -> Optional[str]:

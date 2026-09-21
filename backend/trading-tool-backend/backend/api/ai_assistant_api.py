@@ -3083,17 +3083,25 @@ async def get_finn_state(
 
 @router.get("/assistant/mission-control")
 async def get_finn_mission_control(
+    symbol: Optional[str] = None,
     current_user: dict = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
     request: Request = None,
 ):
+    requested_symbol = str(symbol or "").strip().upper()
+    if requested_symbol and not re.fullmatch(r"[A-Z0-9._-]{1,20}", requested_symbol):
+        raise HTTPException(status_code=422, detail="Ongeldig assetsymbool.")
     trace_id = getattr(request.state, "trace_id", None) if request else None
     service = FinnV2VisibleDeliveryService(db)
     try:
         response = await asyncio.wait_for(
             service.deliver_mission_control(
                 user_id=current_user["id"],
-                context_payload={"page": "assistant", "surface": "today_with_finn"},
+                context_payload={
+                    "page": "assistant",
+                    "surface": "today_with_finn",
+                    "symbol": requested_symbol or None,
+                },
                 request_id=trace_id or f"mission-{uuid.uuid4().hex}",
                 trace_id=trace_id or f"mission-{uuid.uuid4().hex}",
             ),
@@ -3104,6 +3112,7 @@ async def get_finn_mission_control(
         response = await service.deliver_mission_control_fallback(
             user_id=current_user["id"],
             trace_id=trace_id or f"mission-{uuid.uuid4().hex}",
+            symbol=requested_symbol or None,
         )
     # Mission Control projects mutable owner-scoped state. A process-local
     # cache cannot be coherently invalidated across PM2 workers after an

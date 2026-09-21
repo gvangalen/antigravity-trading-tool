@@ -11,6 +11,7 @@ from enum import Enum
 from typing import Mapping, Optional
 
 from backend.domain.finn_v2_contract import INFORMATION_SCOPE_ORDER
+from backend.domain.finn_v2_tools import FINN_V2_TOOL_ORDER
 
 
 # This is the sole scope-to-tool binding used while materializing contracts.
@@ -24,6 +25,8 @@ _SCOPE_TOOL_BINDINGS = {
     "portfolio": "read_portfolio",
     "indicator_configuration": "read_indicator_configuration",
     "market_snapshot": "read_market_snapshot",
+    "macro_snapshot": "read_macro_snapshot",
+    "technical_snapshot": "read_technical_snapshot",
     "active_setup": "read_active_setup",
     "linked_strategy": "read_linked_strategy",
     "linked_bot": "read_linked_bot",
@@ -262,7 +265,11 @@ class OperationContract:
 
     @property
     def tool_names(self) -> tuple[str, ...]:
-        return tuple(tool for scope, tool in self.scope_tool_bindings if scope in self.required_scopes)
+        bound = {
+            tool for scope, tool in self.scope_tool_bindings
+            if scope in self.required_scopes
+        }
+        return tuple(tool for tool in FINN_V2_TOOL_ORDER if tool in bound)
 
 
 class FinnV2OperationRegistry:
@@ -452,7 +459,11 @@ _OPERATION_SELECTION_METADATA: Mapping[str, dict] = {
         "semantic_description": "Respond safely when the request cannot be fulfilled from an available FINN contract.",
     },
     "explain_financial_concept": {
-        "semantic_description": "Explain a general financial concept, indicator, or trading term without reading the user's workspace or using product tools.",
+        "semantic_description": "Explain a general financial concept, indicator, or trading term without reading the user's workspace or using product tools. Never select this when the user asks what an indicator means for their own active asset, position, setup, strategy or plan; that is a typed evaluation.",
+        "negative_examples": (
+            "What does my RSI mean for my active BTC plan?",
+            "Was bedeutet mein RSI fuer meinen aktiven BTC-Plan?",
+        ),
     },
     "unsupported_financial_operation": {
         "semantic_description": "Safely decline a clearly identified investing, trading, portfolio-management, brokerage, or financial-product operation for which FINN has no supported contract, such as autonomous portfolio management. Do not use this for an underspecified request to improve or change the user's own FINN workspace; that requires clarify_request. Do not use off_topic for financial requests.",
@@ -503,7 +514,12 @@ _OPERATION_SELECTION_METADATA: Mapping[str, dict] = {
         "selection_focus_entities": ("asset",),
     },
     "read_indicator_configuration": {
-        "semantic_description": "Read the user's saved indicator, signal, technical-analysis, market-signal, or analysis configuration for a requested or active instrument. Questions to show stored signal settings are indicator reads, even when they also mention the currently open instrument. Do not select read_active_asset unless the user asks for the instrument itself rather than its saved analysis settings.",
+        "semantic_description": "Read the user's saved indicator, signal, technical-analysis, market-signal, or analysis configuration for a requested or active instrument. Questions to show or list stored signal settings are indicator reads, even when they also mention the currently open instrument. A question asking what one or more indicators say, mean together, imply, or whether they fit the user's plan is an evaluation, not this read contract.",
+        "negative_examples": (
+            "Wat zegt de 200MA samen met RSI voor mijn actieve asset?",
+            "What do RSI and the 200-day average mean for my active plan?",
+            "Was sagen RSI und der 200-Tage-Durchschnitt fuer meinen aktiven Plan?",
+        ),
         "any_entities": ("indicator_configuration",),
         "required_discourse_acts": ("information_request",),
         "allowed_action_polarities": ("read",),
@@ -556,7 +572,10 @@ _OPERATION_SELECTION_METADATA: Mapping[str, dict] = {
         "selection_focus_entities": ("asset",),
     },
     "read_active_plan": {
-        "semantic_description": "Read and summarize the user's linked active setup, strategy, bot, and bot status as one trading plan overview.",
+        "semantic_description": "Read and summarize the user's linked active setup, strategy, bot, and bot status as one trading plan overview. Do not use this for a new plan/setup intent or a question asking what is missing before activation; those require the typed create or evaluation contract.",
+        "negative_examples": (
+            "Ik wil iedere week 150 euro in BTC DCA'en. Wat mis ik nog voordat ik dit plan activeer?",
+        ),
         "any_entities": ("plan",),
         "required_discourse_acts": ("information_request",),
         "allowed_action_polarities": ("read",),
@@ -564,7 +583,12 @@ _OPERATION_SELECTION_METADATA: Mapping[str, dict] = {
         "selection_focus_entities": ("plan",),
     },
     "evaluate_plan": {
-        "semantic_description": "Assess a user's complete current trading approach or plan, including broad requests to review, audit, assess, examine, or identify the least-supported, weak, vulnerable, incomplete, risky, or inconsistent link. Evaluation language remains read-only analysis, even when it asks what should improve; it is not a request to mutate a setup, strategy, bot, or configuration. This is supported plan evaluation, not unsupported portfolio management.",
+        "semantic_description": "Assess a user's complete current trading approach or plan, including broad requests to review, audit, assess, examine, ask what is still missing before activation, or identify the least-supported, weak, vulnerable, incomplete, risky, or inconsistent link. Personal questions asking what an indicator or position means for the user's active plan are evaluations, never general concept explanations. Evaluation language remains read-only analysis, even when it asks what should improve; it is not a request to mutate a setup, strategy, bot, or configuration. This is supported plan evaluation, not unsupported portfolio management.",
+        "positive_examples": (
+            "Past deze positie bij mijn actieve plan en wat moet ik eerst bevestigen?",
+            "What does my RSI mean for my active BTC plan?",
+            "Was bedeutet mein RSI fuer meinen aktiven BTC-Plan?",
+        ),
         # Plan evaluation is deliberately distinct from evaluating a single
         # setup, strategy, bot or indicator configuration.
         "any_entities": ("plan",),
@@ -574,7 +598,16 @@ _OPERATION_SELECTION_METADATA: Mapping[str, dict] = {
         "selection_focus_entities": ("plan",),
     },
     "evaluate_indicator_configuration": {
-        "semantic_description": "Evaluate a user's saved indicator configuration when they ask what is missing, weak, suitable, risky, or should improve. A request to inspect or list configured indicators without an assessment remains read_indicator_configuration.",
+        "semantic_description": "Evaluate one or more configured indicators against current typed technical evidence and the active asset when the user asks what they say, mean together, imply, whether they fit, or what is missing, weak, suitable, risky or should improve. A request only to inspect or list configured indicators remains read_indicator_configuration.",
+        "positive_examples": (
+            "Wat zegt de 200MA samen met RSI voor mijn actieve asset?",
+            "What do RSI and the 200-day average say together?",
+            "Was sagen RSI und der 200-Tage-Durchschnitt zusammen?",
+        ),
+        "negative_examples": (
+            "Welke indicatoren heb ik opgeslagen?",
+            "List my configured indicators.",
+        ),
         "any_entities": ("indicator_configuration",),
         "required_discourse_acts": ("evaluation",),
         "selection_priority": 40,
@@ -637,6 +670,11 @@ _OPERATION_SELECTION_METADATA: Mapping[str, dict] = {
         "required_discourse_acts": ("operation_request",),
         "allowed_action_polarities": ("create", "add"),
         "selection_priority": 80,
+        "positive_examples": (
+            "Ik wil iedere week 150 euro in BTC DCA'en. Wat mis ik nog voordat ik dit plan activeer?",
+            "I want to DCA 150 euros into BTC every week; what details are still missing?",
+            "Ich moechte jede Woche 150 Euro in BTC investieren; welche Angaben fehlen noch?",
+        ),
     },
     "update_setup": {
         "semantic_description": "Prepare a typed, confirmable update to one existing setup. The user must identify or safely resolve the setup and state at least one allowed changed field; an update never creates a new setup.",
@@ -850,6 +888,9 @@ _OPERATION_SELECTION_METADATA: Mapping[str, dict] = {
         "selection_priority": 41,
     },
     "confirm_proposal": {
+        "semantic_description": "Confirm one already open proposal only when the user gives an explicit standalone confirmation command. Merely asking what must be confirmed, what confirmation is needed, or whether a position fits is not confirmation.",
+        "positive_examples": ("Bevestig dit voorstel.", "Confirm this proposal.", "Bestaetige diesen Vorschlag."),
+        "negative_examples": ("Wat moet ik eerst bevestigen?", "What should I confirm first?"),
         "required_discourse_acts": ("operation_request",),
         "allowed_action_polarities": ("confirm",),
         "selection_priority": 100,
@@ -883,7 +924,7 @@ _CONTRACTS: tuple[OperationContract, ...] = (
     OperationContract("create_indicator_configuration", FinnV2OperationRegistry.VERSION, "indicators", "CREATE_PROPOSAL", ("maak indicator", "create indicator", "erstelle indikator"), action_polarity=ActionPolarity.CREATE, required_inputs=("asset", "category", "indicator"), required_scopes=("active_asset", "indicator_configuration"), proposal_type="create_indicator_configuration", confirmation_required=True, execution_adapter="create_indicator_configuration", idempotency_rule="proposal_payload_hash", postcondition="indicator_configuration_created", response_strategy="proposal_draft", policy_class="proposal"),
     OperationContract("update_indicator_configuration", FinnV2OperationRegistry.VERSION, "indicators", "CREATE_PROPOSAL", ("wijzig indicator", "update indicator", "ändere indikator"), action_polarity=ActionPolarity.UPDATE, required_inputs=("asset", "category", "indicator", "changed_fields"), required_scopes=("active_asset", "indicator_configuration"), proposal_type="update_indicator_configuration", confirmation_required=True, execution_adapter="update_indicator_configuration", idempotency_rule="proposal_payload_hash", postcondition="indicator_configuration_updated", response_strategy="proposal_draft", policy_class="proposal"),
     OperationContract("delete_indicator_configuration", FinnV2OperationRegistry.VERSION, "indicators", "CREATE_PROPOSAL", ("verwijder indicator", "delete indicator", "lösche indikator"), action_polarity=ActionPolarity.DELETE, required_inputs=("asset", "category", "indicator"), required_scopes=("active_asset", "indicator_configuration"), proposal_type="delete_indicator_configuration", confirmation_required=True, execution_adapter="delete_indicator_configuration", idempotency_rule="proposal_payload_hash", postcondition="indicator_configuration_removed", response_strategy="proposal_draft", policy_class="proposal"),
-    OperationContract("evaluate_indicator_configuration", FinnV2OperationRegistry.VERSION, "indicators", "EVALUATE", ("beoordeel indicator",), required_scopes=("active_asset", "indicator_configuration"), model_policy="required", response_strategy="model_reasoning", policy_class="advice"),
+    OperationContract("evaluate_indicator_configuration", FinnV2OperationRegistry.VERSION, "indicators", "EVALUATE", ("beoordeel indicator",), required_scopes=("active_asset", "indicator_configuration", "market_snapshot", "macro_snapshot", "technical_snapshot"), model_policy="required", response_strategy="model_reasoning", policy_class="advice"),
     # A persisted setup is self-describing: its owner-scoped record already
     # carries the canonical asset and timeframe. Requiring a separate
     # workspace asset makes an otherwise valid setup read unavailable.
@@ -891,7 +932,7 @@ _CONTRACTS: tuple[OperationContract, ...] = (
     # SetupService validates the persisted setup fields unconditionally.
     # Score and market-condition details are useful trusted inputs, but must
     # not be invented by FINN.
-    OperationContract("create_setup", FinnV2OperationRegistry.VERSION, "setup", "CREATE_PROPOSAL", ("maak setup", "create setup", "setup voor"), action_polarity=ActionPolarity.CREATE, required_inputs=("setup_type", "timeframe", "name", "symbol"), conditional_required_inputs=(("dca_frequency", "setup_type", "dca"), ("dca_day", "dca_frequency", "weekly"), ("dca_month_day", "dca_frequency", "monthly")), required_scopes=("active_asset",), optional_scopes=("profile", "preferences", "indicator_configuration", "active_setup", "linked_strategy"), model_policy="optional", response_strategy="proposal_draft", policy_class="proposal", proposal_type="create_setup", confirmation_required=True, execution_adapter="create_setup", idempotency_rule="proposal_payload_hash", postcondition="setup_created_for_user_asset"),
+    OperationContract("create_setup", FinnV2OperationRegistry.VERSION, "setup", "CREATE_PROPOSAL", ("maak setup", "create setup", "setup voor"), action_polarity=ActionPolarity.CREATE, required_inputs=("setup_type", "timeframe", "name", "symbol"), optional_inputs=("min_investment",), conditional_required_inputs=(("dca_frequency", "setup_type", "dca"), ("dca_day", "dca_frequency", "weekly"), ("dca_month_day", "dca_frequency", "monthly")), required_scopes=("active_asset",), optional_scopes=("profile", "preferences", "indicator_configuration", "active_setup", "linked_strategy"), model_policy="optional", response_strategy="proposal_draft", policy_class="proposal", proposal_type="create_setup", confirmation_required=True, execution_adapter="create_setup", idempotency_rule="proposal_payload_hash", postcondition="setup_created_for_user_asset"),
     OperationContract("update_setup", FinnV2OperationRegistry.VERSION, "setup", "CREATE_PROPOSAL", ("wijzig setup", "update setup", "setup andern"), action_polarity=ActionPolarity.UPDATE, required_inputs=("setup_id", "changed_fields"), contextual_reference_inputs=("setup_id",), required_scopes=("active_asset", "active_setup"), proposal_type="update_setup", confirmation_required=True, execution_adapter="update_setup", idempotency_rule="proposal_payload_hash", postcondition="setup_updated_for_user", response_strategy="proposal_draft", policy_class="proposal"),
     OperationContract("delete_setup", FinnV2OperationRegistry.VERSION, "setup", "CREATE_PROPOSAL", ("verwijder setup", "delete setup", "lösche setup"), action_polarity=ActionPolarity.DELETE, required_inputs=("setup_id",), contextual_reference_inputs=("setup_id",), required_scopes=("active_asset", "active_setup"), proposal_type="delete_setup", confirmation_required=True, execution_adapter="delete_setup", idempotency_rule="proposal_payload_hash", postcondition="setup_deleted_for_user", response_strategy="proposal_draft", policy_class="proposal"),
     OperationContract("evaluate_setup", FinnV2OperationRegistry.VERSION, "setup", "EVALUATE", ("beoordeel setup",), required_scopes=("active_asset", "active_setup"), optional_scopes=("indicator_configuration",), model_policy="required", response_strategy="model_reasoning", policy_class="advice"),
@@ -913,7 +954,7 @@ _CONTRACTS: tuple[OperationContract, ...] = (
     OperationContract("activate_paper_bot", FinnV2OperationRegistry.VERSION, "bot", "ACTION_PROPOSAL", ("activeer paper bot",), action_polarity=ActionPolarity.ACTIVATE, required_inputs=("bot_id",), contextual_reference_inputs=("bot_id",), required_scopes=("active_asset", "active_setup", "linked_strategy", "linked_bot", "bot_status"), proposal_type="activate_paper_bot", confirmation_required=True, execution_adapter="activate_paper_bot", idempotency_rule="proposal_payload_hash", postcondition="paper_bot_active", response_strategy="proposal_draft", policy_class="paper_action"),
     OperationContract("deactivate_bot", FinnV2OperationRegistry.VERSION, "bot", "ACTION_PROPOSAL", ("deactiveer bot", "deactivate bot", "deaktiviere bot"), action_polarity=ActionPolarity.UPDATE, required_inputs=("bot_id",), contextual_reference_inputs=("bot_id",), required_scopes=("active_asset", "active_setup", "linked_strategy", "linked_bot", "bot_status"), proposal_type="deactivate_bot", confirmation_required=True, execution_adapter="deactivate_bot", idempotency_rule="proposal_payload_hash", postcondition="bot_inactive", response_strategy="proposal_draft", policy_class="paper_action"),
     OperationContract("read_active_plan", FinnV2OperationRegistry.VERSION, "plan", "READ", ("mijn actieve plan", "setup strategie bot"), required_scopes=("active_asset", "active_setup", "linked_strategy", "linked_bot", "bot_status"), required_response_fields=("setup", "strategy", "bot", "bot_status")),
-    OperationContract("evaluate_plan", FinnV2OperationRegistry.VERSION, "plan", "EVALUATE", ("belangrijkste ontbrekende", "bekijk mijn profiel", "beoordeel mijn plan"), required_scopes=("profile", "preferences", "active_asset", "indicator_configuration", "active_setup", "linked_strategy", "linked_bot", "bot_status"), model_policy="required", response_strategy="model_reasoning", policy_class="advice", required_response_fields=("observation", "evidence", "next_step")),
+    OperationContract("evaluate_plan", FinnV2OperationRegistry.VERSION, "plan", "EVALUATE", ("belangrijkste ontbrekende", "bekijk mijn profiel", "beoordeel mijn plan"), required_scopes=("profile", "preferences", "active_asset", "indicator_configuration", "market_snapshot", "macro_snapshot", "technical_snapshot", "active_setup", "linked_strategy", "linked_bot", "bot_status", "scores"), model_policy="required", response_strategy="model_reasoning", policy_class="advice", required_response_fields=("observation", "evidence", "next_step")),
     OperationContract("read_scores", FinnV2OperationRegistry.VERSION, "scores", "READ", ("mijn scores", "read scores", "meine scores"), required_scopes=("active_asset", "scores"), response_strategy="deterministic_structured_summary", required_response_fields=("asset",)),
     OperationContract("explain_score", FinnV2OperationRegistry.VERSION, "scores", "EVALUATE", ("leg score uit", "explain score", "erklare score"), required_scopes=("active_asset", "scores"), optional_scopes=("profile", "preferences", "active_setup", "linked_strategy", "indicator_configuration"), model_policy="required", response_strategy="model_reasoning", policy_class="advice"),
     OperationContract("read_portfolio", FinnV2OperationRegistry.VERSION, "portfolio", "READ", ("portfolio", "portefeuille", "portfolio anzeigen"), optional_inputs=("asset",), required_scopes=("portfolio",), response_strategy="deterministic_structured_summary"),

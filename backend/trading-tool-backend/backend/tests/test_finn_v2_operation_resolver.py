@@ -333,7 +333,11 @@ def test_aggregate_plan_assessment_overrides_a_conflicting_node_projection():
         selection=_selection("evaluate_setup", {"goal": "evaluate", "object": "setup"}),
         candidates=registry.list(),
         conversation_context={},
-        request_facts={"discourse_act": "evaluation", "primary_entity": "plan"},
+        request_facts={
+            "discourse_act": "evaluation",
+            "primary_entity": "plan",
+            "explicit_plan_subject": True,
+        },
     )
 
     assert resolved.operation_id == "evaluate_plan"
@@ -346,7 +350,11 @@ def test_aggregate_plan_assessment_overrides_a_frame_less_setup_selection():
         selection=selection,
         candidates=registry.list(),
         conversation_context={},
-        request_facts={"discourse_act": "evaluation", "primary_entity": "plan"},
+        request_facts={
+            "discourse_act": "evaluation",
+            "primary_entity": "plan",
+            "explicit_plan_subject": True,
+        },
     )
 
     assert resolved.operation_id == "evaluate_plan"

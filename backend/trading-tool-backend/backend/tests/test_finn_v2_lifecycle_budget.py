@@ -30,7 +30,7 @@ def test_provider_budget_reserves_time_for_typed_terminalisation():
         provider_budget = remaining_provider_seconds(terminal_reserve_seconds=0.2)
         assert lifecycle_budget is not None
         assert provider_budget is not None
-        assert 0 < provider_budget < lifecycle_budget
+        assert abs(provider_budget - lifecycle_budget) < 0.05
     finally:
         reset_lifecycle_deadline(token)
 

@@ -1343,6 +1343,7 @@ def test_prepare_finn_envelope_persists_read_only_state_by_default():
 def test_get_finn_mission_control_survives_non_database_action_failures(monkeypatch):
     db = SimpleNamespace(rollback=AsyncMock())
     stored = {}
+    captured = {}
 
     monkeypatch.setattr("backend.api.ai_assistant_api._get_cached_mission_control", lambda user_id: None)
     monkeypatch.setattr(
@@ -1352,6 +1353,7 @@ def test_get_finn_mission_control_survives_non_database_action_failures(monkeypa
 
     class VisibleService:
         async def deliver_mission_control(self, **kwargs):
+            captured.update(kwargs)
             return {
                 "greeting": "Today with FINN",
                 "finn_briefing": {"summary": "Ready", "suggested_actions": []},
@@ -1367,6 +1369,7 @@ def test_get_finn_mission_control_survives_non_database_action_failures(monkeypa
 
     response = asyncio.run(
         get_finn_mission_control(
+            symbol="aapl",
             current_user={"id": 30},
             db=db,
             request=request,
@@ -1375,6 +1378,7 @@ def test_get_finn_mission_control_survives_non_database_action_failures(monkeypa
 
     db.rollback.assert_not_awaited()
     assert response["first_dashboard_context"]["generation_status"] == "ready"
+    assert captured["context_payload"]["symbol"] == "AAPL"
     assert stored == {}
 
 

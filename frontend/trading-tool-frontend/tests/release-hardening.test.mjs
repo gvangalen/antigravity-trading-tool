@@ -49,10 +49,13 @@ test("aligns the desktop trade panel with the selected bot row", () => {
 });
 
 test("ties automation context scores to the selected execution chain", () => {
-  assert.match(botPage, /<BotScores[\s\S]*?bot=\{activeBot\}/);
-  assert.match(botPage, /strategies=\{strategies\}/);
-  assert.match(botPage, /setups=\{setups\}/);
-  assert.match(botPage, /bots=\{bots\}/);
+  assert.match(botPage, /decision=\{decisionsByBot\?\.\[activeBot\?\.id\]\}/);
+  assert.match(botPage, /portfolio=\{portfolios\.find\(\(p\) => p\.bot_id === activeBot\?\.id\)\}/);
+  assert.match(botScores, /export default function BotScores\(\{/);
+  assert.match(botScores, /bot\s*=\s*null/);
+  assert.match(botScores, /strategies\s*=\s*\[\]/);
+  assert.match(botScores, /setups\s*=\s*\[\]/);
+  assert.match(botScores, /bots\s*=\s*\[\]/);
   assert.match(botScores, /resolveBotExecutionChain\(/);
   assert.match(botScores, /readLinkedSetupScore\(/);
   assert.match(botScores, /const hasSetupMismatch = setupScore !== null && setupScore < 40/);
@@ -94,7 +97,7 @@ test("prefills automation bot creation from my plan context", () => {
 
 test("shows the best current plan candidate on the analysis bridge", () => {
   assert.match(assetWorkspace, /workspace\?\.daily\?\.setup\?\.active_setups/);
-  assert.match(assetWorkspace, /fetchActiveSetup\(activeSymbol\)/);
+  assert.match(assetWorkspace, /loadActiveSetupShared\(activeSymbol, cached === undefined\)/);
   assert.match(assetWorkspace, /if \(!matchingSetups\.length\)/);
   assert.match(assetWorkspace, /const linkedMatch = matchingSetups\.find/);
   assert.match(assetWorkspace, /const runtimeMatch = runtimeSetupId == null/);

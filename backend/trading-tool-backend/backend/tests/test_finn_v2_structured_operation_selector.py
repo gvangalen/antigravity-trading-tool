@@ -91,8 +91,7 @@ def test_selector_manifest_is_a_compact_projection_of_every_offered_contract():
 
     assert [entry["operation_id"] for entry in manifest] == [contract.operation_id for contract in offered]
     assert set(manifest[0]) == {
-        "operation_id", "description", "domain", "supported", "required_entities",
-        "required_inputs", "requires_verified_context", "canonical_action_polarity",
+        "operation_id", "description", "domain", "supported", "canonical_action_polarity",
         "positive_examples", "negative_examples", "selection_required_terms",
     }
     assert all(len(str(entry["description"])) <= 161 for entry in manifest)
@@ -110,7 +109,6 @@ def test_selector_manifest_preserves_registry_semantics_without_runtime_metadata
     assert entry["operation_id"] == "activate_bot"
     assert entry["domain"] == contract.domain
     assert entry["supported"] is contract.supported
-    assert entry["required_inputs"] == list(contract.required_inputs)
     assert entry["canonical_action_polarity"] == "activate"
 
 

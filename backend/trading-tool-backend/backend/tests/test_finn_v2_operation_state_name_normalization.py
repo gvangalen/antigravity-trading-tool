@@ -111,6 +111,8 @@ def test_strategy_inputs_accept_natural_dutch_base_amount_wording():
         ("Voeg RSI toe aan Technisch bewijs.", {"name": "rsi", "category": "technical"}),
         ("Voeg DXY toe aan Macro.", {"name": "dxy", "category": "macro"}),
         ("Voeg Price toe aan Marktindicatoren.", {"name": "price", "category": "market"}),
+        ("Verwijder Prijs als marktindicator voor MSFT.", {"name": "price", "category": "market"}),
+        ("Entferne Preis als Marktindikator für MSFT.", {"name": "price", "category": "market"}),
         ("Add MA 200 to technical evidence.", {"name": "ma_200", "category": "technical"}),
     ),
 )

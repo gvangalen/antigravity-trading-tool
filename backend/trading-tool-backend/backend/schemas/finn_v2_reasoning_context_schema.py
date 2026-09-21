@@ -23,6 +23,7 @@ class ReasoningEvidenceItem(BaseModel):
     source: str
     as_of: Optional[datetime] = None
     freshness: str
+    availability: str = "unknown"
     confidence: str
     facts: Dict[str, Any] = Field(default_factory=dict)
 
