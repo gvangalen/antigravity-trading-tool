@@ -815,6 +815,72 @@ def test_natural_setup_name_suffix_is_not_an_internal_id():
     assert values["changed_fields"] == {"timeframe": "1D"}
 
 
+def test_strategy_pronoun_restore_maps_amount_to_canonical_base_amount():
+    service = FinnV2OperationStateService()
+    contract = FinnV2OperationRegistry().require_supported("update_strategy")
+
+    values = service.explicit_inputs(
+        contract=contract,
+        message="Wijzig deze strategie terug naar 250 euro per uitvoering.",
+        explicit_asset=None,
+    )
+
+    assert values["changed_fields"] == {"base_amount": 250.0}
+
+
+def test_setup_pronoun_restore_maps_unlabelled_timeframe_transition():
+    service = FinnV2OperationStateService()
+    contract = FinnV2OperationRegistry().require_supported("update_setup")
+
+    values = service.explicit_inputs(
+        contract=contract,
+        message="Wijzig deze setup terug van 1W naar 1D.",
+        explicit_asset=None,
+    )
+
+    assert values["changed_fields"] == {"timeframe": "1D"}
+
+
+@pytest.mark.parametrize(
+    ("operation_id", "message"),
+    (
+        ("update_strategy", "Wijzig strategie Bitcoin Breakout Strategy naar 300 euro per uitvoering."),
+        ("update_setup", "Wijzig setup Bitcoin Momentum Setup terug naar de eerdere instellingen."),
+        ("update_bot", "Wijzig bot Bitcoin Paper Bot terug naar de eerdere instellingen."),
+    ),
+)
+def test_update_fallback_never_emits_object_names_as_synthetic_fields(operation_id, message):
+    service = FinnV2OperationStateService()
+    contract = FinnV2OperationRegistry().require_supported(operation_id)
+
+    values = service.explicit_inputs(
+        contract=contract,
+        message=message,
+        explicit_asset=None,
+    )
+
+    changed_fields = values.get("changed_fields", {})
+    assert set(changed_fields).issubset(
+        {
+            "name",
+            "symbol",
+            "timeframe",
+            "setup_type",
+            "dca_frequency",
+            "dca_day",
+            "execution_mode",
+            "base_amount",
+            "entry",
+            "stop_loss",
+            "targets",
+            "risk_profile",
+            "budget",
+            "status",
+        }
+    )
+    assert not any("strategie" in field or "setup" in field or "bot" in field for field in changed_fields)
+
+
 def test_guided_targets_turn_cannot_change_existing_strategy_slots():
     registry = FinnV2OperationRegistry()
     contract = registry.require_supported("create_strategy")

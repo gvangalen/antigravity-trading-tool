@@ -899,6 +899,16 @@ class FinnV2OperationStateService:
             )
             if amount_transition:
                 changes["base_amount"] = cls._typed_numeric_value(amount_transition.group(1))
+            amount_per_execution = re.search(
+                r"\b(?:naar|to|auf|op|at)\s+"
+                r"(?:€|eur|euro)?\s*([0-9][0-9.,]*|honderd|duizend|hundred|thousand|hundert|tausend)"
+                r"(?:\s*(?:€|eur|euro|euros))?\s+"
+                r"(?:per\s+(?:uitvoering|keer|trade)|per\s+execution|je\s+ausf[uü]hrung)\b",
+                text,
+                re.IGNORECASE,
+            )
+            if amount_per_execution:
+                changes["base_amount"] = cls._typed_numeric_value(amount_per_execution.group(1))
         # The action contract deliberately has one ``changed_fields`` slot,
         # while the owning domain services keep their field allowlists.  Parse
         # common natural-language update clauses into those canonical domain
@@ -932,7 +942,7 @@ class FinnV2OperationStateService:
             timeframe_transition = re.search(
                 r"\b(?:wijzig|verander|change|update|aktualisiere|ändere)\b"
                 r"[^,.!?\n]{0,100}?\b(?:van|from|von)\s+"
-                r"(?:timeframe|time\s*frame|tijdframe|zeitrahmen)\s+"
+                r"(?:(?:timeframe|time\s*frame|tijdframe|zeitrahmen)\s+)?"
                 r"[\w-]+\s+(?:naar|to|auf)\s+([\w-]+)",
                 text,
                 re.IGNORECASE,
@@ -1062,6 +1072,21 @@ class FinnV2OperationStateService:
         }.get(field, field)
         value = match.group(2).strip(" .\"'")
         if not field or not value:
+            return {}
+        # The domain services remain the sole authority for mutable fields.
+        # A broad natural-language fallback must never turn an object name
+        # (for example "deze strategie terug") into a synthetic JSON key that
+        # reaches proposal validation and crashes the lifecycle.
+        from backend.schemas.bot_schema import BotConfigUpdateSchema
+        from backend.services.setup_service import SetupService
+        from backend.services.strategy_service import StrategyService
+
+        allowed_fields = {
+            "update_setup": SetupService.UPDATE_ALLOWED_FIELDS,
+            "update_strategy": StrategyService.UPDATE_ALLOWED_FIELDS,
+            "update_bot": frozenset(BotConfigUpdateSchema.__fields__) | {"budget"},
+        }.get(contract.operation_id)
+        if allowed_fields is not None and field not in allowed_fields:
             return {}
         # Currency is presentation around an otherwise explicit numeric action
         # value; preserve the number's type instead of sending a prose value to

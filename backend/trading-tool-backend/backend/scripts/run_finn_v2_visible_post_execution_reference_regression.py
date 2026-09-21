@@ -174,7 +174,7 @@ def main() -> None:
     )
     setup_update_after_execution = _visible_action(
         base_url=base_url, token=token, other_token=other_token,
-        query="Wijzig deze setup terug naar timeframe 4H.",
+        query="Wijzig deze setup terug van 1D naar 4H.",
         session_id=setup_update["execution_conversation_id"], expected_operation="update_setup",
     )
     strategy_create = _visible_action(
@@ -193,7 +193,7 @@ def main() -> None:
     )
     strategy_update_after_execution = _visible_action(
         base_url=base_url, token=token, other_token=other_token,
-        query="Wijzig deze strategie en zet het bedrag terug naar 100 euro.",
+        query="Wijzig deze strategie terug naar 100 euro per uitvoering.",
         session_id=strategy_update["execution_conversation_id"], expected_operation="update_strategy",
     )
     steps = (
