@@ -33,6 +33,14 @@ def test_provider_symbol_normalizes_crypto_pairs_for_twelve_data():
     assert adapter._provider_symbol(_asset(symbol="AAPL", provider_symbol="AAPL", asset_class="stock")) == "AAPL"
 
 
+def test_binance_symbol_completes_catalog_crypto_base_symbols():
+    adapter = TwelveDataTechnicalIndicatorAdapter(api_key="")
+
+    assert adapter._binance_symbol(_asset(provider_symbol="BTC")) == "BTCUSDT"
+    assert adapter._binance_symbol(_asset(provider_symbol="BTCUSDT")) == "BTCUSDT"
+    assert adapter._binance_symbol(_asset(symbol="AAPL", provider_symbol="AAPL", asset_class="stock")) == "AAPL"
+
+
 def test_twelve_data_transport_does_not_log_query_parameter_credentials():
     assert logging.getLogger("httpx").getEffectiveLevel() >= logging.WARNING
 

@@ -191,7 +191,15 @@ class TwelveDataTechnicalIndicatorAdapter:
 
     def _binance_symbol(self, asset: AssetRecord) -> str:
         provider_symbol = str(asset.provider_symbol or asset.symbol or "").strip().upper()
-        return provider_symbol.replace("/", "")
+        normalized = provider_symbol.replace("/", "").replace("-", "")
+        if asset.asset_class != "crypto":
+            return normalized
+        known_quotes = ("USDT", "USDC", "BUSD", "FDUSD", "BTC", "ETH", "EUR")
+        if any(normalized.endswith(quote) and len(normalized) > len(quote) for quote in known_quotes):
+            return normalized
+        base = str(asset.base_currency or asset.symbol or normalized).strip().upper()
+        quote = str(asset.quote_currency or "USDT").strip().upper()
+        return f"{base}{quote}"
 
     async def _moving_average_ratio(self, symbol: str, *, endpoint: str, period: int, field: str) -> float:
         quote_payload = await self._get_quote(symbol)
