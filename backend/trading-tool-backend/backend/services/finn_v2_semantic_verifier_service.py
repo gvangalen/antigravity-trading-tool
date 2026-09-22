@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 from time import monotonic
 from typing import Any, Dict, Optional
@@ -13,6 +14,9 @@ from backend.utils.openai_client import StructuredOutputSpec
 
 
 logger = logging.getLogger(__name__)
+
+
+SEMANTIC_VERIFIER_MAX_OUTPUT_TOKENS = 160
 
 
 class FinnV2SemanticVerifierService:
@@ -70,11 +74,12 @@ class FinnV2SemanticVerifierService:
         }
         started = monotonic()
         response = openai_client.ask_gpt_structured_response(
-            prompt=str(user_prompt),
+            prompt=json.dumps(user_prompt, ensure_ascii=False, separators=(",", ":")),
             system_role=system_prompt,
             output_spec=StructuredOutputSpec(name="finn_v2_semantic_verifier", schema=self.SCHEMA),
             model_override=self.flags.semantic_verifier_model(),
             timeout_seconds=provider_timeout_seconds or self.flags.semantic_verifier_timeout_seconds(),
+            max_output_tokens=SEMANTIC_VERIFIER_MAX_OUTPUT_TOKENS,
             client_max_retries=0,
         )
         logger.info(
@@ -141,12 +146,16 @@ class FinnV2SemanticVerifierService:
         try:
             started = monotonic()
             response = await openai_client.ask_gpt_structured_response_async(
-                prompt=str({
-                    "user_message": user_message,
-                    "draft": sanitized_draft,
-                    "evidence": compact_evidence,
-                    "deterministic_summary": deterministic_summary,
-                }),
+                prompt=json.dumps(
+                    {
+                        "user_message": user_message,
+                        "draft": sanitized_draft,
+                        "evidence": compact_evidence,
+                        "deterministic_summary": deterministic_summary,
+                    },
+                    ensure_ascii=False,
+                    separators=(",", ":"),
+                ),
                 system_role=(
                     "You are an independent verifier for FINN Core V2. "
                     "Only judge question relevance, scope completeness, entailment, recommendation consistency, "
@@ -156,6 +165,7 @@ class FinnV2SemanticVerifierService:
                 output_spec=StructuredOutputSpec(name="finn_v2_semantic_verifier", schema=self.SCHEMA),
                 model_override=self.flags.semantic_verifier_model(),
                 timeout_seconds=effective_timeout,
+                max_output_tokens=SEMANTIC_VERIFIER_MAX_OUTPUT_TOKENS,
                 client_max_retries=0,
             )
             logger.info(

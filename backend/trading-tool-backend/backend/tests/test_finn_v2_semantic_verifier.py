@@ -5,7 +5,10 @@ from types import SimpleNamespace
 
 from backend.schemas.finn_v2_verifier_schema import CoverageVerification, VerifierResult
 from backend.services.finn_v2_response_verifier_service import FinnV2ResponseVerifierService
-from backend.services.finn_v2_semantic_verifier_service import FinnV2SemanticVerifierService
+from backend.services.finn_v2_semantic_verifier_service import (
+    SEMANTIC_VERIFIER_MAX_OUTPUT_TOKENS,
+    FinnV2SemanticVerifierService,
+)
 from backend.utils import openai_client as openai_module
 
 
@@ -19,6 +22,7 @@ def test_semantic_verifier_uses_strict_structured_output(monkeypatch):
         assert kwargs["output_spec"].name == "finn_v2_semantic_verifier"
         assert kwargs["output_spec"].strict is True
         assert kwargs["output_spec"].schema["type"] == "object"
+        assert kwargs["max_output_tokens"] == SEMANTIC_VERIFIER_MAX_OUTPUT_TOKENS
         return {
             "parsed": {
                 "passes": True,
