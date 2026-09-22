@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.infrastructure.models import FinnV2RunTrace
@@ -15,6 +15,15 @@ class FinnV2TraceRepository(FinnV2RepositoryTransactionMixin):
         self.session = session
 
     async def next_event_order(self, *, run_id: str, user_id: int) -> int:
+        # Parallel tool sessions append to the same run trace. Serialize only
+        # this tiny sequence allocation inside the current transaction; the
+        # owner-scoped tool reads themselves remain concurrent. Without this
+        # lock two sessions can both observe the same highest event order and
+        # one loses its complete atomic tool transaction to the unique index.
+        await self.session.execute(
+            text("SELECT pg_advisory_xact_lock(hashtext(:run_id))"),
+            {"run_id": run_id},
+        )
         result = await self.session.execute(
             select(FinnV2RunTrace.event_order)
             .where(FinnV2RunTrace.run_id == run_id, FinnV2RunTrace.user_id == user_id)

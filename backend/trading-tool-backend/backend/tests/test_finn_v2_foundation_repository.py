@@ -1,6 +1,7 @@
 from pathlib import Path
 from types import SimpleNamespace
 import asyncio
+from unittest.mock import AsyncMock
 
 import pytest
 
@@ -9,9 +10,24 @@ from backend.schemas.finn_v2_schema import AgentRunRequest
 from backend.services import finn_v2_gateway_service as gateway_module
 from backend.services.finn_v2_gateway_service import FinnV2GatewayService
 from backend.services.finn_v2_run_service import FinnV2RunService
+from backend.infrastructure.repositories.finn_v2_trace_repository import FinnV2TraceRepository
 
 
 ROOT = Path(__file__).resolve().parents[1]
+
+
+def test_trace_event_order_uses_per_run_transaction_lock():
+    locked = SimpleNamespace()
+    latest = SimpleNamespace(scalar_one_or_none=lambda: 8)
+    session = SimpleNamespace(execute=AsyncMock(side_effect=[locked, latest]))
+    repository = FinnV2TraceRepository(session)
+
+    order = asyncio.run(repository.next_event_order(run_id="run-parallel", user_id=7))
+
+    assert order == 9
+    lock_statement, lock_params = session.execute.await_args_list[0].args
+    assert "pg_advisory_xact_lock" in str(lock_statement)
+    assert lock_params == {"run_id": "run-parallel"}
 
 
 def test_dashboard_briefing_cannot_block_the_interactive_finn_queue():
