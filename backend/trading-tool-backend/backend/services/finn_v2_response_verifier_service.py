@@ -1616,11 +1616,16 @@ class FinnV2ResponseVerifierService:
     def _scopes_for_evidence(self, evidence: Any, *, allow_legacy: bool = False) -> set[str]:
         if getattr(evidence, "availability", "available") not in {"available", "stale", "unknown"}:
             return set()
-        if not (getattr(evidence, "facts", None) or {}):
-            return set()
         persisted_scope = getattr(evidence, "information_scope", None)
         if persisted_scope:
+            # A successful canonical read can prove that a user-scoped source is
+            # empty (for example, no preferences have been configured yet).
+            # That is known context, not a missing source. Availability above
+            # remains authoritative, so failed/unavailable reads never gain
+            # coverage through this path.
             return {normalize_information_scope(persisted_scope)}
+        if not (getattr(evidence, "facts", None) or {}):
+            return set()
         if not allow_legacy:
             return set()
         tool_name = str(getattr(evidence, "tool_name", "") or "")

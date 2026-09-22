@@ -163,15 +163,17 @@ class FinnV2OperationClassificationService:
                 conversation_context=conversation_context,
             )
         if (
-            facts.discourse_act == "evaluation"
+            facts.discourse_act in {"evaluation", "contextual_follow_up"}
             and facts.primary_entity == "plan"
             and facts.explicit_plan_subject
         ):
             # The multilingual preprocessor has already produced the complete
-            # typed semantic frame for an explicit plan assessment. Repeating
-            # that same classification through the provider consumes the
-            # reasoning budget without adding ambiguity resolution. The
-            # evaluation itself still uses the real reasoning provider.
+            # typed semantic frame for an explicit plan assessment or a plan-
+            # bound consequence follow-up. Repeating that classification
+            # through the selector provider consumes the reasoning budget
+            # without adding ambiguity resolution. The evaluation itself still
+            # uses the real reasoning provider and persisted conversation
+            # lineage.
             contract = self.registry.require_supported("evaluate_plan")
             return self._result(
                 contract.operation_id,

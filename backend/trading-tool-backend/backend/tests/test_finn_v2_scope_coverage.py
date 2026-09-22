@@ -13,6 +13,41 @@ from backend.services.finn_v2_response_verifier_service import FinnV2ResponseVer
 CONTRACT_VERSION = FinnV2OperationRegistry.VERSION
 
 
+def test_canonical_empty_scope_is_known_context_not_a_missing_source():
+    evidence = SimpleNamespace(
+        availability="available",
+        information_scope="preferences",
+        facts={},
+        tool_name="read_user_preferences",
+        entity_type="preferences",
+    )
+
+    assert FinnV2ResponseVerifierService(session=object())._scopes_for_evidence(evidence) == {
+        "preferences"
+    }
+
+
+def test_empty_scope_does_not_cover_unavailable_or_untyped_evidence():
+    service = FinnV2ResponseVerifierService(session=object())
+    unavailable = SimpleNamespace(
+        availability="unavailable",
+        information_scope="preferences",
+        facts={},
+        tool_name="read_user_preferences",
+        entity_type="preferences",
+    )
+    untyped = SimpleNamespace(
+        availability="available",
+        information_scope=None,
+        facts={},
+        tool_name="read_user_preferences",
+        entity_type="preferences",
+    )
+
+    assert service._scopes_for_evidence(unavailable) == set()
+    assert service._scopes_for_evidence(untyped) == set()
+
+
 def test_lineage_evidence_response_remains_relevant_after_an_off_topic_turn():
     draft = ResponseDraft(
         draft_id="draft-lineage-evidence",

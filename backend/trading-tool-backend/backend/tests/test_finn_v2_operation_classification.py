@@ -1021,6 +1021,28 @@ def test_indicator_implication_for_explicit_plan_is_a_plan_evaluation(message):
     assert facts.discourse_act == "evaluation"
 
 
+def test_explicit_plan_consequence_follow_up_reuses_evaluate_plan_without_selector():
+    class Selector:
+        def select(self, **kwargs):
+            raise AssertionError("typed plan follow-up must not call the selector provider")
+
+    classifier = FinnV2OperationClassificationService(structured_selector=Selector())
+    result = classifier.classify(
+        message="Wat zou dit veranderen aan mijn plan?",
+        conversation_context={
+            "last_released_context": {
+                "run_id": "run-previous",
+                "operation_id": "explain_previous_evidence",
+                "resolved_entities": {"asset": "BTC", "setup_id": 7},
+            }
+        },
+    )
+
+    assert result.operation_id == "evaluate_plan"
+    assert result.selector_source == "registry_evaluation_constraint"
+    assert result.discourse == "contextual_follow_up"
+
+
 @pytest.mark.parametrize("message", (
     "Waar is mijn handelsaanpak het kwetsbaarst?",
     "Which part of my trading approach is least resilient?",
