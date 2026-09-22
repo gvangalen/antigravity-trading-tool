@@ -2,11 +2,11 @@ from backend.infrastructure.database import _async_engine_options
 from backend.celery_task import finn_v2_task
 
 
-def test_interactive_finn_worker_uses_fresh_bounded_database_connections():
+def test_interactive_finn_worker_keeps_one_warm_connection_with_bounded_read_burst():
     options = _async_engine_options("celery-worker-finn-interactive")
 
     assert options["pool_size"] == 1
-    assert options["max_overflow"] == 0
+    assert options["max_overflow"] == 7
     assert options["pool_pre_ping"] is True
     assert options["pool_use_lifo"] is True
     assert options["pool_recycle"] == 1800

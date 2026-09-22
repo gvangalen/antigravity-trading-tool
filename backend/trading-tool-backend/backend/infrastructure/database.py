@@ -23,13 +23,14 @@ ASYNC_DATABASE_URL = f"postgresql+asyncpg://{db_user}:{db_pass}@{db_host}:{db_po
 def _async_engine_options(build_service: str | None) -> dict:
     options = {"echo": False, "future": True}
     if build_service == "celery-worker-finn-interactive":
-        # The worker has concurrency=1. Keep exactly one recently verified
-        # connection warm rather than recycling it between user turns: closing
-        # an idle remote TLS socket can otherwise consume most of the visible
-        # lifecycle budget before the dispatch claim is persisted.
+        # The worker has concurrency=1. Keep one recently verified connection
+        # warm between user turns, while allowing one bounded burst for the
+        # dependency-layered read graph of a single FINN run. Overflow
+        # connections are discarded after the burst, so idle capacity remains
+        # one connection and external provider waits never retain the pool.
         options.update(
             pool_size=1,
-            max_overflow=0,
+            max_overflow=7,
             pool_pre_ping=True,
             pool_use_lifo=True,
             pool_recycle=1800,

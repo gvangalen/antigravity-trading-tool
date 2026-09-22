@@ -148,6 +148,10 @@ class FinnV2ToolExecutionService:
     ) -> List[ToolExecutionResult]:
         """Run independent read tools concurrently without sharing a DB session."""
         started = monotonic()
+        # Selector persistence may still own the warm connection. Release it
+        # before isolated read sessions fan out so it cannot consume bounded
+        # burst capacity while doing no tool work.
+        await self._release_primary_connection()
         ordered_names = list(tool_plan.tool_names)
         selected = set(ordered_names)
         definitions = {name: self.registry.get_tool(name) for name in ordered_names}

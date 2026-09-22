@@ -600,7 +600,7 @@ def test_tool_execution_skips_evidence_ingestion_after_tool_call_completion_roll
 
 
 def test_full_plan_reads_run_in_dependency_layers_with_isolated_sessions(monkeypatch):
-    service = FinnV2ToolExecutionService(session=object())
+    service = FinnV2ToolExecutionService(session=_FakeSession())
     service.persistence_session_factory = object()
     active = 0
     peak_active = 0
