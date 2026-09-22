@@ -15,23 +15,17 @@ class FinnV2TraceRepository(FinnV2RepositoryTransactionMixin):
         self.session = session
 
     async def next_event_order(self, *, run_id: str, user_id: int) -> int:
-        # Parallel tool sessions append to the same run trace. Serialize only
-        # this tiny sequence allocation inside the current transaction; the
-        # owner-scoped tool reads themselves remain concurrent. Without this
-        # lock two sessions can both observe the same highest event order and
-        # one loses its complete atomic tool transaction to the unique index.
-        await self.session.execute(
-            text("SELECT pg_advisory_xact_lock(hashtext(:run_id))"),
-            {"run_id": run_id},
-        )
+        # A PostgreSQL sequence is atomic across concurrent tool sessions and
+        # does not hold a transaction lock while evidence is persisted. The
+        # value only needs to be monotonic for ordering; gaps after rollback
+        # are valid trace semantics.
         result = await self.session.execute(
-            select(FinnV2RunTrace.event_order)
-            .where(FinnV2RunTrace.run_id == run_id, FinnV2RunTrace.user_id == user_id)
-            .order_by(FinnV2RunTrace.event_order.desc())
-            .limit(1)
+            text(
+                "SELECT nextval(pg_get_serial_sequence("
+                "'finn_v2_run_traces', 'id'))"
+            )
         )
-        current = result.scalar_one_or_none()
-        return int(current or 0) + 1
+        return int(result.scalar_one())
 
     async def append_event(
         self,
