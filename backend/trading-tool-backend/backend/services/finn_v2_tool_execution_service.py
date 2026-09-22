@@ -146,7 +146,13 @@ class FinnV2ToolExecutionService:
         user_id: int,
         tool_plan: ToolPlan,
     ) -> List[ToolExecutionResult]:
-        """Run independent read tools concurrently without sharing a DB session."""
+        """Run the registry dependency graph without sharing DB sessions.
+
+        A stage-based implementation made every dependent tool wait for the
+        slowest unrelated tool in the same stage.  This DAG scheduler starts a
+        tool as soon as its own dependencies are complete, while preserving
+        registry order in the returned contract evidence.
+        """
         started = monotonic()
         # Selector persistence may still own the warm connection. Release it
         # before isolated read sessions fan out so it cannot consume bounded
@@ -155,58 +161,69 @@ class FinnV2ToolExecutionService:
         ordered_names = list(tool_plan.tool_names)
         selected = set(ordered_names)
         definitions = {name: self.registry.get_tool(name) for name in ordered_names}
-        remaining = list(ordered_names)
-        completed: set[str] = set()
-        shared_state: Dict[str, Any] = {}
-        results_by_name: Dict[str, ToolExecutionResult] = {}
+        tasks: Dict[str, asyncio.Task[tuple[ToolExecutionResult, Dict[str, Any]]]] = {}
+        scheduling: set[str] = set()
 
-        while remaining:
-            ready = [
-                name
-                for name in remaining
-                if all(dependency not in selected or dependency in completed for dependency in definitions[name].depends_on)
+        def schedule(name: str) -> asyncio.Task[tuple[ToolExecutionResult, Dict[str, Any]]]:
+            existing = tasks.get(name)
+            if existing is not None:
+                return existing
+            if name in scheduling:
+                async def cycle_failure():
+                    return ToolExecutionResult(
+                        tool_name=name,
+                        status="failed",
+                        success=False,
+                        error_codes=["tool_dependency_cycle"],
+                    ), {}
+
+                task = asyncio.create_task(cycle_failure())
+                tasks[name] = task
+                return task
+
+            scheduling.add(name)
+            dependency_names = [
+                dependency
+                for dependency in definitions[name].depends_on
+                if dependency in selected
             ]
-            if not ready:
-                # Registry cycles are invalid, but preserve bounded fail-safe
-                # behavior instead of leaving a run in collecting.
-                ready = [remaining[0]]
+            dependency_tasks = [schedule(dependency) for dependency in dependency_names]
+            scheduling.remove(name)
 
-            if monotonic() - started > 20.0:
-                for name in remaining:
-                    results_by_name[name] = ToolExecutionResult(
+            async def execute_after_dependencies():
+                dependency_state: Dict[str, Any] = {}
+                if dependency_tasks:
+                    dependency_results = await asyncio.gather(*dependency_tasks)
+                    for _result, resolved_state in dependency_results:
+                        dependency_state.update(resolved_state)
+                if monotonic() - started > 20.0:
+                    return ToolExecutionResult(
                         tool_name=name,
                         status="failed",
                         success=False,
                         error_codes=["tool_timeout"],
-                    )
-                break
-
-            stage_state = dict(shared_state)
-            stage_results = await asyncio.gather(
-                *(
-                    self._execute_tool_in_isolated_session(
-                        run_id=run_id,
-                        user_id=user_id,
-                        tool_name=name,
-                        selector=tool_plan.tool_inputs.get(name, {}),
-                        shared_state=stage_state,
-                        operation_id=getattr(getattr(tool_plan, "request_plan", None), "operation_id", None),
-                        operation_contract_version=getattr(
-                            getattr(tool_plan, "request_plan", None),
-                            "operation_contract_version",
-                            None,
-                        ),
-                    )
-                    for name in ready
+                    ), dependency_state
+                return await self._execute_tool_in_isolated_session(
+                    run_id=run_id,
+                    user_id=user_id,
+                    tool_name=name,
+                    selector=tool_plan.tool_inputs.get(name, {}),
+                    shared_state=dependency_state,
+                    operation_id=getattr(getattr(tool_plan, "request_plan", None), "operation_id", None),
+                    operation_contract_version=getattr(
+                        getattr(tool_plan, "request_plan", None),
+                        "operation_contract_version",
+                        None,
+                    ),
                 )
-            )
-            for name, (result, resolved_state) in zip(ready, stage_results):
-                results_by_name[name] = result
-                shared_state.update(resolved_state)
-                completed.add(name)
-                remaining.remove(name)
 
-        return [results_by_name[name] for name in ordered_names]
+            task = asyncio.create_task(execute_after_dependencies())
+            tasks[name] = task
+            return task
+
+        ordered_tasks = [schedule(name) for name in ordered_names]
+        ordered_results = await asyncio.gather(*ordered_tasks)
+        return [result for result, _resolved_state in ordered_results]
 
     async def _execute_tool_in_isolated_session(
         self,

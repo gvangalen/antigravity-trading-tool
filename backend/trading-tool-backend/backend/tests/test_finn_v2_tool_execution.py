@@ -599,7 +599,7 @@ def test_tool_execution_skips_evidence_ingestion_after_tool_call_completion_roll
     assert service.traces.events == []
 
 
-def test_full_plan_reads_run_in_dependency_layers_with_isolated_sessions(monkeypatch):
+def test_full_plan_reads_run_as_dependency_dag_with_isolated_sessions(monkeypatch):
     service = FinnV2ToolExecutionService(session=_FakeSession())
     service.persistence_session_factory = object()
     active = 0
@@ -613,7 +613,7 @@ def test_full_plan_reads_run_in_dependency_layers_with_isolated_sessions(monkeyp
         active += 1
         peak_active = max(peak_active, active)
         started[name] = asyncio.get_running_loop().time()
-        await asyncio.sleep(0.01)
+        await asyncio.sleep(0.05 if name == "read_technical_snapshot" else 0.01)
         completed[name] = asyncio.get_running_loop().time()
         active -= 1
         state = dict(kwargs["shared_state"])
@@ -658,3 +658,4 @@ def test_full_plan_reads_run_in_dependency_layers_with_isolated_sessions(monkeyp
     assert started["read_linked_strategy"] >= completed["read_active_setup"]
     assert started["read_linked_bot"] >= completed["read_linked_strategy"]
     assert started["read_bot_status"] >= completed["read_linked_bot"]
+    assert started["read_active_setup"] < completed["read_technical_snapshot"]

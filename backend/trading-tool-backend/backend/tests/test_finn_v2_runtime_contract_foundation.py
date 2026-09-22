@@ -1377,6 +1377,7 @@ def test_selector_provider_budget_leaves_time_for_the_persisted_selection(monkey
     assert flags.selector_phase_deadline_seconds() == 12
     assert flags.selector_provider_timeout_seconds() < flags.lifecycle_deadline_seconds()
     assert flags.selector_max_output_tokens() == 240
+    assert flags.reasoning_max_output_tokens() == 600
     assert "timeout_seconds=selector_timeout_seconds" in (
         ROOT / "services" / "finn_v2_operation_classification_service.py"
     ).read_text(encoding="utf-8")

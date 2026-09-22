@@ -174,7 +174,10 @@ class FinnV2FlagService:
         return max(1, min(20, self._env_int("FINN_V2_VISIBLE_REQUEST_TIMEOUT_SECONDS", 20)))
 
     def reasoning_max_output_tokens(self) -> int:
-        return self._env_int("FINN_V2_REASONING_MAX_OUTPUT_TOKENS", 1800)
+        # The strict response schema is intentionally compact. Allowing the
+        # generic 1,800-token ceiling made an interactive reasoning call use
+        # nearly the full lifecycle before the independent verifier could run.
+        return max(320, min(900, self._env_int("FINN_V2_REASONING_MAX_OUTPUT_TOKENS", 600)))
 
     def reasoning_max_retries(self) -> int:
         return max(0, min(1, self._env_int("FINN_V2_REASONING_MAX_RETRIES", 1)))
