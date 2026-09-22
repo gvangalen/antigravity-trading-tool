@@ -894,6 +894,8 @@ def terminal_projection(
     except (KeyError, TypeError, ValueError):
         # Historical projections remain readable without invented timings.
         timings_ms = {}
+    response_payload = dict(response or {})
+    reasoning_provenance = dict(response_payload.get("reasoning_provenance") or {})
     return {
         "version": FINN_PUBLIC_PROJECTION_VERSION,
         "projection_version": RUNTIME_CONTRACT_VERSION,
@@ -910,9 +912,11 @@ def terminal_projection(
         "final_mode": mode or state.get("final_mode") or state.get("requested_mode"),
         "operation_change_reason": state.get("operation_change_reason"),
         "canonical_target": state.get("canonical_target"),
+        "target_asset": state.get("canonical_target"),
         "canonical_entity_target": dict(state.get("canonical_entity_target") or {}),
         "canonical_target_collection": dict(state.get("canonical_target_collection") or {}),
         "target_source": state.get("target_source"),
+        "target_asset_source": state.get("target_source"),
         "conversation_reference": state.get("conversation_reference"),
         "conversation_reference_kind": state.get("conversation_reference_kind"),
         "supplied_inputs": dict(state.get("supplied_inputs") or {}),
@@ -921,6 +925,11 @@ def terminal_projection(
         "action_draft": dict(state.get("action_draft") or {}),
         "terminal_status": status,
         "terminal_response_type": state.get("terminal_response_type") or ("failure" if status == "failed" else "response"),
+        "response_type": response_payload.get("mode") or mode or state.get("final_mode"),
+        "modelcall_attempted": bool(reasoning_provenance.get("provider_called")),
+        "modelcall_outcome": reasoning_provenance.get("provider_status") or (
+            "not_attempted" if reasoning_provenance.get("provider_called") is False else None
+        ),
         "proposal_lifecycle": dict(state.get("proposal_lifecycle") or {}),
         "action_result": dict(state.get("action_result") or {}),
         "resolved_action_envelope": dict(state.get("resolved_action_envelope") or {}),
@@ -930,5 +939,5 @@ def terminal_projection(
         "timings_ms": timings_ms,
         "error_code": error_code,
         "terminal_reason": state.get("terminal_reason") or error_code,
-        "response": dict(response or {}),
+        "response": response_payload,
     }

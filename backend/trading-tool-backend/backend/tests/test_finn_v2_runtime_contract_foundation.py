@@ -1254,6 +1254,35 @@ def test_collecting_setup_draft_uses_product_copy_in_its_terminal_placeholder():
     assert "dca_frequency" not in response["content"]
 
 
+def test_collecting_dca_setup_keeps_known_plan_terms_visible_while_asking_next_slot():
+    run_service = FinnV2RunService(session=object())
+
+    response = run_service._terminal_placeholder_response(
+        interaction_mode="CREATE_PROPOSAL",
+        terminal_status="clarification_required",
+        orchestrator={},
+        verifier={},
+        reasoning={},
+        delivery_envelope={},
+        setup_draft={
+            "operation_id": "create_setup",
+            "requested_slot": "name",
+            "supplied_inputs": {
+                "symbol": "BTC",
+                "setup_type": "dca",
+                "dca_frequency": "weekly",
+                "min_investment": 150,
+            },
+        },
+    )
+
+    assert response["mode"] == "CLARIFICATION"
+    assert "BTC" in response["content"]
+    assert "wekelijks" in response["content"]
+    assert "EUR 150 per aankoop" in response["content"]
+    assert "naam" in response["content"].lower()
+
+
 def test_cancelled_guided_draft_uses_natural_terminal_copy():
     run_service = FinnV2RunService(session=object())
 

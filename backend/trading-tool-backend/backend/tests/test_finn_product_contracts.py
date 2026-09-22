@@ -1,4 +1,5 @@
 import asyncio
+import pytest
 
 from backend.schemas.bot_schema import BotConfigCreateSchema
 from backend.schemas.trading_schema import SetupCreateSchema, StrategyCreateSchema
@@ -114,6 +115,25 @@ def test_setup_contract_accepts_canonical_btc_and_aapl_payloads():
 
     assert SetupCreateSchema(**btc).symbol == "BTC"
     assert SetupCreateSchema(**aapl).symbol == "AAPL"
+
+
+def test_setup_contract_rejects_incomplete_dca_schedules_before_database_write():
+    with pytest.raises(ValueError, match="dca_frequency"):
+        SetupCreateSchema(name="BTC DCA", symbol="BTC", setup_type="dca")
+    with pytest.raises(ValueError, match="dca_day"):
+        SetupCreateSchema(
+            name="BTC Weekly DCA",
+            symbol="BTC",
+            setup_type="dca",
+            dca_frequency="weekly",
+        )
+    assert SetupCreateSchema(
+        name="BTC Weekly DCA",
+        symbol="BTC",
+        setup_type="dca",
+        dca_frequency="weekly",
+        dca_day=1,
+    ).dca_day == 1
 
 
 def test_strategy_contract_accepts_canonical_btc_and_aapl_trade_payloads():

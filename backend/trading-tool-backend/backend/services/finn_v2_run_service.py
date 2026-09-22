@@ -387,6 +387,24 @@ class FinnV2RunService:
                     contract=FinnV2OperationRegistry().require_supported(draft["operation_id"]),
                     collected_inputs=dict(draft.get("supplied_inputs") or {}),
                 )
+            if draft.get("operation_id") == "create_setup":
+                supplied = dict(draft.get("supplied_inputs") or {})
+                known = []
+                if supplied.get("symbol"):
+                    known.append(str(supplied["symbol"]).upper())
+                if supplied.get("dca_frequency"):
+                    frequency = {
+                        "daily": "dagelijks",
+                        "weekly": "wekelijks",
+                        "monthly": "maandelijks",
+                    }.get(str(supplied["dca_frequency"]).casefold(), str(supplied["dca_frequency"]))
+                    known.append(frequency)
+                if supplied.get("min_investment") is not None:
+                    amount = float(supplied["min_investment"])
+                    rendered_amount = str(int(amount)) if amount.is_integer() else str(amount)
+                    known.append(f"EUR {rendered_amount} per aankoop")
+                if known:
+                    content = f"Ik heb {' · '.join(known)} vastgelegd. {content}"
             content = content or "FINN heeft eerst een verduidelijking nodig."
             mode = "CLARIFICATION"
         elif terminal_status == "rejected":

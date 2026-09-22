@@ -67,6 +67,30 @@ def test_unavailable_downgrade_keeps_internal_verifier_codes_out_of_user_copy():
     assert "response_not_answering_question" not in rendered
 
 
+def test_contract_limited_downgrade_keeps_provider_locale_and_asset():
+    draft = ResponseDraft(
+        draft_id="draft-de",
+        run_id="run-de",
+        user_id=7,
+        mode="EVALUATE",
+        direct_answer="Antwort",
+        main_observation="Beobachtung",
+        evidence_refs_used=["E1"],
+        evidence_set_hash="hash-de",
+        reasoning_provenance={"locale": "de-DE", "target_asset": "MSFT"},
+        created_at=datetime.now(timezone.utc),
+    )
+
+    result = FinnV2ResponseDowngradeService().downgrade_to_contract_limited_evaluate(
+        draft=draft, reason="response_scope_incomplete"
+    )
+
+    rendered = " ".join([result.direct_answer, result.main_observation, result.uncertainty_summary or ""])
+    assert "MSFT" in rendered
+    assert "Nachweise" in rendered
+    assert "Ik kan" not in rendered
+
+
 def test_evaluate_claim_downgrade_never_changes_the_request_to_read():
     verifier = FinnV2ResponseVerifierService(session=object())
 

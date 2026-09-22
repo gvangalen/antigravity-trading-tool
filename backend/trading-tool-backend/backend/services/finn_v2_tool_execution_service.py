@@ -106,6 +106,12 @@ class FinnV2ToolExecutionService:
         return results
 
     async def execute_tool_plan(self, *, run_id: str, user_id: int, tool_plan: ToolPlan) -> List[ToolExecutionResult]:
+        if self.persistence_session_factory is not None and len(tool_plan.tool_names) > 1:
+            return await self._execute_parallel_tool_plan(
+                run_id=run_id,
+                user_id=user_id,
+                tool_plan=tool_plan,
+            )
         started = monotonic()
         results: List[ToolExecutionResult] = []
         shared_state: Dict[str, Any] = {}
@@ -132,6 +138,97 @@ class FinnV2ToolExecutionService:
             )
             results.append(result)
         return results
+
+    async def _execute_parallel_tool_plan(
+        self,
+        *,
+        run_id: str,
+        user_id: int,
+        tool_plan: ToolPlan,
+    ) -> List[ToolExecutionResult]:
+        """Run independent read tools concurrently without sharing a DB session."""
+        started = monotonic()
+        ordered_names = list(tool_plan.tool_names)
+        selected = set(ordered_names)
+        definitions = {name: self.registry.get_tool(name) for name in ordered_names}
+        remaining = list(ordered_names)
+        completed: set[str] = set()
+        shared_state: Dict[str, Any] = {}
+        results_by_name: Dict[str, ToolExecutionResult] = {}
+
+        while remaining:
+            ready = [
+                name
+                for name in remaining
+                if all(dependency not in selected or dependency in completed for dependency in definitions[name].depends_on)
+            ]
+            if not ready:
+                # Registry cycles are invalid, but preserve bounded fail-safe
+                # behavior instead of leaving a run in collecting.
+                ready = [remaining[0]]
+
+            if monotonic() - started > 20.0:
+                for name in remaining:
+                    results_by_name[name] = ToolExecutionResult(
+                        tool_name=name,
+                        status="failed",
+                        success=False,
+                        error_codes=["tool_timeout"],
+                    )
+                break
+
+            stage_state = dict(shared_state)
+            stage_results = await asyncio.gather(
+                *(
+                    self._execute_tool_in_isolated_session(
+                        run_id=run_id,
+                        user_id=user_id,
+                        tool_name=name,
+                        selector=tool_plan.tool_inputs.get(name, {}),
+                        shared_state=stage_state,
+                        operation_id=getattr(getattr(tool_plan, "request_plan", None), "operation_id", None),
+                        operation_contract_version=getattr(
+                            getattr(tool_plan, "request_plan", None),
+                            "operation_contract_version",
+                            None,
+                        ),
+                    )
+                    for name in ready
+                )
+            )
+            for name, (result, resolved_state) in zip(ready, stage_results):
+                results_by_name[name] = result
+                shared_state.update(resolved_state)
+                completed.add(name)
+                remaining.remove(name)
+
+        return [results_by_name[name] for name in ordered_names]
+
+    async def _execute_tool_in_isolated_session(
+        self,
+        *,
+        run_id: str,
+        user_id: int,
+        tool_name: str,
+        selector: Dict[str, Any],
+        shared_state: Dict[str, Any],
+        operation_id: Optional[str],
+        operation_contract_version: Optional[str],
+    ) -> tuple[ToolExecutionResult, Dict[str, Any]]:
+        local_state = dict(shared_state)
+        async with self.persistence_session_factory() as session:
+            service = FinnV2ToolExecutionService(session, self.flags)
+            result = await service.execute_tool(
+                run_id=run_id,
+                user_id=user_id,
+                tool_name=tool_name,
+                selector=selector,
+                shared_state=local_state,
+                timeout_seconds=2.0,
+                operation_id=operation_id,
+                operation_contract_version=operation_contract_version,
+            )
+        return result, local_state
 
     async def run_state_pipeline(self, *, run_id: str, user_id: int) -> Tuple[Optional[object], Optional[object]]:
         return await self._run_state_pipeline(run_id=run_id, user_id=user_id)

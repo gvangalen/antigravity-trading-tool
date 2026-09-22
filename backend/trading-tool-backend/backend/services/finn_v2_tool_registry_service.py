@@ -9,7 +9,7 @@ class FinnV2ToolRegistryService:
             ToolDefinition(name="read_profile", description="Read normalized trader profile."),
             ToolDefinition(name="read_user_preferences", description="Read stored FINN user preferences."),
             ToolDefinition(name="read_active_asset", description="Resolve the active asset context."),
-            ToolDefinition(name="read_indicator_configuration", description="Read indicator preferences for the resolved asset."),
+            ToolDefinition(name="read_indicator_configuration", description="Read indicator preferences for the resolved asset.", depends_on=["read_active_asset"]),
             ToolDefinition(name="read_asset_scores", description="Read the latest stored asset scores.", depends_on=["read_active_asset"]),
             ToolDefinition(name="read_market_snapshot", description="Read the latest market snapshot.", depends_on=["read_active_asset"]),
             ToolDefinition(name="read_macro_snapshot", description="Read the latest macro snapshot.", depends_on=["read_active_asset"]),

@@ -84,6 +84,33 @@ def test_terminal_projection_exposes_safe_phase_timings_when_persisted():
     assert projection["timings_ms"] == {"total": 1000, "until_queued": 100, "until_collecting": 200, "terminal_persist": 700}
 
 
+def test_terminal_projection_exposes_safe_provider_and_asset_observability():
+    projection = terminal_projection(
+        {
+            "identity": {"run_id": "run-provider", "conversation_id": "conversation-provider"},
+            "canonical_target": "MSFT",
+            "target_source": "workspace_context",
+        },
+        status="completed",
+        mode="EVALUATE",
+        response={
+            "mode": "EVALUATE",
+            "reasoning_provenance": {
+                "provider_called": True,
+                "provider_status": "completed",
+                "provider_response_id": "private-provider-id",
+            },
+        },
+    )
+
+    assert projection["target_asset"] == "MSFT"
+    assert projection["target_asset_source"] == "workspace_context"
+    assert projection["modelcall_attempted"] is True
+    assert projection["modelcall_outcome"] == "completed"
+    assert projection["response_type"] == "EVALUATE"
+    assert "provider_response_id" not in projection
+
+
 def test_terminal_projection_keeps_dispatch_selector_and_fast_path_boundaries():
     projection = terminal_projection(
         {

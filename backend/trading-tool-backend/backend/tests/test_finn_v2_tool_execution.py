@@ -8,6 +8,8 @@ from backend.services.asset_catalog_service import AssetCatalogService
 from backend.services.finn_v2_freshness_service import FinnV2FreshnessService
 from backend.services.finn_v2_tool_redaction_service import FinnV2ToolRedactionService
 from backend.services.finn_v2_tool_execution_service import FinnV2ToolExecutionService
+from backend.schemas.finn_v2_orchestrator_schema import ToolPlan
+from backend.domain.finn_v2_tools import ToolExecutionResult
 
 
 class _FakeRunRepo:
@@ -595,3 +597,64 @@ def test_tool_execution_skips_evidence_ingestion_after_tool_call_completion_roll
     assert session.rollback_calls == 1
     assert service.evidence.ingest_tool_result.await_count == 0
     assert service.traces.events == []
+
+
+def test_full_plan_reads_run_in_dependency_layers_with_isolated_sessions(monkeypatch):
+    service = FinnV2ToolExecutionService(session=object())
+    service.persistence_session_factory = object()
+    active = 0
+    peak_active = 0
+    started = {}
+    completed = {}
+
+    async def _execute_isolated(**kwargs):
+        nonlocal active, peak_active
+        name = kwargs["tool_name"]
+        active += 1
+        peak_active = max(peak_active, active)
+        started[name] = asyncio.get_running_loop().time()
+        await asyncio.sleep(0.01)
+        completed[name] = asyncio.get_running_loop().time()
+        active -= 1
+        state = dict(kwargs["shared_state"])
+        if name == "read_active_asset":
+            state["asset"] = "BTC"
+        elif name == "read_active_setup":
+            state["setup"] = {"setup_id": 7}
+        elif name == "read_linked_strategy":
+            state["strategy"] = {"strategy_id": 8}
+        elif name == "read_linked_bot":
+            state["bot"] = {"bot_id": 9}
+        return ToolExecutionResult(tool_name=name, status="completed", success=True), state
+
+    monkeypatch.setattr(service, "_execute_tool_in_isolated_session", _execute_isolated)
+    names = [
+        "read_profile",
+        "read_user_preferences",
+        "read_active_asset",
+        "read_indicator_configuration",
+        "read_asset_scores",
+        "read_market_snapshot",
+        "read_macro_snapshot",
+        "read_technical_snapshot",
+        "read_active_setup",
+        "read_linked_strategy",
+        "read_linked_bot",
+        "read_bot_status",
+    ]
+    plan = ToolPlan(
+        run_id="run-plan",
+        interaction_mode="EVALUATE",
+        tool_names=names,
+        tool_inputs={name: {"asset": "BTC"} for name in names},
+        max_tool_calls=15,
+    )
+
+    results = asyncio.run(service.execute_tool_plan(run_id="run-plan", user_id=7, tool_plan=plan))
+
+    assert [result.tool_name for result in results] == names
+    assert peak_active >= 5
+    assert started["read_indicator_configuration"] >= completed["read_active_asset"]
+    assert started["read_linked_strategy"] >= completed["read_active_setup"]
+    assert started["read_linked_bot"] >= completed["read_linked_strategy"]
+    assert started["read_bot_status"] >= completed["read_linked_bot"]

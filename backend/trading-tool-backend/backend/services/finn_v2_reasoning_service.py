@@ -325,6 +325,8 @@ class FinnV2ReasoningService:
                 "response_strategy": contract.response_strategy,
                 "missing_required_inputs": missing_required_inputs,
                 "validation_status": "passed",
+                "locale": context.locale,
+                "target_asset": request_plan_payload.get("target_asset"),
             }
             await self._append_trace(run_id, user_id, trace_id, "reasoning_deterministic_contract", context, model_name, "ready", 0, 0, input_hash, [])
             return await self._persist_record(
@@ -743,6 +745,7 @@ class FinnV2ReasoningService:
                         "created_at": datetime.now(timezone.utc),
                     }
                 )
+                self._add_request_provenance(result=result, context=context)
                 self._include_required_evidence_ledger(result=result, context=context)
                 self._validate_refs(result, context)
             except (ValidationError, FinnV2ReasoningContractError) as exc:
@@ -820,6 +823,7 @@ class FinnV2ReasoningService:
                         fallback_reason="rejected_optional_item_removed",
                     )
                     deterministic_repair.reasoning_provenance["reasoning_source"] = "model_with_bounded_repair"
+                    self._add_request_provenance(result=deterministic_repair, context=context)
                     return await self._persist_record(
                         run_id=run_id, user_id=user_id,
                         orchestrator_result_id=orchestrator_result.orchestrator_result_id,
@@ -879,6 +883,7 @@ class FinnV2ReasoningService:
                         },
                     )
                     limited.reasoning_provenance["reasoning_source"] = "contract_evidence_limitation"
+                    self._add_request_provenance(result=limited, context=context)
                     return await self._persist_record(
                         run_id=run_id,
                         user_id=user_id,
@@ -916,6 +921,7 @@ class FinnV2ReasoningService:
                     fallback_reason=error,
                     repair_audit=repair_contract,
                 )
+                self._add_request_provenance(result=fallback, context=context)
                 return await self._persist_record(
                     run_id=run_id,
                     user_id=user_id,
@@ -1049,6 +1055,15 @@ class FinnV2ReasoningService:
         if commit is not None:
             await commit()
 
+    @staticmethod
+    def _add_request_provenance(*, result: ReasoningResult, context) -> None:
+        request_plan = dict(getattr(context, "request_plan", None) or {})
+        result.reasoning_provenance = {
+            **dict(result.reasoning_provenance or {}),
+            "locale": str(getattr(context, "locale", "nl-NL") or "nl-NL"),
+            "target_asset": request_plan.get("target_asset"),
+        }
+
     def _fallback_for_reasoning_error(
         self,
         *,
@@ -1082,47 +1097,52 @@ class FinnV2ReasoningService:
                 result.direct_answer = "De AI-dienst is tijdelijk niet beschikbaar; daarom doe ik geen inhoudelijke beoordeling alsof die wel is uitgevoerd."
                 result.main_observation = "Je opgeslagen gegevens zijn niet gewijzigd."
                 result.uncertainty_summary = "Probeer het opnieuw zodra de AI-dienst weer beschikbaar is."
+            self._add_request_provenance(result=result, context=context)
             return result
         mode = normalize_interaction_mode(context.interaction_mode)
         if mode == "EVALUATE":
-            return self.fallbacks.grounded_evaluation_draft(
+            result = self.fallbacks.grounded_evaluation_draft(
                 run_id=run_id,
                 user_id=user_id,
                 context=context,
                 model=model_name,
                 error_codes=error_codes,
             )
-        if mode == "READ":
-            return self.fallbacks.grounded_read_draft(
+        elif mode == "READ":
+            result = self.fallbacks.grounded_read_draft(
                 run_id=run_id,
                 user_id=user_id,
                 context=context,
                 model=model_name,
                 error_codes=error_codes,
             )
-        if mode in {"CREATE_PROPOSAL", "ACTION_PROPOSAL"}:
+        elif mode in {"CREATE_PROPOSAL", "ACTION_PROPOSAL"}:
             if not context.policy.allowed and context.policy.operation_type == "activate_live_bot":
-                return self.fallbacks.blocked_action_draft(
+                result = self.fallbacks.blocked_action_draft(
                     run_id=run_id,
                     user_id=user_id,
                     context=context,
                     model=model_name,
                     error_codes=error_codes,
                 )
-            return self.fallbacks.grounded_proposal_draft(
+            else:
+                result = self.fallbacks.grounded_proposal_draft(
+                    run_id=run_id,
+                    user_id=user_id,
+                    context=context,
+                    model=model_name,
+                    error_codes=error_codes,
+                )
+        else:
+            result = self.fallbacks.unavailable_draft(
                 run_id=run_id,
                 user_id=user_id,
-                context=context,
-                model=model_name,
+                mode=context.interaction_mode,
                 error_codes=error_codes,
+                model=model_name,
             )
-        return self.fallbacks.unavailable_draft(
-            run_id=run_id,
-            user_id=user_id,
-            mode=context.interaction_mode,
-            error_codes=error_codes,
-            model=model_name,
-        )
+        self._add_request_provenance(result=result, context=context)
+        return result
 
     async def _persist_record(self, **kwargs):
         result = kwargs.pop("result", None)
