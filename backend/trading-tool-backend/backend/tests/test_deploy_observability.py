@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -221,6 +222,8 @@ def test_deploy_checks_effective_finn_policy_parity_without_printing_values() ->
         assert key in source
     assert "FINN_V2_LIVE_ACTIONS_ENABLED" in source
     assert "FINN_V2_EXECUTE_LIVE_BOT_ACTIVATION" in source
+    assert 'process.env.APP_ENV === "staging" ? "-staging" : ""' in source
+    assert '"backend" + appSuffix' in source
     for result in (
         "safe_action_policy_ready",
         "api_worker_policy_parity",
@@ -229,6 +232,51 @@ def test_deploy_checks_effective_finn_policy_parity_without_printing_values() ->
         "broker_execution_disabled",
     ):
         assert result in source
+
+
+def test_policy_gate_checks_staging_process_names(tmp_path: Path) -> None:
+    policy_check = REPO_ROOT / "ops" / "deploy" / "check_finn_runtime_policy.js"
+    source = policy_check.read_text(encoding="utf-8")
+    sha = "b" * 40
+    runtime_env = {
+        "TRADAMIND_BUILD_COMMIT_SHA": sha,
+        "FINN_V2_PROPOSALS_ENABLED": "true",
+        "FINN_V2_CONFIRMATIONS_ENABLED": "true",
+        "FINN_V2_WRITE_BLOCKED": "true",
+        "FINN_V2_LIVE_ACTIONS_ENABLED": "false",
+        "FINN_V2_PAPER_ACTIONS_ENABLED": "false",
+        "FINN_V2_EXECUTE_LIVE_BOT_ACTIVATION": "false",
+        "FINN_V2_EXECUTE_ASSET_SELECTION": "true",
+        "FINN_V2_EXECUTE_WATCHLIST_CHANGES": "true",
+        "FINN_V2_EXECUTE_INDICATOR_CHANGES": "true",
+        "FINN_V2_EXECUTE_SETUP_CHANGES": "true",
+        "FINN_V2_EXECUTE_STRATEGY_CHANGES": "true",
+        "FINN_V2_EXECUTE_BOT_CHANGES": "true",
+        "FINN_V2_EXECUTE_TRADE_PLAN_CHANGES": "false",
+        "FINN_V2_EXECUTE_PAPER_BOT_ACTIVATION": "false",
+    }
+    payload = [
+        {"name": name, "pm2_env": {"env": runtime_env}}
+        for name in (
+            "backend-staging",
+            "celery-worker-finn-interactive-staging",
+            "celery-worker-default-staging",
+        )
+    ]
+    pm2 = tmp_path / "pm2"
+    pm2.write_text("#!/bin/sh\nprintf '%s\\n' '" + json.dumps(payload) + "'\n", encoding="utf-8")
+    pm2.chmod(0o700)
+
+    result = subprocess.run(
+        ["node", str(policy_check)],
+        env={**os.environ, "APP_ENV": "staging", "PM2_BIN": str(pm2), "TRADAMIND_BUILD_COMMIT_SHA": sha},
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert json.loads(result.stdout)["pass"] is True
     assert "JSON.stringify" in source
     assert "requiredPolicy" in source
 

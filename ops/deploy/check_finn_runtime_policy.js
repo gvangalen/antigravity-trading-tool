@@ -9,10 +9,11 @@ var path = require("path");
 var pm2Bin = process.env.PM2_BIN || path.join(
   process.env.HOME || "", ".nvm/versions/node/v20.19.5/bin/pm2"
 );
+var appSuffix = process.env.APP_ENV === "staging" ? "-staging" : "";
 var requiredApps = [
-  "backend",
-  "celery-worker-finn-interactive",
-  "celery-worker-default"
+  "backend" + appSuffix,
+  "celery-worker-finn-interactive" + appSuffix,
+  "celery-worker-default" + appSuffix
 ];
 var requiredPolicy = {
   FINN_V2_PROPOSALS_ENABLED: "true",
