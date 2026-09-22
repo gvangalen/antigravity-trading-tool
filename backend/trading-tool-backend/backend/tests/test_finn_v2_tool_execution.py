@@ -659,3 +659,50 @@ def test_full_plan_reads_run_as_dependency_dag_with_isolated_sessions(monkeypatc
     assert started["read_linked_bot"] >= completed["read_linked_strategy"]
     assert started["read_bot_status"] >= completed["read_linked_bot"]
     assert started["read_active_setup"] < completed["read_technical_snapshot"]
+
+
+def test_isolated_tool_uses_one_atomic_session_without_nested_factory(monkeypatch):
+    class _AtomicSession:
+        def __init__(self):
+            self.commit_calls = 0
+
+        async def commit(self):
+            self.commit_calls += 1
+
+    class _FactoryContext:
+        def __init__(self, session):
+            self.session = session
+
+        async def __aenter__(self):
+            return self.session
+
+        async def __aexit__(self, *_args):
+            return False
+
+    outer = FinnV2ToolExecutionService(session=_FakeSession())
+    atomic_session = _AtomicSession()
+    outer.persistence_session_factory = lambda: _FactoryContext(atomic_session)
+
+    async def _execute_tool(inner, **kwargs):
+        assert inner.persistence_session_factory is None
+        return ToolExecutionResult(
+            tool_name=kwargs["tool_name"],
+            status="completed",
+            success=True,
+        )
+
+    monkeypatch.setattr(FinnV2ToolExecutionService, "execute_tool", _execute_tool)
+    result, _state = asyncio.run(
+        outer._execute_tool_in_isolated_session(
+            run_id="run-atomic",
+            user_id=7,
+            tool_name="read_profile",
+            selector={},
+            shared_state={},
+            operation_id="evaluate_plan",
+            operation_contract_version="v1",
+        )
+    )
+
+    assert result.success is True
+    assert atomic_session.commit_calls == 1

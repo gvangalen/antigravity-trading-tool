@@ -239,6 +239,13 @@ class FinnV2ToolExecutionService:
         local_state = dict(shared_state)
         async with self.persistence_session_factory() as session:
             service = FinnV2ToolExecutionService(session, self.flags)
+            # This session is already isolated to one tool task. Reusing it
+            # for the run preflight, tool-call record, owner-scoped read,
+            # completion and evidence makes the tool atomic and avoids four
+            # nested connection acquisitions per read. The outer service still
+            # owns parallel scheduling; the inner service must not create
+            # another persistence session.
+            service.persistence_session_factory = None
             result = await service.execute_tool(
                 run_id=run_id,
                 user_id=user_id,
@@ -249,6 +256,7 @@ class FinnV2ToolExecutionService:
                 operation_id=operation_id,
                 operation_contract_version=operation_contract_version,
             )
+            await session.commit()
         return result, local_state
 
     async def run_state_pipeline(self, *, run_id: str, user_id: int) -> Tuple[Optional[object], Optional[object]]:
