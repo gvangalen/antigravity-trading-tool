@@ -293,6 +293,25 @@ def test_check_celery_requires_a_live_finn_interactive_queue(monkeypatch):
     assert result["missing_queue"] == "finn_interactive"
 
 
+def test_check_celery_accepts_prefixed_staging_finn_queue(monkeypatch):
+    import backend.services.system_health_service as health_module
+
+    monkeypatch.setattr(health_module, "QUEUE_NAME_PREFIX", "staging-")
+    monkeypatch.setattr(SystemHealthService, "_celery_ping", staticmethod(lambda: {"worker-a": {"ok": "pong"}}))
+    monkeypatch.setattr(
+        SystemHealthService,
+        "_celery_active_queues",
+        staticmethod(lambda: {"worker-a": [{"name": "staging-finn_interactive"}]}),
+    )
+    monkeypatch.setattr(SystemHealthService, "_celery_stats", staticmethod(lambda: {"worker-a": {}}))
+    monkeypatch.setattr(SystemHealthService, "_celery_registered", staticmethod(lambda: {"worker-a": []}))
+
+    result = asyncio.run(SystemHealthService._check_celery())
+
+    assert result["status"] == "ok"
+    assert result["workers_by_queue"]["staging-finn_interactive"] == ["worker-a"]
+
+
 def test_check_celery_rejects_pm2_snapshot_when_inspect_is_empty(monkeypatch):
     monkeypatch.setattr(SystemHealthService, "_celery_ping", staticmethod(lambda: None))
     monkeypatch.setattr(SystemHealthService, "_celery_active_queues", staticmethod(lambda: None))

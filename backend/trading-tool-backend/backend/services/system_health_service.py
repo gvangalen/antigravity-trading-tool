@@ -9,7 +9,7 @@ from typing import Any, Dict, Optional
 from sqlalchemy import text
 
 from backend.celery_task.legacy_queue_drain import summarize_legacy_queue_messages
-from backend.celery_task.queue_policy import DEFAULT_QUEUE, NAMED_QUEUES, rate_limit_summary_by_queue
+from backend.celery_task.queue_policy import DEFAULT_QUEUE, NAMED_QUEUES, QUEUE_NAME_PREFIX, rate_limit_summary_by_queue
 from backend.infrastructure.database import async_session_factory
 from backend.services.build_metadata_service import build_metadata_snapshot
 from backend.services.platform_metrics import process_metrics_snapshot
@@ -17,10 +17,10 @@ from backend.services.platform_metrics import process_metrics_snapshot
 
 PM2_CELERY_WORKER_QUEUE_MAP = {
     "celery-worker-default": [DEFAULT_QUEUE],
-    "celery-worker-market-portfolio": ["market_data", "portfolio"],
-    "celery-worker-scoring-execution": ["scoring", "execution_critical"],
-    "celery-worker-ai-reporting": ["ai_generation"],
-    "celery-worker-finn-interactive": ["finn_interactive"],
+    "celery-worker-market-portfolio": [f"{QUEUE_NAME_PREFIX}market_data", f"{QUEUE_NAME_PREFIX}portfolio"],
+    "celery-worker-scoring-execution": [f"{QUEUE_NAME_PREFIX}scoring", f"{QUEUE_NAME_PREFIX}execution_critical"],
+    "celery-worker-ai-reporting": [f"{QUEUE_NAME_PREFIX}ai_generation"],
+    "celery-worker-finn-interactive": [f"{QUEUE_NAME_PREFIX}finn_interactive"],
 }
 
 FIRST_DASHBOARD_TASK_NAMES = [
@@ -413,7 +413,8 @@ class SystemHealthService:
                     control_plane_ready=False,
                     pm2_workers=(pm2_snapshot or {}).get("workers", []),
                 )
-            if not workers_by_queue.get("finn_interactive"):
+            finn_interactive_queue = f"{QUEUE_NAME_PREFIX}finn_interactive"
+            if not workers_by_queue.get(finn_interactive_queue):
                 return _component(
                     "down",
                     worker_count=len(workers),
@@ -421,7 +422,7 @@ class SystemHealthService:
                     workers_by_queue=workers_by_queue,
                     worker_mapping_source=worker_mapping_source,
                     control_plane_ready=True,
-                    missing_queue="finn_interactive",
+                    missing_queue=finn_interactive_queue,
                 )
             return _component(
                 "ok",
