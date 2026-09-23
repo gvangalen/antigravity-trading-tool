@@ -16,6 +16,8 @@ from backend.services.finn_v2_operation_classification_service import SemanticOp
 from backend.services.finn_v2_request_analysis_service import FinnV2RequestAnalysisService
 from backend.services.finn_v2_response_verifier_service import FinnV2VerifierRejected
 from backend.schemas.finn_v2_verifier_schema import CoverageVerification, VerifierResult
+from backend.services.finn_v2_responses_proposal_selection import FinnResponsesProposalSelection
+from backend.services.finn_v2_responses_tool_catalog import FinnResponsesToolCatalog
 
 
 def test_contract_operation_state_view_uses_only_persisted_action_inputs():
@@ -583,6 +585,75 @@ def test_orchestrator_flow_executes_plan_and_persists_result():
         "policy_evaluation_completed",
         "orchestrator_completed",
     ]
+
+
+def test_responses_proposal_selection_skips_legacy_selector_and_keeps_guided_draft():
+    run = SimpleNamespace(
+        id="run-responses-draft", user_id=7, trace_id="trace-responses", status="planned",
+        message="Maak een wekelijkse BTC DCA-setup", conversation_id=None,
+        workspace_hints_json={}, client_context_json={},
+    )
+    service = FinnV2OrchestratorService(session=object())
+    service.runs = _FakeRunRepo(run)
+    service.traces = _FakeTraceRepo()
+    service.results = _FakeResultRepo()
+    service.flags.is_tool_registry_enabled = lambda: True
+    service.flags.is_state_assembly_enabled = lambda: True
+    service.analysis.analyze_async = AsyncMock(side_effect=AssertionError("legacy selector used"))
+    call = FinnResponsesToolCatalog().validate(
+        "create_dca_plan_proposal",
+        {"operation_id": "create_setup", "inputs": {"symbol": "BTC", "setup_type": "dca"}},
+    )
+    analysis = FinnResponsesProposalSelection().from_call(
+        call=call, message=run.message, conversation_context={}, verified_asset="BTC",
+    )
+    async def record_guided_draft(*, guided_state, **_kwargs):
+        row = await service.runtime_contracts.get_for_run(run_id=run.id)
+        row.state_json = {
+            **row.state_json,
+            "guided_state": guided_state,
+            "supplied_inputs": guided_state["collected_inputs"],
+            "missing_inputs": guided_state["missing_required_inputs"],
+        }
+        return row
+
+    service.runtime_contracts.record_guided_draft = record_guided_draft
+    result = asyncio.run(service.execute_run(
+        run_id=run.id, user_id=run.user_id, trace_id=run.trace_id,
+        analysis_override=analysis,
+    ))
+    assert result.analysis.request_plan.operation_id == "create_setup"
+    assert service.phase_outcome.terminal_status == "clarification_required"
+    service.analysis.analyze_async.assert_not_awaited()
+
+
+def test_responses_guided_slot_survives_owner_reference_resolution():
+    catalog = FinnResponsesToolCatalog()
+    selector = FinnResponsesProposalSelection()
+    first = selector.from_call(
+        call=catalog.validate("create_dca_plan_proposal", {
+            "operation_id": "create_setup",
+            "inputs": {"symbol": "BTC", "setup_type": "dca", "timeframe": "4H"},
+        }),
+        message="Maak een BTC DCA-setup op 4H", conversation_context={}, verified_asset="BTC",
+    )
+    context = {"active_guided_operation": first.request_plan.operation_state}
+    second = selector.from_call(
+        call=catalog.validate("create_dca_plan_proposal", {
+            "operation_id": "create_setup", "inputs": {"name": "FINN DCA Flow 0914"},
+        }),
+        message="FINN DCA Flow 0914", conversation_context=context, verified_asset="BTC",
+    )
+    service = FinnV2OrchestratorService(session=object())
+    service.entities.resolve_contract_reference_inputs = AsyncMock(return_value={"symbol": "BTC"})
+    resolved = asyncio.run(service._resolve_explicit_action_references(
+        user_id=7, message="FINN DCA Flow 0914", analysis=second,
+        conversation_context=context, model_selected=True,
+    ))
+    state = resolved.request_plan.operation_state
+    assert state["collected_inputs"]["name"] == "FINN DCA Flow 0914"
+    assert state["collected_inputs"]["timeframe"] == "4H"
+    assert state["next_missing_input"] == "dca_frequency"
 
 
 def test_orchestrator_runs_policy_reasoning_and_verifier_for_visible_run_without_shadow_flags():

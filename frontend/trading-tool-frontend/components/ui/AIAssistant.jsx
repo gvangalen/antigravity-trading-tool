@@ -5275,7 +5275,7 @@ function AIAssistantContent({
     const humanValue = (value) => valueLabels[String(value || "").toLowerCase()] || value;
     const contextLine = [supplied.symbol, supplied.timeframe, humanValue(supplied.setup_type)].filter(Boolean).join(" · ");
     const frequency = [humanValue(supplied.dca_frequency), humanValue(supplied.dca_day || supplied.dca_month_day)].filter(Boolean).join(" · ");
-    const labels = { name: "naam", setup_type: "type", symbol: "asset", timeframe: "timeframe", dca_frequency: "frequentie", dca_day: "weekdag", dca_month_day: "dag van de maand" };
+    const labels = { name: "naam", setup_type: "type", symbol: "asset", timeframe: "timeframe", dca_frequency: "frequentie", dca_day: "weekdag", dca_month_day: "dag van de maand", min_investment: "bedrag" };
     const missing = (draft.missing_inputs || []).map((field) => labels[field]).filter(Boolean);
     return (
       <div className="mt-4 min-w-0 overflow-hidden rounded-2xl border border-slate-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-950/45">
@@ -5286,6 +5286,7 @@ function AIAssistantContent({
           {contextLine && <p className="mt-1 break-words text-xs text-slate-500 dark:text-slate-400">{contextLine}</p>}
         </div>
         {frequency && <p className="mt-3 text-sm text-slate-700 dark:text-slate-200">Frequentie: <span className="font-semibold">{frequency}</span></p>}
+        {supplied.min_investment != null && supplied.min_investment !== "" && <p className="mt-1 text-sm text-slate-700 dark:text-slate-200">Bedrag: <span className="font-semibold">{new Intl.NumberFormat("nl-NL", { style: "currency", currency: "EUR" }).format(Number(supplied.min_investment))}</span></p>}
         {missing.length > 0 && <p className="mt-4 rounded-xl bg-slate-50 px-3 py-2.5 text-sm text-slate-700 dark:bg-slate-900/70 dark:text-slate-200">{at("draftCards.missingFields", "Nog nodig: {fields}.", { fields: missing.join(", ") })}</p>}
         <div className="mt-4 flex flex-wrap items-center gap-2">{draftActionButtons(message, messageIndex, "setup")}</div>
       </div>

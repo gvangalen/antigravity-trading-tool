@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.infrastructure.repositories.finn_v2_policy_repository import FinnV2PolicyRepository
 from backend.infrastructure.repositories.finn_v2_proposal_repository import FinnV2ProposalRepository
 from backend.infrastructure.repositories.finn_v2_run_repository import FinnV2RunRepository
+from backend.infrastructure.repositories.finn_v2_runtime_contract_repository import FinnV2RuntimeContractRepository
 from backend.infrastructure.repositories.finn_v2_state_repository import FinnV2StateRepository
 from backend.infrastructure.repositories.finn_v2_validation_repository import FinnV2ValidationRepository
 from backend.schemas.finn_v2_policy_schema import FinnV2PolicyDecision
@@ -31,6 +32,7 @@ class FinnV2ProposalService:
         self.policies = FinnV2PolicyRepository(session)
         self.proposals = FinnV2ProposalRepository(session)
         self.runs = FinnV2RunRepository(session)
+        self.runtime_contracts = FinnV2RuntimeContractRepository(session)
         self.states = FinnV2StateRepository(session)
         self.validations = FinnV2ValidationRepository(session)
         self.resolver = FinnV2EntityResolutionService(session)
@@ -78,6 +80,29 @@ class FinnV2ProposalService:
                 proposal_input=proposal_input,
             )
         proposal_input = self._reseal_hydrated_action_envelope(proposal_input)
+
+        current_run = None
+        guided_state = {}
+        if proposal_input.action_envelope:
+            current_contract = await self.runtime_contracts.get_for_run(run_id=run_id)
+            guided_state = dict((current_contract.state_json or {}).get("guided_state") or {}) if current_contract else {}
+        revises_id = str(guided_state.get("open_proposal_id") or "")
+        prior_proposal = None
+        if revises_id:
+            current_run = await self.runs.get_by_id_for_user(run_id=run_id, user_id=user_id)
+            prior_proposal = await self.proposals.get_by_id_for_user(
+                proposal_id=revises_id, user_id=user_id, for_update=True,
+            )
+            prior_run = await self.runs.get_by_id_for_user(
+                run_id=prior_proposal.run_id, user_id=user_id,
+            ) if prior_proposal is not None else None
+            if (
+                current_run is None or prior_run is None
+                or prior_run.conversation_id != current_run.conversation_id
+                or prior_proposal.operation_type != proposal_input.operation_type
+                or prior_proposal.status not in {"draft", "pending_confirmation"}
+            ):
+                raise ValueError("proposal_revision_not_pending_or_owned")
 
         existing = await self.proposals.get_by_idempotency_key_for_user(
             idempotency_key=proposal_input.idempotency_key,
@@ -141,6 +166,8 @@ class FinnV2ProposalService:
             requires_step_up_auth=policy.step_up_required,
             expires_at=proposal_input.expires_at,
         )
+        if prior_proposal is not None and prior_proposal.id != row.id:
+            await self.proposals.update_status(prior_proposal, status="cancelled")
         return self._row_to_record(row)
 
     async def _hydrate_domain_change(

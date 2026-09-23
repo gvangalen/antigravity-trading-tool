@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.infrastructure.models import FinnV2Conversation
 from backend.infrastructure.repositories.finn_v2_repository_transaction_mixin import FinnV2RepositoryTransactionMixin
+from backend.domain.finn_v2_runtime_contract import RuntimeContractConflictError
 
 
 class FinnV2ConversationRepository(FinnV2RepositoryTransactionMixin):
@@ -80,6 +81,21 @@ class FinnV2ConversationRepository(FinnV2RepositoryTransactionMixin):
             operation="update_context",
             entity_type="FinnV2Conversation",
             run_id=row.last_run_id,
+        )
+
+    async def set_responses_cursor(
+        self, *, conversation_id: str, user_id: int, run_id: str, response_id: str,
+    ) -> None:
+        """Advance continuity only for the current owner-scoped conversation turn."""
+        row = await self.get_by_id_for_user(conversation_id, user_id, for_update=True)
+        if row is None or row.last_run_id != run_id or not response_id:
+            raise RuntimeContractConflictError("responses_cursor_stale_or_unowned")
+        context = dict(row.context_json or {})
+        context["responses_cursor"] = {"run_id": run_id, "response_id": response_id}
+        row.context_json = context
+        row.updated_at = datetime.now(timezone.utc)
+        await self._flush_with_rollback(
+            operation="set_responses_cursor", entity_type="FinnV2Conversation", run_id=run_id,
         )
 
     async def record_verified_action_result(

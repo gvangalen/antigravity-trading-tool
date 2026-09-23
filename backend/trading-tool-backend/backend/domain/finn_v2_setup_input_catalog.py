@@ -19,7 +19,7 @@ class FinnV2SetupInputCatalog:
     }
     _TIMEFRAME_ALIASES = {
         "1D": ("dagbasis", "daily", "daily basis", "day basis", "tagesbasis", "taglich", "taeglich"),
-        "1H": ("uurbasis", "hourly", "hour basis", "stundenbasis", "stundlich", "stuendlich"),
+        "1H": ("1 uur", "een uur", "one hour", "1 hour", "1 stunde", "eine stunde", "uurbasis", "hourly", "hour basis", "stundenbasis", "stundlich", "stuendlich"),
         "4H": ("4 uur", "vier uur", "four hours", "4 hours", "vier stunden", "4 stunden"),
         "12H": ("12 uur", "twaalf uur", "twelve hours", "12 hours", "zwolf stunden", "12 stunden"),
         "1W": ("weekbasis", "weekly", "week basis", "wochenbasis", "wochentlich", "woechentlich"),

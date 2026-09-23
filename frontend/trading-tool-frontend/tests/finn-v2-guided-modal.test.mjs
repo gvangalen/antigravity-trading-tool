@@ -14,6 +14,8 @@ test("renders V2 setup drafts and proposals inside the simple FINN modal", () =>
   assert.match(source, /"v2_proposal"/);
   assert.doesNotMatch(source, /\{!isSimpleFinnModal && renderV2SetupDraftCard\(m\)\}/);
   assert.doesNotMatch(source, /\{!isSimpleFinnModal && renderInlineActionCard\(m\)\}/);
+  assert.match(source, /supplied\.min_investment != null/);
+  assert.match(source, /Bedrag:.*Intl\.NumberFormat/);
 });
 
 test("builds strategy and bot draft cards from the terminal runtime contract", () => {

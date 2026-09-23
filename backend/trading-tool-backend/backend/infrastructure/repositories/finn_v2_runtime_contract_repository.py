@@ -489,6 +489,63 @@ class FinnV2RuntimeContractRepository(FinnV2RepositoryTransactionMixin):
         await self._flush_with_rollback(operation="materialize_runtime_terminal", entity_type="FinnV2RuntimeContract", run_id=run_id)
         return row
 
+    async def record_responses_progress(
+        self, *, run_id: str, user_id: int, response_id: str,
+        tool_trace: list[dict[str, Any]],
+    ) -> FinnV2RuntimeContract:
+        """Checkpoint typed tool calls on the owning runtime contract."""
+        row = await self._required_for_update(run_id)
+        if row.user_id != user_id:
+            raise RuntimeContractConflictError("responses_progress_owner_mismatch")
+        state = deepcopy(row.state_json or {})
+        state["responses_progress"] = {
+            "response_id": response_id,
+            "tool_trace": deepcopy(tool_trace),
+            "conversation_id": row.conversation_id,
+            "run_id": row.run_id,
+        }
+        return await self._write_revision(row=row, state=state)
+
+    async def record_responses_exchange(
+        self, *, run_id: str, user_id: int, response_id: str,
+        tool_trace: list[dict[str, Any]], answer: str,
+    ) -> FinnV2RuntimeContract:
+        """Keep the model exchange on the existing owner-bound run contract."""
+        if not response_id or not answer.strip():
+            raise ValueError("responses_exchange_incomplete")
+        row = await self._required_for_update(run_id)
+        if row.user_id != user_id:
+            raise RuntimeContractConflictError("responses_exchange_owner_mismatch")
+        state = deepcopy(row.state_json or {})
+        if state.get("responses_exchange"):
+            raise RuntimeContractConflictError("responses_exchange_already_recorded")
+        state.pop("responses_progress", None)
+        state["responses_exchange"] = {
+            "response_id": response_id,
+            "tool_trace": deepcopy(tool_trace),
+            "answer": answer,
+            "conversation_id": row.conversation_id,
+            "run_id": row.run_id,
+        }
+        return await self._write_revision(row=row, state=state)
+
+    async def record_previous_response_reference(
+        self, *, run_id: str, previous_run_id: str,
+    ) -> FinnV2RuntimeContract:
+        row = await self._required_for_update(run_id)
+        previous = await self.get_for_run(run_id=previous_run_id)
+        if (
+            previous is None or previous.run_id == row.run_id
+            or previous.user_id != row.user_id
+            or previous.conversation_id != row.conversation_id
+            or (previous.state_json or {}).get("terminal_status") not in {"completed", "unavailable"}
+        ):
+            raise RuntimeContractConflictError("previous_response_not_owned_or_terminal")
+        state = deepcopy(row.state_json or {})
+        state["conversation_reference"] = previous_run_id
+        state["conversation_reference_kind"] = "previous_verified_response"
+        return await self._write_revision(row=row, state=state)
+
     async def record_lifecycle_status(self, *, run_id: str, status: str, mode: Optional[str]) -> FinnV2RuntimeContract:
         row = await self._required_for_update(run_id)
         state = deepcopy(row.state_json or {})

@@ -358,6 +358,8 @@ def _run_follow_up(base_url: str, token: str, spec: tuple[str, str, str, str], f
         )
         turns.append(next_turn)
         previous = next_turn
+        if _runtime_record(next_turn["run_id"])["proposal"]:
+            break
     second = previous
     first_record = _runtime_record(first["run_id"])
     second_record = _runtime_record(second["run_id"])

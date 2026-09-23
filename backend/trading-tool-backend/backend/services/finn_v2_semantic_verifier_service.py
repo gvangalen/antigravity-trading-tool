@@ -118,9 +118,11 @@ class FinnV2SemanticVerifierService:
         compact_evidence: list[dict],
         deterministic_summary: Dict[str, Any],
         timeout_seconds: float | None = None,
+        mandatory: bool = False,
+        verification_guidance: str | None = None,
     ) -> SemanticVerificationResult:
         """Verify through the cancellable provider transport."""
-        if not self.flags.is_semantic_verifier_enabled():
+        if not mandatory and not self.flags.is_semantic_verifier_enabled():
             return SemanticVerificationResult(available=False, passes=True)
 
         configured_timeout = float(self.flags.semantic_verifier_timeout_seconds())
@@ -152,6 +154,7 @@ class FinnV2SemanticVerifierService:
                     "Only judge question relevance, scope completeness, entailment, recommendation consistency, "
                     "mode purity, and follow-up validity. Never reveal chain of thought. "
                     "Deterministic failures are final and cannot be overridden."
+                    + (" " + verification_guidance if verification_guidance else "")
                 ),
                 output_spec=StructuredOutputSpec(name="finn_v2_semantic_verifier", schema=self.SCHEMA),
                 model_override=self.flags.semantic_verifier_model(),

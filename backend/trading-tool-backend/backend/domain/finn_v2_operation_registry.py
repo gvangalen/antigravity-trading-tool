@@ -55,6 +55,49 @@ _RESPONSE_FIELDS = frozenset(
     }
 )
 
+# Model tool schemas are a projection of these registry-owned input types.
+# Tool exposure reads these types from the same action contracts; it does not
+# define an independent set of required fields or execution rules.
+_MODEL_TOOL_INPUT_TYPES: dict[str, tuple[tuple[str, str], ...]] = {
+    "select_asset": (("asset", "string"),),
+    "watchlist_add": (("asset", "string"),),
+    "watchlist_remove": (("asset", "string"),),
+    "create_setup": (
+        ("setup_type", "string"), ("timeframe", "string"), ("name", "string"),
+        ("symbol", "string"), ("min_investment", "number"),
+        ("dca_frequency", "string"), ("dca_day", "string"),
+        ("dca_month_day", "integer"),
+    ),
+    "update_setup": (("setup_id", "integer"), ("changed_fields", "object")),
+    "delete_setup": (("setup_id", "integer"),),
+    "create_strategy": (
+        ("setup_id", "integer"), ("name", "string"),
+        ("execution_mode", "string"), ("base_amount", "number"),
+        ("entry", "string"), ("stop_loss", "string"),
+        ("targets", "array"), ("risk_profile", "string"),
+        ("symbol", "string"), ("timeframe", "string"),
+    ),
+    "update_strategy": (("strategy_id", "integer"), ("changed_fields", "object")),
+    "delete_strategy": (("strategy_id", "integer"),),
+    "create_indicator_configuration": (
+        ("asset", "string"), ("category", "string"), ("indicator", "string"),
+    ),
+    "update_indicator_configuration": (
+        ("asset", "string"), ("category", "string"),
+        ("indicator", "string"), ("changed_fields", "object"),
+    ),
+    "delete_indicator_configuration": (
+        ("asset", "string"), ("category", "string"), ("indicator", "string"),
+    ),
+    "create_bot": (
+        ("strategy_id", "integer"), ("name", "string"), ("budget_total_eur", "number"),
+    ),
+    "update_bot": (("bot_id", "integer"), ("changed_fields", "object")),
+    "deactivate_bot": (("bot_id", "integer"),),
+    "delete_bot": (("bot_id", "integer"),),
+    "activate_paper_bot": (("bot_id", "integer"),),
+}
+
 
 class FinnV2OperationContractError(ValueError):
     code = "finn_v2_operation_contract_invalid"
@@ -136,6 +179,10 @@ class OperationContract:
     selection_priority: int = 0
     required_inputs: tuple[str, ...] = ()
     optional_inputs: tuple[str, ...] = ()
+    # Types for model-visible action inputs live on this immutable contract.
+    # The Responses surface derives its JSON schema here, never from a
+    # second tool-specific field catalog.
+    input_json_types: tuple[tuple[str, str], ...] = ()
     # A contract can expose an input only when another typed slot makes it
     # applicable. This keeps downstream service requirements in the same
     # registry-owned schema instead of discovering them during execution.
@@ -195,6 +242,13 @@ class OperationContract:
             raise FinnV2OperationContractError(f"scope_overlap:{self.operation_id}")
         if set(self.required_inputs).intersection(self.optional_inputs):
             raise FinnV2OperationContractError(f"input_overlap:{self.operation_id}")
+        typed_fields = dict(self.input_json_types)
+        if len(typed_fields) != len(self.input_json_types):
+            raise FinnV2OperationContractError(f"duplicate_input_json_type:{self.operation_id}")
+        if set(typed_fields).difference(self.input_fields):
+            raise FinnV2OperationContractError(f"undeclared_input_json_type:{self.operation_id}")
+        if any(value not in {"string", "number", "integer", "boolean", "object", "array"} for value in typed_fields.values()):
+            raise FinnV2OperationContractError(f"invalid_input_json_type:{self.operation_id}")
         declared_inputs = set(self.required_inputs).union(self.optional_inputs)
         for field, dependency, expected in self.conditional_required_inputs:
             if not field or not dependency or not expected:
@@ -262,6 +316,9 @@ class OperationContract:
             if actual == expected.casefold():
                 required.append(field)
         return tuple(dict.fromkeys(required))
+
+    def input_json_type(self, field: str) -> str | None:
+        return dict(self.input_json_types).get(field)
 
     @property
     def tool_names(self) -> tuple[str, ...]:
@@ -404,7 +461,9 @@ class FinnV2OperationRegistry:
 
     @staticmethod
     def _with_selection_metadata(contract: OperationContract) -> OperationContract:
-        metadata = _OPERATION_SELECTION_METADATA.get(contract.operation_id, {})
+        metadata = dict(_OPERATION_SELECTION_METADATA.get(contract.operation_id, {}))
+        if contract.operation_id in _MODEL_TOOL_INPUT_TYPES:
+            metadata["input_json_types"] = _MODEL_TOOL_INPUT_TYPES[contract.operation_id]
         return replace(contract, **metadata) if metadata else contract
 
     def _validate_manifest(self) -> None:
@@ -583,9 +642,13 @@ _OPERATION_SELECTION_METADATA: Mapping[str, dict] = {
         "selection_focus_entities": ("plan",),
     },
     "evaluate_plan": {
-        "semantic_description": "Assess a user's complete current trading approach or plan, including broad requests to review, audit, assess, examine, ask what is still missing before activation, or identify the least-supported, weak, vulnerable, incomplete, risky, or inconsistent link. Personal questions asking what an indicator or position means for the user's active plan are evaluations, never general concept explanations. Evaluation language remains read-only analysis, even when it asks what should improve; it is not a request to mutate a setup, strategy, bot, or configuration. This is supported plan evaluation, not unsupported portfolio management.",
+        "semantic_description": "Assess a user's complete current trading approach or overall trading plan across profile, setup, strategy, indicators and risk. Dutch mijn aanpak, handelsaanpak and hele handelsplan refer to the whole plan, not to a single setup. A broad question about the biggest remaining risks or weakest link in that approach belongs here even without the word plan. Broad requests to review, audit, assess, examine, ask what is still missing before activation, or identify the least-supported, weak, vulnerable, incomplete, risky, or inconsistent link belong here. Personal questions asking what an indicator or position means for the user's active plan are evaluations, never general concept explanations. Evaluation language remains read-only analysis, even when it asks what should improve; it is not a request to mutate a setup, strategy, bot, or configuration. This is supported plan evaluation, not unsupported portfolio management.",
         "positive_examples": (
             "Past deze positie bij mijn actieve plan en wat moet ik eerst bevestigen?",
+            "Waar is mijn handelsaanpak als geheel het kwetsbaarst?",
+            "Mijn aanpak: waar liggen de grootste resterende risico's?",
+            "Doorlicht mijn complete aanpak en wijs de minst overtuigend onderbouwde schakel aan.",
+            "Geef een onderbouwd oordeel over de samenhang van mijn hele BTC-handelsplan.",
             "What does my RSI mean for my active BTC plan?",
             "Was bedeutet mein RSI fuer meinen aktiven BTC-Plan?",
         ),
@@ -614,7 +677,7 @@ _OPERATION_SELECTION_METADATA: Mapping[str, dict] = {
         "selection_focus_entities": ("indicator_configuration",),
     },
     "evaluate_setup": {
-        "semantic_description": "Assess the user's active or named setup for quality, risk, suitability, weaknesses, or missing conditions. A request to show, identify, or list the setup without judgment remains read_active_setup.",
+        "semantic_description": "Assess one specific active or named setup for quality, risk, suitability, weaknesses, or missing conditions. The user must refer to that setup as an object. Dutch mijn aanpak without a setup reference denotes the overall plan and belongs to evaluate_plan, not here. This is narrower than judging the user's whole trading approach or complete plan across setups, strategies and risk. A request to show, identify, or list the setup without judgment remains read_active_setup.",
         "positive_examples": (
             "Beoordeel mijn actieve setup.",
             "Evaluate my active setup.",
@@ -622,6 +685,10 @@ _OPERATION_SELECTION_METADATA: Mapping[str, dict] = {
         ),
         "negative_examples": (
             "Toon mijn actieve setup.",
+            "Waar is mijn hele handelsaanpak het kwetsbaarst?",
+            "Mijn aanpak: waar liggen de grootste resterende risico's?",
+            "Doorlicht mijn complete aanpak en wijs de minst overtuigend onderbouwde schakel aan.",
+            "Geef een oordeel over de samenhang van mijn complete tradingplan.",
             "Show my active setup.",
             "Zeige mein aktives Setup.",
         ),
@@ -954,7 +1021,7 @@ _CONTRACTS: tuple[OperationContract, ...] = (
     OperationContract("activate_paper_bot", FinnV2OperationRegistry.VERSION, "bot", "ACTION_PROPOSAL", ("activeer paper bot",), action_polarity=ActionPolarity.ACTIVATE, required_inputs=("bot_id",), contextual_reference_inputs=("bot_id",), required_scopes=("active_asset", "active_setup", "linked_strategy", "linked_bot", "bot_status"), proposal_type="activate_paper_bot", confirmation_required=True, execution_adapter="activate_paper_bot", idempotency_rule="proposal_payload_hash", postcondition="paper_bot_active", response_strategy="proposal_draft", policy_class="paper_action"),
     OperationContract("deactivate_bot", FinnV2OperationRegistry.VERSION, "bot", "ACTION_PROPOSAL", ("deactiveer bot", "deactivate bot", "deaktiviere bot"), action_polarity=ActionPolarity.UPDATE, required_inputs=("bot_id",), contextual_reference_inputs=("bot_id",), required_scopes=("active_asset", "active_setup", "linked_strategy", "linked_bot", "bot_status"), proposal_type="deactivate_bot", confirmation_required=True, execution_adapter="deactivate_bot", idempotency_rule="proposal_payload_hash", postcondition="bot_inactive", response_strategy="proposal_draft", policy_class="paper_action"),
     OperationContract("read_active_plan", FinnV2OperationRegistry.VERSION, "plan", "READ", ("mijn actieve plan", "setup strategie bot"), required_scopes=("active_asset", "active_setup", "linked_strategy", "linked_bot", "bot_status"), required_response_fields=("setup", "strategy", "bot", "bot_status")),
-    OperationContract("evaluate_plan", FinnV2OperationRegistry.VERSION, "plan", "EVALUATE", ("belangrijkste ontbrekende", "bekijk mijn profiel", "beoordeel mijn plan"), required_scopes=("profile", "preferences", "active_asset", "indicator_configuration", "market_snapshot", "macro_snapshot", "technical_snapshot", "active_setup", "linked_strategy", "linked_bot", "bot_status", "scores"), model_policy="required", response_strategy="model_reasoning", policy_class="advice", required_response_fields=("observation", "evidence", "next_step")),
+    OperationContract("evaluate_plan", FinnV2OperationRegistry.VERSION, "plan", "EVALUATE", ("belangrijkste ontbrekende", "bekijk mijn profiel", "beoordeel mijn plan", "waar is mijn handelsaanpak het kwetsbaarst", "onderbouwd oordeel over mijn hele handelsplan", "evaluate my overall trading plan", "bewerte meinen gesamten handelsplan"), required_scopes=("profile", "preferences", "active_asset", "indicator_configuration", "market_snapshot", "macro_snapshot", "technical_snapshot", "active_setup", "linked_strategy", "linked_bot", "bot_status", "scores"), model_policy="required", response_strategy="model_reasoning", policy_class="advice", required_response_fields=("observation", "evidence", "next_step")),
     OperationContract("read_scores", FinnV2OperationRegistry.VERSION, "scores", "READ", ("mijn scores", "read scores", "meine scores"), required_scopes=("active_asset", "scores"), response_strategy="deterministic_structured_summary", required_response_fields=("asset",)),
     OperationContract("explain_score", FinnV2OperationRegistry.VERSION, "scores", "EVALUATE", ("leg score uit", "explain score", "erklare score"), required_scopes=("active_asset", "scores"), optional_scopes=("profile", "preferences", "active_setup", "linked_strategy", "indicator_configuration"), model_policy="required", response_strategy="model_reasoning", policy_class="advice"),
     OperationContract("read_portfolio", FinnV2OperationRegistry.VERSION, "portfolio", "READ", ("portfolio", "portefeuille", "portfolio anzeigen"), optional_inputs=("asset",), required_scopes=("portfolio",), response_strategy="deterministic_structured_summary"),

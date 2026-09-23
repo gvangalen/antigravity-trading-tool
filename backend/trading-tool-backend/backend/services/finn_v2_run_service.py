@@ -4,6 +4,7 @@ import logging
 from contextlib import suppress
 from datetime import datetime, timedelta, timezone
 import asyncio
+from dataclasses import replace
 from time import monotonic
 from types import SimpleNamespace
 from typing import Any, Dict, Optional
@@ -29,11 +30,17 @@ from backend.services.finn_v2_orchestrator_service import FinnV2OrchestratorServ
 from backend.services.finn_v2_tool_execution_service import FinnV2ToolExecutionService
 from backend.services.finn_v2_flag_service import FinnV2FlagService
 from backend.services.finn_v2_lifecycle_budget import (
+    remaining_lifecycle_seconds,
     reset_lifecycle_deadline,
     set_lifecycle_deadline,
 )
 from backend.schemas.finn_v2_schema import AgentRunStatusEnvelope, PolicyDecision, VerifiedResponse
 from backend.schemas.finn_v2_orchestrator_schema import LifecyclePhaseOutcome
+from backend.services.finn_v2_responses_answer_verifier import FinnResponsesVerifiedAnswer
+from backend.services.finn_v2_responses_answer_verifier import FinnResponsesAnswerVerifier
+from backend.services.finn_v2_responses_front_door import FinnResponsesFrontDoor, FinnResponsesFrontDoorResult
+from backend.services.finn_v2_responses_loop import FinnResponsesError
+from backend.utils import openai_client
 
 
 logger = logging.getLogger(__name__)
@@ -75,6 +82,230 @@ class FinnV2RunService:
         except Exception:
             raise
         return run
+
+    async def complete_responses_read(
+        self, *, run_id: str, user_id: int, response_id: str,
+        answer: FinnResponsesVerifiedAnswer,
+        previous_response: dict[str, Any] | None = None,
+    ) -> None:
+        """Publish a verified free-chat read through the same polling/SSE model."""
+        run = await self.runs.get_by_id_for_user(run_id=run_id, user_id=user_id)
+        if run is None:
+            raise LookupError("FINN V2 run not found")
+        status = answer.status
+        if status not in {"completed", "unavailable"}:
+            raise ValueError("responses_read_terminal_status_invalid")
+        validate_run_transition(run.status, status)
+        response_json = {
+            "mode": "READ" if status == "completed" else "UNAVAILABLE",
+            "content": answer.text,
+            "response_source": "v2_runtime",
+            "verifier_status": "passed" if status == "completed" else "failed",
+            "evidence": [],
+            "uncertainty": [answer.reason] if answer.reason else [],
+            "proposal_id": None,
+            "confirmation_required": False,
+            "reasoning_provenance": {
+                "reasoning_source": "responses_tool_loop",
+                "provider_response_id": response_id,
+            },
+        }
+        if previous_response:
+            await self.runtime_contracts.record_previous_response_reference(
+                run_id=run_id,
+                previous_run_id=str(previous_response["run_id"]),
+            )
+        contract = await self.runtime_contracts.materialize_terminal(
+            run_id=run_id, status=status, mode=response_json["mode"],
+            response=response_json, error_code=answer.reason,
+        )
+        response_json["_runtime_contract_projection"] = contract.terminal_projection_json
+        await self.runs.update_status(
+            run=run, status=status, interaction_mode=response_json["mode"],
+            policy_json=PolicyDecision().dict(), response_json=response_json,
+            error_code=answer.reason, retryable=False,
+            completed_at=datetime.now(timezone.utc),
+        )
+        await self.traces.append_event(
+            run_id=run.id, user_id=run.user_id, trace_id=run.trace_id,
+            event_type=TRACE_EVENT_BY_STATUS[status],
+            payload_json=self._trace_payload(run, status=status, response_source="v2_runtime"),
+        )
+        if status == "completed" and run.conversation_id:
+            await self.conversations.set_responses_cursor(
+                conversation_id=run.conversation_id, user_id=user_id,
+                run_id=run_id, response_id=response_id,
+            )
+        await self._commit_session_if_possible()
+
+    @classmethod
+    async def prepare_responses_turn(
+        cls, *, run_id: str, user_id: int,
+        selector_started: asyncio.Event, selection_ready: asyncio.Event,
+        recovery_response_id: str | None = None,
+        prior_tool_trace: tuple[dict[str, Any], ...] = (),
+    ) -> tuple[FinnResponsesFrontDoorResult, str]:
+        """Select through Responses without holding a DB connection at the provider."""
+        async with async_session_factory() as session:
+            orchestrator = FinnV2OrchestratorService(session)
+            run = await orchestrator.runs.get_by_id_for_user(run_id=run_id, user_id=user_id)
+            if run is None or run.status != "planned":
+                raise LookupError("responses_run_not_planned_or_unowned")
+            conversation_id = run.conversation_id
+            message = run.message
+            context = await orchestrator._load_continuation_context(
+                conversation_id=conversation_id, user_id=user_id, run_id=run_id,
+                has_prior_run=(run.client_context_json or {}).get("_conversation_has_prior_run"),
+            )
+            cursor = dict(context.get("responses_cursor") or {})
+            previous_response = None
+            if cursor.get("run_id") and cursor.get("response_id"):
+                prior_contract = await orchestrator.runtime_contracts.get_for_run(
+                    run_id=str(cursor["run_id"]),
+                )
+                if (
+                    prior_contract is not None
+                    and prior_contract.user_id == user_id
+                    and prior_contract.conversation_id == conversation_id
+                ):
+                    prior_state = dict(prior_contract.state_json or {})
+                    exchange = dict(prior_state.get("responses_exchange") or {})
+                    if (
+                        exchange.get("response_id") == cursor["response_id"]
+                        and prior_state.get("terminal_status") == "completed"
+                    ):
+                        previous_response = {
+                            "run_id": prior_contract.run_id,
+                            "response_id": cursor["response_id"],
+                            "answer": dict(prior_state.get("terminal_response") or {}).get("content"),
+                            "tool_trace": list(exchange.get("tool_trace") or []),
+                        }
+            prior_contract = await orchestrator.runtime_contracts.get_latest_for_conversation(
+                conversation_id=conversation_id, user_id=user_id, exclude_run_id=run_id,
+            ) if conversation_id else None
+            prior_state = dict((prior_contract.state_json or {}) if prior_contract else {})
+            if prior_state.get("terminal_status") == "unavailable":
+                safe_answer = str(dict(prior_state.get("terminal_response") or {}).get("content") or "").strip()
+                if safe_answer:
+                    exchange = dict(prior_state.get("responses_exchange") or {})
+                    progress = dict(prior_state.get("responses_progress") or {})
+                    previous_response = {
+                        "run_id": prior_contract.run_id,
+                        "response_id": None,
+                        "answer": safe_answer,
+                        "tool_trace": list(exchange.get("tool_trace") or progress.get("tool_trace") or []),
+                    }
+            guided = dict(context.get("active_guided_operation") or {})
+            guided_inputs = dict(guided.get("collected_inputs") or {})
+            verified_asset = (
+                str(guided_inputs.get("symbol") or guided_inputs.get("asset") or "") or None
+            ) if guided.get("missing_required_inputs") else None
+        client = openai_client.async_client
+        if client is None:
+            raise FinnResponsesError("responses_provider_unconfigured")
+        selector_started.set()
+        async with async_session_factory() as session:
+            await FinnV2RuntimeContractRepository(session).record_phase_timestamp(
+                run_id=run_id, phase="selector_started",
+            )
+            await session.commit()
+        result = await FinnResponsesFrontDoor(
+            client=client, session_factory=async_session_factory,
+            user_id=user_id, run_id=run_id,
+        ).run(
+            message=message,
+            instructions=(
+                "You are FINN, a grounded personal trading coach. Understand the user's language and "
+                "choose zero or more FINN read tools. Personal judgments about the user's plan, risk, "
+                "portfolio or market conditions require relevant read tools; use zero tools only for "
+                "general educational conversation. Keep the final answer to a few grounded sentences. "
+                "A personalized trading-plan assessment needs both the user's profile/risk style and "
+                "the active plan/strategy read; if either is ambiguous or unavailable, ask for the "
+                "missing context instead of recommending a strategy. "
+                "For a standalone question about current indicators, use the indicator and relevant "
+                "market tools; do not fetch the active plan or ask which setup is meant unless the user "
+                "asks how those indicators affect a specific plan. "
+                "For a requested mutation, the proposal operation's entity type must be the object "
+                "the user wants to change; a related parent or child object is not the target. "
+                "For every user request to create, "
+                "update or remove something, ALWAYS call the matching proposal tool immediately, even "
+                "when some inputs are missing. Never ask for mutation inputs before that tool call: the "
+                "registry-backed tool result determines the missing fields. Read tools may support that "
+                "request but can never replace its proposal tool. Do not first require a parent object "
+                "or all required inputs: FINN resolves owner-scoped dependencies and asks for gaps. "
+                "A proposal is not an execution. "
+                "Continue an active guided operation with the same proposal tool and the user's answer "
+                "for its pending contract input. Never claim a change is saved before explicit "
+                "user confirmation and backend execution. Never invent prices, evidence, ownership or IDs. "
+                "When a tool returns partial, unavailable or stale data, describe only what the typed "
+                "result establishes and what is still missing. Do not infer live indicator values, "
+                "market causes, portfolio effects or a personal recommendation from generic knowledge. "
+                "If an owner-scoped read is ambiguous, ask which named object the user means; do not "
+                "guess one, claim that no plan exists, or evaluate the whole plan without a unique target. "
+                "An unavailable source does not establish that the outage is temporary or why it happened. "
+                "If asked why data is missing, say that the current evidence does not establish the "
+                "cause; do not invent a provider failure. Reply in the user's language without raw "
+                "contract keys, internal IDs or backend error codes. For a proposal tool call, set "
+                "draft_intent to new for a new action or revise only when changing a pending draft."
+                + (
+                    " Your preceding answer could not be verified against FINN evidence. Reconsider the "
+                    "original request: if it asks to change a saved object, call its proposal tool now, "
+                    "even when a supporting read was unavailable. If it only asks a question, use "
+                    "read tools or give an honest limitation; do not propose a mutation."
+                    if recovery_response_id else ""
+                )
+                + (
+                    " A pending draft exists for operation "
+                    + str(dict(context.get("proposal_revision") or {}).get("operation_id"))
+                    + ". When the user changes that draft, call its proposal tool with "
+                    "draft_intent=revise and only the changed inputs; FINN retains and validates prior fields."
+                    if context.get("proposal_revision") else ""
+                )
+                + (
+                    " This turn follows a verified answer in the same conversation. For a short why/how "
+                    "follow-up, explain only what the previous verified answer and its tool results establish. "
+                    "Do not invent possible causes, user history, technical failures or missing data beyond "
+                    "those actually returned by FINN tools. If the prior response reports unavailable "
+                    "market evidence, explain that no verified conclusion about its effect on the plan "
+                    "can be drawn until fresh evidence is available."
+                    if previous_response else ""
+                )
+            ),
+            conversation_context=context,
+            verified_asset=verified_asset,
+            previous_response_id=(
+                recovery_response_id or (
+                    str(previous_response.get("response_id"))
+                    if previous_response and previous_response.get("response_id") else None
+                )
+            ),
+            previous_response=previous_response,
+        )
+        if prior_tool_trace:
+            result = replace(
+                result,
+                response=replace(
+                    result.response,
+                    tool_trace=prior_tool_trace + result.response.tool_trace,
+                ),
+            )
+        async with async_session_factory() as session:
+            contracts = FinnV2RuntimeContractRepository(session)
+            await contracts.record_responses_exchange(
+                run_id=run_id, user_id=user_id,
+                response_id=result.response.response_id,
+                tool_trace=list(result.response.tool_trace),
+                answer=result.response.text,
+            )
+            await contracts.record_phase_timestamp(run_id=run_id, phase="selector_completed")
+            await session.commit()
+        selection_ready.set()
+        if result.proposal_analysis is None and any(
+            str(call.get("name") or "").endswith("_proposal")
+            for call in result.response.tool_trace
+        ):
+            raise FinnResponsesError("proposal_tool_validation_failed")
+        return result, message
 
     async def transition_run(
         self,
@@ -158,6 +389,7 @@ class FinnV2RunService:
         run_id: str,
         user_id: int,
         phase_outcome: LifecyclePhaseOutcome,
+        responses_response_id: str | None = None,
     ):
         get_runtime_contract = getattr(self.runtime_contracts, "get_for_run", None)
         runtime_contract = (
@@ -310,6 +542,11 @@ class FinnV2RunService:
                 run, status=next_status, response_source="v2_runtime"
             ),
         )
+        if responses_response_id and next_status in {"completed", "clarification_required"} and run.conversation_id:
+            await self.conversations.set_responses_cursor(
+                conversation_id=run.conversation_id, user_id=user_id,
+                run_id=run_id, response_id=responses_response_id,
+            )
         await self._commit_session_if_possible()
 
     @staticmethod
@@ -592,14 +829,71 @@ class FinnV2RunService:
                     run = await service.runs.get_by_id_for_user(run_id=run_id, user_id=user_id)
                     if run is None:
                         raise LookupError("FINN V2 run not found")
-                    trace_id = run.trace_id
                     visible = service._is_visible_run(run)
+                    run_shadow = service.tools.flags.should_run_block4_shadow(user_id)
+
+                prepared: FinnResponsesFrontDoorResult | None = None
+                if visible:
+                    from backend.services.ai_usage_observability_service import ai_usage_context
+
+                    with ai_usage_context(entry_point="finn_v2_responses", user_id=user_id):
+                        prepared, message = await cls.prepare_responses_turn(
+                            run_id=run_id, user_id=user_id,
+                            selector_started=selector_started,
+                            selection_ready=selection_ready,
+                        )
+                        if prepared.proposal_analysis is None:
+                            answer = await FinnResponsesAnswerVerifier(client=openai_client.async_client).verify(
+                                message=message, result=prepared.response,
+                                previous_response=prepared.previous_response,
+                            )
+                            remaining = remaining_lifecycle_seconds()
+                            if (
+                                answer.reason == "responses_evidence_not_verified"
+                                and any(
+                                    str(call.get("name") or "").startswith("get_")
+                                    for call in prepared.response.tool_trace
+                                )
+                                and (remaining is None or remaining > 12)
+                            ):
+                                prepared, message = await cls.prepare_responses_turn(
+                                    run_id=run_id, user_id=user_id,
+                                    selector_started=selector_started,
+                                    selection_ready=selection_ready,
+                                    recovery_response_id=prepared.response.response_id,
+                                    prior_tool_trace=prepared.response.tool_trace,
+                                )
+                                answer = (
+                                    None if prepared.proposal_analysis is not None
+                                    else await FinnResponsesAnswerVerifier(client=openai_client.async_client).verify(
+                                        message=message, result=prepared.response,
+                                        previous_response=prepared.previous_response,
+                                    )
+                                )
+                        else:
+                            answer = None
+                    if answer is not None:
+                        async with async_session_factory() as session:
+                            await cls(session).complete_responses_read(
+                                run_id=run_id, user_id=user_id,
+                                response_id=prepared.response.response_id,
+                                answer=answer,
+                                previous_response=prepared.previous_response,
+                            )
+                        return
+
+                async with async_session_factory() as session:
+                    service = cls(session)
+                    run = await service.runs.get_by_id_for_user(run_id=run_id, user_id=user_id)
+                    if run is None:
+                        raise LookupError("FINN V2 run not found")
+                    trace_id = run.trace_id
 
                     async def transition_phase(**kwargs) -> None:
                         async with async_session_factory() as transition_session:
                             await cls(transition_session).persist_transition(**kwargs)
 
-                    if visible or service.tools.flags.should_run_block4_shadow(user_id):
+                    if visible or run_shadow:
                         async def selection_persisted() -> None:
                             selection_ready.set()
 
@@ -612,7 +906,10 @@ class FinnV2RunService:
                             selector_started=selector_phase_started,
                             selection_persisted=selection_persisted,
                         )
-                        await orchestrator.execute_run(run_id=run_id, user_id=user_id, trace_id=trace_id)
+                        await orchestrator.execute_run(
+                            run_id=run_id, user_id=user_id, trace_id=trace_id,
+                            analysis_override=prepared.proposal_analysis if prepared else None,
+                        )
                         # The orchestrator has committed every persistence
                         # boundary it owns. Do not refresh the original ORM
                         # instance here: in production that defensive read
@@ -643,6 +940,7 @@ class FinnV2RunService:
                         run_id=run_id,
                         user_id=user_id,
                         phase_outcome=phase_outcome,
+                        responses_response_id=prepared.response.response_id if prepared else None,
                     )
             finally:
                 # A deadline terminalizer takes a fresh database unit of work.
@@ -660,7 +958,11 @@ class FinnV2RunService:
             dedicated interactive worker.  The lifecycle is cancellation-safe;
             terminalisation always happens below in a fresh unit of work.
             """
-            if lifecycle is None or lifecycle.done():
+            if lifecycle is None:
+                return
+            if lifecycle.done():
+                with suppress(asyncio.CancelledError, Exception):
+                    lifecycle.result()
                 return
             lifecycle.cancel()
             release_waiter = asyncio.create_task(lifecycle_released.wait())
@@ -678,6 +980,9 @@ class FinnV2RunService:
                     "FINN V2 lifecycle cancellation did not release its session within the bounded reserve",
                     extra={"run_id": run_id, "user_id": user_id},
                 )
+            else:
+                with suppress(asyncio.CancelledError, Exception):
+                    lifecycle.result()
 
         try:
             # Context hydration, selector, and post-selection work have
@@ -729,8 +1034,17 @@ class FinnV2RunService:
                 return_when=asyncio.ALL_COMPLETED,
             )
             if lifecycle not in done:
+                if lifecycle.done():
+                    await lifecycle
                 raise asyncio.TimeoutError()
             await lifecycle
+        except FinnResponsesError as exc:
+            await _cancel_lifecycle_within_reserve()
+            async with async_session_factory() as session:
+                await cls(session).terminalize_unavailable(
+                    run_id=run_id, user_id=user_id, error_code=str(exc),
+                )
+            selection_ready.set()
         except asyncio.TimeoutError as exc:
             await _cancel_lifecycle_within_reserve()
             logger.warning(

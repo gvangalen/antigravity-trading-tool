@@ -151,7 +151,11 @@ def _registry_hash() -> str:
 
 def _operation_contract_hash(contract: object) -> str:
     """Bind a corpus erratum to its operation instead of unrelated registry entries."""
-    payload = getattr(contract, "__dict__", contract)
+    payload = dict(getattr(contract, "__dict__", contract))
+    # Published selector errata predate model-visible tool input types. Those
+    # types do not change selector expectations, so preserve the historical
+    # selection-contract hash without rewriting the published corpus.
+    payload.pop("input_json_types", None)
     return hashlib.sha256(
         json.dumps(payload, default=str, sort_keys=True, separators=(",", ":")).encode("utf-8")
     ).hexdigest()

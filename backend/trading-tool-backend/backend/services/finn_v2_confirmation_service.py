@@ -28,9 +28,11 @@ class FinnV2ConfirmationService:
     async def issue_confirmation_token(self, *, proposal_id: str, user_id: int) -> tuple[str, datetime]:
         if not self._confirmations_available():
             raise ValueError("feature_disabled")
-        proposal = await self.proposals.get_by_id_for_user(proposal_id=proposal_id, user_id=user_id)
+        proposal = await self.proposals.get_by_id_for_user(proposal_id=proposal_id, user_id=user_id, for_update=True)
         if proposal is None:
             raise LookupError("proposal_not_owned")
+        if proposal.status not in {"draft", "pending_confirmation"}:
+            raise ValueError("proposal_not_pending_confirmation")
         raw_token = secrets.token_urlsafe(48)
         expires_at = min(
             proposal.expires_at,
@@ -64,7 +66,7 @@ class FinnV2ConfirmationService:
         return raw_token, expires_at
 
     async def cancel(self, *, proposal_id: str, user_id: int) -> dict:
-        proposal = await self.proposals.get_by_id_for_user(proposal_id=proposal_id, user_id=user_id)
+        proposal = await self.proposals.get_by_id_for_user(proposal_id=proposal_id, user_id=user_id, for_update=True)
         if proposal is None:
             raise LookupError("proposal_not_owned")
         if proposal.status == "cancelled":
@@ -84,9 +86,11 @@ class FinnV2ConfirmationService:
         step_up_required: bool = False,
         step_up_satisfied: bool = False,
     ) -> FinnV2ConfirmationResult:
-        proposal = await self.proposals.get_by_id_for_user(proposal_id=request.proposal_id, user_id=user_id)
+        proposal = await self.proposals.get_by_id_for_user(proposal_id=request.proposal_id, user_id=user_id, for_update=True)
         if proposal is None:
             raise LookupError("confirmation_token_invalid")
+        if proposal.status not in {"pending_confirmation", "confirmed", "executed"}:
+            raise ValueError("proposal_not_pending_confirmation")
         confirmation = await self.confirmations.get_for_proposal_user(proposal_id=proposal.id, user_id=user_id)
         if confirmation is None:
             raise LookupError("confirmation_token_invalid")

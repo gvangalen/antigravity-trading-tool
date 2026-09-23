@@ -11,10 +11,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.infrastructure.repositories.finn_v2_orchestrator_repository import FinnV2OrchestratorRepository
 from backend.infrastructure.repositories.finn_v2_conversation_repository import FinnV2ConversationRepository
 from backend.infrastructure.repositories.finn_v2_run_repository import FinnV2RunRepository
+from backend.infrastructure.repositories.finn_v2_proposal_repository import FinnV2ProposalRepository
 from backend.infrastructure.repositories.finn_v2_runtime_contract_repository import FinnV2RuntimeContractRepository
 from backend.infrastructure.repositories.finn_v2_trace_repository import FinnV2TraceRepository
 from backend.domain.finn_v2_contract import normalize_interaction_mode
-from backend.schemas.finn_v2_orchestrator_schema import LifecyclePhaseOutcome, ORCHESTRATOR_VERSION
+from backend.domain.finn_v2_operation_registry import FinnV2OperationRegistry
+from backend.schemas.finn_v2_orchestrator_schema import LifecyclePhaseOutcome, ORCHESTRATOR_VERSION, RequestAnalysisResult
 from backend.services.finn_v2_domain_requirement_service import FinnV2DomainRequirementService
 from backend.services.finn_v2_entity_resolution_service import FinnV2EntityResolutionService
 from backend.services.finn_v2_flag_service import FinnV2FlagService
@@ -168,6 +170,7 @@ class FinnV2OrchestratorService:
         conversation_context: dict,
         workspace_hints: Optional[dict] = None,
         client_context: Optional[dict] = None,
+        model_selected: bool = False,
     ):
         """Resolve one owner-scoped target before any lifecycle consumer.
 
@@ -294,10 +297,15 @@ class FinnV2OrchestratorService:
         }
         state = self.analysis.operation_state.resolve(
             contract=contract,
-            message=message,
+            message=(
+                message
+                if not model_selected or self.analysis.operation_state.pending_operation_id(conversation_context)
+                else ""
+            ),
             explicit_asset=getattr(analysis, "explicit_asset", None),
             conversation_context=conversation_context,
             supplied_inputs=supplied,
+            model_tool_inputs=model_selected,
             # Canonical resolver output is owner-scoped trusted context. It
             # must be allowed to satisfy an ID slot during disambiguation even
             # though arbitrary selector values are ignored on guided turns.
@@ -330,6 +338,7 @@ class FinnV2OrchestratorService:
         user_id: int,
         run_id: str,
         trace_id: str,
+        analysis_override: RequestAnalysisResult | None = None,
     ):
         started = monotonic()
         run = await self.runs.get_by_id_for_user(run_id=run_id, user_id=user_id)
@@ -367,28 +376,44 @@ class FinnV2OrchestratorService:
         # Selector quota is user-scoped. Without this context the OpenAI
         # boundary groups every lifecycle run into an unscoped global bucket,
         # allowing unrelated background/eval traffic to suppress user turns.
-        with ai_usage_context(
-            entry_point="finn_v2_selector",
-            purpose="finn_v2_selector",
-            user_id=user_id,
-        ):
-            # Context hydration has its own pre-selection lifecycle budget.
-            # Start the provider watchdog only when the structured selector
-            # itself is about to issue its bounded call.
+        if analysis_override is None:
+            with ai_usage_context(
+                entry_point="finn_v2_selector",
+                purpose="finn_v2_selector",
+                user_id=user_id,
+            ):
+                # Legacy callers retain their selector until the Responses
+                # entrypoint supplies a registry-validated selection.
+                if self.selector_started:
+                    await self.selector_started()
+                await self._record_phase_timestamp(run_id=run_id, phase="selector_started")
+                analysis = await asyncio.wait_for(
+                    self.analysis.analyze_async(
+                        message=run.message,
+                        workspace_hints=getattr(run, "workspace_hints_json", {}) or {},
+                        client_context=getattr(run, "client_context_json", {}) or {},
+                        conversation_context=conversation_context,
+                        selector_timeout_seconds=self.flags.selector_provider_timeout_seconds(),
+                        selector_max_output_tokens=self.flags.selector_max_output_tokens(),
+                    ),
+                    timeout=self.flags.selector_phase_deadline_seconds(),
+                )
+        else:
+            selected_plan = analysis_override.request_plan
+            if selected_plan is None or selected_plan.selector_source != "responses_tool_call":
+                raise ValueError("responses_selection_not_registry_validated")
+            selected_contract = FinnV2OperationRegistry().require_supported(selected_plan.operation_id or "")
+            if (
+                selected_plan.initial_operation_id != selected_contract.operation_id
+                or selected_plan.operation_contract_version != selected_contract.version
+                or selected_plan.interaction_mode != selected_contract.mode
+                or set(selected_plan.referenced_entities).difference(selected_contract.input_fields)
+            ):
+                raise ValueError("responses_selection_contract_mismatch")
             if self.selector_started:
                 await self.selector_started()
             await self._record_phase_timestamp(run_id=run_id, phase="selector_started")
-            analysis = await asyncio.wait_for(
-                self.analysis.analyze_async(
-                    message=run.message,
-                    workspace_hints=getattr(run, "workspace_hints_json", {}) or {},
-                    client_context=getattr(run, "client_context_json", {}) or {},
-                    conversation_context=conversation_context,
-                    selector_timeout_seconds=self.flags.selector_provider_timeout_seconds(),
-                    selector_max_output_tokens=self.flags.selector_max_output_tokens(),
-                ),
-                timeout=self.flags.selector_phase_deadline_seconds(),
-            )
+            analysis = analysis_override
         await self._record_phase_timestamp(run_id=run_id, phase="selector_completed")
         request_plan = getattr(analysis, "request_plan", None)
         analysis = await self._resolve_explicit_action_references(
@@ -398,6 +423,7 @@ class FinnV2OrchestratorService:
             conversation_context=conversation_context,
             workspace_hints=getattr(run, "workspace_hints_json", {}) or {},
             client_context=getattr(run, "client_context_json", {}) or {},
+            model_selected=analysis_override is not None,
         )
         request_plan = getattr(analysis, "request_plan", None)
         await self.runtime_contracts.record_initial_intent(
@@ -959,6 +985,23 @@ class FinnV2OrchestratorService:
                 exclude_run_id=run_id,
             )
         previous_state = dict((previous_contract.state_json or {}) if previous_contract else {})
+        prior_guided = dict(previous_state.get("guided_state") or {})
+        prior_proposal_id = str(prior_guided.get("open_proposal_id") or "")
+        if prior_proposal_id and previous_contract is not None:
+            prior_proposal = await FinnV2ProposalRepository(self.session).get_by_id_for_user(
+                proposal_id=prior_proposal_id, user_id=user_id,
+            )
+            if (
+                prior_proposal is not None
+                and prior_proposal.run_id == previous_contract.run_id
+                and prior_proposal.status in {"draft", "pending_confirmation"}
+                and prior_proposal.operation_type == prior_guided.get("operation_id")
+            ):
+                context["proposal_revision"] = {
+                    "proposal_id": prior_proposal.id,
+                    "operation_id": prior_proposal.operation_type,
+                    "guided_state": prior_guided,
+                }
         # Contract state is authoritative for new runs; context_json remains
         # only a compatible delivery projection for historical consumers.
         context.update(dict(previous_state.get("lineage_state") or {}))

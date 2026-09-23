@@ -642,19 +642,20 @@ def _rate_limit_allows_call() -> bool:
     context = dict(get_ai_usage_context() or {})
     scope, scheduled = _call_scope()
     limit_override = None
-    if context.get("entry_point") == "finn_v2_selector":
-        # Every interactive turn must pass the model-first selector before a
-        # contract can choose tools or a deterministic response. Keep that
-        # small paid call bounded separately from broader reasoning calls so
-        # a busy conversation cannot strand later user turns in UNAVAILABLE.
+    if context.get("entry_point") in {"finn_v2_selector", "finn_v2_responses"}:
+        # Keep interactive selection and Responses verification bounded per
+        # owner, separately from broader background/reasoning calls.
         generic_limit = max(1, int(os.getenv("OPENAI_MAX_CALLS_PER_SCOPE_WINDOW", "20")))
         limit_override = max(
             generic_limit,
-            # A normal interactive session may contain many short follow-up
-            # turns. Keep a bounded per-user quota, but never make the
-            # selector unavailable halfway through a sustained session merely
-            # because every turn correctly used the required model-first path.
-            int(os.getenv("OPENAI_MAX_SELECTOR_CALLS_PER_SCOPE_WINDOW", "120")),
+            # A conversation may contain several short follow-ups and a
+            # verifier call per answer without sharing an unscoped bucket.
+            int(os.getenv(
+                "OPENAI_MAX_RESPONSES_CALLS_PER_SCOPE_WINDOW"
+                if context.get("entry_point") == "finn_v2_responses"
+                else "OPENAI_MAX_SELECTOR_CALLS_PER_SCOPE_WINDOW",
+                "120",
+            )),
         )
     allowed = acquire_ai_call_slot(scope, scheduled=scheduled, limit_override=limit_override)
     if not allowed:

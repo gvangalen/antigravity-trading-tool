@@ -1,9 +1,26 @@
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 import asyncio
+import pytest
 
 from backend.schemas.finn_v2_confirmation_schema import FinnV2ConfirmationRequest
 from backend.services.finn_v2_confirmation_service import FinnV2ConfirmationService
+
+
+def test_superseded_proposal_cannot_be_published_or_confirmed():
+    service = FinnV2ConfirmationService(session=object())
+    proposal = SimpleNamespace(id="old-proposal", status="cancelled")
+    service.proposals.get_by_id_for_user = lambda **_kwargs: asyncio.sleep(0, result=proposal)
+    with pytest.raises(ValueError, match="proposal_not_pending_confirmation"):
+        asyncio.run(service.issue_confirmation_token(proposal_id=proposal.id, user_id=7))
+    with pytest.raises(ValueError, match="proposal_not_pending_confirmation"):
+        asyncio.run(service.confirm(
+            user_id=7,
+            request=FinnV2ConfirmationRequest(
+                proposal_id=proposal.id, confirmation_token="old-token",
+                expected_payload_hash="old-hash",
+            ),
+        ))
 
 
 def test_confirmation_accepts_valid_token_and_is_idempotent(monkeypatch):

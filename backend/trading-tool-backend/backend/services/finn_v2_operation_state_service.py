@@ -58,6 +58,7 @@ class FinnV2OperationStateService:
         conversation_context: Optional[Mapping[str, object]],
         supplied_inputs: Optional[Mapping[str, object]] = None,
         derived_inputs: Optional[Mapping[str, object]] = None,
+        model_tool_inputs: bool = False,
     ) -> FinnV2OperationState:
         existing = self._existing_state(contract, conversation_context or {})
         collected = self._canonicalize_inputs(dict(existing.collected_inputs)) if existing is not None else {}
@@ -107,7 +108,7 @@ class FinnV2OperationStateService:
                 if key in missing_fields and not self._is_missing(value):
                     explicit.setdefault(key, value)
         else:
-            explicit = self.explicit_inputs(
+            explicit = {} if model_tool_inputs else self.explicit_inputs(
                 contract=contract,
                 message=message,
                 explicit_asset=contract_asset,
@@ -118,7 +119,7 @@ class FinnV2OperationStateService:
         # projection may normalize an equivalent value for matching, but it
         # must not overwrite a typed setup name with that normalized form.
         accepted_inputs = set(contract.input_fields)
-        permits_existing_field_changes = self._is_explicit_correction(message)
+        permits_existing_field_changes = bool((conversation_context or {}).get("proposal_revision")) or self._is_explicit_correction(message)
         for key, value in (supplied_inputs or {}).items():
             if is_slot_turn:
                 continue
@@ -151,6 +152,14 @@ class FinnV2OperationStateService:
             key: {"source": "explicit", "state_revision": next_revision}
             for key in explicit
         })
+        if "category" in accepted_inputs and collected.get("indicator"):
+            definition = self._indicator_input_from_text(str(collected["indicator"]))
+            if definition is not None:
+                collected["indicator"] = definition["name"]
+                collected["category"] = definition["category"]
+                if "category" not in explicit and "category" not in sources:
+                    sources["category"] = "default"
+                    provenance["category"] = {"source": "default", "state_revision": next_revision}
         for key, value in (derived_inputs or {}).items():
             if key in accepted_inputs and key not in collected and not self._is_missing(value):
                 collected[key] = self._canonical_input(key, value)
@@ -356,6 +365,14 @@ class FinnV2OperationStateService:
         # A completed/proposed action is historical context, not an active
         # guided draft. Reusing it made a fresh RSI request inherit an older
         # DXY proposal because both share the indicator operation contract.
+        revision = dict(context.get("proposal_revision") or {})
+        if (
+            revision.get("proposal_id") == state.open_proposal_id
+            and revision.get("operation_id") == contract.operation_id
+            and state.status == "proposed"
+            and not state.missing_required_inputs
+        ):
+            return state
         if not state.missing_required_inputs or state.status != "collecting":
             return None
         return state
@@ -695,27 +712,9 @@ class FinnV2OperationStateService:
             named = self._name_input_from_text(value) or value
             return FinnV2SetupInputCatalog.display_name(named) if contract.operation_id == "create_setup" else named
         if field == "dca_frequency":
-            lowered = value.casefold()
-            for token, canonical in (
-                ("daily", "daily"), ("dagelijks", "daily"), ("taeglich", "daily"),
-                ("weekly", "weekly"), ("wekelijks", "weekly"),
-                ("monthly", "monthly"), ("maandelijks", "monthly"),
-            ):
-                if re.search(rf"\b{token}\b", lowered):
-                    return canonical
-            return None
+            return self._canonical_dca_frequency(value)
         if field == "dca_day":
-            lowered = FinnV2SetupInputCatalog._comparison_text(value)
-            weekdays = {
-                "monday": "monday", "maandag": "monday", "montag": "monday",
-                "tuesday": "tuesday", "dinsdag": "tuesday", "dienstag": "tuesday",
-                "wednesday": "wednesday", "woensdag": "wednesday", "mittwoch": "wednesday",
-                "thursday": "thursday", "donderdag": "thursday", "donnerstag": "thursday",
-                "friday": "friday", "vrijdag": "friday", "freitag": "friday",
-                "saturday": "saturday", "zaterdag": "saturday", "samstag": "saturday",
-                "sunday": "sunday", "zondag": "sunday", "sonntag": "sunday",
-            }
-            return weekdays.get(lowered)
+            return self._canonical_dca_day(value)
         if field == "dca_month_day":
             match = re.fullmatch(r"(?:dag\s*)?(\d{1,2})(?:e|ste|de|st|nd|rd|th)?", value.casefold())
             if match and 1 <= int(match.group(1)) <= 28:
@@ -726,14 +725,7 @@ class FinnV2OperationStateService:
         if field == "setup_type":
             return FinnV2SetupInputCatalog.setup_type_from_text(value)
         if field == "execution_mode":
-            lowered = value.casefold()
-            if re.search(r"\b(?:fixed|vast|standaard|manual|handmatig|fest(?:e)?)\b", lowered):
-                return "fixed"
-            if re.search(r"\b(?:custom|aangepast|individuell|benutzerdefiniert)\b", lowered):
-                return "custom"
-            if re.search(r"\b(?:automatic|automatis\w*)\b", lowered):
-                return "automatic"
-            return None
+            return self._canonical_execution_mode(value)
         if field == "changed_fields":
             changes = self._natural_changed_fields(value, contract=contract)
             return changes or None
@@ -1208,7 +1200,55 @@ class FinnV2OperationStateService:
 
     @staticmethod
     def _canonical_input(field: str, value: object) -> object:
+        if field == "changed_fields" and isinstance(value, Mapping):
+            return {
+                key: FinnV2OperationStateService._canonical_input(key, item)
+                for key, item in value.items()
+            }
+        if field == "execution_mode":
+            return FinnV2OperationStateService._canonical_execution_mode(str(value))
+        if field == "dca_frequency":
+            return FinnV2OperationStateService._canonical_dca_frequency(str(value))
+        if field == "dca_day":
+            return FinnV2OperationStateService._canonical_dca_day(str(value))
         return FinnV2SetupInputCatalog.canonical_input(field, value)
+
+    @staticmethod
+    def _canonical_dca_frequency(value: str) -> Optional[str]:
+        lowered = value.casefold()
+        for token, canonical in (
+            ("daily", "daily"), ("dagelijks", "daily"), ("taeglich", "daily"),
+            ("weekly", "weekly"), ("wekelijks", "weekly"),
+            ("monthly", "monthly"), ("maandelijks", "monthly"),
+        ):
+            if re.search(rf"\b{token}\b", lowered):
+                return canonical
+        return None
+
+    @staticmethod
+    def _canonical_dca_day(value: str) -> Optional[str]:
+        lowered = FinnV2SetupInputCatalog._comparison_text(value)
+        weekdays = {
+            "monday": "monday", "maandag": "monday", "montag": "monday",
+            "tuesday": "tuesday", "dinsdag": "tuesday", "dienstag": "tuesday",
+            "wednesday": "wednesday", "woensdag": "wednesday", "mittwoch": "wednesday",
+            "thursday": "thursday", "donderdag": "thursday", "donnerstag": "thursday",
+            "friday": "friday", "vrijdag": "friday", "freitag": "friday",
+            "saturday": "saturday", "zaterdag": "saturday", "samstag": "saturday",
+            "sunday": "sunday", "zondag": "sunday", "sonntag": "sunday",
+        }
+        return weekdays.get(lowered)
+
+    @staticmethod
+    def _canonical_execution_mode(value: str) -> Optional[str]:
+        lowered = value.casefold()
+        if re.search(r"\b(?:fixed|vast|standaard|manual|handmatig|fest(?:e)?)\b", lowered):
+            return "fixed"
+        if re.search(r"\b(?:custom|aangepast|individuell|benutzerdefiniert)\b", lowered):
+            return "custom"
+        if re.search(r"\b(?:automatic|automatis\w*)\b", lowered):
+            return "automatic"
+        return None
 
     def _canonicalize_inputs(self, values: Mapping[str, object]) -> dict[str, object]:
         return {key: self._canonical_input(key, value) for key, value in values.items()}

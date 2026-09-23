@@ -697,9 +697,15 @@ def resolve_catalog_symbol_mention(value: object) -> str | None:
     whole-token mention anywhere in that request, not only at its beginning.
     Ambiguous text remains unresolved rather than guessing a target.
     """
+    matches = mentioned_catalog_symbols(value)
+    return next(iter(matches)) if len(matches) == 1 else None
+
+
+def mentioned_catalog_symbols(value: object) -> set[str]:
+    """Return explicit catalog mentions without selecting one from a multi-asset question."""
     normalized = str(value or "").casefold()
     if not normalized:
-        return None
+        return set()
     matches: set[str] = set()
     for symbol, asset in DEFAULT_ASSET_CATALOG.items():
         names = (symbol, str(asset.get("display_name") or ""), *(str(alias) for alias in asset.get("aliases") or ()))
@@ -708,7 +714,7 @@ def resolve_catalog_symbol_mention(value: object) -> str | None:
             if candidate and re.search(rf"(?<![a-z0-9]){re.escape(candidate)}(?![a-z0-9])", normalized):
                 matches.add(symbol)
                 break
-    return next(iter(matches)) if len(matches) == 1 else None
+    return matches
 
 
 class AssetCatalogService:

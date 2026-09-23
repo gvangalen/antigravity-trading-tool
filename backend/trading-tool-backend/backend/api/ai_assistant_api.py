@@ -3173,7 +3173,12 @@ async def assistant_v2_publish_proposal(
         limit=ASSISTANT_EXECUTE_USER_LIMIT,
     )
     _require_csrf_match(raw_request, x_csrf_token)
-    token, expires_at = await FinnV2ConfirmationService(db).issue_confirmation_token(proposal_id=proposal_id, user_id=current_user["id"])
+    try:
+        token, expires_at = await FinnV2ConfirmationService(db).issue_confirmation_token(proposal_id=proposal_id, user_id=current_user["id"])
+    except ValueError as exc:
+        if str(exc) != "proposal_not_pending_confirmation":
+            raise
+        raise HTTPException(status_code=409, detail="Proposal is no longer pending confirmation") from exc
     proposal = await FinnV2ProposalRepository(db).get_by_id_for_user(proposal_id=proposal_id, user_id=current_user["id"])
     return {
         "proposal_id": proposal_id,
@@ -3204,8 +3209,8 @@ async def assistant_v2_confirm_proposal(
         limit=ASSISTANT_EXECUTE_USER_LIMIT,
     )
     _require_csrf_match(raw_request, request.csrf_token or x_csrf_token)
-    return (
-        await FinnV2ConfirmationService(db).confirm(
+    try:
+        result = await FinnV2ConfirmationService(db).confirm(
             user_id=current_user["id"],
             request=FinnV2ConfirmationRequest(
                 proposal_id=proposal_id,
@@ -3213,7 +3218,11 @@ async def assistant_v2_confirm_proposal(
                 expected_payload_hash=request.expected_payload_hash,
             ),
         )
-    ).dict()
+    except ValueError as exc:
+        if str(exc) != "proposal_not_pending_confirmation":
+            raise
+        raise HTTPException(status_code=409, detail="Proposal is no longer pending confirmation") from exc
+    return result.dict()
 
 
 @router.post("/assistant/v2/proposals/{proposal_id}/cancel")

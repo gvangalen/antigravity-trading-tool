@@ -14,12 +14,15 @@ class FinnV2ProposalRepository(FinnV2RepositoryTransactionMixin):
     def __init__(self, session: AsyncSession):
         self.session = session
 
-    async def get_by_id_for_user(self, *, proposal_id: str, user_id: int) -> Optional[FinnV2Proposal]:
+    async def get_by_id_for_user(self, *, proposal_id: str, user_id: int, for_update: bool = False) -> Optional[FinnV2Proposal]:
+        statement = select(FinnV2Proposal).where(
+            FinnV2Proposal.id == proposal_id,
+            FinnV2Proposal.user_id == user_id,
+        )
+        if for_update:
+            statement = statement.with_for_update()
         result = await self.session.execute(
-            select(FinnV2Proposal).where(
-                FinnV2Proposal.id == proposal_id,
-                FinnV2Proposal.user_id == user_id,
-            )
+            statement
         )
         return result.scalars().first()
 
