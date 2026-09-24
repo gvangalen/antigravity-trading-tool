@@ -12,6 +12,10 @@ class SetupToolAdapter:
                 "symbol": row.get("symbol"),
                 "timeframe": row.get("timeframe"),
                 "setup_type": row.get("setup_type"),
+                "dca_frequency": row.get("dca_frequency"),
+                "dca_day": row.get("dca_day"),
+                "dca_month_day": row.get("dca_month_day"),
+                "min_investment": row.get("min_investment"),
             }
             for row in (setups or [])
         ]
@@ -21,6 +25,10 @@ class SetupToolAdapter:
             symbol=setup.get("symbol"),
             timeframe=setup.get("timeframe"),
             setup_type=setup.get("setup_type"),
+            dca_frequency=setup.get("dca_frequency"),
+            dca_day=setup.get("dca_day"),
+            dca_month_day=setup.get("dca_month_day"),
+            min_investment=setup.get("min_investment"),
             score=float(setup.get("score") or 0) if setup.get("score") is not None else None,
             setups=collection,
             setup_count=len(collection) if collection else None,

@@ -442,6 +442,24 @@ def test_setup_collection_survives_the_persisted_evidence_schema():
     assert [setup["name"] for setup in persisted.setups] == ["BTC DCA", "BTC Swing"]
 
 
+def test_setup_read_preserves_confirmed_dca_fields_in_typed_evidence():
+    import asyncio
+
+    result = asyncio.run(SetupToolAdapter().execute(
+        setup={
+            "id": 326, "name": "BTC DCA", "symbol": "BTC", "timeframe": "4H",
+            "setup_type": "dca", "dca_frequency": "weekly", "dca_day": "monday",
+            "min_investment": 100,
+        },
+        resolution_source="explicit_setup_name",
+    ))
+    persisted = parse_tool_payload(result["schema_name"], result["data"].dict())
+
+    assert persisted.dca_frequency == "weekly"
+    assert persisted.dca_day == "monday"
+    assert persisted.min_investment == 100
+
+
 def test_response_projection_makes_persisted_indicator_contract_fields_visible():
     draft = ResponseDraft(
         draft_id="draft-projection-indicators", run_id="run-projection-indicators", user_id=406,

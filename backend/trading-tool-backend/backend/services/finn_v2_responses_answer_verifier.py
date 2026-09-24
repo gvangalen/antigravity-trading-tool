@@ -145,6 +145,14 @@ class FinnResponsesAnswerVerifier:
             for item in (call.get("result", {}).get("results") or [])
             if isinstance(item, dict)
         )
+        if any(item.get("reason") == "setup_ambiguous" for item in evidence) and not any(
+            item.get("scope") == "read_active_setup" and item.get("status") == "completed"
+            for item in evidence
+        ):
+            return FinnResponsesVerifiedAnswer(
+                "unavailable", self._fallback_copy("setup_ambiguous", message=message),
+                "setup_ambiguous", evidence,
+            )
         if any(call.get("status") == "error" for call in result.tool_trace):
             return FinnResponsesVerifiedAnswer(
                 "unavailable", "Ik kan dit nu niet betrouwbaar beoordelen.",

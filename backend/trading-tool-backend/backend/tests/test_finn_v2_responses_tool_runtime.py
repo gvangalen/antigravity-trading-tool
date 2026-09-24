@@ -1149,3 +1149,58 @@ def test_model_read_asset_uses_catalog_symbol_after_explicit_mention(asset_name,
         conversation_context={}, verified_asset=symbol,
     ))
     assert received == [{"asset": symbol}]
+
+
+def test_recent_confirmed_setup_is_bound_server_side_before_read(monkeypatch):
+    import backend.services.finn_v2_responses_front_door as front_module
+
+    fake = FakeResponses(
+        response("r1", calls=(tool_call("c1", "get_active_plan_and_strategy", {"asset": "BTC"}),)),
+        response("r2", text="Je setup gebruikt 100 euro per week."),
+    )
+    front = object.__new__(FinnResponsesFrontDoor)
+    front.client = SimpleNamespace(responses=fake)
+    front.user_id = 21
+    front.run_id = "run-21"
+    front.proposals = FinnResponsesProposalSelection()
+    received = []
+
+    class Session:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_args):
+            return False
+
+        async def commit(self):
+            pass
+
+    class Reads:
+        session_factory = Session
+
+        async def __call__(self, call):
+            received.append(call.inputs)
+            return {"status": "completed", "results": []}
+
+    class Resolver:
+        is_setup_collection_request = staticmethod(lambda _message: False)
+
+        def __init__(self, _session):
+            pass
+
+        async def resolve_canonical_target(self, **kwargs):
+            assert kwargs["user_id"] == 21
+            assert kwargs["conversation_context"]["previous_action_result"]["entity_id"] == "326"
+            return SimpleNamespace(resolution_status="resolved", entity_id=326)
+
+    monkeypatch.setattr(front_module, "FinnV2EntityResolutionService", Resolver)
+    monkeypatch.setattr(front_module.FinnV2RuntimeContractRepository, "record_responses_progress", AsyncMock())
+    front.reads = Reads()
+    asyncio.run(front.run(
+        message="Wat zijn frequentie en bedrag van de setup die je net hebt opgeslagen?",
+        instructions="Gebruik bewijs", verified_asset="BTC",
+        conversation_context={"previous_action_result": {
+            "owner_user_id": 21, "result_status": "succeeded", "entity_type": "setup", "entity_id": "326",
+        }},
+    ))
+    assert received == [{"setup_id": 326}]

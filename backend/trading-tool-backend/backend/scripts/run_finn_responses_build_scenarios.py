@@ -191,8 +191,32 @@ def run_scenarios(*, base_url: str, output: Path) -> dict:
             and lifecycle.get("cross_user_rejected")
         ),
     }
+    readback = run_gate(
+        base_url=base_url, bearer_token=token,
+        conversation_id=first["conversation_id"],
+        message="Wat zijn naam, frequentie en bedrag van de setup die je net hebt opgeslagen?",
+        timeout_seconds=75,
+    )
+    readback_record = _runtime_record(readback["run_id"])
+    readback_terminal, readback_status = _request_json(
+        url=f"{base_url.rstrip('/')}/api/assistant/v2/runs/{readback['run_id']}",
+        method="GET", headers=headers, body=None, timeout=10,
+    )
+    readback_answer = str((readback_terminal.get("response") or {}).get("content") or "")
+    readback_exchange = dict(readback_record["runtime_state"].get("responses_exchange") or {})
+    artifact["readback"] = {
+        "run_id": readback["run_id"],
+        "status": readback["status"],
+        "tools": [item.get("name") for item in readback_exchange.get("tool_trace", [])],
+        "answer": readback_answer,
+        "pass": bool(readback_status == 200 and readback["status"] == "completed"
+                     and readback["dispatch_count"] == 1 and readback["attempt_count"] == 1
+                     and name in readback_answer and "100" in readback_answer
+                     and ("week" in readback_answer.casefold() or "weekly" in readback_answer.casefold())),
+    }
     artifact["passed"] = sum(case["pass"] for case in artifact["cases"]) + int(artifact["draft"]["pass"])
-    artifact["total"] = len(artifact["cases"]) + 1
+    artifact["passed"] += int(artifact["readback"]["pass"])
+    artifact["total"] = len(artifact["cases"]) + 2
     checkpoint()
     return artifact
 

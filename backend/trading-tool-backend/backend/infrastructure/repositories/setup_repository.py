@@ -143,7 +143,8 @@ class SetupRepository:
         query = text("""
             SELECT ds.setup_id, ds.score, ds.explanation as ai_explanation,
                    s.name, s.symbol, s.timeframe, s.trend, s.setup_type,
-                   s.min_investment, s.tags, s.favorite, s.action, s.explanation as setup_explanation
+                   s.min_investment, s.dca_frequency, s.dca_day, s.dca_month_day,
+                   s.tags, s.favorite, s.action, s.explanation as setup_explanation
             FROM daily_setup_scores ds
             JOIN setups s ON s.id = ds.setup_id
             WHERE ds.report_date = CURRENT_DATE

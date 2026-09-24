@@ -125,6 +125,10 @@ class ActiveSetupData(BaseModel):
     symbol: Optional[str] = None
     timeframe: Optional[str] = None
     setup_type: Optional[str] = None
+    dca_frequency: Optional[str] = None
+    dca_day: Optional[str] = None
+    dca_month_day: Optional[int] = None
+    min_investment: Optional[float] = None
     score: Optional[float] = None
     setups: List[Dict[str, object]] = Field(default_factory=list)
     setup_count: Optional[int] = None

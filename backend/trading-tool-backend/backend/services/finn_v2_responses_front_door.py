@@ -60,6 +60,27 @@ class FinnResponsesFrontDoor:
                         call = replace(call, inputs={key: value for key, value in call.inputs.items() if key != "asset"})
                     else:
                         call = replace(call, inputs={**call.inputs, "asset": symbol})
+                if (
+                    call.name == "get_active_plan_and_strategy"
+                    and not FinnV2EntityResolutionService.is_setup_collection_request(message)
+                ):
+                    session_factory = getattr(self.reads, "session_factory", None)
+                    if session_factory is not None:
+                        async with session_factory() as session:
+                            target = await FinnV2EntityResolutionService(session).resolve_canonical_target(
+                                user_id=self.user_id, entity_type="setup", message=message,
+                                conversation_context=dict(conversation_context),
+                                selector={
+                                    **call.inputs,
+                                    "asset_source": (
+                                        "explicit_message" if call.inputs.get("asset")
+                                        and call.inputs["asset"] in mentioned_catalog_symbols(message)
+                                        else "context"
+                                    ),
+                                },
+                            )
+                        if target.resolution_status == "resolved":
+                            call = replace(call, inputs={"setup_id": target.entity_id})
                 read_result = await self.reads(call)
                 read_context.append(read_result)
                 return read_result
