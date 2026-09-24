@@ -14,3 +14,22 @@ export function formatExecutionMode(value, locale = "nl") {
   if (!normalized) return "";
   return EXECUTION_MODE_LABELS[normalizeProductLocale(locale)][normalized] || "";
 }
+
+const RISK_LABELS = Object.freeze({
+  nl: Object.freeze({ cautious: "Voorzichtig", conservative: "Voorzichtig", balanced: "Gebalanceerd", aggressive: "Offensief" }),
+  en: Object.freeze({ cautious: "Cautious", conservative: "Conservative", balanced: "Balanced", aggressive: "Aggressive" }),
+  de: Object.freeze({ cautious: "Vorsichtig", conservative: "Konservativ", balanced: "Ausgewogen", aggressive: "Offensiv" }),
+});
+
+export function formatDraftCardValue(value, locale = "nl") {
+  const language = normalizeProductLocale(locale);
+  if (value == null) return "";
+  if (Array.isArray(value)) return value.map((item) => formatDraftCardValue(item, locale)).filter(Boolean).join(", ");
+  if (typeof value === "object") {
+    const target = value.price ?? value.target_price ?? value.value;
+    return target == null ? "" : formatDraftCardValue(target, locale);
+  }
+  if (typeof value === "number") return new Intl.NumberFormat(language).format(value);
+  const normalized = String(value).trim().toLowerCase();
+  return RISK_LABELS[language][normalized] || String(value);
+}

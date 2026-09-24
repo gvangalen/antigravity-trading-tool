@@ -34,7 +34,7 @@ import { FINN_ASSETS } from "@/lib/finnCommandSearch";
 import { getWorkspaceSnapshot, subscribeWorkspaceSnapshot } from "@/lib/workspaceSnapshotStore";
 import { getActiveSetupId } from "@/lib/setup/activeSetup";
 import { indicatorDisplayName } from "@/lib/indicators/configuredIndicatorRows.mjs";
-import { formatExecutionMode } from "@/lib/contractValueFormatter.mjs";
+import { formatDraftCardValue, formatExecutionMode } from "@/lib/contractValueFormatter.mjs";
 import { clearActiveFinnConversation, readActiveFinnConversation, writeActiveFinnConversation } from "@/lib/finnActiveConversation.mjs";
 
 const INDICATOR_MODAL_OPEN_EVENT = "finn-indicator-config:open";
@@ -5314,11 +5314,7 @@ function AIAssistantContent({
         : [supplied.asset || context.symbol, isIndicator ? ({ technical: "Technisch bewijs", macro: "Macro", market: "Marktindicatoren" }[supplied.category] || supplied.category) : "Watchlist"].filter(Boolean).join(" · ");
     const labels = { name: "naam", setup_id: "setup", strategy_id: "strategie", symbol: "asset", timeframe: "timeframe", execution_mode: "uitvoering", base_amount: "bedrag", entry: "entry", stop_loss: "stop-loss", targets: "targets", risk_profile: "risico", budget_total_eur: "budget" };
     const missing = (draft.missing_inputs || []).map((field) => labels[field]).filter(Boolean);
-    const formatValue = (value) => {
-      const riskLabels = { conservative: "Voorzichtig", balanced: "Gebalanceerd", aggressive: "Offensief" };
-      if (typeof value === "string" && riskLabels[value.toLowerCase()]) return riskLabels[value.toLowerCase()];
-      return Array.isArray(value) ? value.join(", ") : String(value);
-    };
+    const formatValue = (value) => formatDraftCardValue(value, locale);
     const rows = isStrategy
       ? [["Uitvoering", [formatExecutionMode(supplied.execution_mode, locale), supplied.base_amount ? `€${supplied.base_amount}` : null].filter(Boolean).join(" · ")], ["Entry", supplied.entry], ["Stop-loss", supplied.stop_loss], ["Targets", supplied.targets], ["Risico", supplied.risk_profile]]
       : isBot
