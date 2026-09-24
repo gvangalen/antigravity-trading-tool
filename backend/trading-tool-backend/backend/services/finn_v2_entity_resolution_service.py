@@ -675,6 +675,15 @@ class FinnV2EntityResolutionService:
             return False
         return bool(re.search(rf"(?<!\w){re.escape(normalized_name)}(?!\w)", normalized_message))
 
+    @staticmethod
+    def references_recent_action(message: str, entity_type: str) -> bool:
+        normalized = " ".join(str(message or "").casefold().split())
+        object_word = rf"(?:{re.escape(entity_type)}|object|plan)"
+        return bool(
+            re.search(rf"\b(?:deze|die|dit|this|that|diese[nrms]?|dieser|dieses)\s+{object_word}\b", normalized)
+            or re.search(rf"\b{object_word}\b.{{0,90}}\b(?:net|zojuist|just|gerade)\s+(?:(?:je|you|du)\s+)?(?:(?:heb|hebt|has|have)\s+)?(?:opgeslagen|saved|gespeichert)\b", normalized)
+        )
+
     async def resolve_setup(
         self,
         *,

@@ -212,11 +212,41 @@ def run_scenarios(*, base_url: str, output: Path) -> dict:
         "pass": bool(readback_status == 200 and readback["status"] == "completed"
                      and readback["dispatch_count"] == 1 and readback["attempt_count"] == 1
                      and name in readback_answer and "100" in readback_answer
-                     and ("week" in readback_answer.casefold() or "weekly" in readback_answer.casefold())),
+                     and ("week" in readback_answer.casefold() or "wekel" in readback_answer.casefold())),
+    }
+    ambiguous = run_gate(
+        base_url=base_url, bearer_token=token,
+        conversation_id=first["conversation_id"],
+        message="Bitte antworte auf Deutsch: Was kann ich derzeit sicher über meinen BTC-Plan sagen?",
+        timeout_seconds=75,
+    )
+    ambiguous_record = _runtime_record(ambiguous["run_id"])
+    ambiguous_terminal, ambiguous_status = _request_json(
+        url=f"{base_url.rstrip('/')}/api/assistant/v2/runs/{ambiguous['run_id']}",
+        method="GET", headers=headers, body=None, timeout=10,
+    )
+    ambiguous_answer = str((ambiguous_terminal.get("response") or {}).get("content") or "")
+    artifact["ambiguous_plan_read"] = {
+        "run_id": ambiguous["run_id"], "status": ambiguous["status"],
+        "reason": ambiguous_record["terminal_projection"].get("error_code"),
+        "answer": ambiguous_answer,
+        "pass": bool(
+            ambiguous_status == 200
+            and ambiguous["dispatch_count"] == 1 and ambiguous["attempt_count"] == 1
+            and "150" not in ambiguous_answer
+            and (
+                (ambiguous["status"] == "unavailable"
+                 and ambiguous_record["terminal_projection"].get("error_code") in {
+                     "setup_ambiguous", "responses_evidence_not_verified",
+                 })
+                or (ambiguous["status"] == "completed" and "100" in ambiguous_answer)
+            )
+        ),
     }
     artifact["passed"] = sum(case["pass"] for case in artifact["cases"]) + int(artifact["draft"]["pass"])
     artifact["passed"] += int(artifact["readback"]["pass"])
-    artifact["total"] = len(artifact["cases"]) + 2
+    artifact["passed"] += int(artifact["ambiguous_plan_read"]["pass"])
+    artifact["total"] = len(artifact["cases"]) + 3
     checkpoint()
     return artifact
 

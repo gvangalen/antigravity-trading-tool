@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from decimal import Decimal, InvalidOperation
 import asyncio
 import json
+import re
 from typing import Any
 from langdetect import DetectorFactory, LangDetectException, detect
 
@@ -97,6 +99,57 @@ class FinnResponsesAnswerVerifier:
             return "no_evidence_available"
         return "responses_evidence_not_verified"
 
+    @staticmethod
+    def _currency_amounts(text: str) -> set[str]:
+        amounts = set()
+        for match in re.finditer(
+            r"(?:€\s*([\d][\d.,]*)|([\d][\d.,]*)\s*(?:€|\beuro\b|\beur\b))",
+            text.casefold(),
+        ):
+            value = (match.group(1) or match.group(2)).rstrip(".,")
+            if "," in value and "." in value:
+                decimal_separator = "," if value.rfind(",") > value.rfind(".") else "."
+            elif "," in value or "." in value:
+                separator = "," if "," in value else "."
+                decimal_separator = separator if len(value.rsplit(separator, 1)[-1]) <= 2 else ""
+            else:
+                decimal_separator = ""
+            normalized = "".join(
+                "." if character == decimal_separator else character
+                for character in value if character.isdigit() or character == decimal_separator
+            )
+            try:
+                amounts.add(str(Decimal(normalized).normalize()))
+            except InvalidOperation:
+                pass
+        return amounts
+
+    @classmethod
+    def _amounts_supported(
+        cls, *, answer: str, message: str, previous_answer: str,
+        evidence: tuple[dict[str, Any], ...],
+    ) -> bool:
+        claims = cls._currency_amounts(answer)
+        if not claims:
+            return True
+        grounded = cls._currency_amounts(message) | cls._currency_amounts(previous_answer)
+
+        def monetary_fields(value: Any) -> None:
+            if isinstance(value, dict):
+                for key, item in value.items():
+                    if any(token in str(key).casefold() for token in ("amount", "budget", "investment")):
+                        grounded.update(cls._currency_amounts(f"€{item}"))
+                    else:
+                        monetary_fields(item)
+            elif isinstance(value, list):
+                for item in value:
+                    monetary_fields(item)
+
+        for item in evidence:
+            if item.get("status") == "completed":
+                monetary_fields(item.get("data"))
+        return claims <= grounded
+
     async def _cause_claim_is_grounded(self, *, answer: str, remaining: float | None) -> bool:
         if self.client is None or (remaining is not None and remaining <= 4):
             return False
@@ -169,6 +222,14 @@ class FinnResponsesAnswerVerifier:
             for item in evidence
         ]
         previous_answer = str((previous_response or {}).get("answer") or "").strip()
+        if not self._amounts_supported(
+            answer=result.text, message=message, previous_answer=previous_answer,
+            evidence=evidence,
+        ):
+            return FinnResponsesVerifiedAnswer(
+                "unavailable", self._fallback_copy("responses_evidence_not_verified", message=message),
+                "responses_evidence_not_verified", evidence, bool(previous_answer),
+            )
         confirmed_action = {
             key: recent_action_result.get(key)
             for key in ("operation_id", "entity_type", "canonical_name", "result_status")

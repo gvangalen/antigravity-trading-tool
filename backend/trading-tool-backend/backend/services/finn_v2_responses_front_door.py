@@ -69,7 +69,11 @@ class FinnResponsesFrontDoor:
                         async with session_factory() as session:
                             target = await FinnV2EntityResolutionService(session).resolve_canonical_target(
                                 user_id=self.user_id, entity_type="setup", message=message,
-                                conversation_context=dict(conversation_context),
+                                conversation_context=(
+                                    dict(conversation_context)
+                                    if FinnV2EntityResolutionService.references_recent_action(message, "setup")
+                                    else {}
+                                ),
                                 selector={
                                     **call.inputs,
                                     "asset_source": (

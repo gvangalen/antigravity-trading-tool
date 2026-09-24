@@ -1184,6 +1184,7 @@ def test_recent_confirmed_setup_is_bound_server_side_before_read(monkeypatch):
 
     class Resolver:
         is_setup_collection_request = staticmethod(lambda _message: False)
+        references_recent_action = staticmethod(lambda _message, _entity_type: True)
 
         def __init__(self, _session):
             pass
@@ -1204,3 +1205,58 @@ def test_recent_confirmed_setup_is_bound_server_side_before_read(monkeypatch):
         }},
     ))
     assert received == [{"setup_id": 326}]
+
+
+@pytest.mark.parametrize(
+    ("message", "expected"),
+    [
+        ("Wat zijn frequentie en bedrag van de setup die je net hebt opgeslagen?", True),
+        ("What did you just save in this setup?", True),
+        ("Was hast du in diesem Setup gerade gespeichert?", True),
+        ("Was kann ich über meinen BTC-Plan sagen?", False),
+        ("Welke BTC setups heb ik?", False),
+    ],
+)
+def test_recent_setup_reference_does_not_capture_general_plan_reads(message, expected):
+    from backend.services.finn_v2_entity_resolution_service import FinnV2EntityResolutionService
+
+    assert FinnV2EntityResolutionService.references_recent_action(message, "setup") is expected
+
+
+def test_responses_money_claims_require_current_or_immediate_verified_evidence():
+    verifier = FinnResponsesAnswerVerifier()
+    evidence = ({"scope": "read_market_snapshot", "status": "unavailable"},)
+    assert not verifier._amounts_supported(
+        answer="Du investierst 150 Euro pro Woche.", message="Was ist mein BTC-Plan?",
+        previous_answer="Für die Bewertung fehlen aktuelle Daten.", evidence=evidence,
+    )
+    assert verifier._amounts_supported(
+        answer="Du investierst 100 Euro pro Woche.", message="Was ist mein BTC-Plan?",
+        previous_answer="De opgeslagen setup gebruikt €100 per week.", evidence=evidence,
+    )
+    assert verifier._amounts_supported(
+        answer="Het budget is €1.000,00.", message="Wat is het botbudget?",
+        previous_answer="", evidence=({
+            "scope": "read_bot_status", "status": "completed", "data": {"budget": 1000},
+        },),
+    )
+
+
+def test_responses_verifier_blocks_stale_saved_amount_even_if_semantic_model_passes():
+    semantic = SimpleNamespace(verify_async=AsyncMock(return_value=SimpleNamespace(
+        available=True, passes=True, reason_codes=[],
+    )))
+    result = FinnResponsesResult("De setup gebruikt €150 per week.", "resp-amount", ({
+        "name": "get_market_snapshot", "status": "partial",
+        "result": {"results": [{
+            "scope": "read_market_snapshot", "status": "unavailable", "reason": "source_unavailable",
+        }]},
+    },))
+    verified = asyncio.run(FinnResponsesAnswerVerifier(semantic).verify(
+        message="Wat kan ik veilig zeggen over mijn BTC-plan?",
+        result=result, previous_response={"answer": "Er ontbreekt actuele marktdata."},
+    ))
+    assert verified.status == "unavailable"
+    assert verified.reason == "responses_evidence_not_verified"
+    assert "150" not in verified.text
+    semantic.verify_async.assert_not_awaited()
