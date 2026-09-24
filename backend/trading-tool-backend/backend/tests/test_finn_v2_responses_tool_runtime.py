@@ -716,6 +716,18 @@ def test_responses_exchange_is_owner_bound_and_single_write():
         asyncio.run(repo.record_responses_exchange(
             run_id="run-7", user_id=7, response_id="resp-8", tool_trace=[], answer="Anders",
         ))
+    with pytest.raises(RuntimeContractConflictError, match="already_recorded"):
+        asyncio.run(repo.record_responses_exchange(
+            run_id="run-7", user_id=7, response_id="resp-8", tool_trace=[], answer="Anders",
+            supersedes_response_id="wrong-response",
+        ))
+    recovered = asyncio.run(repo.record_responses_exchange(
+        run_id="run-7", user_id=7, response_id="resp-8",
+        tool_trace=[{"call_id": "c1"}, {"call_id": "c2"}], answer="Hersteld antwoord",
+        supersedes_response_id="resp-7",
+    ))
+    assert recovered.state_json["responses_exchange"]["supersedes_response_id"] == "resp-7"
+    assert [item["call_id"] for item in recovered.state_json["responses_exchange"]["tool_trace"]] == ["c1", "c2"]
 
 
 def test_responses_cursor_rejects_stale_conversation_turn():
@@ -880,6 +892,32 @@ def test_rejected_follow_up_uses_persisted_previous_evidence_limitation():
     assert answer.reason == "source_unavailable"
     assert answer.used_previous_response
     assert "oorzaak" in answer.text
+
+
+def test_unrelated_previous_market_failure_does_not_override_setup_ambiguity():
+    semantic = SimpleNamespace(verify_async=AsyncMock(return_value=SimpleNamespace(
+        available=True, passes=False, reason_codes=["setup_ambiguous"],
+    )))
+    previous = {
+        "answer": "Ik heb geen actuele AAPL-koers.",
+        "tool_trace": [{"result": {"results": [{
+            "scope": "read_market_snapshot", "status": "unavailable",
+            "reason": "source_unavailable", "asset": "AAPL",
+        }]}}],
+    }
+    current = FinnResponsesResult("Ik kan je setup beoordelen.", "resp-2", ({
+        "name": "get_active_plan_and_strategy", "status": "partial",
+        "result": {"results": [{
+            "scope": "read_active_setup", "status": "unavailable",
+            "reason": "setup_ambiguous", "asset": "BTC",
+        }]},
+    },))
+    answer = asyncio.run(FinnResponsesAnswerVerifier(semantic).verify(
+        message="Tell me about my BTC setup", result=current, previous_response=previous,
+    ))
+    assert answer.status == "unavailable"
+    assert answer.reason == "setup_ambiguous"
+    assert answer.text.startswith("I found several setups")
 
 
 def test_responses_loop_accepts_direct_answer_without_tools():

@@ -509,6 +509,7 @@ class FinnV2RuntimeContractRepository(FinnV2RepositoryTransactionMixin):
     async def record_responses_exchange(
         self, *, run_id: str, user_id: int, response_id: str,
         tool_trace: list[dict[str, Any]], answer: str,
+        supersedes_response_id: str | None = None,
     ) -> FinnV2RuntimeContract:
         """Keep the model exchange on the existing owner-bound run contract."""
         if not response_id or not answer.strip():
@@ -517,8 +518,14 @@ class FinnV2RuntimeContractRepository(FinnV2RepositoryTransactionMixin):
         if row.user_id != user_id:
             raise RuntimeContractConflictError("responses_exchange_owner_mismatch")
         state = deepcopy(row.state_json or {})
-        if state.get("responses_exchange"):
+        previous_exchange = dict(state.get("responses_exchange") or {})
+        if previous_exchange and (
+            not supersedes_response_id
+            or previous_exchange.get("response_id") != supersedes_response_id
+        ):
             raise RuntimeContractConflictError("responses_exchange_already_recorded")
+        if supersedes_response_id and not previous_exchange:
+            raise RuntimeContractConflictError("responses_exchange_recovery_missing")
         state.pop("responses_progress", None)
         state["responses_exchange"] = {
             "response_id": response_id,
@@ -526,6 +533,7 @@ class FinnV2RuntimeContractRepository(FinnV2RepositoryTransactionMixin):
             "answer": answer,
             "conversation_id": row.conversation_id,
             "run_id": row.run_id,
+            "supersedes_response_id": supersedes_response_id,
         }
         return await self._write_revision(row=row, state=state)
 

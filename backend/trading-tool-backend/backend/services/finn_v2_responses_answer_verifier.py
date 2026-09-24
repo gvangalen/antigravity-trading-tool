@@ -174,9 +174,14 @@ class FinnResponsesAnswerVerifier:
             for item in (call.get("result", {}).get("results") or [])
             if isinstance(item, dict)
         ]
+        current_scopes = {item.get("scope") for item in evidence}
+        relevant_previous_source_evidence = [
+            item for item in previous_source_evidence
+            if not current_scopes or item.get("scope") in current_scopes
+        ]
         unavailable_without_cause = any(
             item.get("reason") == "source_unavailable"
-            for item in (*evidence, *previous_source_evidence)
+            for item in (*evidence, *relevant_previous_source_evidence)
         )
         limitation_only = bool(evidence) and all(item.get("status") != "completed" for item in evidence)
         if previous_answer:
@@ -337,7 +342,7 @@ class FinnResponsesAnswerVerifier:
                 except Exception:
                     pass
         if not verdict.available or not verdict.passes:
-            reason = self._typed_failure_reason((*evidence, *previous_source_evidence))
+            reason = self._typed_failure_reason((*evidence, *relevant_previous_source_evidence))
             answer = self._fallback_copy(
                 "previous_source_unavailable" if previous_answer and unavailable_without_cause else reason,
                 message=message, previous_answer=previous_answer,

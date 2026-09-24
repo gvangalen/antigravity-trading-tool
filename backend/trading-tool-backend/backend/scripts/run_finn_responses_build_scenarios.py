@@ -36,6 +36,7 @@ READ_SCENARIOS = (
     ("cross_asset", "Wat zeggen de actuele AAPL- en MSFT-koersen over mijn plan? Gebruik geen BTC-koers als vervanging."),
     ("why_followup", "Waarom?"),
     ("plan_followup", "Wat verandert dit aan mijn plan?"),
+    ("new_setup_topic_after_missing_market_data", "Please answer in English: what can you safely say about my BTC DCA setup?"),
     ("english", "Explain what my plan can safely conclude from the available evidence."),
     ("german", "Erkläre, welche Daten für meinen Plan noch fehlen."),
 )
@@ -50,6 +51,7 @@ TYPED_LIMITATION_CASES = {
     "indicators": {"source_unavailable", "scope_unavailable"},
     "cross_asset": {"source_unavailable", "scope_unavailable"},
     "why_followup": {"source_unavailable", "scope_unavailable"},
+    "new_setup_topic_after_missing_market_data": {"setup_ambiguous"},
     "english": {"setup_ambiguous", "source_unavailable"},
     "german": {"setup_ambiguous", "source_unavailable"},
 }
@@ -82,7 +84,7 @@ def run_scenarios(*, base_url: str, output: Path) -> dict:
         temporary.replace(output)
 
     for case_id, question in READ_SCENARIOS:
-        if case_id not in {"why_followup", "plan_followup"}:
+        if case_id not in {"why_followup", "plan_followup", "new_setup_topic_after_missing_market_data"}:
             conversation_id = None
         observed = run_gate(
             base_url=base_url, bearer_token=token, message=question,
@@ -133,6 +135,15 @@ def run_scenarios(*, base_url: str, output: Path) -> dict:
                     "vertragingen in gegevensverwerking", "providerstoring", "technical outage",
                     "provider failure", "datenquellenproblem",
                 )
+            )
+        if case_id == "new_setup_topic_after_missing_market_data":
+            lower_answer = str(response.get("content") or "").casefold()
+            passed = (
+                passed
+                and bool(observed.get("conversation_reference"))
+                and "get_active_plan_and_strategy" in selected_tools
+                and "cause of the missing data" not in lower_answer
+                and "can't establish why" not in lower_answer
             )
         artifact["cases"].append({
             "case_id": case_id, "question": question, "run_id": observed["run_id"],

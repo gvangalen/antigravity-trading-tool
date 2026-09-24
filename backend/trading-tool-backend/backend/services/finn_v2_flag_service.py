@@ -142,6 +142,10 @@ class FinnV2FlagService:
         """Bound worker ownership before a visible request exceeds its SLA."""
         return max(5, min(15, self._env_int("FINN_V2_LIFECYCLE_DEADLINE_SECONDS", 14)))
 
+    def responses_lifecycle_deadline_seconds(self) -> int:
+        """Allow selection, tool evidence, and answer composition one bounded budget."""
+        return max(15, min(30, self._env_int("FINN_V2_RESPONSES_LIFECYCLE_DEADLINE_SECONDS", 24)))
+
     def selector_phase_deadline_seconds(self) -> int:
         # A phase cannot consume more than the complete visible lifecycle.
         # Reserve terminal persistence so a selector timeout still produces a

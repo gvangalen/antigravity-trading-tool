@@ -224,7 +224,14 @@ class FinnV2RunService:
         ).run(
             message=message,
             instructions=(
-                "You are FINN, a grounded personal trading coach. Understand the user's language and "
+                "You are FINN, a grounded personal trading coach. First determine whether the user "
+                "explicitly requests creation, modification or removal of a saved object. If so, "
+                "call the matching registry-backed proposal tool FIRST, even when the named parent "
+                "object or some inputs need owner-scoped resolution. A read of that parent may support "
+                "the proposal, but must not replace it or turn the request into a generic question. "
+                "For example, creating a strategy for a named setup is a create_strategy proposal, "
+                "not a request to evaluate the setup or find an existing strategy. "
+                "Otherwise, understand the user's language and "
                 "choose zero or more FINN read tools. Personal judgments about the user's plan, risk, "
                 "portfolio or market conditions require relevant read tools; use zero tools only for "
                 "general educational conversation. Keep the final answer to a few grounded sentences. "
@@ -326,6 +333,7 @@ class FinnV2RunService:
                 response_id=result.response.response_id,
                 tool_trace=list(result.response.tool_trace),
                 answer=result.response.text,
+                supersedes_response_id=recovery_response_id,
             )
             await contracts.record_phase_timestamp(run_id=run_id, phase="selector_completed")
             await session.commit()
@@ -1017,6 +1025,11 @@ class FinnV2RunService:
                     lifecycle.result()
 
         try:
+            async with async_session_factory() as session:
+                candidate_run = await cls(session).runs.get_by_id_for_user(run_id=run_id, user_id=user_id)
+                if candidate_run is None:
+                    raise LookupError("FINN V2 run not found")
+                responses_visible = cls._is_visible_run(candidate_run)
             # Context hydration, selector, and post-selection work have
             # separate budgets.  The provider watchdog begins only after
             # context hydration has completed and the selector is about to
@@ -1024,7 +1037,10 @@ class FinnV2RunService:
             # terminal reserve is included only after the persisted selector
             # transition, so a slow but valid selector cannot cancel that
             # transition before its immutable intent reaches the contract.
-            deadline = monotonic() + flags.lifecycle_deadline_seconds()
+            deadline = monotonic() + (
+                flags.responses_lifecycle_deadline_seconds()
+                if responses_visible else flags.lifecycle_deadline_seconds()
+            )
             lifecycle_budget_token = set_lifecycle_deadline(deadline)
             # ``create_task`` snapshots the context variable, keeping this
             # deadline attached to provider work even after the coordinator
@@ -1055,7 +1071,10 @@ class FinnV2RunService:
             await selector_started_waiter
             await asyncio.wait_for(
                 selection_waiter,
-                timeout=min(flags.selector_phase_deadline_seconds(), _remaining(reserve=True)),
+                timeout=(
+                    _remaining(reserve=True) if responses_visible
+                    else min(flags.selector_phase_deadline_seconds(), _remaining(reserve=True))
+                ),
             )
             # Do not use ``wait_for`` here. It waits indefinitely for a task
             # that is slow to acknowledge cancellation, which defeats the
@@ -1130,7 +1149,8 @@ class FinnV2RunService:
                 with suppress(asyncio.CancelledError, asyncio.TimeoutError):
                     await selection_waiter
 
-    def _is_visible_run(self, run) -> bool:
+    @staticmethod
+    def _is_visible_run(run) -> bool:
         return getattr(run, "visibility", None) == "visible" or getattr(run, "feature_mode", None) == "visible_readonly"
 
     async def apply_retention(self, *, message_days: int, trace_days: int) -> Dict[str, int]:

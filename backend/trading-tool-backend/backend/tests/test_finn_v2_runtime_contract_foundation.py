@@ -1346,6 +1346,9 @@ def test_selector_provider_budget_leaves_time_for_the_persisted_selection(monkey
 
     assert flags.selector_provider_timeout_seconds() == 10
     assert flags.selector_phase_deadline_seconds() == 12
+    assert flags.responses_lifecycle_deadline_seconds() == 24
+    monkeypatch.setenv("FINN_V2_RESPONSES_LIFECYCLE_DEADLINE_SECONDS", "100")
+    assert flags.responses_lifecycle_deadline_seconds() == 30
     assert flags.selector_provider_timeout_seconds() < flags.lifecycle_deadline_seconds()
     assert flags.selector_max_output_tokens() == 240
     assert "timeout_seconds=selector_timeout_seconds" in (
