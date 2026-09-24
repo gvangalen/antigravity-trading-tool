@@ -6,6 +6,7 @@ from typing import Any, Mapping, Sequence
 
 from backend.services.asset_catalog_service import mentioned_catalog_symbols, resolve_catalog_symbol
 from backend.domain.finn_v2_operation_registry import FinnV2OperationRegistry
+from backend.domain.finn_v2_setup_input_catalog import FinnV2SetupInputCatalog
 from backend.schemas.finn_v2_orchestrator_schema import RequestAnalysisResult, RequestPlan
 from backend.services.finn_v2_operation_state_service import FinnV2OperationStateService
 from backend.services.finn_v2_responses_tool_catalog import FinnResponsesToolCall
@@ -31,6 +32,15 @@ class FinnResponsesProposalSelection:
         if contract.mode not in {"CREATE_PROPOSAL", "ACTION_PROPOSAL"}:
             raise ValueError("proposal_operation_not_write_contract")
         inputs = dict(call.inputs)
+        if contract.operation_id == "create_setup" and not dict(conversation_context.get("active_guided_operation") or {}):
+            # Contribution cadence is not a chart timeframe. The model's
+            # candidate may fill this required slot only when the user's
+            # current text actually states a canonical setup timeframe.
+            explicit_timeframe = FinnV2SetupInputCatalog.timeframe_from_text(message)
+            if explicit_timeframe is None:
+                inputs.pop("timeframe", None)
+            elif "timeframe" in inputs:
+                inputs["timeframe"] = explicit_timeframe
         mentioned_assets = mentioned_catalog_symbols(message)
         if len(mentioned_assets) > 1:
             raise ValueError("proposal_asset_ambiguous")

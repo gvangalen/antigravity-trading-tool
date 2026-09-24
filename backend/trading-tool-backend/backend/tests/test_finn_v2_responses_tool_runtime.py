@@ -87,7 +87,7 @@ def test_catalog_uses_registry_for_required_and_conditional_inputs():
     )
     assert call.missing_inputs == ("timeframe", "name", "dca_frequency")
     assert call.operation_id == "create_setup"
-    assert len(catalog.definitions()) == 13
+    assert len(catalog.definitions()) == 14
     proposal = next(item for item in catalog.definitions() if item["name"] == "create_dca_plan_proposal")
     assert proposal["parameters"]["properties"]["payload"]["properties"]["inputs"]["properties"]["min_investment"]["type"] == "number"
 
@@ -283,6 +283,39 @@ def test_proposal_candidate_uses_registry_contract_and_existing_guided_state():
     assert plan.selector_source == "responses_tool_call"
     assert plan.operation_state["collected_inputs"]["symbol"] == "BTC"
     assert plan.missing_information == ["timeframe", "name", "dca_frequency"]
+
+
+@pytest.mark.parametrize("model_timeframe", ["1W", "wekelijks"])
+def test_weekly_dca_cadence_cannot_satisfy_setup_chart_timeframe(model_timeframe):
+    call = FinnResponsesToolCatalog().validate(
+        "create_dca_plan_proposal",
+        {"operation_id": "create_setup", "inputs": {
+            "setup_type": "dca", "symbol": "BTC", "name": "Build Smoke BTC",
+            "dca_frequency": "weekly", "timeframe": model_timeframe,
+        }},
+    )
+    selection = FinnResponsesProposalSelection()
+    first = selection.from_call(
+        call=call, message="Maak een wekelijkse BTC DCA-setup met naam Build Smoke BTC",
+        conversation_context={}, verified_asset="BTC",
+    )
+    state = first.request_plan.operation_state
+    assert "timeframe" not in state["collected_inputs"]
+    assert "timeframe" in state["missing_required_inputs"]
+
+
+def test_saved_indicator_configuration_does_not_bundle_unavailable_current_values():
+    catalog = FinnResponsesToolCatalog()
+    assert catalog.validate("get_indicator_snapshot", {}).read_tools == ("read_indicator_configuration",)
+    assert catalog.validate("get_current_technical_snapshot", {}).read_tools == ("read_technical_snapshot",)
+
+
+def test_indicator_read_options_come_from_existing_macro_catalog():
+    evidence = FinnResponsesReadExecutor._macro_catalog_evidence()
+    assert evidence["scope"] == "available_macro_indicator_catalog"
+    assert evidence["source"] == "macro_indicator_catalog"
+    assert any(item["name"] == "dxy" for item in evidence["data"]["supported_options"])
+    assert evidence["data"]["proposal_operation_id"] == "create_indicator_configuration"
 
 
 def test_proposal_candidate_rejects_cross_asset_context():
@@ -742,6 +775,29 @@ def test_general_education_is_verified_without_personal_read_scope():
     assert semantic.verify_async.await_args.kwargs["deterministic_summary"]["general_education_no_personal_claims"]
 
 
+def test_confirmed_action_result_is_grounding_for_saved_object_readback():
+    semantic = SimpleNamespace(verify_async=AsyncMock(return_value=SimpleNamespace(
+        available=True, passes=True, reason_codes=[],
+    )))
+    answer = asyncio.run(FinnResponsesAnswerVerifier(semantic).verify(
+        message="Welke setup heb ik net opgeslagen?",
+        result=FinnResponsesResult("Je hebt Build Smoke BTC opgeslagen.", "resp-1", ({
+            "name": "get_decision_history", "status": "partial",
+            "result": {"results": [{"scope": "read_latest_report", "status": "unavailable"}]},
+        },)),
+        recent_action_result={
+            "owner_user_id": 7, "result_status": "succeeded", "operation_id": "create_setup",
+            "entity_type": "setup", "canonical_name": "Build Smoke BTC", "entity_id": 42,
+        },
+    ))
+    assert answer.status == "completed"
+    evidence = semantic.verify_async.await_args.kwargs["compact_evidence"]
+    confirmed = next(item for item in evidence if item["scope"] == "confirmed_action_result")
+    assert confirmed["data"]["canonical_name"] == "Build Smoke BTC"
+    assert "entity_id" not in confirmed["data"]
+    assert "confirmed_action_result" in semantic.verify_async.await_args.kwargs["deterministic_summary"]["available_scopes"]
+
+
 def test_rejected_read_is_rewritten_once_via_responses_and_reverified():
     semantic = SimpleNamespace(verify_async=AsyncMock(side_effect=[
         SimpleNamespace(available=True, passes=False, reason_codes=["unsupported_market_claim"]),
@@ -989,7 +1045,7 @@ def test_front_door_prepares_existing_action_pipeline_without_writing():
 
     front.reads = no_reads
     result = asyncio.run(front.run(
-        message="Maak een BTC DCA-setup met de naam DCA test, wekelijks op maandag.", instructions="Gebruik tools",
+        message="Maak een BTC DCA-setup op 4H met de naam DCA test, wekelijks op maandag.", instructions="Gebruik tools",
         conversation_context={}, verified_asset="BTC",
     ))
     assert result.proposal_analysis.request_plan.operation_id == "create_setup"
@@ -1023,3 +1079,35 @@ def test_model_read_asset_must_be_explicitly_mentioned_by_user():
         conversation_context={}, verified_asset=None,
     ))
     assert received == [{}]
+
+
+@pytest.mark.parametrize(
+    ("asset_name", "message", "symbol"),
+    [
+        ("Bitcoin", "Beoordeel mijn BTC-handelsplan.", "BTC"),
+        ("Apple", "Lees mijn AAPL-plan.", "AAPL"),
+        ("Microsoft", "Lees mijn MSFT-plan.", "MSFT"),
+    ],
+)
+def test_model_read_asset_uses_catalog_symbol_after_explicit_mention(asset_name, message, symbol):
+    fake = FakeResponses(
+        response("r1", calls=(tool_call("c1", "get_active_plan_and_strategy", {"asset": asset_name}),)),
+        response("r2", text="Ik lees je plan."),
+    )
+    front = object.__new__(FinnResponsesFrontDoor)
+    front.client = SimpleNamespace(responses=fake)
+    front.user_id = 21
+    front.run_id = "run-21"
+    front.proposals = FinnResponsesProposalSelection()
+    received = []
+
+    async def read(call):
+        received.append(call.inputs)
+        return {"status": "completed", "results": []}
+
+    front.reads = read
+    asyncio.run(front.run(
+        message=message, instructions="Gebruik bewijs",
+        conversation_context={}, verified_asset=symbol,
+    ))
+    assert received == [{"asset": symbol}]

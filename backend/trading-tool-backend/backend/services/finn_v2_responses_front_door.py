@@ -22,6 +22,7 @@ class FinnResponsesFrontDoorResult:
     response: FinnResponsesResult
     proposal_analysis: RequestAnalysisResult | None
     previous_response: dict[str, Any] | None = None
+    recent_action_result: dict[str, Any] | None = None
 
 
 class FinnResponsesFrontDoor:
@@ -53,8 +54,12 @@ class FinnResponsesFrontDoor:
             nonlocal selected, target_retry_used
             if call.operation_id is None:
                 model_asset = call.inputs.get("asset")
-                if model_asset and resolve_catalog_symbol(model_asset) not in mentioned_catalog_symbols(message):
-                    call = replace(call, inputs={key: value for key, value in call.inputs.items() if key != "asset"})
+                if model_asset:
+                    symbol = resolve_catalog_symbol(model_asset)
+                    if symbol not in mentioned_catalog_symbols(message):
+                        call = replace(call, inputs={key: value for key, value in call.inputs.items() if key != "asset"})
+                    else:
+                        call = replace(call, inputs={**call.inputs, "asset": symbol})
                 read_result = await self.reads(call)
                 read_context.append(read_result)
                 return read_result
@@ -139,4 +144,7 @@ class FinnResponsesFrontDoor:
         )
         if pending_operation and selected is None:
             raise FinnResponsesError("guided_proposal_tool_call_required")
-        return FinnResponsesFrontDoorResult(result, selected, previous_response)
+        recent_action_result = dict(conversation_context.get("previous_action_result") or {})
+        if recent_action_result.get("owner_user_id") != self.user_id or recent_action_result.get("result_status") != "succeeded":
+            recent_action_result = {}
+        return FinnResponsesFrontDoorResult(result, selected, previous_response, recent_action_result or None)

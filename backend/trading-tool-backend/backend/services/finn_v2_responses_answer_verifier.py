@@ -137,6 +137,7 @@ class FinnResponsesAnswerVerifier:
     async def verify(
         self, *, message: str, result: FinnResponsesResult,
         previous_response: dict[str, Any] | None = None,
+        recent_action_result: dict[str, Any] | None = None,
     ) -> FinnResponsesVerifiedAnswer:
         evidence = tuple(
             item
@@ -160,6 +161,11 @@ class FinnResponsesAnswerVerifier:
             for item in evidence
         ]
         previous_answer = str((previous_response or {}).get("answer") or "").strip()
+        confirmed_action = {
+            key: recent_action_result.get(key)
+            for key in ("operation_id", "entity_type", "canonical_name", "result_status")
+            if recent_action_result and recent_action_result.get(key) is not None
+        }
         general_education = bool(result.tool_trace) and all(
             call.get("name") == "answer_directly" for call in result.tool_trace
         )
@@ -183,6 +189,13 @@ class FinnResponsesAnswerVerifier:
                     "source_evidence": previous_source_evidence,
                 },
             })
+        if confirmed_action.get("result_status") == "succeeded":
+            compact.append({
+                "scope": "confirmed_action_result",
+                "source": "owner_scoped_runtime_contract",
+                "availability": "available",
+                "data": confirmed_action,
+            })
         guidance = (
                 "This is a Responses-tool-loop answer, not a selector-first contract response. "
                 "Check every concrete personal or market fact against the supplied typed tool evidence, "
@@ -192,6 +205,27 @@ class FinnResponsesAnswerVerifier:
                 "scope when the answer explicitly limits itself to available evidence. If a previous "
                 "verified response appears in evidence, interpret short follow-up questions relative "
                 "to that response, but reject invented causes, technical failures or unsupported advice."
+                " Judge source availability per claim and question, not per bundled tool. A completed "
+                "owner-scoped indicator_configuration with an empty category list proves that the "
+                "user has no saved indicators in that category. An unavailable technical or market "
+                "snapshot does not invalidate that configuration fact or ordinary educational reasons "
+                "for considering a category; it only prevents claims about current indicator values "
+                "or market effects. Conversely, never infer a current value from saved configuration."
+                " Active indicator options supplied by the canonical indicator catalog can ground "
+                "a recommendation of what to configure next, but not a claim about its current reading. "
+                "The available_macro_indicator_catalog scope lists supported options that are "
+                "deliberately NOT in the user's saved configuration; recommending one of them "
+                "does not claim it is already saved."
+                " A confirmed_action_result is verified persisted evidence of the object just saved. "
+                "For a claim about which object was saved, its exact canonical_name must match this "
+                "result; a short guided slot answer is not an object's name unless this result says so. "
+                "Do not invent saved object names from conversation text. This action result proves "
+                "only object identity and successful persistence, not its current asset, timeframe, "
+                "frequency, amount, currency or other fields. Previous chat text and a draft are "
+                "not a saved-object read. If an answer describes any such object fields, require a "
+                "completed owner-scoped read of that object type in the current tool trace; "
+                "read_review_history and read_latest_report do not satisfy setup/strategy/bot "
+                "field claims. Reject unsupported extra details even when the saved name is correct."
                 " Also verify that the answer addresses the user's actual request. If the user explicitly "
                 "asked to create, update or delete a saved object, a read-only explanation or request "
                 "for profile details does not fulfill that action request. Reject it so FINN can retry "
@@ -227,7 +261,8 @@ class FinnResponsesAnswerVerifier:
         )
         summary = {
             "available_scopes": [item.get("scope") for item in evidence if item.get("status") == "completed"]
-            + (["previous_response"] if previous_answer else []),
+            + (["previous_response"] if previous_answer else [])
+            + (["confirmed_action_result"] if confirmed_action.get("result_status") == "succeeded" else []),
             "unavailable_scopes": [item.get("scope") for item in evidence if item.get("status") != "completed"],
             "unavailable_cause_established": False if unavailable_without_cause else None,
             "general_education_no_personal_claims": general_education,

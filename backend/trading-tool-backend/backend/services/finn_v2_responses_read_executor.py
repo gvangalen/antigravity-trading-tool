@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Any, Callable
 
+from backend.domain.macro_indicator_catalog import get_active_macro_indicator_definitions
 from backend.services.finn_v2_json_safety import to_json_safe
 from backend.services.finn_v2_responses_tool_catalog import FinnResponsesToolCall
 from backend.services.finn_v2_tool_execution_service import FinnV2ToolExecutionService
@@ -66,6 +67,8 @@ class FinnResponsesReadExecutor:
                 "data": data,
                 "reason": result.error_codes[0] if result.error_codes else None,
             })
+            if read_tool == "read_indicator_configuration":
+                results.append(self._macro_catalog_evidence())
         return {
             "status": "completed" if all(item["status"] == "completed" for item in results) else "partial",
             "tool": call.name,
@@ -79,3 +82,19 @@ class FinnResponsesReadExecutor:
             if value:
                 return str(value)
         return None
+
+    @staticmethod
+    def _macro_catalog_evidence() -> dict[str, Any]:
+        return {
+            "scope": "available_macro_indicator_catalog",
+            "status": "completed", "availability": "available", "freshness": "not_applicable",
+            "source": "macro_indicator_catalog", "as_of": None, "asset": None,
+            "data": {
+                "supported_options": [
+                    {"name": item["name"], "display_name": item["display_name"]}
+                    for item in get_active_macro_indicator_definitions()
+                ],
+                "proposal_operation_id": "create_indicator_configuration",
+            },
+            "reason": None,
+        }

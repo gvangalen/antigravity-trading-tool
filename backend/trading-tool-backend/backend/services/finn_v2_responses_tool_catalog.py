@@ -16,7 +16,8 @@ _READ_SCOPES: dict[str, tuple[str, ...]] = {
     "get_active_asset_context": ("active_asset", "watchlist"),
     "get_active_plan_and_strategy": ("active_setup", "linked_strategy"),
     "get_market_snapshot": ("market_snapshot", "macro_snapshot"),
-    "get_indicator_snapshot": ("indicator_configuration", "technical_snapshot"),
+    "get_indicator_snapshot": ("indicator_configuration",),
+    "get_current_technical_snapshot": ("technical_snapshot",),
     "get_portfolio_and_exposure": ("portfolio",),
     "get_decision_history": ("review_history", "latest_report"),
 }
