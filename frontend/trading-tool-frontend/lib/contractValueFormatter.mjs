@@ -16,9 +16,9 @@ export function formatExecutionMode(value, locale = "nl") {
 }
 
 const RISK_LABELS = Object.freeze({
-  nl: Object.freeze({ cautious: "Voorzichtig", conservative: "Voorzichtig", balanced: "Gebalanceerd", aggressive: "Offensief" }),
-  en: Object.freeze({ cautious: "Cautious", conservative: "Conservative", balanced: "Balanced", aggressive: "Aggressive" }),
-  de: Object.freeze({ cautious: "Vorsichtig", conservative: "Konservativ", balanced: "Ausgewogen", aggressive: "Offensiv" }),
+  nl: Object.freeze({ cautious: "Voorzichtig", conservative: "Voorzichtig", balanced: "Gebalanceerd", moderate: "Gebalanceerd", aggressive: "Offensief" }),
+  en: Object.freeze({ cautious: "Cautious", conservative: "Conservative", balanced: "Balanced", moderate: "Balanced", aggressive: "Aggressive" }),
+  de: Object.freeze({ cautious: "Vorsichtig", conservative: "Konservativ", balanced: "Ausgewogen", moderate: "Ausgewogen", aggressive: "Offensiv" }),
 });
 
 export function formatDraftCardValue(value, locale = "nl") {
@@ -26,7 +26,7 @@ export function formatDraftCardValue(value, locale = "nl") {
   if (value == null) return "";
   if (Array.isArray(value)) return value.map((item) => formatDraftCardValue(item, locale)).filter(Boolean).join(", ");
   if (typeof value === "object") {
-    const target = value.price ?? value.target_price ?? value.value;
+    const target = value.target ?? value.price ?? value.target_price ?? value.value;
     return target == null ? "" : formatDraftCardValue(target, locale);
   }
   if (typeof value === "number") return new Intl.NumberFormat(language).format(value);
