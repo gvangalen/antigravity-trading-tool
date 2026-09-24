@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
+import time
 from dataclasses import dataclass
 from typing import Any, Awaitable, Callable
 
@@ -13,6 +15,9 @@ from backend.services.finn_v2_responses_tool_catalog import (
     FinnResponsesToolError,
 )
 from backend.services.finn_v2_lifecycle_budget import remaining_lifecycle_seconds
+
+
+logger = logging.getLogger(__name__)
 
 
 class FinnResponsesError(RuntimeError):
@@ -56,15 +61,23 @@ class FinnResponsesLoop:
         message: str,
         instructions: str,
         previous_response_id: str | None = None,
+        previous_verified_answer: str | None = None,
         guided_operation_id: str | None = None,
+        resuming_clarification: bool = False,
+        previous_answer_only: bool = False,
     ) -> FinnResponsesResult:
-        current_input: list[dict[str, Any]] = [{"role": "user", "content": message}]
+        current_input: list[dict[str, Any]] = (
+            [{"role": "assistant", "content": previous_verified_answer}]
+            if previous_verified_answer else []
+        ) + [{"role": "user", "content": message}]
         prior_id = previous_response_id
         trace: list[dict[str, Any]] = []
         seen_call_ids: set[str] = set()
         proposal_selected = False
         tool_rounds = 0
         repair_tool_name: str | None = None
+        repair_attempts: dict[str, int] = {}
+        repair_exhausted = False
         for _ in range(self.max_rounds):
             remaining = remaining_lifecycle_seconds()
             if remaining is not None and remaining <= 3.25:
@@ -77,20 +90,47 @@ class FinnResponsesLoop:
                 self.provider_timeout_seconds,
                 remaining - 3.5 if remaining is not None else self.provider_timeout_seconds,
             )
+            definitions = self.catalog.definitions(
+                guided_operation_id=guided_operation_id if not trace else None,
+                retry_target_domain=retry_target_domain,
+            )
+            if previous_answer_only:
+                definitions = [item for item in definitions if item["name"] == "answer_directly"]
+            resolved_choice_read = any(
+                item.get("name") == "get_active_plan_and_strategy"
+                and any(
+                    result.get("scope") == "read_active_setup"
+                    and result.get("status") == "completed"
+                    for result in (item.get("result", {}).get("results") or [])
+                )
+                for item in trace
+            )
+            if resuming_clarification and resolved_choice_read:
+                definitions = [
+                    item for item in definitions
+                    if item["name"] in {"ask_for_clarification", "answer_directly"}
+                ]
             kwargs: dict[str, Any] = {
                 "model": self.model,
-                "instructions": instructions,
-                "input": current_input,
-                "tools": self.catalog.definitions(
-                    guided_operation_id=guided_operation_id if not trace else None,
-                    retry_target_domain=retry_target_domain,
+                "instructions": (
+                    instructions
+                    + "\nFor this turn, explain only the previous verified answer. "
+                    "No new market facts, historical analysis, suitability claim, "
+                    "risk conclusion, or advice about changing levels. If the previous "
+                    "answer says a current assessment is missing, explain why stored "
+                    "settings alone cannot establish suitability; do not claim the "
+                    "user's actual plan is risky or fits their goals."
+                    if previous_answer_only else instructions
                 ),
+                "input": current_input,
+                "tools": definitions,
+                "parallel_tool_calls": False,
                 "store": True,
                 "max_output_tokens": 700 if not trace else 350,
             }
             if prior_id:
                 kwargs["previous_response_id"] = prior_id
-            if proposal_selected or (tool_rounds >= 2 and not repair_tool_name):
+            if proposal_selected or repair_exhausted or (previous_answer_only and trace) or (tool_rounds >= 2 and not repair_tool_name):
                 kwargs["tool_choice"] = "none"
             elif repair_tool_name:
                 kwargs["tool_choice"] = {"type": "function", "name": repair_tool_name}
@@ -102,6 +142,7 @@ class FinnResponsesLoop:
             elif trace[-1]["status"] == "retry":
                 kwargs["tool_choice"] = "required"
             try:
+                provider_started = time.perf_counter()
                 provider_client = (
                     self.client.with_options(max_retries=0, timeout=provider_timeout)
                     if hasattr(self.client, "with_options") else self.client
@@ -110,6 +151,7 @@ class FinnResponsesLoop:
                     provider_client.responses.create(**kwargs),
                     timeout=provider_timeout,
                 )
+                provider_elapsed_ms = round((time.perf_counter() - provider_started) * 1000, 2)
             except TimeoutError as exc:
                 raise FinnResponsesError("responses_provider_timeout") from exc
             except Exception as exc:
@@ -136,6 +178,10 @@ class FinnResponsesLoop:
             tool_rounds += 1
             prior_id = response_id
             current_input = []
+            conflicting_proposals = sum(
+                self.catalog.is_proposal_tool(str(getattr(item, "name", "") or ""))
+                for item in calls
+            ) > 1
             for item in calls:
                 call_id = str(getattr(item, "call_id", "") or "")
                 tool_name = str(getattr(item, "name", "") or "")
@@ -148,23 +194,43 @@ class FinnResponsesLoop:
                     raise FinnResponsesError("responses_tool_call_limit")
                 parsed_arguments: dict[str, Any] | None = None
                 try:
+                    tool_started = time.perf_counter()
                     arguments = json.loads(getattr(item, "arguments", "") or "")
                     if isinstance(arguments, dict):
                         parsed_arguments = arguments
-                    call = self.catalog.validate(tool_name, arguments)
-                    remaining = remaining_lifecycle_seconds()
-                    if remaining is not None and remaining <= 3.25:
-                        raise FinnResponsesError("responses_lifecycle_budget_exhausted")
-                    output = await asyncio.wait_for(
-                        self.executor(call),
-                        timeout=min(
-                            self.tool_timeout_seconds,
-                            remaining - 3.0 if remaining is not None else self.tool_timeout_seconds,
-                        ),
-                    )
+                    if conflicting_proposals:
+                        output = {
+                            "status": "retry",
+                            "reason": "multiple_action_proposals",
+                            "instruction": (
+                                "No proposal was created. Choose exactly one action proposal for "
+                                "the user's current request. A separate new object is not a "
+                                "revision of an older draft."
+                            ),
+                        }
+                        call = None
+                    else:
+                        call = self.catalog.validate(tool_name, arguments)
+                        remaining = remaining_lifecycle_seconds()
+                        if remaining is not None and remaining <= 3.25:
+                            raise FinnResponsesError("responses_lifecycle_budget_exhausted")
+                        output = await asyncio.wait_for(
+                            self.executor(call),
+                            timeout=min(
+                                max(self.tool_timeout_seconds, 8.0) if call.operation_id else self.tool_timeout_seconds,
+                                remaining - 3.0 if remaining is not None else (
+                                    max(self.tool_timeout_seconds, 8.0) if call.operation_id else self.tool_timeout_seconds
+                                ),
+                            ),
+                        )
                     if not isinstance(output, dict):
                         raise FinnResponsesToolError("tool_output_not_typed_json")
-                    if call.operation_id is not None and output.get("status") != "retry":
+                    if call is not None and output.get("status") != "retry":
+                        repair_tool_name = None
+                    if call is not None and (
+                        (call.operation_id is not None and output.get("status") != "retry")
+                        or (call.name == "ask_for_clarification" and output.get("status") == "needs_input")
+                    ):
                         proposal_selected = True
                         repair_tool_name = None
                 except TimeoutError:
@@ -173,8 +239,17 @@ class FinnResponsesLoop:
                     output = {"status": "unavailable", "reason": str(exc)}
                     if isinstance(exc, FinnResponsesToolError):
                         output.update(exc.details)
-                        if self.catalog.is_proposal_tool(tool_name):
+                        if (tool_name in {definition["name"] for definition in definitions}
+                                and repair_attempts.get(tool_name, 0) < 1):
+                            output["instruction"] = (
+                                "Retry this same tool using only its declared argument names and types. "
+                                "The previous call did not run; do not answer from its missing result."
+                            )
                             repair_tool_name = tool_name
+                            repair_attempts[tool_name] = 1
+                        else:
+                            repair_tool_name = None
+                            repair_exhausted = True
                 except FinnResponsesError:
                     raise
                 except Exception:
@@ -185,12 +260,32 @@ class FinnResponsesLoop:
                     "arguments": parsed_arguments,
                     "status": output.get("status", "error"),
                     "result": output,
+                    "provider_elapsed_ms": provider_elapsed_ms,
+                    "tool_elapsed_ms": round((time.perf_counter() - tool_started) * 1000, 2),
                 })
                 if self.on_tool_result is not None:
+                    checkpoint_started = time.perf_counter()
                     await self.on_tool_result(response_id, tuple(trace))
+                    checkpoint_elapsed_ms = round((time.perf_counter() - checkpoint_started) * 1000, 2)
+                    if checkpoint_elapsed_ms > 1000:
+                        logger.warning(
+                            "FINN Responses checkpoint slow tool=%s elapsed_ms=%s",
+                            tool_name, checkpoint_elapsed_ms,
+                        )
                 current_input.append({
                     "type": "function_call_output",
                     "call_id": call_id,
                     "output": json.dumps(output, default=str),
                 })
+            setup_results = [
+                result for call in trace
+                for result in (call.get("result", {}).get("results") or [])
+                if result.get("scope") == "read_active_setup"
+            ]
+            if (
+                not proposal_selected
+                and any(result.get("reason") == "setup_ambiguous" for result in setup_results)
+                and not any(result.get("status") == "completed" for result in setup_results)
+            ):
+                return FinnResponsesResult("A setup choice is required.", response_id, tuple(trace))
         raise FinnResponsesError("responses_tool_round_limit")

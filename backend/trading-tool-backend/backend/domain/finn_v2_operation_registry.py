@@ -183,6 +183,7 @@ class OperationContract:
     # The Responses surface derives its JSON schema here, never from a
     # second tool-specific field catalog.
     input_json_types: tuple[tuple[str, str], ...] = ()
+    input_allowed_values: tuple[tuple[str, tuple[str, ...]], ...] = ()
     # A contract can expose an input only when another typed slot makes it
     # applicable. This keeps downstream service requirements in the same
     # registry-owned schema instead of discovering them during execution.
@@ -249,6 +250,12 @@ class OperationContract:
             raise FinnV2OperationContractError(f"undeclared_input_json_type:{self.operation_id}")
         if any(value not in {"string", "number", "integer", "boolean", "object", "array"} for value in typed_fields.values()):
             raise FinnV2OperationContractError(f"invalid_input_json_type:{self.operation_id}")
+        allowed_values = dict(self.input_allowed_values)
+        if len(allowed_values) != len(self.input_allowed_values) or set(allowed_values).difference(self.input_fields):
+            raise FinnV2OperationContractError(f"invalid_input_allowed_values:{self.operation_id}")
+        if any(not values or (typed_fields and typed_fields.get(field) != "string")
+               for field, values in allowed_values.items()):
+            raise FinnV2OperationContractError(f"invalid_input_allowed_values:{self.operation_id}")
         declared_inputs = set(self.required_inputs).union(self.optional_inputs)
         for field, dependency, expected in self.conditional_required_inputs:
             if not field or not dependency or not expected:
@@ -319,6 +326,9 @@ class OperationContract:
 
     def input_json_type(self, field: str) -> str | None:
         return dict(self.input_json_types).get(field)
+
+    def allowed_values_for(self, field: str) -> tuple[str, ...]:
+        return dict(self.input_allowed_values).get(field, ())
 
     @property
     def tool_names(self) -> tuple[str, ...]:
@@ -999,7 +1009,7 @@ _CONTRACTS: tuple[OperationContract, ...] = (
     # SetupService validates the persisted setup fields unconditionally.
     # Score and market-condition details are useful trusted inputs, but must
     # not be invented by FINN.
-    OperationContract("create_setup", FinnV2OperationRegistry.VERSION, "setup", "CREATE_PROPOSAL", ("maak setup", "create setup", "setup voor"), action_polarity=ActionPolarity.CREATE, required_inputs=("setup_type", "timeframe", "name", "symbol"), optional_inputs=("min_investment",), conditional_required_inputs=(("dca_frequency", "setup_type", "dca"), ("dca_day", "dca_frequency", "weekly"), ("dca_month_day", "dca_frequency", "monthly")), required_scopes=("active_asset",), optional_scopes=("profile", "preferences", "indicator_configuration", "active_setup", "linked_strategy"), model_policy="optional", response_strategy="proposal_draft", policy_class="proposal", proposal_type="create_setup", confirmation_required=True, execution_adapter="create_setup", idempotency_rule="proposal_payload_hash", postcondition="setup_created_for_user_asset"),
+    OperationContract("create_setup", FinnV2OperationRegistry.VERSION, "setup", "CREATE_PROPOSAL", ("maak setup", "create setup", "setup voor"), action_polarity=ActionPolarity.CREATE, required_inputs=("setup_type", "timeframe", "name", "symbol"), optional_inputs=("min_investment",), input_allowed_values=(("dca_frequency", ("daily", "weekly", "monthly")),), conditional_required_inputs=(("dca_frequency", "setup_type", "dca"), ("dca_day", "dca_frequency", "weekly"), ("dca_month_day", "dca_frequency", "monthly")), required_scopes=("active_asset",), optional_scopes=("profile", "preferences", "indicator_configuration", "active_setup", "linked_strategy"), model_policy="optional", response_strategy="proposal_draft", policy_class="proposal", proposal_type="create_setup", confirmation_required=True, execution_adapter="create_setup", idempotency_rule="proposal_payload_hash", postcondition="setup_created_for_user_asset"),
     OperationContract("update_setup", FinnV2OperationRegistry.VERSION, "setup", "CREATE_PROPOSAL", ("wijzig setup", "update setup", "setup andern"), action_polarity=ActionPolarity.UPDATE, required_inputs=("setup_id", "changed_fields"), contextual_reference_inputs=("setup_id",), required_scopes=("active_asset", "active_setup"), proposal_type="update_setup", confirmation_required=True, execution_adapter="update_setup", idempotency_rule="proposal_payload_hash", postcondition="setup_updated_for_user", response_strategy="proposal_draft", policy_class="proposal"),
     OperationContract("delete_setup", FinnV2OperationRegistry.VERSION, "setup", "CREATE_PROPOSAL", ("verwijder setup", "delete setup", "lösche setup"), action_polarity=ActionPolarity.DELETE, required_inputs=("setup_id",), contextual_reference_inputs=("setup_id",), required_scopes=("active_asset", "active_setup"), proposal_type="delete_setup", confirmation_required=True, execution_adapter="delete_setup", idempotency_rule="proposal_payload_hash", postcondition="setup_deleted_for_user", response_strategy="proposal_draft", policy_class="proposal"),
     OperationContract("evaluate_setup", FinnV2OperationRegistry.VERSION, "setup", "EVALUATE", ("beoordeel setup",), required_scopes=("active_asset", "active_setup"), optional_scopes=("indicator_configuration",), model_policy="required", response_strategy="model_reasoning", policy_class="advice"),

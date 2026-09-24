@@ -20,6 +20,7 @@ from backend.scripts.run_finn_v2_full_action_matrix import (
 )
 from backend.scripts.run_finn_v2_persisted_runtime_gate import _request_json, run_gate
 from backend.infrastructure.database import sync_engine
+from backend.domain.macro_indicator_catalog import get_active_macro_indicator_definitions
 from backend.utils.auth_utils import create_access_token
 
 
@@ -101,10 +102,21 @@ def run_scenarios(*, base_url: str, output: Path) -> dict:
         selected_tools = [item.get("name") for item in trace]
         response = dict(terminal.get("response") or {})
         error_code = record["terminal_projection"].get("error_code")
+        missing_profile_clarification = (
+            case_id == "plan"
+            and error_code == "user_detail_required"
+            and any(
+                result.get("scope") == "read_profile"
+                and result.get("status") == "completed"
+                and result.get("data", {}).get("has_profile") is False
+                for call in trace
+                for result in (call.get("result", {}).get("results") or [])
+            )
+        )
         typed_limitation = (
             case_id in TYPED_LIMITATION_CASES
-            and observed["status"] == "unavailable"
-            and error_code in TYPED_LIMITATION_CASES[case_id]
+            and observed["status"] in {"unavailable", "clarification_required"}
+            and (error_code in TYPED_LIMITATION_CASES[case_id] or missing_profile_clarification)
         )
         passed = (
             http_status == 200
@@ -124,6 +136,24 @@ def run_scenarios(*, base_url: str, output: Path) -> dict:
                 str(item.get("arguments", {}).get("asset") or "").upper() != "BTC"
                 for item in trace if item.get("name") == "get_market_snapshot"
             )
+        if case_id == "indicators":
+            answer_lower = str(response.get("content") or "").casefold()
+            passed = passed and any(item.get("name") == "get_current_technical_snapshot" for item in trace)
+            passed = passed and not any(phrase in answer_lower for phrase in (
+                "tijdelijke storing", "temporary outage", "vorübergehende störung",
+                "onder 30 overbought", "below 30 overbought",
+            ))
+        if case_id == "macro" and observed["status"] == "completed":
+            answer_lower = str(response.get("content") or "").casefold()
+            named_options = {
+                str(item["name"])
+                for item in get_active_macro_indicator_definitions()
+                if any(
+                    str(label).casefold() in answer_lower
+                    for label in (item["name"], item["display_name"])
+                )
+            }
+            passed = passed and len(named_options) <= 1
         if case_id in {"why_followup", "plan_followup"}:
             passed = passed and bool(observed.get("conversation_reference"))
         if case_id == "why_followup":
@@ -157,6 +187,104 @@ def run_scenarios(*, base_url: str, output: Path) -> dict:
         })
         checkpoint()
 
+    conversation_owner = _create_local_user()
+    _seed_fixtures(int(conversation_owner["id"]))
+    with sync_engine.begin() as connection:
+        connection.execute(
+            text("UPDATE users SET ai_preferences = CAST(:preferences AS jsonb) WHERE id = :user_id"),
+            {
+                "user_id": int(conversation_owner["id"]),
+                "preferences": json.dumps({
+                    "trader_types": ["swing_trader"],
+                    "primary_timeframes": ["4h"],
+                    "asset_focus": ["bitcoin"],
+                    "investment_goals_list": ["wealth_building"],
+                    "experience_levels": ["intermediate"],
+                    "risk_profiles": ["balanced"],
+                    "selected_asset": "BTC",
+                }),
+            },
+        )
+    conversation_token = create_access_token({"sub": str(conversation_owner["id"]), "role": "user"})
+    conversation_headers = {"Authorization": f"Bearer {conversation_token}", "Content-Type": "application/json"}
+    conversation_turns = []
+    conversation_id = None
+    for question in (
+        "Wat is een logisch tradingplan voor mijn doel en risicostijl?",
+        "Matrix Strategy Update Parent",
+        "Waarom?",
+        "Wat betekent RSI in algemene zin?",
+    ):
+        observed = run_gate(
+            base_url=base_url, bearer_token=conversation_token, message=question,
+            timeout_seconds=75, conversation_id=conversation_id,
+        )
+        conversation_id = observed["conversation_id"]
+        record = _runtime_record(observed["run_id"])
+        terminal, http_status = _request_json(
+            url=f"{base_url.rstrip('/')}/api/assistant/v2/runs/{observed['run_id']}",
+            method="GET", headers=conversation_headers, body=None, timeout=10,
+        )
+        conversation_turns.append({
+            "question": question, "run_id": observed["run_id"],
+            "http_status": http_status, "status": observed["status"],
+            "answer": str((terminal.get("response") or {}).get("content") or ""),
+            "tools": [
+                item.get("name") for item in
+                (record["runtime_state"].get("responses_exchange") or {}).get("tool_trace", [])
+            ],
+            "clarification_persisted": bool(record["runtime_state"].get("responses_clarification")),
+            "conversation_reference": bool(observed.get("conversation_reference")),
+            "dispatch_count": observed["dispatch_count"],
+            "attempt_count": observed["attempt_count"],
+            "polling_sse_parity": observed["polling_sse_contract_projection"],
+            "elapsed_ms": observed["elapsed_ms"],
+        })
+        artifact["conversation"] = {"turns": conversation_turns, "pass": False}
+        checkpoint()
+    why_answer = conversation_turns[2]["answer"].casefold()
+    why_explains = (
+        any(marker in why_answer for marker in (
+            "omdat", "want", "daarom", "de reden", "heeft te maken met", "om verder",
+            "zonder een actuele", "zonder actuele", "zonder deze gegevens",
+            "zonder deze informatie",
+        ))
+        and any(marker in why_answer for marker in (
+            "matrix strategy update parent", "matrix update strategie",
+            "entry", "stop-loss", "risico", "doel",
+        ))
+        and "wat wil je dat er verder in je plan wordt opgenomen?" not in why_answer
+    )
+    unsupported_fit_claim = any(
+        phrase in turn["answer"].casefold()
+        for turn in conversation_turns[1:3]
+        for phrase in ("sluit goed aan bij je risicoprofiel", "is afgestemd op je risicoprofiel",
+                       "is well aligned with your risk", "fits your risk profile")
+    )
+    lost_profile_context = any(
+        phrase in turn["answer"].casefold()
+        for turn in conversation_turns[1:3]
+        for phrase in ("geen specifieke informatie over je risicoprofiel",
+                       "risicoprofiel ontbreekt", "risk profile is missing")
+    )
+    artifact["conversation"]["pass"] = bool(
+        [turn["status"] for turn in conversation_turns]
+        == ["clarification_required", "completed", "completed", "completed"]
+        and conversation_turns[0]["clarification_persisted"]
+        and all(turn["http_status"] == 200 and turn["dispatch_count"] == 1
+                and turn["attempt_count"] == 1 and turn["polling_sse_parity"]
+                for turn in conversation_turns)
+        and all(turn["conversation_reference"] for turn in conversation_turns[1:])
+        and "Matrix Strategy Update Parent" in conversation_turns[1]["answer"]
+        and why_explains
+        and conversation_turns[2]["tools"] == ["answer_directly"]
+        and not unsupported_fit_claim
+        and not lost_profile_context
+        and "RSI" in conversation_turns[3]["answer"]
+        and conversation_turns[3]["tools"] == ["answer_directly"]
+    )
+    checkpoint()
+
     name = f"Responses Build DCA {uuid.uuid4().hex[:8]}"
     first = run_gate(
         base_url=base_url, bearer_token=token,
@@ -184,6 +312,9 @@ def run_scenarios(*, base_url: str, output: Path) -> dict:
         "pass": bool(
             first_record["proposal"] and proposal
             and first_record["proposal"]["id"] != proposal["id"]
+            and revised_record["terminal_projection"].get("supplied_inputs", {}).get("timeframe") == "4H"
+            and revised_record["terminal_projection"].get("supplied_inputs", {}).get("min_investment") == 100
+            and revised_record["terminal_projection"].get("supplied_inputs", {}).get("name") == name
             and before == 0 and after == 1
             and lifecycle.get("confirmed")
             and lifecycle.get("execution_result") == "succeeded"
@@ -235,7 +366,7 @@ def run_scenarios(*, base_url: str, output: Path) -> dict:
             and ambiguous["dispatch_count"] == 1 and ambiguous["attempt_count"] == 1
             and "150" not in ambiguous_answer
             and (
-                (ambiguous["status"] == "unavailable"
+                (ambiguous["status"] in {"unavailable", "clarification_required"}
                  and ambiguous_record["terminal_projection"].get("error_code") in {
                      "setup_ambiguous", "responses_evidence_not_verified",
                  })
@@ -285,7 +416,8 @@ def run_scenarios(*, base_url: str, output: Path) -> dict:
     artifact["passed"] += int(artifact["readback"]["pass"])
     artifact["passed"] += int(artifact["ambiguous_plan_read"]["pass"])
     artifact["passed"] += int(artifact["latest_of_two_executions"]["pass"])
-    artifact["total"] = len(artifact["cases"]) + 4
+    artifact["passed"] += int(artifact["conversation"]["pass"])
+    artifact["total"] = len(artifact["cases"]) + 5
     checkpoint()
     return artifact
 

@@ -5,6 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
+from backend.domain.finn_v2_setup_input_catalog import FinnV2SetupInputCatalog
+
 from backend.domain.finn_v2_operation_registry import FinnV2OperationRegistry
 from backend.services.finn_v2_tool_registry_service import FinnV2ToolRegistryService
 
@@ -102,14 +104,37 @@ class FinnResponsesToolCatalog:
             "name": "answer_directly",
             "description": (
                 "Choose this only for a general educational answer or a follow-up fully grounded "
-                "in the previous verified response. Do not use it for the user's profile, plan, "
+                "in the previous verified response. Set uses_previous_response=true only when the "
+                "current question refers to that response; a new self-contained question uses false. "
+                "Do not use it for the user's profile, plan, "
                 "portfolio, indicator values, market data, or a proposed change; choose FINN tools instead."
             ),
             "strict": False,
             "parameters": {
-                "type": "object", "properties": {}, "additionalProperties": False,
+                "type": "object", "properties": {
+                    "uses_previous_response": {"type": "boolean"},
+                }, "additionalProperties": False,
             },
         }]
+        definitions.append({
+            "type": "function",
+            "name": "ask_for_clarification",
+            "description": (
+                "Use only when a specific choice or user-provided detail is necessary to answer the "
+                "current question and cannot be obtained from FINN read tools. Ask one short natural "
+                "question. Do not use this for unavailable market data; state that limitation instead."
+            ),
+            "strict": False,
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "question": {"type": "string", "description": "One user-facing question without internal fields or IDs."},
+                    "reason": {"type": "string", "enum": ["choice_required", "user_detail_required"]},
+                },
+                "required": ["question", "reason"],
+                "additionalProperties": False,
+            },
+        })
         for name, read_tools in self.read_tools.items():
             definitions.append({
                 "type": "function",
@@ -120,7 +145,14 @@ class FinnResponsesToolCatalog:
                     "type": "object",
                     "properties": {
                         "asset": {"type": "string", "description": "Asset named by the user, if any."},
-                        "timeframe": {"type": "string", "description": "Timeframe named by the user, if any."},
+                        "timeframe": {"type": "string", "description": "A real timeframe such as 4H or 1D, never an object name."},
+                        **({"setup_name": {
+                            "type": "string",
+                            "description": "Saved setup name explicitly selected by the user. FINN resolves ownership server-side.",
+                        }, "reference": {
+                            "type": "string", "enum": ["current_request", "previous_response"],
+                            "description": "Use previous_response only to revisit the owner-scoped setup read in the preceding verified answer.",
+                        }} if name == "get_active_plan_and_strategy" else {}),
                     },
                     "additionalProperties": False,
                 },
@@ -162,7 +194,11 @@ class FinnResponsesToolCatalog:
                                 else "Supply only known fields; FINN asks for missing inputs."
                             ),
                             "properties": {
-                                field: {"type": field_type}
+                                field: {
+                                    "type": field_type,
+                                    **({"enum": list(contract.allowed_values_for(field))}
+                                       if contract.allowed_values_for(field) else {}),
+                                }
                                 for field, field_type in sorted(field_types.items())
                             },
                             "additionalProperties": False,
@@ -226,15 +262,41 @@ class FinnResponsesToolCatalog:
         if not isinstance(arguments, dict):
             raise FinnResponsesToolError("tool_arguments_invalid")
         if name == "answer_directly":
-            if arguments:
+            if set(arguments).difference({"uses_previous_response"}) or any(
+                not isinstance(value, bool) for value in arguments.values()
+            ):
                 raise FinnResponsesToolError("direct_answer_arguments_invalid")
-            return FinnResponsesToolCall(name, None, {}, (), (), ())
+            return FinnResponsesToolCall(name, None, arguments, (), (), ())
+        if name == "ask_for_clarification":
+            if set(arguments) != {"question", "reason"}:
+                raise FinnResponsesToolError("clarification_arguments_invalid")
+            question = arguments["question"]
+            if (
+                not isinstance(question, str) or not 8 <= len(question.strip()) <= 240
+                or not question.strip().endswith("?")
+                or any(token in question.casefold() for token in ("operation_id", "setup_id", "strategy_id", "bot_id", "required_inputs"))
+                or arguments["reason"] not in {"choice_required", "user_detail_required"}
+            ):
+                raise FinnResponsesToolError("clarification_question_invalid")
+            return FinnResponsesToolCall(name, None, {
+                "question": question.strip(), "reason": arguments["reason"],
+            }, (), (), ())
         if name in self.read_tools:
-            if set(arguments).difference({"asset", "timeframe"}):
+            allowed = {"asset", "timeframe"}
+            if name == "get_active_plan_and_strategy":
+                allowed.update({"setup_name", "reference"})
+            if set(arguments).difference(allowed):
                 raise FinnResponsesToolError("read_arguments_invalid")
             if any(not isinstance(value, str) for value in arguments.values()):
                 raise FinnResponsesToolError("read_arguments_invalid")
             supplied = {key: value.strip() for key, value in arguments.items() if value.strip()}
+            if "reference" in supplied and supplied["reference"] not in {"current_request", "previous_response"}:
+                raise FinnResponsesToolError("read_reference_invalid")
+            if "timeframe" in supplied:
+                canonical_timeframe = FinnV2SetupInputCatalog.canonical_timeframe(supplied["timeframe"])
+                if canonical_timeframe is None:
+                    raise FinnResponsesToolError("read_timeframe_invalid")
+                supplied["timeframe"] = canonical_timeframe
             return FinnResponsesToolCall(name, None, supplied, self.read_tools[name], (), ())
         operations = _PROPOSAL_OPERATIONS.get(name)
         if operations is None:
@@ -286,6 +348,12 @@ class FinnResponsesToolCatalog:
             }[field_type](value)
             if not valid:
                 raise FinnResponsesToolError(f"proposal_input_type_invalid:{field}")
+            allowed_values = contract.allowed_values_for(field)
+            if allowed_values and value not in allowed_values:
+                raise FinnResponsesToolError(
+                    f"proposal_input_value_invalid:{field}",
+                    details={"field": field, "allowed_values": list(allowed_values)},
+                )
         if name == "create_dca_plan_proposal" and supplied.get("setup_type") is not None and str(supplied["setup_type"]).casefold() != "dca":
             raise FinnResponsesToolError("dca_tool_requires_dca_setup_contract")
         required = contract.required_inputs_for(supplied)

@@ -985,6 +985,13 @@ class FinnV2OrchestratorService:
                 exclude_run_id=run_id,
             )
         previous_state = dict((previous_contract.state_json or {}) if previous_contract else {})
+        previous_clarification = dict(previous_state.get("responses_clarification") or {})
+        if (
+            previous_state.get("terminal_status") == "clarification_required"
+            and previous_clarification.get("conversation_id") == conversation_id
+            and previous_clarification.get("run_id") == getattr(previous_contract, "run_id", None)
+        ):
+            context["responses_clarification"] = previous_clarification
         prior_guided = dict(previous_state.get("guided_state") or {})
         prior_proposal_id = str(prior_guided.get("open_proposal_id") or "")
         if prior_proposal_id and previous_contract is not None:
@@ -1016,16 +1023,7 @@ class FinnV2OrchestratorService:
         elif verified_conversation_target.get("owner_id") == user_id:
             context["canonical_entity_target"] = verified_conversation_target
         action_result = dict(previous_state.get("action_result") or {})
-        if (
-            action_result.get("entity_id")
-            and action_result.get("owner_user_id") == user_id
-            and action_result.get("result_status") == "succeeded"
-            and not str(action_result.get("operation_id") or "").startswith("delete_")
-        ):
-            # A confirmed execution is the only cross-turn object reference
-            # accepted without an explicit current-turn identifier.
-            context["previous_action_result"] = action_result
-        elif conversation_id and callable(
+        if conversation_id and callable(
             getattr(self.runtime_contracts, "get_latest_action_result_for_conversation", None)
         ):
             # Continue only a result produced inside this persisted
@@ -1049,6 +1047,13 @@ class FinnV2OrchestratorService:
             ):
                 context["previous_action_result"] = latest_action_result
                 context["previous_action_result_source"] = "conversation_action_result"
+        elif (
+            action_result.get("entity_id")
+            and action_result.get("owner_user_id") == user_id
+            and action_result.get("result_status") == "succeeded"
+            and not str(action_result.get("operation_id") or "").startswith("delete_")
+        ):
+            context["previous_action_result"] = action_result
         if (
             "previous_action_result" not in context
             and verified_conversation_result.get("owner_user_id") == user_id

@@ -7,7 +7,7 @@ short; link artifacts rather than copying reports or chat history.
 
 | Field | Value |
 | --- | --- |
-| Phase | `BUILD_VALIDATED` |
+| Phase | `BUILDING` |
 | Active goal | FINN Responses Tool Runtime |
 | Candidate branch | `codex/finn-responses-tool-runtime` |
 | Candidate code SHA | Resolve from the branch commit; this document is not release-authoritative |
@@ -29,16 +29,34 @@ Git and deployment surfaces, not from this self-referential status file.
 
 ## Evidence
 
+The current uncommitted repair remains `BUILDING`. Two consecutive local public
+Responses conversation gates are `20/20`, including a four-turn conversation,
+an owner-scoped draft revision, confirmation, execution, replay, and readback.
+The `Waarom?` follow-up now requires `answer_directly` without unrelated reads.
+Artifacts: `.local-finn-parity-artifacts/finn-responses-relevance-v18.json`,
+SHA-256 `f60f0482bd92f31cd8163ddd046c43c809e6ad93f7c6672ed2471ec3e96b1e8b`,
+and `.local-finn-parity-artifacts/finn-responses-relevance-v19.json`,
+SHA-256 `eb4dab08e8abd60b12926ab37b1dcd9dd8d69cd257cd4238dc2b7e0acafab43b`.
+The latest complete worker-driven action matrix is `16/16` with zero broker,
+live-trading, or live-bot effects. Artifact:
+`.local-finn-parity-artifacts/finn-responses-action-matrix-v18.json`,
+SHA-256 `07042b60143e9968d56ce0e75d3ff0aeeb6524b93c94d0a5e4425a875fd129a3`.
+The current backend root suite is `2497 passed, 3 skipped`. The real-provider
+development and regression gates were rerun on the final conversation-lineage
+code and passed `18/18` and `109/109`, respectively, with zero provider,
+schema, parse, validation, or timeout failures. No CI, deployment, or
+independent QA has started for this repair.
+
 | Gate | Status | Evidence |
 | --- | --- | --- |
-| Responses runtime scenarios | `PASS` | Local real-provider public API `15/15`, including zero/one/multiple tools, NL/EN/DE, cross-asset, follow-up, DCA draft revision, confirmation, execution and replay; `.local-finn-parity-artifacts/finn-responses-build-scenarios-repair-v8.json`, SHA-256 `74068703009cf8288e240e23cb98b1e62a69ecbfb150584f979aa7084fd400e5`. |
+| Responses runtime scenarios | `PASS` | Two consecutive public real-provider API runs `20/20` each, including scoped short follow-up and persisted draft lifecycle; artifacts and hashes above. |
 | Fresh-owner regression | `PASS` | Public API/Celery guided setup, explicit confirmation, one persisted setup, idempotent replay, and exact saved-name/4H readback with a new owner; `.local-finn-parity-artifacts/finn-responses-fresh-owner-repair.jsonl`, SHA-256 `56195d95ff3ca10507994edfdb46d463a06bda9dc6d58f3019e6a1e54f92b28d`. |
-| Action matrix | `PASS` | Local worker-driven `16/16`, including guided strategy and safe proposal/confirmation/execution/replay; no broker, live trading or live bot effect; `.local-finn-parity-artifacts/finn-responses-action-matrix-repair-final.json`, SHA-256 `86051a3c8f174592a227dd121f9cfe833946a99fe6a72d88a8005243429a31cf`. |
+| Action matrix | `PASS` | Current local worker-driven `16/16`, including guided strategy, proposal/confirmation/execution/replay; no broker, live trading or live bot effect; `.local-finn-parity-artifacts/finn-responses-action-matrix-v18.json`, SHA-256 `07042b60143e9968d56ce0e75d3ff0aeeb6524b93c94d0a5e4425a875fd129a3`. |
 | Visible Draft Card | `PASS` | Local browser shows a registry-backed BTC DCA proposal with name, timeframe, frequency, amount and explicit confirmation; `/tmp/finn-responses-draft-card-amount-local.png`, SHA-256 `ecf1f84a70f57bf7bbc7f53e481e980e478240ef05c34d64aca52c65d00e819e`. |
-| Provider development | `PASS` | Real provider `18/18`, no provider or validation failure; `.local-finn-parity-artifacts/finn-responses-provider-development-repair.json`, SHA-256 `7c8f3306394f99989da5059aadcc1e692f1a15b56f72bb8007586b6cca4326fa`. |
-| Provider regression | `PASS` | A first real-provider measurement was `108/109` on one nondeterministic historical selector case. The exact case passed in isolation, then the complete second run was `109/109` with zero retries or provider/schema/parse/validation/timeout failures; `.local-finn-parity-artifacts/finn-responses-provider-regression-repair-v2.json`, SHA-256 `204e2feed7d951b1e49f5c57f9f52d15ff593007cebc3a55c13ce9ae4cf2eff1`. |
-| Backend suite | `PASS` | `2433 passed, 3 skipped` from the canonical checkout root. |
-| Frontend suite | `PASS` | `typecheck`, `lint:i18n`, `test:i18n` (`8/8`), `test:commands` (`5/5`), guided-modal (`5/5`), `audit:high`, and production build passed on the final source. |
+| Provider development | `PASS` | Current real provider `18/18`; `.local-finn-parity-artifacts/finn-responses-provider-development-v18.json`, SHA-256 `9bff107bc9db8196eeb53e216b3f162eca658c1dcd01930ac9f71d405e34d3cd`. |
+| Provider regression | `PASS` | Current real provider `109/109`; `.local-finn-parity-artifacts/finn-responses-provider-regression-v18.json`, SHA-256 `f4ddeea08184f29518065ebe519e6e69d1b2b8df5cf50b33c52d003447b509ed`. |
+| Backend suite | `PASS` | `2497 passed, 3 skipped` from the canonical checkout root. |
+| Frontend suite | `PASS` | Current `typecheck` and production build passed; earlier `lint:i18n`, `test:i18n`, `test:commands`, guided-modal, and `audit:high` passed before this backend-only repair. |
 | CI | `NOT_RUN` | Awaiting the validated candidate push. |
 | Deployment | `NOT_RUN` | Production remains on `258b998a…`; its first safe Build smoke exposed fresh-owner readback defects. The repair candidate has not deployed or run a new live smoke. |
 | Official independent QA | `NOT_STARTED` | Build does not initiate official QA. |

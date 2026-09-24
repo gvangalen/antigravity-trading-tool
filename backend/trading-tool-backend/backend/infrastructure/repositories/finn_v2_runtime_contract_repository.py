@@ -546,6 +546,24 @@ class FinnV2RuntimeContractRepository(FinnV2RepositoryTransactionMixin):
         }
         return await self._write_revision(row=row, state=state)
 
+    async def record_responses_clarification(
+        self, *, run_id: str, user_id: int, original_message: str,
+        question: str, reason: str,
+    ) -> FinnV2RuntimeContract:
+        """Persist one open conversational choice on the owning run contract."""
+        row = await self._required_for_update(run_id)
+        if row.user_id != user_id or not row.conversation_id:
+            raise RuntimeContractConflictError("responses_clarification_owner_or_conversation_missing")
+        state = deepcopy(row.state_json or {})
+        state["responses_clarification"] = {
+            "original_message": original_message,
+            "question": question,
+            "reason": reason,
+            "conversation_id": row.conversation_id,
+            "run_id": run_id,
+        }
+        return await self._write_revision(row=row, state=state)
+
     async def record_previous_response_reference(
         self, *, run_id: str, previous_run_id: str,
     ) -> FinnV2RuntimeContract:
@@ -555,7 +573,7 @@ class FinnV2RuntimeContractRepository(FinnV2RepositoryTransactionMixin):
             previous is None or previous.run_id == row.run_id
             or previous.user_id != row.user_id
             or previous.conversation_id != row.conversation_id
-            or (previous.state_json or {}).get("terminal_status") not in {"completed", "unavailable"}
+            or (previous.state_json or {}).get("terminal_status") not in {"completed", "unavailable", "clarification_required"}
         ):
             raise RuntimeContractConflictError("previous_response_not_owned_or_terminal")
         state = deepcopy(row.state_json or {})

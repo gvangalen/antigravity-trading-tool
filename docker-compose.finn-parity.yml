@@ -13,6 +13,7 @@ x-finn-env: &finn-env
   CELERY_QUEUE_PREFIX: parity-
   OPENAI_CALLS_ENABLED: "true"
   OPENAI_API_KEY: ${OPENAI_API_KEY:?source ~/tradamind-local-secrets/finn-development.env before parity start}
+  FINN_RESPONSES_CHAT_MODEL: ${FINN_RESPONSES_CHAT_MODEL:-gpt-4o-mini}
   TWELVE_DATA_API_KEY: ${TWELVE_DATA_API_KEY:-}
   JWT_SECRET_KEY: local-finn-parity-not-production-jwt-secret
   SECRET_KEY: local-finn-parity-not-production-app-secret

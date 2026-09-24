@@ -156,6 +156,7 @@ def _operation_contract_hash(contract: object) -> str:
     # types do not change selector expectations, so preserve the historical
     # selection-contract hash without rewriting the published corpus.
     payload.pop("input_json_types", None)
+    payload.pop("input_allowed_values", None)
     return hashlib.sha256(
         json.dumps(payload, default=str, sort_keys=True, separators=(",", ":")).encode("utf-8")
     ).hexdigest()

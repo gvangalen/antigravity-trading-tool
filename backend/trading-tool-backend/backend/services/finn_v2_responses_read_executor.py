@@ -69,11 +69,20 @@ class FinnResponsesReadExecutor:
             })
             if read_tool == "read_indicator_configuration":
                 results.append(self._macro_catalog_evidence())
-        return {
+        output = {
             "status": "completed" if all(item["status"] == "completed" for item in results) else "partial",
             "tool": call.name,
             "results": results,
         }
+        if call.name == "get_active_plan_and_strategy":
+            output["evidence_boundary"] = (
+                "This is a read of saved setup and strategy configuration, not a current market "
+                "or owner-scoped risk evaluation. Stored entry, stop-loss, target and amount values "
+                "must be described as existing settings, never as an instruction to trade at "
+                "those levels or as proof that this plan suits the user's goals or risk style. "
+                "If the user asks for a recommendation, say which evaluation is still needed."
+            )
+        return output
 
     @staticmethod
     def _as_of(data: Any) -> str | None:
