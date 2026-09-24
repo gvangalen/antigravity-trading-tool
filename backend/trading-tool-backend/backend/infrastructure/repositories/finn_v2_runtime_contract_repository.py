@@ -33,6 +33,15 @@ class FinnV2RuntimeContractRepository(FinnV2RepositoryTransactionMixin):
     def __init__(self, session: AsyncSession):
         self.session = session
 
+    @staticmethod
+    def _action_result_order():
+        # A later read can update an older contract; execution time, not row
+        # revision time, defines the newest persisted action result.
+        return (
+            desc(FinnV2RuntimeContract.state_json["action_result"]["created_at"].astext).nulls_last(),
+            desc(FinnV2RuntimeContract.updated_at),
+        )
+
     async def create_for_run(self, *, run) -> FinnV2RuntimeContract:
         existing = await self.get_for_run(run_id=run.id, for_update=True)
         if existing is not None:
@@ -98,7 +107,7 @@ class FinnV2RuntimeContractRepository(FinnV2RepositoryTransactionMixin):
         result = await self.session.execute(
             select(FinnV2RuntimeContract)
             .where(*conditions)
-            .order_by(desc(FinnV2RuntimeContract.updated_at))
+            .order_by(*self._action_result_order())
             .limit(32)
         )
         for row in result.scalars():
@@ -134,7 +143,7 @@ class FinnV2RuntimeContractRepository(FinnV2RepositoryTransactionMixin):
         result = await self.session.execute(
             select(FinnV2RuntimeContract)
             .where(*conditions)
-            .order_by(desc(FinnV2RuntimeContract.updated_at))
+            .order_by(*self._action_result_order())
             .limit(32)
         )
         for row in result.scalars():
@@ -164,7 +173,7 @@ class FinnV2RuntimeContractRepository(FinnV2RepositoryTransactionMixin):
         result = await self.session.execute(
             select(FinnV2RuntimeContract)
             .where(*conditions)
-            .order_by(desc(FinnV2RuntimeContract.updated_at))
+            .order_by(*self._action_result_order())
             .limit(64)
         )
         by_type: dict[str, dict] = {}
@@ -200,7 +209,7 @@ class FinnV2RuntimeContractRepository(FinnV2RepositoryTransactionMixin):
         result = await self.session.execute(
             select(FinnV2RuntimeContract)
             .where(*conditions)
-            .order_by(desc(FinnV2RuntimeContract.updated_at))
+            .order_by(*self._action_result_order())
             .limit(96)
         )
         by_type: dict[str, dict] = {}

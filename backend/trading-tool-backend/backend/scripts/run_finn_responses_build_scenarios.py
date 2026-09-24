@@ -243,10 +243,49 @@ def run_scenarios(*, base_url: str, output: Path) -> dict:
             )
         ),
     }
+    newer_name = f"Responses Latest DCA {uuid.uuid4().hex[:8]}"
+    newer = run_gate(
+        base_url=base_url, bearer_token=token,
+        conversation_id=first["conversation_id"],
+        message=f"Maak daarnaast een nieuwe BTC 4H DCA-setup met de naam {newer_name}, 200 euro per week op dinsdag.",
+        timeout_seconds=75,
+    )
+    newer_proposal = _runtime_record(newer["run_id"])["proposal"]
+    newer_lifecycle = _proposal_lifecycle(base_url, token, other_token, newer_proposal) if newer_proposal else {}
+    if newer_lifecycle.get("execution_result") == "succeeded":
+        with sync_engine.begin() as connection:
+            connection.execute(text("""
+                UPDATE finn_v2_runtime_contracts
+                SET updated_at = NOW() + INTERVAL '1 hour'
+                WHERE run_id = :older_run_id AND user_id = :user_id
+            """), {"older_run_id": revised["run_id"], "user_id": int(owner["id"])})
+    latest = run_gate(
+        base_url=base_url, bearer_token=token,
+        conversation_id=first["conversation_id"],
+        message="Wat zijn naam en bedrag van de setup die je net hebt opgeslagen?",
+        timeout_seconds=75,
+    )
+    latest_terminal, latest_status = _request_json(
+        url=f"{base_url.rstrip('/')}/api/assistant/v2/runs/{latest['run_id']}",
+        method="GET", headers=headers, body=None, timeout=10,
+    )
+    latest_answer = str((latest_terminal.get("response") or {}).get("content") or "")
+    artifact["latest_of_two_executions"] = {
+        "newer_run_id": newer["run_id"], "read_run_id": latest["run_id"],
+        "execution_result": newer_lifecycle.get("execution_result"),
+        "answer": latest_answer,
+        "pass": bool(newer_proposal and newer_lifecycle.get("execution_result") == "succeeded"
+                     and newer_lifecycle.get("idempotency_result") == "already_executed"
+                     and latest_status == 200 and latest["status"] == "completed"
+                     and latest["dispatch_count"] == 1 and latest["attempt_count"] == 1
+                     and newer_name in latest_answer and "200" in latest_answer
+                     and name not in latest_answer and "150" not in latest_answer),
+    }
     artifact["passed"] = sum(case["pass"] for case in artifact["cases"]) + int(artifact["draft"]["pass"])
     artifact["passed"] += int(artifact["readback"]["pass"])
     artifact["passed"] += int(artifact["ambiguous_plan_read"]["pass"])
-    artifact["total"] = len(artifact["cases"]) + 3
+    artifact["passed"] += int(artifact["latest_of_two_executions"]["pass"])
+    artifact["total"] = len(artifact["cases"]) + 4
     checkpoint()
     return artifact
 

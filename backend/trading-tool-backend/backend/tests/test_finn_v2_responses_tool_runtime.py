@@ -1260,3 +1260,25 @@ def test_responses_verifier_blocks_stale_saved_amount_even_if_semantic_model_pas
     assert verified.reason == "responses_evidence_not_verified"
     assert "150" not in verified.text
     semantic.verify_async.assert_not_awaited()
+
+
+def test_recent_action_result_query_orders_by_execution_not_contract_revision():
+    session = SimpleNamespace(execute=AsyncMock(return_value=SimpleNamespace(
+        scalars=lambda: [SimpleNamespace(state_json={"action_result": {
+            "owner_user_id": 21, "entity_id": "327", "result_status": "succeeded",
+            "created_at": "2026-09-24T10:05:00+00:00",
+        }}), SimpleNamespace(state_json={"action_result": {
+            "owner_user_id": 21, "entity_id": "326", "result_status": "succeeded",
+            "created_at": "2026-09-24T10:00:00+00:00",
+        }})],
+    )))
+    repository = FinnV2RuntimeContractRepository(session)
+    latest = asyncio.run(repository.get_latest_action_result_for_conversation(
+        conversation_id="conv-1", user_id=21,
+    ))
+    assert latest.state_json["action_result"]["entity_id"] == "327"
+    ordering = str(session.execute.await_args.args[0].compile(
+        compile_kwargs={"literal_binds": True},
+    )).split("ORDER BY", 1)[1]
+    assert "action_result" in ordering and "created_at" in ordering
+    assert ordering.index("created_at") < ordering.index("updated_at")
