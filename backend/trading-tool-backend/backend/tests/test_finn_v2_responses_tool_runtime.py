@@ -1342,6 +1342,39 @@ def test_review_constraint_can_carry_evidence_limit_without_duplicate_limit_fiel
     assert "Eerst controleren:" in answer
 
 
+@pytest.mark.parametrize("locale,expected", [
+    ("nl", "zelfstandig plan"),
+    ("en", "standalone plan"),
+    ("de", "eigenständigen Plan"),
+])
+def test_plan_review_next_step_uses_typed_missing_component(locale, expected):
+    from backend.services.finn_v2_responses_loop import (
+        limited_evaluation_answer, plan_review_next_step_from_evidence,
+    )
+
+    evidence = [
+        {"scope": "read_active_setup", "status": "completed", "data": {"setup_type": "dca"}},
+        {"scope": "read_linked_strategy", "status": "unavailable", "reason": "strategy_not_resolved"},
+        {"scope": "read_market_snapshot", "status": "unavailable", "reason": "source_unavailable"},
+    ]
+    step = plan_review_next_step_from_evidence(evidence, locale)
+    answer = limited_evaluation_answer(json.dumps({
+        "response_focus": "review", "saved_context": "Duplicated saved context",
+        "user_proposal": "", "conditional_observation": "", "priority_actions": [],
+        "avoid_action": "",
+        "verified_strength": "The schedule is recorded.",
+        "verified_constraint": "Current market evidence is unavailable.",
+        "assessment_limit": "Duplicated market limitation",
+        "next_safe_step": "Wait for market data.",
+    }), locale=locale, review_next_step=step)
+    assert expected in answer
+    assert "Wait for market data" not in answer
+    assert "Duplicated" not in answer
+    assert plan_review_next_step_from_evidence(
+        [{**evidence[0]}, {"scope": "read_linked_strategy", "status": "completed"}], locale,
+    ) is None
+
+
 def test_personal_advice_audit_rejects_user_rule_claimed_as_saved():
     response = SimpleNamespace(output_text=json.dumps({
         "unsupported_personal_advice": False,
@@ -3211,9 +3244,9 @@ def test_partial_evaluation_survives_semantic_timeout_only_with_independent_audi
     assert "nog niet wijzigen" in rejected.text
 
 
-def test_rejected_plan_review_uses_saved_strategy_facts_without_suitability_claim():
+def test_limited_plan_review_uses_saved_strategy_facts_even_if_model_verifier_accepts():
     semantic = SimpleNamespace(verify_async=AsyncMock(return_value=SimpleNamespace(
-        available=True, passes=False, reason_codes=["insufficient_evidence"],
+        available=True, passes=True, reason_codes=[],
     )))
     verifier = FinnResponsesAnswerVerifier(semantic=semantic, client=None)
     result = FinnResponsesResult(
@@ -3233,16 +3266,19 @@ def test_rejected_plan_review_uses_saved_strategy_facts_without_suitability_clai
                      "reason": "source_unavailable"},
                 ],
             },
-        },),
+        },), response_focus="review",
     )
-    answer = asyncio.run(verifier.verify(
-        message="Wat is sterk, waar rem je me af en wat controleer ik eerst?", result=result,
-    ))
-    assert answer.status == "completed"
-    assert answer.reason == "insufficient_evidence"
-    assert "opgeslagen strategie" in answer.text
-    assert "Controleer eerst" in answer.text
-    assert "setup heeft entry" not in answer.text
+    for passes in (True, False):
+        semantic.verify_async.return_value.passes = passes
+        answer = asyncio.run(verifier.verify(
+            message="Wat is sterk, waar rem je me af en wat controleer ik eerst?", result=result,
+        ))
+        assert answer.status == "completed"
+        assert answer.reason == "insufficient_evidence"
+        assert "opgeslagen strategie" in answer.text
+        assert "Controleer eerst" in answer.text
+        assert "setup heeft entry" not in answer.text
+        assert "sterk als vastgelegd controlepunt" in answer.text.casefold()
 
 
 def test_limited_evaluation_cannot_claim_completion_after_requested_form_fails():
@@ -4839,6 +4875,205 @@ def test_plan_evaluation_does_not_trigger_single_indicator_catalog_check():
     verifier._catalog_answer_is_focused.assert_not_awaited()
 
 
+def test_plan_review_audit_receives_typed_missing_strategy_and_market_evidence():
+    semantic = SimpleNamespace(verify_async=AsyncMock(return_value=SimpleNamespace(
+        available=True, passes=True, reason_codes=[],
+    )))
+    verifier = FinnResponsesAnswerVerifier(semantic=semantic, client=SimpleNamespace())
+    verifier._personal_advice_is_grounded = AsyncMock(return_value=True)
+    result = FinnResponsesResult(
+        "Je DCA-setup is opgeslagen. Wacht op marktdata en blijf je plan volgen.",
+        "resp-plan-gap", ({"name": "evaluate_plan", "status": "partial", "result": {
+            "evaluation_operation_id": "evaluate_plan",
+            "assessment_status": "insufficient_evidence",
+            "results": [
+                {"scope": "read_active_setup", "status": "completed",
+                 "data": {"name": "Coach DCA", "setup_type": "dca"}},
+                {"scope": "read_linked_strategy", "status": "unavailable",
+                 "reason": "strategy_not_resolved", "data": None},
+                {"scope": "read_market_snapshot", "status": "unavailable",
+                 "reason": "source_unavailable", "data": None},
+            ],
+        }},), "free_text", "review",
+    )
+    asyncio.run(verifier.verify(message="Beoordeel mijn plan en geef mijn volgende stap.", result=result))
+    audited = verifier._personal_advice_is_grounded.await_args.kwargs["evidence"]
+    assert {item["scope"]: item["status"] for item in audited if item["scope"].startswith("read_")} == {
+        "read_active_setup": "completed",
+        "read_linked_strategy": "unavailable",
+        "read_market_snapshot": "unavailable",
+    }
+    assert next(item for item in audited if item["scope"] == "read_linked_strategy")["reason"] == "strategy_not_resolved"
+    assert verifier._personal_advice_is_grounded.await_args.kwargs["require_actionable_next_decision"] is True
+
+
+@pytest.mark.parametrize("locale,expected", [
+    ("nl", "geen gekoppelde strategie"),
+    ("en", "No linked strategy"),
+    ("de", "keine verknüpfte Strategie"),
+])
+def test_rejected_limited_plan_review_keeps_typed_plan_gap_and_user_choice(locale, expected):
+    semantic = SimpleNamespace(verify_async=AsyncMock(return_value=SimpleNamespace(
+        available=True, passes=False, reason_codes=["insufficient_evidence"],
+    )))
+    verifier = FinnResponsesAnswerVerifier(semantic=semantic)
+    result = FinnResponsesResult(
+        "Wait for market data.", "resp-plan-gap", ({"name": "evaluate_plan", "status": "partial", "result": {
+            "evaluation_operation_id": "evaluate_plan",
+            "assessment_status": "insufficient_evidence",
+            "results": [
+                {"scope": "read_active_setup", "status": "completed", "data": {"name": "Coach DCA"}},
+                {"scope": "read_linked_strategy", "status": "unavailable",
+                 "reason": "strategy_not_resolved", "data": None},
+                {"scope": "read_market_snapshot", "status": "unavailable",
+                 "reason": "source_unavailable", "data": None},
+            ],
+        }},), "free_text", "review",
+    )
+    verified = asyncio.run(verifier.verify(message="Review my plan", result=result, locale=locale))
+    assert verified.status == "completed"
+    assert expected in verified.text
+    assert "Coach DCA" in verified.text
+    assert "Wait for market data" not in verified.text
+
+
+def test_rejected_plan_review_preserves_proposed_amount_without_calling_it_saved():
+    semantic = SimpleNamespace(verify_async=AsyncMock(return_value=SimpleNamespace(
+        available=True, passes=False, reason_codes=["insufficient_evidence"],
+    )))
+    result = FinnResponsesResult("Generic market warning", "resp-proposal-review", ({
+        "name": "evaluate_plan", "status": "partial", "result": {
+            "evaluation_operation_id": "evaluate_plan",
+            "assessment_status": "insufficient_evidence",
+            "results": [
+                {"scope": "read_active_setup", "status": "completed", "data": {"name": "Coach DCA"}},
+                {"scope": "read_linked_strategy", "status": "unavailable",
+                 "reason": "strategy_not_resolved"},
+            ],
+        },
+    },), "free_text", "review")
+    verified = asyncio.run(FinnResponsesAnswerVerifier(semantic=semantic).verify(
+        message="Ik denk aan 100 euro per week. Past dat bij mijn plan?",
+        result=result, locale="nl",
+    ))
+    assert "Je overweegt 100 euro per week" in verified.text
+    assert "voorgestelde inleg" in verified.text
+    assert "opgeslagen bedrag" not in verified.text
+
+
+def test_horizon_guard_rejects_cross_sentence_inference_from_setup_type_and_timeframe():
+    evidence = ({"scope": "read_active_setup", "status": "completed",
+                 "data": {"setup_type": "dca", "timeframe": "4H"}},)
+    assert not FinnResponsesAnswerVerifier._saved_horizon_claim_supported(
+        "Je DCA-setup heeft een 4H-grafiek. Hierdoor wordt het doorgaans beschouwd "
+        "als een langetermijnopbouwstrategie.", evidence,
+    )
+    assert not FinnResponsesAnswerVerifier._saved_horizon_claim_supported(
+        "Your DCA setup uses a 4H chart. Therefore it is considered a long-term strategy.", evidence,
+    )
+    assert FinnResponsesAnswerVerifier._saved_horizon_claim_supported(
+        "Je DCA-setup heeft een 4H-grafiek. Welke beleggingshorizon bedoel je?", evidence,
+    )
+
+
+def test_level_advice_guard_rejects_speculative_saved_level_changes():
+    assert FinnResponsesAnswerVerifier._ungrounded_level_advice(
+        "Dit geeft een goede reward-to-risk verhouding van 2:1."
+    )
+    assert FinnResponsesAnswerVerifier._ungrounded_level_advice(
+        "Sterk in je plan: Het plan heeft een duidelijke risico-beloningsverhouding "
+        "met ratio's van 2:1 en 3:1."
+    )
+    assert FinnResponsesAnswerVerifier._ungrounded_level_advice(
+        "Bepaal of je de instap- en targetniveaus wilt bevestigen of aanpassen "
+        "op basis van recente marktbewegingen."
+    )
+    assert FinnResponsesAnswerVerifier._ungrounded_level_advice(
+        "Consider whether to adjust the entry and target levels based on recent market moves."
+    )
+    assert not FinnResponsesAnswerVerifier._ungrounded_level_advice(
+        "Controleer welke entry, stop-loss en targets je hebt opgeslagen; wijzig nog niets."
+    )
+
+
+def test_absolute_risk_per_unit_cannot_be_described_as_percentage():
+    evidence = ({"scope": "read_linked_strategy", "status": "completed", "data": {
+        "level_geometry": {"status": "completed", "risk_per_unit": "4000"},
+    }},)
+    assert not FinnResponsesAnswerVerifier._static_risk_units_supported(
+        "Het risicopercentage per eenheid is 4000.", evidence,
+    )
+    assert FinnResponsesAnswerVerifier._static_risk_units_supported(
+        "Het absolute risico per eenheid is 4.000; dit is geen risicopercentage.", evidence,
+    )
+
+
+def test_unavailable_live_source_cannot_be_an_immediate_priority():
+    assert FinnResponsesAnswerVerifier._asks_user_to_supply_unavailable_source(
+        "Zorg voor het updaten van de ontbrekende markt- en technische gegevens."
+    )
+    assert FinnResponsesAnswerVerifier._uses_unavailable_live_source_as_current_action(
+        "Controleer de huidige prijs van BTC en vergelijk die met je entry."
+    )
+    assert FinnResponsesAnswerVerifier._uses_unavailable_live_source_as_current_action(
+        "Controleer of de prijs van BTC bij de instapprijs ligt voordat je een positie opent."
+    )
+    assert FinnResponsesAnswerVerifier._uses_unavailable_live_source_as_current_action(
+        "Houd de prijsontwikkeling in de gaten en anticipeer op een stijging."
+    )
+    assert not FinnResponsesAnswerVerifier._uses_unavailable_live_source_as_current_action(
+        "Zodra actuele marktdata beschikbaar zijn, controleer dan of je entryvoorwaarde geldt."
+    )
+
+
+def test_rejected_priority_list_uses_saved_levels_without_pretending_live_data():
+    semantic = SimpleNamespace(verify_async=AsyncMock(return_value=SimpleNamespace(
+        available=True, passes=False, reason_codes=["insufficient_evidence"],
+    )))
+    result = FinnResponsesResult("Controleer de huidige koers.", "resp-priorities", ({
+        "name": "evaluate_plan", "status": "partial", "result": {
+            "evaluation_operation_id": "evaluate_plan",
+            "assessment_status": "insufficient_evidence",
+            "results": [
+                {"scope": "read_linked_strategy", "status": "completed",
+                 "data": {"entry": 80000, "stop_loss": 76000, "targets": [88000]}},
+                {"scope": "read_market_snapshot", "status": "unavailable",
+                 "reason": "source_unavailable"},
+            ],
+        },
+    },), "free_text", "priorities")
+    verified = asyncio.run(FinnResponsesAnswerVerifier(semantic=semantic).verify(
+        message="Wat zijn mijn drie prioriteiten?", result=result, locale="nl",
+    ))
+    assert verified.status == "completed"
+    assert "1. Controleer of de opgeslagen entry" in verified.text
+    assert "3. Laat een nieuwe entrybeslissing open" in verified.text
+    assert "Controleer de huidige koers" not in verified.text
+
+
+def test_plan_read_without_market_snapshot_cannot_ground_live_price_priorities():
+    semantic = SimpleNamespace(verify_async=AsyncMock(return_value=SimpleNamespace(
+        available=True, passes=True, reason_codes=[],
+    )))
+    result = FinnResponsesResult(
+        "1. Controleer de huidige marktprijs van BTC.\n"
+        "2. Volg de prijsontwikkeling en pas je entry aan.\n"
+        "3. Bevestig de actuele markttrend.",
+        "resp-read-priorities", ({"name": "get_active_plan_and_strategy", "status": "completed",
+            "result": {"results": [{"scope": "read_linked_strategy", "status": "completed",
+                                  "data": {"entry": 80000, "stop_loss": 76000,
+                                           "targets": [88000, 92000]}}]}},),
+        "free_text", "priorities",
+    )
+    verified = asyncio.run(FinnResponsesAnswerVerifier(semantic=semantic).verify(
+        message="Wat zijn mijn drie prioriteiten?", result=result, locale="nl",
+    ))
+    assert verified.status == "completed"
+    assert "1. Controleer of de opgeslagen entry" in verified.text
+    assert "huidige marktprijs" not in verified.text
+    assert "plaats geen order" in verified.text
+
+
 def test_plan_evaluation_inventory_is_rewritten_as_coaching():
     semantic = SimpleNamespace(verify_async=AsyncMock(return_value=SimpleNamespace(
         available=True, passes=True, reason_codes=[],
@@ -4861,7 +5096,9 @@ def test_plan_evaluation_inventory_is_rewritten_as_coaching():
                 "assessment_status": "insufficient_evidence",
                 "missing_required_scopes": ["market_snapshot"],
                 "results": [{"scope": "read_active_setup", "status": "completed",
-                             "data": {"name": "Coach DCA Basis", "setup_type": "dca"}}],
+                             "data": {"name": "Coach DCA Basis", "setup_type": "dca"}},
+                            {"scope": "read_linked_strategy", "status": "unavailable",
+                             "reason": "strategy_not_resolved", "data": None}],
             },
         },),
     )
@@ -4873,6 +5110,13 @@ def test_plan_evaluation_inventory_is_rewritten_as_coaching():
         "source": "owner_scoped_persisted_read",
         "setup": {"name": "Coach DCA Basis", "setup_type": "dca"},
         "strategy": {}, "profile_saved": False,
+        "component_statuses": {
+            "read_active_setup": {"status": "completed", "reason": None},
+            "read_linked_strategy": {"status": "unavailable", "reason": "strategy_not_resolved"},
+        },
+    }
+    assert repair_input["typed_scope_statuses"]["read_linked_strategy"] == {
+        "status": "unavailable", "reason": "strategy_not_resolved",
     }
     assert repair_input["proposed_change_is_not_saved"] is True
     assert not verifier._evaluation_presentation_is_coaching(result.text)

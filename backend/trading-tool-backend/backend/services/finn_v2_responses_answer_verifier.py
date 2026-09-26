@@ -17,6 +17,7 @@ from backend.services.finn_v2_responses_loop import (
     FinnResponsesResult,
     limited_evaluation_answer,
     limited_evaluation_format,
+    plan_review_next_step_from_evidence,
 )
 from backend.services.finn_v2_semantic_verifier_service import FinnV2SemanticVerifierService
 from backend.services.finn_v2_lifecycle_budget import remaining_lifecycle_seconds
@@ -134,6 +135,12 @@ class FinnResponsesAnswerVerifier:
                 rf"\b{inferred_horizon}\b",
                 sentence, re.IGNORECASE,
             )
+            or re.search(
+                r"\b(?:hierdoor|daardoor|therefore|thus|dadurch|deshalb)\b[^.!?\n]{0,100}"
+                r"\b(?:beschouwd\s+als|considered(?:\s+(?:as|to\s+be))?|angesehen\s+als|gilt\s+als)\b"
+                rf"[^.!?\n]{{0,75}}\b{inferred_horizon}\b",
+                sentence, re.IGNORECASE,
+            )
             for sentence in re.split(r"(?<=[.!?])\s+", text)
         ) and not re.search(
             r"\b(?:dit|deze|het|this|it|das|dieses)\s+is\s+(?:geen|not|kein)\s+swing.?trad\w*\b"
@@ -194,7 +201,7 @@ class FinnResponsesAnswerVerifier:
         }[language]
 
     @classmethod
-    def _limited_evaluation_copy(cls, *, message: str, locale: str | None) -> str:
+    def _proposed_change_copy(cls, *, message: str, locale: str | None) -> str | None:
         proposal = re.search(
             r"(?:€\s*\d[\d.,]*|\d[\d.,]*\s*(?:euros?|eur|€))"
             r"\s*(?:(?:per|pro)\s+(?:week|woche|month|monat|maand|day|tag|dag))?",
@@ -206,13 +213,25 @@ class FinnResponsesAnswerVerifier:
             message, re.IGNORECASE,
         )
         if not proposal or not proposed_intent:
-            return cls._fallback_copy("limited_evaluation", message=message, locale=locale)
+            return None
         amount = proposal.group().strip()
         language = locale if locale in {"nl", "en", "de"} else cls._fallback_language(message)
         return {
-            "nl": f"Je overweegt {amount}. Ik kan nog niet beoordelen of die wijziging bij je risicostijl past: de benodigde actuele gegevens ontbreken. Je opgeslagen setup blijft ongewijzigd.",
-            "en": f"You are considering {amount}. I can't yet assess whether that change suits your risk style because the required current data is missing. Your saved setup remains unchanged.",
-            "de": f"Du erwägst {amount}. Ob diese Änderung zu deinem Risikoprofil passt, kann ich ohne die nötigen aktuellen Daten noch nicht beurteilen. Dein gespeichertes Setup bleibt unverändert.",
+            "nl": f"Je overweegt {amount}.",
+            "en": f"You are considering {amount}.",
+            "de": f"Du erwägst {amount}.",
+        }[language]
+
+    @classmethod
+    def _limited_evaluation_copy(cls, *, message: str, locale: str | None) -> str:
+        proposed = cls._proposed_change_copy(message=message, locale=locale)
+        if proposed is None:
+            return cls._fallback_copy("limited_evaluation", message=message, locale=locale)
+        language = locale if locale in {"nl", "en", "de"} else cls._fallback_language(message)
+        return {
+            "nl": f"{proposed} Ik kan nog niet beoordelen of die wijziging bij je risicostijl past: de benodigde actuele gegevens ontbreken. Je opgeslagen setup blijft ongewijzigd.",
+            "en": f"{proposed} I can't yet assess whether that change suits your risk style because the required current data is missing. Your saved setup remains unchanged.",
+            "de": f"{proposed} Ob diese Änderung zu deinem Risikoprofil passt, kann ich ohne die nötigen aktuellen Daten noch nicht beurteilen. Dein gespeichertes Setup bleibt unverändert.",
         }[language]
 
     @staticmethod
@@ -421,7 +440,32 @@ class FinnResponsesAnswerVerifier:
             r"(?:feiten|gegevens|informatie|facts|data|information|fakten|daten|informationen)\b"
             r"[^.!?\n]{0,80}\b(?:markt|market|koers|price|börse|kurs)\w*",
             text, re.IGNORECASE,
+        ) or re.search(
+            r"\b(?:update\w*|actualiseer\w*|ververs\w*|refresh\w*|aktualisier\w*)\b"
+            r"[^.!?\n]{0,85}\b(?:markt|market|technisch|technical|markt|technisch)\w*"
+            r"[^.!?\n]{0,35}\b(?:data|gegevens|snapshot|daten)\b",
+            text, re.IGNORECASE,
         ))
+
+    @staticmethod
+    def _uses_unavailable_live_source_as_current_action(text: str) -> bool:
+        for sentence in re.split(r"[.!?;\n]+", text):
+            current_source_action = re.search(
+                r"\b(?:controleer|vergelijk|evalueer|bekijk|bevestig|volg|monitor|houd|"
+                r"check|compare|evaluate|review|"
+                r"confirm|track|watch|prüfe|vergleiche|bewerte|bestätige|beobachte)\b"
+                r"[^.!?;\n]{0,110}"
+                r"\b(?:prijs|koers|markt|indicator|price|market|kurs|indikator)\w*\b",
+                sentence, re.IGNORECASE,
+            )
+            waits_for_availability = re.search(
+                r"\b(?:zodra|wanneer|als|when|once|sobald|wenn)\b[^.!?;\n]{0,75}"
+                r"\b(?:beschikbaar|available|verfügbar)\b",
+                sentence, re.IGNORECASE,
+            )
+            if current_source_action and not waits_for_availability:
+                return True
+        return False
 
     @staticmethod
     def _followup_advances_conversation(message: str, previous_answer: str, text: str) -> bool:
@@ -450,14 +494,14 @@ class FinnResponsesAnswerVerifier:
     @staticmethod
     def _ungrounded_level_advice(text: str) -> bool:
         ratio_praise = re.search(
-            r"\b(?:aantrekkelijk\w*|gunstig\w*|sterk\w*|goed|positiev\w*|positief|beter|"
+            r"\b(?:aantrekkelijk\w*|gunstig\w*|sterk\w*|goed\w*|positiev\w*|positief|beter|"
             r"attractive|favorable|favourable|good|strong|positive|better|attraktiv|günstig|gut|"
-            r"positiv\w*|besser)\b[^.!?;\n]{0,55}"
-            r"\b(?:risico.?opbrengst\w*|risico.?rendement\w*|risk.?reward\w*|reward.?risk\w*|"
+            r"positiv\w*|besser)\b[^.!?;\n]{0,100}"
+            r"\b(?:risico.?opbrengst\w*|risico.?rendement\w*|risico.?beloning\w*|risk.?reward\w*|reward.?risk\w*|"
             r"verhouding\w*|ratio\w*|verhältnis\w*)\b"
-            r"|\b(?:risico.?opbrengst\w*|risico.?rendement\w*|risk.?reward\w*|reward.?risk\w*|"
-            r"verhouding\w*|ratio\w*|verhältnis\w*)\b[^.!?;\n]{0,55}"
-            r"\b(?:aantrekkelijk\w*|gunstig\w*|sterk\w*|goed|positiev\w*|positief|beter|"
+            r"|\b(?:risico.?opbrengst\w*|risico.?rendement\w*|risico.?beloning\w*|risk.?reward\w*|reward.?risk\w*|"
+            r"verhouding\w*|ratio\w*|verhältnis\w*)\b[^.!?;\n]{0,100}"
+            r"\b(?:aantrekkelijk\w*|gunstig\w*|sterk\w*|goed\w*|positiev\w*|positief|beter|"
             r"attractive|favorable|favourable|good|strong|positive|better|attraktiv|günstig|gut|"
             r"positiv\w*|besser)\b",
             text, re.IGNORECASE,
@@ -473,6 +517,12 @@ class FinnResponsesAnswerVerifier:
             r"\b(?:doel|target|price|prijs|markt|market|ziel|preis)\b",
             text, re.IGNORECASE,
         )
+        speculative_level_change = re.search(
+            r"\b(?:bepaal|overweeg|consider|decide|entscheide|überlege)\b"
+            r"[^.!?;\n]{0,100}\b(?:entry|instap|stop.?loss|target|doel|einstieg|ziel)\w*\b"
+            r"[^.!?;\n]{0,70}\b(?:aanpass\w*|adjust\w*|chang\w*|änder\w*)\b",
+            text, re.IGNORECASE,
+        )
         trade_planning = re.search(
             r"\b(?:plan|overweeg|neem|take|planen|plane|nimm)\s+"
             r"(?:je\s+)?(?:winstneming\w*|profit.?tak\w*|gewinnmitnahme\w*)\b"
@@ -480,7 +530,8 @@ class FinnResponsesAnswerVerifier:
             r"[^.!?;\n]{0,20}\b(?:plannen|plan|overwegen|nemen|take|planen)\b",
             text, re.IGNORECASE,
         )
-        return bool(ratio_praise or directed_change or conditional_change or trade_planning)
+        return bool(ratio_praise or directed_change or conditional_change
+                    or speculative_level_change or trade_planning)
 
     @staticmethod
     def _proposal_speaker_is_user(text: str) -> bool:
@@ -716,6 +767,32 @@ class FinnResponsesAnswerVerifier:
         return claimed <= grounded
 
     @staticmethod
+    def _static_risk_units_supported(answer: str, evidence: tuple[dict[str, Any], ...]) -> bool:
+        risk_values = {
+            Decimal(str(geometry["risk_per_unit"]))
+            for item in evidence
+            if item.get("scope") == "read_linked_strategy" and item.get("status") == "completed"
+            for geometry in [(item.get("data") or {}).get("level_geometry")]
+            if isinstance(geometry, dict) and geometry.get("status") == "completed"
+            and geometry.get("risk_per_unit") is not None
+        }
+        if not risk_values:
+            return True
+        for match in re.finditer(
+            r"\b(?:risicopercentage|risk\s+percentage|risikoprozentsatz)\b"
+            r"[^.!?;\n]{0,45}\b(\d[\d.,]*)\b",
+            answer, re.IGNORECASE,
+        ):
+            token = match.group(1)
+            normalized = token.replace(".", "").replace(",", "") if re.search(r"[.,]\d{3}$", token) else token.replace(",", ".")
+            try:
+                if Decimal(normalized) in risk_values:
+                    return False
+            except InvalidOperation:
+                continue
+        return True
+
+    @staticmethod
     def _asset_quantities_supported(
         *, answer: str, message: str, evidence: tuple[dict[str, Any], ...],
     ) -> bool:
@@ -891,6 +968,13 @@ class FinnResponsesAnswerVerifier:
                         "is missing or asking whether the user wants to create one is allowed; "
                         "neither claims a saved strategy exists. Mark unsupported_entity_claim=true "
                         "only when the answer calls a saved setup a saved strategy or invents a linked object. "
+                        "For a review of a saved plan, treat typed unavailable plan components as "
+                        "evidence limits, not as absent audit input. If a setup exists but its linked "
+                        "strategy is unavailable, a next step that only waits for market data or "
+                        "continues following the plan does not address the missing plan structure. "
+                        "Mark actionable_next_decision=false unless the answer identifies a concrete "
+                        "user-controlled way to clarify or complete that missing component, without "
+                        "claiming a strategy must exist for every DCA setup. "
                         "Mark proposed_as_saved=true when a value mentioned only in the user's "
                         "hypothetical proposal is described as the current persisted setting. "
                         "A proposal of 100 euros per week is not a saved amount when the saved "
@@ -1381,6 +1465,7 @@ class FinnResponsesAnswerVerifier:
                     answer=text, message=message, previous_answer=previous_answer,
                     evidence=evidence, response_focus=result.response_focus,
                 )
+                and self._static_risk_units_supported(text, evidence)
                 and self._asset_quantities_supported(
                     answer=text, message=message, evidence=evidence,
                 )
@@ -1431,6 +1516,101 @@ class FinnResponsesAnswerVerifier:
         )
 
         def limited_fallback() -> FinnResponsesVerifiedAnswer:
+            if result.response_focus == "priorities":
+                has_strategy = any(
+                    item.get("scope") == "read_linked_strategy"
+                    and item.get("status") == "completed"
+                    and isinstance(item.get("data"), dict)
+                    and all(item["data"].get(field) for field in ("entry", "stop_loss", "targets"))
+                    for item in evidence
+                )
+                market_unavailable = not any(
+                    item.get("scope") == "read_market_snapshot"
+                    and item.get("status") == "completed"
+                    for item in evidence
+                )
+                if has_strategy and market_unavailable:
+                    copy = {
+                        "nl": (
+                            "1. Controleer of de opgeslagen entry, stop-loss en doelen nog de niveaus zijn die jij bedoelt; dit is geen marktoordeel.\n"
+                            "2. Bepaal welk maximaal verlies per positie binnen je eigen risicobudget past voordat je een inzet kiest.\n"
+                            "3. Laat een nieuwe entrybeslissing open totdat een actuele bron jouw voorwaarden kan toetsen.\n"
+                            "Laat liggen: verander geen opgeslagen niveaus en plaats geen order alleen uit FOMO."
+                        ),
+                        "en": (
+                            "1. Check whether the saved entry, stop-loss and targets are still the levels you intend; this is not a market assessment.\n"
+                            "2. Decide what maximum loss per position fits your risk budget before choosing a stake.\n"
+                            "3. Leave a new entry decision open until current evidence can test your conditions.\n"
+                            "Avoid: do not change saved levels or place an order just because of FOMO."
+                        ),
+                        "de": (
+                            "1. Prüfe, ob der gespeicherte Einstieg, Stop-Loss und die Ziele noch deinen beabsichtigten Werten entsprechen; das ist keine Marktbeurteilung.\n"
+                            "2. Bestimme vor einer Einsatzentscheidung, welcher maximale Verlust pro Position in dein Risikobudget passt.\n"
+                            "3. Lass eine neue Einstiegsentscheidung offen, bis aktuelle Daten deine Bedingungen prüfen können.\n"
+                            "Vermeide es, gespeicherte Werte zu ändern oder allein aus FOMO eine Order zu platzieren."
+                        ),
+                    }[locale if locale in {"nl", "en", "de"} else "nl"]
+                    return FinnResponsesVerifiedAnswer(
+                        "completed", copy, "insufficient_evidence", evidence, bool(previous_response),
+                    )
+            if result.response_focus == "review":
+                saved_setup = next((
+                    item.get("data") for item in evidence
+                    if item.get("scope") == "read_active_setup"
+                    and item.get("status") == "completed"
+                    and isinstance(item.get("data"), dict)
+                ), None)
+                missing_strategy = any(
+                    item.get("scope") == "read_linked_strategy"
+                    and item.get("reason") == "strategy_not_resolved"
+                    for item in evidence
+                )
+                if saved_setup and missing_strategy:
+                    name = str(saved_setup.get("name") or "").strip()
+                    has_market = any(
+                        item.get("scope") == "read_market_snapshot"
+                        and item.get("status") == "completed"
+                        for item in evidence
+                    )
+                    phrases = {
+                        "nl": (
+                            "Wat vaststaat: Je setup{named} is opgeslagen.",
+                            "Wat ik niet kan beoordelen: Voor deze setup is geen gekoppelde strategie gevonden{market}. "
+                            "Ik kan daardoor geen afzonderlijke uitvoeringsregels of geschiktheid bevestigen.",
+                            "Eerst kiezen: Wil je deze setup als zelfstandig plan bespreken of er een aparte strategie aan koppelen?",
+                            "; ook actuele marktdata ontbreken" if not has_market else "",
+                        ),
+                        "en": (
+                            "What is established: Your setup{named} is saved.",
+                            "What I cannot assess: No linked strategy was found for this setup{market}. "
+                            "I cannot verify separate execution rules or suitability from that.",
+                            "Choose first: Do you want to discuss this setup as a standalone plan or link a separate strategy?",
+                            "; current market data are also unavailable" if not has_market else "",
+                        ),
+                        "de": (
+                            "Was feststeht: Dein Setup{named} ist gespeichert.",
+                            "Was ich nicht beurteilen kann: Für dieses Setup wurde keine verknüpfte Strategie gefunden{market}. "
+                            "Eigene Ausführungsregeln oder Eignung kann ich daraus nicht bestätigen.",
+                            "Entscheide zuerst: Möchtest du dieses Setup als eigenständigen Plan besprechen oder eine separate Strategie verknüpfen?",
+                            "; aktuelle Marktdaten fehlen ebenfalls" if not has_market else "",
+                        ),
+                    }[locale if locale in {"nl", "en", "de"} else "nl"]
+                    named = f" ‘{name}’" if name else ""
+                    proposed = self._proposed_change_copy(message=message, locale=locale)
+                    proposed_next_step = {
+                        "nl": "Eerst controleren: Welk deel van je beschikbare budget en bestaande blootstelling zou deze voorgestelde inleg innemen?",
+                        "en": "Check first: How much of your available budget and existing exposure would this proposed contribution use?",
+                        "de": "Prüfe zuerst: Welchen Anteil deines verfügbaren Budgets und deiner bestehenden Positionen würde dieser vorgeschlagene Betrag beanspruchen?",
+                    }[locale if locale in {"nl", "en", "de"} else "nl"]
+                    return FinnResponsesVerifiedAnswer(
+                        "completed", "\n".join((
+                            *([proposed] if proposed else []),
+                            phrases[0].format(named=named),
+                            phrases[1].format(market=phrases[3]),
+                            proposed_next_step if proposed else phrases[2],
+                        )),
+                        "insufficient_evidence", evidence, bool(previous_response),
+                    )
             missed_structure = "requested_structure_missing" in (
                 advice_diagnostics.get(result.text, {}).get("rejected_checks") or []
             )
@@ -1442,25 +1622,23 @@ class FinnResponsesAnswerVerifier:
                 and isinstance(item.get("data"), dict)
                 and all(item["data"].get(field) for field in ("entry", "stop_loss", "targets"))
             ), None)
-            if saved_strategy and self._evaluation_presentation_is_coaching(result.text):
+            if saved_strategy:
                 copy = {
                     "nl": (
-                        "Sterk: je opgeslagen strategie legt entry, stop-loss en doelen expliciet vast. "
-                        "Ik rem je af bij een oordeel over geschiktheid: daarvoor ontbreken nog "
-                        "voldoende persoonlijke of actuele marktgegevens. Controleer eerst je "
-                        "risicoprofiel en een verse marktsnapshot voordat je beslist; je instellingen blijven ongewijzigd."
+                        "Sterk als vastgelegd controlepunt: je opgeslagen strategie bevat entry, stop-loss en doelen. "
+                        "Ik rem je af bij een oordeel over geschiktheid: of die niveaus bij de markt en jouw risicobudget passen, kan ik met het beschikbare bewijs niet beoordelen. "
+                        "Controleer eerst welke maximale verliesruimte per positie je hiervoor wilt aanhouden. "
+                        "Je instellingen blijven ongewijzigd."
                     ),
                     "en": (
-                        "A strength is that your saved strategy explicitly records entry, stop-loss and targets. "
-                        "I would hold back on judging suitability: sufficient personal or current market evidence "
-                        "is missing. Check your risk profile and a fresh market snapshot before deciding; "
-                        "your settings remain unchanged."
+                        "What is established: your saved strategy has an entry, stop-loss and targets. "
+                        "I cannot judge whether those levels fit the market and your risk budget from the available evidence. "
+                        "What maximum loss per position do you want to allow? Your settings remain unchanged."
                     ),
                     "de": (
-                        "Eine Stärke ist, dass deine gespeicherte Strategie Einstieg, Stop-Loss und Ziele "
-                        "ausdrücklich festhält. Bei einem Eignungsurteil bremse ich: Dafür fehlen noch "
-                        "ausreichende persönliche oder aktuelle Marktdaten. Prüfe zuerst dein Risikoprofil "
-                        "und einen frischen Marktsnapshot; deine Einstellungen bleiben unverändert."
+                        "Was feststeht: Deine gespeicherte Strategie enthält Einstieg, Stop-Loss und Ziele. "
+                        "Ob diese Werte zum Markt und deinem Risikobudget passen, kann ich mit den verfügbaren Daten nicht beurteilen. "
+                        "Welchen maximalen Verlust pro Position möchtest du zulassen? Deine Einstellungen bleiben unverändert."
                     ),
                 }[locale if locale in {"nl", "en", "de"} else "nl"]
                 return FinnResponsesVerifiedAnswer(
@@ -1814,14 +1992,30 @@ class FinnResponsesAnswerVerifier:
             )
             for item in (*evidence, *(relevant_previous_source_evidence if reusing_previous_read else []))
         )
+        review_has_missing_plan_component = (
+            result.response_focus == "review"
+            and any(
+                call.get("result", {}).get("evaluation_operation_id") == "evaluate_plan"
+                for call in evaluation_calls
+            )
+            and any(item.get("scope") == "read_active_setup" and item.get("status") == "completed"
+                    for item in evidence)
+            and any(item.get("scope") == "read_linked_strategy" and item.get("status") != "completed"
+                    for item in evidence)
+        )
         unavailable_technical = any(
             item.get("scope") == "read_technical_snapshot"
             and item.get("status") != "completed"
             for item in evidence
         )
+        unavailable_live_for_priorities = (
+            result.response_focus == "priorities"
+            and not any(item.get("scope") == "read_market_snapshot"
+                        and item.get("status") == "completed" for item in evidence)
+        )
         advice_evidence = [
             item for item in compact
-            if item.get("status") == "completed"
+            if item.get("status") in {"completed", "unavailable", "stale", "error"}
             and (
                 item.get("lineage") != "previous_verified_run"
                 or item.get("scope") == "read_profile"
@@ -1863,7 +2057,11 @@ class FinnResponsesAnswerVerifier:
                         if reusing_previous_read else None
                     ),
                     require_address_judgment=result.answer_kind != "grounded_next_decision",
-                    require_actionable_next_decision=result.answer_kind == "grounded_next_decision",
+                    require_actionable_next_decision=(
+                        result.answer_kind == "grounded_next_decision"
+                        or review_has_missing_plan_component
+                        or result.response_focus == "priorities"
+                    ),
                     answering_previous_question=result.answer_kind == "answers_previous_question",
                     conditional_process=result.answer_kind == "conditional_process",
                     locale=locale,
@@ -1906,6 +2104,8 @@ class FinnResponsesAnswerVerifier:
                      or not self._asks_user_to_supply_unavailable_source(text))
                 and (not unavailable_without_cause
                      or not self._asks_user_to_supply_unavailable_source(text))
+                and (not unavailable_live_for_priorities
+                     or not self._uses_unavailable_live_source_as_current_action(text))
                 and (not message.startswith("Original user request:")
                      or self._evaluation_presentation_is_coaching(text))
                 and
@@ -2022,6 +2222,11 @@ class FinnResponsesAnswerVerifier:
                     )
             else:
                 logger.info("FINN catalog focus repair produced no valid single-option answer")
+        if limited_evaluation and result.response_focus == "review" and any(
+            call["result"].get("evaluation_operation_id") == "evaluate_plan"
+            for call in evaluation_calls
+        ):
+            return limited_fallback()
         if not verification_available or not verdict_passes or not quantities_supported(result.text) or not advice_ok or not technical_ok or not catalog_ok or not presentation_ok(result.text):
             if static_answer:
                 return FinnResponsesVerifiedAnswer(
@@ -2079,11 +2284,12 @@ class FinnResponsesAnswerVerifier:
                         "reason": item.get("reason"),
                     }
                     for item in evidence
-                    if item.get("scope") in focused_scopes and item.get("status") == "completed"
+                    if item.get("scope") in focused_scopes
                 ]
                 focused_data = {
                     item["scope"]: item["data"] for item in focused_evidence
-                    if item.get("scope") in {"read_profile", "read_active_setup", "read_linked_strategy"}
+                    if item.get("status") == "completed"
+                    and item.get("scope") in {"read_profile", "read_active_setup", "read_linked_strategy"}
                     and isinstance(item.get("data"), dict)
                 }
                 saved_setup = focused_data.get("read_active_setup", {})
@@ -2099,6 +2305,16 @@ class FinnResponsesAnswerVerifier:
                         "targets", "entry_type", "level_geometry",
                     ) if saved_strategy.get(key) is not None},
                     "profile_saved": saved_profile.get("has_profile") is True,
+                    "component_statuses": {
+                        item["scope"]: {
+                            "status": item["status"],
+                            "reason": item.get("reason"),
+                        }
+                        for item in focused_evidence
+                        if item.get("scope") in {
+                            "read_active_setup", "read_linked_strategy", "read_linked_bot",
+                        }
+                    },
                 }
                 try:
                     response = await asyncio.wait_for(
@@ -2116,6 +2332,13 @@ class FinnResponsesAnswerVerifier:
                                 "specified levels, not proof of good risk management, attractive "
                                 "ratios, plan strength, target feasibility or personal fit. "
                                 "A stated rule is not a saved rule unless it appears in saved data. "
+                                "The component_statuses are typed results of actual owner-scoped reads. "
+                                "If a setup was read but its linked strategy is unavailable, do not "
+                                "call that setup a saved strategy or praise its strategy rules. In a "
+                                "plan review, identify the missing component as a distinct structural "
+                                "limit and make the next check a concrete choice the owner can make, "
+                                "rather than only waiting for unavailable market data. A DCA setup "
+                                "does not by itself require the user to create a strategy. "
                                 "A review must identify a verifiable structural fact, a concrete "
                                 "limitation, and one check; having saved levels permits arithmetic "
                                 "but does not make a plan good or suitable. A calculation must "
@@ -2150,6 +2373,11 @@ class FinnResponsesAnswerVerifier:
                                         "read_technical_snapshot", "read_asset_scores",
                                     }
                                 ],
+                                "typed_scope_statuses": {
+                                    item["scope"]: {"status": item["status"], "reason": item.get("reason")}
+                                    for item in focused_evidence
+                                    if item.get("status") != "completed"
+                                },
                                 "rejected_checks": advice_diagnostics.get(result.text, {}).get("rejected_checks", [])
                                 + (["assessment_presentation_not_coaching"] if not presentation_ok(result.text) else []),
                             }, ensure_ascii=False, default=str),
@@ -2158,7 +2386,11 @@ class FinnResponsesAnswerVerifier:
                         ),
                         timeout=min(8.0, remaining - 3 if remaining is not None else 8.0),
                     )
-                    focused = limited_evaluation_answer(str(response.output_text), locale=locale)
+                    focused = limited_evaluation_answer(
+                        str(response.output_text), locale=locale,
+                        review_next_step=plan_review_next_step_from_evidence(evidence, locale)
+                        if result.response_focus == "review" else None,
+                    )
                     focused_verdict, focused_advice, focused_technical, focused_catalog = await asyncio.gather(
                         verify_text(focused), advice_supported(focused),
                         technical_supported(focused), catalog_focused(focused),
@@ -2174,6 +2406,15 @@ class FinnResponsesAnswerVerifier:
                         "FINN focused evaluation repair unavailable: %s",
                         str(exc) if isinstance(exc, FinnResponsesError) else type(exc).__name__,
                     )
+        if result.response_focus == "priorities" and unavailable_live_for_priorities and not presentation_ok(result.text):
+            return limited_fallback()
+        if limited_evaluation and (
+            result.response_focus == "review"
+            or
+            review_has_missing_plan_component
+            or (result.response_focus == "priorities" and unavailable_live_for_priorities)
+        ):
+            return limited_fallback()
         if verification_available and (not verdict_passes or not quantities_supported(result.text) or not advice_ok or not technical_ok or not catalog_ok or not presentation_ok(result.text)) and self.client is not None:
             remaining = remaining_lifecycle_seconds()
             if remaining is None or remaining > 8:
@@ -2438,7 +2679,11 @@ class FinnResponsesAnswerVerifier:
                             if getattr(part, "type", None) == "output_text"
                         ).strip()
                     if revised and limited_evaluation:
-                        revised = limited_evaluation_answer(revised, locale=locale)
+                        revised = limited_evaluation_answer(
+                            revised, locale=locale,
+                            review_next_step=plan_review_next_step_from_evidence(evidence, locale)
+                            if result.response_focus == "review" else None,
+                        )
                     if revised:
                         (revised_verdict, revised_advice_ok, revised_technical_ok,
                          revised_catalog_ok) = await asyncio.gather(

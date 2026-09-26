@@ -204,10 +204,12 @@ def main() -> None:
                     "ik kan nog niet beoordelen of dit bij je risicostijl past",
                 ))
                 and any(phrase in answer.casefold() for phrase in {
-                    "nl": ("wacht tot", "controleer of", "controleer eerst of", "moet controleren of", "check of"),
-                    "en": ("wait until", "check whether", "verify that", "confirm whether"),
-                    "de": ("warte bis", "prüfe ob", "prüf ob", "sicherstellen, dass"),
+                    "nl": ("wacht tot", "controleer of", "controleer eerst of", "moet controleren of", "check of", "wachtregel niet negeren", "negeer de wachtregel niet"),
+                    "en": ("wait until", "check whether", "verify that", "confirm whether", "not ignore the wait rule"),
+                    "de": ("warte bis", "prüfe ob", "prüf ob", "sicherstellen, dass", "warteregel nicht ignorieren"),
                 }[args.locale])
+                and not any(detail in answer.casefold() and detail not in question.casefold()
+                            for detail in {"bullish breakout", "prijsactie", "price action", "bullishe ausbruch"})
                 and not answer.casefold().startswith({
                     "nl": "je hebt een dca-setup", "en": "you have a dca setup",
                     "de": "du hast ein dca-setup",

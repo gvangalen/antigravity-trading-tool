@@ -109,7 +109,9 @@ def conditional_process_answer(text: str) -> str:
     return " ".join(part for part in (decision, reason, limit) if part)
 
 
-def limited_evaluation_answer(text: str, *, locale: str | None = None) -> str:
+def limited_evaluation_answer(
+    text: str, *, locale: str | None = None, review_next_step: str | None = None,
+) -> str:
     try:
         structured = json.loads(text)
         context = str(structured["saved_context"] or "").strip()
@@ -150,11 +152,9 @@ def limited_evaluation_answer(text: str, *, locale: str | None = None) -> str:
             "de": ("Was festgelegt ist", "Wo ich dich bremsen würde", "Zuerst prüfen"),
         }[locale if locale in {"nl", "en", "de"} else "nl"]
         review_parts = [
-            context,
             f"{labels[0]}: {strength}",
             f"{labels[1]}: {constraint}",
-            limitation,
-            f"{labels[2]}: {next_step}",
+            f"{labels[2]}: {review_next_step or next_step}",
         ]
         return "\n".join(part for part in review_parts if part).strip()
     prose = " ".join(part if part.endswith((".", "!", "?")) else f"{part}." for part in parts)
@@ -165,6 +165,28 @@ def limited_evaluation_answer(text: str, *, locale: str | None = None) -> str:
     if next_step and focus != "priorities":
         prose += " " + (next_step if next_step.endswith((".", "!", "?")) else f"{next_step}.")
     return prose.strip()
+
+
+def plan_review_next_step_from_evidence(
+    evidence: list[dict[str, Any]] | tuple[dict[str, Any], ...], locale: str | None,
+) -> str | None:
+    """Keep review follow-up choices tied to typed owner-scoped plan reads."""
+    has_setup = any(
+        item.get("scope") == "read_active_setup" and item.get("status") == "completed"
+        for item in evidence
+    )
+    missing_strategy = any(
+        item.get("scope") == "read_linked_strategy" and item.get("status") != "completed"
+        and item.get("reason") == "strategy_not_resolved"
+        for item in evidence
+    )
+    if not (has_setup and missing_strategy):
+        return None
+    return {
+        "nl": "Wil je deze setup als zelfstandig plan beoordelen of er een aparte strategie aan koppelen?",
+        "en": "Do you want to review this setup as a standalone plan or link a separate strategy to it?",
+        "de": "Möchtest du dieses Setup als eigenständigen Plan prüfen oder eine separate Strategie damit verknüpfen?",
+    }[locale if locale in {"nl", "en", "de"} else "nl"]
 
 
 @dataclass(frozen=True)
@@ -617,7 +639,17 @@ class FinnResponsesLoop:
                         raise FinnResponsesError("responses_next_decision_incomplete")
                     answer = f"{reason} {decision}"
                 elif limited_evaluations:
-                    answer = limited_evaluation_answer(answer, locale=locale)
+                    evaluation_evidence = [
+                        item for evaluation in limited_evaluations
+                        for item in (evaluation.get("results") or [])
+                        if isinstance(item, dict)
+                    ]
+                    answer = limited_evaluation_answer(
+                        answer, locale=locale,
+                        review_next_step=plan_review_next_step_from_evidence(
+                            evaluation_evidence, locale,
+                        ) if response_focus_check is not None and response_focus_check() == "review" else None,
+                    )
                 elif conditional_process_check is not None and conditional_process_check() and kwargs.get("text") == conditional_process_format():
                     answer = conditional_process_answer(answer)
                 elif kwargs.get("text") == priority_process_format():
