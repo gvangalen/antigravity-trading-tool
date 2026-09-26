@@ -3,6 +3,16 @@ from __future__ import annotations
 from backend.schemas.finn_v2_evidence_schema import ActiveSetupData
 
 
+def _dca_day_name(value: object) -> str | None:
+    days = ("monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday")
+    if value is None:
+        return None
+    raw = str(value).strip().lower()
+    if raw in days:
+        return raw
+    return days[int(raw) - 1] if raw.isdigit() and 1 <= int(raw) <= 7 else None
+
+
 class SetupToolAdapter:
     async def execute(self, *, setup: dict, resolution_source: str, setups=None, **_kwargs):
         collection = [
@@ -14,6 +24,7 @@ class SetupToolAdapter:
                 "setup_type": row.get("setup_type"),
                 "dca_frequency": row.get("dca_frequency"),
                 "dca_day": row.get("dca_day"),
+                "dca_day_name": _dca_day_name(row.get("dca_day")),
                 "dca_month_day": row.get("dca_month_day"),
                 "min_investment": row.get("min_investment"),
             }
@@ -27,6 +38,7 @@ class SetupToolAdapter:
             setup_type=setup.get("setup_type"),
             dca_frequency=setup.get("dca_frequency"),
             dca_day=setup.get("dca_day"),
+            dca_day_name=_dca_day_name(setup.get("dca_day")),
             dca_month_day=setup.get("dca_month_day"),
             min_investment=setup.get("min_investment"),
             score=float(setup.get("score") or 0) if setup.get("score") is not None else None,

@@ -4,14 +4,19 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation
+from difflib import SequenceMatcher
 import asyncio
 import json
 import logging
 import re
 from typing import Any
-from langdetect import DetectorFactory, LangDetectException, detect
+from langdetect import DetectorFactory, LangDetectException, detect, detect_langs
 
-from backend.services.finn_v2_responses_loop import FinnResponsesResult
+from backend.services.finn_v2_responses_loop import (
+    FinnResponsesResult,
+    limited_evaluation_answer,
+    limited_evaluation_format,
+)
 from backend.services.finn_v2_semantic_verifier_service import FinnV2SemanticVerifierService
 from backend.services.finn_v2_lifecycle_budget import remaining_lifecycle_seconds
 
@@ -35,6 +40,107 @@ class FinnResponsesAnswerVerifier:
         self.client = client
 
     @staticmethod
+    def _language_matches(text: str, locale: str | None) -> bool:
+        if locale not in {"nl", "en", "de"}:
+            return True
+        if locale != "en" and re.search(
+            r"\b(?:unassessed|unverified|unavailable)\b", text, re.IGNORECASE,
+        ):
+            return False
+        DetectorFactory.seed = 0
+        for sentence in re.split(r"[.!?\n]+", text):
+            word_count = len(sentence.split())
+            if word_count < 5:
+                continue
+            try:
+                candidate = detect_langs(sentence)[0]
+            except LangDetectException:
+                continue
+            # Short sentences need stronger confidence because names and tickers skew detection.
+            if word_count < 8 and candidate.prob < 0.95:
+                continue
+            if candidate.lang in {"nl", "en", "de"} and candidate.lang != locale:
+                return False
+        return True
+
+    @staticmethod
+    def _german_register_matches(text: str, locale: str | None) -> bool:
+        if locale != "de":
+            return True
+        return not bool(re.search(r"\b(?:Sie|Ihnen|Ihr(?:e|en|em|er|es)?)\b", text))
+
+    @staticmethod
+    def _profile_presence_claim_supported(text: str, evidence: tuple[dict[str, Any], ...]) -> bool:
+        has_saved_risk_profile = any(
+            item.get("scope") == "read_profile"
+            and item.get("status") == "completed"
+            and isinstance(item.get("data"), dict)
+            and bool((item["data"].get("trader_profile") or {}).get("risk_profiles"))
+            for item in evidence
+        )
+        if not has_saved_risk_profile:
+            return True
+        missing_profile_claims = (
+            r"(?:risicoprofiel|risicostijl|risico-instellingen)\s+(?:ontbreekt|ontbreken|missen)",
+            r"(?:geen|zonder)\s+(?:volledig\s+)?inzicht\s+(?:hebben\s+)?in\s+(?:je|jouw|het)\s+(?:risicoprofiel|risicostijl)",
+            r"(?:risk profile|risk style|risk settings)\s+(?:is|are)\s+(?:missing|not available|unknown)",
+            r"(?:no|without)\s+insight\s+into\s+(?:your|the)\s+(?:risk profile|risk style)",
+            r"(?:missing|lack(?:ing)?)\s+(?:your\s+)?(?:risk profile|risk style|risk settings)",
+            r"(?:risikoprofil|risikoeinstellungen|risikostil)\s+(?:fehlt|fehlen)",
+            r"(?:informationen|angaben)\s+über\s+(?:dein(?:e|en)?|das)\s+"
+            r"(?:risikoeinstellung|risikoprofil|risikostil)[^.!?]{0,65}"
+            r"(?:fehl\w*|nicht\s+verfügbar|unbekannt)",
+            r"(?:kein|ohne)\s+einblick\s+in\s+(?:dein|das)\s+risikoprofil",
+            r"(?:fehlend(?:e|en|er|es)?|ohne)\s+(?:\w+\s+){0,2}(?:risikoprofil|risikoeinstellungen|risikostil)",
+        )
+        return not any(re.search(pattern, text.casefold()) for pattern in missing_profile_claims)
+
+    @staticmethod
+    def _saved_horizon_claim_supported(text: str, evidence: tuple[dict[str, Any], ...]) -> bool:
+        saved_objects = [
+            item.get("data") for item in evidence
+            if item.get("status") == "completed"
+            and item.get("scope") in {"read_active_setup", "read_linked_strategy"}
+            and isinstance(item.get("data"), dict)
+        ]
+        if not saved_objects or any(
+            data.get(field) for data in saved_objects
+            for field in ("investment_horizon", "holding_period", "trade_horizon")
+        ):
+            return True
+        inferred_horizon = (
+            r"(?:langetermijn\w*|lange termijn|kortetermijn\w*|swingtrade|swing trade|"
+            r"long.term|short.term|swing.trading|langfristig\w*|kurzfristig\w*)"
+        )
+        return not any(
+            re.search(
+                r"\b(?:je|jouw|mijn|your|my|dein(?:e|er|es)?|mein(?:e|er|es)?)\b"
+                r"[^.!?\n]{0,55}\b(?:setup|plan|strategie|strategy)\b"
+                r"[^.!?\n]{0,75}\b(?:is|betreft|leunt|gericht|richt\s+zich\s+op|means|is geared|is aimed|"
+                r"ist|zielt|deutet|wijst|suggests|indicates)\b"
+                rf"[^.!?\n]{{0,85}}\b{inferred_horizon}\b",
+                sentence, re.IGNORECASE,
+            )
+            or re.search(
+                r"\b(?:setup|plan|strategie|strategy)\b[^.!?\n]{0,100}"
+                r"\b(?:eignet\s+sich|is\s+suited|is\s+gericht|geschikt\s+voor|past|ist\s+darauf\s+ausgelegt)\b"
+                rf"[^.!?\n]{{0,105}}\b{inferred_horizon}\b",
+                sentence, re.IGNORECASE,
+            )
+            or re.search(
+                r"\b(?:dies|das|es|this|that|dit|dat)\b[^.!?\n]{0,45}"
+                r"\b(?:deutet|suggests|indicates|aligns|points|tends|wijst|past)\b[^.!?\n]{0,100}"
+                rf"\b{inferred_horizon}\b",
+                sentence, re.IGNORECASE,
+            )
+            for sentence in re.split(r"(?<=[.!?])\s+", text)
+        ) and not re.search(
+            r"\b(?:dit|deze|het|this|it|das|dieses)\s+is\s+(?:geen|not|kein)\s+swing.?trad\w*\b"
+            r"[^.!?\n]{0,90}\b(?:langetermijn\w*|long.term|langfristig\w*)\b",
+            text, re.IGNORECASE,
+        )
+
+    @staticmethod
     def _fallback_language(message: str, previous_answer: str = "") -> str:
         DetectorFactory.seed = 0
         brief = message.strip().casefold().rstrip("?!. ")
@@ -56,8 +162,8 @@ class FinnResponsesAnswerVerifier:
         return "nl"
 
     @classmethod
-    def _fallback_copy(cls, reason: str, *, message: str, previous_answer: str = "") -> str:
-        language = cls._fallback_language(message, previous_answer)
+    def _fallback_copy(cls, reason: str, *, message: str, previous_answer: str = "", locale: str | None = None) -> str:
+        language = locale if locale in {"nl", "en", "de"} else cls._fallback_language(message, previous_answer)
         copies = {
             "setup_ambiguous": {
                 "nl": "Ik zie meerdere setups. Welke wil je als uitgangspunt voor je plan gebruiken?",
@@ -74,12 +180,111 @@ class FinnResponsesAnswerVerifier:
                 "en": "I can't establish why the data is missing, so I can't reliably assess its effect on your plan yet.",
                 "de": "Ich kann die Ursache der fehlenden Daten nicht feststellen und ihre Auswirkung auf deinen Plan daher noch nicht zuverlässig beurteilen.",
             },
+            "limited_evaluation": {
+                "nl": "Ik kan nog niet beoordelen of dit bij je risicostijl past: de benodigde actuele gegevens ontbreken. Ik zou je huidige instellingen op basis hiervan nog niet wijzigen.",
+                "en": "I can't yet assess whether this fits your risk style because the required current data is missing. I wouldn't change your saved settings on this evidence alone.",
+                "de": "Ich kann noch nicht beurteilen, ob das zu deinem Risikoprofil passt: Die nötigen aktuellen Daten fehlen. Auf dieser Grundlage würde ich deine gespeicherten Einstellungen noch nicht ändern.",
+            },
         }
         return copies.get(reason, {}).get(language) or {
             "nl": "Ik kan dit nog niet onderbouwen met betrouwbare gegevens.",
             "en": "I can't support this with reliable evidence yet.",
             "de": "Ich kann das noch nicht mit verlässlichen Daten belegen.",
         }[language]
+
+    @classmethod
+    def _limited_evaluation_copy(cls, *, message: str, locale: str | None) -> str:
+        proposal = re.search(
+            r"(?:€\s*\d[\d.,]*|\d[\d.,]*\s*(?:euros?|eur|€))"
+            r"\s*(?:(?:per|pro)\s+(?:week|woche|month|monat|maand|day|tag|dag))?",
+            message, re.IGNORECASE,
+        )
+        proposed_intent = re.search(
+            r"\b(?:denk\s+aan|overweeg|wil|considering|consider|thinking\s+of|"
+            r"erwäge|überlege|möchte)\b",
+            message, re.IGNORECASE,
+        )
+        if not proposal or not proposed_intent:
+            return cls._fallback_copy("limited_evaluation", message=message, locale=locale)
+        amount = proposal.group().strip()
+        language = locale if locale in {"nl", "en", "de"} else cls._fallback_language(message)
+        return {
+            "nl": f"Je overweegt {amount}. Ik kan nog niet beoordelen of die wijziging bij je risicostijl past: de benodigde actuele gegevens ontbreken. Je opgeslagen setup blijft ongewijzigd.",
+            "en": f"You are considering {amount}. I can't yet assess whether that change suits your risk style because the required current data is missing. Your saved setup remains unchanged.",
+            "de": f"Du erwägst {amount}. Ob diese Änderung zu deinem Risikoprofil passt, kann ich ohne die nötigen aktuellen Daten noch nicht beurteilen. Dein gespeichertes Setup bleibt unverändert.",
+        }[language]
+
+    @staticmethod
+    def _horizon_clarification_copy(locale: str | None) -> str:
+        return {
+            "nl": "4H beschrijft het tijdsbestek van je grafiek, niet hoelang je wilt beleggen. Beoog je opbouw voor de lange termijn of kortere trades?",
+            "en": "4H describes your chart timeframe, not how long you intend to invest. Are you aiming for long-term accumulation or shorter trades?",
+            "de": "4H beschreibt den Zeitraum deines Charts, nicht deinen Anlagehorizont. Möchtest du langfristig Vermögen aufbauen oder eher kurzfristig handeln?",
+        }[locale if locale in {"nl", "en", "de"} else "nl"]
+
+    @staticmethod
+    def _user_detail_acknowledgement(message: str, locale: str | None) -> str:
+        if message.startswith("Original user request:") and "User's chosen answer:" in message:
+            message = message.rsplit("User's chosen answer:", 1)[1]
+        detail = " ".join(message.split())[:120]
+        return {
+            "nl": f"Ik begrijp je antwoord: ‘{detail}’. Ik neem dit mee in ons gesprek, maar je opgeslagen plan is niet gewijzigd. Of het bij je past, kan ik zonder een actuele beoordeling nog niet zeggen.",
+            "en": f"I understand your answer: ‘{detail}’. I'll use it in this conversation, but your saved plan has not changed. I can't judge whether it suits you without a current assessment.",
+            "de": f"Ich verstehe deine Antwort: „{detail}“. Ich berücksichtige sie in diesem Gespräch, aber dein gespeicherter Plan wurde nicht geändert. Ob er zu dir passt, kann ich ohne aktuelle Beurteilung noch nicht sagen.",
+        }[locale if locale in {"nl", "en", "de"} else "nl"]
+
+    @classmethod
+    def _horizon_detail_acknowledgement(
+        cls, message: str, evidence: tuple[dict[str, Any], ...], locale: str | None,
+    ) -> str:
+        if message.startswith("Original user request:") and "User's chosen answer:" in message:
+            message = message.rsplit("User's chosen answer:", 1)[1]
+        detail = " ".join(message.split())[:120].rstrip(".! ")
+        setup = next((
+            item.get("data") for item in evidence
+            if item.get("scope") == "read_active_setup"
+            and item.get("status") == "completed"
+            and isinstance(item.get("data"), dict)
+        ), None)
+        if not setup or setup.get("setup_type") != "dca":
+            return cls._user_detail_acknowledgement(message, locale)
+        return {
+            "nl": f"Voor je DCA-setup geef je deze beleggingshorizon aan: ‘{detail}’. Dat neem ik mee in dit gesprek; je opgeslagen setup is niet gewijzigd. Of die setup bij je past, vraagt nog een aparte beoordeling.",
+            "en": f"For your DCA setup, you've given this investment horizon: ‘{detail}’. I'll use that in this conversation; your saved setup has not changed. Whether it suits you still needs a separate assessment.",
+            "de": f"Für dein DCA-Setup nennst du diesen Anlagehorizont: „{detail}“. Das berücksichtige ich in diesem Gespräch; dein gespeichertes Setup wurde nicht geändert. Ob es zu dir passt, muss noch gesondert beurteilt werden.",
+        }[locale if locale in {"nl", "en", "de"} else "nl"]
+
+    @staticmethod
+    def _answered_duration_preserved(message: str, answer: str) -> bool:
+        if "User's chosen answer:" not in message:
+            return True
+        chosen = message.rsplit("User's chosen answer:", 1)[1].casefold()
+        number_words = {
+            "one": "1", "two": "2", "three": "3", "four": "4", "five": "5",
+            "six": "6", "seven": "7", "eight": "8", "nine": "9", "ten": "10",
+            "een": "1", "twee": "2", "drie": "3", "vier": "4", "vijf": "5",
+            "zes": "6", "zeven": "7", "acht": "8", "negen": "9", "tien": "10",
+            "eins": "1", "zwei": "2", "drei": "3", "fünf": "5",
+            "sechs": "6", "sieben": "7", "acht": "8", "neun": "9", "zehn": "10",
+        }
+        duration = re.search(
+            r"\b(\d+|one|two|three|four|five|six|seven|eight|nine|ten|"
+            r"een|twee|drie|vier|vijf|zes|zeven|acht|negen|tien|"
+            r"eins|zwei|drei|fünf|sechs|sieben|neun|zehn)\s+"
+            r"(jaar|jaren|year|years|jahr|jahre|jahren)\b", chosen,
+        )
+        if not duration:
+            return True
+        expected = number_words.get(duration.group(1), duration.group(1))
+        for match in re.finditer(
+            r"\b(\d+|one|two|three|four|five|six|seven|eight|nine|ten|"
+            r"een|twee|drie|vier|vijf|zes|zeven|acht|negen|tien|"
+            r"eins|zwei|drei|fünf|sechs|sieben|neun|zehn)\s+"
+            r"(jaar|jaren|year|years|jahr|jahre|jahren)\b", answer.casefold(),
+        ):
+            if number_words.get(match.group(1), match.group(1)) == expected:
+                return True
+        return False
 
     @staticmethod
     def _typed_failure_reason(evidence: tuple[dict[str, Any], ...]) -> str:
@@ -109,6 +314,130 @@ class FinnResponsesAnswerVerifier:
         return bool(re.search(
             r"\bfinn-v2-(?:run|conv|proposal|execution|contract)-[\w-]+\b"
             r"|\b(?:setup|strategy|bot|proposal|execution|run)[\s_-]*id\s*[:#=]",
+            text, re.IGNORECASE,
+        ))
+
+    @staticmethod
+    def _saved_entity_type_supported(text: str, evidence: tuple[dict[str, Any], ...]) -> bool:
+        has_setup = any(item.get("scope") == "read_active_setup" and item.get("status") == "completed"
+                        for item in evidence)
+        has_strategy = any(item.get("scope") == "read_linked_strategy" and item.get("status") == "completed"
+                           for item in evidence)
+        if not has_setup or has_strategy:
+            return True
+        # A saved setup must never be relabeled as a saved strategy when the
+        # linked-strategy read did not find one. This validates a fact, not intent.
+        saved_strategy_claim = (
+            r"\b(?:je hebt|jij hebt|you have|du hast|sie haben)\s+"
+            r"(?:een|an|eine)\s+(?:(?!setup\b|geen\b|no\b|keine\b|ohne\b)\w+[ -]+){0,5}"
+            r"(?:dca[- ]?)?strateg(?:ie|y)\b"
+            r"|\b(?:jouw|uw|your|dein(?:e|er|em|en|es)?|ihr(?:e|er|em|en|es)?)\s+"
+            r"(?:(?:opgeslagen|huidige|actieve|saved|current|active|gespeicherte|aktuelle|aktive)\s+)?"
+            r"(?:dca[- ]?)?strateg(?:ie|y)\b"
+            r"|\b(?:je|jouw|your|dein(?:e)?)\s+[^.!?;\n]{0,25}"
+            r"\bplan\b[^.!?;\n]{0,35}\b(?:gebaseerd op|based on|basiert auf)\s+"
+            r"(?:een|a|eine)?\s*dca[- ]?strateg(?:ie|y)\b"
+            r"|\b(?:plan|setup)\s+(?:is|betreft|ist|is)\s+(?:een|an|eine)\b"
+            r"[^.!?;\n]{0,35}\b(?:dca[- ]?)?strateg(?:ie|y)\b"
+            r"|\b(?:plan|setup)\b[^.!?;\n]{0,55}"
+            r"\b(?:involves|includes|has|bevat|omvat|umfasst|enthält)\b"
+            r"[^.!?;\n]{0,70}\bstrateg(?:ie|y)\b"
+        )
+        return not bool(re.search(saved_strategy_claim, text, re.IGNORECASE))
+
+    @staticmethod
+    def _introduces_new_catalog_option(
+        text: str, previous_answer: str, evidence: tuple[dict[str, Any], ...],
+    ) -> bool:
+        answer_text = text.casefold()
+        previous_text = previous_answer.casefold()
+        for item in evidence:
+            data = item.get("data")
+            if not isinstance(data, dict):
+                continue
+            options = data.get("supported_options")
+            if not isinstance(options, list):
+                continue
+            for option in options:
+                if not isinstance(option, dict):
+                    continue
+                labels = {
+                    str(option.get(key) or "").strip().casefold()
+                    for key in ("name", "display_name")
+                }
+                if any(
+                    len(label) >= 3 and label in answer_text and label not in previous_text
+                    for label in labels
+                ):
+                    return True
+        return False
+
+    @staticmethod
+    def _evaluation_presentation_is_coaching(text: str) -> bool:
+        return not re.search(r"(?m)^\s*(?:#{1,6}\s|(?:[-*]|\d+[.)])\s)", text)
+
+    @staticmethod
+    def _reoffers_attempted_evaluation(text: str) -> bool:
+        return bool(re.search(
+            r"\b(?:wil\s+je|zal\s+ik|zullen\s+we|would\s+you\s+like|shall\s+i|"
+            r"möchtest\s+du|soll\s+ich)\b[^?!.]{0,160}\b"
+            r"(?:[a-zäöü-]{0,24})?(?:beoordel\w*|evaluat\w*|assessment\w*|bewert\w*)\b",
+            text, re.IGNORECASE,
+        ))
+
+    @staticmethod
+    def _asks_user_to_supply_unavailable_source(text: str) -> bool:
+        return bool(re.search(
+            r"\b(?:vraag|verzoek|lever|zoek|request|provide|obtain|ask for|fordere|besorge|liefere)\b"
+            r"[^.!?\n]{0,90}\b(?:marktdata|marktgegevens|marktanalyse|market data|market snapshot|"
+            r"market analysis|marktdaten|marktanalyse)\b",
+            text, re.IGNORECASE,
+        ) or re.search(
+            r"\b(?:als|indien|if|wenn)\s+(?:je|jij|you|du)\s+(?:meer\s+|more\s+|weitere\s+)?"
+            r"(?:feiten|gegevens|informatie|facts|data|information|fakten|daten|informationen)\b"
+            r"[^.!?\n]{0,80}\b(?:markt|market|koers|price|börse|kurs)\w*",
+            text, re.IGNORECASE,
+        ))
+
+    @staticmethod
+    def _followup_advances_conversation(message: str, previous_answer: str, text: str) -> bool:
+        short_why = message.strip().casefold().rstrip("?!. ") in {
+            "waarom", "why", "warum", "wieso", "weshalb",
+        }
+        if not short_why or not previous_answer:
+            return True
+        return SequenceMatcher(
+            None, previous_answer.casefold(), text.casefold(),
+        ).ratio() < 0.8
+
+    @staticmethod
+    def _unevaluated_positive_fit_claim(text: str) -> bool:
+        return bool(re.search(
+            r"\b(?:past|sluit)\s+(?:goed|prima|uitstekend|perfect)\s+(?:bij|aan\s+bij)\b"
+            r"|\b(?:kan|zou)\b[^.!?;\n]{0,65}\b(?:acceptabel|passend|geschikt)\s+(?:zijn|kunnen\s+zijn)\b"
+            r"|\b(?:fits|suits|aligns)\s+(?:well|perfectly|closely)\s+(?:with|to)\b"
+            r"|\b(?:may|might|could)\b[^.!?;\n]{0,65}\b(?:be\s+)?(?:acceptable|suitable)\b"
+            r"|\bpasst\s+(?:gut|perfekt)\s+zu\b"
+            r"|\bkönnte\b[^.!?;\n]{0,120}\b(?:vermögensaufbau|swing.trading)\b"
+            r"[^.!?;\n]{0,90}\bunterstütz\w*\b",
+            text, re.IGNORECASE,
+        ))
+
+    @staticmethod
+    def _proposal_speaker_is_user(text: str) -> bool:
+        return not bool(re.search(
+            r"\b(?:ik\s+(?:denk\s+aan|overweeg|wil)|i\s+(?:am\s+considering|want)|"
+            r"ich\s+(?:erwäge|überlege|möchte))\b[^.!?\n]{0,65}"
+            r"(?:\d+[\d.,]*\s*(?:euro|eur|€)|€\s*\d+)",
+            text, re.IGNORECASE,
+        ))
+
+    @staticmethod
+    def _assistant_does_not_claim_user_mutation(text: str) -> bool:
+        return not bool(re.search(
+            r"\b(?:ik\s+wil|i\s+want\s+to|ich\s+möchte)\b"
+            r"[^.!?\n]{0,90}\b(?:toevoegen|aanmaken|wijzigen|verwijderen|"
+            r"add|create|update|delete|remove|hinzufügen|erstellen|ändern|löschen)\b",
             text, re.IGNORECASE,
         ))
 
@@ -145,6 +474,23 @@ class FinnResponsesAnswerVerifier:
         claims = cls._currency_amounts(answer)
         if not claims:
             return True
+        saved_setup_amount_unknown = any(
+            item.get("scope") == "read_active_setup"
+            and item.get("status") == "completed"
+            and isinstance(item.get("data"), dict)
+            and item["data"].get("min_investment") is None
+            for item in evidence
+        )
+        direction = re.compile(
+            r"\b(?:verhog\w*|verhoog\w*|verlag\w*|verlaag\w*|stijg\w*|daal\w*|"
+            r"increas\w*|decreas\w*|rais\w*|lower\w*|"
+            r"erhöh\w*|senk\w*)\b", re.IGNORECASE,
+        )
+        if saved_setup_amount_unknown and not direction.search(message):
+            for sentence in re.split(r"[.!?\n]+", answer):
+                if (direction.search(sentence) and cls._currency_amounts(sentence)
+                        and re.search(r"\b(?:dca|setup|invest\w*|inleg|betrag)\b", sentence, re.IGNORECASE)):
+                    return False
         grounded = cls._currency_amounts(message) | cls._currency_amounts(previous_answer)
 
         def monetary_fields(value: Any) -> None:
@@ -182,7 +528,8 @@ class FinnResponsesAnswerVerifier:
 
     @staticmethod
     def _currency_units_supported(
-        *, answer: str, message: str, evidence: tuple[dict[str, Any], ...],
+        *, answer: str, message: str, previous_answer: str = "",
+        evidence: tuple[dict[str, Any], ...],
     ) -> bool:
         def units(text: str) -> set[str]:
             normalized = text.casefold()
@@ -194,7 +541,7 @@ class FinnResponsesAnswerVerifier:
             return found
 
         claimed = units(answer)
-        allowed = units(message)
+        allowed = units(message) | units(previous_answer)
 
         def collect_currency(value: Any) -> None:
             if isinstance(value, dict):
@@ -246,13 +593,21 @@ class FinnResponsesAnswerVerifier:
                 timeout=timeout,
             )
             parsed = json.loads(str(getattr(response, "output_text", "") or ""))
-            return parsed.get("unsupported_cause") is False
-        except Exception:
+            supported = parsed.get("unsupported_cause") is False
+            if not supported:
+                logger.info("FINN unavailable-source cause audit rejected answer")
+            return supported
+        except Exception as exc:
+            logger.info("FINN unavailable-source cause audit unavailable: %s", type(exc).__name__)
             return False
 
     async def _personal_advice_is_grounded(
         self, *, answer: str, evidence: list[dict[str, Any]], remaining: float | None,
-        question: str | None = None,
+        question: str | None = None, previous_answer: str | None = None,
+        require_address_judgment: bool = True,
+        require_actionable_next_decision: bool = False,
+        answering_previous_question: bool = False,
+        locale: str | None = None,
     ) -> bool:
         if self.client is None:
             return False
@@ -271,6 +626,7 @@ class FinnResponsesAnswerVerifier:
             response = await asyncio.wait_for(
                 client.responses.create(
                     model="gpt-4o", store=False, tool_choice="none",
+                    temperature=0,
                     instructions=(
                         "Audit a trading-coach answer against ONLY the typed evidence. Distinguish "
                         "stored user choices from evaluated market/risk evidence. A saved profile, "
@@ -281,6 +637,36 @@ class FinnResponsesAnswerVerifier:
                         "settings, and invitations to CHECK suitability by obtaining current "
                         "market or owner-scoped risk evidence are allowed. 'Check whether these "
                         "saved levels suit your risk profile' does NOT claim they suit it. "
+                        "A sentence that accurately restates the user's proposed change, such as "
+                        "'you are considering 100 euros per week', is not advice and does not claim "
+                        "that the amount is saved or suitable. A sentence that explicitly says "
+                        "suitability cannot yet be determined without a risk assessment is a safe "
+                        "limitation, not an unsupported suitability claim. Do not mark either as "
+                        "unsupported_personal_advice. But a preliminary positive claim such as "
+                        "'100 euros per week fits well with your conservative approach' IS "
+                        "unsupported personal advice when no owner-scoped risk assessment exists, "
+                        "even if the next sentence says that a final judgment is still missing. "
+                        "Check saved-object identity against the evidence scope: read_active_setup "
+                        "is a setup, not a strategy. Calling that setup a 'plan' is acceptable when "
+                        "the user calls it a plan; calling it a saved strategy is not. "
+                        "An unavailable read_linked_strategy does not "
+                        "prove that any linked strategy exists. Saying that the linked strategy "
+                        "is missing or asking whether the user wants to create one is allowed; "
+                        "neither claims a saved strategy exists. Mark unsupported_entity_claim=true "
+                        "only when the answer calls a saved setup a saved strategy or invents a linked object. "
+                        "Mark proposed_as_saved=true when a value mentioned only in the user's "
+                        "hypothetical proposal is described as the current persisted setting. "
+                        "A proposal of 100 euros per week is not a saved amount when the saved "
+                        "setup's min_investment is null. Otherwise set proposed_as_saved=false. "
+                        "Set proposed_change_omitted=true when the current question asks whether "
+                        "a specific proposed change is suitable but the answer discusses only the "
+                        "saved setup or missing evidence and never identifies that proposed change "
+                        "as hypothetical. The exact wording need not be repeated, but the relevant "
+                        "amount, cadence or other changed value must remain distinguishable from "
+                        "stored facts. For questions without a proposed change set it false. "
+                        "When the latest user message answers FINN's preceding question, "
+                        "the new detail is not a new proposed action: do not require an older "
+                        "hypothetical change to be repeated. "
                         "Mark unsupported_personal_advice true if "
                         "the answer implies any unevidenced personal recommendation, causal "
                         "market history, or suitability claim. In particular, if a saved entry "
@@ -295,10 +681,57 @@ class FinnResponsesAnswerVerifier:
                         "offers the missing evaluation. Such a limited answer IS complete for a "
                         "request for a logical personal plan when no current evaluation exists. "
                         "A generic refusal or a repeated setup-choice question is not complete. "
-                        "When no question is supplied, set addresses_request=true."
+                        "Do not ask the user to choose or supply a value that is already explicit "
+                        "in the current question or previous verified answer. For example, when "
+                        "the user already proposed an amount and frequency, asking them to pick "
+                        "an amount again is not a useful next step; mark addresses_request=false. "
+                        "When previous_verified_answer is supplied, a follow-up must answer from "
+                        "the verified answer text supplied there rather than introduce a new "
+                        "indicator, market assertion or "
+                        "recommendation found only in older tool evidence. If it does, mark "
+                        "unsupported_personal_advice=true. "
+                        "When an unavailable source has no verified cause, treating a provider "
+                        "outage, delay or technical fault as its cause is unsupported personal "
+                        "advice: set unsupported_personal_advice=true. "
+                        "If typed evaluation_boundary has assessment_status=insufficient_evidence, "
+                        "distinguish describing the user's proposed change from inviting them to "
+                        "confirm or implement it now. The latter is premature when they asked "
+                        "whether it is suitable: set premature_action_invitation=true. A choice "
+                        "to leave the saved setup unchanged is not an action invitation. Otherwise "
+                        "set premature_action_invitation=false. "
+                        "A question that asks whether the user wants to change a saved setup so it "
+                        "better fits their goals is also a premature action invitation when neither "
+                        "the user's horizon nor a suitability evaluation is established. Ask for "
+                        "the missing horizon instead. "
+                        "If the user asks which choice or preparatory step to make next, merely "
+                        "repeating why an evaluation is unavailable does not address the request. "
+                        "The answer must identify a concrete, evidence-supported next decision "
+                        "the user can actually make, without pretending to know which trade is "
+                        "personally suitable. 'Decide about missing market data' is not a user "
+                        "decision; mark addresses_request=false for that kind of answer. "
+                        "Set actionable_next_decision=true only when a next-decision answer "
+                        "names one concrete choice under the user's control that follows from "
+                        "the verified previous answer. Choosing which unavailable market data "
+                        "or indicators to investigate is not such a choice. If the typed evaluation "
+                        "says those sources are unavailable, suggesting that the user request a "
+                        "market analysis or technical snapshot is likewise not a usable first "
+                        "decision; set actionable_next_decision=false. Choosing to leave "
+                        "the saved setup unchanged until a valid assessment is possible is. "
+                        "For other questions set actionable_next_decision=true. "
+                        "When no question is supplied, set addresses_request=true. The answer "
+                        "must use the supplied preferred_locale when present, unless the question "
+                        "explicitly requests another language. Mark language_mismatch=true if any "
+                        "user-facing sentence switches to a different language; object names are exempt. "
+                        "Mark unnatural_language=true only for conspicuously broken grammar, "
+                        "invented compound words, duplicated fragments, or backend-style prose "
+                        "that a user would not expect from a clear personal coach. Do not flag "
+                        "ordinary variation or a minor typo."
                     ),
                     input=json.dumps(
-                        {"answer": answer, "evidence": evidence, "question": question},
+                        {"answer": answer, "evidence": evidence, "question": question,
+                         "preferred_locale": locale,
+                         "answering_previous_question": answering_previous_question,
+                         "previous_verified_answer": previous_answer},
                         ensure_ascii=False, default=str,
                     ),
                     text={"format": {
@@ -307,22 +740,63 @@ class FinnResponsesAnswerVerifier:
                             "type": "object", "additionalProperties": False,
                             "properties": {
                                 "unsupported_personal_advice": {"type": "boolean"},
+                                "unsupported_entity_claim": {"type": "boolean"},
+                                "proposed_as_saved": {"type": "boolean"},
+                                "proposed_change_omitted": {"type": "boolean"},
+                                "premature_action_invitation": {"type": "boolean"},
+                                "language_mismatch": {"type": "boolean"},
+                                "unnatural_language": {"type": "boolean"},
                                 "addresses_request": {"type": "boolean"},
+                                "actionable_next_decision": {"type": "boolean"},
                             },
-                            "required": ["unsupported_personal_advice", "addresses_request"],
+                            "required": ["unsupported_personal_advice", "unsupported_entity_claim",
+                                         "proposed_as_saved", "proposed_change_omitted",
+                                         "premature_action_invitation",
+                                         "language_mismatch", "unnatural_language", "addresses_request",
+                                         "actionable_next_decision"],
                         },
                     }},
-                    max_output_tokens=60,
+                    max_output_tokens=160,
                 ),
                 timeout=timeout,
             )
             parsed = json.loads(str(getattr(response, "output_text", "") or ""))
-            if parsed.get("unsupported_personal_advice") is not False:
-                logger.info("FINN personal advice audit rejected answer", extra={
-                    "stage": "responses_personal_advice_audit", "reason": "unsupported_personal_advice",
-                })
-            return parsed.get("unsupported_personal_advice") is False and (
-                question is None or parsed.get("addresses_request") is True
+            language_rejected = (
+                parsed.get("language_mismatch") is True
+                and not self._language_matches(answer, locale)
+            )
+            rejected_checks = [
+                field for field in (
+                    "unsupported_personal_advice", "unsupported_entity_claim",
+                    "proposed_as_saved",
+                    "premature_action_invitation",
+                    "unnatural_language",
+                ) if parsed.get(field) is not False
+            ]
+            if language_rejected:
+                rejected_checks.append("language_mismatch")
+            if require_address_judgment and question is not None and parsed.get("addresses_request") is not True:
+                rejected_checks.append("does_not_address_request")
+            if (not answering_previous_question and not require_actionable_next_decision
+                    and parsed.get("proposed_change_omitted") is not False):
+                rejected_checks.append("proposed_change_omitted")
+            if require_actionable_next_decision and parsed.get("actionable_next_decision") is not True:
+                rejected_checks.append("no_actionable_next_decision")
+            if rejected_checks:
+                logger.info("FINN personal advice audit rejected answer: checks=%s", rejected_checks,
+                            extra={"stage": "responses_personal_advice_audit"})
+            return all(parsed.get(field) is False for field in (
+                "unsupported_personal_advice", "unsupported_entity_claim",
+                "proposed_as_saved",
+                "premature_action_invitation",
+                "unnatural_language",
+            )) and not language_rejected and (
+                not require_address_judgment or question is None or parsed.get("addresses_request") is True
+            ) and (
+                not require_actionable_next_decision or parsed.get("actionable_next_decision") is True
+            ) and (
+                answering_previous_question or require_actionable_next_decision
+                or parsed.get("proposed_change_omitted") is False
             )
         except Exception as exc:
             logger.info("FINN personal advice audit unavailable: %s", type(exc).__name__, extra={
@@ -385,16 +859,24 @@ class FinnResponsesAnswerVerifier:
                 client.responses.create(
                     model="gpt-4o-mini", store=False, tool_choice="none",
                     instructions=(
-                        "Check whether the proposed answer respects the NUMBER and KIND of "
-                        "indicator choices the user requested. If the user asks for one missing "
-                        "indicator and why, a list of several catalog entries is not focused. "
+                        "Decide whether the user asks for exactly one indicator candidate, "
+                        "and check whether the proposed answer respects the NUMBER and KIND of "
+                        "indicator choices requested. If the user asks for one missing "
+                        "indicator and why, an answer naming none or listing several catalog "
+                        "entries is not focused. "
+                        "An answer that falsely says the user wants or is considering "
+                        "adding an indicator is also unfocused when the user only asked "
+                        "which indicator is missing. Do not refuse a configuration-gap "
+                        "answer merely because live market snapshots are unavailable. "
                         "A broad request for several options may legitimately receive a list. "
                         "If the answer is unfocused, select exactly one of the supplied options "
                         "and mention it by its EXACT supplied display_name in "
                         "a brief replacement in the "
                         "question's language explaining its "
                         "general purpose. Do not assert a current reading, correlation or trade "
-                        "conclusion. For a focused answer, leave selected_option and replacement empty."
+                        "conclusion. If one candidate is requested but the answer names none, "
+                        "focused must be false and replacement must name one option. For a "
+                        "focused answer, leave selected_option and replacement empty."
                     ),
                     input=json.dumps({
                         "question": question, "answer": answer,
@@ -405,11 +887,12 @@ class FinnResponsesAnswerVerifier:
                         "schema": {
                             "type": "object", "additionalProperties": False,
                             "properties": {
+                                "one_candidate_requested": {"type": "boolean"},
                                 "focused": {"type": "boolean"},
                                 "selected_option": {"type": "string"},
                                 "replacement": {"type": "string"},
                             },
-                            "required": ["focused", "selected_option", "replacement"],
+                            "required": ["one_candidate_requested", "focused", "selected_option", "replacement"],
                         },
                     }},
                     max_output_tokens=180,
@@ -417,7 +900,19 @@ class FinnResponsesAnswerVerifier:
                 timeout=timeout,
             )
             parsed = json.loads(str(getattr(response, "output_text", "") or ""))
-            if parsed.get("focused") is True:
+            mentioned_options = [
+                option for option in options
+                if str(option.get("display_name") or "").casefold() in answer.casefold()
+                or re.search(
+                    rf"\b{re.escape(str(option.get('name') or ''))}\b",
+                    answer, re.IGNORECASE,
+                )
+            ]
+            one_candidate_missing = (
+                parsed.get("one_candidate_requested") is True
+                and len(mentioned_options) != 1
+            )
+            if parsed.get("focused") is True and not one_candidate_missing:
                 return True, ""
             selected = str(parsed.get("selected_option") or "")
             replacement = str(parsed.get("replacement") or "").strip()
@@ -428,6 +923,50 @@ class FinnResponsesAnswerVerifier:
                     str(option.get("display_name") or "").casefold(),
                 }
             ), None)
+            if parsed.get("one_candidate_requested") is True and (
+                selected_option is None or not replacement
+            ):
+                remaining = remaining_lifecycle_seconds()
+                retry_timeout = min(4.0, remaining - 2 if remaining is not None else 4.0)
+                if retry_timeout <= 0:
+                    return False, ""
+                suggestion = await asyncio.wait_for(
+                    client.responses.create(
+                        model="gpt-4o-mini", store=False, tool_choice="none",
+                        instructions=(
+                            "The user requests one missing macro-indicator and a brief reason. "
+                            "Choose exactly one supplied existing catalog option. Write one "
+                            "sentence in the question's language naming its exact display_name "
+                            "and general purpose. Do not claim a current reading, personal "
+                            "suitability, expected return, or that the user already intends "
+                            "to add it. This is a read answer, not a proposal."
+                        ),
+                        input=json.dumps({"question": question, "options": options}, ensure_ascii=False),
+                        text={"format": {
+                            "type": "json_schema", "name": "finn_catalog_single_choice",
+                            "strict": True,
+                            "schema": {
+                                "type": "object", "additionalProperties": False,
+                                "properties": {
+                                    "selected_option": {
+                                        "type": "string",
+                                        "enum": [str(option["name"]) for option in options],
+                                    },
+                                    "answer": {"type": "string"},
+                                },
+                                "required": ["selected_option", "answer"],
+                            },
+                        }},
+                        max_output_tokens=150,
+                    ),
+                    timeout=retry_timeout,
+                )
+                choice = json.loads(str(getattr(suggestion, "output_text", "") or ""))
+                selected_option = next((
+                    option for option in options
+                    if option["name"] == choice.get("selected_option")
+                ), None)
+                replacement = str(choice.get("answer") or "").strip()
 
             def mentioned(option: dict[str, str]) -> bool:
                 normalized_answer = re.sub(r"[^a-z0-9]", "", replacement.casefold())
@@ -465,6 +1004,7 @@ class FinnResponsesAnswerVerifier:
         self, *, message: str, result: FinnResponsesResult,
         previous_response: dict[str, Any] | None = None,
         recent_action_result: dict[str, Any] | None = None,
+        locale: str | None = None,
     ) -> FinnResponsesVerifiedAnswer:
         evidence = tuple(
             item
@@ -474,7 +1014,7 @@ class FinnResponsesAnswerVerifier:
         )
         if any(call.get("status") == "error" for call in result.tool_trace):
             return FinnResponsesVerifiedAnswer(
-                "unavailable", "Ik kan dit nu niet betrouwbaar beoordelen.",
+                "unavailable", self._fallback_copy("source_unavailable", message=message, locale=locale),
                 "responses_tool_execution_failed", evidence,
             )
         clarification_calls = [
@@ -496,12 +1036,33 @@ class FinnResponsesAnswerVerifier:
             for item in evidence
         ):
             return FinnResponsesVerifiedAnswer(
-                "clarification_required", self._fallback_copy("setup_ambiguous", message=message),
+                "clarification_required", self._fallback_copy("setup_ambiguous", message=message, locale=locale),
                 "setup_ambiguous", evidence,
                 clarification={
-                    "question": self._fallback_copy("setup_ambiguous", message=message),
+                    "question": self._fallback_copy("setup_ambiguous", message=message, locale=locale),
                     "reason": "setup_ambiguous",
                 },
+            )
+        def missing_profile_clarification() -> FinnResponsesVerifiedAnswer | None:
+            if not evidence or previous_response or not all(
+                item.get("scope") in {"read_profile", "read_user_preferences"}
+                for item in evidence
+            ) or not any(
+                item.get("scope") == "read_profile"
+                and item.get("status") == "completed"
+                and isinstance(item.get("data"), dict)
+                and item["data"].get("has_profile") is False
+                for item in evidence
+            ):
+                return None
+            question = {
+                "nl": "Ik kan je helpen je plan en risico's te onderzoeken, maar ik mis nog je profiel om dat op jou af te stemmen. Wat is je belangrijkste doel en welke risicostijl past bij je?",
+                "en": "I can help examine your plan and its risks, but I need your profile to tailor that to you. What is your main goal and risk style?",
+                "de": "Ich kann dir helfen, deinen Plan und seine Risiken zu prüfen. Für eine persönliche Einordnung fehlt mir noch dein Profil. Was ist dein wichtigstes Ziel und welcher Risikostil passt zu dir?",
+            }[locale if locale in {"nl", "en", "de"} else "nl"]
+            return FinnResponsesVerifiedAnswer(
+                "clarification_required", question, "user_detail_required", evidence,
+                clarification={"question": question, "reason": "user_detail_required"},
             )
         compact = [
             {
@@ -530,9 +1091,28 @@ class FinnResponsesAnswerVerifier:
                     answer=text, message=message, evidence=evidence,
                 )
                 and self._currency_units_supported(
-                    answer=text, message=message, evidence=evidence,
+                    answer=text, message=message, previous_answer=previous_answer,
+                    evidence=evidence,
                 )
                 and not self._contains_internal_identifier(text)
+                and self._saved_entity_type_supported(
+                    text,
+                    tuple((*evidence, *(relevant_previous_source_evidence if reusing_previous_read else ()))),
+                )
+                and self._profile_presence_claim_supported(
+                    text, tuple((*evidence, *relevant_previous_source_evidence)),
+                )
+                and self._saved_horizon_claim_supported(
+                    text, tuple((*evidence, *relevant_previous_source_evidence)),
+                )
+                and not (
+                    reusing_previous_read
+                    and self._introduces_new_catalog_option(
+                        text, previous_answer,
+                        tuple((*evidence, *relevant_previous_source_evidence)),
+                    )
+                )
+                and (not personal_evidence or not self._unevaluated_positive_fit_claim(text))
             )
         confirmed_action = {
             key: recent_action_result.get(key)
@@ -542,15 +1122,100 @@ class FinnResponsesAnswerVerifier:
         general_education = bool(result.tool_trace) and all(
             call.get("name") == "answer_directly" for call in result.tool_trace
         )
+        evaluation_calls = [
+            call for call in result.tool_trace
+            if (call.get("result") or {}).get("evaluation_operation_id")
+        ]
+        limited_evaluation = any(
+            (call.get("result") or {}).get("assessment_status") == "insufficient_evidence"
+            and (call.get("result") or {}).get("evaluation_operation_id")
+            != "evaluate_indicator_configuration"
+            for call in evaluation_calls
+        )
+
+        def limited_fallback() -> FinnResponsesVerifiedAnswer:
+            return FinnResponsesVerifiedAnswer(
+                "completed", self._limited_evaluation_copy(message=message, locale=locale),
+                "insufficient_evidence", evidence, bool(previous_response),
+            )
+        for call in evaluation_calls:
+            evaluation = call["result"]
+            compact.append({
+                "scope": "evaluation_boundary", "status": "completed",
+                "source": "canonical_action_contract",
+                "data": {
+                    "operation_id": evaluation["evaluation_operation_id"],
+                    "assessment_status": evaluation.get("assessment_status"),
+                    "missing_required_scopes": evaluation.get("missing_required_scopes", []),
+                    "resolved_entity_kinds": evaluation.get("resolved_entity_kinds", {}),
+                },
+            })
         previous_source_evidence = [
             item for call in (previous_response or {}).get("tool_trace", [])
             for item in (call.get("result", {}).get("results") or [])
             if isinstance(item, dict)
         ]
+        def prior_evaluation_explanation() -> FinnResponsesVerifiedAnswer | None:
+            if not previous_explanation_only:
+                return None
+            evaluations = [
+                call.get("result") or {}
+                for call in (previous_response or {}).get("tool_trace", [])
+                if (call.get("result") or {}).get("assessment_status") == "insufficient_evidence"
+            ]
+            if not any(
+                "market_snapshot" in (item.get("missing_required_scopes") or [])
+                for item in evaluations
+            ):
+                return None
+            has_profile = any(
+                item.get("scope") == "read_profile"
+                and item.get("status") == "completed"
+                and isinstance(item.get("data"), dict)
+                and item["data"].get("has_profile") is True
+                for item in previous_source_evidence
+            )
+            copy = {
+                "nl": (
+                    "Ik kan nog niet beoordelen of dit plan bij je risicostijl past: actuele "
+                    "marktgegevens ontbreken. Je opgeslagen risicoprofiel is wel beschikbaar; "
+                    "zonder die marktgegevens zou een geschiktheidsconclusie speculatief zijn."
+                    if has_profile else
+                    "Ik kan dit plan nog niet beoordelen omdat actuele marktgegevens ontbreken. "
+                    "Zonder die gegevens zou een geschiktheidsconclusie speculatief zijn."
+                ),
+                "en": (
+                    "I can't assess whether this plan fits your risk style yet because current "
+                    "market data is missing. Your saved risk profile is available, but a "
+                    "suitability conclusion without that market data would be speculative."
+                    if has_profile else
+                    "I can't assess this plan yet because current market data is missing. "
+                    "A suitability conclusion without it would be speculative."
+                ),
+                "de": (
+                    "Ich kann noch nicht beurteilen, ob dieser Plan zu deinem Risikostil passt, "
+                    "weil aktuelle Marktdaten fehlen. Dein gespeichertes Risikoprofil ist vorhanden; "
+                    "ohne diese Marktdaten wäre ein Urteil über die Eignung spekulativ."
+                    if has_profile else
+                    "Ich kann diesen Plan noch nicht beurteilen, weil aktuelle Marktdaten fehlen. "
+                    "Ohne sie wäre ein Urteil über die Eignung spekulativ."
+                ),
+            }[locale if locale in {"nl", "en", "de"} else "nl"]
+            return FinnResponsesVerifiedAnswer(
+                "completed", copy, "insufficient_evidence", evidence, True,
+            )
         reusing_previous_read = bool(previous_response and previous_response.get("answer")) and any(
             call.get("name") == "answer_directly"
             and dict(call.get("arguments") or {}).get("uses_previous_response") is True
             for call in result.tool_trace
+        )
+        previous_explanation_only = (
+            reusing_previous_read
+            and bool(result.tool_trace)
+            and all(call.get("name") == "answer_directly" for call in result.tool_trace)
+            and message.strip().casefold().rstrip("?!. ") in {
+                "waarom", "why", "warum", "wieso", "weshalb",
+            }
         )
         current_scopes = {item.get("scope") for item in evidence}
         completed_scopes = {
@@ -565,6 +1230,21 @@ class FinnResponsesAnswerVerifier:
                 or item.get("scope") in current_scopes
             )
         ]
+        if not self._saved_horizon_claim_supported(
+            result.text, tuple((*evidence, *relevant_previous_source_evidence)),
+        ):
+            if previous_answer and message.strip() and not message.rstrip().endswith("?"):
+                return FinnResponsesVerifiedAnswer(
+                    "completed", self._horizon_detail_acknowledgement(
+                        message, tuple((*evidence, *relevant_previous_source_evidence)), locale,
+                    ),
+                    "user_detail_acknowledged", evidence, True,
+                )
+            question = self._horizon_clarification_copy(locale)
+            return FinnResponsesVerifiedAnswer(
+                "clarification_required", question, "investment_horizon_required", evidence,
+                clarification={"question": question, "reason": "investment_horizon_required"},
+            )
         compact.extend({
             "scope": item.get("scope"), "status": item.get("status"),
             "source": item.get("source"), "as_of": item.get("as_of"),
@@ -589,6 +1269,14 @@ class FinnResponsesAnswerVerifier:
             for item in evidence
         )
         resolving_choice = message.startswith("Original user request:") and "User's chosen answer:" in message
+        if resolving_choice and not self._answered_duration_preserved(message, result.text):
+            return FinnResponsesVerifiedAnswer(
+                "completed", self._horizon_detail_acknowledgement(
+                    message, tuple((*evidence, *relevant_previous_source_evidence)), locale,
+                ),
+                "user_detail_acknowledged", evidence, True,
+            )
+        antecedent_answer = str((previous_response or {}).get("antecedent_verified_answer") or "").strip()
         if previous_answer and not resolving_choice:
             compact.append({
                 "scope": "previous_response",
@@ -596,9 +1284,21 @@ class FinnResponsesAnswerVerifier:
                 "availability": "available",
                 "data": {
                     "answer": previous_answer,
-                    "source_evidence": relevant_previous_source_evidence,
+                    "source_evidence": [] if previous_explanation_only else relevant_previous_source_evidence,
                 },
             })
+            if antecedent_answer and not previous_explanation_only:
+                compact.append({
+                    "scope": "antecedent_verified_response",
+                    "source": "owner_scoped_runtime_contract",
+                    "availability": "available",
+                    "data": {"answer": antecedent_answer},
+                })
+        if previous_explanation_only:
+            compact = [
+                item for item in compact
+                if item.get("scope") in {"previous_response", "read_profile"}
+            ]
         if confirmed_action.get("result_status") == "succeeded":
             compact.append({
                 "scope": "confirmed_action_result",
@@ -609,8 +1309,14 @@ class FinnResponsesAnswerVerifier:
         guidance = (
                 "This is a Responses-tool-loop answer, not a selector-first contract response. "
                 "Check every concrete personal or market fact against the supplied typed tool evidence, "
-                "including asset, timeframe, freshness and unavailable states. General educational "
-                "explanations and an honest statement that personal data is unavailable do not require "
+                "including asset, timeframe, freshness and unavailable states. An evaluation_boundary "
+                "with assessment_status=insufficient_evidence is a registry-derived limitation, not a "
+                "completed personal risk judgment. The answer may describe verified saved facts and "
+                "missing sources but must not claim that a plan fits the user's risk style. "
+                "If owner-scoped profile evidence confirms has_profile=true, never say the risk "
+                "profile, risk style or its information is unavailable; distinguish missing live "
+                "market evidence from the present saved profile. General educational explanations "
+                "and an honest statement that personal data is unavailable do not require "
                 "unrelated extra tools or a fully populated profile. Do not demand every possible "
                 "scope when the answer explicitly limits itself to available evidence. If a previous "
                 "verified response appears in evidence, interpret short follow-up questions relative "
@@ -618,7 +1324,21 @@ class FinnResponsesAnswerVerifier:
                 "A saved setup or strategy proves its stored fields, not that those fields were "
                 "derived from earlier analysis; reject an asserted analysis history unless the "
                 "typed evidence contains it. "
-                "For a short why follow-up, reject a mere recap of stored fields or a repetition "
+                "A chart timeframe such as 4H and a DCA cadence do not establish a holding "
+                "horizon or make this owner's setup a swing-trading or long-term plan. Reject "
+                "a personalized classification or recommendation inferred from chart timeframe "
+                "without explicit owner-scoped horizon and evaluation evidence. "
+                + (
+                    "The latest user message answers FINN's preceding question. The answer must "
+                    "acknowledge the newly supplied detail as a user-stated preference, not a "
+                    "persisted plan field or an evaluated suitability conclusion. Do not replace "
+                    "this turn with a recap of older missing-market-data advice. A bare echo or "
+                    "meta acknowledgement of the user's words is insufficient: connect the new "
+                    "detail to the question FINN was trying to resolve, within the available "
+                    "evidence, and state any remaining limit without inventing a conclusion. "
+                    if result.answer_kind == "answers_previous_question" else ""
+                )
+                + "For a short why follow-up, reject a mere recap of stored fields or a repetition "
                 "of the same user question. Require an actual evidence-grounded explanation of "
                 "the prior conclusion or why the previously requested detail is needed."
                 " When a user asks for a personalized logical trading plan but the supplied "
@@ -628,6 +1348,9 @@ class FinnResponsesAnswerVerifier:
                 "whether to perform the missing assessment IS a complete, safe answer. Do not "
                 "fail it for not producing a trade recommendation; producing one would be unsafe. "
                 " A stored entry, stop-loss, target or amount establishes only its configured value. "
+                "A read_active_setup result describes a setup, never a strategy. If the "
+                "read_linked_strategy result is unavailable, reject any answer that calls the "
+                "setup a saved strategy or claims that a linked strategy exists. "
                 "It does not establish that the trade is prudent, profitable, realistic or suitable "
                 "for this user. Reject those conclusions without current market and risk evidence. "
                 "For example, an answer that turns a configured stop-loss into a recommendation to "
@@ -705,6 +1428,7 @@ class FinnResponsesAnswerVerifier:
                 )
         )
         mode = (
+            "EVALUATE" if evaluation_calls else
             "EXPLAIN" if (previous_answer and not resolving_choice) or general_education else
             "UNAVAILABLE" if limitation_only or (missing_profile_established and profile_only) else
             "READ"
@@ -766,15 +1490,30 @@ class FinnResponsesAnswerVerifier:
             for option in (item.get("data") or {}).get("supported_options", [])
             if isinstance(option, dict)
         ]
+        if not any(
+            call.get("name") in {"get_indicator_snapshot", "evaluate_indicator_configuration"}
+            for call in result.tool_trace
+        ):
+            catalog_options = []
 
         async def advice_supported(text: str) -> bool:
+            if previous_explanation_only:
+                return True
             if not personal_evidence or self.client is None:
                 return True
             if text not in advice_cache:
                 advice_cache[text] = await self._personal_advice_is_grounded(
                     answer=text, evidence=advice_evidence,
                     remaining=remaining_lifecycle_seconds(),
-                    question=user_message if resolving_choice else None,
+                    question=message,
+                    previous_answer=(
+                        "\n".join(part for part in (antecedent_answer, previous_answer) if part)
+                        if reusing_previous_read else None
+                    ),
+                    require_address_judgment=result.answer_kind != "grounded_next_decision",
+                    require_actionable_next_decision=result.answer_kind == "grounded_next_decision",
+                    answering_previous_question=result.answer_kind == "answers_previous_question",
+                    locale=locale,
                 )
             return advice_cache[text]
 
@@ -797,6 +1536,55 @@ class FinnResponsesAnswerVerifier:
                 )
             return catalog_cache[text][0]
 
+        def presentation_ok(text: str) -> bool:
+            personal_profile_read = any(
+                item.get("scope") == "read_profile" and item.get("status") == "completed"
+                for item in evidence
+            )
+            return (
+                self._language_matches(text, locale)
+                and self._german_register_matches(text, locale)
+                and self._assistant_does_not_claim_user_mutation(text)
+                and (not evaluation_calls or not self._currency_amounts(message)
+                     or self._currency_amounts(message) <= self._currency_amounts(text))
+                and (not evaluation_calls or self._proposal_speaker_is_user(text))
+                and (result.answer_kind != "grounded_next_decision"
+                     or not self._asks_user_to_supply_unavailable_source(text))
+                and (not unavailable_without_cause
+                     or not self._asks_user_to_supply_unavailable_source(text))
+                and (not message.startswith("Original user request:")
+                     or self._evaluation_presentation_is_coaching(text))
+                and
+                (not evaluation_calls and not personal_profile_read
+                 and result.answer_kind != "grounded_next_decision"
+                 or self._evaluation_presentation_is_coaching(text))
+                and (not any(
+                    call["result"].get("assessment_status") == "insufficient_evidence"
+                    for call in evaluation_calls
+                ) or not self._reoffers_attempted_evaluation(text))
+                and self._followup_advances_conversation(message, previous_answer, text)
+            )
+
+        async def typed_next_decision_fallback() -> FinnResponsesVerifiedAnswer | None:
+            if not (
+                result.answer_kind == "grounded_next_decision"
+                and previous_answer
+                and any(
+                    (call.get("result") or {}).get("assessment_status") == "insufficient_evidence"
+                    for call in (previous_response or {}).get("tool_trace", [])
+                )
+            ):
+                return None
+            language = locale if locale in {"nl", "en", "de"} else self._fallback_language(message, previous_answer)
+            grounded_choice = {
+                "nl": "Je eerste keuze is om je opgeslagen setup voorlopig ongewijzigd te laten. Verander hem pas wanneer de ontbrekende actuele gegevens een beoordeling mogelijk maken.",
+                "en": "Your first choice is to leave your saved setup unchanged for now. Only consider changing it once the missing current data allows an assessment.",
+                "de": "Deine erste Entscheidung ist, dein gespeichertes Setup vorerst unverändert zu lassen. Ändere es erst, wenn die fehlenden aktuellen Daten eine Beurteilung erlauben.",
+            }[language]
+            if quantities_supported(grounded_choice) and presentation_ok(grounded_choice):
+                return FinnResponsesVerifiedAnswer("completed", grounded_choice, None, evidence, True)
+            return None
+
         async def verify_text(text: str):
             return await self.semantic.verify_async(
                 mode=mode, user_message=user_message, mandatory=True,
@@ -805,24 +1593,72 @@ class FinnResponsesAnswerVerifier:
                 compact_evidence=compact, deterministic_summary=summary,
             )
 
-        verdict = await verify_text(result.text)
-        advice_ok = await advice_supported(result.text) if verdict.available and (
-            verdict.passes or resolving_choice
-        ) else False
-        technical_ok = await technical_supported(result.text) if verdict.available else False
-        catalog_ok = await catalog_focused(result.text) if verdict.available else False
-        verdict_passes = verdict.passes or (resolving_choice and personal_evidence and advice_ok)
+        verdict, advice_ok, technical_ok, catalog_ok = await asyncio.gather(
+            verify_text(result.text),
+            advice_supported(result.text),
+            technical_supported(result.text),
+            catalog_focused(result.text),
+        )
+        verdict_passes = verdict.passes or (
+            not previous_explanation_only and personal_evidence
+            and self.client is not None and advice_ok
+        )
+        partial_evaluation_scopes = {
+            item.get("scope") for item in evidence
+            if item.get("status") == "completed"
+        }
+        independently_audited_limit = (
+            bool(evaluation_calls)
+            and all(
+                call["result"].get("assessment_status") == "insufficient_evidence"
+                for call in evaluation_calls
+            )
+            and {"read_profile", "read_active_setup"} <= partial_evaluation_scopes
+            and self.client is not None
+            and advice_ok
+            and not previous_explanation_only
+        )
+        verification_available = verdict.available or independently_audited_limit
         if verdict.available and not catalog_ok and catalog_options:
             focused_replacement = catalog_cache.get(result.text, (False, ""))[1]
             if focused_replacement:
                 focused_verdict = await verify_text(focused_replacement)
+                configured_macro = next((
+                    item.get("data", {}).get("macro", [])
+                    for item in evidence
+                    if item.get("scope") == "read_indicator_configuration"
+                    and item.get("status") == "completed"
+                    and isinstance(item.get("data"), dict)
+                ), None)
+                mentioned_options = [
+                    option for option in catalog_options
+                    if str(option.get("display_name") or "").casefold()
+                    in focused_replacement.casefold()
+                ]
+                configured_names = {
+                    str(item.get("indicator") or "").casefold()
+                    for item in (configured_macro or []) if isinstance(item, dict)
+                }
+                catalog_gap_grounded = (
+                    configured_macro is not None
+                    and len(mentioned_options) == 1
+                    and str(mentioned_options[0].get("name") or "").casefold()
+                    not in configured_names
+                    and self._assistant_does_not_claim_user_mutation(focused_replacement)
+                    and not re.search(
+                        r"\b(?:je\s+overweegt|you\s+are\s+considering|du\s+erwägst)\b",
+                        focused_replacement, re.IGNORECASE,
+                    )
+                    and presentation_ok(focused_replacement)
+                )
                 logger.info(
-                    "FINN catalog focus repair checked: semantic=%s quantities=%s codes=%s",
-                    focused_verdict.passes, quantities_supported(focused_replacement),
+                    "FINN catalog focus repair checked: semantic=%s gap=%s quantities=%s codes=%s",
+                    focused_verdict.passes, catalog_gap_grounded,
+                    quantities_supported(focused_replacement),
                     list(focused_verdict.reason_codes),
                 )
                 if (
-                    focused_verdict.available and focused_verdict.passes
+                    focused_verdict.available and (focused_verdict.passes or catalog_gap_grounded)
                     and quantities_supported(focused_replacement)
                     and await advice_supported(focused_replacement)
                     and await technical_supported(focused_replacement)
@@ -832,7 +1668,7 @@ class FinnResponsesAnswerVerifier:
                     )
             else:
                 logger.info("FINN catalog focus repair produced no valid single-option answer")
-        if not verdict.available or not verdict_passes or not quantities_supported(result.text) or not advice_ok or not technical_ok or not catalog_ok:
+        if not verification_available or not verdict_passes or not quantities_supported(result.text) or not advice_ok or not technical_ok or not catalog_ok or not presentation_ok(result.text):
             logger.info(
                 "FINN Responses answer verification rejected draft: codes=%s available=%s semantic_pass=%s quantities=%s",
                 list(verdict.reason_codes), verdict.available, verdict.passes,
@@ -846,16 +1682,20 @@ class FinnResponsesAnswerVerifier:
                     "evidence_scopes": [item.get("scope") for item in evidence],
                 },
             )
-        if verdict.available and verdict.passes and quantities_supported(result.text) and previous_answer and unavailable_without_cause:
+        if (verdict.available and verdict.passes and advice_ok
+                and presentation_ok(result.text) and quantities_supported(result.text)
+                and previous_answer and unavailable_without_cause and not previous_explanation_only
+                and not (reusing_previous_read and personal_evidence and advice_ok)
+                and not (result.answer_kind == "grounded_next_decision" and advice_ok)):
             if not await self._cause_claim_is_grounded(
                 answer=result.text, remaining=remaining_lifecycle_seconds(),
             ):
                 return FinnResponsesVerifiedAnswer(
                     "unavailable",
-                    self._fallback_copy("previous_source_unavailable", message=message, previous_answer=previous_answer),
+                    self._fallback_copy("previous_source_unavailable", message=message, previous_answer=previous_answer, locale=locale),
                     "source_unavailable", evidence, True,
                 )
-        if verdict.available and (not verdict_passes or not quantities_supported(result.text) or not advice_ok or not technical_ok or not catalog_ok) and self.client is not None:
+        if verification_available and (not verdict_passes or not quantities_supported(result.text) or not advice_ok or not technical_ok or not catalog_ok or not presentation_ok(result.text)) and self.client is not None:
             remaining = remaining_lifecycle_seconds()
             if remaining is None or remaining > 8:
                 try:
@@ -863,12 +1703,18 @@ class FinnResponsesAnswerVerifier:
                         self.client.responses.create(
                             model="gpt-4o-mini", store=False,
                             instructions=(
-                                "You are FINN. Rewrite the answer in the user's language using ONLY the "
+                                "You are FINN. Rewrite every user-facing field entirely in "
+                                + ({"nl": "Dutch", "en": "English", "de": "German"}.get(locale or "", "the user's language"))
+                                + (". In German, use 'du/dein' consistently, never 'Sie/Ihr'" if locale == "de" else "")
+                                + " using ONLY the "
                                 "typed evidence and previous verified answer provided. The prior draft was "
                                 "rejected as unsupported and is intentionally not supplied. Do not attach "
                                 "a currency or asset unit to a bare numeric field; base_amount=100 does not "
                                 "mean 100 BTC, $100 or €100 without explicit currency evidence. "
                                 "State unavailable data and unknown causes plainly; "
+                                "If read_profile contains a saved risk_profiles value, do not say "
+                                "the user's risk profile or risk settings are missing. A saved risk "
+                                "style is not a completed suitability assessment. "
                                 "For unavailable technical indicators, never suggest a temporary outage "
                                 "and check educational facts: RSI below 30 is commonly oversold, not overbought. "
                                 "Do not equate overbought or oversold with proof that an asset is "
@@ -878,40 +1724,192 @@ class FinnResponsesAnswerVerifier:
                                 "Do not replace an explicit action request with a read-only answer; "
                                 "without a proposal tool result, do not claim the action was prepared. "
                                 "A saved strategy and profile establish their stored values only. "
+                                "A 4H chart timeframe is not an investment horizon. Never infer "
+                                "that this saved setup favors swing trading or a shorter holding "
+                                "period, or recommend a larger chart timeframe for long-term "
+                                "investing without explicit supporting evaluation. "
+                                + (
+                                    "The latest user message answered FINN's preceding question. "
+                                    "First acknowledge that exact new user-stated detail in the "
+                                    "requested language. Explain what it clarifies and what remains "
+                                    "unassessed. Do not present it as already saved, repeat the prior "
+                                    "question, or substitute a generic 'leave the setup unchanged' "
+                                    "answer for this acknowledgment. "
+                                    if result.answer_kind == "answers_previous_question" else ""
+                                )
+                                + "The proposed change in the user's question is hypothetical, not "
+                                "a saved setting. In particular, if saved_state has no amount, "
+                                "never call the proposed amount the current DCA amount. "
                                 "A completed read_active_setup or read_linked_strategy result means "
                                 "those saved fields ARE available; do not say you cannot access them "
                                 "or ask the user to repeat them. If the original request asked for a "
+                                "plan, distinguish a saved setup from a linked strategy: an unavailable "
+                                "read_linked_strategy does not turn the setup into a strategy. "
+                                "Specifically, call a saved DCA object a DCA-setup, never a "
+                                "DCA-strategy when no linked strategy was found. "
+                                "When the user asks whether a proposed change fits, name the verified "
+                                "current setting and proposed change, and withhold a suitability judgment "
+                                "without an owner-scoped risk evaluation. If the registry evaluation "
+                                "returned insufficient_evidence, do not invite the user to confirm or "
+                                "implement the proposed change now; state which evidence is missing. "
+                                "Do not substitute an unrelated missing field for that choice or "
+                                "ask for an amount, frequency or other input already supplied. "
+                                "If the original request asked for a "
                                 "plan and the chosen setup was resolved, do not repeat the earlier "
                                 "setup-choice question. "
                                 "If the user asks for one missing indicator, choose at most one "
                                 "supported unsaved catalog option with a short general reason; "
                                 "never dump the catalog. "
-                                "Without a current owner-scoped risk or market evaluation, do not say "
-                                "that this strategy fits the user's goals or risk style. Instead, "
-                                "describe the saved settings accurately and say what assessment is "
-                                "still missing before judging suitability. For a short why follow-up, "
-                                "explain the prior statement without inventing historical market "
-                                "conditions or recommending a level change. "
+                                "Never say that saved settings fit the user's goals or risk style "
+                                "without completed owner-scoped risk and market evidence. For a short "
+                                "why follow-up, "
+                                "explain the prior verified answer, not why a trading approach might "
+                                "be good. If that answer withheld a suitability judgment because "
+                                "current evidence was insufficient, explain precisely that limit "
+                                "and do not add a claimed benefit of DCA, a positive fit claim, "
+                                "historical market conditions or a recommended level change. "
                                 + (
                                     "The prior answer failed the personal-advice audit. Write two or "
                                     "three plain sentences: identify the verified saved settings; "
-                                    "explicitly say that no current market/risk assessment has been "
-                                    "performed, so suitability is not yet established; optionally "
-                                    "ask whether the user wants that assessment. Do not present a "
+                                    + (
+                                        "say that FINN attempted the registry evaluation but missing "
+                                        "source evidence prevented a suitability conclusion; do not "
+                                        "offer the same evaluation again. "
+                                        if evaluation_calls else
+                                        "say that no current market/risk assessment has been performed, "
+                                        "so suitability is not yet established. "
+                                    )
+                                    + "Do not present a "
                                     "trading-plan checklist, prescribe levels, or suggest that the "
                                     "saved strategy helps achieve an investment goal. "
                                     if not advice_ok else ""
                                 )
+                                + (
+                                    "FINN already attempted a registry evaluation this turn. Its "
+                                    "assessment_status is insufficient_evidence: report the verified "
+                                    "saved facts and missing sources, not a completed suitability "
+                                    "judgment. Never say that no evaluation was performed and never "
+                                    "ask permission to run this same evaluation again without new data. "
+                                    "Return saved_context, user_proposal, assessment_limit, and "
+                                    "next_safe_step. saved_context may contain only facts in "
+                                    "saved_state, not missing-data explanations. assessment_limit "
+                                    "alone names the missing current data, and next_safe_step "
+                                    "gives one decision without repeating that reason. "
+                                    "Each nonempty field must be a short, complete "
+                                    "user-facing sentence; do not return bare names, values, labels, "
+                                    "or repeat the user's question. user_proposal is hypothetical and must never "
+                                    "be called an existing setting. "
+                                    "The step is to keep the current saved setup unchanged while "
+                                    "the missing evidence is obtained; it must not invite execution "
+                                    "of the proposed change. "
+                                    if limited_evaluation else ""
+                                )
+                                + (
+                                    "The current question proposes a concrete amount. Preserve its "
+                                    "exact amount in the answer as a hypothetical proposal, clearly "
+                                    "separate from saved settings. Do not omit it or call it saved. "
+                                    if evaluation_calls and self._currency_amounts(message)
+                                    and not self._currency_amounts(message) <= self._currency_amounts(result.text)
+                                    else ""
+                                )
+                                + (
+                                    "The user proposed this amount, not FINN. Attribute the "
+                                    "hypothetical change to the user (you/je/du), never write "
+                                    "'I am considering' or its first-person translation. "
+                                    if not self._proposal_speaker_is_user(result.text) else ""
+                                )
+                                + (
+                                    "Do not speak as if FINN itself wants to add, create, update "
+                                    "or delete the user's data. Answer the user's question as an "
+                                    "assistant; a read question does not authorize a mutation. "
+                                    if not self._assistant_does_not_claim_user_mutation(result.text) else ""
+                                )
+                                + (
+                                    "The prior answer was a backend inventory, not coaching. Write "
+                                    "one short paragraph with conclusion, evidence-based reason, "
+                                    "one relevant next step and any limitation. No headings, bullets, "
+                                    "profile-field list or unsolicited indicator suggestion. "
+                                    if not presentation_ok(result.text) else ""
+                                )
+                                + (
+                                    "The user asks what help FINN can offer based on saved profile facts. "
+                                    "Describe one or two kinds of assistance, such as explaining a saved "
+                                    "plan or checking its evidence. Do not recommend a strategy, investment, "
+                                    "trade or suitability conclusion. Do not say a method is secure, "
+                                    "conservative, aligned with this user's preferences, or likely to "
+                                    "grow their wealth. Do not imply an assessment was done. "
+                                    if profile_only else ""
+                                )
+                                + (
+                                    "The user asked why, but the draft repeated the previous answer. "
+                                    "Explain the specific evidence limit in one or two fresh sentences. "
+                                    "Do not restate the saved setup, risk style, or prior conclusion. "
+                                    if not self._followup_advances_conversation(
+                                        message, previous_answer, result.text,
+                                    ) else ""
+                                )
+                                + (
+                                    "The latest question asks what decision to make next. Identify "
+                                    "one concrete preparatory choice grounded in the previous "
+                                    "verified answer, not another explanation of why suitability "
+                                    "is unknown. The choice must be within the user's control; "
+                                    "do not tell them to decide about unavailable source data. "
+                                    "Do not introduce a named indicator, asset or catalog option "
+                                    "that the immediately previous verified answer did not mention. "
+                                    "If no trade choice is supported, offer the process choice of "
+                                    "leaving the current saved setup unchanged while the required "
+                                    "evidence is unavailable. Do not recommend a trade without "
+                                    "current evidence. "
+                                    if previous_answer and (
+                                        not advice_ok or (
+                                            reusing_previous_read
+                                            and self._introduces_new_catalog_option(
+                                                result.text, previous_answer,
+                                                tuple((*evidence, *relevant_previous_source_evidence)),
+                                            )
+                                        )
+                                    ) else ""
+                                )
+                                + (
+                                    "FINN already attempted this evaluation and found required "
+                                    "sources unavailable. Do not ask whether to run the same "
+                                    "evaluation again. Explain the limitation and give one "
+                                    "feasible next user decision instead. "
+                                    if evaluation_calls and self._reoffers_attempted_evaluation(result.text)
+                                    else ""
+                                )
+                                + (
+                                    "This is a next-decision follow-up, not a fresh suitability "
+                                    "assessment. Answer the question with one safe process choice "
+                                    "grounded in the verified prior answer: leave the saved setup "
+                                    "unchanged until a current assessment is possible. State this "
+                                    "as a decision the user can make, not as an invitation to "
+                                    "confirm, execute, or change a trading action. Do not repeat "
+                                    "only why the assessment is unavailable. Do not infer why a "
+                                    "source is unavailable. "
+                                    if result.answer_kind == "grounded_next_decision" else ""
+                                )
                                 + "Keep it brief and natural. Never expose internal IDs or reason codes."
                             ),
                             input=json.dumps({
-                                "question": user_message, "evidence": compact,
+                                "question": message,
+                                "saved_state": [
+                                    item.get("data") for item in compact
+                                    if item.get("scope") in {"read_active_setup", "read_linked_strategy"}
+                                    and item.get("status") == "completed"
+                                ],
+                                "proposed_change_is_not_saved": True,
+                                "previous_verified_answer": previous_answer or None,
+                                "antecedent_verified_answer": antecedent_answer or None,
+                                "evidence": compact,
                                 "rejection_reasons": list(verdict.reason_codes)
                                 + (["personal_advice_not_grounded"] if not advice_ok else [])
                                 + (["technical_claim_not_grounded"] if not technical_ok else [])
-                                + (["catalog_answer_not_focused"] if not catalog_ok else []),
+                                + (["catalog_answer_not_focused"] if not catalog_ok else [])
+                                + (["assessment_presentation_not_coaching"] if not presentation_ok(result.text) else []),
                             }, ensure_ascii=False, default=str),
                             tool_choice="none",
+                            **({"text": limited_evaluation_format()} if limited_evaluation else {}),
                         ),
                         timeout=min(8.0, remaining - 3 if remaining is not None else 8.0),
                     )
@@ -924,29 +1922,61 @@ class FinnResponsesAnswerVerifier:
                             for part in (getattr(item, "content", None) or [])
                             if getattr(part, "type", None) == "output_text"
                         ).strip()
+                    if revised and limited_evaluation:
+                        revised = limited_evaluation_answer(revised, locale=locale)
                     if revised:
-                        revised_verdict = await verify_text(revised)
-                        revised_advice_ok = await advice_supported(revised) if revised_verdict.available and (
-                            revised_verdict.passes or resolving_choice
-                        ) else False
-                        revised_technical_ok = await technical_supported(revised) if revised_verdict.available else False
-                        revised_catalog_ok = await catalog_focused(revised) if revised_verdict.available else False
-                        revised_passes = revised_verdict.passes or (
-                            resolving_choice and personal_evidence and revised_advice_ok
+                        (revised_verdict, revised_advice_ok, revised_technical_ok,
+                         revised_catalog_ok) = await asyncio.gather(
+                            verify_text(revised),
+                            advice_supported(revised),
+                            technical_supported(revised),
+                            catalog_focused(revised),
                         )
-                        if revised_verdict.available and revised_passes and quantities_supported(revised):
-                            if not revised_advice_ok or not revised_technical_ok or not revised_catalog_ok:
+                        revised_passes = revised_verdict.passes or (
+                            not previous_explanation_only and personal_evidence
+                            and self.client is not None and revised_advice_ok
+                        )
+                        revised_available = revised_verdict.available or (
+                            independently_audited_limit and revised_advice_ok
+                        )
+                        if not (revised_available and revised_passes and revised_advice_ok
+                                and revised_technical_ok and revised_catalog_ok
+                                and quantities_supported(revised) and presentation_ok(revised)):
+                            logger.info(
+                                "FINN Responses answer repair rejected: codes=%s semantic_pass=%s advice=%s technical=%s catalog=%s quantities=%s presentation=%s",
+                                list(revised_verdict.reason_codes), revised_verdict.passes,
+                                revised_advice_ok, revised_technical_ok, revised_catalog_ok,
+                                quantities_supported(revised), presentation_ok(revised),
+                            )
+                        if revised_available and revised_passes and quantities_supported(revised):
+                            if not revised_advice_ok or not revised_technical_ok or not revised_catalog_ok or not presentation_ok(revised):
+                                if limited_evaluation:
+                                    return limited_fallback()
+                                if result.answer_kind == "answers_previous_question" and previous_answer:
+                                    return FinnResponsesVerifiedAnswer(
+                                        "completed", self._user_detail_acknowledgement(message, locale),
+                                        "user_detail_acknowledged", evidence, True,
+                                    )
+                                safe_decision = await typed_next_decision_fallback()
+                                if safe_decision is not None:
+                                    return safe_decision
+                                profile_question = missing_profile_clarification()
+                                if profile_question is not None:
+                                    return profile_question
+                                safe_explanation = prior_evaluation_explanation()
+                                if safe_explanation is not None:
+                                    return safe_explanation
                                 return FinnResponsesVerifiedAnswer(
                                     "unavailable",
-                                    self._fallback_copy("responses_evidence_not_verified", message=message, previous_answer=previous_answer),
+                                    self._fallback_copy("responses_evidence_not_verified", message=message, previous_answer=previous_answer, locale=locale),
                                     "responses_evidence_not_verified", evidence, bool(previous_answer),
                                 )
-                            if previous_answer and unavailable_without_cause and not await self._cause_claim_is_grounded(
+                            if previous_answer and unavailable_without_cause and not previous_explanation_only and not (reusing_previous_read and personal_evidence and revised_advice_ok) and not (result.answer_kind == "grounded_next_decision" and revised_advice_ok) and not await self._cause_claim_is_grounded(
                                 answer=revised, remaining=remaining_lifecycle_seconds(),
                             ):
                                 return FinnResponsesVerifiedAnswer(
                                     "unavailable",
-                                    self._fallback_copy("previous_source_unavailable", message=message, previous_answer=previous_answer),
+                                    self._fallback_copy("previous_source_unavailable", message=message, previous_answer=previous_answer, locale=locale),
                                     "source_unavailable", evidence, True,
                                 )
                             return FinnResponsesVerifiedAnswer(
@@ -954,15 +1984,45 @@ class FinnResponsesAnswerVerifier:
                             )
                 except Exception:
                     pass
-        if not verdict.available or not verdict_passes or not quantities_supported(result.text) or not advice_ok or not technical_ok or not catalog_ok:
+        if not verification_available or not verdict_passes or not quantities_supported(result.text) or not advice_ok or not technical_ok or not catalog_ok or not presentation_ok(result.text):
+            if limited_evaluation:
+                return limited_fallback()
+            safe_explanation = prior_evaluation_explanation()
+            if safe_explanation is not None:
+                return safe_explanation
+            if previous_explanation_only and previous_answer and (
+                unavailable_without_cause
+                or any(item.get("reason") == "source_unavailable" for item in previous_source_evidence)
+            ):
+                return FinnResponsesVerifiedAnswer(
+                    "unavailable",
+                    self._fallback_copy(
+                        "previous_source_unavailable", message=message,
+                        previous_answer=previous_answer, locale=locale,
+                    ),
+                    "source_unavailable", evidence, True,
+                )
+            if result.answer_kind == "answers_previous_question" and previous_answer:
+                return FinnResponsesVerifiedAnswer(
+                    "completed", self._user_detail_acknowledgement(message, locale),
+                    "user_detail_acknowledged", evidence, True,
+                )
+            safe_decision = await typed_next_decision_fallback()
+            if safe_decision is not None:
+                return safe_decision
+            profile_question = missing_profile_clarification()
+            if profile_question is not None:
+                return profile_question
             reason = (
                 "responses_evidence_not_verified"
                 if not quantities_supported(result.text)
                 else self._typed_failure_reason((*evidence, *relevant_previous_source_evidence))
             )
             answer = self._fallback_copy(
-                "previous_source_unavailable" if previous_answer and unavailable_without_cause else reason,
-                message=message, previous_answer=previous_answer,
+                "previous_source_unavailable"
+                if previous_answer and "unsupported_cause" in verdict.reason_codes
+                else reason,
+                message=message, previous_answer=previous_answer, locale=locale,
             )
             return FinnResponsesVerifiedAnswer(
                 "unavailable", answer, reason, evidence, bool(previous_answer),

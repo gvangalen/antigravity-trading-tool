@@ -37,6 +37,15 @@ class FinnResponsesProposalSelection:
             # Explicit user input outranks a model candidate that shortened the name.
             inputs["name"] = explicitly_named
         if contract.operation_id == "create_setup":
+            explicit_day = self.states.explicit_inputs(
+                contract=contract, message=message, explicit_asset=None,
+            ).get("dca_day")
+            if explicit_day is not None:
+                inputs["dca_day"] = explicit_day
+            else:
+                # The model may propose a valid weekday that the owner never chose.
+                # Persisted guided state is merged by the existing state service.
+                inputs.pop("dca_day", None)
             # Contribution cadence is not a chart timeframe. The model's
             # candidate may fill this required slot only when the user's
             # current text actually states a canonical setup timeframe.

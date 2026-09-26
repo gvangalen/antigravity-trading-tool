@@ -85,13 +85,17 @@ class FinnV2ConversationRepository(FinnV2RepositoryTransactionMixin):
 
     async def set_responses_cursor(
         self, *, conversation_id: str, user_id: int, run_id: str, response_id: str,
+        locale: str | None = None,
     ) -> None:
         """Advance continuity only for the current owner-scoped conversation turn."""
         row = await self.get_by_id_for_user(conversation_id, user_id, for_update=True)
         if row is None or row.last_run_id != run_id or not response_id:
             raise RuntimeContractConflictError("responses_cursor_stale_or_unowned")
         context = dict(row.context_json or {})
-        context["responses_cursor"] = {"run_id": run_id, "response_id": response_id}
+        context["responses_cursor"] = {
+            "run_id": run_id, "response_id": response_id,
+            **({"locale": locale} if locale in {"nl", "en", "de"} else {}),
+        }
         row.context_json = context
         row.updated_at = datetime.now(timezone.utc)
         await self._flush_with_rollback(

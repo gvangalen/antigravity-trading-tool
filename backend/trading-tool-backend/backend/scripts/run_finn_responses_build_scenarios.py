@@ -21,6 +21,7 @@ from backend.scripts.run_finn_v2_full_action_matrix import (
 from backend.scripts.run_finn_v2_persisted_runtime_gate import _request_json, run_gate
 from backend.infrastructure.database import sync_engine
 from backend.domain.macro_indicator_catalog import get_active_macro_indicator_definitions
+from backend.services.finn_v2_responses_answer_verifier import FinnResponsesAnswerVerifier
 from backend.utils.auth_utils import create_access_token
 
 
@@ -38,8 +39,8 @@ READ_SCENARIOS = (
     ("why_followup", "Waarom?"),
     ("plan_followup", "Wat verandert dit aan mijn plan?"),
     ("new_setup_topic_after_missing_market_data", "Please answer in English: what can you safely say about my BTC DCA setup?"),
-    ("english", "Explain what my plan can safely conclude from the available evidence."),
-    ("german", "Erkläre, welche Daten für meinen Plan noch fehlen."),
+    ("english", "Please answer in English: explain what my plan can safely conclude from the available evidence."),
+    ("german", "Bitte antworte auf Deutsch: Erkläre, welche Daten für meinen Plan noch fehlen."),
 )
 
 TYPED_LIMITATION_CASES = {
@@ -66,7 +67,8 @@ def _owner_setup_count(user_id: int, name: str) -> int:
         ).scalar() or 0)
 
 
-def run_scenarios(*, base_url: str, output: Path) -> dict:
+def run_scenarios(*, base_url: str, output: Path, only_case: str | None = None,
+                  conversation_only: bool = False) -> dict:
     if urlparse(base_url).hostname not in {"localhost", "127.0.0.1"}:
         raise ValueError("responses_build_scenarios_require_loopback")
     owner = _create_local_user()
@@ -75,7 +77,10 @@ def run_scenarios(*, base_url: str, output: Path) -> dict:
     token = create_access_token({"sub": str(owner["id"]), "role": "user"})
     other_token = create_access_token({"sub": str(outsider["id"]), "role": "user"})
     headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}
-    artifact: dict = {"version": 1, "local_synthetic_only": True, "cases": [], "draft": {}}
+    artifact: dict = {
+        "version": 1, "local_synthetic_only": True,
+        "targeted_only": only_case, "cases": [], "draft": {},
+    }
     conversation_id = None
 
     def checkpoint() -> None:
@@ -85,6 +90,10 @@ def run_scenarios(*, base_url: str, output: Path) -> dict:
         temporary.replace(output)
 
     for case_id, question in READ_SCENARIOS:
+        if conversation_only:
+            break
+        if only_case and case_id != only_case:
+            continue
         if case_id not in {"why_followup", "plan_followup", "new_setup_topic_after_missing_market_data"}:
             conversation_id = None
         observed = run_gate(
@@ -103,7 +112,7 @@ def run_scenarios(*, base_url: str, output: Path) -> dict:
         response = dict(terminal.get("response") or {})
         error_code = record["terminal_projection"].get("error_code")
         missing_profile_clarification = (
-            case_id == "plan"
+            case_id in {"capabilities", "plan"}
             and error_code == "user_detail_required"
             and any(
                 result.get("scope") == "read_profile"
@@ -114,9 +123,11 @@ def run_scenarios(*, base_url: str, output: Path) -> dict:
             )
         )
         typed_limitation = (
-            case_id in TYPED_LIMITATION_CASES
-            and observed["status"] in {"unavailable", "clarification_required"}
-            and (error_code in TYPED_LIMITATION_CASES[case_id] or missing_profile_clarification)
+            observed["status"] in {"unavailable", "clarification_required"}
+            and (
+                missing_profile_clarification
+                or error_code in TYPED_LIMITATION_CASES.get(case_id, set())
+            )
         )
         passed = (
             http_status == 200
@@ -145,6 +156,9 @@ def run_scenarios(*, base_url: str, output: Path) -> dict:
             ))
         if case_id == "macro" and observed["status"] == "completed":
             answer_lower = str(response.get("content") or "").casefold()
+            passed = passed and FinnResponsesAnswerVerifier._assistant_does_not_claim_user_mutation(
+                answer_lower,
+            )
             named_options = {
                 str(item["name"])
                 for item in get_active_macro_indicator_definitions()
@@ -153,7 +167,8 @@ def run_scenarios(*, base_url: str, output: Path) -> dict:
                     for label in (item["name"], item["display_name"])
                 )
             }
-            passed = passed and len(named_options) <= 1
+            passed = passed and len(named_options) == 1
+            passed = passed and "ik kan nog niet beoordelen of dit bij je risicostijl past" not in answer_lower
         if case_id in {"why_followup", "plan_followup"}:
             passed = passed and bool(observed.get("conversation_reference"))
         if case_id == "why_followup":
@@ -175,6 +190,14 @@ def run_scenarios(*, base_url: str, output: Path) -> dict:
                 and "cause of the missing data" not in lower_answer
                 and "can't establish why" not in lower_answer
             )
+        if case_id in {"new_setup_topic_after_missing_market_data", "english", "german"}:
+            expected_locale = "de" if case_id == "german" else "en"
+            passed = passed and FinnResponsesAnswerVerifier._language_matches(
+                str(response.get("content") or ""), expected_locale,
+            )
+            passed = passed and FinnResponsesAnswerVerifier._german_register_matches(
+                str(response.get("content") or ""), expected_locale,
+            )
         artifact["cases"].append({
             "case_id": case_id, "question": question, "run_id": observed["run_id"],
             "status": observed["status"], "tools": selected_tools,
@@ -186,6 +209,11 @@ def run_scenarios(*, base_url: str, output: Path) -> dict:
             "pass": passed,
         })
         checkpoint()
+    if only_case:
+        artifact["passed"] = sum(case["pass"] for case in artifact["cases"])
+        artifact["total"] = len(artifact["cases"])
+        checkpoint()
+        return artifact
 
     conversation_owner = _create_local_user()
     _seed_fixtures(int(conversation_owner["id"]))
@@ -247,11 +275,12 @@ def run_scenarios(*, base_url: str, output: Path) -> dict:
         any(marker in why_answer for marker in (
             "omdat", "want", "daarom", "de reden", "heeft te maken met", "om verder",
             "zonder een actuele", "zonder actuele", "zonder deze gegevens",
-            "zonder deze informatie",
+            "zonder deze informatie", "zonder die informatie",
+            "om te zien",
         ))
         and any(marker in why_answer for marker in (
             "matrix strategy update parent", "matrix update strategie",
-            "entry", "stop-loss", "risico", "doel",
+            "entry", "stop-loss", "risico", "doel", "setup",
         ))
         and "wat wil je dat er verder in je plan wordt opgenomen?" not in why_answer
     )
@@ -265,7 +294,10 @@ def run_scenarios(*, base_url: str, output: Path) -> dict:
         phrase in turn["answer"].casefold()
         for turn in conversation_turns[1:3]
         for phrase in ("geen specifieke informatie over je risicoprofiel",
-                       "risicoprofiel ontbreekt", "risk profile is missing")
+                       "risicoprofiel ontbreekt", "risk profile is missing",
+                       "geen toegang heb tot je risicoprofiel",
+                       "je risicoprofiel te kennen",
+                       "risicoprofiel en beleggingsdoelen verder te verduidelijken")
     )
     artifact["conversation"]["pass"] = bool(
         [turn["status"] for turn in conversation_turns]
@@ -276,6 +308,11 @@ def run_scenarios(*, base_url: str, output: Path) -> dict:
                 for turn in conversation_turns)
         and all(turn["conversation_reference"] for turn in conversation_turns[1:])
         and "Matrix Strategy Update Parent" in conversation_turns[1]["answer"]
+        and "evaluate_plan" in conversation_turns[1]["tools"]
+        and not any(phrase in conversation_turns[1]["answer"].casefold() for phrase in (
+            "je overweegt een update", "je wilt de strategie wijzigen",
+            "je hebt de setup opgeslagen",
+        ))
         and why_explains
         and conversation_turns[2]["tools"] == ["answer_directly"]
         and not unsupported_fit_claim
@@ -284,6 +321,12 @@ def run_scenarios(*, base_url: str, output: Path) -> dict:
         and conversation_turns[3]["tools"] == ["answer_directly"]
     )
     checkpoint()
+
+    if conversation_only:
+        artifact["passed"] = int(artifact["conversation"]["pass"])
+        artifact["total"] = 1
+        checkpoint()
+        return artifact
 
     name = f"Responses Build DCA {uuid.uuid4().hex[:8]}"
     first = run_gate(
@@ -426,8 +469,13 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--base-url", default="http://127.0.0.1:8000")
     parser.add_argument("--output", required=True, type=Path)
+    parser.add_argument("--only-case", choices=[case_id for case_id, _ in READ_SCENARIOS])
+    parser.add_argument("--conversation-only", action="store_true")
     args = parser.parse_args()
-    artifact = run_scenarios(base_url=args.base_url, output=args.output)
+    artifact = run_scenarios(
+        base_url=args.base_url, output=args.output,
+        only_case=args.only_case, conversation_only=args.conversation_only,
+    )
     print(json.dumps({
         "passed": artifact["passed"], "total": artifact["total"],
         "output": str(args.output), "sha256": hashlib.sha256(args.output.read_bytes()).hexdigest(),

@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from backend.domain.finn_v2_setup_input_catalog import FinnV2SetupInputCatalog
+from backend.services.finn_v2_operation_state_service import FinnV2OperationStateService
 
 from backend.domain.finn_v2_operation_registry import FinnV2OperationRegistry
 from backend.services.finn_v2_tool_registry_service import FinnV2ToolRegistryService
@@ -67,6 +68,7 @@ class FinnResponsesToolCall:
     required_inputs: tuple[str, ...]
     missing_inputs: tuple[str, ...]
     draft_intent: str | None = None
+    evaluation_operation_id: str | None = None
 
 
 class FinnResponsesToolCatalog:
@@ -82,6 +84,12 @@ class FinnResponsesToolCatalog:
         self.read_tools = {
             name: tuple(scope_bindings[scope] for scope in scopes)
             for name, scopes in _READ_SCOPES.items()
+        }
+        self.evaluation_contracts = {
+            contract.operation_id: contract
+            for contract in self.registry.list()
+            if contract.supported and contract.mode == "EVALUATE"
+            and contract.model_policy == "required" and contract.required_scopes
         }
         for operations in _PROPOSAL_OPERATIONS.values():
             for operation_id in operations:
@@ -153,6 +161,26 @@ class FinnResponsesToolCatalog:
                             "type": "string", "enum": ["current_request", "previous_response"],
                             "description": "Use previous_response only to revisit the owner-scoped setup read in the preceding verified answer.",
                         }} if name == "get_active_plan_and_strategy" else {}),
+                    },
+                    "additionalProperties": False,
+                },
+            })
+        for contract in self.evaluation_contracts.values():
+            definitions.append({
+                "type": "function",
+                "name": contract.operation_id,
+                "description": (
+                    f"Read-only evidence collection for {contract.semantic_description or contract.operation_id} "
+                    "Use for a personal assessment, not merely to list saved settings. "
+                    "FINN collects the registry-required sources; missing or stale sources limit the judgment. "
+                    "This tool cannot modify stored objects or execute actions."
+                ),
+                "strict": False,
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "asset": {"type": "string", "description": "Asset explicitly named by the user, if any."},
+                        "timeframe": {"type": "string", "description": "Timeframe explicitly named by the user, if any."},
                     },
                     "additionalProperties": False,
                 },
@@ -281,7 +309,7 @@ class FinnResponsesToolCatalog:
             return FinnResponsesToolCall(name, None, {
                 "question": question.strip(), "reason": arguments["reason"],
             }, (), (), ())
-        if name in self.read_tools:
+        if name in self.read_tools or name in self.evaluation_contracts:
             allowed = {"asset", "timeframe"}
             if name == "get_active_plan_and_strategy":
                 allowed.update({"setup_name", "reference"})
@@ -297,6 +325,12 @@ class FinnResponsesToolCatalog:
                 if canonical_timeframe is None:
                     raise FinnResponsesToolError("read_timeframe_invalid")
                 supplied["timeframe"] = canonical_timeframe
+            if name in self.evaluation_contracts:
+                contract = self.evaluation_contracts[name]
+                return FinnResponsesToolCall(
+                    name, None, supplied, contract.tool_names, (), (),
+                    evaluation_operation_id=name,
+                )
             return FinnResponsesToolCall(name, None, supplied, self.read_tools[name], (), ())
         operations = _PROPOSAL_OPERATIONS.get(name)
         if operations is None:
@@ -336,6 +370,10 @@ class FinnResponsesToolCatalog:
             if value not in (None, "", [], {})
             and not (field in contract.required_inputs and type(value) in {int, float} and value == 0)
         }
+        supplied = {
+            field: FinnV2OperationStateService._canonical_input(field, value) or value
+            for field, value in supplied.items()
+        }
         for field, value in supplied.items():
             field_type = contract.input_json_type(field)
             valid = {
@@ -355,7 +393,14 @@ class FinnResponsesToolCatalog:
                     details={"field": field, "allowed_values": list(allowed_values)},
                 )
         if name == "create_dca_plan_proposal" and supplied.get("setup_type") is not None and str(supplied["setup_type"]).casefold() != "dca":
-            raise FinnResponsesToolError("dca_tool_requires_dca_setup_contract")
+            alternatives = [
+                tool_name for tool_name, allowed in _PROPOSAL_OPERATIONS.items()
+                if tool_name != name and operation_id in allowed
+            ]
+            raise FinnResponsesToolError(
+                "dca_tool_requires_dca_setup_contract",
+                details={"recommended_tool_name": alternatives[0]} if len(alternatives) == 1 else {},
+            )
         required = contract.required_inputs_for(supplied)
         missing = tuple(field for field in required if supplied.get(field) in (None, "", [], {}))
         return FinnResponsesToolCall(name, operation_id, dict(supplied), (), required, missing, draft_intent)

@@ -26,6 +26,8 @@ from backend.infrastructure.repositories.finn_v2_run_repository import FinnV2Run
 from backend.infrastructure.repositories.finn_v2_runtime_contract_repository import FinnV2RuntimeContractRepository
 from backend.infrastructure.repositories.finn_v2_trace_repository import FinnV2TraceRepository
 from backend.infrastructure.database import async_session_factory
+from backend.infrastructure.models import User
+from backend.services.locale_config import resolve_chat_locale, response_language_name
 from backend.services.finn_v2_delivery_service import FinnV2DeliveryService
 from backend.services.finn_v2_orchestrator_service import FinnV2OrchestratorService
 from backend.services.finn_v2_tool_execution_service import FinnV2ToolExecutionService
@@ -88,6 +90,7 @@ class FinnV2RunService:
         self, *, run_id: str, user_id: int, response_id: str,
         answer: FinnResponsesVerifiedAnswer,
         previous_response: dict[str, Any] | None = None,
+        locale: str | None = None,
     ) -> None:
         """Publish a verified free-chat read through the same polling/SSE model."""
         run = await self.runs.get_by_id_for_user(run_id=run_id, user_id=user_id)
@@ -142,7 +145,7 @@ class FinnV2RunService:
         if status in {"completed", "clarification_required"} and run.conversation_id:
             await self.conversations.set_responses_cursor(
                 conversation_id=run.conversation_id, user_id=user_id,
-                run_id=run_id, response_id=response_id,
+                run_id=run_id, response_id=response_id, locale=locale,
             )
         await self._commit_session_if_possible()
 
@@ -161,11 +164,17 @@ class FinnV2RunService:
                 raise LookupError("responses_run_not_planned_or_unowned")
             conversation_id = run.conversation_id
             message = run.message
+            user = await session.get(User, user_id)
             context = await orchestrator._load_continuation_context(
                 conversation_id=conversation_id, user_id=user_id, run_id=run_id,
                 has_prior_run=(run.client_context_json or {}).get("_conversation_has_prior_run"),
             )
             cursor = dict(context.get("responses_cursor") or {})
+            locale = resolve_chat_locale(
+                (user.ai_preferences or {}).get("locale") if user else None,
+                message,
+                conversation_locale=cursor.get("locale"),
+            )
             previous_response = None
             if cursor.get("run_id") and cursor.get("response_id"):
                 prior_contract = await orchestrator.runtime_contracts.get_for_run(
@@ -192,7 +201,7 @@ class FinnV2RunService:
                 conversation_id=conversation_id, user_id=user_id, exclude_run_id=run_id,
             ) if conversation_id else None
             prior_state = dict((prior_contract.state_json or {}) if prior_contract else {})
-            if prior_state.get("terminal_status") == "unavailable":
+            if previous_response is None and prior_state.get("terminal_status") == "unavailable":
                 safe_answer = str(dict(prior_state.get("terminal_response") or {}).get("content") or "").strip()
                 if safe_answer:
                     exchange = dict(prior_state.get("responses_exchange") or {})
@@ -209,20 +218,33 @@ class FinnV2RunService:
                 )
                 preceding_state = dict((preceding_contract.state_json or {}) if preceding_contract else {})
                 ancestor_run_id = preceding_state.get("conversation_reference")
-                if ancestor_run_id and preceding_state.get("conversation_reference_kind") == "previous_verified_response":
+                for _ in range(3):
+                    if not ancestor_run_id or preceding_state.get("conversation_reference_kind") != "previous_verified_response":
+                        break
                     ancestor = await orchestrator.runtime_contracts.get_for_run(run_id=str(ancestor_run_id))
                     if (
-                        ancestor is not None and ancestor.user_id == user_id
-                        and ancestor.conversation_id == conversation_id
-                        and (ancestor.state_json or {}).get("terminal_status") == "completed"
+                        ancestor is None or ancestor.user_id != user_id
+                        or ancestor.conversation_id != conversation_id
+                        or (ancestor.state_json or {}).get("terminal_status") != "completed"
                     ):
-                        ancestor_trace = dict((ancestor.state_json or {}).get("responses_exchange") or {}).get("tool_trace") or []
-                        profile_calls = [
-                            call for call in ancestor_trace
-                            if call.get("name") == "get_my_profile_and_risk_style"
-                            and (call.get("result") or {}).get("status") == "completed"
-                        ]
-                        previous_response["tool_trace"] = profile_calls + list(previous_response.get("tool_trace") or [])
+                        break
+                    ancestor_state = dict(ancestor.state_json or {})
+                    ancestor_trace = dict(ancestor_state.get("responses_exchange") or {}).get("tool_trace") or []
+                    source_calls = [
+                        call for call in ancestor_trace
+                        if call.get("status") in {"completed", "partial"}
+                        and isinstance((call.get("result") or {}).get("results"), list)
+                        and (
+                            str(call.get("name") or "").startswith("get_")
+                            or (call.get("result") or {}).get("evaluation_operation_id")
+                        )
+                    ]
+                    previous_response["tool_trace"] = source_calls + list(previous_response.get("tool_trace") or [])
+                    ancestor_answer = str(dict(ancestor_state.get("terminal_response") or {}).get("content") or "").strip()
+                    if ancestor_answer and not previous_response.get("antecedent_verified_answer"):
+                        previous_response["antecedent_verified_answer"] = ancestor_answer
+                    preceding_state = ancestor_state
+                    ancestor_run_id = ancestor_state.get("conversation_reference")
             guided = dict(context.get("active_guided_operation") or {})
             pending_clarification = dict(context.get("responses_clarification") or {})
             guided_inputs = dict(guided.get("collected_inputs") or {})
@@ -277,10 +299,16 @@ class FinnV2RunService:
                 if pending_clarification else None
             ),
             resuming_clarification=bool(pending_clarification),
+            locale=locale,
             instructions=(
-                "You are FINN, a grounded personal trading coach. Reply in the language of the "
-                "LATEST user message, even when earlier turns, tool results or your previous answer "
-                "were in another language. Keep saved object names unchanged. First determine whether the user "
+                "You are FINN, a grounded personal trading coach. The backend selected the effective response language "
+                f"{response_language_name(locale)} ({locale}) from the owner's preference and any explicit switch. "
+                "Write every user-visible field entirely in that language. Do not copy tool-result prose "
+                "in another language. For German, address the user consistently as 'du/dein', "
+                "not 'Sie/Ihr'. Describe missing evidence as missing current market or plan data "
+                "in natural coaching language, not as legal evidence or backend terminology. "
+                "In German say 'Marktdaten' or 'Informationen', never 'Marktbeweise' or 'Beweismittel'. "
+                "Keep saved object names unchanged. First determine whether the user "
                 "explicitly requests creation, modification or removal of a saved object. If so, "
                 "call the matching registry-backed proposal tool FIRST, even when the named parent "
                 "object or some inputs need owner-scoped resolution. A read of that parent may support "
@@ -292,8 +320,25 @@ class FinnV2RunService:
                 "Otherwise, understand the user's language and "
                 "choose zero or more FINN read tools. Personal judgments about the user's plan, risk, "
                 "portfolio or market conditions require relevant read tools; use zero tools only for "
-                "general educational conversation. A self-contained new question takes priority over "
-                "earlier conversation topics. For a general definition or explanation that does not "
+                "general educational conversation. When the user asks FINN to assess whether a saved plan fits their "
+                "risk style or what its weaknesses are, choose the registry-backed read-only "
+                "evaluate_plan tool rather than stopping after separate profile and plan reads. "
+                "That tool gathers its required evidence; unavailable sources limit the conclusion. "
+                "Never portray saved profile and setup labels alone as a completed suitability assessment. "
+                "A saved DCA setup is a setup, not a saved strategy. If read_linked_strategy "
+                "is unavailable, never call the user's saved DCA setup a DCA-strategy, even "
+                "colloquially. Say 'DCA-setup' and state that no linked strategy was found. "
+                "A setup's chart timeframe and DCA cadence do not establish the owner's "
+                "investment or holding horizon. Explain the general distinction if asked, "
+                "then ask which horizon the owner intends; do not classify the saved setup "
+                "as long-term or swing trading without explicit owner-scoped evidence. "
+                "For an evaluation with missing required evidence, lead with what cannot yet "
+                "be concluded, then briefly name the verified setup and one useful next step. "
+                "Do not output a profile-field inventory or Markdown headings and bullets. "
+                "Do not let earlier conversation topics override the current question. "
+                "Use natural, concise wording: say 'marktdata' in Dutch or 'market data' in English, "
+                "not backend terms or awkward literal translations. Do not promise to fetch missing "
+                "data later unless a real scheduled action exists. For a general definition or explanation that does not "
                 "ask about the user's saved data or current market conditions, use answer_directly "
                 "with uses_previous_response=false and do not fetch live snapshots. For a follow-up "
                 "fully explained by the previous verified answer, use answer_directly with "
@@ -321,8 +366,9 @@ class FinnV2RunService:
                 "into an imperative such as 'begin investing at', 'set the stop at', or 'take profit "
                 "at' those levels. Describe them as saved settings, then explain that current "
                 "market and risk evidence is needed before recommending action. A plan blueprint can explain "
-                "structure and missing decisions using those reads; do not fetch a technical or "
-                "market snapshot unless the user asks about a current signal or present-day entry. "
+                "structure and missing decisions using those reads; a personal suitability assessment "
+                "uses the evaluation contract's required sources, while a simple blueprint should not "
+                "fetch a technical or market snapshot without a current-signal question. "
                 "If the selected setup has no linked strategy or no saved amount, do not invent a "
                 "budget, per-trade amount, entry, stop-loss or target. State what is known and use "
                 "ask_for_clarification for the one user decision needed next. "
@@ -440,7 +486,11 @@ class FinnV2RunService:
             ),
             conversation_context=context,
             verified_asset=verified_asset,
-            previous_response_id=recovery_response_id,
+            previous_response_id=(
+                recovery_response_id
+                or (str(previous_response["response_id"])
+                    if previous_response and previous_response.get("response_id") else None)
+            ),
             previous_response=previous_response,
             prior_tool_trace=prior_tool_trace,
         )
@@ -559,6 +609,7 @@ class FinnV2RunService:
         user_id: int,
         phase_outcome: LifecyclePhaseOutcome,
         responses_response_id: str | None = None,
+        responses_locale: str | None = None,
     ):
         get_runtime_contract = getattr(self.runtime_contracts, "get_for_run", None)
         runtime_contract = (
@@ -715,6 +766,7 @@ class FinnV2RunService:
             await self.conversations.set_responses_cursor(
                 conversation_id=run.conversation_id, user_id=user_id,
                 run_id=run_id, response_id=responses_response_id,
+                locale=responses_locale,
             )
         await self._commit_session_if_possible()
 
@@ -843,6 +895,9 @@ class FinnV2RunService:
                 terminal_status="failed",
                 orchestrator={}, verifier={}, reasoning={}, delivery_envelope={},
             )
+            response_json["content"] = await self._localized_runtime_failure_content(
+                run_id=run_id, user_id=user_id,
+            )
             contract = await self.runtime_contracts.materialize_terminal(
                 run_id=run_id, status="failed", mode="UNAVAILABLE", response=response_json, error_code=error_code
             )
@@ -880,6 +935,9 @@ class FinnV2RunService:
             terminal_status="unavailable",
             orchestrator={}, verifier={}, reasoning={}, delivery_envelope={},
         )
+        response_json["content"] = await self._localized_runtime_failure_content(
+            run_id=run_id, user_id=user_id,
+        )
         contract = await self.runtime_contracts.materialize_terminal(
             run_id=run_id, status="unavailable", mode="UNAVAILABLE", response=response_json, error_code=error_code
         )
@@ -888,6 +946,21 @@ class FinnV2RunService:
             run_id, user_id, next_status="unavailable", interaction_mode="UNAVAILABLE",
             error_code=error_code, response_json=response_json, response_source="v2_runtime",
         )
+
+    async def _localized_runtime_failure_content(self, *, run_id: str, user_id: int) -> str:
+        locale = "nl"
+        try:
+            run = await self.runs.get_by_id_for_user(run_id=run_id, user_id=user_id)
+            user = await self.session.get(User, user_id)
+            if run is not None and user is not None:
+                locale = resolve_chat_locale((user.ai_preferences or {}).get("locale"), run.message)
+        except Exception:
+            logger.warning("FINN failure locale lookup unavailable", extra={"run_id": run_id})
+        return {
+            "nl": "FINN kon dit antwoord niet afronden. Probeer het opnieuw.",
+            "en": "FINN couldn't complete this answer. Please try again.",
+            "de": "FINN konnte diese Antwort nicht abschließen. Versuche es bitte erneut.",
+        }[locale]
 
     async def cancel_run(self, *, run_id: str, user_id: int):
         run = await self.runs.get_by_id_for_user(run_id=run_id, user_id=user_id)
@@ -1006,16 +1079,27 @@ class FinnV2RunService:
                     from backend.services.ai_usage_observability_service import ai_usage_context
 
                     with ai_usage_context(entry_point="finn_v2_responses", user_id=user_id):
+                        responses_stage_started = monotonic()
                         prepared, message = await cls.prepare_responses_turn(
                             run_id=run_id, user_id=user_id,
                             selector_started=selector_started,
                             selection_ready=selection_ready,
                         )
+                        logger.info(
+                            "FINN Responses preparation completed in %.2fs",
+                            monotonic() - responses_stage_started,
+                        )
                         if prepared.proposal_analysis is None:
+                            responses_stage_started = monotonic()
                             answer = await FinnResponsesAnswerVerifier(client=openai_client.async_client).verify(
                                 message=message, result=prepared.response,
                                 previous_response=prepared.previous_response,
                                 recent_action_result=prepared.recent_action_result,
+                                locale=prepared.locale,
+                            )
+                            logger.info(
+                                "FINN Responses verification completed in %.2fs",
+                                monotonic() - responses_stage_started,
                             )
                             remaining = remaining_lifecycle_seconds()
                             if (
@@ -1039,6 +1123,7 @@ class FinnV2RunService:
                                         message=message, result=prepared.response,
                                         previous_response=prepared.previous_response,
                                         recent_action_result=prepared.recent_action_result,
+                                        locale=prepared.locale,
                                     )
                                 )
                         else:
@@ -1050,6 +1135,7 @@ class FinnV2RunService:
                                 response_id=prepared.response.response_id,
                                 answer=answer,
                                 previous_response=prepared.previous_response,
+                                locale=prepared.locale,
                             )
                         return
 
@@ -1112,6 +1198,7 @@ class FinnV2RunService:
                         user_id=user_id,
                         phase_outcome=phase_outcome,
                         responses_response_id=prepared.response.response_id if prepared else None,
+                        responses_locale=prepared.locale if prepared else None,
                     )
             finally:
                 # A deadline terminalizer takes a fresh database unit of work.

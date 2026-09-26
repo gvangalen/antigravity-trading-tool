@@ -127,6 +127,7 @@ class ActiveSetupData(BaseModel):
     setup_type: Optional[str] = None
     dca_frequency: Optional[str] = None
     dca_day: Optional[str] = None
+    dca_day_name: Optional[str] = None
     dca_month_day: Optional[int] = None
     min_investment: Optional[float] = None
     score: Optional[float] = None

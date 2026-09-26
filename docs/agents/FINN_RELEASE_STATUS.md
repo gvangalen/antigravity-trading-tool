@@ -13,7 +13,7 @@ short; link artifacts rather than copying reports or chat history.
 | Candidate code SHA | Resolve from the branch commit; this document is not release-authoritative |
 | Production SHA | `258b998ae19df6a026b63265c507855069ebb82c` (public backend/frontend, 2026-09-24; repair candidate not deployed) |
 | Release owner | Build |
-| Last updated | `2026-09-24` |
+| Last updated | `2026-09-26` |
 
 ## QA Runner
 
@@ -28,6 +28,28 @@ fixture or sealed manifest. Candidate and live identity must be verified from
 Git and deployment surfaces, not from this self-referential status file.
 
 ## Evidence
+
+The current Responses coach repair was revalidated on 2026-09-26 before
+deployment. Three six-turn real-provider coaching conversations passed in NL,
+EN, and DE (`6/6` each), and the public API/Celery scenario suite passed
+`20/20`. The local worker-driven action matrix passed `16/16` after a
+registry-backed proposal-tool repair; the first `15/16` diagnostic run is not
+the release evidence. Backend root tests passed `2604`, with `3` skipped;
+frontend typecheck and production build passed. Real-provider development and
+regression passed `18/18` and `109/109` without provider, schema, parse,
+validation, or timeout failures. Current artifacts:
+
+- `.local-finn-parity-artifacts/finn-responses-boundary-full-scenarios.json`
+  SHA-256 `55488400391492b05aa26abccb511d396fb512f0962dd2e330b0d4b2e15e7f06`
+- `.local-finn-parity-artifacts/finn-responses-release-action-matrix-v2.json`
+  SHA-256 `814840b2c398bc034973312ade70a28a0f5fd521efb0f7053ab22e55b6cfdfbf`
+- `.local-finn-parity-artifacts/finn-responses-boundary-provider-development.json`
+  SHA-256 `294a9ba5d85d6fdb1e5285eedac37a329a462d636baa4e639c92ddc5624a813e`
+- `.local-finn-parity-artifacts/finn-responses-boundary-provider-regression.json`
+  SHA-256 `490570644e97881f4a311c2f10e36c80d1cbf6a890c332781ac1731701d5f75a`
+
+These artifacts are local Build evidence only. No CI, deployment, or independent
+QA outcome is inferred from them.
 
 The current uncommitted repair remains `BUILDING`. Two consecutive local public
 Responses conversation gates are `20/20`, including a four-turn conversation,

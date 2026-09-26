@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from dataclasses import replace
 import logging
 import os
+from time import monotonic
 from typing import Any, Mapping
 
 from backend.services.asset_catalog_service import mentioned_catalog_symbols, resolve_catalog_symbol
@@ -29,6 +30,7 @@ class FinnResponsesFrontDoorResult:
     proposal_analysis: RequestAnalysisResult | None
     previous_response: dict[str, Any] | None = None
     recent_action_result: dict[str, Any] | None = None
+    locale: str = "nl"
 
 
 class FinnResponsesFrontDoor:
@@ -54,9 +56,12 @@ class FinnResponsesFrontDoor:
         prior_tool_trace: tuple[dict[str, Any], ...] = (),
         model_message: str | None = None,
         resuming_clarification: bool = False,
+        locale: str = "nl",
     ) -> FinnResponsesFrontDoorResult:
         selected: RequestAnalysisResult | None = None
         read_context: list[dict[str, Any]] = []
+        completed_read_calls: set[tuple[str, str]] = set()
+        attempted_evaluation: str | None = None
         pending_operation = FinnV2OperationStateService.pending_operation_id(conversation_context)
         guided_state = dict(conversation_context.get("active_guided_operation") or {})
         requested_slot = str(guided_state.get("next_missing_input") or "")
@@ -94,28 +99,56 @@ class FinnResponsesFrontDoor:
                             "result": {"operation_id": pending_operation, "requested_slot": requested_slot},
                         },),
                     ),
-                    selected, previous_response,
+                    selected, previous_response, locale=locale,
                 )
         target_retry_used = False
         relevance_retry_used = False
+        recommended_read_operation: str | None = None
         guard = getattr(self, "relevance_guard", None)
         previous_answer_only = False
+        next_decision_from_previous = False
+        answering_previous_question = False
+        resolved_detail_clarification = False
+        pending_clarification = dict(conversation_context.get("responses_clarification") or {})
+        detail_clarification = (
+            resuming_clarification
+            and pending_clarification.get("reason") == "user_detail_required"
+        )
         if (
             guard is not None and previous_response and previous_response.get("answer") and not pending_operation
-            and not resuming_clarification and len(message.strip().split()) <= 4
+            and (not resuming_clarification or detail_clarification)
+            and len(message.strip().split()) <= 12
         ):
+            classification_started = monotonic()
             sufficiency = await guard.previous_answer_suffices(
                 message=message,
                 previous_answer=str(previous_response.get("answer") or ""),
             )
-            previous_answer_only = sufficiency is not False
+            previous_answer_only = sufficiency in {
+                "explain_previous", "next_decision_from_previous",
+                "answers_previous_question",
+            }
+            next_decision_from_previous = sufficiency == "next_decision_from_previous"
+            answering_previous_question = sufficiency == "answers_previous_question"
+            if detail_clarification and not answering_previous_question:
+                previous_answer_only = False
+                next_decision_from_previous = False
+            logger.info(
+                "FINN Responses follow-up classification completed in %.2fs, kind=%s",
+                monotonic() - classification_started,
+                sufficiency if isinstance(sufficiency, str) else "other",
+            )
+            if detail_clarification and answering_previous_question:
+                resolved_detail_clarification = True
+                resuming_clarification = False
+                model_message = message
         tool_purposes = {
             item["name"]: item.get("description", "")
             for item in FinnResponsesToolCatalog().definitions()
         }
 
         async def execute(call: FinnResponsesToolCall) -> dict[str, Any]:
-            nonlocal selected, target_retry_used, relevance_retry_used
+            nonlocal selected, target_retry_used, relevance_retry_used, recommended_read_operation, attempted_evaluation
             if call.name == "ask_for_clarification":
                 prior_read_completed = any(
                     item.get("status") == "completed"
@@ -129,35 +162,90 @@ class FinnResponsesFrontDoor:
                     "reason": call.inputs["reason"],
                     "question": call.inputs["question"],
                 }
+            if attempted_evaluation and (call.name.startswith("get_") or call.evaluation_operation_id):
+                return {
+                    "status": "retry", "reason": "evaluation_already_attempted_this_turn",
+                    "finalize_now": True,
+                    "instruction": (
+                        "The registry evaluation has already run in this turn. Do not repeat it "
+                        "or fetch a subset of the same required scopes. Answer using its typed "
+                        "result, including any unavailable evidence, without claiming a new assessment."
+                    ),
+                }
             should_check = (
                 not pending_operation
                 and not resuming_clarification
                 and (
                     call.operation_id is not None
-                    or (
-                        call.name.startswith("get_")
-                        and previous_response
-                        and len(message.strip().split()) <= 4
-                    )
+                    or call.evaluation_operation_id is not None
+                    or call.name.startswith("get_")
                 )
                 and not conversation_context.get("proposal_revision")
             )
             if should_check and guard is not None:
                 contract = (
-                    self.proposals.registry.require_supported(call.operation_id)
-                    if call.operation_id else None
+                    self.proposals.registry.require_supported(call.operation_id or call.evaluation_operation_id)
+                    if call.operation_id or call.evaluation_operation_id else None
                 )
                 purpose = (
-                    f"{contract.action_polarity.value} {contract.domain}"
+                    str(contract.semantic_description or contract.operation_id)
+                    if contract and call.evaluation_operation_id
+                    else f"{contract.action_polarity.value} {contract.domain}"
                     if contract and contract.action_polarity
                     else tool_purposes.get(call.name, call.name)
                 )
-                aligned = await guard.is_relevant(
+                preferred = None
+                choose_read = getattr(guard, "preferred_read_operation", None)
+                if call.name.startswith("get_") and not read_context and callable(choose_read):
+                    relevance_started = monotonic()
+                    options = [
+                        {"operation_id": item.operation_id,
+                         "purpose": str(item.semantic_description or item.operation_id)}
+                        for item in self.proposals.registry.list()
+                        if item.supported and item.mode == "EVALUATE"
+                        and item.model_policy == "required" and item.required_scopes
+                    ]
+                    preferred = await choose_read(
+                        message=message,
+                        previous_answer=str((previous_response or {}).get("answer") or ""),
+                        proposed_tool=call.name,
+                        proposed_purpose=str(purpose or call.name),
+                        evaluation_options=options,
+                    )
+                    logger.info(
+                        "FINN Responses primary-read relevance completed in %.2fs changed=%s",
+                        monotonic() - relevance_started, bool(preferred and preferred != call.name),
+                    )
+                    if preferred and preferred != call.name:
+                        if relevance_retry_used:
+                            return {"status": "unavailable", "reason": "tool_not_relevant_to_request"}
+                        relevance_retry_used = True
+                        recommended_read_operation = preferred
+                        return {
+                            "status": "retry", "reason": "primary_operation_mismatch",
+                            "recommended_tool_name": preferred,
+                            "instruction": (
+                                "The primary operation selected from FINN's existing registry is "
+                                f"{preferred}. The proposed read was not executed. Call that "
+                                "operation with its declared arguments; its contract gathers required evidence."
+                            ),
+                        }
+                relevance_started = monotonic()
+                aligned = (
+                    preferred == call.name
+                    or (recommended_read_operation is not None
+                        and call.evaluation_operation_id == recommended_read_operation)
+                    or await guard.is_relevant(
                     message=message,
                     previous_answer=str((previous_response or {}).get("answer") or ""),
-                    tool_name=call.operation_id or call.name,
+                    tool_name=call.operation_id or call.evaluation_operation_id or call.name,
                     tool_purpose=str(purpose or call.name),
                     is_proposal=call.operation_id is not None,
+                    )
+                )
+                logger.info(
+                    "FINN Responses tool relevance completed in %.2fs verified=%s",
+                    monotonic() - relevance_started, aligned is not None,
                 )
                 if aligned is None and call.operation_id is None:
                     return {"status": "unavailable", "reason": "tool_relevance_unverified"}
@@ -170,9 +258,10 @@ class FinnResponsesFrontDoor:
                     return {
                         "status": "retry", "reason": "tool_not_relevant_to_request",
                         "instruction": (
-                            "The candidate tool does not match the latest user request. "
-                            "Reconsider the request and previous verified answer, then choose "
-                            "a relevant read, answer_directly, or a proposal only if a mutation was requested. "
+                            "The candidate tool is not the right primary operation for the latest "
+                            "request. Reconsider the user's intended outcome and the registry-backed "
+                            "evaluation contracts as well as reads; choose the operation that can "
+                            "actually answer it. Use a proposal only if a mutation was requested. "
                             "No tool was executed and no proposal was created."
                         ),
                     }
@@ -253,8 +342,34 @@ class FinnResponsesFrontDoor:
                             )
                         if target.resolution_status == "resolved":
                             call = replace(call, inputs={"setup_id": target.entity_id})
+                if call.evaluation_operation_id and resuming_clarification:
+                    chosen_setups = [
+                        item for prior_read in read_context
+                        for item in (prior_read.get("results") or [])
+                        if item.get("scope") == "read_active_setup"
+                        and item.get("status") == "completed"
+                        and isinstance(item.get("data"), dict)
+                        and item["data"].get("setup_id") is not None
+                    ]
+                    if len({item["data"]["setup_id"] for item in chosen_setups}) == 1:
+                        call = replace(call, inputs={
+                            **call.inputs, "setup_id": chosen_setups[-1]["data"]["setup_id"],
+                        })
+                read_identity = (call.name, repr(sorted(call.inputs.items())))
+                if call.read_tools and read_identity in completed_read_calls:
+                    return {
+                        "status": "retry", "reason": "read_already_completed_this_turn",
+                        "instruction": (
+                            "That same FINN read already returned evidence in this turn. Do not repeat it. "
+                            "Use the existing typed result to answer the latest question, or ask one "
+                            "specific clarification if a user choice is genuinely missing."
+                        ),
+                    }
                 read_result = await self.reads(call)
                 read_context.append(read_result)
+                completed_read_calls.add(read_identity)
+                if call.evaluation_operation_id:
+                    attempted_evaluation = call.evaluation_operation_id
                 return read_result
             if pending_operation and call.operation_id != pending_operation:
                 return {"status": "unavailable", "reason": "guided_operation_still_active"}
@@ -327,6 +442,7 @@ class FinnResponsesFrontDoor:
                 )
                 await session.commit()
 
+        loop_started = monotonic()
         result = await FinnResponsesLoop(
             client=self.client, executor=execute, on_tool_result=checkpoint,
             model=os.getenv("FINN_RESPONSES_CHAT_MODEL", "gpt-4o-mini"),
@@ -335,20 +451,41 @@ class FinnResponsesFrontDoor:
             instructions=instructions,
             previous_response_id=(
                 previous_response_id
-                if previous_response_id and not previous_response_id.startswith("guided-")
+                if previous_response_id and not resuming_clarification
+                and not previous_response_id.startswith("guided-")
                 else None
             ),
             previous_verified_answer=(
                 str(previous_response.get("answer") or "")[:1600]
                 if previous_response and not resuming_clarification else None
             ),
+            antecedent_verified_answer=(
+                str(previous_response.get("antecedent_verified_answer") or "")[:1600]
+                if previous_response and not resuming_clarification else None
+            ),
             guided_operation_id=pending_operation,
             resuming_clarification=resuming_clarification,
+            resume_evaluation_operation_id=(
+                next((
+                    str((item.get("result") or {})["evaluation_operation_id"])
+                    for item in reversed((previous_response or {}).get("tool_trace") or [])
+                    if (item.get("result") or {}).get("evaluation_operation_id")
+                ), None)
+                if resuming_clarification else None
+            ),
+            original_user_request=(
+                str(conversation_context.get("responses_clarification", {}).get("original_message") or "")
+                if resuming_clarification or resolved_detail_clarification else ""
+            ),
             previous_answer_only=previous_answer_only,
+            next_decision_from_previous=next_decision_from_previous,
+            answering_previous_question=answering_previous_question,
+            locale=locale,
         )
+        logger.info("FINN Responses tool loop completed in %.2fs", monotonic() - loop_started)
         if pending_operation and selected is None:
             raise FinnResponsesError("guided_proposal_tool_call_required")
         recent_action_result = dict(conversation_context.get("previous_action_result") or {})
         if recent_action_result.get("owner_user_id") != self.user_id or recent_action_result.get("result_status") != "succeeded":
             recent_action_result = {}
-        return FinnResponsesFrontDoorResult(result, selected, previous_response, recent_action_result or None)
+        return FinnResponsesFrontDoorResult(result, selected, previous_response, recent_action_result or None, locale)

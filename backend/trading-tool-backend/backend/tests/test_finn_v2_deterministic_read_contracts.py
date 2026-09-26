@@ -457,7 +457,21 @@ def test_setup_read_preserves_confirmed_dca_fields_in_typed_evidence():
 
     assert persisted.dca_frequency == "weekly"
     assert persisted.dca_day == "monday"
+    assert persisted.dca_day_name == "monday"
     assert persisted.min_investment == 100
+
+
+def test_setup_read_explains_numeric_weekday_without_changing_storage_code():
+    import asyncio
+
+    result = asyncio.run(SetupToolAdapter().execute(
+        setup={"id": 326, "symbol": "BTC", "dca_frequency": "weekly", "dca_day": "1"},
+        resolution_source="owner_setup_collection",
+    ))
+    persisted = parse_tool_payload(result["schema_name"], result["data"].dict())
+
+    assert persisted.dca_day == "1"
+    assert persisted.dca_day_name == "monday"
 
 
 def test_response_projection_makes_persisted_indicator_contract_fields_visible():
