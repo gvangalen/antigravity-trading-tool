@@ -57,15 +57,15 @@ GUIDED_SLOT_ANSWERS = {
     "create_setup": ("Op 4 uur.", "Noem hem Matrix Nieuwe Setup."),
     "update_setup": ("Matrix Update Setup.", "Zet het tijdframe op 1 uur."),
     "delete_setup": ("Matrix Delete Setup.",),
-    "create_strategy": (
-        "Noem hem Matrix Nieuwe Strategie.",
-        "Vaste uitvoering.",
-        "100 euro.",
-        "Entry rond 76000 euro.",
-        "Stop-loss op 72000.",
-        "Targets op 83000 en 87000.",
-        "Gebalanceerd risico.",
-    ),
+    "create_strategy": {
+        "name": "Noem hem Matrix Nieuwe Strategie.",
+        "execution_mode": "Vaste uitvoering.",
+        "base_amount": "100 euro.",
+        "entry": "Entry rond 76000 euro.",
+        "stop_loss": "Stop-loss op 72000.",
+        "targets": "Targets op 83000 en 87000.",
+        "risk_profile": "Gebalanceerd risico.",
+    },
     "update_strategy": ("Matrix Update Strategie.", "Zet de basisinleg op 120 euro."),
     "delete_strategy": ("Matrix Delete Strategie.",),
     "create_bot": ("Matrix Bot Parent.", "Noem hem Matrix Nieuwe Bot."),
@@ -348,7 +348,16 @@ def _run_follow_up(base_url: str, token: str, spec: tuple[str, str, str, str], f
     first = run_gate(base_url=base_url, bearer_token=token, message=incomplete.format(**fields), timeout_seconds=75)
     turns = []
     previous = first
-    for answer in GUIDED_SLOT_ANSWERS[operation_id]:
+    answers = GUIDED_SLOT_ANSWERS[operation_id]
+    for index in range(len(answers)):
+        if isinstance(answers, dict):
+            projection = _runtime_record(previous["run_id"])["terminal_projection"]
+            requested_slot = (projection.get("action_draft") or {}).get("requested_slot")
+            answer = answers.get(requested_slot)
+            if answer is None:
+                break
+        else:
+            answer = answers[index]
         next_turn = run_gate(
             base_url=base_url,
             bearer_token=token,

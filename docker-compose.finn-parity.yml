@@ -99,7 +99,9 @@ services:
     # API and both prefork pools share one cgroup, just as they share the
     # production host. This prevents a green matrix from hiding an API OOM
     # behind separate per-container memory allowances.
-    mem_limit: 780m
+    # Rosetta-backed x86 API and two prefork pools share this local cgroup.
+    # Keep it bounded without OOM-killing a worker below the 8 GB host budget.
+    mem_limit: 2g
     healthcheck:
       test: ["CMD-SHELL", "python -c 'from urllib.request import urlopen; urlopen(\"http://127.0.0.1:8000/api/health\", timeout=2)'" ]
       interval: 2s

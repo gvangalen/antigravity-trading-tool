@@ -43,6 +43,10 @@ from backend.services.finn_v2_responses_answer_verifier import FinnResponsesVeri
 from backend.services.finn_v2_responses_answer_verifier import FinnResponsesAnswerVerifier
 from backend.services.finn_v2_responses_front_door import FinnResponsesFrontDoor, FinnResponsesFrontDoorResult
 from backend.services.finn_v2_responses_loop import FinnResponsesError
+from backend.services.finn_v2_responses_tool_relevance import FinnResponsesToolRelevanceGuard
+from backend.services.finn_v2_operation_state_service import FinnV2OperationStateService
+from backend.services.finn_v2_entity_resolution_service import FinnV2EntityResolutionService
+from backend.domain.finn_v2_operation_registry import FinnV2OperationRegistry
 from backend.utils import openai_client
 
 
@@ -270,6 +274,62 @@ class FinnV2RunService:
         client = openai_client.async_client
         if client is None:
             raise FinnResponsesError("responses_provider_unconfigured")
+        if pending_clarification and not await FinnResponsesToolRelevanceGuard(client).continues_clarification(
+            message=message,
+            original_request=str(pending_clarification.get("original_message") or ""),
+            question=str(pending_clarification.get("question") or ""),
+        ):
+            pending_clarification = {}
+            context.pop("responses_clarification", None)
+            # A new request must not inherit the prior clarification as its answer.
+            previous_response = None
+        pending_guided = FinnV2OperationStateService.pending_operation_id(context)
+        if pending_guided:
+            contract = FinnV2OperationRegistry().require_supported(pending_guided)
+            requested_slot = str(guided.get("next_missing_input") or "")
+            explicit_targets = []
+            if contract.domain in {"setup", "strategy", "bot"}:
+                async with async_session_factory() as session:
+                    resolver = FinnV2EntityResolutionService(session)
+                    explicit_targets = [
+                        await resolver.resolve_canonical_target(
+                            user_id=user_id, entity_type=entity_type, message=message,
+                        )
+                        for entity_type in ("setup", "strategy", "bot")
+                    ]
+            explicit_targets = [
+                target for target in explicit_targets
+                if target.resolution_status == "resolved" and target.source == "explicit_name"
+            ]
+            longest_name = max((len(target.display_name or "") for target in explicit_targets), default=0)
+            longest_targets = [
+                target for target in explicit_targets
+                if len(target.display_name or "") == longest_name
+            ]
+            if len(longest_targets) == 1 and longest_targets[0].entity_type != contract.domain:
+                continuation = False
+            elif requested_slot and FinnResponsesFrontDoor.binds_guided_slot(
+                message=message, contract=contract, registry=FinnV2OperationRegistry(),
+                requested_slot=requested_slot,
+            ):
+                continuation = True
+            else:
+                continuation = await FinnResponsesToolRelevanceGuard(client).continues_guided_operation(
+                    message=message, operation_id=pending_guided,
+                    operation_purpose=str(contract.semantic_description or pending_guided),
+                    requested_slot=requested_slot,
+                    question=FinnV2OperationStateService.clarification_question(
+                        requested_slot, contract=contract,
+                        collected_inputs=guided_inputs,
+                    ),
+                )
+            if continuation is None:
+                raise FinnResponsesError("guided_turn_continuation_unverified")
+            if not continuation:
+                context.pop("active_guided_operation", None)
+                context.pop("proposal_revision", None)
+                previous_response = None
+                verified_asset = None
         selector_started.set()
         async with async_session_factory() as session:
             await FinnV2RuntimeContractRepository(session).record_phase_timestamp(
@@ -325,6 +385,13 @@ class FinnV2RunService:
                 "evaluate_plan tool rather than stopping after separate profile and plan reads. "
                 "That tool gathers its required evidence; unavailable sources limit the conclusion. "
                 "Never portray saved profile and setup labels alone as a completed suitability assessment. "
+                "For process coaching about a rule the user describes, answer the decision "
+                "first in two or three sentences: explain what condition they should check "
+                "before acting, then name the relevant data limit. A user-described rule is "
+                "not a verified saved setup field unless a FINN read actually contains it. "
+                "Do not open with an inventory of setup type, cadence or timeframe when "
+                "those facts do not decide the user's question. Following a stated wait "
+                "rule is not a claim that its market conditions are currently satisfied. "
                 "A saved DCA setup is a setup, not a saved strategy. If read_linked_strategy "
                 "is unavailable, never call the user's saved DCA setup a DCA-strategy, even "
                 "colloquially. Say 'DCA-setup' and state that no linked strategy was found. "
@@ -332,9 +399,14 @@ class FinnV2RunService:
                 "investment or holding horizon. Explain the general distinction if asked, "
                 "then ask which horizon the owner intends; do not classify the saved setup "
                 "as long-term or swing trading without explicit owner-scoped evidence. "
-                "For an evaluation with missing required evidence, lead with what cannot yet "
-                "be concluded, then briefly name the verified setup and one useful next step. "
-                "Do not output a profile-field inventory or Markdown headings and bullets. "
+                "For an evaluation with missing required evidence, distinguish the verified "
+                "saved facts and any static arithmetic from the judgment that cannot yet be "
+                "made. Answer the user's actual question in its requested form: a review may "
+                "name a verifiable structural strength and a limitation; a request for several "
+                "priorities may use a short numbered list. Do not substitute a generic "
+                "missing-data warning for those parts. Never turn structural facts into a "
+                "personal suitability judgment or a trade signal. Do not output a profile-field "
+                "inventory or internal evidence scopes. "
                 "Do not let earlier conversation topics override the current question. "
                 "Use natural, concise wording: say 'marktdata' in Dutch or 'market data' in English, "
                 "not backend terms or awkward literal translations. Do not promise to fetch missing "
@@ -348,7 +420,7 @@ class FinnV2RunService:
                 "relevant concrete detail from it and explain the actual evidence or limitation "
                 "behind its conclusion, not why trading plans are useful in general. Do not ask "
                 "what the user means when the preceding answer supplies the referent. Keep the "
-                "final answer to a few grounded sentences. When the previous answer's conclusion "
+                "final answer concise but complete for the requested structure. When the previous answer's conclusion "
                 "was a request for more information, a why follow-up must explain why that "
                 "specific information is needed in light of the known facts. Do not simply repeat "
                 "the saved fields or ask the same question again. When the previous answer's conclusion "
@@ -502,7 +574,12 @@ class FinnV2RunService:
                     tool_trace=prior_tool_trace + result.response.tool_trace,
                 ),
             )
+        exchange_started = monotonic()
         async with async_session_factory() as session:
+            logger.info(
+                "FINN Responses exchange session acquired in %.2fs",
+                monotonic() - exchange_started,
+            )
             contracts = FinnV2RuntimeContractRepository(session)
             await contracts.record_responses_exchange(
                 run_id=run_id, user_id=user_id,
@@ -511,8 +588,16 @@ class FinnV2RunService:
                 answer=result.response.text,
                 supersedes_response_id=recovery_response_id,
             )
+            logger.info(
+                "FINN Responses exchange recorded in %.2fs",
+                monotonic() - exchange_started,
+            )
             await contracts.record_phase_timestamp(run_id=run_id, phase="selector_completed")
             await session.commit()
+        logger.info(
+            "FINN Responses exchange committed in %.2fs",
+            monotonic() - exchange_started,
+        )
         selection_ready.set()
         if result.proposal_analysis is None and any(
             str(call.get("name") or "").endswith("_proposal")

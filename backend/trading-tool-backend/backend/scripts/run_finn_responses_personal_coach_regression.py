@@ -24,6 +24,7 @@ QUESTIONS = (
     "Beoordeel nu mijn volledige BTC-plan en mijn voorzichtige risicostijl met de beschikbare gegevens.",
     "Is mijn 4H DCA-setup langetermijnopbouw of een swingtrade?",
     "Voor de lange termijn, ongeveer vijf jaar.",
+    "Mijn BTC-plan zegt te wachten op bevestiging voor een entry. Ik ben bang de beweging te missen. Moet ik die wachtregel nu negeren? Denk als coach met me mee, zonder te doen alsof je de actuele koers kent.",
 )
 TRANSLATED_QUESTIONS = {
     "nl": QUESTIONS,
@@ -34,6 +35,7 @@ TRANSLATED_QUESTIONS = {
         "Assess my entire BTC plan and cautious risk style using the available evidence.",
         "Is my 4H DCA setup long-term accumulation or a swing trade?",
         "For the long term, around five years.",
+        "My BTC plan says to wait for entry confirmation. I fear missing the move. Should I ignore that rule now? Coach me without pretending you know the current price.",
     ),
     "de": (
         "Mein aktueller BTC-Plan ist tägliches DCA, aber ich erwäge 100 Euro pro Woche. Passt das zu meinem vorsichtigen Risikostil?",
@@ -42,10 +44,12 @@ TRANSLATED_QUESTIONS = {
         "Bewerte meinen gesamten BTC-Plan und meinen vorsichtigen Risikostil anhand der verfügbaren Daten.",
         "Ist mein 4H-DCA-Setup langfristiger Vermögensaufbau oder ein Swingtrade?",
         "Langfristig, ungefähr fünf Jahre.",
+        "Mein BTC-Plan verlangt eine Bestätigung vor dem Einstieg. Ich habe Angst, die Bewegung zu verpassen. Soll ich diese Regel jetzt ignorieren? Antworte als Coach, ohne den aktuellen Kurs zu behaupten.",
     ),
 }
 PROPOSAL_MARKERS = {
-    "nl": ("je voorstel", "je overweegt", "je denkt aan", "je wilt", "voorgestelde wijziging"),
+    "nl": ("je voorstel", "je overweegt", "je denkt aan", "je wilt", "voorgestelde wijziging",
+           "kan nog niet beoordelen of", "kan niet beoordelen of"),
     "en": ("your proposal", "you are considering", "you consider", "proposed change"),
     "de": ("dein vorschlag", "du erwägst", "vorgeschlagene änderung", "du überlegst", "du ziehst in betracht"),
 }
@@ -62,6 +66,7 @@ def main() -> None:
     parser.add_argument("--output", required=True)
     parser.add_argument("--evaluation-only", action="store_true")
     parser.add_argument("--horizon-only", action="store_true")
+    parser.add_argument("--conditional-only", action="store_true")
     parser.add_argument("--locale", choices=tuple(TRANSLATED_QUESTIONS), default="nl")
     args = parser.parse_args()
     if not args.base_url.startswith(("http://localhost:", "http://127.0.0.1:")):
@@ -83,6 +88,7 @@ def main() -> None:
     conversation_id = None
     questions = TRANSLATED_QUESTIONS[args.locale]
     selected_questions = (
+        [(6, questions[6])] if args.conditional_only else
         [(3, questions[3])] if args.evaluation_only else
         list(enumerate(questions))[3:] if args.horizon_only else
         list(enumerate(questions))
@@ -90,6 +96,8 @@ def main() -> None:
     previous_answer = ""
     for index, question in selected_questions:
         if index == 3:
+            conversation_id = None
+        if index == 6:
             conversation_id = None
         observed = run_gate(
             base_url=args.base_url, bearer_token=token, message=question,
@@ -111,7 +119,7 @@ def main() -> None:
             "language": FinnResponsesAnswerVerifier._language_matches(answer, args.locale),
             "german_register": FinnResponsesAnswerVerifier._german_register_matches(answer, args.locale),
             "no_unsupported_positive_fit": not FinnResponsesAnswerVerifier._unevaluated_positive_fit_claim(answer),
-            "conversation_reference": index in {0, 3} or bool(observed.get("conversation_reference")),
+            "conversation_reference": index in {0, 3, 6} or bool(observed.get("conversation_reference")),
             "saved_entity_type": FinnResponsesAnswerVerifier._saved_entity_type_supported(
                 answer, ({"scope": "read_active_setup", "status": "completed"},
                          {"scope": "read_linked_strategy", "status": "unavailable"}),
@@ -178,6 +186,44 @@ def main() -> None:
                 }[args.locale])
                 and "dca" in answer.casefold()
                 and not FinnResponsesAnswerVerifier._unevaluated_positive_fit_claim(answer)
+            ),
+            "conditional_process_coaching": index != 6 or (
+                observed["status"] == "completed"
+                and any(word in answer.casefold() for word in {
+                    "nl": ("wacht", "bevestig", "voorwaarde"),
+                    "en": ("wait", "confirm", "condition"),
+                    "de": ("wart", "bestätig", "bedingung"),
+                }[args.locale])
+                and any(word in answer.casefold() for word in {
+                    "nl": ("koers", "markt", "actueel", "controleer"),
+                    "en": ("price", "market", "current", "check"),
+                    "de": ("kurs", "markt", "aktuell", "prüf"),
+                }[args.locale])
+                and not any(phrase in answer.casefold() for phrase in (
+                    "ik kan dit nog niet onderbouwen met betrouwbare gegevens",
+                    "ik kan nog niet beoordelen of dit bij je risicostijl past",
+                ))
+                and any(phrase in answer.casefold() for phrase in {
+                    "nl": ("wacht tot", "controleer of", "controleer eerst of", "moet controleren of", "check of"),
+                    "en": ("wait until", "check whether", "verify that", "confirm whether"),
+                    "de": ("warte bis", "prüfe ob", "prüf ob", "sicherstellen, dass"),
+                }[args.locale])
+                and not answer.casefold().startswith({
+                    "nl": "je hebt een dca-setup", "en": "you have a dca setup",
+                    "de": "du hast ein dca-setup",
+                }[args.locale])
+                and not any(phrase in answer.casefold() for phrase in {
+                    "nl": ("je opgeslagen strategie", "gekoppelde strategie vereist"),
+                    "en": ("your saved strategy", "linked strategy requires"),
+                    "de": ("deine gespeicherte strategie", "verknüpfte strategie verlangt"),
+                }[args.locale])
+            ),
+            "user_rule_not_claimed_as_saved": index != 6 or not any(
+                phrase in answer.casefold() for phrase in {
+                    "nl": ("setup verwacht een bevestiging", "opgeslagen plan vereist bevestiging"),
+                    "en": ("saved setup requires confirmation", "saved plan requires confirmation"),
+                    "de": ("gespeicherte setup verlangt bestätigung", "gespeicherte plan verlangt bestätigung"),
+                }[args.locale]
             ),
         }
         passed = all(checks.values())

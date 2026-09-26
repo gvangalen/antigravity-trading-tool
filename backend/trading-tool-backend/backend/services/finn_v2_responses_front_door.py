@@ -44,6 +44,25 @@ class FinnResponsesFrontDoor:
         self.proposals = FinnResponsesProposalSelection()
         self.relevance_guard = FinnResponsesToolRelevanceGuard(client)
 
+    @staticmethod
+    def binds_guided_slot(*, message: str, contract: Any, registry: Any, requested_slot: str) -> bool:
+        """A short typed answer belongs to the persisted slot, not a new model intent."""
+        states = FinnV2OperationStateService()
+        normalized = message.strip().casefold()
+        if not normalized or "?" in message or states.is_cancel_intent(message):
+            return False
+        if any(
+            normalized.startswith(alias.casefold())
+            for other in registry.list()
+            if other.operation_id != contract.operation_id
+            for alias in other.aliases
+        ):
+            return False
+        return (
+            states._requested_slot_value(field=requested_slot, text=message, contract=contract) is not None
+            and states._is_short_slot_answer(message, requested_slot=requested_slot)
+        )
+
     async def run(
         self,
         *,
@@ -67,18 +86,17 @@ class FinnResponsesFrontDoor:
         requested_slot = str(guided_state.get("next_missing_input") or "")
         if pending_operation and requested_slot and not FinnV2OperationStateService.is_cancel_intent(message):
             contract = self.proposals.registry.require_supported(pending_operation)
-            normalized_message = message.strip().casefold()
+            states = self.proposals.states
             switches_operation = any(
-                normalized_message.startswith(alias.casefold())
+                message.strip().casefold().startswith(alias.casefold())
                 for other in self.proposals.registry.list()
                 if other.operation_id != pending_operation
                 for alias in other.aliases
             )
-            states = self.proposals.states
-            binds_slot = states._requested_slot_value(
-                field=requested_slot, text=message, contract=contract,
-            ) is not None or states._is_explicit_correction(message)
-            if binds_slot and not switches_operation and "?" not in message:
+            if self.binds_guided_slot(
+                message=message, contract=contract, registry=self.proposals.registry,
+                requested_slot=requested_slot,
+            ) or (states._is_explicit_correction(message) and not switches_operation and "?" not in message):
                 selected = self.proposals.from_call(
                     call=FinnResponsesToolCall(
                         name=FinnResponsesToolCatalog().proposal_tool_for_operation(pending_operation),
@@ -196,7 +214,7 @@ class FinnResponsesFrontDoor:
                 )
                 preferred = None
                 choose_read = getattr(guard, "preferred_read_operation", None)
-                if call.name.startswith("get_") and not read_context and callable(choose_read):
+                if (call.name.startswith("get_") or call.evaluation_operation_id) and not read_context and callable(choose_read) and recommended_read_operation is None:
                     relevance_started = monotonic()
                     options = [
                         {"operation_id": item.operation_id,
@@ -211,6 +229,11 @@ class FinnResponsesFrontDoor:
                         proposed_tool=call.name,
                         proposed_purpose=str(purpose or call.name),
                         evaluation_options=options,
+                        read_options=[
+                            {"operation_id": name, "purpose": description}
+                            for name, description in tool_purposes.items()
+                            if name.startswith("get_")
+                        ],
                     )
                     logger.info(
                         "FINN Responses primary-read relevance completed in %.2fs changed=%s",
@@ -226,7 +249,7 @@ class FinnResponsesFrontDoor:
                             "recommended_tool_name": preferred,
                             "instruction": (
                                 "The primary operation selected from FINN's existing registry is "
-                                f"{preferred}. The proposed read was not executed. Call that "
+                                f"{preferred}. The proposed tool was not executed. Call that "
                                 "operation with its declared arguments; its contract gathers required evidence."
                             ),
                         }
@@ -234,29 +257,48 @@ class FinnResponsesFrontDoor:
                 aligned = (
                     preferred == call.name
                     or (recommended_read_operation is not None
-                        and call.evaluation_operation_id == recommended_read_operation)
+                        and (call.evaluation_operation_id or call.name) == recommended_read_operation)
                     or await guard.is_relevant(
                     message=message,
                     previous_answer=str((previous_response or {}).get("answer") or ""),
                     tool_name=call.operation_id or call.evaluation_operation_id or call.name,
                     tool_purpose=str(purpose or call.name),
                     is_proposal=call.operation_id is not None,
+                    **({"proposal_operations": [
+                        {
+                            "operation_id": item.operation_id,
+                            "domain": item.domain,
+                            "polarity": item.action_polarity.value if item.action_polarity else "",
+                            "purpose": str(item.semantic_description or item.operation_id),
+                        }
+                        for item in self.proposals.registry.list()
+                        if item.supported and item.mode in {"CREATE_PROPOSAL", "ACTION_PROPOSAL"}
+                    ]} if call.operation_id else {}),
                     )
                 )
                 logger.info(
                     "FINN Responses tool relevance completed in %.2fs verified=%s",
                     monotonic() - relevance_started, aligned is not None,
                 )
-                if aligned is None and call.operation_id is None:
-                    return {"status": "unavailable", "reason": "tool_relevance_unverified"}
                 if aligned is None:
-                    logger.info("FINN proposal relevance undecided; continuing to contract validation: %s", call.operation_id)
+                    return {"status": "unavailable", "reason": "tool_relevance_unverified"}
                 if not aligned:
                     if relevance_retry_used:
                         return {"status": "unavailable", "reason": "tool_not_relevant_to_request"}
                     relevance_retry_used = True
+                    recommended_operation_id = (
+                        getattr(guard, "recommended_operation_id", None)
+                        if call.operation_id else None
+                    )
+                    recommended_tool_name = (
+                        FinnResponsesToolCatalog().proposal_tool_for_operation(recommended_operation_id)
+                        if recommended_operation_id else None
+                    )
                     return {
                         "status": "retry", "reason": "tool_not_relevant_to_request",
+                        **({"recommended_operation_id": recommended_operation_id,
+                            "recommended_tool_name": recommended_tool_name}
+                           if recommended_tool_name else {}),
                         "instruction": (
                             "The candidate tool is not the right primary operation for the latest "
                             "request. Reconsider the user's intended outcome and the registry-backed "
@@ -383,28 +425,37 @@ class FinnResponsesFrontDoor:
                 read_context=read_context,
             )
             state = analysis.request_plan.operation_state
-            missing = set(state.get("missing_required_inputs") or [])
             if (
                 not pending_operation
                 and not target_retry_used
                 and call.operation_id.startswith(("update_", "delete_", "deactivate_"))
-                and missing.intersection({"setup_id", "strategy_id", "bot_id"})
+                and self.proposals.registry.require_supported(call.operation_id).domain
+                in {"setup", "strategy", "bot"}
             ):
                 session_factory = getattr(self.reads, "session_factory", None)
                 if session_factory is not None:
+                    candidate_domain = self.proposals.registry.require_supported(call.operation_id).domain
                     async with session_factory() as session:
                         resolver = FinnV2EntityResolutionService(session)
-                        alternatives = [
+                        targets = [
                             await resolver.resolve_canonical_target(
                                 user_id=self.user_id, entity_type=entity_type,
                                 message=message, conversation_context=dict(conversation_context),
                             )
                             for entity_type in ("setup", "strategy", "bot")
-                            if entity_type != self.proposals.registry.require_supported(call.operation_id).domain
                         ]
+                    candidate_name_length = max((
+                        len(target.display_name or "") for target in targets
+                        if target.entity_type == candidate_domain
+                        and target.resolution_status == "resolved"
+                        and target.source == "explicit_name"
+                    ), default=0)
                     explicit_matches = [
-                        target for target in alternatives
-                        if target.resolution_status == "resolved" and target.source == "explicit_name"
+                        target for target in targets
+                        if target.entity_type != candidate_domain
+                        and target.resolution_status == "resolved"
+                        and target.source == "explicit_name"
+                        and len(target.display_name or "") > candidate_name_length
                     ]
                     if len(explicit_matches) == 1:
                         target_retry_used = True
@@ -480,6 +531,11 @@ class FinnResponsesFrontDoor:
             previous_answer_only=previous_answer_only,
             next_decision_from_previous=next_decision_from_previous,
             answering_previous_question=answering_previous_question,
+            conditional_process_check=lambda: bool(
+                getattr(guard, "conditional_process", False)
+                and getattr(guard, "response_focus", None) != "priorities"
+            ),
+            response_focus_check=lambda: getattr(guard, "response_focus", None),
             locale=locale,
         )
         logger.info("FINN Responses tool loop completed in %.2fs", monotonic() - loop_started)

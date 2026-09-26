@@ -12,19 +12,18 @@ from backend.services.finn_v2_lifecycle_budget import remaining_lifecycle_second
 class FinnResponsesToolRelevanceGuard:
     def __init__(self, client: Any) -> None:
         self.client = client
+        self.recommended_operation_id: str | None = None
+        self.conditional_process = False
+        self.response_focus: str | None = None
 
-    async def preferred_read_operation(
-        self, *, message: str, previous_answer: str, proposed_tool: str,
-        proposed_purpose: str, evaluation_options: list[dict[str, str]],
-    ) -> str | None:
+    async def continues_clarification(
+        self, *, message: str, original_request: str, question: str,
+    ) -> bool:
+        """Only a reply to the open choice may inherit its operation context."""
         remaining = remaining_lifecycle_seconds()
         if remaining is not None and remaining <= 5:
-            return None
+            return False
         timeout = min(4.0, remaining - 3 if remaining is not None else 4.0)
-        choices = [proposed_tool] + [
-            item["operation_id"] for item in evaluation_options
-            if item["operation_id"] != proposed_tool
-        ]
         client = (
             self.client.with_options(max_retries=0, timeout=timeout)
             if hasattr(self.client, "with_options") else self.client
@@ -32,7 +31,123 @@ class FinnResponsesToolRelevanceGuard:
         try:
             response = await asyncio.wait_for(
                 client.responses.create(
-                    model="gpt-4o-mini", store=False, tool_choice="none",
+                    model="gpt-4o", store=False, tool_choice="none",
+                    temperature=0,
+                    instructions=(
+                        "Decide whether the latest message answers the specific open question "
+                        "and continues the original request. A correction that changes the "
+                        "target object type, a fresh mutation request, or a new advice question "
+                        "is not an answer to the old question. Reusing the same action verb "
+                        "does not make a new request an answer: if the open question asks which "
+                        "bot and the user requests an action on a strategy, return false. A "
+                        "valid answer identifies one of the objects requested in the open "
+                        "question, rather than issuing a complete new command. Do not choose "
+                        "a tool or infer "
+                        "an object ID. When uncertain, return continues=false."
+                    ),
+                    input=json.dumps({
+                        "latest_user_message": message,
+                        "original_request": original_request[:1200],
+                        "open_question": question[:1200],
+                    }, ensure_ascii=False),
+                    text={"format": {
+                        "type": "json_schema", "name": "finn_clarification_continuation",
+                        "strict": True,
+                        "schema": {
+                            "type": "object", "additionalProperties": False,
+                            "properties": {"continues": {"type": "boolean"}},
+                            "required": ["continues"],
+                        },
+                    }},
+                    max_output_tokens=24,
+                ), timeout=timeout,
+            )
+            return json.loads(str(getattr(response, "output_text", "") or "")).get("continues") is True
+        except Exception:
+            return False
+
+    async def continues_guided_operation(
+        self, *, message: str, operation_id: str, operation_purpose: str,
+        requested_slot: str, question: str,
+    ) -> bool | None:
+        """Separate an answer to a contract slot from an explicit new request."""
+        remaining = remaining_lifecycle_seconds()
+        if remaining is not None and remaining <= 5:
+            return None
+        timeout = min(4.0, remaining - 3 if remaining is not None else 4.0)
+        client = (
+            self.client.with_options(max_retries=0, timeout=timeout)
+            if hasattr(self.client, "with_options") else self.client
+        )
+        try:
+            response = await asyncio.wait_for(
+                client.responses.create(
+                    model="gpt-4o", store=False, tool_choice="none",
+                    temperature=0,
+                    instructions=(
+                        "Classify whether the latest turn is ONLY an answer to one active "
+                        "FINN draft question. Return continues=true for a short answer to "
+                        "the requested slot, "
+                        "a clarification question about that slot, or an explicit correction "
+                        "to this draft. A complete imperative with its own action and target "
+                        "is a new request, not a slot answer. Return false for an independent "
+                        "new question or a request to create, update or delete a different "
+                        "object type, even if it contains numbers or the old object's name. "
+                        "An imperative sentence that repeats an action verb is NOT a slot "
+                        "answer when it explicitly names a different object category. "
+                        "For example, while asking which bot to delete, 'Verwijder mijn "
+                        "strategie BTC Breakout Full Strategy' is false; 'BTC Alpha Paper "
+                        "Bot' is true. A stop-loss value "
+                        "is not a cancel command. Do not choose a tool or infer object IDs."
+                    ),
+                    input=json.dumps({
+                        "latest_user_message": message,
+                        "active_operation_id": operation_id,
+                        "active_operation_purpose": operation_purpose,
+                        "requested_slot": requested_slot,
+                        "open_question": question,
+                    }, ensure_ascii=False),
+                    text={"format": {
+                        "type": "json_schema", "name": "finn_guided_turn_continuation",
+                        "strict": True,
+                        "schema": {
+                            "type": "object", "additionalProperties": False,
+                            "properties": {"continues": {"type": "boolean"}},
+                            "required": ["continues"],
+                        },
+                    }},
+                    max_output_tokens=24,
+                ), timeout=timeout,
+            )
+            value = json.loads(str(getattr(response, "output_text", "") or "")).get("continues")
+            return value if isinstance(value, bool) else None
+        except Exception:
+            return None
+
+    async def preferred_read_operation(
+        self, *, message: str, previous_answer: str, proposed_tool: str,
+        proposed_purpose: str, evaluation_options: list[dict[str, str]],
+        read_options: list[dict[str, str]] | None = None,
+    ) -> str | None:
+        self.conditional_process = False
+        self.response_focus = None
+        remaining = remaining_lifecycle_seconds()
+        if remaining is not None and remaining <= 5:
+            return None
+        timeout = min(4.0, remaining - 3 if remaining is not None else 4.0)
+        choices = list(dict.fromkeys([
+            proposed_tool,
+            *(item["operation_id"] for item in (read_options or [])),
+            *(item["operation_id"] for item in evaluation_options),
+        ]))
+        client = (
+            self.client.with_options(max_retries=0, timeout=timeout)
+            if hasattr(self.client, "with_options") else self.client
+        )
+        try:
+            response = await asyncio.wait_for(
+                client.responses.create(
+                    model="gpt-4o", store=False, tool_choice="none",
                     temperature=0,
                     instructions=(
                         "Choose the one primary FINN operation that answers the latest user request. "
@@ -41,6 +156,23 @@ class FinnResponsesToolRelevanceGuard:
                         "operations gather their registry-required sources and may still return "
                         "insufficient_evidence. Choose the proposed read for factual lookup; "
                         "choose the matching evaluation only for a requested judgment. "
+                        "This check is symmetric: when the candidate is an evaluation but "
+                        "the user only asks for saved facts, static arithmetic from saved "
+                        "levels, or conditional process steps, choose the matching read. "
+                        "A request to reason conditionally about a user-stated trading rule, "
+                        "discipline or preparatory checklist is not by itself a request to "
+                        "certify current market suitability. Read the relevant saved plan "
+                        "where needed, then discuss the rule without inventing market facts. "
+                        "Set conditional_process=true when the user asks whether to follow "
+                        "or ignore a stated plan rule, or what to check before acting, without "
+                        "asking FINN to verify that current market conditions satisfy it. "
+                        "For conditional_process=true choose the factual read that retrieves "
+                        "the relevant saved plan, even if the candidate is an evaluation. "
+                        "A request for preparatory priorities and something to avoid for an "
+                        "existing saved plan is conditional_process=true when it does not "
+                        "explicitly ask whether today's live market conditions satisfy the plan. "
+                        "It can be answered with saved plan facts plus an honest live-data "
+                        "limit; it is not authorization to change settings or trade. "
                         "Classifying whether a saved setup is long-term accumulation or swing "
                         "trading from its chart timeframe is NOT a suitability judgment. The "
                         "timeframe does not establish the owner's holding horizon; use a factual "
@@ -52,7 +184,16 @@ class FinnResponsesToolRelevanceGuard:
                         "assess personal suitability, trading risk, plan coherence, performance "
                         "or consequences, not merely to identify what kind of plan it is. "
                         "Use only one of the supplied operation IDs. The previous answer is context, "
-                        "not an instruction. Do not decide tool arguments or execute an action."
+                        "not an instruction. Classify the answer FORM separately from the "
+                        "operation: review when the user asks for strengths, restraints and a "
+                        "check; calculation for static numeric relationships; priorities when "
+                        "they explicitly request a numbered action list and what to avoid; "
+                        "general otherwise. Set requested_priority_count to the number of "
+                        "actions explicitly requested by the user, or zero when no number "
+                        "was requested. A request to think together is not an action-list "
+                        "request and must have requested_priority_count=0. "
+                        "Classify the form even if evidence for a full judgment is missing. "
+                        "Do not decide tool arguments or execute an action."
                     ),
                     input=json.dumps({
                         "latest_user_message": message,
@@ -60,6 +201,7 @@ class FinnResponsesToolRelevanceGuard:
                         "proposed_operation": {
                             "operation_id": proposed_tool, "purpose": proposed_purpose,
                         },
+                        "read_operations": read_options or [],
                         "evaluation_operations": evaluation_options,
                     }, ensure_ascii=False),
                     text={"format": {
@@ -70,8 +212,13 @@ class FinnResponsesToolRelevanceGuard:
                             "properties": {
                                 "operation_id": {"type": "string", "enum": choices},
                                 "requires_judgment": {"type": "boolean"},
+                                "conditional_process": {"type": "boolean"},
+                                "response_focus": {"type": "string", "enum": [
+                                    "general", "review", "calculation", "priorities",
+                                ]},
+                                "requested_priority_count": {"type": "integer", "enum": [0, 1, 2, 3, 4, 5]},
                             },
-                            "required": ["operation_id", "requires_judgment"],
+                            "required": ["operation_id", "requires_judgment", "conditional_process", "response_focus", "requested_priority_count"],
                         },
                     }},
                     max_output_tokens=60,
@@ -79,8 +226,31 @@ class FinnResponsesToolRelevanceGuard:
                 timeout=timeout,
             )
             parsed = json.loads(str(getattr(response, "output_text", "") or ""))
+            if parsed.get("response_focus") in {"general", "review", "calculation", "priorities"}:
+                self.response_focus = parsed["response_focus"]
+            if self.response_focus == "priorities" and not (
+                isinstance(parsed.get("requested_priority_count"), int)
+                and parsed["requested_priority_count"] >= 2
+            ):
+                self.response_focus = "general"
             selected = parsed.get("operation_id")
+            if self.response_focus == "calculation":
+                arithmetic_reads = [
+                    item["operation_id"] for item in (read_options or [])
+                    if "static arithmetic" in item.get("purpose", "").casefold()
+                ]
+                if len(arithmetic_reads) == 1:
+                    return arithmetic_reads[0]
+            if parsed.get("conditional_process") is True:
+                self.conditional_process = True
+                if selected in {item["operation_id"] for item in (read_options or [])}:
+                    return selected
+                if any(item["operation_id"] == "get_active_plan_and_strategy" for item in (read_options or [])):
+                    return "get_active_plan_and_strategy"
+                return proposed_tool
             if selected == proposed_tool:
+                return selected
+            if selected in {item["operation_id"] for item in (read_options or [])}:
                 return selected
             return selected if selected in choices and parsed.get("requires_judgment") is True else proposed_tool
         except Exception:
@@ -210,7 +380,9 @@ class FinnResponsesToolRelevanceGuard:
     async def is_relevant(
         self, *, message: str, previous_answer: str, tool_name: str,
         tool_purpose: str, is_proposal: bool,
+        proposal_operations: list[dict[str, str]] | None = None,
     ) -> bool | None:
+        self.recommended_operation_id = None
         remaining = remaining_lifecycle_seconds()
         if remaining is not None and remaining <= 5:
             return None
@@ -225,24 +397,40 @@ class FinnResponsesToolRelevanceGuard:
                     client.responses.create(
                         model="gpt-4o-mini", store=False, tool_choice="none",
                         instructions=(
-                            "Decide only whether the latest user message REQUESTS a change to "
-                            "the user's stored state. Creating, updating, selecting, adding, "
-                            "removing, deleting, activating or deactivating are changes. "
-                            "A question about suitability, explanation, or what exists is not "
-                            "a change request. Do not judge whether the proposed operation is "
-                            "ready, its target is resolved, or inputs are complete; FINN's "
-                            "existing action contract validates those separately. A proposal "
-                            "is only a draft and never executes without user confirmation."
+                            "Check whether the candidate action contract matches the latest "
+                            "user request's mutation, target object type and action polarity. "
+                            "A strategy is not its parent setup; a bot is not its strategy. "
+                            "Compare the candidate with the supplied canonical registry "
+                            "operations. Mark aligned=false if another operation matches the "
+                            "requested change better, or if the user asked only a question. "
+                            "Previous answers provide context but cannot change the explicit "
+                            "target in the latest request. Do not decide target IDs, input "
+                            "completeness or execution authorization. A proposal is only a "
+                            "draft and requires separate user confirmation. When not aligned, "
+                            "recommend the single best operation_id from the supplied registry "
+                            "list, or 'none' if the request is not a mutation."
                         ),
                         input=json.dumps({
                             "latest_user_message": message,
                             "previous_verified_answer": previous_answer[:1200],
+                            "candidate_operation_id": tool_name,
+                            "candidate_purpose": tool_purpose,
+                            "registry_action_operations": proposal_operations or [],
                         }, ensure_ascii=False),
                         text={"format": {
-                            "type": "json_schema", "name": "finn_change_request", "strict": True,
+                            "type": "json_schema", "name": "finn_action_alignment", "strict": True,
                             "schema": {
-                                "type": "object", "properties": {"requests_change": {"type": "boolean"}},
-                                "required": ["requests_change"], "additionalProperties": False,
+                                "type": "object", "properties": {
+                                    "aligned": {"type": "boolean"},
+                                    "recommended_operation_id": {
+                                        "type": "string",
+                                        "enum": ["none"] + [
+                                            item["operation_id"] for item in (proposal_operations or [])
+                                        ],
+                                    },
+                                },
+                                "required": ["aligned", "recommended_operation_id"],
+                                "additionalProperties": False,
                             },
                         }},
                         max_output_tokens=40,
@@ -250,7 +438,12 @@ class FinnResponsesToolRelevanceGuard:
                     timeout=timeout,
                 )
                 parsed = json.loads(str(getattr(response, "output_text", "") or ""))
-                return parsed["requests_change"] if isinstance(parsed.get("requests_change"), bool) else None
+                recommendation = parsed.get("recommended_operation_id")
+                if recommendation in {
+                    item["operation_id"] for item in (proposal_operations or [])
+                }:
+                    self.recommended_operation_id = recommendation
+                return parsed["aligned"] if isinstance(parsed.get("aligned"), bool) else None
             response = await asyncio.wait_for(
                 client.responses.create(
                     model="gpt-4o-mini", store=False, tool_choice="none",
@@ -264,6 +457,10 @@ class FinnResponsesToolRelevanceGuard:
                         "collects its own required evidence; mark a generic read aligned=false "
                         "and that evaluation aligned=true. A question that merely asks what is "
                         "saved is a read, not an evaluation. "
+                        "Conditional process coaching about a user-supplied wait rule or "
+                        "checklist may use saved-plan reads without claiming that live "
+                        "conditions satisfy the rule. Do not turn such a process question into "
+                        "a full suitability evaluation solely because it mentions risk. "
                         "For a mutation, proposed_tool is the canonical action-contract operation ID, "
                         "not the generic transport tool name. A request to update, delete or deactivate "
                         "an object can legitimately use an action-proposal tool. "

@@ -11,6 +11,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.infrastructure.repositories.strategy_repository import StrategyRepository
+from backend.domain.strategy_level_geometry import strategy_level_geometry
 from backend.schemas.trading_schema import StrategyCreateSchema
 from backend.utils.data_normalizers import (
     normalize_targets,
@@ -136,18 +137,11 @@ class StrategyService:
                 decision_curve = None
 
         # Calculate Risk/Reward ratio for Trade setups
-        risk_reward = "N/A"
-        if entry and stop_loss and targets and len(targets) > 0:
-            try:
-                # Use the first target for the primary R:R calculation
-                first_target = float(targets[0])
-                risk = abs(float(entry) - float(stop_loss))
-                reward = abs(first_target - float(entry))
-                if risk > 0:
-                    rr_ratio = round(reward / risk, 2)
-                    risk_reward = f"1:{rr_ratio}"
-            except (ValueError, ZeroDivisionError):
-                pass
+        geometry = strategy_level_geometry(entry, stop_loss, targets)
+        risk_reward = (
+            f"1:{float(geometry['targets'][0]['reward_to_risk'])}"
+            if geometry["status"] == "completed" else "N/A"
+        )
 
         return {
             "id": row.get("id"),

@@ -24,20 +24,89 @@ class FinnResponsesError(RuntimeError):
     """A typed provider or tool-loop failure, never a legacy-chat fallback."""
 
 
-def limited_evaluation_format() -> dict[str, Any]:
-    return {"format": {
+def limited_evaluation_format(response_focus: str | None = None) -> dict[str, Any]:
+    output = {"format": {
         "type": "json_schema", "name": "finn_limited_evaluation", "strict": True,
         "schema": {
             "type": "object", "additionalProperties": False,
             "properties": {
+                "response_focus": {"type": "string", "enum": ["general", "review", "calculation", "priorities"]},
                 "saved_context": {"type": "string"},
                 "user_proposal": {"type": "string"},
+                "conditional_observation": {"type": "string"},
+                "verified_strength": {"type": "string"},
+                "verified_constraint": {"type": "string"},
+                "priority_actions": {"type": "array", "items": {"type": "string"}},
+                "avoid_action": {"type": "string"},
                 "assessment_limit": {"type": "string"},
                 "next_safe_step": {"type": "string"},
             },
-            "required": ["saved_context", "user_proposal", "assessment_limit", "next_safe_step"],
+            "required": ["response_focus", "saved_context", "user_proposal", "conditional_observation", "verified_strength", "verified_constraint", "priority_actions", "avoid_action", "assessment_limit", "next_safe_step"],
         },
     }}
+    if response_focus in {"general", "review", "calculation", "priorities"}:
+        output["format"]["schema"]["properties"]["response_focus"]["enum"] = [response_focus]
+    return output
+
+
+def conditional_process_format() -> dict[str, Any]:
+    return {"format": {
+        "type": "json_schema", "name": "finn_conditional_process", "strict": True,
+        "schema": {
+            "type": "object", "additionalProperties": False,
+            "properties": {
+                "decision": {"type": "string"},
+                "reason": {"type": "string"},
+                "data_limit": {"type": "string"},
+            },
+            "required": ["decision", "reason", "data_limit"],
+        },
+    }}
+
+
+def priority_process_format() -> dict[str, Any]:
+    return {"format": {
+        "type": "json_schema", "name": "finn_plan_process_priorities", "strict": True,
+        "schema": {
+            "type": "object", "additionalProperties": False,
+            "properties": {
+                "priority_actions": {"type": "array", "items": {"type": "string"}},
+                "avoid_action": {"type": "string"},
+                "data_limit": {"type": "string"},
+            },
+            "required": ["priority_actions", "avoid_action", "data_limit"],
+        },
+    }}
+
+
+def priority_process_answer(text: str) -> str:
+    try:
+        payload = json.loads(text)
+        priorities = [str(item).strip() for item in payload["priority_actions"] if str(item).strip()]
+        avoid = str(payload["avoid_action"] or "").strip()
+        limit = str(payload["data_limit"] or "").strip()
+    except (TypeError, ValueError, KeyError) as exc:
+        raise FinnResponsesError("responses_priority_process_invalid") from exc
+    if not priorities or not avoid:
+        raise FinnResponsesError("responses_priority_process_incomplete")
+    return "\n".join((
+        *(f"{index}. {item}" for index, item in enumerate(priorities, 1)),
+        avoid,
+        *([limit] if limit else []),
+    ))
+
+
+def conditional_process_answer(text: str) -> str:
+    try:
+        payload = json.loads(text)
+        decision = str(payload["decision"] or "").strip()
+        reason = str(payload["reason"] or "").strip()
+        limit = str(payload["data_limit"] or "").strip()
+    except (TypeError, ValueError, KeyError) as exc:
+        raise FinnResponsesError("responses_conditional_process_invalid") from exc
+    if not decision or not reason:
+        raise FinnResponsesError("responses_conditional_process_incomplete")
+    return " ".join(part for part in (decision, reason, limit) if part)
 
 
 def limited_evaluation_answer(text: str, *, locale: str | None = None) -> str:
@@ -45,14 +114,57 @@ def limited_evaluation_answer(text: str, *, locale: str | None = None) -> str:
         structured = json.loads(text)
         context = str(structured["saved_context"] or "").strip()
         proposal = str(structured["user_proposal"] or "").strip()
+        observation = str(structured.get("conditional_observation") or "").strip()
+        strength = str(structured.get("verified_strength") or "").strip()
+        constraint = str(structured.get("verified_constraint") or "").strip()
+        priorities = [str(item).strip() for item in (structured.get("priority_actions") or []) if str(item).strip()]
+        avoid = str(structured.get("avoid_action") or "").strip()
         limitation = str(structured["assessment_limit"] or "").strip()
         next_step = str(structured["next_safe_step"] or "").strip()
+        focus = str(structured.get("response_focus") or "general")
     except (TypeError, ValueError, KeyError) as exc:
         raise FinnResponsesError("responses_limited_evaluation_invalid") from exc
-    if not limitation or not next_step:
-        raise FinnResponsesError("responses_limited_evaluation_incomplete")
-    parts = [part for part in (context, proposal, limitation, next_step) if part]
-    return " ".join(part if part.endswith((".", "!", "?")) else f"{part}." for part in parts)
+    if focus not in {"general", "review", "calculation", "priorities"}:
+        raise FinnResponsesError("responses_limited_evaluation_invalid_focus")
+    required_by_focus = {
+        "general": {"assessment_limit": limitation, "next_safe_step": next_step},
+        "review": {"verified_strength": strength, "verified_constraint": constraint,
+                   "next_safe_step": next_step},
+        "calculation": {"conditional_observation": observation, "assessment_limit": limitation},
+        "priorities": {"priority_actions": priorities, "avoid_action": avoid},
+    }
+    missing = [key for key, value in required_by_focus[focus].items() if not value]
+    if missing:
+        raise FinnResponsesError("responses_limited_evaluation_incomplete:" + ",".join(missing))
+    details = {
+        "general": (context, proposal, observation, limitation),
+        "review": (context, strength, constraint, limitation),
+        "calculation": (context, observation, limitation),
+        "priorities": (context, limitation),
+    }[focus]
+    parts = [part for part in details if part]
+    if focus == "review":
+        labels = {
+            "nl": ("Sterk in je plan", "Waar ik je afrem", "Eerst controleren"),
+            "en": ("What is defined", "Where I would pause", "Check first"),
+            "de": ("Was festgelegt ist", "Wo ich dich bremsen würde", "Zuerst prüfen"),
+        }[locale if locale in {"nl", "en", "de"} else "nl"]
+        review_parts = [
+            context,
+            f"{labels[0]}: {strength}",
+            f"{labels[1]}: {constraint}",
+            limitation,
+            f"{labels[2]}: {next_step}",
+        ]
+        return "\n".join(part for part in review_parts if part).strip()
+    prose = " ".join(part if part.endswith((".", "!", "?")) else f"{part}." for part in parts)
+    if focus == "priorities" and priorities:
+        prose += "\n" + "\n".join(f"{index}. {item}" for index, item in enumerate(priorities, 1))
+    if focus == "priorities" and avoid:
+        prose += "\n" + (avoid if avoid.endswith((".", "!", "?")) else f"{avoid}.")
+    if next_step and focus != "priorities":
+        prose += " " + (next_step if next_step.endswith((".", "!", "?")) else f"{next_step}.")
+    return prose.strip()
 
 
 @dataclass(frozen=True)
@@ -61,6 +173,7 @@ class FinnResponsesResult:
     response_id: str
     tool_trace: tuple[dict[str, Any], ...]
     answer_kind: str = "free_text"
+    response_focus: str | None = None
 
 
 class FinnResponsesLoop:
@@ -102,6 +215,8 @@ class FinnResponsesLoop:
         previous_answer_only: bool = False,
         next_decision_from_previous: bool = False,
         answering_previous_question: bool = False,
+        conditional_process_check: Callable[[], bool] | None = None,
+        response_focus_check: Callable[[], str | None] | None = None,
         locale: str | None = None,
     ) -> FinnResponsesResult:
         verified_context = (
@@ -144,6 +259,10 @@ class FinnResponsesLoop:
                 str(trace[-1]["result"].get("target_domain") or "")
                 if trace and trace[-1]["status"] == "retry" else None
             )
+            retry_operation_id = (
+                str(trace[-1]["result"].get("recommended_operation_id") or "")
+                if trace and trace[-1]["status"] == "retry" else None
+            )
             provider_timeout = min(
                 self.provider_timeout_seconds,
                 remaining - 3.5 if remaining is not None else self.provider_timeout_seconds,
@@ -151,6 +270,7 @@ class FinnResponsesLoop:
             definitions = self.catalog.definitions(
                 guided_operation_id=guided_operation_id if not trace else None,
                 retry_target_domain=retry_target_domain,
+                retry_operation_id=retry_operation_id,
             )
             if previous_answer_only:
                 definitions = []
@@ -179,6 +299,18 @@ class FinnResponsesLoop:
                     "different output language from the question, prior turns, or tool evidence. Preserve "
                     "proper names, tickers and quoted user values unchanged."
                 )
+            turn_instructions += (
+                "\nMatch the structure of the user's question. When they ask for a numbered "
+                "set of priorities, give that number of distinct numbered, preparatory "
+                "actions and separately name what to avoid. Base each action on verified "
+                "saved settings or on a clearly labelled evidence limitation; never turn "
+                "saved entry, stop or target levels into instructions to trade now. "
+                "For a plan review, distinguish a verifiable structural property from a "
+                "market or suitability judgment. Having saved entry, stop and target levels "
+                "permits static risk arithmetic, but does not make their ratios attractive, "
+                "the plan strong, or the trade suitable. State a concrete check without "
+                "claiming that unavailable current market data has been obtained."
+            )
             if previous_verified_answer:
                 turn_instructions += (
                     "\nThe assistant message in this turn's input is the immediately previous "
@@ -275,9 +407,22 @@ class FinnResponsesLoop:
                 )
                 kwargs["instructions"] = turn_instructions
             elif limited_evaluations:
-                kwargs["text"] = limited_evaluation_format()
+                requested_focus = response_focus_check() if response_focus_check is not None else None
+                logger.info("FINN limited evaluation response focus=%s", requested_focus or "unclassified")
+                kwargs["text"] = limited_evaluation_format(requested_focus)
                 turn_instructions += (
                     "\nReturn brief user-facing text in the user's language. "
+                    "Set response_focus to the classified answer form in the schema. "
+                    "If no form is classified, choose from the user's actual request: review for a "
+                    "strength/weakness/check assessment, calculation for static saved-level "
+                    "arithmetic, priorities for a requested action list, general otherwise. "
+                    "Populate only fields relevant to that focus; unrelated fields must be "
+                    "empty strings or an empty priority_actions array. For priorities, give "
+                    "exactly the number of distinct preparatory actions requested, followed "
+                    "by one avoid_action. These actions may verify saved settings, identify "
+                    "what current condition must be checked when a source becomes available, "
+                    "or clarify the owner's own risk constraint; do not recommend an entry, "
+                    "a new position or changing saved levels without evaluation. "
                     "saved_context names only saved settings proven by the typed result; "
                     "a setup is not a saved strategy and a missing saved amount stays missing. "
                     "Write saved_context as one short natural sentence about the saved state only; "
@@ -289,13 +434,41 @@ class FinnResponsesLoop:
                     "Write it as one natural sentence beginning with the equivalent of 'You are considering', "
                     "not as a bare amount or a repeated question. "
                     "Preserve any amount and cadence the user explicitly proposed. "
+                    "conditional_observation may explain the logical consequence of a rule, "
+                    "entry/stop/target values or a scenario explicitly supplied by the user, "
+                    "without claiming the current market meets that rule or that the trade "
+                    "is personally suitable. If no such rule or numbers exist, leave it empty. "
+                    "When a verified linked strategy provides completed level_geometry and "
+                    "the user asks about risk versus reward, put its risk_per_unit and the "
+                    "reward_to_risk of each relevant target in conditional_observation. "
+                    "These are static arithmetic facts and do not require a live quote; "
+                    "do not convert them into a probability of profit or a trade signal. "
+                    "Adapt the response to the user's requested form. For a plan review, "
+                    "verified_strength names one genuinely evidenced structural fact, "
+                    "verified_constraint names one evidenced weakness or unresolved risk, "
+                    "and next_safe_step gives a concrete verification step. Otherwise leave "
+                    "the review fields empty. For a request for three priorities, put "
+                    "exactly three distinct, actionable, evidence-grounded process steps "
+                    "in priority_actions and one thing to avoid in avoid_action. Do not "
+                    "substitute the same generic data-warning three times. Otherwise "
+                    "leave priority_actions empty and avoid_action empty. These are "
+                    "presentation fields, not new action contracts. "
+                    "Never describe a reward-to-risk ratio as attractive, positive, "
+                    "favorable, convincing, or proof of a good plan. For calculation, "
+                    "report the exact risk_per_unit and each ratio from level_geometry, "
+                    "then say what cannot be concluded without current evidence. "
+                    "Do not repeat the saved_context or invent a price, outcome or condition. "
                     "assessment_limit states plainly that "
                     "you cannot yet judge suitability because specific current data is missing, "
                     "in one plain sentence without backend terminology. Do not say a judgment is "
                     "'not supported by missing data' or repeat this limitation elsewhere. "
-                    "next_safe_step names one choice the user can actually make now: "
-                    "keep the current saved setup unchanged for now. State the decision once, "
-                    "without another explanation or a vague promise that 'we' will obtain data. "
+                    "next_safe_step names one choice the user can actually make now. "
+                    "If the user supplied a wait, entry or review rule, the safe process "
+                    "choice may be to follow that stated rule until its conditions are "
+                    "verified. Otherwise suggest leaving saved settings unchanged. "
+                    "Do not imply those conditions are currently met or that following "
+                    "the rule makes a trade suitable. State the decision once, without "
+                    "another explanation or a vague promise that 'we' will obtain data. "
                     "Do not invite them to confirm or implement the proposed change. "
                     "Do not recommend changing an amount, frequency, entry, stop or target, or "
                     "suggest a named indicator absent the user's question. Do not offer to "
@@ -323,9 +496,56 @@ class FinnResponsesLoop:
                 )
             elif trace[-1]["status"] == "retry":
                 kwargs["tool_choice"] = "required"
+            if (
+                trace and conditional_process_check is not None
+                and conditional_process_check() and not proposal_selected
+                and trace[-1]["status"] in {"completed", "partial", "unavailable"}
+                and not repair_tool_name
+            ):
+                kwargs["tool_choice"] = "none"
+            priority_process = (
+                response_focus_check is not None and response_focus_check() == "priorities"
+                and trace and trace[-1]["status"] in {"completed", "partial", "unavailable"}
+                and not limited_evaluations and not proposal_selected and not repair_tool_name
+            )
+            if priority_process:
+                kwargs["tool_choice"] = "none"
             if kwargs.get("tool_choice") == "none":
                 kwargs["tools"] = []
                 kwargs.pop("parallel_tool_calls", None)
+                if (
+                    conditional_process_check is not None
+                    and conditional_process_check()
+                    and not next_decision_from_previous
+                    and not limited_evaluations
+                    and not proposal_selected
+                ):
+                    kwargs["text"] = conditional_process_format()
+                    kwargs["instructions"] = (
+                        kwargs.get("instructions", instructions)
+                        + "\nFor this process-choice question, return a concise decision first, "
+                        "then one reason grounded in the user's stated rule, then the specific "
+                        "limit on checking today's conditions. The user's rule is conversation "
+                        "input, not a verified saved setup or strategy field. Do not claim it is "
+                        "stored: attribute it explicitly to the user (for example, 'the wait "
+                        "rule you describe'), not to the saved plan. Do not invent triggers "
+                        "or recommend a trade. "
+                        "Refer to a saved strategy only if a typed tool result actually found "
+                        "one; a saved DCA setup is not a saved strategy. Otherwise speak "
+                        "about the user's stated rule without naming a saved object. Each "
+                        "field should be one short sentence in the requested language."
+                    )
+                elif priority_process:
+                    kwargs["text"] = priority_process_format()
+                    kwargs["instructions"] = (
+                        kwargs.get("instructions", instructions)
+                        + "\nGive the number of distinct preparatory priorities requested by "
+                        "the user in priority_actions and one explicit avoid_action. Ground "
+                        "them in verified saved plan fields and user-stated constraints. "
+                        "Do not recommend opening a position, adjusting saved levels or "
+                        "checking an unavailable live source now. Put the live-data boundary "
+                        "in data_limit. All fields are user-facing in the selected language."
+                    )
             try:
                 provider_started = time.perf_counter()
                 logger.info(
@@ -398,11 +618,17 @@ class FinnResponsesLoop:
                     answer = f"{reason} {decision}"
                 elif limited_evaluations:
                     answer = limited_evaluation_answer(answer, locale=locale)
+                elif conditional_process_check is not None and conditional_process_check() and kwargs.get("text") == conditional_process_format():
+                    answer = conditional_process_answer(answer)
+                elif kwargs.get("text") == priority_process_format():
+                    answer = priority_process_answer(answer)
                 logger.info("FINN Responses final answer prepared round=%d", tool_rounds + 1)
                 return FinnResponsesResult(
                     answer, response_id, tuple(trace),
                     "grounded_next_decision" if next_decision_from_previous else
-                    "answers_previous_question" if answering_previous_question else "free_text",
+                    "answers_previous_question" if answering_previous_question else
+                    "conditional_process" if conditional_process_check is not None and conditional_process_check() else "free_text",
+                    response_focus_check() if response_focus_check is not None else None,
                 )
             tool_rounds += 1
             prior_id = response_id
@@ -528,6 +754,24 @@ class FinnResponsesLoop:
                     "call_id": call_id,
                     "output": json.dumps(output, default=str),
                 })
+            if (
+                response_focus_check is not None
+                and response_focus_check() == "calculation"
+                and not proposal_selected
+                and any(
+                    item.get("scope") == "read_linked_strategy"
+                    and item.get("status") == "completed"
+                    and isinstance((item.get("data") or {}).get("level_geometry"), dict)
+                    and item["data"]["level_geometry"].get("status") == "completed"
+                    for call in trace
+                    for item in ((call.get("result") or {}).get("results") or [])
+                    if isinstance(item, dict)
+                )
+            ):
+                return FinnResponsesResult(
+                    "Static calculation from verified saved strategy levels.",
+                    response_id, tuple(trace), response_focus="calculation",
+                )
             if resume_evaluation_operation_id and not any(
                 (item.get("result") or {}).get("evaluation_operation_id") == resume_evaluation_operation_id
                 for item in trace

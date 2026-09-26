@@ -6,6 +6,7 @@ from typing import Any, Callable
 
 from backend.domain.macro_indicator_catalog import get_active_macro_indicator_definitions
 from backend.domain.finn_v2_operation_registry import FinnV2OperationRegistry
+from backend.domain.strategy_level_geometry import strategy_level_geometry
 from backend.services.finn_v2_json_safety import to_json_safe
 from backend.services.finn_v2_responses_tool_catalog import FinnResponsesToolCall
 from backend.services.finn_v2_tool_execution_service import FinnV2ToolExecutionService
@@ -61,6 +62,10 @@ class FinnResponsesReadExecutor:
                 )
                 data = to_json_safe(result.result) if result.success else None
                 as_of = self._as_of(data)
+            if read_tool == "read_linked_strategy" and isinstance(data, dict):
+                data = {**data, "level_geometry": strategy_level_geometry(
+                    data.get("entry"), data.get("stop_loss"), data.get("targets"),
+                )}
             results.append({
                 "scope": read_tool,
                 "status": "completed" if result.success else "unavailable",
@@ -114,7 +119,13 @@ class FinnResponsesReadExecutor:
                 "personal suitability, risk alignment, or a trading recommendation. Explain which "
                 "required source is missing and what the user can decide next. Write a brief coach "
                 "answer with a conclusion, a reason and one relevant next step; do not enumerate "
-                "profile fields or suggest an indicator unless the user asked for one."
+                "profile fields or suggest an indicator unless the user asked for one. "
+                "Static level_geometry from a verified linked strategy may be explained even "
+                "when live market sources are missing. Its ratios do not establish current "
+                "entry conditions, probability of success, or personal suitability. When the "
+                "user requests a review, distinguish one verifiable structural strength from "
+                "one concrete missing or risky condition and one next check; do not replace "
+                "that review with only a missing-data statement."
             )
             if contract.operation_id == "evaluate_indicator_configuration":
                 output["assessment_boundary"] += (
@@ -134,8 +145,13 @@ class FinnResponsesReadExecutor:
                 "must be described as existing settings, never as an instruction to trade at "
                 "those levels or as proof that this plan suits the user's goals or risk style. "
                 "For a factual readback, answer only the fields the user asked about; do not add "
-                "an unsolicited suitability warning or suggest a trade. If the user asks for a "
-                "recommendation, say which evaluation is still needed."
+                "an unsolicited suitability warning or suggest a trade. For a question about "
+                "following a rule the user says they have, distinguish that user statement "
+                "from verified saved fields. Give a brief conditional process answer: what "
+                "the rule would require checking and why FOMO alone does not prove its "
+                "conditions are met. Do not recite unrelated setup fields. Do not claim "
+                "the current market satisfies the rule. If the user asks whether a trade "
+                "is personally suitable now, say which evaluation is still needed."
             )
         return output
 

@@ -13,6 +13,7 @@ from typing import Any
 from langdetect import DetectorFactory, LangDetectException, detect, detect_langs
 
 from backend.services.finn_v2_responses_loop import (
+    FinnResponsesError,
     FinnResponsesResult,
     limited_evaluation_answer,
     limited_evaluation_format,
@@ -311,11 +312,34 @@ class FinnResponsesAnswerVerifier:
 
     @staticmethod
     def _contains_internal_identifier(text: str) -> bool:
-        return bool(re.search(
+        return bool(re.search(r"\b[a-z]+(?:_[a-z0-9]+)+\b", text)) or bool(re.search(
             r"\bfinn-v2-(?:run|conv|proposal|execution|contract)-[\w-]+\b"
             r"|\b(?:setup|strategy|bot|proposal|execution|run)[\s_-]*id\s*[:#=]",
             text, re.IGNORECASE,
         ))
+
+    @staticmethod
+    def _strategy_levels_attributed_to_setup(
+        text: str, evidence: tuple[dict[str, Any], ...],
+    ) -> bool:
+        if not any(item.get("scope") == "read_active_setup" and item.get("status") == "completed" for item in evidence):
+            return False
+        if not any(item.get("scope") == "read_linked_strategy" and item.get("status") == "completed" for item in evidence):
+            return False
+        for sentence in re.split(r"[.!?\n]+", text):
+            match = re.search(
+                r"\bsetup\b[^.!?\n]{0,100}\b(?:met|heeft|with|has|enthält)\b"
+                r"(?P<detail>[^.!?\n]{0,100})",
+                sentence, re.IGNORECASE,
+            )
+            if not match:
+                continue
+            detail = match.group("detail")
+            if re.search(r"\b(?:strategie|strategy|strategieplan)\b", match.group(0), re.IGNORECASE):
+                continue
+            if re.search(r"\b(?:entry|instap|einstieg|stop.?loss|targets?|doelen|ziele)\b", detail, re.IGNORECASE):
+                return True
+        return False
 
     @staticmethod
     def _saved_entity_type_supported(text: str, evidence: tuple[dict[str, Any], ...]) -> bool:
@@ -424,6 +448,41 @@ class FinnResponsesAnswerVerifier:
         ))
 
     @staticmethod
+    def _ungrounded_level_advice(text: str) -> bool:
+        ratio_praise = re.search(
+            r"\b(?:aantrekkelijk\w*|gunstig\w*|sterk\w*|goed|positiev\w*|positief|beter|"
+            r"attractive|favorable|favourable|good|strong|positive|better|attraktiv|günstig|gut|"
+            r"positiv\w*|besser)\b[^.!?;\n]{0,55}"
+            r"\b(?:risico.?opbrengst\w*|risico.?rendement\w*|risk.?reward\w*|reward.?risk\w*|"
+            r"verhouding\w*|ratio\w*|verhältnis\w*)\b"
+            r"|\b(?:risico.?opbrengst\w*|risico.?rendement\w*|risk.?reward\w*|reward.?risk\w*|"
+            r"verhouding\w*|ratio\w*|verhältnis\w*)\b[^.!?;\n]{0,55}"
+            r"\b(?:aantrekkelijk\w*|gunstig\w*|sterk\w*|goed|positiev\w*|positief|beter|"
+            r"attractive|favorable|favourable|good|strong|positive|better|attraktiv|günstig|gut|"
+            r"positiv\w*|besser)\b",
+            text, re.IGNORECASE,
+        )
+        directed_change = re.search(
+            r"\b(?:stel|zet|pas|activeer|plaats|set|adjust|change|activate|place|"
+            r"setze|ändere|aktiviere)\b[^.!?;\n]{0,65}"
+            r"\b(?:stop.?loss|target|doel|entry|instap|strategie|strategy|order)\b",
+            text, re.IGNORECASE,
+        )
+        conditional_change = re.search(
+            r"\b(?:pas\s+aan|adjust|change|ändere)\b[^.!?;\n]{0,65}"
+            r"\b(?:doel|target|price|prijs|markt|market|ziel|preis)\b",
+            text, re.IGNORECASE,
+        )
+        trade_planning = re.search(
+            r"\b(?:plan|overweeg|neem|take|planen|plane|nimm)\s+"
+            r"(?:je\s+)?(?:winstneming\w*|profit.?tak\w*|gewinnmitnahme\w*)\b"
+            r"|\b(?:winstneming\w*|profit.?tak\w*|gewinnmitnahme\w*)\b"
+            r"[^.!?;\n]{0,20}\b(?:plannen|plan|overwegen|nemen|take|planen)\b",
+            text, re.IGNORECASE,
+        )
+        return bool(ratio_praise or directed_change or conditional_change or trade_planning)
+
+    @staticmethod
     def _proposal_speaker_is_user(text: str) -> bool:
         return not bool(re.search(
             r"\b(?:ik\s+(?:denk\s+aan|overweeg|wil)|i\s+(?:am\s+considering|want)|"
@@ -465,6 +524,105 @@ class FinnResponsesAnswerVerifier:
             except InvalidOperation:
                 pass
         return amounts
+
+    @staticmethod
+    def _static_geometry_complete(
+        text: str, evidence: tuple[dict[str, Any], ...], response_focus: str | None,
+    ) -> bool:
+        if response_focus != "calculation":
+            return True
+        geometries = [
+            item["data"]["level_geometry"]
+            for item in evidence
+            if item.get("scope") == "read_linked_strategy"
+            and item.get("status") == "completed"
+            and isinstance(item.get("data"), dict)
+            and isinstance(item["data"].get("level_geometry"), dict)
+            and item["data"]["level_geometry"].get("status") == "completed"
+        ]
+        if not geometries:
+            return True
+        values: set[Decimal] = set()
+        for match in re.finditer(r"(?<![\w])\d+(?:[.,]\d+)*(?![\w])", text):
+            token = match.group()
+            pieces = re.split(r"[.,]", token)
+            if len(pieces) > 1 and len(pieces[-1]) == 3:
+                normalized = "".join(pieces)
+            else:
+                normalized = "".join(pieces[:-1]) + "." + pieces[-1] if len(pieces) > 1 else token
+            try:
+                values.add(Decimal(normalized))
+            except InvalidOperation:
+                continue
+        for geometry in geometries:
+            try:
+                required = {Decimal(str(geometry["risk_per_unit"]))}
+                required.update(Decimal(str(target["reward_to_risk"])) for target in geometry["targets"])
+            except (KeyError, InvalidOperation, TypeError):
+                return False
+            if not required <= values:
+                return False
+        return True
+
+    @staticmethod
+    def _static_geometry_answer(
+        evidence: tuple[dict[str, Any], ...], locale: str | None,
+    ) -> str | None:
+        for item in evidence:
+            if item.get("scope") != "read_linked_strategy" or item.get("status") != "completed":
+                continue
+            data = item.get("data")
+            if not isinstance(data, dict):
+                continue
+            geometry = data.get("level_geometry")
+            if not isinstance(geometry, dict) or geometry.get("status") != "completed":
+                continue
+            try:
+                risk = Decimal(str(geometry["risk_per_unit"]))
+                targets = [
+                    (Decimal(str(target["price"])), Decimal(str(target["reward_per_unit"])),
+                     Decimal(str(target["reward_to_risk"])))
+                    for target in geometry["targets"]
+                ]
+            except (KeyError, InvalidOperation, TypeError):
+                continue
+            if not targets or risk <= 0:
+                continue
+
+            language = locale if locale in {"nl", "en", "de"} else "nl"
+
+            def number(value: Decimal) -> str:
+                normalized = format(value.normalize(), "f")
+                integer, dot, fraction = normalized.partition(".")
+                grouped = f"{int(integer):,}"
+                if language != "en":
+                    grouped = grouped.replace(",", ".")
+                return grouped + (("," if language != "en" else ".") + fraction if dot else "")
+
+            name = str(data.get("name") or "").strip()
+            if language == "en":
+                heading = f"From your saved strategy {name}, the entry-to-stop distance is {number(risk)} per unit."
+                lines = [
+                    f"At target {number(price)}, the potential gain is {number(reward)} per unit ({number(ratio)}:1)."
+                    for price, reward, ratio in targets
+                ]
+                limit = "These are static calculations from saved levels, not a judgment about today's market or the likelihood of reaching a target."
+            elif language == "de":
+                heading = f"Aus deiner gespeicherten Strategie {name} ergibt sich ein Abstand von {number(risk)} je Einheit zwischen Einstieg und Stop-Loss."
+                lines = [
+                    f"Beim Ziel {number(price)} beträgt der mögliche Gewinn {number(reward)} je Einheit ({number(ratio)}:1)."
+                    for price, reward, ratio in targets
+                ]
+                limit = "Das sind statische Berechnungen aus gespeicherten Kursniveaus, keine Beurteilung des heutigen Marktes oder der Zielwahrscheinlichkeit."
+            else:
+                heading = f"Uit je opgeslagen strategie {name} volgt een verschil van {number(risk)} per eenheid tussen entry en stop-loss."
+                lines = [
+                    f"Bij doel {number(price)} is de potentiële opbrengst {number(reward)} per eenheid ({number(ratio)}:1)."
+                    for price, reward, ratio in targets
+                ]
+                limit = "Dit zijn statische berekeningen uit opgeslagen niveaus, geen oordeel over de huidige markt of de kans dat een doel wordt bereikt."
+            return " ".join((heading, *lines, limit))
+        return None
 
     @classmethod
     def _amounts_supported(
@@ -508,6 +666,54 @@ class FinnResponsesAnswerVerifier:
             if item.get("status") == "completed":
                 monetary_fields(item.get("data"))
         return claims <= grounded
+
+    @staticmethod
+    def _percentage_claims_supported(
+        *, answer: str, message: str, previous_answer: str,
+        evidence: tuple[dict[str, Any], ...], response_focus: str | None,
+    ) -> bool:
+        pattern = re.compile(
+            r"\b(\d+(?:[.,]\d+)?)\s*(?:%|\b(?:procent|percent|prozent)\b)",
+            re.IGNORECASE,
+        )
+
+        def percentages(value: str) -> set[Decimal]:
+            return {Decimal(match.group(1).replace(",", ".")) for match in pattern.finditer(value)}
+
+        claimed = percentages(answer)
+        if not claimed:
+            return True
+        grounded = percentages(message) | percentages(previous_answer)
+
+        def collect(value: Any) -> None:
+            if isinstance(value, dict):
+                for key, item in value.items():
+                    field = str(key).casefold()
+                    if field == "level_geometry":
+                        continue
+                    if any(token in field for token in ("percent", "percentage", "_pct", "risk_per_trade")):
+                        try:
+                            grounded.add(Decimal(str(item)))
+                        except (InvalidOperation, TypeError):
+                            pass
+                    else:
+                        collect(item)
+            elif isinstance(value, list):
+                for item in value:
+                    collect(item)
+
+        for item in evidence:
+            if item.get("status") == "completed":
+                collect(item.get("data"))
+        if response_focus == "calculation":
+            for item in evidence:
+                geometry = (item.get("data") or {}).get("level_geometry") if isinstance(item.get("data"), dict) else None
+                if isinstance(geometry, dict) and geometry.get("status") == "completed":
+                    try:
+                        grounded.add(Decimal(str(geometry["entry_stop_distance_percent"])))
+                    except (KeyError, InvalidOperation, TypeError):
+                        pass
+        return claimed <= grounded
 
     @staticmethod
     def _asset_quantities_supported(
@@ -607,7 +813,9 @@ class FinnResponsesAnswerVerifier:
         require_address_judgment: bool = True,
         require_actionable_next_decision: bool = False,
         answering_previous_question: bool = False,
+        conditional_process: bool = False,
         locale: str | None = None,
+        audit_diagnostics: dict[str, Any] | None = None,
     ) -> bool:
         if self.client is None:
             return False
@@ -633,6 +841,12 @@ class FinnResponsesAnswerVerifier:
                         "setup, strategy, entry, stop-loss or target proves its stored value, NOT "
                         "personal suitability, profitability, historical market conditions, a "
                         "need to change levels, or that changes will achieve investment goals. "
+                        "The user's description of a plan rule is conversation input, not "
+                        "proof that this rule exists in the saved setup or strategy. Mark "
+                        "user_claim_as_saved=true if the answer attributes such a rule, "
+                        "trigger, amount or condition to a persisted object when the typed "
+                        "read evidence does not contain it. The answer may instead say "
+                        "'you describe a rule' and discuss its conditional consequence. "
                         "General education, cautious questions, truthful descriptions of saved "
                         "settings, and invitations to CHECK suitability by obtaining current "
                         "market or owner-scoped risk evidence are allowed. 'Check whether these "
@@ -646,6 +860,29 @@ class FinnResponsesAnswerVerifier:
                         "'100 euros per week fits well with your conservative approach' IS "
                         "unsupported personal advice when no owner-scoped risk assessment exists, "
                         "even if the next sentence says that a final judgment is still missing. "
+                        "Completed level_geometry from a saved owner-scoped strategy grounds "
+                        "static risk per unit and reward-to-risk ratios. Reporting those "
+                        "numbers or noting that saved levels make the calculation possible "
+                        "does not claim suitability. Calling a ratio attractive, favorable "
+                        "or convincing does. A requested plan review can name a verified "
+                        "structural fact, an evidenced limitation, and a concrete check. "
+                        "A requested priority list may contain the requested number of "
+                        "distinct preparatory checks grounded in saved facts; do not require "
+                        "reducing it to one choice or a generic data warning. "
+                        "Set requested_structure_satisfied=false if the question asks for a "
+                        "specific response structure that the answer omits: for example a "
+                        "strength, restraint and next check in a review, or three separately "
+                        "identifiable priorities plus what to avoid. Merely saying 'three "
+                        "actions' without listing three is insufficient. For a calculation, "
+                        "when completed level_geometry is in evidence, require its absolute "
+                        "risk_per_unit AND the reward_to_risk of each target, plus the "
+                        "inference limit; ratios alone omit the risk amount. Otherwise "
+                        "set requested_structure_satisfied=true. "
+                        "Set invented_rule_detail=true if an unspecified user-stated "
+                        "wait or confirmation rule becomes a specific indicator, price-action "
+                        "pattern, threshold or trigger absent from both the user's words and "
+                        "typed evidence, or if the answer claims that such a detail improves "
+                        "the chance of a successful trade. Otherwise set it false. "
                         "Check saved-object identity against the evidence scope: read_active_setup "
                         "is a setup, not a strategy. Calling that setup a 'plan' is acceptable when "
                         "the user calls it a plan; calling it a saved strategy is not. "
@@ -705,12 +942,24 @@ class FinnResponsesAnswerVerifier:
                         "the missing horizon instead. "
                         "If the user asks which choice or preparatory step to make next, merely "
                         "repeating why an evaluation is unavailable does not address the request. "
-                        "The answer must identify a concrete, evidence-supported next decision "
+                        "When the user asks whether to bypass a rule they just described, an "
+                        "inventory of saved fields and a statement that market data is missing "
+                        "does not answer the question: set addresses_request=false. A grounded "
+                        "answer explains the conditional process choice without claiming that "
+                        "the described rule is saved or that its market trigger is satisfied. "
+                        "The answer must identify concrete, evidence-supported next steps "
                         "the user can actually make, without pretending to know which trade is "
                         "personally suitable. 'Decide about missing market data' is not a user "
                         "decision; mark addresses_request=false for that kind of answer. "
+                        "Set question_requests_choice=true when the user asks whether to do "
+                        "something, whether to bypass their stated rule, or what to do next. "
+                        "For such a question, 'it is your choice', an inventory of saved data, "
+                        "or only saying that current data is missing is NOT a concrete process "
+                        "decision: set actionable_next_decision=false. A safe decision can be "
+                        "to follow a user-stated wait rule until its condition is checked, "
+                        "without claiming that rule is saved or that the condition is met. "
                         "Set actionable_next_decision=true only when a next-decision answer "
-                        "names one concrete choice under the user's control that follows from "
+                        "names concrete choices under the user's control that follow from "
                         "the verified previous answer. Choosing which unavailable market data "
                         "or indicators to investigate is not such a choice. If the typed evaluation "
                         "says those sources are unavailable, suggesting that the user request a "
@@ -718,6 +967,14 @@ class FinnResponsesAnswerVerifier:
                         "decision; set actionable_next_decision=false. Choosing to leave "
                         "the saved setup unchanged until a valid assessment is possible is. "
                         "For other questions set actionable_next_decision=true. "
+                        "For a typed conditional_process answer, judge whether the answer "
+                        "responds to the user's process choice under their stated rule. "
+                        "Saying not to bypass a user-stated wait rule merely due to FOMO is "
+                        "a concrete safe process decision, not a claim that the rule is saved "
+                        "or that a trade is suitable. A conditional reminder to check the "
+                        "rule's conditions before acting is actionable. Still reject any "
+                        "claim that today's entry condition is satisfied or any new trade "
+                        "recommendation without evidence. "
                         "When no question is supplied, set addresses_request=true. The answer "
                         "must use the supplied preferred_locale when present, unless the question "
                         "explicitly requests another language. Mark language_mismatch=true if any "
@@ -730,6 +987,7 @@ class FinnResponsesAnswerVerifier:
                     input=json.dumps(
                         {"answer": answer, "evidence": evidence, "question": question,
                          "preferred_locale": locale,
+                         "conditional_process": conditional_process,
                          "answering_previous_question": answering_previous_question,
                          "previous_verified_answer": previous_answer},
                         ensure_ascii=False, default=str,
@@ -741,22 +999,28 @@ class FinnResponsesAnswerVerifier:
                             "properties": {
                                 "unsupported_personal_advice": {"type": "boolean"},
                                 "unsupported_entity_claim": {"type": "boolean"},
+                                "user_claim_as_saved": {"type": "boolean"},
                                 "proposed_as_saved": {"type": "boolean"},
                                 "proposed_change_omitted": {"type": "boolean"},
                                 "premature_action_invitation": {"type": "boolean"},
                                 "language_mismatch": {"type": "boolean"},
                                 "unnatural_language": {"type": "boolean"},
                                 "addresses_request": {"type": "boolean"},
+                                "question_requests_choice": {"type": "boolean"},
                                 "actionable_next_decision": {"type": "boolean"},
+                                "requested_structure_satisfied": {"type": "boolean"},
+                                "invented_rule_detail": {"type": "boolean"},
                             },
                             "required": ["unsupported_personal_advice", "unsupported_entity_claim",
+                                         "user_claim_as_saved",
                                          "proposed_as_saved", "proposed_change_omitted",
                                          "premature_action_invitation",
                                          "language_mismatch", "unnatural_language", "addresses_request",
-                                         "actionable_next_decision"],
+                                         "question_requests_choice", "actionable_next_decision",
+                                         "requested_structure_satisfied", "invented_rule_detail"],
                         },
                     }},
-                    max_output_tokens=160,
+                    max_output_tokens=240,
                 ),
                 timeout=timeout,
             )
@@ -773,30 +1037,46 @@ class FinnResponsesAnswerVerifier:
                     "unnatural_language",
                 ) if parsed.get(field) is not False
             ]
+            if parsed.get("user_claim_as_saved", False) is not False:
+                rejected_checks.append("user_claim_as_saved")
             if language_rejected:
                 rejected_checks.append("language_mismatch")
             if require_address_judgment and question is not None and parsed.get("addresses_request") is not True:
                 rejected_checks.append("does_not_address_request")
+            decision_required = (
+                require_actionable_next_decision
+                or parsed.get("question_requests_choice") is True
+            )
             if (not answering_previous_question and not require_actionable_next_decision
                     and parsed.get("proposed_change_omitted") is not False):
                 rejected_checks.append("proposed_change_omitted")
-            if require_actionable_next_decision and parsed.get("actionable_next_decision") is not True:
+            if decision_required and parsed.get("actionable_next_decision") is not True:
                 rejected_checks.append("no_actionable_next_decision")
+            if parsed.get("requested_structure_satisfied", True) is not True:
+                rejected_checks.append("requested_structure_missing")
+            if parsed.get("invented_rule_detail", False) is not False:
+                rejected_checks.append("invented_rule_detail")
             if rejected_checks:
                 logger.info("FINN personal advice audit rejected answer: checks=%s", rejected_checks,
                             extra={"stage": "responses_personal_advice_audit"})
+            if audit_diagnostics is not None:
+                audit_diagnostics["rejected_checks"] = rejected_checks
             return all(parsed.get(field) is False for field in (
                 "unsupported_personal_advice", "unsupported_entity_claim",
                 "proposed_as_saved",
                 "premature_action_invitation",
                 "unnatural_language",
-            )) and not language_rejected and (
+            )) and parsed.get("user_claim_as_saved", False) is False and not language_rejected and (
                 not require_address_judgment or question is None or parsed.get("addresses_request") is True
             ) and (
-                not require_actionable_next_decision or parsed.get("actionable_next_decision") is True
+                not decision_required or parsed.get("actionable_next_decision") is True
             ) and (
                 answering_previous_question or require_actionable_next_decision
                 or parsed.get("proposed_change_omitted") is False
+            ) and (
+                parsed.get("requested_structure_satisfied", True) is True
+            ) and (
+                parsed.get("invented_rule_detail", False) is False
             )
         except Exception as exc:
             logger.info("FINN personal advice audit unavailable: %s", type(exc).__name__, extra={
@@ -1012,10 +1292,20 @@ class FinnResponsesAnswerVerifier:
             for item in (call.get("result", {}).get("results") or [])
             if isinstance(item, dict)
         )
+        static_answer = (
+            self._static_geometry_answer(evidence, locale)
+            if result.response_focus == "calculation" else None
+        )
         if any(call.get("status") == "error" for call in result.tool_trace):
             return FinnResponsesVerifiedAnswer(
                 "unavailable", self._fallback_copy("source_unavailable", message=message, locale=locale),
                 "responses_tool_execution_failed", evidence,
+            )
+        if static_answer and not any(
+            (call.get("result") or {}).get("proposal_id") for call in result.tool_trace
+        ):
+            return FinnResponsesVerifiedAnswer(
+                "completed", static_answer, "static_level_geometry", evidence,
             )
         clarification_calls = [
             call for call in result.tool_trace
@@ -1087,6 +1377,10 @@ class FinnResponsesAnswerVerifier:
                     answer=text, message=message, previous_answer=previous_answer,
                     evidence=evidence,
                 )
+                and self._percentage_claims_supported(
+                    answer=text, message=message, previous_answer=previous_answer,
+                    evidence=evidence, response_focus=result.response_focus,
+                )
                 and self._asset_quantities_supported(
                     answer=text, message=message, evidence=evidence,
                 )
@@ -1094,7 +1388,9 @@ class FinnResponsesAnswerVerifier:
                     answer=text, message=message, previous_answer=previous_answer,
                     evidence=evidence,
                 )
+                and self._static_geometry_complete(text, evidence, result.response_focus)
                 and not self._contains_internal_identifier(text)
+                and not self._strategy_levels_attributed_to_setup(text, evidence)
                 and self._saved_entity_type_supported(
                     text,
                     tuple((*evidence, *(relevant_previous_source_evidence if reusing_previous_read else ()))),
@@ -1113,6 +1409,7 @@ class FinnResponsesAnswerVerifier:
                     )
                 )
                 and (not personal_evidence or not self._unevaluated_positive_fit_claim(text))
+                and (not personal_evidence or not self._ungrounded_level_advice(text))
             )
         confirmed_action = {
             key: recent_action_result.get(key)
@@ -1134,9 +1431,46 @@ class FinnResponsesAnswerVerifier:
         )
 
         def limited_fallback() -> FinnResponsesVerifiedAnswer:
+            missed_structure = "requested_structure_missing" in (
+                advice_diagnostics.get(result.text, {}).get("rejected_checks") or []
+            )
+            saved_strategy = next((
+                item.get("data") for call in evaluation_calls
+                for item in (call.get("result") or {}).get("results", [])
+                if item.get("scope") == "read_linked_strategy"
+                and item.get("status") == "completed"
+                and isinstance(item.get("data"), dict)
+                and all(item["data"].get(field) for field in ("entry", "stop_loss", "targets"))
+            ), None)
+            if saved_strategy and self._evaluation_presentation_is_coaching(result.text):
+                copy = {
+                    "nl": (
+                        "Sterk: je opgeslagen strategie legt entry, stop-loss en doelen expliciet vast. "
+                        "Ik rem je af bij een oordeel over geschiktheid: daarvoor ontbreken nog "
+                        "voldoende persoonlijke of actuele marktgegevens. Controleer eerst je "
+                        "risicoprofiel en een verse marktsnapshot voordat je beslist; je instellingen blijven ongewijzigd."
+                    ),
+                    "en": (
+                        "A strength is that your saved strategy explicitly records entry, stop-loss and targets. "
+                        "I would hold back on judging suitability: sufficient personal or current market evidence "
+                        "is missing. Check your risk profile and a fresh market snapshot before deciding; "
+                        "your settings remain unchanged."
+                    ),
+                    "de": (
+                        "Eine Stärke ist, dass deine gespeicherte Strategie Einstieg, Stop-Loss und Ziele "
+                        "ausdrücklich festhält. Bei einem Eignungsurteil bremse ich: Dafür fehlen noch "
+                        "ausreichende persönliche oder aktuelle Marktdaten. Prüfe zuerst dein Risikoprofil "
+                        "und einen frischen Marktsnapshot; deine Einstellungen bleiben unverändert."
+                    ),
+                }[locale if locale in {"nl", "en", "de"} else "nl"]
+                return FinnResponsesVerifiedAnswer(
+                    "completed", copy, "insufficient_evidence", evidence, bool(previous_response),
+                )
             return FinnResponsesVerifiedAnswer(
-                "completed", self._limited_evaluation_copy(message=message, locale=locale),
-                "insufficient_evidence", evidence, bool(previous_response),
+                "unavailable" if missed_structure else "completed",
+                self._limited_evaluation_copy(message=message, locale=locale),
+                "responses_requested_structure_unverified" if missed_structure else "insufficient_evidence",
+                evidence, bool(previous_response),
             )
         for call in evaluation_calls:
             evaluation = call["result"]
@@ -1324,6 +1658,12 @@ class FinnResponsesAnswerVerifier:
                 "A saved setup or strategy proves its stored fields, not that those fields were "
                 "derived from earlier analysis; reject an asserted analysis history unless the "
                 "typed evidence contains it. "
+                "A completed level_geometry inside a completed owner-scoped "
+                "read_linked_strategy is verified static arithmetic from saved entry, stop "
+                "and targets. An answer may state its per-unit risk and per-target reward-to-risk "
+                "ratios even when live market scopes are unavailable. If the user asks for "
+                "that static calculation, do not replace it with only a missing-data warning. "
+                "The ratios do not prove current entry conditions, profitability or personal fit. "
                 "A chart timeframe such as 4H and a DCA cadence do not establish a holding "
                 "horizon or make this owner's setup a swing-trading or long-term plan. Reject "
                 "a personalized classification or recommendation inferred from chart timeframe "
@@ -1445,6 +1785,15 @@ class FinnResponsesAnswerVerifier:
             "unavailable_scopes": [item.get("scope") for item in evidence if item.get("status") != "completed"],
             "unavailable_cause_established": False if unavailable_without_cause else None,
             "general_education_no_personal_claims": general_education,
+            "static_level_geometry": [
+                item["data"]["level_geometry"]
+                for item in evidence
+                if item.get("scope") == "read_linked_strategy"
+                and item.get("status") == "completed"
+                and isinstance(item.get("data"), dict)
+                and isinstance(item["data"].get("level_geometry"), dict)
+                and item["data"]["level_geometry"].get("status") == "completed"
+            ],
         }
         if missing_profile_established:
             summary["missing_profile_established"] = True
@@ -1481,6 +1830,7 @@ class FinnResponsesAnswerVerifier:
         ]
 
         advice_cache: dict[str, bool] = {}
+        advice_diagnostics: dict[str, dict[str, Any]] = {}
         technical_cache: dict[str, bool] = {}
         catalog_cache: dict[str, tuple[bool, str]] = {}
         catalog_options = [
@@ -1502,6 +1852,8 @@ class FinnResponsesAnswerVerifier:
             if not personal_evidence or self.client is None:
                 return True
             if text not in advice_cache:
+                details: dict[str, Any] = {}
+                advice_diagnostics[text] = details
                 advice_cache[text] = await self._personal_advice_is_grounded(
                     answer=text, evidence=advice_evidence,
                     remaining=remaining_lifecycle_seconds(),
@@ -1513,7 +1865,9 @@ class FinnResponsesAnswerVerifier:
                     require_address_judgment=result.answer_kind != "grounded_next_decision",
                     require_actionable_next_decision=result.answer_kind == "grounded_next_decision",
                     answering_previous_question=result.answer_kind == "answers_previous_question",
+                    conditional_process=result.answer_kind == "conditional_process",
                     locale=locale,
+                    audit_diagnostics=details,
                 )
             return advice_cache[text]
 
@@ -1669,6 +2023,10 @@ class FinnResponsesAnswerVerifier:
             else:
                 logger.info("FINN catalog focus repair produced no valid single-option answer")
         if not verification_available or not verdict_passes or not quantities_supported(result.text) or not advice_ok or not technical_ok or not catalog_ok or not presentation_ok(result.text):
+            if static_answer:
+                return FinnResponsesVerifiedAnswer(
+                    "completed", static_answer, "static_level_geometry", evidence,
+                )
             logger.info(
                 "FINN Responses answer verification rejected draft: codes=%s available=%s semantic_pass=%s quantities=%s",
                 list(verdict.reason_codes), verdict.available, verdict.passes,
@@ -1695,26 +2053,156 @@ class FinnResponsesAnswerVerifier:
                     self._fallback_copy("previous_source_unavailable", message=message, previous_answer=previous_answer, locale=locale),
                     "source_unavailable", evidence, True,
                 )
+        if limited_evaluation and (not verdict_passes or not advice_ok or not presentation_ok(result.text)):
+            remaining = remaining_lifecycle_seconds()
+            if self.client is not None and (remaining is None or remaining > 12):
+                def without_internal_ids(value: Any) -> Any:
+                    if isinstance(value, dict):
+                        return {
+                            key: without_internal_ids(item) for key, item in value.items()
+                            if key != "id" and not key.endswith("_id") and not key.endswith("_ids")
+                        }
+                    if isinstance(value, list):
+                        return [without_internal_ids(item) for item in value]
+                    return value
+
+                focused_scopes = {
+                    "read_profile", "read_active_asset", "read_active_setup",
+                    "read_linked_strategy", "read_linked_bot", "read_bot_status",
+                    "read_indicator_configuration", "read_market_snapshot",
+                    "read_macro_snapshot", "read_technical_snapshot", "read_asset_scores",
+                }
+                focused_evidence = [
+                    {
+                        "scope": item.get("scope"), "status": item.get("status"),
+                        "data": without_internal_ids(item.get("data")),
+                        "reason": item.get("reason"),
+                    }
+                    for item in evidence
+                    if item.get("scope") in focused_scopes and item.get("status") == "completed"
+                ]
+                focused_data = {
+                    item["scope"]: item["data"] for item in focused_evidence
+                    if item.get("scope") in {"read_profile", "read_active_setup", "read_linked_strategy"}
+                    and isinstance(item.get("data"), dict)
+                }
+                saved_setup = focused_data.get("read_active_setup", {})
+                saved_strategy = focused_data.get("read_linked_strategy", {})
+                saved_profile = focused_data.get("read_profile", {})
+                grounded_plan = {
+                    "source": "owner_scoped_persisted_read",
+                    "setup": {key: saved_setup.get(key) for key in (
+                        "name", "symbol", "timeframe", "setup_type",
+                    ) if saved_setup.get(key) is not None},
+                    "strategy": {key: saved_strategy.get(key) for key in (
+                        "name", "symbol", "timeframe", "entry", "stop_loss",
+                        "targets", "entry_type", "level_geometry",
+                    ) if saved_strategy.get(key) is not None},
+                    "profile_saved": saved_profile.get("has_profile") is True,
+                }
+                try:
+                    response = await asyncio.wait_for(
+                        self.client.responses.create(
+                            model="gpt-4o", store=False, tool_choice="none", temperature=0,
+                            instructions=(
+                                "You are FINN repairing a rejected coaching answer. Write every "
+                                "user-facing field in the requested language. The question determines "
+                                "response_focus: review, calculation, priorities or general. "
+                                "FINN already attempted this evaluation; do not offer to run "
+                                "the same unavailable assessment again. "
+                                "Use ONLY the typed owner-scoped evidence and the user's own words. "
+                                "The grounded_plan is a projection of persisted facts, NOT a "
+                                "quality rating. A saved entry, stop and targets are explicitly "
+                                "specified levels, not proof of good risk management, attractive "
+                                "ratios, plan strength, target feasibility or personal fit. "
+                                "A stated rule is not a saved rule unless it appears in saved data. "
+                                "A review must identify a verifiable structural fact, a concrete "
+                                "limitation, and one check; having saved levels permits arithmetic "
+                                "but does not make a plan good or suitable. A calculation must "
+                                "include the exact risk_per_unit and reward_to_risk for each target "
+                                "when level_geometry is completed. A priorities answer must give "
+                                "the requested number of distinct numbered preparatory steps "
+                                "and what to avoid. If live sources are unavailable, make these "
+                                "actions preparatory choices based on saved facts or the user's "
+                                "own risk constraint, not commands to inspect unavailable data "
+                                "right now. Never recommend a trade, modifying saved levels, "
+                                "or claim current conditions are met without current evidence. "
+                                "Mention unavailable market evidence only as a limit on current "
+                                "judgment, not as a substitute for the requested answer. Leave "
+                                "Fill the requested structured response_focus. For review, put "
+                                "the evidenced structural fact in verified_strength, the actual "
+                                "evidence limit in verified_constraint, and one concrete check in "
+                                "next_safe_step. For priorities, give distinct preparatory actions "
+                                "in priority_actions and an explicit avoid_action. For calculation, "
+                                "include absolute risk and every typed ratio in "
+                                "conditional_observation. Leave unrelated fields empty. Do not "
+                                "turn numeric ratios into praise or trading signals."
+                            ),
+                            input=json.dumps({
+                                "question": message, "locale": locale,
+                                "proposed_change_is_not_saved": True,
+                                "grounded_plan": grounded_plan,
+                                "unavailable_live_scopes": [
+                                    item.get("scope") for item in evidence
+                                    if item.get("status") != "completed"
+                                    and item.get("scope") in {
+                                        "read_market_snapshot", "read_macro_snapshot",
+                                        "read_technical_snapshot", "read_asset_scores",
+                                    }
+                                ],
+                                "rejected_checks": advice_diagnostics.get(result.text, {}).get("rejected_checks", [])
+                                + (["assessment_presentation_not_coaching"] if not presentation_ok(result.text) else []),
+                            }, ensure_ascii=False, default=str),
+                            text=limited_evaluation_format(result.response_focus),
+                            max_output_tokens=650,
+                        ),
+                        timeout=min(8.0, remaining - 3 if remaining is not None else 8.0),
+                    )
+                    focused = limited_evaluation_answer(str(response.output_text), locale=locale)
+                    focused_verdict, focused_advice, focused_technical, focused_catalog = await asyncio.gather(
+                        verify_text(focused), advice_supported(focused),
+                        technical_supported(focused), catalog_focused(focused),
+                    )
+                    if (focused_verdict.available and (focused_verdict.passes or focused_advice)
+                            and focused_advice and focused_technical and focused_catalog
+                            and quantities_supported(focused) and presentation_ok(focused)):
+                        return FinnResponsesVerifiedAnswer(
+                            "completed", focused, None, evidence, bool(previous_answer),
+                        )
+                except Exception as exc:
+                    logger.info(
+                        "FINN focused evaluation repair unavailable: %s",
+                        str(exc) if isinstance(exc, FinnResponsesError) else type(exc).__name__,
+                    )
         if verification_available and (not verdict_passes or not quantities_supported(result.text) or not advice_ok or not technical_ok or not catalog_ok or not presentation_ok(result.text)) and self.client is not None:
             remaining = remaining_lifecycle_seconds()
             if remaining is None or remaining > 8:
                 try:
                     response = await asyncio.wait_for(
                         self.client.responses.create(
-                            model="gpt-4o-mini", store=False,
+                            model="gpt-4o", store=False,
                             instructions=(
                                 "You are FINN. Rewrite every user-facing field entirely in "
                                 + ({"nl": "Dutch", "en": "English", "de": "German"}.get(locale or "", "the user's language"))
                                 + (". In German, use 'du/dein' consistently, never 'Sie/Ihr'" if locale == "de" else "")
                                 + " using ONLY the "
-                                "typed evidence and previous verified answer provided. The prior draft was "
-                                "rejected as unsupported and is intentionally not supplied. Do not attach "
+                                "typed evidence, the user's question and any previous verified answer "
+                                "for facts. The rejected draft is supplied only to preserve the "
+                                "user's actual question and useful reasoning structure: it is NOT "
+                                "evidence. Remove or correct every unsupported claim identified by "
+                                "the rejection reasons and personal_advice_audit rejected_checks; "
+                                "never copy a claim merely because it appears "
+                                "in that draft. Do not attach "
                                 "a currency or asset unit to a bare numeric field; base_amount=100 does not "
                                 "mean 100 BTC, $100 or €100 without explicit currency evidence. "
                                 "State unavailable data and unknown causes plainly; "
                                 "If read_profile contains a saved risk_profiles value, do not say "
                                 "the user's risk profile or risk settings are missing. A saved risk "
                                 "style is not a completed suitability assessment. "
+                                "A user's description of a plan rule is not proof that it is "
+                                "stored in their setup or strategy. Attribute unverified rules "
+                                "to the user and reason conditionally; do not claim that a "
+                                "saved object requires a trigger absent from typed read evidence. "
                                 "For unavailable technical indicators, never suggest a temporary outage "
                                 "and check educational facts: RSI below 30 is commonly oversold, not overbought. "
                                 "Do not equate overbought or oversold with proof that an asset is "
@@ -1769,8 +2257,8 @@ class FinnResponsesAnswerVerifier:
                                 "and do not add a claimed benefit of DCA, a positive fit claim, "
                                 "historical market conditions or a recommended level change. "
                                 + (
-                                    "The prior answer failed the personal-advice audit. Write two or "
-                                    "three plain sentences: identify the verified saved settings; "
+                                    "The prior answer failed the personal-advice audit. Preserve "
+                                    "the answer form requested by the user. Identify verified saved settings; "
                                     + (
                                         "say that FINN attempted the registry evaluation but missing "
                                         "source evidence prevented a suitability conclusion; do not "
@@ -1779,9 +2267,10 @@ class FinnResponsesAnswerVerifier:
                                         "say that no current market/risk assessment has been performed, "
                                         "so suitability is not yet established. "
                                     )
-                                    + "Do not present a "
-                                    "trading-plan checklist, prescribe levels, or suggest that the "
-                                    "saved strategy helps achieve an investment goal. "
+                                    + "Do not prescribe levels or suggest that the saved strategy "
+                                    "helps achieve an investment goal. Requested preparatory "
+                                    "priorities are allowed if each is grounded and none recommends "
+                                    "a trade or a change to saved levels. "
                                     if not advice_ok else ""
                                 )
                                 + (
@@ -1790,18 +2279,31 @@ class FinnResponsesAnswerVerifier:
                                     "saved facts and missing sources, not a completed suitability "
                                     "judgment. Never say that no evaluation was performed and never "
                                     "ask permission to run this same evaluation again without new data. "
-                                    "Return saved_context, user_proposal, assessment_limit, and "
-                                    "next_safe_step. saved_context may contain only facts in "
+                                    "Select response_focus from the actual question: review, calculation, "
+                                    "priorities, or general. A review must name a verified structural "
+                                    "fact, an evidenced limitation, and a specific check; never label "
+                                    "static ratios attractive, good or suitable. A calculation must "
+                                    "give risk_per_unit and each reward_to_risk ratio when verified "
+                                    "level_geometry exists, then state what remains unknown. A "
+                                    "priorities request must keep the requested number of distinct, "
+                                    "safe preparatory steps and an avoidance; do not replace it with "
+                                    "a generic missing-data warning. saved_context may contain only facts in "
                                     "saved_state, not missing-data explanations. assessment_limit "
                                     "alone names the missing current data, and next_safe_step "
-                                    "gives one decision without repeating that reason. "
+                                    "gives a decision without repeating that reason. "
                                     "Each nonempty field must be a short, complete "
                                     "user-facing sentence; do not return bare names, values, labels, "
                                     "or repeat the user's question. user_proposal is hypothetical and must never "
                                     "be called an existing setting. "
-                                    "The step is to keep the current saved setup unchanged while "
-                                    "the missing evidence is obtained; it must not invite execution "
-                                    "of the proposed change. "
+                                    "conditional_observation may reason only from a rule or "
+                                    "numbers explicitly supplied by the user or saved evidence; "
+                                    "never assert current market conditions or suitability. "
+                                    "Each step must be a safe process choice supported by the user's "
+                                    "stated plan rule or saved evidence. If the user described a "
+                                    "wait or entry rule, explain that it should not be treated as "
+                                    "satisfied without checking its conditions. Otherwise keep "
+                                    "the saved settings unchanged while evidence is missing. "
+                                    "Do not invite execution of a proposed change. "
                                     if limited_evaluation else ""
                                 )
                                 + (
@@ -1889,10 +2391,22 @@ class FinnResponsesAnswerVerifier:
                                     "source is unavailable. "
                                     if result.answer_kind == "grounded_next_decision" else ""
                                 )
-                                + "Keep it brief and natural. Never expose internal IDs or reason codes."
+                                + "If the user describes a decision rule and asks whether to bypass it, "
+                                "answer that process question first: treat the rule as user-stated, "
+                                "not saved evidence; do not treat its trigger as met without checking. "
+                                "For any question asking for a choice, give concrete safe "
+                                "process decision grounded in user-stated conditions or verified "
+                                "evidence; if the user asked for multiple priorities, preserve "
+                                "that number. 'It is your choice' is not an answer. "
+                                "Mention missing live data only as the limit on assessing today's "
+                                "conditions, not as a substitute for the decision. Do not lead with "
+                                "an inventory of saved setup fields. "
+                                "Keep it brief and natural. Never expose internal IDs or reason codes."
                             ),
                             input=json.dumps({
                                 "question": message,
+                                **({"rejected_draft_not_evidence": result.text}
+                                   if quantities_supported(result.text) and technical_ok else {}),
                                 "saved_state": [
                                     item.get("data") for item in compact
                                     if item.get("scope") in {"read_active_setup", "read_linked_strategy"}
@@ -1907,6 +2421,7 @@ class FinnResponsesAnswerVerifier:
                                 + (["technical_claim_not_grounded"] if not technical_ok else [])
                                 + (["catalog_answer_not_focused"] if not catalog_ok else [])
                                 + (["assessment_presentation_not_coaching"] if not presentation_ok(result.text) else []),
+                                "personal_advice_audit": advice_diagnostics.get(result.text, {}),
                             }, ensure_ascii=False, default=str),
                             tool_choice="none",
                             **({"text": limited_evaluation_format()} if limited_evaluation else {}),

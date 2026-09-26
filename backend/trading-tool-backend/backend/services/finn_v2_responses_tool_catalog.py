@@ -106,6 +106,7 @@ class FinnResponsesToolCatalog:
     def definitions(
         self, *, guided_operation_id: str | None = None,
         retry_target_domain: str | None = None,
+        retry_operation_id: str | None = None,
     ) -> list[dict[str, Any]]:
         definitions: list[dict[str, Any]] = [{
             "type": "function",
@@ -144,10 +145,18 @@ class FinnResponsesToolCatalog:
             },
         })
         for name, read_tools in self.read_tools.items():
+            description = " ".join(self.read_definitions[tool].description for tool in read_tools)
+            if name == "get_active_plan_and_strategy":
+                description += (
+                    " Use this existing owner-scoped read for static arithmetic from saved "
+                    "strategy entry, stop and targets, including per-unit risk and "
+                    "reward-to-risk ratios. These calculations do not need a live quote "
+                    "and do not establish suitability or a current trade signal."
+                )
             definitions.append({
                 "type": "function",
                 "name": name,
-                "description": " ".join(self.read_definitions[tool].description for tool in read_tools),
+                "description": description,
                 "strict": False,
                 "parameters": {
                     "type": "object",
@@ -172,6 +181,8 @@ class FinnResponsesToolCatalog:
                 "description": (
                     f"Read-only evidence collection for {contract.semantic_description or contract.operation_id} "
                     "Use for a personal assessment, not merely to list saved settings. "
+                    "A request only for static arithmetic from already saved levels "
+                    "belongs to the owner-scoped plan/strategy read, not this assessment. "
                     "FINN collects the registry-required sources; missing or stale sources limit the judgment. "
                     "This tool cannot modify stored objects or execute actions."
                 ),
@@ -192,6 +203,7 @@ class FinnResponsesToolCatalog:
                 self.registry.require_supported(operation_id)
                 for operation_id in operations
                 if (not guided_operation_id or operation_id == guided_operation_id)
+                and (not retry_operation_id or operation_id == retry_operation_id)
                 and (not retry_target_domain or self.registry.require_supported(operation_id).domain == retry_target_domain)
             ]
             if not contracts:
@@ -344,7 +356,16 @@ class FinnResponsesToolCatalog:
             raise FinnResponsesToolError("proposal_draft_intent_invalid")
         operation_id = arguments.get("operation_id")
         if operation_id not in operations:
-            raise FinnResponsesToolError("operation_not_allowed_for_tool")
+            recommended_tool = (
+                self.proposal_tool_for_operation(operation_id)
+                if isinstance(operation_id, str)
+                and any(operation_id in bound for bound in _PROPOSAL_OPERATIONS.values())
+                else None
+            )
+            raise FinnResponsesToolError(
+                "operation_not_allowed_for_tool",
+                details={"recommended_tool_name": recommended_tool} if recommended_tool else {},
+            )
         contract = self.registry.require_supported(operation_id)
         supplied = arguments.get("inputs")
         if not isinstance(supplied, dict):
