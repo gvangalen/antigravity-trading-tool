@@ -16,6 +16,54 @@ class FinnResponsesToolRelevanceGuard:
         self.conditional_process = False
         self.response_focus: str | None = None
 
+    async def requested_mutation_domain(
+        self, *, message: str, domains: list[dict[str, str]],
+    ) -> str | None:
+        """Identify the user's requested object kind before a write proposal exists."""
+        remaining = remaining_lifecycle_seconds()
+        if remaining is not None and remaining <= 5:
+            return None
+        timeout = min(4.0, remaining - 3 if remaining is not None else 4.0)
+        client = (
+            self.client.with_options(max_retries=0, timeout=timeout)
+            if hasattr(self.client, "with_options") else self.client
+        )
+        allowed = list(dict.fromkeys(item["domain"] for item in domains))
+        try:
+            response = await asyncio.wait_for(
+                client.responses.create(
+                    model="gpt-4o", store=False, tool_choice="none", temperature=0,
+                    instructions=(
+                        "Identify only the FINN object kind the user explicitly wants to "
+                        "create, change, delete or deactivate. The supplied registry domains "
+                        "define the allowed object kinds. A saved object's name may be only a "
+                        "prefix of a longer name for a different object kind; do not infer the "
+                        "kind from that prefix. Distinguish the object being changed from a "
+                        "parent object named only as context. If the message does not make "
+                        "the target kind clear, choose unknown. Do not choose an operation, "
+                        "owner or object ID, and do not execute anything."
+                    ),
+                    input=json.dumps({
+                        "latest_user_message": message,
+                        "registry_domains": domains,
+                    }, ensure_ascii=False),
+                    text={"format": {
+                        "type": "json_schema", "name": "finn_mutation_target_domain",
+                        "strict": True,
+                        "schema": {
+                            "type": "object", "additionalProperties": False,
+                            "properties": {"domain": {"type": "string", "enum": [*allowed, "unknown"]}},
+                            "required": ["domain"],
+                        },
+                    }},
+                    max_output_tokens=32,
+                ), timeout=timeout,
+            )
+            domain = json.loads(str(getattr(response, "output_text", "") or "")).get("domain")
+            return domain if domain in {*allowed, "unknown"} else None
+        except Exception:
+            return None
+
     async def continues_clarification(
         self, *, message: str, original_request: str, question: str,
     ) -> bool:

@@ -427,14 +427,43 @@ class FinnResponsesFrontDoor:
             state = analysis.request_plan.operation_state
             if (
                 not pending_operation
-                and not target_retry_used
                 and call.operation_id.startswith(("update_", "delete_", "deactivate_"))
                 and self.proposals.registry.require_supported(call.operation_id).domain
                 in {"setup", "strategy", "bot"}
             ):
+                candidate_domain = self.proposals.registry.require_supported(call.operation_id).domain
+                check_domain = getattr(guard, "requested_mutation_domain", None)
+                if callable(check_domain):
+                    registry_domains = [
+                        {"domain": domain, "purpose": next(
+                            str(item.semantic_description or item.operation_id)
+                            for item in self.proposals.registry.list()
+                            if item.supported and item.domain == domain
+                        )}
+                        for domain in ("setup", "strategy", "bot")
+                    ]
+                    requested_domain = await check_domain(
+                        message=message, domains=registry_domains,
+                    )
+                    if requested_domain in {None, "unknown"}:
+                        return {"status": "unavailable", "reason": "write_target_domain_unverified"}
+                    if requested_domain != candidate_domain:
+                        if target_retry_used:
+                            return {"status": "unavailable", "reason": "write_target_domain_mismatch"}
+                        target_retry_used = True
+                        return {
+                            "status": "retry",
+                            "reason": "requested_object_type_mismatch",
+                            "candidate_operation_id": call.operation_id,
+                            "target_domain": requested_domain,
+                            "instruction": (
+                                "The user's requested object kind differs from the candidate. "
+                                "Choose only a registry operation for the requested kind; "
+                                "if no owner-scoped object exists, ask for clarification."
+                            ),
+                        }
                 session_factory = getattr(self.reads, "session_factory", None)
                 if session_factory is not None:
-                    candidate_domain = self.proposals.registry.require_supported(call.operation_id).domain
                     async with session_factory() as session:
                         resolver = FinnV2EntityResolutionService(session)
                         targets = [
@@ -458,6 +487,8 @@ class FinnResponsesFrontDoor:
                         and len(target.display_name or "") > candidate_name_length
                     ]
                     if len(explicit_matches) == 1:
+                        if target_retry_used:
+                            return {"status": "unavailable", "reason": "write_target_domain_mismatch"}
                         target_retry_used = True
                         return {
                             "status": "retry",

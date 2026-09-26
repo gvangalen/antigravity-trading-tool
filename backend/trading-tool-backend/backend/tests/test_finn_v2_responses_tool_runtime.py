@@ -983,6 +983,26 @@ def test_tool_relevance_guard_uses_typed_responses_without_exposing_identity():
     assert "user_id" not in request["input"] and "proposal_id" not in request["input"]
 
 
+def test_mutation_domain_guard_uses_registry_domains_without_owner_identity():
+    fake = FakeResponses(response("domain", text='{"domain": "strategy"}'))
+    guard = FinnResponsesToolRelevanceGuard(SimpleNamespace(responses=fake))
+    domain = asyncio.run(guard.requested_mutation_domain(
+        message="Wijzig BTC Breakout Full Strategy van 250 naar 300 euro",
+        domains=[
+            {"domain": "setup", "purpose": "Manage a setup"},
+            {"domain": "strategy", "purpose": "Manage a strategy"},
+            {"domain": "bot", "purpose": "Manage a bot"},
+        ],
+    ))
+    assert domain == "strategy"
+    request = fake.requests[0]
+    assert request["tool_choice"] == "none" and request["store"] is False
+    assert request["text"]["format"]["schema"]["properties"]["domain"]["enum"] == [
+        "setup", "strategy", "bot", "unknown",
+    ]
+    assert "user_id" not in request["input"] and "proposal_id" not in request["input"]
+
+
 def test_proposal_relevance_compares_registry_operation_domain_and_polarity():
     fake = FakeResponses(response("judge", text='{"aligned": false}'))
     guard = FinnResponsesToolRelevanceGuard(SimpleNamespace(responses=fake))
@@ -1121,6 +1141,68 @@ def test_specific_strategy_name_blocks_overlapping_setup_proposal(monkeypatch):
     assert result.proposal_analysis is None
     assert result.response.tool_trace[0]["result"]["reason"] == "owner_scoped_target_type_mismatch"
     assert result.response.tool_trace[0]["result"]["target_domain"] == "strategy"
+
+
+def test_missing_strategy_cannot_turn_prefix_matched_setup_into_write_proposal(monkeypatch):
+    fake = FakeResponses(
+        response("r1", calls=(tool_call("c1", "create_or_update_trade_plan_proposal", {
+            "operation_id": "update_setup", "draft_intent": "new",
+            "inputs": {"changed_fields": {"min_investment": 300}},
+        }),)),
+        response("r2", text="Ik kan de bedoelde strategie nog niet vinden."),
+    )
+    guard = SimpleNamespace(
+        requested_mutation_domain=AsyncMock(return_value="strategy"),
+        is_relevant=AsyncMock(return_value=True),
+    )
+
+    class Resolver:
+        def __init__(self, _session):
+            pass
+
+        async def resolve_canonical_target(self, *, user_id, entity_type, **_kwargs):
+            if entity_type == "setup":
+                return CanonicalEntityTarget(
+                    entity_type="setup", entity_id=1, display_name="BTC Breakout Full",
+                    owner_id=user_id, source="explicit_name", resolution_status="resolved",
+                )
+            return CanonicalEntityTarget(
+                entity_type=entity_type, owner_id=user_id, resolution_status="not_found",
+            )
+
+    @asynccontextmanager
+    async def session_factory():
+        yield SimpleNamespace(commit=AsyncMock())
+
+    class ProgressRepository:
+        def __init__(self, _session):
+            pass
+
+        async def record_responses_progress(self, **_kwargs):
+            pass
+
+    monkeypatch.setattr(
+        "backend.services.finn_v2_responses_front_door.FinnV2EntityResolutionService", Resolver,
+    )
+    monkeypatch.setattr(
+        "backend.services.finn_v2_responses_front_door.FinnV2RuntimeContractRepository",
+        ProgressRepository,
+    )
+    front = object.__new__(FinnResponsesFrontDoor)
+    front.client = SimpleNamespace(responses=fake)
+    front.user_id = 21
+    front.run_id = "missing-strategy-target"
+    front.proposals = FinnResponsesProposalSelection()
+    front.relevance_guard = guard
+    front.reads = SimpleNamespace(session_factory=session_factory)
+    result = asyncio.run(front.run(
+        message="Wijzig BTC Breakout Full Strategy van 250 naar 300 euro per uitvoering",
+        instructions="Use FINN tools", conversation_context={}, verified_asset="BTC",
+    ))
+    assert result.proposal_analysis is None
+    assert result.response.tool_trace[0]["result"]["reason"] == "requested_object_type_mismatch", result.response.tool_trace[0]["result"]
+    assert result.response.tool_trace[0]["result"]["target_domain"] == "strategy"
+    assert guard.requested_mutation_domain.await_count == 1
 
 
 def test_limited_evaluation_preserves_conditional_plan_reasoning():
