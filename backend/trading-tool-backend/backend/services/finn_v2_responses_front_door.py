@@ -432,6 +432,7 @@ class FinnResponsesFrontDoor:
                 in {"setup", "strategy", "bot"}
             ):
                 candidate_domain = self.proposals.registry.require_supported(call.operation_id).domain
+                requested_domain: str | None = None
                 check_domain = getattr(guard, "requested_mutation_domain", None)
                 if callable(check_domain):
                     registry_domains = [
@@ -463,7 +464,10 @@ class FinnResponsesFrontDoor:
                             ),
                         }
                 session_factory = getattr(self.reads, "session_factory", None)
-                if session_factory is not None:
+                # A verified requested kind outranks a prefix match on a saved
+                # object's name in another domain (for example a setup whose
+                # name prefixes a strategy that has not been created yet).
+                if session_factory is not None and requested_domain is None:
                     async with session_factory() as session:
                         resolver = FinnV2EntityResolutionService(session)
                         targets = [

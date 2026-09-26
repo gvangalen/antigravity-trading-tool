@@ -21,6 +21,7 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--base-url", default="http://127.0.0.1:8000")
     parser.add_argument("--output", required=True)
+    parser.add_argument("--missing-strategy", action="store_true")
     args = parser.parse_args()
     if not args.base_url.startswith(("http://localhost:", "http://127.0.0.1:")):
         raise SystemExit("This regression is local-only")
@@ -28,14 +29,16 @@ def main() -> None:
     user = _create_local_user()
     with sync_engine.begin() as connection:
         setup_id = _insert_setup(connection, user["id"], "BTC Breakout Full")
-        strategy_id = _insert_strategy(
-            connection, user["id"], setup_id, "BTC Breakout Full Strategy",
-        )
-        connection.execute(text("""
-            UPDATE strategies SET base_amount = 250,
-                data = jsonb_set(data, '{base_amount}', '250'::jsonb)
-            WHERE id = :strategy_id AND user_id = :user_id
-        """), {"strategy_id": strategy_id, "user_id": user["id"]})
+        strategy_id = None
+        if not args.missing_strategy:
+            strategy_id = _insert_strategy(
+                connection, user["id"], setup_id, "BTC Breakout Full Strategy",
+            )
+            connection.execute(text("""
+                UPDATE strategies SET base_amount = 250,
+                    data = jsonb_set(data, '{base_amount}', '250'::jsonb)
+                WHERE id = :strategy_id AND user_id = :user_id
+            """), {"strategy_id": strategy_id, "user_id": user["id"]})
     token = create_access_token({"sub": str(user["id"]), "role": "user"})
     observed = run_gate(
         base_url=args.base_url, bearer_token=token,
@@ -46,26 +49,38 @@ def main() -> None:
     proposal = record["proposal"]
     projection = record["terminal_projection"]
     with sync_engine.connect() as connection:
-        saved_amount = connection.execute(text("""
-            SELECT base_amount FROM strategies WHERE id = :strategy_id AND user_id = :user_id
-        """), {"strategy_id": strategy_id, "user_id": user["id"]}).scalar_one()
+        saved_amount = None
+        if strategy_id is not None:
+            saved_amount = connection.execute(text("""
+                SELECT base_amount FROM strategies WHERE id = :strategy_id AND user_id = :user_id
+            """), {"strategy_id": strategy_id, "user_id": user["id"]}).scalar_one()
         setup_investment = connection.execute(text("""
             SELECT min_investment FROM setups WHERE id = :setup_id AND user_id = :user_id
         """), {"setup_id": setup_id, "user_id": user["id"]}).scalar_one()
     checks = {
         "strategy_operation": observed["final_operation_id"] == "update_strategy",
-        "strategy_target": bool(proposal and proposal["target_type"] == "strategy"
-                                and str(proposal["target_id"]) == str(strategy_id)),
-        "strategy_amount_field": dict(projection.get("supplied_inputs") or {}).get(
-            "changed_fields",
-        ) == {"base_amount": 300},
         "no_setup_proposal": not proposal or proposal["target_type"] != "setup",
-        "no_write_before_confirmation": float(saved_amount) == 250 and setup_investment is None,
         "one_dispatch_attempt": observed["dispatch_count"] == observed["attempt_count"] == 1,
         "polling_sse_parity": bool(observed["polling_sse_contract_projection"]),
     }
+    if args.missing_strategy:
+        checks.update({
+            "typed_clarification": observed["status"] == "clarification_required",
+            "no_proposal_for_unknown_strategy": proposal is None,
+            "no_write_before_confirmation": setup_investment is None,
+        })
+    else:
+        checks.update({
+            "strategy_target": bool(proposal and proposal["target_type"] == "strategy"
+                                    and str(proposal["target_id"]) == str(strategy_id)),
+            "strategy_amount_field": dict(projection.get("supplied_inputs") or {}).get(
+                "changed_fields",
+            ) == {"base_amount": 300},
+            "no_write_before_confirmation": float(saved_amount) == 250 and setup_investment is None,
+        })
     artifact = {
-        "synthetic_local_only": True, "run_id": observed["run_id"],
+        "synthetic_local_only": True, "missing_strategy": args.missing_strategy,
+        "run_id": observed["run_id"],
         "status": observed["status"], "proposal_type": (proposal or {}).get("target_type"),
         "operation_id": observed["final_operation_id"],
         "target_source": projection.get("target_source"),

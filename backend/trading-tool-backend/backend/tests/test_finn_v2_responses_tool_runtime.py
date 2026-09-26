@@ -1205,6 +1205,69 @@ def test_missing_strategy_cannot_turn_prefix_matched_setup_into_write_proposal(m
     assert guard.requested_mutation_domain.await_count == 1
 
 
+def test_verified_strategy_domain_outweighs_saved_setup_name_prefix(monkeypatch):
+    fake = FakeResponses(
+        response("r1", calls=(tool_call("c1", "create_or_update_trade_plan_proposal", {
+            "operation_id": "update_strategy", "draft_intent": "new",
+            "inputs": {"changed_fields": {"base_amount": 300}},
+        }),)),
+        response("r2", text="Ik kan die strategie nog niet vinden. Welke bedoel je?"),
+    )
+    guard = SimpleNamespace(
+        requested_mutation_domain=AsyncMock(return_value="strategy"),
+        is_relevant=AsyncMock(return_value=True),
+    )
+
+    class Resolver:
+        def __init__(self, _session):
+            pass
+
+        async def resolve_canonical_target(self, *, user_id, entity_type, **_kwargs):
+            if entity_type == "setup":
+                return CanonicalEntityTarget(
+                    entity_type="setup", entity_id=1, display_name="BTC Breakout Full",
+                    owner_id=user_id, source="explicit_name", resolution_status="resolved",
+                )
+            return CanonicalEntityTarget(
+                entity_type=entity_type, owner_id=user_id, resolution_status="not_found",
+            )
+
+    @asynccontextmanager
+    async def session_factory():
+        yield SimpleNamespace(commit=AsyncMock())
+
+    class ProgressRepository:
+        def __init__(self, _session):
+            pass
+
+        async def record_responses_progress(self, **_kwargs):
+            pass
+
+    monkeypatch.setattr(
+        "backend.services.finn_v2_responses_front_door.FinnV2EntityResolutionService", Resolver,
+    )
+    monkeypatch.setattr(
+        "backend.services.finn_v2_responses_front_door.FinnV2RuntimeContractRepository",
+        ProgressRepository,
+    )
+    front = object.__new__(FinnResponsesFrontDoor)
+    front.client = SimpleNamespace(responses=fake)
+    front.user_id = 21
+    front.run_id = "verified-strategy-target"
+    front.proposals = FinnResponsesProposalSelection()
+    front.relevance_guard = guard
+    front.reads = SimpleNamespace(session_factory=session_factory)
+    result = asyncio.run(front.run(
+        message="Wijzig BTC Breakout Full Strategy van 250 naar 300 euro per uitvoering",
+        instructions="Use FINN tools", conversation_context={}, verified_asset="BTC",
+    ))
+    assert result.proposal_analysis is not None
+    assert result.proposal_analysis.request_plan.operation_id == "update_strategy"
+    assert result.response.tool_trace[0]["result"]["status"] == "needs_input"
+    assert result.response.tool_trace[0]["result"]["operation_id"] == "update_strategy"
+    assert guard.requested_mutation_domain.await_count == 1
+
+
 def test_limited_evaluation_preserves_conditional_plan_reasoning():
     from backend.services.finn_v2_responses_loop import limited_evaluation_answer, limited_evaluation_format
 
