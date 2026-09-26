@@ -3,7 +3,7 @@ fastapi
 uvicorn[standard]
 
 # ✅ Database & ORM
-sqlalchemy>=1.4
+sqlalchemy>=2.0,<2.1
 psycopg2-binary
 asyncpg>=0.28.0
 pydantic>=1.10,<2.0  # v2 vereist migratie

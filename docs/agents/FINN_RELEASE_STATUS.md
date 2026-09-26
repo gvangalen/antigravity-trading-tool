@@ -79,7 +79,7 @@ independent QA has started for this repair.
 | Provider regression | `PASS` | Current real provider `109/109`; `.local-finn-parity-artifacts/finn-responses-provider-regression-v18.json`, SHA-256 `f4ddeea08184f29518065ebe519e6e69d1b2b8df5cf50b33c52d003447b509ed`. |
 | Backend suite | `PASS` | `2497 passed, 3 skipped` from the canonical checkout root. |
 | Frontend suite | `PASS` | Current `typecheck` and production build passed; earlier `lint:i18n`, `test:i18n`, `test:commands`, guided-modal, and `audit:high` passed before this backend-only repair. |
-| CI | `NOT_RUN` | Awaiting the validated candidate push. |
+| CI | `PENDING_RERUN` | First candidate CI run `36228741907` exposed an unbounded SQLAlchemy upgrade selecting an uninstalled sync driver; dependency constrained before the next candidate run. |
 | Deployment | `NOT_RUN` | Production remains on `258b998a…`; its first safe Build smoke exposed fresh-owner readback defects. The repair candidate has not deployed or run a new live smoke. |
 | Official independent QA | `NOT_STARTED` | Build does not initiate official QA. |
 
