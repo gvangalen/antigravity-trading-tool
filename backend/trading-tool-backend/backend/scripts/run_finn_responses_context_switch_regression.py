@@ -35,6 +35,11 @@ def main() -> None:
     artifact = {"synthetic_local_only": True, "cases": []}
     for new_message, expected_operation in (
         ("Verwijder mijn strategie BTC Breakout Full Strategy.", "delete_strategy"),
+        (
+            "Ik bedoel geen paper-bot. Ik bedoel alleen de strategie "
+            "BTC Breakout Full Strategy; de pagina zegt dat daar geen bot aan gekoppeld is.",
+            "delete_strategy",
+        ),
         ("Ik bekijk AAPL op 1D. De koersdata is verouderd. Zou je nu handelen of wachten?", None),
     ):
         first = run_gate(

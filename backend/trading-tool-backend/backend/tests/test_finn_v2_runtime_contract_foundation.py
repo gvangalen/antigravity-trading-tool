@@ -1113,7 +1113,8 @@ def test_owned_worker_lifecycle_has_a_terminal_deadline_independent_of_delivery(
     source = (ROOT / "services" / "finn_v2_run_service.py").read_text(encoding="utf-8")
     owned = source.split("async def run_foundation_lifecycle_owned", 1)[1].split("    def _is_visible_run", 1)[0]
 
-    assert "asyncio.wait_for(" in owned
+    assert "_await_selection_or_lifecycle(" in owned
+    assert "return_when=asyncio.FIRST_COMPLETED" in source
     assert "lifecycle_deadline_seconds()" in owned
     assert 'error_code="lifecycle_deadline_exceeded"' in owned
     assert "_cancel_lifecycle_within_reserve" in owned

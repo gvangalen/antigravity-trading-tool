@@ -64,6 +64,41 @@ def conditional_process_format() -> dict[str, Any]:
     }}
 
 
+def conditional_next_step_format() -> dict[str, Any]:
+    return {"format": {
+        "type": "json_schema", "name": "finn_conditional_next_step", "strict": True,
+        "schema": {
+            "type": "object", "additionalProperties": False,
+            "properties": {
+                "condition_from_previous_answer": {"type": "string"},
+                "step_now": {"type": "string"},
+                "avoid_now": {"type": "string"},
+                "data_limit": {"type": "string"},
+            },
+            "required": ["condition_from_previous_answer", "step_now", "avoid_now", "data_limit"],
+        },
+    }}
+
+
+def conditional_next_step_answer(text: str) -> str:
+    try:
+        payload = json.loads(text)
+        parts = [str(payload[key] or "").strip() for key in (
+            "condition_from_previous_answer", "step_now", "avoid_now", "data_limit",
+        )]
+    except (TypeError, ValueError, KeyError) as exc:
+        raise FinnResponsesError("responses_conditional_next_step_invalid") from exc
+    if not all(parts[:3]):
+        raise FinnResponsesError("responses_conditional_next_step_incomplete")
+    sentences = []
+    for part in parts[1:]:
+        if not part:
+            continue
+        sentence = part[0].upper() + part[1:]
+        sentences.append(sentence if sentence.endswith((".", "!", "?")) else f"{sentence}.")
+    return " ".join(sentences)
+
+
 def priority_process_format() -> dict[str, Any]:
     return {"format": {
         "type": "json_schema", "name": "finn_plan_process_priorities", "strict": True,
@@ -196,6 +231,9 @@ class FinnResponsesResult:
     tool_trace: tuple[dict[str, Any], ...]
     answer_kind: str = "free_text"
     response_focus: str | None = None
+    horizon_classification_question: bool = False
+    resumed_clarification_reason: str | None = None
+    uses_previous_response: bool = False
 
 
 class FinnResponsesLoop:
@@ -229,27 +267,37 @@ class FinnResponsesLoop:
         instructions: str,
         previous_response_id: str | None = None,
         previous_verified_answer: str | None = None,
+        previous_tool_availability: tuple[dict[str, str], ...] = (),
         antecedent_verified_answer: str | None = None,
         guided_operation_id: str | None = None,
         resuming_clarification: bool = False,
+        resumed_clarification_reason: str | None = None,
         resume_evaluation_operation_id: str | None = None,
         original_user_request: str = "",
         previous_answer_only: bool = False,
         next_decision_from_previous: bool = False,
+        conditional_next_step_from_previous: bool = False,
         answering_previous_question: bool = False,
         conditional_process_check: Callable[[], bool] | None = None,
         response_focus_check: Callable[[], str | None] | None = None,
+        horizon_classification_check: Callable[[], bool] | None = None,
         locale: str | None = None,
+        force_read_repair: bool = False,
     ) -> FinnResponsesResult:
         verified_context = (
             f"Earlier verified FINN answer: {antecedent_verified_answer}\n"
             f"Immediately preceding verified FINN answer: {previous_verified_answer or ''}"
             if antecedent_verified_answer else (previous_verified_answer or "")
         )
+        if verified_context and previous_answer_only and previous_tool_availability:
+            verified_context += (
+                "\nTyped availability from that verified run (not fresh market data): "
+                + json.dumps(previous_tool_availability, ensure_ascii=False)
+            )
         current_input: list[dict[str, Any]] = (
             [{"role": "assistant", "content": verified_context}] if verified_context else []
         ) + [{"role": "user", "content": message}]
-        prior_id = None if previous_answer_only else previous_response_id
+        prior_id = None if previous_answer_only or force_read_repair else previous_response_id
         trace: list[dict[str, Any]] = []
         seen_call_ids: set[str] = set()
         proposal_selected = False
@@ -257,22 +305,6 @@ class FinnResponsesLoop:
         repair_tool_name: str | None = None
         repair_attempts: dict[str, int] = {}
         repair_exhausted = False
-        direct_boundary = None
-        if previous_answer_only:
-            direct_started = time.perf_counter()
-            direct_call = self.catalog.validate("answer_directly", {"uses_previous_response": True})
-            direct_boundary = await self.executor(direct_call)
-            logger.info("FINN Responses direct boundary completed in %.2fs", time.perf_counter() - direct_started)
-            if not isinstance(direct_boundary, dict) or direct_boundary.get("status") != "completed":
-                raise FinnResponsesError("responses_direct_boundary_unavailable")
-            trace.append({
-                "call_id": "server-classified-direct-followup",
-                "name": "answer_directly",
-                "arguments": {"uses_previous_response": True},
-                "status": "completed",
-                "result": direct_boundary,
-                "source": "model_classified_server_boundary",
-            })
         for _ in range(self.max_rounds):
             remaining = remaining_lifecycle_seconds()
             if remaining is not None and remaining <= 3.25:
@@ -296,7 +328,18 @@ class FinnResponsesLoop:
             )
             if previous_answer_only:
                 definitions = []
+            elif force_read_repair:
+                definitions = [
+                    item for item in definitions
+                    if item["name"].startswith(("get_", "evaluate_"))
+                ]
             turn_instructions = instructions
+            if force_read_repair:
+                turn_instructions += (
+                    "\nA previous direct answer for this same user request lacked verified "
+                    "evidence. First use the available FINN read or evaluation tools. "
+                    "Never infer saved or current facts from conversation text."
+                )
             if resuming_clarification:
                 turn_instructions += (
                     "\nThe input includes FINN's prior clarification and the user's new answer. "
@@ -322,7 +365,9 @@ class FinnResponsesLoop:
                     "proper names, tickers and quoted user values unchanged."
                 )
             turn_instructions += (
-                "\nMatch the structure of the user's question. When they ask for a numbered "
+                "\nAddress the trader directly as 'you' in the selected language; never "
+                "narrate a user-facing answer as 'the user is considering' or a case report. "
+                "Match the structure of the user's question. When they ask for a numbered "
                 "set of priorities, give that number of distinct numbered, preparatory "
                 "actions and separately name what to avoid. Base each action on verified "
                 "saved settings or on a clearly labelled evidence limitation; never turn "
@@ -372,7 +417,10 @@ class FinnResponsesLoop:
                     "settings alone cannot establish suitability; do not claim the "
                     "user's actual plan is risky or fits their goals."
                 )
-                turn_instructions += "\n" + str(direct_boundary.get("evidence_boundary") or "")
+                turn_instructions += (
+                    "\nExplain only the preceding verified answer and its already verified "
+                    "evidence. No new owner-scoped or market facts were fetched this turn."
+                )
             limited_evaluations = [
                 item.get("result") or {}
                 for item in trace
@@ -403,7 +451,7 @@ class FinnResponsesLoop:
                 "max_output_tokens": 700 if not trace else 350,
             }
             if next_decision_from_previous:
-                kwargs["text"] = {"format": {
+                kwargs["text"] = conditional_next_step_format() if conditional_next_step_from_previous else {"format": {
                     "type": "json_schema", "name": "finn_next_decision", "strict": True,
                     "schema": {
                         "type": "object", "additionalProperties": False,
@@ -424,9 +472,39 @@ class FinnResponsesLoop:
                     "unchanged until a supported assessment becomes possible. "
                     "Ground both fields in the verified answers above; an independent "
                     "verifier checks the final choice for evidence, safety and usefulness. "
+                    "When the verified prior answer concerns a conditional rule described "
+                    "by the user, give one concrete no-trade step: identify or note the "
+                    "specific confirmation being awaited, then do not enter until it is "
+                    "actually observed. Do not divert to other trades, setups, or strategies. "
                     "Do not quote an older draft or a tool catalog. reason and "
                     "next_decision are user-facing text in the user's language."
                 )
+                if conditional_next_step_from_previous:
+                    turn_instructions += (
+                        " This is a follow-up to a user-described conditional rule. In "
+                        "condition_from_previous_answer, restate only the confirmation "
+                        "the prior verified answer says the user is waiting for; if no "
+                        "specific trigger was given, say 'the confirmation you described' "
+                        "in the user's language rather than inventing a level or indicator. "
+                        "In step_now give one concrete no-trade step the user can take now, "
+                        "such as writing down exactly what would count as confirmation. "
+                        "In avoid_now explicitly say not to enter before that confirmation. "
+                        "data_limit briefly distinguishes missing current evidence from "
+                        "the user's process choice. Do not propose other trades, setups, "
+                        "strategies or a change to saved settings."
+                    )
+                if any(
+                    item.get("scope") == "read_linked_strategy"
+                    and item.get("status") != "completed"
+                    for item in previous_tool_availability
+                ):
+                    turn_instructions += (
+                        " The prior verified read did not find a linked saved strategy. "
+                        "Do not refer to 'your strategy', existing strategies, or other "
+                        "trades as if they are part of the owner's saved plan. Ground the "
+                        "next process step in the user's described rule and the verified "
+                        "setup instead."
+                    )
                 kwargs["instructions"] = turn_instructions
             elif limited_evaluations:
                 requested_focus = response_focus_check() if response_focus_check is not None else None
@@ -505,7 +583,7 @@ class FinnResponsesLoop:
             if prior_id:
                 kwargs["previous_response_id"] = prior_id
             if (proposal_selected or repair_exhausted or limited_evaluations
-                    or (previous_answer_only and trace)
+                    or previous_answer_only
                     or (tool_rounds >= 2 and not repair_tool_name
                         and (not trace or trace[-1]["status"] != "retry"))):
                 kwargs["tool_choice"] = "none"
@@ -514,7 +592,7 @@ class FinnResponsesLoop:
             elif not trace:
                 kwargs["tool_choice"] = (
                     {"type": "function", "name": self.catalog.proposal_tool_for_operation(guided_operation_id)}
-                    if guided_operation_id else "required"
+                    if guided_operation_id else "required" if force_read_repair else "auto"
                 )
             elif trace[-1]["status"] == "retry":
                 kwargs["tool_choice"] = "required"
@@ -585,6 +663,12 @@ class FinnResponsesLoop:
                     provider_task.add_done_callback(
                         lambda task: task.exception() if not task.cancelled() else None
                     )
+                    if trace and not proposal_selected:
+                        return FinnResponsesResult(
+                            "", prior_id or "", tuple(trace), "provider_unavailable",
+                            response_focus_check() if response_focus_check is not None else None,
+                            False, None,
+                        )
                     raise FinnResponsesError("responses_provider_timeout")
                 response = await provider_task
                 provider_elapsed_ms = round((time.perf_counter() - provider_started) * 1000, 2)
@@ -597,6 +681,11 @@ class FinnResponsesLoop:
                     "FINN Responses provider round timed out round=%d elapsed_seconds=%.2f",
                     tool_rounds + 1, time.perf_counter() - provider_started,
                 )
+                if trace and not proposal_selected:
+                    return FinnResponsesResult(
+                        "", prior_id or "", tuple(trace), "provider_unavailable",
+                        response_focus_check() if response_focus_check is not None else None,
+                    )
                 raise FinnResponsesError("responses_provider_timeout") from exc
             except FinnResponsesError:
                 logger.warning(
@@ -629,15 +718,18 @@ class FinnResponsesLoop:
                     raise FinnResponsesError("responses_empty_answer")
                 if next_decision_from_previous:
                     logger.info("FINN Responses next-decision parse starting")
-                    try:
-                        structured = json.loads(answer)
-                        reason = str(structured["reason"] or "").strip()
-                        decision = str(structured["next_decision"] or "").strip()
-                    except (TypeError, ValueError, KeyError) as exc:
-                        raise FinnResponsesError("responses_next_decision_invalid") from exc
-                    if not reason or not decision:
-                        raise FinnResponsesError("responses_next_decision_incomplete")
-                    answer = f"{reason} {decision}"
+                    if conditional_next_step_from_previous:
+                        answer = conditional_next_step_answer(answer)
+                    else:
+                        try:
+                            structured = json.loads(answer)
+                            reason = str(structured["reason"] or "").strip()
+                            decision = str(structured["next_decision"] or "").strip()
+                        except (TypeError, ValueError, KeyError) as exc:
+                            raise FinnResponsesError("responses_next_decision_invalid") from exc
+                        if not reason or not decision:
+                            raise FinnResponsesError("responses_next_decision_incomplete")
+                        answer = f"{reason} {decision}"
                 elif limited_evaluations:
                     evaluation_evidence = [
                         item for evaluation in limited_evaluations
@@ -657,10 +749,14 @@ class FinnResponsesLoop:
                 logger.info("FINN Responses final answer prepared round=%d", tool_rounds + 1)
                 return FinnResponsesResult(
                     answer, response_id, tuple(trace),
+                    "conditional_next_step" if conditional_next_step_from_previous else
                     "grounded_next_decision" if next_decision_from_previous else
                     "answers_previous_question" if answering_previous_question else
                     "conditional_process" if conditional_process_check is not None and conditional_process_check() else "free_text",
                     response_focus_check() if response_focus_check is not None else None,
+                    horizon_classification_check() if horizon_classification_check is not None else False,
+                    resumed_clarification_reason if resuming_clarification else None,
+                    previous_answer_only,
                 )
             tool_rounds += 1
             prior_id = response_id

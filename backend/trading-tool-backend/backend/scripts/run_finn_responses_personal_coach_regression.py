@@ -7,6 +7,7 @@ import argparse
 from difflib import SequenceMatcher
 import json
 from pathlib import Path
+import re
 
 from sqlalchemy import text
 
@@ -25,6 +26,7 @@ QUESTIONS = (
     "Is mijn 4H DCA-setup langetermijnopbouw of een swingtrade?",
     "Voor de lange termijn, ongeveer vijf jaar.",
     "Mijn BTC-plan zegt te wachten op bevestiging voor een entry. Ik ben bang de beweging te missen. Moet ik die wachtregel nu negeren? Denk als coach met me mee, zonder te doen alsof je de actuele koers kent.",
+    "Wat moet ik dan concreet doen met die FOMO terwijl ik op bevestiging wacht?",
 )
 TRANSLATED_QUESTIONS = {
     "nl": QUESTIONS,
@@ -36,6 +38,7 @@ TRANSLATED_QUESTIONS = {
         "Is my 4H DCA setup long-term accumulation or a swing trade?",
         "For the long term, around five years.",
         "My BTC plan says to wait for entry confirmation. I fear missing the move. Should I ignore that rule now? Coach me without pretending you know the current price.",
+        "What should I concretely do with that FOMO while I wait for confirmation?",
     ),
     "de": (
         "Mein aktueller BTC-Plan ist tägliches DCA, aber ich erwäge 100 Euro pro Woche. Passt das zu meinem vorsichtigen Risikostil?",
@@ -45,6 +48,7 @@ TRANSLATED_QUESTIONS = {
         "Ist mein 4H-DCA-Setup langfristiger Vermögensaufbau oder ein Swingtrade?",
         "Langfristig, ungefähr fünf Jahre.",
         "Mein BTC-Plan verlangt eine Bestätigung vor dem Einstieg. Ich habe Angst, die Bewegung zu verpassen. Soll ich diese Regel jetzt ignorieren? Antworte als Coach, ohne den aktuellen Kurs zu behaupten.",
+        "Was soll ich konkret gegen diese FOMO tun, während ich auf die Bestätigung warte?",
     ),
 }
 PROPOSAL_MARKERS = {
@@ -60,6 +64,16 @@ WEEK_MARKERS = {
 }
 
 
+def actionable_wait_step(answer: str, locale: str) -> bool:
+    patterns = {
+        "nl": (r"\b(?:schrijf|noteer|bepaal|controleer)\b", r"bevestig|voorwaard|signaal", r"\b(?:niet|geen)\b[^.]{0,45}\b(?:markt|instap|handel|positie|trade|investeer|investeren)"),
+        "en": (r"\b(?:write|note|record|check|identify)\b", r"confirm|condition|signal", r"\b(?:do not|don't|no)\b[^.]{0,45}\b(?:enter|trade|position|market)"),
+        "de": (r"\b(?:schreib\w*|notier\w*|prüf\w*|bestimm\w*|definier\w*)\b", r"bestätig|beding|signal", r"\b(?:nicht|keinen|keine)\b[^.]{0,45}\b(?:einstieg|einsteigen|trade|position|markt)"),
+    }
+    lowered = answer.casefold()
+    return all(re.search(pattern, lowered) for pattern in patterns[locale])
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--base-url", default="http://127.0.0.1:8000")
@@ -67,6 +81,7 @@ def main() -> None:
     parser.add_argument("--evaluation-only", action="store_true")
     parser.add_argument("--horizon-only", action="store_true")
     parser.add_argument("--conditional-only", action="store_true")
+    parser.add_argument("--conditional-followup-only", action="store_true")
     parser.add_argument("--locale", choices=tuple(TRANSLATED_QUESTIONS), default="nl")
     args = parser.parse_args()
     if not args.base_url.startswith(("http://localhost:", "http://127.0.0.1:")):
@@ -88,6 +103,7 @@ def main() -> None:
     conversation_id = None
     questions = TRANSLATED_QUESTIONS[args.locale]
     selected_questions = (
+        list(enumerate(questions))[6:] if args.conditional_followup_only else
         [(6, questions[6])] if args.conditional_only else
         [(3, questions[3])] if args.evaluation_only else
         list(enumerate(questions))[3:] if args.horizon_only else
@@ -106,12 +122,17 @@ def main() -> None:
         conversation_id = observed["conversation_id"]
         record = _runtime_record(observed["run_id"])
         answer = str((record["runtime_state"].get("terminal_response") or {}).get("content") or "")
-        trace = (record["runtime_state"].get("responses_exchange") or {}).get("tool_trace") or []
+        exchange = record["runtime_state"].get("responses_exchange") or {}
+        trace = exchange.get("tool_trace") or []
         checks = {
             "terminal": observed["status"] in ({"completed", "clarification_required"} if index in {2, 4} else {"completed"}),
             "one_dispatch_attempt": observed["dispatch_count"] == observed["attempt_count"] == 1,
             "polling_sse_parity": bool(observed["polling_sse_contract_projection"]),
             "no_proposal": not record["proposal"],
+            "response_id_persisted": bool(exchange.get("response_id")),
+            "direct_answer_has_no_operation": bool(trace) or not (
+                record["terminal_projection"].get("final_operation_id")
+            ),
             "answer_present": bool(answer.strip()),
             "no_internal_choice_wrapper": all(label not in answer for label in (
                 "Original user request:", "User's chosen answer:",
@@ -150,7 +171,7 @@ def main() -> None:
             "why_explains": args.locale != "nl" or index != 1 or (
                 SequenceMatcher(None, previous_answer.casefold(), answer.casefold()).ratio() < 0.8
                 and any(token in answer.casefold() for token in (
-                    "omdat", "doordat", "waardoor", "reden", "zonder", "because", "weil",
+                    "omdat", "doordat", "waardoor", "hierdoor", "reden", "zonder", "because", "weil",
                 ))
                 and any(token in answer.casefold() for token in (
                     "bewijs", "beoordel", "geschik", "markt", "evidence", "assessment",
@@ -158,7 +179,8 @@ def main() -> None:
             ),
             "next_decision": args.locale != "nl" or index != 2 or (
                 observed["status"] == "completed"
-                and any(item.get("name") == "answer_directly" for item in trace)
+                and not trace
+                and bool((record["runtime_state"].get("responses_exchange") or {}).get("uses_previous_response"))
                 and previous_answer.casefold().strip() != answer.casefold().strip()
             ),
             "horizon_not_inferred": index != 4 or (
@@ -203,10 +225,15 @@ def main() -> None:
                     "ik kan dit nog niet onderbouwen met betrouwbare gegevens",
                     "ik kan nog niet beoordelen of dit bij je risicostijl past",
                 ))
-                and any(phrase in answer.casefold() for phrase in {
-                    "nl": ("wacht tot", "controleer of", "controleer eerst of", "moet controleren of", "check of", "wachtregel niet negeren", "negeer de wachtregel niet"),
-                    "en": ("wait until", "check whether", "verify that", "confirm whether", "not ignore the wait rule"),
-                    "de": ("warte bis", "prüfe ob", "prüf ob", "sicherstellen, dass", "warteregel nicht ignorieren"),
+                and any(term in answer.casefold() for term in {
+                    "nl": ("wachtregel", "bevestiging"),
+                    "en": ("rule", "confirmation"),
+                    "de": ("regel", "bestätigung"),
+                }[args.locale])
+                and not any(phrase in answer.casefold() for phrase in {
+                    "nl": ("negeer de wachtregel nu", "stap nu in zonder bevestiging"),
+                    "en": ("ignore the rule now", "enter now without confirmation"),
+                    "de": ("ignoriere die regel jetzt", "steige jetzt ohne bestätigung ein"),
                 }[args.locale])
                 and not any(detail in answer.casefold() and detail not in question.casefold()
                             for detail in {"bullish breakout", "prijsactie", "price action", "bullishe ausbruch"})
@@ -226,6 +253,22 @@ def main() -> None:
                     "en": ("saved setup requires confirmation", "saved plan requires confirmation"),
                     "de": ("gespeicherte setup verlangt bestätigung", "gespeicherte plan verlangt bestätigung"),
                 }[args.locale]
+            ),
+            "followup_does_not_invent_saved_strategy": index != 7 or not any(
+                phrase in answer.casefold() for phrase in {
+                    "nl": ("strategieën die je al hebt", "je bestaande strategie", "je opgeslagen strategie"),
+                    "en": ("strategies you already have", "your existing strategy", "your saved strategy"),
+                    "de": ("strategien, die du bereits hast", "deine bestehende strategie", "deine gespeicherte strategie"),
+                }[args.locale]
+            ),
+            "followup_addresses_fomo": index != 7 or (
+                observed["status"] == "completed"
+                and actionable_wait_step(answer, args.locale)
+                and not any(term in answer.casefold() for term in {
+                    "nl": ("andere mogelijke setups", "andere trades", "andere strategieën"),
+                    "en": ("other possible setups", "other setups", "other trades", "other strategies"),
+                    "de": ("andere mögliche setups", "andere trades", "andere strategien"),
+                }[args.locale])
             ),
         }
         passed = all(checks.values())

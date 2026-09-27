@@ -53,6 +53,20 @@ from backend.utils import openai_client
 logger = logging.getLogger(__name__)
 
 
+async def _await_selection_or_lifecycle(selection_waiter, lifecycle, *, timeout: float) -> None:
+    done, _ = await asyncio.wait(
+        {selection_waiter, lifecycle}, timeout=timeout,
+        return_when=asyncio.FIRST_COMPLETED,
+    )
+    if lifecycle in done:
+        await lifecycle
+        if selection_waiter not in done:
+            raise FinnResponsesError("responses_selection_missing")
+    if selection_waiter not in done:
+        raise asyncio.TimeoutError()
+    await selection_waiter
+
+
 class FinnV2RunService:
     def __init__(self, session: AsyncSession):
         self.session = session
@@ -159,6 +173,7 @@ class FinnV2RunService:
         selector_started: asyncio.Event, selection_ready: asyncio.Event,
         recovery_response_id: str | None = None,
         prior_tool_trace: tuple[dict[str, Any], ...] = (),
+        force_read_repair: bool = False,
     ) -> tuple[FinnResponsesFrontDoorResult, str]:
         """Select through Responses without holding a DB connection at the provider."""
         async with async_session_factory() as session:
@@ -284,6 +299,7 @@ class FinnV2RunService:
             # A new request must not inherit the prior clarification as its answer.
             previous_response = None
         pending_guided = FinnV2OperationStateService.pending_operation_id(context)
+        corrected_guided_operation_id: str | None = None
         if pending_guided:
             contract = FinnV2OperationRegistry().require_supported(pending_guided)
             requested_slot = str(guided.get("next_missing_input") or "")
@@ -307,6 +323,19 @@ class FinnV2RunService:
                 if len(target.display_name or "") == longest_name
             ]
             if len(longest_targets) == 1 and longest_targets[0].entity_type != contract.domain:
+                corrected_domain = longest_targets[0].entity_type
+                if contract.action_polarity and await FinnResponsesToolRelevanceGuard(client).corrects_guided_target(
+                    message=message, original_operation=pending_guided,
+                    requested_slot=requested_slot, corrected_domain=corrected_domain,
+                ):
+                    matching = [
+                        item for item in FinnV2OperationRegistry().list()
+                        if item.supported and item.mode in {"CREATE_PROPOSAL", "ACTION_PROPOSAL"}
+                        and item.domain == corrected_domain
+                        and item.action_polarity == contract.action_polarity
+                    ]
+                    if len(matching) == 1:
+                        corrected_guided_operation_id = matching[0].operation_id
                 continuation = False
             elif requested_slot and FinnResponsesFrontDoor.binds_guided_slot(
                 message=message, contract=contract, registry=FinnV2OperationRegistry(),
@@ -341,6 +370,7 @@ class FinnV2RunService:
             user_id=user_id, run_id=run_id,
         ).run(
             message=message,
+            corrected_guided_operation_id=corrected_guided_operation_id,
             model_message=(
                 "Previous unresolved user request: " + str(pending_clarification["original_message"])
                 + "\nFINN asked: " + str(pending_clarification["question"])
@@ -565,6 +595,7 @@ class FinnV2RunService:
             ),
             previous_response=previous_response,
             prior_tool_trace=prior_tool_trace,
+            force_read_repair=force_read_repair,
         )
         if prior_tool_trace:
             result = replace(
@@ -587,6 +618,8 @@ class FinnV2RunService:
                 tool_trace=list(result.response.tool_trace),
                 answer=result.response.text,
                 supersedes_response_id=recovery_response_id,
+                answer_kind=result.response.answer_kind,
+                uses_previous_response=result.response.uses_previous_response,
             )
             logger.info(
                 "FINN Responses exchange recorded in %.2fs",
@@ -1174,6 +1207,30 @@ class FinnV2RunService:
                             "FINN Responses preparation completed in %.2fs",
                             monotonic() - responses_stage_started,
                         )
+                        read_repair_used = False
+                        if (
+                            prepared.proposal_analysis is None
+                            and not prepared.response.tool_trace
+                            and not prepared.response.uses_previous_response
+                            and await FinnResponsesToolRelevanceGuard(
+                                openai_client.async_client
+                            ).direct_answer_requires_read(
+                                message=message,
+                                answer=prepared.response.text,
+                                previous_verified_answer=str(
+                                    (prepared.previous_response or {}).get("answer") or ""
+                                ),
+                            )
+                            and (remaining_lifecycle_seconds() or 60) > 12
+                        ):
+                            prepared, message = await cls.prepare_responses_turn(
+                                run_id=run_id, user_id=user_id,
+                                selector_started=selector_started,
+                                selection_ready=selection_ready,
+                                recovery_response_id=prepared.response.response_id,
+                                force_read_repair=True,
+                            )
+                            read_repair_used = True
                         if prepared.proposal_analysis is None:
                             responses_stage_started = monotonic()
                             answer = await FinnResponsesAnswerVerifier(client=openai_client.async_client).verify(
@@ -1188,10 +1245,14 @@ class FinnV2RunService:
                             )
                             remaining = remaining_lifecycle_seconds()
                             if (
-                                answer.reason == "responses_evidence_not_verified"
-                                and any(
-                                    str(call.get("name") or "").startswith("get_")
-                                    for call in prepared.response.tool_trace
+                                not read_repair_used
+                                and answer.reason in {"responses_evidence_not_verified", "no_evidence_available"}
+                                and (
+                                    not prepared.response.tool_trace
+                                    or any(
+                                        str(call.get("name") or "").startswith("get_")
+                                        for call in prepared.response.tool_trace
+                                    )
                                 )
                                 and (remaining is None or remaining > 12)
                             ):
@@ -1201,6 +1262,7 @@ class FinnV2RunService:
                                     selection_ready=selection_ready,
                                     recovery_response_id=prepared.response.response_id,
                                     prior_tool_trace=prepared.response.tool_trace,
+                                    force_read_repair=not prepared.response.tool_trace,
                                 )
                                 answer = (
                                     None if prepared.proposal_analysis is not None
@@ -1372,8 +1434,8 @@ class FinnV2RunService:
             if selector_started_waiter not in done:
                 raise asyncio.TimeoutError()
             await selector_started_waiter
-            await asyncio.wait_for(
-                selection_waiter,
+            await _await_selection_or_lifecycle(
+                selection_waiter, lifecycle,
                 timeout=(
                     _remaining(reserve=True) if responses_visible
                     else min(flags.selector_phase_deadline_seconds(), _remaining(reserve=True))

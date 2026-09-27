@@ -239,7 +239,7 @@ def _specifications(names: dict[str, str]) -> tuple[tuple[str, str, str], ...]:
         ),
         ("strategy_update", "Update that strategy and set the base amount to 120 euro.", "update_strategy"),
         ("bot_create", f"Erstelle dafuer einen Paper-Bot mit dem Namen {names['bot']}.", "create_bot"),
-        ("bot_update", "Update that bot and set the cadence to weekly.", "update_bot"),
+        ("bot_update", "Update that bot and set the budget to 150 euros.", "update_bot"),
         ("bot_deactivate", "Deaktiviere diesen Bot.", "deactivate_bot"),
         ("bot_delete", "Entferne diesen Bot.", "delete_bot"),
         ("strategy_delete", "Delete the linked strategy.", "delete_strategy"),

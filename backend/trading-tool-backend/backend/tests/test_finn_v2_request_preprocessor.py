@@ -3,6 +3,25 @@ import pytest
 from backend.services.finn_v2_request_preprocessor_service import FinnV2RequestPreprocessorService
 
 
+@pytest.mark.parametrize("message", [
+    "Welk onderdeel maakt mijn handelsaanpak het meest robuust?",
+    "Bewerte, welche Annahme meinen Handelsplan am stärksten trägt.",
+    "Which assumption supports my overall trading plan most strongly?",
+])
+def test_whole_plan_subject_is_typed_without_confusing_it_with_one_setup(message):
+    facts = FinnV2RequestPreprocessorService().preprocess(message=message)
+    assert facts.discourse_act == "evaluation"
+    assert facts.primary_entity == "plan"
+    assert facts.explicit_plan_subject is True
+
+
+def test_specific_setup_evaluation_is_not_the_whole_plan_subject():
+    facts = FinnV2RequestPreprocessorService().preprocess(
+        message="Beoordeel mijn actieve setup."
+    )
+    assert facts.explicit_plan_subject is False
+
+
 def test_autonomous_financial_delegation_is_a_financial_execution_fact():
     facts = FinnV2RequestPreprocessorService().preprocess(
         message="Move my savings into whichever digital asset you expect to rise tomorrow."

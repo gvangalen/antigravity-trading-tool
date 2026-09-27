@@ -16,6 +16,7 @@ from backend.infrastructure.repositories.finn_v2_state_repository import FinnV2S
 from backend.infrastructure.repositories.finn_v2_validation_repository import FinnV2ValidationRepository
 from backend.schemas.finn_v2_policy_schema import FinnV2PolicyDecision
 from backend.schemas.finn_v2_proposal_schema import FinnV2ProposalRecord, ValidatedProposalInput
+from backend.schemas.bot_schema import BotConfigUpdateSchema
 from backend.services.finn_v2_entity_resolution_service import FinnV2EntityResolutionService
 from backend.services.finn_v2_flag_service import FinnV2FlagService
 from backend.services.finn_v2_json_safety import to_json_safe
@@ -110,16 +111,25 @@ class FinnV2ProposalService:
         )
         if existing is not None:
             if existing.status in self._REUSABLE_STATUSES:
-                if self.canonical_identity(existing.payload_json) != self.canonical_identity(
-                    to_json_safe(proposal_input.dict())
+                current_run = current_run or await self.runs.get_by_id_for_user(
+                    run_id=run_id, user_id=user_id,
+                )
+                existing_run = await self.runs.get_by_id_for_user(
+                    run_id=existing.run_id, user_id=user_id,
+                )
+                if (
+                    current_run is not None and existing_run is not None
+                    and current_run.conversation_id == existing_run.conversation_id
                 ):
-                    raise ValueError("operation_payload_invalid")
-                return self._row_to_record(existing)
+                    if self.canonical_identity(existing.payload_json) != self.canonical_identity(
+                        to_json_safe(proposal_input.dict())
+                    ):
+                        raise ValueError("operation_payload_invalid")
+                    return self._row_to_record(existing)
 
-            # A completed proposal must never be reused for a later user
-            # request. Scope its otherwise canonical proposal key to this run;
-            # duplicate attempts inside this run remain protected below by the
-            # payload-hash lookup and the run's dispatch idempotency.
+            # A completed proposal or one from another conversation must not
+            # become the draft for this run. Keep retries inside this run
+            # idempotent without borrowing another conversation's identity.
             proposal_input = proposal_input.copy(
                 update={
                     "idempotency_key": self.run_scoped_idempotency_key(
@@ -238,6 +248,19 @@ class FinnV2ProposalService:
                 "target_revision": self._target_revision("strategy", change.strategy_id, user_id, before),
                 "snapshot_timestamp": datetime.now(timezone.utc),
             })})
+        if operation == "update_bot":
+            allowed = frozenset(BotConfigUpdateSchema.__fields__) | {"budget"}
+            if not change.changed_fields or set(change.changed_fields).difference(allowed):
+                raise ValueError("invalid_bot_change_fields")
+            fields = dict(change.changed_fields)
+            if "budget" in fields and "budget_total_eur" not in fields:
+                fields["budget_total_eur"] = fields.pop("budget")
+            canonical = BotConfigUpdateSchema.parse_obj(fields).dict(exclude_unset=True)
+            if canonical.get("is_live") is True:
+                raise ValueError("live_bot_update_not_allowed")
+            return proposal_input.copy(update={
+                "change": change.copy(update={"changed_fields": canonical})
+            })
         return proposal_input
 
     @staticmethod

@@ -69,6 +69,18 @@ class FinnV2SetupInputCatalog:
         return next(iter(matches)) if len(matches) == 1 else None
 
     @classmethod
+    def explicit_chart_timeframe_from_text(cls, text: str) -> Optional[str]:
+        """A concrete chart duration cannot be confused with a DCA cadence."""
+        match = cls._CODE_TIMEFRAME.search(str(text or ""))
+        if match:
+            return match.group(1).upper()
+        normalized = cls._comparison_text(text)
+        matches = cls._compound_timeframes(normalized)
+        if not re.search(r"\b(?:timeframe|chart|grafiek|grafik|zeitfenster)\b", normalized):
+            matches.difference_update({"1D", "1W"})
+        return next(iter(matches)) if len(matches) == 1 else None
+
+    @classmethod
     def canonical_timeframe(cls, value: object) -> Optional[str]:
         match = cls._CODE_TIMEFRAME.fullmatch(str(value or "").strip())
         if match:

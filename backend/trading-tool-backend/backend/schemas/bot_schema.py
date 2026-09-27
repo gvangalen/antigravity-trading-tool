@@ -1,6 +1,18 @@
-from pydantic import BaseModel, root_validator, Field, Extra
+from pydantic import BaseModel, root_validator, Field, Extra, validator
 from typing import Optional, List, Dict, Any
 from datetime import date, datetime
+
+
+def _canonical_bot_cadence(value):
+    if value is None:
+        return None
+    aliases = {
+        "hourly": "hourly", "ieder uur": "hourly", "stündlich": "hourly",
+        "daily": "daily", "dagelijks": "daily", "täglich": "daily",
+        "weekly": "weekly", "wekelijks": "weekly", "wöchentlich": "weekly",
+        "monthly": "monthly", "maandelijks": "monthly", "monatlich": "monthly",
+    }
+    return aliases.get(str(value).strip().casefold(), value)
 
 class BotConfigCreateSchema(BaseModel):
     name: str
@@ -16,6 +28,8 @@ class BotConfigCreateSchema(BaseModel):
     cadence: str = "daily"
     base_currency: str = "EUR"
     symbol: Optional[str] = None
+
+    _normalize_cadence = validator("cadence", pre=True, allow_reuse=True)(_canonical_bot_cadence)
 
 class BotConfigUpdateSchema(BaseModel):
     name: Optional[str] = None
@@ -37,6 +51,8 @@ class BotConfigUpdateSchema(BaseModel):
     min_order_eur: Optional[float] = None
     max_order_eur: Optional[float] = None
     risk_acknowledged: Optional[bool] = None
+
+    _normalize_cadence = validator("cadence", pre=True, allow_reuse=True)(_canonical_bot_cadence)
     
 class BotManualOrderSchema(BaseModel):
     bot_id: int

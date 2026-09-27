@@ -73,7 +73,7 @@ _MODEL_TOOL_INPUT_TYPES: dict[str, tuple[tuple[str, str], ...]] = {
     "create_strategy": (
         ("setup_id", "integer"), ("name", "string"),
         ("execution_mode", "string"), ("base_amount", "number"),
-        ("entry", "string"), ("stop_loss", "string"),
+        ("entry", "number"), ("stop_loss", "number"),
         ("targets", "array"), ("risk_profile", "string"),
         ("symbol", "string"), ("timeframe", "string"),
     ),
@@ -652,7 +652,7 @@ _OPERATION_SELECTION_METADATA: Mapping[str, dict] = {
         "selection_focus_entities": ("plan",),
     },
     "evaluate_plan": {
-        "semantic_description": "Assess a user's complete current trading approach or overall trading plan across profile, setup, strategy, indicators and risk. Dutch mijn aanpak, handelsaanpak and hele handelsplan refer to the whole plan, not to a single setup. A broad question about the biggest remaining risks or weakest link in that approach belongs here even without the word plan. Broad requests to review, audit, assess, examine, ask what is still missing before activation, or identify the least-supported, weak, vulnerable, incomplete, risky, or inconsistent link belong here. Personal questions asking what an indicator or position means for the user's active plan are evaluations, never general concept explanations. Evaluation language remains read-only analysis, even when it asks what should improve; it is not a request to mutate a setup, strategy, bot, or configuration. This is supported plan evaluation, not unsupported portfolio management.",
+        "semantic_description": "Assess a user's complete current trading approach or overall trading plan across profile, setup, strategy, indicators and risk. Dutch mijn aanpak, handelsaanpak and hele handelsplan refer to the whole plan, not to a single setup. A broad question about the biggest remaining risks, weakest link, or strongest supporting assumption in that approach belongs here even without the word plan. Broad requests to review, audit, assess, examine, ask what is still missing before activation, or identify the least-supported, strongest, weak, vulnerable, incomplete, risky, or inconsistent link belong here. Personal questions asking what an indicator or position means for the user's active plan are evaluations, never general concept explanations. Evaluation language remains read-only analysis, even when it asks what should improve; it is not a request to mutate a setup, strategy, bot, or configuration. This is supported plan evaluation, not unsupported portfolio management.",
         "positive_examples": (
             "Past deze positie bij mijn actieve plan en wat moet ik eerst bevestigen?",
             "Waar is mijn handelsaanpak als geheel het kwetsbaarst?",
@@ -661,6 +661,7 @@ _OPERATION_SELECTION_METADATA: Mapping[str, dict] = {
             "Geef een onderbouwd oordeel over de samenhang van mijn hele BTC-handelsplan.",
             "What does my RSI mean for my active BTC plan?",
             "Was bedeutet mein RSI fuer meinen aktiven BTC-Plan?",
+            "Welche Annahme trägt meinen gesamten Handelsplan am stärksten?",
         ),
         # Plan evaluation is deliberately distinct from evaluating a single
         # setup, strategy, bot or indicator configuration.
@@ -802,7 +803,12 @@ _OPERATION_SELECTION_METADATA: Mapping[str, dict] = {
         "selection_focus_entities": ("indicator_configuration",),
     },
     "update_indicator_configuration": {
-        "semantic_description": "Prepare a confirmed update of an existing saved indicator configuration. Reading or evaluating indicators remains read-only.",
+        "semantic_description": "Prepare a confirmed update of an existing saved indicator configuration, including disabling it with enabled=false while preserving the saved configuration. Reading or evaluating indicators remains read-only. Removing the saved configuration entirely is delete_indicator_configuration.",
+        "positive_examples": (
+            "Schakel mijn opgeslagen RSI-configuratie uit, maar bewaar haar.",
+            "Disable my saved RSI configuration without deleting it.",
+            "Deaktiviere meine gespeicherte RSI-Konfiguration, ohne sie zu löschen.",
+        ),
         "any_entities": ("indicator_configuration",),
         "required_discourse_acts": ("operation_request",),
         "allowed_action_polarities": ("update",),
@@ -810,7 +816,7 @@ _OPERATION_SELECTION_METADATA: Mapping[str, dict] = {
         "selection_focus_entities": ("indicator_configuration",),
     },
     "delete_indicator_configuration": {
-        "semantic_description": "Prepare a confirmed removal or reset of one saved indicator configuration for an asset. It never deletes global indicator definitions.",
+        "semantic_description": "Prepare a confirmed deletion of one saved indicator configuration for an asset. Disabling or deactivating a configuration while keeping it saved is update_indicator_configuration with enabled=false, not deletion. It never deletes global indicator definitions.",
         "any_entities": ("indicator_configuration",),
         "required_discourse_acts": ("operation_request",),
         "allowed_action_polarities": ("delete", "remove"),
@@ -1014,7 +1020,7 @@ _CONTRACTS: tuple[OperationContract, ...] = (
     OperationContract("delete_setup", FinnV2OperationRegistry.VERSION, "setup", "CREATE_PROPOSAL", ("verwijder setup", "delete setup", "lösche setup"), action_polarity=ActionPolarity.DELETE, required_inputs=("setup_id",), contextual_reference_inputs=("setup_id",), required_scopes=("active_asset", "active_setup"), proposal_type="delete_setup", confirmation_required=True, execution_adapter="delete_setup", idempotency_rule="proposal_payload_hash", postcondition="setup_deleted_for_user", response_strategy="proposal_draft", policy_class="proposal"),
     OperationContract("evaluate_setup", FinnV2OperationRegistry.VERSION, "setup", "EVALUATE", ("beoordeel setup",), required_scopes=("active_asset", "active_setup"), optional_scopes=("indicator_configuration",), model_policy="required", response_strategy="model_reasoning", policy_class="advice"),
     _read("read_linked_strategy", "strategy", ("active_asset", "active_setup", "linked_strategy"), ("welke strategie", "strategie"), ("setup", "strategy")),
-    OperationContract("create_strategy", FinnV2OperationRegistry.VERSION, "strategy", "CREATE_PROPOSAL", ("maak strategie", "create strategy", "erstelle strategie"), action_polarity=ActionPolarity.CREATE, required_inputs=("setup_id", "name", "execution_mode", "base_amount", "entry", "stop_loss", "targets", "risk_profile"), optional_inputs=("symbol", "timeframe"), contextual_reference_inputs=("setup_id",), required_scopes=("active_asset", "active_setup"), optional_scopes=("profile", "preferences", "indicator_configuration", "linked_strategy", "market_snapshot"), model_policy="required", response_strategy="proposal_draft", policy_class="proposal", proposal_type="create_strategy", confirmation_required=True, execution_adapter="create_strategy", idempotency_rule="proposal_payload_hash", postcondition="strategy_created_for_user_setup_name"),
+    OperationContract("create_strategy", FinnV2OperationRegistry.VERSION, "strategy", "CREATE_PROPOSAL", ("maak strategie", "create strategy", "erstelle strategie"), action_polarity=ActionPolarity.CREATE, required_inputs=("setup_id", "name", "execution_mode", "base_amount", "entry", "stop_loss", "targets", "risk_profile"), optional_inputs=("symbol", "timeframe"), input_allowed_values=(("risk_profile", ("conservative", "balanced", "aggressive")),), contextual_reference_inputs=("setup_id",), required_scopes=("active_asset", "active_setup"), optional_scopes=("profile", "preferences", "indicator_configuration", "linked_strategy", "market_snapshot"), model_policy="required", response_strategy="proposal_draft", policy_class="proposal", proposal_type="create_strategy", confirmation_required=True, execution_adapter="create_strategy", idempotency_rule="proposal_payload_hash", postcondition="strategy_created_for_user_setup_name"),
     OperationContract("update_strategy", FinnV2OperationRegistry.VERSION, "strategy", "CREATE_PROPOSAL", ("wijzig strategie", "update strategy", "strategie andern"), action_polarity=ActionPolarity.UPDATE, required_inputs=("strategy_id", "changed_fields"), contextual_reference_inputs=("strategy_id",), required_scopes=("active_asset", "active_setup", "linked_strategy"), proposal_type="update_strategy", confirmation_required=True, execution_adapter="update_strategy", idempotency_rule="proposal_payload_hash", postcondition="strategy_updated_for_user", response_strategy="proposal_draft", policy_class="proposal"),
     OperationContract("delete_strategy", FinnV2OperationRegistry.VERSION, "strategy", "CREATE_PROPOSAL", ("verwijder strategie", "delete strategy", "lösche strategie"), action_polarity=ActionPolarity.DELETE, required_inputs=("strategy_id",), contextual_reference_inputs=("strategy_id",), required_scopes=("active_asset", "active_setup", "linked_strategy"), proposal_type="delete_strategy", confirmation_required=True, execution_adapter="delete_strategy", idempotency_rule="proposal_payload_hash", postcondition="strategy_deleted_for_user", response_strategy="proposal_draft", policy_class="proposal"),
     # A strategy review compares the persisted strategy with its owning setup

@@ -100,6 +100,7 @@ def test_selector_manifest_is_a_compact_projection_of_every_offered_contract():
     assert all("execution_adapter" not in entry for entry in manifest)
 
 
+
 def test_selector_manifest_preserves_registry_semantics_without_runtime_metadata():
     registry = FinnV2OperationRegistry()
     contract = registry.get("activate_bot")

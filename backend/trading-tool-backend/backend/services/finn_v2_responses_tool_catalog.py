@@ -108,23 +108,7 @@ class FinnResponsesToolCatalog:
         retry_target_domain: str | None = None,
         retry_operation_id: str | None = None,
     ) -> list[dict[str, Any]]:
-        definitions: list[dict[str, Any]] = [{
-            "type": "function",
-            "name": "answer_directly",
-            "description": (
-                "Choose this only for a general educational answer or a follow-up fully grounded "
-                "in the previous verified response. Set uses_previous_response=true only when the "
-                "current question refers to that response; a new self-contained question uses false. "
-                "Do not use it for the user's profile, plan, "
-                "portfolio, indicator values, market data, or a proposed change; choose FINN tools instead."
-            ),
-            "strict": False,
-            "parameters": {
-                "type": "object", "properties": {
-                    "uses_previous_response": {"type": "boolean"},
-                }, "additionalProperties": False,
-            },
-        }]
+        definitions: list[dict[str, Any]] = []
         definitions.append({
             "type": "function",
             "name": "ask_for_clarification",

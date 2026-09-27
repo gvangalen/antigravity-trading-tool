@@ -19,6 +19,7 @@ import uuid
 from backend.scripts.run_finn_v2_full_action_matrix import _create_local_user, _request_json, _runtime_record
 from backend.scripts.run_finn_v2_persisted_runtime_gate import run_gate
 from backend.scripts.run_finn_v2_sequential_action_chain import _run_action
+from backend.domain.finn_v2_operation_registry import FinnV2OperationRegistry
 from backend.utils.auth_utils import create_access_token
 
 
@@ -59,6 +60,7 @@ def main() -> None:
     cases: list[dict] = []
     output = Path(args.output).expanduser().resolve()
     output.parent.mkdir(parents=True, exist_ok=True)
+    contracts = {contract.operation_id: contract for contract in FinnV2OperationRegistry().list()}
 
     def checkpoint() -> None:
         payload = {
@@ -198,6 +200,13 @@ def main() -> None:
             "single_attempt": actual.get("attempt_count") == 1,
         }
         passed = all(checks.values())
+        runtime_state = _runtime_record(observed["run_id"])["runtime_state"]
+        exchange = runtime_state.get("responses_exchange") or {}
+        response = actual.get("response") or {}
+        tool_trace = exchange.get("tool_trace") or []
+        contract = contracts.get(expected["operation"])
+        registry_required_inputs = list(contract.required_inputs) if contract else None
+        lifecycle = observed.get("proposal_lifecycle") or {}
         cases.append({
             "case_id": record["case_id"],
             "classification": record["classification"],
@@ -210,11 +219,37 @@ def main() -> None:
             "final_operation_id": observed["final_operation_id"],
             "terminal_status": status,
             "required_inputs": actual.get("required_inputs"),
+            "registry_required_inputs": registry_required_inputs,
+            "fixture_required_inputs_match_registry": (
+                sorted(expected["required_inputs"]) == sorted(registry_required_inputs)
+                if registry_required_inputs is not None else None
+            ),
             "supplied_inputs": actual.get("supplied_inputs"),
             "missing_inputs": actual.get("missing_inputs"),
             "dispatch_count": actual.get("dispatch_count"),
             "attempt_count": actual.get("attempt_count"),
             "polling_sse_parity": parity,
+            "response_content": response.get("content"),
+            "response_source": response.get("response_source"),
+            "tool_trace_summary": [
+                {"name": call.get("name"), "status": call.get("status"),
+                 "result_status": (call.get("result") or {}).get("status"),
+                 "result_reason": (call.get("result") or {}).get("reason")}
+                for call in tool_trace
+            ],
+            "legacy_operation_expectation_only": (
+                expected["operation"] not in SAFE_WRITE_OPERATIONS
+                and observed["final_operation_id"] is None
+                and status == "completed"
+                and bool(response.get("content"))
+            ),
+            "write_effect_evidence": {
+                "proposal_present": bool(observed.get("proposal_id")),
+                "confirmed": lifecycle.get("confirmed") is True,
+                "execution_succeeded": lifecycle.get("execution_result") == "succeeded",
+                "idempotency_replay": lifecycle.get("idempotency_result") == "already_executed",
+                "action_result_present": bool(observed.get("action_result")),
+            } if expected["operation"] in SAFE_WRITE_OPERATIONS else None,
             "checks": checks,
             "passed": passed,
         })

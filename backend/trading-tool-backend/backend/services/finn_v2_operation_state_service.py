@@ -108,20 +108,47 @@ class FinnV2OperationStateService:
                 if key in missing_fields and not self._is_missing(value):
                     explicit.setdefault(key, value)
         else:
-            explicit = {} if model_tool_inputs else self.explicit_inputs(
-                contract=contract,
-                message=message,
-                explicit_asset=contract_asset,
-                continuation=existing is not None,
-                requested_slot=requested_slot,
+            # Strategy price, target and risk fields have an existing
+            # contract-bound extractor; its explicit values outrank a model
+            # candidate that accidentally absorbs one field into another.
+            explicit = (
+                self.explicit_inputs(
+                    contract=contract,
+                    message=message,
+                    explicit_asset=contract_asset,
+                    continuation=existing is not None,
+                    requested_slot=requested_slot,
+                )
+                if contract.operation_id in {"create_setup", "create_strategy"} or not model_tool_inputs
+                else {}
             )
+        explicit_chart_timeframe = (
+            FinnV2SetupInputCatalog.explicit_chart_timeframe_from_text(message)
+            if contract.operation_id == "create_setup" and model_tool_inputs and not is_slot_turn
+            else None
+        )
+        if contract.operation_id == "create_setup" and model_tool_inputs and not is_slot_turn:
+            explicit.pop("timeframe", None)
+            if explicit_chart_timeframe:
+                explicit["timeframe"] = explicit_chart_timeframe
         # Keep the literal spelling of a user-provided value. The semantic
         # projection may normalize an equivalent value for matching, but it
         # must not overwrite a typed setup name with that normalized form.
         accepted_inputs = set(contract.input_fields)
         permits_existing_field_changes = bool((conversation_context or {}).get("proposal_revision")) or self._is_explicit_correction(message)
+        if contract.operation_id == "create_strategy":
+            explicit = {
+                key: canonical
+                for key, value in explicit.items()
+                if key in accepted_inputs
+                for canonical in (self._canonical_input(key, value),)
+                if not self._is_missing(canonical)
+                and (not contract.allowed_values_for(key) or canonical in contract.allowed_values_for(key))
+            }
         for key, value in (supplied_inputs or {}).items():
             if is_slot_turn:
+                continue
+            if key == "timeframe" and contract.operation_id == "create_setup" and model_tool_inputs:
                 continue
             if (
                 existing is not None
@@ -140,7 +167,11 @@ class FinnV2OperationStateService:
                 # slot as a replacement for an already persisted field.
                 continue
             if key in accepted_inputs and not self._is_missing(value):
-                explicit.setdefault(key, self._canonical_input(key, value))
+                canonical = self._canonical_input(key, value)
+                if not self._is_missing(canonical) and (
+                    not contract.allowed_values_for(key) or canonical in contract.allowed_values_for(key)
+                ):
+                    explicit.setdefault(key, canonical)
         if contract.operation_id == "create_bot" and explicit.get("name"):
             explicit["name"] = self._trim_linked_strategy_clause(str(explicit["name"]))
         sources = dict(existing.input_sources) if existing is not None else {}
@@ -1196,10 +1227,22 @@ class FinnV2OperationStateService:
 
     @staticmethod
     def _is_missing(value: object) -> bool:
-        return value is None or (isinstance(value, str) and not value.strip())
+        return value is None or (isinstance(value, str) and not value.strip()) or (
+            isinstance(value, (list, tuple, dict)) and not value
+        )
 
     @staticmethod
     def _canonical_input(field: str, value: object) -> object:
+        if field in {"entry", "stop_loss", "base_amount"}:
+            numeric = FinnV2OperationStateService._typed_numeric_value(value)
+            return numeric if isinstance(numeric, (int, float)) and not isinstance(numeric, bool) else None
+        if field == "targets":
+            if not isinstance(value, (list, tuple)) or not value:
+                return None
+            numbers = [FinnV2OperationStateService._typed_numeric_value(item) for item in value]
+            return numbers if all(isinstance(item, (int, float)) and not isinstance(item, bool) for item in numbers) else None
+        if field == "risk_profile":
+            return FinnV2OperationStateService._canonical_risk_profile(str(value))
         if field == "changed_fields" and isinstance(value, Mapping):
             return {
                 key: FinnV2OperationStateService._canonical_input(key, item)

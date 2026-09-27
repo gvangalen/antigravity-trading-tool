@@ -15,6 +15,53 @@ class FinnResponsesToolRelevanceGuard:
         self.recommended_operation_id: str | None = None
         self.conditional_process = False
         self.response_focus: str | None = None
+        self.horizon_classification_question = False
+
+    async def direct_answer_requires_read(
+        self, *, message: str, answer: str, previous_verified_answer: str = "",
+    ) -> bool:
+        """Check whether a no-tool reply skipped facts FINN must supply."""
+        remaining = remaining_lifecycle_seconds()
+        if remaining is not None and remaining <= 12:
+            return False
+        timeout = min(4.0, remaining - 8 if remaining is not None else 4.0)
+        client = (
+            self.client.with_options(max_retries=0, timeout=timeout)
+            if hasattr(self.client, "with_options") else self.client
+        )
+        try:
+            response = await asyncio.wait_for(
+                client.responses.create(
+                    model="gpt-4o-mini", store=False, tool_choice="none", temperature=0,
+                    instructions=(
+                        "Decide whether the user's question requires current or saved FINN-owned "
+                        "facts that were not verified by tools in this turn or the supplied previous "
+                        "verified answer. Personal setup, strategy, portfolio, indicator, price and "
+                        "risk-profile questions require a read even if the draft reply merely says "
+                        "it lacks details. General education, hypothetical discussion, and a "
+                        "follow-up fully answered from the verified previous answer do not. "
+                        "Do not infer any account facts from the draft reply."
+                    ),
+                    input=json.dumps({
+                        "question": message,
+                        "draft_answer": answer[:1200],
+                        "previous_verified_answer": previous_verified_answer[:1200],
+                    }, ensure_ascii=False),
+                    text={"format": {
+                        "type": "json_schema", "name": "finn_direct_answer_read_boundary",
+                        "strict": True,
+                        "schema": {
+                            "type": "object", "additionalProperties": False,
+                            "properties": {"requires_read": {"type": "boolean"}},
+                            "required": ["requires_read"],
+                        },
+                    }},
+                    max_output_tokens=24,
+                ), timeout=timeout,
+            )
+            return json.loads(str(getattr(response, "output_text", "") or "")).get("requires_read") is True
+        except Exception:
+            return False
 
     async def requested_mutation_domain(
         self, *, message: str, domains: list[dict[str, str]],
@@ -114,6 +161,51 @@ class FinnResponsesToolRelevanceGuard:
         except Exception:
             return False
 
+    async def corrects_guided_target(
+        self, *, message: str, original_operation: str, requested_slot: str,
+        corrected_domain: str,
+    ) -> bool:
+        """Distinguish a target correction from an unrelated new request."""
+        remaining = remaining_lifecycle_seconds()
+        if remaining is not None and remaining <= 5:
+            return False
+        timeout = min(4.0, remaining - 3 if remaining is not None else 4.0)
+        client = (
+            self.client.with_options(max_retries=0, timeout=timeout)
+            if hasattr(self.client, "with_options") else self.client
+        )
+        try:
+            response = await asyncio.wait_for(
+                client.responses.create(
+                    model="gpt-4o", store=False, tool_choice="none", temperature=0,
+                    instructions=(
+                        "Decide whether the latest user message corrects only the object kind "
+                        "of the still-open action. Return false for a new complete command, "
+                        "a read or advice question, or an ambiguous message. Do not choose an "
+                        "operation, owner or object ID; do not execute anything."
+                    ),
+                    input=json.dumps({
+                        "latest_user_message": message,
+                        "open_operation": original_operation,
+                        "requested_slot": requested_slot,
+                        "owner_scoped_corrected_object_kind": corrected_domain,
+                    }, ensure_ascii=False),
+                    text={"format": {
+                        "type": "json_schema", "name": "finn_guided_target_correction",
+                        "strict": True,
+                        "schema": {
+                            "type": "object", "additionalProperties": False,
+                            "properties": {"corrects_target": {"type": "boolean"}},
+                            "required": ["corrects_target"],
+                        },
+                    }},
+                    max_output_tokens=24,
+                ), timeout=timeout,
+            )
+            return json.loads(str(getattr(response, "output_text", "") or "")).get("corrects_target") is True
+        except Exception:
+            return False
+
     async def continues_guided_operation(
         self, *, message: str, operation_id: str, operation_purpose: str,
         requested_slot: str, question: str,
@@ -179,6 +271,7 @@ class FinnResponsesToolRelevanceGuard:
     ) -> str | None:
         self.conditional_process = False
         self.response_focus = None
+        self.horizon_classification_question = False
         remaining = remaining_lifecycle_seconds()
         if remaining is not None and remaining <= 5:
             return None
@@ -226,6 +319,9 @@ class FinnResponsesToolRelevanceGuard:
                         "timeframe does not establish the owner's holding horizon; use a factual "
                         "read and ask for that missing horizon rather than promoting the read to "
                         "evaluate_setup. Do not require live market data to ask that question. "
+                        "Set horizon_classification_question=true only when the latest user "
+                        "asks whether their saved setup or plan has a long-term or short-term "
+                        "holding horizon. A user supplying their horizon as an answer is false. "
                         "A question about what FINN can help with based on a saved profile asks "
                         "for capabilities informed by profile facts, not a judgment that a plan fits. "
                         "Set requires_judgment=true only when the latest question asks FINN to "
@@ -261,12 +357,13 @@ class FinnResponsesToolRelevanceGuard:
                                 "operation_id": {"type": "string", "enum": choices},
                                 "requires_judgment": {"type": "boolean"},
                                 "conditional_process": {"type": "boolean"},
+                                "horizon_classification_question": {"type": "boolean"},
                                 "response_focus": {"type": "string", "enum": [
                                     "general", "review", "calculation", "priorities",
                                 ]},
                                 "requested_priority_count": {"type": "integer", "enum": [0, 1, 2, 3, 4, 5]},
                             },
-                            "required": ["operation_id", "requires_judgment", "conditional_process", "response_focus", "requested_priority_count"],
+                            "required": ["operation_id", "requires_judgment", "conditional_process", "horizon_classification_question", "response_focus", "requested_priority_count"],
                         },
                     }},
                     max_output_tokens=60,
@@ -274,6 +371,7 @@ class FinnResponsesToolRelevanceGuard:
                 timeout=timeout,
             )
             parsed = json.loads(str(getattr(response, "output_text", "") or ""))
+            self.horizon_classification_question = parsed.get("horizon_classification_question") is True
             if parsed.get("response_focus") in {"general", "review", "calculation", "priorities"}:
                 self.response_focus = parsed["response_focus"]
             if self.response_focus == "priorities" and not (
@@ -338,7 +436,13 @@ class FinnResponsesToolRelevanceGuard:
                         "next-decision follow-up merely because the previous answer suggested "
                         "leaving settings unchanged; classify it as other so the normal tool "
                         "route can inspect the relevant facts. This is not permission "
-                        "to invent a trading recommendation. Choose answers_previous_question "
+                        "to invent a trading recommendation. "
+                        "Choose conditional_next_step_from_previous instead of "
+                        "next_decision_from_previous when the user asks what to do while "
+                        "waiting for a condition or rule described in the previous verified "
+                        "answer. This is a process follow-up, not a request to check fresh "
+                        "market data or to propose another trade. "
+                        "Choose answers_previous_question "
                         "when the previous answer asked the user for a preference, horizon or "
                         "missing detail and the latest message supplies that answer, even if it "
                         "is only a short phrase. It is not a request for a new decision. "
@@ -357,6 +461,7 @@ class FinnResponsesToolRelevanceGuard:
                             "type": "object", "additionalProperties": False,
                             "properties": {"kind": {"type": "string", "enum": [
                                 "explain_previous", "next_decision_from_previous",
+                                "conditional_next_step_from_previous",
                                 "answers_previous_question",
                                 "new_facts", "new_action", "other",
                             ]}},
@@ -373,13 +478,16 @@ class FinnResponsesToolRelevanceGuard:
                 return False
             if kind in {
                 "explain_previous", "next_decision_from_previous",
+                "conditional_next_step_from_previous",
                 "answers_previous_question",
             }:
                 remaining = remaining_lifecycle_seconds()
                 if remaining is not None and remaining <= 5:
                     return False
                 confirmation_timeout = min(3.0, remaining - 2 if remaining is not None else 3.0)
-                next_decision = kind == "next_decision_from_previous"
+                next_decision = kind in {
+                    "next_decision_from_previous", "conditional_next_step_from_previous",
+                }
                 try:
                     confirmation = await asyncio.wait_for(
                         client.responses.create(

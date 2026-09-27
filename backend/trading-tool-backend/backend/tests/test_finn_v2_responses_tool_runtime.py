@@ -291,6 +291,49 @@ def test_unsupported_saved_horizon_claim_becomes_localized_typed_clarification()
     assert "investment_horizon_required" not in verified.text
 
 
+def test_model_classified_horizon_question_asks_instead_of_inventing_horizon():
+    result = FinnResponsesResult(
+        "Je 4H DCA-setup is ontworpen voor langetermijnopbouw.",
+        "resp-horizon-classified", ({
+            "name": "get_active_plan_and_strategy", "status": "completed",
+            "result": {"results": [{
+                "scope": "read_active_setup", "status": "completed",
+                "data": {"name": "Coach DCA Basis", "timeframe": "4H"},
+            }]},
+        },), horizon_classification_question=True,
+    )
+    verified = asyncio.run(FinnResponsesAnswerVerifier().verify(
+        message="Is mijn setup voor lange termijn of swingtrading?", result=result, locale="nl",
+    ))
+    assert verified.status == "clarification_required"
+    assert verified.reason == "investment_horizon_required"
+    assert "4H beschrijft" in verified.text
+
+
+def test_horizon_clarification_answer_stays_conversational_not_saved():
+    result = FinnResponsesResult(
+        "Your saved setup aims for long-term wealth building and matches your goal.",
+        "resp-horizon-reply", ({
+            "name": "evaluate_plan", "status": "partial", "result": {"results": []},
+        },), resumed_clarification_reason="investment_horizon_required",
+    )
+    verified = asyncio.run(FinnResponsesAnswerVerifier().verify(
+        message="For the long term, around five years.", result=result, locale="en",
+    ))
+    assert verified.status == "completed"
+    assert verified.reason == "user_detail_acknowledged"
+    assert "five years" in verified.text
+    assert "saved setup aims" not in verified.text
+    assert "saved plan has not changed" in verified.text
+
+
+def test_currency_amounts_normalize_singular_and_plural_user_units():
+    amounts = FinnResponsesAnswerVerifier._currency_amounts
+    assert amounts("100 euro per week") == {"1E+2"}
+    assert amounts("100 euros per week") == amounts("€100 per week")
+    assert amounts("250 dollars monthly") == amounts("$250 monthly")
+
+
 @pytest.mark.parametrize("locale,message,needle", [
     ("nl", "Voor de lange termijn, ongeveer vijf jaar.", "je opgeslagen plan is niet gewijzigd"),
     ("en", "For the long term, around five years.", "your saved plan has not changed"),
@@ -361,7 +404,8 @@ def test_catalog_uses_registry_for_required_and_conditional_inputs():
     )
     assert call.missing_inputs == ("timeframe", "name", "dca_frequency")
     assert call.operation_id == "create_setup"
-    assert len(catalog.definitions()) == 15 + len(catalog.evaluation_contracts)
+    assert len(catalog.definitions()) == 14 + len(catalog.evaluation_contracts)
+    assert "answer_directly" not in {item["name"] for item in catalog.definitions()}
     proposal = next(item for item in catalog.definitions() if item["name"] == "create_dca_plan_proposal")
     assert proposal["parameters"]["properties"]["payload"]["properties"]["inputs"]["properties"]["min_investment"]["type"] == "number"
 
@@ -968,6 +1012,24 @@ def tool_call(call_id, name, arguments):
     return SimpleNamespace(type="function_call", call_id=call_id, name=name, arguments=json.dumps(arguments))
 
 
+def test_direct_answer_read_boundary_distinguishes_saved_fact_from_general_coaching():
+    fake = FakeResponses(
+        response("judge-1", text='{"requires_read": true}'),
+        response("judge-2", text='{"requires_read": false}'),
+    )
+    guard = FinnResponsesToolRelevanceGuard(SimpleNamespace(responses=fake))
+    assert asyncio.run(guard.direct_answer_requires_read(
+        message="Is mijn 4H DCA-setup voor lange termijn?",
+        answer="Ik kan dat zonder details niet zeggen.",
+    ))
+    assert not asyncio.run(guard.direct_answer_requires_read(
+        message="Waarom kan geduld helpen bij een plan?",
+        answer="Een vooraf gekozen regel kan impulsieve beslissingen beperken.",
+    ))
+    assert all(request["tool_choice"] == "none" for request in fake.requests)
+    assert all(not request.get("tools") for request in fake.requests)
+
+
 def test_tool_relevance_guard_uses_typed_responses_without_exposing_identity():
     fake = FakeResponses(response("judge", text='{"aligned": false}'))
     guard = FinnResponsesToolRelevanceGuard(SimpleNamespace(responses=fake))
@@ -1001,6 +1063,20 @@ def test_mutation_domain_guard_uses_registry_domains_without_owner_identity():
         "setup", "strategy", "bot", "unknown",
     ]
     assert "user_id" not in request["input"] and "proposal_id" not in request["input"]
+
+
+@pytest.mark.parametrize("corrects", [True, False])
+def test_guided_target_correction_is_model_classified_without_identity(corrects):
+    fake = FakeResponses(response("correction", text=json.dumps({"corrects_target": corrects})))
+    guard = FinnResponsesToolRelevanceGuard(SimpleNamespace(responses=fake))
+    actual = asyncio.run(guard.corrects_guided_target(
+        message="Ik bedoel geen paper-bot. Ik bedoel alleen de strategie BTC Breakout Full Strategy.",
+        original_operation="delete_bot", requested_slot="bot_id", corrected_domain="strategy",
+    ))
+    assert actual is corrects
+    request = fake.requests[0]
+    assert request["tool_choice"] == "none" and request["store"] is False
+    assert "user_id" not in request["input"] and "strategy_id" not in request["input"]
 
 
 def test_proposal_relevance_compares_registry_operation_domain_and_polarity():
@@ -2049,7 +2125,8 @@ def test_persisted_detail_clarification_answer_does_not_rerun_evaluation():
         resuming_clarification=True,
     ))
     assert result.response.answer_kind == "answers_previous_question"
-    assert result.response.tool_trace[0]["name"] == "answer_directly"
+    assert result.response.tool_trace == ()
+    assert result.response.uses_previous_response is True
     assert fake.requests[0]["tools"] == []
     assert fake.requests[0]["input"][-1]["content"] == "Voor de lange termijn, ongeveer vijf jaar."
     assert "Original question awaiting this detail" in fake.requests[0]["instructions"]
@@ -2168,7 +2245,11 @@ def test_detail_answer_audit_does_not_require_old_hypothetical_change():
     ))
 
 
-def test_next_decision_followup_is_restricted_to_previous_verified_answer():
+@pytest.mark.parametrize("message", [
+    "Welke keuze moet ik nu eerst maken?",
+    "Wat moet ik dan concreet doen met die FOMO terwijl ik op bevestiging wacht?",
+])
+def test_next_decision_followup_is_restricted_to_previous_verified_answer(message):
     fake = FakeResponses(response("r1", text=json.dumps({
         "reason": "De geschiktheid van een wijziging is nog onbewezen.",
         "next_decision": "Bepaal eerst of je de huidige inleg wilt aanhouden.",
@@ -2192,7 +2273,7 @@ def test_next_decision_followup_is_restricted_to_previous_verified_answer():
 
     front.reads = Reads()
     result = asyncio.run(front.run(
-        message="Welke keuze moet ik nu eerst maken?", instructions="Gebruik FINN-tools",
+        message=message, instructions="Gebruik FINN-tools",
         conversation_context={}, verified_asset="BTC",
         previous_response={"answer": "De huidige DCA-inleg is bekend, maar actuele marktdata ontbreken."},
     ))
@@ -2204,6 +2285,68 @@ def test_next_decision_followup_is_restricted_to_previous_verified_answer():
     assert "request another market analysis" in fake.requests[0]["instructions"]
     assert result.response.answer_kind == "grounded_next_decision"
     assert result.response.text.endswith("Bepaal eerst of je de huidige inleg wilt aanhouden.")
+
+
+def test_next_decision_uses_prior_typed_absence_without_inventing_strategy():
+    fake = FakeResponses(response("r1", text=json.dumps({
+        "reason": "Je beschrijft een wachtregel voor een entry.",
+        "next_decision": "Laat de wachtregel staan en noteer welke bevestiging je afwacht.",
+    })))
+
+    async def execute(call):
+        assert call.name == "answer_directly"
+        return {"status": "completed", "results": []}
+
+    asyncio.run(FinnResponsesLoop(
+        client=SimpleNamespace(responses=fake), executor=execute,
+    ).run(
+        message="Wat doe ik met FOMO terwijl ik wacht?", instructions="Gebruik FINN-tools",
+        previous_verified_answer="De door jou beschreven wachtregel is nog niet vervuld.",
+        previous_tool_availability=({"scope": "read_active_setup", "status": "completed"}, {
+            "scope": "read_linked_strategy", "status": "unavailable",
+        }),
+        previous_answer_only=True, next_decision_from_previous=True,
+    ))
+    assert "read_linked_strategy" in fake.requests[0]["input"][0]["content"]
+    assert "did not find a linked saved strategy" in fake.requests[0]["instructions"]
+
+
+def test_conditional_next_step_is_structured_around_prior_rule():
+    fake = FakeResponses(response("r1", text=json.dumps({
+        "condition_from_previous_answer": "You are waiting for entry confirmation.",
+        "step_now": "Write down what would count as that confirmation.",
+        "avoid_now": "Do not enter before it is observed.",
+        "data_limit": "I cannot verify the current market condition here.",
+    })))
+
+    async def execute(call):
+        assert call.name == "answer_directly"
+        return {"status": "completed", "results": []}
+
+    result = asyncio.run(FinnResponsesLoop(
+        client=SimpleNamespace(responses=fake), executor=execute,
+    ).run(
+        message="What should I do while waiting?", instructions="Use FINN evidence",
+        previous_verified_answer="The wait rule you described requires entry confirmation.",
+        previous_answer_only=True, next_decision_from_previous=True,
+        conditional_next_step_from_previous=True, locale="en",
+    ))
+    assert result.answer_kind == "conditional_next_step"
+    assert fake.requests[0]["text"]["format"]["name"] == "finn_conditional_next_step"
+    assert "Write down what would count" in result.text
+    assert "Do not enter before" in result.text
+
+
+@pytest.mark.parametrize("locale,answer", [
+    ("nl", "Schrijf precies op wat als bevestiging telt. Ga niet in de markt voordat die is waargenomen."),
+    ("en", "Write down what counts as confirmation. Do not enter the market before it arrives."),
+    ("de", "Schreibe auf, was als Bestätigung zählt. Betritt keinen Trade, bevor du sie siehst."),
+])
+def test_coach_gate_requires_action_condition_and_no_entry(locale, answer):
+    from backend.scripts.run_finn_responses_personal_coach_regression import actionable_wait_step
+
+    assert actionable_wait_step(answer, locale)
+    assert not actionable_wait_step("Focus on discipline and consider other trades.", "en")
 
 
 def test_next_decision_can_use_earlier_owner_verified_answer_after_why_turn():
@@ -2382,11 +2525,12 @@ def test_confirmed_previous_answer_limits_short_followup_to_direct_answer():
         conversation_context={}, verified_asset="BTC",
         previous_response={"answer": "Deze strategie heeft nog geen actuele markt- en risicobeoordeling."},
     ))
-    assert called == ["answer_directly"]
+    assert called == []
     assert fake.requests[0]["tools"] == []
     assert "No new market facts" in fake.requests[0]["instructions"]
     assert fake.requests[0]["tool_choice"] == "none"
-    assert [item["name"] for item in result.response.tool_trace] == ["answer_directly"]
+    assert result.response.tool_trace == ()
+    assert result.response.uses_previous_response is True
     assert result.proposal_analysis is None
 
 
@@ -2475,7 +2619,7 @@ def test_guided_strategy_slot_binds_without_provider_call():
     assert not fake.requests
     assert result.proposal_analysis.request_plan.operation_id == "create_strategy"
     assert state["collected_inputs"]["base_amount"] == 100
-    assert state["collected_inputs"]["entry"] == "76000"
+    assert state["collected_inputs"]["entry"] == 76000
     assert state["collected_inputs"]["stop_loss"] == 72000.0
 
 
@@ -2730,7 +2874,8 @@ def test_resumed_choice_keeps_evaluation_available_after_identity_read():
           resuming_clarification=True))
     assert result.text
     available = {item["name"] for item in fake.requests[1]["tools"]}
-    assert {"ask_for_clarification", "answer_directly", "evaluate_plan"} <= available
+    assert {"ask_for_clarification", "evaluate_plan"} <= available
+    assert "answer_directly" not in available
 
 
 def test_resumed_evaluation_requires_registry_tool_after_owner_scoped_choice():
@@ -2967,7 +3112,7 @@ def test_valid_proposal_call_is_followed_only_by_a_final_answer():
     ))
     assert result.response_id == "r2"
     assert fake.requests[1]["tool_choice"] == "none"
-    assert fake.requests[0]["tool_choice"] == "required"
+    assert fake.requests[0]["tool_choice"] == "auto"
 
 
 def test_provider_failure_has_no_legacy_fallback():
@@ -3251,7 +3396,7 @@ def test_limited_plan_review_uses_saved_strategy_facts_even_if_model_verifier_ac
     verifier = FinnResponsesAnswerVerifier(semantic=semantic, client=None)
     result = FinnResponsesResult(
         "Sterk in je plan: de setup heeft entry en targets. Waar ik je afrem: geen marktdata. "
-        "Controleer eerst de actuele gegevens.",
+        "Controleer eerst de actuele gegevens. 4H betekent langetermijnopbouw.",
         "resp-review", ({
             "name": "evaluate_plan", "status": "partial", "result": {
                 "evaluation_operation_id": "evaluate_plan",
@@ -3278,6 +3423,7 @@ def test_limited_plan_review_uses_saved_strategy_facts_even_if_model_verifier_ac
         assert "opgeslagen strategie" in answer.text
         assert "Controleer eerst" in answer.text
         assert "setup heeft entry" not in answer.text
+        assert "4H beschrijft" not in answer.text
         assert "sterk als vastgelegd controlepunt" in answer.text.casefold()
 
 
@@ -3476,7 +3622,7 @@ def test_previous_unavailable_source_cannot_be_explained_with_invented_outage():
     }
     answer = asyncio.run(FinnResponsesAnswerVerifier(semantic, client).verify(
         message="Waarom?",
-        result=FinnResponsesResult("Door een technische storing.", "resp-2", ()),
+            result=FinnResponsesResult("Door een technische storing.", "resp-2", (), uses_previous_response=True),
         previous_response=previous,
     ))
     assert answer.status == "unavailable"
@@ -3498,7 +3644,7 @@ def test_rejected_follow_up_uses_persisted_previous_evidence_limitation():
         }]}}],
     }
     answer = asyncio.run(FinnResponsesAnswerVerifier(semantic).verify(
-        message="Waarom?", result=FinnResponsesResult("Door een storing.", "resp-2", ()),
+        message="Waarom?", result=FinnResponsesResult("Door een storing.", "resp-2", (), uses_previous_response=True),
         previous_response=previous,
     ))
     assert answer.status == "unavailable"
@@ -3742,7 +3888,33 @@ def test_responses_loop_accepts_direct_answer_without_tools():
     ))
     assert result.tool_trace == ()
     assert result.text == "Ik kan je plan uitleggen."
+    assert fake.requests[0]["tool_choice"] == "auto"
+    assert "answer_directly" not in {tool["name"] for tool in fake.requests[0]["tools"]}
+
+
+def test_unverified_direct_answer_repair_can_only_call_read_tools():
+    fake = FakeResponses(
+        response("repair-1", calls=(tool_call("read-1", "get_active_asset_context", {}),)),
+        response("repair-2", text="Ik kan de huidige koers niet bevestigen."),
+    )
+    calls = []
+
+    async def execute(call):
+        calls.append(call)
+        return {"status": "unavailable", "reason": "source_unavailable", "results": []}
+
+    result = asyncio.run(FinnResponsesLoop(
+        client=SimpleNamespace(responses=fake), executor=execute,
+    ).run(
+        message="Wat is nu de BTC-koers?", instructions="Gebruik geverifieerde gegevens.",
+        force_read_repair=True,
+    ))
     assert fake.requests[0]["tool_choice"] == "required"
+    assert fake.requests[0].get("previous_response_id") is None
+    assert all(tool["name"].startswith(("get_", "evaluate_")) for tool in fake.requests[0]["tools"])
+    assert len(calls) == 1
+    assert [item["name"] for item in result.tool_trace] == ["get_active_asset_context"]
+    assert result.text == "Ik kan de huidige koers niet bevestigen."
 
 
 def test_previous_verified_answer_is_an_assistant_turn_not_user_instructions():
@@ -3852,7 +4024,7 @@ def test_direct_answer_is_an_explicit_model_choice_with_no_finn_reads():
         client=SimpleNamespace(responses=fake), executor=execute,
     ).run(message="Wat betekent RSI?", instructions="Antwoord algemeen"))
     assert [call["name"] for call in result.tool_trace] == ["answer_directly"]
-    assert fake.requests[0]["tool_choice"] == "required"
+    assert fake.requests[0]["tool_choice"] == "auto"
     assert "tool_choice" not in fake.requests[1]
 
 
@@ -3940,6 +4112,38 @@ def test_responses_provider_timeout_leaves_terminal_persistence_reserve(monkeypa
 
     assert asyncio.run(run_case()) < 0.5
     fake.responses.create.assert_awaited_once()
+
+
+def test_provider_timeout_after_typed_evaluation_retains_trace_and_terminalizes():
+    calls = 0
+
+    async def provider(**_kwargs):
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            return response("resp-plan", calls=(tool_call("c1", "evaluate_plan", {}),))
+        await asyncio.Event().wait()
+
+    async def execute(call):
+        assert call.name == "evaluate_plan"
+        return {
+            "status": "partial", "evaluation_operation_id": "evaluate_plan",
+            "assessment_status": "insufficient_evidence", "results": [],
+        }
+
+    result = asyncio.run(FinnResponsesLoop(
+        client=SimpleNamespace(responses=SimpleNamespace(create=provider)),
+        executor=execute, provider_timeout_seconds=0.05,
+    ).run(message="Beoordeel mijn plan", instructions="Gebruik bewijs"))
+    assert calls == 2
+    assert result.answer_kind == "provider_unavailable"
+    assert result.tool_trace[0]["result"]["assessment_status"] == "insufficient_evidence"
+    verified = asyncio.run(FinnResponsesAnswerVerifier().verify(
+        message="Beoordeel mijn plan", result=result, locale="nl",
+    ))
+    assert verified.status == "unavailable"
+    assert verified.reason == "responses_provider_timeout"
+    assert "Er is niets gewijzigd" in verified.text
 
 
 def test_responses_loop_bounds_tool_rounds_without_silent_answer():
@@ -4844,6 +5048,41 @@ def test_grounded_personal_limitation_survives_generic_read_verifier_rejection()
     assert verified.text == answer_text
     verifier._personal_advice_is_grounded.assert_awaited_once()
     assert verifier._personal_advice_is_grounded.await_args.kwargs["question"] == message
+
+
+def test_direct_followup_keeps_previous_unavailable_strategy_for_grounding():
+    verifier = FinnResponsesAnswerVerifier(client=SimpleNamespace())
+    verifier._personal_advice_is_grounded = AsyncMock(return_value=True)
+    previous_response = {
+        "answer": "Je setup bestaat, maar er is geen gekoppelde strategie gevonden.",
+        "tool_trace": ({
+            "name": "get_active_plan_and_strategy",
+            "result": {"results": [{
+                "scope": "read_active_setup", "status": "completed",
+                "data": {"name": "Coach DCA Basis"},
+            }, {
+                "scope": "read_linked_strategy", "status": "unavailable",
+                "reason": "strategy_not_resolved", "data": None,
+            }]},
+        },),
+    }
+    result = FinnResponsesResult(
+        "Analyseer je strategie terwijl je wacht.", "resp-followup", ({
+            "name": "answer_directly", "status": "completed",
+            "arguments": {"uses_previous_response": True},
+            "result": {"results": []},
+        },),
+    )
+    asyncio.run(verifier.verify(
+        message="Wat doe ik met de FOMO terwijl ik wacht?",
+        result=result, previous_response=previous_response,
+    ))
+    evidence = verifier._personal_advice_is_grounded.await_args.kwargs["evidence"]
+    assert any(
+        item.get("scope") == "read_linked_strategy"
+        and item.get("status") == "unavailable"
+        for item in evidence
+    )
 
 
 def test_plan_evaluation_does_not_trigger_single_indicator_catalog_check():

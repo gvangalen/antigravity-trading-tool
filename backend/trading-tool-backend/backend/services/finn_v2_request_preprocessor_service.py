@@ -248,7 +248,11 @@ class FinnV2RequestPreprocessorService:
             r"hoort|gehort|gehört|meiner\s+strategie|mijn\s+strategie)\b",
             normalized,
         ))
-        explicit_plan = bool(re.search(r"\b(?:mijn\s+)?(?:actieve\s+)?plan\b|\bactive\s+plan\b", normalized))
+        explicit_plan = bool(re.search(
+            r"\b(?:(?:mijn|my|mein(?:e[nsr]?)?)\s+)?(?:actieve\s+|active\s+|aktiven?\s+)?"
+            r"(?:plan|handelsplan|handelsaanpak|trading\s+(?:plan|approach)|handelsansatz)\b",
+            normalized,
+        ))
         # A topology question about all graph nodes asks for the user's
         # complete plan. This is distinct from a request to find one linked
         # strategy or bot, which keeps the narrower linked-object contract.
@@ -276,6 +280,7 @@ class FinnV2RequestPreprocessorService:
             and re.search(r"(?:handelsaanpak|trading approach)\b", normalized)
         )
         if concrete_setup_subject:
+            explicit_plan = False
             entities = tuple("setup" if entity == "plan" else entity for entity in entities)
         if (relational_graph or explicit_plan or compound_plan_subject) and "plan" not in entities:
             entities = (*entities, "plan")
@@ -414,7 +419,7 @@ class FinnV2RequestPreprocessorService:
         inflection_stems = {
             "indicator", "signaal", "trendindicator", "setup", "haal", "maak", "voorbereid",
             "toevoeg", "verwijder", "activeer", "bevestig", "formuleer",
-            "herformuleer", "herschrijf", "ontbrek", "ontbreek", "inschakel", "erstell", "anleg",
+            "herformuleer", "herschrijf", "ontbrek", "ontbreek", "inschakel", "erstell", "anleg", "bewert",
         }
         return any(
             re.search(rf"(?<!\w){re.escape(term)}(?!\w)", text)

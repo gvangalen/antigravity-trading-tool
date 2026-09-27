@@ -75,9 +75,35 @@ class FinnResponsesFrontDoor:
         prior_tool_trace: tuple[dict[str, Any], ...] = (),
         model_message: str | None = None,
         resuming_clarification: bool = False,
+        corrected_guided_operation_id: str | None = None,
         locale: str = "nl",
+        force_read_repair: bool = False,
     ) -> FinnResponsesFrontDoorResult:
         selected: RequestAnalysisResult | None = None
+        if corrected_guided_operation_id:
+            contract = self.proposals.registry.require_supported(corrected_guided_operation_id)
+            if contract.mode not in {"CREATE_PROPOSAL", "ACTION_PROPOSAL"}:
+                raise ValueError("guided_target_correction_requires_action_contract")
+            selected = self.proposals.from_call(
+                call=FinnResponsesToolCall(
+                    name=FinnResponsesToolCatalog().proposal_tool_for_operation(contract.operation_id),
+                    operation_id=contract.operation_id, inputs={}, read_tools=(),
+                    required_inputs=contract.required_inputs, missing_inputs=(), draft_intent="new",
+                ),
+                message=message, conversation_context=conversation_context,
+                verified_asset=verified_asset,
+            )
+            return FinnResponsesFrontDoorResult(
+                FinnResponsesResult(
+                    text="Het gecorrigeerde doel wordt als nieuw voorstel beoordeeld.",
+                    response_id=f"guided-correction-{self.run_id}",
+                    tool_trace=({
+                        "name": "guided_target_correction", "status": "completed",
+                        "result": {"operation_id": contract.operation_id, "domain": contract.domain},
+                    },),
+                ),
+                selected, previous_response, locale=locale,
+            )
         read_context: list[dict[str, Any]] = []
         completed_read_calls: set[tuple[str, str]] = set()
         attempted_evaluation: str | None = None
@@ -125,6 +151,7 @@ class FinnResponsesFrontDoor:
         guard = getattr(self, "relevance_guard", None)
         previous_answer_only = False
         next_decision_from_previous = False
+        conditional_next_step_from_previous = False
         answering_previous_question = False
         resolved_detail_clarification = False
         pending_clarification = dict(conversation_context.get("responses_clarification") or {})
@@ -134,8 +161,8 @@ class FinnResponsesFrontDoor:
         )
         if (
             guard is not None and previous_response and previous_response.get("answer") and not pending_operation
+            and not force_read_repair
             and (not resuming_clarification or detail_clarification)
-            and len(message.strip().split()) <= 12
         ):
             classification_started = monotonic()
             sufficiency = await guard.previous_answer_suffices(
@@ -144,13 +171,18 @@ class FinnResponsesFrontDoor:
             )
             previous_answer_only = sufficiency in {
                 "explain_previous", "next_decision_from_previous",
+                "conditional_next_step_from_previous",
                 "answers_previous_question",
             }
-            next_decision_from_previous = sufficiency == "next_decision_from_previous"
+            next_decision_from_previous = sufficiency in {
+                "next_decision_from_previous", "conditional_next_step_from_previous",
+            }
+            conditional_next_step_from_previous = sufficiency == "conditional_next_step_from_previous"
             answering_previous_question = sufficiency == "answers_previous_question"
             if detail_clarification and not answering_previous_question:
                 previous_answer_only = False
                 next_decision_from_previous = False
+                conditional_next_step_from_previous = False
             logger.info(
                 "FINN Responses follow-up classification completed in %.2fs, kind=%s",
                 monotonic() - classification_started,
@@ -545,12 +577,22 @@ class FinnResponsesFrontDoor:
                 str(previous_response.get("answer") or "")[:1600]
                 if previous_response and not resuming_clarification else None
             ),
+            previous_tool_availability=tuple(
+                {"scope": str(item.get("scope") or ""),
+                 "status": str(item.get("status") or "")}
+                for call in (previous_response or {}).get("tool_trace", [])
+                for item in ((call.get("result") or {}).get("results") or [])
+                if isinstance(item, dict) and item.get("scope") and item.get("status")
+            ) if previous_response and not resuming_clarification else (),
             antecedent_verified_answer=(
                 str(previous_response.get("antecedent_verified_answer") or "")[:1600]
                 if previous_response and not resuming_clarification else None
             ),
             guided_operation_id=pending_operation,
             resuming_clarification=resuming_clarification,
+            resumed_clarification_reason=(
+                str(pending_clarification.get("reason") or "") or None
+            ) if resuming_clarification else None,
             resume_evaluation_operation_id=(
                 next((
                     str((item.get("result") or {})["evaluation_operation_id"])
@@ -565,13 +607,18 @@ class FinnResponsesFrontDoor:
             ),
             previous_answer_only=previous_answer_only,
             next_decision_from_previous=next_decision_from_previous,
+            conditional_next_step_from_previous=conditional_next_step_from_previous,
             answering_previous_question=answering_previous_question,
             conditional_process_check=lambda: bool(
                 getattr(guard, "conditional_process", False)
                 and getattr(guard, "response_focus", None) != "priorities"
             ),
             response_focus_check=lambda: getattr(guard, "response_focus", None),
+            horizon_classification_check=lambda: bool(
+                getattr(guard, "horizon_classification_question", False)
+            ),
             locale=locale,
+            force_read_repair=force_read_repair,
         )
         logger.info("FINN Responses tool loop completed in %.2fs", monotonic() - loop_started)
         if pending_operation and selected is None:

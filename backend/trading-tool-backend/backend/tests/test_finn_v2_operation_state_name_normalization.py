@@ -10,6 +10,24 @@ def test_setup_name_drops_trailing_non_persistence_safety_instruction():
     ) == "Measured Accumulation"
 
 
+def test_create_setup_recovers_explicit_timeframe_when_model_tool_omits_it():
+    contract = FinnV2OperationRegistry().require_supported("create_setup")
+    state = FinnV2OperationStateService().resolve(
+        contract=contract,
+        message="Erstelle ein taegliches DCA-Setup fuer SOL auf 4 Stunden mit dem Namen Chain DCA Setup.",
+        explicit_asset="SOL",
+        conversation_context={},
+        supplied_inputs={
+            "setup_type": "dca", "dca_frequency": "daily",
+            "name": "Chain DCA Setup", "symbol": "SOL",
+        },
+        model_tool_inputs=True,
+    )
+
+    assert state.collected_inputs["timeframe"] == "4H"
+    assert state.missing_required_inputs == []
+
+
 def test_setup_name_drops_broader_english_non_persistence_clause():
     assert FinnV2OperationStateService._trim_setup_name_clause(
         "Calm Builder without writing it yet"
@@ -412,6 +430,29 @@ def test_create_strategy_extracts_explicit_trade_contract_fields(message):
     assert state.missing_required_inputs == []
 
 
+def test_create_strategy_model_placeholders_remain_missing_before_proposal():
+    contract = FinnV2OperationRegistry().require_supported("create_strategy")
+
+    state = FinnV2OperationStateService().resolve(
+        contract=contract,
+        message="Create a manual strategy from that saved setup for 125 euros named Atlas Plan.",
+        explicit_asset=None,
+        conversation_context={},
+        supplied_inputs={
+            "setup_id": 42, "name": "Atlas Plan", "execution_mode": "fixed",
+            "base_amount": 125, "entry": "default", "stop_loss": "default",
+            "targets": ["default"], "risk_profile": "default",
+        },
+        model_tool_inputs=True,
+    )
+
+    assert state.collected_inputs["base_amount"] == 125
+    assert {"entry", "stop_loss", "targets", "risk_profile"}.issubset(state.missing_required_inputs)
+    assert state.status == "collecting"
+    assert contract.input_json_type("entry") == "number"
+    assert contract.allowed_values_for("risk_profile") == ("conservative", "balanced", "aggressive")
+
+
 def test_create_strategy_does_not_treat_risk_percentage_as_a_target():
     service = FinnV2OperationStateService()
     contract = FinnV2OperationRegistry().require_supported("create_strategy")
@@ -557,6 +598,31 @@ def test_complete_dutch_strategy_prompt_extracts_execution_and_risk_synonyms():
     assert state.collected_inputs["risk_profile"] == "balanced"
     assert "execution_mode" not in state.missing_required_inputs
     assert "risk_profile" not in state.missing_required_inputs
+
+
+def test_explicit_strategy_fields_override_conflicting_model_extraction():
+    contract = FinnV2OperationRegistry().require_supported("create_strategy")
+    state = FinnV2OperationStateService().resolve(
+        contract=contract,
+        message=(
+            "Maak voor Matrix Strategy Parent een strategie met de naam Matrix Nieuwe Strategie, "
+            "vaste uitvoering van 100 euro, entry 76000, stop-loss 72000, "
+            "targets 83000 en 87000 en gebalanceerd risico."
+        ),
+        explicit_asset="BTC",
+        conversation_context={"previous_action_result": {
+            "entity_type": "setup", "entity_id": 42, "result_status": "succeeded",
+        }},
+        supplied_inputs={
+            "setup_id": 42,
+            "targets": [{"target": "83000"}, {"target": "87000}],", "risk_profile": "gebalanceerd"}],
+        },
+        model_tool_inputs=True,
+    )
+
+    assert state.collected_inputs["risk_profile"] == "balanced"
+    assert state.collected_inputs["targets"] == [83000.0, 87000.0]
+    assert not state.missing_required_inputs
 
 
 @pytest.mark.parametrize(

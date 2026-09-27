@@ -193,6 +193,11 @@ class FinnResponsesAnswerVerifier:
                 "en": "I can't yet assess whether this fits your risk style because the required current data is missing. I wouldn't change your saved settings on this evidence alone.",
                 "de": "Ich kann noch nicht beurteilen, ob das zu deinem Risikoprofil passt: Die nötigen aktuellen Daten fehlen. Auf dieser Grundlage würde ich deine gespeicherten Einstellungen noch nicht ändern.",
             },
+            "responses_provider_timeout": {
+                "nl": "Ik heb je gegevens opgehaald, maar kon het antwoord nu niet afronden. Er is niets gewijzigd. Probeer het zo opnieuw.",
+                "en": "I retrieved your data but couldn't finish the answer just now. Nothing was changed. Please try again shortly.",
+                "de": "Ich habe deine Daten abgerufen, konnte die Antwort aber gerade nicht abschließen. Es wurde nichts geändert. Bitte versuche es gleich noch einmal.",
+            },
         }
         return copies.get(reason, {}).get(language) or {
             "nl": "Ik kan dit nog niet onderbouwen met betrouwbare gegevens.",
@@ -555,7 +560,7 @@ class FinnResponsesAnswerVerifier:
     def _currency_amounts(text: str) -> set[str]:
         amounts = set()
         for match in re.finditer(
-            r"(?:[€$]\s*([\d][\d.,]*)|([\d][\d.,]*)\s*(?:[€$]|\beuro\b|\beur\b|\busd\b|\bdollar\b))",
+            r"(?:[€$]\s*([\d][\d.,]*)|([\d][\d.,]*)\s*(?:[€$]|\beuros?\b|\beur\b|\busd\b|\bdollars?\b))",
             text.casefold(),
         ):
             value = (match.group(1) or match.group(2)).rstrip(".,")
@@ -924,6 +929,12 @@ class FinnResponsesAnswerVerifier:
                         "trigger, amount or condition to a persisted object when the typed "
                         "read evidence does not contain it. The answer may instead say "
                         "'you describe a rule' and discuss its conditional consequence. "
+                        "Use persisted_entity_evidence as a strict existence boundary. "
+                        "If linked_strategy_completed is false, any claim that the user "
+                        "already has, follows, or should keep following one or more saved "
+                        "strategies is an unsupported entity claim, even when phrased as "
+                        "general coaching. A saved setup is not a saved strategy. Do not "
+                        "infer a strategy from conversation history or the user's label 'plan'. "
                         "General education, cautious questions, truthful descriptions of saved "
                         "settings, and invitations to CHECK suitability by obtaining current "
                         "market or owner-scoped risk evidence are allowed. 'Check whether these "
@@ -1070,6 +1081,16 @@ class FinnResponsesAnswerVerifier:
                     ),
                     input=json.dumps(
                         {"answer": answer, "evidence": evidence, "question": question,
+                         "persisted_entity_evidence": {
+                             "active_setup_completed": any(
+                                 item.get("scope") == "read_active_setup"
+                                 and item.get("status") == "completed" for item in evidence
+                             ),
+                             "linked_strategy_completed": any(
+                                 item.get("scope") == "read_linked_strategy"
+                                 and item.get("status") == "completed" for item in evidence
+                             ),
+                         },
                          "preferred_locale": locale,
                          "conditional_process": conditional_process,
                          "answering_previous_question": answering_previous_question,
@@ -1376,6 +1397,12 @@ class FinnResponsesAnswerVerifier:
             for item in (call.get("result", {}).get("results") or [])
             if isinstance(item, dict)
         )
+        if result.answer_kind == "provider_unavailable":
+            return FinnResponsesVerifiedAnswer(
+                "unavailable", self._fallback_copy(
+                    "responses_provider_timeout", message=message, locale=locale,
+                ), "responses_provider_timeout", evidence,
+            )
         static_answer = (
             self._static_geometry_answer(evidence, locale)
             if result.response_focus == "calculation" else None
@@ -1449,10 +1476,12 @@ class FinnResponsesAnswerVerifier:
             for item in evidence
         ]
         direct_calls = [call for call in result.tool_trace if call.get("name") == "answer_directly"]
-        if direct_calls and len(direct_calls) == len(result.tool_trace) and all(
+        if (
+            not result.uses_previous_response and not result.tool_trace
+        ) or (direct_calls and len(direct_calls) == len(result.tool_trace) and all(
             (call.get("arguments") or {}).get("uses_previous_response") is False
             for call in direct_calls
-        ):
+        )):
             previous_response = None
         previous_answer = str((previous_response or {}).get("answer") or "").strip()
         def quantities_supported(text: str) -> bool:
@@ -1501,9 +1530,11 @@ class FinnResponsesAnswerVerifier:
             for key in ("operation_id", "entity_type", "canonical_name", "result_status")
             if recent_action_result and recent_action_result.get(key) is not None
         }
-        general_education = bool(result.tool_trace) and all(
+        general_education = (
+            not result.tool_trace and not result.uses_previous_response
+        ) or (bool(result.tool_trace) and all(
             call.get("name") == "answer_directly" for call in result.tool_trace
-        )
+        ))
         evaluation_calls = [
             call for call in result.tool_trace
             if (call.get("result") or {}).get("evaluation_operation_id")
@@ -1514,6 +1545,7 @@ class FinnResponsesAnswerVerifier:
             != "evaluate_indicator_configuration"
             for call in evaluation_calls
         )
+        advice_diagnostics: dict[str, dict[str, Any]] = {}
 
         def limited_fallback() -> FinnResponsesVerifiedAnswer:
             if result.response_focus == "priorities":
@@ -1650,6 +1682,16 @@ class FinnResponsesAnswerVerifier:
                 "responses_requested_structure_unverified" if missed_structure else "insufficient_evidence",
                 evidence, bool(previous_response),
             )
+        proposed_change = self._proposed_change_copy(message=message, locale=locale)
+        if limited_evaluation and result.response_focus in {None, "general"} and proposed_change:
+            proposed_amounts = self._currency_amounts(message)
+            attributed = re.search(
+                r"\b(?:je|jij|jouw|you|your|du|dein\w*)\b[^.!?\n]{0,65}"
+                r"\b(?:overweeg\w*|denk\w*|consider\w*|propos\w*|erwäg\w*|überleg\w*)\b",
+                result.text.casefold(),
+            )
+            if not proposed_amounts <= self._currency_amounts(result.text) or not attributed:
+                return limited_fallback()
         for call in evaluation_calls:
             evaluation = call["result"]
             compact.append({
@@ -1716,20 +1758,28 @@ class FinnResponsesAnswerVerifier:
             return FinnResponsesVerifiedAnswer(
                 "completed", copy, "insufficient_evidence", evidence, True,
             )
-        reusing_previous_read = bool(previous_response and previous_response.get("answer")) and any(
-            call.get("name") == "answer_directly"
-            and dict(call.get("arguments") or {}).get("uses_previous_response") is True
-            for call in result.tool_trace
+        reusing_previous_read = bool(previous_response and previous_response.get("answer")) and (
+            result.uses_previous_response or any(
+                call.get("name") == "answer_directly"
+                and dict(call.get("arguments") or {}).get("uses_previous_response") is True
+                for call in result.tool_trace
+            )
         )
         previous_explanation_only = (
             reusing_previous_read
-            and bool(result.tool_trace)
-            and all(call.get("name") == "answer_directly" for call in result.tool_trace)
+            and (not result.tool_trace or all(
+                call.get("name") == "answer_directly" for call in result.tool_trace
+            ))
             and message.strip().casefold().rstrip("?!. ") in {
                 "waarom", "why", "warum", "wieso", "weshalb",
             }
         )
         current_scopes = {item.get("scope") for item in evidence}
+        limited_plan_review = result.response_focus == "review" and any(
+            (call.get("result") or {}).get("evaluation_operation_id") == "evaluate_plan"
+            and (call.get("result") or {}).get("assessment_status") == "insufficient_evidence"
+            for call in result.tool_trace
+        )
         completed_scopes = {
             item.get("scope") for item in evidence if item.get("status") == "completed"
         }
@@ -1742,7 +1792,28 @@ class FinnResponsesAnswerVerifier:
                 or item.get("scope") in current_scopes
             )
         ]
-        if not self._saved_horizon_claim_supported(
+        saved_horizon_objects = [
+            item["data"] for item in (*evidence, *relevant_previous_source_evidence)
+            if item.get("scope") in {"read_active_setup", "read_linked_strategy"}
+            and item.get("status") == "completed"
+            and isinstance(item.get("data"), dict)
+        ]
+        if result.resumed_clarification_reason == "investment_horizon_required":
+            return FinnResponsesVerifiedAnswer(
+                "completed", self._horizon_detail_acknowledgement(
+                    message, tuple((*evidence, *relevant_previous_source_evidence)), locale,
+                ), "user_detail_acknowledged", evidence, True,
+            )
+        if result.horizon_classification_question and saved_horizon_objects and not any(
+            data.get(field) for data in saved_horizon_objects
+            for field in ("investment_horizon", "holding_period", "trade_horizon")
+        ):
+            question = self._horizon_clarification_copy(locale)
+            return FinnResponsesVerifiedAnswer(
+                "clarification_required", question, "investment_horizon_required", evidence,
+                clarification={"question": question, "reason": "investment_horizon_required"},
+            )
+        if not limited_plan_review and not self._saved_horizon_claim_supported(
             result.text, tuple((*evidence, *relevant_previous_source_evidence)),
         ):
             if previous_answer and message.strip() and not message.rstrip().endswith("?"):
@@ -1763,7 +1834,8 @@ class FinnResponsesAnswerVerifier:
             "asset": item.get("asset"), "freshness": item.get("freshness"),
             "availability": item.get("availability"), "data": item.get("data"),
             "reason": item.get("reason"), "lineage": "previous_verified_run",
-        } for item in relevant_previous_source_evidence if item.get("status") == "completed")
+        } for item in relevant_previous_source_evidence if item.get("status") == "completed"
+        or (reusing_previous_read and item.get("status") in {"unavailable", "stale", "error"}))
         unavailable_without_cause = any(
             item.get("reason") == "source_unavailable"
             for item in (*evidence, *relevant_previous_source_evidence)
@@ -1907,8 +1979,8 @@ class FinnResponsesAnswerVerifier:
                 "frequency, amount, currency or other fields. Previous chat text and a draft are "
                 "not a saved-object read. If an answer describes any such object fields, require a "
                 "completed owner-scoped read of that object type in the current tool trace, "
-                "or an immediately preceding verified owner-scoped read when answer_directly "
-                "explicitly references that previous response and makes no new field claim; "
+                "or an immediately preceding verified owner-scoped read when this direct "
+                "follow-up explicitly references that previous response and makes no new field claim; "
                 "read_review_history and read_latest_report do not satisfy setup/strategy/bot "
                 "field claims. Reject unsupported extra details even when the saved name is correct."
                 " If the preceding response asked the user to choose a setup and the current "
@@ -1937,7 +2009,7 @@ class FinnResponsesAnswerVerifier:
                     if unavailable_without_cause else ""
                 )
                 + (
-                    " This is a general educational explanation selected through answer_directly. "
+                    " This is a direct answer without a FINN tool call. "
                     "Check ordinary conceptual accuracy and absence of personal or current-market claims. "
                     "For RSI, overbought and oversold describe momentum conditions; they do not "
                     "by themselves prove that an asset is objectively too expensive or too cheap. "
@@ -2022,9 +2094,17 @@ class FinnResponsesAnswerVerifier:
                 or reusing_previous_read
             )
         ]
+        no_linked_strategy_evidence = any(
+            item.get("scope") == "read_linked_strategy"
+            and item.get("status") in {"unavailable", "stale", "error"}
+            for item in advice_evidence
+        ) and not any(
+            item.get("scope") == "read_linked_strategy"
+            and item.get("status") == "completed"
+            for item in advice_evidence
+        )
 
         advice_cache: dict[str, bool] = {}
-        advice_diagnostics: dict[str, dict[str, Any]] = {}
         technical_cache: dict[str, bool] = {}
         catalog_cache: dict[str, tuple[bool, str]] = {}
         catalog_options = [
@@ -2247,7 +2327,7 @@ class FinnResponsesAnswerVerifier:
             )
         if (verdict.available and verdict.passes and advice_ok
                 and presentation_ok(result.text) and quantities_supported(result.text)
-                and previous_answer and unavailable_without_cause and not previous_explanation_only
+                and previous_answer and unavailable_without_cause
                 and not (reusing_previous_read and personal_evidence and advice_ok)
                 and not (result.answer_kind == "grounded_next_decision" and advice_ok)):
             if not await self._cause_claim_is_grounded(
@@ -2498,6 +2578,15 @@ class FinnResponsesAnswerVerifier:
                                 "and do not add a claimed benefit of DCA, a positive fit claim, "
                                 "historical market conditions or a recommended level change. "
                                 + (
+                                    "No linked strategy was found in the verified owner-scoped "
+                                    "evidence. Refer to the user's stated wait rule as their "
+                                    "description, not as a saved strategy. Do not say 'your "
+                                    "strategy' or suggest analyzing, following, or changing a "
+                                    "strategy the user does not have. Give one concrete process "
+                                    "step that needs no strategy or current price. "
+                                    if no_linked_strategy_evidence else ""
+                                )
+                                + (
                                     "The prior answer failed the personal-advice audit. Preserve "
                                     "the answer form requested by the user. Identify verified saved settings; "
                                     + (
@@ -2731,7 +2820,7 @@ class FinnResponsesAnswerVerifier:
                                     self._fallback_copy("responses_evidence_not_verified", message=message, previous_answer=previous_answer, locale=locale),
                                     "responses_evidence_not_verified", evidence, bool(previous_answer),
                                 )
-                            if previous_answer and unavailable_without_cause and not previous_explanation_only and not (reusing_previous_read and personal_evidence and revised_advice_ok) and not (result.answer_kind == "grounded_next_decision" and revised_advice_ok) and not await self._cause_claim_is_grounded(
+                            if previous_answer and unavailable_without_cause and not (reusing_previous_read and personal_evidence and revised_advice_ok) and not (result.answer_kind == "grounded_next_decision" and revised_advice_ok) and not await self._cause_claim_is_grounded(
                                 answer=revised, remaining=remaining_lifecycle_seconds(),
                             ):
                                 return FinnResponsesVerifiedAnswer(
