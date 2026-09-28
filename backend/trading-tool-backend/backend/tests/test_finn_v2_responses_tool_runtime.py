@@ -1349,7 +1349,8 @@ def test_guided_turn_boundary_separates_slot_answers_from_new_requests(
     ("Entry rond 76000 euro.", "entry", True),
     ("Stop-loss op 72000.", "stop_loss", True),
     ("Vaste uitvoering.", "execution_mode", True),
-    ("Dat weet ik nog niet.", "execution_mode", True),
+    ("Dat weet ik nog niet.", "execution_mode", False),
+    ("Lösche die in diesem Ablauf erstellte Strategie.", "bot_id", False),
     ("Wat vind je van mijn plan?", "base_amount", False),
     ("Verwijder mijn bot.", "name", False),
 ])

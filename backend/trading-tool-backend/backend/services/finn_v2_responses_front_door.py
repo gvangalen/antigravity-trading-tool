@@ -91,7 +91,10 @@ class FinnResponsesFrontDoor:
             for alias in other.aliases
         ):
             return False
-        return states._is_short_slot_answer(message, requested_slot=requested_slot)
+        return (
+            states._requested_slot_value(field=requested_slot, text=message, contract=contract) is not None
+            and states._is_short_slot_answer(message, requested_slot=requested_slot)
+        )
 
     async def run(
         self,
