@@ -44,6 +44,9 @@ class SemanticVerificationResult(BaseModel):
     recommendation_ok: bool = True
     mode_purity_ok: bool = True
     follow_up_ok: bool = True
+    unsupported_unavailable_cause: bool = False
+    unverified_guardrail_override: bool = False
+    unverified_outcome_claim: bool = False
     reason_codes: List[str] = Field(default_factory=list)
     model: Optional[str] = None
 

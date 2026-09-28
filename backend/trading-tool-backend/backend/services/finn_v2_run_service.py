@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import json
+import re
 from contextlib import suppress
 from datetime import datetime, timedelta, timezone
 import asyncio
@@ -45,6 +46,7 @@ from backend.services.finn_v2_responses_front_door import FinnResponsesFrontDoor
 from backend.services.finn_v2_responses_loop import FinnResponsesError
 from backend.services.finn_v2_responses_tool_relevance import FinnResponsesToolRelevanceGuard
 from backend.services.finn_v2_operation_state_service import FinnV2OperationStateService
+from backend.services.finn_v2_request_preprocessor_service import FinnV2RequestPreprocessorService
 from backend.services.finn_v2_entity_resolution_service import FinnV2EntityResolutionService
 from backend.domain.finn_v2_operation_registry import FinnV2OperationRegistry
 from backend.utils import openai_client
@@ -68,6 +70,41 @@ async def _await_selection_or_lifecycle(selection_waiter, lifecycle, *, timeout:
 
 
 class FinnV2RunService:
+    @staticmethod
+    def _independent_linked_read(message: str) -> bool:
+        facts = FinnV2RequestPreprocessorService().preprocess(message=message)
+        return facts.discourse_act == "information_request" and facts.linked_graph_relationship
+
+    @staticmethod
+    def _unanalysed_proposal_selected(tool_trace: tuple[dict[str, Any], ...]) -> bool:
+        return any(
+            str(call.get("name") or "").endswith("_proposal")
+            and str(call.get("status") or "") not in {"retry", "unavailable", "error"}
+            for call in tool_trace
+        )
+
+    @staticmethod
+    def _requests_unconfirmed_financial_execution(message: str) -> bool:
+        facts = FinnV2RequestPreprocessorService().preprocess(message=message)
+        bypass = re.search(
+            r"\b(?:without\s+(?:any\s+)?confirmation|zonder\s+bevestiging|"
+            r"ohne\s+best[aä]tigung)\b",
+            message.casefold(),
+        )
+        return bool(facts.financial_execution_intent and bypass)
+
+    @staticmethod
+    def _requests_live_bot_activation(message: str) -> bool:
+        facts = FinnV2RequestPreprocessorService().preprocess(message=message)
+        if facts.primary_entity != "bot" or facts.action_polarity != "activate":
+            return False
+        contract = FinnV2OperationRegistry().require_supported("activate_bot")
+        return bool(
+            contract.response_strategy == "policy_denial"
+            and re.search(r"\blive\b", message.casefold())
+            and not re.search(r"\b(?:not|no|geen|nicht)\s+live\b", message.casefold())
+        )
+
     def __init__(self, session: AsyncSession):
         self.session = session
         self.conversations = FinnV2ConversationRepository(session)
@@ -212,15 +249,27 @@ class FinnV2RunService:
                     ):
                         previous_response = {
                             "run_id": prior_contract.run_id,
-                            "response_id": cursor["response_id"],
+                            "response_id": (
+                                cursor["response_id"]
+                                if exchange.get("response_id_reusable", True) else None
+                            ),
                             "answer": dict(prior_state.get("terminal_response") or {}).get("content"),
+                            "terminal_kind": exchange.get("answer_kind") or prior_state.get("terminal_status"),
+                            "terminal_status": prior_state.get("terminal_status"),
+                            "open_choice": dict(prior_state.get("responses_clarification") or {}).get("question"),
+                            "terminal_reason": (
+                                dict(prior_state.get("responses_clarification") or {}).get("reason")
+                                or next(iter(dict(prior_state.get("terminal_response") or {}).get("uncertainty") or []), None)
+                            ),
                             "tool_trace": list(exchange.get("tool_trace") or []),
                         }
             prior_contract = await orchestrator.runtime_contracts.get_latest_for_conversation(
                 conversation_id=conversation_id, user_id=user_id, exclude_run_id=run_id,
             ) if conversation_id else None
             prior_state = dict((prior_contract.state_json or {}) if prior_contract else {})
-            if previous_response is None and prior_state.get("terminal_status") == "unavailable":
+            if previous_response is None and prior_state.get("terminal_status") in {
+                "unavailable", "clarification_required",
+            }:
                 safe_answer = str(dict(prior_state.get("terminal_response") or {}).get("content") or "").strip()
                 if safe_answer:
                     exchange = dict(prior_state.get("responses_exchange") or {})
@@ -229,6 +278,13 @@ class FinnV2RunService:
                         "run_id": prior_contract.run_id,
                         "response_id": None,
                         "answer": safe_answer,
+                        "terminal_kind": exchange.get("answer_kind") or prior_state.get("terminal_status"),
+                        "terminal_status": prior_state.get("terminal_status"),
+                        "open_choice": dict(prior_state.get("responses_clarification") or {}).get("question"),
+                        "terminal_reason": (
+                            dict(prior_state.get("responses_clarification") or {}).get("reason")
+                            or next(iter(dict(prior_state.get("terminal_response") or {}).get("uncertainty") or []), None)
+                        ),
                         "tool_trace": list(exchange.get("tool_trace") or progress.get("tool_trace") or []),
                     }
             if previous_response and previous_response.get("run_id"):
@@ -286,18 +342,35 @@ class FinnV2RunService:
             verified_asset = (
                 str(guided_inputs.get("symbol") or guided_inputs.get("asset") or "") or None
             ) if guided.get("missing_required_inputs") else None
+        # Financial execution is a policy boundary, not a candidate proposal.
+        # Use the existing request fact and registry contract before any model
+        # tool can turn an autonomous order into an unrelated clarification.
+        if cls._requests_unconfirmed_financial_execution(message):
+            FinnV2OperationRegistry().require_supported("unsupported_financial_operation")
+            raise FinnResponsesError("financial_execution_not_available")
+        if cls._requests_live_bot_activation(message):
+            raise FinnResponsesError("live_bot_activation_disabled")
         client = openai_client.async_client
         if client is None:
             raise FinnResponsesError("responses_provider_unconfigured")
-        if pending_clarification and not await FinnResponsesToolRelevanceGuard(client).continues_clarification(
-            message=message,
-            original_request=str(pending_clarification.get("original_message") or ""),
-            question=str(pending_clarification.get("question") or ""),
-        ):
-            pending_clarification = {}
-            context.pop("responses_clarification", None)
-            # A new request must not inherit the prior clarification as its answer.
-            previous_response = None
+        if pending_clarification:
+            relevance = FinnResponsesToolRelevanceGuard(client)
+            if not await relevance.continues_clarification(
+                message=message,
+                original_request=str(pending_clarification.get("original_message") or ""),
+                question=str(pending_clarification.get("question") or ""),
+            ):
+                pending_clarification = {}
+                context.pop("responses_clarification", None)
+                prior_relation = (
+                    await relevance.previous_answer_suffices(
+                        message=message,
+                        previous_answer=str(previous_response.get("answer") or ""),
+                    ) if previous_response else None
+                )
+                if prior_relation != "explain_previous":
+                    # A fresh request must not inherit an unrelated choice as its answer.
+                    previous_response = None
         pending_guided = FinnV2OperationStateService.pending_operation_id(context)
         corrected_guided_operation_id: str | None = None
         if pending_guided:
@@ -343,7 +416,10 @@ class FinnV2RunService:
             ):
                 continuation = True
             else:
-                continuation = await FinnResponsesToolRelevanceGuard(client).continues_guided_operation(
+                if cls._independent_linked_read(message):
+                    continuation = False
+                else:
+                    continuation = await FinnResponsesToolRelevanceGuard(client).continues_guided_operation(
                     message=message, operation_id=pending_guided,
                     operation_purpose=str(contract.semantic_description or pending_guided),
                     requested_slot=requested_slot,
@@ -351,7 +427,7 @@ class FinnV2RunService:
                         requested_slot, contract=contract,
                         collected_inputs=guided_inputs,
                     ),
-                )
+                    )
             if continuation is None:
                 raise FinnResponsesError("guided_turn_continuation_unverified")
             if not continuation:
@@ -410,7 +486,10 @@ class FinnV2RunService:
                 "Otherwise, understand the user's language and "
                 "choose zero or more FINN read tools. Personal judgments about the user's plan, risk, "
                 "portfolio or market conditions require relevant read tools; use zero tools only for "
-                "general educational conversation. When the user asks FINN to assess whether a saved plan fits their "
+                "general education or a conditional explanation of what FINN can help with. "
+                "For capability questions, give concrete examples but do not imply that the user "
+                "already has a saved plan, profile or market snapshot unless a read proves it. "
+                "When the user asks FINN to assess whether a saved plan fits their "
                 "risk style or what its weaknesses are, choose the registry-backed read-only "
                 "evaluate_plan tool rather than stopping after separate profile and plan reads. "
                 "That tool gathers its required evidence; unavailable sources limit the conclusion. "
@@ -441,10 +520,10 @@ class FinnV2RunService:
                 "Use natural, concise wording: say 'marktdata' in Dutch or 'market data' in English, "
                 "not backend terms or awkward literal translations. Do not promise to fetch missing "
                 "data later unless a real scheduled action exists. For a general definition or explanation that does not "
-                "ask about the user's saved data or current market conditions, use answer_directly "
-                "with uses_previous_response=false and do not fetch live snapshots. For a follow-up "
-                "fully explained by the previous verified answer, use answer_directly with "
-                "uses_previous_response=true unless a missing fact requires a new read. "
+                "ask about the user's saved data or current market conditions, answer directly "
+                "without a tool call and do not fetch live snapshots. For a follow-up "
+                "fully explained by the previous verified answer, answer directly in text "
+                "unless a missing fact requires a new read. "
                 "A short referential follow-up after a verified "
                 "answer, such as asking why, refers to that specific answer: name at least one "
                 "relevant concrete detail from it and explain the actual evidence or limitation "
@@ -526,7 +605,7 @@ class FinnV2RunService:
                 "the choice is resolved. Answer the original plan question; never ask which setup "
                 "they mean again. For a short why follow-up needing that same object, call "
                 "get_active_plan_and_strategy with reference=previous_response; FINN validates the "
-                "earlier owner-scoped result. Or use answer_directly with uses_previous_response=true "
+                "earlier owner-scoped result. Or answer directly in text "
                 "when the previous verified answer already fully supports the explanation. "
                 "An unavailable source does not establish that the outage is temporary or why it happened. "
                 "If asked why data is missing, say that the current evidence does not establish the "
@@ -576,8 +655,8 @@ class FinnV2RunService:
                     " This turn follows a verified answer in the same conversation. For a short why/how "
                     "follow-up, explain only what the previous verified answer and its tool results establish. "
                     "If the preceding answer was about unavailable market data, a short 'why' asks "
-                    "about that limitation, not which setup to use. Prefer answer_directly with "
-                    "uses_previous_response=true; do not read a setup merely because the earlier "
+                    "about that limitation, not which setup to use. Answer in text when the "
+                    "verified prior evidence suffices; do not read a setup merely because the earlier "
                     "market-data question also mentioned a plan. "
                     "Do not invent possible causes, user history, technical failures or missing data beyond "
                     "those actually returned by FINN tools. If the prior response reports unavailable "
@@ -620,6 +699,7 @@ class FinnV2RunService:
                 supersedes_response_id=recovery_response_id,
                 answer_kind=result.response.answer_kind,
                 uses_previous_response=result.response.uses_previous_response,
+                response_id_reusable=result.response.response_id_reusable,
             )
             logger.info(
                 "FINN Responses exchange recorded in %.2fs",
@@ -632,10 +712,7 @@ class FinnV2RunService:
             monotonic() - exchange_started,
         )
         selection_ready.set()
-        if result.proposal_analysis is None and any(
-            str(call.get("name") or "").endswith("_proposal")
-            for call in result.response.tool_trace
-        ):
+        if result.proposal_analysis is None and cls._unanalysed_proposal_selected(result.response.tool_trace):
             raise FinnResponsesError("proposal_tool_validation_failed")
         verification_message = (
             "Original user request: " + str(pending_clarification["original_message"])
@@ -801,6 +878,15 @@ class FinnV2RunService:
         next_status = phase_outcome.terminal_status
         if next_status not in {"clarification_required", "unavailable", "downgraded", "rejected", "completed", "failed"}:
             raise ValueError("invalid_lifecycle_phase_outcome")
+        action_needs_input = (
+            next_status == "completed"
+            and (contract_state.get("final_mode") or contract_state.get("requested_mode"))
+            in {"CREATE_PROPOSAL", "ACTION_PROPOSAL"}
+            and bool(contract_state.get("missing_inputs"))
+            and not verified.get("proposal_id")
+        )
+        if action_needs_input:
+            next_status = "clarification_required"
         if not content:
             response_json = self._terminal_placeholder_response(
                 interaction_mode=phase_outcome.interaction_mode,
@@ -813,7 +899,7 @@ class FinnV2RunService:
             )
         else:
             response_json = {
-                "mode": verified.get("mode") or phase_outcome.interaction_mode or "UNAVAILABLE",
+                "mode": "CLARIFICATION" if action_needs_input else verified.get("mode") or phase_outcome.interaction_mode or "UNAVAILABLE",
                 "content": content,
                 "response_source": "v2_runtime",
                 "verifier_status": verified.get("verifier_status") or "passed",
@@ -834,7 +920,7 @@ class FinnV2RunService:
         contract = await self.runtime_contracts.materialize_terminal(
             run_id=run_id,
             status=next_status,
-            mode=phase_outcome.interaction_mode or response_json["mode"],
+            mode=response_json["mode"] if action_needs_input else phase_outcome.interaction_mode or response_json["mode"],
             response=response_json,
             error_code=terminal_reason,
         )
@@ -845,7 +931,7 @@ class FinnV2RunService:
                 run_id,
                 user_id,
                 next_status=next_status,
-                interaction_mode=phase_outcome.interaction_mode or response_json["mode"],
+                interaction_mode=response_json["mode"] if action_needs_input else phase_outcome.interaction_mode or response_json["mode"],
                 policy_json=policy,
                 response_json=response_json,
                 response_source="v2_runtime",
@@ -865,7 +951,7 @@ class FinnV2RunService:
         await self.runs.update_status(
             run=run,
             status=next_status,
-            interaction_mode=phase_outcome.interaction_mode or response_json["mode"],
+            interaction_mode=response_json["mode"] if action_needs_input else phase_outcome.interaction_mode or response_json["mode"],
             policy_json=policy,
             response_json=response_json,
             retryable=False,
@@ -1054,7 +1140,7 @@ class FinnV2RunService:
             orchestrator={}, verifier={}, reasoning={}, delivery_envelope={},
         )
         response_json["content"] = await self._localized_runtime_failure_content(
-            run_id=run_id, user_id=user_id,
+            run_id=run_id, user_id=user_id, error_code=error_code,
         )
         contract = await self.runtime_contracts.materialize_terminal(
             run_id=run_id, status="unavailable", mode="UNAVAILABLE", response=response_json, error_code=error_code
@@ -1065,7 +1151,7 @@ class FinnV2RunService:
             error_code=error_code, response_json=response_json, response_source="v2_runtime",
         )
 
-    async def _localized_runtime_failure_content(self, *, run_id: str, user_id: int) -> str:
+    async def _localized_runtime_failure_content(self, *, run_id: str, user_id: int, error_code: str = "") -> str:
         locale = "nl"
         try:
             run = await self.runs.get_by_id_for_user(run_id=run_id, user_id=user_id)
@@ -1074,6 +1160,24 @@ class FinnV2RunService:
                 locale = resolve_chat_locale((user.ai_preferences or {}).get("locale"), run.message)
         except Exception:
             logger.warning("FINN failure locale lookup unavailable", extra={"run_id": run_id})
+        if error_code == "financial_execution_not_available":
+            return {
+                "nl": "Ik kan geen koop- of verkooporder automatisch uitvoeren. We kunnen wel samen een plan of voorstel voorbereiden; opslaan of uitvoeren vraagt altijd jouw expliciete bevestiging.",
+                "en": "I can't place buy or sell orders automatically. We can prepare a plan or proposal together, but saving or executing it always requires your explicit confirmation.",
+                "de": "Ich kann Kauf- oder Verkaufsaufträge nicht automatisch ausführen. Wir können gemeinsam einen Plan oder Vorschlag vorbereiten; zum Speichern oder Ausführen ist immer deine ausdrückliche Bestätigung nötig.",
+            }[locale]
+        if error_code == "live_bot_activation_disabled":
+            return {
+                "nl": "Ik kan deze bot niet voor live trading activeren. Je kunt hem wel veilig in Paper gebruiken; live-activatie blijft geblokkeerd.",
+                "en": "I can't activate this bot for live trading. You can use it safely in Paper mode; live activation remains blocked.",
+                "de": "Ich kann diesen Bot nicht für Live-Trading aktivieren. Du kannst ihn sicher im Paper-Modus nutzen; die Live-Aktivierung bleibt gesperrt.",
+            }[locale]
+        if error_code == "responses_provider_quota_unavailable":
+            return {
+                "nl": "Mijn AI-verbinding is momenteel niet beschikbaar. Ik kan je vraag nu niet betrouwbaar beantwoorden; probeer het later opnieuw.",
+                "en": "My AI connection is currently unavailable. I can't answer reliably right now; please try again later.",
+                "de": "Meine KI-Verbindung ist derzeit nicht verfügbar. Ich kann deine Frage gerade nicht zuverlässig beantworten; versuche es später erneut.",
+            }[locale]
         return {
             "nl": "FINN kon dit antwoord niet afronden. Probeer het opnieuw.",
             "en": "FINN couldn't complete this answer. Please try again.",
@@ -1208,29 +1312,6 @@ class FinnV2RunService:
                             monotonic() - responses_stage_started,
                         )
                         read_repair_used = False
-                        if (
-                            prepared.proposal_analysis is None
-                            and not prepared.response.tool_trace
-                            and not prepared.response.uses_previous_response
-                            and await FinnResponsesToolRelevanceGuard(
-                                openai_client.async_client
-                            ).direct_answer_requires_read(
-                                message=message,
-                                answer=prepared.response.text,
-                                previous_verified_answer=str(
-                                    (prepared.previous_response or {}).get("answer") or ""
-                                ),
-                            )
-                            and (remaining_lifecycle_seconds() or 60) > 12
-                        ):
-                            prepared, message = await cls.prepare_responses_turn(
-                                run_id=run_id, user_id=user_id,
-                                selector_started=selector_started,
-                                selection_ready=selection_ready,
-                                recovery_response_id=prepared.response.response_id,
-                                force_read_repair=True,
-                            )
-                            read_repair_used = True
                         if prepared.proposal_analysis is None:
                             responses_stage_started = monotonic()
                             answer = await FinnResponsesAnswerVerifier(client=openai_client.async_client).verify(
@@ -1246,6 +1327,7 @@ class FinnV2RunService:
                             remaining = remaining_lifecycle_seconds()
                             if (
                                 not read_repair_used
+                                and prepared.response.response_id_reusable
                                 and answer.reason in {"responses_evidence_not_verified", "no_evidence_available"}
                                 and (
                                     not prepared.response.tool_trace

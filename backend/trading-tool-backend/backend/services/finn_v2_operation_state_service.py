@@ -329,8 +329,9 @@ class FinnV2OperationStateService:
             "dca_frequency": "Hoe vaak wil je volgens deze DCA-setup aankopen: dagelijks, wekelijks of maandelijks?",
             "dca_day": "Op welke weekdag wil je volgens deze DCA-setup aankopen?",
             "dca_month_day": "Op welke dag van de maand wil je volgens deze DCA-setup aankopen?",
-            "setup_id": "Welke bestaande setup wil je aanpassen?",
-            "strategy_id": "Welke bestaande strategie wil je aanpassen?",
+            "setup_id": "Welke bestaande setup bedoel je?",
+            "strategy_id": "Welke bestaande strategie bedoel je?",
+            "bot_id": "Welke bestaande paper-bot bedoel je?",
             "execution_mode": "Wil je een fixed of custom uitvoeringsmodus gebruiken?",
             "base_amount": "Welk bedrag wil je per uitvoering inzetten?",
             "entry": "Bij welke koers wil je instappen?",
@@ -1285,7 +1286,7 @@ class FinnV2OperationStateService:
     @staticmethod
     def _canonical_execution_mode(value: str) -> Optional[str]:
         lowered = value.casefold()
-        if re.search(r"\b(?:fixed|vast|standaard|manual|handmatig|fest(?:e)?)\b", lowered):
+        if re.search(r"\b(?:fixed|vast(?:e)?|standaard|manual|handmatig|fest(?:e|er|es)?)\b", lowered):
             return "fixed"
         if re.search(r"\b(?:custom|aangepast|individuell|benutzerdefiniert)\b", lowered):
             return "custom"

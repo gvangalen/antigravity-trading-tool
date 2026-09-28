@@ -277,6 +277,7 @@ class FinnResponsesToolRelevanceGuard:
             return None
         timeout = min(4.0, remaining - 3 if remaining is not None else 4.0)
         choices = list(dict.fromkeys([
+            "respond_without_tool",
             proposed_tool,
             *(item["operation_id"] for item in (read_options or [])),
             *(item["operation_id"] for item in evaluation_options),
@@ -291,7 +292,12 @@ class FinnResponsesToolRelevanceGuard:
                     model="gpt-4o", store=False, tool_choice="none",
                     temperature=0,
                     instructions=(
-                        "Choose the one primary FINN operation that answers the latest user request. "
+                        "Choose the one primary FINN operation that answers the latest user request, "
+                        "or respond_without_tool when the user asks for general education or a "
+                        "hypothetical explanation that needs no saved or current FINN facts. "
+                        "Do not fetch a saved object just because an educational concept shares "
+                        "a word with an object type. A direct answer still needs truthful financial "
+                        "limits and must not imply a personal recommendation. "
                         "A read that retrieves saved profile or setup facts is not equivalent to an "
                         "evaluation of personal suitability, risks or weaknesses. Evaluation "
                         "operations gather their registry-required sources and may still return "
@@ -380,6 +386,8 @@ class FinnResponsesToolRelevanceGuard:
             ):
                 self.response_focus = "general"
             selected = parsed.get("operation_id")
+            if selected == "respond_without_tool" and parsed.get("requires_judgment") is False:
+                return selected
             if self.response_focus == "calculation":
                 arithmetic_reads = [
                     item["operation_id"] for item in (read_options or [])

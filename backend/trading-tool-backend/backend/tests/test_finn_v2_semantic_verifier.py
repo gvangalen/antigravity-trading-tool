@@ -6,7 +6,19 @@ from types import SimpleNamespace
 from backend.schemas.finn_v2_verifier_schema import CoverageVerification, VerifierResult
 from backend.services.finn_v2_response_verifier_service import FinnV2ResponseVerifierService
 from backend.services.finn_v2_semantic_verifier_service import FinnV2SemanticVerifierService
+from backend.services.finn_v2_flag_service import FinnV2FlagService
 from backend.utils import openai_client as openai_module
+
+
+def test_semantic_verifier_model_default_and_override(monkeypatch):
+    monkeypatch.delenv("FINN_V2_SEMANTIC_VERIFIER_MODEL", raising=False)
+    assert FinnV2FlagService().semantic_verifier_model() == "gpt-6-sol"
+    monkeypatch.setenv("FINN_V2_SEMANTIC_VERIFIER_MODEL", "gpt-test")
+    assert FinnV2FlagService().semantic_verifier_model() == "gpt-test"
+    monkeypatch.delenv("FINN_V2_COACH_VERIFIER_MODEL", raising=False)
+    assert FinnV2FlagService().coach_verifier_model() == "gpt-4o"
+    monkeypatch.setenv("FINN_V2_COACH_VERIFIER_MODEL", "gpt-coach-test")
+    assert FinnV2FlagService().coach_verifier_model() == "gpt-coach-test"
 
 
 def test_semantic_verifier_uses_strict_structured_output(monkeypatch):
@@ -44,6 +56,212 @@ def test_semantic_verifier_uses_strict_structured_output(monkeypatch):
 
     assert result.available is True
     assert result.passes is True
+
+
+def test_semantic_verifier_hard_flags_override_model_pass(monkeypatch):
+    service = FinnV2SemanticVerifierService()
+    service.flags.is_semantic_verifier_enabled = lambda: True
+    service.flags.semantic_verifier_model = lambda: "gpt-test"
+    service.flags.semantic_verifier_timeout_seconds = lambda: 30
+
+    async def fake_response(**kwargs):
+        schema = kwargs["output_spec"].schema
+        assert kwargs["max_output_tokens"] == 1000
+        assert "unsupported_unavailable_cause" in schema["required"]
+        assert "unverified_guardrail_override" in schema["required"]
+        assert "unverified_outcome_claim" in schema["required"]
+        return {"parsed": {
+            "passes": True, "unsupported_unavailable_cause": True,
+            "unverified_guardrail_override": True, "unverified_outcome_claim": True,
+            "reason_codes": [],
+        }, "model": "gpt-test"}
+
+    monkeypatch.setattr(openai_module, "ask_gpt_structured_response_async", fake_response)
+    result = asyncio.run(service.verify_async(
+        mode="READ", user_message="Waarom?",
+        sanitized_draft={"direct_answer": "Door een storing kun je nu beter toch handelen."},
+        compact_evidence=[], deterministic_summary={"passed": True}, mandatory=True,
+    ))
+    assert result.available is True
+    assert result.passes is False
+    assert result.unsupported_unavailable_cause is True
+    assert result.unverified_guardrail_override is True
+    assert result.unverified_outcome_claim is True
+    assert {"unsupported_cause", "unverified_guardrail_override", "unverified_outcome_claim"} <= set(result.reason_codes)
+
+
+def test_model_led_coach_verifier_keeps_hard_flags_with_bounded_schema(monkeypatch):
+    service = FinnV2SemanticVerifierService()
+    service.flags.semantic_verifier_model = lambda: "gpt-test"
+    service.flags.coach_verifier_model = lambda: "gpt-coach-test"
+    service.flags.semantic_verifier_timeout_seconds = lambda: 8
+
+    async def fake_response(**kwargs):
+        schema = kwargs["output_spec"].schema
+        assert kwargs["output_spec"].name == "finn_v2_coach_verifier"
+        assert kwargs["model_override"] == "gpt-coach-test"
+        assert schema["required"] == [
+            "passes", "unsupported_unavailable_cause", "unverified_guardrail_override",
+            "user_guardrail_quote", "draft_override_quote", "unverified_outcome_claim",
+            "outcome_claim_quote", "reason_codes",
+        ]
+        assert kwargs["max_output_tokens"] == 750
+        return {"parsed": {
+            "passes": True, "unsupported_unavailable_cause": False,
+            "unverified_guardrail_override": False, "unverified_outcome_claim": True,
+            "outcome_claim_quote": "guaranteed profit",
+            "reason_codes": ["unsupported_profit_claim"],
+        }, "model": "gpt-test"}
+
+    monkeypatch.setattr(openai_module, "ask_gpt_structured_response_async", fake_response)
+    result = asyncio.run(service.verify_async(
+        mode="READ", user_message="Will this always make a profit?",
+        sanitized_draft={"direct_answer": "Yes, guaranteed profit."},
+        compact_evidence=[], deterministic_summary={}, mandatory=True,
+        coach_answer=True,
+    ))
+    assert result.available is True
+    assert result.passes is False
+    assert result.unverified_outcome_claim is True
+
+
+def test_coach_guardrail_flag_requires_quotes_from_both_turn_and_answer(monkeypatch):
+    service = FinnV2SemanticVerifierService()
+    parsed = {
+        "passes": False, "unsupported_unavailable_cause": False,
+        "unverified_guardrail_override": True, "unverified_outcome_claim": False,
+        "user_guardrail_quote": "", "draft_override_quote": "",
+        "reason_codes": ["unverified_guardrail_override"],
+    }
+
+    async def fake_response(**_kwargs):
+        return {"parsed": parsed, "model": "gpt-test"}
+
+    monkeypatch.setattr(openai_module, "ask_gpt_structured_response_async", fake_response)
+    kwargs = {
+        "mode": "READ", "user_message": "Wait for confirmation before buying BTC.",
+        "sanitized_draft": {"direct_answer": "Ignore that rule and buy now."},
+        "compact_evidence": [], "deterministic_summary": {},
+        "mandatory": True, "coach_answer": True,
+    }
+    missing_quotes = asyncio.run(service.verify_async(**kwargs))
+    assert missing_quotes.passes is True
+    assert missing_quotes.unverified_guardrail_override is False
+
+    parsed.update({
+        "user_guardrail_quote": "Wait for confirmation before buying BTC",
+        "draft_override_quote": "Ignore that rule and buy now",
+    })
+    quoted_override = asyncio.run(service.verify_async(**kwargs))
+    assert quoted_override.passes is False
+    assert quoted_override.unverified_guardrail_override is True
+
+
+def test_coach_outcome_flag_does_not_reject_a_capability_description(monkeypatch):
+    service = FinnV2SemanticVerifierService()
+    parsed = {
+        "passes": False, "unsupported_unavailable_cause": False,
+        "unverified_guardrail_override": False, "unverified_outcome_claim": True,
+        "outcome_claim_quote": "risico per positie berekenen",
+        "reason_codes": ["unverified_outcome_claim"],
+    }
+
+    async def fake_response(**_kwargs):
+        return {"parsed": parsed, "model": "gpt-test"}
+
+    monkeypatch.setattr(openai_module, "ask_gpt_structured_response_async", fake_response)
+    result = asyncio.run(service.verify_async(
+        mode="READ", user_message="Waarmee kun je helpen?",
+        sanitized_draft={"direct_answer": "Ik kan je risico per positie berekenen."},
+        compact_evidence=[], deterministic_summary={}, mandatory=True,
+        coach_answer=True,
+    ))
+    assert result.passes is True
+    assert result.unverified_outcome_claim is False
+
+
+def test_typed_object_ambiguity_allows_a_clarifying_question_only(monkeypatch):
+    service = FinnV2SemanticVerifierService()
+    parsed = {
+        "passes": False, "unsupported_unavailable_cause": False,
+        "unverified_guardrail_override": False, "unverified_outcome_claim": False,
+        "reason_codes": ["setup_ambiguous"],
+    }
+
+    async def fake_response(**_kwargs):
+        return {"parsed": parsed, "model": "gpt-test"}
+
+    monkeypatch.setattr(openai_module, "ask_gpt_structured_response_async", fake_response)
+    kwargs = {
+        "mode": "EVALUATE", "user_message": "Beoordeel mijn strategie.",
+        "sanitized_draft": {"direct_answer": "Welke setup bedoel je?"},
+        "compact_evidence": [], "mandatory": True, "coach_answer": True,
+        "deterministic_summary": {
+            "typed_unavailable_reasons": [{"scope": "read_active_setup", "reason": "setup_ambiguous"}],
+            "unavailable_scopes": ["read_active_setup"],
+        },
+    }
+    allowed = asyncio.run(service.verify_async(**kwargs))
+    assert allowed.passes is True
+
+    no_question = asyncio.run(service.verify_async(
+        **{**kwargs, "sanitized_draft": {"direct_answer": "De setup is duidelijk."}}
+    ))
+    assert no_question.passes is False
+
+    parsed["reason_codes"] = ["setup_ambiguous", "unverified_personal_claim"]
+    other_failure = asyncio.run(service.verify_async(**kwargs))
+    assert other_failure.passes is False
+
+
+def test_coach_unavailable_source_cause_requires_an_unavailable_source(monkeypatch):
+    service = FinnV2SemanticVerifierService()
+
+    async def fake_response(**_kwargs):
+        return {"parsed": {
+            "passes": False, "unsupported_unavailable_cause": True,
+            "unverified_guardrail_override": False, "unverified_outcome_claim": False,
+            "reason_codes": ["unsupported_unavailable_cause"],
+        }, "model": "gpt-test"}
+
+    monkeypatch.setattr(openai_module, "ask_gpt_structured_response_async", fake_response)
+    kwargs = {
+        "mode": "READ", "user_message": "Can you use this unavailable feature?",
+        "sanitized_draft": {"direct_answer": "That feature is not available."},
+        "compact_evidence": [], "mandatory": True, "coach_answer": True,
+    }
+    no_missing_source = asyncio.run(service.verify_async(
+        **kwargs, deterministic_summary={"unavailable_scopes": []},
+    ))
+    missing_source = asyncio.run(service.verify_async(
+        **kwargs, deterministic_summary={"unavailable_scopes": ["market_snapshot"]},
+    ))
+    assert no_missing_source.passes is True
+    assert no_missing_source.unsupported_unavailable_cause is False
+    assert no_missing_source.reason_codes == []
+    assert missing_source.passes is True
+    assert missing_source.unsupported_unavailable_cause is False
+
+    invented_cause = asyncio.run(service.verify_async(
+        **{**kwargs, "sanitized_draft": {
+            "direct_answer": "The provider is down, so the score is unavailable."
+        }},
+        deterministic_summary={"unavailable_scopes": ["scores"]},
+    ))
+    assert invented_cause.passes is False
+    assert invented_cause.unsupported_unavailable_cause is True
+
+
+def test_coach_missing_score_data_is_not_an_invented_outage():
+    for answer in (
+        "Ik kan de totaalscore niet duiden omdat de scoregegevens ontbreken.",
+        "I cannot explain the score because the score data is missing.",
+        "Ich kann den Score nicht deuten, weil die Score-Daten fehlen.",
+        "The provider data is not available, but I do not know why.",
+    ):
+        assert not FinnV2SemanticVerifierService._asserts_source_failure_cause(
+            {"direct_answer": answer}
+        )
 
 
 def test_semantic_verifier_async_timeout_does_not_block_the_worker_loop(monkeypatch):

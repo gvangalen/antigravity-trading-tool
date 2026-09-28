@@ -34,7 +34,7 @@ def classify(case: dict, runtime: dict) -> str:
     if (projection.get("terminal_status") == "completed"
             and not projection.get("final_operation_id")
             and (projection.get("response") or {}).get("content")):
-        return "direct_response_requires_semantic_review"
+        return "coach_response_requires_content_review"
     return "product_or_fixture_review_required"
 
 
@@ -58,16 +58,31 @@ def main() -> None:
             "action" if contract and contract.mode in {"CREATE_PROPOSAL", "ACTION_PROPOSAL"}
             else "conversation"
         )
-        direct_response = bool(
+        answer_without_operation = bool(
             projection.get("terminal_status") == "completed"
             and not projection.get("final_operation_id")
-            and (not calls or all(call.get("name") == "answer_directly" for call in calls))
             and (projection.get("response") or {}).get("content")
+        )
+        direct_response = answer_without_operation and not any(
+            call.get("status") in {"completed", "partial"}
+            and call.get("name") != "answer_directly"
+            for call in calls
+        )
+        failed_checks = [key for key, value in (case.get("checks") or {}).items() if value is False]
+        legacy_operation_conflict = bool(
+            track == "conversation" and answer_without_operation and failed_checks
+            and set(failed_checks) <= {
+                "initial_operation", "final_operation", "action_polarity", "polarity",
+            }
         )
         if track == "action":
             track_result = "contract_passed" if case.get("passed") else "action_failure_requires_review"
-        elif direct_response:
-            track_result = "direct_answer_requires_grounding_review"
+        elif answer_without_operation:
+            track_result = "coach_answer_requires_content_grounding_review"
+        elif projection.get("terminal_status") == "clarification_required":
+            track_result = "clarification_requires_context_review"
+        elif projection.get("terminal_status") == "unavailable":
+            track_result = "typed_limit_requires_evidence_review"
         else:
             track_result = "legacy_checks_passed" if case.get("passed") else "conversation_failure_requires_review"
         cases.append({
@@ -77,6 +92,16 @@ def main() -> None:
             "track": track,
             "track_result": track_result,
             "direct_response_without_operation": direct_response,
+            "answer_without_operation": answer_without_operation,
+            "legacy_operation_id_conflict_only": legacy_operation_conflict,
+            "model_tool_names": [call.get("name") for call in calls],
+            "evidence_scopes": [
+                {"scope": item.get("scope"), "status": item.get("status"),
+                 "reason": item.get("reason")}
+                for call in calls
+                for item in ((call.get("result") or {}).get("results") or [])
+                if isinstance(item, dict)
+            ],
             "expected_operation_id": case.get("expected_operation_id"),
             "observed_operation_id": projection.get("final_operation_id"),
             "terminal_status": projection.get("terminal_status"),
@@ -89,7 +114,7 @@ def main() -> None:
                 for call in calls
             ],
             "fixture_required_inputs_match_registry": case.get("fixture_required_inputs_match_registry"),
-            "failed_legacy_checks": [key for key, value in (case.get("checks") or {}).items() if value is False],
+            "failed_legacy_checks": failed_checks,
         })
     output = {
         "source_artifact": str(Path(args.input).resolve()),

@@ -521,6 +521,7 @@ class FinnV2RuntimeContractRepository(FinnV2RepositoryTransactionMixin):
         supersedes_response_id: str | None = None,
         answer_kind: str | None = None,
         uses_previous_response: bool = False,
+        response_id_reusable: bool = True,
     ) -> FinnV2RuntimeContract:
         """Keep the model exchange on the existing owner-bound run contract."""
         if not response_id or not answer.strip():
@@ -544,6 +545,7 @@ class FinnV2RuntimeContractRepository(FinnV2RepositoryTransactionMixin):
             "answer": answer,
             "answer_kind": answer_kind,
             "uses_previous_response": uses_previous_response,
+            "response_id_reusable": response_id_reusable,
             "conversation_id": row.conversation_id,
             "run_id": row.run_id,
             "supersedes_response_id": supersedes_response_id,

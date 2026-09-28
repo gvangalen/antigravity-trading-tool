@@ -234,6 +234,8 @@ class FinnResponsesResult:
     horizon_classification_question: bool = False
     resumed_clarification_reason: str | None = None
     uses_previous_response: bool = False
+    model_led_coach: bool = False
+    response_id_reusable: bool = True
 
 
 class FinnResponsesLoop:
@@ -243,9 +245,10 @@ class FinnResponsesLoop:
         client: Any,
         executor: Callable[[FinnResponsesToolCall], Awaitable[dict[str, Any]]],
         catalog: FinnResponsesToolCatalog | None = None,
-        model: str = "gpt-4o-mini",
+        model: str = "gpt-6-sol",
+        clarification_model: str = "gpt-4o",
         max_rounds: int = 4,
-        provider_timeout_seconds: float = 12.0,
+        provider_timeout_seconds: float = 16.0,
         tool_timeout_seconds: float = 4.0,
         max_tool_calls: int = 10,
         on_tool_result: Callable[[str, tuple[dict[str, Any], ...]], Awaitable[None]] | None = None,
@@ -254,6 +257,7 @@ class FinnResponsesLoop:
         self.executor = executor
         self.catalog = catalog or FinnResponsesToolCatalog()
         self.model = model
+        self.clarification_model = clarification_model
         self.max_rounds = max_rounds
         self.provider_timeout_seconds = provider_timeout_seconds
         self.tool_timeout_seconds = tool_timeout_seconds
@@ -266,8 +270,11 @@ class FinnResponsesLoop:
         message: str,
         instructions: str,
         previous_response_id: str | None = None,
+        verified_turn_context: dict[str, Any] | None = None,
         previous_verified_answer: str | None = None,
         previous_tool_availability: tuple[dict[str, str], ...] = (),
+        previous_terminal_status: str | None = None,
+        previous_terminal_reason: str | None = None,
         antecedent_verified_answer: str | None = None,
         guided_operation_id: str | None = None,
         resuming_clarification: bool = False,
@@ -283,20 +290,35 @@ class FinnResponsesLoop:
         horizon_classification_check: Callable[[], bool] | None = None,
         locale: str | None = None,
         force_read_repair: bool = False,
+        model_led_coach: bool = False,
     ) -> FinnResponsesResult:
         verified_context = (
             f"Earlier verified FINN answer: {antecedent_verified_answer}\n"
             f"Immediately preceding verified FINN answer: {previous_verified_answer or ''}"
             if antecedent_verified_answer else (previous_verified_answer or "")
         )
-        if verified_context and previous_answer_only and previous_tool_availability:
+        if verified_turn_context:
+            verified_context += (
+                "\nVerified preceding-turn context (persisted FINN evidence, not fresh market data): "
+                + json.dumps(verified_turn_context, ensure_ascii=False, default=str)
+            )
+        elif verified_context and previous_answer_only and previous_tool_availability:
             verified_context += (
                 "\nTyped availability from that verified run (not fresh market data): "
                 + json.dumps(previous_tool_availability, ensure_ascii=False)
             )
+        if verified_context and previous_terminal_status == "clarification_required":
+            verified_context += (
+                "\nThe preceding answer was a verified clarification, not an assessment. "
+                "Its typed reason was " + json.dumps(previous_terminal_reason or "choice_required")
+                + ". Explain or restate only why that choice is needed; do not infer missing "
+                "profile, market evidence, or suitability from unrelated tool statuses."
+            )
         current_input: list[dict[str, Any]] = (
             [{"role": "assistant", "content": verified_context}] if verified_context else []
         ) + [{"role": "user", "content": message}]
+        initial_input = list(current_input)
+        tool_exchange: list[dict[str, Any]] = []
         prior_id = None if previous_answer_only or force_read_repair else previous_response_id
         trace: list[dict[str, Any]] = []
         seen_call_ids: set[str] = set()
@@ -305,6 +327,8 @@ class FinnResponsesLoop:
         repair_tool_name: str | None = None
         repair_attempts: dict[str, int] = {}
         repair_exhausted = False
+        incomplete_output_retry_used = False
+        output_token_override: int | None = None
         for _ in range(self.max_rounds):
             remaining = remaining_lifecycle_seconds()
             if remaining is not None and remaining <= 3.25:
@@ -354,9 +378,10 @@ class FinnResponsesLoop:
                     "when it has been answered. Do not claim that a conversational answer "
                     "changed a saved setup or proves personal suitability."
                 )
+            locale_instruction = ""
             if locale in {"nl", "en", "de"}:
                 language = {"nl": "Dutch", "en": "English", "de": "German"}[locale]
-                turn_instructions += (
+                locale_instruction = (
                     f"\nWrite the entire user-facing response in {language}, including "
                     "headings, labels, follow-up questions and tool-result summaries. "
                     "This is the effective language selected by the backend from the saved "
@@ -364,9 +389,17 @@ class FinnResponsesLoop:
                     "different output language from the question, prior turns, or tool evidence. Preserve "
                     "proper names, tickers and quoted user values unchanged."
                 )
+                turn_instructions += locale_instruction
             turn_instructions += (
                 "\nAddress the trader directly as 'you' in the selected language; never "
                 "narrate a user-facing answer as 'the user is considering' or a case report. "
+                "A reflective question about the user's own stated decision rule can be "
+                "answered directly, without a FINN tool, when it asks for reasoning rather "
+                "than saved account facts or today's market conditions. Attribute the rule "
+                "to the user, distinguish a possible process benefit from a proven trading "
+                "outcome, and ask at most one useful follow-up. Use FINN reads when the answer "
+                "actually needs owner-scoped or current facts; unavailable market data does "
+                "not prevent discussing the user's decision process. "
                 "Match the structure of the user's question. When they ask for a numbered "
                 "set of priorities, give that number of distinct numbered, preparatory "
                 "actions and separately name what to avoid. Base each action on verified "
@@ -385,7 +418,10 @@ class FinnResponsesLoop:
                     "verified answer from the same owner-scoped conversation. Both are authoritative "
                     "for this follow-up, with the immediately preceding answer taking precedence; the "
                     "Responses cursor may contain an earlier unverified draft "
-                    "that the user never saw. Do not treat that draft as the prior answer."
+                    "that the user never saw. Do not treat that draft as the prior answer. "
+                    "If the follow-up asks why a prior process suggestion was made, explain "
+                    "the verified rationale and its limits; do not convert that question "
+                    "into a fresh market assessment unless the user requests one."
                 )
             if answering_previous_question:
                 turn_instructions += (
@@ -421,6 +457,19 @@ class FinnResponsesLoop:
                     "\nExplain only the preceding verified answer and its already verified "
                     "evidence. No new owner-scoped or market facts were fetched this turn."
                 )
+            if any(
+                item.get("scope") == "read_asset_scores"
+                for call in trace
+                for item in (call.get("result") or {}).get("results", [])
+            ):
+                turn_instructions += (
+                    "\nFor dated score evidence, answer in one brief paragraph without headings "
+                    "or bullet lists. Include only scores actually present in the typed tool result, "
+                    "name its as_of date and say plainly when the source is stale. A historical "
+                    "score is not today's market reading or a trading recommendation. Do not "
+                    "offer a fresh score calculation or live market check unless a tool in this "
+                    "turn actually made that source available."
+                )
             limited_evaluations = [
                 item.get("result") or {}
                 for item in trace
@@ -441,14 +490,74 @@ class FinnResponsesLoop:
                     "must become available. Do not list internal scope names to the user."
                 )
                 turn_instructions += "\nCurrent user question (quoted data): " + json.dumps(message, ensure_ascii=False)
+            if model_led_coach:
+                # The model-led route must not inherit the legacy answer-shaping rules above.
+                turn_instructions = instructions + locale_instruction
+                if any(
+                    item.get("reason") == "setup_ambiguous"
+                    for call in trace
+                    for item in ((call.get("result") or {}).get("results") or [])
+                    if isinstance(item, dict)
+                ):
+                    turn_instructions += (
+                        "\nA tool could not identify one owner-scoped setup. If the answer needs "
+                        "that setup, ask which setup the trader means; answer independent parts "
+                        "from other available evidence. Do not claim how many matching setups "
+                        "exist unless the tool returned a count."
+                    )
+                if any(
+                    item.get("scope") == "read_active_setup" and item.get("status") == "completed"
+                    for call in trace
+                    for item in ((call.get("result") or {}).get("results") or [])
+                    if isinstance(item, dict)
+                ):
+                    turn_instructions += (
+                        "\nA completed read_active_setup identifies the active setup even if "
+                        "its data also lists other setups. Describe that active setup and state "
+                        "which linked objects could not be resolved; do not ask the trader to "
+                        "choose a setup unless the setup read itself is ambiguous."
+                    )
+                if any(
+                    item.get("reason") == "report_not_found"
+                    for call in trace
+                    for item in ((call.get("result") or {}).get("results") or [])
+                    if isinstance(item, dict)
+                ):
+                    turn_instructions += (
+                        "\nThe owner-scoped report query returned report_not_found: no saved "
+                        "report was found. Say that plainly; do not imply a provider outage. "
+                        "A completed review-history read with items=[] likewise means no "
+                        "saved reviews were found."
+                    )
+                if previous_verified_answer:
+                    turn_instructions += (
+                        "\nThe preceding verified answer in the input is what the trader saw. "
+                        "Explain that answer when asked, rather than an unseen model draft."
+                    )
+                if resuming_clarification and original_user_request:
+                    turn_instructions += (
+                        "\nThe trader is answering a clarification for this original request: "
+                        + json.dumps(original_user_request, ensure_ascii=False)
+                    )
+                if limited_evaluations:
+                    turn_instructions += (
+                        "\nA requested evaluation was attempted, but required data were unavailable. "
+                        "Do not repeat it; state its limit and answer only what the available facts support."
+                    )
             kwargs: dict[str, Any] = {
-                "model": self.model,
+                "model": (
+                    self.clarification_model
+                    if proposal_selected and trace and trace[-1]["status"] == "needs_input"
+                    else self.model
+                ),
                 "instructions": turn_instructions,
                 "input": current_input,
                 "tools": definitions,
                 "parallel_tool_calls": False,
                 "store": True,
-                "max_output_tokens": 700 if not trace else 350,
+                "max_output_tokens": output_token_override or (
+                    1000 if model_led_coach and trace else 700 if not trace else 350
+                ),
             }
             if next_decision_from_previous:
                 kwargs["text"] = conditional_next_step_format() if conditional_next_step_from_previous else {"format": {
@@ -506,7 +615,7 @@ class FinnResponsesLoop:
                         "setup instead."
                     )
                 kwargs["instructions"] = turn_instructions
-            elif limited_evaluations:
+            elif limited_evaluations and not model_led_coach:
                 requested_focus = response_focus_check() if response_focus_check is not None else None
                 logger.info("FINN limited evaluation response focus=%s", requested_focus or "unclassified")
                 kwargs["text"] = limited_evaluation_format(requested_focus)
@@ -582,6 +691,11 @@ class FinnResponsesLoop:
                 kwargs["instructions"] = turn_instructions
             if prior_id:
                 kwargs["previous_response_id"] = prior_id
+            if kwargs["model"] != self.model:
+                # Response cursors are model-specific in practice. Replay the typed
+                # function-call exchange instead of crossing models with that cursor.
+                kwargs.pop("previous_response_id", None)
+                kwargs["input"] = initial_input + tool_exchange
             if (proposal_selected or repair_exhausted or limited_evaluations
                     or previous_answer_only
                     or (tool_rounds >= 2 and not repair_tool_name
@@ -694,9 +808,38 @@ class FinnResponsesLoop:
                 )
                 raise
             except Exception as exc:
+                provider_code = getattr(exc, "code", None)
+                provider_body = getattr(exc, "body", None)
+                if isinstance(provider_body, dict):
+                    provider_code = provider_code or (provider_body.get("error") or {}).get("code")
+                if provider_code in {"credit_balance_exhausted", "insufficient_quota"}:
+                    raise FinnResponsesError("responses_provider_quota_unavailable") from exc
                 raise FinnResponsesError("responses_provider_error") from exc
             if getattr(response, "status", "completed") != "completed":
+                incomplete_reason = str(getattr(getattr(response, "incomplete_details", None), "reason", "") or "")
+                remaining_after = remaining_lifecycle_seconds()
+                if (
+                    incomplete_reason == "max_output_tokens"
+                    and not incomplete_output_retry_used
+                    and (remaining_after is None or remaining_after > 7)
+                ):
+                    incomplete_output_retry_used = True
+                    output_token_override = min(kwargs["max_output_tokens"] * 2, 1400)
+                    continue
                 raise FinnResponsesError("responses_incomplete")
+            # A successful canonical provider call proves that a shared quota
+            # breaker from an earlier failure is stale. Manual policy blocks
+            # remain authoritative in get_ai_availability().
+            from backend.services.ai_availability_service import get_ai_availability
+            from backend.utils import openai_client
+
+            availability = get_ai_availability() if self.client is openai_client.async_client else {}
+            if (
+                availability.get("reason") == "ai_unavailable_budget"
+                and availability.get("source") != "environment"
+            ):
+                openai_client.clear_openai_runtime_breaker()
+            output_token_override = None
             response_id = str(getattr(response, "id", "") or "")
             if not response_id:
                 raise FinnResponsesError("responses_missing_id")
@@ -730,7 +873,7 @@ class FinnResponsesLoop:
                         if not reason or not decision:
                             raise FinnResponsesError("responses_next_decision_incomplete")
                         answer = f"{reason} {decision}"
-                elif limited_evaluations:
+                elif limited_evaluations and not model_led_coach:
                     evaluation_evidence = [
                         item for evaluation in limited_evaluations
                         for item in (evaluation.get("results") or [])
@@ -757,10 +900,17 @@ class FinnResponsesLoop:
                     horizon_classification_check() if horizon_classification_check is not None else False,
                     resumed_clarification_reason if resuming_clarification else None,
                     previous_answer_only,
+                    model_led_coach,
+                    response_id_reusable=kwargs["model"] == self.model,
                 )
             tool_rounds += 1
             prior_id = response_id
             current_input = []
+            tool_exchange.extend(
+                {"type": "function_call", "call_id": str(item.call_id),
+                 "name": str(item.name), "arguments": str(item.arguments)}
+                for item in calls
+            )
             conflicting_proposals = sum(
                 self.catalog.is_proposal_tool(str(getattr(item, "name", "") or ""))
                 for item in calls
@@ -865,7 +1015,10 @@ class FinnResponsesLoop:
                     "provider_elapsed_ms": provider_elapsed_ms,
                     "tool_elapsed_ms": round((time.perf_counter() - tool_started) * 1000, 2),
                 })
-                logger.info("FINN Responses tool completed name=%s status=%s", tool_name, output.get("status", "error"))
+                logger.info(
+                    "FINN Responses tool completed name=%s status=%s reason=%s",
+                    tool_name, output.get("status", "error"), output.get("reason", ""),
+                )
                 if self.on_tool_result is not None:
                     checkpoint_started = time.perf_counter()
                     logger.info("FINN Responses checkpoint starting name=%s", tool_name)
@@ -882,6 +1035,7 @@ class FinnResponsesLoop:
                     "call_id": call_id,
                     "output": json.dumps(output, default=str),
                 })
+            tool_exchange.extend(current_input)
             if (
                 response_focus_check is not None
                 and response_focus_check() == "calculation"
@@ -899,6 +1053,7 @@ class FinnResponsesLoop:
                 return FinnResponsesResult(
                     "Static calculation from verified saved strategy levels.",
                     response_id, tuple(trace), response_focus="calculation",
+                    response_id_reusable=False,
                 )
             if resume_evaluation_operation_id and not any(
                 (item.get("result") or {}).get("evaluation_operation_id") == resume_evaluation_operation_id
@@ -915,9 +1070,13 @@ class FinnResponsesLoop:
                 if result.get("scope") == "read_active_setup"
             ]
             if (
-                not proposal_selected
+                not model_led_coach
+                and not proposal_selected
                 and any(result.get("reason") == "setup_ambiguous" for result in setup_results)
                 and not any(result.get("status") == "completed" for result in setup_results)
             ):
-                return FinnResponsesResult("A setup choice is required.", response_id, tuple(trace))
+                return FinnResponsesResult(
+                    "A setup choice is required.", response_id, tuple(trace),
+                    response_id_reusable=False,
+                )
         raise FinnResponsesError("responses_tool_round_limit")

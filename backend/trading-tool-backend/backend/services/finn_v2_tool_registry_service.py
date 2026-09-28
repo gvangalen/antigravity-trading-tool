@@ -19,7 +19,13 @@ class FinnV2ToolRegistryService:
             ToolDefinition(name="read_linked_bot", description="Read the bot linked to the strategy.", depends_on=["read_linked_strategy"]),
             ToolDefinition(name="read_bot_status", description="Read the runtime status of the linked bot.", depends_on=["read_linked_bot"]),
             ToolDefinition(name="read_watchlist", description="Read the current user watchlist and whether the selected asset is already present.", depends_on=["read_active_asset"]),
-            ToolDefinition(name="read_portfolio", description="Read the compact portfolio state."),
+            ToolDefinition(
+                name="read_portfolio",
+                description=(
+                    "Read owner-scoped Paper-bot portfolio valuation, budgets, balances and exposure. "
+                    "This source does not contain trade transaction history, tax records or tax calculations."
+                ),
+            ),
             ToolDefinition(name="read_latest_report", description="Read compact metadata for the latest report.", depends_on=["read_active_asset"]),
             ToolDefinition(name="read_review_history", description="Read historical reviews and decisions when available, not recently saved setup or strategy details.", depends_on=["read_active_asset"]),
         ]

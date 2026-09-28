@@ -130,6 +130,11 @@ class FinnResponsesToolCatalog:
         })
         for name, read_tools in self.read_tools.items():
             description = " ".join(self.read_definitions[tool].description for tool in read_tools)
+            if name == "get_my_profile_and_risk_style":
+                description += (
+                    " Call only when the answer needs this user's saved profile or risk style. "
+                    "A general explanation of a trading concept does not need this read."
+                )
             if name == "get_active_plan_and_strategy":
                 description += (
                     " Use this existing owner-scoped read for static arithmetic from saved "

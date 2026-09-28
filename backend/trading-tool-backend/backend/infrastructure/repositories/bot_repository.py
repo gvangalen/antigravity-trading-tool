@@ -615,6 +615,7 @@ class BotRepository:
                 c.id AS bot_id, 
                 c.name, 
                 COALESCE(p.symbol, st.symbol, 'BTC') AS symbol, 
+                p.bot_id IS NOT NULL AS portfolio_initialized,
                 COALESCE(p.cash_eur, 0) AS cash_eur, 
                 COALESCE(p.position_qty, 0) AS position_qty, 
                 COALESCE(p.invested_eur, 0) AS invested_eur, 
@@ -665,6 +666,7 @@ class BotRepository:
             risk = mapping["risk_profile"]
             
             price = prices.get(sym, 0.0)
+            price_available = qty == 0 or (sym in prices and price > 0)
             pos_val = qty * price
             unrealized = pos_val - invested
             bot_equity = cash + pos_val
@@ -679,6 +681,8 @@ class BotRepository:
             
             bot_states.append({
                 "bot_id": bot_id,
+                "portfolio_initialized": bool(mapping["portfolio_initialized"]),
+                "price_available": price_available,
                 "name": name,
                 "symbol": sym,
                 "cash": cash,

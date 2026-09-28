@@ -22,7 +22,8 @@ class PortfolioToolAdapter:
                 bot_id=row.get("bot_id"),
                 name=row.get("name"),
                 symbol=row.get("symbol"),
-                equity=row.get("equity"),
+                equity=(row.get("equity") if row.get("portfolio_initialized", True)
+                        and row.get("price_available", True) else None),
                 is_active=row.get("is_active"),
                 is_live=row.get("is_live"),
             )
@@ -40,6 +41,8 @@ class PortfolioToolAdapter:
                 {
                     "global": PortfolioGlobalData(**global_payload).dict(),
                     "bots": [row.dict() for row in compact_bots],
+                    "covered_scopes": ["paper_bot_portfolio_valuation", "budget", "exposure"],
+                    "excluded_scopes": ["trade_transaction_history", "tax_records", "tax_calculations"],
                 }
             ),
             "summary": summary,
@@ -58,18 +61,30 @@ class PortfolioToolAdapter:
         reduces its already loaded bot rows and derives the same aggregate
         fields, so an asset-scoped read cannot disclose another position.
         """
-        cash_balance = sum(float(row.get("cash") or 0) for row in rows)
-        invested_value = sum(float(row.get("invested") or 0) for row in rows)
-        current_position_value = sum(float(row.get("position_value") or 0) for row in rows)
-        realized_pnl = sum(float(row.get("realized_pnl") or 0) for row in rows)
         total_budget_limit = sum(float(row.get("budget_total") or 0) for row in rows)
-        total_equity = cash_balance + current_position_value
+        portfolio_complete = bool(rows) and all(
+            row.get("portfolio_initialized", True) for row in rows
+        )
+        valuation_complete = portfolio_complete and all(
+            row.get("price_available", True) for row in rows
+        )
+        cash_balance = sum(float(row.get("cash") or 0) for row in rows) if portfolio_complete else None
+        invested_value = sum(float(row.get("invested") or 0) for row in rows) if portfolio_complete else None
+        realized_pnl = sum(float(row.get("realized_pnl") or 0) for row in rows) if portfolio_complete else None
+        current_position_value = (
+            sum(float(row.get("position_value") or 0) for row in rows)
+            if valuation_complete else None
+        )
+        total_equity = (
+            cash_balance + current_position_value
+            if cash_balance is not None and current_position_value is not None else None
+        )
         allocation_values: dict[str, float] = {}
-        for row in rows:
+        for row in rows if valuation_complete else []:
             symbol = str(row.get("symbol") or "").strip().upper()
             if symbol:
                 allocation_values[symbol] = allocation_values.get(symbol, 0.0) + float(row.get("position_value") or 0)
-        allocations = {"Cash": 100.0} if total_equity <= 0 else {
+        allocations = {} if total_equity is None or total_equity <= 0 else {
             "Cash": round((cash_balance / total_equity) * 100, 2),
             **{
                 symbol: round((value / total_equity) * 100, 2)
@@ -77,12 +92,16 @@ class PortfolioToolAdapter:
             },
         }
         return {
+            "currency": "EUR",
             "total_equity": total_equity,
             "cash_balance": cash_balance,
             "invested_value": invested_value,
             "current_position_value": current_position_value,
             "realized_pnl": realized_pnl,
-            "unrealized_pnl": current_position_value - invested_value,
+            "unrealized_pnl": (
+                current_position_value - invested_value
+                if current_position_value is not None and invested_value is not None else None
+            ),
             "total_budget_limit": total_budget_limit,
             "allocations_pct": allocations,
         }

@@ -268,6 +268,48 @@ def test_completed_run_uses_the_typed_lifecycle_mode_when_delivery_omits_mode():
     assert transition["response_json"]["mode"] == "EVALUATE"
 
 
+def test_action_with_missing_contract_input_is_a_clarification_not_a_completed_write():
+    service = FinnV2RunService(session=object())
+    transition = {}
+    persisted = {}
+    service.runtime_contracts = SimpleNamespace(
+        get_for_run=lambda **_kwargs: asyncio.sleep(0, result=SimpleNamespace(state_json={
+            "final_mode": "ACTION_PROPOSAL",
+            "final_operation_id": "activate_paper_bot",
+            "missing_inputs": ["bot_id"],
+            "guided_state": {"operation_id": "activate_paper_bot", "missing_required_inputs": ["bot_id"]},
+        })),
+        materialize_terminal=lambda **kwargs: asyncio.sleep(0, result=(
+            persisted.update(kwargs) or SimpleNamespace(terminal_projection_json={
+                "terminal_status": kwargs["status"], "response": kwargs["response"],
+            })
+        )),
+    )
+    service.delivery.get_delivery_artifacts = lambda **_kwargs: asyncio.sleep(0, result={
+        "verified_response": {
+            "mode": "ACTION_PROPOSAL", "direct_answer": "Welke paper-bot bedoel je?",
+            "verifier_status": "passed", "proposal_id": None,
+        },
+        "policy_result": {"allowed": True},
+    })
+
+    async def persist_transition(*_args, **kwargs):
+        transition.update(kwargs)
+
+    service.persist_transition = persist_transition
+    asyncio.run(service.complete_run(
+        run_id="missing-paper-bot", user_id=7,
+        phase_outcome=LifecyclePhaseOutcome(
+            terminal_status="completed", interaction_mode="ACTION_PROPOSAL",
+            orchestrator_result_id="orchestrator-missing-paper-bot", verifier_action="deliver",
+        ),
+    ))
+
+    assert persisted["status"] == transition["next_status"] == "clarification_required"
+    assert persisted["mode"] == transition["response_json"]["mode"] == "CLARIFICATION"
+    assert transition["response_json"]["proposal_id"] is None
+
+
 def test_terminal_projection_is_the_same_contract_for_polling_and_sse_consumers():
     service = FinnV2RunService(session=object())
     artifacts = {

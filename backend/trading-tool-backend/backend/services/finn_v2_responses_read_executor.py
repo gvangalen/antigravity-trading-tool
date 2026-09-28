@@ -102,7 +102,18 @@ class FinnResponsesReadExecutor:
             output["evaluation_operation_id"] = contract.operation_id
             output["missing_required_scopes"] = [
                 scope for scope, tool in contract.scope_tool_bindings
-                if scope in contract.required_scopes and tool not in completed
+                if scope in contract.required_scopes and (
+                    tool not in completed
+                    or (
+                        scope == "profile"
+                        and not any(
+                            item["scope"] == tool
+                            and isinstance(item.get("data"), dict)
+                            and item["data"].get("has_profile") is True
+                            for item in results
+                        )
+                    )
+                )
             ]
             output["assessment_status"] = (
                 "insufficient_evidence" if output["missing_required_scopes"]
@@ -135,6 +146,14 @@ class FinnResponsesReadExecutor:
                     "candidate and explain its general role. Do not claim it improves returns "
                     "or is personally suitable without a separate assessment."
                 )
+            if contract.operation_id == "evaluate_portfolio":
+                output["assessment_boundary"] += (
+                    " A Paper bot is configuration, not a live position or executed trade; "
+                    "is_active does not override is_live=false. A budget limit is not available "
+                    "cash, invested capital, or realized performance. An empty profile limits "
+                    "personal suitability assessment, even when the profile read succeeded. "
+                    "Do not suggest putting money to work merely because invested value is zero."
+                )
         if call.name == "get_active_plan_and_strategy":
             output["evidence_boundary"] = (
                 "This is a read of saved setup and strategy configuration, not a current market "
@@ -153,6 +172,17 @@ class FinnResponsesReadExecutor:
                 "the current market satisfies the rule. If the user asks whether a trade "
                 "is personally suitable now, say which evaluation is still needed."
             )
+        if any(
+            item["scope"] == "read_asset_scores" and item["status"] == "completed"
+            for item in results
+        ):
+            output["evidence_boundary"] = (
+                "A dated score is a historical report, not a current market reading. "
+                "When reporting exact saved scores, name their as_of date and stale status. "
+                "Use one short paragraph without headings or a raw backend inventory. "
+                "Do not infer a present trading signal, personal suitability, or a missing score as zero. "
+                "Do not offer to refresh or repeat a score assessment when no fresh score source is available."
+            )
         return output
 
     @staticmethod
@@ -161,6 +191,12 @@ class FinnResponsesReadExecutor:
             value = data.get("as_of") or data.get("timestamp")
             if value:
                 return str(value)
+            daily_scores = data.get("daily_scores")
+            if isinstance(daily_scores, dict) and daily_scores.get("report_date"):
+                return str(daily_scores["report_date"])
+            master_score = data.get("master_score")
+            if isinstance(master_score, dict) and master_score.get("date"):
+                return str(master_score["date"])
         return None
 
     @staticmethod

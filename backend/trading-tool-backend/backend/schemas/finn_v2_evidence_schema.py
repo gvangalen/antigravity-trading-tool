@@ -184,6 +184,7 @@ class WatchlistData(BaseModel):
 
 
 class PortfolioGlobalData(BaseModel):
+    currency: Optional[str] = None
     total_equity: Optional[float] = None
     cash_balance: Optional[float] = None
     invested_value: Optional[float] = None
@@ -206,6 +207,8 @@ class PortfolioBotData(BaseModel):
 class PortfolioData(BaseModel):
     global_: PortfolioGlobalData = Field(default_factory=PortfolioGlobalData, alias="global")
     bots: List[PortfolioBotData] = Field(default_factory=list)
+    covered_scopes: List[str] = Field(default_factory=list)
+    excluded_scopes: List[str] = Field(default_factory=list)
 
     class Config:
         allow_population_by_field_name = True
