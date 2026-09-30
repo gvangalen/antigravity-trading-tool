@@ -8,49 +8,54 @@ commit SHA.
 
 | Field | Value |
 | --- | --- |
-| Phase | `READY_FOR_INDEPENDENT_QA` |
-| Active goal | Correct Paper-bot concept names and per-bot budget readback after the live browser caution verdict |
-| Candidate branch | `codex/finn-bot-budget-readback` ([PR #13](https://github.com/gvangalen/antigravity-trading-tool/pull/13), merged) |
-| Candidate code SHA | `493afb696f609dcda5ac6868a4a10e77ea89118e` |
-| Production SHA | Read the public backend health and frontend build-info. This status-only follow-up has its own SHA, so this file cannot identify that SHA in advance. |
+| Phase | `LOCAL_VALIDATED_AWAITING_CI` |
+| Active goal | Resolve the live coach caution findings: inconsistent FOMO/frustration fallback, unsupported personal confirmation condition, and literal Markdown markers in chat |
+| Candidate branch | `codex/finn-coach-consistency` |
+| Candidate code SHA | `f89187a902319f0b2d0f3813b88b021c8342c178` |
+| Production SHA | Not yet deployed for this candidate; verify from public backend health and frontend build-info after Auto Deploy |
 | Release owner | Build |
 | Last updated | `2026-09-30` |
 
-The user-reported live browser run on `730319fb…` passed the setup, strategy,
-Paper-bot, watchlist, and coaching flows but returned `caution`: the first bot
-concept included its budget phrase in the name, and a later readback called
-€600 a portfolio limit while denying a separate bot budget. The test account's
-Analysis onboarding prevented independent overview-page checks. That run did
-not prove the model name used by production.
+The user reported a `caution` coach verdict from 12 authenticated browser turns on
+older SHA `730319fb5ef91a272cf4c8ff58d9e7fff7fe32f3`: two emotional
+questions received a generic evidence refusal, FINN referred to a confirmation
+condition absent from the active setup, and chat displayed literal `**`.
+That browser run is user-provided evidence, not Build's independent QA verdict.
 
 ## Local Build Evidence
 
-All local runtime probes below used a new isolated Docker Compose project,
-synthetic users, a local PostgreSQL/Redis/API/Celery stack, and the real
-Responses provider. The stack explicitly reported `gpt-6-luna` for chat,
-clarification, and repair with reasoning `none`; the independent selector and
-semantic verifier retain `gpt-4o-mini`. Build did not access the protected QA
-fixture or sealed holdout.
+The local runtime probes used an isolated Docker Compose project with synthetic
+users, PostgreSQL, Redis, API and Celery. The actual Responses route used
+`gpt-6-luna` with reasoning `none` for chat and repair. The independent
+selector and semantic verifier remained on `gpt-4o-mini`. Build did not access
+the protected production QA fixture or sealed holdout.
 
 | Gate | Result | Evidence |
 | --- | --- | --- |
-| Bot concept and budget regressions | `PASS` | The model-suggested name drops the trailing budget clause; the portfolio schema and read output include each owner-scoped bot's `budget_total_eur`. |
-| Worker-driven safe action contracts | `16/16` | `.local-finn-parity-artifacts/bot-budget-action-matrix.json`, SHA-256 `a157d50fb57bf5f26a1144f61c1fcc4e6f61df5c6008e12178ff4d277096b0c8`; zero broker orders, live-trading calls, or live bots. |
-| Affected bot action/readback chain | `PASS` | `.local-finn-parity-artifacts/bot-budget-live-regression.json`, SHA-256 `a613e893f3dd7f4d0a5595356e9f9f2b07f4633810c9ccf3c4e77bd425e6534c`; create at €500 with the exact name, confirm and execute, update to €600, confirm and execute, then read the named bot budget as €600 through `get_portfolio_and_exposure` with polling/SSE parity. Both persisted states remained Paper. |
-| Real-provider selector development | `18/18` | `.local-finn-parity-artifacts/bot-budget-provider-development.json`, SHA-256 `72fd431ccca9254d97b6be5633433aafa463ffa73b778486798dfa62ddaec9ad`. |
-| Real-provider selector regression | `109/109` on rerun | `.local-finn-parity-artifacts/bot-budget-provider-regression-rerun.json`, SHA-256 `1481dd2a1d8a98e0715bafc2562c26d12e42e23ea259727e5024ecaad8646bca`. The first run scored `108/109` (SHA-256 `361b7003dd90e1b0bf98f136015451adc9de0c00dd94bab6bd7930e323cc41fc`): a plan-risk question was once classified as `evaluate_setup` instead of `evaluate_plan`. Three isolated retries gave `evaluate_plan` twice and `evaluate_setup` once. This selector variance remains an open risk outside the bot change. |
-| Backend canonical suite | `2849 passed, 3 skipped` | `python3 -m pytest -q` on this candidate's source tree. |
-| Frontend | `PASS` | `typecheck`, `lint:i18n`, `test:i18n`, `test:commands`, `audit:high` (zero high vulnerabilities), and production `build`; frontend source did not change. |
+| Focused coach regressions | `PASS` | Deterministic tests cover emotional fallback after semantic and condition-bypass rejection, unsaved confirmation phrasing, source-grounded static risk ratios, horizon clarification and follow-up, and explicit attribution of a user-proposed amount. |
+| Worker-driven personal coach conversation | `8/8` | `.local-finn-parity-artifacts/coach-consistency-personal-final-green.json`, SHA-256 `3826cfe87db8ce031e1e047b7ef94328532997d974068731009ba69f120e29cd`. |
+| Final focused horizon/FOMO route | `5/5` | `.local-finn-parity-artifacts/coach-consistency-horizon-candidate.json`, SHA-256 `e75fca06a6088cc7517b91aa5e2cb42fe98662c3dc9c2f428c77dce4c323f40f`. This rerun covers the last verifier changes after the 8-turn run. |
+| Public declassified coach route | `4/4` | `.local-finn-parity-artifacts/coach-consistency-public-candidate.json`, SHA-256 `3e42c035063471665b0e41e1b0ffef6d7b845145c7529da6696f1969677c6fdd`. |
+| Worker-driven safe action contracts | `16/16` | `.local-finn-parity-artifacts/coach-consistency-action-matrix-candidate.json`, SHA-256 `0a3ea3789e7000702e28ac6994c64f54c02ac5ad4abe1f28121d94659990d261`; zero broker orders, live-trading calls, live bots, or production connections. |
+| Real-provider selector development | `18/18` | `.local-finn-parity-artifacts/coach-consistency-provider-development.json`, SHA-256 `3aa88b7b2b22551aa77ddf064cd0228792945fc871bfcb2a7cd843d441c1b5a2`. |
+| Real-provider selector regression | `109/109` | `.local-finn-parity-artifacts/coach-consistency-provider-regression.json`, SHA-256 `4bd3053baf18a4152f644f96dd2b95ac65b2c39c2b3d3f762fc0030daae87b0a`. |
+| Backend canonical suite | `2864 passed, 3 skipped` | `python3 -m pytest -q` on the candidate source tree. |
+| Frontend | `PASS` | `typecheck`, `lint:i18n`, `test:i18n`, `test:commands`, chat text parser tests, `audit:high` (zero vulnerabilities), and production `build` with updated tracked `out/`. |
+
+Intermediate local probes exposed verifier wording and provider variance. They
+were repaired within this batch; the final route runs above are the release
+evidence. Provider output remains variable, so authenticated live acceptance
+still belongs to independent QA.
 
 ## Release and Independent QA
 
 | Gate | Status |
 | --- | --- |
-| Candidate CI | `PASS`: PR run `36692752254` and main run `36693048399`, all five jobs green. |
-| Auto Deploy | `PASS`: run `36693278059` deployed code merge SHA `edde4f65cfb82f221c64066d54375316df9451da`. |
-| Backend health and frontend build-info for code deploy | `PASS`: both HTTP 200 and both reported `edde4f65cfb82f221c64066d54375316df9451da` on `2026-09-30`. |
+| Candidate CI | `NOT_STARTED` |
+| Auto Deploy | `NOT_STARTED` |
+| Backend health and frontend build-info for this candidate | `NOT_STARTED` |
 | Independent live QA for this candidate | `NOT_STARTED`; only the user assigns it after deployment |
 
-Build will verify only Auto Deploy success, public HTTP availability, and exact
-backend/frontend SHA after deployment. QA owns the independent live runtime
-verdict after the user assigns that work.
+After Auto Deploy, Build verifies only successful deployment, public HTTP
+availability and exact backend/frontend SHA. QA owns the authenticated live
+runtime verdict.
