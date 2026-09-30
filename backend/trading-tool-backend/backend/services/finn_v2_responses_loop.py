@@ -49,16 +49,31 @@ def _read_only_stop_loss_coaching(message: str) -> bool:
     )
     explicit_no_write = re.search(
         r"\b(?:wijzig niets|verander niets|zonder iets te wijzigen|zonder iets te veranderen|"
+        r"niet om iets te wijzigen|niet om iets te veranderen|"
         r"do not change|don't change|without changing|ändere nichts)\b", message, re.I,
     )
     coaching_request = re.search(
         r"\b(?:spreek me tegen|denk met me mee|wat vind je|is dit verstandig|"
+        r"hoe kijk je hiernaar|vraag je om coaching|"
         r"should i|would it be wise|talk me out of|was meinst du)\b", message, re.I,
     )
     return bool(
         re.search(r"\b(?:stop.loss|stoploss)\b", message, re.I)
         and re.search(r"\b(?:weghalen|verwijderen|loslaten|remove|delete|entfern\w*)\b", message, re.I)
         and (explicit_no_write or (coaching_request and not direct_change))
+    )
+
+
+def _hypothetical_trade_reflection(message: str) -> bool:
+    """A stated example asking for reflection does not authorize a saved setup."""
+    return bool(
+        re.search(r"\b(?:stel|hypothetisch|suppose|imagine)\b", message, re.I)
+        and re.search(r"\b(?:trades?|transacties?|transactions?)\b", message, re.I)
+        and re.search(r"\b(?:patroon|pattern|reflectie|reflection)\b", message, re.I)
+        and not re.search(
+            r"\b(?:maak|cre[eë]er|sla op|bewaar|wijzig|verwijder|create|save|update|delete)\b",
+            message, re.I,
+        )
     )
 
 
@@ -345,6 +360,18 @@ class FinnResponsesLoop:
         model_led_coach: bool = False,
         rejection_feedback: dict[str, Any] | None = None,
     ) -> FinnResponsesResult:
+        stop_loss_coaching = model_led_coach and _read_only_stop_loss_coaching(message)
+        hypothetical_trade_reflection = model_led_coach and _hypothetical_trade_reflection(message)
+        if stop_loss_coaching or hypothetical_trade_reflection:
+            # These are self-contained coach questions. A preceding setup read
+            # must not become an implied fact about this hypothetical decision.
+            previous_response_id = None
+            verified_turn_context = None
+            previous_verified_answer = None
+            previous_tool_availability = ()
+            previous_terminal_status = None
+            previous_terminal_reason = None
+            antecedent_verified_answer = None
         verified_context = (
             f"Earlier verified FINN answer: {antecedent_verified_answer}\n"
             f"Immediately preceding verified FINN answer: {previous_verified_answer or ''}"
@@ -410,16 +437,15 @@ class FinnResponsesLoop:
         incomplete_output_retry_used = False
         output_token_override: int | None = None
         saved_confirmation_readback = model_led_coach and _saved_confirmation_readback(message)
-        stop_loss_coaching = model_led_coach and _read_only_stop_loss_coaching(message)
         rule_objection = model_led_coach and _rule_objection(message, previous_verified_answer or "")
 
-        def stop_loss_timeout_result() -> FinnResponsesResult:
+        def safe_coach_timeout_result() -> FinnResponsesResult:
             # The runtime contract needs an exchange identifier and nonempty
             # draft even when the provider never returned a response. This
             # synthetic cursor is never reused as a provider response ID.
             return FinnResponsesResult(
-                "Read-only stop-loss coaching fallback.",
-                prior_id or f"local-safe-stoploss-{uuid.uuid4().hex}",
+                "Read-only coaching fallback.",
+                prior_id or f"local-safe-coach-{uuid.uuid4().hex}",
                 tuple(trace), "provider_unavailable", model_led_coach=True,
                 response_id_reusable=False,
             )
@@ -427,8 +453,8 @@ class FinnResponsesLoop:
         for _ in range(self.max_rounds):
             remaining = remaining_lifecycle_seconds()
             if remaining is not None and remaining <= 3.25:
-                if stop_loss_coaching and not proposal_selected:
-                    return stop_loss_timeout_result()
+                if (stop_loss_coaching or hypothetical_trade_reflection) and not proposal_selected:
+                    return safe_coach_timeout_result()
                 raise FinnResponsesError("responses_lifecycle_budget_exhausted")
             retry_target_domain = (
                 str(trace[-1]["result"].get("target_domain") or "")
@@ -614,8 +640,16 @@ class FinnResponsesLoop:
                         "\nThe trader asks for read-only coaching about "
                         "removing a stop-loss. Address that concern directly as a read-only "
                         "process question. Do not claim to know the saved stop or suggest a "
-                        "replacement level. A tool read is unnecessary unless the trader "
-                        "asks for a saved setting."
+                        "replacement level. Do not suggest that a mental exit rule is an "
+                        "equivalent substitute for the protective order. A tool read is "
+                        "unnecessary unless the trader asks for a saved setting."
+                    )
+                if hypothetical_trade_reflection:
+                    turn_instructions += (
+                        "\nThe trader describes a hypothetical example for reflection. "
+                        "Call it an example, not saved trade history or actual performance. "
+                        "Answer the requested pattern and one process rule; do not prepare "
+                        "a setup or other persistent change."
                     )
                 if resuming_clarification and original_user_request:
                     turn_instructions += (
@@ -791,7 +825,7 @@ class FinnResponsesLoop:
                 )
                 if saved_confirmation_readback:
                     kwargs["tool_choice"] = {"type": "function", "name": "get_active_plan_and_strategy"}
-                elif stop_loss_coaching or rule_objection:
+                elif stop_loss_coaching or rule_objection or hypothetical_trade_reflection:
                     kwargs["tool_choice"] = "none"
             elif trace[-1]["status"] == "retry":
                 kwargs["tool_choice"] = "required"
@@ -862,8 +896,8 @@ class FinnResponsesLoop:
                     provider_task.add_done_callback(
                         lambda task: task.exception() if not task.cancelled() else None
                     )
-                    if stop_loss_coaching and not proposal_selected:
-                        return stop_loss_timeout_result()
+                    if (stop_loss_coaching or hypothetical_trade_reflection) and not proposal_selected:
+                        return safe_coach_timeout_result()
                     if trace and not proposal_selected:
                         return FinnResponsesResult(
                             "", prior_id or "", tuple(trace), "provider_unavailable",
@@ -882,8 +916,8 @@ class FinnResponsesLoop:
                     "FINN Responses provider round timed out round=%d elapsed_seconds=%.2f",
                     tool_rounds + 1, time.perf_counter() - provider_started,
                 )
-                if stop_loss_coaching and not proposal_selected:
-                    return stop_loss_timeout_result()
+                if (stop_loss_coaching or hypothetical_trade_reflection) and not proposal_selected:
+                    return safe_coach_timeout_result()
                 if trace and not proposal_selected:
                     return FinnResponsesResult(
                         "", prior_id or "", tuple(trace), "provider_unavailable",

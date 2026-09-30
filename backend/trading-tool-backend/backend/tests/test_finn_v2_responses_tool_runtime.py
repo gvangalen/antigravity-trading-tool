@@ -9,7 +9,7 @@ import pytest
 from backend.domain.finn_v2_operation_registry import FinnV2OperationRegistry
 from backend.services.finn_v2_responses_loop import (
     FinnResponsesError, FinnResponsesLoop, _read_only_stop_loss_coaching,
-    _saved_confirmation_readback,
+    _saved_confirmation_readback, _hypothetical_trade_reflection,
 )
 from backend.services.finn_v2_responses_tool_catalog import (
     FinnResponsesToolCatalog,
@@ -3594,6 +3594,30 @@ def test_model_led_completed_read_is_not_reaudited_as_a_missing_action():
     assert result.proposal_analysis is None
     assert result.response.text == "Je actieve asset is BTC."
     assert len(result.response.tool_trace) == 1
+    front.relevance_guard.requested_action_contract.assert_not_awaited()
+
+
+@pytest.mark.parametrize("question", [
+    "Ik wil mijn stop-loss weghalen omdat BTC anders te vroeg wordt uitgestopt. Ik vraag je om coaching, niet om iets te wijzigen. Hoe kijk je hiernaar?",
+    "Stel: ik nam deze maand 8 impulsieve trades, 6 verlies en 2 winst, samen -4,2%. Wat is het belangrijkste patroon en welke ene regel zou ik testen?",
+])
+def test_read_only_coach_questions_cannot_be_reaudited_as_mutations(question):
+    fake = FakeResponses(response("coach-direct", text="Laten we dit als reflectie bekijken."))
+    front = object.__new__(FinnResponsesFrontDoor)
+    front.client = SimpleNamespace(responses=fake)
+    front.user_id = 21
+    front.run_id = "run-read-only-coach"
+    front.model_led_coach = True
+    front.proposals = FinnResponsesProposalSelection()
+    front.relevance_guard = SimpleNamespace(
+        requested_action_contract=AsyncMock(return_value="create_setup"),
+    )
+    result = asyncio.run(front.run(
+        message=question, instructions="unused", conversation_context={},
+        verified_asset=None,
+    ))
+    assert result.proposal_analysis is None
+    assert fake.requests[0]["tool_choice"] == "none"
     front.relevance_guard.requested_action_contract.assert_not_awaited()
 
 
@@ -7653,7 +7677,113 @@ def test_saved_confirmation_question_requires_a_read_and_uses_verified_absence()
     assert answer.status == "completed"
     assert answer.reason == "saved_confirmation_readback"
     assert "geen concrete bevestigings- of entryregel" in answer.text
+    assert "BTC 4H" in answer.text
     assert "betrouwbare gegevens" not in answer.text
+
+
+def test_saved_confirmation_question_names_ambiguous_matching_setups():
+    question = (
+        "Welke bevestigingsvoorwaarde staat concreet in mijn opgeslagen 4H-setup? "
+        "En welke van mijn BTC-setups bedoel je eigenlijk?"
+    )
+    setups = [
+        {"setup_id": 7, "name": "BTC 4H Voorzichtig", "symbol": "BTC", "timeframe": "4H"},
+        {"setup_id": 8, "name": "BTC 4H Alternatief", "symbol": "BTC", "timeframe": "4H"},
+        {"setup_id": 9, "name": "BTC DCA", "symbol": "BTC", "timeframe": "1D"},
+    ]
+    result = FinnResponsesResult(
+        "Er staat geen regel in je setup.", "saved-rule-multi",
+        ({"result": {"results": [{"scope": "read_active_setup", "status": "completed",
+                                "data": {**setups[0], "setups": setups}}]}},),
+        model_led_coach=True,
+    )
+    answer = asyncio.run(FinnResponsesAnswerVerifier().verify(
+        message=question, result=result, locale="nl",
+    ))
+    assert answer.reason == "saved_confirmation_readback"
+    assert "BTC 4H Voorzichtig" in answer.text
+    assert "BTC 4H Alternatief" in answer.text
+    assert "BTC DCA" not in answer.text
+    assert "Welke bedoel je?" in answer.text
+    assert "geen concrete bevestigings" not in answer.text
+
+
+def test_hypothetical_trade_reflection_uses_no_action_tools():
+    question = (
+        "Stel: ik nam deze maand 8 impulsieve trades, 6 verlies en 2 winst, "
+        "samen -4,2%. Wat is volgens jou het belangrijkste patroon en welke "
+        "ene regel zou ik volgende week testen?"
+    )
+    assert _hypothetical_trade_reflection(question)
+    assert not _hypothetical_trade_reflection("Maak een setup om mijn trades te evalueren.")
+    assert not FinnResponsesAnswerVerifier._unsupported_personal_confirmation(
+        "Noteer je bevestigingsvoorwaarde voordat je een trade overweegt.", (), question,
+    )
+    assert not FinnResponsesAnswerVerifier._unsupported_personal_confirmation(
+        "Gebruik alleen een bevestigingsvoorwaarde die je vooraf formuleert.", (), question,
+    )
+    assert FinnResponsesAnswerVerifier._unsupported_personal_confirmation(
+        "Je bevestigingsvoorwaarde is opgeslagen en geldt voor deze trade.", (), question,
+    )
+    assert FinnResponsesAnswerVerifier._unsupported_personal_confirmation(
+        "Volg je bevestigingsvoorwaarde.", (),
+        "Welke voorwaarde staat in mijn opgeslagen setup?",
+    )
+    fake = FakeResponses(response("reflection", text="Het patroon is impulsiviteit. Test eerst een vaste pauze."))
+    loop = FinnResponsesLoop(client=SimpleNamespace(responses=fake), executor=AsyncMock())
+    result = asyncio.run(loop.run(
+        message=question, instructions=FinnResponsesFrontDoor._model_led_instructions("nl"),
+        model_led_coach=True, locale="nl",
+    ))
+    assert fake.requests[0]["tool_choice"] == "none"
+    assert result.tool_trace == ()
+
+
+@pytest.mark.parametrize("question", [
+    "Ik wil mijn stop-loss weghalen omdat BTC anders te vroeg wordt uitgestopt. Ik vraag je om coaching, niet om iets te wijzigen. Hoe kijk je hiernaar?",
+    "Stel: ik nam 8 impulsieve trades, 6 verlies en 2 winst. Wat is het patroon en welke regel zou ik testen?",
+])
+def test_standalone_coach_questions_do_not_inherit_unrelated_setup_read(question):
+    fake = FakeResponses(response("coach", text="Ik beoordeel alleen je huidige vraag."))
+    loop = FinnResponsesLoop(client=SimpleNamespace(responses=fake), executor=AsyncMock())
+    result = asyncio.run(loop.run(
+        message=question, instructions=FinnResponsesFrontDoor._model_led_instructions("nl"),
+        previous_response_id="previous-setup-response",
+        previous_verified_answer="Je BTC 4H-setup heeft geen opgeslagen bevestigingsregel.",
+        verified_turn_context={"answer": "BTC 4H-setup", "evidence": [{"scope": "read_active_setup"}]},
+        model_led_coach=True, locale="nl",
+    ))
+    assert fake.requests[0].get("previous_response_id") is None
+    assert [item["role"] for item in fake.requests[0]["input"]] == ["user"]
+    assert not result.uses_previous_response
+
+
+def test_hypothetical_trade_reflection_has_safe_timeout_reply():
+    question = (
+        "Stel: ik nam deze maand 8 impulsieve trades, 6 verlies en 2 winst, "
+        "samen -4,2%. Wat is het belangrijkste patroon en welke ene regel zou ik testen?"
+    )
+
+    async def slow_response(**_kwargs):
+        await asyncio.sleep(0.05)
+
+    provider = SimpleNamespace(create=AsyncMock(side_effect=slow_response))
+    loop = FinnResponsesLoop(
+        client=SimpleNamespace(responses=provider), executor=AsyncMock(),
+        provider_timeout_seconds=0.01,
+    )
+    result = asyncio.run(loop.run(
+        message=question, instructions=FinnResponsesFrontDoor._model_led_instructions("nl"),
+        model_led_coach=True, locale="nl",
+    ))
+    assert result.answer_kind == "provider_unavailable"
+    assert not result.response_id_reusable
+    answer = asyncio.run(FinnResponsesAnswerVerifier().verify(
+        message=question, result=result, locale="nl",
+    ))
+    assert answer.reason == "safe_hypothetical_reflection"
+    assert "geen opgeslagen tradehistorie" in answer.text
+    assert "één regel" in answer.text
 
 
 def test_strict_rule_objection_addresses_the_objection_without_repeating_clarification():
@@ -7688,8 +7818,8 @@ def test_strict_rule_objection_addresses_the_objection_without_repeating_clarifi
 
 def test_read_only_stop_loss_coaching_completes_on_provider_timeout():
     question = (
-        "Ik wil mijn stop-loss weghalen omdat ik bang ben uitgestopt te worden. "
-        "Spreek me tegen als dit impulsief is; wijzig niets."
+        "Ik wil mijn stop-loss weghalen omdat BTC anders te vroeg wordt uitgestopt. "
+        "Ik vraag je om coaching, niet om iets te wijzigen. Hoe kijk je hiernaar?"
     )
     assert _read_only_stop_loss_coaching(question)
     assert not _read_only_stop_loss_coaching("Verwijder mijn stop-loss nu.")
@@ -7707,7 +7837,7 @@ def test_read_only_stop_loss_coaching_completes_on_provider_timeout():
         model_led_coach=True, locale="nl",
     ))
     assert result.answer_kind == "provider_unavailable"
-    assert result.response_id.startswith("local-safe-stoploss-")
+    assert result.response_id.startswith("local-safe-coach-")
     assert result.text.strip() and not result.response_id_reusable
     answer = asyncio.run(FinnResponsesAnswerVerifier().verify(
         message=question, result=result, locale="nl",
@@ -7716,6 +7846,53 @@ def test_read_only_stop_loss_coaching_completes_on_provider_timeout():
     assert answer.reason == "safe_stop_loss_coaching"
     assert "stop-loss niet uit angst" in answer.text
     assert "Ik wijzig niets" in answer.text
+
+
+def test_stop_loss_coach_does_not_offer_a_mental_exit_as_order_substitute():
+    question = (
+        "Ik wil mijn stop-loss weghalen omdat BTC anders te vroeg wordt uitgestopt. "
+        "Ik vraag je om coaching, niet om iets te wijzigen. Hoe kijk je hiernaar?"
+    )
+    result = FinnResponsesResult(
+        "Een grens hoeft niet per se een order te zijn.", "mental-stop-draft", (),
+        model_led_coach=True,
+    )
+    answer = asyncio.run(FinnResponsesAnswerVerifier().verify(
+        message=question, result=result, locale="nl",
+    ))
+    assert answer.reason == "safe_stop_loss_coaching"
+    assert "stop-loss niet uit angst" in answer.text
+
+
+def test_priority_coaching_keeps_three_safe_steps_when_live_sources_are_missing():
+    verifier = FinnResponsesAnswerVerifier()
+    assert not verifier._ungrounded_level_advice(
+        "Wat is de voorwaarde waarop jouw plan pas een entry toestaat?"
+    )
+    assert verifier._ungrounded_level_advice("Pas je stop-loss aan.")
+    result = FinnResponsesResult(
+        "Ik kan vandaag geen drie acties geven.", "priority-draft",
+        ({"name": "evaluate_plan", "result": {
+            "evaluation_operation_id": "evaluate_plan",
+            "assessment_status": "insufficient_evidence",
+            "results": [
+                {"scope": "read_linked_strategy", "status": "completed", "data": {
+                    "name": "BTC Strategie", "entry": "80000", "stop_loss": "76000",
+                    "targets": ["88000", "92000"],
+                }},
+                {"scope": "read_market_snapshot", "status": "unavailable",
+                 "reason": "source_unavailable", "data": None},
+            ],
+        }},), model_led_coach=True,
+    )
+    answer = asyncio.run(verifier.verify(
+        message="Wat zijn vandaag mijn drie belangrijkste acties voor mijn bestaande BTC-plan, en wat moet ik juist laten liggen?",
+        result=result, locale="nl",
+    ))
+    assert answer.status == "completed"
+    assert answer.reason == "insufficient_evidence"
+    assert all(f"{number}." in answer.text for number in (1, 2, 3))
+    assert "Laat liggen:" in answer.text
 
 
 def test_stop_loss_coach_does_not_deny_saved_level_without_a_read():
