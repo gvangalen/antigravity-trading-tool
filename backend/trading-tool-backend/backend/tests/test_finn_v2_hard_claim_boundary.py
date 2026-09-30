@@ -277,6 +277,19 @@ def test_trading_outcome_claim_is_not_authorized_by_a_saved_setup(monkeypatch):
     assert result.violations == ("outcome_claim",)
 
 
+def test_saved_setup_readback_in_dutch_perfect_tense_is_not_a_new_write():
+    trace = ({"result": {"results": [{"scope": "read_active_setup", "status": "completed"}]}},)
+    assert FinnV2HardClaimBoundary._saved_state_readback(
+        "je een dagelijkse DCA-setup voor BTC hebt opgeslagen", trace,
+    )
+    assert FinnV2HardClaimBoundary._saved_state_readback(
+        "Je opgeslagen BTC-instelling is dagelijkse DCA", trace,
+    )
+    assert not FinnV2HardClaimBoundary._saved_state_readback(
+        "je zojuist een dagelijkse DCA-setup hebt opgeslagen", trace,
+    )
+
+
 def test_general_purchase_frequency_tradeoff_is_not_a_predicted_user_outcome(monkeypatch):
     quote = "wisselen van dagelijkse naar wekelijkse aankopen vergroot de timingimpact per aankoop"
 

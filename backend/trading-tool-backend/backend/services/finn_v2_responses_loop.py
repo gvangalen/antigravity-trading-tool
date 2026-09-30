@@ -535,6 +535,12 @@ class FinnResponsesLoop:
                     "clarifying question when needed; never invent a cause or a match. "
                     "Explain the answer the trader actually saw when asked about a previous "
                     "turn. A newly supplied choice is not a saved fact until a tool confirms it. "
+                    "Before personal advice that relies on a confirmation rule, read the "
+                    "relevant saved setup or strategy and check whether that exact condition "
+                    "is present. If no concrete condition is returned, say so and ask the "
+                    "trader to define it. A user-mentioned wait rule may guide a cautious "
+                    "process discussion, but do not call an unspecified trigger 'your "
+                    "confirmation condition' or imply it is stored. "
                     "Do not repeat a clarification already answered or a failed evaluation "
                     "without new evidence."
                 )

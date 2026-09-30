@@ -110,9 +110,10 @@ class FinnV2HardClaimBoundary:
     def _saved_state_readback(cls, quote: str, tool_trace: tuple[dict[str, Any], ...]) -> bool:
         """A stored-object description is not a claim of a new write."""
         existing_state = (
-            re.search(r"\b(?:opgeslagen|saved|gespeichert)\s+(?:[\w]+[-\s]+){0,3}(?:setup|plan|profiel|profile|strategie|strategy|opzet)\b", quote, re.I)
-            or re.search(r"\b(?:setup|plan|profiel|profile|strategie|strategy|opzet)\b[^.!?]{0,90}\b(?:is|was|ist|are|were)\s+(?:opgeslagen|saved|gespeichert)\b", quote, re.I)
-            or re.search(r"\b(?:is|was|ist|are|were)\b[^.!?]{0,100}\b(?:setup|plan|profiel|profile|strategie|strategy|opzet)\b[^.!?]{0,90}\b(?:opgeslagen|saved|gespeichert)\b", quote, re.I)
+            re.search(r"\b(?:opgeslagen|saved|gespeichert)\s+(?:[\w]+[-\s]+){0,3}(?:setup|plan|profiel|profile|strategie|strategy|opzet|instelling|setting)\b", quote, re.I)
+            or re.search(r"\b(?:setup|plan|profiel|profile|strategie|strategy|opzet|instelling|setting)\b[^.!?]{0,90}\b(?:is|was|ist|are|were)\s+(?:opgeslagen|saved|gespeichert)\b", quote, re.I)
+            or re.search(r"\b(?:is|was|ist|are|were)\b[^.!?]{0,100}\b(?:setup|plan|profiel|profile|strategie|strategy|opzet|instelling|setting)\b[^.!?]{0,90}\b(?:opgeslagen|saved|gespeichert)\b", quote, re.I)
+            or re.search(r"\b(?:je|jij)\b[^.!?]{0,90}\b(?:setup|plan|profiel|strategie|instelling)\b[^.!?]{0,50}\b(?:hebt|had)\s+opgeslagen\b", quote, re.I)
         )
         if not existing_state:
             return False
