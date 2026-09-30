@@ -1814,17 +1814,40 @@ class FinnResponsesAnswerVerifier:
             for item in (call.get("result", {}).get("results") or [])
             if isinstance(item, dict)
         )
+        if result.answer_kind in {"saved_inventory_unavailable", "cross_asset_inventory_unavailable"}:
+            language = locale if locale in {"nl", "en", "de"} else "nl"
+            if result.answer_kind == "cross_asset_inventory_unavailable":
+                arguments = next((
+                    call.get("arguments") for call in result.tool_trace
+                    if isinstance(call.get("arguments"), dict)
+                ), {})
+                source = str(arguments.get("source_asset") or "").upper()
+                target = str(arguments.get("target_asset") or "").upper()
+                answer = {
+                    "nl": f"Nee, een regel voor {source} geldt niet automatisch voor {target}. Ik kan je opgeslagen setups op dit moment niet betrouwbaar uitlezen, dus ik kan geen {target}-plan bevestigen.",
+                    "en": f"No, a rule for {source} does not automatically apply to {target}. I cannot reliably read your saved setups right now, so I cannot confirm a {target} plan.",
+                    "de": f"Nein, eine Regel für {source} gilt nicht automatisch für {target}. Ich kann Deine gespeicherten Setups gerade nicht zuverlässig lesen und deshalb keinen {target}-Plan bestätigen.",
+                }[language]
+            else:
+                answer = {
+                    "nl": "Ik kan je opgeslagen setups op dit moment niet betrouwbaar uitlezen. Probeer deze vraag later opnieuw; ik wil geen namen of regels gokken.",
+                    "en": "I cannot reliably read your saved setups right now. Please try again later; I do not want to guess names or rules.",
+                    "de": "Ich kann Deine gespeicherten Setups gerade nicht zuverlässig lesen. Bitte versuche es später erneut; ich möchte keine Namen oder Regeln raten.",
+                }[language]
+            return FinnResponsesVerifiedAnswer(
+                "completed", answer, result.answer_kind, evidence,
+            )
         if result.answer_kind == "cross_asset_rule_scope":
             source_target = next((
                 call.get("arguments") for call in result.tool_trace
-                if call.get("name") == "get_active_plan_and_strategy"
+                if call.get("name") == "get_saved_setup_inventory"
                 and isinstance(call.get("arguments"), dict)
             ), {})
             source = str(source_target.get("source_asset") or "").upper()
             target = str(source_target.get("target_asset") or "").upper()
             setup_read = next((
                 item for item in evidence
-                if item.get("scope") == "read_active_setup"
+                if item.get("scope") == "read_saved_setup_inventory"
                 and item.get("status") == "completed"
                 and isinstance(item.get("data"), dict)
                 and isinstance(item["data"].get("setups"), list)
@@ -1849,13 +1872,67 @@ class FinnResponsesAnswerVerifier:
                         "de": f" Ich sehe diese gespeicherten {target}-Setups: {names}. Prüfe ihre Bedingungen separat.",
                     }[language]
                 else:
-                    answer += {
+                    answer += ({
                         "nl": f" In het gelezen setupoverzicht zie ik geen {target}-plan.",
                         "en": f" I do not see a {target} plan in the setup overview I read.",
                         "de": f" In der gelesenen Setup-Übersicht sehe ich keinen {target}-Plan.",
+                    } if setup_read["data"].get("complete", True) else {
+                        "nl": f" Het setupoverzicht is afgekapt; ik kan niet vaststellen of er een {target}-plan is.",
+                        "en": f" The setup inventory is truncated; I cannot determine whether a {target} plan exists.",
+                        "de": f" Die Setup-Übersicht ist gekürzt; ob ein {target}-Plan besteht, bleibt offen.",
+                    })[language]
+                if re.search(r"\b(?:fomo|impulsief|impulsive|impulsiv)\b", message, re.I):
+                    answer += {
+                        "nl": " Als FOMO de aanleiding is, behandel die eerst als signaal om je plan te controleren, niet als reden om de BTC-regel over te nemen.",
+                        "en": " If FOMO is driving the question, use it as a cue to check your plan before applying the BTC rule elsewhere.",
+                        "de": " Wenn FOMO der Anlass ist, prüfe zuerst Deinen Plan, bevor Du die BTC-Regel anderswo anwendest.",
                     }[language]
                 return FinnResponsesVerifiedAnswer(
                     "completed", answer, "cross_asset_rule_scope", evidence,
+                )
+        if result.answer_kind == "saved_confirmation_inventory":
+            inventory = next((
+                item.get("data") for item in evidence
+                if item.get("scope") == "read_saved_setup_inventory"
+                and item.get("status") == "completed"
+                and isinstance(item.get("data"), dict)
+                and isinstance(item["data"].get("setups"), list)
+            ), None)
+            if inventory is not None:
+                rows = [row for row in inventory["setups"] if isinstance(row, dict) and row.get("name")]
+                names = ", ".join(f"‘{row['name']}’" for row in rows)
+                language = locale if locale in {"nl", "en", "de"} else "nl"
+                if not inventory.get("complete", True):
+                    return FinnResponsesVerifiedAnswer(
+                        "completed", {
+                            "nl": f"Ik zie ten minste {len(rows)} setups in het gelezen deel: {names}. Het overzicht is afgekapt, dus ik kan niet bepalen of een van alle opgeslagen setups een instapvoorwaarde bevat.",
+                            "en": f"I can see at least {len(rows)} setups in the retrieved portion: {names}. The inventory is truncated, so I cannot assess every saved setup's entry condition.",
+                            "de": f"Ich sehe mindestens {len(rows)} Setups im gelesenen Teil: {names}. Die Übersicht ist gekürzt; ich kann daher nicht alle Einstiegsbedingungen prüfen.",
+                        }[language], "saved_confirmation_inventory", evidence,
+                    )
+                answer = {
+                    "nl": (
+                        f"Ik zie {len(rows)} opgeslagen setups: {names}. "
+                        "In deze setupgegevens staat bij geen daarvan een apart veld met een "
+                        "bevestigings- of instapregel. Ik kan dus geen van deze setups met zo'n "
+                        "opgeslagen regel aanwijzen; eventuele gekoppelde strategieën zijn "
+                        "hiermee nog niet gecontroleerd."
+                    ),
+                    "en": (
+                        f"I can see {len(rows)} saved setups: {names}. "
+                        "None of these setup records has a separate confirmation or entry-rule field. "
+                        "I cannot identify one with a saved rule from this inventory; linked "
+                        "strategies have not been checked here."
+                    ),
+                    "de": (
+                        f"Ich sehe {len(rows)} gespeicherte Setups: {names}. "
+                        "Keiner dieser Setup-Datensätze enthält ein eigenes Feld für eine "
+                        "Bestätigungs- oder Einstiegsregel. Eine solche gespeicherte Regel kann "
+                        "ich hier nicht zuordnen; verknüpfte Strategien wurden nicht geprüft."
+                    ),
+                }[language]
+                return FinnResponsesVerifiedAnswer(
+                    "completed", answer, "saved_confirmation_inventory", evidence,
                 )
         if result.answer_kind == "saved_confirmation_collection":
             answer = self._saved_confirmation_answer(message, evidence, locale)
@@ -1866,7 +1943,7 @@ class FinnResponsesAnswerVerifier:
         if result.answer_kind == "saved_setup_collection":
             setup_read = next((
                 item for item in evidence
-                if item.get("scope") == "read_active_setup"
+                if item.get("scope") == "read_saved_setup_inventory"
                 and item.get("status") == "completed"
                 and isinstance(item.get("data"), dict)
                 and isinstance(item["data"].get("setups"), list)
@@ -1884,6 +1961,14 @@ class FinnResponsesAnswerVerifier:
                         for row in rows
                     )
                     language = locale if locale in {"nl", "en", "de"} else "nl"
+                    if not setup_read["data"].get("complete", True):
+                        return FinnResponsesVerifiedAnswer(
+                            "completed", {
+                                "nl": f"Ik zie ten minste {len(rows)} opgeslagen setups in het gelezen deel: {labels}. Het overzicht is afgekapt.",
+                                "en": f"I can see at least {len(rows)} saved setups in the retrieved portion: {labels}. The inventory is truncated.",
+                                "de": f"Ich sehe mindestens {len(rows)} gespeicherte Setups im gelesenen Teil: {labels}. Die Übersicht ist gekürzt.",
+                            }[language], "saved_setup_collection", evidence,
+                        )
                     answer = {
                         "nl": f"Ik zie {len(rows)} opgeslagen setups: {labels}.",
                         "en": f"I can see {len(rows)} saved setups: {labels}.",
@@ -1892,6 +1977,14 @@ class FinnResponsesAnswerVerifier:
                     return FinnResponsesVerifiedAnswer(
                         "completed", answer, "saved_setup_collection", evidence,
                     )
+                language = locale if locale in {"nl", "en", "de"} else "nl"
+                return FinnResponsesVerifiedAnswer(
+                    "completed", {
+                        "nl": "Ik zie geen opgeslagen setups in dit overzicht.",
+                        "en": "I see no saved setups in this inventory.",
+                        "de": "Ich sehe in dieser Übersicht keine gespeicherten Setups.",
+                    }[language], "saved_setup_collection", evidence,
+                )
         if (
             not previous_response and not recent_action_result and not result.tool_trace
             and result.answer_kind != "provider_unavailable"

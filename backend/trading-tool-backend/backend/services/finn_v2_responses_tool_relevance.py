@@ -7,10 +7,79 @@ import json
 import re
 from typing import Any
 
+from backend.services.asset_catalog_service import mentioned_catalog_symbols
 from backend.services.finn_v2_lifecycle_budget import remaining_lifecycle_seconds
 
 
 class FinnResponsesToolRelevanceGuard:
+    async def saved_plan_query_kind(
+        self, *, message: str, previous_kind: str = "", previous_answer: str = "",
+    ) -> dict[str, str] | None:
+        """Choose the scope of a factual plan question before tool selection.
+
+        A collection reference is resolved from the verified prior turn, not
+        from a guessed active setup or the model's private response cursor.
+        """
+        remaining = remaining_lifecycle_seconds()
+        if remaining is not None and remaining <= 8:
+            return None
+        timeout = min(4.0, remaining - 4 if remaining is not None else 4.0)
+        client = (
+            self.client.with_options(max_retries=0, timeout=timeout)
+            if hasattr(self.client, "with_options") else self.client
+        )
+        try:
+            response = await asyncio.wait_for(
+                client.responses.create(
+                    model="gpt-4o-mini", store=False, tool_choice="none", temperature=0,
+                    instructions=(
+                        "Classify the latest user's primary factual question. Choose inventory "
+                        "for all saved setup names, counts, or comparing multiple saved setups. "
+                        "Choose confirmation_inventory when asking which of several saved setups "
+                        "has an entry/confirmation condition, including references such as 'those three' "
+                        "to a previously verified inventory. Choose cross_asset_scope when asking "
+                        "whether a saved rule/plan for one named asset may apply to another named "
+                        "asset; emotional context such as FOMO is secondary. Choose none for a "
+                        "single selected setup, general coaching, or any request to change data. "
+                        "Return the source and target asset symbols only when the user explicitly "
+                        "names both in a cross-asset question; otherwise use empty strings. "
+                        "The prior answer is context only; never infer saved data from it."
+                    ),
+                    input=json.dumps({
+                        "latest_user_message": message,
+                        "previous_verified_answer_kind": previous_kind,
+                        "previous_verified_answer": previous_answer[:700],
+                    }, ensure_ascii=False),
+                    text={"format": {
+                        "type": "json_schema", "name": "finn_saved_plan_query_scope",
+                        "strict": True,
+                        "schema": {
+                            "type": "object", "additionalProperties": False,
+                            "properties": {
+                                "kind": {"type": "string", "enum": [
+                                    "none", "inventory", "confirmation_inventory", "cross_asset_scope",
+                                ]},
+                                "source_asset": {"type": "string"},
+                                "target_asset": {"type": "string"},
+                            },
+                            "required": ["kind", "source_asset", "target_asset"],
+                        },
+                    }},
+                    max_output_tokens=48,
+                ), timeout=timeout,
+            )
+            decision = json.loads(str(getattr(response, "output_text", "") or ""))
+            if decision.get("kind") not in {
+                "none", "inventory", "confirmation_inventory", "cross_asset_scope",
+            }:
+                return None
+            for field in ("source_asset", "target_asset"):
+                candidates = mentioned_catalog_symbols(decision.get(field))
+                decision[field] = next(iter(candidates)) if len(candidates) == 1 else ""
+            return decision
+        except Exception:
+            return None
+
     async def requested_action_contract(
         self, *, message: str, contracts: list[dict[str, str]],
     ) -> str | None:

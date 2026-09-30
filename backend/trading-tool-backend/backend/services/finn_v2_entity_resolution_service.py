@@ -654,7 +654,7 @@ class FinnV2EntityResolutionService:
         normalized = " ".join(str(message or "").casefold().split())
         return bool(re.search(
             r"\b(?:welke|toon|noem|overzicht|which|show|list|welche|zeige|liste)\b"
-            r".*\b(?:setups?|plannen?|set-ups?)\b",
+            r".*\b(?:setups|plannen|set-ups)\b",
             normalized,
         ))
 

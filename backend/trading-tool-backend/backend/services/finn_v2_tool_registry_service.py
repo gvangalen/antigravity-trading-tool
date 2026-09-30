@@ -15,6 +15,7 @@ class FinnV2ToolRegistryService:
             ToolDefinition(name="read_macro_snapshot", description="Read the latest macro snapshot.", depends_on=["read_active_asset"]),
             ToolDefinition(name="read_technical_snapshot", description="Read current measured technical indicator values for the resolved asset, when a fresh source is available. This is distinct from saved indicator configuration.", depends_on=["read_active_asset"]),
             ToolDefinition(name="read_active_setup", description="Read the owner's saved setup, including the recently confirmed setup when asking what was saved. Use this for setup names, types and timeframes; it is not review history.", depends_on=["read_active_asset"]),
+            ToolDefinition(name="read_saved_setup_inventory", description="Read the complete owner-scoped list of saved setups, optionally filtered by asset. Use this for counts, names, comparisons and questions about any of several setups; no active setup is selected."),
             ToolDefinition(name="read_linked_strategy", description="Read the strategy linked to the active setup.", depends_on=["read_active_setup"]),
             ToolDefinition(name="read_linked_bot", description="Read the bot linked to the strategy.", depends_on=["read_linked_strategy"]),
             ToolDefinition(name="read_bot_status", description="Read the runtime status of the linked bot.", depends_on=["read_linked_bot"]),

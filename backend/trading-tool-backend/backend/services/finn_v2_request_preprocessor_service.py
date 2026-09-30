@@ -485,6 +485,11 @@ class FinnV2RequestPreprocessorService:
         # commands. This is grammatical normalization, not prompt matching.
         if re.search(r"\bvolg\s+ik\b|\b(bevestigd|confirmed)\b", text):
             return "read"
+        if (
+            re.search(r"^(?:is\s+er|welke|welk|wat|staat|heb|hebben|which|what|is\s+there)\b", text)
+            and re.search(r"\b(?:bevestigd\w*|bevestiging\w*|confirmed\w*|confirmation\w*)\b", text)
+        ):
+            return "read"
         if "live" in text and re.search(r"\b(staat|is|welke|toon)\b", text):
             return "read"
         # An explicit explanation stays read-only when a later clause rules

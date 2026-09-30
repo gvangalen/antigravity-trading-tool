@@ -93,6 +93,9 @@ class FinnResponsesToolCatalog:
             name: tuple(scope_bindings[scope] for scope in scopes)
             for name, scopes in _READ_SCOPES.items()
         }
+        # Collection reads have a distinct typed read adapter. They do not
+        # add a new action/evaluation operation to the sealed registry matrix.
+        self.read_tools["get_saved_setup_inventory"] = ("read_saved_setup_inventory",)
         self.evaluation_contracts = {
             contract.operation_id: contract
             for contract in self.registry.list()
@@ -154,11 +157,21 @@ class FinnResponsesToolCatalog:
                 )
             if name == "get_active_plan_and_strategy":
                 description += (
-                    " Returns saved setup and linked strategy facts, not an assessment. "
+                    " Returns one selected saved setup and its linked strategy, not a list or assessment. "
+                    "For all saved setups, counts, or questions about which of several setups has a field, "
+                    "use get_saved_setup_inventory instead. "
                     "Use it for listing settings or static arithmetic from saved entry, "
                     "stop and targets. If the user asks whether the complete plan fits "
                     "their goals or risk style, use evaluate_plan instead; this read alone "
                     "cannot establish suitability or a current trade signal."
+                )
+            if name == "get_saved_setup_inventory":
+                description += (
+                    " Returns an owner-scoped collection, optionally filtered by asset and timeframe; "
+                    "the typed complete flag reports whether repository pagination truncated it. "
+                    "Use for all setup names, counts and comparisons, including a follow-up about "
+                    "'those three' after listing setups. This does not select an active setup "
+                    "or read a linked strategy."
                 )
             definitions.append({
                 "type": "function",

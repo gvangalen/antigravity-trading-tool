@@ -344,6 +344,15 @@ def test_setup_collection_read_returns_every_owner_asset_match():
     assert resolved["resolution_source"] == "owner_setup_collection"
 
 
+def test_singular_setup_question_does_not_silently_select_first_collection_row():
+    assert not FinnV2EntityResolutionService.is_setup_collection_request(
+        "Welke setup is voor mijn BTC-plan actief?"
+    )
+    assert FinnV2EntityResolutionService.is_setup_collection_request(
+        "Welke BTC-setups staan er op Mijn Plan?"
+    )
+
+
 def test_canonical_target_uses_previous_action_result_before_workspace():
     service = FinnV2EntityResolutionService(session=object())
     service.strategies = _FakeStrategyRepo()

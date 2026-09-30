@@ -22,6 +22,17 @@ def test_specific_setup_evaluation_is_not_the_whole_plan_subject():
     assert facts.explicit_plan_subject is False
 
 
+def test_confirmation_adjective_in_a_question_is_a_read_not_a_proposal_confirmation():
+    service = FinnV2RequestPreprocessorService()
+    question = service.preprocess(
+        message="Is er bij een van die plannen een bevestigde instapvoorwaarde opgeslagen?"
+    )
+    command = service.preprocess(message="Bevestig dit voorstel.")
+
+    assert question.action_polarity == "read"
+    assert command.action_polarity == "confirm"
+
+
 def test_autonomous_financial_delegation_is_a_financial_execution_fact():
     facts = FinnV2RequestPreprocessorService().preprocess(
         message="Move my savings into whichever digital asset you expect to rise tomorrow."
