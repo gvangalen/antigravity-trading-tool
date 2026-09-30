@@ -4378,6 +4378,34 @@ def test_portfolio_evaluation_requires_usable_profile_not_just_successful_read(h
     assert "Paper bot is configuration" in result["assessment_boundary"]
 
 
+def test_portfolio_readback_identifies_each_bot_budget_separately():
+    class Reads:
+        async def execute_tool(self, **_kwargs):
+            return SimpleNamespace(
+                success=True, availability="available", freshness_status="unknown",
+                source="bot_portfolios", asset=None, as_of=None, error_codes=[],
+                result={
+                    "global": {"total_budget_limit": 725.0},
+                    "bots": [
+                        {"bot_id": 1, "name": "BTC Paper", "budget_total_eur": 600.0},
+                        {"bot_id": 2, "name": "ETH Paper", "budget_total_eur": 125.0},
+                    ],
+                },
+            )
+
+    executor = object.__new__(FinnResponsesReadExecutor)
+    executor.user_id = 44
+    executor.run_id = "run-portfolio-budget"
+    executor.reads = Reads()
+    result = asyncio.run(executor(FinnResponsesToolCatalog().validate(
+        "get_portfolio_and_exposure", {},
+    )))
+
+    assert result["results"][0]["data"]["bots"][0]["budget_total_eur"] == 600.0
+    assert "bots[].budget_total_eur" in result["evidence_boundary"]
+    assert "sum across the selected bots" in result["evidence_boundary"]
+
+
 def test_plan_evidence_coverage_distinguishes_saved_facts_from_full_assessment():
     class Reads:
         async def execute_tool(self, **kwargs):

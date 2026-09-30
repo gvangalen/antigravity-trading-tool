@@ -498,6 +498,28 @@ def test_create_bot_preserves_an_explicit_optional_budget():
     assert state.missing_required_inputs == []
 
 
+def test_create_bot_does_not_include_budget_clause_in_model_suggested_name():
+    service = FinnV2OperationStateService()
+    contract = FinnV2OperationRegistry().require_supported("create_bot")
+
+    state = service.resolve(
+        contract=contract,
+        message="Maak paper-bot BTC Paper en een budget van 500 euro.",
+        explicit_asset="BTC",
+        conversation_context={},
+        supplied_inputs={
+            "strategy_id": 84,
+            "name": "BTC Paper en een budget van 500 euro",
+        },
+    )
+
+    assert state.collected_inputs == {
+        "budget_total_eur": 500.0,
+        "strategy_id": 84,
+        "name": "BTC Paper",
+    }
+
+
 def test_update_bot_extracts_budget_without_exposing_setup_copy():
     service = FinnV2OperationStateService()
     contract = FinnV2OperationRegistry().require_supported("update_bot")

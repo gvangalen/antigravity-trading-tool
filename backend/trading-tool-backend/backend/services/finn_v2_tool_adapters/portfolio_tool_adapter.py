@@ -24,6 +24,7 @@ class PortfolioToolAdapter:
                 symbol=row.get("symbol"),
                 equity=(row.get("equity") if row.get("portfolio_initialized", True)
                         and row.get("price_available", True) else None),
+                budget_total_eur=row.get("budget_total"),
                 is_active=row.get("is_active"),
                 is_live=row.get("is_live"),
             )
