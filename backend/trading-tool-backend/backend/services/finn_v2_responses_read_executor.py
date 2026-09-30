@@ -240,6 +240,14 @@ class FinnResponsesReadExecutor:
                 "the current market satisfies the rule. If the user asks whether a trade "
                 "is personally suitable now, say which evaluation is still needed."
             )
+        if call.name == "get_portfolio_and_exposure":
+            output["evidence_boundary"] = (
+                "Each bots[].budget_total_eur is that saved Paper-bot's own budget. "
+                "global.total_budget_limit is the sum across the selected bots, not a "
+                "separate budget for one bot. When asked about a particular bot's budget, "
+                "use its matching bot row and never say its budget is missing when that "
+                "field is present. A budget limit is not available cash or invested capital."
+            )
         if any(
             item["scope"] == "read_asset_scores" and item["status"] == "completed"
             for item in results

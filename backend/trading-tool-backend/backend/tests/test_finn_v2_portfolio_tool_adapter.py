@@ -5,6 +5,7 @@ from types import SimpleNamespace
 
 from backend.services.finn_v2_tool_adapters.portfolio_tool_adapter import PortfolioToolAdapter
 from backend.services.finn_v2_tool_execution_service import FinnV2ToolExecutionService
+from backend.services.finn_v2_json_safety import to_json_safe
 
 
 class _PortfolioRepository:
@@ -77,6 +78,8 @@ def test_portfolio_adapter_keeps_owner_scope_and_filters_only_the_existing_ledge
         "allocations_pct": {"Cash": 28.57, "ETH": 71.43},
     }
     assert [bot.symbol for bot in result["data"].bots] == ["ETH"]
+    assert result["data"].bots[0].budget_total_eur == 400.0
+    assert to_json_safe(result["data"])["bots"][0]["budget_total_eur"] == 400.0
     assert result["data"].covered_scopes == [
         "paper_bot_portfolio_valuation", "budget", "exposure",
     ]
@@ -94,6 +97,10 @@ def test_portfolio_adapter_returns_the_full_existing_owner_ledger_without_a_filt
     assert result["summary"]["bot_count"] == 2
     assert result["data"].global_.total_equity == 480.0
     assert {bot.symbol for bot in result["data"].bots} == {"ETH", "BTC"}
+    assert {bot.name: bot.budget_total_eur for bot in result["data"].bots} == {
+        "ETH plan": 400.0,
+        "BTC plan": 125.0,
+    }
 
 
 def test_empty_portfolio_has_no_fabricated_allocation_and_keeps_currency():
