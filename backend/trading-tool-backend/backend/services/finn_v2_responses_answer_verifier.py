@@ -16,6 +16,9 @@ from langdetect import DetectorFactory, LangDetectException, detect, detect_lang
 from backend.services.finn_v2_responses_loop import (
     FinnResponsesError,
     FinnResponsesResult,
+    _read_only_stop_loss_coaching,
+    _rule_objection,
+    _saved_confirmation_readback,
     limited_evaluation_answer,
     limited_evaluation_format,
     plan_review_next_step_from_evidence,
@@ -70,6 +73,128 @@ class FinnResponsesAnswerVerifier:
                 "de": "Das klingt frustrierend. Lass uns trennen, was du weißt, von dem, was du vermutest. Welche Entscheidung steht an, und welche Information brauchst du dafür?",
             }[language]
         return None
+
+    @staticmethod
+    def _stop_loss_coach_fallback(locale: str | None) -> str:
+        return {
+            "nl": "Ik zou een stop-loss niet uit angst voor uitstopping weghalen. Pauzeer eerst en controleer welke maximale verliesgrens je vooraf had gekozen; zonder dat plan kan ik geen veilig nieuw niveau aanwijzen. Ik wijzig niets. Welke reden had je destijds voor deze grens?",
+            "en": "I wouldn't remove a stop-loss just because you're afraid of being stopped out. Pause and check the maximum loss you planned beforehand; without that plan I can't name a safe replacement level. I won't change anything. Why did you choose that limit?",
+            "de": "Ich würde einen Stop-Loss nicht aus Angst vor dem Ausstoppen entfernen. Halte erst inne und prüfe, welche Verlustgrenze du zuvor festgelegt hast; ohne diesen Plan kann ich kein sicheres neues Niveau nennen. Ich ändere nichts. Warum hast du diese Grenze gewählt?",
+        }[locale if locale in {"nl", "en", "de"} else "nl"]
+
+    @staticmethod
+    def _saved_confirmation_answer(
+        message: str, evidence: tuple[dict[str, Any], ...], locale: str | None,
+    ) -> str | None:
+        if not _saved_confirmation_readback(message):
+            return None
+        setup_read = any(
+            item.get("scope") == "read_active_setup" and item.get("status") == "completed"
+            and isinstance(item.get("data"), dict) and item["data"].get("setup_id")
+            for item in evidence
+        )
+        if not setup_read:
+            return None
+        if any(
+            item.get("status") == "completed"
+            and item.get("scope") in {"read_active_setup", "read_linked_strategy"}
+            and isinstance(item.get("data"), dict)
+            and any(item["data"].get(key) for key in (
+                "confirmation_condition", "entry_condition", "entry_conditions",
+                "confirmation_rule", "entry_rule", "trigger_conditions",
+            ))
+            for item in evidence
+        ):
+            return None
+        return {
+            "nl": "In de gegevens die ik voor je opgeslagen setup kan lezen staat geen concrete bevestigings- of entryregel. Ik kan daarom geen bestaande voorwaarde aanwijzen; je kunt er eerst een meetbare formuleren voordat je die als instapcheck gebruikt.",
+            "en": "The saved setup data I can read contains no specific confirmation or entry rule. I can't point to an existing condition; you could first define a measurable one before using it as an entry check.",
+            "de": "In den Daten, die ich zu deinem gespeicherten Setup lesen kann, steht keine konkrete Bestätigungs- oder Einstiegsregel. Ich kann deshalb keine vorhandene Bedingung nennen; du könntest zuerst eine messbare Regel festlegen, bevor du sie als Einstiegskriterium nutzt.",
+        }[locale if locale in {"nl", "en", "de"} else "nl"]
+
+    @staticmethod
+    def _grounded_plan_review_fallback(
+        message: str, evidence: tuple[dict[str, Any], ...], locale: str | None,
+    ) -> str | None:
+        if not (
+            re.search(r"\b(?:beoordeel|review|bewerte)\b", message, re.I)
+            and re.search(r"\b(?:plan|strategie|strategy|Strategie)\b", message, re.I)
+        ):
+            return None
+        strategy = next((
+            item.get("data") for item in evidence
+            if item.get("scope") == "read_linked_strategy"
+            and item.get("status") == "completed"
+            and isinstance(item.get("data"), dict)
+            and all(item["data"].get(field) for field in ("entry", "stop_loss", "targets"))
+        ), None)
+        if strategy is None:
+            return None
+        return {
+            "nl": "Sterk: je opgeslagen strategie bevat een entry, stop-loss en doelen, zodat je de risicoafstand kunt controleren. Waar ik je afrem: die planwaarden tonen niet of er nu een geldige instap is en evenmin of het risico bij jou past. Eerstvolgende check: leg een concrete instapvoorwaarde vast en controleer die met verifieerbare actuele gegevens voordat je een positie overweegt.",
+            "en": "Strength: your saved strategy has an entry, stop-loss and targets, so you can check the risk distance. Where I'd slow you down: those plan values do not show whether an entry is valid now or whether the risk suits you. Next check: define a specific entry condition and verify it against current evidence before considering a position.",
+            "de": "Stärke: Deine gespeicherte Strategie enthält Einstieg, Stop-Loss und Ziele, sodass du den Risikoabstand prüfen kannst. Wo ich dich bremsen würde: Diese Planwerte zeigen weder einen aktuell gültigen Einstieg noch, ob das Risiko zu dir passt. Nächster Check: Lege eine konkrete Einstiegsbedingung fest und prüfe sie anhand aktueller verlässlicher Daten, bevor du eine Position erwägst.",
+        }[locale if locale in {"nl", "en", "de"} else "nl"]
+
+    @staticmethod
+    def _limited_personal_plan_fallback(
+        message: str, evidence: tuple[dict[str, Any], ...],
+        tool_trace: tuple[dict[str, Any], ...], locale: str | None,
+    ) -> str | None:
+        if not any(
+            call.get("name") == "evaluate_plan"
+            and (call.get("result") or {}).get("assessment_status") == "insufficient_evidence"
+            for call in tool_trace
+        ):
+            return None
+        profile = next((
+            item.get("data") for item in evidence
+            if item.get("scope") == "read_profile" and item.get("status") == "completed"
+            and isinstance(item.get("data"), dict)
+        ), None)
+        setup = next((
+            item.get("data") for item in evidence
+            if item.get("scope") == "read_active_setup" and item.get("status") == "completed"
+            and isinstance(item.get("data"), dict)
+        ), None)
+        if not profile or not setup or not setup.get("symbol"):
+            return None
+        language = locale if locale in {"nl", "en", "de"} else "nl"
+        asset = str(setup.get("symbol") or "").upper()
+        amount = re.search(
+            r"(?:€\s*)?(\d+(?:[.,]\d+)?)\s*(?:euro|euros|eur|€)\s*"
+            r"(?:per\s+week|a\s+week|weekly|pro\s+woche)", message, re.I,
+        )
+        weekly_dca = (
+            amount is not None and setup.get("setup_type") == "dca"
+            and re.search(r"\b(?:dca|dagelijks|daily|täglich)\b", message, re.I)
+        )
+        if weekly_dca:
+            proposed = amount.group(1)
+            return {
+                "nl": f"Je overweegt €{proposed} per week voor {asset}-DCA; dat is jouw voorstel, geen opgeslagen wijziging. Je profiel en DCA-setup zijn gelezen, maar ik kan niet beoordelen of dit bij je risicostijl past zonder je huidige totale inleg en een volledige risicobeoordeling. Controleer eerst of €{proposed} per week je totale {asset}-inleg verhoogt of ongeveer gelijk houdt. Welke van die twee bedoel je?",
+                "en": f"You're considering €{proposed} per week for {asset} DCA; that is your proposal, not a saved change. I can read your profile and DCA setup, but cannot judge whether it fits your risk style without your current total contribution and a full risk assessment. First check whether €{proposed} per week raises your total {asset} contribution or keeps it roughly level. Which do you mean?",
+                "de": f"Du erwägst €{proposed} pro Woche für {asset}-DCA; das ist dein Vorschlag, keine gespeicherte Änderung. Ich kann dein Profil und DCA-Setup lesen, aber ohne deine bisherige Gesamteinzahlung und eine vollständige Risikoprüfung nicht beurteilen, ob das zu deinem Risikostil passt. Prüfe zuerst, ob €{proposed} pro Woche deine gesamte {asset}-Einzahlung erhöht oder ungefähr gleich hält. Was meinst du?",
+            }[language]
+        if not re.search(r"\b(?:beoordeel|assess|bewerte)\b", message, re.I):
+            return None
+        return {
+            "nl": f"Ik kan je volledige {asset}-plan nog niet als passend bij je risicostijl beoordelen. Je profiel en opgeslagen setup zijn gelezen, maar de evaluatie meldt ontbrekende gegevens voor een volledig oordeel. Controleer eerst je totale inleg en de maximale verliesgrens die je wilt hanteren; deze beperkte beoordeling geeft geen instapsignaal.",
+            "en": f"I can't yet judge whether your full {asset} plan fits your risk style. I can read your profile and saved setup, but the evaluation lacks evidence for a full judgment. First check your total contribution and the maximum loss you intend to accept; this limited review is not an entry signal.",
+            "de": f"Ich kann noch nicht beurteilen, ob dein vollständiger {asset}-Plan zu deinem Risikostil passt. Dein Profil und gespeichertes Setup sind lesbar, aber der Bewertung fehlen Daten für ein vollständiges Urteil. Prüfe zuerst deine Gesamteinzahlung und die Verlustgrenze, die du akzeptieren willst; diese begrenzte Prüfung ist kein Einstiegssignal.",
+        }[language]
+
+    @staticmethod
+    def _rule_objection_answer(
+        message: str, previous_answer: str, locale: str | None,
+    ) -> str | None:
+        if not _rule_objection(message, previous_answer):
+            return None
+        return {
+            "nl": "Ik snap je bezwaar: een regel die te streng voelt, mag je kritisch bekijken. Een strenge wachttijd is niet vanzelf veiliger, maar versoepelen uit ongeduld is ook geen onderbouwde keuze. Kijk welk risico de regel moest begrenzen en welke meetbare voorwaarde datzelfde doel dient. Gaat je bezwaar vooral over de wachttijd of over het vereiste signaal?",
+            "en": "I hear your objection: a rule that feels too strict is worth reviewing. A longer wait is not automatically safer, but relaxing it out of impatience is not a reasoned choice either. Check what risk the rule was meant to limit and what measurable condition would serve that purpose. Is your objection mainly about the wait or the required signal?",
+            "de": "Ich verstehe deinen Einwand: Eine Regel, die zu streng wirkt, solltest du prüfen. Längeres Warten ist nicht automatisch sicherer, aber die Regel aus Ungeduld zu lockern ist auch keine begründete Entscheidung. Prüfe, welches Risiko sie begrenzen sollte und welche messbare Bedingung denselben Zweck erfüllt. Geht es dir vor allem um die Wartezeit oder um das verlangte Signal?",
+        }[locale if locale in {"nl", "en", "de"} else "nl"]
 
     @staticmethod
     def _unsupported_personal_confirmation(answer: str, evidence: tuple[dict[str, Any], ...]) -> bool:
@@ -466,10 +591,22 @@ class FinnResponsesAnswerVerifier:
 
     @staticmethod
     def _promises_unverified_trading_outcome(text: str) -> bool:
-        return bool(re.search(
+        probability_claim = re.compile(
             r"\b(?:kans|chance|probability|gewinnchance)\b.{0,55}\b"
-            r"(?:succes|success|profit|winst|gewinn)\w*\b"
-            r"|\b(?:risic\w*|risk\w*|verlust\w*|loss\w*)\b.{0,40}\b"
+            r"(?:succes|success|profit|winst|gewinn)\w*\b",
+            re.IGNORECASE | re.DOTALL,
+        )
+        for match in probability_claim.finditer(text):
+            prefix = re.split(r"[.!?;\n]|\b(?:maar|but|aber)\b", text[:match.start()], flags=re.I)[-1]
+            if not re.search(
+                r"\b(?:geen|no|not|kein\w*)\s+(?:(?:a|an)\s+)?(?:(?:betrouwbare|reliable|verlässliche)\s+)?"
+                r"(?:beoordeling|inschatting|oordeel|uitspraak|bewijs|assessment|estimate|"
+                r"judgment|evidence|Bewertung|Einschätzung|Aussage)\b[^.!?;\n]{0,50}$",
+                prefix, re.I,
+            ):
+                return True
+        return bool(re.search(
+            r"\b(?:risic\w*|risk\w*|verlust\w*|loss\w*)\b.{0,40}\b"
             r"(?:beperk\w*|verminder\w*|verklein\w*|reduc\w*|lower\w*|senk\w*)\b"
             r"|\b(?:beperk\w*|verminder\w*|verklein\w*|reduc\w*|lower\w*|senk\w*)\b"
             r".{0,40}\b(?:risic\w*|risk\w*|verlust\w*|loss\w*)\b",
@@ -1639,6 +1776,11 @@ class FinnResponsesAnswerVerifier:
                 clarification={"question": question, "reason": "previous_response_unavailable"},
             )
         if result.answer_kind == "provider_unavailable":
+            if result.model_led_coach and _read_only_stop_loss_coaching(message):
+                return FinnResponsesVerifiedAnswer(
+                    "completed", self._stop_loss_coach_fallback(locale),
+                    "safe_stop_loss_coaching", evidence,
+                )
             return FinnResponsesVerifiedAnswer(
                 "unavailable", self._fallback_copy(
                     "responses_provider_timeout", message=message, locale=locale,
@@ -1683,6 +1825,42 @@ class FinnResponsesAnswerVerifier:
                     "reason": str(clarification["reason"]),
                 },
             )
+        if result.model_led_coach:
+            saved_confirmation = self._saved_confirmation_answer(message, evidence, locale)
+            if saved_confirmation:
+                return FinnResponsesVerifiedAnswer(
+                    "completed", saved_confirmation, "saved_confirmation_readback", evidence,
+                )
+            if (
+                _read_only_stop_loss_coaching(message)
+                and (remaining := remaining_lifecycle_seconds()) is not None
+                and remaining <= 5
+            ):
+                return FinnResponsesVerifiedAnswer(
+                    "completed", self._stop_loss_coach_fallback(locale),
+                    "safe_stop_loss_coaching", evidence,
+                )
+            if (
+                _read_only_stop_loss_coaching(message)
+                and not any(item.get("scope") == "read_linked_strategy"
+                            and item.get("status") == "completed" for item in evidence)
+                and re.search(
+                    r"\b(?:geen opgeslagen stop(?:niveau|.loss)?|geen stop.loss opgeslagen|"
+                    r"no saved stop(?:.loss| level)?|keinen gespeicherten Stop)\b",
+                    result.text, re.I,
+                )
+            ):
+                return FinnResponsesVerifiedAnswer(
+                    "completed", self._stop_loss_coach_fallback(locale),
+                    "safe_stop_loss_coaching", evidence,
+                )
+            objection = self._rule_objection_answer(
+                message, str((previous_response or {}).get("answer") or ""), locale,
+            )
+            if objection and previous_response:
+                return FinnResponsesVerifiedAnswer(
+                    "completed", objection, "rule_objection_coaching", evidence, True,
+                )
         if result.model_led_coach and self._unsupported_personal_confirmation(result.text, evidence):
             coach_fallback = self._emotional_coach_fallback(message, locale)
             if coach_fallback:
@@ -2826,6 +3004,22 @@ class FinnResponsesAnswerVerifier:
                     and self._proposal_speaker_is_user(result.text)
                 )
                 if not language_only_repair:
+                    review_fallback = self._grounded_plan_review_fallback(
+                        message, evidence, locale,
+                    )
+                    if review_fallback:
+                        return FinnResponsesVerifiedAnswer(
+                            "completed", review_fallback, "grounded_plan_review", evidence,
+                            bool(previous_answer),
+                        )
+                    personal_fallback = self._limited_personal_plan_fallback(
+                        message, evidence, result.tool_trace, locale,
+                    )
+                    if personal_fallback:
+                        return FinnResponsesVerifiedAnswer(
+                            "completed", personal_fallback, "limited_personal_plan", evidence,
+                            bool(previous_answer),
+                        )
                     coach_fallback = (
                         self._emotional_coach_fallback(message, locale)
                         if reason in {
