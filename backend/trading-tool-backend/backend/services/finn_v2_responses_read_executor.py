@@ -2,17 +2,57 @@
 
 from __future__ import annotations
 
+import os
 from typing import Any, Callable
 
 from backend.domain.macro_indicator_catalog import get_active_macro_indicator_definitions
 from backend.domain.finn_v2_operation_registry import FinnV2OperationRegistry
+from backend.domain.finn_v2_tools import TOOL_FRESHNESS_MAX_AGE_SECONDS
 from backend.domain.strategy_level_geometry import strategy_level_geometry
+from backend.schemas.finn_v2_evidence_schema import ActiveSetupData
 from backend.services.finn_v2_json_safety import to_json_safe
 from backend.services.finn_v2_responses_tool_catalog import FinnResponsesToolCall
 from backend.services.finn_v2_tool_execution_service import FinnV2ToolExecutionService
 
 
 class FinnResponsesReadExecutor:
+    @staticmethod
+    def _facts_only_local_experiment() -> bool:
+        return (
+            os.getenv("APP_ENV") == "local_finn"
+            and (
+                os.getenv("FINN_SIMPLE_COACH_EXPERIMENT") == "1"
+                or os.getenv("FINN_FACTS_ONLY_TOOL_RESULTS_EXPERIMENT") == "1"
+            )
+        )
+
+    @staticmethod
+    def _setup_facts_for_local_experiment(data: Any) -> Any:
+        if not isinstance(data, dict):
+            return data
+        saved = data.get("data") if isinstance(data.get("data"), dict) else data
+        fields = (
+            "name", "symbol", "timeframe", "setup_type", "dca_frequency",
+            "dca_day_name", "dca_month_day", "min_investment",
+        )
+        return {
+            "fields": {key: saved[key] for key in fields if saved.get(key) is not None},
+            "available_setup_fields": [
+                key for key in fields if key in getattr(ActiveSetupData, "model_fields", ActiveSetupData.__fields__)
+            ],
+            "not_recorded_fields": [
+                key for key in fields if saved.get(key) is None and (
+                    (key == "dca_day_name" and saved.get("dca_frequency") == "weekly")
+                    or (key == "dca_month_day" and saved.get("dca_frequency") == "monthly")
+                )
+            ],
+            "setups": [
+                {key: row[key] for key in ("name", "symbol", "timeframe", "setup_type")
+                 if row.get(key) is not None}
+                for row in saved.get("setups") or [] if isinstance(row, dict)
+            ],
+        }
+
     def __init__(
         self, *, session: Any = None, session_factory: Callable[[], Any] | None = None,
         user_id: int, run_id: str,
@@ -54,19 +94,21 @@ class FinnResponsesReadExecutor:
                         selector=call.inputs, shared_state=shared_state,
                     )
                     data = to_json_safe(result.result) if result.success else None
-                    as_of = self._as_of(data)
+                    as_of = str(result.as_of) if getattr(result, "as_of", None) else self._as_of(data)
             else:
                 result = await self.reads.execute_tool(
                     run_id=self.run_id, user_id=self.user_id, tool_name=read_tool,
                     selector=call.inputs, shared_state=shared_state,
                 )
                 data = to_json_safe(result.result) if result.success else None
-                as_of = self._as_of(data)
+                as_of = str(result.as_of) if getattr(result, "as_of", None) else self._as_of(data)
             if read_tool == "read_linked_strategy" and isinstance(data, dict):
                 data = {**data, "level_geometry": strategy_level_geometry(
                     data.get("entry"), data.get("stop_loss"), data.get("targets"),
                 )}
-            results.append({
+            if read_tool == "read_active_setup" and self._facts_only_local_experiment():
+                data = self._setup_facts_for_local_experiment(data)
+            evidence = {
                 "scope": read_tool,
                 "status": "completed" if result.success else "unavailable",
                 "availability": result.availability,
@@ -76,7 +118,10 @@ class FinnResponsesReadExecutor:
                 "asset": result.asset or call.inputs.get("asset"),
                 "data": data,
                 "reason": result.error_codes[0] if result.error_codes else None,
-            })
+            }
+            if read_tool == "read_active_asset" and result.success:
+                evidence["resolution_source"] = shared_state.get("resolution_source")
+            results.append(evidence)
             if read_tool == "read_indicator_configuration":
                 results.append(self._macro_catalog_evidence())
         output = {
@@ -100,25 +145,46 @@ class FinnResponsesReadExecutor:
                 return {"status": "unavailable", "reason": "evaluation_contract_invalid"}
             completed = {item["scope"] for item in results if item["status"] == "completed"}
             output["evaluation_operation_id"] = contract.operation_id
+            if "hypothetical_change" in contract.optional_inputs and call.inputs.get("hypothetical_change"):
+                output["hypothetical_scenario"] = {
+                    "change": call.inputs["hypothetical_change"],
+                    "status": "user_proposed_not_saved",
+                    "assessment": "not_established_by_scenario_alone",
+                }
+            def scope_available(scope: str, tool: str) -> bool:
+                for item in results:
+                    if item["scope"] != tool or item["status"] != "completed":
+                        continue
+                    if scope == "profile" and not (
+                        isinstance(item.get("data"), dict)
+                        and item["data"].get("has_profile") is True
+                    ):
+                        return False
+                    if TOOL_FRESHNESS_MAX_AGE_SECONDS.get(tool) is not None:
+                        return item.get("freshness") == "fresh" and bool(item.get("as_of"))
+                    return True
+                return False
+
             output["missing_required_scopes"] = [
                 scope for scope, tool in contract.scope_tool_bindings
-                if scope in contract.required_scopes and (
-                    tool not in completed
-                    or (
-                        scope == "profile"
-                        and not any(
-                            item["scope"] == tool
-                            and isinstance(item.get("data"), dict)
-                            and item["data"].get("has_profile") is True
-                            for item in results
-                        )
-                    )
-                )
+                if scope in contract.required_scopes and not scope_available(scope, tool)
             ]
             output["assessment_status"] = (
                 "insufficient_evidence" if output["missing_required_scopes"]
                 else "evidence_collected_not_yet_judged"
             )
+            available_scopes = {
+                scope for scope, tool in contract.scope_tool_bindings
+                if scope_available(scope, tool)
+            }
+            dimensions = (("full_assessment", contract.required_scopes),) + contract.evidence_dimensions
+            output["evidence_coverage"] = {
+                name: {
+                    "status": "available" if set(scopes) <= available_scopes else "incomplete",
+                    "missing_scopes": [scope for scope in scopes if scope not in available_scopes],
+                }
+                for name, scopes in dimensions
+            }
             output["resolved_entity_kinds"] = {
                 "setup": "read_active_setup" in completed,
                 "strategy": "read_linked_strategy" in completed,
@@ -159,7 +225,9 @@ class FinnResponsesReadExecutor:
                 "This is a read of saved setup and strategy configuration, not a current market "
                 "or owner-scoped risk evaluation. A numeric dca_day is a stored weekday code, "
                 "not a user-facing day; use dca_day_name and translate it into the answer language. "
-                "A chart timeframe and DCA frequency do not record the owner's holding horizon. "
+                "A chart timeframe, DCA frequency, and broad profile goal do not record the "
+                "owner's holding horizon. Ask for the intended period before classifying the "
+                "saved setup as long-term accumulation or short-term trading. "
                 "Stored entry, stop-loss, target and amount values "
                 "must be described as existing settings, never as an instruction to trade at "
                 "those levels or as proof that this plan suits the user's goals or risk style. "
@@ -183,6 +251,15 @@ class FinnResponsesReadExecutor:
                 "Do not infer a present trading signal, personal suitability, or a missing score as zero. "
                 "Do not offer to refresh or repeat a score assessment when no fresh score source is available."
             )
+        if self._facts_only_local_experiment():
+            output.pop("evidence_boundary", None)
+            output.pop("assessment_boundary", None)
+            if call.name == "get_my_profile_and_risk_style":
+                output["evidence_kind"] = "saved_profile_preferences"
+                output["assessment_status"] = "not_assessed"
+            elif call.name == "get_active_plan_and_strategy":
+                output["evidence_kind"] = "saved_plan_configuration"
+                output["assessment_status"] = "not_assessed"
         return output
 
     @staticmethod

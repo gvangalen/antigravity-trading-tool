@@ -220,6 +220,7 @@ def build_structured_response_request(
     output_spec: StructuredOutputSpec,
     max_output_tokens: int,
     timeout_seconds: Optional[int] = None,
+    reasoning_effort: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Serialize the one canonical Responses API JSON-schema payload."""
     _validate_structured_output_spec(output_spec)
@@ -229,6 +230,8 @@ def build_structured_response_request(
         "text": {"format": {"type": "json_schema", "name": output_spec.name, "schema": output_spec.schema, "strict": output_spec.strict}},
         "max_output_tokens": max_output_tokens,
     }
+    if reasoning_effort is not None:
+        request["reasoning"] = {"effort": reasoning_effort}
     return request
 
 
@@ -945,6 +948,7 @@ async def ask_gpt_structured_response_async(
     timeout_seconds: Optional[float] = None,
     max_output_tokens: Optional[int] = None,
     client_max_retries: Optional[int] = None,
+    reasoning_effort: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Cancellable structured provider boundary for FINN lifecycle phases."""
     # Existing callers and tests may inject the public sync provider. Honor an
@@ -959,6 +963,8 @@ async def ask_gpt_structured_response_async(
             "max_output_tokens": max_output_tokens,
             "client_max_retries": client_max_retries,
         }
+        if reasoning_effort is not None:
+            kwargs["reasoning_effort"] = reasoning_effort
         if inspect.iscoroutinefunction(ask_gpt_structured_response):
             injected = ask_gpt_structured_response(**kwargs)
         else:
@@ -1003,6 +1009,7 @@ async def ask_gpt_structured_response_async(
             output_spec=output_spec,
             max_output_tokens=max_output_tokens or MAX_TOKENS,
             timeout_seconds=timeout_seconds,
+            reasoning_effort=reasoning_effort,
         )
         if timeout_seconds is None:
             response = await active_client.responses.create(**request_kwargs)

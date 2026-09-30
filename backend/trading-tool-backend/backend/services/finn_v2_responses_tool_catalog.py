@@ -72,8 +72,16 @@ class FinnResponsesToolCall:
 
 
 class FinnResponsesToolCatalog:
-    def __init__(self, registry: FinnV2OperationRegistry | None = None) -> None:
+    def __init__(
+        self, registry: FinnV2OperationRegistry | None = None, *, individual_proposals: bool = False,
+    ) -> None:
         self.registry = registry or FinnV2OperationRegistry()
+        self.individual_proposals = individual_proposals
+        self.proposal_operations = (
+            {f"propose_{operation_id}": (operation_id,)
+             for operations in _PROPOSAL_OPERATIONS.values() for operation_id in operations}
+            if individual_proposals else _PROPOSAL_OPERATIONS
+        )
         self.read_definitions = {
             tool.name: tool for tool in FinnV2ToolRegistryService().list_tools()
         }
@@ -98,7 +106,7 @@ class FinnResponsesToolCatalog:
                     raise FinnResponsesToolError("proposal_binding_is_not_an_action_contract")
 
     def proposal_tool_for_operation(self, operation_id: str) -> str:
-        for name, operations in _PROPOSAL_OPERATIONS.items():
+        for name, operations in self.proposal_operations.items():
             if operation_id in operations:
                 return name
         raise FinnResponsesToolError("guided_operation_not_in_tool_catalog")
@@ -130,17 +138,27 @@ class FinnResponsesToolCatalog:
         })
         for name, read_tools in self.read_tools.items():
             description = " ".join(self.read_definitions[tool].description for tool in read_tools)
+            if name == "get_active_asset_context":
+                description += (
+                    " Returns the resolved asset symbol and its context source separately from "
+                    "watchlist membership. A selected asset does not imply an owned position, "
+                    "a fresh market quote, or a trading recommendation."
+                )
             if name == "get_my_profile_and_risk_style":
                 description += (
                     " Call only when the answer needs this user's saved profile or risk style. "
-                    "A general explanation of a trading concept does not need this read."
+                    "A general explanation of a trading concept does not need this read. "
+                    "This returns preferences, not a judgment about whether a specific plan "
+                    "or proposed amount fits them; use the registry-backed evaluate_plan "
+                    "tool for that assessment."
                 )
             if name == "get_active_plan_and_strategy":
                 description += (
-                    " Use this existing owner-scoped read for static arithmetic from saved "
-                    "strategy entry, stop and targets, including per-unit risk and "
-                    "reward-to-risk ratios. These calculations do not need a live quote "
-                    "and do not establish suitability or a current trade signal."
+                    " Returns saved setup and linked strategy facts, not an assessment. "
+                    "Use it for listing settings or static arithmetic from saved entry, "
+                    "stop and targets. If the user asks whether the complete plan fits "
+                    "their goals or risk style, use evaluate_plan instead; this read alone "
+                    "cannot establish suitability or a current trade signal."
                 )
             definitions.append({
                 "type": "function",
@@ -164,6 +182,15 @@ class FinnResponsesToolCatalog:
                 },
             })
         for contract in self.evaluation_contracts.values():
+            optional_properties = {}
+            if "hypothetical_change" in contract.optional_inputs:
+                optional_properties["hypothetical_change"] = {
+                    "type": "string",
+                    "description": (
+                        "A change the user is considering, quoted as a hypothetical scenario. "
+                        "It is not a saved plan, an instruction to write, or proof of suitability."
+                    ),
+                }
             definitions.append({
                 "type": "function",
                 "name": contract.operation_id,
@@ -173,6 +200,7 @@ class FinnResponsesToolCatalog:
                     "A request only for static arithmetic from already saved levels "
                     "belongs to the owner-scoped plan/strategy read, not this assessment. "
                     "FINN collects the registry-required sources; missing or stale sources limit the judgment. "
+                    "If the user proposes a change, pass it as hypothetical_change when this contract allows it. "
                     "This tool cannot modify stored objects or execute actions."
                 ),
                 "strict": False,
@@ -181,11 +209,12 @@ class FinnResponsesToolCatalog:
                     "properties": {
                         "asset": {"type": "string", "description": "Asset explicitly named by the user, if any."},
                         "timeframe": {"type": "string", "description": "Timeframe explicitly named by the user, if any."},
+                        **optional_properties,
                     },
                     "additionalProperties": False,
                 },
             })
-        for name, operations in _PROPOSAL_OPERATIONS.items():
+        for name, operations in self.proposal_operations.items():
             if guided_operation_id and guided_operation_id not in operations:
                 continue
             contracts = [
@@ -283,9 +312,8 @@ class FinnResponsesToolCatalog:
             return [definition for definition in definitions if self.is_proposal_tool(definition["name"])]
         return definitions
 
-    @staticmethod
-    def is_proposal_tool(name: str) -> bool:
-        return name in _PROPOSAL_OPERATIONS
+    def is_proposal_tool(self, name: str) -> bool:
+        return name in self.proposal_operations
 
     def validate(self, name: str, arguments: dict[str, Any]) -> FinnResponsesToolCall:
         if not isinstance(arguments, dict):
@@ -312,6 +340,8 @@ class FinnResponsesToolCatalog:
             }, (), (), ())
         if name in self.read_tools or name in self.evaluation_contracts:
             allowed = {"asset", "timeframe"}
+            if name in self.evaluation_contracts:
+                allowed.update(self.evaluation_contracts[name].optional_inputs)
             if name == "get_active_plan_and_strategy":
                 allowed.update({"setup_name", "reference"})
             if set(arguments).difference(allowed):
@@ -319,6 +349,8 @@ class FinnResponsesToolCatalog:
             if any(not isinstance(value, str) for value in arguments.values()):
                 raise FinnResponsesToolError("read_arguments_invalid")
             supplied = {key: value.strip() for key, value in arguments.items() if value.strip()}
+            if len(supplied.get("hypothetical_change", "")) > 500:
+                raise FinnResponsesToolError("read_arguments_invalid")
             if "reference" in supplied and supplied["reference"] not in {"current_request", "previous_response"}:
                 raise FinnResponsesToolError("read_reference_invalid")
             if "timeframe" in supplied:
@@ -333,7 +365,7 @@ class FinnResponsesToolCatalog:
                     evaluation_operation_id=name,
                 )
             return FinnResponsesToolCall(name, None, supplied, self.read_tools[name], (), ())
-        operations = _PROPOSAL_OPERATIONS.get(name)
+        operations = self.proposal_operations.get(name)
         if operations is None:
             raise FinnResponsesToolError("tool_unknown")
         if set(arguments) == {"payload"} and isinstance(arguments["payload"], dict):
@@ -348,7 +380,7 @@ class FinnResponsesToolCatalog:
             recommended_tool = (
                 self.proposal_tool_for_operation(operation_id)
                 if isinstance(operation_id, str)
-                and any(operation_id in bound for bound in _PROPOSAL_OPERATIONS.values())
+                and any(operation_id in bound for bound in self.proposal_operations.values())
                 else None
             )
             raise FinnResponsesToolError(
@@ -404,7 +436,7 @@ class FinnResponsesToolCatalog:
                 )
         if name == "create_dca_plan_proposal" and supplied.get("setup_type") is not None and str(supplied["setup_type"]).casefold() != "dca":
             alternatives = [
-                tool_name for tool_name, allowed in _PROPOSAL_OPERATIONS.items()
+                tool_name for tool_name, allowed in self.proposal_operations.items()
                 if tool_name != name and operation_id in allowed
             ]
             raise FinnResponsesToolError(

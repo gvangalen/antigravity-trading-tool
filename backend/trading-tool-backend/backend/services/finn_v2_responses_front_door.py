@@ -18,6 +18,7 @@ from backend.services.finn_v2_responses_proposal_selection import FinnResponsesP
 from backend.services.finn_v2_responses_read_executor import FinnResponsesReadExecutor
 from backend.services.finn_v2_responses_tool_catalog import FinnResponsesToolCall
 from backend.services.finn_v2_responses_tool_catalog import FinnResponsesToolCatalog
+from backend.services.finn_v2_responses_tool_catalog import FinnResponsesToolError
 from backend.services.finn_v2_responses_tool_relevance import FinnResponsesToolRelevanceGuard
 from backend.services.finn_v2_verified_turn_context import project_verified_turn
 from backend.services.finn_v2_entity_resolution_service import FinnV2EntityResolutionService
@@ -41,29 +42,30 @@ class FinnResponsesFrontDoor:
         language = {"nl": "Dutch", "en": "English", "de": "German"}.get(locale, "Dutch")
         return (
             "You are FINN, a personal trading coach. Respond entirely in " + language + ". "
-            "Talk naturally and briefly with the trader. A direct answer or a focused follow-up "
-            "question is valid without a tool. Use registry-backed FINN read tools only when "
-            "the answer needs saved account facts, calculations, or current data; you may call "
-            "more than one tool when needed. "
-            "For a general concept explanation, answer without account reads and explain the "
-            "mechanism without inventing an example price, currency amount, percentage or holding. "
-            "If the trader supplied a number, you may use that number with its original meaning. "
-            "A question about the trader's stated decision "
-            "process does not require a current market reading. Distinguish the trader's own "
-            "rule from a verified saved rule. A trader's report that the market is moving is "
-            "not a verified market snapshot; attribute it to the trader and do not state it as "
-            "a current market fact. Never claim that following a rule improves trading "
-            "outcomes or prevents losses without evidence. When a source is missing or stale, "
-            "explain the limit without inventing a value or cause, then answer the part that is "
-            "supported. A typed object-not-resolved result means no unique owner-scoped object "
-            "was identified; do not describe it as a provider outage or inability to access data. "
-            "Use the verified preceding-turn context for short follow-ups. "
-            "If the trader asks to create, change, or remove a saved object, call the matching "
-            "registry-backed proposal tool; missing inputs and owner-scoped dependencies are "
-            "validated by FINN. A proposal is not a saved change. Never claim a write succeeded "
-            "before explicit user confirmation and backend execution. Do not output internal "
-            "IDs, contract keys, tool names, or technical failure codes. Do not suggest a live "
-            "trade or bot activation from a hypothetical or unavailable signal."
+            "This is the effective reply language from the owner's preference and any explicit "
+            "language switch. The latest user message or a tool result may be in another language; "
+            "do not mirror that language unless the user explicitly requests a switch. "
+            "Lead the conversation: answer directly when general reasoning suffices, ask one "
+            "useful follow-up when a choice is missing, and call one or more FINN tools when "
+            "the answer needs saved account facts, a personal assessment, or current data. "
+            "For a general explanation, answer without account reads and do not invent an "
+            "example price, currency amount, or holding. If asked what to do now, offer a "
+            "specific safe process step rather than a generic invitation to ask again. "
+            "User statements are conversational context, not proof of saved FINN facts. "
+            "A short reply to a question you just asked supplies conversational detail; it "
+            "does not authorize changing a saved object unless the user explicitly requests that change. "
+            "Treat each tool's status, availability, source, as_of and evidence_boundary or "
+            "assessment_boundary as authoritative. A partial or insufficient assessment "
+            "supports only the returned facts and limits, never personal suitability. "
+            "A chart timeframe is not a holding horizon. Do not invent a saved object, "
+            "market reading, trading outcomes, or cause of unavailable data. A typed object "
+            "not-resolved result means no unique owner-scoped object, not a provider outage. "
+            "Keep user-stated entry conditions intact; do not suggest any position before "
+            "a required condition is met, including a smaller position. "
+            "For a requested mutation, choose the registry-backed proposal tool. FINN validates "
+            "inputs and dependencies; only explicit user confirmation can execute it. "
+            "Never claim a write happened before confirmed execution, and never suggest a "
+            "broker order or live-bot activation. Hide internal IDs and error codes."
         )
 
     def __init__(self, *, client: Any, session: Any = None, session_factory: Any = None, user_id: int, run_id: str, model_led_coach: bool = True) -> None:
@@ -111,15 +113,21 @@ class FinnResponsesFrontDoor:
         corrected_guided_operation_id: str | None = None,
         locale: str = "nl",
         force_read_repair: bool = False,
+        rejection_feedback: dict[str, Any] | None = None,
     ) -> FinnResponsesFrontDoorResult:
         selected: RequestAnalysisResult | None = None
+        individual_proposals = (
+            os.getenv("APP_ENV") == "local_finn"
+            and os.getenv("FINN_PER_OPERATION_TOOLS_EXPERIMENT") == "1"
+        )
+        catalog = FinnResponsesToolCatalog(individual_proposals=individual_proposals)
         if corrected_guided_operation_id:
             contract = self.proposals.registry.require_supported(corrected_guided_operation_id)
             if contract.mode not in {"CREATE_PROPOSAL", "ACTION_PROPOSAL"}:
                 raise ValueError("guided_target_correction_requires_action_contract")
             selected = self.proposals.from_call(
                 call=FinnResponsesToolCall(
-                    name=FinnResponsesToolCatalog().proposal_tool_for_operation(contract.operation_id),
+                    name=catalog.proposal_tool_for_operation(contract.operation_id),
                     operation_id=contract.operation_id, inputs={}, read_tools=(),
                     required_inputs=contract.required_inputs, missing_inputs=(), draft_intent="new",
                 ),
@@ -140,7 +148,6 @@ class FinnResponsesFrontDoor:
             )
         read_context: list[dict[str, Any]] = []
         completed_read_calls: set[tuple[str, str]] = set()
-        attempted_evaluation: str | None = None
         pending_operation = FinnV2OperationStateService.pending_operation_id(conversation_context)
         guided_state = dict(conversation_context.get("active_guided_operation") or {})
         requested_slot = str(guided_state.get("next_missing_input") or "")
@@ -159,7 +166,7 @@ class FinnResponsesFrontDoor:
             ) or (states._is_explicit_correction(message) and not switches_operation and "?" not in message):
                 selected = self.proposals.from_call(
                     call=FinnResponsesToolCall(
-                        name=FinnResponsesToolCatalog().proposal_tool_for_operation(pending_operation),
+                        name=catalog.proposal_tool_for_operation(pending_operation),
                         operation_id=pending_operation, inputs={}, read_tools=(),
                         required_inputs=contract.required_inputs,
                         missing_inputs=tuple(guided_state.get("missing_required_inputs") or ()),
@@ -195,16 +202,29 @@ class FinnResponsesFrontDoor:
             and pending_clarification.get("reason") == "user_detail_required"
         )
         if (
-            guard is not None and not getattr(self, "model_led_coach", False)
+            guard is not None
             and previous_response and previous_response.get("answer") and not pending_operation
             and not force_read_repair
             and (not resuming_clarification or detail_clarification)
+            and (
+                not getattr(self, "model_led_coach", False)
+                or previous_response.get("terminal_status") in {None, "completed"}
+            )
         ):
             classification_started = monotonic()
             sufficiency = await guard.previous_answer_suffices(
                 message=message,
                 previous_answer=str(previous_response.get("answer") or ""),
+                **({
+                    "model": os.getenv("FINN_RESPONSES_CHAT_MODEL", "gpt-6-luna"),
+                    "reasoning_effort": os.getenv("FINN_RESPONSES_REASONING_EFFORT", "none"),
+                } if getattr(self, "model_led_coach", False) else {}),
             )
+            if getattr(self, "model_led_coach", False) and sufficiency not in {
+                "explain_previous", "next_decision_from_previous",
+                "conditional_next_step_from_previous",
+            }:
+                sufficiency = False
             previous_answer_only = sufficiency in {
                 "explain_previous", "next_decision_from_previous",
                 "conditional_next_step_from_previous",
@@ -234,7 +254,30 @@ class FinnResponsesFrontDoor:
         }
 
         async def execute(call: FinnResponsesToolCall) -> dict[str, Any]:
-            nonlocal selected, target_retry_used, relevance_retry_used, recommended_read_operation, attempted_evaluation
+            nonlocal selected, target_retry_used, relevance_retry_used, recommended_read_operation
+            normalized_message = message.strip().casefold()
+            if (
+                call.operation_id == "select_asset"
+                and normalized_message.endswith("?")
+                and normalized_message.startswith((
+                    "welke ", "wat ", "which ", "what ", "welches ", "welcher ",
+                ))
+                and "asset" in normalized_message
+                and any(word in normalized_message for word in (
+                    "actief", "huidig", "active", "current", "selected", "geselecteerd", "aktiv",
+                ))
+                and not any(word in normalized_message for word in (
+                    "selecteer", "selecteren", "select ", "switch", "change ", "wijzig", "ändere",
+                ))
+            ):
+                return {
+                    "status": "retry", "reason": "active_asset_read_not_mutation",
+                    "recommended_tool_name": "get_active_asset_context",
+                    "instruction": (
+                        "The user asks which asset is currently selected. Read the owner-scoped "
+                        "active asset with get_active_asset_context; do not propose a selection."
+                    ),
+                }
             if call.name == "ask_for_clarification":
                 prior_read_completed = any(
                     item.get("status") == "completed"
@@ -252,24 +295,14 @@ class FinnResponsesFrontDoor:
                     "reason": call.inputs["reason"],
                     "question": call.inputs["question"],
                 }
-            if attempted_evaluation and (call.name.startswith("get_") or call.evaluation_operation_id):
-                return {
-                    "status": "retry", "reason": "evaluation_already_attempted_this_turn",
-                    "finalize_now": True,
-                    "instruction": (
-                        "The registry evaluation has already run in this turn. Do not repeat it "
-                        "or fetch a subset of the same required scopes. Answer using its typed "
-                        "result, including any unavailable evidence, without claiming a new assessment."
-                    ),
-                }
             should_check = (
-                not getattr(self, "model_led_coach", False)
-                and not pending_operation
+                not pending_operation
                 and not resuming_clarification
                 and (
                     call.operation_id is not None
-                    or call.evaluation_operation_id is not None
-                    or call.name.startswith("get_")
+                    or (not getattr(self, "model_led_coach", False)
+                        and (call.evaluation_operation_id is not None
+                             or call.name.startswith("get_")))
                 )
                 and not conversation_context.get("proposal_revision")
             )
@@ -374,7 +407,7 @@ class FinnResponsesFrontDoor:
                         if call.operation_id else None
                     )
                     recommended_tool_name = (
-                        FinnResponsesToolCatalog().proposal_tool_for_operation(recommended_operation_id)
+                        catalog.proposal_tool_for_operation(recommended_operation_id)
                         if recommended_operation_id else None
                     )
                     return {
@@ -511,8 +544,6 @@ class FinnResponsesFrontDoor:
                 read_result = await self.reads(call)
                 read_context.append(read_result)
                 completed_read_calls.add(read_identity)
-                if call.evaluation_operation_id:
-                    attempted_evaluation = call.evaluation_operation_id
                 return read_result
             if pending_operation and call.operation_id != pending_operation:
                 return {"status": "unavailable", "reason": "guided_operation_still_active"}
@@ -629,13 +660,17 @@ class FinnResponsesFrontDoor:
                 )
                 await session.commit()
 
-        verified_turn = project_verified_turn(previous_response) if not resuming_clarification else None
+        use_verified_turn = not resuming_clarification or getattr(self, "model_led_coach", False)
+        verified_turn = project_verified_turn(previous_response) if use_verified_turn else None
         loop_started = monotonic()
-        result = await FinnResponsesLoop(
+        loop = FinnResponsesLoop(
             client=self.client, executor=execute, on_tool_result=checkpoint,
-            model=os.getenv("FINN_RESPONSES_CHAT_MODEL", "gpt-6-sol"),
-            clarification_model=os.getenv("FINN_RESPONSES_CLARIFICATION_MODEL", "gpt-4o"),
-        ).run(
+            catalog=catalog,
+            model=os.getenv("FINN_RESPONSES_CHAT_MODEL", "gpt-6-luna"),
+            clarification_model=os.getenv("FINN_RESPONSES_CLARIFICATION_MODEL", "gpt-6-luna"),
+            reasoning_effort=os.getenv("FINN_RESPONSES_REASONING_EFFORT", "none"),
+        )
+        result = await loop.run(
             message=model_message or message,
             instructions=(self._model_led_instructions(locale) if getattr(self, "model_led_coach", False) else instructions),
             verified_turn_context=verified_turn,
@@ -654,15 +689,15 @@ class FinnResponsesFrontDoor:
             ) if verified_turn else (),
             previous_terminal_status=(
                 str(previous_response.get("terminal_status") or "")
-                if previous_response and not resuming_clarification else None
+                if previous_response and use_verified_turn else None
             ),
             previous_terminal_reason=(
                 str(previous_response.get("terminal_reason") or "")
-                if previous_response and not resuming_clarification else None
+                if previous_response and use_verified_turn else None
             ),
             antecedent_verified_answer=(
                 str(previous_response.get("antecedent_verified_answer") or "")[:1600]
-                if previous_response and not resuming_clarification else None
+                if previous_response and use_verified_turn else None
             ),
             guided_operation_id=pending_operation,
             resuming_clarification=resuming_clarification,
@@ -695,9 +730,45 @@ class FinnResponsesFrontDoor:
             ),
             locale=locale,
             force_read_repair=force_read_repair,
+            rejection_feedback=rejection_feedback,
             model_led_coach=getattr(self, "model_led_coach", False),
         )
         logger.info("FINN Responses tool loop completed in %.2fs", monotonic() - loop_started)
+        if (
+            not individual_proposals
+            and selected is None
+            and pending_operation is None
+            and not force_read_repair
+            and not previous_answer_only
+            and not result.tool_trace
+            and getattr(self, "model_led_coach", False)
+        ):
+            action_contracts = []
+            for contract in self.proposals.registry.list():
+                if not contract.supported or contract.mode not in {"CREATE_PROPOSAL", "ACTION_PROPOSAL"}:
+                    continue
+                try:
+                    loop.catalog.proposal_tool_for_operation(contract.operation_id)
+                except FinnResponsesToolError:
+                    continue
+                action_contracts.append({
+                    "operation_id": contract.operation_id,
+                    "purpose": contract.semantic_description or contract.operation_id,
+                })
+            audit = getattr(guard, "requested_action_contract", None)
+            missed_operation = (
+                await audit(message=message, contracts=action_contracts)
+                if callable(audit) and action_contracts else None
+            )
+            if missed_operation:
+                result = await loop.run(
+                    message=message,
+                    instructions=self._model_led_instructions(locale),
+                    previous_response_id=result.response_id,
+                    guided_operation_id=missed_operation,
+                    locale=locale,
+                    model_led_coach=True,
+                )
         if (
             getattr(self, "model_led_coach", False)
             and verified_turn is not None

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import json
+import os
 import re
 from contextlib import suppress
 from datetime import datetime, timedelta, timezone
@@ -45,6 +46,7 @@ from backend.services.finn_v2_responses_answer_verifier import FinnResponsesAnsw
 from backend.services.finn_v2_responses_front_door import FinnResponsesFrontDoor, FinnResponsesFrontDoorResult
 from backend.services.finn_v2_responses_loop import FinnResponsesError
 from backend.services.finn_v2_responses_tool_relevance import FinnResponsesToolRelevanceGuard
+from backend.services.finn_v2_hard_claim_boundary import FinnV2HardClaimBoundary
 from backend.services.finn_v2_operation_state_service import FinnV2OperationStateService
 from backend.services.finn_v2_request_preprocessor_service import FinnV2RequestPreprocessorService
 from backend.services.finn_v2_entity_resolution_service import FinnV2EntityResolutionService
@@ -53,6 +55,136 @@ from backend.utils import openai_client
 
 
 logger = logging.getLogger(__name__)
+
+
+def _simple_coach_experiment_enabled() -> bool:
+    return (
+        os.getenv("APP_ENV") == "local_finn"
+        and os.getenv("FINN_SIMPLE_COACH_EXPERIMENT") == "1"
+    )
+
+
+def _simple_coach_structural_violations(
+    *, text: str, tool_trace: tuple[dict[str, Any], ...], message: str,
+    horizon_classification_question: bool = False,
+) -> tuple[str, ...]:
+    """Reuse the verifier's typed fact checks in the local model-led path."""
+    evidence = tuple(
+        item
+        for call in tool_trace
+        for item in (call.get("result") or {}).get("results") or []
+        if isinstance(item, dict)
+    )
+    checks = (
+        ("saved_entity_type", FinnResponsesAnswerVerifier._saved_entity_type_supported(
+            text, evidence, user_message=message,
+        )),
+        ("saved_horizon", not (horizon_classification_question or "?" in message) or
+         FinnResponsesAnswerVerifier._saved_horizon_claim_supported(text, evidence)),
+        ("saved_profile", FinnResponsesAnswerVerifier._profile_presence_claim_supported(
+            text, evidence,
+        )),
+    )
+    return tuple(name for name, supported in checks if not supported)
+
+
+async def _simple_coach_experiment_answer(
+    *, message: str, prepared: FinnResponsesFrontDoorResult,
+) -> tuple[FinnResponsesVerifiedAnswer, str, str | None]:
+    """Let OpenAI repair only a typed hard-claim violation in the local experiment."""
+    boundary = FinnV2HardClaimBoundary()
+    text = prepared.response.text.strip()
+    response_id = prepared.response.response_id
+    for repair_attempt in range(2):
+        verdict = await boundary.assess(
+            answer=text, tool_trace=prepared.response.tool_trace,
+            recent_action_result=prepared.recent_action_result,
+            user_message="\n".join(filter(None, (
+                str((prepared.previous_response or {}).get("user_message") or ""), message,
+            ))),
+        )
+        if not verdict.available:
+            logger.warning("FINN local claim boundary unavailable: %s", verdict.violations)
+            return FinnResponsesVerifiedAnswer(
+                "unavailable", "Ik kan dit antwoord niet betrouwbaar controleren. Probeer het opnieuw.",
+                "claim_boundary_unavailable", (),
+            ), response_id, None
+        violations = tuple(dict.fromkeys((
+            *verdict.violations,
+            *_simple_coach_structural_violations(
+                text=text, tool_trace=prepared.response.tool_trace, message=message,
+                horizon_classification_question=prepared.response.horizon_classification_question,
+            ),
+        )))
+        if not violations:
+            return FinnResponsesVerifiedAnswer(
+                "completed", text, None, (),
+                used_previous_response=prepared.response.uses_previous_response,
+            ), response_id, text if response_id != prepared.response.response_id else None
+        if (
+            not prepared.response.tool_trace
+            and "condition_bypass" not in violations
+            and any(kind in violations for kind in ("personal_fit", "current_market"))
+        ):
+            return FinnResponsesVerifiedAnswer(
+                "unavailable", "Ik kan dit nog niet betrouwbaar onderbouwen met de beschikbare gegevens.",
+                "no_evidence_available", (),
+            ), response_id, None
+        if repair_attempt:
+            logger.warning("FINN local claim repair still unsupported: %s", violations)
+            break
+        repair_input = {
+            "boundary_status": "unsupported_claim",
+            "original_user_question": message,
+            "claim_types": list(violations),
+            "unsupported_quotes": {
+                key: quote for key, quote in verdict.quotes.items() if quote
+            },
+            "typed_evidence": boundary.repair_evidence(
+                prepared.response.tool_trace, prepared.recent_action_result,
+            ),
+            "previous_verified_answer": (prepared.previous_response or {}).get("answer"),
+            "previous_user_message": (prepared.previous_response or {}).get("user_message"),
+        }
+        timeout = min(15.0, max(0.1, remaining_lifecycle_seconds() or 15.0))
+        repair_model = os.getenv("FINN_RESPONSES_REPAIR_MODEL") or "gpt-6-luna"
+        repair_options = (
+            {"reasoning": {"effort": "none"}}
+            if repair_model == "gpt-6-luna" else {"temperature": 0}
+        )
+        try:
+            revised = await asyncio.wait_for(
+                openai_client.async_client.responses.create(
+                    model=repair_model,
+                    instructions=(
+                        FinnResponsesFrontDoor._model_led_instructions(prepared.locale)
+                        + " The typed FINN facts in the current input are the only saved or current "
+                        "evidence for this answer. The listed claim_types were rejected because "
+                        "their required evidence is absent. Do not assert or imply that a plan, "
+                        "method, amount or asset fits this person's goals or risk profile; do not "
+                        "claim it reduces risk or improves outcomes. If the user has stated a "
+                        "prerequisite for entering a trade, do not suggest any entry before it, "
+                        "including a smaller position. Distinguish saved facts from "
+                        "the user's proposed change. Answer the original question naturally by "
+                        "stating what can and cannot be established, then ask at most one relevant "
+                        "question. Do not replace the answer with an error message."
+                    ),
+                    input=json.dumps(repair_input, ensure_ascii=False),
+                    tool_choice="none",
+                    **repair_options,
+                ),
+                timeout=timeout,
+            )
+        except Exception:
+            break
+        text = str(getattr(revised, "output_text", "") or "").strip()
+        response_id = str(getattr(revised, "id", "") or response_id)
+        if not text:
+            break
+    return FinnResponsesVerifiedAnswer(
+        "unavailable", "Ik kan dit nog niet betrouwbaar onderbouwen met de beschikbare gegevens.",
+        "unsupported_model_claim", (),
+    ), response_id, None
 
 
 async def _await_selection_or_lifecycle(selection_waiter, lifecycle, *, timeout: float) -> None:
@@ -70,6 +202,18 @@ async def _await_selection_or_lifecycle(selection_waiter, lifecycle, *, timeout:
 
 
 class FinnV2RunService:
+    @staticmethod
+    def _read_repair_has_budget(remaining: float | None, *, explain_limit: bool) -> bool:
+        # The provider loop retains its own terminal-persistence reserve.
+        return remaining is None or remaining > (7 if explain_limit else 8)
+
+    @staticmethod
+    def _read_only_repair_eligible(tool_trace: tuple[dict[str, Any], ...]) -> bool:
+        return not tool_trace or all(
+            str(call.get("name") or "").startswith(("get_", "evaluate_"))
+            for call in tool_trace
+        )
+
     @staticmethod
     def _independent_linked_read(message: str) -> bool:
         facts = FinnV2RequestPreprocessorService().preprocess(message=message)
@@ -146,6 +290,7 @@ class FinnV2RunService:
         answer: FinnResponsesVerifiedAnswer,
         previous_response: dict[str, Any] | None = None,
         locale: str | None = None,
+        model_only_experiment: bool = False,
     ) -> None:
         """Publish a verified free-chat read through the same polling/SSE model."""
         run = await self.runs.get_by_id_for_user(run_id=run_id, user_id=user_id)
@@ -166,7 +311,10 @@ class FinnV2RunService:
             "mode": "CLARIFICATION" if status == "clarification_required" else "READ" if status == "completed" else "UNAVAILABLE",
             "content": answer.text,
             "response_source": "v2_runtime",
-            "verifier_status": "passed" if status in {"completed", "clarification_required"} else "failed",
+            "verifier_status": (
+                "not_run" if model_only_experiment else
+                "passed" if status in {"completed", "clarification_required"} else "failed"
+            ),
             "evidence": [],
             "uncertainty": [answer.reason] if answer.reason else [],
             "proposal_id": None,
@@ -174,6 +322,7 @@ class FinnV2RunService:
             "reasoning_provenance": {
                 "reasoning_source": "responses_tool_loop",
                 "provider_response_id": response_id,
+                **({"local_model_only_experiment": True} if model_only_experiment else {}),
             },
         }
         if previous_response:
@@ -211,6 +360,7 @@ class FinnV2RunService:
         recovery_response_id: str | None = None,
         prior_tool_trace: tuple[dict[str, Any], ...] = (),
         force_read_repair: bool = False,
+        rejection_feedback: dict[str, Any] | None = None,
     ) -> tuple[FinnResponsesFrontDoorResult, str]:
         """Select through Responses without holding a DB connection at the provider."""
         async with async_session_factory() as session:
@@ -288,6 +438,11 @@ class FinnV2RunService:
                         "tool_trace": list(exchange.get("tool_trace") or progress.get("tool_trace") or []),
                     }
             if previous_response and previous_response.get("run_id"):
+                preceding_run = await orchestrator.runs.get_by_id_for_user(
+                    run_id=str(previous_response["run_id"]), user_id=user_id,
+                )
+                if preceding_run is not None and preceding_run.conversation_id == conversation_id:
+                    previous_response["user_message"] = preceding_run.message
                 preceding_contract = await orchestrator.runtime_contracts.get_for_run(
                     run_id=str(previous_response["run_id"]),
                 )
@@ -675,6 +830,7 @@ class FinnV2RunService:
             previous_response=previous_response,
             prior_tool_trace=prior_tool_trace,
             force_read_repair=force_read_repair,
+            rejection_feedback=rejection_feedback,
         )
         if prior_tool_trace:
             result = replace(
@@ -1312,31 +1468,60 @@ class FinnV2RunService:
                             monotonic() - responses_stage_started,
                         )
                         read_repair_used = False
+                        final_response_id: str | None = None
                         if prepared.proposal_analysis is None:
                             responses_stage_started = monotonic()
-                            answer = await FinnResponsesAnswerVerifier(client=openai_client.async_client).verify(
-                                message=message, result=prepared.response,
-                                previous_response=prepared.previous_response,
-                                recent_action_result=prepared.recent_action_result,
-                                locale=prepared.locale,
-                            )
+                            if _simple_coach_experiment_enabled() and prepared.response.text.strip():
+                                answer, final_response_id, revised_text = await _simple_coach_experiment_answer(
+                                    message=message, prepared=prepared,
+                                )
+                                if revised_text:
+                                    async with async_session_factory() as session:
+                                        await FinnV2RuntimeContractRepository(session).record_responses_exchange(
+                                            run_id=run_id, user_id=user_id,
+                                            response_id=final_response_id,
+                                            tool_trace=list(prepared.response.tool_trace),
+                                            answer=revised_text,
+                                            supersedes_response_id=prepared.response.response_id,
+                                            answer_kind=prepared.response.answer_kind,
+                                            uses_previous_response=prepared.response.uses_previous_response,
+                                            response_id_reusable=False,
+                                        )
+                                        await session.commit()
+                            else:
+                                answer = await FinnResponsesAnswerVerifier(client=openai_client.async_client).verify(
+                                    message=message, result=prepared.response,
+                                    previous_response=prepared.previous_response,
+                                    recent_action_result=prepared.recent_action_result,
+                                    locale=prepared.locale,
+                                )
                             logger.info(
                                 "FINN Responses verification completed in %.2fs",
                                 monotonic() - responses_stage_started,
                             )
                             remaining = remaining_lifecycle_seconds()
+                            assessment_limited = any(
+                                (call.get("result") or {}).get("assessment_status") == "insufficient_evidence"
+                                and (call.get("result") or {}).get("evaluation_operation_id")
+                                for call in prepared.response.tool_trace
+                            )
+                            explain_limit = (
+                                assessment_limited and answer.reason == "personal_fit_not_established"
+                            ) or answer.reason in {
+                                "saved_entity_type_unverified", "trading_outcome_claim_unverified",
+                                "user_condition_bypass_blocked",
+                            }
                             if (
                                 not read_repair_used
                                 and prepared.response.response_id_reusable
-                                and answer.reason in {"responses_evidence_not_verified", "no_evidence_available"}
-                                and (
-                                    not prepared.response.tool_trace
-                                    or any(
-                                        str(call.get("name") or "").startswith("get_")
-                                        for call in prepared.response.tool_trace
-                                    )
-                                )
-                                and (remaining is None or remaining > 12)
+                                and answer.reason in {
+                                    "responses_evidence_not_verified", "no_evidence_available",
+                                    "personal_fit_not_established", "current_market_claim_unverified",
+                                    "saved_action_claim_unverified", "trading_outcome_claim_unverified",
+                                    "user_condition_bypass_blocked", "saved_entity_type_unverified",
+                                }
+                                and cls._read_only_repair_eligible(prepared.response.tool_trace)
+                                and cls._read_repair_has_budget(remaining, explain_limit=explain_limit)
                             ):
                                 prepared, message = await cls.prepare_responses_turn(
                                     run_id=run_id, user_id=user_id,
@@ -1344,27 +1529,58 @@ class FinnV2RunService:
                                     selection_ready=selection_ready,
                                     recovery_response_id=prepared.response.response_id,
                                     prior_tool_trace=prepared.response.tool_trace,
-                                    force_read_repair=not prepared.response.tool_trace,
+                                    force_read_repair=not prepared.response.tool_trace and not explain_limit,
+                                    rejection_feedback={
+                                        "status": "answer_rejected",
+                                        "reason": answer.reason,
+                                        **({"repair_mode": "explain_limit"} if explain_limit else {}),
+                                        **(answer.rejection_details or {}),
+                                        "evidence": [
+                                            {key: item.get(key) for key in (
+                                                "scope", "status", "reason", "source", "asset", "as_of",
+                                            ) if item.get(key) is not None}
+                                            for item in answer.evidence
+                                        ],
+                                    },
                                 )
-                                answer = (
-                                    None if prepared.proposal_analysis is not None
-                                    else await FinnResponsesAnswerVerifier(client=openai_client.async_client).verify(
+                                read_repair_used = True
+                                if prepared.proposal_analysis is not None:
+                                    answer = None
+                                elif _simple_coach_experiment_enabled():
+                                    answer, final_response_id, revised_text = await _simple_coach_experiment_answer(
+                                        message=message, prepared=prepared,
+                                    )
+                                    if revised_text:
+                                        async with async_session_factory() as session:
+                                            await FinnV2RuntimeContractRepository(session).record_responses_exchange(
+                                                run_id=run_id, user_id=user_id,
+                                                response_id=final_response_id,
+                                                tool_trace=list(prepared.response.tool_trace),
+                                                answer=revised_text,
+                                                supersedes_response_id=prepared.response.response_id,
+                                                answer_kind=prepared.response.answer_kind,
+                                                uses_previous_response=prepared.response.uses_previous_response,
+                                                response_id_reusable=False,
+                                            )
+                                            await session.commit()
+                                else:
+                                    answer = await FinnResponsesAnswerVerifier(client=openai_client.async_client).verify(
                                         message=message, result=prepared.response,
                                         previous_response=prepared.previous_response,
                                         recent_action_result=prepared.recent_action_result,
                                         locale=prepared.locale,
                                     )
-                                )
                         else:
                             answer = None
                     if answer is not None:
                         async with async_session_factory() as session:
                             await cls(session).complete_responses_read(
                                 run_id=run_id, user_id=user_id,
-                                response_id=prepared.response.response_id,
+                                response_id=final_response_id or prepared.response.response_id,
                                 answer=answer,
                                 previous_response=prepared.previous_response,
                                 locale=prepared.locale,
+                                model_only_experiment=_simple_coach_experiment_enabled(),
                             )
                         return
 

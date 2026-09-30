@@ -227,7 +227,7 @@ class FinnV2ToolExecutionService:
                     user_id=user_id,
                     selector=selector,
                     run=run_context,
-                    shared_state=shared_state or {},
+                    shared_state=shared_state if shared_state is not None else {},
                 ),
                 timeout=timeout_seconds,
             )
@@ -243,6 +243,7 @@ class FinnV2ToolExecutionService:
                 selector=selector,
                 resolution_source=payload.get("resolution_source"),
                 freshness_status=freshness_status,
+                as_of=as_of,
                 source=payload.get("source", "internal"),
                 schema_name=payload.get("schema_name"),
                 availability="stale" if freshness_status == "stale" else "available",

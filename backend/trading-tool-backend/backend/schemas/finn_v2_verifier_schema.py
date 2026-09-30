@@ -47,6 +47,7 @@ class SemanticVerificationResult(BaseModel):
     unsupported_unavailable_cause: bool = False
     unverified_guardrail_override: bool = False
     unverified_outcome_claim: bool = False
+    rejected_claim_quotes: List[str] = Field(default_factory=list)
     reason_codes: List[str] = Field(default_factory=list)
     model: Optional[str] = None
 

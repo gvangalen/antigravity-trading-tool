@@ -1,94 +1,59 @@
 # FINN Release Status
 
-This is the only current status page for the active FINN release. Keep it
-short; link artifacts rather than copying reports or chat history.
+This is the current status page for the active FINN release. Runtime identity is
+verified from Git and the public deployment surfaces, not from this file's own
+commit SHA.
 
 ## Active Release
 
 | Field | Value |
 | --- | --- |
-| Phase | `BUILDING` |
-| Active goal | FINN Responses Tool Runtime |
+| Phase | `BUILD_VALIDATED` |
+| Active goal | FINN Responses Tool Runtime with `gpt-6-luna`, reasoning `none` as the chat default |
 | Candidate branch | `codex/finn-responses-tool-runtime` |
-| Candidate code SHA | Resolve from the branch commit; this document is not release-authoritative |
-| Production SHA | `258b998ae19df6a026b63265c507855069ebb82c` (public backend/frontend, 2026-09-24; repair candidate not deployed) |
+| Candidate code SHA | Resolve from the branch commit after local validation |
+| Production SHA before this release | `86ef0dfa82eb24d20b9d9348fe9f7c142c2194e1` (backend health and frontend build-info, 2026-09-30) |
 | Release owner | Build |
-| Last updated | `2026-09-26` |
+| Last updated | `2026-09-30` |
 
-## QA Runner
+## Local Build Evidence
 
-- QA runner readiness: `AVAILABLE`
-- authenticated QA preflight: not started for this candidate; Build does not
-  access `FINN_QA_USER_ID`.
-- official QA status: `NOT_STARTED` for this candidate.
+All runs below used synthetic local owners, the real Responses provider, the
+local API, persisted worker lifecycle, polling, and SSE where applicable. The
+local parity runtime reports `gpt-6-luna` for chat, clarification, and repair,
+with reasoning `none`. The independent semantic verifier remains
+`gpt-4o-mini`. The candidate's production PM2 config sets the Luna defaults for the API and all
+workers, including when an old PM2 process environment carries stale values.
 
-The protected GitHub Actions runner remains the canonical authenticated
-production QA executor. This Build batch does not start QA or access its
-fixture or sealed manifest. Candidate and live identity must be verified from
-Git and deployment surfaces, not from this self-referential status file.
-
-## Evidence
-
-The current Responses coach repair was revalidated on 2026-09-26 before
-deployment. Three six-turn real-provider coaching conversations passed in NL,
-EN, and DE (`6/6` each), and the public API/Celery scenario suite passed
-`20/20`. The local worker-driven action matrix passed `16/16` after a
-registry-backed proposal-tool repair; the first `15/16` diagnostic run is not
-the release evidence. Backend root tests passed `2604`, with `3` skipped;
-frontend typecheck and production build passed. Real-provider development and
-regression passed `18/18` and `109/109` without provider, schema, parse,
-validation, or timeout failures. Current artifacts:
-
-- `.local-finn-parity-artifacts/finn-responses-boundary-full-scenarios.json`
-  SHA-256 `55488400391492b05aa26abccb511d396fb512f0962dd2e330b0d4b2e15e7f06`
-- `.local-finn-parity-artifacts/finn-responses-release-action-matrix-v2.json`
-  SHA-256 `814840b2c398bc034973312ade70a28a0f5fd521efb0f7053ab22e55b6cfdfbf`
-- `.local-finn-parity-artifacts/finn-responses-boundary-provider-development.json`
-  SHA-256 `294a9ba5d85d6fdb1e5285eedac37a329a462d636baa4e639c92ddc5624a813e`
-- `.local-finn-parity-artifacts/finn-responses-boundary-provider-regression.json`
-  SHA-256 `490570644e97881f4a311c2f10e36c80d1cbf6a890c332781ac1731701d5f75a`
-
-These artifacts are local Build evidence only. No CI, deployment, or independent
-QA outcome is inferred from them.
-
-The current uncommitted repair remains `BUILDING`. Two consecutive local public
-Responses conversation gates are `20/20`, including a four-turn conversation,
-an owner-scoped draft revision, confirmation, execution, replay, and readback.
-The `Waarom?` follow-up now requires `answer_directly` without unrelated reads.
-Artifacts: `.local-finn-parity-artifacts/finn-responses-relevance-v18.json`,
-SHA-256 `f60f0482bd92f31cd8163ddd046c43c809e6ad93f7c6672ed2471ec3e96b1e8b`,
-and `.local-finn-parity-artifacts/finn-responses-relevance-v19.json`,
-SHA-256 `eb4dab08e8abd60b12926ab37b1dcd9dd8d69cd257cd4238dc2b7e0acafab43b`.
-The latest complete worker-driven action matrix is `16/16` with zero broker,
-live-trading, or live-bot effects. Artifact:
-`.local-finn-parity-artifacts/finn-responses-action-matrix-v18.json`,
-SHA-256 `07042b60143e9968d56ce0e75d3ff0aeeb6524b93c94d0a5e4425a875fd129a3`.
-The current backend root suite is `2497 passed, 3 skipped`. The real-provider
-development and regression gates were rerun on the final conversation-lineage
-code and passed `18/18` and `109/109`, respectively, with zero provider,
-schema, parse, validation, or timeout failures. No CI, deployment, or
-independent QA has started for this repair.
-
-| Gate | Status | Evidence |
+| Gate | Result | Evidence |
 | --- | --- | --- |
-| Responses runtime scenarios | `PASS` | Two consecutive public real-provider API runs `20/20` each, including scoped short follow-up and persisted draft lifecycle; artifacts and hashes above. |
-| Fresh-owner regression | `PASS` | Public API/Celery guided setup, explicit confirmation, one persisted setup, idempotent replay, and exact saved-name/4H readback with a new owner; `.local-finn-parity-artifacts/finn-responses-fresh-owner-repair.jsonl`, SHA-256 `56195d95ff3ca10507994edfdb46d463a06bda9dc6d58f3019e6a1e54f92b28d`. |
-| Action matrix | `PASS` | Current local worker-driven `16/16`, including guided strategy, proposal/confirmation/execution/replay; no broker, live trading or live bot effect; `.local-finn-parity-artifacts/finn-responses-action-matrix-v18.json`, SHA-256 `07042b60143e9968d56ce0e75d3ff0aeeb6524b93c94d0a5e4425a875fd129a3`. |
-| Visible Draft Card | `PASS` | Local browser shows a registry-backed BTC DCA proposal with name, timeframe, frequency, amount and explicit confirmation; `/tmp/finn-responses-draft-card-amount-local.png`, SHA-256 `ecf1f84a70f57bf7bbc7f53e481e980e478240ef05c34d64aca52c65d00e819e`. |
-| Provider development | `PASS` | Current real provider `18/18`; `.local-finn-parity-artifacts/finn-responses-provider-development-v18.json`, SHA-256 `9bff107bc9db8196eeb53e216b3f162eca658c1dcd01930ac9f71d405e34d3cd`. |
-| Provider regression | `PASS` | Current real provider `109/109`; `.local-finn-parity-artifacts/finn-responses-provider-regression-v18.json`, SHA-256 `f4ddeea08184f29518065ebe519e6e69d1b2b8df5cf50b33c52d003447b509ed`. |
-| Backend suite | `PASS` | `2497 passed, 3 skipped` from the canonical checkout root. |
-| Frontend suite | `PASS` | Current `typecheck` and production build passed; earlier `lint:i18n`, `test:i18n`, `test:commands`, guided-modal, and `audit:high` passed before this backend-only repair. |
-| CI | `PENDING_RERUN` | First candidate CI run `36228741907` exposed an unbounded SQLAlchemy upgrade selecting an uninstalled sync driver; dependency constrained before the next candidate run. |
-| Deployment | `NOT_RUN` | Production remains on `258b998a…`; its first safe Build smoke exposed fresh-owner readback defects. The repair candidate has not deployed or run a new live smoke. |
-| Official independent QA | `NOT_STARTED` | Build does not initiate official QA. |
+| Dutch coaching conversation | `8/8` | `.local-finn-parity-artifacts/coach-luna-release-final-nl-v7.json`, SHA-256 `9a5056129e9808ef347bd0f9c311020f57c8843aef7a5bd45019658ebb1adb03` |
+| Alternate Dutch conversation | `4/4` | `.local-finn-parity-artifacts/coach-luna-release-final-alt-nl-v7.json`, SHA-256 `41d0ffa59f6006bbd75495bc3570dac012bc34a01b22cb8a4240e0659a47bf4e` |
+| Alternate English conversation | `4/4` | `.local-finn-parity-artifacts/coach-luna-release-final-alt-en-v7.json`, SHA-256 `4a40ccbe63455f4d1bd88136cbe5f0e4db52965e964ab797d32e4375d6bd4304` |
+| Action contract matrix | `16/16` | `.local-finn-parity-artifacts/action-matrix-luna-release-final-v8.json`, SHA-256 `c217e1fa1cc1eb902bc078e6da4a37d3ee7c5ab9d594bb749cb68d3d2fac10fc`; zero broker orders, live-trading calls, or live bots. The preceding `15/16` run exposed a four-second action-alignment timeout, corrected before this run. |
+| Real-provider selector development | `18/18` | `.local-finn-parity-artifacts/luna-release-provider-development.json`, SHA-256 `226e10d6091db692a0aed5f13e9a0bece4cbd693a79250e77ff5138e01f6a374` |
+| Real-provider selector regression | `109/109` | `.local-finn-parity-artifacts/luna-release-provider-regression.json`, SHA-256 `51ffc2ef9f9aea166478b2e290a42b97172cabc04b2cf2c84091990d7f33e542` |
+| Backend root suite | `2847 passed, 3 skipped` | `pytest -q` on the current working tree |
+| Frontend | `PASS` | `typecheck`, `lint:i18n`, `test:i18n`, `test:commands`, `audit:high` (zero high vulnerabilities), and production `build` |
+| Production PM2 model defaults | `PASS` | Node check of all five production app environments, including a simulated stale model and reasoning process environment |
 
-## Independent QA
+The public 48-case legacy operation-ID diagnostic ran before the last repairs
+and scored `10/48`: `.local-finn-parity-artifacts/public-48-luna-release.json`,
+SHA-256 `57caabeb800c3becc5447d4523df0db907f31d08e5357980aba4c2728527983a`.
+Its operation-ID assertions target the old selector route and do not describe
+the direct Responses chat contract. This is a recorded red diagnostic, not a
+claim of 48-case parity; the current action contract matrix remains the
+canonical Build action gate. The diagnostic also exposed read/language defects
+that were fixed and covered by focused regressions and the conversations above.
 
-- No independent QA has been started for this candidate.
-- The sealed holdout remains QA-exclusive and was not read or used by Build.
+## Release and Independent QA
 
-## Allowed Phases
+| Gate | Status |
+| --- | --- |
+| CI | `NOT_STARTED` for this candidate |
+| Auto Deploy | `NOT_STARTED`; production remains on the SHA above |
+| Backend health and frontend build-info for candidate | `NOT_RUN` |
+| Official independent QA | `NOT_STARTED`; Build has not accessed the QA fixture or sealed holdout |
 
-`BUILDING`, `BUILD_VALIDATED`, `DEPLOYING`, `LIVE_SMOKE_RUNNING`,
-`READY_FOR_INDEPENDENT_QA`, `QA_RUNNING`, `ACCEPTED`, `NOT_ACCEPTED`.
+Only the user assigns independent production QA after Build records a complete
+live candidate. Build does not start, instruct, or contact QA.

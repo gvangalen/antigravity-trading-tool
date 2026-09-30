@@ -83,7 +83,7 @@ def main() -> None:
     output.parent.mkdir(parents=True, exist_ok=True)
     artifact = {
         "synthetic_local_only": True,
-        "chat_model": os.getenv("FINN_RESPONSES_CHAT_MODEL", "gpt-6-sol"),
+        "chat_model": os.getenv("FINN_RESPONSES_CHAT_MODEL", "gpt-6-luna"),
         "verifier_model": os.getenv("FINN_V2_SEMANTIC_VERIFIER_MODEL", "gpt-6-sol"),
         "conversations": [], "action_followups": [], "complete": False,
     }

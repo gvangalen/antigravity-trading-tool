@@ -191,6 +191,9 @@ class OperationContract:
     conditional_required_inputs: tuple[tuple[str, str, str], ...] = ()
     required_scopes: tuple[str, ...] = ()
     optional_scopes: tuple[str, ...] = ()
+    # Evidence coverage is registry-owned. A partial evaluation may support a
+    # narrower factual dimension without authorizing the full assessment.
+    evidence_dimensions: tuple[tuple[str, tuple[str, ...]], ...] = ()
     scope_tool_bindings: tuple[tuple[str, str], ...] = ()
     model_policy: str = "never"  # never | optional | required
     # Context policy is part of the immutable operation contract.  It keeps
@@ -276,6 +279,13 @@ class OperationContract:
         unknown = set(self.required_scopes + self.optional_scopes).difference(INFORMATION_SCOPE_ORDER)
         if unknown:
             raise FinnV2OperationContractError(f"unknown_scope:{self.operation_id}:{sorted(unknown)}")
+        if self.evidence_dimensions:
+            names = [name for name, _ in self.evidence_dimensions]
+            if self.mode != "EVALUATE" or len(names) != len(set(names)) or any(not name for name in names):
+                raise FinnV2OperationContractError(f"invalid_evidence_dimensions:{self.operation_id}")
+            if any(not scopes or set(scopes).difference(self.required_scopes + self.optional_scopes)
+                   for _, scopes in self.evidence_dimensions):
+                raise FinnV2OperationContractError(f"invalid_evidence_dimension_scopes:{self.operation_id}")
         unknown_response_fields = set(self.required_response_fields).difference(_RESPONSE_FIELDS)
         if unknown_response_fields:
             raise FinnV2OperationContractError(
@@ -1037,7 +1047,7 @@ _CONTRACTS: tuple[OperationContract, ...] = (
     OperationContract("activate_paper_bot", FinnV2OperationRegistry.VERSION, "bot", "ACTION_PROPOSAL", ("activeer paper bot",), action_polarity=ActionPolarity.ACTIVATE, required_inputs=("bot_id",), contextual_reference_inputs=("bot_id",), required_scopes=("active_asset", "active_setup", "linked_strategy", "linked_bot", "bot_status"), proposal_type="activate_paper_bot", confirmation_required=True, execution_adapter="activate_paper_bot", idempotency_rule="proposal_payload_hash", postcondition="paper_bot_active", response_strategy="proposal_draft", policy_class="paper_action"),
     OperationContract("deactivate_bot", FinnV2OperationRegistry.VERSION, "bot", "ACTION_PROPOSAL", ("deactiveer bot", "deactivate bot", "deaktiviere bot"), action_polarity=ActionPolarity.UPDATE, required_inputs=("bot_id",), contextual_reference_inputs=("bot_id",), required_scopes=("active_asset", "active_setup", "linked_strategy", "linked_bot", "bot_status"), proposal_type="deactivate_bot", confirmation_required=True, execution_adapter="deactivate_bot", idempotency_rule="proposal_payload_hash", postcondition="bot_inactive", response_strategy="proposal_draft", policy_class="paper_action"),
     OperationContract("read_active_plan", FinnV2OperationRegistry.VERSION, "plan", "READ", ("mijn actieve plan", "setup strategie bot"), required_scopes=("active_asset", "active_setup", "linked_strategy", "linked_bot", "bot_status"), required_response_fields=("setup", "strategy", "bot", "bot_status")),
-    OperationContract("evaluate_plan", FinnV2OperationRegistry.VERSION, "plan", "EVALUATE", ("belangrijkste ontbrekende", "bekijk mijn profiel", "beoordeel mijn plan", "waar is mijn handelsaanpak het kwetsbaarst", "onderbouwd oordeel over mijn hele handelsplan", "evaluate my overall trading plan", "bewerte meinen gesamten handelsplan"), required_scopes=("profile", "preferences", "active_asset", "indicator_configuration", "market_snapshot", "macro_snapshot", "technical_snapshot", "active_setup", "linked_strategy", "linked_bot", "bot_status", "scores"), model_policy="required", response_strategy="model_reasoning", policy_class="advice", required_response_fields=("observation", "evidence", "next_step")),
+    OperationContract("evaluate_plan", FinnV2OperationRegistry.VERSION, "plan", "EVALUATE", ("belangrijkste ontbrekende", "bekijk mijn profiel", "beoordeel mijn plan", "waar is mijn handelsaanpak het kwetsbaarst", "onderbouwd oordeel over mijn hele handelsplan", "evaluate my overall trading plan", "bewerte meinen gesamten handelsplan"), optional_inputs=("hypothetical_change",), input_json_types=(("hypothetical_change", "string"),), required_scopes=("profile", "preferences", "active_asset", "indicator_configuration", "market_snapshot", "macro_snapshot", "technical_snapshot", "active_setup", "linked_strategy", "linked_bot", "bot_status", "scores"), evidence_dimensions=(("saved_setup", ("active_setup",)), ("saved_strategy", ("active_setup", "linked_strategy")), ("current_market", ("market_snapshot", "macro_snapshot", "technical_snapshot"))), model_policy="required", response_strategy="model_reasoning", policy_class="advice", required_response_fields=("observation", "evidence", "next_step")),
     OperationContract("read_scores", FinnV2OperationRegistry.VERSION, "scores", "READ", ("mijn scores", "read scores", "meine scores"), required_scopes=("active_asset", "scores"), response_strategy="deterministic_structured_summary", required_response_fields=("asset",)),
     OperationContract("explain_score", FinnV2OperationRegistry.VERSION, "scores", "EVALUATE", ("leg score uit", "explain score", "erklare score"), required_scopes=("active_asset", "scores"), optional_scopes=("profile", "preferences", "active_setup", "linked_strategy", "indicator_configuration"), model_policy="required", response_strategy="model_reasoning", policy_class="advice"),
     OperationContract("read_portfolio", FinnV2OperationRegistry.VERSION, "portfolio", "READ", ("portfolio", "portefeuille", "portfolio anzeigen"), optional_inputs=("asset",), required_scopes=("portfolio",), response_strategy="deterministic_structured_summary"),

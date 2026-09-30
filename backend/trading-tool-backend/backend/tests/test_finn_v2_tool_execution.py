@@ -121,6 +121,52 @@ def test_tool_execution_logs_successful_profile_call(monkeypatch):
     assert service.calls.rows[-1].status == "completed"
 
 
+def test_tool_execution_preserves_source_as_of_for_responses_projection(monkeypatch):
+    service = FinnV2ToolExecutionService(session=_FakeSession())
+    service.runs = _FakeRunRepo()
+    service.calls = _FakeCallRepo()
+    service.traces = _FakeTraceRepo()
+    monkeypatch.setattr(service.flags, "is_tool_registry_enabled", lambda: True)
+    monkeypatch.setattr(service.flags, "is_tool_registry_readonly", lambda: True)
+    monkeypatch.setattr(service.flags, "is_tool_call_logging_enabled", lambda: True)
+    captured = datetime.now(timezone.utc)
+
+    async def dispatch(**_kwargs):
+        return {"data": {"price": 100}, "summary": {"title": "market"},
+                "as_of": captured, "source": "synthetic_market"}
+
+    monkeypatch.setattr(service, "_dispatch_tool", dispatch)
+    result = asyncio.run(service.execute_tool(
+        run_id="run-1", user_id=7, tool_name="read_market_snapshot", selector={"asset": "BTC"},
+    ))
+    assert result.success is True
+    assert result.as_of == captured
+    assert result.freshness_status == "fresh"
+
+
+def test_tool_execution_preserves_initially_empty_shared_state(monkeypatch):
+    service = FinnV2ToolExecutionService(session=_FakeSession())
+    service.runs = _FakeRunRepo()
+    service.calls = _FakeCallRepo()
+    service.traces = _FakeTraceRepo()
+    monkeypatch.setattr(service.flags, "is_tool_registry_enabled", lambda: True)
+    monkeypatch.setattr(service.flags, "is_tool_registry_readonly", lambda: True)
+    monkeypatch.setattr(service.flags, "is_tool_call_logging_enabled", lambda: True)
+
+    async def dispatch(**kwargs):
+        kwargs["shared_state"].update({"asset": "BTC", "resolution_source": "selected_asset"})
+        return {"data": {"symbol": "BTC"}, "summary": {"title": "asset"}, "as_of": None}
+
+    monkeypatch.setattr(service, "_dispatch_tool", dispatch)
+    shared_state = {}
+    result = asyncio.run(service.execute_tool(
+        run_id="run-1", user_id=7, tool_name="read_active_asset",
+        selector={}, shared_state=shared_state,
+    ))
+    assert result.success is True
+    assert shared_state == {"asset": "BTC", "resolution_source": "selected_asset"}
+
+
 def test_tool_execution_releases_primary_connection_around_durable_call_sessions(monkeypatch):
     session = _FakeSession()
     service = FinnV2ToolExecutionService(session=session)

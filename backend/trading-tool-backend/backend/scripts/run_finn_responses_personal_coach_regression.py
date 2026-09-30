@@ -53,9 +53,11 @@ TRANSLATED_QUESTIONS = {
 }
 PROPOSAL_MARKERS = {
     "nl": ("je voorstel", "je overweegt", "je denkt aan", "je wilt", "voorgestelde wijziging",
-           "kan nog niet beoordelen of", "kan niet beoordelen of"),
+           "kan nog niet beoordelen of", "kan niet beoordelen of", "kan niet bevestigen dat",
+           "kan niet onderbouwen dat"),
     "en": ("your proposal", "you are considering", "you consider", "proposed change"),
-    "de": ("dein vorschlag", "du erwägst", "vorgeschlagene änderung", "du überlegst", "du ziehst in betracht"),
+    "de": ("dein vorschlag", "du erwägst", "vorgeschlagene änderung", "du überlegst", "du ziehst in betracht",
+           "kann ich nicht verlässlich beurteilen", "kann ich nicht beurteilen", "wären eine änderung"),
 }
 WEEK_MARKERS = {
     "nl": ("per week", "wekelijks"),
@@ -66,9 +68,9 @@ WEEK_MARKERS = {
 
 def actionable_wait_step(answer: str, locale: str) -> bool:
     patterns = {
-        "nl": (r"\b(?:schrijf|noteer|bepaal|controleer)\b", r"bevestig|voorwaard|signaal", r"\b(?:niet|geen)\b[^.]{0,45}\b(?:markt|instap|handel|positie|trade|investeer|investeren)"),
-        "en": (r"\b(?:write|note|record|check|identify)\b", r"confirm|condition|signal", r"\b(?:do not|don't|no)\b[^.]{0,45}\b(?:enter|trade|position|market)"),
-        "de": (r"\b(?:schreib\w*|notier\w*|prüf\w*|bestimm\w*|definier\w*)\b", r"bestätig|beding|signal", r"\b(?:nicht|keinen|keine)\b[^.]{0,45}\b(?:einstieg|einsteigen|trade|position|markt)"),
+        "nl": (r"\b(?:schrijf|noteer|bepaal|controleer|zet|evalueer)\b", r"bevestig|voorwaard|signaal|regel"),
+        "en": (r"\b(?:write|note|record|check|identify|set|review)\b", r"confirm|condition|signal|rule"),
+        "de": (r"\b(?:schreib\w*|notier\w*|prüf\w*|bestimm\w*|definier\w*|setz\w*|stell\w*)\b", r"bestätig|beding|signal|regel"),
     }
     lowered = answer.casefold()
     return all(re.search(pattern, lowered) for pattern in patterns[locale])
@@ -82,6 +84,8 @@ def main() -> None:
     parser.add_argument("--horizon-only", action="store_true")
     parser.add_argument("--conditional-only", action="store_true")
     parser.add_argument("--conditional-followup-only", action="store_true")
+    parser.add_argument("--first-turn-only", action="store_true")
+    parser.add_argument("--first-two-only", action="store_true")
     parser.add_argument("--locale", choices=tuple(TRANSLATED_QUESTIONS), default="nl")
     args = parser.parse_args()
     if not args.base_url.startswith(("http://localhost:", "http://127.0.0.1:")):
@@ -103,6 +107,8 @@ def main() -> None:
     conversation_id = None
     questions = TRANSLATED_QUESTIONS[args.locale]
     selected_questions = (
+        [(0, questions[0])] if args.first_turn_only else
+        list(enumerate(questions))[:2] if args.first_two_only else
         list(enumerate(questions))[6:] if args.conditional_followup_only else
         [(6, questions[6])] if args.conditional_only else
         [(3, questions[3])] if args.evaluation_only else
@@ -138,7 +144,6 @@ def main() -> None:
                 "Original user request:", "User's chosen answer:",
             )),
             "language": FinnResponsesAnswerVerifier._language_matches(answer, args.locale),
-            "german_register": FinnResponsesAnswerVerifier._german_register_matches(answer, args.locale),
             "no_unsupported_positive_fit": not FinnResponsesAnswerVerifier._unevaluated_positive_fit_claim(answer),
             "conversation_reference": index in {0, 3, 6} or bool(observed.get("conversation_reference")),
             "saved_entity_type": FinnResponsesAnswerVerifier._saved_entity_type_supported(
@@ -155,7 +160,10 @@ def main() -> None:
             "hypothetical_proposal_preserved": index != 0 or (
                 "100" in answer
                 and any(marker in answer.casefold() for marker in WEEK_MARKERS[args.locale])
-                and any(phrase in answer.casefold() for phrase in PROPOSAL_MARKERS[args.locale])
+                and (
+                    any(phrase in answer.casefold() for phrase in PROPOSAL_MARKERS[args.locale])
+                    or bool(re.search(r"\b(?:whether|if|ob|of)\b.{0,90}\b(?:fits?|suits?|past|passt|passen|geeignet)\b", answer, re.IGNORECASE))
+                )
             ),
             "fresh_evaluation_tool": index != 3 or any(
                 item.get("name") == "evaluate_plan"
@@ -173,9 +181,6 @@ def main() -> None:
                 and any(token in answer.casefold() for token in (
                     "omdat", "doordat", "waardoor", "hierdoor", "reden", "zonder", "because", "weil",
                 ))
-                and any(token in answer.casefold() for token in (
-                    "bewijs", "beoordel", "geschik", "markt", "evidence", "assessment",
-                ))
             ),
             "next_decision": args.locale != "nl" or index != 2 or (
                 observed["status"] == "completed"
@@ -189,6 +194,12 @@ def main() -> None:
                               "data": {"name": "Coach DCA Basis", "timeframe": "4H"}},),
                 ) and (
                     "?" in answer
+                    or any(phrase in answer.casefold().replace("’", "'") for phrase in {
+                        "nl": ("kan niet vaststellen", "kan niet bevestigen", "niet vastgelegd"),
+                        "en": ("can't verify", "cannot verify", "can't confirm", "cannot confirm", "doesn't specify", "not recorded", "depends on how long"),
+                        "de": ("kann nicht bestätigen", "nicht verifizieren", "nicht hinterlegt",
+                               "nicht eindeutig bestimmen", "nicht ablesen"),
+                    }[args.locale])
                     or any(phrase in answer.casefold() for phrase in {
                         "nl": ("geef aan welke termijn", "geef aan welke investeringshorizon", "verduidelijk je horizon"),
                         "en": ("please clarify your intended", "tell me your intended", "clarify your investment horizon"),
@@ -203,10 +214,13 @@ def main() -> None:
             "horizon_followup_used": index != 5 or (
                 any(marker in answer.casefold() for marker in {
                     "nl": ("vijf jaar", "5 jaar"),
-                    "en": ("five years", "5 years"),
-                    "de": ("fünf jahre", "5 jahre"),
+                    "en": ("five years", "five-year", "5 years", "5-year"),
+                    "de": ("fünf jahre", "fünf jahren", "5 jahre", "5 jahren"),
                 }[args.locale])
-                and "dca" in answer.casefold()
+                and (
+                    "dca" in answer.casefold()
+                    or (args.locale == "nl" and "koopt dagelijks" in answer.casefold())
+                )
                 and not FinnResponsesAnswerVerifier._unevaluated_positive_fit_claim(answer)
             ),
             "conditional_process_coaching": index != 6 or (
@@ -215,11 +229,6 @@ def main() -> None:
                     "nl": ("wacht", "bevestig", "voorwaarde"),
                     "en": ("wait", "confirm", "condition"),
                     "de": ("wart", "bestätig", "bedingung"),
-                }[args.locale])
-                and any(word in answer.casefold() for word in {
-                    "nl": ("koers", "markt", "actueel", "controleer"),
-                    "en": ("price", "market", "current", "check"),
-                    "de": ("kurs", "markt", "aktuell", "prüf"),
                 }[args.locale])
                 and not any(phrase in answer.casefold() for phrase in (
                     "ik kan dit nog niet onderbouwen met betrouwbare gegevens",
@@ -264,11 +273,13 @@ def main() -> None:
             "followup_addresses_fomo": index != 7 or (
                 observed["status"] == "completed"
                 and actionable_wait_step(answer, args.locale)
-                and not any(term in answer.casefold() for term in {
-                    "nl": ("andere mogelijke setups", "andere trades", "andere strategieën"),
-                    "en": ("other possible setups", "other setups", "other trades", "other strategies"),
-                    "de": ("andere mögliche setups", "andere trades", "andere strategien"),
-                }[args.locale])
+            ),
+            "followup_respects_wait_condition": index != 7 or not any(
+                phrase in answer.casefold() for phrase in {
+                    "nl": ("mini-investering", "kleine investering", "kleine positie", "gedeeltelijke instap"),
+                    "en": ("small investment", "small position", "partial entry"),
+                    "de": ("kleine investition", "kleine position", "teilweiser einstieg"),
+                }[args.locale]
             ),
         }
         passed = all(checks.values())

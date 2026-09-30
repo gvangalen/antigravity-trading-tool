@@ -122,6 +122,13 @@ const SHARED_RUNTIME_ENV = pickRuntimeEnv([
 // survive a release when the protected environment deliberately omits a key.
 // A protected value in SHARED_RUNTIME_ENV always takes precedence.
 const FINN_RUNTIME_DEFAULT_ENV = {
+  // Pin the default Responses route across the API and workers. PM2 merges
+  // process environment on --update-env, so code defaults alone cannot
+  // replace a stale model value from an earlier release.
+  FINN_RESPONSES_CHAT_MODEL: "gpt-6-luna",
+  FINN_RESPONSES_CLARIFICATION_MODEL: "gpt-6-luna",
+  FINN_RESPONSES_REPAIR_MODEL: "gpt-6-luna",
+  FINN_RESPONSES_REASONING_EFFORT: "none",
   FINN_V2_PROPOSALS_ENABLED: "true",
   FINN_V2_VISIBLE_PROPOSALS_ENABLED: "true",
   FINN_V2_CONFIRMATIONS_ENABLED: "true",

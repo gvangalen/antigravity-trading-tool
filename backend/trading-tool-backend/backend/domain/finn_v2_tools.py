@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from datetime import date, datetime
 from typing import Any, List, Literal, Optional
 
 
@@ -115,6 +116,7 @@ class ToolExecutionResult:
     error_codes: List[str] = field(default_factory=list)
     resolution_source: Optional[str] = None
     freshness_status: Optional[FreshnessStatus] = None
+    as_of: date | datetime | None = None
     source: str = "internal"
     schema_name: Optional[str] = None
     schema_version: str = "2026-08-17.block3"

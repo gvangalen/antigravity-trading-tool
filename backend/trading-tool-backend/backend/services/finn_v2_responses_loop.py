@@ -245,9 +245,10 @@ class FinnResponsesLoop:
         client: Any,
         executor: Callable[[FinnResponsesToolCall], Awaitable[dict[str, Any]]],
         catalog: FinnResponsesToolCatalog | None = None,
-        model: str = "gpt-6-sol",
-        clarification_model: str = "gpt-4o",
-        max_rounds: int = 4,
+        model: str = "gpt-6-luna",
+        clarification_model: str = "gpt-6-luna",
+        reasoning_effort: str = "none",
+        max_rounds: int = 5,
         provider_timeout_seconds: float = 16.0,
         tool_timeout_seconds: float = 4.0,
         max_tool_calls: int = 10,
@@ -258,6 +259,9 @@ class FinnResponsesLoop:
         self.catalog = catalog or FinnResponsesToolCatalog()
         self.model = model
         self.clarification_model = clarification_model
+        self.reasoning_effort = reasoning_effort if reasoning_effort in {
+            "none", "low", "medium", "high", "xhigh", "max"
+        } else "none"
         self.max_rounds = max_rounds
         self.provider_timeout_seconds = provider_timeout_seconds
         self.tool_timeout_seconds = tool_timeout_seconds
@@ -291,6 +295,7 @@ class FinnResponsesLoop:
         locale: str | None = None,
         force_read_repair: bool = False,
         model_led_coach: bool = False,
+        rejection_feedback: dict[str, Any] | None = None,
     ) -> FinnResponsesResult:
         verified_context = (
             f"Earlier verified FINN answer: {antecedent_verified_answer}\n"
@@ -302,6 +307,13 @@ class FinnResponsesLoop:
                 "\nVerified preceding-turn context (persisted FINN evidence, not fresh market data): "
                 + json.dumps(verified_turn_context, ensure_ascii=False, default=str)
             )
+            if verified_turn_context.get("user_message"):
+                verified_context += (
+                    "\nThe preceding user's stated constraints remain in force for a follow-up. "
+                    "Do not suggest taking any trading position before a condition that user "
+                    "said must be met, including a smaller or partial position. The statement "
+                    "is conversational context, not proof that the rule is saved in FINN."
+                )
         elif verified_context and previous_answer_only and previous_tool_availability:
             verified_context += (
                 "\nTyped availability from that verified run (not fresh market data): "
@@ -314,9 +326,29 @@ class FinnResponsesLoop:
                 + ". Explain or restate only why that choice is needed; do not infer missing "
                 "profile, market evidence, or suitability from unrelated tool statuses."
             )
+        if verified_context and previous_terminal_status == "unavailable":
+            verified_context += (
+                "\nThe preceding answer was withheld, not verified as a conclusion. "
+                "Explain the typed evidence_limit and identify which facts were available "
+                "versus what remains unassessed. Do not defend the rejected conclusion, "
+                "repeat the generic fallback, or present a proposed change as saved. "
+                "You may ask one useful follow-up question."
+            )
         current_input: list[dict[str, Any]] = (
             [{"role": "assistant", "content": verified_context}] if verified_context else []
         ) + [{"role": "user", "content": message}]
+        if rejection_feedback:
+            current_input.append({
+                "role": "developer",
+                "content": (
+                    "FINN rejected the preceding draft answer at a hard evidence or safety boundary. "
+                    "This typed result is not a request to repeat the rejected conclusion. "
+                    "You may call an available read tool if it can supply the missing evidence, "
+                    "or answer with the supported limitation and one useful question. "
+                    "Do not present user-proposed values as saved facts. "
+                    + json.dumps(rejection_feedback, ensure_ascii=False, default=str)
+                ),
+            })
         initial_input = list(current_input)
         tool_exchange: list[dict[str, Any]] = []
         prior_id = None if previous_answer_only or force_read_repair else previous_response_id
@@ -350,9 +382,11 @@ class FinnResponsesLoop:
                 retry_target_domain=retry_target_domain,
                 retry_operation_id=retry_operation_id,
             )
-            if previous_answer_only:
+            if previous_answer_only or (
+                rejection_feedback and rejection_feedback.get("repair_mode") == "explain_limit"
+            ):
                 definitions = []
-            elif force_read_repair:
+            elif force_read_repair or rejection_feedback:
                 definitions = [
                     item for item in definitions
                     if item["name"].startswith(("get_", "evaluate_"))
@@ -390,27 +424,28 @@ class FinnResponsesLoop:
                     "proper names, tickers and quoted user values unchanged."
                 )
                 turn_instructions += locale_instruction
-            turn_instructions += (
-                "\nAddress the trader directly as 'you' in the selected language; never "
-                "narrate a user-facing answer as 'the user is considering' or a case report. "
-                "A reflective question about the user's own stated decision rule can be "
-                "answered directly, without a FINN tool, when it asks for reasoning rather "
-                "than saved account facts or today's market conditions. Attribute the rule "
-                "to the user, distinguish a possible process benefit from a proven trading "
-                "outcome, and ask at most one useful follow-up. Use FINN reads when the answer "
-                "actually needs owner-scoped or current facts; unavailable market data does "
-                "not prevent discussing the user's decision process. "
-                "Match the structure of the user's question. When they ask for a numbered "
-                "set of priorities, give that number of distinct numbered, preparatory "
-                "actions and separately name what to avoid. Base each action on verified "
-                "saved settings or on a clearly labelled evidence limitation; never turn "
-                "saved entry, stop or target levels into instructions to trade now. "
-                "For a plan review, distinguish a verifiable structural property from a "
-                "market or suitability judgment. Having saved entry, stop and target levels "
-                "permits static risk arithmetic, but does not make their ratios attractive, "
-                "the plan strong, or the trade suitable. State a concrete check without "
-                "claiming that unavailable current market data has been obtained."
-            )
+            if not model_led_coach:
+                turn_instructions += (
+                    "\nAddress the trader directly as 'you' in the selected language; never "
+                    "narrate a user-facing answer as 'the user is considering' or a case report. "
+                    "A reflective question about the user's own stated decision rule can be "
+                    "answered directly, without a FINN tool, when it asks for reasoning rather "
+                    "than saved account facts or today's market conditions. Attribute the rule "
+                    "to the user, distinguish a possible process benefit from a proven trading "
+                    "outcome, and ask at most one useful follow-up. Use FINN reads when the answer "
+                    "actually needs owner-scoped or current facts; unavailable market data does "
+                    "not prevent discussing the user's decision process. "
+                    "Match the structure of the user's question. When they ask for a numbered "
+                    "set of priorities, give that number of distinct numbered, preparatory "
+                    "actions and separately name what to avoid. Base each action on verified "
+                    "saved settings or on a clearly labelled evidence limitation; never turn "
+                    "saved entry, stop or target levels into instructions to trade now. "
+                    "For a plan review, distinguish a verifiable structural property from a "
+                    "market or suitability judgment. Having saved entry, stop and target levels "
+                    "permits static risk arithmetic, but does not make their ratios attractive, "
+                    "the plan strong, or the trade suitable. State a concrete check without "
+                    "claiming that unavailable current market data has been obtained."
+                )
             if previous_verified_answer:
                 turn_instructions += (
                     "\nThe assistant message in this turn's input is the immediately previous "
@@ -492,62 +527,26 @@ class FinnResponsesLoop:
                 turn_instructions += "\nCurrent user question (quoted data): " + json.dumps(message, ensure_ascii=False)
             if model_led_coach:
                 # The model-led route must not inherit the legacy answer-shaping rules above.
-                turn_instructions = instructions + locale_instruction
-                if any(
-                    item.get("reason") == "setup_ambiguous"
-                    for call in trace
-                    for item in ((call.get("result") or {}).get("results") or [])
-                    if isinstance(item, dict)
-                ):
-                    turn_instructions += (
-                        "\nA tool could not identify one owner-scoped setup. If the answer needs "
-                        "that setup, ask which setup the trader means; answer independent parts "
-                        "from other available evidence. Do not claim how many matching setups "
-                        "exist unless the tool returned a count."
-                    )
-                if any(
-                    item.get("scope") == "read_active_setup" and item.get("status") == "completed"
-                    for call in trace
-                    for item in ((call.get("result") or {}).get("results") or [])
-                    if isinstance(item, dict)
-                ):
-                    turn_instructions += (
-                        "\nA completed read_active_setup identifies the active setup even if "
-                        "its data also lists other setups. Describe that active setup and state "
-                        "which linked objects could not be resolved; do not ask the trader to "
-                        "choose a setup unless the setup read itself is ambiguous."
-                    )
-                if any(
-                    item.get("reason") == "report_not_found"
-                    for call in trace
-                    for item in ((call.get("result") or {}).get("results") or [])
-                    if isinstance(item, dict)
-                ):
-                    turn_instructions += (
-                        "\nThe owner-scoped report query returned report_not_found: no saved "
-                        "report was found. Say that plainly; do not imply a provider outage. "
-                        "A completed review-history read with items=[] likewise means no "
-                        "saved reviews were found."
-                    )
-                if previous_verified_answer:
-                    turn_instructions += (
-                        "\nThe preceding verified answer in the input is what the trader saw. "
-                        "Explain that answer when asked, rather than an unseen model draft."
-                    )
+                turn_instructions = instructions + locale_instruction + (
+                    "\nUse the typed tool results and verified preceding-turn context in the "
+                    "input as the only authority for saved or current facts. A completed read "
+                    "establishes only the fields it returned. For ambiguous, missing, stale, "
+                    "or unavailable data, explain the supported limit and ask one useful "
+                    "clarifying question when needed; never invent a cause or a match. "
+                    "Explain the answer the trader actually saw when asked about a previous "
+                    "turn. A newly supplied choice is not a saved fact until a tool confirms it. "
+                    "Do not repeat a clarification already answered or a failed evaluation "
+                    "without new evidence."
+                )
                 if resuming_clarification and original_user_request:
                     turn_instructions += (
                         "\nThe trader is answering a clarification for this original request: "
                         + json.dumps(original_user_request, ensure_ascii=False)
                     )
-                if limited_evaluations:
-                    turn_instructions += (
-                        "\nA requested evaluation was attempted, but required data were unavailable. "
-                        "Do not repeat it; state its limit and answer only what the available facts support."
-                    )
             kwargs: dict[str, Any] = {
                 "model": (
                     self.clarification_model
-                    if proposal_selected and trace and trace[-1]["status"] == "needs_input"
+                    if proposal_selected and trace and trace[-1]["status"] in {"needs_input", "validation_pending"}
                     else self.model
                 ),
                 "instructions": turn_instructions,
@@ -559,6 +558,8 @@ class FinnResponsesLoop:
                     1000 if model_led_coach and trace else 700 if not trace else 350
                 ),
             }
+            if kwargs["model"].startswith("gpt-6-"):
+                kwargs["reasoning"] = {"effort": self.reasoning_effort}
             if next_decision_from_previous:
                 kwargs["text"] = conditional_next_step_format() if conditional_next_step_from_previous else {"format": {
                     "type": "json_schema", "name": "finn_next_decision", "strict": True,
@@ -698,6 +699,7 @@ class FinnResponsesLoop:
                 kwargs["input"] = initial_input + tool_exchange
             if (proposal_selected or repair_exhausted or limited_evaluations
                     or previous_answer_only
+                    or (rejection_feedback and rejection_feedback.get("repair_mode") == "explain_limit")
                     or (tool_rounds >= 2 and not repair_tool_name
                         and (not trace or trace[-1]["status"] != "retry"))):
                 kwargs["tool_choice"] = "none"
@@ -899,9 +901,15 @@ class FinnResponsesLoop:
                     response_focus_check() if response_focus_check is not None else None,
                     horizon_classification_check() if horizon_classification_check is not None else False,
                     resumed_clarification_reason if resuming_clarification else None,
-                    previous_answer_only,
+                    bool(
+                        previous_answer_only or verified_turn_context or previous_verified_answer
+                        or (
+                            previous_response_id
+                            and kwargs.get("previous_response_id") == previous_response_id
+                        )
+                    ),
                     model_led_coach,
-                    response_id_reusable=kwargs["model"] == self.model,
+                    response_id_reusable=kwargs["model"] == self.model and not proposal_selected,
                 )
             tool_rounds += 1
             prior_id = response_id

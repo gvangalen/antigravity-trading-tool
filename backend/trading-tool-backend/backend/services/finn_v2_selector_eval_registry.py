@@ -157,6 +157,9 @@ def _operation_contract_hash(contract: object) -> str:
     # selection-contract hash without rewriting the published corpus.
     payload.pop("input_json_types", None)
     payload.pop("input_allowed_values", None)
+    # Evidence coverage is evaluated after selection and does not alter the
+    # historical selector contract to which published errata are pinned.
+    payload.pop("evidence_dimensions", None)
     return hashlib.sha256(
         json.dumps(payload, default=str, sort_keys=True, separators=(",", ":")).encode("utf-8")
     ).hexdigest()

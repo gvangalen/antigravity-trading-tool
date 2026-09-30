@@ -112,8 +112,9 @@ def main() -> None:
                 and any(word in lower_answer for word in ("controleer", "controleren", "check", "verifieer"))
             )
             checks["strategy_levels_not_attributed_to_setup"] = not bool(re.search(
-                r"\bsetup\b[^.!?\n]{0,80}\b(?:met|heeft)\b[^.!?\n]{0,45}"
-                r"\b(?:entry|instap|stop.?loss|targets?|doelen)\b",
+                r"\bsetup\b[^.!?\n]{0,80}\b(?:met|heeft|bevat)\s+"
+                r"(?:een\s+|de\s+|het\s+)?"
+                r"(?:entry|instap|stop.?loss|targets?|doelen)\b",
                 answer, re.IGNORECASE,
             ))
         elif index == 2:

@@ -68,6 +68,22 @@ def test_transport_timeout_is_not_sent_as_a_responses_payload_field():
     assert "timeout" not in request
 
 
+def test_explicit_reasoning_effort_is_sent_only_for_opted_in_structured_calls():
+    spec = StructuredOutputSpec("test", {
+        "type": "object", "properties": {}, "required": [], "additionalProperties": False,
+    })
+    request = openai_client.build_structured_response_request(
+        model_name="gpt-6-luna", prompt="x", system_role="x",
+        output_spec=spec, max_output_tokens=500, reasoning_effort="none",
+    )
+    assert request["reasoning"] == {"effort": "none"}
+    default_request = openai_client.build_structured_response_request(
+        model_name="gpt-4o-mini", prompt="x", system_role="x",
+        output_spec=spec, max_output_tokens=500,
+    )
+    assert "reasoning" not in default_request
+
+
 def test_wrapped_schema_is_rejected_before_network_or_rate_limit(monkeypatch):
     called = False
 

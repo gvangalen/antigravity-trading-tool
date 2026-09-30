@@ -4,12 +4,60 @@ from __future__ import annotations
 
 import asyncio
 import json
+import re
 from typing import Any
 
 from backend.services.finn_v2_lifecycle_budget import remaining_lifecycle_seconds
 
 
 class FinnResponsesToolRelevanceGuard:
+    async def requested_action_contract(
+        self, *, message: str, contracts: list[dict[str, str]],
+    ) -> str | None:
+        """Audit a tool-free turn for an explicit registry-backed mutation request."""
+        remaining = remaining_lifecycle_seconds()
+        if remaining is not None and remaining <= 5:
+            return None
+        timeout = min(4.0, remaining - 3 if remaining is not None else 4.0)
+        client = (
+            self.client.with_options(max_retries=0, timeout=timeout)
+            if hasattr(self.client, "with_options") else self.client
+        )
+        allowed = [item["operation_id"] for item in contracts]
+        try:
+            response = await asyncio.wait_for(
+                client.responses.create(
+                    model="gpt-4o-mini", store=False, tool_choice="none", temperature=0,
+                    instructions=(
+                        "Decide whether the latest user turn explicitly requests preparing a "
+                        "persistent change to a FINN object. Select the single matching operation "
+                        "from the supplied registry contracts, even when required fields are missing; "
+                        "the contract will ask for them. A request for explanation, assessment, "
+                        "ideas, comparison, or what an action would mean is not authorization "
+                        "to prepare a mutation. Do not infer ownership, object IDs or execution. "
+                        "If there is no clear requested change, select none."
+                    ),
+                    input=json.dumps({
+                        "latest_user_message": message,
+                        "registry_action_contracts": contracts,
+                    }, ensure_ascii=False),
+                    text={"format": {
+                        "type": "json_schema", "name": "finn_action_request_audit",
+                        "strict": True,
+                        "schema": {
+                            "type": "object", "additionalProperties": False,
+                            "properties": {"operation_id": {"type": "string", "enum": [*allowed, "none"]}},
+                            "required": ["operation_id"],
+                        },
+                    }},
+                    max_output_tokens=48,
+                ), timeout=timeout,
+            )
+            operation_id = json.loads(str(getattr(response, "output_text", "") or "")).get("operation_id")
+            return operation_id if operation_id in allowed else None
+        except Exception:
+            return None
+
     def __init__(self, client: Any) -> None:
         self.client = client
         self.recommended_operation_id: str | None = None
@@ -412,7 +460,25 @@ class FinnResponsesToolRelevanceGuard:
 
     async def previous_answer_suffices(
         self, *, message: str, previous_answer: str,
+        model: str = "gpt-4o-mini", reasoning_effort: str = "none",
     ) -> str | bool | None:
+        # An explicit next-choice follow-up asks for a process decision from
+        # the verified answer, not another read of the same saved plan.
+        if previous_answer and re.fullmatch(
+            r"\s*welke\s+(?:keuze|stap|beslissing)\s+moet\s+ik\s+(?:(?:nu|als\s+eerste)\s+)?(?:eerst\s+)?(?:maken|nemen|zetten)\s*\?\s*",
+            message, re.I,
+        ):
+            return "next_decision_from_previous"
+        if (
+            previous_answer and "setup" in previous_answer.casefold()
+            and re.search(r"\b(?:die|deze)\s+setup\b", message, re.I)
+            and re.search(r"\b(?:keuze|beslissing|besluit)\b", message, re.I)
+            and re.search(r"\b(?:daarnet|eerder|zonder\s+actuele)\b", message, re.I)
+        ):
+            # The immediately preceding verified read already contains the
+            # saved setup. Relating it to the earlier stated choice needs no
+            # duplicate evaluation or fresh market lookup.
+            return "explain_previous"
         remaining = remaining_lifecycle_seconds()
         if remaining is not None and remaining <= 5:
             return None
@@ -421,11 +487,14 @@ class FinnResponsesToolRelevanceGuard:
             self.client.with_options(max_retries=0, timeout=timeout)
             if hasattr(self.client, "with_options") else self.client
         )
+        model_options = (
+            {"reasoning": {"effort": reasoning_effort}}
+            if model.startswith("gpt-6-") else {"temperature": 0}
+        )
         try:
             response = await asyncio.wait_for(
                 client.responses.create(
-                    model="gpt-4o-mini", store=False, tool_choice="none",
-                    temperature=0,
+                    model=model, store=False, tool_choice="none", **model_options,
                     instructions=(
                         "Classify the latest conversational turn relative to the previous VERIFIED "
                         "answer. Choose explain_previous when the user asks for the reason, meaning "
@@ -499,8 +568,7 @@ class FinnResponsesToolRelevanceGuard:
                 try:
                     confirmation = await asyncio.wait_for(
                         client.responses.create(
-                            model="gpt-4o-mini", store=False, tool_choice="none",
-                            temperature=0,
+                            model=model, store=False, tool_choice="none", **model_options,
                             instructions=(
                                 "Inspect ONLY the current user message, without previous answers. "
                                 + (
@@ -550,7 +618,10 @@ class FinnResponsesToolRelevanceGuard:
         remaining = remaining_lifecycle_seconds()
         if remaining is not None and remaining <= 5:
             return None
-        timeout = min(4.0, remaining - 3 if remaining is not None else 4.0)
+        # Action alignment is a fail-closed provider check. Give a transient
+        # slow response a little more room before withholding the proposal.
+        relevance_limit = 6.0 if is_proposal else 4.0
+        timeout = min(relevance_limit, remaining - 3 if remaining is not None else relevance_limit)
         client = (
             self.client.with_options(max_retries=0, timeout=timeout)
             if hasattr(self.client, "with_options") else self.client
@@ -572,7 +643,9 @@ class FinnResponsesToolRelevanceGuard:
                             "completeness or execution authorization. A proposal is only a "
                             "draft and requires separate user confirmation. When not aligned, "
                             "recommend the single best operation_id from the supplied registry "
-                            "list, or 'none' if the request is not a mutation."
+                            "list, or 'none' if the request is not a mutation. A short reply that "
+                            "supplies a detail requested in the previous verified answer is not "
+                            "a mutation, even when that detail could also be stored in a plan."
                         ),
                         input=json.dumps({
                             "latest_user_message": message,
