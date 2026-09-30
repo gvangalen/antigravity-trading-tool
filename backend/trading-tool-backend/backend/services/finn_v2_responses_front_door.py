@@ -13,7 +13,10 @@ from backend.services.asset_catalog_service import mentioned_catalog_symbols, re
 from backend.infrastructure.repositories.finn_v2_runtime_contract_repository import FinnV2RuntimeContractRepository
 from backend.schemas.finn_v2_orchestrator_schema import RequestAnalysisResult
 from backend.services.finn_v2_operation_state_service import FinnV2OperationStateService
-from backend.services.finn_v2_responses_loop import FinnResponsesError, FinnResponsesLoop, FinnResponsesResult
+from backend.services.finn_v2_responses_loop import (
+    FinnResponsesError, FinnResponsesLoop, FinnResponsesResult,
+    _hypothetical_trade_reflection, _read_only_stop_loss_coaching,
+)
 from backend.services.finn_v2_responses_proposal_selection import FinnResponsesProposalSelection
 from backend.services.finn_v2_responses_read_executor import FinnResponsesReadExecutor
 from backend.services.finn_v2_responses_tool_catalog import FinnResponsesToolCall
@@ -205,6 +208,8 @@ class FinnResponsesFrontDoor:
             guard is not None
             and previous_response and previous_response.get("answer") and not pending_operation
             and not force_read_repair
+            and not _read_only_stop_loss_coaching(message)
+            and not _hypothetical_trade_reflection(message)
             and (not resuming_clarification or detail_clarification)
             and (
                 not getattr(self, "model_led_coach", False)
@@ -742,6 +747,8 @@ class FinnResponsesFrontDoor:
             and not previous_answer_only
             and not result.tool_trace
             and getattr(self, "model_led_coach", False)
+            and not _hypothetical_trade_reflection(message)
+            and not _read_only_stop_loss_coaching(message)
         ):
             action_contracts = []
             for contract in self.proposals.registry.list():

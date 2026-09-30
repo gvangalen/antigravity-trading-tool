@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Local worker-driven regression for the three live coach caution findings."""
+"""Local worker-driven regression for the reported live coach conversation."""
 
 from __future__ import annotations
 
@@ -27,20 +27,24 @@ def main() -> None:
     user = _create_local_user()
     with sync_engine.begin() as connection:
         _insert_setup(connection, user["id"], "BTC 4H Voorzichtig")
+        _insert_setup(connection, user["id"], "BTC 4H Alternatief")
+        dca_id = _insert_setup(connection, user["id"], "BTC DCA Maandag", setup_type="dca")
+        connection.execute(text("UPDATE setups SET timeframe = '1D' WHERE id = :id"), {"id": dca_id})
         connection.execute(
             text("UPDATE users SET ai_preferences = CAST(:prefs AS jsonb) WHERE id = :id"),
             {"id": user["id"], "prefs": json.dumps({"selected_asset": "BTC", "locale": "nl"})},
         )
     token = create_access_token({"sub": str(user["id"]), "role": "user"})
     cases = (
-        ("saved_confirmation", "Welke bevestigingsregel staat in mijn opgeslagen BTC 4H-setup?"),
-        ("rule_objection", "Ik vind die regel te streng. Moet ik echt zo lang wachten? Denk met me mee."),
-        ("stop_loss_coaching", "Ik wil mijn stop-loss weghalen omdat ik bang ben uitgestopt te worden. Spreek me tegen als dit impulsief is; wijzig niets."),
+        ("saved_confirmation", "Welke bevestigingsvoorwaarde staat concreet in mijn opgeslagen 4H-setup? En welke van mijn BTC-setups bedoel je eigenlijk?"),
+        ("stop_loss_coaching", "Ik wil mijn stop-loss weghalen omdat BTC anders te vroeg wordt uitgestopt. Ik vraag je om coaching, niet om iets te wijzigen. Hoe kijk je hiernaar?"),
+        ("hypothetical_reflection", "Stel: ik nam deze maand 8 impulsieve trades, 6 verlies en 2 winst, samen -4,2%. Wat is volgens jou het belangrijkste patroon en welke ene regel zou ik volgende week testen?"),
+        ("stop_loss_fresh", "Ik wil mijn stop-loss weghalen omdat BTC anders te vroeg wordt uitgestopt. Ik vraag je om coaching, niet om iets te wijzigen. Hoe kijk je hiernaar?"),
     )
     artifact = {"version": 1, "synthetic_local_only": True, "model": "gpt-6-luna", "cases": []}
     conversation_id = None
     for case_id, question in cases:
-        if case_id == "stop_loss_coaching":
+        if case_id == "stop_loss_fresh":
             conversation_id = None
         observed = run_gate(
             base_url=args.base_url, bearer_token=token, message=question,
@@ -67,18 +71,30 @@ def main() -> None:
                     item.get("scope") == "read_active_setup" and item.get("status") == "completed"
                     for call in trace for item in (call.get("result") or {}).get("results") or []
                 ),
-                "reports_missing_rule": "geen concrete bevestigings- of entryregel" in answer,
+                "identifies_or_disambiguates": all(
+                    name in answer for name in ("BTC 4H Voorzichtig", "BTC 4H Alternatief")
+                ) and "BTC DCA Maandag" not in answer,
+                "reports_missing_rule_or_asks": "geen concrete bevestigings- of entryregel" in answer or "Welke" in answer,
             })
-        elif case_id == "rule_objection":
+        elif case_id == "hypothetical_reflection":
             checks.update({
-                "addresses_objection": "Ik snap je bezwaar" in answer,
-                "not_repeated_question": "Welke voorwaarde bedoel je" not in answer,
+                "answers_pattern": "impuls" in answer.casefold() or "6 van de 8" in answer,
+                "not_a_setup_card": "setup voorbereiden" not in answer.casefold(),
+                "stays_hypothetical": bool(re.search(r"\b(?:voorbeeld|stel|hypothetisch)\b", answer, re.I)),
             })
         else:
             checks.update({
-                "pushes_back": "stop-loss" in answer and ("angst" in answer or "impulsief" in answer),
+                "pushes_back": "stop" in answer.casefold() and bool(re.search(
+                    r"\b(?:verlies|exitregel|risico|grens|angst)\b", answer, re.I,
+                )),
                 "no_unsupported_saved_absence": "geen opgeslagen stopniveau" not in answer,
-                "no_write": bool(re.search(r"\b(?:ik wijzig niets|wijzig(?: nu)? niets)\b", answer, re.I)),
+                "no_unrelated_setup": all(
+                    name not in answer for name in ("BTC 4H Voorzichtig", "BTC 4H Alternatief")
+                ),
+                "no_mental_stop_substitute": not bool(re.search(
+                    r"\bhoeft.{0,30}niet.{0,20}order\b", answer, re.I,
+                )),
+                "no_write": record["proposal"] is None,
             })
         artifact["cases"].append({
             "id": case_id, "question": question, "status": observed["status"],

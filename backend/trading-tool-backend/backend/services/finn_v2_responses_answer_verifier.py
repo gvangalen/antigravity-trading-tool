@@ -13,10 +13,12 @@ import re
 from typing import Any
 from langdetect import DetectorFactory, LangDetectException, detect, detect_langs
 
+from backend.services.asset_catalog_service import mentioned_catalog_symbols
 from backend.services.finn_v2_responses_loop import (
     FinnResponsesError,
     FinnResponsesResult,
     _read_only_stop_loss_coaching,
+    _hypothetical_trade_reflection,
     _rule_objection,
     _saved_confirmation_readback,
     limited_evaluation_answer,
@@ -83,18 +85,49 @@ class FinnResponsesAnswerVerifier:
         }[locale if locale in {"nl", "en", "de"} else "nl"]
 
     @staticmethod
+    def _hypothetical_reflection_fallback(locale: str | None) -> str:
+        return {
+            "nl": "In je hypothetische voorbeeld is impulsief handelen het patroon om te onderzoeken; de negatieve uitkomst bewijst op zichzelf geen oorzaak. Test volgende week één regel: schrijf vóór elke trade een concrete instapvoorwaarde en je maximale risico op, en sla de trade over als die ontbreken. Dit is geen opgeslagen tradehistorie.",
+            "en": "In your hypothetical example, impulsive trading is the pattern to examine; the negative outcome alone does not prove a cause. Test one rule next week: write down a concrete entry condition and your maximum risk before each trade, and skip it if either is missing. This is not saved trade history.",
+            "de": "In deinem hypothetischen Beispiel ist impulsives Handeln das Muster, das du untersuchen solltest; das negative Ergebnis allein beweist keine Ursache. Teste nächste Woche eine Regel: Notiere vor jedem Trade eine konkrete Einstiegsbedingung und dein maximales Risiko und verzichte auf den Trade, wenn eines davon fehlt. Das ist keine gespeicherte Handelshistorie.",
+        }[locale if locale in {"nl", "en", "de"} else "nl"]
+
+    @staticmethod
     def _saved_confirmation_answer(
         message: str, evidence: tuple[dict[str, Any], ...], locale: str | None,
     ) -> str | None:
         if not _saved_confirmation_readback(message):
             return None
-        setup_read = any(
-            item.get("scope") == "read_active_setup" and item.get("status") == "completed"
+        setup_read = next((
+            item["data"] for item in evidence
+            if item.get("scope") == "read_active_setup" and item.get("status") == "completed"
             and isinstance(item.get("data"), dict) and item["data"].get("setup_id")
-            for item in evidence
-        )
+        ), None)
         if not setup_read:
             return None
+        timeframe = re.search(r"\b(?:1H|4H|1D|1W|15M|30M)\b", message, re.I)
+        assets = mentioned_catalog_symbols(message)
+        collection = setup_read.get("setups")
+        matching = [
+            row for row in collection if isinstance(row, dict) and row.get("name")
+            and (not timeframe or str(row.get("timeframe") or "").casefold() == timeframe.group().casefold())
+            and (not assets or str(row.get("symbol") or "").upper() in assets)
+        ] if isinstance(collection, list) else []
+        if len(matching) > 1:
+            names = ", ".join(f"‘{row['name']}’" for row in matching[:4])
+            return {
+                "nl": f"Ik zie meerdere passende opgeslagen setups: {names}. Welke bedoel je? Dan kan ik de bevestigingsvoorwaarde van die specifieke setup controleren.",
+                "en": f"I can see multiple matching saved setups: {names}. Which one do you mean? I can then check that setup's confirmation condition.",
+                "de": f"Ich sehe mehrere passende gespeicherte Setups: {names}. Welches meinst du? Dann kann ich die Bestätigungsregel dieses Setups prüfen.",
+            }[locale if locale in {"nl", "en", "de"} else "nl"]
+        if len(matching) == 1 and matching[0].get("setup_id") != setup_read.get("setup_id"):
+            name = str(matching[0]["name"])
+            return {
+                "nl": f"De passende setup heet ‘{name}’. De huidige readback hoort bij een andere setup, dus ik kan de bevestigingsvoorwaarde van ‘{name}’ nog niet betrouwbaar aanwijzen. Vraag me gericht naar die setup.",
+                "en": f"The matching setup is ‘{name}’. The current readback is for a different setup, so I cannot reliably identify the confirmation condition of ‘{name}’ yet. Ask me about that setup by name.",
+                "de": f"Das passende Setup heißt ‘{name}’. Die aktuelle Abfrage betrifft ein anderes Setup, daher kann ich die Bestätigungsregel von ‘{name}’ noch nicht zuverlässig nennen. Frage mich gezielt nach diesem Setup.",
+            }[locale if locale in {"nl", "en", "de"} else "nl"]
+        selected_name = str(matching[0]["name"] if len(matching) == 1 else setup_read.get("name") or "").strip()
         if any(
             item.get("status") == "completed"
             and item.get("scope") in {"read_active_setup", "read_linked_strategy"}
@@ -106,10 +139,11 @@ class FinnResponsesAnswerVerifier:
             for item in evidence
         ):
             return None
+        label = f"‘{selected_name}’" if selected_name else "de gelezen setup"
         return {
-            "nl": "In de gegevens die ik voor je opgeslagen setup kan lezen staat geen concrete bevestigings- of entryregel. Ik kan daarom geen bestaande voorwaarde aanwijzen; je kunt er eerst een meetbare formuleren voordat je die als instapcheck gebruikt.",
-            "en": "The saved setup data I can read contains no specific confirmation or entry rule. I can't point to an existing condition; you could first define a measurable one before using it as an entry check.",
-            "de": "In den Daten, die ich zu deinem gespeicherten Setup lesen kann, steht keine konkrete Bestätigungs- oder Einstiegsregel. Ich kann deshalb keine vorhandene Bedingung nennen; du könntest zuerst eine messbare Regel festlegen, bevor du sie als Einstiegskriterium nutzt.",
+            "nl": f"Ik bedoel {label}. In de gegevens die ik voor deze opgeslagen setup kan lezen staat geen concrete bevestigings- of entryregel. Ik kan daarom geen bestaande voorwaarde aanwijzen; je kunt er eerst een meetbare formuleren voordat je die als instapcheck gebruikt.",
+            "en": f"I mean {label}. The saved setup data I can read contains no specific confirmation or entry rule. I can't point to an existing condition; you could first define a measurable one before using it as an entry check.",
+            "de": f"Ich meine {label}. In den Daten, die ich zu diesem gespeicherten Setup lesen kann, steht keine konkrete Bestätigungs- oder Einstiegsregel. Ich kann deshalb keine vorhandene Bedingung nennen; du könntest zuerst eine messbare Regel festlegen, bevor du sie als Einstiegskriterium nutzt.",
         }[locale if locale in {"nl", "en", "de"} else "nl"]
 
     @staticmethod
@@ -197,7 +231,20 @@ class FinnResponsesAnswerVerifier:
         }[locale if locale in {"nl", "en", "de"} else "nl"]
 
     @staticmethod
-    def _unsupported_personal_confirmation(answer: str, evidence: tuple[dict[str, Any], ...]) -> bool:
+    def _unsupported_personal_confirmation(
+        answer: str, evidence: tuple[dict[str, Any], ...], message: str = "",
+    ) -> bool:
+        if (
+            _hypothetical_trade_reflection(message)
+            and not re.search(r"\b(?:opgeslagen|bewaarde|saved|gespeichert\w*)\b", answer, re.I)
+            and not re.search(
+                r"\b(?:je|jouw)\s+bevestigingsvoorwaarde\s+(?:is|staat|luidt|vereist)\b|"
+                r"\byour\s+confirmation\s+condition\s+(?:is|requires|says)\b|"
+                r"\bdeine\s+Bestätigungsbedingung\s+(?:ist|lautet|verlangt)\b",
+                answer, re.I,
+            )
+        ):
+            return False
         answer = re.sub(r"[*_`]", "", answer)
         if not re.search(
             r"\b(?:jouw|je)\s+bevestigingsvoorwaarde\b|\byour\s+confirmation\s+condition\b|"
@@ -825,9 +872,15 @@ class FinnResponsesAnswerVerifier:
             text, re.IGNORECASE,
         )
         directed_change = re.search(
-            r"\b(?:stel|zet|pas|activeer|plaats|set|adjust|change|activate|place|"
+            r"\b(?:stel|zet|activeer|plaats|set|adjust|change|activate|place|"
             r"setze|ändere|aktiviere)\b[^.!?;\n]{0,65}"
             r"\b(?:stop.?loss|target|doel|entry|instap|strategie|strategy|order)\b",
+            text, re.IGNORECASE,
+        )
+        directed_change_by_pas = re.search(
+            r"\bpas\b[^.!?;\n]{0,65}"
+            r"\b(?:stop.?loss|target|doel|entry|instap|strategie|strategy|order)\b"
+            r"[^.!?;\n]{0,30}\baan\b",
             text, re.IGNORECASE,
         )
         conditional_change = re.search(
@@ -848,7 +901,7 @@ class FinnResponsesAnswerVerifier:
             r"[^.!?;\n]{0,20}\b(?:plannen|plan|overwegen|nemen|take|planen)\b",
             text, re.IGNORECASE,
         )
-        return bool(ratio_praise or directed_change or conditional_change
+        return bool(ratio_praise or directed_change or directed_change_by_pas or conditional_change
                     or speculative_level_change or trade_planning)
 
     @staticmethod
@@ -1781,6 +1834,11 @@ class FinnResponsesAnswerVerifier:
                     "completed", self._stop_loss_coach_fallback(locale),
                     "safe_stop_loss_coaching", evidence,
                 )
+            if result.model_led_coach and _hypothetical_trade_reflection(message):
+                return FinnResponsesVerifiedAnswer(
+                    "completed", self._hypothetical_reflection_fallback(locale),
+                    "safe_hypothetical_reflection", evidence,
+                )
             return FinnResponsesVerifiedAnswer(
                 "unavailable", self._fallback_copy(
                     "responses_provider_timeout", message=message, locale=locale,
@@ -1831,6 +1889,15 @@ class FinnResponsesAnswerVerifier:
                 return FinnResponsesVerifiedAnswer(
                     "completed", saved_confirmation, "saved_confirmation_readback", evidence,
                 )
+            if _read_only_stop_loss_coaching(message) and re.search(
+                r"\b(?:hoeft.{0,30}(?:geen|niet.{0,20})(?:stop)?order|"
+                r"vervang.{0,40}(?:mentale|zelfgekozen)\s+(?:grens|regel)|"
+                r"mental(?:e)?\s+stop)\b", result.text, re.I,
+            ):
+                return FinnResponsesVerifiedAnswer(
+                    "completed", self._stop_loss_coach_fallback(locale),
+                    "safe_stop_loss_coaching", evidence,
+                )
             if (
                 _read_only_stop_loss_coaching(message)
                 and (remaining := remaining_lifecycle_seconds()) is not None
@@ -1861,7 +1928,7 @@ class FinnResponsesAnswerVerifier:
                 return FinnResponsesVerifiedAnswer(
                     "completed", objection, "rule_objection_coaching", evidence, True,
                 )
-        if result.model_led_coach and self._unsupported_personal_confirmation(result.text, evidence):
+        if result.model_led_coach and self._unsupported_personal_confirmation(result.text, evidence, message):
             coach_fallback = self._emotional_coach_fallback(message, locale)
             if coach_fallback:
                 return FinnResponsesVerifiedAnswer(
@@ -2023,9 +2090,14 @@ class FinnResponsesAnswerVerifier:
             if isinstance(item, dict)
         )
         advice_diagnostics: dict[str, dict[str, Any]] = {}
+        explicit_three_priorities = bool(re.search(
+            r"\b(?:drie|three|drei|3)\s+(?:belangrijkste\s+|most important\s+|wichtigsten\s+)?"
+            r"(?:acties|prioriteiten|stappen|actions|priorities|steps|Aktionen|Prioritäten|Schritte)\b",
+            message, re.I,
+        ))
 
         def limited_fallback() -> FinnResponsesVerifiedAnswer:
-            if result.response_focus == "priorities":
+            if result.response_focus == "priorities" or explicit_three_priorities:
                 has_strategy = any(
                     item.get("scope") == "read_linked_strategy"
                     and item.get("status") == "completed"
@@ -2664,10 +2736,22 @@ class FinnResponsesAnswerVerifier:
             for item in evidence
         )
         unavailable_live_for_priorities = (
-            result.response_focus == "priorities"
+            (result.response_focus == "priorities" or explicit_three_priorities)
             and not any(item.get("scope") == "read_market_snapshot"
                         and item.get("status") == "completed" for item in evidence)
         )
+        if (
+            result.model_led_coach and explicit_three_priorities
+            and limited_evaluation and plan_evaluation and unavailable_live_for_priorities
+            and any(
+                item.get("scope") == "read_linked_strategy"
+                and item.get("status") == "completed"
+                and isinstance(item.get("data"), dict)
+                and all(item["data"].get(field) for field in ("entry", "stop_loss", "targets"))
+                for item in evidence
+            )
+        ):
+            return limited_fallback()
         advice_evidence = [
             item for item in compact
             if item.get("status") in {"completed", "unavailable", "stale", "error"}
@@ -3654,4 +3738,14 @@ class FinnResponsesAnswerVerifier:
             and not any((call.get("result") or {}).get("proposal_id") for call in result.tool_trace)
             else result.text
         )
+        if _hypothetical_trade_reflection(message) and not re.search(
+            r"\b(?:voorbeeld|stel|hypothetisch|example|suppose|hypothetical|Beispiel|angenommen)\b",
+            final_text, re.I,
+        ):
+            lead = {
+                "nl": "In je hypothetische voorbeeld:",
+                "en": "In your hypothetical example:",
+                "de": "In deinem hypothetischen Beispiel:",
+            }[locale if locale in {"nl", "en", "de"} else "nl"]
+            final_text = f"{lead}\n\n{final_text}"
         return FinnResponsesVerifiedAnswer("completed", final_text, None, evidence, bool(previous_answer))
