@@ -8,11 +8,11 @@ commit SHA.
 
 | Field | Value |
 | --- | --- |
-| Phase | `LOCAL_VALIDATED_AWAITING_CI` |
+| Phase | `READY_FOR_INDEPENDENT_QA` |
 | Active goal | Correct Paper-bot concept names and per-bot budget readback after the live browser caution verdict |
-| Candidate branch | `codex/finn-bot-budget-readback` |
+| Candidate branch | `codex/finn-bot-budget-readback` ([PR #13](https://github.com/gvangalen/antigravity-trading-tool/pull/13), merged) |
 | Candidate code SHA | `493afb696f609dcda5ac6868a4a10e77ea89118e` |
-| Production SHA before this candidate | `730319fb5ef91a272cf4c8ff58d9e7fff7fe32f3` |
+| Production SHA | Read the public backend health and frontend build-info. This status-only follow-up has its own SHA, so this file cannot identify that SHA in advance. |
 | Release owner | Build |
 | Last updated | `2026-09-30` |
 
@@ -46,9 +46,9 @@ fixture or sealed holdout.
 
 | Gate | Status |
 | --- | --- |
-| Candidate CI | `PENDING` |
-| Auto Deploy | `PENDING`; production remains on `730319fb…` |
-| Backend health and frontend build-info for this candidate | `PENDING` |
+| Candidate CI | `PASS`: PR run `36692752254` and main run `36693048399`, all five jobs green. |
+| Auto Deploy | `PASS`: run `36693278059` deployed code merge SHA `edde4f65cfb82f221c64066d54375316df9451da`. |
+| Backend health and frontend build-info for code deploy | `PASS`: both HTTP 200 and both reported `edde4f65cfb82f221c64066d54375316df9451da` on `2026-09-30`. |
 | Independent live QA for this candidate | `NOT_STARTED`; only the user assigns it after deployment |
 
 Build will verify only Auto Deploy success, public HTTP availability, and exact
