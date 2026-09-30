@@ -8,11 +8,11 @@ commit SHA.
 
 | Field | Value |
 | --- | --- |
-| Phase | `CANDIDATE_AWAITING_CI` |
+| Phase | `READY_FOR_INDEPENDENT_QA` |
 | Active goal | Resolve the three live coach cautions on `2b0b923b2e76e097604991d9982cacf786be77a0`: saved 4H confirmation-rule fallback, stop-loss coach runtime failure, and failure to address an objection to a strict rule |
-| Candidate branch | `codex/finn-coach-live-caution` |
+| Candidate branch | `codex/finn-coach-live-caution` ([PR #17](https://github.com/gvangalen/antigravity-trading-tool/pull/17), merged) |
 | Candidate code SHA | `b5b3a3e4ecea030069752c7428e1e91e7f316bf5` |
-| Production SHA | Pending candidate deployment and public SHA verification. The user's preceding live coach run measured backend and frontend at `2b0b923b2e76e097604991d9982cacf786be77a0`. |
+| Production SHA | Code deploy `1870f0cde1457a6aa16d1e4fc789af3eda5a3fc9` verified from public backend health and frontend build-info. This status-only follow-up creates its own SHA, which must be verified after its Auto Deploy. |
 | Release owner | Build |
 | Last updated | `2026-09-30` |
 
@@ -53,9 +53,9 @@ independent QA's responsibility.
 
 | Gate | Status |
 | --- | --- |
-| Candidate CI | `PENDING` |
-| Auto Deploy | `PENDING` |
-| Backend health and frontend build-info | `PENDING` |
+| Candidate CI | `PASS`: PR run `36721929674` and main run `36722280213`, all five jobs green in each. |
+| Auto Deploy | `PASS`: run `36722503150` deployed code merge SHA `1870f0cde1457a6aa16d1e4fc789af3eda5a3fc9`. |
+| Backend health and frontend build-info | `PASS`: both HTTP 200 and both reported `1870f0cde1457a6aa16d1e4fc789af3eda5a3fc9` on `2026-09-30` at `13:35 UTC`. |
 | Independent live QA for this candidate | `NOT_STARTED`; only the user assigns it after deployment |
 
 After Auto Deploy, Build verifies only successful deployment, public HTTP
