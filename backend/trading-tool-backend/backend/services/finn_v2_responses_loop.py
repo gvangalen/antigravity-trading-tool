@@ -29,11 +29,16 @@ class FinnResponsesError(RuntimeError):
 def _saved_confirmation_readback(message: str) -> bool:
     """A direct question about a stored rule requires an owner-scoped plan read."""
     return bool(
-        re.search(r"\b(?:opgeslagen|bewaarde|saved|gespeichert\w*)\b", message, re.I)
-        and re.search(r"\b(?:setup|plan|strategie|strategy|Strategie)\b", message, re.I)
+        re.search(
+            r"\b(?:opgeslagen|bewaarde|saved|gespeichert\w*|mijn|my|meine[nr]?|"
+            r"gebruik\s+je|gebruikte|bedoel\s+je|do\s+you\s+use|"
+            r"which\s+do\s+you\s+mean|verwendest\s+du)\b", message, re.I,
+        )
+        and re.search(r"\b(?:setups?|plans?|strategies?|strategy)\b", message, re.I)
         and re.search(
             r"\b(?:bevestigingsregel|bevestigingsvoorwaarde|entryregel|instapregel|"
-            r"confirmation rule|confirmation condition|entry rule|Bestätigungsregel)\b",
+            r"entrytrigger|instaptrigger|confirmation rule|confirmation condition|"
+            r"entry rule|entry trigger|Bestätigungsregel)\b",
             message, re.I,
         )
         and ("?" in message or re.search(r"\b(?:welke|wat|which|what|welche|welches)\b", message, re.I))

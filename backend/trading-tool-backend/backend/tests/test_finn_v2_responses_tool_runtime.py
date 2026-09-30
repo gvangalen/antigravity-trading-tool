@@ -66,6 +66,97 @@ def test_factual_tool_result_experiment_cannot_enable_outside_local_fixture(monk
     assert FinnResponsesReadExecutor._facts_only_local_experiment() is True
 
 
+@pytest.mark.parametrize(
+    ("message", "expected_kind", "expected_asset"),
+    [
+        ("Welke BTC-setups staan er op Mijn Plan? Noem de namen.",
+         "saved_setup_collection", "BTC"),
+        ("Geldt mijn BTC-DCA-regel ook voor Apple/AAPL?",
+         "cross_asset_rule_scope", None),
+        ("Welke van mijn BTC-setups gebruik je en welke entrytrigger staat erin?",
+         "saved_confirmation_collection", "BTC"),
+    ],
+)
+def test_explicit_plan_scope_questions_read_owner_setup_collection_without_provider(
+    message, expected_kind, expected_asset,
+):
+    rows = [
+        {"setup_id": 11, "name": "BTC Maandag DCA", "symbol": "BTC", "setup_type": "dca"},
+        {"setup_id": 12, "name": "BTC 4H terugtest", "symbol": "BTC", "setup_type": "trade"},
+        {"setup_id": 13, "name": "BTC breakout", "symbol": "BTC", "setup_type": "trade"},
+    ]
+    front = FinnResponsesFrontDoor(client=object(), session=object(), user_id=7, run_id="scope-read")
+
+    async def read(call):
+        assert call.inputs.get("asset") == expected_asset
+        assert call.inputs["setup_collection_requested"] is True
+        selected = [row for row in rows if not expected_asset or row["symbol"] == expected_asset]
+        return {"status": "completed", "results": [{
+            "scope": "read_active_setup", "status": "completed",
+            "data": {**selected[0], "setups": selected},
+        }]}
+
+    front.reads = read
+    response = asyncio.run(front.run(
+        message=message, instructions="", conversation_context={}, verified_asset="BTC",
+    ))
+    assert response.response.answer_kind == expected_kind
+    verified = asyncio.run(FinnResponsesAnswerVerifier().verify(
+        message=message, result=response.response, locale="nl",
+    ))
+    assert verified.status == "completed"
+    if expected_kind == "saved_setup_collection":
+        assert all(row["name"] in verified.text for row in rows)
+    elif expected_kind == "cross_asset_rule_scope":
+        assert "niet automatisch" in verified.text
+        assert "geen AAPL-plan" in verified.text
+    else:
+        assert "meerdere passende opgeslagen setups" in verified.text
+        assert all(row["name"] in verified.text for row in rows)
+
+
+def test_hypothetical_reflection_does_not_attribute_unread_entry_rule_to_saved_plan():
+    message = (
+        "Stel: ik nam deze maand 9 impulsieve trades, 7 verlies en 2 winst. "
+        "Welk patroon zie je en welke ene regel zou ik volgende week testen?"
+    )
+    assert _hypothetical_trade_reflection(message)
+    result = FinnResponsesResult(
+        "Volgens je instapregel uit je plan had je moeten wachten.",
+        "draft", (), model_led_coach=True,
+    )
+    verified = asyncio.run(FinnResponsesAnswerVerifier().verify(
+        message=message, result=result, locale="nl",
+    ))
+    assert verified.status == "completed"
+    assert verified.reason == "safe_hypothetical_reflection"
+    assert "hypothetische voorbeeld" in verified.text
+    assert "opgeslagen tradehistorie" in verified.text
+
+
+def test_cross_asset_rule_answer_names_target_plan_when_one_is_saved():
+    result = FinnResponsesResult(
+        "Verified saved setup context.", "local-read", ({
+            "name": "get_active_plan_and_strategy", "status": "completed",
+            "arguments": {"source_asset": "BTC", "target_asset": "AAPL"},
+            "result": {"results": [{
+                "scope": "read_active_setup", "status": "completed",
+                "data": {"setups": [
+                    {"name": "BTC DCA", "symbol": "BTC"},
+                    {"name": "AAPL geduldig", "symbol": "AAPL"},
+                ]},
+            }]},
+        },), answer_kind="cross_asset_rule_scope", model_led_coach=True,
+    )
+    verified = asyncio.run(FinnResponsesAnswerVerifier().verify(
+        message="Geldt mijn BTC-regel ook voor AAPL?", result=result, locale="nl",
+    ))
+    assert verified.status == "completed"
+    assert "niet automatisch" in verified.text
+    assert "AAPL geduldig" in verified.text
+    assert "geen AAPL-plan" not in verified.text
+
+
 def test_rejected_proposal_does_not_override_later_valid_clarification():
     trace = (
         {"name": "create_or_update_trade_plan_proposal", "status": "retry"},
