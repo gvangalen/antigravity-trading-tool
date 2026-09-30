@@ -1814,6 +1814,84 @@ class FinnResponsesAnswerVerifier:
             for item in (call.get("result", {}).get("results") or [])
             if isinstance(item, dict)
         )
+        if result.answer_kind == "cross_asset_rule_scope":
+            source_target = next((
+                call.get("arguments") for call in result.tool_trace
+                if call.get("name") == "get_active_plan_and_strategy"
+                and isinstance(call.get("arguments"), dict)
+            ), {})
+            source = str(source_target.get("source_asset") or "").upper()
+            target = str(source_target.get("target_asset") or "").upper()
+            setup_read = next((
+                item for item in evidence
+                if item.get("scope") == "read_active_setup"
+                and item.get("status") == "completed"
+                and isinstance(item.get("data"), dict)
+                and isinstance(item["data"].get("setups"), list)
+            ), None)
+            if source and target and setup_read is not None:
+                target_names = [
+                    str(row["name"]) for row in setup_read["data"]["setups"]
+                    if isinstance(row, dict) and row.get("name")
+                    and str(row.get("symbol") or "").upper() == target
+                ]
+                language = locale if locale in {"nl", "en", "de"} else "nl"
+                answer = {
+                    "nl": f"Nee, een regel voor {source} geldt niet automatisch voor {target}.",
+                    "en": f"No, a rule for {source} does not automatically apply to {target}.",
+                    "de": f"Nein, eine Regel für {source} gilt nicht automatisch für {target}.",
+                }[language]
+                if target_names:
+                    names = ", ".join(f"‘{name}’" for name in target_names)
+                    answer += {
+                        "nl": f" Ik zie voor {target} deze opgeslagen setups: {names}. Hun eigen voorwaarden moet je afzonderlijk bekijken.",
+                        "en": f" I can see these saved {target} setups: {names}. Check their own conditions separately.",
+                        "de": f" Ich sehe diese gespeicherten {target}-Setups: {names}. Prüfe ihre Bedingungen separat.",
+                    }[language]
+                else:
+                    answer += {
+                        "nl": f" In het gelezen setupoverzicht zie ik geen {target}-plan.",
+                        "en": f" I do not see a {target} plan in the setup overview I read.",
+                        "de": f" In der gelesenen Setup-Übersicht sehe ich keinen {target}-Plan.",
+                    }[language]
+                return FinnResponsesVerifiedAnswer(
+                    "completed", answer, "cross_asset_rule_scope", evidence,
+                )
+        if result.answer_kind == "saved_confirmation_collection":
+            answer = self._saved_confirmation_answer(message, evidence, locale)
+            if answer:
+                return FinnResponsesVerifiedAnswer(
+                    "completed", answer, "saved_confirmation_readback", evidence,
+                )
+        if result.answer_kind == "saved_setup_collection":
+            setup_read = next((
+                item for item in evidence
+                if item.get("scope") == "read_active_setup"
+                and item.get("status") == "completed"
+                and isinstance(item.get("data"), dict)
+                and isinstance(item["data"].get("setups"), list)
+            ), None)
+            if setup_read is not None:
+                rows = [
+                    row for row in setup_read["data"]["setups"]
+                    if isinstance(row, dict) and row.get("name")
+                ]
+                if rows:
+                    assets = {str(row.get("symbol") or "").upper() for row in rows}
+                    labels = ", ".join(
+                        f"‘{row['name']}’ ({str(row.get('symbol') or '').upper()})"
+                        if len(assets) > 1 else f"‘{row['name']}’"
+                        for row in rows
+                    )
+                    language = locale if locale in {"nl", "en", "de"} else "nl"
+                    answer = {
+                        "nl": f"Ik zie {len(rows)} opgeslagen setups: {labels}.",
+                        "en": f"I can see {len(rows)} saved setups: {labels}.",
+                        "de": f"Ich sehe {len(rows)} gespeicherte Setups: {labels}.",
+                    }[language]
+                    return FinnResponsesVerifiedAnswer(
+                        "completed", answer, "saved_setup_collection", evidence,
+                    )
         if (
             not previous_response and not recent_action_result and not result.tool_trace
             and result.answer_kind != "provider_unavailable"
@@ -1888,6 +1966,27 @@ class FinnResponsesAnswerVerifier:
             if saved_confirmation:
                 return FinnResponsesVerifiedAnswer(
                     "completed", saved_confirmation, "saved_confirmation_readback", evidence,
+                )
+            if (
+                _hypothetical_trade_reflection(message)
+                and not any(item.get("scope") in {"read_active_setup", "read_linked_strategy"}
+                            and item.get("status") == "completed" for item in evidence)
+                and re.search(
+                    r"\b(?:jouw|je|your|deine?)\s+(?:opgeslagen\s+|saved\s+)?"
+                    r"(?:instapregel|entryregel|entry\s+rule|bevestigingsregel)\b"
+                    r"|\b(?:instapregel|entryregel|entry\s+rule)\b.{0,35}"
+                    r"\b(?:uit|in|from)\s+(?:je|jouw|your|het|the)\s+plan\b",
+                    result.text, re.I,
+                )
+                and not re.search(
+                    r"\b(?:geen|no|not|niet|keine?)\b.{0,35}"
+                    r"\b(?:instapregel|entryregel|entry\s+rule|bevestigingsregel)\b",
+                    result.text, re.I,
+                )
+            ):
+                return FinnResponsesVerifiedAnswer(
+                    "completed", self._hypothetical_reflection_fallback(locale),
+                    "safe_hypothetical_reflection", evidence,
                 )
             if _read_only_stop_loss_coaching(message) and re.search(
                 r"\b(?:hoeft.{0,30}(?:geen|niet.{0,20})(?:stop)?order|"

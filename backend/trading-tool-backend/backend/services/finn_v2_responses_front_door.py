@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from dataclasses import replace
 import logging
 import os
+import re
 from time import monotonic
 from typing import Any, Mapping
 
@@ -16,6 +17,7 @@ from backend.services.finn_v2_operation_state_service import FinnV2OperationStat
 from backend.services.finn_v2_responses_loop import (
     FinnResponsesError, FinnResponsesLoop, FinnResponsesResult,
     _hypothetical_trade_reflection, _read_only_stop_loss_coaching,
+    _saved_confirmation_readback,
 )
 from backend.services.finn_v2_responses_proposal_selection import FinnResponsesProposalSelection
 from backend.services.finn_v2_responses_read_executor import FinnResponsesReadExecutor
@@ -25,7 +27,9 @@ from backend.services.finn_v2_responses_tool_catalog import FinnResponsesToolErr
 from backend.services.finn_v2_responses_tool_relevance import FinnResponsesToolRelevanceGuard
 from backend.services.finn_v2_verified_turn_context import project_verified_turn
 from backend.services.finn_v2_entity_resolution_service import FinnV2EntityResolutionService
+from backend.services import finn_v2_entity_resolution_service as entity_resolution_module
 from backend.services.finn_v2_request_preprocessor_service import FinnV2RequestPreprocessorService
+from backend.services.finn_v2_operation_classification_service import FinnV2OperationClassificationService
 
 logger = logging.getLogger(__name__)
 
@@ -186,6 +190,86 @@ class FinnResponsesFrontDoor:
                             "name": "guided_slot_binding", "status": "completed",
                             "result": {"operation_id": pending_operation, "requested_slot": requested_slot},
                         },),
+                        response_id_reusable=False,
+                    ),
+                    selected, previous_response, locale=locale,
+                )
+        collection_requested = FinnV2OperationClassificationService._is_explicit_setup_collection_read(message)
+        saved_rule_requested = _saved_confirmation_readback(message)
+        applicability = re.search(
+            r"\b(?:geldt|gelden|apply|applies|gilt)\b.{0,100}"
+            r"\b(?:ook\s+voor|also\s+(?:to|for)|auch\s+für)\s+([^?.!,]+)",
+            message, re.I,
+        ) if re.search(r"\b(?:dca|regel|rule|plan)\b", message, re.I) else None
+        target_symbols = mentioned_catalog_symbols(applicability.group(1)) if applicability else set()
+        target_asset = next(iter(target_symbols)) if len(target_symbols) == 1 else None
+        other_assets = mentioned_catalog_symbols(message) - ({target_asset} if target_asset else set())
+        cross_asset_rule = bool(target_asset and len(other_assets) == 1)
+        if (
+            pending_operation is None
+            and not resuming_clarification
+            and (collection_requested or cross_asset_rule or saved_rule_requested)
+        ):
+            # A plural saved-setup question is a factual owner-scoped read.
+            # Resolve it before a model can answer from the active singleton.
+            symbols = mentioned_catalog_symbols(message)
+            inputs = (
+                {"asset": next(iter(symbols))}
+                if (collection_requested or saved_rule_requested)
+                and not cross_asset_rule and len(symbols) == 1
+                and not entity_resolution_module.FinnV2EntityResolutionService.is_all_assets_collection_request(message)
+                else {}
+            )
+            collection_call = FinnResponsesToolCall(
+                name="get_active_plan_and_strategy", operation_id=None,
+                inputs={**inputs, "setup_collection_requested": True},
+                read_tools=("read_active_setup",), required_inputs=(), missing_inputs=(),
+            )
+            try:
+                collection_read = await self.reads(collection_call)
+            except Exception:
+                logger.warning("FINN owner-scoped setup collection pre-read failed", exc_info=True)
+                collection_read = {}
+            collection_evidence = next((
+                item for item in collection_read.get("results", [])
+                if item.get("scope") == "read_active_setup"
+                and item.get("status") == "completed"
+                and isinstance(item.get("data"), dict)
+                and item["data"].get("setups")
+            ), None)
+            if saved_rule_requested and collection_evidence is not None:
+                timeframe = re.search(r"\b(?:1H|4H|1D|1W|15M|30M)\b", message, re.I)
+                matching = [
+                    row for row in collection_evidence["data"]["setups"]
+                    if isinstance(row, dict) and row.get("name")
+                    and (not timeframe or str(row.get("timeframe") or "").casefold()
+                         == timeframe.group().casefold())
+                ]
+                # One identified setup can have a linked strategy with a rule.
+                # Use the normal relation read for that case rather than
+                # declaring the entry condition absent from an overview.
+                if len(matching) <= 1 or any(
+                    str(row["name"]).casefold() in message.casefold() for row in matching
+                ):
+                    collection_evidence = None
+            if collection_evidence is not None:
+                return FinnResponsesFrontDoorResult(
+                    FinnResponsesResult(
+                        text="Verified saved setup context.",
+                        response_id=f"local-setup-collection-{self.run_id}",
+                        tool_trace=({
+                            "name": collection_call.name, "status": collection_read["status"],
+                            "arguments": {
+                                **collection_call.inputs,
+                                **({"source_asset": next(iter(other_assets)),
+                                    "target_asset": target_asset} if cross_asset_rule else {}),
+                            },
+                            "result": collection_read,
+                        },),
+                        answer_kind=("cross_asset_rule_scope" if cross_asset_rule
+                                     else "saved_confirmation_collection" if saved_rule_requested
+                                     else "saved_setup_collection"),
+                        model_led_coach=True,
                         response_id_reusable=False,
                     ),
                     selected, previous_response, locale=locale,
