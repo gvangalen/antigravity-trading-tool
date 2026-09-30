@@ -9,11 +9,11 @@ this document's own commit SHA.
 
 | Field | Value |
 | --- | --- |
-| Phase | `CANDIDATE_CI_PENDING` |
+| Phase | `READY_FOR_INDEPENDENT_QA` |
 | Active goal | Repair the recurring live coach defects reported on `a6247144468e9d407bb376cda115af861bfe6554`: contradictory saved BTC setup inventory and entry-condition follow-ups; BTC-to-AAPL rule scope hidden by FOMO coaching. |
-| Candidate branch | `codex/finn-coach-structural-context` |
-| Candidate code SHA | Pending commit and CI. |
-| Production code SHA | The user reported `a6247144468e9d407bb376cda115af861bfe6554` for the latest authenticated browser QA. Build has not yet verified the next deployed candidate. |
+| Candidate branch | `codex/finn-coach-structural-context` ([PR #23](https://github.com/gvangalen/antigravity-trading-tool/pull/23), merged) |
+| Candidate code SHA | `d6a3a5785812e6d1a7fd4de94fd15793182430f0`; merge SHA `91f24f0b2cd9e533f19b393351c5458dcf6766ea`. |
+| Production code SHA | `91f24f0b2cd9e533f19b393351c5458dcf6766ea`, verified on public backend health and frontend build-info at 20:04 UTC on 2026-09-30. This status-only follow-up creates another deploy SHA; verify that runtime identity separately. |
 | Release owner | Build |
 | Last updated | `2026-09-30` |
 
@@ -59,10 +59,10 @@ semantic verification used `gpt-4o-mini`. Artifacts are ignored files under
 
 | Gate | Status |
 | --- | --- |
-| Candidate CI | Pending. |
-| Main CI | Pending. |
-| Auto Deploy | Pending. |
-| Backend health and frontend build-info | Pending for the new candidate. |
+| Candidate CI | `PASS`: PR run `36769396747`, all five jobs green. |
+| Main CI | `PASS`: main run `36769663898`, all five jobs green. |
+| Auto Deploy | `PASS`: run `36769888529` deployed merge SHA `91f24f0b2cd9e533f19b393351c5458dcf6766ea`. |
+| Backend health and frontend build-info | `PASS`: both HTTP 200 and both reported the merge SHA at 20:04 UTC on 2026-09-30. |
 | Independent authenticated live QA | Pending; QA owns the protected fixture, full live matrix, and final verdict. |
 
 Build's local checks establish technical readiness only. Authenticated
