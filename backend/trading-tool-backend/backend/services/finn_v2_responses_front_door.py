@@ -194,36 +194,120 @@ class FinnResponsesFrontDoor:
                     ),
                     selected, previous_response, locale=locale,
                 )
-        collection_requested = FinnV2OperationClassificationService._is_explicit_setup_collection_read(message)
-        saved_rule_requested = _saved_confirmation_readback(message)
-        applicability = re.search(
-            r"\b(?:geldt|gelden|apply|applies|gilt)\b.{0,100}"
-            r"\b(?:ook\s+voor|also\s+(?:to|for)|auch\s+für)\s+([^?.!,]+)",
+        guard = getattr(self, "relevance_guard", None)
+        previous_kind = str((previous_response or {}).get("terminal_kind") or "")
+        is_read_request = (
+            FinnV2RequestPreprocessorService().preprocess(message=message).action_polarity == "read"
+        )
+        mentioned_assets = mentioned_catalog_symbols(message)
+        prior_inventory = next((
+            call for call in reversed((previous_response or {}).get("tool_trace") or [])
+            if call.get("name") == "get_saved_setup_inventory"
+            and call.get("status") == "completed"
+            and any(
+                item.get("scope") == "read_saved_setup_inventory"
+                and item.get("status") == "completed"
+                for item in (call.get("result") or {}).get("results") or []
+            )
+        ), None)
+        prior_inventory_data = next((
+            item.get("data") for item in (prior_inventory or {}).get("result", {}).get("results") or []
+            if item.get("scope") == "read_saved_setup_inventory"
+            and isinstance(item.get("data"), dict)
+        ), {})
+        prior_setup_ids = [
+            row["setup_id"] for row in prior_inventory_data.get("setups") or []
+            if isinstance(row, dict) and isinstance(row.get("setup_id"), int)
+        ]
+        prior_inventory_asset = resolve_catalog_symbol(
+            (prior_inventory or {}).get("arguments", {}).get("asset")
+        )
+        prior_inventory_timeframe = str(
+            (prior_inventory or {}).get("arguments", {}).get("timeframe") or ""
+        ).upper()
+        collection_cue = bool(re.search(
+            r"\b(?:setups|set-ups|plannen|plans|(?:alle|all)\s+(?:mijn|my)?\s*setups?)\b",
             message, re.I,
-        ) if re.search(r"\b(?:dca|regel|rule|plan)\b", message, re.I) else None
-        target_symbols = mentioned_catalog_symbols(applicability.group(1)) if applicability else set()
-        target_asset = next(iter(target_symbols)) if len(target_symbols) == 1 else None
-        other_assets = mentioned_catalog_symbols(message) - ({target_asset} if target_asset else set())
-        cross_asset_rule = bool(target_asset and len(other_assets) == 1)
+        ))
+        cross_asset_cue = len(mentioned_assets) >= 2 and bool(re.search(
+            r"\b(?:dca|plans?|plannen?|setups?|regels?|rules?)\b", message, re.I,
+        ))
+        inventory_followup = (
+            bool(prior_setup_ids) and previous_kind != "cross_asset_rule_scope"
+        ) and bool(re.search(
+            r"\b(?:die|deze|daarvan|welke|welk|bij|entry\w*|instap\w*|"
+            r"bevestig\w*|those|which|any)\b", message, re.I,
+        ))
+        confirmation_followup = inventory_followup and bool(re.search(
+            r"\b(?:entry\w*|instap\w*|bevestig\w*|confirmation|trigger\w*)\b",
+            message, re.I,
+        ))
+        confirmation_subject = bool(re.search(
+            r"\b(?:entry\w*|instap\w*|bevestig\w*|confirmation|trigger\w*)\b",
+            message, re.I,
+        ))
+        explicit_list = collection_cue and bool(
+            re.search(r"\b(?:noem|opsom\w*|lijst|list|alle|all|namen|names|overzicht|show|toon)\b", message, re.I)
+            or re.search(r"\b(?:welke|which)\b.{0,80}\b(?:staan|heb|have|are)\b", message, re.I)
+        )
+        query: dict[str, str] | None = None
+        if is_read_request and not cross_asset_cue and explicit_list:
+            query = {"kind": "confirmation_inventory" if confirmation_subject else "inventory"}
+        elif is_read_request and confirmation_followup and not mentioned_assets:
+            query = {"kind": "confirmation_inventory"}
+        if (
+            pending_operation is None and not resuming_clarification and is_read_request
+            and (collection_cue or cross_asset_cue or inventory_followup)
+            and query is None
+            and guard is not None
+            and callable(getattr(guard, "saved_plan_query_kind", None))
+        ):
+            query = await guard.saved_plan_query_kind(
+                message=message, previous_kind=previous_kind,
+                previous_answer=str((previous_response or {}).get("answer") or ""),
+            )
+        # The classifier is a semantic router. These narrow fallbacks keep an
+        # unambiguous read available if the selector provider is unavailable.
+        if query is None and is_read_request:
+            if FinnV2OperationClassificationService._is_explicit_setup_collection_read(message):
+                query = {"kind": "inventory"}
+            elif _saved_confirmation_readback(message):
+                query = {"kind": "confirmation_inventory"}
+        query_kind = str((query or {}).get("kind") or "none")
+        source_asset = str((query or {}).get("source_asset") or "").upper()
+        target_asset = str((query or {}).get("target_asset") or "").upper()
+        if query_kind == "cross_asset_scope" and not (
+            source_asset != target_asset and {source_asset, target_asset} <= mentioned_assets
+        ):
+            query_kind = "none"
         if (
             pending_operation is None
             and not resuming_clarification
-            and (collection_requested or cross_asset_rule or saved_rule_requested)
+            and is_read_request
+            and query_kind in {"inventory", "confirmation_inventory", "cross_asset_scope"}
         ):
-            # A plural saved-setup question is a factual owner-scoped read.
-            # Resolve it before a model can answer from the active singleton.
-            symbols = mentioned_catalog_symbols(message)
+            # Collection questions have their own typed, owner-scoped read.
+            # No active setup or linked strategy is selected here.
             inputs = (
-                {"asset": next(iter(symbols))}
-                if (collection_requested or saved_rule_requested)
-                and not cross_asset_rule and len(symbols) == 1
+                {"asset": next(iter(mentioned_assets))}
+                if query_kind != "cross_asset_scope" and len(mentioned_assets) == 1
                 and not entity_resolution_module.FinnV2EntityResolutionService.is_all_assets_collection_request(message)
                 else {}
             )
+            timeframe = re.search(r"\b(?:15m|30m|1h|4h|1d|1w)\b", message, re.I)
+            if timeframe and query_kind != "cross_asset_scope":
+                inputs["timeframe"] = timeframe.group().upper()
+            if query_kind != "cross_asset_scope" and inventory_followup and not mentioned_assets:
+                inputs = {
+                    **({"asset": prior_inventory_asset} if prior_inventory_asset else {}),
+                    **({"timeframe": prior_inventory_timeframe} if prior_inventory_timeframe and not timeframe else {}),
+                    **({"timeframe": timeframe.group().upper()} if timeframe else {}),
+                    "setup_ids": prior_setup_ids,
+                }
             collection_call = FinnResponsesToolCall(
-                name="get_active_plan_and_strategy", operation_id=None,
-                inputs={**inputs, "setup_collection_requested": True},
-                read_tools=("read_active_setup",), required_inputs=(), missing_inputs=(),
+                name="get_saved_setup_inventory", operation_id=None,
+                inputs=inputs, read_tools=("read_saved_setup_inventory",),
+                required_inputs=(), missing_inputs=(),
             )
             try:
                 collection_read = await self.reads(collection_call)
@@ -232,26 +316,11 @@ class FinnResponsesFrontDoor:
                 collection_read = {}
             collection_evidence = next((
                 item for item in collection_read.get("results", [])
-                if item.get("scope") == "read_active_setup"
+                if item.get("scope") == "read_saved_setup_inventory"
                 and item.get("status") == "completed"
                 and isinstance(item.get("data"), dict)
-                and item["data"].get("setups")
+                and isinstance(item["data"].get("setups"), list)
             ), None)
-            if saved_rule_requested and collection_evidence is not None:
-                timeframe = re.search(r"\b(?:1H|4H|1D|1W|15M|30M)\b", message, re.I)
-                matching = [
-                    row for row in collection_evidence["data"]["setups"]
-                    if isinstance(row, dict) and row.get("name")
-                    and (not timeframe or str(row.get("timeframe") or "").casefold()
-                         == timeframe.group().casefold())
-                ]
-                # One identified setup can have a linked strategy with a rule.
-                # Use the normal relation read for that case rather than
-                # declaring the entry condition absent from an overview.
-                if len(matching) <= 1 or any(
-                    str(row["name"]).casefold() in message.casefold() for row in matching
-                ):
-                    collection_evidence = None
             if collection_evidence is not None:
                 return FinnResponsesFrontDoorResult(
                     FinnResponsesResult(
@@ -261,23 +330,42 @@ class FinnResponsesFrontDoor:
                             "name": collection_call.name, "status": collection_read["status"],
                             "arguments": {
                                 **collection_call.inputs,
-                                **({"source_asset": next(iter(other_assets)),
-                                    "target_asset": target_asset} if cross_asset_rule else {}),
+                                **({"source_asset": source_asset, "target_asset": target_asset}
+                                   if query_kind == "cross_asset_scope" else {}),
                             },
                             "result": collection_read,
                         },),
-                        answer_kind=("cross_asset_rule_scope" if cross_asset_rule
-                                     else "saved_confirmation_collection" if saved_rule_requested
+                        answer_kind=("cross_asset_rule_scope" if query_kind == "cross_asset_scope"
+                                     else "saved_confirmation_inventory" if query_kind == "confirmation_inventory"
                                      else "saved_setup_collection"),
                         model_led_coach=True,
                         response_id_reusable=False,
                     ),
                     selected, previous_response, locale=locale,
                 )
+            return FinnResponsesFrontDoorResult(
+                FinnResponsesResult(
+                    text="Saved setup inventory unavailable.",
+                    response_id=f"local-setup-inventory-unavailable-{self.run_id}",
+                    tool_trace=({
+                        "name": collection_call.name,
+                        "status": str(collection_read.get("status") or "unavailable"),
+                        "arguments": {
+                            **collection_call.inputs,
+                            **({"source_asset": source_asset, "target_asset": target_asset}
+                               if query_kind == "cross_asset_scope" else {}),
+                        },
+                        "result": collection_read,
+                    },),
+                    answer_kind=("cross_asset_inventory_unavailable"
+                                 if query_kind == "cross_asset_scope" else "saved_inventory_unavailable"),
+                    model_led_coach=True,
+                    response_id_reusable=False,
+                ), selected, previous_response, locale=locale,
+            )
         target_retry_used = False
         relevance_retry_used = False
         recommended_read_operation: str | None = None
-        guard = getattr(self, "relevance_guard", None)
         previous_answer_only = False
         next_decision_from_previous = False
         conditional_next_step_from_previous = False

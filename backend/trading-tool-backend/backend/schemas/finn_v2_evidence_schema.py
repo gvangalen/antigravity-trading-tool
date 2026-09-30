@@ -135,6 +135,16 @@ class ActiveSetupData(BaseModel):
     setup_count: Optional[int] = None
 
 
+class SavedSetupInventoryData(BaseModel):
+    """Complete owner-scoped setup list; never an active-setup selection."""
+    setups: List[Dict[str, object]] = Field(default_factory=list)
+    setup_count: int
+    asset_filter: Optional[str] = None
+    timeframe_filter: Optional[str] = None
+    complete: bool = True
+    confirmation_rule_field_available: bool = False
+
+
 class LinkedStrategyData(BaseModel):
     strategy_id: int
     setup_id: Optional[int] = None
@@ -237,6 +247,7 @@ ToolDataUnion = Union[
     MacroSnapshotData,
     TechnicalSnapshotData,
     ActiveSetupData,
+    SavedSetupInventoryData,
     LinkedStrategyData,
     LinkedBotData,
     BotStatusData,
@@ -256,6 +267,7 @@ TOOL_DATA_MODEL_BY_NAME = {
     "MacroSnapshotData": MacroSnapshotData,
     "TechnicalSnapshotData": TechnicalSnapshotData,
     "ActiveSetupData": ActiveSetupData,
+    "SavedSetupInventoryData": SavedSetupInventoryData,
     "LinkedStrategyData": LinkedStrategyData,
     "LinkedBotData": LinkedBotData,
     "BotStatusData": BotStatusData,
@@ -275,6 +287,7 @@ PAYLOAD_TYPE_TO_SCHEMA_NAME = {
     "macro_snapshot": "MacroSnapshotData",
     "technical_snapshot": "TechnicalSnapshotData",
     "active_setup": "ActiveSetupData",
+    "saved_setup_inventory": "SavedSetupInventoryData",
     "linked_strategy": "LinkedStrategyData",
     "linked_bot": "LinkedBotData",
     "bot_status": "BotStatusData",

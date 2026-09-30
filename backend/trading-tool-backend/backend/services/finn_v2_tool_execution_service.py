@@ -37,6 +37,7 @@ from backend.services.finn_v2_tool_adapters.report_tool_adapter import ReportToo
 from backend.services.finn_v2_tool_adapters.review_tool_adapter import ReviewToolAdapter
 from backend.services.finn_v2_tool_adapters.score_tool_adapter import ScoreToolAdapter
 from backend.services.finn_v2_tool_adapters.setup_tool_adapter import SetupToolAdapter
+from backend.services.finn_v2_tool_adapters.setup_inventory_tool_adapter import SetupInventoryToolAdapter
 from backend.services.finn_v2_tool_adapters.strategy_tool_adapter import StrategyToolAdapter
 from backend.services.finn_v2_tool_adapters.technical_tool_adapter import TechnicalToolAdapter
 from backend.services.finn_v2_tool_adapters.watchlist_tool_adapter import WatchlistToolAdapter
@@ -77,6 +78,7 @@ class FinnV2ToolExecutionService:
         self.macro_adapter = MacroToolAdapter(session)
         self.technical_adapter = TechnicalToolAdapter(session)
         self.setup_adapter = SetupToolAdapter()
+        self.setup_inventory_adapter = SetupInventoryToolAdapter()
         self.strategy_adapter = StrategyToolAdapter()
         self.bot_adapter = BotToolAdapter()
         self.watchlist_adapter = WatchlistToolAdapter(session)
@@ -571,6 +573,27 @@ class FinnV2ToolExecutionService:
             elif resolved.get("setup", {}).get("symbol"):
                 shared_state["asset"] = str(resolved["setup"]["symbol"]).upper()
             return await self.setup_adapter.execute(**resolved)
+        if tool_name == "read_saved_setup_inventory":
+            # Inventory ownership and completeness come from one repository
+            # query. Workspace hints and active-setup selection do not apply.
+            asset_filter = str(selector.get("asset") or "").strip().upper() or None
+            timeframe_filter = str(selector.get("timeframe") or "").strip().upper() or None
+            rows = [dict(row) for row in await self.resolver.setups.get_user_setups(user_id)]
+            complete = len(rows) < 200  # repository caps this read at 200
+            reference_ids = selector.get("setup_ids")
+            if isinstance(reference_ids, list) and all(
+                isinstance(value, int) and value > 0 for value in reference_ids
+            ):
+                requested_ids = set(reference_ids)
+                rows = [row for row in rows if (row.get("setup_id") or row.get("id")) in requested_ids]
+            if asset_filter:
+                rows = [row for row in rows if str(row.get("symbol") or "").upper() == asset_filter]
+            if timeframe_filter:
+                rows = [row for row in rows if str(row.get("timeframe") or "").upper() == timeframe_filter]
+            return await self.setup_inventory_adapter.execute(
+                setups=rows, asset_filter=asset_filter,
+                timeframe_filter=timeframe_filter, complete=complete,
+            )
         if tool_name == "read_linked_strategy":
             setup_state = await self._ensure_setup(user_id=user_id, selector=selector, run=run, shared_state=shared_state)
             resolved = await self.resolver.resolve_strategy(user_id=user_id, selector=selector, setup=setup_state["setup"])

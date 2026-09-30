@@ -86,32 +86,45 @@ def test_explicit_plan_scope_questions_read_owner_setup_collection_without_provi
         {"setup_id": 13, "name": "BTC breakout", "symbol": "BTC", "setup_type": "trade"},
     ]
     front = FinnResponsesFrontDoor(client=object(), session=object(), user_id=7, run_id="scope-read")
+    front.relevance_guard = SimpleNamespace(saved_plan_query_kind=AsyncMock(return_value={
+        "kind": {
+            "saved_setup_collection": "inventory",
+            "saved_confirmation_collection": "confirmation_inventory",
+            "cross_asset_rule_scope": "cross_asset_scope",
+        }[expected_kind],
+        "source_asset": "BTC" if expected_kind == "cross_asset_rule_scope" else "",
+        "target_asset": "AAPL" if expected_kind == "cross_asset_rule_scope" else "",
+    }))
 
     async def read(call):
+        assert call.name == "get_saved_setup_inventory"
         assert call.inputs.get("asset") == expected_asset
-        assert call.inputs["setup_collection_requested"] is True
         selected = [row for row in rows if not expected_asset or row["symbol"] == expected_asset]
         return {"status": "completed", "results": [{
-            "scope": "read_active_setup", "status": "completed",
-            "data": {**selected[0], "setups": selected},
+            "scope": "read_saved_setup_inventory", "status": "completed",
+            "data": {"setups": selected, "setup_count": len(selected)},
         }]}
 
     front.reads = read
     response = asyncio.run(front.run(
         message=message, instructions="", conversation_context={}, verified_asset="BTC",
     ))
-    assert response.response.answer_kind == expected_kind
+    assert response.response.answer_kind == (
+        "saved_confirmation_inventory" if expected_kind == "saved_confirmation_collection"
+        else expected_kind
+    )
     verified = asyncio.run(FinnResponsesAnswerVerifier().verify(
         message=message, result=response.response, locale="nl",
     ))
     assert verified.status == "completed"
     if expected_kind == "saved_setup_collection":
+        front.relevance_guard.saved_plan_query_kind.assert_not_awaited()
         assert all(row["name"] in verified.text for row in rows)
     elif expected_kind == "cross_asset_rule_scope":
         assert "niet automatisch" in verified.text
         assert "geen AAPL-plan" in verified.text
     else:
-        assert "meerdere passende opgeslagen setups" in verified.text
+        assert "geen daarvan" in verified.text
         assert all(row["name"] in verified.text for row in rows)
 
 
@@ -137,10 +150,10 @@ def test_hypothetical_reflection_does_not_attribute_unread_entry_rule_to_saved_p
 def test_cross_asset_rule_answer_names_target_plan_when_one_is_saved():
     result = FinnResponsesResult(
         "Verified saved setup context.", "local-read", ({
-            "name": "get_active_plan_and_strategy", "status": "completed",
+            "name": "get_saved_setup_inventory", "status": "completed",
             "arguments": {"source_asset": "BTC", "target_asset": "AAPL"},
             "result": {"results": [{
-                "scope": "read_active_setup", "status": "completed",
+                "scope": "read_saved_setup_inventory", "status": "completed",
                 "data": {"setups": [
                     {"name": "BTC DCA", "symbol": "BTC"},
                     {"name": "AAPL geduldig", "symbol": "AAPL"},
@@ -155,6 +168,121 @@ def test_cross_asset_rule_answer_names_target_plan_when_one_is_saved():
     assert "niet automatisch" in verified.text
     assert "AAPL geduldig" in verified.text
     assert "geen AAPL-plan" not in verified.text
+
+
+def test_cross_asset_rule_answer_leads_with_asset_scope_before_fomo_coaching():
+    result = FinnResponsesResult(
+        "Verified saved setup context.", "local-read", ({
+            "name": "get_saved_setup_inventory", "status": "completed",
+            "arguments": {"source_asset": "BTC", "target_asset": "AAPL"},
+            "result": {"results": [{
+                "scope": "read_saved_setup_inventory", "status": "completed",
+                "data": {"setups": [{"setup_id": 1, "name": "BTC DCA", "symbol": "BTC"}],
+                         "complete": True},
+            }]},
+        },), answer_kind="cross_asset_rule_scope", model_led_coach=True,
+    )
+    verified = asyncio.run(FinnResponsesAnswerVerifier().verify(
+        message="Ik voel FOMO. Mag ik mijn BTC-DCA-regel op AAPL toepassen?",
+        result=result, locale="nl",
+    ))
+    assert verified.text.startswith("Nee, een regel voor BTC geldt niet automatisch voor AAPL.")
+    assert "FOMO" in verified.text
+
+
+def test_inventory_followup_reads_collection_again_instead_of_active_singleton():
+    names = ("BTC Maandag DCA", "BTC 4H terugtest", "BTC breakout")
+    front = FinnResponsesFrontDoor(client=object(), session=object(), user_id=7, run_id="inventory-followup")
+    front.relevance_guard = SimpleNamespace(saved_plan_query_kind=AsyncMock(return_value={
+        "kind": "confirmation_inventory", "source_asset": "", "target_asset": "",
+    }))
+    calls = []
+
+    async def read(call):
+        calls.append(call)
+        return {"status": "completed", "results": [{
+            "scope": "read_saved_setup_inventory", "status": "completed",
+            "data": {"setups": [
+                {"setup_id": index, "name": name, "symbol": "BTC"}
+                for index, name in enumerate(names, 1)
+            ], "setup_count": 3, "complete": True},
+        }]}
+
+    front.reads = read
+    message = "Bij welke van die drie staat een entrybevestiging?"
+    result = asyncio.run(front.run(
+        message=message, instructions="", conversation_context={}, verified_asset="BTC",
+        previous_response={
+            "terminal_kind": "saved_setup_collection", "answer": "Ik zie 3 setups.",
+            "tool_trace": [{
+                "name": "get_saved_setup_inventory", "status": "completed",
+                "arguments": {"asset": "BTC"},
+                "result": {"results": [{
+                    "scope": "read_saved_setup_inventory", "status": "completed",
+                    "data": {"setups": [
+                        {"setup_id": index, "name": name, "symbol": "BTC"}
+                        for index, name in enumerate(names, 1)
+                    ]},
+                }]},
+            }],
+        },
+    ))
+    assert len(calls) == 1
+    assert calls[0].read_tools == ("read_saved_setup_inventory",)
+    assert calls[0].inputs == {"asset": "BTC", "setup_ids": [1, 2, 3]}
+    answer = asyncio.run(FinnResponsesAnswerVerifier().verify(
+        message=message, result=result.response, locale="nl",
+    ))
+    assert answer.status == "completed"
+    assert all(name in answer.text for name in names)
+    assert "geen daarvan" in answer.text
+
+
+def test_inventory_router_never_intercepts_explicit_setup_creation(monkeypatch):
+    front = FinnResponsesFrontDoor(client=object(), session=object(), user_id=7, run_id="action-boundary")
+    classify = AsyncMock(return_value={"kind": "inventory", "source_asset": "", "target_asset": ""})
+    front.relevance_guard = SimpleNamespace(saved_plan_query_kind=classify)
+    front.reads = AsyncMock(side_effect=AssertionError("a creation request must not be answered by a read"))
+    monkeypatch.setattr(
+        "backend.services.finn_v2_responses_front_door.FinnResponsesLoop.run",
+        AsyncMock(return_value=FinnResponsesResult("Model action route", "response-1", ())),
+    )
+    asyncio.run(front.run(
+        message="Maak drie BTC-setups voor me.", instructions="",
+        conversation_context={}, verified_asset="BTC",
+    ))
+    classify.assert_not_awaited()
+    front.reads.assert_not_awaited()
+
+
+def test_inventory_read_failure_does_not_fall_back_to_active_setup_or_guess_count():
+    front = FinnResponsesFrontDoor(client=object(), session=object(), user_id=7, run_id="inventory-unavailable")
+    front.relevance_guard = SimpleNamespace(saved_plan_query_kind=AsyncMock(return_value={
+        "kind": "inventory", "source_asset": "", "target_asset": "",
+    }))
+    front.reads = AsyncMock(return_value={"status": "partial", "results": [{
+        "scope": "read_saved_setup_inventory", "status": "unavailable", "reason": "tool_timeout",
+    }]})
+    message = "Kun je mijn BTC-setups allemaal opsommen?"
+    result = asyncio.run(front.run(
+        message=message, instructions="", conversation_context={}, verified_asset="BTC",
+    ))
+    assert result.response.answer_kind == "saved_inventory_unavailable"
+    answer = asyncio.run(FinnResponsesAnswerVerifier().verify(
+        message=message, result=result.response, locale="nl",
+    ))
+    assert answer.status == "completed"
+    assert "niet betrouwbaar uitlezen" in answer.text
+    assert "Ik zie één" not in answer.text
+
+
+def test_inventory_reference_ids_are_server_only_not_model_arguments():
+    catalog = FinnResponsesToolCatalog()
+    assert catalog.validate("get_saved_setup_inventory", {"asset": "BTC"}).read_tools == (
+        "read_saved_setup_inventory",
+    )
+    with pytest.raises(FinnResponsesToolError, match="read_arguments_invalid"):
+        catalog.validate("get_saved_setup_inventory", {"setup_ids": [1, 2, 3]})
 
 
 def test_rejected_proposal_does_not_override_later_valid_clarification():
@@ -783,7 +911,7 @@ def test_catalog_uses_registry_for_required_and_conditional_inputs():
     )
     assert call.missing_inputs == ("timeframe", "name", "dca_frequency")
     assert call.operation_id == "create_setup"
-    assert len(catalog.definitions()) == 14 + len(catalog.evaluation_contracts)
+    assert len(catalog.definitions()) == 1 + len(catalog.read_tools) + len(catalog.proposal_operations) + len(catalog.evaluation_contracts)
     assert "answer_directly" not in {item["name"] for item in catalog.definitions()}
     proposal = next(item for item in catalog.definitions() if item["name"] == "create_dca_plan_proposal")
     assert proposal["parameters"]["properties"]["payload"]["properties"]["inputs"]["properties"]["min_investment"]["type"] == "number"
