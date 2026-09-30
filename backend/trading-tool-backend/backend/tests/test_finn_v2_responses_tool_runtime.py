@@ -7504,6 +7504,298 @@ def test_model_led_hard_semantic_rejection_still_blocks_answer():
     assert answer.status != "completed" or answer.text != result.text
 
 
+def test_model_led_fomo_rejection_returns_safe_coaching_instead_of_generic_fallback(monkeypatch):
+    async def assess(_self, **_kwargs):
+        return HardClaimBoundaryResult(True, (), {})
+
+    monkeypatch.setattr(
+        "backend.services.finn_v2_responses_answer_verifier.FinnV2HardClaimBoundary.assess",
+        assess,
+    )
+    semantic = SimpleNamespace(verify_async=AsyncMock(return_value=SimpleNamespace(
+        available=True, passes=False, reason_codes=["insufficient_evidence"],
+    )))
+    result = FinnResponsesResult(
+        "Ik kan dit nog niet onderbouwen met betrouwbare gegevens.",
+        "resp-fomo", (), model_led_coach=True,
+    )
+    answer = asyncio.run(FinnResponsesAnswerVerifier(semantic=semantic).verify(
+        message="Ik ben bang de beweging te missen en voel FOMO. Denk met me mee.",
+        result=result, locale="nl",
+    ))
+    assert answer.status == "completed"
+    assert answer.reason == "safe_emotional_coaching"
+    assert "angst om een koersbeweging te missen" in answer.text
+    assert "Welke concrete voorwaarde" in answer.text
+    assert "betrouwbare gegevens" not in answer.text
+
+
+def test_fomo_bypass_rejection_uses_safe_process_copy(monkeypatch):
+    async def assess(_self, **_kwargs):
+        return HardClaimBoundaryResult(True, ("condition_bypass",), {
+            "condition_bypass_quote": "Neem alvast een kleine positie.",
+        })
+
+    monkeypatch.setattr(
+        "backend.services.finn_v2_responses_answer_verifier.FinnV2HardClaimBoundary.assess",
+        assess,
+    )
+    semantic = SimpleNamespace(verify_async=AsyncMock(return_value=SimpleNamespace(
+        available=True, passes=True, reason_codes=[],
+    )))
+    result = FinnResponsesResult(
+        "Neem alvast een kleine positie.", "resp-unsafe-fomo", ({
+            "name": "get_active_plan_and_strategy", "status": "completed",
+            "result": {"results": [{"scope": "read_active_setup", "status": "completed",
+                                   "data": {"name": "BTC DCA"}}]},
+        },), model_led_coach=True,
+    )
+    answer = asyncio.run(FinnResponsesAnswerVerifier(
+        semantic=semantic, client=SimpleNamespace(),
+    ).verify(
+        message="Ik ben bang de beweging te missen. Moet ik de wachtregel negeren?",
+        result=result, locale="nl",
+    ))
+    assert answer.status == "completed"
+    assert answer.reason == "safe_emotional_coaching"
+    assert "kleine positie" not in answer.text
+    assert "wachtregel die je beschrijft" in answer.text
+    assert "Welke concrete voorwaarde" in answer.text
+
+
+def test_model_led_coach_does_not_claim_an_unsaved_confirmation_condition():
+    semantic = SimpleNamespace(verify_async=AsyncMock(return_value=SimpleNamespace(
+        available=True, passes=True, reason_codes=[],
+    )))
+    result = FinnResponsesResult(
+        "Wacht op jouw bevestigingsvoorwaarde voordat je handelt.",
+        "resp-condition", ({"name": "get_active_plan_and_strategy", "status": "completed",
+                            "result": {"results": [{"scope": "read_active_setup",
+                                                   "status": "completed",
+                                                   "data": {"name": "BTC DCA"}}]}},),
+        model_led_coach=True,
+    )
+    answer = asyncio.run(FinnResponsesAnswerVerifier(semantic=semantic).verify(
+        message="Welke voorwaarde bedoel je?", result=result, locale="nl",
+    ))
+    assert answer.status == "clarification_required"
+    assert answer.reason == "confirmation_condition_unverified"
+    assert "Welke voorwaarde bedoel je" in answer.text
+    semantic.verify_async.assert_not_awaited()
+
+
+def test_unsaved_confirmation_in_fomo_followup_keeps_a_coach_answer():
+    result = FinnResponsesResult(
+        "Controleer jouw bevestigingsvoorwaarde.", "resp-fomo-condition", ({
+            "name": "get_active_plan_and_strategy", "status": "completed",
+            "result": {"results": [{"scope": "read_active_setup", "status": "completed",
+                                   "data": {"name": "BTC DCA"}}]},
+        },), model_led_coach=True,
+    )
+    answer = asyncio.run(FinnResponsesAnswerVerifier().verify(
+        message="Wat moet ik met FOMO doen terwijl ik op bevestiging wacht?",
+        result=result, locale="nl",
+    ))
+    assert answer.status == "completed"
+    assert answer.reason == "safe_emotional_coaching"
+    assert "Schrijf" in answer.text and "voorwaarde" in answer.text
+    assert "jouw bevestigingsvoorwaarde" not in answer.text
+
+
+def test_frustration_fallback_stays_a_process_question():
+    answer = FinnResponsesAnswerVerifier._emotional_coach_fallback(
+        "Ik ben gefrustreerd omdat mijn plan me steeds tegenhoudt.", "nl",
+    )
+    assert "Dat klinkt frustrerend" in answer
+    assert "Welke beslissing" in answer
+    assert "trade" not in answer
+
+
+def test_saved_confirmation_condition_is_allowed_by_source_guard():
+    assert not FinnResponsesAnswerVerifier._unsupported_personal_confirmation(
+        "Controleer jouw bevestigingsvoorwaarde.",
+        ({"scope": "read_active_setup", "status": "completed",
+          "data": {"confirmation_condition": "dagcandle sluit boven weerstand"}},),
+    )
+
+
+def test_risk_distance_percentage_is_grounded_in_saved_strategy_geometry():
+    assert FinnResponsesAnswerVerifier._percentage_claims_supported(
+        answer="De risicoafstand is 5% van de entry.", message="Beoordeel mijn plan.",
+        previous_answer="", response_focus=None,
+        evidence=({"scope": "read_linked_strategy", "status": "completed",
+                   "data": {"level_geometry": {
+                       "status": "completed", "entry_stop_distance_percent": "5.00",
+                   }}},),
+    )
+
+
+def test_model_led_ratio_question_uses_typed_static_geometry_when_draft_is_rejected():
+    semantic = SimpleNamespace(verify_async=AsyncMock(return_value=SimpleNamespace(
+        available=True, passes=False, reason_codes=["unverified_personal_claim"],
+    )))
+    geometry = {
+        "status": "completed", "risk_per_unit": "4000", "entry_stop_distance_percent": "5.00",
+        "targets": [
+            {"price": "88000", "reward_per_unit": "8000", "reward_to_risk": "2.00"},
+            {"price": "92000", "reward_per_unit": "12000", "reward_to_risk": "3.00"},
+        ],
+    }
+    result = FinnResponsesResult(
+        "Deze strategie levert gegarandeerd winst op.", "resp-ratio", ({
+            "name": "get_active_plan_and_strategy", "status": "completed",
+            "result": {"results": [{"scope": "read_linked_strategy", "status": "completed",
+                                   "data": {"name": "BTC Breakout", "level_geometry": geometry}}]},
+        },), model_led_coach=True,
+    )
+    answer = asyncio.run(FinnResponsesAnswerVerifier(semantic=semantic).verify(
+        message="Wat zegt de verhouding tussen risico en potentiële opbrengst?",
+        result=result, locale="nl",
+    ))
+    assert answer.status == "completed"
+    assert answer.reason == "static_level_geometry"
+    assert "2:1" in answer.text and "3:1" in answer.text
+    assert "geen oordeel over de huidige markt" in answer.text
+    semantic.verify_async.assert_not_awaited()
+
+
+def test_model_led_horizon_question_asks_for_missing_holding_period():
+    semantic = SimpleNamespace(verify_async=AsyncMock(return_value=SimpleNamespace(
+        available=True, passes=True, reason_codes=[],
+    )))
+    result = FinnResponsesResult(
+        "Dat kan ik niet classificeren.", "resp-horizon", ({
+            "name": "get_active_plan_and_strategy", "status": "partial",
+            "result": {"results": [{"scope": "read_active_setup", "status": "completed",
+                                   "data": {"name": "BTC DCA", "timeframe": "4H"}}]},
+        },), model_led_coach=True,
+    )
+    answer = asyncio.run(FinnResponsesAnswerVerifier(semantic=semantic).verify(
+        message="Is mijn 4H DCA-setup langetermijnopbouw of een swingtrade?",
+        result=result, locale="nl",
+    ))
+    assert answer.status == "clarification_required"
+    assert answer.reason == "investment_horizon_required"
+    assert "lange termijn" in answer.text
+    semantic.verify_async.assert_not_awaited()
+
+
+def test_static_geometry_does_not_replace_a_different_hypothetical_trade():
+    evidence = ({"scope": "read_linked_strategy", "status": "completed", "data": {
+        "entry": "80000", "stop_loss": "76000", "targets": ["88000", "92000"],
+    }},)
+    assert FinnResponsesAnswerVerifier._question_matches_saved_geometry(
+        "Wat is de verhouding bij entry 80000 en stop 76000?", evidence,
+    )
+    assert not FinnResponsesAnswerVerifier._question_matches_saved_geometry(
+        "Wat is de verhouding bij entry 90000 en stop 76000?", evidence,
+    )
+
+
+def test_model_led_horizon_reply_does_not_repeat_the_clarification_question():
+    semantic = SimpleNamespace(verify_async=AsyncMock(return_value=SimpleNamespace(
+        available=True, passes=True, reason_codes=[],
+    )))
+    result = FinnResponsesResult(
+        "Beoog je lange termijn of een swingtrade?", "resp-repeat", ({
+            "name": "get_active_plan_and_strategy", "status": "partial",
+            "result": {"results": [{"scope": "read_active_setup", "status": "completed",
+                                   "data": {"name": "BTC DCA", "setup_type": "dca", "timeframe": "4H"}}]},
+        },), model_led_coach=True, uses_previous_response=True,
+    )
+    answer = asyncio.run(FinnResponsesAnswerVerifier(semantic=semantic).verify(
+        message="Voor de lange termijn, ongeveer vijf jaar.", result=result, locale="nl",
+        previous_response={
+            "terminal_status": "clarification_required",
+            "terminal_reason": "investment_horizon_required",
+            "answer": "Beoog je opbouw voor de lange termijn of kortere trades?",
+            "tool_trace": [{"result": {"results": [{
+                "scope": "read_active_setup", "status": "completed",
+                "data": {"name": "BTC DCA", "setup_type": "dca", "timeframe": "4H"},
+            }]}}],
+        },
+    ))
+    assert answer.status == "completed"
+    assert "vijf jaar" in answer.text
+    assert "DCA-setup" in answer.text
+    assert "?" not in answer.text
+    semantic.verify_async.assert_not_awaited()
+
+
+def test_unrelated_followup_after_horizon_question_is_not_treated_as_horizon_answer():
+    semantic = SimpleNamespace(verify_async=AsyncMock(return_value=SimpleNamespace(
+        available=True, passes=True, reason_codes=[],
+    )))
+    result = FinnResponsesResult(
+        "Dat is een andere vraag; welke gegevens bedoel je?", "resp-new-question", ({
+            "name": "answer_directly", "status": "completed",
+            "arguments": {"uses_previous_response": True}, "result": {"results": []},
+        },), model_led_coach=True, uses_previous_response=True,
+    )
+    answer = asyncio.run(FinnResponsesAnswerVerifier(semantic=semantic).verify(
+        message="Hoeveel BTC heb ik nu?", result=result, locale="nl",
+        previous_response={
+            "terminal_status": "clarification_required",
+            "terminal_reason": "investment_horizon_required",
+            "answer": "Beoog je opbouw voor de lange termijn of kortere trades?",
+        },
+    ))
+    assert answer.reason != "user_detail_acknowledged"
+
+
+def test_rejected_horizon_fit_claim_keeps_safe_user_detail_acknowledgement(monkeypatch):
+    async def assess(_self, **_kwargs):
+        return HardClaimBoundaryResult(True, ("personal_fit",), {
+            "personal_fit_quote": "past deze opzet qua bedoeling bij langetermijnopbouw",
+        })
+
+    monkeypatch.setattr(
+        "backend.services.finn_v2_responses_answer_verifier.FinnV2HardClaimBoundary.assess",
+        assess,
+    )
+    semantic = SimpleNamespace(verify_async=AsyncMock(return_value=SimpleNamespace(
+        available=True, passes=True, reason_codes=[],
+    )))
+    result = FinnResponsesResult(
+        "Met jouw horizon van vijf jaar past deze opzet qua bedoeling bij langetermijnopbouw.",
+        "resp-fit-horizon", ({
+            "name": "get_active_plan_and_strategy", "status": "partial",
+            "result": {"results": [{"scope": "read_active_setup", "status": "completed",
+                                   "data": {"name": "BTC DCA", "setup_type": "dca", "timeframe": "4H"}}]},
+        },), model_led_coach=True, uses_previous_response=True,
+    )
+    answer = asyncio.run(FinnResponsesAnswerVerifier(
+        semantic=semantic, client=SimpleNamespace(),
+    ).verify(
+        message="Voor de lange termijn, ongeveer vijf jaar.", result=result, locale="nl",
+        previous_response={
+            "terminal_status": "clarification_required",
+            "terminal_reason": "investment_horizon_required",
+            "answer": "Beoog je opbouw voor de lange termijn of kortere trades?",
+        },
+    ))
+    assert answer.status == "completed"
+    assert answer.reason == "user_detail_acknowledged"
+    assert "DCA-setup" in answer.text and "vijf jaar" in answer.text
+    assert "past deze opzet" not in answer.text
+
+
+def test_model_led_suitability_answer_attributes_user_proposed_amount():
+    semantic = SimpleNamespace(verify_async=AsyncMock(return_value=SimpleNamespace(
+        available=True, passes=True, reason_codes=[],
+    )))
+    result = FinnResponsesResult(
+        "Ik kan niet beoordelen of €100 per week bij je past; dat bedrag staat niet in je setup.",
+        "resp-proposal", (), model_led_coach=True,
+    )
+    answer = asyncio.run(FinnResponsesAnswerVerifier(semantic=semantic).verify(
+        message="Ik denk aan 100 euro per week. Past dat bij mij?", result=result, locale="nl",
+    ))
+    assert answer.status == "completed"
+    assert answer.text.startswith("Je overweegt 100 euro per week.")
+    assert "staat niet in je setup" in answer.text
+
+
 def test_model_led_setup_called_strategy_returns_typed_fact_boundary():
     semantic = SimpleNamespace(verify_async=AsyncMock(return_value=SimpleNamespace(
         available=True, passes=True, reason_codes=[],

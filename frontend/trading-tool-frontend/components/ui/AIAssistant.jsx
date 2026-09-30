@@ -36,6 +36,7 @@ import { getActiveSetupId } from "@/lib/setup/activeSetup";
 import { indicatorDisplayName } from "@/lib/indicators/configuredIndicatorRows.mjs";
 import { formatDraftCardValue, formatExecutionMode } from "@/lib/contractValueFormatter.mjs";
 import { clearActiveFinnConversation, readActiveFinnConversation, writeActiveFinnConversation } from "@/lib/finnActiveConversation.mjs";
+import { parseFinnChatText } from "@/lib/finnChatText.mjs";
 
 const INDICATOR_MODAL_OPEN_EVENT = "finn-indicator-config:open";
 const INDICATOR_MODAL_COMPLETED_EVENT = "finn-indicator-config:completed";
@@ -7015,7 +7016,13 @@ function AIAssistantContent({
                     ? "bg-rose-50 dark:bg-rose-900/20 border border-rose-100 dark:border-rose-900 text-rose-700 dark:text-rose-300"
                     : "bg-[var(--color-border-subtle)] dark:bg-slate-900 border border-slate-100 dark:border-slate-800 text-foreground dark:text-slate-100"
                 }`}>
-                <p className="text-sm leading-relaxed">{m.text}</p>
+                <p className="whitespace-pre-line text-sm leading-relaxed">
+                  {m.role === "assistant"
+                    ? parseFinnChatText(m.text).map((part, index) => part.bold
+                      ? <strong key={index}>{part.text}</strong>
+                      : <React.Fragment key={index}>{part.text}</React.Fragment>)
+                    : m.text}
+                </p>
                 {!isSimpleFinnModal && m.role === "assistant" && m.isComplete !== false && renderOperatorReadoutCard(m)}
                 {!isSimpleFinnModal && m.role === "assistant" && m.isComplete !== false && renderAgentController(getMessageAgentController(m))}
                 {!isSimpleFinnModal && m.role === "assistant" && m.isComplete !== false && renderDecisionReviewV3Card(getMessageDecisionReview(m))}

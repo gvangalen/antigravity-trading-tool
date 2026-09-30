@@ -48,6 +48,51 @@ class FinnResponsesAnswerVerifier:
         self.client = client
 
     @staticmethod
+    def _emotional_coach_fallback(message: str, locale: str | None) -> str | None:
+        """Offer a safe process question when an emotional coaching draft fails verification."""
+        language = locale if locale in {"nl", "en", "de"} else "nl"
+        if re.search(r"\b(?:fomo|fear of missing out|bang[^.!?]{0,35}missen|afraid[^.!?]{0,35}miss|bewegung[^.!?]{0,35}verpass)\b", message, re.I):
+            if re.search(r"\b(?:wachtregel|wachten op bevestiging|wait rule|wait for confirmation|Warteregel|Bestätigung warten)\b", message, re.I):
+                return {
+                    "nl": "Ik zou de wachtregel die je beschrijft niet alleen uit angst voor een gemiste beweging negeren. Schrijf op wat voor jou bevestiging betekent en wacht met handelen totdat je die kunt controleren. Welke concrete voorwaarde bedoel je?",
+                    "en": "I wouldn't ignore the wait rule you describe just because you fear missing a move. Write down what confirmation means to you and wait before acting until you can check it. What specific condition do you mean?",
+                    "de": "Ich würde die von dir beschriebene Warteregel nicht nur aus Angst vor einer verpassten Bewegung ignorieren. Schreib auf, was für dich als Bestätigung zählt, und warte mit dem Handeln, bis du es prüfen kannst. Welche konkrete Bedingung meinst du?",
+                }[language]
+            return {
+                "nl": "De angst om een koersbeweging te missen maakt rustig beslissen lastig. Schrijf eerst op wat voor jou een geldige aanleiding is om te handelen en wacht met een instap totdat je die kunt controleren. Welke concrete voorwaarde zou je willen gebruiken?",
+                "en": "FOMO can make it hard to decide calmly. Write down what would justify acting, then check whether it has actually happened. What specific condition would you use?",
+                "de": "FOMO kann eine ruhige Entscheidung erschweren. Schreib zuerst auf, was ein Handeln rechtfertigen würde, und prüfe, ob es wirklich eingetreten ist. Welche konkrete Bedingung würdest du verwenden?",
+            }[language]
+        if re.search(r"\b(?:frustrat\w*|gefrustreerd|frustrerend|ongeduldig|stressed?|gestrest|ärger\w*)\b", message, re.I):
+            return {
+                "nl": "Dat klinkt frustrerend. Laten we eerst scheiden wat je weet van wat je vermoedt. Welke beslissing wil je nemen, en welke informatie heb je nodig om die rustig te beoordelen?",
+                "en": "That sounds frustrating. Let's separate what you know from what you suspect. What decision are you facing, and what information would help you assess it calmly?",
+                "de": "Das klingt frustrierend. Lass uns trennen, was du weißt, von dem, was du vermutest. Welche Entscheidung steht an, und welche Information brauchst du dafür?",
+            }[language]
+        return None
+
+    @staticmethod
+    def _unsupported_personal_confirmation(answer: str, evidence: tuple[dict[str, Any], ...]) -> bool:
+        answer = re.sub(r"[*_`]", "", answer)
+        if not re.search(
+            r"\b(?:jouw|je)\s+bevestigingsvoorwaarde\b|\byour\s+confirmation\s+condition\b|"
+            r"\bdeine\s+Bestätigungsbedingung\b", answer, re.I,
+        ):
+            return False
+        for item in evidence:
+            if item.get("status") != "completed" or item.get("scope") not in {"read_active_setup", "read_linked_strategy"}:
+                continue
+            data = item.get("data") or {}
+            if not isinstance(data, dict):
+                continue
+            if any(data.get(key) for key in (
+                "confirmation_condition", "entry_condition", "entry_conditions",
+                "confirmation_rule", "entry_rule", "trigger_conditions",
+            )):
+                return False
+        return True
+
+    @staticmethod
     def _model_led_repair_instructions(locale: str | None) -> str:
         language = {"nl": "Dutch", "en": "English", "de": "German"}.get(locale or "", "Dutch")
         return (
@@ -289,6 +334,20 @@ class FinnResponsesAnswerVerifier:
             "en": f"You are considering {amount}.",
             "de": f"Du erwägst {amount}.",
         }[language]
+
+    @classmethod
+    def _attribute_user_proposal(cls, *, answer: str, message: str, locale: str | None) -> str:
+        if not re.search(r"\b(?:past|passen|fit|fits|suit|suits|geeignet)\b", message, re.I):
+            return answer
+        proposal = cls._proposed_change_copy(message=message, locale=locale)
+        if proposal is None or re.search(
+            r"\b(?:je\s+(?:overweegt|denkt\s+aan)|jouw\s+voorstel|"
+            r"you\s+(?:are\s+considering|propose)|your\s+proposal|"
+            r"du\s+(?:erwägst|überlegst)|dein\s+Vorschlag)\b",
+            answer, re.I,
+        ):
+            return answer
+        return f"{proposal} {answer}"
 
     @classmethod
     def _limited_evaluation_copy(cls, *, message: str, locale: str | None) -> str:
@@ -797,6 +856,31 @@ class FinnResponsesAnswerVerifier:
             return " ".join((heading, *lines, limit))
         return None
 
+    @staticmethod
+    def _question_matches_saved_geometry(message: str, evidence: tuple[dict[str, Any], ...]) -> bool:
+        if re.search(r"\b(?:stel|hypothetisch|what if|hypothetical|angenommen)\b", message, re.I):
+            return False
+        mentioned = {
+            Decimal(token.replace(".", "").replace(",", ""))
+            for token in re.findall(r"(?<!\w)\d[\d.,]{2,}(?!\w)", message)
+        }
+        if not mentioned:
+            return True
+        for item in evidence:
+            if item.get("scope") != "read_linked_strategy" or item.get("status") != "completed":
+                continue
+            data = item.get("data") or {}
+            if not isinstance(data, dict):
+                continue
+            try:
+                saved = {Decimal(str(data[key])) for key in ("entry", "stop_loss")}
+                saved.update(Decimal(str(target)) for target in data.get("targets") or [])
+            except (InvalidOperation, KeyError, TypeError):
+                continue
+            if mentioned <= saved:
+                return True
+        return False
+
     @classmethod
     def _amounts_supported(
         cls, *, answer: str, message: str, previous_answer: str,
@@ -889,7 +973,7 @@ class FinnResponsesAnswerVerifier:
         price_distance_claims = {
             Decimal(match.group(1).replace(",", "."))
             for match in re.finditer(
-                r"\b(?:afstand|verschil|distance|difference|Abstand|Differenz)\b"
+                r"\b(?:risicoafstand|afstand|verschil|risk\s+distance|distance|difference|Abstand|Differenz)\b"
                 r"[^.!?\n]{0,100}?\b(\d+(?:[.,]\d+)?)\s*"
                 r"(?:%|\b(?:procent|percent|Prozent)\b)",
                 answer, re.IGNORECASE,
@@ -1560,9 +1644,19 @@ class FinnResponsesAnswerVerifier:
                     "responses_provider_timeout", message=message, locale=locale,
                 ), "responses_provider_timeout", evidence,
             )
+        calculation_question = bool(re.search(
+            r"\b(?:verhouding|bereken|berekening|risk.reward|reward.to.risk|calculate|ratio|"
+            r"verhältnis|berechne)\b", message, re.I,
+        )) and not bool(re.search(
+            r"\b(?:moet\s+ik|should\s+i|soll\s+ich)\b", message, re.I,
+        ))
         static_answer = (
             self._static_geometry_answer(evidence, locale)
-            if result.response_focus == "calculation" else None
+            if result.response_focus == "calculation" or (
+                result.model_led_coach and calculation_question
+                and self._question_matches_saved_geometry(message, evidence)
+            )
+            else None
         )
         if any(call.get("status") == "error" for call in result.tool_trace):
             return FinnResponsesVerifiedAnswer(
@@ -1588,6 +1682,31 @@ class FinnResponsesAnswerVerifier:
                     "question": str(clarification["question"]),
                     "reason": str(clarification["reason"]),
                 },
+            )
+        if result.model_led_coach and self._unsupported_personal_confirmation(result.text, evidence):
+            coach_fallback = self._emotional_coach_fallback(message, locale)
+            if coach_fallback:
+                return FinnResponsesVerifiedAnswer(
+                    "completed", coach_fallback, "safe_emotional_coaching", evidence,
+                )
+            saved_plan_read = any(
+                item.get("scope") in {"read_active_setup", "read_linked_strategy"}
+                and item.get("status") == "completed" for item in evidence
+            )
+            question = {
+                "nl": ("De opgeslagen gegevens bevatten geen concrete bevestigingsvoorwaarde. "
+                       if saved_plan_read else "Ik heb geen concrete bevestigingsvoorwaarde kunnen verifiëren. ")
+                      + "Welke voorwaarde bedoel je precies?",
+                "en": ("The saved data contains no specific confirmation condition. "
+                       if saved_plan_read else "I haven't verified a specific confirmation condition. ")
+                      + "Which condition do you mean?",
+                "de": ("Die gespeicherten Daten enthalten keine konkrete Bestätigungsbedingung. "
+                       if saved_plan_read else "Ich habe keine konkrete Bestätigungsbedingung verifiziert. ")
+                      + "Welche Bedingung meinst du genau?",
+            }[locale if locale in {"nl", "en", "de"} else "nl"]
+            return FinnResponsesVerifiedAnswer(
+                "clarification_required", question, "confirmation_condition_unverified", evidence,
+                clarification={"question": question, "reason": "confirmation_condition_unverified"},
             )
         if not result.model_led_coach and any(item.get("reason") == "setup_ambiguous" for item in evidence) and not any(
             item.get("scope") == "read_active_setup" and item.get("status") == "completed"
@@ -1980,13 +2099,36 @@ class FinnResponsesAnswerVerifier:
             and item.get("status") == "completed"
             and isinstance(item.get("data"), dict)
         ]
-        if result.resumed_clarification_reason == "investment_horizon_required" and not result.model_led_coach:
+        answering_horizon_clarification = (
+            (
+                result.resumed_clarification_reason == "investment_horizon_required"
+                or previous_clarification_reason == "investment_horizon_required"
+            )
+            and bool(re.search(
+                r"\b(?:langetermijn\w*|lange termijn|jaar|jaren|maanden|long.term|years?|months?|"
+                r"langfristig\w*|Jahre?|Monate?|swing.?trade|kortetermijn\w*|short.term)\b",
+                message, re.I,
+            ))
+        )
+        if answering_horizon_clarification and (
+            not result.model_led_coach
+            or result.text.rstrip().endswith("?")
+            or not re.search(
+                r"\b(?:langetermijn\w*|lange termijn|long.term|langfristig\w*)\b",
+                result.text, re.I,
+            )
+        ):
             return FinnResponsesVerifiedAnswer(
                 "completed", self._horizon_detail_acknowledgement(
                     message, tuple((*evidence, *relevant_previous_source_evidence)), locale,
                 ), "user_detail_acknowledged", evidence, True,
             )
-        if result.horizon_classification_question and saved_horizon_objects and not any(
+        asks_horizon_classification = result.horizon_classification_question or bool(
+            re.search(r"\b(?:langetermijn\w*|lange termijn|swing.?trade|long.term|short.term|langfristig\w*)\b", message, re.I)
+            and re.search(r"\b(?:setup|plan|timeframe|4H|grafiek)\b", message, re.I)
+            and "?" in message
+        )
+        if not answering_horizon_clarification and asks_horizon_classification and saved_horizon_objects and not any(
             data.get(field) for data in saved_horizon_objects
             for field in ("investment_horizon", "holding_period", "trade_horizon")
         ):
@@ -2653,6 +2795,12 @@ class FinnResponsesAnswerVerifier:
                     presentation_ok(result.text),
                 )
                 reason = claim_failure_reason() or "responses_evidence_not_verified"
+                if answering_horizon_clarification and reason == "personal_fit_not_established":
+                    return FinnResponsesVerifiedAnswer(
+                        "completed", self._horizon_detail_acknowledgement(
+                            message, tuple((*evidence, *relevant_previous_source_evidence)), locale,
+                        ), "user_detail_acknowledged", evidence, True,
+                    )
                 rejected_quotes = advice_diagnostics.get(result.text, {}).get("claim_boundary_quotes") or {}
                 verified_entities = [
                     entity_type for entity_type, scope in (
@@ -2678,6 +2826,19 @@ class FinnResponsesAnswerVerifier:
                     and self._proposal_speaker_is_user(result.text)
                 )
                 if not language_only_repair:
+                    coach_fallback = (
+                        self._emotional_coach_fallback(message, locale)
+                        if reason in {
+                            "responses_evidence_not_verified",
+                            "user_condition_bypass_blocked",
+                            "trading_outcome_claim_unverified",
+                        } else None
+                    )
+                    if coach_fallback:
+                        return FinnResponsesVerifiedAnswer(
+                            "completed", coach_fallback, "safe_emotional_coaching", evidence,
+                            bool(previous_answer),
+                        )
                     return FinnResponsesVerifiedAnswer(
                         "unavailable",
                         self._fallback_copy(reason, message=message, previous_answer=previous_answer, locale=locale),
@@ -3293,4 +3454,10 @@ class FinnResponsesAnswerVerifier:
             return FinnResponsesVerifiedAnswer(
                 "unavailable", answer, reason, evidence, bool(previous_answer),
             )
-        return FinnResponsesVerifiedAnswer("completed", result.text, None, evidence, bool(previous_answer))
+        final_text = (
+            self._attribute_user_proposal(answer=result.text, message=message, locale=locale)
+            if result.model_led_coach and result.answer_kind == "free_text"
+            and not any((call.get("result") or {}).get("proposal_id") for call in result.tool_trace)
+            else result.text
+        )
+        return FinnResponsesVerifiedAnswer("completed", final_text, None, evidence, bool(previous_answer))
