@@ -8,11 +8,11 @@ commit SHA.
 
 | Field | Value |
 | --- | --- |
-| Phase | `BUILD_VALIDATED` |
+| Phase | `READY_FOR_INDEPENDENT_QA` |
 | Active goal | FINN Responses Tool Runtime with `gpt-6-luna`, reasoning `none` as the chat default |
 | Candidate branch | `codex/finn-responses-tool-runtime` |
-| Candidate code SHA | Resolve from the branch commit after local validation |
-| Production SHA before this release | `86ef0dfa82eb24d20b9d9348fe9f7c142c2194e1` (backend health and frontend build-info, 2026-09-30) |
+| Candidate code SHA | `7de58a867f423d40efd9ed5573a34ad41ab573af` ([PR #12](https://github.com/gvangalen/antigravity-trading-tool/pull/12)) |
+| Production SHA | Read the live backend health and frontend build-info. The status-only commit that records this release has its own SHA, so this file cannot identify that commit in advance. |
 | Release owner | Build |
 | Last updated | `2026-09-30` |
 
@@ -50,9 +50,9 @@ that were fixed and covered by focused regressions and the conversations above.
 
 | Gate | Status |
 | --- | --- |
-| CI | `NOT_STARTED` for this candidate |
-| Auto Deploy | `NOT_STARTED`; production remains on the SHA above |
-| Backend health and frontend build-info for candidate | `NOT_RUN` |
+| CI | `PASS`: PR run `36674086375` and main run `36674335437`, all five jobs green for code SHA `7de58a86…` |
+| Auto Deploy | `PASS`: run `36674476178` deployed code SHA `7de58a86…` |
+| Backend health and frontend build-info for candidate | `PASS`: both HTTP 200 and both reported `7de58a867f423d40efd9ed5573a34ad41ab573af` after Auto Deploy on 2026-09-30 |
 | Official independent QA | `NOT_STARTED`; Build has not accessed the QA fixture or sealed holdout |
 
 Only the user assigns independent production QA after Build records a complete
