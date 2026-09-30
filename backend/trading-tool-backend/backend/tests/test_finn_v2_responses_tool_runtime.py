@@ -7,7 +7,10 @@ from unittest.mock import AsyncMock, Mock
 import pytest
 
 from backend.domain.finn_v2_operation_registry import FinnV2OperationRegistry
-from backend.services.finn_v2_responses_loop import FinnResponsesError, FinnResponsesLoop
+from backend.services.finn_v2_responses_loop import (
+    FinnResponsesError, FinnResponsesLoop, _read_only_stop_loss_coaching,
+    _saved_confirmation_readback,
+)
 from backend.services.finn_v2_responses_tool_catalog import (
     FinnResponsesToolCatalog,
     FinnResponsesToolError,
@@ -19,7 +22,7 @@ from backend.services.finn_v2_responses_proposal_selection import FinnResponsesP
 from backend.services.finn_v2_responses_front_door import FinnResponsesFrontDoor
 from backend.services.finn_v2_responses_tool_relevance import FinnResponsesToolRelevanceGuard
 from backend.services.finn_v2_responses_answer_verifier import FinnResponsesAnswerVerifier
-from backend.services.finn_v2_hard_claim_boundary import HardClaimBoundaryResult
+from backend.services.finn_v2_hard_claim_boundary import FinnV2HardClaimBoundary, HardClaimBoundaryResult
 from backend.services.finn_v2_verified_turn_context import project_verified_turn
 from backend.services.finn_v2_responses_loop import FinnResponsesResult
 from backend.services.finn_v2_run_service import FinnV2RunService, _simple_coach_experiment_enabled
@@ -7617,6 +7620,230 @@ def test_saved_confirmation_condition_is_allowed_by_source_guard():
         ({"scope": "read_active_setup", "status": "completed",
           "data": {"confirmation_condition": "dagcandle sluit boven weerstand"}},),
     )
+
+
+def test_saved_confirmation_question_requires_a_read_and_uses_verified_absence():
+    question = "Welke bevestigingsregel staat in mijn opgeslagen BTC 4H-setup?"
+    assert _saved_confirmation_readback(question)
+    assert _saved_confirmation_readback(question.rstrip("?"))
+    assert not _saved_confirmation_readback("Waarom kan een bevestigingsregel helpen?")
+    fake = FakeResponses(
+        response("read-rule", calls=(tool_call("rule-call", "get_active_plan_and_strategy", {
+            "asset": "BTC", "timeframe": "4H",
+        }),)),
+        response("rule-answer", text="Ik kan dit nog niet onderbouwen met betrouwbare gegevens."),
+    )
+    read = {"status": "partial", "results": [
+        {"scope": "read_active_setup", "status": "completed",
+         "data": {"setup_id": 7, "name": "BTC 4H", "timeframe": "4H"}},
+        {"scope": "read_linked_strategy", "status": "unavailable",
+         "reason": "strategy_not_resolved", "data": None},
+    ]}
+    loop = FinnResponsesLoop(client=SimpleNamespace(responses=fake), executor=AsyncMock(return_value=read))
+    result = asyncio.run(loop.run(
+        message=question, instructions=FinnResponsesFrontDoor._model_led_instructions("nl"),
+        model_led_coach=True, locale="nl",
+    ))
+    assert fake.requests[0]["tool_choice"] == {
+        "type": "function", "name": "get_active_plan_and_strategy",
+    }
+    answer = asyncio.run(FinnResponsesAnswerVerifier().verify(
+        message=question, result=result, locale="nl",
+    ))
+    assert answer.status == "completed"
+    assert answer.reason == "saved_confirmation_readback"
+    assert "geen concrete bevestigings- of entryregel" in answer.text
+    assert "betrouwbare gegevens" not in answer.text
+
+
+def test_strict_rule_objection_addresses_the_objection_without_repeating_clarification():
+    fake = FakeResponses(response("objection-draft", text="Welke bevestigingsvoorwaarde bedoel je precies?"))
+    loop = FinnResponsesLoop(client=SimpleNamespace(responses=fake), executor=AsyncMock())
+    asyncio.run(loop.run(
+        message="Ik vind die regel te streng. Moet ik echt zo lang wachten?",
+        instructions=FinnResponsesFrontDoor._model_led_instructions("nl"),
+        previous_verified_answer="Wacht op bevestiging.", model_led_coach=True, locale="nl",
+    ))
+    assert fake.requests[0]["tool_choice"] == "none"
+    result = FinnResponsesResult(
+        "Welke bevestigingsvoorwaarde bedoel je precies?", "rule-objection", (),
+        model_led_coach=True,
+    )
+    answer = asyncio.run(FinnResponsesAnswerVerifier().verify(
+        message="Ik vind die regel te streng. Moet ik echt zo lang wachten?",
+        result=result, previous_response={"answer": "Wacht op bevestiging."}, locale="nl",
+    ))
+    assert answer.status == "completed"
+    assert answer.reason == "rule_objection_coaching"
+    assert "Ik snap je bezwaar" in answer.text
+    assert "Welke bevestigingsvoorwaarde" not in answer.text
+    assert "wachttijd" in answer.text
+    implicit = asyncio.run(FinnResponsesAnswerVerifier().verify(
+        message="Dat vind ik te streng.", result=result,
+        previous_response={"answer": "In je opgeslagen gegevens staat geen entryregel."},
+        locale="nl",
+    ))
+    assert implicit.reason == "rule_objection_coaching"
+
+
+def test_read_only_stop_loss_coaching_completes_on_provider_timeout():
+    question = (
+        "Ik wil mijn stop-loss weghalen omdat ik bang ben uitgestopt te worden. "
+        "Spreek me tegen als dit impulsief is; wijzig niets."
+    )
+    assert _read_only_stop_loss_coaching(question)
+    assert not _read_only_stop_loss_coaching("Verwijder mijn stop-loss nu.")
+
+    async def slow_response(**_kwargs):
+        await asyncio.sleep(0.05)
+
+    provider = SimpleNamespace(create=AsyncMock(side_effect=slow_response))
+    loop = FinnResponsesLoop(
+        client=SimpleNamespace(responses=provider), executor=AsyncMock(),
+        provider_timeout_seconds=0.01,
+    )
+    result = asyncio.run(loop.run(
+        message=question, instructions=FinnResponsesFrontDoor._model_led_instructions("nl"),
+        model_led_coach=True, locale="nl",
+    ))
+    assert result.answer_kind == "provider_unavailable"
+    assert result.response_id.startswith("local-safe-stoploss-")
+    assert result.text.strip() and not result.response_id_reusable
+    answer = asyncio.run(FinnResponsesAnswerVerifier().verify(
+        message=question, result=result, locale="nl",
+    ))
+    assert answer.status == "completed"
+    assert answer.reason == "safe_stop_loss_coaching"
+    assert "stop-loss niet uit angst" in answer.text
+    assert "Ik wijzig niets" in answer.text
+
+
+def test_stop_loss_coach_does_not_deny_saved_level_without_a_read():
+    question = (
+        "Ik wil mijn stop-loss weghalen omdat ik bang ben uitgestopt te worden. "
+        "Spreek me tegen; wijzig niets."
+    )
+    result = FinnResponsesResult(
+        "Ik heb geen opgeslagen stopniveau om te beoordelen.", "stop-draft", (),
+        model_led_coach=True,
+    )
+    answer = asyncio.run(FinnResponsesAnswerVerifier().verify(
+        message=question, result=result, locale="nl",
+    ))
+    assert answer.status == "completed"
+    assert answer.reason == "safe_stop_loss_coaching"
+    assert "geen opgeslagen stopniveau" not in answer.text
+
+
+def test_stop_loss_coach_uses_safe_reply_before_terminal_deadline(monkeypatch):
+    monkeypatch.setattr(
+        "backend.services.finn_v2_responses_answer_verifier.remaining_lifecycle_seconds",
+        lambda: 4.5,
+    )
+    result = FinnResponsesResult(
+        "Ik wil jouw situatie eerst grondig bekijken.", "late-stop", (),
+        model_led_coach=True,
+    )
+    answer = asyncio.run(FinnResponsesAnswerVerifier().verify(
+        message="Ik wil mijn stop-loss weghalen. Spreek me tegen; wijzig niets.",
+        result=result, locale="nl",
+    ))
+    assert answer.status == "completed"
+    assert answer.reason == "safe_stop_loss_coaching"
+    assert "Ik wijzig niets" in answer.text
+
+
+def test_outcome_guard_allows_negated_probability_assessment_but_blocks_positive_claim():
+    guard = FinnResponsesAnswerVerifier._promises_unverified_trading_outcome
+    assert not guard("Dit is alleen niveau-rekenwerk, geen beoordeling van de kans op succes.")
+    assert not guard("This is not an assessment of the chance of success.")
+    assert guard("Deze strategie heeft een hoge kans op succes.")
+    assert guard("Geen beoordeling van de koers, maar de kans op winst is hoog.")
+    quoted = FinnV2HardClaimBoundary._negated_outcome_assessment
+    assert quoted("Dat is geen bewijs dat de trade kansrijk is.", "de trade kansrijk is")
+    assert quoted("Dat is geen bewijs dat de trade kansrijk is.", "geen bewijs dat de trade kansrijk is")
+    assert not quoted("Geen bewijs voor vandaag, maar de trade is kansrijk.", "de trade is kansrijk")
+    assert not quoted("De trade heeft een hoge kans op winst.", "hoge kans op winst")
+
+
+def test_rejected_plan_review_uses_only_verified_strategy_structure():
+    question = "Beoordeel mijn BTC-plan als coach. Wat is sterk, waar rem je me af en wat is mijn check?"
+    evidence = (
+        {"scope": "read_linked_strategy", "status": "completed",
+         "data": {"entry": 80000, "stop_loss": 76000, "targets": [88000]}},
+    )
+    fallback = FinnResponsesAnswerVerifier._grounded_plan_review_fallback(question, evidence, "nl")
+    assert fallback is not None
+    assert all(phrase in fallback for phrase in ("Sterk:", "Waar ik je afrem:", "Eerstvolgende check:"))
+    assert "80000" not in fallback and "geen actuele" not in fallback
+    assert FinnResponsesAnswerVerifier._grounded_plan_review_fallback(question, (), "nl") is None
+    semantic = SimpleNamespace(verify_async=AsyncMock(return_value=SimpleNamespace(
+        available=True, passes=False, reason_codes=["insufficient_evidence"],
+    )))
+    result = FinnResponsesResult(
+        "Deze strategie heeft een hoge kans op winst.", "review-rejected", ({
+            "name": "get_active_plan_and_strategy", "status": "completed",
+            "result": {"results": list(evidence)},
+        },), model_led_coach=True,
+    )
+    answer = asyncio.run(FinnResponsesAnswerVerifier(semantic=semantic).verify(
+        message=question, result=result, locale="nl",
+    ))
+    assert answer.status == "completed"
+    assert answer.reason == "grounded_plan_review"
+    assert "hoge kans op winst" not in answer.text
+
+
+def test_limited_personal_plan_answer_preserves_proposal_and_stays_read_only():
+    evidence = (
+        {"scope": "read_profile", "status": "completed",
+         "data": {"trader_profile": {"risk_profiles": ["conservative"]}}},
+        {"scope": "read_active_setup", "status": "completed",
+         "data": {"symbol": "BTC", "setup_type": "dca", "dca_frequency": "daily"}},
+    )
+    trace = ({"name": "evaluate_plan", "result": {"assessment_status": "insufficient_evidence"}},)
+    fallback = FinnResponsesAnswerVerifier._limited_personal_plan_fallback
+    proposal = fallback(
+        "Mijn BTC-plan is dagelijkse DCA, maar ik denk aan 100 euro per week. Past dat bij mijn risicostijl?",
+        evidence, trace, "nl",
+    )
+    assert proposal is not None
+    assert "€100 per week" in proposal and "jouw voorstel" in proposal
+    assert "niet beoordelen" in proposal and "Welke van die twee" in proposal
+    review = fallback(
+        "Beoordeel nu mijn volledige BTC-plan en mijn risicostijl.", evidence, trace, "nl",
+    )
+    assert review is not None and "nog niet" in review and "geen instapsignaal" in review
+    assert fallback("Beoordeel mijn plan", evidence, (), "nl") is None
+    assert fallback("Beoordeel mijn plan", evidence[:1], trace, "nl") is None
+
+
+def test_rejected_personal_dca_assessment_finishes_without_a_repair_round():
+    question = (
+        "Mijn huidige BTC-plan is dagelijkse DCA, maar ik denk aan 100 euro per week. "
+        "Past dat bij mijn voorzichtige risicostijl?"
+    )
+    semantic = SimpleNamespace(verify_async=AsyncMock(return_value=SimpleNamespace(
+        available=True, passes=False, reason_codes=["insufficient_evidence"],
+    )))
+    result = FinnResponsesResult(
+        "Een onjuiste persoonlijke beoordeling.", "limited-dca", ({
+            "name": "evaluate_plan", "status": "partial",
+            "result": {"assessment_status": "insufficient_evidence", "results": [
+                {"scope": "read_profile", "status": "completed",
+                 "data": {"trader_profile": {"risk_profiles": ["conservative"]}}},
+                {"scope": "read_active_setup", "status": "completed",
+                 "data": {"symbol": "BTC", "setup_type": "dca", "dca_frequency": "daily"}},
+            ]},
+        },), model_led_coach=True,
+    )
+    answer = asyncio.run(FinnResponsesAnswerVerifier(semantic=semantic).verify(
+        message=question, result=result, locale="nl",
+    ))
+    assert answer.status == "completed"
+    assert answer.reason == "limited_personal_plan"
+    assert "€100 per week" in answer.text
+    assert "niet beoordelen" in answer.text
 
 
 def test_risk_distance_percentage_is_grounded_in_saved_strategy_geometry():

@@ -106,6 +106,26 @@ class HardClaimBoundaryResult:
 
 
 class FinnV2HardClaimBoundary:
+    @staticmethod
+    def _negated_outcome_assessment(answer: str, quote: str) -> bool:
+        """A denial of evidence for an outcome is not an outcome prediction."""
+        position = answer.casefold().find(quote.casefold())
+        if position < 0:
+            return False
+        clause = re.split(
+            r"[.!?;\n]|\b(?:maar|but|aber)\b",
+            answer[:position + len(quote)], flags=re.I,
+        )[-1]
+        return bool(re.search(
+            r"\b(?:geen\s+(?:bewijs|beoordeling|inschatting|uitspraak)|"
+            r"niet\s+(?:beoordelen|vaststellen|inschatten)|"
+            r"no\s+(?:evidence|proof|assessment|estimate)|"
+            r"not\s+(?:an?\s+)?(?:assessment|estimate|evidence)|"
+            r"cannot\s+(?:assess|establish|estimate)|"
+            r"kein\w*\s+(?:Beweis|Bewertung|Einschätzung))\b",
+            clause, re.I,
+        ))
+
     @classmethod
     def _saved_state_readback(cls, quote: str, tool_trace: tuple[dict[str, Any], ...]) -> bool:
         """A stored-object description is not a claim of a new write."""
@@ -329,6 +349,10 @@ class FinnV2HardClaimBoundary:
                 quotes["personal_fit_quote"] = quote
         else:
             quotes["personal_fit_quote"] = ""
+        if quotes["outcome_claim_quote"] and self._negated_outcome_assessment(
+            answer, quotes["outcome_claim_quote"],
+        ):
+            quotes["outcome_claim_quote"] = ""
         if quotes["outcome_claim_quote"]:
             outcome_check = await ask_gpt_structured_response_async(
                 prompt=json.dumps(

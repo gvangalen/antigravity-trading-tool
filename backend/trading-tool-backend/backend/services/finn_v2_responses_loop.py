@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import asyncio
 import json
+import re
 import logging
 import time
+import uuid
 from dataclasses import dataclass
 from typing import Any, Awaitable, Callable
 
@@ -22,6 +24,52 @@ logger = logging.getLogger(__name__)
 
 class FinnResponsesError(RuntimeError):
     """A typed provider or tool-loop failure, never a legacy-chat fallback."""
+
+
+def _saved_confirmation_readback(message: str) -> bool:
+    """A direct question about a stored rule requires an owner-scoped plan read."""
+    return bool(
+        re.search(r"\b(?:opgeslagen|bewaarde|saved|gespeichert\w*)\b", message, re.I)
+        and re.search(r"\b(?:setup|plan|strategie|strategy|Strategie)\b", message, re.I)
+        and re.search(
+            r"\b(?:bevestigingsregel|bevestigingsvoorwaarde|entryregel|instapregel|"
+            r"confirmation rule|confirmation condition|entry rule|Bestätigungsregel)\b",
+            message, re.I,
+        )
+        and ("?" in message or re.search(r"\b(?:welke|wat|which|what|welche|welches)\b", message, re.I))
+    )
+
+
+def _read_only_stop_loss_coaching(message: str) -> bool:
+    """Recognize a request for process coaching, never a stop-loss mutation."""
+    normalized = message.strip()
+    direct_change = re.match(
+        r"^(?:verwijder|haal|wijzig|pas|remove|delete|change|ändere|entferne)\b",
+        normalized, re.I,
+    )
+    explicit_no_write = re.search(
+        r"\b(?:wijzig niets|verander niets|zonder iets te wijzigen|zonder iets te veranderen|"
+        r"do not change|don't change|without changing|ändere nichts)\b", message, re.I,
+    )
+    coaching_request = re.search(
+        r"\b(?:spreek me tegen|denk met me mee|wat vind je|is dit verstandig|"
+        r"should i|would it be wise|talk me out of|was meinst du)\b", message, re.I,
+    )
+    return bool(
+        re.search(r"\b(?:stop.loss|stoploss)\b", message, re.I)
+        and re.search(r"\b(?:weghalen|verwijderen|loslaten|remove|delete|entfern\w*)\b", message, re.I)
+        and (explicit_no_write or (coaching_request and not direct_change))
+    )
+
+
+def _rule_objection(message: str, previous_answer: str) -> bool:
+    return bool(
+        re.search(r"\b(?:te streng|overdreven|too strict|overly strict|zu streng)\b", message, re.I)
+        and re.search(
+            r"\b(?:\w*regel|voorwaarde|wacht\w*|rule|condition|wait\w*|Bedingung|wart\w*)\b",
+            message + " " + previous_answer, re.I,
+        )
+    )
 
 
 def limited_evaluation_format(response_focus: str | None = None) -> dict[str, Any]:
@@ -361,9 +409,26 @@ class FinnResponsesLoop:
         repair_exhausted = False
         incomplete_output_retry_used = False
         output_token_override: int | None = None
+        saved_confirmation_readback = model_led_coach and _saved_confirmation_readback(message)
+        stop_loss_coaching = model_led_coach and _read_only_stop_loss_coaching(message)
+        rule_objection = model_led_coach and _rule_objection(message, previous_verified_answer or "")
+
+        def stop_loss_timeout_result() -> FinnResponsesResult:
+            # The runtime contract needs an exchange identifier and nonempty
+            # draft even when the provider never returned a response. This
+            # synthetic cursor is never reused as a provider response ID.
+            return FinnResponsesResult(
+                "Read-only stop-loss coaching fallback.",
+                prior_id or f"local-safe-stoploss-{uuid.uuid4().hex}",
+                tuple(trace), "provider_unavailable", model_led_coach=True,
+                response_id_reusable=False,
+            )
+
         for _ in range(self.max_rounds):
             remaining = remaining_lifecycle_seconds()
             if remaining is not None and remaining <= 3.25:
+                if stop_loss_coaching and not proposal_selected:
+                    return stop_loss_timeout_result()
                 raise FinnResponsesError("responses_lifecycle_budget_exhausted")
             retry_target_domain = (
                 str(trace[-1]["result"].get("target_domain") or "")
@@ -544,6 +609,14 @@ class FinnResponsesLoop:
                     "Do not repeat a clarification already answered or a failed evaluation "
                     "without new evidence."
                 )
+                if stop_loss_coaching:
+                    turn_instructions += (
+                        "\nThe trader asks for read-only coaching about "
+                        "removing a stop-loss. Address that concern directly as a read-only "
+                        "process question. Do not claim to know the saved stop or suggest a "
+                        "replacement level. A tool read is unnecessary unless the trader "
+                        "asks for a saved setting."
+                    )
                 if resuming_clarification and original_user_request:
                     turn_instructions += (
                         "\nThe trader is answering a clarification for this original request: "
@@ -716,6 +789,10 @@ class FinnResponsesLoop:
                     {"type": "function", "name": self.catalog.proposal_tool_for_operation(guided_operation_id)}
                     if guided_operation_id else "required" if force_read_repair else "auto"
                 )
+                if saved_confirmation_readback:
+                    kwargs["tool_choice"] = {"type": "function", "name": "get_active_plan_and_strategy"}
+                elif stop_loss_coaching or rule_objection:
+                    kwargs["tool_choice"] = "none"
             elif trace[-1]["status"] == "retry":
                 kwargs["tool_choice"] = "required"
             if (
@@ -785,11 +862,13 @@ class FinnResponsesLoop:
                     provider_task.add_done_callback(
                         lambda task: task.exception() if not task.cancelled() else None
                     )
+                    if stop_loss_coaching and not proposal_selected:
+                        return stop_loss_timeout_result()
                     if trace and not proposal_selected:
                         return FinnResponsesResult(
                             "", prior_id or "", tuple(trace), "provider_unavailable",
                             response_focus_check() if response_focus_check is not None else None,
-                            False, None,
+                            False, None, model_led_coach=model_led_coach,
                         )
                     raise FinnResponsesError("responses_provider_timeout")
                 response = await provider_task
@@ -803,10 +882,13 @@ class FinnResponsesLoop:
                     "FINN Responses provider round timed out round=%d elapsed_seconds=%.2f",
                     tool_rounds + 1, time.perf_counter() - provider_started,
                 )
+                if stop_loss_coaching and not proposal_selected:
+                    return stop_loss_timeout_result()
                 if trace and not proposal_selected:
                     return FinnResponsesResult(
                         "", prior_id or "", tuple(trace), "provider_unavailable",
                         response_focus_check() if response_focus_check is not None else None,
+                        model_led_coach=model_led_coach,
                     )
                 raise FinnResponsesError("responses_provider_timeout") from exc
             except FinnResponsesError:
