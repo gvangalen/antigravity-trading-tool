@@ -8,11 +8,11 @@ commit SHA.
 
 | Field | Value |
 | --- | --- |
-| Phase | `LOCAL_VALIDATED_AWAITING_CI` |
+| Phase | `READY_FOR_INDEPENDENT_QA` |
 | Active goal | Resolve the live coach caution findings: inconsistent FOMO/frustration fallback, unsupported personal confirmation condition, and literal Markdown markers in chat |
-| Candidate branch | `codex/finn-coach-consistency` |
+| Candidate branch | `codex/finn-coach-consistency` ([PR #15](https://github.com/gvangalen/antigravity-trading-tool/pull/15), merged) |
 | Candidate code SHA | `f89187a902319f0b2d0f3813b88b021c8342c178` |
-| Production SHA | Not yet deployed for this candidate; verify from public backend health and frontend build-info after Auto Deploy |
+| Production SHA | Read the public backend health and frontend build-info. This status-only follow-up has its own SHA, so this file cannot identify that SHA in advance. |
 | Release owner | Build |
 | Last updated | `2026-09-30` |
 
@@ -51,9 +51,9 @@ still belongs to independent QA.
 
 | Gate | Status |
 | --- | --- |
-| Candidate CI | `NOT_STARTED` |
-| Auto Deploy | `NOT_STARTED` |
-| Backend health and frontend build-info for this candidate | `NOT_STARTED` |
+| Candidate CI | `PASS`: PR run `36705455469` and main run `36705722738`, all five jobs green. |
+| Auto Deploy | `PASS`: run `36705921878` deployed code merge SHA `289c28b50019740e5652c56b1329d4f8019fe1a4`. |
+| Backend health and frontend build-info for code deploy | `PASS`: both HTTP 200 and both reported `289c28b50019740e5652c56b1329d4f8019fe1a4` on `2026-09-30`. |
 | Independent live QA for this candidate | `NOT_STARTED`; only the user assigns it after deployment |
 
 After Auto Deploy, Build verifies only successful deployment, public HTTP
