@@ -10,7 +10,9 @@ import re
 from time import monotonic
 from typing import Any, Mapping
 
-from backend.services.asset_catalog_service import mentioned_catalog_symbols, resolve_catalog_symbol
+from backend.services.asset_catalog_service import (
+    DEFAULT_ASSET_CATALOG, mentioned_catalog_symbols, resolve_catalog_symbol,
+)
 from backend.infrastructure.repositories.finn_v2_runtime_contract_repository import FinnV2RuntimeContractRepository
 from backend.schemas.finn_v2_orchestrator_schema import RequestAnalysisResult
 from backend.services.finn_v2_operation_state_service import FinnV2OperationStateService
@@ -56,6 +58,34 @@ def _listed_setup_ordinal(message: str) -> int | None:
         return names.index(token) % 10
     number = re.match(r"\d+", token)
     return int(number.group()) - 1 if number else None
+
+
+def _explicit_rule_transfer_assets(message: str) -> tuple[str, str] | None:
+    """Extract the source of a named rule and the other named target asset."""
+    assets = mentioned_catalog_symbols(message)
+    if len(assets) != 2 or not re.search(
+        r"\b(?:geldt|toepass\w*|gebruik\w*|overnem\w*|apply|use|applies|gilt|anwenden)\b",
+        message, re.I,
+    ):
+        return None
+    for match in re.finditer(r"\b(?:dca[- ]?)?(?:regel|rule|plan|setup)s?\b", message, re.I):
+        prefix = message[max(0, match.start() - 35):match.start()]
+        nearby = []
+        for symbol in assets:
+            catalog = DEFAULT_ASSET_CATALOG[symbol]
+            names = (symbol, catalog.get("display_name"), *(catalog.get("aliases") or ()))
+            for name in names:
+                if name:
+                    nearby.extend(
+                        (found.end(), symbol)
+                        for found in re.finditer(
+                            rf"(?<![a-z0-9]){re.escape(str(name))}(?![a-z0-9])", prefix, re.I,
+                        )
+                    )
+        if nearby and len(prefix) - max(nearby)[0] <= 15:
+            source = max(nearby)[1]
+            return source, next(iter(assets - {source}))
+    return None
 
 
 def _verified_listed_setup_reference(previous_response: Mapping[str, Any] | None) -> tuple[int, int] | None:
@@ -275,10 +305,8 @@ class FinnResponsesFrontDoor:
         # that owner-scoped item. Re-read its verified ID instead of relying
         # on the old prose answer or asking the model to infer an identity.
         prior_selected = _verified_listed_setup_reference(previous_response)
-        evidence_followup = (
-            is_read_request and request_facts.discourse_act == "evidence_follow_up"
-            and prior_selected is not None
-        )
+        asks_for_evidence = is_read_request and request_facts.discourse_act == "evidence_follow_up"
+        evidence_followup = asks_for_evidence and prior_selected is not None
         listed_ordinal = _listed_setup_ordinal(message) if prior_setup_ids else None
         if listed_ordinal is None and evidence_followup:
             listed_ordinal = prior_selected[0] - 1
@@ -288,6 +316,9 @@ class FinnResponsesFrontDoor:
             else prior_selected[1] if evidence_followup
             else None
         )
+        # An ordinal and an evidence request can arrive in the same message.
+        # The verified inventory already supplies the identity in that case.
+        evidence_followup = asks_for_evidence and listed_setup_id is not None
         if (is_read_request and pending_operation is None and not resuming_clarification
                 and listed_ordinal is not None and listed_setup_id is None):
             return FinnResponsesFrontDoorResult(
@@ -308,6 +339,7 @@ class FinnResponsesFrontDoor:
             r"\b(?:setups|set-ups|plannen|plans|(?:alle|all)\s+(?:mijn|my)?\s*setups?)\b",
             message, re.I,
         ))
+        explicit_rule_transfer = _explicit_rule_transfer_assets(message)
         cross_asset_cue = len(mentioned_assets) >= 2 and bool(re.search(
             r"\b(?:dca|plans?|plannen?|setups?|regels?|rules?)\b", message, re.I,
         ))
@@ -330,7 +362,10 @@ class FinnResponsesFrontDoor:
             or re.search(r"\b(?:welke|which)\b.{0,80}\b(?:staan|heb|have|are)\b", message, re.I)
         )
         query: dict[str, str] | None = None
-        if is_read_request and listed_setup_id and not mentioned_assets:
+        if is_read_request and explicit_rule_transfer:
+            query = {"kind": "cross_asset_scope", "source_asset": explicit_rule_transfer[0],
+                     "target_asset": explicit_rule_transfer[1]}
+        elif is_read_request and listed_setup_id and not mentioned_assets:
             query = {"kind": "listed_setup_reference"}
         elif is_read_request and not cross_asset_cue and explicit_list:
             query = {"kind": "confirmation_inventory" if confirmation_subject else "inventory"}
@@ -761,7 +796,7 @@ class FinnResponsesFrontDoor:
                     else:
                         call = replace(call, inputs={**call.inputs, "asset": symbol})
                 if (
-                    call.name == "get_active_plan_and_strategy"
+                    "read_active_setup" in call.read_tools
                     and not FinnV2EntityResolutionService.is_setup_collection_request(message)
                 ):
                     session_factory = getattr(self.reads, "session_factory", None)
@@ -786,8 +821,15 @@ class FinnResponsesFrontDoor:
                                     ),
                                 },
                             )
-                        if target.resolution_status == "resolved":
-                            call = replace(call, inputs={"setup_id": target.entity_id})
+                        if target.resolution_status == "resolved" and (
+                            call.name == "get_active_plan_and_strategy"
+                            or target.source == "explicit_name"
+                        ):
+                            call = replace(call, inputs=(
+                                {"setup_id": target.entity_id}
+                                if call.name == "get_active_plan_and_strategy"
+                                else {**call.inputs, "setup_id": target.entity_id}
+                            ))
                 if call.evaluation_operation_id and resuming_clarification:
                     chosen_setups = [
                         item for prior_read in read_context

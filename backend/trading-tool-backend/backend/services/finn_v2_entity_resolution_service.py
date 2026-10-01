@@ -773,6 +773,8 @@ class FinnV2EntityResolutionService:
         if explicit_strategy_id:
             row = await self.strategies.get_raw_strategy_with_setup(explicit_strategy_id, user_id)
             if row:
+                if setup and self._coerce_int(row.get("setup_id")) != self._coerce_int(setup.get("id") or setup.get("setup_id")):
+                    raise LookupError("strategy_not_resolved")
                 return {"strategy": dict(row), "resolution_source": "explicit_strategy_id"}
             raise LookupError("entity_not_found")
 
@@ -784,6 +786,8 @@ class FinnV2EntityResolutionService:
                 if self._normalized_name(row.get("name")) == explicit_strategy_name
             ]
             if len(matches) == 1:
+                if setup and self._coerce_int(matches[0].get("setup_id")) != self._coerce_int(setup.get("id") or setup.get("setup_id")):
+                    raise LookupError("strategy_not_resolved")
                 return {"strategy": matches[0], "resolution_source": "explicit_strategy_name"}
             if len(matches) > 1:
                 raise LookupError("strategy_ambiguous")
