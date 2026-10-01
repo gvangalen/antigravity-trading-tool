@@ -34,7 +34,9 @@ class FinnResponsesToolRelevanceGuard:
                     model="gpt-4o-mini", store=False, tool_choice="none", temperature=0,
                     instructions=(
                         "Classify the latest user's primary factual question. Choose inventory "
-                        "for all saved setup names, counts, or comparing multiple saved setups. "
+                        "for all saved setup names or counts. Choose none for questions "
+                        "that compare or explain the contents of multiple saved setups; "
+                        "the main coach can read the owner-scoped inventory and answer them. "
                         "Choose confirmation_inventory when asking which of several saved setups "
                         "has an entry/confirmation condition, including references such as 'those three' "
                         "to a previously verified inventory. Choose cross_asset_scope when asking "

@@ -40,5 +40,6 @@ def project_verified_turn(previous: Mapping[str, Any] | None) -> dict[str, Any] 
         "evidence_limit": evidence_limits.get(terminal_reason),
         "open_choice": (previous.get("open_choice") or terminal_reason) if clarification else None,
         "antecedent_verified_answer": previous.get("antecedent_verified_answer"),
+        "turn_contract": previous.get("turn_contract"),
         "evidence": evidence,
     }
