@@ -1,12 +1,12 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import List, Literal, Optional
+from typing import Any, List, Literal, Optional
 
 from pydantic import BaseModel, Field, validator
 
 from backend.domain.finn_v2_contract import InformationScope
-from backend.schemas.finn_v2_evidence_schema import PAYLOAD_TYPE_TO_SCHEMA_NAME, SCHEMA_VERSION, ToolDataUnion, parse_tool_payload
+from backend.schemas.finn_v2_evidence_schema import PAYLOAD_TYPE_TO_SCHEMA_NAME, SCHEMA_VERSION, parse_tool_payload
 
 
 ASSEMBLY_VERSION = "2026-08-17.block3"
@@ -29,7 +29,7 @@ class StateNode(BaseModel):
     asset: Optional[str] = None
     payload_type: str
     information_scope: Optional[InformationScope] = None
-    payload: Optional[ToolDataUnion] = None
+    payload: Optional[Any] = None
     availability: Literal["available", "stale", "ambiguous", "unavailable", "not_collected"]
     freshness: Literal["fresh", "stale", "unknown", "not_applicable"]
     confidence: Literal["high", "medium", "low", "none"]

@@ -29,6 +29,7 @@ from backend.services.finn_v2_semantic_verifier_service import FinnV2SemanticVer
 from backend.services.finn_v2_lifecycle_budget import remaining_lifecycle_seconds
 from backend.services.finn_v2_request_preprocessor_service import FinnV2RequestPreprocessorService
 from backend.services.finn_v2_verified_turn_context import project_verified_turn
+from backend.services.finn_v2_verified_setup_reference import verified_selected_setup
 from backend.services.finn_v2_hard_claim_boundary import FinnV2HardClaimBoundary
 from backend.domain.finn_v2_operation_registry import FinnV2OperationRegistry
 
@@ -79,6 +80,7 @@ class FinnResponsesAnswerVerifier:
     @staticmethod
     def _grounded_named_setup_coach_fallback(
         message: str, evidence: tuple[dict[str, Any], ...], locale: str | None,
+        verified_setup_id: int | None = None,
     ) -> str | None:
         """Keep an owner-scoped plan read usable when generated coaching is rejected."""
         setups = [item["data"] for item in evidence
@@ -93,7 +95,10 @@ class FinnResponsesAnswerVerifier:
             return None
         setup, strategy = setups[0], strategies[0]
         name = str(setup.get("name") or "").strip()
-        if not name or name.casefold() not in message.casefold():
+        if not name or (
+            name.casefold() not in message.casefold()
+            and setup.get("setup_id") != verified_setup_id
+        ):
             return None
         if setup.get("setup_id") != strategy.get("setup_id"):
             return None
@@ -1298,6 +1303,7 @@ class FinnResponsesAnswerVerifier:
     @staticmethod
     def _saved_strategy_levels_supported(
         answer: str, evidence: tuple[dict[str, Any], ...], user_message: str,
+        selected_setup_id: int | None = None,
     ) -> bool:
         """Bind stated entry/stop/target prices to the strategy read this turn."""
         strategies = [
@@ -1308,6 +1314,15 @@ class FinnResponsesAnswerVerifier:
         ]
         if not strategies:
             return True
+        if selected_setup_id is not None:
+            strategies = [data for data in strategies if data.get("setup_id") == selected_setup_id]
+            if not strategies:
+                # A prior selected setup cannot borrow prices from a
+                # different setup read during this turn.
+                return not bool(re.search(
+                    r"\b(?:entry|instap|stop(?:-loss)?|targets?|doelen?|niveaus?|levels?)\b"
+                    r"[^.!?]{0,30}\d", answer, re.I,
+                ))
         saved: set[Decimal] = set()
         for data in strategies:
             for value in (data.get("entry"), data.get("stop_loss"), *(data.get("targets") or [])):
@@ -1318,13 +1333,20 @@ class FinnResponsesAnswerVerifier:
         if not saved:
             return True
         plain_answer = re.sub(r"[*_`]", "", answer)
-        for match in re.finditer(
+        labelled = list(re.finditer(
             r"\b(?:entry|instap|stop(?:-loss)?|targets?|doelen?|niveaus?|levels?)\b"
             r"(?![-\w])\s*(?:(?:staat|ligt|staan|is|was|zijn|were)\s+)?"
             r"(?:op|van|bij|rond|at|of|:|=)?\s*"
             r"(\d[\d.,]*)(?:\s*[/–-]\s*(\d[\d.,]*))?",
             plain_answer, re.I,
-        ):
+        ))
+        # A compact price pair may omit the label entirely while still
+        # asserting the selected strategy's levels ("80.000/76.000").
+        price_pairs = list(re.finditer(
+            r"\b(\d{1,3}(?:[.,]\d{3})+)\s*[/–-]\s*"
+            r"(\d{1,3}(?:[.,]\d{3})+)\b", plain_answer,
+        ))
+        for match in (*labelled, *price_pairs):
             for raw_token in (match.group(1), match.group(2)):
                 if not raw_token:
                     continue
@@ -1939,6 +1961,7 @@ class FinnResponsesAnswerVerifier:
             for item in (call.get("result", {}).get("results") or [])
             if isinstance(item, dict)
         )
+        prior_selected_setup = verified_selected_setup(previous_response)
         if result.answer_kind in {"saved_inventory_unavailable", "cross_asset_inventory_unavailable"}:
             language = locale if locale in {"nl", "en", "de"} else "nl"
             if result.answer_kind == "cross_asset_inventory_unavailable":
@@ -1961,6 +1984,15 @@ class FinnResponsesAnswerVerifier:
                 }[language]
             return FinnResponsesVerifiedAnswer(
                 "completed", answer, result.answer_kind, evidence,
+            )
+        if result.answer_kind == "cross_asset_scope_unresolved":
+            return FinnResponsesVerifiedAnswer(
+                "completed", {
+                    "nl": "Een regel voor het ene asset geldt niet automatisch voor het andere. Welke opgeslagen regel wil je vergelijken, en op welk asset wil je die toepassen?",
+                    "en": "A rule for one asset does not automatically apply to another. Which saved rule do you mean, and which asset would you apply it to?",
+                    "de": "Eine Regel für einen Vermögenswert gilt nicht automatisch für einen anderen. Welche gespeicherte Regel meinst du, und auf welchen Vermögenswert möchtest du sie anwenden?",
+                }[locale if locale in {"nl", "en", "de"} else "nl"],
+                "cross_asset_scope_unresolved", evidence,
             )
         if result.answer_kind == "cross_asset_rule_scope":
             source_target = next((
@@ -2439,7 +2471,10 @@ class FinnResponsesAnswerVerifier:
                     evidence=evidence, response_focus=result.response_focus,
                 )
                 and self._static_risk_units_supported(text, evidence)
-                and self._saved_strategy_levels_supported(text, evidence, message)
+                and self._saved_strategy_levels_supported(
+                    text, evidence, message,
+                    selected_setup_id=(prior_selected_setup or (None,))[0],
+                )
                 and self._asset_quantities_supported(
                     answer=text, message=user_question_context, evidence=evidence,
                 )
@@ -3505,6 +3540,7 @@ class FinnResponsesAnswerVerifier:
                 if not language_only_repair:
                     named_plan_fallback = self._grounded_named_setup_coach_fallback(
                         message, evidence, locale,
+                        verified_setup_id=(prior_selected_setup or (None,))[0],
                     )
                     if named_plan_fallback:
                         return FinnResponsesVerifiedAnswer(

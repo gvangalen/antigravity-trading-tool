@@ -552,6 +552,25 @@ class FinnV2RuntimeContractRepository(FinnV2RepositoryTransactionMixin):
         }
         return await self._write_revision(row=row, state=state)
 
+    async def record_verified_setup_subject(
+        self, *, run_id: str, user_id: int, subject: Optional[Dict[str, Any]],
+    ) -> FinnV2RuntimeContract:
+        """Checkpoint only a verified, owner-bound conversation subject."""
+        row = await self._required_for_update(run_id)
+        if row.user_id != user_id:
+            raise RuntimeContractConflictError("verified_setup_subject_owner_mismatch")
+        if subject is not None and (
+            subject.get("owner_id") != user_id
+            or not isinstance(subject.get("setup_id"), int)
+            or subject["setup_id"] < 1
+            or not isinstance(subject.get("name"), str)
+            or not subject["name"].strip()
+        ):
+            raise RuntimeContractConflictError("verified_setup_subject_invalid")
+        state = deepcopy(row.state_json or {})
+        state["verified_setup_subject"] = deepcopy(subject) if subject is not None else None
+        return await self._write_revision(row=row, state=state)
+
     async def record_responses_clarification(
         self, *, run_id: str, user_id: int, original_message: str,
         question: str, reason: str,
