@@ -9,12 +9,12 @@ this document's own commit SHA.
 
 | Field | Value |
 | --- | --- |
-| Phase | `BUILD_CANDIDATE`; local required gates passed, CI and deployment pending. |
+| Phase | `READY_FOR_INDEPENDENT_QA`; required local Build, CI and deployment identity gates passed; the nonsealed parity diagnostic gap remains recorded below. |
 | Active goal | Repair FINN's recurring multi-turn coach failures as one flow: keep the current question and selected owner-scoped setup evidence through comparisons, risk tradeoffs, corrections and linked-strategy follow-ups, without fixed coach copy replacing the answer. |
-| Candidate branch | `codex/finn-turn-contract`. |
+| Candidate branch | `codex/finn-turn-contract` ([PR #33](https://github.com/gvangalen/antigravity-trading-tool/pull/33), merged). |
 | Candidate code SHA | `80324808ec474b163bfc727f29291b3ce63dcd47`. |
-| Candidate PR/head SHA | Pending. |
-| Production code SHA | Pending for this candidate. Previous verified release: `2c0423a93cab418071042a9150608cd5419abffd` at 13:26 UTC on 2026-10-01. |
+| Candidate PR/head SHA | `d8d167408d191c608457362793b170125be7562d`. |
+| Production code SHA | `a31beb3574da4adad890ac065b8dc65b1b4e997a`, verified on public backend health and frontend build-info at 19:42 UTC on 2026-10-01. This status-only follow-up creates another deploy SHA; verify that runtime identity separately. |
 | Release owner | Build |
 | Last updated | `2026-10-01` |
 
@@ -73,12 +73,12 @@ This diagnostic gap is not presented as a passing result or a QA verdict.
 
 | Gate | Status |
 | --- | --- |
-| Candidate CI | Pending. |
-| Main CI | Pending. |
-| Auto Deploy | Pending. |
-| Backend health and frontend build-info | Pending for this candidate. |
+| Candidate CI | `PASS`: PR run `36915579106`, all five jobs green. |
+| Main CI | `PASS`: main run `36915892538`, all five jobs green. |
+| Auto Deploy | `PASS`: run `36916142306` deployed merge SHA `a31beb3574da4adad890ac065b8dc65b1b4e997a`. |
+| Backend health and frontend build-info | `PASS`: both HTTP 200 and both reported the merge SHA at 19:42 UTC on 2026-10-01. |
 | Independent authenticated live QA | Pending; QA owns the protected fixture and verdict. |
 
-Build's local evidence establishes technical readiness for a candidate only.
+Build's local and deployment evidence establishes technical readiness only.
 Authenticated production coach acceptance remains independent QA's
 responsibility.
