@@ -9,11 +9,11 @@ this document's own commit SHA.
 
 | Field | Value |
 | --- | --- |
-| Phase | `CANDIDATE_CI_PENDING`; required local Build gates passed, no new candidate has been deployed. |
+| Phase | `READY_FOR_INDEPENDENT_QA`; required local Build and deployment gates passed. |
 | Active goal | Repair the user-reported coach failures on live SHA `94913335abaed9f82c9824bc268dc783f1cc0107`: a combined numbered-setup/evidence follow-up dropped its evidence, a named BTC setup could receive levels from another BTC strategy or generic FOMO coaching, and a BTC-to-AAPL rule question could lose its asset boundary when FOMO was mentioned. |
-| Candidate branch | `codex/finn-coach-identity-boundary`; candidate pending CI. |
+| Candidate branch | `codex/finn-coach-identity-boundary` ([PR #29](https://github.com/gvangalen/antigravity-trading-tool/pull/29), merged). |
 | Candidate code SHA | `c0cb0d7ac8e7179103734b0d215f120ecd04e7ad`. |
-| Production SHA | `94913335abaed9f82c9824bc268dc783f1cc0107` was reported by the user as matching backend and frontend during the failed targeted live recheck. Build has not redeployed. |
+| Production code SHA | `ad071b66c638e20a655495e68281f10bc61ccd65`, verified on public backend health and frontend build-info at 11:35 UTC on 2026-10-01. This status-only follow-up creates another deploy SHA; verify that runtime identity separately. |
 | Release owner | Build |
 | Last updated | `2026-10-01` |
 
@@ -67,12 +67,11 @@ with synthetic users. FINN chat uses `gpt-6-luna` with reasoning `none`.
 
 | Gate | Status |
 | --- | --- |
-| Candidate CI | Pending. |
-| Main CI | Pending. |
-| Auto Deploy | Pending. |
-| Backend health and frontend build-info | Pending for this candidate. |
+| Candidate CI | `PASS`: PR run `36855835737`, all five jobs green. |
+| Main CI | `PASS`: main run `36856041731`, all five jobs green. |
+| Auto Deploy | `PASS`: run `36856206900` deployed merge SHA `ad071b66c638e20a655495e68281f10bc61ccd65`. |
+| Backend health and frontend build-info | `PASS`: both HTTP 200 and both reported the merge SHA at 11:35 UTC on 2026-10-01. |
 | Independent authenticated live QA | Pending; QA owns the protected fixture and verdict. |
 
-Build's local checks establish technical readiness only after all required
-gates finish. Authenticated production acceptance remains independent QA's
-responsibility.
+Build's local and deployment checks establish technical readiness only.
+Authenticated production acceptance remains independent QA's responsibility.
