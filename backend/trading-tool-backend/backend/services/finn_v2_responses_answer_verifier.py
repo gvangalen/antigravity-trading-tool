@@ -84,6 +84,32 @@ class FinnResponsesAnswerVerifier:
             "de": "Ich würde einen Stop-Loss nicht aus Angst vor dem Ausstoppen entfernen. Halte erst inne und prüfe, welche Verlustgrenze du zuvor festgelegt hast; ohne diesen Plan kann ich kein sicheres neues Niveau nennen. Ich ändere nichts. Warum hast du diese Grenze gewählt?",
         }[locale if locale in {"nl", "en", "de"} else "nl"]
 
+    @classmethod
+    def recover_read_only_coaching(
+        cls, *, message: str, result: FinnResponsesResult,
+        answer: FinnResponsesVerifiedAnswer, locale: str | None,
+    ) -> FinnResponsesVerifiedAnswer:
+        """Keep process coaching usable when a model draft cannot be verified.
+
+        The fallback makes no account or market claim and is available only
+        after the normal answer and bounded read repair have failed.
+        """
+        if answer.status != "unavailable" or not result.model_led_coach:
+            return answer
+        if any(
+            "_proposal" in str(call.get("name") or "")
+            or (call.get("result") or {}).get("proposal_id")
+            for call in result.tool_trace
+        ):
+            return answer
+        if _read_only_stop_loss_coaching(message):
+            return FinnResponsesVerifiedAnswer(
+                "completed", cls._stop_loss_coach_fallback(locale),
+                "safe_stop_loss_coaching", answer.evidence,
+                answer.used_previous_response,
+            )
+        return answer
+
     @staticmethod
     def _hypothetical_reflection_fallback(locale: str | None) -> str:
         return {
@@ -1890,6 +1916,73 @@ class FinnResponsesAnswerVerifier:
                 return FinnResponsesVerifiedAnswer(
                     "completed", answer, "cross_asset_rule_scope", evidence,
                 )
+        if result.answer_kind == "listed_setup_reference_out_of_range":
+            return FinnResponsesVerifiedAnswer(
+                "completed", {
+                    "nl": "Dat nummer staat niet in de setup-lijst die ik net noemde. Welk van de genoemde namen bedoel je?",
+                    "en": "That position was not in the setup list I just gave. Which listed name do you mean?",
+                    "de": "Diese Position stand nicht in der eben genannten Setup-Liste. Welchen der genannten Namen meinst du?",
+                }[locale if locale in {"nl", "en", "de"} else "nl"],
+                "listed_setup_reference_out_of_range", evidence,
+            )
+        if result.answer_kind == "listed_setup_reference":
+            reference_call = next((
+                call for call in result.tool_trace
+                if call.get("name") == "get_saved_setup_inventory"
+            ), {})
+            ordinal = (reference_call.get("arguments") or {}).get("listed_ordinal")
+            inventory = next((
+                item.get("data") for item in evidence
+                if item.get("scope") == "read_saved_setup_inventory"
+                and item.get("status") == "completed"
+                and isinstance(item.get("data"), dict)
+            ), {})
+            rows = [
+                row for row in inventory.get("setups") or []
+                if isinstance(row, dict) and row.get("name")
+            ]
+            language = locale if locale in {"nl", "en", "de"} else "nl"
+            if not rows:
+                return FinnResponsesVerifiedAnswer(
+                    "completed", {
+                        "nl": "Die setup uit mijn vorige lijst kan ik nu niet meer terugvinden. Vraag om een nieuw overzicht, dan controleer ik de actuele lijst.",
+                        "en": "I cannot find that setup from my previous list now. Ask for a fresh inventory and I will check the current list.",
+                        "de": "Dieses Setup aus meiner vorherigen Liste kann ich jetzt nicht mehr finden. Frage nach einer neuen Übersicht, dann prüfe ich die aktuelle Liste.",
+                    }[language], "listed_setup_reference", evidence,
+                )
+            row = rows[0]
+            name = str(row["name"])
+            position = str(ordinal) if isinstance(ordinal, int) else "?"
+            answer = {
+                "nl": f"Nummer {position} uit mijn lijst is ‘{name}’.",
+                "en": f"Number {position} on my list is ‘{name}’.",
+                "de": f"Nummer {position} auf meiner Liste ist ‘{name}’.",
+            }[language]
+            if re.search(r"\b(?:meer|details?|informatie|vertel|about|explain|mehr|erzähl)\b", message, re.I):
+                asset = str(row.get("symbol") or "").upper()
+                timeframe = str(row.get("timeframe") or "").upper()
+                setup_type = str(row.get("setup_type") or "").lower()
+                details = {
+                    "nl": f"Het is een {asset + '-' if asset else ''}{setup_type + '-' if setup_type else ''}setup",
+                    "en": f"It is a {asset + ' ' if asset else ''}{setup_type + ' ' if setup_type else ''}setup",
+                    "de": f"Es ist ein {asset + '-' if asset else ''}{setup_type + '-' if setup_type else ''}Setup",
+                }[language]
+                if timeframe:
+                    details += {
+                        "nl": f" op timeframe {timeframe}",
+                        "en": f" on the {timeframe} timeframe",
+                        "de": f" im Zeitrahmen {timeframe}",
+                    }[language]
+                answer += " " + details + "."
+            if re.search(r"\b(?:entry\w*|instap\w*|bevestig\w*|confirmation|trigger\w*)\b", message, re.I):
+                answer += {
+                    "nl": " Deze setupgegevens bevatten geen apart veld met een instapbevestiging; een gekoppelde strategie is hiermee niet gecontroleerd.",
+                    "en": " This setup record has no separate entry-confirmation field; a linked strategy has not been checked here.",
+                    "de": " Dieser Setup-Datensatz hat kein eigenes Feld für eine Einstiegsbestätigung; eine verknüpfte Strategie wurde hier nicht geprüft.",
+                }[language]
+            return FinnResponsesVerifiedAnswer(
+                "completed", answer, "listed_setup_reference", evidence,
+            )
         if result.answer_kind == "saved_confirmation_inventory":
             inventory = next((
                 item.get("data") for item in evidence
