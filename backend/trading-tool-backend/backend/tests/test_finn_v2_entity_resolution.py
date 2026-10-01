@@ -116,6 +116,24 @@ def test_entity_resolution_resolves_explicit_quoted_names_owner_scoped():
     assert bot["resolution_source"] == "explicit_bot_name"
 
 
+def test_explicit_strategy_cannot_override_a_different_selected_setup():
+    service = FinnV2EntityResolutionService(session=object())
+    service.strategies = _FakeStrategyRepo()
+    for selector in ({"strategy_id": 309}, {"strategy_name": "Matrix Strategy"}):
+        with pytest.raises(LookupError, match="strategy_not_resolved"):
+            asyncio.run(service.resolve_strategy(
+                user_id=388, selector=selector, setup={"id": 999},
+            ))
+        linked = asyncio.run(service.resolve_strategy(
+            user_id=388, selector=selector, setup={"id": 293},
+        ))
+        assert linked["strategy"]["setup_id"] == 293
+        linked_alias = asyncio.run(service.resolve_strategy(
+            user_id=388, selector=selector, setup={"setup_id": 293},
+        ))
+        assert linked_alias["strategy"]["setup_id"] == 293
+
+
 def test_entity_resolution_projects_only_registry_required_named_ids():
     service = FinnV2EntityResolutionService(session=object())
     service.setups = _FakeSetupRepo()

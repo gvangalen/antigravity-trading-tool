@@ -77,6 +77,58 @@ class FinnResponsesAnswerVerifier:
         return None
 
     @staticmethod
+    def _grounded_named_setup_coach_fallback(
+        message: str, evidence: tuple[dict[str, Any], ...], locale: str | None,
+    ) -> str | None:
+        """Keep an owner-scoped plan read usable when generated coaching is rejected."""
+        setups = [item["data"] for item in evidence
+                  if item.get("scope") == "read_active_setup"
+                  and item.get("status") == "completed"
+                  and isinstance(item.get("data"), dict)]
+        strategies = [item["data"] for item in evidence
+                      if item.get("scope") == "read_linked_strategy"
+                      and item.get("status") == "completed"
+                      and isinstance(item.get("data"), dict)]
+        if len(setups) != 1 or len(strategies) != 1:
+            return None
+        setup, strategy = setups[0], strategies[0]
+        name = str(setup.get("name") or "").strip()
+        if not name or name.casefold() not in message.casefold():
+            return None
+        if setup.get("setup_id") != strategy.get("setup_id"):
+            return None
+        language = locale if locale in {"nl", "en", "de"} else "nl"
+        answer = {
+            "nl": f"Voor ‘{name}’ heb ik de gekoppelde strategie gelezen. ",
+            "en": f"I read the linked strategy for ‘{name}’. ",
+            "de": f"Ich habe die verknüpfte Strategie für ‘{name}’ gelesen. ",
+        }[language]
+        if re.search(r"\b(?:entry|instap|stop(?:-loss)?|einstieg)\b", message, re.I):
+            try:
+                entry = Decimal(str(strategy["entry"]))
+                stop = Decimal(str(strategy["stop_loss"]))
+            except (KeyError, InvalidOperation, TypeError):
+                pass
+            else:
+                def level(value: Decimal) -> str:
+                    integer, dot, fraction = format(value.normalize(), ",f").partition(".")
+                    if language == "en":
+                        return integer + (dot + fraction if fraction else "")
+                    return integer.replace(",", ".") + ("," + fraction if fraction else "")
+
+                answer += {
+                    "nl": f"De ingestelde entry is {level(entry)} en de stop-loss {level(stop)}. ",
+                    "en": f"The saved entry is {level(entry)} and the stop-loss {level(stop)}. ",
+                    "de": f"Der gespeicherte Einstieg liegt bei {level(entry)} und der Stop-Loss bei {level(stop)}. ",
+                }[language]
+        answer += {
+            "nl": "Dat zijn planwaarden, geen actuele instapbevestiging. Controleer eerst of er een concrete instapvoorwaarde is en of die met actuele gegevens is vervuld; FOMO bewijst dat niet.",
+            "en": "These are plan settings, not a current entry confirmation. First check whether a concrete entry condition exists and whether current evidence meets it; FOMO does not prove that.",
+            "de": "Das sind Planwerte, keine aktuelle Einstiegsbestätigung. Prüfe zuerst, ob eine konkrete Einstiegsbedingung vorliegt und ob aktuelle Daten sie erfüllen; FOMO beweist das nicht.",
+        }[language]
+        return answer
+
+    @staticmethod
     def _stop_loss_coach_fallback(locale: str | None) -> str:
         return {
             "nl": "Ik zou een stop-loss niet uit angst voor uitstopping weghalen. Pauzeer eerst en controleer welke maximale verliesgrens je vooraf had gekozen; zonder dat plan kan ik geen veilig nieuw niveau aanwijzen. Ik wijzig niets. Welke reden had je destijds voor deze grens?",
@@ -1244,6 +1296,53 @@ class FinnResponsesAnswerVerifier:
         return True
 
     @staticmethod
+    def _saved_strategy_levels_supported(
+        answer: str, evidence: tuple[dict[str, Any], ...], user_message: str,
+    ) -> bool:
+        """Bind stated entry/stop/target prices to the strategy read this turn."""
+        strategies = [
+            item["data"] for item in evidence
+            if item.get("scope") == "read_linked_strategy"
+            and item.get("status") == "completed"
+            and isinstance(item.get("data"), dict)
+        ]
+        if not strategies:
+            return True
+        saved: set[Decimal] = set()
+        for data in strategies:
+            for value in (data.get("entry"), data.get("stop_loss"), *(data.get("targets") or [])):
+                try:
+                    saved.add(Decimal(str(value)))
+                except (InvalidOperation, TypeError):
+                    continue
+        if not saved:
+            return True
+        plain_answer = re.sub(r"[*_`]", "", answer)
+        for match in re.finditer(
+            r"\b(?:entry|instap|stop(?:-loss)?|targets?|doelen?|niveaus?|levels?)\b"
+            r"(?![-\w])\s*(?:(?:staat|ligt|staan|is|was|zijn|were)\s+)?"
+            r"(?:op|van|bij|rond|at|of|:|=)?\s*"
+            r"(\d[\d.,]*)(?:\s*[/–-]\s*(\d[\d.,]*))?",
+            plain_answer, re.I,
+        ):
+            for raw_token in (match.group(1), match.group(2)):
+                if not raw_token:
+                    continue
+                token = raw_token.rstrip(".,")
+                if len(re.sub(r"\D", "", token)) < 2:
+                    continue
+                normalized = token.replace(".", "").replace(",", "") if re.search(
+                    r"[.,]\d{3}(?:[.,]\d{3})*$", token,
+                ) else token.replace(",", ".")
+                try:
+                    level = Decimal(normalized)
+                except InvalidOperation:
+                    continue
+                if level not in saved and token not in user_message:
+                    return False
+        return True
+
+    @staticmethod
     def _asset_quantities_supported(
         *, answer: str, message: str, evidence: tuple[dict[str, Any], ...],
     ) -> bool:
@@ -2340,6 +2439,7 @@ class FinnResponsesAnswerVerifier:
                     evidence=evidence, response_focus=result.response_focus,
                 )
                 and self._static_risk_units_supported(text, evidence)
+                and self._saved_strategy_levels_supported(text, evidence, message)
                 and self._asset_quantities_supported(
                     answer=text, message=user_question_context, evidence=evidence,
                 )
@@ -3403,6 +3503,14 @@ class FinnResponsesAnswerVerifier:
                     and self._proposal_speaker_is_user(result.text)
                 )
                 if not language_only_repair:
+                    named_plan_fallback = self._grounded_named_setup_coach_fallback(
+                        message, evidence, locale,
+                    )
+                    if named_plan_fallback:
+                        return FinnResponsesVerifiedAnswer(
+                            "completed", named_plan_fallback, "grounded_named_setup_coaching",
+                            evidence, bool(previous_answer),
+                        )
                     review_fallback = self._grounded_plan_review_fallback(
                         message, evidence, locale,
                     )

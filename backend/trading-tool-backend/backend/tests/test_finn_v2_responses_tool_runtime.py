@@ -19,7 +19,9 @@ from backend.services.finn_v2_responses_tool_catalog import (
 )
 from backend.services.finn_v2_responses_read_executor import FinnResponsesReadExecutor
 from backend.services.finn_v2_responses_proposal_selection import FinnResponsesProposalSelection
-from backend.services.finn_v2_responses_front_door import FinnResponsesFrontDoor, _verified_listed_setup_reference
+from backend.services.finn_v2_responses_front_door import (
+    FinnResponsesFrontDoor, _verified_listed_setup_reference, _explicit_rule_transfer_assets,
+)
 from backend.services.finn_v2_responses_tool_relevance import FinnResponsesToolRelevanceGuard
 from backend.services.finn_v2_responses_answer_verifier import FinnResponsesAnswerVerifier, FinnResponsesVerifiedAnswer
 from backend.services.finn_v2_hard_claim_boundary import FinnV2HardClaimBoundary, HardClaimBoundaryResult
@@ -348,6 +350,74 @@ def test_evidence_followup_rereads_the_last_listed_setup_and_names_verified_fiel
     assert "type trade" in answer.text
     assert "gekoppelde strategie" in answer.text
     assert "BTC Eerste" not in answer.text
+
+
+def test_ordinal_and_evidence_request_in_one_turn_uses_verified_list():
+    front = FinnResponsesFrontDoor(client=object(), session=object(), user_id=7, run_id="combined-evidence")
+    front.relevance_guard = SimpleNamespace(saved_plan_query_kind=AsyncMock())
+
+    async def read(call):
+        assert call.inputs == {"asset": "BTC", "setup_ids": [2]}
+        return {"status": "completed", "results": [{
+            "scope": "read_saved_setup_inventory", "status": "completed",
+            "data": {"setups": [{"setup_id": 2, "name": "BTC Full Base",
+                                "symbol": "BTC", "timeframe": "4H", "setup_type": "trade"}],
+                     "complete": True},
+        }]}
+
+    front.reads = read
+    message = "De tweede uit jouw lijst: welke setup is dat en wat weet je daarvan zeker?"
+    result = asyncio.run(front.run(
+        message=message, instructions="", conversation_context={}, verified_asset="BTC",
+        previous_response={"terminal_kind": "saved_setup_collection",
+                           "answer": "BTC Breakout Full en BTC Full Base.",
+                           "tool_trace": [{"name": "get_saved_setup_inventory", "status": "completed",
+                                           "arguments": {"asset": "BTC"}, "result": {"results": [{
+                                               "scope": "read_saved_setup_inventory", "status": "completed",
+                                               "data": {"setups": [{"setup_id": 1, "name": "BTC Breakout Full"},
+                                                                   {"setup_id": 2, "name": "BTC Full Base"}]},
+                                           }]}}]},
+    ))
+    assert result.response.tool_trace[0]["arguments"]["evidence_followup"] is True
+    answer = asyncio.run(FinnResponsesAnswerVerifier().verify(
+        message=message, result=result.response, locale="nl",
+    ))
+    assert answer.reason == "listed_setup_reference_evidence"
+    assert "BTC Full Base" in answer.text
+    assert "opnieuw" in answer.text
+    assert "gekoppelde strategie" in answer.text
+
+
+@pytest.mark.parametrize("message", [
+    "Ik krijg FOMO bij Apple. Mag ik mijn BTC-DCA-regel daarop toepassen?",
+    "Geldt mijn BTC-DCA-regel ook voor Apple/AAPL? Ik krijg FOMO.",
+    "Mag ik mijn BTC-regel zomaar op AAPL toepassen door FOMO?",
+])
+def test_explicit_cross_asset_rule_transfer_survives_fomo_context(message):
+    assert _explicit_rule_transfer_assets(message) == ("BTC", "AAPL")
+    front = FinnResponsesFrontDoor(client=object(), session=object(), user_id=7, run_id="asset-scope")
+    front.relevance_guard = SimpleNamespace(saved_plan_query_kind=AsyncMock(return_value=None))
+
+    async def read(call):
+        assert call.name == "get_saved_setup_inventory"
+        return {"status": "completed", "results": [{
+            "scope": "read_saved_setup_inventory", "status": "completed",
+            "data": {"setups": [{"setup_id": 1, "name": "BTC maandag DCA", "symbol": "BTC"},
+                                {"setup_id": 2, "name": "Apple swing", "symbol": "AAPL"}],
+                     "complete": True},
+        }]}
+
+    front.reads = read
+    result = asyncio.run(front.run(
+        message=message, instructions="", conversation_context={}, verified_asset="BTC",
+    ))
+    assert result.response.answer_kind == "cross_asset_rule_scope"
+    answer = asyncio.run(FinnResponsesAnswerVerifier().verify(
+        message=message, result=result.response, locale="nl",
+    ))
+    assert "BTC" in answer.text and "AAPL" in answer.text
+    assert "niet automatisch" in answer.text
+    front.relevance_guard.saved_plan_query_kind.assert_not_awaited()
 
 
 def test_listed_evidence_reference_rejects_unverified_or_other_turn_ids():
@@ -6627,6 +6697,103 @@ def test_recent_confirmed_setup_is_bound_server_side_before_read(monkeypatch):
         }},
     ))
     assert received == [{"setup_id": 326}]
+
+
+def test_named_setup_coaching_binds_evaluation_to_its_owner_scoped_strategy(monkeypatch):
+    import backend.services.finn_v2_responses_front_door as front_module
+
+    fake = FakeResponses(
+        response("r1", calls=(tool_call("c1", "evaluate_plan", {"asset": "BTC"}),)),
+        response("r2", text="Controleer eerst de voorwaarde van BTC Full Base."),
+    )
+    front = object.__new__(FinnResponsesFrontDoor)
+    front.client = SimpleNamespace(responses=fake)
+    front.user_id = 21
+    front.run_id = "named-setup-coaching"
+    front.proposals = FinnResponsesProposalSelection()
+    received = []
+
+    class Session:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *_args):
+            return False
+
+        async def commit(self):
+            pass
+
+    class Reads:
+        session_factory = Session
+
+        async def __call__(self, call):
+            received.append(call.inputs)
+            return {"status": "completed", "results": []}
+
+    class Resolver:
+        is_setup_collection_request = staticmethod(lambda _message: False)
+        references_recent_action = staticmethod(lambda _message, _entity_type: False)
+
+        def __init__(self, _session):
+            pass
+
+        async def resolve_canonical_target(self, **kwargs):
+            assert "BTC Full Base" in kwargs["message"]
+            return SimpleNamespace(resolution_status="resolved", entity_id=42,
+                                   source="explicit_name")
+
+    monkeypatch.setattr(front_module, "FinnV2EntityResolutionService", Resolver)
+    monkeypatch.setattr(front_module.FinnV2RuntimeContractRepository,
+                        "record_responses_progress", AsyncMock())
+    front.reads = Reads()
+    asyncio.run(front.run(
+        message="Ik heb FOMO bij BTC Full Base. Hoe kijk je naar mijn risico?",
+        instructions="coach", verified_asset="BTC", conversation_context={},
+    ))
+    assert received == [{"asset": "BTC", "setup_id": 42}]
+
+
+def test_saved_level_claims_cannot_borrow_prices_from_another_btc_strategy():
+    evidence = ({"scope": "read_linked_strategy", "status": "completed", "data": {
+        "name": "BTC Full Base Strategy", "setup_id": 42,
+        "entry": 76000, "stop_loss": 72000, "targets": [84000],
+    }},)
+    supports = FinnResponsesAnswerVerifier._saved_strategy_levels_supported
+    message = "Ik heb FOMO bij BTC Full Base. Hoe kijk je naar mijn risico?"
+    assert supports("Je opgeslagen entry is 76.000 en de stop-loss 72.000.", evidence, message)
+    assert supports("De entry-stopafstand is 5,26%; wacht 24 uur als je FOMO voelt.",
+                    evidence, message)
+    assert not supports("Je opgeslagen entry is 80.000 en de stop-loss 76.000.", evidence, message)
+    assert not supports("De niveaus 80.000/76.000 horen bij dit plan.", evidence, message)
+
+
+def test_rejected_coaching_retains_only_the_named_setups_linked_strategy():
+    evidence = (
+        {"scope": "read_active_setup", "status": "completed", "data": {
+            "setup_id": 42, "name": "BTC Full Base", "symbol": "BTC",
+        }},
+        {"scope": "read_linked_strategy", "status": "completed", "data": {
+            "setup_id": 42, "name": "BTC Full Base Strategy",
+            "entry": 76000, "stop_loss": 72000,
+        }},
+    )
+    question = "Ik heb FOMO bij BTC Full Base. Welke entry en stop horen hierbij?"
+    answer = FinnResponsesAnswerVerifier._grounded_named_setup_coach_fallback(
+        question, evidence, "nl",
+    )
+    assert "76.000" in answer and "72.000" in answer
+    assert "80.000" not in answer
+    mismatched = (evidence[0], {**evidence[1], "data": {**evidence[1]["data"], "setup_id": 43}})
+    assert FinnResponsesAnswerVerifier._grounded_named_setup_coach_fallback(
+        question, mismatched, "nl",
+    ) is None
+    fractional = (evidence[0], {**evidence[1], "data": {
+        **evidence[1]["data"], "entry": "0.75", "stop_loss": "0.65",
+    }})
+    fractional_answer = FinnResponsesAnswerVerifier._grounded_named_setup_coach_fallback(
+        question, fractional, "nl",
+    )
+    assert "0,75" in fractional_answer and "0,65" in fractional_answer
 
 
 @pytest.mark.parametrize("read_arguments", [
